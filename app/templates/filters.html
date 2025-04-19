@@ -1,0 +1,209 @@
+{% extends "base.html" %}
+{% block head %}
+  <meta name="csrf_token" content="{{ csrf_token() }}">
+{% endblock %}
+
+{% block content %}
+
+<div style="max-width:900px; margin:0 auto;">
+
+  <div class="admin-card" style="margin-top:1.5rem; margin-bottom:2rem;">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom:1rem;">
+      <h3 style="margin:0;">Dominios Permitidos</h3>
+      <button 
+        onclick="location.href='{{ url_for('admin_bp.dashboard') }}'" 
+        class="btn-blue"
+      >
+        Volver al Panel
+      </button>
+    </div>
+
+    <!-- Búsqueda AJAX de Dominios -->
+    <form 
+      id="domainSearchForm"
+      style="margin-bottom:1rem; display:flex; gap:0.5rem;"
+    >
+      <input 
+        type="text"
+        id="domainSearchInput"
+        placeholder="Buscar Dominio..."
+        style="flex:1;"
+      >
+      <button type="submit" class="btn-search">Buscar</button>
+    </form>
+
+    <div id="domain-list">
+      {% if domains %}
+        {% for dom in domains %}
+          <div class="domain-item">
+            <strong>{{ dom.domain }}</strong>
+            <div style="margin-top:0.5rem;">
+              <button
+                class="btn-orange"
+                style="margin-right:0.5rem;"
+                onclick="window.location.href='{{ url_for('admin_bp.edit_domain', dom_id=dom.id) }}'"
+              >
+                Editar
+              </button>
+
+              {% if dom.enabled %}
+                <button
+                  class="btn-red toggle-domain"
+                  data-id="{{ dom.id }}"
+                  data-enabled="true"
+                  style="margin-right:0.5rem;"
+                >
+                  Off
+                </button>
+              {% else %}
+                <button
+                  class="btn-green toggle-domain"
+                  data-id="{{ dom.id }}"
+                  data-enabled="false"
+                  style="margin-right:0.5rem;"
+                >
+                  On
+                </button>
+              {% endif %}
+
+              <button
+                class="btn-red delete-domain"
+                data-id="{{ dom.id }}"
+              >
+                Eliminar
+              </button>
+            </div>
+          </div>
+        {% endfor %}
+      {% else %}
+        <p>No hay dominios registrados.</p>
+      {% endif %}
+    </div>
+
+    <!-- Crear Nuevo Dominio -->
+    <div style="margin-top:1rem;">
+      <h4>Agregar Nuevo Dominio</h4>
+      <form action="{{ url_for('admin_bp.create_domain') }}" method="POST">
+        <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+        <input
+          type="text"
+          name="domain"
+          placeholder="Dominio"
+          style="display:block; margin-bottom:0.5rem;"
+        >
+        <button type="submit" class="btn-green">Crear</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="admin-card">
+    <h3>Filtros</h3>
+    <!-- Búsqueda AJAX de Filtros -->
+    <form 
+      id="filterSearchForm"
+      style="margin-bottom:1rem; display:flex; gap:0.5rem;"
+    >
+      <input 
+        type="text"
+        id="filterSearchInput"
+        placeholder="Buscar Filtro (remitente, palabra)..."
+        style="flex:1;"
+      >
+      <button type="submit" class="btn-search">Buscar</button>
+    </form>
+
+    <div id="filter-list">
+      {% if filters %}
+        {% for f in filters %}
+          <div class="filter-item">
+            <strong>Remitente:</strong> {{ f.sender or "(vacío)" }}<br>
+            <strong>Palabra:</strong> {{ f.keyword or "(vacío)" }}<br>
+            <strong>CortarHTML:</strong> {{ f.cut_after_html or "(N/A)" }}
+            <div style="margin-top:0.5rem;">
+              <button
+                class="btn-orange"
+                style="margin-right:0.5rem;"
+                onclick="window.location.href='{{ url_for('admin_bp.edit_filter', filter_id=f.id) }}'"
+              >
+                Editar
+              </button>
+
+              {% if f.enabled %}
+                <button
+                  class="btn-red toggle-filter"
+                  data-id="{{ f.id }}"
+                  data-enabled="true"
+                  style="margin-right:0.5rem;"
+                >
+                  Off
+                </button>
+              {% else %}
+                <button
+                  class="btn-green toggle-filter"
+                  data-id="{{ f.id }}"
+                  data-enabled="false"
+                  style="margin-right:0.5rem;"
+                >
+                  On
+                </button>
+              {% endif %}
+
+              <button
+                class="btn-red delete-filter"
+                data-id="{{ f.id }}"
+              >
+                Eliminar
+              </button>
+            </div>
+          </div>
+        {% endfor %}
+      {% else %}
+        <p>No hay filtros creados.</p>
+      {% endif %}
+    </div>
+
+    <!-- Crear Nuevo Filtro -->
+    <div style="margin-top:1rem;">
+      <h4>Crear Nuevo Filtro</h4>
+      <form action="{{ url_for('admin_bp.create_filter') }}" method="POST">
+        <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+
+        <input
+          type="text"
+          name="sender"
+          placeholder="Remitente (opcional)"
+          style="display:block; margin-bottom:0.5rem;"
+        >
+        <input
+          type="text"
+          name="keyword"
+          placeholder="Palabra Clave (opcional)"
+          style="display:block; margin-bottom:0.5rem;"
+        >
+        <input
+          type="text"
+          name="cut_after_html"
+          placeholder="Cortar HTML desde (opcional)"
+          style="display:block; margin-bottom:0.5rem;"
+        >
+
+        <button type="submit" class="btn-green">Crear</button>
+      </form>
+    </div>
+
+    <div style="text-align:right; margin-top:2rem;">
+      <button
+        onclick="location.href='{{ url_for('admin_bp.dashboard') }}'"
+        class="btn-blue"
+      >
+        Volver al Panel
+      </button>
+    </div>
+
+  </div>
+
+</div>
+
+<!-- Referencia al JS que maneja dominios y filtros (admin_filters.js) -->
+<script src="{{ url_for('static', filename='js/admin_filters.js') }}"></script>
+{% endblock %}

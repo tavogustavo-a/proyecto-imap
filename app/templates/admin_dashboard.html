@@ -1,0 +1,352 @@
+<!-- app/templates/admin_dashboard.html -->
+{% extends "base.html" %}
+{% block content %}
+
+<style>
+@media (max-width: 600px) {
+  .twofa-button-group {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}
+</style>
+
+<div style="max-width:900px; margin:0 auto;">
+
+  <div class="admin-card" style="margin-top:1.5rem;">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem;">
+      <h2 style="margin:0;">Administración</h2>
+      <div style="display:flex; align-items:center;">
+        <form action="{{ url_for('admin_bp.logout_all_users') }}"
+              method="POST"
+              style="display:inline; margin-right:1rem;"
+              onsubmit="return confirm('¿Estás seguro de cerrar la sesión de TODOS los usuarios?')">
+          <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+          <button type="submit" class="btn-red">
+            Cerrar Sesión de Todos
+          </button>
+        </form>
+        <a href="{{ url_for('auth_bp.logout') }}"
+           class="btn-red"
+           style="text-decoration:none;">
+          Cerrar
+        </a>
+      </div>
+    </div>
+
+    <div style="display:flex; align-items:center; gap:1rem; flex-wrap:wrap; margin-bottom:1rem;">
+      <form action="{{ url_for('admin_bp.set_opacity') }}"
+            method="POST"
+            style="display:flex; gap:0.5rem; align-items:center;">
+        <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+        <input
+          type="range"
+          name="card_opacity"
+          min="0"
+          max="1"
+          step="0.1"
+          value="{{ site_settings.get('card_opacity','0.8') }}"
+          style="vertical-align: middle;"
+        >
+        <button type="submit" class="btn-blue">Aplicar</button>
+      </form>
+
+      <form action="{{ url_for('admin_bp.toggle_logo') }}"
+            method="POST"
+            style="display:flex; gap:0.5rem; align-items:center;">
+        <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+        {% if logo_enabled == 'true' %}
+          <button type="submit" class="btn-red">Deshabilitar Logo</button>
+        {% else %}
+          <button type="submit" class="btn-green">Habilitar Logo</button>
+        {% endif %}
+      </form>
+
+      <form action="{{ url_for('admin_bp.change_theme') }}"
+            method="POST"
+            style="display:flex; gap:0.5rem; align-items:center;">
+        <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+        <select name="theme" id="theme">
+          <option value="tema1">Tema 1</option>
+          <option value="tema2">Tema 2</option>
+          <option value="tema3">Tema 3</option>
+          <option value="tema4">Tema 4</option>
+          <option value="tema5">Tema 5</option>
+          <option value="tema6">Tema 6</option>
+          <option value="tema7">Tema 7</option>
+          <option value="tema8">Tema 8</option>
+          <option value="tema9">Tema 9</option>
+          <option value="tema10">Tema 10</option>
+          <option value="tema11">Tema 11</option>
+          <option value="tema12">Tema 12</option>
+          <option value="tema13">Tema 13</option>
+          <option value="tema14">Tema 14</option>
+          <option value="tema15">Tema 15</option>
+          <option value="tema16">Tema 16</option>
+          <option value="tema17">Tema 17</option>
+          <option value="temaadmin">Tema oscuro</option>
+        </select>
+        <button type="submit" class="btn-blue">Cambiar</button>
+      </form>
+    </div>
+
+    <div style="margin-bottom:1rem;">
+      <button
+        class="btn-blue"
+        onclick="location.href='{{ url_for('admin_bp.parrafos_page') }}'">
+        Párrafos
+      </button>
+    </div>
+
+    {% set admin_user = admin_user if admin_user else None %}
+    {% if admin_user %}
+      <div style="background:#fff; border:2px solid #ccc; border-radius:6px; padding:1rem;">
+        {% if not admin_user.twofa_enabled and not admin_user.pending_2fa_method %}
+          <form action="{{ url_for('admin_bp.enable_2fa') }}" method="POST" style="display:inline;">
+            <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+            <select name="method" style="margin-right:0.5rem;">
+              <option value="TOTP">TOTP (Google Authenticator)</option>
+              <option value="EMAIL">OTP por Correo</option>
+            </select>
+            <button type="submit" class="btn-green">Activar 2FA</button>
+          </form>
+
+        {% elif admin_user.pending_2fa_method == 'TOTP' %}
+          <p>2FA TOTP pendiente. Escanea el código y luego confirma tu TOTP.</p>
+          <div style="margin-bottom:0.5rem;">
+            <img
+              src="{{ url_for('admin_bp.qr_code') }}"
+              alt="Código QR"
+              style="width:200px; height:200px; border:1px solid #333;"
+            >
+          </div>
+          <form action="{{ url_for('admin_bp.confirm_2fa') }}" method="POST" style="display:inline;">
+            <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+            <input type="text" name="code" placeholder="Ingresa el código TOTP" required>
+            <button type="submit" class="btn-green">Confirmar</button>
+          </form>
+          <form action="{{ url_for('admin_bp.cancel_pending_2fa') }}" method="POST" style="display:inline; margin-left:0.5rem;">
+            <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+            <button type="submit" class="btn-red">Cancelar</button>
+          </form>
+
+        {% elif admin_user.pending_2fa_method == 'EMAIL' %}
+          <p>2FA por correo pendiente. Se envió un código OTP a tu email.</p>
+          <form action="{{ url_for('admin_bp.confirm_2fa') }}" method="POST" style="display:inline;">
+            <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+            <input type="text" name="code" placeholder="Ingresa el código OTP" required>
+            <button type="submit" class="btn-green">Confirmar</button>
+          </form>
+          <form action="{{ url_for('admin_bp.cancel_pending_2fa') }}" method="POST" style="display:inline; margin-left:0.5rem;">
+            <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+            <button type="submit" class="btn-red">Cancelar</button>
+          </form>
+
+          <form action="{{ url_for('admin_bp.resend_activation_email_otp') }}" method="POST" style="display:inline; margin-left:0.5rem;">
+            <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+            <button type="submit" class="btn-blue">Reenviar OTP Email</button>
+          </form>
+
+        {% else %}
+          <p>2FA está <strong>activo</strong> (método: {{ admin_user.twofa_method }}).</p>
+          <div class="twofa-button-group" style="display:flex; gap:0.5rem; align-items:center;">
+            <a
+              href="{{ url_for('admin_bp.start_change_admin') }}"
+              style="
+                background:#9c27b0;
+                border:2px solid #9c27b0;
+                color:#fff;
+                padding:0.4rem 0.8rem;
+                border-radius:4px;
+                cursor:pointer;
+                text-decoration:none;
+              "
+            >
+              Cambiar Credenciales (Admin)
+            </a>
+            <a
+              href="{{ url_for('admin_bp.disable_2fa') }}"
+              style="
+                background:#f44336;
+                border:2px solid #f44336;
+                color:#fff;
+                padding:0.4rem 0.8rem;
+                border-radius:4px;
+                cursor:pointer;
+                text-decoration:none;
+              "
+            >
+              Desactivar 2FA
+            </a>
+          </div>
+          {% if admin_user.twofa_method == "EMAIL" and not admin_user.email_verified %}
+            <p style="margin-top:0.5rem;">(Necesitas verificar tu email para OTP correctamente.)</p>
+          {% endif %}
+        {% endif %}
+
+        {% if admin_user.email and admin_user.email_verified %}
+          <p style="margin-top:1rem; color:#333; font-size:0.9rem;">
+            Correo actual (recuperación/OTP): <strong>{{ admin_user.email }}</strong>
+            <br>
+            Para modificarlo, usa la sección de <em>Cambiar Credenciales</em>.
+          </p>
+        {% else %}
+          <div style="margin-top:1rem;">
+            <p>Configura tu correo de recuperación/OTP:</p>
+            <form action="{{ url_for('admin_bp.set_admin_email') }}" method="POST" style="display:flex; gap:0.5rem; max-width:400px;">
+              <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+              <input
+                type="email"
+                name="new_email"
+                placeholder="Correo Admin (Recuperación u OTP)"
+                style="flex:1;"
+                required
+              >
+              <button type="submit" class="btn-blue">Guardar Correo</button>
+            </form>
+          </div>
+        {% endif %}
+      </div>
+    {% else %}
+      <p>No se encontró usuario administrador.</p>
+    {% endif %}
+
+    <div style="margin-bottom:2rem; margin-top:2rem; display:flex; gap:0.5rem; align-items:center;">
+      <button onclick="location.href='{{ url_for('admin_bp.filters_page') }}'" class="btn-blue">
+        Modificar Filtros
+      </button>
+      <button onclick="location.href='{{ url_for('admin_bp.regex_page') }}'" class="btn-blue">
+        Modificar Regex
+      </button>
+      <button onclick="location.href='{{ url_for('admin_bp.services_page') }}'" class="btn-blue">
+        Modificar Servicios
+      </button>
+      <button onclick="location.href='{{ url_for('admin_bp.usuarios_page') }}'" class="btn-blue">
+        Usuarios
+      </button>
+      <form action="{{ url_for('admin_bp.change_gif') }}"
+            method="POST"
+            style="display:flex; gap:0.5rem; align-items:center; margin:0;">
+        <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+        <select name="gif_name" id="gif_name">
+          <option value="none">none</option>
+          <option value="gif1">Gif1</option>
+          <option value="gif2">Gif2</option>
+          <option value="gif3">Gif3</option>
+          <option value="gif4">Gif4</option>
+          <option value="gif5">Gif5</option>
+          <option value="gif6">Gif6</option>
+          <option value="gif7">Gif7</option>
+        </select>
+        <button type="submit" class="btn-blue">Cambiar</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="admin-card" style="margin-top:1rem;">
+    <h3>Servidores IMAP</h3>
+    <form id="imapSearchForm" style="display:flex; gap:0.5rem; margin-bottom:1rem;">
+      <input
+        type="text"
+        id="imapSearchInput"
+        placeholder="Buscar host o usuario..."
+        style="flex:1;"
+      >
+      <button type="submit" class="btn-search">Buscar</button>
+    </form>
+
+    <div id="imapList">
+      {% for s in servers %}
+        <div class="imap-item" style="margin-bottom:1rem;">
+          <strong>Usuario: {{ s.username }}</strong><br>
+          <em>Carpetas:</em> {{ s.folders }}
+          <div style="margin-top:0.5rem;">
+            <form action="{{ url_for('admin_bp.test_imap', server_id=s.id) }}"
+                  method="POST"
+                  style="display:inline;">
+              <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+              <button type="submit" class="btn-blue">Probar</button>
+            </form>
+            {% if s.enabled %}
+              <button
+                class="btn-red toggle-imap-btn"
+                data-id="{{ s.id }}"
+                data-enabled="true"
+                style="margin-left:0.3rem;"
+              >
+                Deshabilitar
+              </button>
+            {% else %}
+              <button
+                class="btn-green toggle-imap-btn"
+                data-id="{{ s.id }}"
+                data-enabled="false"
+                style="margin-left:0.3rem;"
+              >
+                Habilitar
+              </button>
+            {% endif %}
+            <button
+              onclick="location.href='{{ url_for('admin_bp.edit_imap', server_id=s.id) }}'"
+              class="btn-orange"
+              style="margin-left:0.3rem;"
+            >
+              Editar
+            </button>
+            <button
+              class="btn-red delete-imap-btn"
+              data-id="{{ s.id }}"
+              style="margin-left:0.3rem;"
+            >
+              Eliminar
+            </button>
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+
+    <form action="{{ url_for('admin_bp.manage_imap') }}" method="POST" style="margin-top:1rem;">
+      <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+      <h4>Crear Nuevo Servidor IMAP</h4>
+      <input
+        type="text"
+        name="host"
+        placeholder="Host"
+        required
+        style="display:block; margin-bottom:0.5rem;"
+      >
+      <input
+        type="number"
+        name="port"
+        placeholder="993"
+        value="993"
+        style="display:block; margin-bottom:0.5rem;"
+      >
+      <input
+        type="text"
+        name="username"
+        placeholder="Usuario"
+        required
+        style="display:block; margin-bottom:0.5rem;"
+      >
+      <input
+        type="password"
+        name="password"
+        placeholder="Password"
+        style="display:block; margin-bottom:0.5rem;"
+      >
+      <label>Carpetas (separadas por comas):</label>
+      <input
+        type="text"
+        name="folders"
+        placeholder="INBOX,Carpeta2"
+        value="INBOX"
+        style="display:block; margin-bottom:0.5rem;"
+      >
+      <button type="submit" class="btn-green">Crear</button>
+    </form>
+  </div>
+</div>
+
+<script src="{{ url_for('static', filename='js/admin_imap.js') }}"></script>
+{% endblock %}

@@ -1,0 +1,141 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="admin-card" style="max-width:600px; margin:2rem auto;">
+
+  <!-- ======================== PÁRRAFO 1 ======================== -->
+  <h3 style="margin-top:0;">Párrafo 1</h3>
+
+  <!-- 1) Form para ACTUALIZAR EL TEXTO del párrafo 1 -->
+  <form
+    id="saveMsgForm1"
+    action="{{ url_for('admin_bp.update_paragraph', num_paragraph=1) }}"
+    method="POST"
+    style="margin-bottom:0.5rem;"
+  >
+    <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+    <textarea
+      name="paragraph"
+      rows="3"
+      style="
+        display:block;
+        width:100%;
+        resize:vertical;
+      "
+    >{{ paragraph }}</textarea>
+
+    <button type="submit" class="btn-green" style="margin-top:0.5rem;">
+      Guardar Texto
+    </button>
+  </form>
+
+  <!-- 2) Form para TOGGLE PÁRRAFO 1 => off <-> guests -->
+  <div style="display:flex; align-items:center; gap:0.5rem; margin-top:1rem; flex-wrap:wrap;">
+    <form
+      action="{{ url_for('admin_bp.cycle_paragraph_mode', num_paragraph=1) }}"
+      method="POST"
+      style="margin:0;"
+    >
+      <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+      {% if paragraph_mode == 'off' %}
+        <button type="submit" class="btn-blue">
+          Habilitar para no registrados
+        </button>
+      {% else %}
+        <!-- paragraph_mode == 'guests' -->
+        <button type="submit" class="btn-red">
+          Deshabilitar para no registrados
+        </button>
+      {% endif %}
+    </form>
+
+    <!-- Estado actual -->
+    <div style="margin-left:auto; color:#666;">
+      Estado actual:
+      {% if paragraph_mode == 'off' %}
+        <strong>desactivado</strong>
+      {% elif paragraph_mode == 'guests' %}
+        <strong>no registrados</strong>
+      {% endif %}
+    </div>
+  </div>
+
+  <hr style="margin:1.5rem 0;">
+
+  <!-- ======================== PÁRRAFO 2 ======================== -->
+  <h3>Párrafo 2</h3>
+
+  <!-- 1) Form para ACTUALIZAR EL TEXTO del párrafo 2 -->
+  <form
+    id="saveMsgForm2"
+    action="{{ url_for('admin_bp.update_paragraph', num_paragraph=2) }}"
+    method="POST"
+    style="margin-bottom:0.5rem;"
+  >
+    <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+    <textarea
+      name="paragraph"
+      rows="3"
+      style="
+        display:block;
+        width:100%;
+        resize:vertical;
+      "
+    >{{ paragraph2 }}</textarea>
+
+    <button type="submit" class="btn-green" style="margin-top:0.5rem;">
+      Guardar Texto
+    </button>
+  </form>
+
+  <!-- 2) Form para TOGGLE PÁRRAFO 2 => off <-> users -->
+  <div style="display:flex; align-items:center; gap:0.5rem; margin-top:1rem; flex-wrap:wrap;">
+    <form
+      action="{{ url_for('admin_bp.cycle_paragraph_mode', num_paragraph=2) }}"
+      method="POST"
+      style="margin:0;"
+    >
+      <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+      {% if paragraph2_mode == 'off' %}
+        <button type="submit" class="btn-blue">
+          Habilitar para usuarios
+        </button>
+      {% else %}
+        <!-- paragraph2_mode == 'users' -->
+        <button type="submit" class="btn-red">
+          Deshabilitar para usuarios
+        </button>
+      {% endif %}
+    </form>
+
+    <!-- Estado actual -->
+    <div style="margin-left:auto; color:#666;">
+      Estado actual:
+      {% if paragraph2_mode == 'off' %}
+        <strong>desactivado</strong>
+      {% elif paragraph2_mode == 'users' %}
+        <strong>usuarios</strong>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- BOTÓN Volver al panel con contorno más grueso -->
+  <div style="text-align:right; margin-top:1.5rem;">
+    <a
+      href="{{ url_for('admin_bp.dashboard') }}"
+      style="
+        background:#2196f3;
+        border:3px solid #2196f3;
+        color:#fff;
+        padding:0.4rem 0.8rem;
+        border-radius:5px;
+        text-decoration:none;
+      "
+    >
+      Volver al panel
+    </a>
+  </div>
+
+</div><!-- Fin .admin-card -->
+
+{% endblock %}

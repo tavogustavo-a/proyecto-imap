@@ -1,0 +1,134 @@
+{% extends "base.html" %}
+{% block head %}
+  <meta name="csrf_token" content="{{ csrf_token() }}">
+{% endblock %}
+
+{% block content %}
+<div style="max-width:900px; margin:0 auto;">
+  <div class="admin-card" style="margin-top:1.5rem;">
+
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem;">
+      <h3 style="margin:0;">Expresiones Regulares (Regex)</h3>
+      <button
+        onclick="location.href='{{ url_for('admin_bp.dashboard') }}'"
+        class="btn-blue"
+      >
+        Volver al Panel
+      </button>
+    </div>
+
+    <!-- Búsqueda AJAX -->
+    <form
+      id="regexSearchForm"
+      style="margin-bottom:1rem; display:flex; gap:0.5rem;"
+    >
+      <input
+        type="text"
+        id="regexSearchInput"
+        placeholder="Buscar Regex (remitente, descripción, patrón)..."
+        style="flex:1;"
+      >
+      <button type="submit" class="btn-search">Buscar</button>
+    </form>
+
+    <!-- Lista de regex -->
+    <div id="regex-list">
+      {% if regexes %}
+        {% for r in regexes %}
+          <div class="regex-item">
+            <strong>Remitente:</strong> {{ r.sender or "(vacío)" }}<br>
+
+            {# Mostrar primero descripción, si no hay => "(vacío)" #}
+            <strong>Descripción:</strong> {{ r.description if r.description else "(vacío)" }}<br>
+
+            <strong>Patrón:</strong> {{ r.pattern }}<br>
+
+            <div style="margin-top:0.5rem;">
+
+              {% if not r.protected %}
+                <button
+                  class="btn-orange"
+                  style="margin-right:0.5rem;"
+                  onclick="location.href='{{ url_for('admin_bp.edit_regex', regex_id=r.id) }}'"
+                >
+                  Editar
+                </button>
+                <button
+                  class="btn-red delete-regex"
+                  data-id="{{ r.id }}"
+                  style="margin-right:0.5rem;"
+                >
+                  Eliminar
+                </button>
+              {% endif %}
+
+              {% if r.enabled %}
+                <button
+                  class="btn-red toggle-regex"
+                  data-id="{{ r.id }}"
+                  data-enabled="true"
+                >
+                  Off
+                </button>
+              {% else %}
+                <button
+                  class="btn-green toggle-regex"
+                  data-id="{{ r.id }}"
+                  data-enabled="false"
+                >
+                  On
+                </button>
+              {% endif %}
+
+            </div>
+          </div>
+        {% endfor %}
+      {% else %}
+        <p>No hay Regex creados aún.</p>
+      {% endif %}
+    </div>
+
+    <div style="margin-top:1rem;">
+      <h4>Crear Nuevo Regex</h4>
+      <form action="{{ url_for('admin_bp.create_regex') }}" method="POST">
+        <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+
+        <input
+          type="text"
+          name="sender"
+          placeholder="Remitente (opcional)"
+          style="display:block; margin-bottom:0.5rem;"
+        >
+        <input
+          type="text"
+          name="pattern"
+          placeholder="Expresión Regular (obligatorio)"
+          required
+          style="display:block; margin-bottom:0.5rem;"
+        >
+        <input
+          type="text"
+          name="description"
+          placeholder="Descripción (opcional)"
+          style="display:block; margin-bottom:0.5rem;"
+        >
+
+        <button type="submit" class="btn-green">Crear</button>
+      </form>
+    </div>
+
+    <div style="text-align:right; margin-top:2rem;">
+      <button
+        onclick="location.href='{{ url_for('admin_bp.dashboard') }}'"
+        class="btn-blue"
+      >
+        Volver al Panel
+      </button>
+    </div>
+
+  </div>
+</div>
+
+<!-- Referencia al JS que maneja la búsqueda/toggle de regex (admin_regex.js) -->
+<script src="{{ url_for('static', filename='js/admin_regex.js') }}"></script>
+{% endblock %}

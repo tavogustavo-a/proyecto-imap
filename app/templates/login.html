@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+
+{% block head %}
+  <meta name="csrf_token" content="{{ csrf_token() }}">
+{% endblock %}
+
+{% block content %}
+<!-- 
+  Contenedor principal con zoom 1.1 => ~10% más grande.
+  Ajustamos transform-origin a top center para mantenerlo centrado verticalmente.
+-->
+<div style="max-width:400px; margin:2rem auto; transform: scale(1.1); transform-origin: top center;">
+  <div class="card" style="text-align:center;">
+    <h3>Iniciar Sesión</h3>
+
+    <form method="POST" style="margin-top:1rem;">
+      <!-- CSRF token -->
+      <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+
+      <!-- =========== CAMPO USUARIO =========== -->
+      <label style="display:block; margin-bottom:0.3rem;">Usuario:</label>
+      <div style="display:flex; justify-content:center; margin-bottom:1rem;">
+        {{ 
+          form.username(
+            size=20,
+            id="adminUsernameField",
+            style="width:220px; text-align:center;"
+          )
+        }}
+      </div>
+
+      <!-- =========== CAMPO CONTRASEÑA =========== -->
+      <label style="display:block; margin-bottom:0.3rem;">Contraseña:</label>
+      <div style="display:flex; justify-content:center; margin-bottom:1rem;">
+        <div style="position:relative;">
+          {{
+            form.password(
+              size=20,
+              id="adminPasswordField",
+              style="width:220px; padding-right:30px; text-align:center;"
+            )
+          }}
+          <span 
+            id="toggleAdminPass"
+            style="
+              position:absolute;
+              right:5px; 
+              top:50%; 
+              transform:translateY(-50%);
+              cursor:pointer;
+            "
+          >👁</span>
+        </div>
+      </div>
+
+      <!-- =========== RECORDAR USUARIO =========== -->
+      <div style="text-align:left; margin:1rem auto; max-width:220px;">
+        <input type="checkbox" name="remember_user" id="remember_user">
+        <label for="remember_user">Recordar usuario 15 días</label>
+      </div>
+
+      <!-- =========== BOTONES: INGRESAR & VOLVER A LA BÚSQUEDA =========== -->
+      <div style="display:flex; gap:0.5rem; justify-content:center;">
+        <!-- Botón "Ingresar" con bordes redondeados -->
+        <input 
+          type="submit" 
+          value="Ingresar" 
+          class="btn-search" 
+          style="border-radius:20px; padding: 0.4rem 1rem;"
+        >
+        <!-- Botón "Volver a la Búsqueda" también redondeado -->
+        <button
+          type="button"
+          class="btn-blue"
+          style="border-radius:20px; padding: 0.4rem 1rem;"
+          onclick="location.href='{{ url_for('main_bp.home') }}'"
+        >
+          Volver a la Búsqueda
+        </button>
+      </div>
+    </form>
+
+    <!-- Enlace '¿Olvidaste tu contraseña?' -->
+    <div style="margin-top:1rem;">
+      <a href="{{ url_for('auth_bp.forgot_password') }}" class="btn-red">
+        ¿Olvidaste tu contraseña?
+      </a>
+    </div>
+  </div>
+</div>
+
+<!-- Script para mostrar/ocultar la contraseña (ojito) -->
+<script>
+document.addEventListener("DOMContentLoaded", function() {
+  const passField = document.getElementById("adminPasswordField");
+  const toggleBtn = document.getElementById("toggleAdminPass");
+
+  if (toggleBtn && passField) {
+    toggleBtn.addEventListener("click", function() {
+      if (passField.type === "password") {
+        passField.type = "text";
+        toggleBtn.textContent = "🙈"; // opcional, cambia el ícono si gustas
+      } else {
+        passField.type = "password";
+        toggleBtn.textContent = "👁";
+      }
+    });
+  }
+});
+</script>
+{% endblock %}

@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+
+{% block content %}
+<!-- Contenedor principal con zoom 1.1 => ~10% más grande. -->
+<div style="max-width:400px; margin:2rem auto; transform: scale(1.1); transform-origin: top center;">
+  <div class="card" style="text-align:center;">
+    <h3>Iniciar Sesión</h3>
+
+    <form method="POST" style="margin-top:1rem;">
+      <!-- Campo oculto para CSRF (si lo usas) -->
+      <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+
+      <!-- =========== CAMPO USUARIO =========== -->
+      <label style="display:block; margin-bottom:0.3rem;">Usuario:</label>
+      <div style="display:flex; justify-content:center; margin-bottom:1rem;">
+        <input
+          type="text"
+          name="username"
+          id="userUsernameField"
+          required
+          style="width:220px; text-align:center;"
+        >
+      </div>
+
+      <!-- =========== CAMPO CONTRASEÑA =========== -->
+      <label style="display:block; margin-bottom:0.3rem;">Contraseña:</label>
+      <div style="display:flex; justify-content:center; margin-bottom:1rem;">
+        <div style="position:relative;">
+          <input
+            type="password"
+            name="password"
+            id="userPasswordField"
+            required
+            style="width:220px; padding-right:30px; text-align:center;"
+          >
+          <span
+            id="toggleUserPass"
+            style="
+              position:absolute;
+              right:5px;
+              top:50%;
+              transform:translateY(-50%);
+              cursor:pointer;
+            "
+          >👁</span>
+        </div>
+      </div>
+
+      <!-- =========== BOTONES DE ACCIÓN =========== -->
+      <div style="display:flex; gap:0.5rem; justify-content:center;">
+        <!-- Botón Ingresar con bordes redondeados -->
+        <button
+          type="submit"
+          class="btn-search"
+          style="border-radius:20px; padding: 0.4rem 1rem;"
+        >
+          Ingresar
+        </button>
+        <!-- Botón Volver a la Búsqueda, también redondeado -->
+        <button
+          type="button"
+          class="btn-blue"
+          style="border-radius:20px; padding: 0.4rem 1rem;"
+          onclick="location.href='{{ url_for('main_bp.home') }}'"
+        >
+          Volver a la Búsqueda
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Script para mostrar/ocultar la contraseña (ojito) -->
+<script>
+document.addEventListener("DOMContentLoaded", function() {
+  const userPassField = document.getElementById("userPasswordField");
+  const toggleUserPass = document.getElementById("toggleUserPass");
+
+  if (toggleUserPass && userPassField) {
+    toggleUserPass.addEventListener("click", function() {
+      if (userPassField.type === "password") {
+        userPassField.type = "text";
+        toggleUserPass.textContent = "🙈";  // Cambia el ícono si lo deseas
+      } else {
+        userPassField.type = "password";
+        toggleUserPass.textContent = "👁";
+      }
+    });
+  }
+});
+</script>
+{% endblock %}

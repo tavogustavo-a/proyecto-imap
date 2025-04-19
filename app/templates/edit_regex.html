@@ -1,0 +1,54 @@
+<!-- app/templates/edit_regex.html -->
+{% extends "base.html" %}
+{% block content %}
+<div class="admin-card" style="max-width:600px; margin:1rem auto;">
+  <h2>Editar Regex</h2>
+
+  <form method="POST">
+    <!-- Campo oculto para el CSRF Token (SeaSurf) -->
+    <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+
+    <label>Remitente (Sender) (opcional):</label>
+    <input
+      type="text"
+      name="sender"
+      value="{{ regex.sender }}"
+      style="display:block; margin-bottom:1rem;"
+    >
+
+    <label>Expresión Regular (Pattern):</label>
+    <!-- Aquí agregamos size y maxlength para hacerlo más pequeño y limitar caracteres -->
+    <input
+      type="text"
+      name="pattern"
+      value="{{ regex.pattern }}"
+      style="display:block; margin-bottom:1rem;"
+      size="30"
+      maxlength="80"  <!-- Limita a 80 caracteres -->
+      required
+    >
+
+    <label>Descripción (opcional):</label>
+    <input
+      type="text"
+      name="description"
+      value="{{ regex.description }}"
+      style="display:block; margin-bottom:1rem;"
+    >
+
+    <label>¿Habilitado?</label>
+    <input type="checkbox" name="enabled" {% if regex.enabled %}checked{% endif %}>
+    <br><br>
+
+    <button type="submit" class="btn-green">Guardar</button>
+    <!-- Botón para volver a la lista de Regex (regex_page) -->
+    <button
+      type="button"
+      class="btn-blue"
+      onclick="location.href='{{ url_for('admin_bp.regex_page') }}'"
+    >
+      Volver
+    </button>
+  </form>
+</div>
+{% endblock %}

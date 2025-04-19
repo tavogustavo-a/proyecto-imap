@@ -1,0 +1,210 @@
+<!-- app/templates/usuarios.html -->
+{% extends "base.html" %}
+{% block head %}
+<meta name="csrf_token" content="{{ csrf_token() }}">
+{% endblock %}
+
+{% block content %}
+<div style="max-width:900px; margin:1.5rem auto;">
+  <div class="admin-card">
+    <!-- Encabezado con botón Volver -->
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem;">
+      <h3 style="margin:0;">Usuarios Principales</h3>
+      <button
+        onclick="location.href='{{ url_for('admin_bp.dashboard') }}'"
+        class="btn-blue"
+      >
+        Volver al Panel
+      </button>
+    </div>
+
+    <!-- Búsqueda AJAX de usuarios (solo principales, no sub-usuarios) -->
+    <form 
+      id="userSearchForm"
+      style="margin-bottom:1rem; display:flex; gap:0.5rem;"
+    >
+      <input
+        type="text"
+        id="userSearchInput"
+        placeholder="Buscar usuario..."
+        style="flex:1;"
+      >
+      <button type="submit" class="btn-search">Buscar</button>
+    </form>
+
+    <!-- Contenedor donde se pintan los usuarios con admin_users.js -->
+    <div id="userListContainer"></div>
+
+    <hr>
+
+    <!-- Crear Nuevo Usuario Principal -->
+    <div style="margin-top:1rem;">
+      <h4>Crear Usuarios</h4>
+
+      <!-- FILA 1: Usuario + Contraseña con ojito -->
+      <div style="display:flex; gap:0.5rem; flex-wrap:wrap; margin-bottom:1rem;">
+        <input
+          type="text"
+          id="newUsername"
+          placeholder="Usuario"
+          style="flex:1;"
+        >
+
+        <div style="position:relative;">
+          <input
+            type="password"
+            id="newUserPassword"
+            placeholder="Contraseña"
+            style="width:150px; padding-right:30px;"
+          >
+          <span
+            id="toggleNewPass"
+            style="
+              position:absolute;
+              right:8px;
+              top:50%;
+              transform:translateY(-50%);
+              cursor:pointer;
+              color:#007bff;
+            "
+          >
+            👁
+          </span>
+        </div>
+      </div>
+
+      <!-- FILA 2: Checkbox "Consultar Correos Sin Restricciones" + Color + Posición + Botón "Crear" -->
+      <div style="display:flex; gap:0.5rem; align-items:center; margin-bottom:1rem; flex-wrap:wrap;">
+        <label style="display:flex; align-items:center; gap:0.3rem; margin:0;">
+          <input
+            type="checkbox"
+            id="newUserCanSearchAny"
+          >
+          Consultar Correos Sin Restricciones
+        </label>
+
+        <!-- Color picker -->
+        <label style="display:inline-flex; align-items:center; gap:4px; margin:0;">
+          Color:
+          <input
+            type="color"
+            id="newUserColor"
+            value="#ffffff"
+            style="width:50px; height:30px; cursor:pointer;"
+          >
+        </label>
+
+        <label style="white-space:nowrap; margin:0;">
+          Posición
+          <input
+            type="number"
+            id="newUserPosition"
+            style="width:50px; margin-left:4px;"
+          >
+        </label>
+
+        <button type="button" class="btn-green" id="createUserBtn">Crear Usuarios</button>
+      </div>
+    </div>
+
+    <!-- Botón "Volver al Panel" al final -->
+    <div style="text-align:right; margin-top:2rem;">
+      <button
+        onclick="location.href='{{ url_for('admin_bp.dashboard') }}'"
+        class="btn-blue"
+      >
+        Volver al Panel
+      </button>
+    </div>
+  </div>
+</div>
+
+
+<!-- POPUP Editar Usuario -->
+<div
+  id="editUserPopup"
+  style="
+    display:none;
+    position:fixed;
+    top:50%;
+    left:50%;
+    transform:translate(-50%,-50%);
+    background:#fff;
+    border:2px solid #ccc;
+    padding:1rem;
+    z-index:9999;
+    max-width:300px;
+    width:90%;
+  "
+>
+  <h4>Editar Usuario</h4>
+  <input type="hidden" id="editUserId">
+
+  <label style="display:block; margin-bottom:0.2rem;">Usuario:</label>
+  <input
+    type="text"
+    id="editUserUsername"
+    style="display:block; margin-bottom:0.5rem; width:100%;"
+  >
+
+  <label style="display:block; margin-bottom:0.2rem;">Nueva Contraseña:</label>
+  <div style="position:relative; margin-bottom:0.5rem;">
+    <input
+      type="password"
+      id="editUserPassword"
+      placeholder="(vacío = no cambiar)"
+      style="width:150px; padding-right:30px;"
+    >
+    <span
+      id="toggleEditPass"
+      style="
+        position:absolute;
+        left:160px;
+        top:50%;
+        transform:translateY(-50%);
+        cursor:pointer;
+        color:#007bff;
+      "
+    >
+      👁
+    </span>
+  </div>
+
+  <label>Color:</label>
+  <input
+    type="color"
+    id="editUserColor"
+    value="#ffffff"
+    style="width:50px; height:30px; margin-bottom:0.5rem; cursor:pointer;"
+  >
+
+  <label>Posición:</label>
+  <input
+    type="number"
+    id="editUserPosition"
+    placeholder="Posición"
+    style="width:50px; margin-bottom:0.5rem;"
+  >
+
+  <div style="margin-bottom:0.5rem;">
+    <input type="checkbox" id="editUserCanSearchAny">
+    <label for="editUserCanSearchAny">Consultar Correos Sin Restricciones</label>
+  </div>
+
+  <!-- Checkbox para "Puede crear sub-usuarios" -->
+  <div style="margin-bottom:0.5rem;">
+    <input type="checkbox" id="editUserCanCreateSubusers">
+    <label for="editUserCanCreateSubusers">Puede crear sub-usuarios</label>
+  </div>
+
+  <!-- No mostrar can_create_subusers para sub-usuarios, 
+       pero aquí solo listamos parent_id=None (usuarios principales).
+       => si deseas, sírvelo. 
+  -->
+
+  <button id="editUserSaveBtn" class="btn-green" style="margin-right:0.5rem;">Guardar</button>
+  <button id="editUserCancelBtn" class="btn-red">Cancelar</button>
+</div>
+
+<script src="{{ url_for('static', filename='js/admin_users.js') }}"></script>
+{% endblock %}

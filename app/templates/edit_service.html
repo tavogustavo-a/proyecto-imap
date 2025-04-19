@@ -1,0 +1,365 @@
+<!-- app/templates/edit_service.html -->
+{% extends "base.html" %}
+{% block head %}
+<meta name="csrf_token" content="{{ csrf_token() }}">
+<title>Editar Servicio - {{ srv.name }}</title>
+<style>
+  .search-container {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+    margin-bottom: 0.75rem;
+  }
+  .search-container input[type="search"] {
+    flex-grow: 1;
+    margin-bottom: 0; 
+  }
+  .hidden-item {
+    display: none;
+  }
+  .admin-card + .admin-card { margin-top: 1.5rem; }
+  .admin-card h3:first-child { margin-top: 0; }
+  ul { list-style: none; padding-left: 0; }
+  li { margin-bottom: 0.5rem; padding-bottom: 0.5rem; border-bottom: 1px solid #eee; }
+  li:last-child { border-bottom: none; }
+  /* Estilo para listas Regex/Filtros */
+  .styled-list {
+      border: 1px solid #eee;
+      border-radius: 4px;
+      margin-bottom: 1rem;
+      padding-left: 0; /* Asegurar que no haya padding por defecto */
+      list-style: none; /* Asegurar que no haya bullets */
+  }
+  .styled-list li {
+    padding: 0.4rem 0.8rem;
+    border-bottom: 1px solid #eee;
+    display: flex; /* Para alinear botón */
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap; 
+    gap: 0.5rem; 
+    margin-bottom: 0; /* Quitar margen inferior del li */
+  }
+  .styled-list li:nth-child(odd) { background-color: #ffffff; }
+  .styled-list li:nth-child(even) { background-color: #f8f9fa; }
+  .styled-list li:last-child { border-bottom: none; }
+  .styled-list li span { word-break: break-all; }
+</style>
+{% endblock head %}
+
+{% block content %}
+
+<div style="max-width:900px; margin:2rem auto;">
+
+  <!-- ======================= TARJETA 1: Editar Servicio ======================= -->
+  <div class="admin-card">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem;">
+      <h2 style="margin:0; font-size:1.5rem;">Editar Servicio</h2>
+      <div>
+        <button class="btn-red" style="margin-right:0.5rem;" onclick="location.href='{{ url_for('admin_bp.dashboard') }}'">Volver al Panel</button>
+        <button class="btn-blue" onclick="location.href='{{ url_for('admin_bp.services_page') }}'">Volver a Servicios</button>
+      </div>
+    </div>
+    <hr style="margin-bottom:1rem;">
+
+    <form method="POST" action="{{ url_for('admin_bp.edit_service', service_id=srv.id) }}" style="margin-bottom:0;">
+      <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+      {% if srv.protected and srv.name == "Pais Netflix" %}
+        <p><strong>Nombre (protegido):</strong> {{ srv.name }}</p>
+      {% else %}
+        <div style="margin-bottom:1rem;">
+          <label for="service_name_input">Nombre del Servicio:</label><br>
+          <input id="service_name_input" type="text" name="service_name" value="{{ srv.name }}" style="width:70%;">
+        </div>
+      {% endif %}
+      <div style="display:flex; align-items:flex-end; gap:1.5rem; margin-bottom:1.5rem; flex-wrap: wrap;">
+        <div>
+          <label for="border_color_input">Color (contorno):</label>
+          <input id="border_color_input" type="color" name="border_color" value="{{ srv.border_color if srv.border_color else '#333' }}" style="width:50px; height:30px; cursor:pointer; padding: 0; border: 1px solid #ccc; vertical-align: bottom; margin-left: 0.5rem;">
+        </div>
+        <div>
+          <label for="position_input" style="margin:0;">Posición:</label>
+          <input id="position_input" type="number" name="position" value="{{ srv.position }}" style="width:70px; border:1px solid #ccc; border-radius:4px; padding:0.2rem; margin-left: 0.5rem;">
+        </div>
+      </div>
+      <div style="display:flex; align-items:center; justify-content: flex-start; flex-wrap: wrap; gap: 1.5rem;">
+          <div>
+            <button type="submit" class="btn-green" style="margin-right:0.5rem;">Guardar Cambios</button>
+            <button type="button" class="btn-red" onclick="location.href='{{ url_for('admin_bp.services_page') }}'">Cancelar</button>
+          </div>
+          <div style="display: flex; align-items: center; gap: 0.5rem;">
+              <label for="visibility_mode_select" style="margin:0;">Visibilidad:</label>
+              <select id="visibility_mode_select" name="visibility_mode" style="border:1px solid #ccc; border-radius:4px; padding:0.2rem; cursor:pointer;">
+                <option value="off" {% if srv.visibility_mode == 'off' %}selected{% endif %}>off</option>
+                <option value="on-no-usuarios" {% if srv.visibility_mode == 'on-no-usuarios' %}selected{% endif %}>on-no-usuarios</option>
+                <option value="on-usuarios" {% if srv.visibility_mode == 'on-usuarios' %}selected{% endif %}>on-usuarios</option>
+              </select>
+          </div>
+      </div>
+    </form>
+  </div> <!-- FIN TARJETA 1 -->
+
+
+  <!-- ======================= TARJETA 2: Alias ======================= -->
+  <div class="admin-card">
+    <h3>Alias</h3>
+    {% if srv.aliases %}
+      <ul style="list-style-type: none; padding-left: 0;">
+        {% for al in srv.aliases %}
+          <li style="margin-bottom:1rem; border-left:4px solid {{ al.border_color }}; padding-left:0.8rem; border-bottom: 1px solid #eee;">
+            <div><strong>{{ al.alias_name }}</strong></div>
+            {% if al.alias_icons and al.alias_icons|length > 0 %}
+              <div style="margin-top:0.4rem; display: flex; align-items: center; flex-wrap: wrap; gap: 0.5rem;">
+                <strong style="font-size: 0.9em; margin-right: 0.5rem;">Íconos:</strong>
+                <div>
+                  {% for ai in al.alias_icons %}
+                    <span style="display:inline-flex; align-items: center; margin-right:0.75rem; background-color: #f0f0f0; padding: 2px 5px; border-radius: 4px;">
+                      <img src="{{ url_for('static', filename='images/' ~ ai.icon_name) }}" alt="Icon" style="max-height:1.1em; vertical-align:middle; margin-right: 4px;">
+                      <button class="delete-alias-icon" data-icon-id="{{ ai.id }}" style="padding:0 4px; background:#e57373; border:1px solid #e57373; color:#fff; border-radius:3px; cursor:pointer; font-size: 0.8em; line-height: 1;" title="Eliminar icono">x</button>
+                    </span>
+                  {% endfor %}
+                </div>
+              </div>
+            {% endif %}
+            <div style="margin-top:0.75rem;">
+                <button class="add-alias-icon-btn btn-small" data-alias-id="{{ al.id }}" style="background:#9c27b0; border-color:#9c27b0; color:#fff;">+Icon</button>
+                <button class="edit-alias-btn btn-small" data-alias-id="{{ al.id }}" data-alias-name="{{ al.alias_name }}" data-alias-color="{{ al.border_color }}" style="margin-left:0.5rem; background:#ffa726; border-color:#ffa726; color:#fff;">Editar</button>
+                <button class="delete-alias-btn btn-small" data-alias-id="{{ al.id }}" style="margin-left:0.5rem; background:#f44336; border-color:#f44336; color:#fff;">Eliminar</button>
+            </div>
+          </li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <p>(No hay alias creados para este servicio)</p>
+    {% endif %}
+    <button class="open-alias-popup btn-blue" data-service-id="{{ srv.id }}" style="margin-top: 1rem;">
+      + Crear Alias
+    </button>
+  </div> <!-- FIN TARJETA 2 -->
+
+
+  <!-- ======================= TARJETA 3: Regex y Filtros Activos ======================= -->
+  <div class="admin-card">
+    <h3>Regex Activos</h3>
+    <ul class="styled-list">
+      {% if srv.regexes %}
+        {% for r in srv.regexes %}
+          <li>
+            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem;">
+                <span style="word-break: break-all;"><code>{{ r.pattern }}</code>{% if r.description %} <small>({{ r.description }})</small>{% endif %}</span>
+                {% if srv.name == "Pais Netflix" and r.pattern == "_(?:es_|en-)([A-Za-z]{2})[^_]*_EVO" %}
+                  <small style="color:#999;">(protegido)</small>
+                {% else %}
+                  <button class="unlink-regex-btn btn-red btn-small" data-service-id="{{ srv.id }}" data-regex-id="{{ r.id }}">Quitar</button>
+                {% endif %}
+            </div>
+          </li>
+        {% endfor %}
+      {% else %}
+        <li>(No hay regex vinculados a este servicio)</li>
+      {% endif %}
+    </ul>
+
+    <h3 style="margin-top: 1.5rem;">Filtros Activos</h3>
+    <ul class="styled-list">
+      {% if srv.filters %}
+        {% for f in srv.filters %}
+           <li>
+               <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem;">
+                  <span style="word-break: break-all;">{{ f.sender if f.sender else 'Cualquiera' }} / {{ f.keyword if f.keyword else 'Cualquiera' }}</span>
+                  <button class="unlink-filter-btn btn-red btn-small" data-service-id="{{ srv.id }}" data-filter-id="{{ f.id }}">Quitar</button>
+               </div>
+           </li>
+        {% endfor %}
+      {% else %}
+        <li>(No hay filtros vinculados a este servicio)</li>
+      {% endif %}
+    </ul>
+  </div> <!-- FIN TARJETA 3 -->
+
+</div> <!-- FIN Contenedor General -->
+
+<!-- POPUPS y scripts para alias e íconos -->
+<div
+  id="aliasPopup"
+  style="
+    display:none;
+    position:fixed;
+    top:50%; left:50%;
+    transform:translate(-50%,-50%);
+    background:#fff;
+    border:2px solid #ccc;
+    border-radius:6px;
+    padding:1rem;
+    z-index:9999;
+    max-width:300px;
+  "
+>
+  <h4 style="margin-top:0;">Crear Alias</h4>
+  <div style="margin-bottom:0.5rem;">
+    <label>Nombre del alias:</label>
+    <input
+      type="text"
+      id="aliasNameInput"
+      style="
+        width:100%;
+        border:1px solid #ccc;
+        border-radius:4px;
+        padding:0.3rem;
+      "
+    >
+  </div>
+  <div style="margin-bottom:0.5rem;">
+    <label>Color:</label><br>
+    <input
+      type="color"
+      id="aliasColorInput"
+      value="#333"
+      style="width:50px; height:30px; cursor:pointer;"
+    >
+  </div>
+  <button
+    id="aliasCreateBtn"
+    style="
+      background:#4caf50;
+      border:2px solid #4caf50;
+      color:#fff;
+      padding:0.3rem 0.7rem;
+      border-radius:4px;
+      cursor:pointer;
+    "
+  >
+    Crear
+  </button>
+  <button
+    id="aliasCancelBtn"
+    style="
+      background:#f44336;
+      border:2px solid #f44336;
+      color:#fff;
+      padding:0.3rem 0.7rem;
+      border-radius:4px;
+      cursor:pointer;
+      margin-left:0.5rem;
+    "
+  >
+    Cancelar
+  </button>
+</div>
+
+<div
+  id="editAliasPopup"
+  style="
+    display:none;
+    position:fixed;
+    top:50%; left:50%;
+    transform:translate(-50%,-50%);
+    background:#fff;
+    border:2px solid #ccc;
+    border-radius:6px;
+    padding:1rem;
+    z-index:9999;
+    max-width:300px;
+  "
+>
+  <h4 style="margin-top:0;">Editar Alias</h4>
+  <input type="hidden" id="editAliasId">
+  <div style="margin-bottom:0.5rem;">
+    <label>Nombre del alias:</label>
+    <input
+      type="text"
+      id="editAliasName"
+      style="
+        width:100%;
+        border:1px solid #ccc;
+        border-radius:4px;
+        padding:0.3rem;
+      "
+    >
+  </div>
+  <div style="margin-bottom:0.5rem;">
+    <label>Color:</label><br>
+    <input
+      type="color"
+      id="editAliasColor"
+      value="#333"
+      style="width:50px; height:30px; cursor:pointer;"
+    >
+  </div>
+  <button
+    id="editAliasSaveBtn"
+    style="
+      background:#4caf50;
+      border:2px solid #4caf50;
+      color:#fff;
+      padding:0.3rem 0.7rem;
+      border-radius:4px;
+      cursor:pointer;
+    "
+  >
+    Guardar
+  </button>
+  <button
+    id="editAliasCancelBtn"
+    style="
+      background:#f44336;
+      border:2px solid #f44336;
+      color:#fff;
+      padding:0.3rem 0.7rem;
+      border-radius:4px;
+      cursor:pointer;
+      margin-left:0.5rem;
+    "
+  >
+    Cancelar
+  </button>
+</div>
+
+<div
+  id="aliasIconGridOverlay"
+  style="
+    display:none;
+    position:fixed;
+    top:0; left:0;
+    width:100%; height:100%;
+    background:rgba(0,0,0,0.5);
+    z-index:9999;
+  "
+>
+  <div
+    id="aliasIconGridContainer"
+    style="
+      position:absolute;
+      top:50%; left:50%;
+      transform:translate(-50%,-50%);
+      background:#fff;
+      border:2px solid #ccc;
+      border-radius:6px;
+      padding:1rem;
+      max-width:500px;
+      width:90%;
+      color:#333;
+    "
+  >
+    <h4 style="margin-top:0;">Selecciona un ícono para el alias</h4>
+    <div id="aliasIconGrid" style="display:flex; flex-wrap:wrap; gap:0.5rem;"></div>
+    <button
+      id="closeAliasIconGridBtn"
+      style="
+        background:#f44336;
+        border:2px solid #f44336;
+        color:#fff;
+        margin-top:1rem;
+        padding:0.3rem 0.7rem;
+        border-radius:4px;
+        cursor:pointer;
+      "
+    >
+      Cerrar
+    </button>
+  </div>
+</div>
+
+<script src="{{ url_for('static', filename='js/admin_services_edit.js') }}"></script>
+
+{% endblock %}

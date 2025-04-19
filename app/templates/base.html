@@ -1,0 +1,70 @@
+<!-- app/templates/base.html -->
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>{{ title if title else "ProyectoIMAP" }}</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  {% block head %}
+    <meta name="csrf_token" content="{{ csrf_token() }}">
+  {% endblock %}
+
+  <link rel="icon" href="{{ url_for('static', filename='images/favicon.svg') }}" type="image/svg+xml">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+
+  <style>
+    :root {
+      --card-opacity: {{ site_settings.get('card_opacity','0.8') }};
+    }
+    body {
+      display: none;
+      margin: 0;
+      padding: 0;
+    }
+    #loading-overlay {
+      position: fixed;
+      top:0; left:0; right:0; bottom:0;
+      background: #fff;
+      color: #333;
+      z-index:9999;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      flex-direction:column;
+    }
+  </style>
+</head>
+
+<body class="theme-active {{ site_settings.get('current_theme','tema1') }}">
+  <div id="loading-overlay">
+    <h2>Por favor espere...</h2>
+  </div>
+
+  <noscript>
+    <p style="color:red; text-align:center; margin-top:2rem;">
+      Esta aplicación requiere JavaScript. Actívalo para continuar.
+    </p>
+  </noscript>
+
+  <div class="container">
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        {% for category, msg in messages %}
+          <div class="flash-message {{ category }}">{{ msg }}</div>
+        {% endfor %}
+      {% endif %}
+    {% endwith %}
+
+    {% block content %}{% endblock %}
+  </div>
+
+  <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+  <script>
+    window.addEventListener('load', () => {
+      const overlay = document.getElementById('loading-overlay');
+      if (overlay) overlay.style.display = 'none';
+      document.body.style.display = 'block';
+    });
+  </script>
+</body>
+</html>

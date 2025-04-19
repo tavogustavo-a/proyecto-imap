@@ -1,0 +1,1210 @@
+{% extends "base.html" %}
+{% block head %}
+<meta name="csrf_token" content="{{ csrf_token() }}">
+<title>Emails Permitidos - {{ user.username }}</title>
+<style>
+  .search-results-container {
+    max-height: 360px;
+    overflow-y: auto;
+    border: 1px solid #ccc;
+    margin-top: 0.5rem;
+    background-color: #ffffff;
+  }
+  .search-result-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.25rem 0.6rem;
+    border-bottom: 1px solid #eee;
+    font-size: 0.95em;
+  }
+  .search-result-item:nth-child(odd) {
+    background-color: #ffffff;
+  }
+  .search-result-item:nth-child(even) {
+    background-color: #f1f3f5;
+  }
+  .search-result-item:last-child {
+    border-bottom: none;
+  }
+  .search-result-item span {
+      flex-grow: 1;
+      margin-right: 0.25rem;
+      word-break: break-all;
+  }
+  .delete-search-result-btn {
+    padding: 0.1rem 0.4rem;
+    font-size: 0.9em;
+    line-height: 1;
+    cursor: pointer;
+    border: 1px solid #dc3545;
+    color: #dc3545;
+    background-color: transparent;
+    border-radius: 3px;
+    flex-shrink: 0;
+  }
+  .delete-search-result-btn:hover {
+    background-color: #dc3545;
+    color: white;
+  }
+  .delete-displayed-emails-btn {
+      display: block;
+      margin-top: 0.75rem;
+  }
+  #delete-displayed-container {
+    margin-top: 0.75rem;
+    text-align: right;
+  }
+  #deleteDisplayedBtn {
+      display: none;
+  }
+  #searchEmailsForm {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 0.5rem;
+    align-items: center;
+  }
+  .admin-card + .admin-card {
+    margin-top: 1.5rem;
+  }
+  .admin-card h3:first-child, .admin-card h4:first-child {
+    margin-top: 0;
+  }
+</style>
+{% endblock head %}
+
+{% block content %}
+
+<div style="max-width:770px; margin:2rem auto;">
+
+  <!-- TARJETA 1: Cabecera Y Búsqueda (Unificadas) -->
+  <div class="admin-card">
+    <!-- Cabecera -->
+    <div style="display:flex; align-items:center; gap: 1rem; margin-bottom:1rem; flex-wrap: wrap;">
+      <h2 style="margin:0; flex-shrink: 0;">Gestionar Correos y Accesos de {{ user.username }}</h2>
+      <div style="margin-left: auto;">
+        <button onclick="location.href='{{ url_for('admin_bp.usuarios_page') }}'" class="btn-blue" style="margin-right:0.5rem;">Volver a Usuarios</button>
+        <button onclick="location.href='{{ url_for('admin_bp.dashboard') }}'" class="btn-blue">Volver al Panel</button>
+      </div>
+    </div>
+
+    <!-- Búsqueda y activación -->
+    <hr style="margin: 1.5rem 0;">
+    <h3 style="margin-bottom: 0.5rem;">Búsqueda y activacion de correos</h3>
+    <p style="font-size: 0.85rem; color: #555; margin-bottom: 0.75rem;">
+      Ingresa uno o varios correos (separados por comas, espacios o saltos de línea) para buscar y activar o desactivar individualmente o todos los resultados.
+    </p>
+    <form id="searchEmailsForm" style="display:flex; gap:0.5rem; margin-bottom:0.5rem; align-items:center;">
+      <textarea id="searchEmailsInput" rows="2" style="flex:1; resize:vertical;" placeholder="correo1@gmail.com, correo2@gmail.com"></textarea>
+      <button type="submit" class="btn-search">Buscar</button>
+    </form>
+    <div id="emailsSearchResults" class="search-results-container" style="display: none;">
+        <!-- Resultados aquí -->
+    </div>
+    <div style="display: flex; justify-content: space-between; align-items: center; min-height: 2.5rem;">
+      <div id="searchStatus" style="font-style: italic; color: #555;"></div>
+      <div id="delete-displayed-container" style="margin-top: 0.75rem; text-align: right;">
+          <button id="deleteDisplayedBtn" class="btn-red btn-small">
+              Eliminar X Mostrados
+          </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- TARJETA 2: Correos Permitidos -->
+  <div class="admin-card">
+    <h3>Correos Permitidos</h3>
+    <div id="allowedEmailsContainer" style="margin-bottom:0;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem; flex-wrap: wrap; gap: 1rem;">
+        <label><strong>Lista de Correos:</strong></label>
+        <div>
+          <span>Mostrar:</span>
+          <select id="perPageSelect" style="margin-left: 0.5rem; padding: 3px;" value="10">
+             <option value="10">10</option><option value="20">20</option><option value="30">30</option><option value="50">50</option><option value="100">100</option><option value="300">300</option><option value="-1">Todos</option>
+          </select>
+        </div>
+      </div>
+      <div id="allowedEmailsTextContainer"
+           style="min-height: 90px; border: 1px solid #ccc; padding: 10px; margin-bottom: 0.5rem; background-color: #f8f9fa; font-family: monospace; white-space: pre-wrap; overflow-y: auto;">
+        <p>Cargando correos...</p>
+      </div>
+      <div id="allowedEmailsPagination"
+           style="display: flex; justify-content: space-between; align-items: center;">
+        <span id="paginationInfo"></span>
+        <button id="deleteAllEmailsBtn" class="btn-red btn-small" title="Eliminar TODOS los correos permitidos para este usuario">Eliminar Todos (X)</button>
+        <div style="margin-left: auto;">
+          <button id="prevPageBtn" class="btn-blue btn-small" disabled>&lt; Anterior</button>
+          <button id="nextPageBtn" class="btn-blue btn-small" style="margin-left: 0.5rem;" disabled>Siguiente &gt;</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- TARJETA 3 (antes 4): Añadir Correos -->
+  <div class="admin-card">
+    <strong style="display:block; margin-bottom:0.5rem;">¿Cómo agregar correos?</strong>
+    <ol style="margin:0; padding-left:1.5rem;">
+      <li>Escribe varias direcciones en el campo (separadas por comas, saltos de línea o espacios).</li>
+      <li>Da clic en <b>"Añadir Correos"</b>.</li>
+    </ol>
+
+    <hr style="margin: 1.5rem 0;">
+    <h4>Añadir Nuevos Correos Masivamente</h4>
+    <div id="addEmailsSection" style="margin-bottom: 0;">
+      <label for="addEmailsInput"><strong>Nuevos Correos (separados por comas, espacios o saltos de línea):</strong></label>
+      <textarea id="addEmailsInput" name="add_emails_input" rows="2" style="width:95%; display:block; margin-top:0.5rem; margin-bottom:0.5rem;" placeholder="nuevo1@ejemplo.com, nuevo2@ejemplo.com..."></textarea>
+      <button type="button" id="addEmailsBtn" class="btn-blue">Añadir Correos</button>
+      <span id="addEmailsMsg" style="margin-left: 1rem; font-style: italic; color: green;"></span>
+    </div>
+  </div>
+
+  <!-- TARJETA 4 (antes 5): Acceso a Regex y Filtros -->
+  <div class="admin-card">
+    <h3>Acceso a Regex y Filtros (Usuario Principal)</h3>
+    <p style="font-size:0.95rem;">
+      Marca o desmarca cuáles <strong>Regex</strong> o <strong>Filtros</strong>
+      tiene permitido consultar este usuario.
+    </p>
+    <div style="margin-bottom:1rem;">
+      <button type="button" class="btn-blue" id="openRegexModalBtn">Configurar Regex</button>
+      <button type="button" class="btn-blue" id="openFiltersModalBtn" style="margin-left:0.5rem;">
+        Configurar Filtros
+      </button>
+    </div>
+  </div>
+
+  <!-- TARJETA 5 (antes 6): Permiso para Crear Sub-usuarios -->
+  <div class="admin-card">
+    <h3>Permiso para Crear Sub-usuarios</h3>
+    <p style="font-size:0.9rem;">
+      Si activas esta opción, el usuario podrá crear "sub-usuarios" y gestionarlos.
+      <br>
+      <strong>Atención:</strong> si desactivas este permiso, se borrarán todos sus sub-usuarios existentes.
+    </p>
+    <div style="margin-bottom:1rem;">
+      <label style="display:flex; align-items:center; gap:0.3rem;">
+        <input
+          type="checkbox"
+          id="toggleCanCreateSubusers"
+          {% if user.can_create_subusers %}checked{% endif %}
+        >
+        Puede crear sub-usuarios
+      </label>
+      <button id="saveCanCreateSubusersBtn" class="btn-green" style="margin-left:1rem;">
+        Guardar
+      </button>
+    </div>
+
+    {% if user.can_create_subusers %}
+      <hr style="margin:1rem 0;">
+      <h4>Sub-usuarios</h4>
+      <div style="display:flex; gap:0.5rem; margin-bottom:1rem;">
+        <button id="btnShowSubusers" class="btn-blue">Ver Sub-usuarios</button>
+        <button id="btnSubusersRegexGlobal" class="btn-blue">Configurar Regex Sub-usuario</button>
+        <button id="btnSubusersFilterGlobal" class="btn-blue">Configurar Filtros Sub-usuario</button>
+      </div>
+      <p style="font-size:0.85rem;">
+        Desde aquí puedes Encender/Apagar (On/Off) y <strong>Eliminar</strong> cada sub-usuario.
+        Además, puedes definir Regex y Filtros que se aplicarán a los sub-usuarios en general.
+      </p>
+    {% endif %}
+  </div>
+
+</div>
+
+<!-- ========================= MODALES ========================= -->
+<!-- Modal Regex (principal) -->
+<div
+  id="regexModal"
+  style="
+    display:none;
+    position:fixed; top:50%; left:50%;
+    transform:translate(-50%,-50%);
+    background:#fff; border:2px solid #ccc;
+    padding:1rem; z-index:9999; max-width:400px; width:90%;
+  "
+>
+  <h4>Acceso a Regex (Principal)</h4>
+  <div id="regexListContainer" style="max-height:300px; overflow:auto; margin-bottom:1rem;"></div>
+  <button type="button" class="btn-green" id="saveRegexSelectionBtn">Guardar</button>
+  <button type="button" class="btn-red" id="closeRegexModalBtn" style="margin-left:1rem;">Cerrar</button>
+</div>
+
+<!-- Modal Filtros (principal) -->
+<div
+  id="filtersModal"
+  style="
+    display:none; position:fixed; top:50%; left:50%;
+    transform:translate(-50%,-50%);
+    background:#fff; border:2px solid #ccc;
+    padding:1rem; z-index:9999; max-width:400px; width:90%;
+  "
+>
+  <h4>Acceso a Filtros (Principal)</h4>
+  <div id="filtersListContainer" style="max-height:300px; overflow:auto; margin-bottom:1rem;"></div>
+  <button type="button" class="btn-green" id="saveFiltersSelectionBtn">Guardar</button>
+  <button type="button" class="btn-red" id="closeFiltersModalBtn" style="margin-left:1rem;">Cerrar</button>
+</div>
+
+<!-- Modal Sub-usuarios => On/Off/Eliminar individual -->
+<div
+  id="subusersModal"
+  style="
+    display:none; position:fixed; top:50%; left:50%;
+    transform:translate(-50%,-50%);
+    background:#fff; border:2px solid #ccc;
+    padding:1rem; z-index:9999; max-width:600px; width:90%;
+  "
+>
+  <h4>Sub-usuarios de {{ user.username }}</h4>
+  <div id="subusersList" style="max-height:250px; overflow:auto; margin-bottom:1rem;"></div>
+  <button type="button" class="btn-red" id="closeSubusersModalBtn">Cerrar</button>
+</div>
+
+<!-- Modal Sub-usuario Regex -->
+<div
+  id="subusersRegexModal"
+  style="
+    display:none; position:fixed; top:50%; left:50%;
+    transform:translate(-50%,-50%);
+    background:#fff; border:2px solid #ccc;
+    padding:1rem; z-index:9999; max-width:400px; width:90%;
+  "
+>
+  <h4>Configurar Regex Sub-usuario (Global)</h4>
+  <div id="subusersRegexList" style="max-height:300px; overflow:auto; margin-bottom:1rem;"></div>
+  <button type="button" class="btn-green" id="saveSubusersRegexBtn">Guardar</button>
+  <button type="button" class="btn-red" id="closeSubusersRegexModalBtn" style="margin-left:1rem;">Cerrar</button>
+</div>
+
+<!-- Modal Sub-usuario Filtros -->
+<div
+  id="subusersFiltersModal"
+  style="
+    display:none; position:fixed; top:50%; left:50%;
+    transform:translate(-50%,-50%);
+    background:#fff; border:2px solid #ccc;
+    padding:1rem; z-index:9999; max-width:400px; width:90%;
+  "
+>
+  <h4>Configurar Filtros Sub-usuario (Global)</h4>
+  <div id="subusersFiltersList" style="max-height:300px; overflow:auto; margin-bottom:1rem;"></div>
+  <button type="button" class="btn-green" id="saveSubusersFiltersBtn">Guardar</button>
+  <button type="button" class="btn-red" id="closeSubusersFiltersModalBtn" style="margin-left:1rem;">Cerrar</button>
+</div>
+
+<script>
+document.addEventListener("DOMContentLoaded", function() {
+  // --- Variables inicializadas desde el Backend (Jinja2) ---
+  // El linter puede quejarse de esta línea, pero es necesaria.
+  const userId = {{ user.id | tojson }}; // Usar tojson para asegurar formato correcto
+
+  // --- Funciones Auxiliares ---
+  function getCsrfToken(){
+    const meta = document.querySelector('meta[name="csrf_token"]');
+    return meta ? meta.getAttribute('content') : '';
+  }
+
+  function escapeHtml(unsafe) {
+    if (!unsafe) return '';
+    return unsafe
+         .replace(/&/g, "&amp;")
+         .replace(/</g, "&lt;")
+         .replace(/>/g, "&gt;")
+         .replace(/"/g, "&quot;")
+         .replace(/'/g, "&#039;");
+  }
+
+  // Función para manejar respuestas fetch y errores comunes
+  function handleFetchResponse(response) {
+    if (!response.ok) {
+      // Intenta parsear el error JSON del backend, si falla, usa el status
+      return response.json()
+        .then(errData => { 
+          throw new Error(errData.message || `Error del servidor: ${response.status}`); 
+        })
+        .catch(() => { // Si el body no es JSON o está vacío
+           throw new Error(`Error del servidor: ${response.status}`);
+        });
+    }
+    return response.json(); // Parsea el JSON si la respuesta es ok
+  }
+
+  // --- Lógica Principal --- 
+
+  // ======= PAGINACIÓN CORREOS PERMITIDOS =======
+  const allowedEmailsTextContainer = document.getElementById("allowedEmailsTextContainer");
+  const paginationInfo = document.getElementById("paginationInfo");
+  const prevPageBtn = document.getElementById("prevPageBtn");
+  const nextPageBtn = document.getElementById("nextPageBtn");
+  const perPageSelect = document.getElementById("perPageSelect");
+  const deleteAllEmailsBtn = document.getElementById("deleteAllEmailsBtn");
+  
+  let currentPage = 1;
+  let currentPerPage = 10;
+  if (perPageSelect) perPageSelect.value = currentPerPage;
+
+  function fetchAllowedEmails(page = 1, perPage = 10) {
+    currentPage = page;
+    // Asegurar que perPage sea un número válido, default a 10 si no
+    currentPerPage = parseInt(perPage, 10) || 10;
+    if (currentPerPage === -1) { // Si selecciona "Todos"
+        perPage = 999999; // Un número muy grande para simular todos
+    } else {
+         perPage = currentPerPage;
+    }
+    const url = `/admin/list_allowed_emails_paginated?user_id=${userId}&page=${page}&per_page=${perPage}`;
+    
+    if (allowedEmailsTextContainer) allowedEmailsTextContainer.innerHTML = "<p>Cargando...</p>";
+    
+    fetch(url, {
+      method: "GET",
+      headers: { "X-CSRFToken": getCsrfToken() }
+    })
+    .then(handleFetchResponse)
+    .then(data => {
+      if (data.status === "ok") {
+        if (allowedEmailsTextContainer) renderAllowedEmailsText(data.emails);
+        if (paginationInfo) updatePaginationControls(data.pagination);
+      } else {
+        if (allowedEmailsTextContainer) allowedEmailsTextContainer.innerHTML = `<p style="color:red;">Error: ${data.message || 'No se pudieron cargar los correos.'}</p>`;
+      }
+    })
+    .catch(err => {
+      console.error("Fetch error list emails:", err);
+      if (allowedEmailsTextContainer) allowedEmailsTextContainer.innerHTML = `<p style="color:red;">Error al cargar correos: ${err.message}</p>`;
+    });
+  }
+
+  function renderAllowedEmailsText(emails) {
+    if (!emails || emails.length === 0) {
+      allowedEmailsTextContainer.textContent = "No hay correos permitidos asignados."; // Usar textContent
+      return;
+    }
+    // Unir correos con salto de línea
+    allowedEmailsTextContainer.textContent = emails.join('\n'); 
+  }
+
+  function updatePaginationControls(pagination) {
+    if (!pagination) return;
+
+    paginationInfo.textContent = `Página ${pagination.page} de ${pagination.total_pages}.`;
+
+    if (prevPageBtn) prevPageBtn.disabled = !pagination.has_prev;
+    if (nextPageBtn) nextPageBtn.disabled = !pagination.has_next;
+    
+    // --- INICIO: Actualizar botón "Eliminar Todos" ---
+    if (deleteAllEmailsBtn) { // Asegurarse que el botón exista
+        const totalItems = pagination.total_items || 0;
+        if (totalItems > 0) {
+            deleteAllEmailsBtn.textContent = `Eliminar Todos (${totalItems})`;
+            deleteAllEmailsBtn.disabled = false; // Habilitar si hay correos
+            deleteAllEmailsBtn.style.display = 'inline-block'; // Asegurar que sea visible
+        } else {
+            deleteAllEmailsBtn.textContent = 'Eliminar Todos';
+            deleteAllEmailsBtn.disabled = true; // Deshabilitar si no hay correos
+            // Opcional: ocultarlo si no hay correos
+            // deleteAllEmailsBtn.style.display = 'none'; 
+        }
+    }
+    // --- FIN: Actualizar botón ---
+    
+    // Actualizar valor del select por si cambió (ej: si se seleccionó "Todos")
+    if (perPageSelect) {
+       if (pagination.per_page >= 999999) { // Si cargamos "Todos"
+           perPageSelect.value = "-1";
+       } else {
+           perPageSelect.value = pagination.per_page;
+       }
+    }
+  }
+
+  // Event Listeners Paginación
+  if(prevPageBtn) {
+      prevPageBtn.addEventListener("click", () => {
+          if (currentPage > 1) fetchAllowedEmails(currentPage - 1, currentPerPage);
+      });
+  }
+  if(nextPageBtn) {
+      nextPageBtn.addEventListener("click", () => {
+          fetchAllowedEmails(currentPage + 1, currentPerPage);
+      });
+  }
+  if(perPageSelect) {
+      perPageSelect.addEventListener("change", () => {
+          const newPerPage = parseInt(perPageSelect.value, 10);
+          fetchAllowedEmails(1, newPerPage); // Volver a página 1 al cambiar tamaño
+      });
+  }
+
+  // --- NUEVO Listener para Eliminar Todos ---
+  if(deleteAllEmailsBtn) {
+      deleteAllEmailsBtn.addEventListener("click", () => {
+          if (!confirm("¿Seguro que quieres eliminar TODOS los correos permitidos para este usuario? Esta acción no se puede deshacer.")) {
+              return;
+          }
+          
+          fetch("/admin/delete_all_allowed_emails_ajax", { // Nueva ruta backend
+              method: "POST",
+              headers: {
+                  "Content-Type": "application/json",
+                  "X-CSRFToken": getCsrfToken()
+              },
+              body: JSON.stringify({ user_id: userId })
+          })
+          .then(handleFetchResponse)
+          .then(data => {
+              if(data.status === "ok"){
+                  alert(`${data.deleted_count_parent || 0} correos eliminados.`);
+                  fetchAllowedEmails(1, currentPerPage); // Recargar (ahora estará vacío)
+              } else {
+                  alert(`Error al eliminar todos: ${data.message || 'Error desconocido'}`);
+              }
+          })
+          .catch(err => {
+              console.error("Fetch error delete all:", err);
+              alert(`Error de red al eliminar todos: ${err.message}`);
+          });
+      });
+  }
+
+  // Carga inicial
+  if(allowedEmailsTextContainer) fetchAllowedEmails(currentPage, currentPerPage);
+  // ======= FIN PAGINACIÓN CORREOS PERMITIDOS =======
+
+  // ======= BÚSQUEDA Y ELIMINACIÓN DE CORREOS =======
+  const searchEmailsForm = document.getElementById("searchEmailsForm");
+  const searchEmailsInput = document.getElementById("searchEmailsInput");
+  const emailsSearchResults = document.getElementById("emailsSearchResults");
+  const searchStatusDiv = document.getElementById('searchStatus'); // Para mensajes
+  const deleteDisplayedBtn = document.getElementById('deleteDisplayedBtn'); // Botón "Eliminar Mostrados"
+
+  let currentlyDisplayedEmails = [];
+
+  if(searchEmailsForm && searchEmailsInput && emailsSearchResults && deleteDisplayedBtn){
+    searchEmailsForm.addEventListener("submit", function(e){
+      e.preventDefault();
+      const searchText = searchEmailsInput.value.trim();
+       if (!searchText) {
+           renderEmailsResults([]);
+           return;
+       }
+      // if(searchStatusDiv) searchStatusDiv.textContent = 'Buscando...'; // COMENTADO
+
+      fetch("/admin/search_allowed_emails_ajax", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-CSRFToken": getCsrfToken()
+        },
+        body: JSON.stringify({ user_id: userId, search_text: searchText })
+      })
+      .then(handleFetchResponse)
+      .then(data => {
+        if(data.status === "ok"){
+          currentlyDisplayedEmails = data.emails || [];
+          renderEmailsResults(currentlyDisplayedEmails);
+        } else {
+          emailsSearchResults.innerHTML = `<p style="color:red;">Error: ${data.message || 'Respuesta inválida'}</p>`;
+           if(searchStatusDiv) searchStatusDiv.textContent = '';
+           deleteDisplayedBtn.style.display = 'none';
+        }
+      })
+      .catch(err => {
+        console.error("Fetch error search:", err);
+        emailsSearchResults.innerHTML = `<p style="color:red;">Error al buscar: ${err.message}</p>`;
+         if(searchStatusDiv) searchStatusDiv.textContent = '';
+         deleteDisplayedBtn.style.display = 'none';
+      });
+    });
+  }
+
+  // --- Renderizar Resultados de Búsqueda ---
+  function renderEmailsResults(emails) {
+    emailsSearchResults.innerHTML = '';
+    if (!emails || emails.length === 0) {
+        emailsSearchResults.style.display = 'none';
+        deleteDisplayedBtn.style.display = 'none';
+        return;
+    }
+
+    emailsSearchResults.style.display = 'block';
+    emails.forEach(email => {
+        const itemDiv = document.createElement('div');
+        itemDiv.classList.add('search-result-item');
+        itemDiv.innerHTML = `
+            <span>${escapeHtml(email)}</span>
+            <button class="delete-search-result-btn" data-email="${escapeHtml(email)}" title="Eliminar este correo">X</button>
+        `;
+        emailsSearchResults.appendChild(itemDiv);
+    });
+
+    deleteDisplayedBtn.textContent = `Eliminar ${emails.length} Mostrados`;
+    deleteDisplayedBtn.style.display = 'inline-block';
+    deleteDisplayedBtn.disabled = false;
+  }
+
+  // --- Listener para botones DENTRO de los resultados (SOLO Eliminar X individual) ---
+  if(emailsSearchResults){
+    emailsSearchResults.addEventListener("click", function(e){
+      if(e.target.classList.contains("delete-search-result-btn")){
+        e.preventDefault();
+        const button = e.target;
+        const emailToRemove = button.getAttribute("data-email");
+        if(!emailToRemove || !confirm(`¿Eliminar ${emailToRemove}?`)) { return; }
+
+        button.disabled = true;
+        button.textContent = '...';
+
+        fetch("/admin/delete_allowed_email_ajax", {
+          method: "POST",
+          headers: {"Content-Type": "application/json", "X-CSRFToken": getCsrfToken()},
+          body: JSON.stringify({ user_id: userId, email: emailToRemove })
+        })
+        .then(handleFetchResponse)
+        .then(data => {
+          if(data.status === "ok"){
+            button.closest('.search-result-item').remove();
+            currentlyDisplayedEmails = currentlyDisplayedEmails.filter(email => email !== emailToRemove);
+            if (currentlyDisplayedEmails.length > 0) {
+                 deleteDisplayedBtn.textContent = `Eliminar ${currentlyDisplayedEmails.length} Mostrados`;
+                 deleteDisplayedBtn.style.display = 'inline-block';
+            } else {
+                 emailsSearchResults.style.display = 'none';
+                 deleteDisplayedBtn.style.display = 'none';
+            }
+            fetchAllowedEmails(currentPage, currentPerPage);
+          } else {
+            alert(`Error: ${data.message || 'Error desconocido'}`);
+            button.disabled = false;
+          }
+        })
+        .catch(err => {
+          alert(`Error de red: ${err.message}`);
+          button.disabled = false;
+        });
+      }
+    });
+  }
+
+  // --- Listener para el botón "Eliminar Todos los Mostrados" (fuera de la lista) ---
+  if (deleteDisplayedBtn) {
+      deleteDisplayedBtn.addEventListener('click', function(e){
+         e.preventDefault();
+         const emailsToDelete = currentlyDisplayedEmails;
+
+         if (!emailsToDelete || emailsToDelete.length === 0) { return; }
+         if(!confirm(`¿Eliminar los ${emailsToDelete.length} correos mostrados?`)) { return; }
+
+         deleteDisplayedBtn.disabled = true;
+         deleteDisplayedBtn.textContent = 'Eliminando...';
+
+         fetch("/admin/delete_many_emails_ajax", {
+           method: "POST",
+           headers: {"Content-Type": "application/json", "X-CSRFToken": getCsrfToken()},
+           body: JSON.stringify({ user_id: userId, emails: emailsToDelete })
+         })
+         .then(handleFetchResponse)
+         .then(data => {
+           if(data.status === "ok"){
+             emailsSearchResults.innerHTML = "";
+             emailsSearchResults.style.display = 'none';
+             deleteDisplayedBtn.style.display = 'none';
+             currentlyDisplayedEmails = [];
+             fetchAllowedEmails(currentPage, currentPerPage);
+           } else {
+             alert(`Error: ${data.message || 'Error desconocido'}`);
+           }
+         })
+         .catch(err => {
+           alert(`Error de red: ${err.message}`);
+         })
+         .finally(() => {
+         });
+      });
+  }
+
+  // ======= NUEVO: AÑADIR CORREOS MASIVAMENTE =======
+  const addEmailsInput = document.getElementById("addEmailsInput");
+  const addEmailsBtn = document.getElementById("addEmailsBtn");
+  const addEmailsMsg = document.getElementById("addEmailsMsg");
+
+  if(addEmailsBtn && addEmailsInput && addEmailsMsg){
+    addEmailsBtn.addEventListener("click", function() {
+      const rawText = addEmailsInput.value.trim();
+      if (!rawText) {
+         if(addEmailsMsg) { addEmailsMsg.textContent = 'Campo vacío.'; addEmailsMsg.style.color = 'orange';}
+         return;
+      }
+      const emailsToAdd = rawText.split(/[\s,;\n]+/).map(e => e.trim().toLowerCase()).filter(e => e && e.includes('@'));
+      if (!emailsToAdd.length) {
+         if(addEmailsMsg) { addEmailsMsg.textContent = 'No se encontraron correos válidos.'; addEmailsMsg.style.color = 'orange';}
+         return;
+      }
+
+      if(addEmailsMsg) { addEmailsMsg.textContent = "Añadiendo..."; addEmailsMsg.style.color = "orange"; }
+      addEmailsBtn.disabled = true;
+
+      fetch("/admin/add_allowed_emails_ajax", {
+        method: "POST",
+        headers: {"Content-Type": "application/json", "X-CSRFToken": getCsrfToken()},
+        body: JSON.stringify({ user_id: userId, emails: emailsToAdd })
+      })
+      .then(handleFetchResponse)
+      .then(data => {
+        if (data.status === "ok") {
+          if(addEmailsMsg) {
+              addEmailsMsg.textContent = `${data.added_count || 0} añadidos, ${data.skipped_count || 0} omitidos. Recargando lista...`;
+              addEmailsMsg.style.color = "green";
+          }
+          addEmailsInput.value = "";
+          fetchAllowedEmails(1, currentPerPage);
+        } else {
+           throw new Error(data.message || 'Error desconocido');
+        }
+      })
+      .catch(err => {
+        if(addEmailsMsg) { addEmailsMsg.textContent = `Error: ${err.message}`; addEmailsMsg.style.color = "red"; }
+      })
+      .finally(() => {
+          addEmailsBtn.disabled = false;
+      });
+    });
+  }
+
+  // ======= ACCESO A REGEX (Usuario Principal) =======
+  const openRegexModalBtn = document.getElementById("openRegexModalBtn");
+  const regexModal = document.getElementById("regexModal");
+  const regexListContainer = document.getElementById("regexListContainer");
+  const saveRegexSelectionBtn = document.getElementById("saveRegexSelectionBtn");
+  const closeRegexModalBtn = document.getElementById("closeRegexModalBtn");
+
+  if(openRegexModalBtn){
+    openRegexModalBtn.addEventListener("click", ()=>{
+      regexModal.style.display="block";
+      loadPrincipalRegex();
+    });
+  }
+  if(closeRegexModalBtn){
+    closeRegexModalBtn.addEventListener("click", ()=>{
+      regexModal.style.display="none";
+    });
+  }
+
+  function loadPrincipalRegex(){
+    fetch(`/admin/list_regex_ajax?user_id=${userId}`, {
+      method:"GET",
+      headers:{ "X-CSRFToken": getCsrfToken() }
+    })
+    .then(r=>r.json())
+    .then(data=>{
+      if(data.status==="ok"){
+        renderPrincipalRegexList(data.regexes);
+      } else {
+        regexListContainer.innerHTML=`<p style="color:red;">Error: ${data.message}</p>`;
+      }
+    })
+    .catch(err=>{
+      regexListContainer.innerHTML=`<p style="color:red;">Error: ${err}</p>`;
+    });
+  }
+
+  function renderPrincipalRegexList(rxArr){
+    let html="";
+    rxArr.forEach((rx,i)=>{
+      const bg = (i%2===0) ? "#f9f9f9" : "#fff";
+      html += `
+        <div style="background:${bg}; padding:6px;">
+          <label style="display:flex; gap:0.5rem; align-items:center;">
+            <input
+              type="checkbox"
+              class="principal-regex-cb"
+              data-id="${rx.id}"
+              ${rx.allowed ? "checked" : ""}
+            >
+            <strong>${rx.pattern}</strong>
+            <small>(${rx.description||""})</small>
+          </label>
+        </div>
+      `;
+    });
+    regexListContainer.innerHTML = html;
+  }
+
+  if(saveRegexSelectionBtn){
+    saveRegexSelectionBtn.addEventListener("click", ()=>{
+      const cbs = document.querySelectorAll(".principal-regex-cb");
+      let allowedIds = [];
+      cbs.forEach(cb=>{
+        if(cb.checked) allowedIds.push(parseInt(cb.getAttribute("data-id")));
+      });
+      fetch("/admin/update_user_rfs_ajax", {
+        method:"POST",
+        headers:{
+          "Content-Type":"application/json",
+          "X-CSRFToken": getCsrfToken()
+        },
+        body: JSON.stringify({
+          user_id:userId,
+          type:"regex",
+          allowed_ids: allowedIds
+        })
+      })
+      .then(r=>r.json())
+      .then(data=>{
+        if(data.status==="ok"){
+          alert("Regex principal actualizados.");
+          regexModal.style.display="none";
+        } else {
+          alert("Error: " + data.message);
+        }
+      })
+      .catch(err=>alert("Error Regex: "+err));
+    });
+  }
+
+  // ======= ACCESO A FILTROS (Usuario Principal) =======
+  const openFiltersModalBtn = document.getElementById("openFiltersModalBtn");
+  const filtersModal = document.getElementById("filtersModal");
+  const filtersListContainer = document.getElementById("filtersListContainer");
+  const saveFiltersSelectionBtn = document.getElementById("saveFiltersSelectionBtn");
+  const closeFiltersModalBtn = document.getElementById("closeFiltersModalBtn");
+
+  if(openFiltersModalBtn){
+    openFiltersModalBtn.addEventListener("click", ()=>{
+      filtersModal.style.display="block";
+      loadPrincipalFilters();
+    });
+  }
+  if(closeFiltersModalBtn){
+    closeFiltersModalBtn.addEventListener("click", ()=>{
+      filtersModal.style.display="none";
+    });
+  }
+
+  function loadPrincipalFilters(){
+    fetch(`/admin/list_filters_ajax?user_id=${userId}`, {
+      method:"GET",
+      headers:{ "X-CSRFToken": getCsrfToken() }
+    })
+    .then(r=>r.json())
+    .then(data=>{
+      if(data.status==="ok"){
+        renderPrincipalFiltersList(data.filters);
+      } else {
+        filtersListContainer.innerHTML = `<p style="color:red;">Error: ${data.message}</p>`;
+      }
+    })
+    .catch(err=>{
+      filtersListContainer.innerHTML = `<p style="color:red;">Error: ${err}</p>`;
+    });
+  }
+
+  function renderPrincipalFiltersList(ftArr){
+    let html="";
+    ftArr.forEach((f,i)=>{
+      const bg = (i%2===0) ? "#f9f9f9" : "#fff";
+      html += `
+        <div style="background:${bg}; padding:6px;">
+          <label style="display:flex; gap:0.5rem; align-items:center;">
+            <input
+              type="checkbox"
+              class="principal-filter-cb"
+              data-id="${f.id}"
+              ${f.allowed ? "checked" : ""}
+            >
+            <strong>(${f.sender||"?"}) - ${f.keyword||"?"}</strong>
+          </label>
+        </div>
+      `;
+    });
+    filtersListContainer.innerHTML = html;
+  }
+
+  if(saveFiltersSelectionBtn){
+    saveFiltersSelectionBtn.addEventListener("click", ()=>{
+      const cbs = document.querySelectorAll(".principal-filter-cb");
+      let allowedIds = [];
+      cbs.forEach(cb=>{
+        if(cb.checked) allowedIds.push(parseInt(cb.getAttribute("data-id")));
+      });
+      fetch("/admin/update_user_rfs_ajax", {
+        method:"POST",
+        headers:{
+          "Content-Type":"application/json",
+          "X-CSRFToken": getCsrfToken()
+        },
+        body: JSON.stringify({
+          user_id:userId,
+          type:"filter",
+          allowed_ids: allowedIds
+        })
+      })
+      .then(r=>r.json())
+      .then(data=>{
+        if(data.status==="ok"){
+          alert("Filtros principal actualizados.");
+          filtersModal.style.display="none";
+        } else {
+          alert("Error: " + data.message);
+        }
+      })
+      .catch(err=>alert("Error Filtros:"+err));
+    });
+  }
+
+  // ======= PERMISO SUB-USUARIOS =======
+  const toggleCanCreateSubusers = document.getElementById("toggleCanCreateSubusers");
+  const saveCanCreateSubusersBtn = document.getElementById("saveCanCreateSubusersBtn");
+
+  if(saveCanCreateSubusersBtn){
+    saveCanCreateSubusersBtn.addEventListener("click", ()=>{
+      const newVal = toggleCanCreateSubusers.checked;
+      fetch("/admin/update_user_ajax", {
+        method:"POST",
+        headers:{
+          "Content-Type":"application/json",
+          "X-CSRFToken": getCsrfToken()
+        },
+        body: JSON.stringify({
+          user_id: userId,
+          username: "{{ user.username }}",
+          color: "{{ user.color }}",
+          position: {{ user.position|default(1) }},
+          can_search_any: {{ "true" if user.can_search_any else "false" }},
+          password: "",
+          can_create_subusers: newVal
+        })
+      })
+      .then(r=>r.json())
+      .then(data=>{
+        if(data.status==="ok"){
+          alert("Permiso de sub-usuarios guardado.");
+          location.reload();
+        } else {
+          alert("Error: " + data.message);
+        }
+      })
+      .catch(err=>alert("Error:", err));
+    });
+  }
+
+  // ======= Ver Sub-usuarios => modal =======
+  const btnShowSubusers = document.getElementById("btnShowSubusers");
+  const subusersModal = document.getElementById("subusersModal");
+  const subusersList = document.getElementById("subusersList");
+  const closeSubusersModalBtn = document.getElementById("closeSubusersModalBtn");
+
+  if(btnShowSubusers){
+    btnShowSubusers.addEventListener("click", ()=>{
+      subusersModal.style.display="block";
+      loadAllSubusers();
+    });
+  }
+  if(closeSubusersModalBtn){
+    closeSubusersModalBtn.addEventListener("click", ()=>{
+      subusersModal.style.display="none";
+    });
+  }
+
+  function loadAllSubusers(){
+    fetch(`/subusers/list_subusers_ajax?parent_id=${userId}`, {
+      method:"GET",
+      headers:{ "X-CSRFToken": getCsrfToken() }
+    })
+    .then(r=>r.json())
+    .then(data=>{
+      if(data.status==="ok"){
+        renderAllSubusers(data.subusers);
+      } else {
+        subusersList.innerHTML=`<p style="color:red;">Error: ${data.message}</p>`;
+      }
+    })
+    .catch(err=>{
+      subusersList.innerHTML=`<p style="color:red;">Error: ${err}</p>`;
+    });
+  }
+
+  function renderAllSubusers(arr){
+    if(!arr.length){
+      subusersList.innerHTML="<p>No hay sub-usuarios creados.</p>";
+      return;
+    }
+    let html="<ul style='list-style:none; margin:0; padding:0;'>";
+    arr.forEach(su=>{
+      const toggleLabel = su.enabled ? "OFF" : "ON";
+      const toggleClass = su.enabled ? "btn-red" : "btn-green";
+      html += `
+        <li style="margin-bottom:0.7rem; border-bottom:1px solid #ccc; padding-bottom:0.5rem;">
+          <div style="display:flex; align-items:center; justify-content:space-between;">
+            <strong>${su.username}</strong>
+            <div style="display:flex; gap:0.5rem;">
+              <button
+                class="${toggleClass}"
+                onclick="toggleSubuser(${su.id}, ${su.enabled})"
+              >
+                ${toggleLabel}
+              </button>
+              <button
+                class="btn-red"
+                onclick="deleteSubuser(${su.id})"
+              >
+                Eliminar
+              </button>
+            </div>
+          </div>
+        </li>
+      `;
+    });
+    html += "</ul>";
+    subusersList.innerHTML = html;
+  }
+
+  window.toggleSubuser = function(subId, currentState){
+    fetch("/subusers/toggle_subuser_ajax", {
+      method:"POST",
+      headers:{
+        "Content-Type":"application/json",
+        "X-CSRFToken": getCsrfToken()
+      },
+      body: JSON.stringify({ sub_id: subId, currently_enabled: currentState })
+    })
+    .then(r=>r.json())
+    .then(data=>{
+      if(data.status==="ok"){
+        renderAllSubusers(data.subusers);
+      } else {
+        alert("Error: "+data.message);
+      }
+    })
+    .catch(err=>console.error(err));
+  };
+
+  window.deleteSubuser = function(subId){
+    if(!confirm("¿Eliminar este sub-usuario?")) return;
+    fetch("/subusers/delete_subuser_ajax", {
+      method:"POST",
+      headers:{
+        "Content-Type":"application/json",
+        "X-CSRFToken": getCsrfToken()
+      },
+      body: JSON.stringify({ subuser_id: subId })
+    })
+    .then(r=>r.json())
+    .then(data=>{
+      if(data.status==="ok"){
+        renderAllSubusers(data.subusers);
+      } else {
+        alert("Error:"+data.message);
+      }
+    })
+    .catch(err=>alert("Error:"+err));
+  };
+
+  // ======= Regex Sub-usuario (Global) =======
+  const btnSubusersRegexGlobal = document.getElementById("btnSubusersRegexGlobal");
+  const subusersRegexModal = document.getElementById("subusersRegexModal");
+  const subusersRegexList = document.getElementById("subusersRegexList");
+  const saveSubusersRegexBtn = document.getElementById("saveSubusersRegexBtn");
+  const closeSubusersRegexModalBtn = document.getElementById("closeSubusersRegexModalBtn");
+
+  if(btnSubusersRegexGlobal){
+    btnSubusersRegexGlobal.addEventListener("click", ()=>{
+      subusersRegexModal.style.display="block";
+      loadGlobalSubusersRegex();
+    });
+  }
+  if(closeSubusersRegexModalBtn){
+    closeSubusersRegexModalBtn.addEventListener("click", ()=>{
+      subusersRegexModal.style.display="none";
+    });
+  }
+
+  function loadGlobalSubusersRegex(){
+    fetch(`/subusers/list_subusers_regex_global?parent_id=${userId}`, {
+      method:"GET"
+    })
+    .then(r=>r.json())
+    .then(data=>{
+      if(data.status==="ok"){
+        renderGlobalSubusersRegex(data.items);
+      } else {
+        subusersRegexList.innerHTML=`<p style="color:red;">Error: ${data.message}</p>`;
+      }
+    })
+    .catch(err=>{
+      subusersRegexList.innerHTML=`<p style="color:red;">Error: ${err}</p>`;
+    });
+  }
+
+  function renderGlobalSubusersRegex(arr){
+    console.log("[RenderSubRegex] Datos recibidos:", arr);
+    let html="";
+    arr.forEach((rx,i)=>{
+      const bg=(i%2===0)?"#f9f9f9":"#fff";
+      console.log(`[RenderSubRegex] Item ID ${rx.id}: enabled=${rx.enabled}, locked=${rx.locked}`);
+      html+=`
+        <div style="background:${bg}; padding:6px;">
+          <label style="display:flex; align-items:center; gap:0.5rem;">
+            <input
+              type="checkbox"
+              class="subusers-regex-global-cb"
+              data-id="${rx.id}"
+              ${rx.enabled ? "checked" : ""}
+              ${rx.locked ? "disabled" : ""}
+            >
+            <strong>${rx.pattern}</strong>
+            <small>(${rx.description||""})</small>
+            ${ rx.locked
+               ? "<em style='color:#dc3545; font-size:0.8rem; margin-left: auto;'>(Bloqueado: Padre inactivo)</em>"
+               : "" 
+            }
+          </label>
+        </div>
+      `
+    });
+    if (subusersRegexList) subusersRegexList.innerHTML = html;
+    else console.error("Error: Contenedor subusersRegexList no encontrado!");
+  }
+
+  if(saveSubusersRegexBtn){
+    saveSubusersRegexBtn.addEventListener("click", ()=>{
+      const cbs = document.querySelectorAll(".subusers-regex-global-cb");
+      let allowedIds = [];
+      cbs.forEach(cb=>{
+        if(cb.checked && !cb.disabled){
+          allowedIds.push(parseInt(cb.getAttribute("data-id")));
+        }
+      });
+      
+      console.log("[SaveSubRegex] IDs recopilados para enviar:", allowedIds);
+
+      fetch("/subusers/save_subusers_regex_global", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-CSRFToken": getCsrfToken()
+        },
+        body: JSON.stringify({
+          parent_id: userId, 
+          allowed_ids: allowedIds
+        })
+      })
+      .then(handleFetchResponse)
+      .then(data => {
+        if(data.status === "ok"){
+          alert("Configuración de Regex para sub-usuarios guardada.");
+          if(subusersRegexModal) subusersRegexModal.style.display = "none";
+        } else {
+          alert("Error al guardar Regex para sub-usuarios: " + (data.message || 'Error desconocido'));
+        }
+      })
+      .catch(err => alert("Error de red al guardar Regex para sub-usuarios: " + err.message));
+    });
+  }
+
+  // ======= Filtros Sub-usuario (Global) =======
+  const btnSubusersFilterGlobal = document.getElementById("btnSubusersFilterGlobal");
+  const subusersFiltersModal = document.getElementById("subusersFiltersModal");
+  const subusersFiltersList = document.getElementById("subusersFiltersList");
+  const saveSubusersFiltersBtn = document.getElementById("saveSubusersFiltersBtn");
+  const closeSubusersFiltersModalBtn = document.getElementById("closeSubusersFiltersModalBtn");
+
+  if(btnSubusersFilterGlobal){
+    btnSubusersFilterGlobal.addEventListener("click", ()=>{
+      subusersFiltersModal.style.display="block";
+      loadGlobalSubusersFilters();
+    });
+  }
+  if(closeSubusersFiltersModalBtn){
+    closeSubusersFiltersModalBtn.addEventListener("click", ()=>{
+      subusersFiltersModal.style.display="none";
+    });
+  }
+
+  function loadGlobalSubusersFilters(){
+    fetch(`/subusers/list_subusers_filters_global?parent_id=${userId}`, {
+      method:"GET"
+    })
+    .then(r=>r.json())
+    .then(data=>{
+      if(data.status==="ok"){
+        renderGlobalSubusersFilters(data.items);
+      } else {
+        subusersFiltersList.innerHTML=`<p style="color:red;">Error: ${data.message}</p>`;
+      }
+    })
+    .catch(err=>{
+      subusersFiltersList.innerHTML=`<p style="color:red;">Error: ${err}</p>`;
+    });
+  }
+
+  function renderGlobalSubusersFilters(arr){
+    console.log("[RenderSubFilters] Datos recibidos:", arr);
+    let html="";
+    arr.forEach((f,i)=>{
+      const bg = (i%2===0) ? "#f9f9f9" : "#fff";
+      console.log(`[RenderSubFilters] Item ID ${f.id}: enabled=${f.enabled}, locked=${f.locked}`);
+      html += `
+        <div style="background:${bg}; padding:6px;">
+          <label style="display:flex; gap:0.5rem; align-items:center;">
+            <input
+              type="checkbox"
+              class="subusers-filters-global-cb"
+              data-id="${f.id}"
+              ${f.enabled ? "checked" : ""} 
+              ${f.locked ? "disabled" : ""}
+            >
+            <strong>(${f.sender||"?"}) - ${f.keyword||"?"}</strong>
+            ${ f.locked
+               ? "<em style='color:#dc3545; font-size:0.8rem; margin-left: auto;'>(Bloqueado: Padre inactivo)</em>"
+               : ""
+            }
+          </label>
+        </div>
+      `;
+    });
+    if (subusersFiltersList) subusersFiltersList.innerHTML = html;
+    else console.error("Error: Contenedor subusersFiltersList no encontrado!");
+  }
+
+  if(saveSubusersFiltersBtn){
+    saveSubusersFiltersBtn.addEventListener("click", ()=>{
+      const cbs = document.querySelectorAll(".subusers-filters-global-cb");
+      let allowedIds = [];
+      cbs.forEach(cb=>{
+        if(cb.checked && !cb.disabled){
+          allowedIds.push(parseInt(cb.getAttribute("data-id")));
+        }
+      });
+
+      console.log("[SaveSubFilters] IDs recopilados para enviar:", allowedIds);
+      
+      fetch("/subusers/save_subusers_filters_global", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-CSRFToken": getCsrfToken()
+        },
+        body: JSON.stringify({
+          parent_id: userId, 
+          allowed_ids: allowedIds
+        })
+      })
+      .then(handleFetchResponse)
+      .then(data => {
+        if(data.status === "ok"){
+          alert("Configuración de Filtros para sub-usuarios guardada.");
+          if(subusersFiltersModal) subusersFiltersModal.style.display = "none";
+        } else {
+          alert("Error al guardar Filtros para sub-usuarios: " + (data.message || 'Error desconocido'));
+        }
+      })
+      .catch(err => alert("Error de red al guardar Filtros para sub-usuarios: " + err.message));
+    });
+  }
+
+});
+</script>
+
+{% endblock %}

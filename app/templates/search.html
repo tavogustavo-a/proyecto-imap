@@ -1,0 +1,836 @@
+<!-- app/templates/search.html -->
+{% extends "base.html" %}
+{% block content %}
+
+<style>
+  .search-page-container {
+    max-width: 1800px;
+    margin: 3rem auto;
+    padding: 1rem;
+  }
+
+  .admin-card {
+    width: 100%;
+    background-color: var(--card-bg);
+    border-radius: 6px;
+    padding: 0.2cm 0.8cm;
+    margin-bottom: 1rem;
+  }
+
+  .btn-login-user {
+    background-color: #2196f3; 
+    color: #fff;
+    font-size: 1rem;
+    font-weight: 600;
+    border: 2px solid #2196f3;
+    padding: 0.4rem 0.8rem;
+    border-radius: 5px;
+    cursor: pointer;
+    text-decoration: none;
+  }
+  .services-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1.3rem;
+    margin-bottom: 0;
+    justify-content: center;
+  }
+  .service-btn-container {
+    position: relative;
+    flex: 1 1 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    padding: 0.5rem 0.5rem 0.5rem 0;
+    margin-bottom: 0.1rem;
+    border-radius: 5px;
+    border: none;
+    box-shadow: none;
+    background: none;
+  }
+  @media (min-width: 601px) {
+    .service-btn-container {
+      flex: 1 1 calc(50% - 1.3rem);
+      max-width: calc(50% - 1.3rem);
+    }
+  }
+  .service-btn {
+    position: relative;
+    border: none;
+    box-shadow: none;
+    cursor: pointer;
+    color: #fff;
+    transition: all 0.2s ease;
+    outline: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 1.2rem;
+    margin: 0;
+    width: 100%;
+    text-align: left;
+    border-radius: 30px;
+    height: 3rem;
+    padding: 0 1rem;
+    overflow: hidden;
+  }
+  .service-btn img {
+    height: 2.2rem;
+    width: auto;
+    object-fit: contain;
+    vertical-align: middle;
+  }
+  .info-icon {
+    margin-left: auto;
+    font-size: 1.4rem;
+    cursor: pointer;
+    user-select: none;
+  }
+  .gif-outside {
+    position: absolute;
+    z-index: 1;
+    left: -1.7rem;
+    top: 50%;
+    transform: translateY(-50%);
+    pointer-events: none;
+    display: none;
+    height: 1.8rem;
+    width: auto;
+  }
+  .main-message-wrapper {
+    max-width: 100%;
+    word-wrap: break-word;
+    text-align: center;
+    margin-bottom: 0;
+  }
+  #aliasPopup {
+    display: none;
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: #fff;
+    border: 2px solid #333;
+    border-radius: 6px;
+    padding: 1rem;
+    z-index: 9999;
+    max-width: 600px;
+    width: 90%;
+  }
+  .alias-popup-close {
+    display: inline-block;
+    padding: 0.3rem 0.6rem;
+    background: #c00;
+    color: #fff;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    margin-top: 0.5rem;
+  }
+  @media (max-width: 600px) {
+    #aliasPopup {
+      max-width: 85% !important;
+    }
+    .services-row {
+      gap: 0;
+      justify-content: flex-start;
+    }
+    .service-btn-container {
+      margin-bottom: 0.1rem;
+    }
+  }
+  .dark-mode {
+    background-color: #1c1c1c;
+    color: #f5f5f5;
+  }
+  .dark-mode .admin-card {
+    background-color: rgba(55,55,55,0.9);
+    color: #fff;
+  }
+  .dark-mode .service-btn {
+    background-color: #444;
+    color: #fff;
+  }
+  .dark-mode .btn-search {
+    background-color: #444;
+    color: #fff;
+    border: 2px solid #444;
+  }
+  .dark-mode #aliasPopup {
+    background: #bbb;
+    color: #222;
+  }
+  .filter-match {
+    background-color: #fff !important;
+    color: #000 !important;
+  }
+
+  /* --- INICIO: Estilo para Resultados en Móviles --- */
+  @media (max-width: 767px) { /* Puedes ajustar este breakpoint */
+    /* -- ELIMINAR ESTAS REGLAS -- */
+    /* 
+    .search-page-container {
+      padding: 0.5rem; 
+    }
+    .admin-card {
+        padding: 0.5rem; 
+    }
+    */
+    /* -- FIN ELIMINAR -- */
+
+    /* -- MANTENER ESTAS REGLAS -- */
+    #search-results {
+      padding: 0.5rem 1rem; 
+      word-wrap: break-word;
+      overflow-wrap: break-word; 
+    }
+    #search-results pre {
+        white-space: pre-wrap; 
+        word-break: break-all; 
+    }
+    #search-results table {
+        table-layout: fixed; 
+        width: 100% !important;
+    }
+    #search-results td, #search-results th {
+        word-wrap: break-word;
+        overflow-wrap: break-word;
+    }
+    /* -- FIN MANTENER -- */
+  }
+  /* --- FIN: Estilo para Resultados en Móviles --- */
+</style>
+
+{% set current_user_id = session.get("user_id") %}
+{% if current_user_id %}
+  {# Attempting to fetch the User object, need 'User' #}
+  {% set user_object = User.query.get(current_user_id) %}
+{% else %}
+  {% set user_object = None %}
+{% endif %}
+
+<div class="search-page-container">
+
+  <div style="text-align:right; margin-bottom:1rem;">
+    {% if session.get("is_user") %}
+      {# Mostrar "Panel" si user_object y user_object.can_create_subusers #}
+      {% if user_object and user_object.can_create_subusers %}
+        <a href="{{ url_for('subuser_bp.manage_subusers') }}" class="btn-login-user" style="margin-right:0.5rem;">
+          Panel
+        </a>
+      {% endif %}
+      <a href="{{ url_for('user_auth_bp.logout') }}" class="btn-login-user">
+        Cerrar Sesión
+      </a>
+    {% else %}
+      <a href="{{ url_for('user_auth_bp.login') }}" class="btn-login-user">
+        Iniciar Sesión
+      </a>
+    {% endif %}
+  </div>
+
+  <div class="admin-card">
+    <!-- Botón modo oscuro -->
+    <div style="text-align:right; margin-bottom:0;">
+      <button id="toggleThemeBtn" class="btn-gray">Modo Oscuro</button>
+    </div>
+
+    <!-- Spinner -->
+    <div id="spinner" style="display:none; text-align:center; margin-bottom:0;">
+      <img src="{{ url_for('static', filename='images/spinner.gif') }}" alt="Cargando..." style="height:50px;">
+      <p>Buscando correos, por favor espera...</p>
+    </div>
+
+    {% set p1_mode = site_settings.get('search_message_mode','off') %}
+    {% set p1_text = site_settings.get('search_message','') %}
+    {% set p2_mode = site_settings.get('search_message2_mode','off') %}
+    {% set p2_text = site_settings.get('search_message2','') %}
+
+    {% if p1_mode == 'guests' and not session.get("logged_in") %}
+      <div class="main-message-wrapper" style="margin-bottom:1rem;">
+        {{ p1_text|safe }}
+      </div>
+    {% endif %}
+
+    {% if p2_mode == 'users' and session.get("logged_in") %}
+      <div class="main-message-wrapper" style="margin-bottom:1rem;">
+        {{ p2_text|safe }}
+      </div>
+    {% endif %}
+
+    {% if site_settings.get('logo_enabled','true') == 'true' %}
+      <div style="text-align:center; margin-bottom:1rem;">
+        <img
+          src="{{ url_for('static', filename='images/logo.png') }}"
+          alt="Logo"
+          style="height:70px;"
+        >
+      </div>
+    {% endif %}
+
+    {% if services_in_rows %}
+      {% if session.get("username") == ADMIN_USER %}
+        {# ADMIN VE TODOS #}
+        {% for row in services_in_rows %}
+          <div class="services-row">
+            {% for srv in row %}
+              <div class="service-btn-container">
+                <button
+                  class="service-btn"
+                  style="background-color: {{ srv.border_color }};"
+                  data-service-id="{{ srv.id }}"
+                  data-service-aliases='[
+                    {% for al in srv.aliases %}
+                      {
+                        "alias_name": "{{ al.alias_name|escape }}",
+                        "alias_icons": [
+                          {% for ai in al.alias_icons %}
+                            "{{ ai.icon_name }}"{% if not loop.last %},{% endif %}
+                          {% endfor %}
+                        ],
+                        "alias_color": "{{ al.border_color }}"
+                      }{% if not loop.last %},{% endif %}
+                    {% endfor %}
+                  ]'
+                >
+                  {% if srv.service_icons and srv.service_icons|length > 0 %}
+                    {% for icon_obj in srv.service_icons %}
+                      <img
+                        src="{{ url_for('static', filename='images/' ~ icon_obj.icon_name) }}"
+                        alt="icon"
+                      >
+                    {% endfor %}
+                  {% endif %}
+                  {{ srv.name }}
+                  {% if srv.aliases and srv.aliases|length > 0 %}
+                    <span class="info-icon">ℹ️</span>
+                  {% endif %}
+                </button>
+                {% set current_gif = site_settings.get('current_gif','none') %}
+                {% if current_gif != 'none' %}
+                  <img
+                    src="{{ url_for('static', filename='images/gifs/' ~ current_gif ~ '.gif') }}"
+                    alt="GIF"
+                    class="gif-outside"
+                  >
+                {% endif %}
+              </div>
+            {% endfor %}
+          </div>
+        {% endfor %}
+      {% else %}
+        {# USUARIO NO ADMIN => Filtramos visibility_mode #}
+        {% for row in services_in_rows %}
+          <div class="services-row">
+            {% for srv in row %}
+              {% if srv.visibility_mode == "off" %}
+                <!-- No se muestra -->
+              {% elif srv.visibility_mode == "on-no-usuarios" and not session.get("logged_in") %}
+                <div class="service-btn-container">
+                  <button
+                    class="service-btn"
+                    style="background-color: {{ srv.border_color }};"
+                    data-service-id="{{ srv.id }}"
+                    data-service-aliases='[
+                      {% for al in srv.aliases %}
+                        {
+                          "alias_name": "{{ al.alias_name|escape }}",
+                          "alias_icons": [
+                            {% for ai in al.alias_icons %}
+                              "{{ ai.icon_name }}"{% if not loop.last %},{% endif %}
+                            {% endfor %}
+                          ],
+                          "alias_color": "{{ al.border_color }}"
+                        }{% if not loop.last %},{% endif %}
+                      {% endfor %}
+                    ]'
+                  >
+                    {% if srv.service_icons and srv.service_icons|length > 0 %}
+                      {% for icon_obj in srv.service_icons %}
+                        <img
+                          src="{{ url_for('static', filename='images/' ~ icon_obj.icon_name) }}"
+                          alt="icon"
+                        >
+                      {% endfor %}
+                    {% endif %}
+                    {{ srv.name }}
+                    {% if srv.aliases and srv.aliases|length > 0 %}
+                      <span class="info-icon">ℹ️</span>
+                    {% endif %}
+                  </button>
+                  {% set current_gif = site_settings.get('current_gif','none') %}
+                  {% if current_gif != 'none' %}
+                    <img
+                      src="{{ url_for('static', filename='images/gifs/' ~ current_gif ~ '.gif') }}"
+                      alt="GIF"
+                      class="gif-outside"
+                    >
+                  {% endif %}
+                </div>
+              {% elif srv.visibility_mode == "on-usuarios" and session.get("logged_in") %}
+                <div class="service-btn-container">
+                  <button
+                    class="service-btn"
+                    style="background-color: {{ srv.border_color }};"
+                    data-service-id="{{ srv.id }}"
+                    data-service-aliases='[
+                      {% for al in srv.aliases %}
+                        {
+                          "alias_name": "{{ al.alias_name|escape }}",
+                          "alias_icons": [
+                            {% for ai in al.alias_icons %}
+                              "{{ ai.icon_name }}"{% if not loop.last %},{% endif %}
+                            {% endfor %}
+                          ],
+                          "alias_color": "{{ al.border_color }}"
+                        }{% if not loop.last %},{% endif %}
+                      {% endfor %}
+                    ]'
+                  >
+                    {% if srv.service_icons and srv.service_icons|length > 0 %}
+                      {% for icon_obj in srv.service_icons %}
+                        <img
+                          src="{{ url_for('static', filename='images/' ~ icon_obj.icon_name) }}"
+                          alt="icon"
+                        >
+                      {% endfor %}
+                    {% endif %}
+                    {{ srv.name }}
+                    {% if srv.aliases and srv.aliases|length > 0 %}
+                      <span class="info-icon">ℹ️</span>
+                    {% endif %}
+                  </button>
+                  {% set current_gif = site_settings.get('current_gif','none') %}
+                  {% if current_gif != 'none' %}
+                    <img
+                      src="{{ url_for('static', filename='images/gifs/' ~ current_gif ~ '.gif') }}"
+                      alt="GIF"
+                      class="gif-outside"
+                    >
+                  {% endif %}
+                </div>
+              {% endif %}
+            {% endfor %}
+          </div>
+        {% endfor %}
+      {% endif %}
+    {% endif %}
+
+    <!-- Form de búsqueda IMAP -->
+    <div style="max-width:400px; margin:0.2rem auto;">
+      <form id="ajax-search-form" style="margin-bottom:0.3rem;">
+        <input type="hidden" id="selectedServiceId" name="service_id" value="">
+        <div style="display:flex; gap:0.5rem;">
+          <input
+            type="text"
+            id="searchEmail"
+            class="search-input"
+            placeholder="correo@dominio.com"
+            required
+          >
+          <button type="submit" class="btn-search">Buscar</button>
+        </div>
+      </form>
+    </div>
+
+    <!-- Resultados -->
+    <div
+      id="search-results"
+      style="
+        padding:0.5rem;
+        display:none;
+        max-width:100%;
+        overflow-x:auto;
+        text-align:left;
+      "
+    ></div>
+  </div>
+</div>
+
+<div id="aliasPopup">
+  <div id="aliasListContainer"></div>
+  <button class="alias-popup-close">Cerrar</button>
+</div>
+
+<script>
+document.addEventListener("DOMContentLoaded", function() {
+  // MODO OSCURO
+  const savedTheme = localStorage.getItem("darkMode") === "true";
+  if (savedTheme) {
+    document.body.classList.add("dark-mode");
+  }
+
+  const toggleThemeBtn = document.getElementById("toggleThemeBtn");
+  if (toggleThemeBtn) {
+    toggleThemeBtn.addEventListener("click", function() {
+      document.body.classList.toggle("dark-mode");
+      const isDark = document.body.classList.contains("dark-mode");
+      localStorage.setItem("darkMode", isDark.toString());
+      toggleThemeBtn.textContent = isDark ? "Modo Claro" : "Modo Oscuro";
+    });
+    toggleThemeBtn.textContent = document.body.classList.contains("dark-mode")
+      ? "Modo Claro"
+      : "Modo Oscuro";
+  }
+
+  // Mostrar GIF en el primer container
+  const firstContainer = document.querySelector(".service-btn-container");
+  if (firstContainer) {
+    const gif = firstContainer.querySelector(".gif-outside");
+    if (gif) gif.style.display = "block";
+    const firstBtn = firstContainer.querySelector(".service-btn");
+    if (firstBtn) {
+      const firstId = firstBtn.getAttribute("data-service-id");
+      const hiddenInput = document.getElementById("selectedServiceId");
+      if (hiddenInput) {
+        hiddenInput.value = firstId;
+      }
+    }
+  }
+
+  // Popup alias
+  document.addEventListener("click", function(e) {
+    const aliasPopup = document.getElementById("aliasPopup");
+    if (aliasPopup && aliasPopup.style.display === "block") {
+      if (!aliasPopup.contains(e.target) && !e.target.classList.contains("info-icon")) {
+        aliasPopup.style.display = "none";
+      }
+    }
+  });
+
+  function showAliasPopup(aliases) {
+    const popup = document.getElementById("aliasPopup");
+    const listContainer = document.getElementById("aliasListContainer");
+    listContainer.innerHTML = "";
+    if (!aliases || aliases.length === 0) {
+      listContainer.innerHTML = "<p>No hay aliases</p>";
+    } else {
+      aliases.forEach(al => {
+        const div = document.createElement("div");
+        div.style.backgroundColor = al.alias_color;
+        div.style.color = "#fff";
+        div.style.border = "none";
+        div.style.borderRadius = "20px";
+        div.style.fontSize = "1.6rem";
+        div.style.margin = "0.2rem 0";
+        div.style.padding = "0.5rem 1rem";
+        div.style.wordWrap = "break-word";
+        div.style.display = "flex";
+        div.style.alignItems = "center";
+        div.style.gap = "0.1rem";
+
+        if (al.alias_icons && al.alias_icons.length > 0) {
+          al.alias_icons.forEach(iconName => {
+            const img = document.createElement("img");
+            img.src = decideIconPath(iconName);
+            img.style.height = "2.3rem";
+            img.style.marginRight = "0.2rem";
+            div.appendChild(img);
+          });
+        }
+
+        const textSpan = document.createElement("span");
+        textSpan.textContent = al.alias_name;
+        div.appendChild(textSpan);
+
+        listContainer.appendChild(div);
+      });
+    }
+    popup.style.display = "block";
+  }
+
+  document.addEventListener("click", function(e) {
+    if (e.target.classList.contains("info-icon")) {
+      e.preventDefault();
+      e.stopPropagation();
+      const btn = e.target.closest(".service-btn");
+      if (!btn) return;
+      const aliasesJSON = btn.getAttribute("data-service-aliases");
+      if (!aliasesJSON) return;
+      let aliases;
+      try {
+        aliases = JSON.parse(aliasesJSON);
+      } catch (err) {
+        aliases = [];
+      }
+      showAliasPopup(aliases);
+    }
+    if (e.target.classList.contains("alias-popup-close")) {
+      const aliasPopup = document.getElementById("aliasPopup");
+      aliasPopup.style.display = "none";
+    }
+  });
+
+  // AJAX busqueda
+  const ajaxSearchForm = document.getElementById("ajax-search-form");
+  const spinner = document.getElementById("spinner");
+  const resultsDiv = document.getElementById("search-results");
+  const csrfMeta = document.querySelector('meta[name="csrf_token"]');
+  const csrfToken = csrfMeta ? csrfMeta.getAttribute("content") : "";
+
+  if (ajaxSearchForm) {
+    ajaxSearchForm.addEventListener("submit", function(e) {
+      e.preventDefault();
+      const email = document.getElementById("searchEmail").value.trim();
+      const serviceId = document.getElementById("selectedServiceId").value.trim();
+
+      if (!serviceId) {
+        alert("Por favor, selecciona un servicio antes de buscar.");
+        return;
+      }
+      if (!email) {
+        return;
+      }
+
+      if (spinner) spinner.style.display = "block";
+      if (resultsDiv) {
+        resultsDiv.style.display = "none";
+        resultsDiv.innerHTML = "";
+      }
+
+      fetch("/api/search_mails", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-CSRFToken": csrfToken
+        },
+        credentials: "same-origin",
+        body: JSON.stringify({ email_to_search: email, service_id: serviceId })
+      })
+      .then(response => {
+        if (!response.ok) {
+          if (response.status === 403) {
+            throw new Error("No tienes permiso al consultar este correo");
+          }
+          throw new Error(`Error HTTP ${response.status}`);
+        }
+        return response.json();
+      })
+      .then(data => {
+        if (spinner) spinner.style.display = "none";
+
+        if (data.error) {
+          if (resultsDiv) {
+            resultsDiv.style.display = "block";
+            resultsDiv.innerHTML = `<div style="color:red;">Error: ${data.error}</div>`;
+          }
+          return;
+        }
+
+        const results = data.results || [];
+        if (results.length === 0) {
+          if (resultsDiv) {
+            resultsDiv.style.display = "block";
+            resultsDiv.innerHTML = `<p>No se encontraron resultados.</p>`;
+          }
+          return;
+        }
+
+        const mail = results[0];
+        const regexDict = mail.regex_matches;
+        const mailDateFormatted = mail.formatted_date || "";
+        const filterMatched = mail.filter_matched === true;
+
+        let html = "";
+        if (mail.html) {
+          if (filterMatched) {
+            html += `
+              <div class="mail-content filter-match">
+                ${mail.html}
+              </div>
+            `;
+          } else {
+            html += `
+              <div class="mail-content">
+                ${mail.html}
+              </div>
+            `;
+          }
+        } else if (mail.text) {
+          if (filterMatched) {
+            html += `
+              <div class="mail-content filter-match">
+                <pre>${mail.text}</pre>
+              </div>
+            `;
+          } else {
+            html += `
+              <div class="mail-content">
+                <pre>${mail.text}</pre>
+              </div>
+            `;
+          }
+        }
+
+        if (regexDict && Object.keys(regexDict).length > 0) {
+          html += renderRegexMatches(regexDict, mailDateFormatted);
+        } else {
+          if (mailDateFormatted) {
+            html += `<p style="font-size:0.9rem; color:#666;">Fecha: ${mailDateFormatted}</p>`;
+          }
+        }
+
+        if (resultsDiv) {
+          resultsDiv.innerHTML = html;
+          resultsDiv.style.display = "block";
+          attachCopyButtonListener();
+        }
+      })
+      .catch(err => {
+        if (spinner) spinner.style.display = "none";
+        if (resultsDiv) {
+          resultsDiv.style.display = "block";
+          resultsDiv.innerHTML = `<div style="color:red;">${err.message}</div>`;
+        }
+      });
+    });
+  }
+
+  function renderRegexMatches(regexMatches, mailDateFormatted) {
+    let allMatches = [];
+    for (const rId in regexMatches) {
+      allMatches = allMatches.concat(regexMatches[rId]);
+    }
+    if (allMatches.length === 0) {
+      return `<p>No se encontraron resultados de regex.</p>`;
+    }
+
+    let primerCodigo = allMatches[0];
+    if (Array.isArray(primerCodigo)) {
+      primerCodigo = primerCodigo.join("");
+    } else {
+      primerCodigo = String(primerCodigo);
+    }
+
+    const isLink = /^(https?:\/\/|www\.)/i.test(primerCodigo.trim());
+    const MAX_LEN = 50;
+    let displayText = primerCodigo;
+    if (displayText.length > MAX_LEN) {
+      displayText = displayText.slice(0, MAX_LEN - 3) + "...";
+    }
+
+    let html = `
+      <div style="background:#f9f9f9; padding:1rem; text-align:center; margin-top:1rem;">
+        <p style="font-size:1.4rem; color:#444; margin:0; display:inline-block;">
+          <strong id="regex-code">${displayText}</strong>
+        </p>
+        <button
+          id="copyRegexBtn"
+          data-valor="${primerCodigo}"
+          style="
+            margin-left:1rem;
+            padding:0.5rem 1rem;
+            font-size:1rem;
+            background-color: #007bff;
+            border: 2px solid #007bff;
+            color: #fff;
+            cursor: pointer;
+            border-radius:4px;
+          "
+        >
+          Copiar
+        </button>
+    `;
+    if (isLink) {
+      html += `
+        <button
+          id="openLinkBtn"
+          data-link="${primerCodigo}"
+          style="
+            margin-left:1rem;
+            padding:0.5rem 1rem;
+            font-size:1rem;
+            background-color: #4caf50;
+            border: 2px solid #4caf50;
+            color: #fff;
+            cursor: pointer;
+            border-radius:4px;
+          "
+        >
+          Abrir Enlace
+        </button>
+      `;
+    }
+
+    if (mailDateFormatted) {
+      html += `
+        <p style="font-size:0.9rem; color:#666; margin-top:1rem;">
+          Fecha: ${mailDateFormatted}
+        </p>
+      `;
+    }
+
+    html += `</div>`;
+    return html;
+  }
+
+  function attachCopyButtonListener() {
+    const copyBtn = document.getElementById("copyRegexBtn");
+    if (copyBtn) {
+      copyBtn.addEventListener("click", function() {
+        const valorACopiar = copyBtn.getAttribute("data-valor") || "";
+        copyTextToClipboard(valorACopiar)
+          .then(() => {
+            copyBtn.textContent = "Copiado";
+            copyBtn.style.backgroundColor = "#28a745";
+            copyBtn.style.borderColor = "#28a745";
+            copyBtn.style.color = "#fff";
+          })
+          .catch(err => {
+            console.error("Error al copiar:", err);
+            copyBtn.textContent = "Error";
+          });
+      });
+    }
+
+    const openLinkBtn = document.getElementById("openLinkBtn");
+    if (openLinkBtn) {
+      openLinkBtn.addEventListener("click", function() {
+        const link = openLinkBtn.getAttribute("data-link");
+        if (link) {
+          window.open(link, "_blank");
+        }
+      });
+    }
+  }
+
+  function copyTextToClipboard(text) {
+    if (navigator.clipboard && window.isSecureContext) {
+      return navigator.clipboard.writeText(text);
+    } else {
+      return new Promise((resolve, reject) => {
+        const textArea = document.createElement("textarea");
+        textArea.value = text;
+        textArea.style.position = "fixed";
+        textArea.style.left = "-999999px";
+        document.body.appendChild(textArea);
+        textArea.focus();
+        textArea.select();
+        const successful = document.execCommand("copy");
+        document.body.removeChild(textArea);
+        if (successful) {
+          resolve();
+        } else {
+          reject(new Error("Fallback: No se pudo copiar el texto."));
+        }
+      });
+    }
+  }
+
+  function decideIconPath(fileName) {
+    const lower = fileName.toLowerCase();
+    if (lower.startsWith("gif")) {
+      return "/static/images/gifs/" + fileName;
+    }
+    return "/static/images/" + fileName;
+  }
+
+  window.addEventListener("load", () => {
+    const overlay = document.getElementById("loading-overlay");
+    if (overlay) overlay.style.display = "none";
+    document.body.style.display = "block";
+  });
+});
+</script>
+
+{% endblock %}

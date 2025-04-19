@@ -1,0 +1,203 @@
+# app/models/user.py
+
+from datetime import datetime
+from flask import current_app, session
+from cryptography.fernet import Fernet
+from app.extensions import db
+
+# Tablas M2M para Regex y Filters
+user_regex = db.Table(
+    "user_regex",
+    db.Column("user_id", db.Integer, db.ForeignKey('users.id'), primary_key=True),
+    db.Column("regex_id", db.Integer, db.ForeignKey('regexes.id'), primary_key=True)
+)
+
+user_filter = db.Table(
+    "user_filter",
+    db.Column("user_id", db.Integer, db.ForeignKey('users.id'), primary_key=True),
+    db.Column("filter_id", db.Integer, db.ForeignKey('filters.id'), primary_key=True)
+)
+
+# Tabla M2M para Services
+user_service = db.Table(
+    "user_service",
+    db.Column("user_id", db.Integer, db.ForeignKey('users.id'), primary_key=True),
+    db.Column("service_id", db.Integer, db.ForeignKey('services.id'), primary_key=True)
+)
+
+# --- INICIO: Nuevas Tablas para Defaults de Sub-usuarios ---
+parent_default_regex = db.Table(
+    "parent_default_regex",
+    db.Column("parent_user_id", db.Integer, db.ForeignKey('users.id', ondelete='CASCADE'), primary_key=True),
+    db.Column("regex_id", db.Integer, db.ForeignKey('regexes.id', ondelete='CASCADE'), primary_key=True),
+    db.Index('ix_parent_default_regex_ids', 'parent_user_id', 'regex_id') # Índice útil
+)
+
+parent_default_filter = db.Table(
+    "parent_default_filter",
+    db.Column("parent_user_id", db.Integer, db.ForeignKey('users.id', ondelete='CASCADE'), primary_key=True),
+    db.Column("filter_id", db.Integer, db.ForeignKey('filters.id', ondelete='CASCADE'), primary_key=True),
+    db.Index('ix_parent_default_filter_ids', 'parent_user_id', 'filter_id') # Índice útil
+)
+# --- FIN: Nuevas Tablas ---
+
+# --- Nuevo Modelo para Correos Permitidos ---
+class AllowedEmail(db.Model):
+    __tablename__ = "allowed_emails"
+    # Índices para búsquedas rápidas y unicidad por usuario
+    __table_args__ = (db.UniqueConstraint('user_id', 'email', name='uq_user_email'),
+                      db.Index('ix_allowed_emails_user_id_email', 'user_id', 'email'))
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
+    email = db.Column(db.String(255), nullable=False, index=True) # Indexar email también es útil
+
+    def __repr__(self):
+        return f'<AllowedEmail user_id={self.user_id} email="{self.email}">'
+# --- Fin Nuevo Modelo ---
+
+class User(db.Model):
+    __tablename__ = "users"
+
+    id = db.Column(db.Integer, primary_key=True)
+    username = db.Column(db.String(80), unique=True, nullable=False)
+    password = db.Column(db.String(255), nullable=False)
+
+    # Más campos...
+    email = db.Column(db.String(120), unique=True, nullable=True)
+    email_verified = db.Column(db.Boolean, default=False)
+    twofa_enabled = db.Column(db.Boolean, default=False)
+    twofa_method = db.Column(db.String(10), default="TOTP")
+    twofa_secret_enc = db.Column(db.String(255), nullable=True)
+
+    # --- NUEVOS CAMPOS para 2FA pendiente y recuperación --- 
+    pending_2fa_method = db.Column(db.String(10), nullable=True) # Almacena "TOTP" o "EMAIL" temporalmente
+    pending_2fa_code = db.Column(db.String(10), nullable=True)   # Código OTP Email pendiente
+    pending_2fa_code_expires = db.Column(db.DateTime, nullable=True) # Expiración del código OTP
+    pending_email_code = db.Column(db.String(10), nullable=True) # Código para confirmar nuevo email
+    pending_email_code_expires = db.Column(db.DateTime, nullable=True) # Expiración de confirmación de email
+    recovery_email = db.Column(db.String(120), nullable=True) # Email de recuperación (usado temporalmente)
+    # --- FIN NUEVOS CAMPOS ---
+
+    enabled = db.Column(db.Boolean, default=True)
+    was_enabled = db.Column(db.Boolean, nullable=True)
+    blocked_until = db.Column(db.DateTime, nullable=True)
+    failed_attempts = db.Column(db.Integer, default=0)
+    block_count = db.Column(db.Integer, default=0)
+    user_session_rev_count = db.Column(db.Integer, default=0)
+
+    # --- Campos para reseteo de contraseña ---
+    forgot_token = db.Column(db.String(100), nullable=True, index=True)
+    forgot_token_time = db.Column(db.DateTime, nullable=True)
+    forgot_count = db.Column(db.Integer, nullable=False, default=0, server_default='0')
+    # --- Fin Campos Reseteo ---
+
+    parent_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
+    can_create_subusers = db.Column(db.Boolean, default=False)
+
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    color = db.Column(db.String(50), default="#ffffff")
+    position = db.Column(db.Integer, default=1)
+
+    # Campo para indicar si el usuario puede buscar cualquier email (o solo los permitidos)
+    can_search_any = db.Column(db.Boolean, default=False, nullable=False)
+
+    # Relación de sub-usuarios (uno-a-muchos recursivo)
+    parent = db.relationship("User", remote_side=[id], backref="subusers")
+
+    # --- Nueva Relación con AllowedEmail ---
+    allowed_email_entries = db.relationship(
+        "AllowedEmail",
+        backref="user",
+        cascade="all, delete-orphan", # Borrar correos si se borra el usuario
+        lazy='dynamic' # Usar lazy='dynamic' si esperas muchos correos por usuario
+    )
+    # --- Fin Nueva Relación ---
+
+    # Relación M2M con Regex y Filtros
+    regexes_allowed = db.relationship(
+        "RegexModel",
+        secondary=user_regex,
+        backref="users_who_allow"
+    )
+    filters_allowed = db.relationship(
+        "FilterModel",
+        secondary=user_filter,
+        backref="users_who_allow"
+    )
+
+    # Relación M2M con Services
+    services_allowed = db.relationship(
+        "ServiceModel",
+        secondary=user_service,
+        backref="users_who_allow"
+    )
+
+    # --- INICIO: Nuevas Relaciones para Defaults de Sub-usuarios ---
+    # Estos son los Regex que los sub-usuarios de este User tendrán por defecto
+    default_regexes_for_subusers = db.relationship(
+        "RegexModel",
+        secondary=parent_default_regex,
+        # No necesitamos backref aquí usualmente
+        lazy='dynamic' # O 'select', según preferencia
+    )
+    
+    # Estos son los Filtros que los sub-usuarios de este User tendrán por defecto
+    default_filters_for_subusers = db.relationship(
+        "FilterModel",
+        secondary=parent_default_filter,
+        # No necesitamos backref aquí usualmente
+        lazy='dynamic' # O 'select', según preferencia
+    )
+    # --- FIN: Nuevas Relaciones ---
+
+    # Relación UNO (User) -> MUCHOS (RememberDevice), con delete-orphan y single_parent
+    devices = db.relationship(
+        "RememberDevice",
+        back_populates="user",           # Se refleja en RememberDevice.user
+        cascade="all, delete-orphan",    # Borramos en cascada
+        single_parent=True,              # Requerido con delete-orphan
+        lazy=True
+    )
+
+    @property
+    def twofa_secret(self):
+        """Desencripta el twofa_secret_enc usando la key en TWOFA_KEY."""
+        if not self.twofa_secret_enc:
+            return None
+        cipher = Fernet(current_app.config["TWOFA_KEY"].encode())
+        dec = cipher.decrypt(self.twofa_secret_enc.encode())
+        return dec.decode()
+
+    @twofa_secret.setter
+    def twofa_secret(self, raw_secret):
+        """Encripta y setea en twofa_secret_enc el valor raw_secret."""
+        if not raw_secret:
+            self.twofa_secret_enc = None
+            return
+        cipher = Fernet(current_app.config["TWOFA_KEY"].encode())
+        enc = cipher.encrypt(raw_secret.encode())
+        self.twofa_secret_enc = enc.decode()
+
+
+class RememberDevice(db.Model):
+    """
+    Tabla para manejar la lógica de "recordar dispositivo"
+    y no pedir 2FA en cada login. Almacena un token + expiración.
+    """
+    __tablename__ = "remember_devices"
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    token = db.Column(db.String(255), unique=True, nullable=False)
+    expires_at = db.Column(db.DateTime, nullable=False)
+
+    # Relación hijo => N sub-devices asociados a 1 user
+    # Sin "cascade" aquí, ni "delete-orphan", en la parte "many".
+    user = db.relationship(
+        "User",
+        back_populates="devices",  # <-- se enlaza con devices en la clase User
+        lazy=True
+    )

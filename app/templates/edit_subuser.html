@@ -1,0 +1,264 @@
+<!-- app/templates/edit_subuser.html -->
+{% extends "base.html" %}
+
+{% block head %}
+  <meta name="csrf_token" content="{{ csrf_token() }}">
+  <style>
+    /* Estilo para ocultar elementos */
+    .hidden-email {
+      display: none;
+    }
+    /* Contenedor para búsqueda y botón limpiar */
+    .search-container {
+      display: flex;
+      gap: 0.5rem;
+      align-items: center;
+      margin-bottom: 0.5rem; /* Margen reducido porque la lista ahora tiene margen superior */
+    }
+    .search-container input[type="search"] {
+      flex-grow: 1;
+      margin-bottom: 0;
+    }
+    #email-search-clear-btn {
+      /* Estilos para el botón limpiar (visible por defecto) */
+    }
+    .email-checkbox-list {
+        margin-top: 1rem; /* Margen superior para separar de la búsqueda */
+        max-height: 250px;
+        overflow-y: auto;
+        border: 1px solid #ddd;
+        padding: 0.75rem;
+        margin-bottom: 0.75rem;
+        background-color: #f9f9f9;
+        border-radius: 4px;
+    }
+    /* Margen entre las dos tarjetas */
+    .admin-card + .admin-card {
+        margin-top: 1.5rem;
+    }
+  </style>
+{% endblock head %}
+
+{% block content %}
+<div style="max-width:700px; margin:1.5rem auto;">
+
+  <!-- TARJETA 1: Cabecera y Contraseña -->
+  <div class="admin-card">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem;">
+      <h3 style="margin:0;">Editar Sub-usuario: {{ sub_user.username }}</h3>
+      <div style="display:flex; gap: 0.5rem;">
+        <button
+          class="btn-blue"
+          onclick="location.href='{{ url_for('subuser_bp.manage_subusers') }}'"
+        >
+          Volver a Lista
+        </button>
+        <button
+          class="btn-blue"
+          onclick="location.href='{{ url_for('main_bp.home') }}'"
+        >
+          Volver a Búsqueda
+        </button>
+      </div>
+    </div>
+    <hr style="margin:0.8rem 0;">
+
+    <!-- Formulario para Cambiar Contraseña -->
+    <div class="form-section"> {# No necesita márgenes/bordes extra aquí #}
+      <h4 style="margin-top:0; margin-bottom: 0.5rem;">Cambiar Contraseña</h4>
+      <form action="{{ url_for('subuser_bp.update_subuser_password') }}" method="POST" style="display:flex; gap:0.5rem;">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="hidden" name="sub_id" value="{{ sub_user.id }}">
+        <input type="password" name="new_pass" placeholder="Nueva contraseña" required style="flex-grow:1;">
+        <button type="submit" class="btn-blue">Actualizar Contraseña</button>
+    </form>
+  </div>
+  </div> <!-- FIN TARJETA 1 -->
+
+  <!-- TARJETA 2: Correos Permitidos -->
+  <div class="admin-card"> {# Nueva tarjeta separada #}
+    <div class="form-section" id="email-management-section">
+        <h4 style="margin-top:0; margin-bottom: 0.5rem;">Gestionar Correos Permitidos</h4>
+
+        {% if parent_allowed_emails is defined and parent_allowed_emails %}
+            <p style="font-size: 0.9em; color: #555; margin-bottom: 0.5rem;">
+                Selecciona los correos (de la lista permitida para el usuario padre) que este sub-usuario podrá usar:
+            </p>
+
+            <!-- Contenedor de Búsqueda y Limpiar -->
+            <div class="search-container">
+              <input type="search" id="email-search-input" placeholder="Buscar correos (separados por coma, espacio o salto de línea)..." style="padding: 0.4rem; border: 1px solid #ccc; border-radius: 4px;">
+              <button type="button" id="email-search-clear-btn" class="btn-grey btn-small" title="Limpiar búsqueda">Limpiar</button>
+      </div>
+      
+            <!-- Lista de Correos -->
+            <div class="email-checkbox-list">
+                {% set current_assigned_set = assigned_emails | map('lower') | list if assigned_emails is defined else [] %}
+                {% for email in parent_allowed_emails %}
+                <div class="email-item" data-email-text="{{ email | lower }}" style="margin-bottom: 0.4rem;">
+                    <label style="display: flex; align-items: center; cursor: pointer;">
+                    <input
+                        type="checkbox"
+                        class="subuser-email-checkbox"
+                        data-email="{{ email }}"
+                        {% if email.lower() in current_assigned_set %}checked{% endif %}
+                        style="margin-right: 0.5rem; transform: scale(1.1);"
+                    >
+                    <span style="font-size: 0.95em;">{{ email }}</span>
+                    </label>
+                </div>
+                {% else %}
+                 <p><i>No hay correos permitidos definidos para el usuario padre.</i></p>
+                {% endfor %}
+      </div>
+
+            <!-- Botones de Acción -->
+            <div style="display: flex; gap: 0.75rem; margin-top: 0.5rem; flex-wrap: wrap; align-items: center;">
+                <button class="btn-green btn-small select-all-emails">Activar Todos</button>
+                <button class="btn-orange btn-small deselect-all-emails">Desactivar</button>
+                <button class="btn-blue save-subuser-emails">Guardar Cambios</button>
+                <span class="save-status-msg" style="font-size: 0.9em; color: green; margin-left: auto;"></span>
+    </div>
+
+        {% else %}
+            <p style="font-style: italic; color: #666;">El usuario padre no tiene correos configurados o la lista no está disponible. No se pueden asignar correos a este sub-usuario.</p>
+        {% endif %}
+    </div>
+     <!-- Aquí podrías añadir otras secciones de edición si las hubiera DENTRO de esta tarjeta -->
+  </div> <!-- FIN TARJETA 2 -->
+
+</div>
+
+<script>
+// --- El bloque <script> permanece igual que en la versión anterior ---
+// (Incluye la lógica para búsqueda masiva, botón limpiar, activar/desactivar, guardar)
+document.addEventListener('DOMContentLoaded', function() {
+  function getCsrfToken(){
+    const meta = document.querySelector('meta[name="csrf_token"]');
+    return meta ? meta.getAttribute('content') : '';
+  }
+
+    // Seleccionar la sección de correos dentro de la segunda tarjeta
+    const emailSection = document.getElementById('email-management-section');
+    const subuserId = {{ sub_user.id | tojson }};
+
+    if (emailSection) {
+        const searchInput = emailSection.querySelector('#email-search-input');
+        const clearSearchBtn = emailSection.querySelector('#email-search-clear-btn');
+        const selectAllBtn = emailSection.querySelector('.select-all-emails');
+        const deselectAllBtn = emailSection.querySelector('.deselect-all-emails');
+        const saveBtn = emailSection.querySelector('.save-subuser-emails');
+        const statusMsgSpan = emailSection.querySelector('.save-status-msg');
+        const checkboxListDiv = emailSection.querySelector('.email-checkbox-list');
+
+        if (checkboxListDiv) {
+            const emailItems = checkboxListDiv.querySelectorAll('.email-item');
+
+            // --- Filtro de Búsqueda Masiva ---
+            if (searchInput && emailItems.length > 0) {
+                searchInput.addEventListener('input', function() {
+                    const searchTerms = searchInput.value
+                                            .split(/[\s,;\n]+/)
+                                            .map(term => term.trim().toLowerCase())
+                                            .filter(term => term.length > 0);
+
+                    emailItems.forEach(item => {
+                        const emailText = item.getAttribute('data-email-text') || '';
+                        let matchFound = searchTerms.length === 0 || searchTerms.some(term => emailText.includes(term));
+                        if (matchFound) {
+                            item.classList.remove('hidden-email');
+      } else {
+                            item.classList.add('hidden-email');
+                        }
+                    });
+                    // Botón limpiar siempre visible, no necesitamos controlar visibilidad aquí
+                });
+                 // No necesitamos ocultar inicialmente el botón
+            }
+
+            // --- Botón Limpiar Búsqueda ---
+            if (clearSearchBtn && searchInput) {
+                clearSearchBtn.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    searchInput.value = '';
+                    searchInput.dispatchEvent(new Event('input', { bubbles: true }));
+                });
+            }
+
+            // --- Manejadores de Botones (Activar/Desactivar/Guardar) ---
+            if (selectAllBtn) {
+                selectAllBtn.addEventListener('click', function(e) {
+      e.preventDefault();
+                    const visibleCheckboxes = checkboxListDiv.querySelectorAll('.email-item:not(.hidden-email) .subuser-email-checkbox');
+                    visibleCheckboxes.forEach(cb => cb.checked = true);
+                });
+            }
+            if (deselectAllBtn) {
+                deselectAllBtn.addEventListener('click', function(e) {
+        e.preventDefault();
+                    const visibleCheckboxes = checkboxListDiv.querySelectorAll('.email-item:not(.hidden-email) .subuser-email-checkbox');
+                    visibleCheckboxes.forEach(cb => cb.checked = false);
+                });
+            }
+            if (saveBtn) {
+                 saveBtn.addEventListener('click', function(e) {
+        e.preventDefault();
+                    const checkedCheckboxes = checkboxListDiv.querySelectorAll('.subuser-email-checkbox:checked');
+                    const selectedEmails = Array.from(checkedCheckboxes).map(cb => cb.getAttribute('data-email'));
+
+                    if (statusMsgSpan) {
+                         statusMsgSpan.textContent = "Guardando...";
+                         statusMsgSpan.style.color = "orange";
+                    }
+                    saveBtn.disabled = true;
+
+                    fetch("{{ url_for('subuser_bp.update_subuser_emails_ajax') }}", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-CSRFToken": getCsrfToken()
+          },
+                        body: JSON.stringify({
+                            subuser_id: subuserId,
+                            selected_emails: selectedEmails
+                        })
+                    })
+                    .then(response => {
+                        if (!response.ok) {
+                            return response.json().then(errData => {
+                                throw new Error(errData.message || `Error ${response.status}: ${response.statusText}`);
+                            }).catch(() => {
+                                throw new Error(`Error HTTP ${response.status}: ${response.statusText}`);
+                            });
+                        }
+                        return response.json();
+                    })
+      .then(data => {
+        if (data.status === "ok") {
+                            if (statusMsgSpan) {
+                                statusMsgSpan.textContent = "¡Cambios guardados!";
+                                statusMsgSpan.style.color = "green";
+                                setTimeout(() => { statusMsgSpan.textContent = ""; }, 3500);
+                            }
+        } else {
+                            throw new Error(data.message || "Error desconocido al guardar.");
+                        }
+                    })
+                    .catch(error => {
+                        console.error("Error guardando correos:", error);
+                        if (statusMsgSpan) {
+                            statusMsgSpan.textContent = `Error: ${error.message}`;
+                            statusMsgSpan.style.color = "red";
+                        }
+                    })
+                    .finally(() => {
+                        saveBtn.disabled = false;
+      });
+    });
+  }
+        } // Fin if (checkboxListDiv)
+    } // Fin if (emailSection)
+
+});
+</script>
+{% endblock content %}

@@ -1,0 +1,18 @@
+<!-- app/templates/verify_2fa_for_creds.html -->
+{% extends "base.html" %}
+{% block content %}
+<div class="admin-card" style="max-width:500px; margin:2rem auto;">
+  <h2>Verificar 2FA para Cambiar Credenciales</h2>
+  <p>Ingresa tu código de 2FA para continuar.</p>
+
+  <form method="POST">
+    <!-- Campo oculto para el CSRF Token (SeaSurf) -->
+    <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+
+    <label>Código 2FA:</label>
+    <input type="text" name="code" required style="display:block; margin:1rem auto;">
+
+    <button type="submit" class="btn-green">Verificar</button>
+  </form>
+</div>
+{% endblock %}

@@ -1,0 +1,313 @@
+<!-- app/templates/manage_subusers.html -->
+{% extends "base.html" %}
+{% block head %}
+<meta name="csrf_token" content="{{ csrf_token() }}">
+{% endblock head %}
+
+{% block content %}
+
+<div style="max-width:900px; margin:1.5rem auto;">
+
+  <!-- CONTORNO 1: Panel Sub-usuarios + Crear Sub-usuario -->
+  <div class="admin-card" style="margin-bottom:1rem;">
+    <div style="display:flex; justify-content:space-between; align-items:center;">
+      <h3 style="margin:0;">Panel de Sub-usuarios</h3>
+      <button
+        class="btn-blue"
+        onclick="location.href='{{ url_for('main_bp.home') }}'"
+      >
+        Volver a Búsqueda
+      </button>
+    </div>
+    <hr style="margin:0.8rem 0;">
+
+    <!-- CREAR SUB-USUARIO -->
+    <h4 style="margin-top:0;">Crear Sub-usuario</h4>
+    <form id="createSubuserForm" style="display:flex; gap:0.5rem; flex-wrap:wrap; margin-top:0.5rem;">
+      <input
+        type="text"
+        id="subUsername"
+        placeholder="Usuario"
+        style="flex:1;"
+        required
+      >
+      <input
+        type="password"
+        id="subPassword"
+        placeholder="Contraseña"
+        style="flex:1;"
+        required
+      >
+      <!-- Si eres admin y deseas indicar parent_id manual:
+           <input type="number" id="subParentId" placeholder="Parent ID (solo admin)" style="width:120px;">
+         O dejas por defecto que se asigne al user normal
+      -->
+      <button type="submit" class="btn-green">Crear</button>
+    </form>
+    <div id="createSubuserMsg" style="margin-top:0.5rem; color:red;"></div>
+  </div>
+
+  <!-- CONTORNO 2: Búsqueda y Listado de Sub-usuarios -->
+  <div class="admin-card">
+    <h4 style="margin-top:0;">Buscar Sub-usuarios</h4>
+    <form id="searchSubusersForm" style="display:flex; gap:0.5rem; margin-bottom:0.5rem;">
+      <input
+        type="text"
+        id="searchSubusersInput"
+        placeholder="Buscar sub-usuario..."
+        style="flex:1;"
+      >
+      <button type="submit" class="btn-search">Buscar</button>
+    </form>
+
+    <div id="subusersContainer"></div>
+  </div>
+
+</div>
+
+<script>
+document.addEventListener("DOMContentLoaded", function() {
+  function getCsrfToken(){
+    const meta = document.querySelector('meta[name="csrf_token"]');
+    return meta ? meta.getAttribute('content') : '';
+  }
+
+  const createForm = document.getElementById("createSubuserForm");
+  const subUsername = document.getElementById("subUsername");
+  const subPassword = document.getElementById("subPassword");
+  const createSubuserMsg = document.getElementById("createSubuserMsg");
+
+  // Si quisieras manual: 
+  // const subParentId = document.getElementById("subParentId");
+
+  const searchForm = document.getElementById("searchSubusersForm");
+  const searchInput = document.getElementById("searchSubusersInput");
+  const subusersContainer = document.getElementById("subusersContainer");
+
+  // Al cargar => listar sub-usuarios
+  loadAllSubusers();
+
+  // 1) CREAR SUB-USUARIO
+  createForm.addEventListener("submit", function(e) {
+    e.preventDefault();
+    const userVal = subUsername.value.trim();
+    const passVal = subPassword.value.trim();
+    if(!userVal || !passVal){
+      createSubuserMsg.textContent = "Usuario y contraseña son obligatorios.";
+      return;
+    }
+    const payload = {
+      username: userVal,
+      password: passVal
+      // parent_id: parseInt(subParentId.value) || null  // si eres admin
+    };
+
+    fetch("/subusers/create_subuser_ajax", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-CSRFToken": getCsrfToken()
+      },
+      body: JSON.stringify(payload)
+    })
+    .then(r=>r.json())
+    .then(data=>{
+      if(data.status==="ok"){
+        subUsername.value = "";
+        subPassword.value = "";
+        createSubuserMsg.textContent = "";
+        renderSubusers(data.subusers || []);
+      } else {
+        createSubuserMsg.textContent = "Error: " + data.message;
+      }
+    })
+    .catch(err=> {
+      createSubuserMsg.textContent = "Error: " + err;
+    });
+  });
+
+  // 2) BUSCAR SUB-USUARIOS
+  searchForm.addEventListener("submit", function(e) {
+    e.preventDefault();
+    const q = searchInput.value.trim().toLowerCase();
+    fetch(`/subusers/list_subusers_ajax?query=${encodeURIComponent(q)}`, {
+      method:"GET",
+      headers: { "X-CSRFToken": getCsrfToken() }
+    })
+    .then(r=>r.json())
+    .then(data=>{
+      if(data.status==="ok"){
+        renderSubusers(data.subusers || []);
+      } else {
+        subusersContainer.innerHTML = `<p style="color:red;">Error: ${data.message}</p>`;
+      }
+    })
+    .catch(err=>{
+      subusersContainer.innerHTML = `<p style="color:red;">Error: ${err}</p>`;
+    });
+  });
+
+  // 3) CARGAR TODOS
+  function loadAllSubusers(){
+    fetch("/subusers/list_subusers_ajax", { 
+      method:"GET",
+      headers:{ "X-CSRFToken": getCsrfToken() }
+    })
+    .then(r=>r.json())
+    .then(data=>{
+      if(data.status==="ok"){
+        // Volver a la llamada original sin parent_emails
+        renderSubusers(data.subusers || []);
+      } else {
+        subusersContainer.innerHTML = `<p style="color:red;">Error: ${data.message}</p>`;
+      }
+    })
+    .catch(err=> { 
+        console.error("Error cargando subusuarios:", err);
+        subusersContainer.innerHTML = `<p style="color:red;">Error al cargar subusuarios: ${err}</p>`;
+    });
+  }
+
+  // 4) RENDER SUB-USUARIOS - Revertido a la versión simple
+  function renderSubusers(subuserList) { // Quitar parentEmails
+    if(!subuserList.length){
+      subusersContainer.innerHTML = "<p>No hay sub-usuarios creados.</p>";
+      return;
+    }
+    let html = "";
+    
+    subuserList.forEach(su => {
+      html += `
+        <div
+          class="subuser-card" 
+          style="
+            border:1px solid #ccc;
+            border-radius:6px;
+            padding:1rem;
+            margin-bottom:0.6rem; /* Margen original */
+            background-color:#fff;
+          "
+          /* Quitar data-subuser-id del contenedor principal */
+        >
+          <!-- Fila Superior: Nombre y Botones Principales -->
+          <div style="display:flex; justify-content:space-between; align-items:center;">
+            <strong>${su.username}</strong>
+            <div style="display:flex; gap:0.5rem;">
+              <button
+                class="btn-orange"
+                onclick="location.href='/subusers/edit/${su.id}'"
+              >
+                Editar
+              </button>
+      `;
+      // Botón On/Off (Original)
+      if(su.enabled){
+        html += `
+              <button
+                class="btn-red toggle-subuser"
+                data-id="${su.id}"
+                data-enabled="true"
+              >
+                Off
+              </button>
+        `;
+      } else {
+        html += `
+              <button
+                class="btn-green toggle-subuser"
+                data-id="${su.id}"
+                data-enabled="false"
+              >
+                On
+              </button>
+        `;
+      }
+      // Botón Eliminar (Original)
+      html += `
+              <button
+                class="btn-red delete-subuser"
+                data-id="${su.id}"
+              >
+                Eliminar
+              </button>
+            </div>
+          </div>
+          <!-- Quitar toda la sección de correos -->
+        </div> <!-- Fin de subuser-card -->
+      `;
+    });
+    subusersContainer.innerHTML = html;
+  }
+
+  // 5) Delegación de eventos: Solo Toggle / Delete 
+  subusersContainer.addEventListener("click", function(e) {
+    const target = e.target; 
+
+    // Toggle Subuser Enable/Disable (Original)
+    if(target.classList.contains("toggle-subuser")) {
+      e.preventDefault();
+      const subId = target.getAttribute("data-id");
+      const currEnabled = (target.getAttribute("data-enabled") === "true");
+      fetch("/subusers/toggle_subuser_ajax", {
+        method: "POST",
+        headers: {
+          "Content-Type":"application/json",
+          "X-CSRFToken": getCsrfToken()
+        },
+        body: JSON.stringify({
+          sub_id: parseInt(subId),
+          currently_enabled: currEnabled
+        })
+      })
+      .then(r => r.json())
+      .then(data => {
+        if(data.status === "ok") {
+          // Renderizar solo con subusers
+          renderSubusers(data.subusers || []); 
+        } else {
+          alert("Error al cambiar estado: " + data.message);
+        }
+      })
+      .catch(err => {
+        console.error("Error en toggle subuser:", err);
+        alert("Error de red al cambiar estado.");
+      });
+    }
+
+    // Delete Subuser (Original)
+    if(target.classList.contains("delete-subuser")) {
+      e.preventDefault();
+      const subId = target.getAttribute("data-id");
+      if(!confirm("¿Deseas eliminar este sub-usuario? Esta acción no se puede deshacer.")) return;
+
+      fetch("/subusers/delete_subuser_ajax", {
+        method: "POST",
+        headers: {
+          "Content-Type":"application/json",
+          "X-CSRFToken": getCsrfToken()
+        },
+        body: JSON.stringify({ subuser_id: parseInt(subId) })
+      })
+      .then(r => r.json())
+      .then(data => {
+        if(data.status === "ok") {
+          // Renderizar solo con subusers
+          renderSubusers(data.subusers || []);
+        } else {
+          alert("Error al eliminar: " + data.message);
+        }
+      })
+      .catch(err => {
+         console.error("Error en delete subuser:", err);
+         alert("Error de red al eliminar.");
+      });
+    }
+
+    // --- QUITAR MANEJADORES PARA CORREOS ---
+
+  }); // Fin del event listener principal
+
+}); // Fin DOMContentLoaded
+</script>
+
+{% endblock content %}

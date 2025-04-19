@@ -1,0 +1,145 @@
+{% extends "base.html" %}
+{% block head %}
+  <meta name="csrf_token" content="{{ csrf_token() }}">
+{% endblock %}
+
+{% block content %}
+<div class="admin-card" style="margin-top:1.5rem;">
+  <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem;">
+    <h3 style="margin:0;">Servicios</h3>
+    <button
+      onclick="location.href='{{ url_for('admin_bp.dashboard') }}'"
+      class="btn-red"
+      style="text-decoration:none;"
+    >
+      Volver al Panel
+    </button>
+  </div>
+
+  <!-- Buscador -->
+  <form
+    id="serviceSearchForm"
+    style="margin-bottom:1rem; display:flex; gap:0.5rem;"
+  >
+    <input
+      type="text"
+      id="serviceSearchInput"
+      placeholder="Buscar servicio..."
+      style="flex:1;"
+    >
+    <button type="submit" class="btn-search">Buscar</button>
+  </form>
+
+  <!-- Contenedor donde se listan los servicios con JS -->
+  <div id="service-list"></div>
+
+  <hr style="margin:1rem 0;">
+
+  <!-- Crear Nuevo Servicio -->
+  <h4>Crear Nuevo Servicio</h4>
+  <div style="display:flex; gap:0.5rem; flex-wrap:wrap; margin-bottom:1rem; margin-top:0.3rem;">
+    <input
+      type="text"
+      id="newServiceName"
+      placeholder="Nombre"
+      style="flex:1;"
+    >
+    <input
+      type="color"
+      id="newServiceColor"
+      value="#333"
+      style="width:50px; height:30px; cursor:pointer;"
+    >
+    <button type="button" id="createServiceBtn" class="btn-green">Crear</button>
+  </div>
+</div>
+
+<!-- Popups para vincular Regex y Filtro -->
+<div
+  id="popupRegex"
+  style="
+    display:none;
+    position:fixed;
+    top:50%; left:50%;
+    transform:translate(-50%,-50%);
+    background:#fff;
+    border:2px solid #ccc;
+    padding:1rem;
+    z-index:9999;
+  "
+>
+  <h4>Vincular Regex</h4>
+  <select id="regexSelect" style="min-width:200px;"></select>
+  <br><br>
+  <button id="regexLinkSaveBtn" class="btn-green">Vincular</button>
+  <button id="regexLinkCancelBtn" class="btn-red" style="margin-left:0.5rem;">Cancelar</button>
+</div>
+
+<div
+  id="popupFilter"
+  style="
+    display:none;
+    position:fixed;
+    top:50%; left:50%;
+    transform:translate(-50%,-50%);
+    background:#fff;
+    border:2px solid #ccc;
+    padding:1rem;
+    z-index:9999;
+  "
+>
+  <h4>Vincular Filtro</h4>
+  <select id="filterSelect" style="min-width:200px;"></select>
+  <br><br>
+  <button id="filterLinkSaveBtn" class="btn-green">Vincular</button>
+  <button id="filterLinkCancelBtn" class="btn-red" style="margin-left:0.5rem;">Cancelar</button>
+</div>
+
+<!-- PopUp IconGrid para íconos de Servicio -->
+<div
+  id="iconGridOverlay"
+  style="
+    display:none;
+    position:fixed;
+    top:0; left:0;
+    width:100%; height:100%;
+    background:rgba(0,0,0,0.5);
+    z-index:9999;
+  "
+>
+  <div
+    id="iconGridContainer"
+    style="
+      position:absolute;
+      top:50%; left:50%;
+      transform:translate(-50%,-50%);
+      background:#fff;
+      border:2px solid #ccc;
+      border-radius:6px;
+      padding:1rem;
+      max-width:500px;
+      width:90%;
+      color:#333;
+    "
+  >
+    <h4 style="margin-top:0;">Selecciona un ícono para el servicio</h4>
+    <div id="iconGrid" style="display:flex; flex-wrap:wrap; gap:0.5rem;"></div>
+    <button
+      id="closeIconGridBtn"
+      style="
+        background:#f44336;
+        border:2px solid #f44336;
+        color:#fff;
+        margin-top:1rem;
+        padding:0.3rem 0.7rem;
+        border-radius:4px;
+        cursor:pointer;
+      "
+    >
+      Cerrar
+    </button>
+  </div>
+</div>
+
+<script src="{{ url_for('static', filename='js/admin_services_list.js') }}"></script>
+{% endblock %}
