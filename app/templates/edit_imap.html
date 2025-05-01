@@ -1,0 +1,67 @@
+<!-- app/templates/edit_imap.html -->
+{% extends "base.html" %}
+{% block content %}
+{# Aplicada clase de contenedor #}
+<div class="form-container-medium">
+  <div class="card">
+    <h2>Editar Servidor IMAP</h2>
+
+    <!-- Formulario para actualizar un servidor IMAP existente -->
+    <form method="POST" action="{{ url_for('admin_bp.manage_imap') }}">
+      <!-- Campo oculto con CSRF -->
+      <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+      
+      <!-- Campo oculto para indicar que se está editando el servidor con ID 'srv.id' -->
+      <input type="hidden" name="server_id" value="{{ srv.id }}">
+
+      <!-- Host sin label, con placeholder -->
+      <input
+        type="text"
+        name="host"
+        placeholder="Host"
+        value="{{ srv.host }}"
+        required
+        class="d-block mb-05"
+      >
+
+      <!-- Port sin label, con placeholder 993 -->
+      <input
+        type="number"
+        name="port"
+        placeholder="993"
+        value="{{ srv.port }}"
+        class="d-block mb-05"
+      >
+
+      <!-- Usuario sin label, con placeholder -->
+      <input
+        type="text"
+        name="username"
+        placeholder="Usuario"
+        value="{{ srv.username }}"
+        required
+        class="d-block mb-05"
+      >
+
+      <!-- Password sin label, con placeholder -->
+      <input
+        type="password"
+        name="password"
+        placeholder="Password (dejar vacío si no cambias)"
+        class="d-block mb-05"
+      >
+
+      <!-- Carpetas sí conserva la etiqueta -->
+      <label>Carpetas (separadas por comas):</label>
+      <input
+        type="text"
+        name="folders"
+        value="{{ srv.folders if srv.folders else 'INBOX' }}"
+        class="d-block mb-05"
+      >
+
+      <button type="submit" class="btn-green">Guardar</button>
+    </form>
+  </div>
+</div>
+{% endblock %}

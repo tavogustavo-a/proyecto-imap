@@ -1,0 +1,1763 @@
+/* app/static/css/styles.css */
+
+/* ================== RESET & BASE ================== */
+html, body {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  font-family: sans-serif;
+}
+
+body.theme-active {
+  min-height: 100vh;
+  background-attachment: fixed;
+  background-repeat: no-repeat;
+  background-position: center center;
+  background-size: cover;
+}
+
+.container {
+  width: 95.5%;
+  max-width: 1200px;
+  margin: 1rem auto;
+}
+
+/* Variable CSS para opacidad y colores */
+:root {
+  --card-opacity: 0.8;
+  --card-bg: rgba(255, 255, 255, var(--card-opacity));
+  --text-color: #333;
+  --user-bg-color: #fff;
+  --user-text-color: #333;
+}
+
+/* ============= MODO OSCURO ============= */
+.dark-mode {
+  color: #fff !important;
+}
+
+/* Tarjetas, tablas, inputs en modo oscuro */
+.dark-mode .card, 
+.dark-mode .admin-card {
+  background-color: rgba(40,40,40,var(--card-opacity)) !important;
+  color: #fff !important;
+}
+
+.dark-mode table {
+  background-color: #2c2c2c;
+  color: #fff;
+}
+
+.dark-mode input[type="text"],
+.dark-mode input[type="password"],
+.dark-mode input[type="number"],
+.dark-mode input[type="email"],
+.dark-mode textarea,
+.dark-mode select {
+  background-color: #333;
+  color: #fff;
+  border: 1px solid #666;
+}
+
+/* ============= Temas de fondo (tema1..tema17, temaadmin) ============= */
+body.theme-active.tema1 {
+  background: url("../images/tema1.png") no-repeat center center fixed;
+  background-size: cover;
+  color: var(--text-color);
+}
+body.theme-active.tema2 {
+  background: url("../images/tema2.png") no-repeat center center fixed;
+  background-size: cover;
+  color: var(--text-color);
+}
+body.theme-active.tema3 {
+  background: url("../images/tema3.png") no-repeat center center fixed;
+  background-size: cover;
+  color: var(--text-color);
+}
+body.theme-active.tema4 {
+  background: url("../images/tema4.png") no-repeat center center fixed;
+  background-size: cover;
+  color: var(--text-color);
+}
+body.theme-active.tema5 {
+  background: url("../images/tema5.png") no-repeat center center fixed;
+  background-size: cover;
+  color: var(--text-color);
+}
+body.theme-active.tema6 {
+  background: url("../images/tema6.png") no-repeat center center fixed;
+  background-size: cover;
+  color: var(--text-color);
+}
+body.theme-active.tema7 {
+  background: url("../images/tema7.png") no-repeat center center fixed;
+  background-size: cover;
+  color: var(--text-color);
+}
+body.theme-active.tema8 {
+  background: url("../images/tema8.png") no-repeat center center fixed;
+  background-size: cover;
+  color: var(--text-color);
+}
+body.theme-active.tema9 {
+  background: url("../images/tema9.png") no-repeat center center fixed;
+  background-size: cover;
+  color: var(--text-color);
+}
+body.theme-active.tema10 {
+  background: url("../images/tema10.png") no-repeat center center fixed;
+  background-size: cover;
+  color: var(--text-color);
+}
+body.theme-active.tema11 {
+  background: url("../images/tema11.png") no-repeat center center fixed;
+  background-size: cover;
+  color: var(--text-color);
+}
+body.theme-active.tema12 {
+  background: url("../images/tema12.png") no-repeat center center fixed;
+  background-size: cover;
+  color: var(--text-color);
+}
+body.theme-active.tema13 {
+  background: url("../images/tema13.png") no-repeat center center fixed;
+  background-size: cover;
+  color: var(--text-color);
+}
+body.theme-active.tema14 {
+  background: url("../images/tema14.png") no-repeat center center fixed;
+  background-size: cover;
+  color: var(--text-color);
+}
+body.theme-active.tema15 {
+  background: url("../images/tema15.png") no-repeat center center fixed;
+  background-size: cover;
+  color: var(--text-color);
+}
+body.theme-active.tema16 {
+  background: url("../images/tema16.png") no-repeat center center fixed;
+  background-size: cover;
+  color: var(--text-color);
+}
+body.theme-active.tema17 {
+  background: url("../images/tema17.png") no-repeat center center fixed;
+  background-size: cover;
+  color: var(--text-color);
+}
+body.theme-active.temaadmin {
+  background-color: #2c2c2c;
+  color: #ffffff;
+  --card-bg: rgba(55,55,55,var(--card-opacity));
+}
+
+/* ========== Tarjetas (card/admin-card) ========== */
+.card, .admin-card {
+  background-color: var(--card-bg);
+  margin: 0.001rem auto;
+  padding: 0.75rem;
+  border-radius: 8px;
+  max-width: 700px;
+  overflow-x: auto; /* Asegura scroll horizontal si contenido ancho */
+}
+
+.imap-item,
+.domain-item,
+.regex-item {
+  background-color: var(--card-bg);
+  border: 1px solid #ccc;
+  margin: 0.5rem 0;
+  padding: 0.5rem;
+  border-radius: 6px;
+  word-wrap: break-word;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+/* NUEVA REGLA ESPECÍFICA PARA LOS ITEMS DE USUARIO EN admin_users */
+.filter-item {
+  /* Propiedades de layout */
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  /* Propiedades base */
+  border: 1px solid #ccc;
+  margin: 0.5rem 0;
+  padding: 0.5rem;
+  border-radius: 6px;
+  word-wrap: break-word;
+  overflow-wrap: anywhere;
+  white-space: normal;
+  /* RESTAURAR el uso de variables CSS */
+  background-color: var(--user-bg-color);
+  color: var(--user-text-color);
+}
+
+/* En móvil => ocupar ~95% */
+@media (max-width: 600px) {
+  .card, .admin-card {
+    max-width: 85% !important;
+    margin: 10.5rem auto;
+  }
+}
+
+form {
+  background-color: transparent;
+  padding: 0.5rem;
+  border-radius: 8px;
+  margin: 0.5rem 0;
+}
+
+input[type="text"],
+input[type="password"],
+input[type="number"],
+input[type="email"],
+textarea {
+  width: 89%;
+  margin-bottom: 0.5rem;
+  padding: 0.4rem;
+  border-radius: 4px;
+  border: 1px solid #ccc;
+}
+
+button,
+input[type="submit"],
+.btn {
+  padding: 0.4rem 0.8rem;
+  border-radius: 5px;
+  border: none;
+  cursor: pointer;
+  margin: 0.2rem;
+}
+
+/* ========== Flash messages ========== */
+.flash-message {
+  padding: 10px;
+  margin: 10px 0;
+  border-radius: 5px;
+}
+.flash-message.danger  { background-color: #f44336; color: #fff; }
+.flash-message.success { background-color: #4caf50; color: #fff; }
+.flash-message.warning { background-color: #ff9800; color: #fff; }
+.flash-message.info    { background-color: #2196f3; color: #fff; }
+
+/* ========== Botones y estilos de busqueda ========== */
+.btn-search {
+  background-color: #1e88e5;
+  color: #fff;
+  font-weight: bold;
+  border-radius: 30px; /* Borde redondeado */
+  font-size: 1.1rem;   /* Un poco más grande */
+  font-weight: 600;    /* Más "grueso" */
+  border: 2px solid #1e88e5; /* Borde "grueso" */
+  height: 44px;        /* Altura un poco mayor */
+}
+
+.btn-green {
+  background-color: #4caf50;
+  color: #fff;
+}
+.btn-red {
+  background-color: #f44336;
+  color: #fff;
+}
+.btn-orange {
+  background-color: #ff9800;
+  color: #fff;
+}
+.btn-blue {
+  background-color: #2196f3;
+  color: #fff;
+}
+.btn-gray {
+  background-color: #9e9e9e;
+  color: #fff;
+}
+
+/* Campo de búsqueda "gordo" y con bordes redondeados (RESTAURADO) */
+.search-input {
+  font-size: 1.1rem;       /* Fuente más grande */
+  font-weight: 600;        /* "Grueso" */
+  height: 44px;            /* Más alto */
+  border-radius: 30px;     /* Bordes redondeados */
+  border: 2px solid #ccc;  /* Un poco más grueso */
+  padding: 0 15px;
+  width: 100%;
+  box-sizing: border-box;
+  /* Reset explícito por si acaso */
+  max-width: none;
+}
+
+/* ========== Otros estilos (búsqueda, tablas, etc.) ========== */
+.search-container {
+  max-width: 800px;
+  margin: 0 auto;
+  text-align: center;
+}
+
+.search-message {
+  margin-bottom: 1rem;
+}
+
+.search-form {
+  margin-bottom: 1rem;
+}
+
+/* 
+   Definición para search-field 
+*/
+.search-field {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.search-field input[type="text"] {
+  flex: 1;
+  min-width: 0;
+  height: 38px;
+  line-height: 38px;
+  box-sizing: border-box;
+  border: 1px solid #ccc;
+  border-radius: 20px;
+  background-color: #f5f5f5;
+  padding: 0 10px;
+}
+
+@media (max-width: 600px) {
+  .search-field input[type="text"] {
+    margin-right: 0;
+  }
+}
+
+/* Ajustes para el contenido que se imprime cuando pasa filtros */
+.mail-content {
+  word-wrap: break-word;
+  overflow-wrap: anywhere;
+  font-size: 0.9rem;
+  margin-bottom: 0.5rem; /* Reducido margen inferior */
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.mail-content img,
+.mail-content table,
+.mail-content iframe {
+  max-width: 100%;
+  height: auto;
+}
+
+/* Tablas SOLO para la administración */
+.admin-table {
+  width: 100%;
+  border-collapse: collapse;
+  border: 1px solid #ccc;
+  table-layout: fixed;
+}
+
+.admin-table th,
+.admin-table td {
+  padding: 0.8rem; /* Mantenido reducido */
+  text-align: left;
+  word-wrap: break-word; /* Asegurar word-wrap */
+  overflow-wrap: anywhere; /* Asegurar overflow-wrap */
+  white-space: normal;
+}
+
+/* Intentar apuntar específicamente a la columna de posición (suponiendo que es la 4ta) */
+.admin-table th:nth-child(4),
+.admin-table td:nth-child(4) {
+    max-width: 80px; /* Ancho máximo más restrictivo */
+    width: 80px; /* Ancho fijo */
+    overflow: hidden; /* Ocultar desbordamiento si aún ocurre */
+    text-overflow: ellipsis; /* Añadir puntos suspensivos */
+}
+
+/* Intentar apuntar específicamente a la columna de usuario (suponiendo que es la 2da) */
+.admin-table th:nth-child(2),
+.admin-table td:nth-child(2) {
+    max-width: 150px; /* Ancho máximo */
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+@media (max-width: 600px) {
+  .admin-table,
+  .admin-table thead,
+  .admin-table tbody,
+  .admin-table tr,
+  .admin-table td,
+  .admin-table th {
+    display: block;
+    width: 100%;
+  }
+  .admin-table tr {
+    margin-bottom: 0.8rem;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+    padding: 0.5rem;
+  }
+  .admin-table th {
+    font-weight: bold;
+    background-color: #f0f0f0;
+    margin-top: 0.5rem;
+  }
+}
+
+/* 
+   SOLO PARA FILTRO: scale(0.95)
+*/
+.filter-match {
+  transform: scale(0.95);
+  transform-origin: top center;
+  margin: 0 !important;
+  background: none !important;
+  box-shadow: none !important;
+  border-left: none !important;
+  border-right: 2px solid #ccc !important;
+  border-radius: 0 !important;
+  padding: 0 !important;
+  text-align: left !important;
+}
+
+/* =========================
+   media query ~768px
+========================= */
+@media (max-width: 768px) {
+  .container {
+    width: 95%;
+    margin: 0.5rem auto;
+  }
+  .admin-card {
+    margin: 0.1rem auto;
+    padding: 0.5rem;
+  }
+  .search-container {
+    max-width: 600px;
+  }
+}
+
+/* =========================
+   NUEVO: media query ~320px
+========================= */
+@media (max-width: 320px) {
+  /* Ajustes especiales en pantallas muy pequeñas */
+  .container {
+    width: 94%;
+    margin: 0 auto;
+  }
+  .btn-search {
+    font-size: 1rem;
+    height: 40px;
+  }
+  .search-input {
+    font-size: 1rem;
+    height: 40px;
+  }
+  textarea {
+    font-size: 0.9rem;
+  }
+  .flash-message {
+    font-size: 0.85rem;
+  }
+  /* Ajusta si tienes más elementos */
+}
+
+/* Clase para escalar contenido de correo */
+.scaled-content {
+  transform: scale(0.85);
+  transform-origin: top center;
+}
+
+/* Estilos movidos de admin_dashboard.html */
+@media (max-width: 600px) {
+  .twofa-button-group {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}
+
+/* --- INICIO: Estilo para Resultados en Móviles --- */
+@media (max-width: 767px) { /* Puedes ajustar este breakpoint */
+  /* ... otras reglas móviles ... */
+  #search-results {
+    padding-left: 2px;  /* Reducir padding horizontal */
+    padding-right: 2px; /* Reducir padding horizontal */
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+  }
+
+  /* Ajustar <pre> dentro de resultados para que envuelva texto */
+  #search-results pre {
+    white-space: pre-wrap; /* Permite envolver texto */
+    word-wrap: break-word; /* Rompe palabras largas si es necesario */
+    overflow-x: auto; /* Añade scroll si aún es necesario */
+  }
+
+   /* Desactivar el escalado en móviles para que ocupe más ancho */
+  .scaled-content {
+      transform: none; /* <<< Desactivar escalado */
+      transform-origin: initial; /* <<< Restablecer origen */
+      width: auto; /* <<< Restablecer ancho */
+  }
+
+  #search-results td, #search-results th {
+      word-wrap: break-word;
+      overflow-wrap: break-word;
+  }
+
+  /* Reducir escala para resultados de filtro en móvil */
+  .filter-match {
+    transform: scale(0.95); /* Aumentada escala a 95% en móvil */
+    transform-origin: top center; /* Mantener origen */
+  }
+
+  /* -- FIN MANTENER -- */
+}
+/* --- FIN: Estilo para Resultados en Móviles --- */
+
+/* Estilos movidos de base.html */
+body {
+  display: none; /* Ocultar inicialmente hasta que JS lo muestre */
+  margin: 0;
+  padding: 0;
+}
+
+#loading-overlay {
+  position: fixed;
+  top:0; left:0; right:0; bottom:0;
+  background: #fff;
+  color: #333;
+  z-index:9999;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  flex-direction:column;
+}
+
+noscript p {
+  color:red;
+  text-align:center;
+  margin-top:2rem;
+}
+
+/* Estilos para formularios específicos (movidos de inline) */
+.form-container-narrow {
+  max-width: 500px;
+  margin: 2rem auto;
+}
+
+.form-container-medium {
+  max-width: 600px;
+  margin: 1rem auto;
+}
+
+.form-container-600 {
+  max-width: 600px;
+  margin: 1rem auto; /* Ajusta el margen si es diferente para edit_filter */
+}
+
+.form-container-700 {
+  max-width: 700px;
+  margin: 1.5rem auto; /* Margen específico de esta plantilla */
+}
+
+.form-input-block {
+  display: block;
+  width: 100%; /* Ocupa todo el ancho */
+  margin-bottom: 1rem;
+  /* Hereda padding, border, etc. de reglas generales de input */
+}
+
+.form-input-otp {
+  display: block;
+  margin-bottom: 1rem;
+   /* Hereda padding, border, etc. de reglas generales de input */
+}
+
+.btn-link-style {
+  text-decoration: none;
+  margin-left: 1rem;
+  padding: 6px 12px; /* Ajustar padding si es necesario */
+  /* Hereda colores y otros estilos de .btn-red, .btn-blue, etc. */
+}
+
+/* Clases de utilidad para Flexbox */
+.d-flex {
+  display: flex;
+}
+
+.align-items-center {
+  align-items: center;
+}
+
+.justify-content-between {
+  justify-content: space-between;
+}
+
+.flex-wrap {
+  flex-wrap: wrap;
+}
+
+.flex-column {
+  flex-direction: column;
+}
+
+.flex-grow-1 {
+  flex: 1;
+}
+
+/* Clases de utilidad para Gaps */
+.gap-05 { gap: 0.5rem; }
+.gap-1 { gap: 1rem; }
+.gap-075 { gap: 0.75rem; }
+
+/* Clases de utilidad para Márgenes (ejemplos, se pueden añadir más) */
+.m-0 { margin: 0; }
+.mt-05 { margin-top: 0.5rem; }
+.mt-1 { margin-top: 1rem; }
+.mt-1-5 { margin-top: 1.5rem; }
+.mt-2 { margin-top: 2rem; }
+.mb-05 { margin-bottom: 0.5rem; }
+.mb-1 { margin-bottom: 1rem; }
+.mb-1-5 { margin-bottom: 1.5rem; }
+.mb-2 { margin-bottom: 2rem; }
+.ml-03 { margin-left: 0.3rem; }
+.ml-05 { margin-left: 0.5rem; }
+.ml-1 { margin-left: 1rem; }
+.mr-05 { margin-right: 0.5rem; }
+.mr-1 { margin-right: 1rem; }
+.mx-auto { margin-left: auto; margin-right: auto; } /* Para centrar bloques */
+.w-100 { width: 100%; }
+
+/* Otras utilidades comunes */
+.d-block { display: block; }
+.d-inline { display: inline; }
+.text-decoration-none { text-decoration: none; }
+.vertical-align-middle { vertical-align: middle; }
+
+/* Estilos específicos movidos de admin_dashboard.html */
+.twofa-info-box {
+  background: #fff;
+  border: 2px solid #ccc;
+  border-radius: 6px;
+  padding: 1rem;
+  /* Asegurar color de texto legible si el fondo base cambia */
+  color: #333;
+}
+
+.qr-code-image {
+  width: 200px;
+  height: 200px;
+  border: 1px solid #333;
+  /* display: block; /* Opcional: si se necesita asegurar que sea bloque */
+}
+
+/* Estilo base para enlaces que parecen botones */
+.link-button {
+  display: inline-block; /* Para que padding/margin funcionen bien */
+  padding: 0.4rem 0.8rem;
+  border-radius: 4px;
+  cursor: pointer;
+  text-decoration: none;
+  color: #fff; /* Color de texto por defecto */
+  text-align: center;
+}
+
+.link-button-change-creds {
+  background: #9c27b0;
+  border: 2px solid #9c27b0;
+}
+
+.link-button-disable-2fa {
+  background: #f44336;
+  border: 2px solid #f44336;
+}
+
+/* Clases adicionales para refactorizar */
+.min-width-120 { min-width: 120px; }
+
+.label-block {
+  display: block;
+  margin-bottom: 0.3rem; 
+}
+
+/* Estilos movidos de edit_service.html */
+.search-container {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  margin-bottom: 0.75rem;
+}
+.search-container input[type="search"] {
+  flex-grow: 1;
+  margin-bottom: 0; 
+}
+.hidden-item {
+  display: none;
+}
+.admin-card + .admin-card {
+  margin-top: 1.5rem;
+}
+/* .admin-card h3:first-child { margin-top: 0; } */ /* Comentado: Regla ya existe globalmente? */
+/* ul { list-style: none; padding-left: 0; } */ /* Comentado: Regla demasiado general? */
+/* li { margin-bottom: 0.5rem; padding-bottom: 0.5rem; border-bottom: 1px solid #eee; } */ /* Comentado: Regla demasiado general? */
+/* li:last-child { border-bottom: none; } */ /* Comentado: Regla demasiado general? */
+
+/* Estilo para listas específicas (Regex/Filtros en edit_service) */
+.styled-list {
+    border: 1px solid #eee;
+    border-radius: 4px;
+    margin-bottom: 1rem;
+    padding-left: 0;
+    list-style: none;
+}
+.styled-list li {
+  padding: 0.4rem 0.8rem;
+  border-bottom: 1px solid #eee;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap; 
+  gap: 0.5rem; 
+  margin-bottom: 0.5rem;
+}
+.styled-list li:nth-child(odd) { background-color: #ffffff; }
+.styled-list li:nth-child(even) { background-color: #f8f9fa; }
+.styled-list li:last-child {
+    border-bottom: none;
+    margin-bottom: 0;
+}
+.styled-list li span { word-break: break-all; }
+
+/* Estilos movidos de edit_subuser.html */
+.hidden-email {
+  display: none;
+}
+
+/* .search-container { ... } */ /* Comentado: Regla ya existe (movida de edit_service.html) */
+/* #email-search-clear-btn { ... } */ /* Comentado: Sin reglas definidas */
+
+.email-checkbox-list {
+    margin-top: 1rem; 
+    max-height: 250px;
+    overflow-y: auto;
+    border: 1px solid #ddd;
+    padding: 0.75rem;
+    margin-bottom: 0.75rem;
+    background-color: #f9f9f9;
+    border-radius: 4px;
+}
+
+/* .admin-card + .admin-card { margin-top: 1.5rem; } */ /* Comentado: Regla ya existe globalmente? */
+
+/* Estilos movidos de email.html */
+.search-results-container {
+  display: none; /* Oculto inicialmente */
+  max-height: 360px;
+  overflow-y: auto;
+  border: 1px solid #ccc;
+  margin-top: 0.5rem;
+  background-color: #ffffff;
+}
+.search-result-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.25rem 0.6rem;
+  border-bottom: 1px solid #eee;
+  font-size: 0.95em;
+}
+.search-result-item:nth-child(odd) {
+  background-color: #ffffff;
+}
+.search-result-item:nth-child(even) {
+  background-color: #f1f3f5;
+}
+.search-result-item:last-child {
+  border-bottom: none;
+}
+.search-result-item span {
+    flex-grow: 1;
+    margin-right: 0.25rem;
+    word-break: break-all;
+}
+.delete-search-result-btn {
+  padding: 0.1rem 0.4rem;
+  font-size: 0.9em;
+  line-height: 1;
+  cursor: pointer;
+  border: 1px solid #dc3545;
+  color: #dc3545;
+  background-color: transparent;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+.delete-search-result-btn:hover {
+  background-color: #dc3545;
+  color: white;
+}
+.delete-displayed-emails-btn {
+    display: block;
+    margin-top: 0.75rem;
+}
+#delete-displayed-container {
+  margin-top: 0.75rem;
+  text-align: right;
+}
+#deleteDisplayedBtn {
+    display: none;
+}
+#searchEmailsForm {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+  align-items: center;
+}
+/* .admin-card + .admin-card { margin-top: 1.5rem; } */ /* Comentado: Regla ya existe globalmente? */
+/* .admin-card h3:first-child, .admin-card h4:first-child { margin-top: 0; } */ /* Comentado: Regla ya existe globalmente? */
+
+/* Clases para edit_service.html */
+.form-container-wide {
+  max-width: 900px;
+  margin: 2rem auto;
+}
+
+.service-name-input {
+  width: 70%; /* Mantenemos width específico */
+  /* Hereda otros estilos de input */
+}
+
+.color-picker-input {
+  width: 50px;
+  height: 30px;
+  cursor: pointer;
+  padding: 0;
+  border: 1px solid #ccc;
+  vertical-align: bottom;
+  margin-left: 0.5rem;
+}
+
+.position-input {
+  width: 70px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  padding: 0.2rem;
+  margin-left: 0.5rem;
+}
+
+.visibility-select {
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  padding: 0.2rem;
+  cursor: pointer;
+}
+
+.list-unstyled {
+  list-style-type: none;
+  padding-left: 0;
+}
+
+/* NOTA: El estilo dinámico border-left en alias-list-item debe permanecer inline */
+.alias-list-item {
+  margin-bottom: 1rem;
+  padding-left: 0.8rem;
+  border-bottom: 1px solid #eee;
+}
+
+.alias-icon-label {
+  font-size: 0.9em;
+  margin-right: 0.5rem;
+}
+
+.alias-icon-wrapper {
+  display: inline-flex;
+  align-items: center;
+  margin-right: 0.75rem;
+  background-color: #f0f0f0;
+  padding: 2px 5px;
+  border-radius: 4px;
+}
+
+.alias-icon-img {
+  max-height: 1.1em;
+  vertical-align: middle;
+  margin-right: 4px;
+}
+
+.alias-icon-delete-btn {
+  padding: 0 4px;
+  background: #e57373;
+  border: 1px solid #e57373;
+  color: #fff;
+  border-radius: 3px;
+  cursor: pointer;
+  font-size: 0.8em;
+  line-height: 1;
+}
+
+.alias-action-buttons > .btn-small {
+  /* Podríamos añadir estilos base para btn-small si no existen */
+}
+.alias-action-buttons > .btn-add-icon {
+  background: #9c27b0;
+  border-color: #9c27b0;
+  color: #fff;
+}
+.alias-action-buttons > .btn-edit-alias {
+  background: #ffa726;
+  border-color: #ffa726;
+  color: #fff;
+}
+.alias-action-buttons > .btn-delete-alias {
+  background: #f44336;
+  border-color: #f44336;
+  color: #fff;
+}
+
+.protected-text {
+  color: #999;
+}
+
+/* Estilos base para Popups */
+.popup-base {
+  display: none;
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: #fff;
+  border: 2px solid #ccc;
+  border-radius: 6px;
+  padding: 1rem;
+  z-index: 10000;
+  color: #333; /* Color de texto por defecto */
+}
+
+.popup-small {
+  max-width: 300px;
+}
+
+.popup-medium {
+   max-width: 500px;
+}
+
+.popup-overlay {
+  display: none;
+  position: fixed;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  background: rgba(0,0,0,0.5);
+  z-index: 9998; /* Un poco menos que el popup */
+}
+
+.popup-input {
+  width: 100%;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  padding: 0.3rem;
+  box-sizing: border-box; /* Incluir padding en width */
+  max-width: 300px; /* Añadido max-width para limitar inputs en popups */
+}
+
+.popup-color-input {
+  width: 50px;
+  height: 30px;
+  cursor: pointer;
+}
+
+.popup-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.popup-button-confirm {
+  background: #4caf50;
+  border: 2px solid #4caf50;
+  color: #fff;
+  padding: 0.3rem 0.7rem;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.popup-button-cancel {
+  background: #f44336;
+  border: 2px solid #f44336;
+  color: #fff;
+  padding: 0.3rem 0.7rem;
+  border-radius: 4px;
+  cursor: pointer;
+  margin-left: 0.5rem;
+}
+
+/* Clases para refactorizar filters, forgot_password, login */
+.login-container-zoomed {
+  max-width: 400px;
+  margin: 2rem auto;
+  transform: scale(1.1);
+  transform-origin: top center;
+}
+
+.text-center { text-align: center; }
+.text-left { text-align: left; }
+
+.justify-content-center { justify-content: center; }
+
+.login-input {
+  width: 220px;
+  text-align: center;
+}
+
+.login-input-password {
+  /* Hereda de login-input */
+  padding-right: 30px;
+}
+
+.password-toggle-icon {
+  position: absolute;
+  right: 5px;
+  top: 50%;
+  transform: translateY(-50%);
+  cursor: pointer;
+}
+
+.remember-user-container {
+  text-align: left;
+  margin: 1rem auto;
+  max-width: 220px;
+}
+
+.btn-rounded {
+  border-radius: 20px;
+  padding: 0.4rem 1rem;
+}
+
+.form-errors {
+  color: #e74c3c; /* Rojo error */
+  margin-top: 1rem;
+  list-style-type: none; /* Opcional: quitar bullets */
+  padding-left: 0; /* Opcional: quitar padding */
+}
+
+.form-errors li ul {
+  list-style-type: none;
+  padding-left: 1em;
+}
+
+/* Clases específicas para email.html */
+.form-container-large {
+  max-width: 770px; /* Ancho específico para email.html */
+  margin: 2rem auto;
+}
+
+.no-shrink { flex-shrink: 0; }
+
+.text-small { font-size: 0.9rem; }
+.text-smaller { font-size: 0.85rem; }
+.text-medium-small { font-size: 0.95rem; }
+.text-secondary { color: #555; }
+.text-success { color: green; }
+.text-italic { font-style: italic; }
+
+.list-padding-left-15 { padding-left: 1.5rem; }
+
+.resize-vertical { resize: vertical; }
+
+.allowed-emails-display {
+  min-height: 90px;
+  border: 1px solid #ccc;
+  padding: 10px;
+  margin-bottom: 0.5rem;
+  background-color: #f8f9fa;
+  font-family: monospace;
+  white-space: pre-wrap;
+  overflow-y: auto;
+}
+
+.textarea-wide {
+  width: 95%;
+}
+
+.select-padding-3px {
+  padding: 3px;
+}
+
+/* Reutilizamos .popup-base, .popup-small, .popup-medium, .popup-overlay, 
+   .popup-button-confirm, .popup-button-cancel de edit_service.html 
+   Añadimos estilos específicos si es necesario */
+
+.modal-list-container {
+  max-height: 300px;
+  overflow: auto;
+  margin-bottom: 1rem;
+}
+
+.modal-subuser-list-container {
+  max-height: 250px;
+  overflow: auto;
+  margin-bottom: 1rem;
+}
+
+/* Estilos para ítems dentro de modales (si son comunes) */
+.modal-list-item {
+  padding: 6px;
+}
+.modal-list-item-even { background: #f9f9f9; }
+.modal-list-item-odd { background: #fff; }
+
+.modal-list-item label {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.modal-list-item small {
+  /* Estilos para descripción pequeña */
+}
+
+.modal-list-item em.locked-indicator {
+  color: #dc3545;
+  font-size: 0.8rem;
+  margin-left: auto;
+}
+
+/* Responsive styles for edit_service.html header buttons */
+@media (max-width: 600px) { /* O el breakpoint que prefieras */
+  .edit-service-header-container {
+    flex-wrap: wrap; /* Permitir que el título y los botones se envuelvan */
+    gap: 0.5rem; 
+  }
+  .edit-service-header-buttons button {
+     /* Quitar margen derecho y añadir margen inferior si se envuelven */
+    margin-right: 0 !important; 
+    margin-left: 0; /* Asegurar que no haya margen izquierdo extra */
+    margin-bottom: 0.5rem; /* Espacio si se envuelve debajo */
+  }
+}
+
+/* Estilos movidos de search.html */
+.search-page-container {
+  max-width: 1800px; /* Ancho mayor para esta página */
+  margin: 3rem auto;
+  padding: 1rem;
+}
+
+/* Sobrescribir/Añadir estilos de .admin-card específicos para search.html si es necesario */
+.search-page-container .admin-card {
+  width: 100%;
+  padding: 0.2cm 0.8cm; /* Padding específico */
+  /* margin-bottom: 1rem; ya debería estar */
+  /* background-color: var(--card-bg); ya debería estar */
+  /* border-radius: 6px; ya debería estar */
+}
+
+.btn-login-user {
+  background-color: #2196f3; 
+  color: #fff;
+  font-size: 1rem;
+  font-weight: 600;
+  border: 2px solid #2196f3;
+  padding: 0.4rem 0.8rem;
+  border-radius: 5px;
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.services-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.3rem;
+  margin-bottom: 0;
+  justify-content: center;
+}
+
+.service-btn-container {
+  position: relative;
+  flex: 1 1 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  padding: 0.5rem 0.5rem 0.5rem 0;
+  margin-bottom: 0.1rem;
+  border-radius: 5px;
+  border: none;
+  box-shadow: none;
+  background: none;
+}
+
+@media (min-width: 601px) {
+  .service-btn-container {
+    flex: 1 1 calc(50% - 1.3rem);
+    max-width: calc(50% - 1.3rem);
+  }
+}
+
+.service-btn {
+  position: relative;
+  border: none;
+  box-shadow: none;
+  cursor: pointer;
+  color: #fff;
+  transition: all 0.2s ease;
+  outline: none;
+  display: inline-flex; /* Cambio a inline-flex para que se ajuste al contenido + icono */
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 1.2rem;
+  margin: 0;
+  width: 100%; /* Ocupa el ancho del contenedor */
+  text-align: left;
+  border-radius: 30px;
+  height: 3rem;
+  padding: 0 1rem;
+  overflow: hidden;
+  /* El background-color se aplica inline en la plantilla */
+}
+
+.service-btn img {
+  height: 2.2rem;
+  width: auto;
+  object-fit: contain;
+  vertical-align: middle;
+}
+
+.info-icon {
+  margin-left: auto;
+  font-size: 1.4rem;
+  cursor: pointer;
+  user-select: none;
+}
+
+.gif-outside {
+  position: absolute;
+  z-index: 1;
+  left: -1.7rem;
+  top: 50%;
+  transform: translateY(-50%);
+  pointer-events: none;
+  display: none;
+  height: 1.8rem;
+  width: auto;
+}
+
+.main-message-wrapper {
+  max-width: 100%;
+  word-wrap: break-word;
+  text-align: center;
+  margin-bottom: 0;
+}
+
+/* Estilos específicos para el popup de alias en search.html */
+/* Estilos específicos para el popup de alias EN SEARCH.HTML */
+#aliasPopup {
+  display: none;
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: #fff;
+  border: 2px solid #333;
+  border-radius: 6px;
+  padding: 1rem;
+  z-index: 9999;
+  max-width: 600px;
+  width: 90%;
+}
+
+#aliasPopup .alias-popup-close { /* Selector más específico */
+  display: inline-block;
+  padding: 0.3rem 0.6rem;
+  background: #c00;
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  margin-top: 0.5rem;
+}
+
+/* Media query específica para el popup de alias en search.html */
+@media (max-width: 600px) {
+  #aliasPopup {
+    max-width: 85% !important; /* Usar !important con precaución */
+  }
+  /* Ajuste espaciado botones de servicio en móvil */
+  .services-row { 
+    gap: 0.3rem; /* Mantenido gap para espaciado vertical */
+    /* justify-content: flex-start; /* Opcional: alinear a la izquierda si prefieres */
+  } 
+  .service-btn-container { 
+    /* Eliminado margin-bottom */
+    /* Eliminado flex y max-width para que hereden el 100% de ancho */
+  } 
+}
+
+/* Estilos modo oscuro específicos de search.html */
+.dark-mode .search-page-container .admin-card { /* Más específico */
+  background-color: rgba(55,55,55,0.9);
+  color: #fff;
+}
+
+.dark-mode .service-btn { /* Ya podría existir globalmente */
+  /* background-color: #444; */ /* Comentado: Se aplica inline */
+  /* color: #fff; */ /* Ya aplicado por defecto en .service-btn? */
+}
+
+.dark-mode .btn-search { /* Ya podría existir globalmente */
+  /* background-color: #444; */
+  /* color: #fff; */
+  /* border: 2px solid #444; */
+}
+
+/* .filter-match { ... } */ /* Comentado: Ya existe */
+
+/* Estilos resultados móviles específicos de search.html */
+/* 
+@media (max-width: 767px) { 
+  #search-results { ... } 
+  #search-results pre { ... } 
+  #search-results table { ... } 
+  #search-results td, #search-results th { ... }
+} 
+*/
+/* Comentado: Estos estilos deberían ser globales para #search-results si aplica a otras páginas */
+
+/* Clases específicas para cabecera de search.html */
+.search-header-actions {
+  text-align: right;
+  margin-bottom: 1rem;
+}
+
+.theme-toggle-container {
+  text-align: right;
+  margin-bottom: 0; /* Asegurar que no haya margen inferior */
+}
+
+.info-text-small {
+  /* Combinar con .mt-1 */
+  /* color: #333; */ /* Quitado, debería heredar o manejar con dark-mode */
+  font-size: 0.9rem;
+}
+
+.max-width-400 { max-width: 400px; }
+
+/* Estilos específicos movidos de parrafos.html */
+.textarea-paragraph {
+  /* Podríamos combinar d-block, w-100, resize-vertical aquí */
+  /* Pero usar clases de utilidad es más flexible */
+}
+.paragraph-status-text {
+  color: #666;
+  /* Combinar con ml-auto */
+}
+.link-button-thick-blue {
+  background: #2196f3;
+  border: 3px solid #2196f3;
+  color: #fff;
+  padding: 0.4rem 0.8rem;
+  border-radius: 5px;
+  text-decoration: none;
+  display: inline-block; /* Añadido para padding */
+}
+
+.w-100 { width: 100%; } /* Ancho completo */
+.text-right { text-align: right; }
+
+/* Estilos específicos movidos de admin_dashboard.html */
+.info-text-small {
+  /* color: #333; */ /* Color heredado o manejado por dark-mode */
+  font-size: 0.9rem;
+}
+.max-width-400 { max-width: 400px; }
+
+/* Estilos específicos movidos de parrafos.html */
+.hr-margin-1 { margin-top: 1rem; margin-bottom: 1rem; }
+.hr-margin-15 { margin-top: 1.5rem; margin-bottom: 1.5rem; }
+.hr-margin-08 { margin-top: 0.8rem; margin-bottom: 0.8rem; }
+
+.paragraph-status-text {
+  color: #666; /* Mantenido color específico */
+}
+.link-button-thick-blue {
+  background: #2196f3;
+  border: 3px solid #2196f3;
+  color: #fff;
+  padding: 0.4rem 0.8rem;
+  border-radius: 5px;
+  text-decoration: none;
+  display: inline-block;
+}
+
+/* Estilos específicos para edit_service.html */
+.heading-service-edit { font-size: 1.5rem; }
+.align-items-end { align-items: flex-end; }
+.gap-1-5 { gap: 1.5rem; }
+.justify-content-start { justify-content: flex-start; }
+.mt-075 { margin-top: 0.75rem; }
+.word-break-all { word-break: break-all; }
+.width-70pc { width: 70%; }
+
+/* Estilos específicos para admin_dashboard.html */
+.admin-dashboard-title {
+  font-size: 1.5rem;
+}
+
+.password-input-wrapper { 
+  position: relative; 
+}
+
+.popup-visible {
+    display: block !important; /* Usamos !important aquí para asegurar que anule .popup-base */
+}
+/* O si el popup usa flex: */
+.popup-visible-flex {
+    display: flex !important;
+}
+
+/* Clases específicas para usuarios.html */
+.input-password-short {
+  width: 150px; /* Ancho específico */
+  padding-right: 30px; /* Espacio para el icono */
+}
+
+.password-toggle-icon-create {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  cursor: pointer;
+  color: #007bff;
+}
+
+.password-toggle-icon-edit {
+  position: absolute;
+  left: 160px; /* Posición específica del popup editar */
+  top: 50%;
+  transform: translateY(-50%);
+  cursor: pointer;
+  color: #007bff;
+}
+
+.color-picker-small { /* Reutilizamos o adaptamos popup-color-input */
+  width: 50px;
+  height: 30px;
+  cursor: pointer;
+}
+
+.position-input-small { /* Reutilizamos o adaptamos */
+  width: 45px; /* Mantenido */
+  margin-left: 4px;
+  /* Hereda otros estilos de input */
+  border: 1px solid #ccc; /* Asegurar que tenga estilos base */
+  border-radius: 4px;   /* Asegurar que tenga estilos base */
+  padding: 0.2rem;       /* Asegurar que tenga estilos base */
+}
+
+.label-no-wrap {
+  white-space: nowrap;
+}
+
+.email-search-input-style {
+  padding: 0.4rem;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  /* Hereda flex-grow de .flex-grow-1 */
+}
+
+.mb-04 { margin-bottom: 0.4rem; }
+
+.cursor-pointer { cursor: pointer; }
+
+.checkbox-email-item {
+  margin-right: 0.5rem;
+  transform: scale(1.1);
+  /* Considerar si scale afecta layout */
+}
+
+/* Clases específicas para search.html */
+#spinner { 
+  display: none; /* Oculto inicialmente */
+}
+
+.spinner-image {
+  height: 50px;
+}
+
+.app-logo-image {
+  height: 70px;
+}
+
+.search-form-container {
+  max-width: 400px;
+  margin: 0.2rem auto;
+}
+
+.search-results-display {
+  padding: 0.5rem;
+  display: none; /* Oculto inicialmente */
+  max-width: 100%;
+  overflow-x: auto;
+  text-align: left;
+}
+
+/* Estilo para los items de alias en el popup de search.html */
+.alias-popup-item {
+  background-color: #888; /* Default si no hay color */
+  color: #fff;
+  border: none;
+  border-radius: 20px;
+  font-size: 1.6rem;
+  margin: 0.2rem 0;
+  padding: 0.5rem 1rem;
+  word-wrap: break-word;
+  display: flex;
+  align-items: center;
+  gap: 0.1rem;
+}
+
+.alias-popup-item img {
+  height: 2.3rem;
+  margin-right: 0.2rem;
+  vertical-align: middle; /* Añadido */
+}
+
+.select-min-width-200 {
+  min-width: 200px;
+}
+
+/* Clases adicionales finales */
+.min-height-2-5rem { min-height: 2.5rem; }
+.gap-03 { gap: 0.3rem; }
+.max-width-200 { max-width: 200px; }
+
+/* --- Estilos para resultados de Regex (generados por JS) --- */
+.regex-result-container {
+  background: #f9f9f9;
+  padding: 1rem; /* Padding por defecto */
+  text-align: center;
+  margin-top: 0.5rem; /* Reducido margen superior */
+  border-radius: 4px; /* Añadir borde redondeado */
+}
+
+.regex-result-code {
+  font-size: 1.4rem;
+  color: #444;
+  margin: 0 0 0.5rem 0; /* Margen inferior para separar de botones */
+  display: inline-block; /* Para que botones queden al lado */
+  word-break: break-all; /* Romper texto largo si es necesario */
+}
+
+.regex-result-copy-btn,
+.regex-result-open-link-btn {
+  margin-left: 1rem; /* Margen izquierdo original */
+  padding: 0.5rem 1rem; /* Padding original */
+  font-size: 1rem; /* Tamaño fuente original */
+  /* Hereda colores/bordes de .btn, .btn-primary, .btn-success */
+  /* Hereda cursor:pointer, border-radius:4px de .btn */
+  vertical-align: baseline; /* Asegurar alineación con texto si es necesario */
+}
+
+.regex-result-date {
+  font-size: 0.9rem;
+  color: #666;
+  margin-top: 0.75rem; /* Reducir margen superior */
+}
+
+.regex-result-date-only {
+  font-size: 0.9rem;
+  color: #666;
+  margin-top: 1rem;
+}
+
+/* --- Ajustes Móviles para Regex Results --- */
+@media (max-width: 767px) {
+  .regex-result-container {
+    padding: 0.5rem; /* Reducir padding en móvil */
+    text-align: left; /* Alinear a la izquierda en móvil */
+  }
+  .regex-result-code {
+     font-size: 1.2rem; /* Reducir tamaño fuente código */
+     display: block; /* Hacer que ocupe su línea */
+     margin-bottom: 0.75rem; /* Más margen inferior */
+  }
+  /* Aumentar levemente tamaño de botones en móvil */
+  .regex-result-copy-btn,
+  .regex-result-open-link-btn {
+      padding: 0.6rem 1.1rem; /* Padding ligeramente mayor */
+       /* Mantener font-size y margin-left del estilo base */
+       margin-left: 0; /* Sin margen izquierdo */
+       margin-right: 0.5rem; /* Espacio entre botones si se envuelven */
+       margin-top: 0.25rem; /* Espacio superior si se envuelven */
+  }
+}
+
+/* --- Estilos para secciones de párrafos (parrafos.html) --- */
+/* Eliminadas reglas para .paragraph-section ya que ahora se usa .admin-card */
+
+/* Regla más específica para inputs dentro de popups */
+.popup-base input[type="text"]:not([name*='search']),
+.popup-base input[type="password"],
+.popup-base input[type="number"],
+.popup-base input[type="email"],
+.popup-base textarea,
+.popup-base select {
+    max-width: 220px; /* Reducido aún más el max-width para popups */
+    width: 100%;
+}
+
+/* Asegurarse que el input de posición en popup también se vea afectado */
+.popup-base .position-input-small {
+    max-width: 60px; /* Mantenido */
+    width: 60px;
+}
+
+/* --- Ajustes adicionales para usuarios.html --- */
+
+/* Input de Usuario en CREAR USUARIO (Formulario en página) */
+.admin-card form input[name='username'] {
+  max-width: 180px !important; /* Reducido aún más */
+  width: 100%;
+}
+
+/* Input de Posición en CREAR USUARIO (Formulario en página) */
+.admin-card form input[name='position'] {
+  width: 50px !important; /* Muy pequeño */
+  max-width: 50px !important;
+  flex-grow: 0 !important; /* Asegurar que no se estire */
+}
+
+/* Input de Usuario en EDITAR USUARIO (Popup) */
+.popup-base input[name='username'] {
+    max-width: 180px !important; /* Reducido más */
+    width: 100%;
+}
+
+/* Input de Contraseña en EDITAR USUARIO (Popup) */
+.popup-base input[name='new_password'] {
+    max-width: 180px !important; /* Reducido más */
+    width: 100%;
+}
+
+/* Input de Posición en EDITAR USUARIO (Popup) */
+.popup-base input[name='position'] {
+    max-width: 50px !important; /* Muy pequeño */
+    width: 50px !important;
+}
+
+
+.admin-card form .d-flex .flex-grow-1 {
+  max-width: 200px !important; /* Límite superior */
+  min-width: 150px;          /* Evitar que se encoja demasiado */
+  /* Mantenemos flex-grow: 1 por la clase */
+}
+
+/* Input de Posición en CREAR USUARIO (por atributo name) */
+/* Dentro de una fila flex */
+.admin-card form .d-flex input[name='position'] {
+  width: 55px !important;   /* Muy pequeño */
+  max-width: 55px !important;
+  flex: 0 0 55px !important; /* No crecer, No encoger, Base 55px */
+  padding: 0.4rem;         /* Consistencia en padding */
+}
+
+/* --- Ajustes para Popup Editar Usuario (id=editUserPopup) --- */
+
+/* Limitar ancho de inputs con .flex-grow-1 DENTRO del popup */
+#editUserPopup .flex-grow-1 { /* Asumiendo que el popup también usa .flex-grow-1 */
+  max-width: 200px !important;
+  min-width: 150px;
+}
+
+/* Input de Posición DENTRO del popup */
+#editUserPopup input[name='position'] { /* Asumiendo name='position' también en popup */
+  width: 55px !important;
+  max-width: 55px !important;
+  flex: 0 0 55px !important;
+  padding: 0.4rem;
+}
+
+/* --- Fin Ajustes Precisos --- */
+
+.error-message {
+  color: #f44336; /* Rojo para errores */
+}
+
+.input-admin-id {
+  width: 120px;
+}
+
+/* --- FIN Estilos específicos para admin_dashboard.html --- */
+
+/* Forzar estilo modo claro para resultados de filtro en modo oscuro */
+body.dark-mode .filter-match {
+  background-color: #ffffff !important; /* Fondo blanco */
+  color: #333333 !important; /* Texto oscuro */
+  border-color: #dddddd !important; /* Borde claro (ajustar si es necesario) */
+}
+
+/* Asegurar que el texto DENTRO del HTML del filtro sea legible */
+body.dark-mode .filter-match * {
+  /* Intentar forzar color de texto, puede ser anulado por estilos inline */
+  color: #333333 !important; 
+  /* Forzar fondo transparente para elementos internos, para que se vea el blanco de .filter-match */
+  background-color: transparent !important; 
+}
+
+/* Anular específicamente estilos de enlaces dentro del filtro en modo oscuro si es necesario */
+body.dark-mode .filter-match a {
+   color: #0066cc !important; /* Color de enlace típico de modo claro */
+}
+
+/* Estilos para botones de visibilidad de servicio */
+.visibility-btn {
+  /* Estilos base comunes si los necesitas */
+  border: 2px solid transparent; 
+  color: #fff; 
+  margin-right: 0.3rem; 
+  padding: 0.2rem 0.6rem; 
+  border-radius: 4px; 
+  cursor: pointer;
+}
+
+.visibility-btn-off {
+  background-color: #f44336; /* Rojo */
+  border-color: #f44336;
+}
+
+.visibility-btn-on-no-usuarios {
+  background-color: #2196f3; /* Azul */
+  border-color: #2196f3;
+}
+
+.visibility-btn-on-usuarios {
+  background-color: #4caf50; /* Verde */
+  border-color: #4caf50;
+}
+
+/* Estilo para imagen de icono de servicio en la lista */
+.service-icon-img {
+  max-height: 1.3em; 
+  border: 1px solid #ccc; 
+  border-radius: 4px; 
+  vertical-align: middle;
+  /* Añadimos max-width para evitar desbordes */
+  max-width: 100%; 
+  height: auto; /* Mantiene proporción */
+}
+
+/* Estilo para el botón de eliminar icono de servicio */
+.delete-service-icon-btn {
+  background: #f44336; 
+  border: 2px solid #f44336; 
+  color: #fff; 
+  margin-left: 0.2rem; 
+  padding: 0 5px; 
+  border-radius: 4px; 
+  cursor: pointer; 
+  vertical-align: middle;
+  line-height: 1; /* Ajuste para botones pequeños */
+  font-size: 0.9em; /* Ajuste para botones pequeños */
+}
+
+/* ... añadir más colores si es necesario ... */

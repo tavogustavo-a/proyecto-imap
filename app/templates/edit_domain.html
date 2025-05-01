@@ -1,0 +1,35 @@
+<!-- app/templates/edit_domain.html -->
+{% extends "base.html" %}
+{% block content %}
+{# Aplicada clase de contenedor #}
+<div class="admin-card form-container-narrow">
+  <h3>Editar Dominio</h3>
+  {% if dom %}
+    <form method="POST" action="{{ url_for('admin_bp.edit_domain', dom_id=dom.id) }}">
+      <!-- Campo oculto para CSRF (indispensable para evitar el 403) -->
+      <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+
+      <label for="domain">Dominio:</label>
+      {# Aplicada clase de input (asumiendo que form-input-block es adecuada) #}
+      <input
+        type="text"
+        name="domain"
+        value="{{ dom.domain }}"
+        required
+        class="form-input-block"
+      >
+
+      <button type="submit" class="btn-green">Guardar Cambios</button>
+      <!-- Enlace corregido: apunta a 'filters_page' para volver a la lista de dominios/filtros -->
+      <a
+        href="{{ url_for('admin_bp.filters_page') }}"
+        class="btn-red btn-link-style"
+      >
+        Cancelar
+      </a>
+    </form>
+  {% else %}
+    <p>No se encontró el dominio a editar.</p>
+  {% endif %}
+</div>
+{% endblock %}

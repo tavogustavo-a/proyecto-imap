@@ -1,0 +1,19 @@
+<!-- app/templates/confirm_new_otp_email.html -->
+{% extends "base.html" %}
+{% block content %}
+<div class="card form-container-600">
+  <h2>Confirmar Nuevo Correo</h2>
+  <p>Se envió un código al correo <strong>{{ new_otp_email }}</strong>. Ingrésalo a continuación:</p>
+
+  <form method="POST">
+    <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+    <label for="code">Código OTP:</label>
+    <input type="text" name="code" required class="form-input-otp">
+
+    <button type="submit" class="btn-green">Confirmar</button>
+    <a href="{{ url_for('admin_bp.dashboard') }}" class="btn-red btn-link-style">
+      Cancelar
+    </a>
+  </form>
+</div>
+{% endblock %}

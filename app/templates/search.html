@@ -1,0 +1,248 @@
+<!-- app/templates/search.html -->
+{% extends "base.html" %}
+{% block content %}
+
+{% set current_user_id = session.get("user_id") %}
+{% if current_user_id %}
+  {# Attempting to fetch the User object, need 'User' #}
+  {% set user_object = User.query.get(current_user_id) %}
+{% else %}
+  {% set user_object = None %}
+{% endif %}
+
+<div class="search-page-container">
+
+  <div class="search-header-actions">
+    {% if session.get("is_user") %}
+      {# Mostrar "Panel" si user_object y user_object.can_create_subusers #}
+      {% if user_object and user_object.can_create_subusers %}
+        <a href="{{ url_for('subuser_bp.manage_subusers') }}" class="btn-login-user mr-05">
+          Panel
+        </a>
+      {% endif %}
+      <a href="{{ url_for('user_auth_bp.logout') }}" class="btn-login-user"> Cerrar Sesión </a>
+    {% else %}
+      <a href="{{ url_for('user_auth_bp.login') }}" class="btn-login-user"> Iniciar Sesión </a>
+    {% endif %}
+  </div>
+
+  <div class="admin-card">
+    <!-- Botón modo oscuro -->
+    <div class="theme-toggle-container">
+      <button id="toggleThemeBtn" class="btn-gray">Modo Oscuro</button>
+    </div>
+
+    <!-- Spinner (Quitado style inline) -->
+    <div id="spinner" class="text-center mb-0"> 
+      <img src="{{ url_for('static', filename='images/spinner.gif') }}" alt="Cargando..." class="spinner-image">
+      <p>Buscando correos, por favor espera...</p>
+    </div>
+
+    {# --- MOVER LOGO AQUÍ ARRIBA --- #}
+    {% if site_settings.get('logo_enabled','true') == 'true' %}
+      <div class="text-center mb-1">
+        <img
+          src="{{ url_for('static', filename='images/logo.png') }}"
+          alt="Logo"
+          class="app-logo-image"
+        >
+      </div>
+    {% endif %}
+    {# --- FIN MOVER LOGO --- #}
+
+    {% set p1_mode = site_settings.get('search_message_mode','off') %}
+    {% set p1_text = site_settings.get('search_message','') %}
+    {% set p2_mode = site_settings.get('search_message2_mode','off') %}
+    {% set p2_text = site_settings.get('search_message2','') %}
+
+    {% if p1_mode == 'guests' and not session.get("logged_in") %}
+      <div class="main-message-wrapper mb-1">
+        {{ p1_text|safe }}
+      </div>
+    {% endif %}
+
+    {% if p2_mode == 'users' and session.get("logged_in") %}
+      <div class="main-message-wrapper mb-1">
+        {{ p2_text|safe }}
+      </div>
+    {% endif %}
+
+    {% if services_in_rows %}
+      {% if session.get("username") == ADMIN_USER %}
+        {# ADMIN VE TODOS #}
+        {% for row in services_in_rows %}
+          <div class="services-row">
+            {% for srv in row %}
+              <div class="service-btn-container">
+                <button
+                  class="service-btn"
+                  data-service-id="{{ srv.id }}"
+                  data-bg-color="{{ srv.border_color }}"
+                  data-service-aliases='[
+                    {% for al in srv.aliases %}
+                      {
+                        "alias_name": {{ al.alias_name|tojson }},
+                        "alias_icons": [
+                          {% for ai in al.alias_icons %}
+                            "{{ ai.icon_name }}"{% if not loop.last %},{% endif %}
+                          {% endfor %}
+                        ],
+                        "alias_color": {{ al.border_color|tojson }}
+                      }{% if not loop.last %},{% endif %}
+                    {% endfor %}
+                  ]'
+                >
+                  {% if srv.service_icons and srv.service_icons|length > 0 %}
+                    {% for icon_obj in srv.service_icons %}
+                      <img
+                        src="{{ url_for('static', filename='images/' ~ icon_obj.icon_name) }}"
+                        alt="icon"
+                      >
+                    {% endfor %}
+                  {% endif %}
+                  {{ srv.name }}
+                  {% if srv.aliases and srv.aliases|length > 0 %}
+                    <span class="info-icon">ℹ️</span>
+                  {% endif %}
+                </button>
+                {% set current_gif = site_settings.get('current_gif','none') %}
+                {% if current_gif != 'none' %}
+                  <img
+                    src="{{ url_for('static', filename='images/gifs/' ~ current_gif ~ '.gif') }}"
+                    alt="GIF"
+                    class="gif-outside"
+                  >
+                {% endif %}
+              </div>
+            {% endfor %}
+          </div>
+        {% endfor %}
+      {% else %}
+        {# USUARIO NO ADMIN => Filtramos visibility_mode #}
+        {% for row in services_in_rows %}
+          <div class="services-row">
+            {% for srv in row %}
+              {% if srv.visibility_mode == "off" %}
+                <!-- No se muestra -->
+              {% elif srv.visibility_mode == "on-no-usuarios" and not session.get("logged_in") %}
+                <div class="service-btn-container">
+                  <button
+                    class="service-btn"
+                    data-service-id="{{ srv.id }}"
+                    data-bg-color="{{ srv.border_color }}"
+                    data-service-aliases='[
+                      {% for al in srv.aliases %}
+                        {
+                          "alias_name": {{ al.alias_name|tojson }},
+                          "alias_icons": [
+                            {% for ai in al.alias_icons %}
+                              "{{ ai.icon_name }}"{% if not loop.last %},{% endif %}
+                            {% endfor %}
+                          ],
+                          "alias_color": {{ al.border_color|tojson }}
+                        }{% if not loop.last %},{% endif %}
+                      {% endfor %}
+                    ]'
+                  >
+                    {% if srv.service_icons and srv.service_icons|length > 0 %}
+                      {% for icon_obj in srv.service_icons %}
+                        <img
+                          src="{{ url_for('static', filename='images/' ~ icon_obj.icon_name) }}"
+                          alt="icon"
+                        >
+                      {% endfor %}
+                    {% endif %}
+                    {{ srv.name }}
+                    {% if srv.aliases and srv.aliases|length > 0 %}
+                      <span class="info-icon">ℹ️</span>
+                    {% endif %}
+                  </button>
+                  {% set current_gif = site_settings.get('current_gif','none') %}
+                  {% if current_gif != 'none' %}
+                    <img
+                      src="{{ url_for('static', filename='images/gifs/' ~ current_gif ~ '.gif') }}"
+                      alt="GIF"
+                      class="gif-outside"
+                    >
+                  {% endif %}
+                </div>
+              {% elif srv.visibility_mode == "on-usuarios" and session.get("logged_in") %}
+                <div class="service-btn-container">
+                  <button
+                    class="service-btn"
+                    data-service-id="{{ srv.id }}"
+                    data-bg-color="{{ srv.border_color }}"
+                    data-service-aliases='[
+                      {% for al in srv.aliases %}
+                        {
+                          "alias_name": {{ al.alias_name|tojson }},
+                          "alias_icons": [
+                            {% for ai in al.alias_icons %}
+                              "{{ ai.icon_name }}"{% if not loop.last %},{% endif %}
+                            {% endfor %}
+                          ],
+                          "alias_color": {{ al.border_color|tojson }}
+                        }{% if not loop.last %},{% endif %}
+                      {% endfor %}
+                    ]'
+                  >
+                    {% if srv.service_icons and srv.service_icons|length > 0 %}
+                      {% for icon_obj in srv.service_icons %}
+                        <img
+                          src="{{ url_for('static', filename='images/' ~ icon_obj.icon_name) }}"
+                          alt="icon"
+                        >
+                      {% endfor %}
+                    {% endif %}
+                    {{ srv.name }}
+                    {% if srv.aliases and srv.aliases|length > 0 %}
+                      <span class="info-icon">ℹ️</span>
+                    {% endif %}
+                  </button>
+                  {% set current_gif = site_settings.get('current_gif','none') %}
+                  {% if current_gif != 'none' %}
+                    <img
+                      src="{{ url_for('static', filename='images/gifs/' ~ current_gif ~ '.gif') }}"
+                      alt="GIF"
+                      class="gif-outside"
+                    >
+                  {% endif %}
+                </div>
+              {% endif %}
+            {% endfor %}
+          </div>
+        {% endfor %}
+      {% endif %}
+    {% endif %}
+
+    <!-- Form de búsqueda IMAP -->
+    <div class="search-form-container">
+      <form id="ajax-search-form" class="mb-05">
+        <input type="hidden" id="selectedServiceId" name="service_id" value="">
+        <div class="d-flex gap-05">
+          <input
+            type="text"
+            id="searchEmail"
+            class="search-input"
+            placeholder="correo@dominio.com"
+            required
+          >
+          <button type="submit" class="btn-search">Buscar</button>
+        </div>
+      </form>
+    </div>
+
+    <!-- Resultados (Quitado style inline) -->
+    <div
+      id="search-results"
+      class="search-results-display search-results-mobile-padding"
+    ></div>
+  </div>
+</div>
+
+<div id="aliasPopup">
+  <div id="aliasListContainer"></div>
+  <button class="alias-popup-close">Cerrar</button>
+</div>
+
+{% endblock %}

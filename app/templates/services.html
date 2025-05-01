@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+{% block head %}
+  <meta name="csrf_token" content="{{ csrf_token() }}">
+{% endblock %}
+
+{% block content %}
+<div class="admin-card mt-1">
+  <div class="d-flex justify-content-between align-items-center mb-1">
+    <h3 class="m-0">Servicios</h3>
+    <button
+      id="btnVolverPanelServices"
+      type="button"
+      class="btn-red text-decoration-none"
+      data-dashboard-url="{{ url_for('admin_bp.dashboard') }}"
+    >
+      Volver al Panel
+    </button>
+  </div>
+
+  <form
+    id="serviceSearchForm"
+    class="mb-1 d-flex gap-05"
+  >
+    <input
+      type="text"
+      id="serviceSearchInput"
+      placeholder="Buscar servicio..."
+      class="flex-grow-1"
+    >
+    <button type="submit" class="btn-search">Buscar</button>
+  </form>
+
+  <div id="service-list"></div>
+
+  <hr class="hr-margin-1">
+
+  <h4>Crear Nuevo Servicio</h4>
+  <div class="d-flex gap-05 flex-wrap mb-1 mt-05">
+    <input
+      type="text"
+      id="newServiceName"
+      placeholder="Nombre"
+      class="flex-grow-1"
+    >
+    <input
+      type="color"
+      id="newServiceColor"
+      value="#333"
+      class="popup-color-input"
+    >
+    <button type="button" id="createServiceBtn" class="btn-green">Crear</button>
+  </div>
+</div>
+
+<div id="popupRegex" class="popup-base popup-small">
+  <h4>Vincular Regex</h4>
+  <select id="regexSelect" class="select-min-width-200"></select>
+  <br><br>
+  <button id="regexLinkSaveBtn" class="popup-button-confirm">Vincular</button>
+  <button id="regexLinkCancelBtn" class="popup-button-cancel">Cancelar</button>
+</div>
+
+<div id="popupFilter" class="popup-base popup-small">
+  <h4>Vincular Filtro</h4>
+  <select id="filterSelect" class="select-min-width-200"></select>
+  <br><br>
+  <button id="filterLinkSaveBtn" class="popup-button-confirm">Vincular</button>
+  <button id="filterLinkCancelBtn" class="popup-button-cancel">Cancelar</button>
+</div>
+
+<div id="iconGridOverlay" class="popup-overlay">
+  <div id="iconGridContainer" class="popup-base popup-medium">
+    <h4 class="mt-0">Selecciona un ícono para el servicio</h4>
+    <div id="iconGrid" class="popup-grid"></div>
+    <button id="closeIconGridBtn" class="popup-button-cancel mt-1">
+      Cerrar
+    </button>
+  </div>
+</div>
+
+<script src="{{ url_for('static', filename='js/admin_services_list.js') }}"></script>
+{% endblock %}

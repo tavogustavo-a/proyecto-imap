@@ -1,0 +1,71 @@
+<!-- app/templates/manage_subusers.html -->
+{% extends "base.html" %}
+{% block head %}
+<meta name="csrf_token" content="{{ csrf_token() }}">
+{% endblock head %}
+
+{% block content %}
+
+<div class="form-container-wide mt-1-5 mb-1-5">
+
+  <!-- CONTORNO 1: Panel Sub-usuarios + Crear Sub-usuario -->
+  <div class="admin-card mb-1">
+    <div class="d-flex justify-content-between align-items-center">
+      <h3 class="m-0">Panel de Sub-usuarios</h3>
+      <button
+        id="btnVolverBusqueda"
+        type="button"
+        class="btn-blue"
+        data-home-url="{{ url_for('main_bp.home') }}"
+      >
+        Volver a Búsqueda
+      </button>
+    </div>
+    <hr class="hr-margin-08">
+
+    <!-- CREAR SUB-USUARIO -->
+    <h4 class="mt-0">Crear Sub-usuario</h4>
+    <form id="createSubuserForm" class="d-flex gap-05 flex-wrap mt-05">
+      <input
+        type="text"
+        id="subUsername"
+        placeholder="Usuario"
+        class="flex-grow-1"
+        required
+      >
+      <input
+        type="password"
+        id="subPassword"
+        placeholder="Contraseña"
+        class="flex-grow-1"
+        required
+      >
+      <button type="submit" class="btn-green">Crear</button>
+    </form>
+    <div id="createSubuserMsg" class="mt-05 error-message"></div>
+  </div>
+
+  <!-- CONTORNO 2: Búsqueda y Listado de Sub-usuarios -->
+  <div class="admin-card">
+    <h4 class="mt-0">Buscar Sub-usuarios</h4>
+    <form id="searchSubusersForm" class="d-flex gap-05 mb-05">
+      <input
+        type="text"
+        id="searchSubusersInput"
+        placeholder="Buscar sub-usuario..."
+        class="flex-grow-1"
+      >
+      <button type="submit" class="btn-search">Buscar</button>
+    </form>
+
+    <div id="subusersContainer"></div>
+  </div>
+
+</div>
+
+{% endblock content %}
+
+{% block scripts %}
+{# {{ super() }} #} {# Comentado porque base.html no tiene scripts en este bloque #}
+<script src="{{ url_for('static', filename='js/manage_subusers.js') }}"></script>
+{% endblock scripts %}

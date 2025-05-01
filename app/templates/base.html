@@ -1,0 +1,45 @@
+<!-- app/templates/base.html -->
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>{{ title if title else "ProyectoIMAP" }}</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  {% block head %}
+    <meta name="csrf_token" content="{{ csrf_token() }}">
+  {% endblock %}
+
+  <link rel="icon" href="{{ url_for('static', filename='images/favicon.svg') }}" type="image/svg+xml">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+</head>
+
+<body class="theme-active {{ site_settings.get('current_theme','tema1') }}" data-opacity="{{ site_settings.get('card_opacity','0.8') }}">
+  <div id="loading-overlay">
+    <h2>Por favor espere...</h2>
+  </div>
+
+  <noscript>
+    <p>
+      Esta aplicación requiere JavaScript. Actívalo para continuar.
+    </p>
+  </noscript>
+
+  <div class="container">
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        {% for category, msg in messages %}
+          <div class="flash-message {{ category }}">{{ msg }}</div>
+        {% endfor %}
+      {% endif %}
+    {% endwith %}
+
+    {% block content %}{% endblock %}
+  </div>
+
+  <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/loading_overlay.js') }}" defer></script>
+
+  {# Bloque para que las plantillas hijas puedan añadir sus propios scripts #}
+  {% block scripts %}{% endblock %}
+</body>
+</html>

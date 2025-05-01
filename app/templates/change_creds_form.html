@@ -1,0 +1,42 @@
+<!-- app/templates/change_creds_form.html -->
+{% extends "base.html" %}
+{% block content %}
+<div class="admin-card form-container-narrow">
+  <h2>Cambiar Credenciales del Admin</h2>
+  <p>Has verificado 2FA correctamente. Ingresa los campos que quieras cambiar (contraseña o correo). 
+  El correo será usado para recuperación y OTP.</p>
+
+  <form method="POST">
+    <!-- Campo oculto para el CSRF Token (SeaSurf) -->
+    <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+
+    <!-- Campo para la nueva contraseña (opcional) -->
+    <label for="new_password">Nueva Contraseña (opcional):</label>
+    <input 
+      type="password" 
+      name="new_password" 
+      placeholder="Deja vacío para no cambiar"
+      class="form-input-block"
+    >
+
+    <!-- Campo unificado para correo (recuperación + OTP) -->
+    <label for="new_email">Nuevo Correo (opcional):</label>
+    <input 
+      type="email" 
+      name="new_email" 
+      placeholder="correo@dominio.com"
+      class="form-input-block"
+    >
+    <small>Si lo dejas en blanco, no se modificará el correo.</small>
+    <br><br>
+
+    <button type="submit" class="btn-orange">Cambiar Credenciales</button>
+    <a 
+      href="{{ url_for('admin_bp.dashboard') }}" 
+      class="btn-red btn-link-style"
+    >
+      Cancelar
+    </a>
+  </form>
+</div>
+{% endblock %}

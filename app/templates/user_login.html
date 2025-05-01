@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+
+{% block content %}
+<!-- Contenedor principal con zoom 1.1 => ~10% más grande. -->
+<div class="login-container-zoomed">
+  <div class="card text-center">
+    <h3>Iniciar Sesión</h3>
+
+    <form method="POST" class="mt-1">
+      <!-- Campo oculto para CSRF (si lo usas) -->
+      <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+
+      <!-- =========== CAMPO USUARIO =========== -->
+      <label class="label-block">Usuario:</label>
+      <div class="d-flex justify-content-center mb-1">
+        <input
+          type="text"
+          name="username"
+          id="userUsernameField"
+          required
+          class="login-input"
+        >
+      </div>
+
+      <!-- =========== CAMPO CONTRASEÑA =========== -->
+      <label class="label-block">Contraseña:</label>
+      <div class="d-flex justify-content-center mb-1">
+        <div class="password-input-wrapper">
+          <input
+            type="password"
+            name="password"
+            id="userPasswordField"
+            required
+            class="login-input login-input-password"
+          >
+          <span
+            id="toggleUserPass"
+            class="password-toggle-icon"
+          >👁</span>
+        </div>
+      </div>
+
+      <!-- =========== BOTONES DE ACCIÓN =========== -->
+      <div class="d-flex gap-05 justify-content-center">
+        <!-- Botón Ingresar con bordes redondeados -->
+        <button
+          type="submit"
+          class="btn-search btn-rounded"
+        >
+          Ingresar
+        </button>
+        <!-- Botón Volver a la Búsqueda, también redondeado -->
+        <button
+          id="btnVolverBusquedaUserLogin"
+          type="button"
+          class="btn-blue btn-rounded"
+          data-home-url="{{ url_for('main_bp.home') }}"
+        >
+          Volver a la Búsqueda
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script src="{{ url_for('static', filename='js/logins.js') }}"></script>
+{% endblock scripts %}

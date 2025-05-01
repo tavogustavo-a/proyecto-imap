@@ -1,0 +1,30 @@
+<!-- app/templates/verify_2fa_for_creds.html -->
+{% extends "base.html" %}
+{% block content %}
+<div class="admin-card form-container-narrow">
+  <h2>Verificar 2FA para Cambiar Credenciales</h2>
+  <p>Ingresa tu código de 2FA para continuar.</p>
+
+  <form method="POST">
+    <!-- Campo oculto para el CSRF Token (SeaSurf) -->
+    <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+
+    <label>Código 2FA:</label>
+    <input type="text" name="code" required class="d-block mt-1 mb-1 max-width-200">
+    
+    {# Contenedor Flex para alinear botones horizontalmente #}
+    <div class="d-flex align-items-center justify-content-start gap-1 mt-05 mb-1"> {# Añadido mb-1 para separar del mensaje #}
+        {# Contenedor solo para botón reenviar #}
+        <div class="text-left max-width-200"> 
+            <button type="button" id="resendCodeCredsBtn" class="btn-link-style btn-blue btn-small">Reenviar código</button>
+        </div>
+        {# Botón Verificar #}
+        <button type="submit" class="btn-green">Verificar</button>
+    </div>
+
+    {# Párrafo para el mensaje de reenvío, debajo de los botones #}
+    <p id="resendCredsMsg" class="text-small text-left mt-1"></p> {# Añadido text-left y mt-1 #}
+
+  </form>
+</div>
+{% endblock %}

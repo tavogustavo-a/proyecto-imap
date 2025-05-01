@@ -1,0 +1,111 @@
+<!-- app/templates/edit_subuser.html -->
+{% extends "base.html" %}
+
+{% block head %}
+  <meta name="csrf_token" content="{{ csrf_token() }}">
+{% endblock head %}
+
+{% block content %}
+<div class="form-container-700">
+
+  <!-- TARJETA 1: Cabecera y Contraseña -->
+  <div class="admin-card">
+    <div class="d-flex justify-content-between align-items-center mb-1">
+      <h3 class="m-0">Editar Sub-usuario: {{ sub_user.username }}</h3>
+      <div class="d-flex gap-05">
+        <button
+          id="btnVolverSubuserLista"
+          type="button"
+          class="btn-blue"
+          data-url="{{ url_for('subuser_bp.manage_subusers') }}"
+        >
+          Volver a Lista
+        </button>
+        <button
+          id="btnVolverSubuserBusqueda"
+          type="button"
+          class="btn-blue"
+          data-url="{{ url_for('main_bp.home') }}"
+        >
+          Volver a Búsqueda
+        </button>
+      </div>
+    </div>
+    <hr class="hr-margin-08">
+
+    <!-- Formulario para Cambiar Contraseña -->
+    <div class="form-section">
+      <h4 class="mt-0 mb-05">Cambiar Contraseña</h4>
+      <form action="{{ url_for('subuser_bp.update_subuser_password') }}" method="POST" class="d-flex gap-05">
+        <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+      <input type="hidden" name="sub_id" value="{{ sub_user.id }}">
+        <input type="password" name="new_pass" placeholder="Nueva contraseña" required class="flex-grow-1">
+        <button type="submit" class="btn-blue">Actualizar Contraseña</button>
+    </form>
+  </div>
+  </div> <!-- FIN TARJETA 1 -->
+
+  <!-- TARJETA 2: Correos Permitidos -->
+  <div class="admin-card admin-card + .admin-card">
+    <div class="form-section" 
+         id="email-management-section" 
+         data-subuser-id="{{ sub_user.id }}" 
+         data-save-url="{{ url_for('subuser_bp.update_subuser_emails_ajax') }}">
+        <h4 class="mt-0 mb-05">Gestionar Correos Permitidos</h4>
+
+        {% if parent_allowed_emails is defined and parent_allowed_emails %}
+            <p class="text-small text-secondary mb-05">
+                Selecciona los correos (de la lista permitida para el usuario padre) que este sub-usuario podrá usar:
+            </p>
+
+            <!-- Contenedor de Búsqueda y Limpiar -->
+            <div class="search-container">
+              <input type="search" id="email-search-input" placeholder="Buscar correos (separados por coma, espacio o salto de línea)..." class="email-search-input-style flex-grow-1">
+              <button type="button" id="email-search-clear-btn" class="btn-grey btn-small" title="Limpiar búsqueda">Limpiar</button>
+      </div>
+      
+            <!-- Lista de Correos -->
+            <div class="email-checkbox-list">
+                {% set current_assigned_set = assigned_emails | map('lower') | list if assigned_emails is defined else [] %}
+                {% for email in parent_allowed_emails %}
+                <div class="email-item mb-04" data-email-text="{{ email | lower }}">
+                    <label class="d-flex align-items-center cursor-pointer">
+                    <input
+                        type="checkbox"
+                        class="subuser-email-checkbox checkbox-email-item"
+                        data-email="{{ email }}"
+                        {% if email.lower() in current_assigned_set %}checked{% endif %}
+                    >
+                    <span class="text-medium-small">{{ email }}</span>
+                    </label>
+                </div>
+                {% else %}
+                 <p><i>No hay correos permitidos definidos para el usuario padre.</i></p>
+                {% endfor %}
+      </div>
+
+            <!-- Botones de Acción -->
+            <div class="d-flex flex-wrap align-items-center gap-075 mt-05">
+                <button class="btn-green btn-small select-all-emails">Activar Todos</button>
+                <button class="btn-orange btn-small deselect-all-emails">Desactivar</button>
+                <button class="btn-blue save-subuser-emails">Guardar Cambios</button>
+                <span class="save-status-msg ml-auto text-small text-success"></span>
+    </div>
+
+        {% else %}
+            <p class="text-italic text-secondary">El usuario padre no tiene correos configurados o la lista no está disponible. No se pueden asignar correos a este sub-usuario.</p>
+        {% endif %}
+    </div>
+     <!-- Aquí podrías añadir otras secciones de edición si las hubiera DENTRO de esta tarjeta -->
+  </div> <!-- FIN TARJETA 2 -->
+
+</div>
+
+{# --- AÑADIR CARGA DEL NUEVO SCRIPT EXTERNO --- #}
+{% endblock content %}
+
+{# Cargar el script específico DESPUÉS del bloque de contenido principal #}
+{% block scripts %}
+{# {{ super() }} #} {# Comentado temporalmente #}
+<script src="{{ url_for('static', filename='js/edit_subuser.js') }}"></script>
+{% endblock scripts %}

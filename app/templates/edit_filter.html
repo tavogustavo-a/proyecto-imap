@@ -1,0 +1,42 @@
+<!-- app/templates/edit_filter.html -->
+{% extends "base.html" %}
+{% block content %}
+<div class="admin-card form-container-600">
+  <h2>Editar Filtro</h2>
+  
+  <form method="POST">
+    <!-- Campo oculto para el CSRF Token (SeaSurf) -->
+    <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+
+    <label>Remitente (Sender):</label>
+    <input type="text" name="sender" value="{{ filter.sender }}" class="mb-1">
+
+    <label>Palabra clave (Keyword):</label>
+    <input type="text" name="keyword" value="{{ filter.keyword }}" class="mb-1">
+
+    <label>¿Habilitado?</label>
+    <input type="checkbox" name="enabled" {% if filter.enabled %}checked{% endif %}>
+    <br><br>
+
+    <!-- Campo para "cortar HTML desde" -->
+    <label>Cortar HTML desde (opcional):</label>
+    <input
+      type="text"
+      name="cut_after_html"
+      value="{{ filter.cut_after_html if filter.cut_after_html else '' }}"
+      class="mb-1"
+    >
+
+    <button type="submit" class="btn-green">Guardar</button>
+    <!-- Botón para volver a la lista de Filtros (Refactorizado) -->
+    <button
+      type="button"
+      id="btnVolverFilters"
+      class="btn-blue"
+      data-url="{{ url_for('admin_bp.filters_page') }}"
+    >
+      Volver
+    </button>
+  </form>
+</div>
+{% endblock %}
