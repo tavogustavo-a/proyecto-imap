@@ -175,13 +175,12 @@ body.theme-active.temaadmin {
   white-space: normal;
 }
 
-/* NUEVA REGLA ESPECÍFICA PARA LOS ITEMS DE USUARIO EN admin_users
-   y AHORA TAMBIÉN PARA FILTROS. Quitamos Flexbox. */
+/* Regla para items de Usuario y Filtro. Restauramos Flexbox para layout horizontal. */
 .filter-item {
-  /* QUITAR Propiedades Flexbox */
-  /* display: flex; */
-  /* justify-content: space-between; */
-  /* align-items: center; */
+  /* RESTAURAR Propiedades Flexbox */
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
   /* Propiedades base */
   border: 1px solid #ccc;
   margin: 0.5rem 0;
@@ -190,9 +189,9 @@ body.theme-active.temaadmin {
   word-wrap: break-word;
   overflow-wrap: anywhere;
   white-space: normal;
-  /* Mantenemos las variables CSS por si se usan en Usuarios */
-  background-color: var(--user-bg-color, transparent); /* Añadir fallback */
-  color: var(--user-text-color, inherit); /* Añadir fallback */
+  /* Variables CSS para colores (usadas por Usuarios) */
+  background-color: var(--user-bg-color, transparent);
+  color: var(--user-text-color, inherit);
 }
 
 /* QUITAR .filter-item-actions si aún existe (ya no se usa) */
