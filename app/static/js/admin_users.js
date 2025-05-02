@@ -302,7 +302,7 @@ document.addEventListener("DOMContentLoaded", function() {
 
       html += `
         <div
-          class="filter-item"
+          class="user-item"
           style="${styleVariables}" // Aplicamos variables CSS inline
           data-user-color="${u.color || '#ffffff'}" // Mantenemos data-attribute
         >

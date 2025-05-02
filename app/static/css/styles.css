@@ -175,9 +175,9 @@ body.theme-active.temaadmin {
   white-space: normal;
 }
 
-/* Regla para items de Usuario y Filtro. Restauramos Flexbox para layout horizontal. */
-.filter-item {
-  /* RESTAURAR Propiedades Flexbox */
+/* Regla para ITEMS DE USUARIO (layout horizontal) */
+.user-item { /* <-- RENOMBRADO de filter-item a user-item */
+  /* Propiedades Flexbox para layout horizontal */
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -194,8 +194,19 @@ body.theme-active.temaadmin {
   color: var(--user-text-color, inherit);
 }
 
-/* QUITAR .filter-item-actions si aún existe (ya no se usa) */
-/* .filter-item-actions { ... } */
+/* NUEVA REGLA solo para ITEMS DE FILTRO (layout vertical) */
+.filter-item {
+  /* Propiedades base (sin Flexbox) */
+  border: 1px solid #ccc;
+  margin: 0.5rem 0;
+  padding: 0.5rem;
+  border-radius: 6px;
+  word-wrap: break-word;
+  overflow-wrap: anywhere;
+  white-space: normal;
+  /* Añadir fondo blanco (o el de las tarjetas) */
+  background-color: var(--card-bg, #fff);
+}
 
 /* En móvil => ocupar ~95% */
 @media (max-width: 600px) {
