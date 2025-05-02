@@ -395,15 +395,26 @@ def import_config():
             # Borrar dispositivos recordados
             from app.models import RememberDevice
             RememberDevice.query.delete()
-            # Borrar Usuarios (Excepto el admin principal)
-            User.query.filter(User.username != admin_username).delete()
-            # Borrar el resto
-            # --- NUEVO: Borrar tablas de asociación PRIMERO --- 
+
+            # --- Borrar tablas de asociación PRIMERO ---
             db.session.execute(service_regex.delete()) # Borrar vínculos Servicio <-> Regex
             db.session.execute(service_filter.delete()) # Borrar vínculos Servicio <-> Filtro
-            # --- FIN NUEVO ---
+            # <<< --- AÑADIR BORRADO DE ASOCIACIONES DE USUARIO --- >>>
+            from app.models.user import user_regex, user_filter, user_service # Asegurar importación
+            db.session.execute(user_regex.delete())   # Borrar vínculos User <-> Regex
+            db.session.execute(user_filter.delete())  # Borrar vínculos User <-> Filter
+            db.session.execute(user_service.delete()) # Borrar vínculos User <-> Service
+            # --- FIN Borrado Asociaciones ---
+
+            # --- Borrar Usuarios (Excepto el admin principal) --- AHORA SÍ SE PUEDE
+            User.query.filter(User.username != admin_username).delete()
+
+            # Borrar el resto de objetos base
             AliasIcon.query.delete()
             Alias.query.delete()
+            # ---> AÑADIR BORRADO EXPLÍCITO DE ServiceIcon <--- 
+            from app.models import ServiceIcon # Asegurar importación si no está global
+            ServiceIcon.query.delete()
             ServiceModel.query.delete() # Ahora sí se puede borrar servicios
             RegexPattern.query.delete()
             Filter.query.delete()

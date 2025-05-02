@@ -145,8 +145,8 @@ document.addEventListener("DOMContentLoaded", function() {
             <strong>${su.username}</strong>
             <div style="display:flex; gap:0.5rem;">
               <button
-                class="btn-orange"
-                onclick="location.href='/subusers/edit/${su.id}'"
+                class="btn-orange edit-subuser-btn"
+                data-id="${su.id}"
               >
                 Editar
               </button>
@@ -190,7 +190,7 @@ document.addEventListener("DOMContentLoaded", function() {
   // 5) Delegación de eventos
   if(subusersContainer) { // Verificar que el contenedor existe
       subusersContainer.addEventListener("click", function(e) {
-        const target = e.target; 
+        const target = e.target;
 
         // Toggle Subuser Enable/Disable
         if(target.classList.contains("toggle-subuser")) {
@@ -249,6 +249,19 @@ document.addEventListener("DOMContentLoaded", function() {
              alert("Error de red al eliminar.");
           });
         }
+
+        // <<< --- AÑADIR MANEJO PARA BOTÓN EDITAR --- >>>
+        if (target.classList.contains("edit-subuser-btn")) {
+            e.preventDefault(); // Buena práctica, aunque aquí no es estrictamente necesario
+            const subId = target.getAttribute("data-id");
+            if (subId) {
+                window.location.href = `/subusers/edit/${subId}`;
+            } else {
+                console.error("No se encontró data-id en el botón Editar");
+            }
+        }
+        // <<< --- FIN MANEJO EDITAR --- >>>
+
       }); // Fin del event listener principal
   } // Fin if (subusersContainer)
 
