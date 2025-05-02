@@ -229,8 +229,8 @@ document.addEventListener("DOMContentLoaded", function() {
       html += `
         <div class="filter-item">
           <strong>Remitente:</strong> ${f.sender || "(vacío)"}<br>
-          <strong>Palabra:</strong> ${f.keyword || "(vacío)"}<br>
-          <strong>CortarHTML:</strong> ${f.cut_after_html || "(N/A)"}
+          <strong>Palabra Clave:</strong> ${f.keyword || "(vacío)"}<br>
+          <strong>Cortar HTML desde:</strong> ${f.cut_after_html || "(N/A)"}<br>
           <div class="mt-05"> 
             <button
               type="button"
