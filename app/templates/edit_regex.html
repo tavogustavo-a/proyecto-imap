@@ -17,14 +17,13 @@
     >
 
     <label>Expresión Regular (Pattern):</label>
-    <!-- Aquí agregamos size y maxlength para hacerlo más pequeño y limitar caracteres -->
+    <!-- Aquí quitamos maxlength para permitir regex más largos -->
     <input
       type="text"
       name="pattern"
       value="{{ regex.pattern }}"
       class="d-block mb-1"
-      size="30"
-      maxlength="80"  <!-- Limita a 80 caracteres -->
+      size="30" 
       required
     >
 
