@@ -69,7 +69,7 @@ def seed_netflix_defaults_command():
     print("=== Iniciando seed para Regex y Servicio Netflix... ===")
     with app.app_context():
         try:
-            pattern_netflix = r'_(?:es_|en-)([A-Za-z]{2})[^_]*_EVO'
+            pattern_netflix = r'(?i)_([A-Z]{2})_EVO$'
             existing_nf = RegexModel.query.filter_by(
                 sender='info@account.netflix.com',
                 pattern=pattern_netflix
