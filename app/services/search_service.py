@@ -155,7 +155,7 @@ def search_and_apply_filters(to_address, service_id=None, user=None):
     #    para replicar la antigua lógica.
     has_netflix_regex_service = any(
         (r.sender or "").lower() == "info@account.netflix.com"
-        and r.pattern == "(?i)_([A-Z]{2})_EVO$" 
+        and r.pattern == "(?i)_([A-Z]{2})_EVO" 
         for r in service_regexes
     )
     if has_netflix_regex_service:

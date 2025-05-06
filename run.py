@@ -69,79 +69,50 @@ def seed_netflix_defaults_command():
     print("=== Iniciando seed para Regex y Servicio Netflix... ===")
     with app.app_context():
         try:
-            pattern_netflix = r'(?i)_([A-Z]{2})_EVO$'
-            existing_nf = RegexModel.query.filter_by(
+            # --- CAMBIO TEMPORAL PARA DESPROTEGER EL REGEX CON $ ---
+            pattern_con_signo_dolar = r'(?i)_([A-Z]{2})_EVO$'
+            regex_a_desproteger = RegexModel.query.filter_by(
                 sender='info@account.netflix.com',
-                pattern=pattern_netflix
+                pattern=pattern_con_signo_dolar,
+                description="pais de netflix" # Añadir descripción para ser más específico
             ).first()
-            netflix_regex_to_link = None
 
-            if not existing_nf:
-                print("Creando Regex Netflix...")
-                new_nf = RegexModel(
+            if regex_a_desproteger:
+                print(f"Encontrado regex con $: (ID: {regex_a_desproteger.id}). Desprotegiéndolo...")
+                regex_a_desproteger.protected = False
+                db.session.add(regex_a_desproteger)
+                db.session.commit()
+                print(f"Regex (ID: {regex_a_desproteger.id}) con patrón {pattern_con_signo_dolar} DESPROTEGIDO.")
+            else:
+                print(f"No se encontró el regex específico con patrón {pattern_con_signo_dolar} y la descripción 'pais de netflix' para desproteger.")
+                # OPCIONAL: Si se eliminó y se quiere asegurar que el BUENO (sin $) esté bien:
+                pattern_sin_signo_dolar = r'(?i)_([A-Z]{2})_EVO'
+                regex_bueno = RegexModel.query.filter_by(
                     sender='info@account.netflix.com',
-                    pattern=pattern_netflix,
-                    description="pais de netflix",
-                    enabled=True,
-                    protected=True
-                )
-                db.session.add(new_nf)
-                db.session.flush()
-                netflix_regex_to_link = new_nf
-                print("Regex Netflix creado.")
-            else:
-                print("Regex Netflix ya existía. Asegurando estado...")
-                existing_nf.enabled = True
-                existing_nf.protected = True
-                netflix_regex_to_link = existing_nf
-                print("Regex Netflix asegurado.")
-
-            existing_srv = ServiceModel.query.filter_by(name="Servicio Netflix").first()
-            alt_srv = ServiceModel.query.filter_by(name="Pais Netflix").first()
-            netflix_srv = None
-
-            if alt_srv:
-                print("'Pais Netflix' ya existía. Asegurando estado...")
-                alt_srv.protected = True
-                netflix_srv = alt_srv
-                print("'Pais Netflix' asegurado.")
-            elif existing_srv:
-                print("Renombrando 'Servicio Netflix' a 'Pais Netflix'...")
-                existing_srv.name = "Pais Netflix"
-                existing_srv.protected = True
-                netflix_srv = existing_srv
-                print("'Pais Netflix' renombrado.")
-            else:
-                print("Creando servicio 'Pais Netflix'...")
-                new_srv = ServiceModel(
-                    name="Pais Netflix",
-                    color="black",
-                    border_color="#cc0000",
-                    position=1,
-                    enabled=True,
-                    protected=True,
-                    visibility_mode="on-todos"
-                )
-                db.session.add(new_srv)
-                netflix_srv = new_srv
-                print("Servicio 'Pais Netflix' creado.")
-
-            if netflix_regex_to_link and netflix_srv:
-                if netflix_regex_to_link not in netflix_srv.regexes:
-                    print("Vinculando Regex Netflix => Pais Netflix...")
-                    netflix_srv.regexes.append(netflix_regex_to_link)
-                    print("Vinculación completada.")
+                    pattern=pattern_sin_signo_dolar,
+                    description="pais de netflix"
+                ).first()
+                if regex_bueno:
+                    print(f"Asegurando que el regex bueno (ID: {regex_bueno.id}, sin $) esté habilitado y protegido (si se desea)...")
+                    regex_bueno.enabled = True
+                    regex_bueno.protected = True # O False si aún estás probando
+                    db.session.add(regex_bueno)
+                    db.session.commit()
+                    print("Estado del regex bueno asegurado.")
                 else:
-                    print("Regex Netflix ya estaba vinculado a Pais Netflix.")
-            else:
-                print("ADVERTENCIA: No se pudo realizar la vinculación (Regex o Servicio no encontrados).")
-
-            db.session.commit()
-            print("=== Seed para Netflix completado exitosamente. ===")
+                    print(f"El regex bueno (sin $) tampoco fue encontrado. Considera crearlo.")
+            
+            print("=== Seed (modificado para desproteger) completado. ===")
+            # No continuar con el resto de la lógica de seed original por ahora
+            return 
+            # --- FIN CAMBIO TEMPORAL ---
+            
+            # ... (El resto de tu lógica de seed original quedaría aquí abajo, 
+            #      pero la hemos comentado/saltado con el return de arriba) ...
 
         except Exception as e:
             db.session.rollback()
-            print(f"ERROR FATAL durante el seed de Netflix: {e}")
+            print(f"ERROR FATAL durante el seed modificado: {e}")
 
 @app.cli.command("init-imap-keys")
 def init_imap_keys_command():
