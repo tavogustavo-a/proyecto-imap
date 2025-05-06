@@ -69,50 +69,102 @@ def seed_netflix_defaults_command():
     print("=== Iniciando seed para Regex y Servicio Netflix... ===")
     with app.app_context():
         try:
-            # --- CAMBIO TEMPORAL PARA DESPROTEGER EL REGEX CON $ ---
-            pattern_con_signo_dolar = r'(?i)_([A-Z]{2})_EVO$'
-            regex_a_desproteger = RegexModel.query.filter_by(
+            # ---> USAR EL REGEX SIN $ AL FINAL <--- 
+            pattern_netflix = r'(?i)_([A-Z]{2})_EVO' # SIN EL $ AL FINAL
+            existing_nf = RegexModel.query.filter_by(
                 sender='info@account.netflix.com',
-                pattern=pattern_con_signo_dolar,
-                description="pais de netflix" # Añadir descripción para ser más específico
-            ).first()
+                # Buscar por el patrón antiguo por si acaso o uno de los nuevos
+                # Para esta operación de seed, es más robusto buscar solo por sender y descripción.
+            ).first() # Quitar el filtro por patrón aquí para encontrarlo aunque el patrón haya cambiado
+            
+            # Buscaremos por descripción o por un patrón conocido para actualizarlo
+            # o crearlo si no existe ninguno con la descripción "pais de netflix"
+            target_description = "pais de netflix"
+            
+            # Primero, intentar encontrar por el patrón nuevo (sin $) o el que tenía el $
+            # o el patrón aún más viejo si existe alguno con la descripción correcta.
+            nf_regex_candidates = RegexModel.query.filter(
+                RegexModel.sender == 'info@account.netflix.com',
+                RegexModel.description == target_description
+            ).all()
 
-            if regex_a_desproteger:
-                print(f"Encontrado regex con $: (ID: {regex_a_desproteger.id}). Desprotegiéndolo...")
-                regex_a_desproteger.protected = False
-                db.session.add(regex_a_desproteger)
-                db.session.commit()
-                print(f"Regex (ID: {regex_a_desproteger.id}) con patrón {pattern_con_signo_dolar} DESPROTEGIDO.")
+            netflix_regex_to_update = None
+            if nf_regex_candidates:
+                # Si hay varios, podríamos tener un problema. Por ahora, tomamos el primero.
+                # Idealmente, la combinación sender+description debería ser única para este.
+                netflix_regex_to_update = nf_regex_candidates[0]
+                print(f"Encontrado Regex existente para Netflix (ID: {netflix_regex_to_update.id}) por descripción.")
+            
+            netflix_regex_to_link = None
+
+            if netflix_regex_to_update:
+                print(f"Actualizando Regex Netflix (ID: {netflix_regex_to_update.id})...")
+                netflix_regex_to_update.pattern = pattern_netflix # Actualizar al patrón SIN $
+                netflix_regex_to_update.enabled = True
+                netflix_regex_to_update.protected = False # ---> DESPROTEGER TEMPORALMENTE <--- 
+                netflix_regex_to_link = netflix_regex_to_update
+                print("Regex Netflix actualizado y desprotegido.")
             else:
-                print(f"No se encontró el regex específico con patrón {pattern_con_signo_dolar} y la descripción 'pais de netflix' para desproteger.")
-                # OPCIONAL: Si se eliminó y se quiere asegurar que el BUENO (sin $) esté bien:
-                pattern_sin_signo_dolar = r'(?i)_([A-Z]{2})_EVO'
-                regex_bueno = RegexModel.query.filter_by(
+                print("Creando Nuevo Regex Netflix (ya que no se encontró uno existente por descripción)...")
+                new_nf = RegexModel(
                     sender='info@account.netflix.com',
-                    pattern=pattern_sin_signo_dolar,
-                    description="pais de netflix"
-                ).first()
-                if regex_bueno:
-                    print(f"Asegurando que el regex bueno (ID: {regex_bueno.id}, sin $) esté habilitado y protegido (si se desea)...")
-                    regex_bueno.enabled = True
-                    regex_bueno.protected = True # O False si aún estás probando
-                    db.session.add(regex_bueno)
-                    db.session.commit()
-                    print("Estado del regex bueno asegurado.")
-                else:
-                    print(f"El regex bueno (sin $) tampoco fue encontrado. Considera crearlo.")
-            
-            print("=== Seed (modificado para desproteger) completado. ===")
-            # No continuar con el resto de la lógica de seed original por ahora
-            return 
-            # --- FIN CAMBIO TEMPORAL ---
-            
-            # ... (El resto de tu lógica de seed original quedaría aquí abajo, 
-            #      pero la hemos comentado/saltado con el return de arriba) ...
+                    pattern=pattern_netflix, # Patrón SIN $
+                    description=target_description,
+                    enabled=True,
+                    protected=False # ---> DESPROTEGER AL CREAR <--- 
+                )
+                db.session.add(new_nf)
+                db.session.flush()
+                netflix_regex_to_link = new_nf
+                print("Nuevo Regex Netflix creado y desprotegido.")
+
+            existing_srv = ServiceModel.query.filter_by(name="Servicio Netflix").first()
+            alt_srv = ServiceModel.query.filter_by(name="Pais Netflix").first()
+            netflix_srv = None
+
+            if alt_srv:
+                print("'Pais Netflix' ya existía. Asegurando estado y desprotegiendo temporalmente...")
+                alt_srv.protected = False # ---> DESPROTEGER SERVICIO TEMPORALMENTE <--- 
+                netflix_srv = alt_srv
+            elif existing_srv:
+                print("Renombrando 'Servicio Netflix' a 'Pais Netflix' y desprotegiendo...")
+                existing_srv.name = "Pais Netflix"
+                existing_srv.protected = False # ---> DESPROTEGER SERVICIO TEMPORALMENTE <--- 
+                netflix_srv = existing_srv
+            else:
+                print("Creando servicio 'Pais Netflix' (desprotegido temporalmente)...")
+                new_srv = ServiceModel(
+                    name="Pais Netflix",
+                    color="black",
+                    border_color="#cc0000",
+                    position=1,
+                    enabled=True,
+                    protected=False, # ---> DESPROTEGER SERVICIO AL CREAR <--- 
+                    visibility_mode="on-todos"
+                )
+                db.session.add(new_srv)
+                netflix_srv = new_srv
+            print("Servicio 'Pais Netflix' asegurado/creado y desprotegido.")
+
+            if netflix_regex_to_link and netflix_srv:
+                 if netflix_regex_to_link not in netflix_srv.regexes:
+                    print("Vinculando Regex Netflix => Pais Netflix...")
+                    # Limpiar regexes viejos del servicio para evitar duplicados si se corre múltiples veces
+                    # Esto es seguro porque solo debería tener el de Netflix (o estar vacío)
+                    # netflix_srv.regexes.clear() # Descomentar con precaución si estás seguro
+                    netflix_srv.regexes.append(netflix_regex_to_link)
+                    print("Vinculación completada.")
+                 else:
+                    print("Regex Netflix ya estaba vinculado a Pais Netflix.")
+            else:
+                print("ADVERTENCIA: No se pudo realizar la vinculación (Regex o Servicio no encontrados).")
+
+            db.session.commit()
+            print("=== Seed para Netflix completado exitosamente (elementos desprotegidos). ===")
 
         except Exception as e:
             db.session.rollback()
-            print(f"ERROR FATAL durante el seed modificado: {e}")
+            print(f"ERROR FATAL durante el seed de Netflix: {e}")
 
 @app.cli.command("init-imap-keys")
 def init_imap_keys_command():
