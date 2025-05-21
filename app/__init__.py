@@ -2,14 +2,27 @@
 
 import os
 import sys  # <-- Importante para chequear argumentos de línea de comando
+from dotenv import load_dotenv
 from flask import Flask
 from werkzeug.security import generate_password_hash
-from dotenv import load_dotenv
 from sqlalchemy import inspect
 from flask_seasurf import SeaSurf
 from app.extensions import db, migrate
 from app.models import User  # <-- Importa tu modelo User
 from config import Config
+
+# Determinar la ruta raíz del proyecto (asumiendo que app/__init__.py está en un subdirectorio 'app')
+project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+dotenv_path = os.path.join(project_root, '.env')
+
+# Cargar .env si existe
+if os.path.exists(dotenv_path):
+    load_dotenv(dotenv_path)
+else:
+    # En producción, es posible que las variables de entorno ya estén definidas
+    # en el sistema o a través del servidor WSGI, así que no fallar aquí,
+    # pero es bueno saber si .env no se cargó.
+    print(f"[INFO] Archivo .env no encontrado en {dotenv_path}. Se asumirá que las variables de entorno están predefinidas.")
 
 def create_app(config_class=None):
     load_dotenv()

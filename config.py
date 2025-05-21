@@ -4,7 +4,7 @@ from datetime import timedelta
 basedir = os.path.abspath(os.path.dirname(__file__))
 
 class Config:
-    FLASK_ENV = os.getenv("FLASK_ENV", "development")
+    FLASK_ENV = os.getenv("FLASK_ENV", "production")
     DEBUG = (FLASK_ENV == "development")
     
     BLOCK_TIME_MINUTES = int(os.getenv("BLOCK_TIME_MINUTES", 5))
