@@ -1,10 +1,14 @@
 import os
 from datetime import timedelta
 
+print("[DEBUG][config.py] Archivo config.py está siendo leído.")
+
 basedir = os.path.abspath(os.path.dirname(__file__))
 
 class Config:
+    print("[DEBUG][config.py] Dentro de la clase Config.")
     FLASK_ENV = os.getenv("FLASK_ENV", "production")
+    print(f"[DEBUG][config.py] FLASK_ENV leído como: '{FLASK_ENV}'")
     DEBUG = (FLASK_ENV == "development")
     
     BLOCK_TIME_MINUTES = int(os.getenv("BLOCK_TIME_MINUTES", 5))
@@ -42,6 +46,7 @@ class Config:
 
     # --- Seguridad ---------------------------------------------------------
     ADMIN_CONFIG_SECURITY_CODE = os.getenv("ADMIN_CONFIG_SECURITY_CODE", "cambia-esto-en-produccion")
+    print(f"[DEBUG][config.py] Intentando leer SECRET_KEY. Valor actual de os.getenv('SECRET_KEY'): '{os.getenv('SECRET_KEY')}'")
     SECRET_KEY = os.getenv("SECRET_KEY")
     if not SECRET_KEY:
         if FLASK_ENV == "development":
