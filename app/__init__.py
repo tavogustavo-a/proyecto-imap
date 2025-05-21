@@ -3,13 +3,13 @@
 import os
 import sys  # <-- Importante para chequear argumentos de línea de comando
 from dotenv import load_dotenv
-from flask import Flask
-from werkzeug.security import generate_password_hash
-from sqlalchemy import inspect
-from flask_seasurf import SeaSurf
-from app.extensions import db, migrate
-from app.models import User  # <-- Importa tu modelo User
-from config import Config
+#from flask import Flask
+#from werkzeug.security import generate_password_hash
+#from sqlalchemy import inspect
+#from flask_seasurf import SeaSurf
+#from app.extensions import db, migrate
+#from app.models import User  # <-- Importa tu modelo User
+#from config import Config
 
 # --- INICIO CARGA DE .ENV ---
 # Determinar la ruta raíz del proyecto
