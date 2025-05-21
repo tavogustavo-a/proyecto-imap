@@ -7,7 +7,6 @@ from werkzeug.security import generate_password_hash
 from dotenv import load_dotenv
 from sqlalchemy import inspect
 from flask_seasurf import SeaSurf
-
 from app.extensions import db, migrate
 from app.models import User  # <-- Importa tu modelo User
 from config import Config
@@ -60,6 +59,13 @@ def create_app(config_class=None):
 
     from app.subusers import subuser_bp
     app.register_blueprint(subuser_bp, url_prefix="/subusers")
+
+    # Registrar comandos CLI personalizados
+    try:
+        from app.cli_commands import register_cli_commands
+        register_cli_commands(app)
+    except Exception as cli_err:
+        print(f"[WARN] No se pudieron registrar comandos CLI: {cli_err}")
 
     from sqlalchemy import inspect as insp2
 

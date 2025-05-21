@@ -2,7 +2,7 @@
 
 from app.extensions import db
 from app.models import RegexModel, User
-from app.helpers import increment_global_session_revocation_count
+# from app.helpers import increment_global_session_revocation_count # Comentar o eliminar import
 from flask import current_app
 
 def create_regex_service(sender, pattern, description, skip_revocation=False):
@@ -32,7 +32,8 @@ def create_regex_service(sender, pattern, description, skip_revocation=False):
 
     # Forzar logout global solo si NO es el admin
     if not skip_revocation:
-        increment_global_session_revocation_count()
+        # increment_global_session_revocation_count() # Comentar o eliminar llamada
+        pass # Añadir pass si se quiere mantener el if, o eliminar el if completo
 
 
 def update_regex_service(r: RegexModel, sender, pattern, description, enabled):
@@ -42,6 +43,11 @@ def update_regex_service(r: RegexModel, sender, pattern, description, enabled):
     r.enabled = enabled
     db.session.commit()
 
+    # Forzar logout global solo si NO es el admin
+    if not skip_revocation:
+        # increment_global_session_revocation_count() # Comentar o eliminar llamada
+        pass # Añadir pass
+
 
 def delete_regex_service(regex_id, skip_revocation=False):
     r = RegexModel.query.get_or_404(regex_id)
@@ -50,4 +56,5 @@ def delete_regex_service(regex_id, skip_revocation=False):
 
     # Forzar logout global solo si NO es el admin
     if not skip_revocation:
-        increment_global_session_revocation_count()
+        # increment_global_session_revocation_count() # Comentar o eliminar llamada
+        pass # Añadir pass

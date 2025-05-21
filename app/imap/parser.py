@@ -6,11 +6,12 @@ from email.header import decode_header, make_header
 import urllib.parse
 
 def parse_raw_email(raw_bytes):
-    """Parsea el correo crudo (bytes) y extrae from/subject/date/text/html."""
+    """Parsea el correo crudo (bytes) y extrae from/subject/date/text/html/message_id."""
     msg = email.message_from_bytes(raw_bytes)
     from_ = msg.get("From", "")
     raw_subj = msg.get("Subject", "")
     date_ = msg.get("Date", None)
+    message_id = msg.get("Message-ID", None)
 
     # Decodificar subject
     try:
@@ -95,5 +96,6 @@ def parse_raw_email(raw_bytes):
         "subject": subject_decoded,
         "date": date_,
         "text": text_part,
-        "html": html_part
+        "html": html_part,
+        "message_id": message_id
     }

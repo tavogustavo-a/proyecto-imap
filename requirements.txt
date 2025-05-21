@@ -17,3 +17,4 @@ gunicorn==23.0.0
 APScheduler==3.10.1
 IMAPClient==3.0.1
 gevent==24.11.1
+regex==2023.12.25

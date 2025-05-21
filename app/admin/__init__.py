@@ -6,3 +6,5 @@ from . import admin_security
 from . import admin_settings
 from . import admin_services
 from . import admin_users
+from . import admin_security_rules
+from . import admin_observer_imap

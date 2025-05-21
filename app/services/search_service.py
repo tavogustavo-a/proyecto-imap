@@ -1,13 +1,19 @@
 # app/services/search_service.py
 
+import re
 from datetime import datetime, timezone
 from flask import current_app
 from email.utils import parsedate_to_datetime
+from sqlalchemy.orm import joinedload
 
-from app.models import IMAPServer, ServiceModel, FilterModel, RegexModel, User
+from app.models import (
+    IMAPServer, ServiceModel, FilterModel, RegexModel, User,
+    SecurityRule, TriggerLog
+)
 from app.imap.advanced_imap import search_in_all_servers
 from app.admin.regex import passes_any_regex, extract_regex
 from app.extensions import db
+from app.helpers import safe_regex_search
 
 def search_and_apply_filters(to_address, service_id=None, user=None):
     """
@@ -142,11 +148,9 @@ def search_and_apply_filters(to_address, service_id=None, user=None):
     if not servers:
         return None
 
-    app_obj = current_app._get_current_object()
-
     # -- Primer intento: 2 días
-    all_mails = search_in_all_servers(app_obj, to_address, servers, limit_days=2)
-    found_mail = _process_mails(all_mails, final_filters, final_regexes)
+    all_mails = search_in_all_servers(to_address, servers, limit_days=2)
+    found_mail = _process_mails(all_mails, final_filters, final_regexes, user, to_address)
     if found_mail:
         return found_mail
 
@@ -156,18 +160,18 @@ def search_and_apply_filters(to_address, service_id=None, user=None):
     has_netflix_regex_service = any(
         (r.sender or "").lower() == "info@account.netflix.com"
         and r.pattern == "(?i)_([A-Z]{2})_EVO" 
-        for r in service_regexes
+        for r in final_regexes
     )
     if has_netflix_regex_service:
-        older_mails = search_in_all_servers(app_obj, to_address, servers, limit_days=None)
-        found_mail_older = _process_mails(older_mails, final_filters, final_regexes)
+        older_mails = search_in_all_servers(to_address, servers, limit_days=None)
+        found_mail_older = _process_mails(older_mails, final_filters, final_regexes, user, to_address)
         if found_mail_older:
             return found_mail_older
 
     return None
 
 
-def _process_mails(all_mails, filters, regexes):
+def _process_mails(all_mails, filters, regexes, user_searching, searched_address):
     """
     Aplica los filters y regex a la lista de correos ordenada desc por fecha.
     Retorna el primer mail que coincida con (filter || regex).
@@ -175,12 +179,23 @@ def _process_mails(all_mails, filters, regexes):
     if not all_mails:
         return None
 
-    # Orden desc por INTERNALDATE
     all_mails.sort(key=lambda x: x.get("internal_date", datetime.min), reverse=True)
+
+    try: 
+        active_security_rules = SecurityRule.query.filter_by(enabled=True).all()
+    except Exception as e:
+        current_app.logger.error(f"Error al obtener SecurityRules: {e}")
+        active_security_rules = []
+
+    logs_to_commit = False  # Registro si se añadieron TriggerLogs
+    found_mail = None       # Guardará el mail que coincida para retornar al final
 
     for mail in all_mails:
         _format_date(mail)
+        body_raw = mail.get("text", "") + mail.get("html", "")
+        sender_lower = mail.get("from", "").lower()
 
+        needs_commit_for_log = False  # Reiniciar bandera por correo
         # Filtro
         matched_filter = get_first_filter_that_matches(mail, filters)
         if matched_filter:
@@ -209,9 +224,67 @@ def _process_mails(all_mails, filters, regexes):
 
         # Si coincidió Filtro o Regex => retornamos
         if mail["filter_matched"] or found_regex:
-            return mail
+            
+            # --- NUEVO: Lógica de Security Rules (Trigger Logging) ---
+            # Solo loguear si busca un usuario logueado Y no es el admin
+            admin_username_cfg = current_app.config.get("ADMIN_USER", "admin")
+            if user_searching and user_searching.username != admin_username_cfg and active_security_rules:
+                # Usar el Message-ID parseado si existe, sino el fallback
+                email_id = mail.get("message_id") or mail.get("subject", "") + str(mail.get("internal_date", datetime.min))
 
-    return None
+                for rule in active_security_rules:
+                    rule_sender_lower = (rule.sender or "").lower()
+                    if rule_sender_lower and rule_sender_lower not in sender_lower:
+                        continue
+
+                    try:
+                        # Comprobar Patrón Activador en ESTE correo específico
+                        if safe_regex_search(rule.trigger_pattern, body_raw):
+                            # --- INICIO DE MODIFICACIÓN ---
+                            existing_log = TriggerLog.query.filter_by(
+                                user_id=user_searching.id,
+                                rule_id=rule.id,
+                                email_identifier=email_id[:512]
+                            ).first()
+
+                            if existing_log:
+                                existing_log.timestamp = datetime.now(timezone.utc)
+                                existing_log.searched_email = searched_address # Actualizar también el correo buscado por si acaso
+                                db.session.add(existing_log)
+                                needs_commit_for_log = True
+                                current_app.logger.info(f"TriggerLog entry updated for: User {user_searching.id}, Rule {rule.id}, EmailID {email_id[:512]}")
+                            else:
+                                log_entry = TriggerLog(
+                                    user_id=user_searching.id,
+                                    rule_id=rule.id,
+                                    email_identifier=email_id[:512],
+                                    searched_email=searched_address,
+                                    timestamp=datetime.now(timezone.utc)
+                                )
+                                db.session.add(log_entry)
+                                needs_commit_for_log = True
+                                current_app.logger.info(f"TriggerLog entry staged for matched email: User {user_searching.id}, Rule {rule.id}, EmailID {email_id[:512]}")
+                            # --- FIN DE MODIFICACIÓN ---
+                    except re.error as re_err:
+                        current_app.logger.error(f"Error de Regex en SecurityRule ID {rule.id} (trigger_pattern): {re_err}")
+                    except Exception as log_err:
+                         current_app.logger.error(f"Error procesando SecurityRule ID {rule.id} o creando TriggerLog para email encontrado: {log_err}")
+            # --- FIN Lógica Security Rules MOVIDA ---
+
+            # Marcamos que hay logs pendientes y guardamos mail coincidente
+            logs_to_commit = True if logs_to_commit or needs_commit_for_log else logs_to_commit
+            found_mail = mail
+            break  # Salimos del bucle después de primer match
+
+    # Commit final (si corresponde) después de salir del bucle
+    if logs_to_commit:
+        try:
+            db.session.commit()
+        except Exception as final_commit_err:
+            current_app.logger.error(f"Error haciendo commit en _process_mails (final): {final_commit_err}")
+            db.session.rollback()
+
+    return found_mail
 
 
 def get_first_filter_that_matches(mail_dict, filters):

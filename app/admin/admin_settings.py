@@ -19,7 +19,8 @@ from app.models import (
     AliasIcon,
     service_regex, service_filter,
     AllowedEmail,
-    ServiceIcon
+    ServiceIcon,
+    ObserverIMAPServer
 )
 from app.admin.site_settings import (
     get_site_setting, set_site_setting
@@ -47,36 +48,40 @@ def dashboard():
         )
     servers = servers_query.all()
 
-    # Estos valores se usan en la vista "admin_dashboard.html"
-    paragraph_item = SiteSettings.query.filter_by(key="search_message").first()
-    paragraph = paragraph_item.value if paragraph_item else ""
-    paragraph_mode = get_site_setting("search_message_mode", "off")  # => 'off' o 'guests'
+    from app.models import ObserverIMAPServer
+    observer_servers = ObserverIMAPServer.query.all()
 
-    paragraph2_item = SiteSettings.query.filter_by(key="search_message2").first()
-    paragraph2 = paragraph2_item.value if paragraph2_item else ""
-    paragraph2_mode = get_site_setting("search_message2_mode", "off")  # => 'off' o 'users'
+    # --- Cargar TODOS los SiteSettings en un diccionario ---
+    all_settings = SiteSettings.query.all()
+    site_settings_dict = {s.key: s.value for s in all_settings}
+    # --- Fin carga ---
 
-    lg = SiteSettings.query.filter_by(key="logo_enabled").first()
-    logo_enabled = lg.value if lg else "true"
+    # <<< --- DEBUG LOG --- >>>
+    # current_app.logger.info(f"[DASHBOARD_LOAD] Site settings para plantilla: {site_settings_dict}") # <<< ASÍ
+    # <<< --- FIN DEBUG LOG --- >>>
 
-    op = SiteSettings.query.filter_by(key="card_opacity").first()
-    card_opacity = op.value if op else "0.8"
-
-    th = SiteSettings.query.filter_by(key="current_theme").first()
-    current_theme = th.value if th else "tema1"
-
+    # Obtener valores específicos que ya usabas, usando el dict o get_site_setting
+    paragraph = site_settings_dict.get("search_message", "")
+    paragraph_mode = site_settings_dict.get("search_message_mode", "off")
+    paragraph2 = site_settings_dict.get("search_message2", "")
+    paragraph2_mode = site_settings_dict.get("search_message2_mode", "off")
+    logo_enabled = site_settings_dict.get("logo_enabled", "true")
+    # card_opacity y current_theme ya se usan en la plantilla con site_settings.get
+    
     admin_user = User.query.filter_by(username=current_app.config["ADMIN_USER"]).first()
 
     return render_template(
         "admin_dashboard.html",
         servers=servers,
+        observer_servers=observer_servers,
         paragraph=paragraph,
         paragraph_mode=paragraph_mode,
         paragraph2=paragraph2,
         paragraph2_mode=paragraph2_mode,
         logo_enabled=logo_enabled,
-        card_opacity=card_opacity,
-        current_theme=current_theme,
+        # card_opacity=card_opacity, # Ya no es necesario, la plantilla usa site_settings.get
+        # current_theme=current_theme, # Ya no es necesario
+        site_settings=site_settings_dict, # <-- PASAR EL DICCIONARIO A LA PLANTILLA
         admin_user=admin_user
     )
 
@@ -563,14 +568,14 @@ def import_config():
         # --- INICIO TRANSACCIÓN 2: Vincular Relaciones ManyToMany y Datos Asociados --- 
         try:
             # 9. Vincular Filtros/Regex a Servicios (como antes)
-            for item in services_to_create:
+            for item in services_to_create: 
                 s_data = item['old_data']
                 new_service_id = item['new_obj'].id # Ya tenemos el nuevo ID
                 service_to_update = db.session.get(ServiceModel, new_service_id)
                 if not service_to_update:
                     current_app.logger.warning(f"(Fase 2) No se encontró servicio {new_service_id} para vincular relaciones.")
                     continue
-
+                
                 # Vincular Filtros
                 old_filter_ids = s_data.get('filter_ids', [])
                 filters_to_link = []
@@ -580,7 +585,7 @@ def import_config():
                         filter_obj = db.session.get(Filter, new_f_id)
                         if filter_obj: filters_to_link.append(filter_obj)
                 service_to_update.filters = filters_to_link
-
+                
                 # Vincular Regex
                 old_regex_ids = s_data.get('regex_ids', [])
                 regexes_to_link = []

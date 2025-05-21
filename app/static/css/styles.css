@@ -1775,3 +1775,16 @@ body.dark-mode .filter-match a {
 }
 
 /* ... añadir más colores si es necesario ... */
+
+/* Clase para ocultar visualmente pero mantener accesible (Screen Reader Only) */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap; /* Evitar que el texto se divida en múltiples líneas */
+  border: 0;
+}

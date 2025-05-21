@@ -190,7 +190,7 @@ document.addEventListener("DOMContentLoaded", function() {
   // 5) Delegación de eventos
   if(subusersContainer) { // Verificar que el contenedor existe
       subusersContainer.addEventListener("click", function(e) {
-        const target = e.target;
+        const target = e.target; 
 
         // Toggle Subuser Enable/Disable
         if(target.classList.contains("toggle-subuser")) {

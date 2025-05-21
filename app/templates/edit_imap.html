@@ -7,7 +7,8 @@
     <h2>Editar Servidor IMAP</h2>
 
     <!-- Formulario para actualizar un servidor IMAP existente -->
-    <form method="POST" action="{{ url_for('admin_bp.manage_imap') }}">
+    <form method="POST"
+          action="{{ url_for('admin_bp.observer_manage_imap') if observer_mode else url_for('admin_bp.manage_imap') }}">
       <!-- Campo oculto con CSRF -->
       <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
       

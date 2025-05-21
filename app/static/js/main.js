@@ -674,6 +674,56 @@ document.addEventListener("DOMContentLoaded", function () {
   }
   // --- Fin Manejo Exportar ---
 
+  // --- NUEVO: Listener para Limpiar Log de Activadores ---
+  const btnClearLog = document.getElementById('btnClearTriggerLogBtn');
+  if (btnClearLog) {
+      btnClearLog.addEventListener('click', function() {
+          if (!confirm('¿Estás seguro de que deseas limpiar TODO el log de activadores? Esta acción no se puede deshacer.')) {
+              return;
+          }
+          
+          const csrfToken = getCsrfToken(); 
+          if (!csrfToken) {
+              alert('Error: No se pudo encontrar el token CSRF.');
+              return;
+          }
+
+          fetch('/admin/clear_trigger_log', {
+              method: 'POST',
+              headers: {
+                  'Content-Type': 'application/json',
+                  'X-CSRFToken': csrfToken
+              },
+              body: JSON.stringify({})
+          })
+          .then(response => {
+              if (response.ok) {
+                  return response.json(); 
+              } else {
+                  return response.json().then(errData => {
+                      throw new Error(errData.message || `Error ${response.status}: ${response.statusText}`);
+                  }).catch(() => {
+                      throw new Error(`Error ${response.status}: ${response.statusText}`);
+                  });
+              }
+          })
+          .then(data => {
+              if (data.status === 'ok') {
+                  alert(data.message || 'Log limpiado exitosamente.'); 
+                  // Opcional: redirigir para ver el flash del backend si clear_trigger_log redirige
+                  // window.location.href = '{{ url_for("admin_bp.dashboard") }}'; // NO USAR JINJA AQUÍ
+              } else {
+                  alert('Error al limpiar log: ' + (data.message || 'Error desconocido'));
+              }
+          })
+          .catch(error => {
+              console.error('Error al limpiar el log:', error);
+              alert('Error de red o del servidor al limpiar el log: ' + error.message);
+          });
+      });
+  }
+  // --- FIN: Listener para Limpiar Log ---
+
 }); // Fin DOMContentLoaded
 
 function getCsrfToken() {

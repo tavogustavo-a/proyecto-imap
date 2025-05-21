@@ -12,9 +12,10 @@ from app.models import IMAPServer
 from app.services.imap_crypto import encrypt_password, decrypt_password
 from app.imap.parser import parse_raw_email
 
-def create_imap_server(host, port, username, password_plain, folders="INBOX"):
+def create_imap_server(host, port, username, password_plain, folders="INBOX", model_cls=IMAPServer):
+    """Crea un registro IMAPServer (o subclase) parametrizable."""
     password_enc = encrypt_password(password_plain)
-    srv = IMAPServer(
+    srv = model_cls(
         host=host,
         port=port,
         username=username,
@@ -25,8 +26,8 @@ def create_imap_server(host, port, username, password_plain, folders="INBOX"):
     db.session.commit()
     return srv
 
-def update_imap_server(server_id, host, port, username, password_plain, folders="INBOX"):
-    srv = IMAPServer.query.get_or_404(server_id)
+def update_imap_server(server_id, host, port, username, password_plain, folders="INBOX", model_cls=IMAPServer):
+    srv = model_cls.query.get_or_404(server_id)
     srv.host = host
     srv.port = port
     srv.username = username
@@ -38,13 +39,13 @@ def update_imap_server(server_id, host, port, username, password_plain, folders=
     db.session.commit()
     return srv
 
-def test_imap_connection(server_id):
+def test_imap_connection(server_id, model_cls=IMAPServer):
     """
     Intenta conectar y loguearse al servidor IMAP.
     Devuelve una tupla (bool, str): (éxito, mensaje).
     No lanza excepciones directamente, las captura y las devuelve en el mensaje.
     """
-    srv = IMAPServer.query.get_or_404(server_id)
+    srv = model_cls.query.get_or_404(server_id)
     try:
         password = decrypt_password(srv.password_enc)
     except Exception as e: # Error al desencriptar (p.ej. clave incorrecta)
@@ -85,8 +86,8 @@ def test_imap_connection(server_id):
         traceback.print_exc() # Loggear este porque es inesperado
         return False, f"Error inesperado durante la conexión: {e}"
 
-def delete_imap_server(server_id):
-    srv = IMAPServer.query.get_or_404(server_id)
+def delete_imap_server(server_id, model_cls=IMAPServer):
+    srv = model_cls.query.get_or_404(server_id)
     db.session.delete(srv)
     db.session.commit()
 

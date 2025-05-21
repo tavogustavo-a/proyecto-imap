@@ -2,7 +2,7 @@
 
 from app.extensions import db
 from app.models import FilterModel, User
-from app.helpers import increment_global_session_revocation_count
+# from app.helpers import increment_global_session_revocation_count # Comentar o eliminar import
 from flask import current_app
 
 def create_filter_service(sender, keyword, cut_after_html, skip_revocation=False):
@@ -32,9 +32,7 @@ def create_filter_service(sender, keyword, cut_after_html, skip_revocation=False
     db.session.commit() # Commit para permisos directos y defaults
     current_app.logger.info(f"Nuevo filtro {new_filter.id} asignado a todos los usuarios y a defaults de {len(parents_to_update)} padres.")
 
-    # Forzar logout global solo si NO es el admin
-    if not skip_revocation:
-        increment_global_session_revocation_count()
+    # Forzar logout global solo si NO es el admin (Lógica eliminada)
 
 
 def update_filter_service(f: FilterModel, sender, keyword, enabled, cut_after_html):
@@ -44,12 +42,16 @@ def update_filter_service(f: FilterModel, sender, keyword, enabled, cut_after_ht
     f.cut_after_html = cut_after_html or None
     db.session.commit()
 
+    # Forzar logout global solo si NO es el admin (Lógica eliminada)
+    # if not skip_revocation: # (Este if se eliminaría si no hay skip_revocation en la firma)
+    #     pass
+
 
 def delete_filter_service(filter_id, skip_revocation=False):
     f = FilterModel.query.get_or_404(filter_id)
     db.session.delete(f)
     db.session.commit()
 
-    # Forzar logout global solo si NO es el admin
+    # Forzar logout global solo si NO es el admin (Lógica eliminada)
     if not skip_revocation:
-        increment_global_session_revocation_count()
+        pass

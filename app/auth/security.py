@@ -51,8 +51,8 @@ def block_user(user: User):
         
     # Incrementar el contador de bloqueos *antes* de calcular la duración
     user.block_count += 1 
-    # La duración base es 5 minutos, y se añaden 5 minutos por cada bloqueo previo
-    block_duration_minutes = 5 * user.block_count 
+    # La duración base se configura en Config.BLOCK_TIME_MINUTES (p.ej. 5) y escala con el número de bloqueos previos
+    block_duration_minutes = Config.BLOCK_TIME_MINUTES * user.block_count 
     user.blocked_until = datetime.utcnow() + timedelta(minutes=block_duration_minutes)
     # Reseteamos los intentos fallidos al aplicar un nuevo bloqueo
     user.failed_attempts = 0 
