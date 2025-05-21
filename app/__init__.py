@@ -3,13 +3,13 @@
 import os
 import sys  # <-- Importante para chequear argumentos de línea de comando
 from dotenv import load_dotenv
-#from flask import Flask
-#from werkzeug.security import generate_password_hash
-#from sqlalchemy import inspect
-#from flask_seasurf import SeaSurf
-#from app.extensions import db, migrate
-#from app.models import User  # <-- Importa tu modelo User
-#from config import Config
+from flask import Flask
+from werkzeug.security import generate_password_hash
+from sqlalchemy import inspect
+from flask_seasurf import SeaSurf
+from app.extensions import db, migrate
+from app.models import User  # <-- Importa tu modelo User
+from config import Config
 
 # --- INICIO CARGA DE .ENV ---
 # Determinar la ruta raíz del proyecto
@@ -27,18 +27,37 @@ else:
     print(f"[INFO] Archivo .env no encontrado en {dotenv_path}. Se asumirá que las variables de entorno están predefinidas.")
 # --- FIN CARGA DE .ENV ---
 
-def create_app(config_class=None):
-    app = Flask(__name__)
+def create_app(config_class_passed=None):
+    print("[DEBUG] Entrando a create_app")
+    try:
+        current_app = Flask(__name__)
+        print(f"[DEBUG] Flask app instance creada: {current_app}")
+    except Exception as e:
+        print(f"[DEBUG] ERROR al crear Flask(__name__): {e}")
+        raise # Re-lanzar el error para verlo completo
 
-    if config_class:
-        app.config.from_object(config_class)
-    else:
-        app.config.from_object(Config)
+    # Determinar qué clase de configuración usar
+    config_to_use = config_class_passed if config_class_passed else Config
+    print(f"[DEBUG] Usando clase de configuración: {config_to_use}")
 
+    try:
+        current_app.config.from_object(config_to_use)
+        print("[DEBUG] Configuración cargada desde objeto")
+    except Exception as e:
+        print(f"[DEBUG] ERROR al cargar config.from_object: {e}")
+        raise
+
+    # Renombrar la variable app para el resto de la función para evitar confusiones
+    # y para que coincida con tu código original si quieres revertir fácilmente.
+    app = current_app 
+
+    print("[DEBUG] Inicializando SeaSurf...")
     SeaSurf(app)
-
+    print("[DEBUG] Inicializando DB...")
     db.init_app(app)
+    print("[DEBUG] Inicializando Migrate...")
     migrate.init_app(app, db)
+    print("[DEBUG] Extensiones inicializadas")
 
     @app.context_processor
     def inject_admin_user():
