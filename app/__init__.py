@@ -2,28 +2,71 @@
 
 import os
 import sys  # <-- Importante para chequear argumentos de línea de comando
-from flask import Flask
-from werkzeug.security import generate_password_hash
 from dotenv import load_dotenv
+# Aquí pueden ir imports de bibliotecas estándar de Python que no dependen de tu app o config.
+
+# ESTE BLOQUE DEBE ESTAR AQUÍ, INMEDIATAMENTE DESPUÉS DE LOS IMPORTS BÁSICOS
+# --- INICIO CARGA DE .ENV ---
+project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+dotenv_path = os.path.join(project_root, '.env')
+
+# Cargar .env si existe
+if os.path.exists(dotenv_path):
+    load_dotenv(dotenv_path)
+    print(f"[INFO] Archivo .env cargado desde {dotenv_path}")
+    # --- NUEVO PRINT DE DIAGNÓSTICO ---
+    print(f"[DEBUG][app/__init__.py] Valor de SECRET_KEY después de load_dotenv: '{os.getenv('SECRET_KEY')}'")
+    print(f"[DEBUG][app/__init__.py] Valor de FLASK_ENV después de load_dotenv: '{os.getenv('FLASK_ENV')}'")
+    # --- FIN NUEVO PRINT DE DIAGNÓSTICO ---
+else:
+    # En producción, es posible que las variables de entorno ya estén definidas
+    # en el sistema o a través del servidor WSGI, así que no fallar aquí,
+    # pero es bueno saber si .env no se cargó.
+    print(f"[INFO] Archivo .env no encontrado en {dotenv_path}. Se asumirá que las variables de entorno están predefinidas.")
+# --- FIN CARGA DE .ENV ---
+
+# Y LUEGO, DESPUÉS DEL BLOQUE ANTERIOR, DEBEN VENIR ESTAS IMPORTACIONES
+from flask import Flask
+print("[DEBUG][app/__init__.py] Importando Config...")
+from config import Config
+print("[DEBUG][app/__init__.py] Config importada.")
+from werkzeug.security import generate_password_hash
 from sqlalchemy import inspect
 from flask_seasurf import SeaSurf
 from app.extensions import db, migrate
 from app.models import User  # <-- Importa tu modelo User
-from config import Config
 
-def create_app(config_class=None):
-    load_dotenv()
-    app = Flask(__name__)
+def create_app(config_class_passed=None):
+    print("[DEBUG] Entrando a create_app")
+    try:
+        current_app = Flask(__name__)
+        print(f"[DEBUG] Flask app instance creada: {current_app}")
+    except Exception as e:
+        print(f"[DEBUG] ERROR al crear Flask(__name__): {e}")
+        raise # Re-lanzar el error para verlo completo
 
-    if config_class:
-        app.config.from_object(config_class)
-    else:
-        app.config.from_object(Config)
+    # Determinar qué clase de configuración usar
+    config_to_use = config_class_passed if config_class_passed else Config
+    print(f"[DEBUG] Usando clase de configuración: {config_to_use}")
 
+    try:
+        current_app.config.from_object(config_to_use)
+        print("[DEBUG] Configuración cargada desde objeto")
+    except Exception as e:
+        print(f"[DEBUG] ERROR al cargar config.from_object: {e}")
+        raise
+
+    # Renombrar la variable app para el resto de la función para evitar confusiones
+    # y para que coincida con tu código original si quieres revertir fácilmente.
+    app = current_app 
+
+    print("[DEBUG] Inicializando SeaSurf...")
     SeaSurf(app)
-
+    print("[DEBUG] Inicializando DB...")
     db.init_app(app)
+    print("[DEBUG] Inicializando Migrate...")
     migrate.init_app(app, db)
+    print("[DEBUG] Extensiones inicializadas")
 
     @app.context_processor
     def inject_admin_user():

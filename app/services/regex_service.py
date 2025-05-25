@@ -36,7 +36,7 @@ def create_regex_service(sender, pattern, description, skip_revocation=False):
         pass # Añadir pass si se quiere mantener el if, o eliminar el if completo
 
 
-def update_regex_service(r: RegexModel, sender, pattern, description, enabled):
+def update_regex_service(r: RegexModel, sender, pattern, description, enabled, skip_revocation=False):
     r.sender = sender
     r.pattern = pattern
     r.description = description
