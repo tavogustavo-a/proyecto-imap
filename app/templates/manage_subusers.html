@@ -1,0 +1,159 @@
+<!-- app/templates/manage_subusers.html -->
+{% extends "base.html" %}
+
+{% block title %}Gestionar Sub-usuarios{% endblock %}
+
+{% block head %}
+<meta name="csrf_token" content="{{ csrf_token() }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/store.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='fontawesome/css/all.css') }}">
+{% endblock head %}
+
+{% block content %}
+<div id="mobileMenu" class="mobile-menu-store hidden menu-mobile-fixed">
+  <div class="menu-title-row menu-title-row-custom">
+    <i class="fas fa-bars icon-menu-bar"></i>
+    <h3 class="h3-menu-title">Menú</h3>
+  </div>
+  {% set current_user_id = session.get('user_id') %}
+  {% if current_user_id %}
+    {% set user_object = User.query.get(current_user_id) %}
+    {# Si el usuario fue eliminado, user_object será None #}
+    {% if not user_object %}
+      {% set user_object = None %}
+    {% endif %}
+    {% if user_object and (not user_object.parent_id or (user_object.parent_id and user_object.can_access_store)) %}
+      <a href="{{ url_for('store_bp.store_front') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-store"></i> Tienda</a>
+    {% endif %}
+  {% else %}
+  <a href="{{ url_for('store_bp.store_front') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-store"></i> Tienda</a>
+  {% endif %}
+  <a href="{{ url_for('store_bp.tools_public') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-tools"></i> Herramientas</a>
+  <a href="{{ url_for('main_bp.home') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-code"></i> Códigos</a>
+  {% if user_has_codigos2_access() %}
+  <a href="{{ url_for('main_bp.home2') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-code"></i> Códigos 2</a>
+  {% endif %}
+  {% if user_object %}
+    {% if session.get('username') == ADMIN_USER %}
+      <a href="{{ url_for('user_auth_bp.estadisticas') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-chart-bar"></i> Estadísticas</a>
+    {% elif not user_object.parent_id and user_object.roles_tienda and user_object.roles_tienda[0].enabled %}
+      <a href="{{ url_for('user_auth_bp.estadisticas') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-chart-bar"></i> Estadísticas</a>
+    {% elif user_object.parent_id and user_object.can_access_store %}
+      <a href="{{ url_for('user_auth_bp.estadisticas') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-chart-bar"></i> Estadísticas</a>
+    {% endif %}
+  {% endif %}
+  {% if session.get('is_user') and current_user %}
+    {% if current_user.is_support %}
+      <a href="{{ url_for('store_bp.support_dashboard') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-headset"></i> Chat de Soporte Admin</a>
+    {% elif current_user.can_chat %}
+      <a href="{{ url_for('store_bp.user_chat_soporte') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-headset"></i> Chat de Soporte</a>
+    {% endif %}
+  {% endif %}
+  {% if session.get('is_user') and current_user_id %}
+    {% if user_object and user_object.can_create_subusers %}
+      <a href="{{ url_for('subuser_bp.manage_subusers') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-users"></i> Sub-usuarios</a>
+    {% endif %}
+  {% endif %}
+  {% if session.get('is_user') and not current_user.parent_id and user_has_worksheet_access(current_user) %}
+  <a href="{{ url_for('store_bp.user_work_sheets') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-table"></i> Hojas de Cálculo</a>
+{% endif %}
+  {% if session.get('is_user') and current_user_id %}
+    {% set user_object = User.query.get(current_user_id) if current_user_id else None %}
+    {# Si el usuario fue eliminado, user_object será None #}
+    {% if not user_object %}
+      {% set user_object = None %}
+    {% endif %}
+    {% set show_store = False %}
+    {% if session.get('username') == ADMIN_USER %}
+      {% set show_store = True %}
+    {% elif user_object %}
+      {% if user_object.parent_id %}
+        {% if user_object.can_access_store %}
+          {% set parent = User.query.get(user_object.parent_id) %}
+          {# Si el padre fue eliminado, parent será None #}
+          {% if not parent %}
+            {% set parent = None %}
+          {% endif %}
+          {% if parent and parent.roles_tienda and parent.roles_tienda[0].enabled %}
+            {% set show_store = True %}
+          {% endif %}
+        {% endif %}
+      {% elif user_object.roles_tienda and user_object.roles_tienda[0].enabled %}
+        {% set show_store = True %}
+      {% endif %}
+    {% endif %}
+    {% if show_store %}
+      <a href="{{ url_for('store_bp.historial_compras_usuario') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-receipt"></i> Mi Historial de Compras</a>
+    {% endif %}
+  {% endif %}
+  <a href="{{ url_for('user_auth_bp.logout') }}" class="btn-panel btn-red mobile-menu-btn mb-04"><i class="fas fa-sign-out-alt"></i> Cerrar Sesión</a>
+</div>
+<div id="menuOverlay" class="menu-overlay"></div>
+
+<div class="form-container-wide">
+
+  <!-- CONTORNO 1: Panel Sub-usuarios + Crear Sub-usuario -->
+  <div class="admin-card mb-1">
+    <div class="d-flex justify-content-between align-items-center">
+      <button id="menuToggleBtn" class="btn-panel btn-blue">&#9776; Menú</button>
+      <button
+        id="btnVolverBusqueda"
+        type="button"
+        class="btn-blue"
+        data-home-url="{{ url_for('main_bp.home') }}"
+      >
+        Volver
+      </button>
+    </div>
+    <hr class="hr-margin-08">
+
+    <!-- CREAR SUB-USUARIO -->
+    <h4 class="mt-0">Crear Sub-usuario</h4>
+    <form id="createSubuserForm" class="d-flex gap-05 flex-wrap mt-05">
+      <input
+        type="text"
+        id="subUsername"
+        placeholder="Usuario"
+        class="flex-grow-1"
+        required
+        autocomplete="off"
+      >
+      <input
+        type="password"
+        id="subPassword"
+        placeholder="Contraseña"
+        class="flex-grow-1"
+        required
+        autocomplete="new-password"
+      >
+      <button type="submit" class="btn-green">Crear</button>
+    </form>
+    <div id="createSubuserMsg" class="mt-05 error-message"></div>
+  </div>
+
+  <!-- CONTORNO 2: Búsqueda y Listado de Sub-usuarios -->
+  <div class="admin-card">
+    <h4 class="mt-0">Buscar Sub-usuarios</h4>
+    <form id="searchSubusersForm" class="d-flex gap-05 mb-05">
+      <input
+        type="text"
+        id="searchSubusersInput"
+        placeholder="Buscar sub-usuario..."
+        class="flex-grow-1"
+        autocomplete="off"
+      >
+      <button type="submit" class="btn-search">Limpiar</button>
+    </form>
+
+    <div id="subusersContainer"></div>
+  </div>
+
+</div>
+
+{% endblock content %}
+
+{% block scripts %}
+{# {{ super() }} #} {# Comentado porque base.html no tiene scripts en este bloque #}
+<script src="{{ url_for('static', filename='js/manage_subusers.js') }}"></script>
+<script src="{{ url_for('static', filename='js/menu_busqueda.js') }}" defer></script>
+{% endblock scripts %}

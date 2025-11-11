@@ -1,0 +1,51 @@
+<!-- app/templates/base.html -->
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>{% block title %}Consulta de Codigos{% endblock %}</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  {% block head %}
+    <meta name="csrf_token" content="{{ csrf_token() }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='fontawesome/css/all.min.css') }}">
+  {% endblock %}
+
+  <link rel="icon" href="{{ url_for('static', filename='images/favicon.svg') }}" type="image/svg+xml">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}?v=20241220-login-button-search-page">
+</head>
+
+<body class="theme-active {{ site_settings.get('current_theme','tema1') }}" data-opacity="{{ site_settings.get('card_opacity','0.8') }}" data-debug-mode="{{ 'true' if config.DEBUG else 'false' }}">
+  <div id="loading-overlay">
+    <h2>Por favor espere...</h2>
+  </div>
+
+  <noscript>
+    <p>
+      Esta aplicación requiere JavaScript. Actívalo para continuar.
+    </p>
+  </noscript>
+
+  <div class="container">
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        {% for category, msg in messages %}
+          <div class="flash-message {{ category }}">{{ msg }}</div>
+        {% endfor %}
+      {% endif %}
+    {% endwith %}
+
+    {% block content %}{% endblock %}
+  </div>
+
+  {# Sistema de protección contra copia de código (solo en producción) #}
+  {% if not config.DEBUG %}
+  <script src="{{ url_for('static', filename='js/code_protection.js') }}" defer></script>
+  {% endif %}
+  
+  <script src="{{ url_for('static', filename='js/main.js') }}?v=20241220-fix-empty-mail-cards"></script>
+  <script src="{{ url_for('static', filename='js/loading_overlay.js') }}" defer></script>
+
+  {# Bloque para que las plantillas hijas puedan añadir sus propios scripts #}
+  {% block scripts %}{% endblock %}
+</body>
+</html>

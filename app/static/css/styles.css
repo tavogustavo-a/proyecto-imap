@@ -1,0 +1,3618 @@
+/* app/static/css/styles.css */
+
+/* ================== RESET & BASE ================== */
+html, body {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  font-family: sans-serif;
+}
+
+body.theme-active {
+  min-height: 100vh;
+  background-attachment: fixed;
+  background-repeat: no-repeat;
+  background-position: center center;
+  background-size: cover;
+}
+
+/* LOG: Esta regla controla el ancho y margen general del contenedor principal. Si el layout se descuadra, revisa aquí. */
+/* Variable CSS para opacidad y colores */
+:root {
+  --card-opacity: 0.8;
+  --card-bg: rgba(255, 255, 255, var(--card-opacity));
+  --card-border: rgba(255,255,255,0.85); /* Contorno blanco con opacidad */
+  --text-color: #111;
+  --user-bg-color: #fff;
+  --user-text-color: #111;
+}
+
+/* ============= MODO OSCURO ============= */
+.dark-mode {
+  color: #fff !important;
+}
+
+/* Tarjetas, tablas, inputs en modo oscuro */
+.dark-mode .card, 
+.dark-mode .admin-card {
+  background-color: rgba(40,40,40,var(--card-opacity)) !important;
+  color: #fff !important;
+}
+
+.dark-mode table {
+  background-color: #2c2c2c;
+  color: #fff;
+}
+
+.dark-mode input[type="text"],
+.dark-mode input[type="password"],
+.dark-mode input[type="number"],
+.dark-mode input[type="email"],
+.dark-mode textarea,
+.dark-mode select {
+  background-color: #333;
+  color: #fff;
+  border: 1px solid #666;
+}
+
+/* ============= Temas de fondo (tema1..tema17, temaadmin) ============= */
+body.theme-active.tema1 {
+  background: url("../images/tema1.png") no-repeat center center fixed;
+  background-size: cover;
+  color: var(--text-color);
+}
+body.theme-active.tema2 {
+  background: url("../images/tema2.png") no-repeat center center fixed;
+  background-size: cover;
+  color: var(--text-color);
+}
+body.theme-active.tema3 {
+  background: url("../images/tema3.png") no-repeat center center fixed;
+  background-size: cover;
+  color: var(--text-color);
+}
+
+/* ========== Tarjetas (card/admin-card) ========== */
+/* LOG: Los popups usan esta clase base. Cambios aquí afectan el padding, borde y radio de muchas secciones. */
+.card, .admin-card {
+  background-color: var(--card-bg) !important;
+  color: var(--text-color) !important;
+  border: none !important;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.07);
+  margin: 0.001rem auto;
+  padding: 0.75rem;
+  border-radius: 16px;
+  max-width: 750px;
+  overflow-x: visible;
+  box-sizing: border-box;
+}
+
+.imap-item,
+.domain-item,
+.regex-item,
+.user-item,
+.filter-item {
+  background-color: var(--card-bg) !important;
+  color: var(--text-color) !important;
+  border: 1.5px solid var(--card-border) !important;
+  margin: 0.5rem 0;
+  padding: 0.05rem;
+  border-radius: 6px;
+  word-wrap: break-word;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+/* Regla para ITEMS DE USUARIO (layout horizontal) */
+.user-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border: 1px solid #ccc;
+  margin: 0.5rem 0;
+  padding: 0.5rem;
+  border-radius: 6px;
+  word-wrap: break-word;
+  overflow-wrap: anywhere;
+  white-space: normal;
+  /* Variables CSS para colores (usadas por Usuarios) */
+  background-color: var(--user-bg-color, #fff) !important;
+  color: var(--user-text-color, inherit) !important;
+}
+
+/* NUEVA REGLA solo para ITEMS DE FILTRO (layout vertical) */
+.filter-item {
+  /* Propiedades base (sin Flexbox) */
+  border: 1px solid #ccc;
+  margin: 0.5rem 0;
+  padding: 0.5rem;
+  border-radius: 6px;
+  word-wrap: break-word;
+  overflow-wrap: anywhere;
+  white-space: normal;
+  /* Añadir fondo blanco (o el de las tarjetas) */
+  background-color: var(--card-bg, #fff);
+}
+
+input[type="text"],
+input[type="password"],
+input[type="email"],
+input[type="number"],
+input[type="search"],
+select,
+textarea {
+  background: #fff !important;
+  color: #111 !important;
+  width: 98%;
+  padding: 0.3rem;
+  border-radius: 4px;
+}
+
+input[type="checkbox"],
+input[type="radio"] {
+  width: 1.15em;
+  min-width: 18px;
+  max-width: 22px;
+  height: 1.15em;
+  margin: 0 0.2em 0 0;
+  padding: 0;
+  vertical-align: middle;
+  accent-color: #2196f3;
+}
+
+button,
+input[type="submit"],
+.btn {
+  padding: 0.4rem 0.8rem;
+  border-radius: 5px;
+  border: none;
+  cursor: pointer;
+  margin: 0.2rem;
+}
+
+/* ========== Flash messages ========== */
+.flash-message {
+  padding: 10px;
+  margin: 10px 0;
+  border-radius: 5px;
+}
+.flash-message.danger  { background-color: #f44336; color: #fff; }
+.flash-message.success { background-color: #4caf50; color: #fff; }
+.flash-message.warning { background-color: #ff9800; color: #fff; }
+.flash-message.info    { background-color: #2196f3; color: #fff; }
+.flash-message.error {
+  background: linear-gradient(135deg, #dc3545 0%, #c82333 50%, #bd2130 100%);
+  color: #ffffff;
+  font-weight: 700;
+  font-size: 1.1rem;
+  padding: 18px 25px;
+  margin: 15px 0;
+  border: 3px solid #ffffff;
+  border-radius: 8px;
+  box-shadow: 0 4px 15px rgba(220, 53, 69, 0.5), 0 0 20px rgba(220, 53, 69, 0.3);
+  text-align: center;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  position: relative;
+  z-index: 1000;
+  animation: flash-pulse 2s ease-in-out infinite;
+}
+@keyframes flash-pulse {
+  0%, 100% {
+    box-shadow: 0 4px 15px rgba(220, 53, 69, 0.5), 0 0 20px rgba(220, 53, 69, 0.3);
+  }
+  50% {
+    box-shadow: 0 4px 25px rgba(220, 53, 69, 0.8), 0 0 30px rgba(220, 53, 69, 0.6);
+  }
+}
+
+/* ========== Botones y estilos de busqueda ========== */
+.btn-search {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+  color: #fff !important;
+  font-weight: 600 !important;
+  border-radius: 30px !important;
+  font-size: 0.9rem !important;
+  border: 2px solid #1e88e5 !important;
+  height: 35px !important;
+  box-shadow: 0 2px 6px rgba(33,150,243,0.08);
+  padding: 0.4rem 1.1rem;
+}
+
+.btn-orange, .btn-green {
+  font-weight: 600;
+  font-size: 1.08rem;
+  border-radius: 8px;
+  padding: 4px 18px;
+  min-width: 90px;
+  width: auto;
+  box-shadow: none;
+  border: 2px solid;
+}
+.btn-orange {
+  background: #f39c12 !important;
+  color: #fff !important;
+  border-color: #f39c12 !important;
+}
+.btn-orange:hover {
+  background: #d35400 !important;
+  border-color: #d35400 !important;
+}
+.btn-green {
+  background: #4caf50 !important;
+  color: #fff !important;
+  border-color: #4caf50 !important;
+}
+.btn-green:hover {
+  background: #388e3c !important;
+  border-color: #388e3c !important;
+}
+.btn-red {
+  background-color: #f44336;
+  color: #fff;
+}
+.btn-blue, .btn-red {
+  font-weight: 600;
+  font-size: 1.08rem;
+  border-radius: 8px;
+  padding: 2px 10px;
+  min-width: 83px;
+  width: auto;
+  box-shadow: none;
+  border: 2px solid;
+}
+.btn-blue {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+  color: #fff !important;
+  border-color: #0d6efd !important;
+}
+.btn-blue:hover {
+  background: #1256a6 !important;
+  border-color: #1256a6 !important;
+}
+
+.btn-grey {
+  /* Mismo gradiente que los botones de servicio */
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+  border: none !important;
+  color: white !important;
+  padding: 0.4rem 0.8rem !important;
+  border-radius: 20px !important;
+  font-weight: 600 !important;
+  box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3) !important;
+  transition: all 0.3s ease !important;
+  cursor: pointer !important;
+}
+
+.btn-grey:hover {
+  transform: translateY(-1px) scale(1.02) !important;
+  box-shadow: 0 6px 20px rgba(102, 126, 234, 0.5) !important;
+}
+
+.btn-grey:active {
+  transform: translateY(0) scale(1.01) !important;
+  box-shadow: 0 3px 10px rgba(102, 126, 234, 0.4) !important;
+}
+.btn-red {
+  background: #e74c3c !important;
+  color: #fff !important;
+  border-color: #e74c3c !important;
+}
+.btn-red:hover {
+  background: #c0392b !important;
+  border-color: #c0392b !important;
+}
+.btn-orange {
+  background-color: #fd7e14;
+  color: #fff;
+}
+.btn-orange:hover {
+  background: #e55a00 !important;
+  border-color: #e55a00 !important;
+}
+.btn-gray {
+  background-color: #9e9e9e;
+  color: #fff;
+}
+
+/* Campo de búsqueda "gordo" y con bordes redondeados (RESTAURADO) */
+.search-input {
+  font-size: 0.9rem;       /* Fuente más grande */
+  font-weight: 600;        /* "Grueso" */
+  height: 36px;            /* Más alto */
+  border-radius: 30px;     /* Bordes redondeados */
+  border: 2px solid #ccc;  /* Un poco más grueso */
+  padding: 0 15px;
+  width: 100%;
+  box-sizing: border-box;
+  /* Reset explícito por si acaso */
+  max-width: none;
+  min-width: 190px;
+}
+
+/* ========== Otros estilos (búsqueda, tablas, etc.) ========== */
+.search-container {
+  max-width: 800px;
+  margin: 0 auto;
+  text-align: center;
+}
+
+/* Estilos específicos para search-container en formularios */
+.search-container.form-search {
+  display: flex;
+  gap: 0.5rem;
+  text-align: left;
+}
+
+.search-message {
+  margin-bottom: 1rem;
+}
+
+.search-form {
+  margin-bottom: 1rem;
+}
+
+/* 
+   Definición para search-field 
+*/
+.search-field {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.search-field input[type="text"] {
+  flex: 1;
+  min-width: 0;
+  height: 38px;
+  line-height: 38px;
+  box-sizing: border-box;
+  border: 1px solid #ccc;
+  border-radius: 20px;
+  background-color: #f5f5f5;
+  padding: 0 10px;
+}
+
+@media (max-width: 600px) {
+  .search-field input[type="text"] {
+    margin-right: 0;
+  }
+}
+
+/* Tablas SOLO para la administración */
+.admin-table {
+  width: 100%;
+  border-collapse: collapse;
+  border: 1px solid #ccc;
+  table-layout: fixed;
+}
+
+.admin-table th,
+.admin-table td {
+  padding: 0.8rem; /* Mantenido reducido */
+  text-align: left;
+  word-wrap: break-word; /* Asegurar word-wrap */
+  overflow-wrap: anywhere; /* Asegurar overflow-wrap */
+  white-space: normal;
+}
+
+/* Intentar apuntar específicamente a la columna de posición (suponiendo que es la 4ta) */
+.admin-table th:nth-child(4),
+.admin-table td:nth-child(4) {
+    max-width: 80px; /* Ancho máximo más restrictivo */
+    width: 80px; /* Ancho fijo */
+    overflow: hidden; /* Ocultar desbordamiento si aún ocurre */
+    text-overflow: ellipsis; /* Añadir puntos suspensivos */
+}
+
+/* Intentar apuntar específicamente a la columna de usuario (suponiendo que es la 2da) */
+.admin-table th:nth-child(2),
+.admin-table td:nth-child(2) {
+    max-width: 150px; /* Ancho máximo */
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+@media (max-width: 600px) {
+  .admin-table,
+  .admin-table thead,
+  .admin-table tbody,
+  .admin-table tr,
+  .admin-table td,
+  .admin-table th {
+    display: block;
+    width: 100%;
+  }
+  .admin-table tr {
+    margin-bottom: 0.8rem;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+    padding: 0.5rem;
+  }
+  .admin-table th {
+    font-weight: bold;
+    background-color: #f0f0f0;
+    margin-top: 0.5rem;
+  }
+}
+
+/* =========================
+   media query ~768px
+========================= */
+@media (max-width: 768px) {
+  .admin-card {
+    margin: 0.1rem auto;
+  }
+  .search-container {
+    max-width: 600px;
+  }
+  
+}
+
+/* =========================
+   NUEVO: media query ~320px
+========================= */
+@media (max-width: 320px) {
+  /* Ajustes especiales en pantallas muy pequeñas */
+  .container {
+    width: 94%;
+    margin: 0 auto;
+  }
+  .btn-search {
+    font-size: 1rem;
+    height: 40px;
+  }
+  .search-input {
+    font-size: 1rem;
+    height: 40px;
+  }
+  
+  .search-page-container .admin-card {
+    padding: 0.5rem;
+    margin: 0.125rem auto;
+    max-width: calc(100% - 0.25rem);
+  }
+  textarea {
+    font-size: 0.9rem;
+  }
+  .flash-message {
+    font-size: 0.85rem;
+  }
+  /* Ajusta si tienes más elementos */
+}
+
+/* Estilos movidos de admin_dashboard.html */
+.twofa-button-group {
+  justify-content: center;
+}
+
+@media (max-width: 600px) {
+  .twofa-button-group {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}
+
+/* --- INICIO: Estilo para Resultados en Móviles --- */
+@media (max-width: 767px) { /* Puedes ajustar este breakpoint */
+  /* ... otras reglas móviles ... */
+  #search-results {
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+  }
+
+   /* Desactivar el escalado en móviles para que ocupe más ancho */
+  .scaled-content {
+      transform: none; /* <<< Desactivar escalado */
+      transform-origin: initial; /* <<< Restablecer origen */
+      width: auto; /* <<< Restablecer ancho */
+  }
+
+  #search-results td, #search-results th {
+      word-wrap: break-word;
+      overflow-wrap: break-word;
+  }
+
+  /* Solo contenido puro para filtros - sin estilos visuales */
+  .filter-match {
+    background: #ffffff !important; /* Fondo blanco para consistencia */
+    border: none !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    backdrop-filter: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    max-width: none !important;
+    
+    /* Remover transformaciones */
+    transform: none !important;
+    transform-origin: initial !important;
+  }
+  /* -- FIN MANTENER -- */
+}
+/* --- FIN: Estilo para Resultados en Móviles --- */
+
+/* Estilos movidos de base.html */
+body {
+  display: block; /* Mostrar siempre - el JS ya no necesita mostrar el body */
+  margin: 0;
+  padding: 0;
+}
+
+#loading-overlay {
+  position: fixed;
+  top:0; left:0; right:0; bottom:0;
+  background: #fff;
+  color: #333;
+  z-index:9999;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  flex-direction:column;
+}
+
+noscript p {
+  color:red;
+  text-align:center;
+  margin-top:2rem;
+}
+
+/* Estilos para formularios específicos (movidos de inline) */
+.form-container-narrow {
+  max-width: 500px;
+  margin: 2rem auto;
+}
+
+.form-input-block {
+  display: block;
+  width: 100%; /* Ocupa todo el ancho */
+  margin-bottom: 1rem;
+  /* Hereda padding, border, etc. de reglas generales de input */
+}
+
+.form-input-otp {
+  display: block;
+  margin-bottom: 1rem;
+   /* Hereda padding, border, etc. de reglas generales de input */
+}
+
+.form-container-600 {
+  max-width: 600px;
+  margin: 2rem auto;
+}
+
+.otp-input-container {
+  max-width: 400px;
+}
+
+.btn-link-style {
+  text-decoration: none;
+  margin-left: 1rem;
+  padding: 6px 12px; /* Ajustar padding si es necesario */
+  /* Hereda colores y otros estilos de .btn-red, .btn-blue, etc. */
+}
+
+/* LOG: Flexbox global, pero excluimos editar cupón donde interfiere */
+.d-flex {
+  display: flex;
+}
+
+/* Reactivar flex solo para el header del botón Volver en editar cupón */
+.store-light.maxw-800 .d-flex.align-items-center.justify-content-between {
+  display: flex !important;
+}
+
+.align-items-center {
+  align-items: center;
+}
+
+.justify-content-between {
+  justify-content: space-between;
+}
+
+.flex-wrap {
+  flex-wrap: wrap;
+}
+
+.flex-column {
+  flex-direction: column;
+}
+
+.flex-grow-1 {
+  flex: 1;
+}
+
+/* LOG: Márgenes y paddings globales. Si hay mucho o poco espacio, revisa estas utilidades. */
+.gap-05 { gap: 0.5rem; }
+.gap-1 { gap: 1rem; }
+.gap-075 { gap: 0.75rem; }
+
+.m-0 { margin: 0; }
+.mt-0 { margin-top: 0; }
+.mt-05 { margin-top: 0.5rem; }
+.mt-1 { margin-top: 1rem; }
+.mt-1-5 { margin-top: 1.5rem; }
+.mt-2 { margin-top: 2rem; }
+.mb-04 { margin-bottom: 0.4rem; }
+.mb-05 { margin-bottom: 0.5rem; }
+.mb-1 { margin-bottom: 1rem; }
+.mb-1-5 { margin-bottom: 1.5rem; }
+.mb-2 { margin-bottom: 2rem; }
+.ml-03 { margin-left: 0.3rem; }
+.ml-05 { margin-left: 0.5rem; }
+.ml-1 { margin-left: 1rem; }
+.ml-0 { margin-left: 0; }
+.ml-auto { margin-left: auto; }
+.mr-05 { margin-right: 0.5rem; }
+.mr-1 { margin-right: 1rem; }
+.mx-auto { margin-left: auto; margin-right: auto; }
+.w-100 { width: 100%; }
+
+/* Otras utilidades comunes */
+.d-block { display: block; }
+.d-inline { display: inline; }
+.text-decoration-none { text-decoration: none; }
+.vertical-align-middle { vertical-align: middle; }
+
+/* Estilos específicos movidos de admin_dashboard.html */
+.twofa-info-box {
+  background: #fff;
+  border: 2px solid #ccc;
+  border-radius: 6px;
+  padding: 1rem;
+  /* Asegurar color de texto legible si el fondo base cambia */
+  color: #333;
+  /* Centrar en pantallas grandes */
+  text-align: center;
+}
+
+.qr-code-image {
+  width: 200px;
+  height: 200px;
+  border: 1px solid #333;
+  /* display: block; /* Opcional: si se necesita asegurar que sea bloque */
+}
+
+/* Estilo base para enlaces que parecen botones */
+.link-button {
+  display: inline-block; /* Para que padding/margin funcionen bien */
+  padding: 0.4rem 0.8rem;
+  border-radius: 4px;
+  cursor: pointer;
+  text-decoration: none;
+  color: #fff; /* Color de texto por defecto */
+  text-align: center;
+}
+
+.link-button-change-creds {
+  background: #9c27b0;
+  border: 2px solid #9c27b0;
+}
+
+.link-button-disable-2fa {
+  background: #f44336;
+  border: 2px solid #f44336;
+}
+
+/* Clases adicionales para refactorizar */
+.min-width-120 { min-width: 120px; }
+
+.label-block {
+  display: block;
+  margin-bottom: 0.3rem; 
+}
+
+/* Estilos movidos de edit_service.html - APLICADOS A CLASE ESPECÍFICA */
+.search-container.form-search input[type="search"] {
+  flex-grow: 1;
+  margin-bottom: 0; 
+}
+.hidden-item {
+  display: none;
+}
+.admin-card + .admin-card {
+  margin-top: 1.5rem;
+}
+/* .admin-card h3:first-child { margin-top: 0; } */ /* Comentado: Regla ya existe globalmente? */
+/* ul { list-style: none; padding-left: 0; } */ /* Comentado: Regla demasiado general? */
+/* li { margin-bottom: 0.5rem; padding-bottom: 0.5rem; border-bottom: 1px solid #eee; } */ /* Comentado: Regla demasiado general? */
+/* li:last-child { border-bottom: none; } */ /* Comentado: Regla demasiado general? */
+
+/* Estilo para listas específicas (Regex/Filtros en edit_service) */
+.styled-list {
+    border: 1px solid #eee;
+    border-radius: 4px;
+    margin-bottom: 1rem;
+    padding-left: 0;
+    list-style: none;
+}
+.styled-list li {
+  padding: 0.4rem 0.8rem;
+  border-bottom: 1px solid #eee;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap; 
+  gap: 0.5rem; 
+  margin-bottom: 0.5rem;
+}
+.styled-list li:nth-child(odd) { background-color: #ffffff; }
+.styled-list li:nth-child(even) { background-color: #ffffff; }
+.styled-list li:last-child {
+    border-bottom: none;
+    margin-bottom: 0;
+}
+.styled-list li span { word-break: break-all; }
+
+/* Estilos movidos de edit_subuser.html */
+.hidden-email {
+  display: none;
+}
+
+/* .search-container { ... } */ /* Comentado: Regla ya existe (movida de edit_service.html) */
+/* #email-search-clear-btn { ... } */ /* Comentado: Sin reglas definidas */
+
+.email-checkbox-list {
+    margin-top: 1rem; 
+    max-height: 250px;
+    overflow-y: auto;
+    border: 1px solid #ddd;
+    padding: 0.75rem;
+    margin-bottom: 0.75rem;
+    background-color: #f9f9f9;
+    border-radius: 4px;
+}
+
+.tools-checkbox-list {
+    margin-top: 1rem; 
+    max-height: 250px;
+    overflow-y: auto;
+    border: 1px solid #ddd;
+    padding: 0.75rem;
+    margin-bottom: 0.75rem;
+    background-color: #f9f9f9;
+    border-radius: 4px;
+}
+
+/* .admin-card + .admin-card { margin-top: 1.5rem; } */ /* Comentado: Regla ya existe globalmente? */
+
+/* Estilos movidos de email.html */
+.search-results-container {
+  display: none; /* Oculto inicialmente */
+  max-height: 360px;
+  overflow-y: auto;
+  border: 1px solid #ccc;
+  margin-top: 0.5rem;
+  background-color: #ffffff;
+}
+.search-result-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.25rem 0.6rem;
+  border-bottom: 1px solid #eee;
+  font-size: 0.95em;
+}
+.search-result-item:nth-child(odd) {
+  background-color: #ffffff;
+}
+.search-result-item:nth-child(even) {
+  background-color: #f1f3f5;
+}
+.search-result-item:last-child {
+  border-bottom: none;
+}
+.search-result-item span {
+    flex-grow: 1;
+    margin-right: 0.25rem;
+    word-break: break-all;
+}
+.delete-search-result-btn {
+  padding: 0.1rem 0.4rem;
+  font-size: 0.9em;
+  line-height: 1;
+  cursor: pointer;
+  border: 1px solid #dc3545;
+  color: #dc3545;
+  background-color: transparent;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+.delete-search-result-btn:hover {
+  background-color: #dc3545;
+  color: white;
+}
+.delete-displayed-emails-btn {
+    display: block;
+    margin-top: 0.75rem;
+}
+#delete-displayed-container {
+  margin-top: 0.75rem;
+  text-align: right;
+}
+#deleteDisplayedBtn {
+    display: none;
+}
+#searchEmailsForm {
+  display: flex;
+  margin-bottom: 0.5rem;
+  align-items: center;
+}
+/* .admin-card + .admin-card { margin-top: 1.5rem; } */ /* Comentado: Regla ya existe globalmente? */
+/* .admin-card h3:first-child, .admin-card h4:first-child { margin-top: 0; } */ /* Comentado: Regla ya existe globalmente? */
+
+/* Clases para edit_service.html */
+.service-name-input {
+  width: 70%; /* Mantenemos width específico */
+  /* Hereda otros estilos de input */
+}
+
+.color-picker-input {
+  width: 50px;
+  height: 30px;
+  cursor: pointer;
+  padding: 0;
+  border: 1px solid #ccc;
+  vertical-align: bottom;
+  margin-left: 0.5rem;
+}
+
+.position-input {
+  width: 70px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  padding: 0.2rem;
+  margin-left: 0.5rem;
+}
+
+
+.visibility-select {
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  padding: 0.2rem;
+  cursor: pointer;
+}
+
+.list-unstyled {
+  list-style-type: none;
+  padding-left: 0;
+}
+
+/* NOTA: El estilo dinámico border-left en alias-list-item debe permanecer inline */
+.alias-list-item {
+  margin-bottom: 1rem;
+  padding-left: 0.8rem;
+  border-bottom: 1px solid #eee;
+}
+
+/* Estilos para alias con contorno blanco elegante */
+.alias-card {
+  background: rgba(255, 255, 255, 0.95) !important;
+  border: 2px solid #ffffff !important;
+  border-radius: 12px !important;
+  padding: 16px !important;
+  margin-bottom: 16px !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1) !important;
+  backdrop-filter: blur(5px) !important;
+  transition: all 0.3s ease !important;
+  border-bottom: none !important; /* Sobrescribir el border-bottom anterior */
+}
+
+.alias-card:hover {
+  background: rgba(255, 255, 255, 1) !important;
+  border-color: #e0e0e0 !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15) !important;
+  transform: translateY(-1px) !important;
+}
+
+/* Mejorar estilos de botones dentro de alias cards */
+.alias-card .alias-action-buttons {
+  margin-top: 12px !important;
+  padding-top: 12px !important;
+  border-top: 1px solid rgba(0, 0, 0, 0.1) !important;
+}
+
+.alias-card .alias-action-buttons button {
+  border-radius: 8px !important;
+  font-weight: 600 !important;
+  transition: all 0.2s ease !important;
+}
+
+.alias-card .alias-action-buttons button:hover {
+  transform: translateY(-1px) !important;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2) !important;
+}
+
+.alias-icon-label {
+  font-size: 0.9em;
+  margin-right: 0.5rem;
+}
+
+/* Mejorar estilos de iconos dentro de alias cards */
+.alias-card .alias-icon-wrapper {
+  background: rgba(255, 255, 255, 0.8) !important;
+  border: 1px solid rgba(0, 0, 0, 0.1) !important;
+  border-radius: 8px !important;
+  padding: 4px !important;
+  margin-right: 8px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 4px !important;
+  transition: all 0.2s ease !important;
+}
+
+.alias-card .alias-icon-wrapper:hover {
+  background: rgba(255, 255, 255, 1) !important;
+  border-color: rgba(0, 0, 0, 0.2) !important;
+  transform: translateY(-1px) !important;
+}
+
+.alias-card .alias-icon-img {
+  border-radius: 4px !important;
+}
+
+.alias-card .alias-icon-delete-btn {
+  background: #e74c3c !important;
+  color: white !important;
+  border: none !important;
+  border-radius: 4px !important;
+  padding: 2px 6px !important;
+  font-size: 10px !important;
+  font-weight: bold !important;
+  cursor: pointer !important;
+  transition: all 0.2s ease !important;
+}
+
+.alias-card .alias-icon-delete-btn:hover {
+  background: #c0392b !important;
+  transform: scale(1.1) !important;
+}
+
+.alias-icon-wrapper {
+  display: inline-flex;
+  align-items: center;
+  margin-right: 0.75rem;
+  background-color: #f0f0f0;
+  padding: 2px 5px;
+  border-radius: 4px;
+}
+
+.alias-icon-img {
+  max-height: 1.1em;
+  vertical-align: middle;
+  margin-right: 4px;
+}
+
+.alias-icon-delete-btn {
+  padding: 0 4px;
+  background: #e57373;
+  border: 1px solid #e57373;
+  color: #fff;
+  border-radius: 3px;
+  cursor: pointer;
+  font-size: 0.8em;
+  line-height: 1;
+}
+
+.alias-action-buttons > .btn-small {
+  /* Podríamos añadir estilos base para btn-small si no existen */
+}
+.alias-action-buttons > .btn-add-icon {
+  background: #9c27b0;
+  border-color: #9c27b0;
+  color: #fff;
+}
+.alias-action-buttons > .btn-edit-alias {
+  background: #ffa726;
+  border-color: #ffa726;
+  color: #fff;
+}
+.alias-action-buttons > .btn-delete-alias {
+  background: #f44336;
+  border-color: #f44336;
+  color: #fff;
+}
+
+.protected-text {
+  color: #999;
+}
+
+/* Estilos base para Popups */
+/* LOG: Los popups usan esta clase base. Si el popup se ve mal, revisa aquí. */
+.popup-base {
+  display: none;
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: #fff !important;
+  border: 2.5px solid #111 !important;
+  border-radius: 10px !important;
+  padding: 1rem;
+  z-index: 10000;
+  color: #333;
+  box-shadow: 0 4px 24px rgba(0,0,0,0.13);
+}
+
+/* LOG: Estas clases pueden eliminar bordes y fondos de popups. Si ves popups transparentes o sin borde, revisa aquí. */
+.popup-small {
+  max-width: 400px;
+  width: 90%;
+  /* Mantener el fondo, borde y sombra del popup-base para visibilidad */
+  /* Asegurar posicionamiento centrado */
+  position: fixed !important;
+  top: 50% !important;
+  left: 50% !important;
+  transform: translate(-50%, -50%) !important;
+}
+
+/* Asegurar que los modales de alias se muestren correctamente centrados */
+#aliasPopup[style*="display: block"],
+#editAliasPopup.popup-visible {
+  position: fixed !important;
+  top: 50% !important;
+  left: 50% !important;
+  transform: translate(-50%, -50%) !important;
+  z-index: 10000 !important;
+  text-align: center !important;
+}
+
+/* Centrar contenido dentro de los modales de alias */
+#aliasPopup h4,
+#editAliasPopup h4 {
+  text-align: center !important;
+  margin-bottom: 1rem !important;
+}
+
+#aliasPopup .mb-05,
+#editAliasPopup .mb-05 {
+  text-align: center !important;
+}
+
+#aliasPopup label,
+#editAliasPopup label {
+  display: block !important;
+  text-align: center !important;
+  margin-bottom: 0.5rem !important;
+}
+
+#aliasPopup input[type="text"],
+#editAliasPopup input[type="text"] {
+  margin: 0 auto !important;
+  display: block !important;
+}
+
+#aliasPopup button,
+#editAliasPopup button {
+  margin: 0.5rem 0.25rem !important;
+}
+/* Pantallas grandes - mantener el diseño de dos líneas */
+@media (min-width: 768px) {
+  .position-visibility-container {
+    display: flex !important;
+    align-items: flex-end !important;
+    gap: 1.5rem !important;
+    flex-wrap: wrap !important; /* Permitir wrap para los botones */
+  }
+  
+  .position-visibility-container > div:not(.edit-service-buttons) {
+    display: flex !important;
+    flex-direction: row !important; /* Mantener horizontal */
+    align-items: center !important; /* Centrar verticalmente */
+    gap: 0.5rem !important; /* Gap moderado */
+    flex: 0 0 auto !important;
+  }
+  
+  /* Botones más compactos en pantallas grandes */
+  .edit-service-buttons .btn-green,
+  .edit-service-buttons .btn-red {
+    margin: 0 !important;
+    padding: 0.4rem 0.8rem !important;
+    font-size: 0.85rem !important;
+    height: 32px !important;
+    line-height: 1.2 !important;
+  }
+}
+
+/* En pantallas pequeñas, layout optimizado */
+@media (max-width: 767px) {
+  .position-visibility-container {
+    display: flex !important;
+    flex-wrap: wrap !important; /* Permitir que los botones bajen */
+    gap: 0.5rem !important;
+    align-items: flex-end !important;
+  }
+  
+  /* Posición y dropdown en la primera línea - mantener horizontal */
+  .position-visibility-container > div:not(.edit-service-buttons) {
+    display: flex !important;
+    flex-direction: row !important; /* Mantener horizontal */
+    align-items: center !important; /* Centrar verticalmente */
+    gap: 0.3rem !important; /* Gap más pequeño en móviles */
+    flex: 0 0 auto !important;
+  }
+  
+  /* Botones en la segunda línea, centrados */
+  .position-visibility-container .edit-service-buttons {
+    flex: 1 1 100% !important;
+    justify-content: center !important;
+    margin-top: 0.5rem !important;
+  }
+  
+  /* Dropdown de visibilidad alineado */
+  .visibility-select {
+    height: 28px !important;
+    padding: 0.2rem 0.4rem !important;
+    font-size: 0.8rem !important;
+  }
+  
+  /* Labels alineados */
+  .position-visibility-container label {
+    font-size: 0.9rem !important;
+    margin-bottom: 0.25rem !important;
+  }
+  
+  /* Botones abajo y centrados */
+  .edit-service-buttons {
+    display: block !important;
+    text-align: center !important;
+    margin-top: 1rem !important;
+    clear: both !important;
+  }
+  
+  .edit-service-buttons button {
+    margin: 0.25rem !important;
+    padding: 0.35rem 0.7rem !important;
+    font-size: 0.8rem !important;
+    height: 28px !important;
+    line-height: 1.1 !important;
+  }
+}
+
+.popup-medium {
+   max-width: 500px;
+   border: none !important;
+   background: none !important;
+   box-shadow: none !important;
+}
+
+.popup-overlay {
+  display: none;
+  position: fixed;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  background: rgba(0,0,0,0.5);
+  z-index: 9998; /* Un poco menos que el popup */
+  cursor: pointer; /* Indicar que es clickeable */
+}
+
+.popup-input {
+  width: 100%;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  padding: 0.3rem;
+  box-sizing: border-box; /* Incluir padding en width */
+  max-width: 300px; /* Añadido max-width para limitar inputs en popups */
+}
+
+.popup-color-input {
+  width: 30px;
+  height: 27px;
+  cursor: pointer;
+}
+
+/* Contornos blancos para las 4 secciones de configuración de colores */
+
+/* 1. Sección Colores de Alias */
+.alias-colors-section {
+  border: 2px solid #ffffff !important;
+  border-radius: 12px !important;
+  padding: 1rem !important;
+  margin-bottom: 1rem !important;
+  background: rgba(255, 255, 255) !important;
+}
+
+/* Alinear vista previa en la misma línea */
+.alias-colors-section .d-flex.gap-05,
+.click-colors-section .d-flex.gap-05,
+.normal-colors-section .d-flex.gap-05 {
+  align-items: center !important;
+}
+
+/* Asegurar que la vista previa del gradiente sea visible */
+.gradient-preview {
+  width: 80px !important;
+  height: 30px !important;
+  border: 1px solid #ccc !important;
+  border-radius: 4px !important;
+  display: inline-block !important;
+  margin: 0 0.5rem !important;
+}
+
+.gradient-preview-container {
+  display: flex !important;
+  align-items: center !important;
+  gap: 0.5rem !important;
+}
+
+.service-color-label {
+  font-weight: 600 !important;
+  color: #333 !important;
+  white-space: nowrap !important;
+}
+
+/* 2. Sección Cuando se da clic */
+.click-colors-section {
+  border: 2px solid #ffffff !important;
+  border-radius: 12px !important;
+  padding: 1rem !important;
+  margin-bottom: 1rem !important;
+  background: rgba(255, 255, 255) !important;
+}
+
+/* 3. Sección Sin darle clic */
+.normal-colors-section {
+  border: 2px solid #ffffff !important;
+  border-radius: 12px !important;
+  padding: 1rem !important;
+  margin-bottom: 1rem !important;
+  background: rgba(255, 255, 255) !important;
+}
+
+/* 4. Sección Crear Nuevo Servicio */
+.create-service-section {
+  border: 2px solid #ffffff !important;
+  border-radius: 12px !important;
+  padding: 1rem !important;
+  margin-bottom: 1rem !important;
+  background: rgba(255, 255, 255) !important;
+}
+
+/* Contorno blanco solo para colores de alias */
+#newAliasColor1:focus,
+#newAliasColor1:active,
+#newAliasColor2:focus,
+#newAliasColor2:active {
+  border: 2px solid #ffffff !important;
+  outline: none !important;
+}
+
+.popup-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.popup-button-confirm {
+  background: #4caf50;
+  border: 2px solid #4caf50;
+  color: #fff;
+  padding: 0.3rem 0.7rem;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.popup-button-cancel {
+  background: #f44336;
+  border: 2px solid #f44336;
+  color: #fff;
+  padding: 0.3rem 0.7rem;
+  border-radius: 4px;
+  cursor: pointer;
+  margin-left: 0.5rem;
+}
+
+/* Clases para refactorizar filters, forgot_password, login */
+.login-container-zoomed {
+  max-width: 400px;
+  margin: 2rem auto;
+}
+
+.text-center { text-align: center; }
+
+/* Clases para colores de texto */
+.text-dark { color: #333; }
+.text-left { text-align: left; }
+
+.justify-content-center { justify-content: center; }
+
+.login-input {
+  width: 220px;
+  text-align: center;
+}
+
+.login-input-password {
+  /* Hereda de login-input */
+  padding-right: 30px;
+}
+
+.password-toggle-icon {
+  position: absolute;
+  right: 5px;
+  top: 50%;
+  transform: translateY(-50%);
+  cursor: pointer;
+}
+
+.remember-user-container {
+  text-align: left;
+  margin: 1rem auto;
+  max-width: 300px;
+}
+
+.btn-rounded {
+  border-radius: 20px;
+  padding: 0.4rem 1rem;
+}
+
+.form-errors {
+  color: #e74c3c; /* Rojo error */
+  margin-top: 1rem;
+  list-style-type: none; /* Opcional: quitar bullets */
+  padding-left: 0; /* Opcional: quitar padding */
+}
+
+.form-errors li ul {
+  list-style-type: none;
+  padding-left: 1em;
+}
+
+/* Clases específicas para email.html */
+.no-shrink { flex-shrink: 0; }
+
+.text-small { font-size: 0.9rem; }
+.text-smaller { font-size: 0.85rem; }
+.text-medium-small { font-size: 0.95rem; }
+.text-secondary { color: #555; }
+.text-success { color: green; }
+.text-italic { font-style: italic; }
+
+.list-padding-left-15 { padding-left: 1.5rem; }
+
+.resize-vertical { resize: vertical; }
+
+.allowed-emails-display {
+  min-height: 90px;
+  border: 1px solid #ccc;
+  padding: 10px;
+  margin-bottom: 0.5rem;
+  background-color: #ffffff;
+  font-family: monospace;
+  white-space: pre-wrap;
+  overflow-y: auto;
+}
+
+.textarea-wide {
+  width: 95%;
+}
+
+.select-padding-3px {
+  padding: 3px;
+}
+
+/* Ajustar paginación en email.html para pantallas pequeñas */
+@media (max-width: 768px) {
+  .pagination-info-wrapper {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    line-height: 1.2;
+  }
+  
+  #allowedEmailsPagination {
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    justify-content: space-between;
+  }
+  
+  #allowedEmailsPagination > #deleteAllEmailsBtn {
+    margin-left: auto;
+    margin-right: 0;
+  }
+  
+  #allowedEmailsPagination > .ml-auto {
+    width: 100%;
+    display: flex;
+    justify-content: center;
+    margin-left: 0 !important;
+    margin-right: 0;
+    order: 3;
+  }
+}
+
+/* Reutilizamos .popup-base, .popup-small, .popup-medium, .popup-overlay, 
+   .popup-button-confirm, .popup-button-cancel de edit_service.html 
+   Añadimos estilos específicos si es necesario */
+
+.modal-list-container {
+  max-height: 300px;
+  overflow: auto;
+  margin-bottom: 1rem;
+}
+
+.modal-subuser-list-container {
+  max-height: 250px;
+  overflow: auto;
+  margin-bottom: 1rem;
+}
+
+/* Estilos para ítems dentro de modales (si son comunes) */
+.modal-list-item {
+  padding: 6px;
+}
+.modal-list-item-even { background: #f9f9f9; }
+.modal-list-item-odd { background: #fff; }
+
+.modal-list-item label {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.modal-list-item small {
+  /* Estilos para descripción pequeña */
+}
+
+.modal-list-item em.locked-indicator {
+  color: #dc3545;
+  font-size: 0.8rem;
+  margin-left: auto;
+}
+
+/* Responsive styles for edit_service.html header buttons */
+@media (max-width: 600px) { /* O el breakpoint que prefieras */
+  .edit-service-header-container {
+    flex-wrap: wrap; /* Permitir que el título y los botones se envuelvan */
+    gap: 0.5rem; 
+  }
+  .edit-service-header-buttons button {
+     /* Quitar margen derecho y añadir margen inferior si se envuelven */
+    margin-right: 0 !important; 
+    margin-left: 0; /* Asegurar que no haya margen izquierdo extra */
+    margin-bottom: 0.5rem; /* Espacio si se envuelve debajo */
+  }
+}
+
+/* Sobrescribir/Añadir estilos de .admin-card específicos para search.html si es necesario */
+.search-page-container .admin-card {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.btn-login-user {
+  background-color: #2196f3; 
+  color: #fff;
+  font-size: 1rem;
+  font-weight: 600;
+  border: 2px solid #2196f3;
+  padding: 0.4rem 0.8rem;
+  border-radius: 5px;
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.services-row {
+  display: flex;
+  flex-wrap: wrap;
+  margin-bottom: 0;
+  justify-content: center;
+}
+
+.service-btn-container {
+  position: relative;
+  flex: 1 1 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  padding: 0.5rem 0.5rem 0.5rem 0;
+  margin-bottom: 0.1rem;
+  border-radius: 5px;
+  border: none;
+  box-shadow: none;
+  background: none;
+}
+
+@media (min-width: 601px) {
+  .service-btn-container {
+    flex: 1 1 calc(50% - 1.3rem);
+    max-width: calc(50% - 1.3rem);
+  }
+}
+
+.service-btn {
+  position: relative;
+  border: none;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+  cursor: pointer;
+  color: #fff;
+  transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  outline: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 1rem;
+  margin: 0;
+  width: 100%;
+  text-align: left;
+  border-radius: 30px;
+  height: 3.5rem;
+  padding: 0 1rem;
+  overflow: hidden;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+  backdrop-filter: blur(10px);
+  font-weight: 600;
+  /* El background-color se aplica inline en la plantilla */
+}
+
+/* Efecto shimmer/brillo sutil */
+.service-btn::before {
+  content: '';
+  position: absolute;
+  top: -50%;
+  left: -50%;
+  width: 200%;
+  height: 200%;
+  background: linear-gradient(45deg, transparent, rgba(255, 255, 255, 0.1), transparent);
+  transform: translateX(-100%) translateY(-100%) rotate(45deg);
+  pointer-events: none;
+}
+
+/* Hover effects */
+.service-btn:hover {
+  transform: translateY(-2px) scale(1.02);
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.2);
+  filter: brightness(1.1) saturate(1.1);
+}
+
+.service-btn:hover::before {
+  transform: translateX(100%) translateY(100%) rotate(45deg);
+}
+
+/* Active/Click effect */
+.service-btn:active {
+  transform: translateY(0) scale(0.98);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.15);
+  transition: all 0.1s ease;
+}
+
+/* Estilo para botón de servicio seleccionado (persistente) */
+.service-btn-selected {
+  transform: translateY(0) scale(0.98) !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4) !important;
+  border: 2px solid rgba(255, 255, 255, 0.3) !important;
+  position: relative;
+  z-index: 2;
+}
+
+.service-btn-selected::after {
+  content: '✓';
+  position: absolute;
+  top: 5px;
+  right: 8px;
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 14px;
+  font-weight: bold;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+  pointer-events: none;
+}
+
+/* Focus effect para accesibilidad */
+.service-btn:focus {
+  outline: 3px solid rgba(255, 255, 255, 0.3);
+  outline-offset: 2px;
+}
+
+.service-btn img {
+  height: 2.2rem;
+  width: auto;
+  object-fit: contain;
+  vertical-align: middle;
+  filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.3));
+}
+
+/* Efecto en las imágenes cuando se hace hover en el botón */
+.service-btn:hover img {
+  transform: scale(1.1);
+  filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.4));
+}
+
+.info-icon {
+  margin-left: auto;
+  font-size: 1.4rem;
+  cursor: pointer;
+  user-select: none;
+}
+
+
+.main-message-wrapper {
+  max-width: 100%;
+  word-wrap: break-word;
+  text-align: center;
+  margin-bottom: 0;
+}
+
+/* Overlay opaco para el modal de alias */
+#aliasPopupOverlay {
+  display: none;
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.6);
+  z-index: 9998;
+  backdrop-filter: blur(2px);
+}
+
+/* Estilos específicos para el popup de alias en search.html */
+#aliasPopup {
+  display: none;
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: #fff;
+  border: none; /* Sin borde negro */
+  border-radius: 12px;
+  padding: 1.5rem;
+  padding-top: 2.5rem; /* Espacio extra arriba para la X */
+  z-index: 9999;
+  max-width: 600px;
+  width: 90%;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+  max-height: 80vh;
+  overflow-y: auto;
+  position: relative; /* Para posicionar la X correctamente */
+}
+
+/* Estilos específicos para el popup de alias en edit_service.html */
+.edit-service-page #aliasPopup,
+.form-container-wide.edit-service-page #aliasPopup,
+div.edit-service-page #aliasPopup {
+  padding: 0 !important;
+  padding-top: 0 !important;
+  max-width: none !important;
+  width: auto !important;
+  min-width: 300px !important;
+}
+
+/* Selector alternativo con mayor especificidad */
+body .edit-service-page #aliasPopup {
+  padding: 0 !important;
+  padding-top: 0 !important;
+  max-width: none !important;
+  width: auto !important;
+}
+
+#aliasPopup .alias-popup-close { /* Selector más específico */
+  position: absolute;
+  top: 10px;
+  right: 15px;
+  color: #ff0b0b;
+  border: none;
+  border-radius: 50%;
+  cursor: pointer;
+  font-size: 20px;
+  font-weight: bold;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.3s ease;
+  line-height: 1;
+  padding: 0;
+}
+
+#aliasPopup .alias-popup-close:hover {
+  background: rgba(255, 0, 0, 0.1);
+  color: #c00;
+  transform: scale(1.1);
+}
+
+/* Mostrar el modal cuando tiene la clase popup-visible */
+#aliasPopup.popup-visible {
+  display: block !important;
+  animation: modalFadeIn 0.3s ease-out;
+}
+
+/* OVERRIDE ESPECÍFICO PARA EDIT SERVICE - DEBE IR AL FINAL */
+.edit-service-page #aliasPopup.popup-visible,
+.edit-service-page #aliasPopup[style*="display: block"] {
+  padding: 0 !important;
+  padding-top: 0 !important;
+  max-width: none !important;
+  width: auto !important;
+  min-width: 300px !important;
+}
+
+/* Animación de entrada del modal */
+@keyframes modalFadeIn {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.9);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+}
+
+/* Media query específica para el popup de alias en search.html */
+@media (max-width: 600px) {
+  #aliasPopup,
+  #aliasPopup.popup-visible,
+  #aliasPopup[style*="display: block"] {
+    max-width: 87% !important; /* Aumentado para más ancho en móvil */
+    width: 87% !important; /* Asegurar que use el ancho completo disponible */
+    position: fixed !important;
+    top: 50% !important;
+    left: 50% !important;
+    transform: translate(-50%, -50%) !important;
+    margin: 0 !important;
+  }
+  /* Ajuste espaciado botones de servicio en móvil */
+  .services-row { 
+    gap: 0.05rem; /* Mantenido gap para espaciado vertical *AZQSDW
+    /* justify-content: flex-start; /* Opcional: alinear a la izquierda si prefieres */
+  } 
+  .service-btn-container { 
+    /* Eliminado margin-bottom */
+    /* Eliminado flex y max-width para que hereden el 100% de ancho */
+  } 
+  
+  /* Efectos más suaves en móvil para botones de servicios */
+  .service-btn:hover {
+    transform: translateY(-1px) scale(1.01);
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15);
+  }
+  
+  .service-btn:active {
+    transform: translateY(0) scale(0.99);
+    transition: all 0.1s ease;
+  }
+  
+  .service-btn:hover img {
+    transform: scale(1.05);
+  }
+}
+
+/* Estilos modo oscuro específicos de search.html */
+.dark-mode .search-page-container .admin-card { /* Más específico */
+  background-color: rgba(55,55,55,0.9);
+  color: #fff;
+}
+
+.dark-mode .service-btn { /* Ya podría existir globalmente */
+  /* background-color: #444; */ /* Comentado: Se aplica inline */
+  /* color: #fff; */ /* Ya aplicado por defecto en .service-btn? */
+}
+
+.dark-mode .btn-search { /* Ya podría existir globalmente */
+  /* background-color: #444; */
+  /* color: #fff; */
+  /* border: 2px solid #444; */
+}
+
+/* Clases específicas para cabecera de search.html */
+.search-header-actions {
+  text-align: right;
+  margin-bottom: 1rem;
+}
+
+.theme-toggle-container {
+  text-align: right;
+  margin-bottom: 0; /* Asegurar que no haya margen inferior */
+}
+
+.info-text-small {
+  /* Combinar con .mt-1 */
+  /* color: #333; */ /* Quitado, debería heredar o manejar con dark-mode */
+  font-size: 0.9rem;
+}
+
+.max-width-400 { max-width: 400px; }
+
+/* Estilos específicos movidos de parrafos.html */
+.textarea-paragraph {
+  /* Podríamos combinar d-block, w-100, resize-vertical aquí */
+  /* Pero usar clases de utilidad es más flexible */
+}
+.paragraph-status-text {
+  color: #666;
+  /* Combinar con ml-auto */
+}
+.link-button-thick-blue {
+  background: #2196f3;
+  border: 3px solid #2196f3;
+  color: #fff;
+  padding: 0.4rem 0.8rem;
+  border-radius: 5px;
+  text-decoration: none;
+  display: inline-block; /* Añadido para padding */
+}
+
+.w-100 { width: 98%; } /* Ancho completo */
+.text-right { text-align: right; }
+
+/* Estilos específicos movidos de admin_dashboard.html */
+.info-text-small {
+  /* color: #333; */ /* Color heredado o manejado por dark-mode */
+  font-size: 0.9rem;
+}
+.max-width-400 { max-width: 400px; }
+
+/* Estilos específicos movidos de parrafos.html */
+.hr-margin-1 { margin-top: 1rem; margin-bottom: 1rem; }
+.hr-margin-15 { margin-top: 1.5rem; margin-bottom: 1.5rem; }
+.hr-margin-08 { margin-top: 0.8rem; margin-bottom: 0.8rem; }
+
+.paragraph-status-text {
+  color: #666; /* Mantenido color específico */
+}
+.link-button-thick-blue {
+  background: #2196f3;
+  border: 3px solid #2196f3;
+  color: #fff;
+  padding: 0.4rem 0.8rem;
+  border-radius: 5px;
+  text-decoration: none;
+  display: inline-block;
+}
+
+/* Estilos específicos para edit_service.html */
+.heading-service-edit { font-size: 1.5rem; }
+.align-items-end { align-items: flex-end; }
+.gap-1-5 { gap: 1.5rem; }
+.justify-content-start { justify-content: flex-start; }
+.mt-075 { margin-top: 0.75rem; }
+.word-break-all { word-break: break-all; }
+.width-70pc { width: 70%; }
+
+/* Estilos específicos para admin_dashboard.html */
+.admin-dashboard-title {
+  font-size: 1.5rem;
+}
+
+.password-input-wrapper { 
+  position: relative; 
+}
+
+.popup-visible {
+    display: block !important; /* Usamos !important aquí para asegurar que anule .popup-base */
+}
+/* O si el popup usa flex: */
+.popup-visible-flex {
+    display: flex !important;
+}
+
+/* Clases específicas para usuarios.html */
+.input-password-short {
+  width: 150px; /* Ancho específico */
+  padding-right: 30px; /* Espacio para el icono */
+}
+
+.password-toggle-icon-create {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  cursor: pointer;
+  color: #007bff;
+}
+
+.password-toggle-icon-edit {
+  position: absolute;
+  left: 160px; /* Posición específica del popup editar */
+  top: 50%;
+  transform: translateY(-50%);
+  cursor: pointer;
+  color: #007bff;
+}
+
+.color-picker-small { /* Reutilizamos o adaptamos popup-color-input */
+  width: 50px;
+  height: 30px;
+  cursor: pointer;
+}
+
+.position-input-small {
+  max-width: 55px;
+  width: 100%;
+  box-sizing: border-box;
+  margin-left: 4px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  padding: 0.2rem;
+}
+
+.label-no-wrap {
+  white-space: nowrap;
+}
+
+.email-search-input-style {
+  padding: 0.4rem;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  /* Hereda flex-grow de .flex-grow-1 */
+}
+
+.mb-04 { margin-bottom: 0.4rem; }
+
+/* Botones específicos para gestión de correos en sub-usuarios */
+.select-all-emails, .deselect-all-emails, .save-subuser-emails {
+  /* Heredan estilos de .btn-green, .btn-orange, .btn-blue respectivamente */
+}
+
+/* Botones específicos para gestión de herramientas en sub-usuarios */
+.select-all-tools, .deselect-all-tools {
+  /* Heredan estilos de .btn-green, .btn-orange respectivamente */
+}
+
+.save-status-msg, .save-status-msg-tools {
+  font-style: italic;
+  opacity: 0.8;
+}
+
+/* Clase general para botones pequeños */
+.btn-small {
+  padding: 0.25rem 0.5rem;
+  font-size: 0.875rem;
+  border-radius: 3px;
+}
+
+/* Sección de formulario */
+.form-section {
+  margin-bottom: 1rem;
+}
+
+/* Elementos de email y herramientas */
+.email-item {
+  margin-bottom: 0.4rem;
+}
+
+.tool-item {
+  margin-bottom: 0.4rem;
+}
+
+.label-flex {
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+
+.cursor-pointer { cursor: pointer; }
+
+.checkbox-email-item {
+  margin-right: 0.5rem;
+  transform: scale(1.1);
+  /* Considerar si scale afecta layout */
+}
+
+/* Clases para checkboxes de sub-usuarios */
+.subuser-email-checkbox {
+  margin-right: 0.5rem;
+  transform: scale(1.1);
+}
+
+.subuser-tool-checkbox {
+  margin-right: 0.5rem;
+  transform: scale(1.1);
+}
+
+/* Clases específicas para search.html */
+#spinner { 
+  display: none; /* Oculto inicialmente */
+}
+
+.spinner-image {
+  height: 50px;
+}
+
+.app-logo-image {
+  height: 70px;
+}
+
+/* Estilo específico para herramientas públicas - no aplica a tienda */
+.public-tools-container .search-form-container {
+  margin: 3rem auto 0.1rem auto; /* margin-top: 3rem, margin-bottom: 0.1rem */
+}
+
+/* Los estilos de .alias-popup-item se aplican dinámicamente desde JavaScript */
+
+.select-min-width-200 {
+  min-width: 200px;
+}
+
+/* Clases adicionales finales */
+.min-height-2-5rem { min-height: 2.5rem; }
+.gap-03 { gap: 0.3rem; }
+.max-width-200 { max-width: 200px; }
+
+/* --- Estilos para resultados de Regex (generados por JS) --- */
+.regex-result-container {
+  background: #ffffff;
+  border-radius: 6px; /* Añadir borde redondeado */
+  padding-top: 15px; /* Espacio arriba para el número */
+}
+
+.regex-result-code {
+  font-size: 1.4rem;
+  color: #444;
+  margin: 0 0 0.5rem 0; /* Margen inferior para separar de botones */
+  display: inline-block; /* Para que botones queden al lado */
+  word-break: break-all; /* Romper texto largo si es necesario */
+}
+
+/* Los botones regex con colores intercambiados */
+.regex-result-copy-btn,
+.regex-result-open-link-btn {
+  margin-left: 1rem;
+  /* Estado normal ahora usa el color que antes tenía COPIADO */
+  background: linear-gradient(135deg, #764ba2 0%, #667eea 100%) !important;
+  /* Asegurar que no hay efectos de destello */
+  overflow: visible !important;
+  position: relative !important;
+}
+
+/* Hover para botones regex - usar el color original de COPIAR */
+.regex-result-copy-btn:hover,
+.regex-result-open-link-btn:hover {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+}
+
+/* Los efectos hover, active y focus ahora se heredan automáticamente 
+   de las clases .search-page .btn-search.btn-rounded */
+
+/* Eliminar efecto de brillo para botones regex - solo colores sólidos */
+.regex-result-copy-btn::before,
+.regex-result-open-link-btn::before,
+.search-page .regex-result-copy-btn::before,
+.search-page .regex-result-open-link-btn::before {
+  display: none !important;
+  content: none !important;
+}
+
+/* Eliminar transiciones de destello en hover para botones regex */
+.regex-result-copy-btn:hover::before,
+.regex-result-open-link-btn:hover::before,
+.search-page .regex-result-copy-btn:hover::before,
+.search-page .regex-result-open-link-btn:hover::before {
+  display: none !important;
+  content: none !important;
+  left: -100% !important;
+}
+
+/* Botón limpiar con mismo estilo que botones de servicio */
+#email-search-clear-btn {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+  border: none !important;
+  color: white !important;
+  padding: 0.4rem 0.8rem !important;
+  border-radius: 20px !important;
+  font-weight: 600 !important;
+  box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3) !important;
+  transition: all 0.3s ease !important;
+  cursor: pointer !important;
+}
+
+#email-search-clear-btn:hover {
+  transform: translateY(-1px) scale(1.02) !important;
+  box-shadow: 0 6px 20px rgba(102, 126, 234, 0.5) !important;
+}
+
+#email-search-clear-btn:active {
+  transform: translateY(0) scale(1.01) !important;
+  box-shadow: 0 3px 10px rgba(102, 126, 234, 0.4) !important;
+}
+
+/* Eliminar destello del botón limpiar y otros botones grises */
+#email-search-clear-btn::before,
+.btn-grey::before,
+.btn-grey:hover::before {
+  display: none !important;
+  content: none !important;
+}
+
+/* Estado COPIADO - ahora usa el color original de COPIAR */
+.regex-result-copy-btn.copied-state,
+.regex-result-open-link-btn.copied-state {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+  transform: translateY(-1px) scale(1.01) !important;
+  box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4) !important;
+  color: white !important;
+}
+
+/* Estado ERROR - estilo rojo manteniendo la forma de los botones de servicios */
+.regex-result-copy-btn.error-state,
+.regex-result-open-link-btn.error-state {
+  background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%) !important;
+  transform: translateY(-1px) scale(1.01) !important;
+  box-shadow: 0 6px 20px rgba(231, 76, 60, 0.4) !important;
+  color: white !important;
+}
+
+.regex-result-date {
+  font-size: 0.9rem;
+  color: #666;
+  margin-top: 0.75rem; /* Reducir margen superior */
+}
+
+.regex-result-date-only {
+  font-size: 0.9rem;
+  color: #666;
+  margin-top: 1rem;
+}
+
+
+/* --- Ajustes Móviles para Regex Results --- */
+  .regex-result-code {
+     font-size: 1.2rem; /* Reducir tamaño fuente código */
+     display: block; /* Hacer que ocupe su línea */
+     margin-bottom: 0.75rem; /* Más margen inferior */
+  }
+  /* Ajustes específicos para móvil - los estilos base se heredan de btn-search.btn-rounded */
+  .regex-result-copy-btn,
+  .regex-result-open-link-btn {
+      margin-left: 0; /* Sin margen izquierdo en móvil */
+       margin-right: 0.5rem; /* Espacio entre botones si se envuelven */
+       margin-top: 0.25rem; /* Espacio superior si se envuelven */
+  }
+}
+
+/* --- Estilos para secciones de párrafos (parrafos.html) --- */
+/* Eliminadas reglas para .paragraph-section ya que ahora se usa .admin-card */
+
+/* Regla más específica para inputs dentro de popups */
+.popup-base input[type="text"]:not([name*='search']),
+.popup-base input[type="password"],
+.popup-base input[type="number"],
+.popup-base input[type="email"],
+.popup-base textarea,
+.popup-base select {
+    max-width: 220px; /* Reducido aún más el max-width para popups */
+    width: 100%;
+}
+
+/* Asegurarse que el input de posición en popups también se vea afectado */
+.popup-base .position-input-small {
+    max-width: 60px; /* Mantenido */
+    width: 60px;
+}
+
+/* --- Ajustes adicionales para usuarios.html --- */
+
+/* Input de Usuario en CREAR USUARIO (Formulario en página) */
+.admin-card form input[name='username'] {
+  max-width: 180px !important; /* Reducido aún más */
+  width: 100%;
+}
+
+/* Input de Posición en CREAR USUARIO (Formulario en página) */
+.admin-card form input[name='position'] {
+  width: 50px !important; /* Muy pequeño */
+  max-width: 24px !important;
+  flex-grow: 0 !important; /* Asegurar que no se estire */
+}
+
+/* Input de Usuario en EDITAR USUARIO (Popup) */
+.popup-base input[name='username'] {
+    max-width: 180px !important; /* Reducido más */
+    width: 100%;
+}
+
+/* Input de Contraseña en EDITAR USUARIO (Popup) */
+.popup-base input[name='new_password'] {
+    max-width: 180px !important; /* Reducido más */
+    width: 100%;
+}
+
+/* Input de Posición en EDITAR USUARIO (Popup) */
+.popup-base input[name='position'] {
+    max-width: 50px !important; /* Muy pequeño */
+    width: 50px !important;
+}
+
+
+.admin-card form .d-flex .flex-grow-1 {
+  min-width: 150px;          /* Evitar que se encoja demasiado */
+  /* Mantenemos flex-grow: 1 por la clase */
+}
+
+/* Input de Posición en CREAR USUARIO (por atributo name) */
+/* Dentro de una fila flex */
+.admin-card form .d-flex input[name='position'] {
+  width: 55px !important;   /* Muy pequeño */
+  max-width: 55px !important;
+  flex: 0 0 55px !important; /* No crecer, No encoger, Base 55px */
+  padding: 0.4rem;         /* Consistencia en padding */
+}
+
+/* --- Ajustes para Popup Editar Usuario (id=editUserPopup) --- */
+
+/* Limitar ancho de inputs con .flex-grow-1 DENTRO del popup */
+#editUserPopup .flex-grow-1 { /* Asumiendo que el popup también usa .flex-grow-1 */
+  max-width: 200px !important;
+  min-width: 150px;
+}
+
+/* Input de Posición DENTRO del popup */
+#editUserPopup input[name='position'] { /* Asumiendo name='position' también en popup */
+  width: 55px !important;
+  max-width: 55px !important;
+  flex: 0 0 55px !important;
+  padding: 0.4rem;
+}
+
+/* --- Fin Ajustes Precisos --- */
+
+/* Clases para fechas y errores (seguridad: sin estilos inline) */
+.date-part {
+  color: #666;
+}
+
+.time-part {
+  color: #333;
+  font-weight: 500;
+}
+
+.error-message-large {
+  color: red;
+  font-size: 1.2rem;
+}
+
+.error-message {
+  color: #f44336; /* Rojo para errores */
+}
+
+.input-admin-id {
+  width: 120px;
+}
+
+/* --- FIN Estilos específicos para admin_dashboard.html --- */
+
+/* Solo contenido puro para filtros en modo oscuro - sin estilos visuales */
+body.dark-mode .filter-match {
+  background: #ffffff !important; /* Fondo blanco para consistencia */
+  border: none !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  max-width: none !important;
+}
+
+/* Anular cualquier padding inline en modo oscuro */
+body.dark-mode .filter-match * {
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+}
+
+/* Forzar fondo blanco en elementos con estilo inline gris */
+.filter-match *[style*="background-color: #e5e5e5"],
+.filter-match *[style*="background-color:#e5e5e5"] {
+  background-color: #ffffff !important;
+}
+
+/* Eliminar padding lateral inline de 40px */
+.filter-match *[style*="padding-left: 40px"],
+.filter-match *[style*="padding-left:40px"],
+.filter-match *[style*="padding-right: 40px"],
+.filter-match *[style*="padding-right:40px"] {
+  padding-left: 1rem !important;
+  padding-right: 1rem !important;
+}
+
+/* Eliminar estilos inline de contenedor para consistencia */
+.filter-match *[style*="box-shadow"],
+.filter-match *[style*="border: 1px solid #eaeaea"],
+.filter-match *[style*="border:1px solid #eaeaea"],
+.filter-match *[style*="border-radius: 8px"],
+.filter-match *[style*="border-radius:8px"],
+.filter-match *[style*="padding-bottom: 0"],
+.filter-match *[style*="padding-bottom:0"] {
+  box-shadow: none !important;
+  border: none !important;
+  border-radius: 0 !important;
+  padding-bottom: 0 !important;
+}
+
+/* Estilos para botones de visibilidad de servicio */
+.visibility-btn {
+  /* Estilos base comunes si los necesitas */
+  border: 2px solid transparent; 
+  color: #fff; 
+  margin-right: 0.3rem; 
+  padding: 0.2rem 0.6rem; 
+  border-radius: 4px; 
+  cursor: pointer;
+}
+
+.visibility-btn-off {
+  background-color: #f44336; /* Rojo */
+  border-color: #f44336;
+}
+
+.visibility-btn-on-no-usuarios {
+  background-color: #2196f3; /* Azul */
+  border-color: #2196f3;
+}
+
+.visibility-btn-on-usuarios {
+  background-color: #4caf50; /* Verde */
+  border-color: #4caf50;
+}
+
+.visibility-btn-on-no-usuarios-no-visible {
+  background-color: #9c27b0; /* Púrpura */
+  border-color: #9c27b0;
+}
+
+.visibility-btn-codigos-2 {
+  background-color: #17a2b8; /* Cyan */
+  border-color: #17a2b8;
+}
+
+/* Estilo para imagen de icono de servicio en la lista */
+.service-icon-img {
+  max-height: 1.3em; 
+  border: 1px solid #ccc; 
+  border-radius: 4px; 
+  vertical-align: middle;
+  /* Añadimos max-width para evitar desbordes */
+  max-width: 100%; 
+  height: auto; /* Mantiene proporción */
+}
+
+/* Estilo para el botón de eliminar icono de servicio */
+.delete-service-icon-btn {
+  background: #f44336; 
+  border: 2px solid #f44336; 
+  color: #fff; 
+  margin-left: 0.2rem; 
+  padding: 0 5px; 
+  border-radius: 4px; 
+  cursor: pointer; 
+  vertical-align: middle;
+  line-height: 1; /* Ajuste para botones pequeños */
+  font-size: 0.9em; /* Ajuste para botones pequeños */
+}
+
+/* ... añadir más colores si es necesario ... */
+
+/* Clase para ocultar visualmente pero mantener accesible (Screen Reader Only) */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap; /* Evitar que el texto se divida en múltiples líneas */
+  border: 0;
+}
+
+/* ===== Scroll horizontal responsivo para usuarios (como en tienda) ===== */
+.usuarios-scroll-responsive {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  max-width: 100vw;
+}
+
+@media (max-width: 700px) {
+  .popup-medium {
+    min-width: 70vw !important;
+    max-width: 80vw !important;
+  }
+  #editUserPopup #editUserPhone {
+    max-width: 220px !important;
+    width: 100%;
+    margin-left: 0;
+    margin-right: 0;
+    display: block;
+  }
+  #userListContainer,
+  .usuarios-scroll-responsive {
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch;
+    max-width: 100vw;
+    display: block !important;
+    white-space: normal !important;
+  }
+  .user-item {
+    display: flex !important;
+    flex-wrap: wrap !important;
+    width: 100%;
+    min-width: 320px;
+    box-sizing: border-box;
+  }
+}
+
+/* Eliminar o ajustar reglas que interfieran con el scroll */
+.admin-card {
+  overflow-x: visible; /* Cambiar a visible para evitar conflictos */
+}
+
+/* Asegurar que el scroll funcione en la lista de usuarios */
+#userListContainer {
+  overflow-x: auto;
+}
+
+.input-admin-phone {
+  height: 38px;
+  padding: 0.4rem;
+  border-radius: 4px;
+  border: 1px solid #ccc;
+  font-size: 1rem;
+  box-sizing: border-box;
+  margin-bottom: 0.5rem;
+  background: #fff;
+}
+
+@media (max-width: 700px) {
+  .popup-medium {
+    min-width: 70vw !important;
+    max-width: 80vw !important;
+  }
+}
+
+.btn-imap-action {
+  min-width: 90px;
+  max-width: 120px;
+  padding: 0.45rem 0.8rem;
+  font-size: 1rem;
+  font-weight: 500;
+  border-radius: 8px;
+  text-align: center;
+}
+
+.btn-imap-small {
+  font-size: 0.92rem !important;
+  padding: 0.32rem 0.7rem !important;
+  min-width: 54px;
+  max-width: 100px;
+  border-radius: 7px;
+}
+
+.imap-item .mt-05 {
+  flex-wrap: wrap;
+  gap: 0.25rem !important;
+  align-items: center;
+}
+
+.btn-imap-action,
+.btn-imap-small {
+  margin-left: 0.1rem !important;
+  margin-right: 0.1rem !important;
+}
+
+.admin-card select, .admin-card input, .admin-card textarea {
+  border: 1px solid #111 !important;
+  border-radius: 16px !important;
+  background: #fff !important;
+  color: #111 !important;
+}
+
+body #popupRegex.popup-base, 
+body #popupFilter.popup-base, 
+body #popupRegex.popup-base.popup-small, 
+body #popupFilter.popup-base.popup-small {
+  border: 2.5px solid #000 !important;
+  border-radius: 10px !important;
+  background: #fff !important;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.10) !important;
+  z-index: 10001 !important;
+}
+
+/* Elimina el borde de los popups base para que no interfiera */
+.popup-base, .popup-small {
+  background: #fff !important;
+  border: 2.5px solid #111 !important;
+  border-radius: 10px !important;
+  box-shadow: 0 4px 24px rgba(0,0,0,0.13);
+}
+
+#popupRegex select,
+#popupFilter select {
+  border: 2.5px solid #000 !important;
+  border-radius: 8px !important;
+  background: #fff !important;
+  color: #111 !important;
+  box-shadow: none !important;
+}
+
+/* LOG: Los popups usan esta clase base. Si el popup se ve mal, revisa aquí. */
+#editUserPopup.popup-base,
+#editUserPopup.popup-base.popup-medium,
+#editUserPopup.popup-base.popup-small {
+  background: #fff !important;
+  border-radius: 12px !important;
+  border: 1.5px solid #ccc !important;
+  box-shadow: 0 2px 16px rgba(0,0,0,0.10) !important;
+}
+
+#iconGridContainer {
+  background: #fff !important;
+  border: 2px solid #111 !important;
+  border-radius: 12px !important;
+  box-shadow: 0 4px 24px rgba(0,0,0,0.10) !important;
+  padding: 1.2rem !important;
+  z-index: 10010 !important;
+}
+
+.edit-filter-enabled-row {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  margin-bottom: 1rem;
+}
+
+.edit-filter-enabled-row label {
+  margin-bottom: 0;
+  font-weight: 500;
+  width: auto;
+  min-width: unset;
+  flex: none;
+}
+
+.edit-filter-enabled-row input[type="checkbox"] {
+  width: auto !important;
+  min-width: unset !important;
+  max-width: unset !important;
+  margin-left: 0.1rem;
+  margin-right: 0;
+  transform: scale(1.15);
+}
+
+/* Estilos para formularios generales */
+.form-group {
+  margin-bottom: 15px;
+}
+
+.form-group label {
+  display: block;
+  margin-bottom: 5px;
+  font-weight: bold;
+  color: #2c3e50;
+}
+
+.form-group input {
+  width: 100%;
+  padding: 8px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  box-sizing: border-box;
+  font-size: 14px;
+}
+
+.form-group input:focus {
+  border-color: #007bff;
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.25);
+}
+
+#editUserPopup input,
+#editUserPopup select,
+#editUserPopup textarea {
+  border: 2px solid #111 !important;
+  background: #fff !important;
+  color: #111 !important;
+  border-radius: 6px !important;
+}
+
+#editUserPopup input[type="color"] {
+  border: none !important;
+  background: none !important;
+  width: 50px;
+  height: 30px;
+  cursor: pointer;
+  padding: 0;
+}
+
+#newUserColor {
+  border: none !important;
+  background: none !important;
+  width: 50px;
+  height: 30px;
+  cursor: pointer;
+  padding: 0;
+}
+
+#user-management-container .admin-card label.d-flex.align-items-center.gap-03 {
+  justify-content: flex-start !important;
+  width: 100% !important;
+  margin-left: 0 !important;
+  padding-left: 0 !important;
+  gap: 0.18rem !important;
+}
+#user-management-container .admin-card label.d-flex input[type="checkbox"] {
+  margin-left: 0 !important;
+  margin-right: 0.3rem !important;
+}
+#user-management-container .admin-card .d-flex.gap-05.mb-1 > button {
+  font-size: 0.68rem !important;
+  padding: 0.32rem 0.7rem !important;
+  min-width: 54px;
+  max-width: 180px;
+  border-radius: 7px;
+}
+
+/* POPUPS de email.html: contorno blanco y borde negro */
+#regexModal.popup-base,
+#filtersModal.popup-base,
+#subusersModal.popup-base,
+#subusersRegexModal.popup-base,
+#subusersFiltersModal.popup-base {
+  background: #fff !important;
+  border: 2.5px solid #000 !important;
+  border-radius: 10px !important;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.10) !important;
+  z-index: 10001 !important;
+}
+
+/* Campos grandes dentro de los popups de email.html */
+#regexModal .modal-list-container,
+#filtersModal .modal-list-container,
+#subusersModal .modal-subuser-list-container,
+#subusersRegexModal .modal-list-container,
+#subusersFiltersModal .modal-list-container {
+  max-width: 400px !important;
+  min-width: 260px !important;
+  width: 100%;
+  margin: 0 auto 1rem auto;
+}
+#regexModal input[type="text"],
+#filtersModal input[type="text"],
+#subusersModal input[type="text"],
+#subusersRegexModal input[type="text"],
+#subusersFiltersModal input[type="text"] {
+  width: 100% !important;
+  max-width: 350px !important;
+  min-width: 180px !important;
+  margin-bottom: 0.5rem;
+  border: 2px solid #111 !important;
+  border-radius: 5px !important;
+  background: #fff !important;
+  color: #111 !important;
+  padding: 0.4rem;
+}
+
+#regexModal .modal-list-container strong,
+#regexModal .modal-list-container small,
+#subusersRegexModal .modal-list-container strong,
+#subusersRegexModal .modal-list-container small {
+  text-align: left !important;
+  display: block !important;
+  width: 100%;
+  margin-left: 0 !important;
+}
+
+#user-management-container h2 {
+  word-break: break-word;
+  white-space: normal;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+@media (max-width: 600px) {
+  #user-management-container h2 {
+    font-size: 1.1rem;
+    max-width: 95vw;
+    padding-right: 0;
+  }
+}
+
+.email-checkbox-list label.d-flex.align-items-center.gap-03 {
+  justify-content: flex-start !important;
+  width: 100% !important;
+  margin-left: 0 !important;
+  padding-left: 0 !important;
+  gap: 0.18rem !important;
+}
+.email-checkbox-list label.d-flex input[type="checkbox"] {
+  margin-left: 0 !important;
+  margin-right: 0.3rem !important;
+}
+.email-checkbox-list .text-medium-small {
+  margin-left: 0 !important;
+  padding-left: 0 !important;
+  text-align: left !important;
+  width: auto !important;
+  display: inline-block !important;
+}
+
+#aliasPopup input#aliasNameInput,
+#editAliasPopup input#editAliasName,
+#aliasPopup input.popup-input,
+#editAliasPopup input.popup-input {
+  border: 2px solid #111 !important;
+  background: #fff !important;
+  color: #111 !important;
+  border-radius: 6px !important;
+}
+
+/* Mejorar botón Iniciar Sesión (enlace) para que sea más discreto y elegante */
+a.btn-search.btn-rounded {
+  color: #fff !important;
+  border: 0.1px solid #90caf9 !important;
+  border-radius: 22px !important;
+  font-weight: 500 !important;
+  font-size: 1rem !important;
+  min-width: 110px;
+  padding: 1px 10px;
+  box-shadow: none !important;
+  text-decoration: none !important;
+  height: 30px !important;
+  display: inline-block;
+  text-align: center;
+  line-height: 28px !important;
+  vertical-align: middle;
+}
+a.btn-search.btn-rounded:hover {
+  background: #1976d2 !important;
+  border-color: #64b5f6 !important;
+  color: #fff !important;
+}
+
+/* --- SUBUSER CARD --- */
+.subuser-card {
+  background: #fff;
+  border: 1px solid #ccc;
+  border-radius: 8px;
+  padding: 1rem;
+  margin-bottom: 0.6rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+.subuser-card-content {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+  gap: 1rem;
+}
+.subuser-card-username {
+  font-weight: bold;
+  flex: 1 1 0;
+  min-width: 0;
+}
+.subuser-card-actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-shrink: 0;
+}
+@media (max-width: 600px) {
+  .subuser-card, .subuser-card-content {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.5rem;
+  }
+  .subuser-card-username {
+    margin-bottom: 0.5rem;
+    text-align: left;
+  }
+  .subuser-card-actions {
+    justify-content: flex-start;
+    width: 100%;
+  }
+  .subuser-card-actions button {
+    font-size: 0.92rem;
+    padding: 0.32rem 0.6rem;
+  }
+}
+
+/* ================== ESTILOS PARA ADMIN DASHBOARD ================== */
+
+/* Estilos específicos para admin_dashboard.html */
+.admin-card {
+  border: none !important;
+  border-radius: 8px !important;
+}
+
+.menu-toggle-btn {
+  margin-left: 0.7rem;
+}
+
+.admin-select {
+  border: 2px solid #111;
+  border-radius: 6px;
+}
+
+.admin-hr {
+  border: 0;
+  border-top: 2px solid #111;
+  margin: 0.7rem 0 0.7rem 0;
+}
+
+.admin-form-container {
+  max-width: 500px;
+}
+
+.admin-form-container-wide {
+  max-width: 320px;
+  width: 100%;
+}
+
+.admin-btn {
+  border: 2px solid #111;
+  border-radius: 8px;
+  font-size: 0.97em;
+}
+
+.admin-btn-small {
+  border: 2px solid #111;
+  border-radius: 8px;
+}
+
+.admin-info-box {
+  border: 2px solid #111;
+  border-radius: 8px;
+  padding: 0.7rem 1rem;
+  margin-bottom: 1rem;
+}
+
+.admin-info-text {
+  margin-bottom: 0.7rem;
+}
+
+.admin-email-input {
+  background: #fff;
+  color: #111;
+  border: 2px solid #111;
+  border-radius: 6px;
+}
+
+.admin-center-text {
+  text-align: center;
+  margin: auto;
+}
+
+.admin-input-width {
+  width: 80px;
+}
+
+.admin-checkbox-container {
+  min-width: 120px;
+}
+
+.admin-checkbox-text {
+  font-size: 0.9em;
+}
+/* =========== ESTILOS PARA SERVICIOS ================== */
+/* Botones de servicios sin márgenes para mejor alineación */
+.edit-service, 
+.link-regex-service, 
+.link-filter-service, 
+.add-service-icon-btn, 
+.delete-service {
+  margin: 0 !important;
+  margin-right: 2px !important; /* Espaciado mínimo entre botones */
+}
+
+/* En pantallas pequeñas, eliminar completamente el espaciado */
+@media (max-width: 768px) {
+  .edit-service, 
+  .link-regex-service, 
+  .link-filter-service, 
+  .add-service-icon-btn, 
+  .delete-service {
+    margin: 0 !important;
+    margin-right: 1px !important;
+  }
+}
+
+/* =========== ESTILOS PARA USUARIOS ================== */
+
+/* Estilo específico para usuarios.html */
+.popup-overlay-hidden {
+  display: none;
+}
+
+/* BOTONES DE ACCIÓN MÁS PEQUEÑOS Y COMPACTOS */
+.btn-blue, .btn-red, .btn-orange, .btn-green {
+  font-size: 0.92rem !important;
+  padding: 2px 7px !important;
+  min-width: 60px !important;
+  border-radius: 6px !important;
+}
+
+/* GAP ENTRE BOTONES MÁS PEQUEÑO */
+.user-item-actions,
+.user-item > div[style*="display:flex"] {
+  display: flex;
+  gap: 0.3rem !important;
+}
+
+/* CONTENEDOR DE USUARIO AJUSTADO Y FUENTE MÁS PEQUEÑA */
+.user-item {
+  font-size: 0.97rem !important;
+  padding: 0.35rem 0.3rem !important;
+  overflow: hidden !important;
+}
+
+/* AJUSTE RESPONSIVE PARA MÓVIL */
+@media (max-width: 600px) {
+  .user-item {
+    font-size: 0.90rem !important;
+    padding: 0.22rem 0.1rem !important;
+  }
+  .user-item > div[style*="display:flex"] {
+    gap: 0.15rem !important;
+  }
+}
+
+/* Ajuste para el botón Menú en la plantilla de búsqueda */
+.menu-toggle-container,
+#menuToggleBtn {
+  margin-left: 0.5rem !important;
+  margin-right: 0 !important;
+  float: left !important;
+  display: inline-block !important;
+}
+
+.select-auto {
+  width: auto !important;
+  min-width: unset !important;
+  max-width: 200px !important;
+  display: inline-block !important;
+}
+
+.search-form-inner {
+  display: flex;
+  flex-direction: row;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+@media (max-width: 400px) {
+  #aliasIconGridContainer .popup-grid {
+    display: grid !important;
+    grid-template-columns: repeat(5, 1fr) !important;
+    gap: 0.22rem !important;
+    justify-items: center;
+    align-items: center;
+  }
+  #aliasIconGridContainer .popup-grid > div {
+    width: 46px !important;
+    height: 46px !important;
+    min-width: 46px !important;
+    min-height: 46px !important;
+    max-width: 46px !important;
+    max-height: 46px !important;
+    padding: 0 !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+  }
+  #aliasIconGridContainer .popup-grid img {
+    max-width: 36px !important;
+    max-height: 36px !important;
+  }
+  #aliasIconGridContainer.popup-base {
+    max-width: 99vw !important;
+    min-width: 0 !important;
+    padding: 0.5rem !important;
+  }
+}
+
+@media (max-width: 900px) {
+  #iconGridContainer .popup-grid {
+    display: grid !important;
+    grid-template-columns: repeat(5, 1fr) !important;
+    gap: 0.22rem !important;
+    justify-items: center;
+    align-items: center;
+  }
+  #iconGridContainer .popup-grid > div {
+    width: 46px !important;
+    height: 46px !important;
+    min-width: 46px !important;
+    min-height: 46px !important;
+    max-width: 46px !important;
+    max-height: 46px !important;
+    padding: 0 !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+  }
+  #iconGridContainer .popup-grid img {
+    max-width: 36px !important;
+    max-height: 36px !important;
+  }
+  #iconGridContainer.popup-base {
+    max-width: 99vw !important;
+    min-width: 0 !important;
+    padding: 0.5rem !important;
+  }
+}
+
+@media (max-width: 500px) {
+  .admin-card h3,
+  .admin-card form#securitySettingsForm,
+  .admin-card form#securitySettingsForm .d-flex {
+    text-align: center !important;
+    justify-content: center !important;
+    align-items: center !important;
+    flex-direction: column !important;
+  }
+  .admin-card form#securitySettingsForm .d-flex > div {
+    width: 100% !important;
+    max-width: 250px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+}
+
+.btn-orange, a.btn-orange, a.btn-orange:link, a.btn-orange:visited, a.btn-orange:active, a.btn-orange:hover {
+  text-decoration: none !important;
+}
+
+/* Clase alternativa para contenedores de botones sin display: flex */
+.buttons-container {
+  margin-top: 0.5rem;
+  display: block;
+  gap: 0.5rem;
+}
+
+.buttons-container > * {
+  display: inline-block;
+  margin-right: 0.5rem;
+  vertical-align: top;
+}
+
+.buttons-container > *:last-child {
+  margin-right: 0;
+}
+
+.text-small { font-size: 0.9rem; }
+.text-smaller { font-size: 0.85rem; }
+.text-subuser-buttons { font-size: 0.75rem; }
+.text-medium-small { font-size: 0.95rem; }
+
+/* Estilos del chat eliminados - ahora se manejan en chat_soporte.css */
+
+/* ================== ESTILOS PARA TABLA DE USUARIOS SOPORTE ================== */
+
+/* Badges para tipos de usuario */
+.badge {
+  display: inline-block;
+  padding: 0.25rem 0.5rem;
+  font-size: 0.75rem;
+  font-weight: bold;
+  text-align: center;
+  white-space: nowrap;
+  vertical-align: baseline;
+  border-radius: 0.375rem;
+}
+
+.bg-primary {
+  background-color: #0d6efd !important;
+  color: white !important;
+}
+
+.bg-secondary {
+  background-color: #6c757d !important;
+  color: white !important;
+}
+
+/* Checkboxes personalizados */
+.soporte-checkbox, .subusers-checkbox {
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+  accent-color: #0d6efd;
+}
+
+.soporte-checkbox:checked {
+  background-color: #0d6efd;
+  border-color: #0d6efd;
+}
+
+.subusers-checkbox:checked {
+  background-color: #198754;
+  border-color: #198754;
+}
+
+/* Estilos para la tabla de usuarios */
+#users-table th {
+  background-color: #ffffff;
+  border-bottom: 2px solid #dee2e6;
+  font-weight: bold;
+  text-align: center;
+  padding: 0.75rem;
+}
+
+#users-table td {
+  padding: 0.75rem;
+  vertical-align: middle;
+  text-align: center;
+}
+
+#users-table td:first-child {
+  text-align: left;
+}
+
+#users-table td:nth-child(2) {
+  text-align: left;
+}
+
+/* Responsive para la tabla de usuarios */
+@media (max-width: 700px) {
+  #users-table {
+    font-size: 0.9rem;
+  }
+  
+  #users-table th,
+  #users-table td {
+    padding: 0.5rem 0.25rem;
+  }
+  
+  .badge {
+    font-size: 0.7rem;
+    padding: 0.2rem 0.4rem;
+  }
+  
+  .soporte-checkbox, .subusers-checkbox {
+    width: 16px;
+    height: 16px;
+  }
+}
+
+/* ===== ESTILOS PROFESIONALES PARA BÚSQUEDA ===== */
+/* Campo de búsqueda con contorno similar a la foto */
+.search-input {
+  background: #ffffff !important;
+  border: 2px solid #d1d5db !important;
+  border-radius: 8px !important;
+  padding: 10px 14px !important;
+  font-size: 16px !important;
+  font-weight: 400 !important;
+  color: #374151 !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1) !important;
+  width: 100% !important;
+  max-width: none !important;
+  flex: 1 !important;
+}
+
+.search-input:focus {
+  outline: none !important;
+  border-color: #3b82f6 !important;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1) !important;
+}
+
+.search-input::placeholder {
+  color: #9ca3af !important;
+  font-weight: 400 !important;
+}
+
+/* Botón de búsqueda específico para la página principal de consultas */
+.btn-search-main {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+  border: none !important;
+  border-radius: 10px !important;
+  padding: 10px 16px !important;
+  font-size: 14px !important;
+  font-weight: 700 !important;
+  color: white !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.5px !important;
+  box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4) !important;
+  cursor: pointer !important;
+  min-width: 90px !important;
+  white-space: nowrap !important;
+  flex-shrink: 0 !important;
+  position: relative !important;
+  overflow: hidden !important;
+  height: 33px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
+.btn-search-main::before {
+  display: none !important;
+}
+
+.btn-search-main:hover {
+  background: linear-gradient(135deg, #764ba2 0%, #667eea 100%) !important;
+}
+
+.btn-search-main:hover::before {
+  display: none !important;
+}
+
+.btn-search-main:active {
+  box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4) !important;
+}
+
+.btn-search-main:focus {
+  outline: none !important;
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.3) !important;
+}
+
+/* Contenedor de formulario de búsqueda con contorno blanco */
+.search-form-container {
+  margin: 10px auto !important;
+  background: rgba(255, 255, 255, 0.95) !important;
+  border-radius: 7px !important;
+  padding: 30px !important;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1) !important;
+  backdrop-filter: blur(10px) !important;
+  width: 100% !important;
+  box-sizing: border-box !important;
+}
+
+.search-form-container .d-flex {
+  gap: 8px !important;
+  align-items: stretch !important;
+  flex-wrap: nowrap !important;
+}
+
+/* ===== ESTILOS PROFESIONALES PARA RESULTADOS ===== */
+/* Contenedor principal de resultados */
+
+
+/* Estilo para el número de resultado (código) */
+.regex-result-container .mail-content pre,
+.regex-result-container .mail-content div {
+  margin: 16px 0 !important;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08) !important;
+  letter-spacing: 2px !important;
+}
+
+/* Botón copiar mejorado */
+.regex-result-container button {
+  border: none !important;
+  border-radius: 12px !important;
+  padding: 10px 20px !important;
+  font-size: 14px !important;
+  font-weight: 600 !important;
+  color: white !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.5px !important;
+  box-shadow: 0 4px 12px rgba(40, 167, 69, 0.3) !important;
+  transition: all 0.3s ease !important;
+  cursor: pointer !important;
+  margin: 8px !important;
+}
+
+/* Efecto hover eliminado de botones del contenedor - ahora estáticos */
+
+/* Responsive para móviles */
+@media (max-width: 768px) {
+  .search-form-container {
+    padding: 12px !important;
+    margin: 16px auto !important;
+  }
+  
+  .search-form-container .d-flex {
+    flex-direction: row !important;
+    gap: 6px !important;
+    flex-wrap: nowrap !important;
+  }
+  
+  .search-input {
+    font-size: 14px !important;
+    padding: 8px 12px !important;
+  }
+  
+  .btn-search-main {
+    min-width: 75px !important;
+    padding: 8px 12px !important;
+    font-size: 12px !important;
+    height: 36px !important;
+  }
+
+/* Para pantallas muy pequeñas */
+@media (max-width: 480px) {
+  .search-form-container {
+    padding: 8px !important;
+    margin: 8px auto !important;
+  }
+  
+  .search-form-container .d-flex {
+    gap: 4px !important;
+  }
+  
+  /* Solo contenido puro para filtros en pantallas pequeñas - sin estilos visuales */
+  .filter-match {
+    background: #ffffff !important; /* Fondo blanco para consistencia */
+    border: none !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    backdrop-filter: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    max-width: none !important;
+  }
+  
+  .search-input {
+    font-size: 13px !important;
+    padding: 6px 10px !important;
+  }
+  
+  .btn-search-main {
+    min-width: 60px !important;
+    padding: 2px 7px !important;
+    font-size: 9px !important;
+    height: 32px !important;
+  }
+}
+
+/* DESTELLO ELIMINADO - Los botones de menú ahora tienen colores estáticos */
+
+.search-page #menuToggleBtn:active,
+.search-page #menu2ToggleBtn:active,
+.search-page #menu3ToggleBtn:active,
+.search-page .btn-search.btn-rounded:active {
+  transform: translateY(-1px) scale(1.01) !important;
+  box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4) !important;
+}
+
+.search-page #menuToggleBtn:focus,
+.search-page #menu2ToggleBtn:focus,
+.search-page #menu3ToggleBtn:focus,
+.search-page .btn-search.btn-rounded:focus {
+  outline: none !important;
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.3) !important;
+}
+
+/* Estilos para degradados de servicios */
+.service-color-label {
+  font-size: 12px !important;
+  font-weight: 600 !important;
+  color: #374151 !important;
+  margin: 0 !important;
+  white-space: nowrap;
+}
+
+/* Contenedor con contorno para secciones de configuración de servicios */
+
+
+.service-config-section h4 {
+  margin-top: 0 !important;
+  margin-bottom: 12px !important;
+  color: #000000 !important;
+  font-weight: 600 !important;
+  font-size: 16px !important;
+}
+
+.gradient-preview-container {
+  display: flex;
+  align-items: center;
+}
+
+.gradient-preview-container button {
+  min-width: 32px !important;
+  height: 32px !important;
+  padding: 4px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  border-radius: 6px !important;
+  transition: all 0.2s ease !important;
+}
+
+.gradient-preview-container button:hover {
+  transform: translateY(-1px) !important;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2) !important;
+}
+
+.gradient-preview {
+  width: 80px;
+  height: 32px;
+  border-radius: 8px;
+  border: 2px solid #d1d5db;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  transition: all 0.3s ease;
+}
+
+.gradient-preview:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  transform: translateY(-1px);
+}
+
+/* Estilos para campos de posición y visibilidad en edit_service.html - ELIMINADO: duplicado */
+
+.visibility-select {
+  min-width: 120px !important;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  padding: 0.3rem 0.5rem;
+  font-weight: 600;
+  background-color: white;
+}
+
+/* Contenedor responsive para posición y visibilidad - DEFINICIÓN PRINCIPAL */
+.position-visibility-container {
+  display: flex !important;
+  flex-wrap: wrap !important; /* Permitir que los botones bajen a la siguiente línea */
+  gap: 1rem !important;
+  align-items: flex-end !important;
+  justify-content: flex-start !important;
+}
+
+/* Los primeros dos divs (posición y dropdown) en la primera línea */
+.position-visibility-container > div:nth-child(1),
+.position-visibility-container > div:nth-child(2) {
+  display: flex !important;
+  flex-direction: row !important; /* Cambiar a horizontal */
+  align-items: center !important; /* Centrar verticalmente */
+  gap: 0.5rem !important; /* Espacio entre label y campo */
+  flex: 0 0 auto !important; /* No crecer ni encogerse */
+}
+
+/* Labels en línea con sus campos */
+.position-visibility-container > div:nth-child(1) label,
+.position-visibility-container > div:nth-child(2) label {
+  margin: 0 !important;
+  white-space: nowrap !important; /* Evitar que el texto se rompa */
+}
+
+/* Los botones van en su propia línea */
+.position-visibility-container .edit-service-buttons {
+  flex: 1 1 100% !important; /* Ocupar toda la línea siguiente */
+  display: flex !important;
+  justify-content: center !important;
+  gap: 1rem !important;
+  margin-top: 1rem !important;
+}
+
+/* Media query adicional para ajustes finos en pantallas medianas */
+@media (max-width: 768px) {
+  .position-visibility-container {
+    gap: 0.5rem !important;
+  }
+  
+  .visibility-select {
+    min-width: 100px !important;
+    padding: 0.25rem 0.3rem;
+    font-size: 14px;
+  }
+}
+
+/* En pantallas muy pequeñas, aún mantener en línea pero más compacto */
+@media (max-width: 480px) {
+  .position-visibility-container {
+    gap: 0.3rem !important;
+  }
+  
+  /* .position-input-narrow - ELIMINADO: duplicado */
+  
+  .visibility-select {
+    min-width: 85px !important;
+    padding: 0.2rem 0.25rem;
+    font-size: 13px;
+  }
+}
+
+/* ================== ESTADÍSTICAS ================== */
+.estadisticas-tab {
+  padding: 0.5rem 1.5rem;
+  border: none;
+  cursor: pointer;
+}
+.estadisticas-tab.active {
+  background: #007bff;
+  color: white;
+  opacity: 1;
+}
+.estadisticas-tab:not(.active) {
+  background: #6c757d;
+  color: white;
+  opacity: 0.7;
+}
+.estadisticas-tab:not(.active):hover {
+  opacity: 0.9;
+}
+.estadistica-card {
+  background: #f8f9fa;
+  border: 1px solid #dee2e6;
+  border-radius: 8px;
+  padding: 1.5rem;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  height: 100%;
+}
+.estadistica-icon {
+  font-size: 2.5rem;
+  color: #007bff;
+  min-width: 60px;
+  text-align: center;
+}
+.estadistica-content {
+  flex: 1;
+}
+.estadistica-label {
+  font-size: 0.9rem;
+  color: #6c757d;
+  margin: 0 0 0.5rem 0;
+  font-weight: 600;
+}
+.estadistica-valor {
+  font-size: 1.8rem;
+  font-weight: bold;
+  color: #212529;
+  margin: 0;
+}
+.estadistica-seccion {
+  background: #f8f9fa;
+  border: 1px solid #dee2e6;
+  border-radius: 8px;
+  padding: 1.5rem;
+  margin-top: 1.5rem;
+}
+.estadistica-seccion h3 {
+  color: #212529;
+  font-size: 1.2rem;
+  margin-bottom: 1rem;
+}
+.gasto-mes-container {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+.gasto-mes-item {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+.gasto-mes-label {
+  min-width: 100px;
+  font-weight: 600;
+  color: #495057;
+}
+.gasto-mes-bar-container {
+  flex: 1;
+  height: 30px;
+  background: #e9ecef;
+  border-radius: 15px;
+  overflow: hidden;
+  position: relative;
+}
+.gasto-mes-bar {
+  height: 100%;
+  background: linear-gradient(90deg, #007bff, #0056b3);
+  border-radius: 15px;
+}
+.gasto-mes-valor {
+  min-width: 100px;
+  text-align: right;
+  font-weight: 600;
+  color: #212529;
+}
+.opacity-30 {
+  opacity: 0.3;
+}
+@media (max-width: 768px) {
+  .gasto-mes-item {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .gasto-mes-label,
+  .gasto-mes-valor {
+    min-width: auto;
+  }
+  .gasto-mes-bar-container {
+    width: 100%;
+  }
+}
+
+/* ================== FORM CHECKBOX ================== */
+.form-checkbox-label {
+  display: flex;
+  align-items: center;
+  margin: 10px 0;
+}
+
+.form-checkbox-input {
+  margin-right: 8px;
+}

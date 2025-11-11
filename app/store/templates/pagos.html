@@ -1,0 +1,129 @@
+{% extends "base.html" %}
+
+{% block title %}Pagos{% endblock %}
+
+{% block head %}
+  {{ super() }}
+  <link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}">
+{% endblock %}
+{% block content %}
+<div class="container container-max-width-900 store-light maxw-800 mx-auto mt-3 br-8">
+  <div class="d-flex align-items-center justify-content-between mb-1 pagos-header">
+    <h2 class="m-0">Pagos</h2>
+    <a href="{{ url_for('store_bp.admin_store') }}" class="btn-panel btn-blue pagos-back-btn">Volver a Tienda</a>
+  </div>
+  <div class="d-flex flex-column gap-1 align-items-center pagos-content">
+    <!-- Texto eliminado -->
+  </div>
+  <div class="d-flex flex-wrap align-items-center mb-1 productos-buscar-mostrar">
+    <div class="search-container">
+      <label for="searchUserInput" class="sr-only">Buscar usuario</label>
+      <input type="search" id="searchUserInput" name="searchUserInput" placeholder="Buscar..." autocomplete="off">
+    </div>
+    <div class="d-flex align-items-center">
+      <label for="showUserCount" class="sr-only">Mostrar cantidad de usuarios</label>
+      <select id="showUserCount" autocomplete="off">
+        <option value="5">5</option>
+        <option value="10">10</option>
+        <option value="20">20</option>
+        <option value="30">30</option>
+        <option value="40">40</option>
+        <option value="50">50</option>
+        <option value="100">100</option>
+        <option value="all">Todos</option>
+      </select>
+    </div>
+  </div>
+  <div class="table-wrapper-store">
+    <table class="table mb-1" id="users-table">
+      <thead>
+        <tr>
+          <th>Usuario</th>
+          <th>Nombre completo</th>
+          <th>Saldo</th>
+          <th>Acciones</th>
+        </tr>
+      </thead>
+      <tbody id="users-table-body">
+        {% for user in users %}
+        <tr data-username="{{ user.username|lower }}" data-tipo-precio="{{ user.tipo_precio }}">
+          <td><strong>{{ user.username }}</strong></td>
+          <td>{{ user.full_name or '' }}</td>
+          <td>
+            {% if user.tipo_precio == 'usd' %}
+              {{ (user.saldo_usd or 0)|int }} USD
+            {% elif user.tipo_precio == 'cop' %}
+              {{ (user.saldo_cop or 0)|int }} COP
+            {% else %}
+              -
+            {% endif %}
+          </td>
+          <td>
+            <div class="action-stack">
+              <a href="#" class="action-btn action-blue open-balance-modal" data-username="{{ user.username }}" data-tipo-precio="{{ user.tipo_precio }}">Editar</a>
+            </div>
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="4" class="text-center">No hay usuarios aún.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <div class="d-flex justify-content-center mt-2 mb-2 pagination-buttons">
+    <button id="prevUserPageBtn" class="btn-blue btn-panel" type="button">&lt; Anterior</button>
+    <button id="nextUserPageBtn" class="btn-blue btn-panel" type="button">Siguiente &gt;</button>
+  </div>
+</div>
+<div class="container container-max-width-900 store-light maxw-800 mx-auto mt-3 br-8">
+  <div class="form-group w-100 form-group-max-width-350-centered">
+    <h4 class="w-100 add-balance-title">Añadir saldo a cliente</h4>
+  </div>
+  <div class="form-saldo-wrapper">
+    <form id="add-balance-form" class="form-saldo d-flex flex-column gap-1 align-items-center" method="POST" action="#">
+      <div class="d-flex flex-column gap-1 w-100 align-items-center mb-1">
+        <div class="form-group w-100 form-group-max-width-350">
+          <label for="searchUserBalance" class="text-center w-100">Buscar usuario o nombre</label>
+          <input type="text" id="searchUserBalance" name="searchUserBalance" class="form-control w-100" placeholder="Usuario o nombre" autocomplete="off">
+        </div>
+        <div class="form-group w-100 form-group-max-width-350" id="form-group-usd">
+          <label for="balanceAmountUsd" class="text-center w-100">Saldo a añadir USD</label>
+          <input type="number" id="balanceAmountUsd" name="balanceAmountUsd" class="form-control w-100" min="0" step="0.01" placeholder="Monto USD" autocomplete="off">
+        </div>
+        <div class="form-group w-100 form-group-max-width-350" id="form-group-cop">
+          <label for="balanceAmountCop" class="text-center w-100">Saldo a añadir COP</label>
+          <input type="number" id="balanceAmountCop" name="balanceAmountCop" class="form-control w-100" min="0" step="1" placeholder="Monto COP" autocomplete="off">
+        </div>
+      </div>
+      <div class="d-flex justify-content-center mb-2">
+        <button type="submit" class="btn-panel btn-green">Añadir saldo</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Modal para añadir saldo -->
+<div id="balance-modal-overlay" class="modal-overlay d-none">
+  <div class="modal-balance-content">
+    <h4 class="mb-1">Añadir saldo</h4>
+    <form id="modal-balance-form">
+      <input type="hidden" id="modal-username" name="username">
+      <div class="form-group" id="modal-group-usd">
+        <label for="modal-balance-usd">Saldo a añadir USD</label>
+        <input type="number" id="modal-balance-usd" name="usd" class="form-control" min="0" step="0.01" placeholder="Monto USD" autocomplete="off">
+      </div>
+      <div class="form-group" id="modal-group-cop">
+        <label for="modal-balance-cop">Saldo a añadir COP</label>
+        <input type="number" id="modal-balance-cop" name="cop" class="form-control" min="0" step="1" placeholder="Monto COP" autocomplete="off">
+      </div>
+      <div class="d-flex justify-content-between mt-1">
+        <button type="button" class="btn-panel btn-red close-balance-modal">Cancelar</button>
+        <button type="submit" class="btn-panel btn-green">Añadir saldo</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+  <script src="{{ url_for('store_bp.static', filename='js/pagos.js') }}" defer></script>
+{% endblock %} 

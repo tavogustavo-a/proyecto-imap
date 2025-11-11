@@ -1,0 +1,381 @@
+{% extends "base.html" %}
+
+{% block title %}Herramientas{% endblock %}
+
+{% block head %}
+  {{ super() }}
+  <meta name="csrf_token" content="{{ csrf_token() }}">
+  <link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}">
+{% endblock %}
+{% block content %}
+<div class="store-light maxw-800 mx-auto mt-3 br-8">
+  <div class="d-flex align-items-center justify-content-between header-container">
+    <h2 class="m-0">Herramientas</h2>
+    <a href="{{ url_for('store_bp.admin_store') }}" class="btn-panel btn-blue">Volver</a>
+  </div>
+  <div class="d-flex flex-column align-items-center">
+    <h4 class="mb-1">Información añadida</h4>
+    <div class="d-flex flex-wrap align-items-center mb-1 productos-buscar-mostrar">
+      <div class="search-container">
+        <label for="searchToolInput" class="sr-only">Buscar herramientas</label>
+        <input type="search" id="searchToolInput" placeholder="Buscar..." autocomplete="off">
+      </div>
+      <div class="d-flex align-items-center">
+        <label for="showToolCount" class="sr-only">Mostrar cantidad</label>
+        <select id="showToolCount" autocomplete="off">
+          <option value="5">5</option>
+          <option value="10">10</option>
+          <option value="20">20</option>
+          <option value="30">30</option>
+          <option value="40">40</option>
+          <option value="50">50</option>
+          <option value="100">100</option>
+          <option value="all">Todos</option>
+        </select>
+      </div>
+    </div>
+    <div class="table-wrapper-store">
+      <table class="table mb-1" id="tools-table">
+        <thead>
+          <tr>
+            <th>Título</th>
+            <th>%</th>
+            <th>Acciones</th>
+          </tr>
+        </thead>
+        <tbody id="tools-table-body">
+          {% for tool in tools %}
+          <tr data-title="{{ tool.title|lower }}">
+            <td><strong>{{ tool.title }}</strong></td>
+            <td class="text-primary"><strong>{{ tool.percent }}</strong></td>
+            <td>
+              <div class="action-stack">
+                <button class="action-btn {{ 'action-red' if tool.enabled else 'action-green' }} btn-toggle-tool" data-id="{{ tool.id }}">{{ 'OFF' if tool.enabled else 'ON' }}</button>
+                <a href="{{ url_for('store_bp.edit_tool', tool_id=tool.id) }}" class="action-btn action-blue">Editar</a>
+                <button class="btn-panel btn-red btn-sm btn-delete-tool" data-id="{{ tool.id }}" title="Eliminar">
+                  <i class="fas fa-trash"></i>
+                </button>
+              </div>
+            </td>
+          </tr>
+          {% else %}
+          <tr><td colspan="2" class="text-center">No hay información aún.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="d-flex justify-content-center mt-2 mb-05 pagination-buttons">
+      <button id="prevToolPageBtn" class="btn-blue btn-panel" type="button">&lt; Anterior</button>
+      <button id="nextToolPageBtn" class="btn-blue btn-panel" type="button">Siguiente &gt;</button>
+    </div>
+    <hr class="compact-hr">
+    <h4 class="mb-1">Crear porcentajes/resultados</h4>
+    <form method="POST" action="{{ url_for('store_bp.create_tool') }}" class="edit-html-form mb-05">
+      <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+      <div class="mb-3">
+        <label for="title" class="form-label text-center d-block">Título</label>
+        <input type="text" name="title" id="title" class="form-control" required autocomplete="off">
+      </div>
+      <div class="mb-3">
+        <label for="text" class="form-label text-center d-block">Texto</label>
+        <input type="text" name="text" id="text" class="form-control" required autocomplete="off">
+      </div>
+      <div class="mb-3">
+        <label for="percent" class="form-label text-center d-block">%</label>
+        <input type="number" name="percent" id="percent" class="form-control" min="0" step="any" required autocomplete="off">
+      </div>
+      <div class="d-flex justify-content-center">
+        <button type="submit" class="btn-panel btn-green mt-1">Añadir información</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Nueva sección para HTML -->
+<div class="store-light maxw-800 mx-auto mt-3 br-8">
+  <div class="d-flex flex-column align-items-center">
+    <h4 class="mb-1">HTML añadidos</h4>
+    <div class="d-flex flex-wrap align-items-center mb-1 productos-buscar-mostrar">
+      <div class="search-container">
+        <label for="searchHtmlInput" class="sr-only">Buscar HTML</label>
+        <input type="search" id="searchHtmlInput" placeholder="Buscar..." autocomplete="off">
+      </div>
+      <div class="d-flex align-items-center">
+        <label for="showHtmlCount" class="sr-only">Mostrar cantidad HTML</label>
+        <select id="showHtmlCount" autocomplete="off">
+          <option value="5">5</option>
+          <option value="10">10</option>
+          <option value="20">20</option>
+          <option value="30">30</option>
+          <option value="40">40</option>
+          <option value="50">50</option>
+          <option value="100">100</option>
+          <option value="all">Todos</option>
+        </select>
+      </div>
+    </div>
+    <div class="table-wrapper-store">
+      <table class="table mb-1" id="html-table">
+        <thead>
+          <tr>
+            <th>Título</th>
+            <th>HTML</th>
+            <th>Acciones</th>
+          </tr>
+        </thead>
+        <tbody id="html-table-body">
+          {% for html in htmls %}
+          <tr data-title="{{ html.title|lower }}">
+            <td><strong>{{ html.title }}</strong></td>
+            <td class="text-primary">
+                <strong>
+                    {{ html.text | striptags | truncate(20) }}
+                </strong>
+            </td>
+            <td>
+              <div class="action-stack">
+                <button class="action-btn {{ 'action-red' if html.enabled else 'action-green' }} btn-toggle-html" data-id="{{ html.id }}">{{ 'OFF' if html.enabled else 'ON' }}</button>
+                <a href="{{ url_for('store_bp.edit_html', html_id=html.id) }}" class="action-btn action-blue">Editar</a>
+                <button class="btn-panel btn-red btn-sm btn-delete-html" data-id="{{ html.id }}" title="Eliminar">
+                  <i class="fas fa-trash"></i>
+                </button>
+              </div>
+            </td>
+          </tr>
+          {% else %}
+          <tr><td colspan="3" class="text-center">No hay HTML añadido aún.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="d-flex justify-content-center mt-2 mb-05 pagination-buttons">
+      <button id="prevHtmlPageBtn" class="btn-blue btn-panel" type="button">&lt; Anterior</button>
+      <button id="nextHtmlPageBtn" class="btn-blue btn-panel" type="button">Siguiente &gt;</button>
+    </div>
+    <hr class="compact-hr">
+    <h4 class="mb-1">Crear HTML</h4>
+    <form method="POST" action="{{ url_for('store_bp.add_html') }}" class="edit-html-form mb-05">
+      <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+      <div class="mb-3">
+        <label for="html_title" class="form-label text-center d-block">Título</label>
+        <input type="text" name="title" id="html_title" class="form-control" required autocomplete="off">
+      </div>
+      <div class="mb-3">
+        <label for="html_text" class="form-label text-center d-block">Contenido HTML</label>
+        <textarea name="text" id="html_text" class="form-control" rows="10" required autocomplete="off"></textarea>
+      </div>
+      <div class="d-flex justify-content-center">
+        <button type="submit" class="btn-panel btn-green mt-1">Añadir HTML</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Nueva sección para YouTube -->
+<div class="store-light maxw-800 mx-auto mt-3 br-8">
+  <div class="d-flex flex-column gap-1 align-items-center">
+    <h4 class="mb-1">Listado de YouTube</h4>
+    <div class="d-flex flex-wrap align-items-center mb-1 productos-buscar-mostrar">
+      <div class="search-container">
+        <label for="searchYouTubeInput" class="sr-only">Buscar YouTube</label>
+        <input type="search" id="searchYouTubeInput" placeholder="Buscar..." autocomplete="off">
+      </div>
+      <div class="d-flex align-items-center">
+        <label for="showYouTubeCount" class="sr-only">Mostrar cantidad YouTube</label>
+        <select id="showYouTubeCount" autocomplete="off">
+          <option value="5">5</option>
+          <option value="10">10</option>
+          <option value="20">20</option>
+          <option value="50">50</option>
+          <option value="100">100</option>
+          <option value="all">Todos</option>
+        </select>
+      </div>
+    </div>
+    <div class="table-wrapper-store">
+      <table class="table mb-1" id="youtube-table">
+        <thead>
+          <tr>
+            <th>Título</th>
+            <th>Descripcion YouTube</th>
+            <th>Acciones</th>
+          </tr>
+        </thead>
+        <tbody id="youtube-table-body">
+          {% if youtube_listings %}
+            {% for listing in youtube_listings %}
+            <tr data-title="{{ listing.title|lower }}">
+              <td><strong>{{ listing.title }}</strong></td>
+              <td>{% if listing.content and listing.content != 'None' %}{{ listing.content | truncate(60) }}{% endif %}</td>
+              <td>
+                <div class="action-stack">
+                  <button class="action-btn {{ 'action-red' if listing.enabled else 'action-green' }} btn-toggle-youtube" data-id="{{ listing.id }}">{{ 'OFF' if listing.enabled else 'ON' }}</button>
+                  <a href="{{ url_for('store_bp.edit_youtube_listing', listing_id=listing.id) }}" class="action-btn action-blue">Editar</a>
+                  <button class="btn-panel btn-red btn-sm btn-delete-youtube" data-id="{{ listing.id }}" title="Eliminar">
+                    <i class="fas fa-trash"></i>
+                  </button>
+                </div>
+              </td>
+            </tr>
+            {% endfor %}
+          {% else %}
+            <tr><td colspan="3" class="text-center">No hay listados de YouTube aún.</td></tr>
+          {% endif %}
+        </tbody>
+      </table>
+    </div>
+    <div class="d-flex justify-content-center mt-2 mb-05 pagination-buttons">
+        <button id="prevYouTubePageBtn" class="btn-blue btn-panel" type="button">&lt; Anterior</button>
+        <button id="nextYouTubePageBtn" class="btn-blue btn-panel" type="button">Siguiente &gt;</button>
+    </div>
+    <hr class="compact-hr">
+    <h4 class="mb-1">Crear listado YouTube</h4>
+    <form method="POST" action="{{ url_for('store_bp.create_youtube_listing') }}" class="edit-html-form mb-05">
+      <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+      <div class="mb-3">
+        <label for="youtube_title" class="form-label text-center d-block">Título</label>
+        <input type="text" name="title" id="youtube_title" class="form-control" required autocomplete="off">
+      </div>
+      <div class="mb-3">
+        <label for="youtube_content" class="form-label text-center d-block">Descripcion YouTube</label>
+        <textarea name="youtube_content" id="youtube_content" class="form-control" rows="3" autocomplete="off"></textarea>
+      </div>
+      <div class="d-flex justify-content-center">
+        <button type="submit" class="btn-panel btn-green mt-1">Añadir a Listado</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Nueva sección para APIs -->
+<div class="store-light maxw-800 mx-auto mt-3 br-8">
+  <div class="d-flex flex-column align-items-center">
+    <h4 class="mb-1">Lista de Creación de APIs</h4>
+    <div class="d-flex flex-wrap align-items-center mb-1 productos-buscar-mostrar">
+      <div class="search-container">
+        <label for="searchApiInput" class="sr-only">Buscar APIs</label>
+        <input type="search" id="searchApiInput" placeholder="Buscar..." autocomplete="off">
+      </div>
+      <div class="d-flex align-items-center">
+        <label for="showApiCount" class="sr-only">Mostrar cantidad APIs</label>
+        <select id="showApiCount" autocomplete="off">
+          <option value="5">5</option>
+          <option value="10">10</option>
+          <option value="20">20</option>
+          <option value="50">50</option>
+          <option value="100">100</option>
+          <option value="all">Todos</option>
+        </select>
+      </div>
+    </div>
+    <div class="table-wrapper-store">
+      <table class="table mb-1" id="api-table">
+        <thead>
+          <tr>
+            <th>Título</th>
+            <th>Acciones</th>
+          </tr>
+        </thead>
+        <tbody id="api-table-body">
+          {% for api in apis %}
+          <tr data-title="{{ api.title|lower }}">
+            <td><strong>{{ api.title }}</strong></td>
+            <td>
+              <div class="action-stack">
+                <button class="action-btn {{ 'action-red' if api.enabled else 'action-green' }} btn-toggle-api" data-id="{{ api.id }}">{{ 'OFF' if api.enabled else 'ON' }}</button>
+                <a href="{{ url_for('store_bp.edit_api', api_id=api.id) }}" class="action-btn action-blue">Editar</a>
+                <button class="btn-panel btn-red btn-sm btn-delete-api" data-id="{{ api.id }}" title="Eliminar">
+                  <i class="fas fa-trash"></i>
+                </button>
+              </div>
+            </td>
+          </tr>
+          {% else %}
+          <tr><td colspan="2" class="text-center">No hay APIs creadas todavía.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="d-flex justify-content-center mt-2 mb-05 pagination-buttons">
+        <button id="prevApiPageBtn" class="btn-blue btn-panel" type="button">&lt; Anterior</button>
+        <button id="nextApiPageBtn" class="btn-blue btn-panel" type="button">Siguiente &gt;</button>
+    </div>
+    <hr class="compact-hr">
+    <h4 class="mb-1">Crear Listado de APIs</h4>
+    <form id="apiForm" method="POST" action="{{ url_for('store_bp.create_api') }}" class="edit-html-form mb-05">
+      <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+      <div class="mb-3">
+        <label for="api_title" class="form-label text-center d-block">Título</label>
+        <input type="text" name="title" id="api_title" class="form-control" required autocomplete="off">
+      </div>
+      <div class="mb-3">
+        <label for="api_key" class="form-label text-center d-block">Campo de API</label>
+        <textarea name="api_key" id="api_key" class="form-control" rows="3" required autocomplete="off"></textarea>
+      </div>
+      <div class="mb-3">
+        <label for="api_type" class="form-label text-center d-block">Tipo de API</label>
+        <select name="api_type" id="api_type" class="form-control" required autocomplete="off">
+          <option value="">Genérica / Ninguno</option>
+          <option value="Drive">Drive</option>
+          <option value="Búsqueda de Medios">Búsqueda de Medios</option>
+        </select>
+      </div>
+      <div id="drive-folder-id-field" class="herramientas-drive-field">
+        <label for="api_url" class="form-label text-center d-block">ID de Carpeta de Drive</label>
+        <input type="text" class="form-control" id="api_url" name="api_url" placeholder="Pega aquí el ID de la carpeta de Drive" autocomplete="off">
+        <div id="drive-subtitles-fields" class="herramientas-drive-subtitles">
+          <label for="drive_subtitle_photos" class="form-label text-center d-block">Subtítulos para la galería pública</label>
+          <input type="text" class="form-control mb-05" id="drive_subtitle_photos" name="drive_subtitle_photos" placeholder="Subtítulo para fotos (obligatorio si no hay videos)" autocomplete="off">
+          <input type="text" class="form-control mb-05" id="drive_subtitle_videos" name="drive_subtitle_videos" placeholder="Subtítulo para videos (obligatorio si no hay fotos)" autocomplete="off">
+          <div id="drive-subtitles-warning" class="text-danger mt-1 herramientas-drive-warning"></div>
+        </div>
+      </div>
+      <div class="d-flex justify-content-center">
+        <button type="submit" class="btn-panel btn-green mt-1">Añadir API</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="store-light maxw-800 mx-auto mt-3 br-8">
+  <div class="d-flex flex-column align-items-center">
+    <h4 class="mb-1">Importar / Exportar Configuración</h4>
+    
+    <div class="d-flex flex-wrap gap-1 align-items-end mb-1">
+      {# Input para el código de seguridad para exportar #}
+      <div>
+          <label for="exportSecurityCode" class="d-block mb-03">Código secreto para exportar:</label> 
+          <input type="text" name="export_security_code" id="exportSecurityCode" class="form-control" placeholder="Código secreto Exportar" autocomplete="off">
+      </div>
+      {# Botón de Exportación #}
+      <div>
+          <button type="button" class="btn-panel btn-blue" id="btnExportToolsConfig">Descargar</button>
+      </div>
+    </div>
+
+    <hr class="compact-hr">
+
+    {# Formulario de Importación #}
+    <form action="{{ url_for('store_bp.import_tools_config') }}" method="POST" enctype="multipart/form-data" class="d-flex flex-wrap gap-1 align-items-end mb-05" id="importToolsConfigForm">
+      <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+      <div>
+        <label for="toolsConfigFile" class="d-block mb-03">Archivo de configuración:</label>
+        <input type="file" name="config_file" id="toolsConfigFile" class="form-control" accept=".json" required autocomplete="off">
+      </div>
+      <div>
+        <label for="toolsSecurityCode" class="d-block mb-03">Código secreto para importar:</label> 
+        <input type="text" name="security_code" id="toolsSecurityCode" class="form-control" required placeholder="Código secreto Importar" autocomplete="off">
+      </div>
+      <div>
+        <button type="submit" class="btn-panel btn-green">Subir</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('store_bp.static', filename='js/herramientas.js') }}"></script>
+<script src="{{ url_for('store_bp.static', filename='js/youtube_listings.js') }}"></script>
+<script src="{{ url_for('store_bp.static', filename='js/api_list.js') }}"></script>
+<script src="{{ url_for('store_bp.static', filename='js/admin_herramientas.js') }}"></script>
+{% endblock %} 

@@ -1,0 +1,279 @@
+/* ============================================================================
+   CHAT ENHANCEMENTS - ESTILOS PARA FUNCIONALIDADES MEJORADAS
+   ============================================================================ */
+
+/* ============================================================================
+   1. BÚSQUEDA DE MENSAJES - REMOVIDO
+   ============================================================================ */
+
+/* ============================================================================
+   2. NOTIFICACIONES PUSH
+   ============================================================================ */
+
+.notification-permission-banner {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    background: linear-gradient(135deg, #25d366 0%, #128c7e 100%);
+    color: white;
+    padding: 15px 20px;
+    border-radius: 10px;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    z-index: 1000;
+    animation: slideInRight 0.3s ease-out;
+    max-width: 350px;
+}
+
+.notification-permission-banner p {
+    margin: 0;
+    font-size: 0.95em;
+    line-height: 1.4;
+}
+
+.notification-permission-banner button {
+    background: #ffffff;
+    color: #128c7e;
+    border: none;
+    padding: 8px 15px;
+    border-radius: 5px;
+    cursor: pointer;
+    font-weight: bold;
+    transition: background 0.2s ease, color 0.2s ease;
+}
+
+.notification-permission-banner button:hover {
+    background: #e0e0e0;
+    color: #0f6e5e;
+}
+
+@keyframes slideInRight {
+    from {
+        transform: translateX(100%);
+        opacity: 0;
+    }
+    to {
+        transform: translateX(0);
+        opacity: 1;
+    }
+}
+
+@keyframes slideOutRight {
+    from {
+        transform: translateX(0);
+        opacity: 1;
+    }
+    to {
+        transform: translateX(100%);
+        opacity: 0;
+    }
+}
+
+/* ============================================================================
+   3. RATE LIMITING
+   ============================================================================ */
+
+.rate-limit-warning {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: linear-gradient(135deg, #ff6b6b 0%, #ee5a52 100%);
+    color: white;
+    padding: 20px 30px;
+    border-radius: 10px;
+    box-shadow: 0 5px 20px rgba(0, 0, 0, 0.4);
+    text-align: center;
+    z-index: 1001;
+    animation: pulse 0.5s ease-in-out;
+    max-width: 400px;
+}
+
+.rate-limit-warning h4 {
+    margin-top: 0;
+    margin-bottom: 10px;
+    font-size: 1.4em;
+}
+
+.rate-limit-warning p {
+    margin-bottom: 0;
+    font-size: 1em;
+    line-height: 1.5;
+}
+
+@keyframes pulse {
+    0% {
+        transform: translate(-50%, -50%) scale(1);
+        box-shadow: 0 5px 20px rgba(0, 0, 0, 0.4);
+    }
+    50% {
+        transform: translate(-50%, -50%) scale(1.02);
+        box-shadow: 0 8px 25px rgba(0, 0, 0, 0.5);
+    }
+    100% {
+        transform: translate(-50%, -50%) scale(1);
+        box-shadow: 0 5px 20px rgba(0, 0, 0, 0.4);
+    }
+}
+
+/* ============================================================================
+   4. VALIDACIÓN DE ARCHIVOS
+   ============================================================================ */
+
+.file-validation-error {
+    background: linear-gradient(135deg, #ff6b6b 0%, #ee5a52 100%);
+    color: white;
+    padding: 10px 15px;
+    border-radius: 8px;
+    margin-top: 10px;
+    font-size: 0.9em;
+    animation: shake 0.5s ease-in-out;
+}
+
+.file-validation-success {
+    background: linear-gradient(135deg, #25d366 0%, #128c7e 100%);
+    color: white;
+    padding: 10px 15px;
+    border-radius: 8px;
+    margin-top: 10px;
+    font-size: 0.9em;
+    animation: fadeIn 0.3s ease-out;
+}
+
+@keyframes shake {
+    0%, 100% { transform: translateX(0); }
+    20%, 60% { transform: translateX(-5px); }
+    40%, 80% { transform: translateX(5px); }
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+/* ============================================================================
+   5. LAZY LOADING DE MENSAJES
+   ============================================================================ */
+
+.load-more-messages-btn {
+    display: block;
+    width: fit-content;
+    margin: 1rem auto;
+    padding: 0.6rem 1.2rem;
+    background: linear-gradient(135deg, #007bff 0%, #0056b3 100%);
+    color: white;
+    border: none;
+    border-radius: 20px;
+    cursor: pointer;
+    font-size: 0.9em;
+    transition: all 0.3s ease;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+.load-more-messages-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.load-more-messages-btn:disabled {
+    background: #6c757d;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+}
+
+.loading-messages-spinner {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 1rem;
+}
+
+.loading-messages-spinner .spinner {
+    border: 3px solid #f3f3f3; /* Light grey */
+    border-top: 3px solid #25d366; /* Green */
+    border-radius: 50%;
+    width: 20px;
+    height: 20px;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+/* ============================================================================
+   6. MEMOIZACIÓN DE COMPONENTES
+   ============================================================================ */
+
+/* Estilos para mensajes en caché (opcional, para depuración o indicación visual) */
+.message.cached {
+    opacity: 0.8;
+    transition: opacity 0.3s ease;
+}
+
+.message.cached:hover {
+    opacity: 1;
+}
+
+/* ============================================================================
+   7. RESPONSIVE DESIGN
+   ============================================================================ */
+
+@media (max-width: 768px) {
+    .notification-permission-banner {
+        top: 10px;
+        right: 10px;
+        padding: 10px 15px;
+        max-width: 90%;
+        font-size: 0.9em;
+    }
+
+    .rate-limit-warning {
+        max-width: 90%;
+        padding: 15px 20px;
+    }
+
+    .file-validation-error,
+    .file-validation-success {
+        font-size: 0.8em;
+        padding: 8px 12px;
+    }
+
+    .load-more-messages-btn {
+        font-size: 0.8em;
+        padding: 0.5rem 1rem;
+    }
+}
+
+@media (max-width: 480px) {
+    .notification-permission-banner {
+        top: 5px;
+        right: 5px;
+        left: 5px;
+        max-width: none;
+        padding: 8px 12px;
+        font-size: 0.85em;
+    }
+
+    .notification-permission-banner button {
+        padding: 6px 12px;
+        font-size: 0.8em;
+    }
+
+    .rate-limit-warning {
+        max-width: 95%;
+        padding: 12px 16px;
+    }
+
+    .rate-limit-warning h4 {
+        font-size: 1.2em;
+    }
+
+    .rate-limit-warning p {
+        font-size: 0.9em;
+    }
+}

@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="csrf_token" content="{{ csrf_token() }}">
+    <meta name="admin_user" content="{{ admin_user }}">
+    <meta name="current_user" content="{{ current_username or 'Usuario' }}">
+    <meta name="is_logged_in" content="{{ 'true' if is_logged_in else 'false' }}">
+    <meta name="is_admin" content="{{ 'true' if is_admin else 'false' }}">
+    <title>{{ worksheet.title }} - Hoja de Cálculo Compartida</title>
+    
+    <!-- CSS exactamente igual que el admin work_sheets.html -->
+    <link rel="icon" href="{{ url_for('static', filename='images/favicon.svg') }}" type="image/svg+xml">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+    <link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='fontawesome/css/all.css') }}">
+    
+
+</head>
+<body class="theme-active tema1 shared-mode {% if is_readonly %}readonly{% endif %}" data-opacity="0.8">
+
+
+    <!-- Indicador de modo simple -->
+    <div class="shared-mode-indicator">
+        {% if is_readonly %}
+            Modo Lectura
+        {% else %}
+            Modo Ver y Editar
+        {% endif %}
+    </div>
+
+    <!-- Contenedor principal con estilos base -->
+    <div class="container">
+        <div class="container-max-width-900 mt-2 store-light worksheet-panel">
+        
+        <!-- Menú móvil (oculto en compartido pero necesario para estructura) -->
+        <div id="mobileMenu" class="mobile-menu-store hidden">
+            <div class="menu-title-row"></div>
+            <div class="menu-search-row px-2 py-2">
+                <div class="input-group">
+                    <span class="input-group-text"><i class="fas fa-search"></i></span>
+                    <label for="menuSearchInput" class="sr-only">Buscar en menú</label>
+                    <input type="text" class="form-control text-center" placeholder="Buscar..." id="menuSearchInput" name="menuSearchInput" autocomplete="off">
+                </div>
+            </div>
+            <div id="plantillasMenuList" class="mt-2 px-2"></div>
+        </div>
+        <div id="menuOverlay" class="menu-overlay"></div>
+
+
+        <!-- Barra de búsqueda (igual que admin) -->
+        <div class="d-flex flex-column align-items-center justify-content-center mb-4 w-100">
+            <div class="d-flex flex-wrap align-items-center worksheet-search-container worksheet-search-centered">
+                <div class="search-container search-container-relative">
+                    <label for="mainSearchInput" class="sr-only">Buscar hojas de cálculo</label>
+                    <input type="text" class="form-control" placeholder="Buscar..." id="mainSearchInput" name="mainSearchInput" autocomplete="off">
+                    <button type="button" class="search-clear-btn hidden" id="clearMainSearch"><i class="fas fa-times"></i></button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Contenedor de la tabla (igual que admin) -->
+        <div id="worksheetTableContainer" class="mt-4"></div>
+    </div>
+
+    <!-- Modales necesarios (ocultos en modo compartido pero requeridos por JavaScript) -->
+    
+    <!-- Modal para crear plantilla de hojas de cálculo -->
+    <div id="modalCrearPlantilla" class="modal-overlay d-none">
+        <div class="modal-content worksheet-modal">
+            <div class="modal-header">
+                <h3 class="modal-title">Crear plantilla hojas de cálculo</h3>
+                <button id="closeModalCrearPlantilla" class="btn-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <label for="tituloPlantillaInput" class="sr-only">Título de la plantilla</label>
+                    <input type="text" class="form-control" id="tituloPlantillaInput" name="tituloPlantillaInput" placeholder="Título de la plantilla..." autocomplete="off">
+                </div>
+                <div class="worksheet-fields-grid">
+                    <button class="worksheet-field-btn" data-field="correo">
+                        <i class="fas fa-envelope"></i>
+                        <span>Correo</span>
+                    </button>
+                    <button class="worksheet-field-btn" data-field="contraseña">
+                        <i class="fas fa-key"></i>
+                        <span>Contraseña</span>
+                    </button>
+                    <button class="worksheet-field-btn" data-field="links">
+                        <i class="fas fa-link"></i>
+                        <span>Links</span>
+                    </button>
+                    <button class="worksheet-field-btn" data-field="letras">
+                        <i class="fas fa-font"></i>
+                        <span>Letras</span>
+                    </button>
+                    <button class="worksheet-field-btn" data-field="informacion-adicional">
+                        <i class="fas fa-info-circle"></i>
+                        <span>Información adicional</span>
+                    </button>
+                    <button class="worksheet-field-btn" data-field="numero">
+                        <i class="fas fa-hashtag"></i>
+                        <span>Número</span>
+                    </button>
+                    <button class="worksheet-field-btn" data-field="otro-campo">
+                        <i class="fas fa-ellipsis-h"></i>
+                        <span>Otro campo</span>
+                    </button>
+                </div>
+                <div class="selected-fields-container mt-3">
+                    <h5>Campos seleccionados:</h5>
+                    <div id="selectedFieldsList" class="selected-fields-list">
+                        <p class="text-muted">Ningún campo seleccionado</p>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button id="btnGenerarPlantilla" class="btn-panel btn-green" disabled>
+                    <i class="fas fa-file-excel"></i> Generar plantilla
+                </button>
+                <button id="btnCancelarPlantilla" class="btn-panel btn-red">
+                    Cancelar
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal para plantillas rápidas -->
+    <div id="modalHojasCreadas" class="modal-overlay d-none">
+        <div class="modal-content worksheet-modal">
+            <div class="modal-header">
+                <h3 class="modal-title">Crear plantilla rápida</h3>
+                <button id="closeModalHojasCreadas" class="btn-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <label for="tituloPlantillaRapidaInput" class="sr-only">Título de la plantilla rápida</label>
+                    <input type="text" class="form-control" id="tituloPlantillaRapidaInput" name="tituloPlantillaRapidaInput" placeholder="Título de la plantilla..." autocomplete="off">
+                </div>
+                <div class="mb-3">
+                    <label for="comboPlantillaRapida" class="form-label">Selecciona una combinación:</label>
+                    <select id="comboPlantillaRapida" class="form-select" autocomplete="off">
+                        <option value="correo:contraseña:correo:contraseña:numero">correo:contraseña:correo:contraseña:numero</option>
+                        <option value="correo:contraseña:letras:correo:contraseña:numero">correo:contraseña:letras:correo:contraseña:numero</option>
+                        <option value="correo:contraseña:links:correo:contraseña:numero">correo:contraseña:links:correo:contraseña:numero</option>
+                        <option value="correo:contraseña:correo:contraseña:numero:correo:contraseña:correo:contraseña:numero">correo:contraseña:correo:contraseña:numero:correo:contraseña:correo:contraseña:numero</option>
+                        <option value="correo:contraseña:links:correo:contraseña:numero:correo:contraseña:links:correo:contraseña:numero">correo:contraseña:links:correo:contraseña:numero:correo:contraseña:links:correo:contraseña:numero</option>
+                    </select>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button id="btnCrearPlantillaRapida" class="btn-panel btn-blue">
+                    <i class="fas fa-bolt"></i> Crear plantilla rápida
+                </button>
+                <button id="btnCancelarPlantillaRapida" class="btn-panel btn-red">
+                    Cancelar
+                </button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Scripts necesarios -->
+    <script>
+        // Variables globales para JavaScript externo
+        window.currentUsername = '{{ current_username or "Usuario" }}';
+        window.isAdmin = {{ 'true' if is_admin else 'false' }};
+        window.isLoggedIn = {{ 'true' if is_logged_in else 'false' }};
+        window.adminUser = '{{ admin_user }}';
+        window.userIP = '{{ user_ip }}';
+        
+        // ⭐ NUEVO: Variables específicas para modo compartido
+        window.isSharedMode = true;
+        window.isReadonly = {{ 'true' if is_readonly else 'false' }};
+        window.sharedToken = '{{ token }}';
+        window.accessType = '{{ access_type }}';
+        
+        
+        // Inicializar plantilla directamente con datos del servidor
+        window.sharedWorksheetData = {
+            id: {{ worksheet.id }},
+            title: '{{ worksheet.title }}',
+            fields: {{ worksheet.fields | tojson }},
+            data: {{ data | tojson }},
+            dataTotal: {{ data | length }},
+            formato: {{ formato | tojson }}
+        };
+        
+        
+        // Inicializar plantilla cuando el DOM esté listo
+        document.addEventListener('DOMContentLoaded', function() {
+            renderSimpleTable();
+            
+            // Mostrar contenido cuando esté completamente cargado
+            setTimeout(function() {
+                document.body.classList.add('loaded');
+            }, 100);
+        });
+        
+        // Fallback: mostrar contenido después de un tiempo máximo
+        setTimeout(function() {
+            if (!document.body.classList.contains('loaded')) {
+                document.body.classList.add('loaded');
+            }
+        }, 1000);
+        
+        // Función de renderizado simple
+        function renderSimpleTable() {
+            const container = document.getElementById('worksheetTableContainer');
+            if (!container) {
+                return;
+            }
+            
+            const data = window.sharedWorksheetData.data;
+            const fields = window.sharedWorksheetData.fields;
+            
+            if (!data || !Array.isArray(data) || data.length === 0) {
+                container.innerHTML = '<div class="shared-worksheet-error"><h3>No hay datos para mostrar</h3></div>';
+                return;
+            }
+            
+            if (!fields || !Array.isArray(fields) || fields.length === 0) {
+                container.innerHTML = '<div class="shared-worksheet-error"><h3>No hay campos definidos</h3></div>';
+                return;
+            }
+            
+               let html = `
+                   <div class="shared-worksheet-container">
+                       <h3 class="shared-worksheet-title">
+                           📊 ${window.sharedWorksheetData.title}
+                       </h3>
+                       <p class="shared-worksheet-info">
+                           Mostrando ${data.length} filas • ${fields.length} columnas
+                       </p>
+                       <div class="shared-worksheet-table-container">
+                           <table class="shared-worksheet-table">
+                               <thead class="shared-worksheet-thead">
+                                   <tr class="shared-worksheet-header-row">
+               `;
+            
+            // Encabezados
+            fields.forEach((field, index) => {
+                html += `<th class="shared-worksheet-header-cell">${field}</th>`;
+            });
+            
+            html += `
+                                </tr>
+                            </thead>
+                            <tbody>
+            `;
+            
+            // Filas de datos
+            data.forEach((row, rowIndex) => {
+                if (rowIndex >= 100) return; // Limitar a 100 filas para rendimiento
+                
+                const rowClass = rowIndex % 2 === 0 ? 'shared-worksheet-row-even' : 'shared-worksheet-row-odd';
+                html += `<tr class="${rowClass}">`;
+                
+                // Asegurar que la fila tenga la cantidad correcta de celdas
+                for (let i = 0; i < fields.length; i++) {
+                    const cellValue = row[i] || '';
+                    const displayValue = cellValue.toString().length > 50 ? 
+                                      cellValue.toString().substring(0, 50) + '...' : 
+                                      cellValue.toString();
+                    html += `<td class="shared-worksheet-cell">${displayValue}</td>`;
+                }
+                
+                html += `</tr>`;
+            });
+            
+            html += `
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="shared-worksheet-status">
+                        ✅ <strong>Tabla cargada exitosamente</strong><br>
+                        ${fields.length} columnas • ${Math.min(data.length, 100)} filas mostradas de ${data.length} disponibles<br>
+                        <small>Modo: ${window.isReadonly ? 'Solo lectura' : 'Editable'}</small>
+                    </div>
+                </div>
+            `;
+            
+            container.innerHTML = html;
+        }
+        
+    </script>
+    <script src="{{ url_for('store_bp.static', filename='js/admin_work_sheets.js') }}" defer></script>
+</body>
+</html> 

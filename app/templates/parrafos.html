@@ -1,0 +1,145 @@
+{% extends "base.html" %}
+
+{% block title %}Párrafos{% endblock %}
+
+{% block content %}
+
+{# Eliminado div contenedor principal #}
+
+{# --- Inicio Contenedor Párrafo 1 (Ahora es la tarjeta principal) --- #}
+<div class="admin-card form-container-medium paragraph-section mb-1"> {# Añadidas clases de tarjeta, quitada mt-2, añadida mb-1 #}
+  <h3 class="mt-0 text-center">Párrafo 1</h3>
+
+  {# Formulario solo para el textarea #}
+  <form id="saveMsgForm1" action="{{ url_for('admin_bp.update_paragraph', num_paragraph=1) }}" method="POST" class="mb-05">
+    <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+    {# Aplicadas clases display, width, resize #}
+    <label for="paragraph1" class="sr-only">Contenido del párrafo 1:</label>
+    <textarea
+      id="paragraph1"
+      name="paragraph"
+      rows="3"
+      class="d-block w-100 resize-vertical"
+      autocomplete="off"
+    >{{ paragraph }}</textarea>
+  </form>
+
+  {# Div flex para los botones y estado #}
+  <div class="d-flex align-items-center flex-wrap gap-05 mt-05">
+    <button type="submit" form="saveMsgForm1" class="btn-green">Guardar</button>
+    <form action="{{ url_for('admin_bp.cycle_paragraph_mode', num_paragraph=1) }}" method="POST" class="m-0">
+      <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+      {% if paragraph_mode == 'off' %}
+        <button type="submit" class="btn-blue">Habilitar no registrados</button>
+      {% else %}
+        <button type="submit" class="btn-red">Deshabilitado no registrados</button>
+      {% endif %}
+    </form>
+    {# Aplicadas clases margen y texto específico #}
+    <div class="ml-auto paragraph-status-text">
+      Estado:
+      {% if paragraph_mode == 'off' %}
+        <strong>desactivado</strong>
+      {% elif paragraph_mode == 'guests' %}
+        <strong>no registrados</strong>
+      {% endif %}
+    </div>
+  </div>
+</div> {# --- Fin Contenedor Párrafo 1 --- #}
+
+{# Eliminado HR #}
+
+{# --- Inicio Contenedor Párrafo 2 (Ahora es la tarjeta principal) --- #}
+<div class="admin-card form-container-medium paragraph-section mb-2"> {# Añadidas clases de tarjeta, quitada clase 'paragraph-section', añadida mb-2 #}
+  <h3 class="text-center">Párrafo 2</h3>
+
+  {# Formulario solo para el textarea #}
+  <form id="saveMsgForm2" action="{{ url_for('admin_bp.update_paragraph', num_paragraph=2) }}" method="POST" class="mb-05">
+    <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+    <label for="paragraph2" class="sr-only">Contenido del párrafo 2:</label>
+    <textarea
+      id="paragraph2"
+      name="paragraph"
+      rows="3"
+      class="d-block w-100 resize-vertical"
+      autocomplete="off"
+    >{{ paragraph2 }}</textarea>
+  </form>
+
+  {# Div flex para los botones y estado #}
+  <div class="d-flex align-items-center flex-wrap gap-05 mt-05">
+    <button type="submit" form="saveMsgForm2" class="btn-green">Guardar</button>
+    <form action="{{ url_for('admin_bp.cycle_paragraph_mode', num_paragraph=2) }}" method="POST" class="m-0">
+      <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+      {% if paragraph2_mode == 'off' %}
+        <button type="submit" class="btn-blue">Habilitar usuarios</button>
+      {% else %}
+        <button type="submit" class="btn-red">Deshabilitado usuarios</button>
+      {% endif %}
+    </form>
+    {# Aplicadas clases margen y texto específico #}
+    <div class="ml-auto paragraph-status-text">
+      Estado:
+      {% if paragraph2_mode == 'off' %}
+        <strong>desactivado</strong>
+      {% elif paragraph2_mode == 'users' %}
+        <strong>usuarios</strong>
+      {% endif %}
+    </div>
+  </div>
+
+</div> {# --- Fin Contenedor Párrafo 2 --- #}
+
+{# --- Inicio Contenedor Párrafo 3 (Ahora es la tarjeta principal) --- #}
+<div class="admin-card form-container-medium paragraph-section mb-2">
+  <h3 class="text-center">Párrafo 3</h3>
+
+  {# Formulario solo para el textarea #}
+  <form id="saveMsgForm3" action="{{ url_for('admin_bp.update_paragraph', num_paragraph=3) }}" method="POST" class="mb-05">
+    <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+    <label for="paragraph3" class="sr-only">Contenido del párrafo 3:</label>
+    <textarea
+      id="paragraph3"
+      name="paragraph"
+      rows="3"
+      class="d-block w-100 resize-vertical"
+      autocomplete="off"
+    >{{ paragraph3 }}</textarea>
+  </form>
+
+  {# Div flex para los botones y estado #}
+  <div class="d-flex align-items-center flex-wrap gap-05 mt-05">
+    <button type="submit" form="saveMsgForm3" class="btn-green">Guardar</button>
+    <form action="{{ url_for('admin_bp.cycle_paragraph_mode', num_paragraph=3) }}" method="POST" class="m-0">
+      <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+      {% if paragraph3_mode == 'off' %}
+        <button type="submit" class="btn-blue">Habilitar no registrados</button>
+      {% else %}
+        <button type="submit" class="btn-red">Deshabilitado no registrados</button>
+      {% endif %}
+    </form>
+    {# Aplicadas clases margen y texto específico #}
+    <div class="ml-auto paragraph-status-text">
+      Estado:
+      {% if paragraph3_mode == 'off' %}
+        <strong>desactivado</strong>
+      {% elif paragraph3_mode == 'guests' %}
+        <strong>no registrados</strong>
+      {% endif %}
+    </div>
+  </div>
+
+  {# Botón Volver (Movido dentro de la última tarjeta) #}
+  <div class="text-right mt-1">
+    {# Añadido ID y data-url, quitado href y estilo #}
+    <button 
+      id="btnVolverPanelParrafos"
+      type="button"
+      class="btn-blue"
+      data-dashboard-url="{{ url_for('admin_bp.dashboard') }}"
+      >Volver</button>
+  </div>
+
+</div> {# --- Fin Contenedor Párrafo 3 --- #}
+
+{% endblock %}

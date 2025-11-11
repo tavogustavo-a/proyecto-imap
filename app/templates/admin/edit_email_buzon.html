@@ -1,0 +1,60 @@
+{% extends "admin_dashboard.html" %}
+
+{% block content %}
+<div class="admin-card">
+  <h3>Editar Servidor de Buzón</h3>
+  
+  <form action="{{ url_for('admin_email_buzon.edit_buzon', server_id=server.id) }}" method="POST">
+    <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+    
+    <label for="edit_domain" class="sr-only">Dominio</label>
+    <input
+      id="edit_domain"
+      type="text"
+      name="domain"
+      value="{{ server.domain }}"
+      placeholder="tudominio.com"
+      required
+      class="d-block mb-05"
+      autocomplete="off"
+    >
+    
+    <label for="edit_smtp_port" class="sr-only">Puerto SMTP</label>
+    <input
+      id="edit_smtp_port"
+      type="number"
+      name="smtp_port"
+      value="{{ server.smtp_port }}"
+      placeholder="25"
+      class="d-block mb-05"
+      autocomplete="off"
+    >
+    
+    <label for="edit_max_emails" class="sr-only">Máximo emails por segundo</label>
+    <input
+      id="edit_max_emails"
+      type="number"
+      name="max_emails_per_second"
+      value="{{ server.max_emails_per_second }}"
+      placeholder="300"
+      class="d-block mb-05"
+      autocomplete="off"
+    >
+    
+    <label class="form-checkbox-label">
+      <input
+        type="checkbox"
+        name="enabled"
+        {{ 'checked' if server.enabled else '' }}
+        class="form-checkbox-input"
+      >
+      Servidor activo
+    </label>
+    
+    <div class="mt-1">
+      <button type="submit" class="btn-green">Actualizar Servidor</button>
+      <a href="{{ url_for('admin_email_buzon.manage_email_buzon') }}" class="btn-gray ml-1">Cancelar</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

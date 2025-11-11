@@ -1,0 +1,135 @@
+{% extends "base.html" %}
+
+{% block title %}Productos{% endblock %}
+
+{% block head %}
+  {{ super() }}
+  <link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}">
+  <meta name="csrf_token" content="{{ csrf_token() }}">
+{% endblock %}
+{% block content %}
+<div class="store-light maxw-800 mx-auto mt-3 br-8">
+  <!-- Tarjeta: Lista de Productos -->
+    <div class="header-container d-flex align-items-center justify-content-between mb-2">
+      <div class="section-title mb-0"><strong>Lista de Productos:</strong></div>
+        <a href="{{ url_for('store_bp.admin_store') }}" class="btn-blue btn-panel">Volver</a>
+    </div>
+    <!-- Campo mostrar y buscar en la misma línea -->
+    <div class="d-flex flex-wrap align-items-center mb-1 productos-buscar-mostrar">
+      <div class="search-container">
+        <label for="searchProductInput" class="sr-only">Buscar producto</label>
+        <input type="search" id="searchProductInput" placeholder="Buscar producto..." autocomplete="off">
+      </div>
+      <div class="d-flex align-items-center gap-1">
+        <label for="showCount" class="sr-only">Mostrar cantidad</label>
+        <select id="showCount" autocomplete="off">
+          <option value="10">10</option>
+          <option value="20">20</option>
+          <option value="30">30</option>
+          <option value="40">40</option>
+          <option value="50">50</option>
+          <option value="100">100</option>
+          <option value="all">Todas</option>
+        </select>
+      </div>
+    </div>
+    <!-- Solo la tabla dentro del contorno blanco -->
+    <div class="table-wrapper-store">
+      <table class="table mb-1" id="products-table">
+        <thead>
+          <tr>
+            <th class="id-col">ID</th>
+            <th class="image-col">Imagen</th>
+            <th class="name-col">Nombre</th>
+            <th class="price-col">$ COP</th>
+            <th class="price-col">$ USD</th>
+            <th class="actions-col">Acciones</th>
+          </tr>
+        </thead>
+        <tbody id="products-table-body">
+          {% for p in products %}
+          <tr id="product-row-{{ p.id }}" data-product-name="{{ p.name|lower }}">
+            <td class="id-col">{{ p.id }}</td>
+            <td class="image-col">
+              {% if p.image_filename and p.image_filename != 'none' %}
+                <img src="{{ url_for('static', filename='images/' + p.image_filename) }}" alt="{{ p.name }}" class="product-image">
+              {% else %}
+                <span class="no-image-placeholder">-</span>
+              {% endif %}
+            </td>
+            <td class="name-col">{{ p.name }}</td>
+            <td class="price-col">{{ '$%d'|format(p.price_cop|round|int) }}</td>
+            <td class="price-col">
+              <div class="productos-usd-color">${{ p.price_usd|int }} USD</div>
+            </td>
+            <td class="actions-col">
+              <div class="action-stack">
+                <form class="ajax-form toggle-product-form" method="POST" data-action="{{ url_for('store_bp.toggle_product_ajax', product_id=p.id) }}">
+                  <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+                  <button type="submit" class="action-btn {{ 'action-red' if p.enabled else 'action-green' }}">{{ 'OFF' if p.enabled else 'ON' }}</button>
+                </form>
+                <a href="{{ url_for('store_bp.edit_product', prod_id=p.id) }}" class="action-btn action-blue">Editar</a>
+                {% if not p.is_preset %}
+                <form class="ajax-form delete-product-form" method="POST" data-action="{{ url_for('store_bp.delete_product_ajax', prod_id=p.id) }}">
+                   <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+                  <button type="submit" class="action-btn action-red" title="Eliminar">
+                    <i class="fas fa-trash"></i>
+                  </button>
+                </form>
+                {% endif %}
+              </div>
+            </td>
+          </tr>
+          {% else %}
+          <tr><td colspan="6">No hay productos todavía.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <!-- Botones de paginación fuera del contorno blanco -->
+    <div class="d-flex justify-content-center mt-2 mb-2 pagination-buttons productos-paginacion-margen">
+      <button id="prevPageBtn" class="btn-blue btn-panel" type="button">&lt; Anterior</button>
+      <button id="nextPageBtn" class="btn-blue btn-panel" type="button">Siguiente &gt;</button>
+    </div>
+  </div>
+
+  <!-- Tarjeta: Añadir Producto -->
+  <div class="store-light add-product-container">
+    <div class="table-wrapper-store">
+      <h3 class="text-center mb-1">Añadir Producto</h3>
+      <form action="{{ url_for('store_bp.create_product') }}" method="POST" class="d-flex flex-column gap-03 align-items-center" id="newProductForm">
+        <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+        <label for="productName" class="sr-only">Nombre del producto</label>
+        <input type="text" id="productName" name="name" placeholder="Nombre del producto" autocomplete="off" required>
+        <label for="productPriceCop" class="sr-only">Precio COP</label>
+        <input type="number" id="productPriceCop" step="1" name="price_cop" placeholder="Precio COP" autocomplete="off" required>
+        <label for="productPriceUsd" class="sr-only">Precio USD</label>
+        <input type="number" id="productPriceUsd" step="1" name="price_usd" placeholder="Precio USD" autocomplete="off" required>
+        <div class="image-select-container">
+            <div class="grid-overlay" id="imageGridOverlay"></div>
+            <label for="imageSelect" class="sr-only">Seleccionar imagen</label>
+            <select name="image_filename" id="imageSelect" class="visually-hidden-select" autocomplete="off">
+                <option value="none" selected>Ninguno</option>
+                {% for img_num in range(1, 33) %}
+                <option value="stream{{ img_num }}.png">stream{{ img_num }}.png</option>
+                {% endfor %}
+            </select>
+            <button type="button" id="imageSelectTrigger" class="image-select-trigger-btn">Seleccionar Imagen</button>
+            <div class="image-grid" id="imageGrid"></div>
+        </div>
+        <div class="image-preview-container">
+          <img id="imgPreview" src="{{ url_for('static', filename='images/stream1.png') }}" alt="preview">
+        </div>
+        <label for="productDescription" class="sr-only">Descripción del producto</label>
+        <textarea id="productDescription" name="description" class="textarea-black-border" placeholder="Descripción (opcional)" autocomplete="off"></textarea>
+        <button type="submit" class="btn-green">Crear Producto</button>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+  {{ super() }}
+  <script src="{{ url_for('store_bp.static', filename='js/admin_store.js') }}" defer></script>
+  <script src="{{ url_for('store_bp.static', filename='js/productos.js') }}" defer></script>
+{% endblock %} 

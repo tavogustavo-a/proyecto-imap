@@ -1,0 +1,245 @@
+<!-- app/templates/edit_subuser.html -->
+{% extends "base.html" %}
+
+{% block title %}Editar Sub-usuario{% endblock %}
+
+{% block head %}
+  <meta name="csrf_token" content="{{ csrf_token() }}">
+{% endblock head %}
+
+{% block content %}
+<div class="form-container-700">
+
+  <!-- TARJETA 1: Cabecera y Contraseña -->
+  <section class="admin-card" role="region" aria-labelledby="password-section-title">
+    <div class="d-flex justify-content-between align-items-center mb-1">
+      <h3 class="m-0">Editar Sub-usuario: {{ sub_user.username }}</h3>
+      <div class="ml-auto text-right">
+        <button
+          id="btnVolverSubuserLista"
+          type="button"
+          class="btn-blue"
+          data-url="{{ url_for('subuser_bp.manage_subusers') }}"
+          aria-label="Volver a la lista de sub-usuarios"
+        >
+          Volver
+        </button>
+      </div>
+    </div>
+    <hr class="hr-margin-08">
+
+    <!-- Formulario para Cambiar Contraseña -->
+    <div class="form-section">
+      <h4 id="password-section-title" class="mt-0 mb-05">Cambiar Contraseña</h4>
+      <form action="{{ url_for('subuser_bp.update_subuser_password') }}" method="POST" class="d-flex gap-05">
+        <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+      <input type="hidden" name="sub_id" value="{{ sub_user.id }}">
+        <label for="newPasswordInput" class="sr-only">Nueva contraseña</label>
+        <input type="password" id="newPasswordInput" name="new_pass" placeholder="Nueva contraseña" required class="flex-grow-1" autocomplete="new-password" aria-label="Nueva contraseña para el sub-usuario">
+        <button type="submit" class="btn-blue" aria-label="Actualizar contraseña del sub-usuario">Actualizar Contraseña</button>
+    </form>
+  </div>
+  <!-- Permiso de acceso a tienda -->
+  {% if parent_has_store_role %}
+    <div class="form-section mt-1">
+      <label class="d-flex align-items-center gap-03" for="canAccessStoreCheckbox">
+        <input type="checkbox" id="canAccessStoreCheckbox" name="can_access_store" {% if sub_user.can_access_store %}checked{% endif %}>
+        ¿Deseas que el sub-usuario vea la página de tienda?
+        <span id="store-permission-status" class="ml-1 text-success"></span>
+      </label>
+      <small class="text-secondary">Si está activado, el sub-usuario podrá acceder a la tienda y ver productos.</small>
+    </div>
+  {% endif %}
+  
+  <!-- Permiso de acceso a Códigos 2 -->
+  {% if parent_has_codigos2_access %}
+    <div class="form-section mt-1">
+      <label class="d-flex align-items-center gap-03" for="canAccessCodigos2Checkbox">
+        <input type="checkbox" id="canAccessCodigos2Checkbox" name="can_access_codigos2" {% if sub_user.can_access_codigos2 %}checked{% endif %}>
+        ¿Deseas que el sub-usuario vea la página de Códigos 2?
+        <span id="codigos2-permission-status" class="ml-1 text-success"></span>
+      </label>
+      <small class="text-secondary">Si está activado, el sub-usuario podrá acceder a la página de Códigos 2.</small>
+    </div>
+  {% endif %}
+  
+  <!-- Permiso de chat -->
+  {% if parent_can_manage_subusers %}
+    <div class="form-section mt-1">
+      <label class="d-flex align-items-center gap-03" for="canChatCheckbox">
+        <input type="checkbox" id="canChatCheckbox" name="can_chat" {% if sub_user.can_chat %}checked{% endif %}>
+        ¿Deseas que el sub-usuario pueda usar el chat?
+        <span id="chat-permission-status" class="ml-1 text-success"></span>
+      </label>
+      <small class="text-secondary">Si está activado, el sub-usuario podrá ver y usar el botón de chat de soporte.</small>
+    </div>
+  {% endif %}
+  </section> <!-- FIN TARJETA 1 -->
+
+  <!-- TARJETA 2: Correos Permitidos -->
+  <section class="admin-card admin-card + .admin-card" role="region" aria-labelledby="email-section-title">
+    <div class="form-section" 
+         id="email-management-section" 
+         data-subuser-id="{{ sub_user.id }}" 
+         data-save-url="{{ url_for('subuser_bp.update_subuser_emails_ajax') }}">
+        <h4 id="email-section-title" class="mt-0 mb-05">Gestionar Correos Permitidos</h4>
+
+        {% if parent_allowed_emails is defined and parent_allowed_emails %}
+            <p class="text-small text-secondary mb-05">
+                gestiona los correos de los sub-usuarios puedes habilitar y desactivar los correos seleccionados
+            </p>
+
+            <!-- Contenedor de Búsqueda y Limpiar -->
+            <div class="search-container form-search">
+              <label for="email-search-input" class="sr-only">Buscar correos</label>
+              <input type="search" id="email-search-input" placeholder="Buscar correos (separados por coma, espacio o salto de línea)..." class="email-search-input-style flex-grow-1" autocomplete="off" aria-label="Buscar correos por nombre o dirección">
+              <button type="button" id="email-search-clear-btn" class="btn-grey btn-small" title="Limpiar búsqueda" aria-label="Limpiar búsqueda de correos">Limpiar</button>
+      </div>
+      
+            <!-- Lista de Correos -->
+            <div class="email-checkbox-list" role="group" aria-labelledby="email-section-title">
+                {% set current_assigned_set = assigned_emails | map('lower') | list if assigned_emails is defined else [] %}
+                {% for email in parent_allowed_emails %}
+                <div class="email-item mb-04" data-email-text="{{ email | lower }}">
+                    <label class="d-flex align-items-center gap-03 label-flex w-100" for="email_checkbox_{{ loop.index0 }}">
+                    <input
+                        type="checkbox"
+                        id="email_checkbox_{{ loop.index0 }}"
+                        class="subuser-email-checkbox checkbox-email-item"
+                        data-email="{{ email }}"
+                        name="allowed_email_{{ loop.index0 }}"
+                        {% if email.lower() in current_assigned_set %}checked{% endif %}
+                    >
+                    <span class="text-medium-small ml-0">{{ email }}</span>
+                    </label>
+                </div>
+                {% else %}
+                 <p><i>No hay correos permitidos definidos para el usuario padre.</i></p>
+                {% endfor %}
+      </div>
+
+            <!-- Botones de Acción -->
+            <div class="d-flex flex-wrap align-items-center gap-075 mt-05" role="group" aria-label="Acciones para correos">
+                <button class="btn-green btn-small select-all-emails" aria-label="Activar todos los correos para el sub-usuario">Activar Todos</button>
+                <button class="btn-orange btn-small deselect-all-emails" aria-label="Desactivar todos los correos del sub-usuario">Desactivar</button>
+                <button class="btn-blue btn-small save-subuser-emails" aria-label="Guardar cambios en correos permitidos">Guardar</button>
+                <span class="save-status-msg ml-auto text-small text-success"></span>
+    </div>
+
+        {% else %}
+            <p class="text-italic text-secondary">El usuario padre no tiene correos configurados o la lista no está disponible. No se pueden asignar correos a este sub-usuario.</p>
+        {% endif %}
+    </div>
+     <!-- Aquí podrías añadir otras secciones de edición si las hubiera DENTRO de esta tarjeta -->
+  </section> <!-- FIN TARJETA 2 -->
+
+  <!-- TARJETA 3: Herramientas Públicas Permitidas -->
+  <section class="admin-card admin-card + .admin-card" role="region" aria-labelledby="tools-section-title">
+    <div class="form-section" id="tools-management-section" data-subuser-id="{{ sub_user.id }}">
+      <h4 id="tools-section-title" class="mt-0 mb-05">Gestionar Herramientas Públicas y Contenidos Permitidos</h4>
+      {% if parent_tools or parent_htmls or parent_youtube_listings or parent_apis %}
+        <p class="text-small text-secondary mb-05">
+          Selecciona las herramientas que quieres que se visualicen con tus sub-usuarios
+        </p>
+        <div class="tools-checkbox-list" role="group" aria-labelledby="tools-section-title">
+          {% set subuser_tools_ids = subuser_tools | map(attribute='id') | list %}
+          {% for tool in parent_tools %}
+            <div class="tool-item mb-04">
+              <label class="d-flex align-items-center gap-03 label-flex w-100" for="tool_checkbox_{{ loop.index0 }}">
+                <input
+                  type="checkbox"
+                  id="tool_checkbox_{{ loop.index0 }}"
+                  class="subuser-tool-checkbox"
+                  data-tool-id="{{ tool.id }}"
+                  data-tool-type="tool"
+                  name="allowed_tool_{{ loop.index0 }}"
+                  {% if tool.id in subuser_tools_ids %}checked{% endif %}
+                >
+                <span class="text-medium-small ml-0">[Herramienta de Cálculo] {{ tool.title }}</span>
+              </label>
+            </div>
+          {% endfor %}
+          {% set subuser_htmls_ids = subuser_htmls | map(attribute='id') | list %}
+          {% for html in parent_htmls %}
+            <div class="tool-item mb-04">
+              <label class="d-flex align-items-center gap-03 label-flex w-100" for="html_checkbox_{{ loop.index0 }}">
+                <input
+                  type="checkbox"
+                  id="html_checkbox_{{ loop.index0 }}"
+                  class="subuser-tool-checkbox"
+                  data-tool-id="{{ html.id }}"
+                  data-tool-type="html"
+                  name="allowed_html_{{ loop.index0 }}"
+                  {% if html.id in subuser_htmls_ids %}checked{% endif %}
+                >
+                <span class="text-medium-small ml-0">[Información adicional] {{ html.title }}</span>
+              </label>
+            </div>
+          {% endfor %}
+          {% set subuser_youtube_ids = subuser_youtube_listings | map(attribute='id') | list %}
+          {% for yt in parent_youtube_listings %}
+            <div class="tool-item mb-04">
+              <label class="d-flex align-items-center gap-03 label-flex w-100" for="youtube_checkbox_{{ loop.index0 }}">
+                <input
+                  type="checkbox"
+                  id="youtube_checkbox_{{ loop.index0 }}"
+                  class="subuser-tool-checkbox"
+                  data-tool-id="{{ yt.id }}"
+                  data-tool-type="youtube"
+                  name="allowed_youtube_{{ loop.index0 }}"
+                  {% if yt.id in subuser_youtube_ids %}checked{% endif %}
+                >
+                <span class="text-medium-small ml-0">[Video Producción] {{ yt.title }}</span>
+              </label>
+            </div>
+          {% endfor %}
+          {% set subuser_apis_ids = subuser_apis | map(attribute='id') | list %}
+          {% for api in parent_apis %}
+            <div class="tool-item mb-04">
+              <label class="d-flex align-items-center gap-03 label-flex w-100" for="api_checkbox_{{ loop.index0 }}">
+                <input
+                  type="checkbox"
+                  id="api_checkbox_{{ loop.index0 }}"
+                  class="subuser-tool-checkbox"
+                  data-tool-id="{{ api.id }}"
+                  data-tool-type="api"
+                  name="allowed_api_{{ loop.index0 }}"
+                  {% if api.id in subuser_apis_ids %}checked{% endif %}
+                >
+                <span class="text-medium-small ml-0">
+                  [Extra Búsqueda]
+                  {% if api.api_type == 'Drive' %}
+                    {% set subtitulos = [] %}
+                    {% if api.drive_subtitle_photos %} {% set _ = subtitulos.append(api.drive_subtitle_photos) %} {% endif %}
+                    {% if api.drive_subtitle_videos %} {% set _ = subtitulos.append(api.drive_subtitle_videos) %} {% endif %}
+                    {{ subtitulos|join(' / ') if subtitulos else api.title }}
+                  {% else %}
+                    {{ api.title }}
+                  {% endif %}
+                </span>
+              </label>
+            </div>
+          {% endfor %}
+        </div>
+        <div class="d-flex flex-wrap align-items-center gap-075 mt-05" role="group" aria-label="Acciones para herramientas">
+          <button class="btn-green btn-small select-all-tools" type="button" aria-label="Activar todas las herramientas para el sub-usuario">Activar Todas</button>
+          <button class="btn-orange btn-small deselect-all-tools" type="button" aria-label="Desactivar todas las herramientas del sub-usuario">Desactivar</button>
+          <button class="btn-blue btn-small save-subuser-tools" type="button" aria-label="Guardar cambios en herramientas permitidas">Guardar</button>
+          <span class="save-status-msg-tools ml-auto text-small text-success"></span>
+        </div>
+      {% else %}
+        <p class="text-italic text-secondary">El usuario padre no tiene herramientas públicas, HTMLs, videos de producción ni extras de búsqueda habilitados. No se pueden asignar permisos a este sub-usuario.</p>
+      {% endif %}
+    </div>
+  </section>
+
+</div>
+
+{# --- AÑADIR CARGA DEL NUEVO SCRIPT EXTERNO --- #}
+{% endblock content %}
+
+{# Cargar el script específico DESPUÉS del bloque de contenido principal #}
+{% block scripts %}
+{{ super() }}
+<script src="{{ url_for('static', filename='js/edit_subuser.js') }}"></script>
+{% endblock scripts %}

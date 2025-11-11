@@ -1,0 +1,77 @@
+<!-- app/templates/disable_2fa.html -->
+{% extends "base.html" %}
+{% block content %}
+<div class="admin-card form-container-narrow text-center">
+
+  <!-- Encabezado con título y botón "Volver al Panel" -->
+  <div class="d-flex justify-content-between align-items-center mb-1">
+    <h2 class="m-0">Desactivar 2FA</h2>
+    <!-- Botón Volver al Panel (Refactorizado) -->
+    <button 
+      type="button"
+      id="btnVolverPanelDisable2FA"
+      class="btn-blue min-width-120"
+      data-url="{{ url_for('admin_bp.dashboard') }}"
+      >
+      Volver al Panel
+    </button>
+  </div>
+
+  <!-- Texto descriptivo -->
+  <p class="mb-1 text-center">
+    Para desactivar 2FA, ingresa tu código actual 
+    {% if user.twofa_method == "TOTP" %}
+      (TOTP de la app Google Authenticator).
+    {% elif user.twofa_method == "EMAIL" %}
+      (OTP que se envió a tu correo).
+    {% endif %}
+  </p>
+
+  <!-- Form principal para enviar el POST que desactiva 2FA -->
+  <form method="POST" class="mt-1 d-flex flex-column align-items-center gap-1">
+    <!-- CSRF -->
+    <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+
+    <!-- Campo para el código 2FA -->
+    <div class="d-flex flex-column align-items-center w-100 otp-input-container">
+      <label for="code" class="label-block">Código:</label>
+      <input 
+        id="code"
+        type="text" 
+        name="code" 
+        required 
+        class="form-input-block w-100"
+        autocomplete="one-time-code"
+      >
+    </div>
+
+    <!-- Contenedor Flex para los botones -->
+    <div class="d-flex gap-1 align-items-center justify-content-center">
+
+      <!-- Botón Desactivar (Usa la acción principal del form) -->
+      <button 
+        type="submit" 
+        class="btn-red min-width-120"
+      >
+        Desactivar
+      </button>
+
+      <!-- Botón Reenviar Código (AHORA dentro del MISMO form, pero con atributos propios) -->
+      {% if user.twofa_method == "EMAIL" %}
+        <button 
+          type="submit" 
+          class="btn-blue min-width-120"
+          formaction="{{ url_for('admin_bp.resend_2fa_code_disable') }}" 
+          formmethod="POST"
+          formnovalidate  /* Para no requerir el campo 'code' al reenviar */
+        >
+          Reenviar Código
+        </button>
+      {% endif %}
+
+    </div> <!-- Fin contenedor Flex -->
+
+  </form> <!-- Fin del form principal (AHORA único) -->
+
+</div>
+{% endblock %}

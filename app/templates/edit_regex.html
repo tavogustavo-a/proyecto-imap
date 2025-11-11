@@ -1,0 +1,65 @@
+<!-- app/templates/edit_regex.html -->
+{% extends "base.html" %}
+
+{% block title %}Editar Regex{% endblock %}
+
+{% block content %}
+<div class="admin-card form-container-medium">
+  <h2 class="text-center">Editar Regex</h2>
+
+  <form method="POST">
+    <!-- Campo oculto para el CSRF Token (SeaSurf) -->
+    <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+
+    <label for="editRegexSender">Remitente (Sender) (opcional):</label>
+    <input
+      type="text"
+      id="editRegexSender"
+      name="sender"
+      value="{{ regex.sender }}"
+      class="d-block mb-1"
+      autocomplete="off"
+    >
+
+    <label for="editRegexPattern">Expresión Regular (Pattern):</label>
+    <!-- Aquí quitamos maxlength para permitir regex más largos -->
+    <input
+      type="text"
+      id="editRegexPattern"
+      name="pattern"
+      value="{{ regex.pattern }}"
+      class="d-block mb-1"
+      size="30" 
+      required
+      autocomplete="off"
+    >
+
+    <label for="editRegexDescription">Descripción (opcional):</label>
+    <input
+      type="text"
+      id="editRegexDescription"
+      name="description"
+      value="{{ regex.description }}"
+      class="d-block mb-1"
+      autocomplete="off"
+    >
+
+    <label for="editRegexEnabled">¿Habilitado?</label>
+    <input type="checkbox" id="editRegexEnabled" name="enabled" {% if regex.enabled %}checked{% endif %}>
+    <br><br>
+
+    <div class="text-center">
+      <button type="submit" class="btn-green">Guardar</button>
+      <!-- Botón para volver a la lista de Regex (Refactorizado) -->
+      <button
+        type="button"
+        id="btnVolverRegex"
+        class="btn-blue ml-05"
+        data-url="{{ url_for('admin_bp.regex_page') }}"
+      >
+        Volver
+      </button>
+    </div>
+  </form>
+</div>
+{% endblock %}

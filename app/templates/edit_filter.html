@@ -1,0 +1,69 @@
+<!-- app/templates/edit_filter.html -->
+{% extends "base.html" %}
+
+{% block title %}Editar Filtro{% endblock %}
+
+{% block content %}
+<div class="admin-card form-container-600">
+  <h2 class="text-center">Editar Filtro</h2>
+  
+  <form method="POST">
+    <!-- Campo oculto para el CSRF Token (SeaSurf) -->
+    <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+
+    <div class="form-group">
+      <label for="editFilterSender">Remitente (Sender):</label>
+      <input type="text" id="editFilterSender" name="sender" value="{{ filter.sender }}" class="mb-1" autocomplete="off">
+    </div>
+
+    <div class="form-group">
+      <label for="editFilterKeyword">Clave (Keyword):</label>
+      <input type="text" id="editFilterKeyword" name="keyword" value="{{ filter.keyword }}" class="mb-1" autocomplete="off">
+    </div>
+
+    <div class="edit-filter-enabled-row">
+      <label for="editFilterEnabled">¿Habilitado?</label>
+      <input type="checkbox" name="enabled" id="editFilterEnabled" {% if filter.enabled %}checked{% endif %}>
+    </div>
+
+    <!-- Campo para "cortar HTML desde arriba" -->
+    <div class="form-group">
+      <label for="editFilterCutHtml">Cortar DESDE ARRIBA (opcional):</label>
+      <input
+        type="text"
+        id="editFilterCutHtml"
+        name="cut_after_html"
+        value="{{ filter.cut_after_html if filter.cut_after_html else '' }}"
+        class="mb-1"
+        autocomplete="off"
+      >
+    </div>
+
+    <!-- Campo para "cortar HTML desde abajo" -->
+    <div class="form-group">
+      <label for="editFilterCutHtmlBefore">Cortar DESDE ABAJO (opcional):</label>
+      <input
+        type="text"
+        id="editFilterCutHtmlBefore"
+        name="cut_before_html"
+        value="{{ filter.cut_before_html if filter.cut_before_html else '' }}"
+        class="mb-1"
+        autocomplete="off"
+      >
+    </div>
+
+    <div class="text-center">
+      <button type="submit" class="btn-green">Guardar</button>
+      <!-- Botón para volver a la lista de Filtros (Refactorizado) -->
+      <button
+        type="button"
+        id="btnVolverFilters"
+        class="btn-blue ml-05"
+        data-url="{{ url_for('admin_bp.filters_page') }}"
+      >
+        Volver
+      </button>
+    </div>
+  </form>
+</div>
+{% endblock %}

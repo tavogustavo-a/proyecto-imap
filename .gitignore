@@ -1,0 +1,55 @@
+# Variables de entorno
+.env
+.env.local
+.env.*.local
+
+# Base de datos
+*.db
+*.sqlite
+*.sqlite3
+instance/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+.venv
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Logs
+*.log
+logs/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Migraciones (opcional - descomenta si no quieres versionar migraciones)
+# migrations/versions/*.py
+# !migrations/versions/__init__.py
+
+# Archivos temporales
+*.tmp
+*.bak
+*.cache
+
+# Certificados y llaves privadas
+*.key
+*.pem
+*.crt
+*.cert
+
+# Backups
+backups/
+*.backup

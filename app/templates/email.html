@@ -1,0 +1,228 @@
+{% extends "base.html" %}
+
+{% block title %}Emails Permitidos{% endblock %}
+
+{% block head %}
+{{ super() }}
+<meta name="csrf_token" content="{{ csrf_token() }}">
+{% endblock head %}
+
+{% block content %}
+
+{# Aplicada clase de contenedor y data attributes #}
+<div id="user-management-container" 
+     class="form-container-large" 
+     data-user-id="{{ user.id }}"
+     data-username="{{ user.username }}"
+     data-color="{{ user.color }}"
+     data-position="{{ user.position|default(1) }}"
+     data-can-search-any="{{ 'true' if user.can_search_any else 'false' }}"
+     data-email="{{ user.email }}"
+     data-full-name="{{ user.full_name or '' }}"
+     data-phone="{{ user.phone or '' }}"
+     >
+
+  <div class="admin-card">
+    <div class="d-flex align-items-center flex-wrap gap-1 mb-1 justify-content-between">
+      {# Aplicada clase no-shrink #}
+      <h2 class="m-0 no-shrink">Gestionar Correos de {{ user.username }}</h2>
+      <div>
+        <button 
+          id="btnVolverUsuarios" 
+          class="btn-blue" 
+          data-url="{{ url_for('admin_bp.usuarios_page') }}"
+        >
+          Volver
+        </button>
+      </div>
+    </div>
+
+    {# Aplicada clase HR #}
+    <hr class="hr-margin-15">
+    <h3 class="mb-05">Búsqueda y Eliminacion de Correos</h3>
+    {# Aplicadas clases de texto y margen #}
+    <p class="text-smaller text-secondary mb-075">
+      Ingresa uno o varios correos (separados por comas, espacios o saltos de línea) para eliminar individualmente o todos los resultados.
+    </p>
+    {# Clase searchEmailsForm aplicada desde CSS #}
+    <form id="searchEmailsForm" name="searchEmailsForm">
+      <label for="searchEmailsInput" class="sr-only">Buscar y eliminar correos</label>
+      <textarea id="searchEmailsInput" rows="2" class="flex-grow-1 resize-vertical" placeholder="correo1@gmail.com, correo2@gmail.com" autocomplete="off"></textarea>
+      <button type="submit" class="btn-search">Limpiar</button>
+    </form>
+    <div id="emailsSearchResults" class="search-results-container">
+        <!-- Resultados aquí -->
+    </div>
+    {# Aplicada clase min-height #}
+    <div class="d-flex justify-content-between align-items-center min-height-2-5rem">
+       {# Aplicadas clases de texto #}
+      <div id="searchStatus" class="text-italic text-secondary"></div>
+       {# Clase #delete-displayed-container aplicada desde CSS #}
+      <div id="delete-displayed-container">
+          <button id="deleteDisplayedBtn" class="btn-red btn-small">
+              Eliminar X Mostrados
+          </button>
+      </div>
+    </div>
+  </div>
+
+  <div class="admin-card">
+    <h3>Correos Permitidos</h3>
+    <div id="allowedEmailsContainer" class="mb-0">
+      <div class="d-flex justify-content-between align-items-center flex-wrap gap-1 mb-05">
+        <label for="perPageSelect"><strong>Lista de Correos:</strong></label>
+        <div class="d-flex align-items-center gap-05">
+          <span><strong>Mostrar:</strong></span>
+          <select id="perPageSelect" class="select-padding-3px" autocomplete="off">
+             <option value="10" selected>10</option><option value="20">20</option><option value="30">30</option><option value="50">50</option><option value="100">100</option><option value="300">300</option><option value="-1">Todos</option>
+          </select>
+        </div>
+      </div>
+      {# Aplicada clase específica #}
+      <div id="allowedEmailsTextContainer" class="allowed-emails-display">
+        <p>Cargando correos...</p>
+      </div>
+      <div id="allowedEmailsPagination" class="d-flex justify-content-between align-items-center">
+        <span id="paginationInfo"></span>
+        <button id="deleteAllEmailsBtn" class="btn-panel btn-red btn-sm" title="Eliminar TODOS los correos permitidos para este usuario">
+          <i class="fas fa-trash"></i> Eliminar Todos
+        </button>
+        <div class="ml-auto">
+          <button id="prevPageBtn" class="btn-panel btn-blue" disabled>&lt; Anterior</button>
+          <button id="nextPageBtn" class="btn-panel btn-blue ml-05" disabled>Siguiente &gt;</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="admin-card">
+    <strong class="d-block mb-05">¿Cómo agregar correos?</strong>
+    {# Aplicada clase de lista y padding #}
+    <ol class="m-0 list-padding-left-15">
+      <li>Escribe varias direcciones en el campo (separadas por comas, saltos de línea o espacios).</li>
+      <li>Da clic en <b>"Añadir Correos"</b>.</li>
+    </ol>
+
+    {# Aplicada clase HR #}
+    <hr class="hr-margin-15">
+    <h4>Añadir Nuevos Correos Masivamente</h4>
+    <div id="addEmailsSection" class="mb-0">
+      <label for="addEmailsInput"><strong>Nuevos Correos (separados por comas, espacios o saltos de línea):</strong></label>
+      {# Aplicadas clases display, margen, textarea-wide #}
+      <textarea id="addEmailsInput" name="add_emails_input" rows="2" class="d-block mt-05 mb-05 textarea-wide" placeholder="nuevo1@ejemplo.com, nuevo2@ejemplo.com..." autocomplete="off"></textarea>
+      <div class="text-center">
+        <button type="button" id="addEmailsBtn" class="btn-blue">Añadir Correos</button>
+      </div>
+      {# Aplicadas clases margen y texto #}
+      <div class="text-center mt-05">
+        <span id="addEmailsMsg" class="text-italic text-success"></span>
+      </div>
+    </div>
+  </div>
+
+  <div class="admin-card">
+    <h3>Acceso a Regex y Filtros (Usuario Principal)</h3>
+    {# Aplicada clase de texto #}
+    <p class="text-medium-small">
+      Marca o desmarca cuáles <strong>Regex</strong> o <strong>Filtros</strong>
+      tiene permitido consultar este usuario.
+    </p>
+    <div class="mb-1">
+      <button type="button" class="btn-blue" id="openRegexModalBtn">Configurar Regex</button>
+      <button type="button" class="btn-blue ml-05" id="openFiltersModalBtn">
+        Configurar Filtros
+      </button>
+    </div>
+  </div>
+
+  <div class="admin-card">
+    <h3>Permiso para Crear Sub-usuarios</h3>
+    {# Aplicada clase de texto #}
+    <p class="text-small">
+      Si activas esta opción, el usuario podrá crear "sub-usuarios" y gestionarlos.
+      <br>
+      <strong>Atención:</strong> si desactivas este permiso, se borrarán todos sus sub-usuarios existentes.
+    </p>
+    <div class="mb-1">
+       {# Mantenido gap inline #}
+      <label class="d-flex align-items-center gap-03">
+        <input
+          type="checkbox"
+          id="toggleCanCreateSubusers"
+          name="toggleCanCreateSubusers"
+          {% if user.can_create_subusers %}checked{% endif %}
+          autocomplete="off"
+        >
+        Puede crear sub-usuarios
+      </label>
+      <button id="saveCanCreateSubusersBtn" class="btn-green ml-1">
+        Guardar
+      </button>
+    </div>
+
+    {% if user.can_create_subusers %}
+      {# Aplicada clase HR #}
+      <hr class="hr-margin-1">
+      <h4>Sub-usuarios</h4>
+      <div class="d-flex gap-05 mb-1">
+        <button id="btnShowSubusers" class="btn-blue text-subuser-buttons">Ver Sub-usuarios</button>
+        <button id="btnSubusersRegexGlobal" class="btn-blue text-subuser-buttons">Configurar Regex Sub-usuario</button>
+        <button id="btnSubusersFilterGlobal" class="btn-blue text-subuser-buttons">Configurar Filtros Sub-usuario</button>
+      </div>
+      {# Aplicada clase de texto #}
+      <p class="text-smaller">
+        Desde aquí puedes Encender/Apagar (On/Off) y <strong>Eliminar</strong> cada sub-usuario.
+        Además, puedes definir Regex y Filtros que se aplicarán a los sub-usuarios en general.
+      </p>
+    {% endif %}
+  </div>
+
+</div> {# Cierre del div#user-management-container #}
+
+<!-- MODALES con clases CSS -->
+<div id="regexModal" class="popup-base popup-small">
+  <h4 class="mt-0">Acceso a Regex (Principal)</h4>
+  {# Aplicada clase de contenedor de lista modal #}
+  <div id="regexListContainer" class="modal-list-container"></div>
+  <button type="button" class="popup-button-confirm" id="saveRegexSelectionBtn">Guardar</button>
+  <button type="button" class="popup-button-cancel" id="closeRegexModalBtn">Cerrar</button>
+</div>
+
+<div id="filtersModal" class="popup-base popup-small">
+  <h4 class="mt-0">Acceso a Filtros (Principal)</h4>
+  {# Aplicada clase de contenedor de lista modal #}
+  <div id="filtersListContainer" class="modal-list-container"></div>
+  <button type="button" class="popup-button-confirm" id="saveFiltersSelectionBtn">Guardar</button>
+  <button type="button" class="popup-button-cancel" id="closeFiltersModalBtn">Cerrar</button>
+</div>
+
+<div id="subusersModal" class="popup-base popup-medium"> {# Usamos popup-medium para 600px #}
+  <h4 class="mt-0">Sub-usuarios de {{ user.username }}</h4>
+  {# Aplicada clase de contenedor de lista modal #}
+  <div id="subusersList" class="modal-subuser-list-container"></div>
+  <button type="button" class="popup-button-cancel" id="closeSubusersModalBtn">Cerrar</button>
+</div>
+
+<div id="subusersRegexModal" class="popup-base popup-small">
+  <h4 class="mt-0">Configurar Regex Sub-usuario (Global)</h4>
+  {# Aplicada clase de contenedor de lista modal #}
+  <div id="subusersRegexList" class="modal-list-container"></div>
+  <button type="button" class="popup-button-confirm" id="saveSubusersRegexBtn">Guardar</button>
+  <button type="button" class="popup-button-cancel" id="closeSubusersRegexModalBtn">Cerrar</button>
+</div>
+
+<div id="subusersFiltersModal" class="popup-base popup-small">
+  <h4 class="mt-0">Configurar Filtros Sub-usuario (Global)</h4>
+  {# Aplicada clase de contenedor de lista modal #}
+  <div id="subusersFiltersList" class="modal-list-container"></div>
+  <button type="button" class="popup-button-confirm" id="saveSubusersFiltersBtn">Guardar</button>
+  <button type="button" class="popup-button-cancel" id="closeSubusersFiltersModalBtn">Cerrar</button>
+</div>
+
+{% endblock content %}
+
+{# --- AÑADIR CARGA DEL NUEVO SCRIPT EXTERNO --- #}
+{% block scripts %}
+{# {{ super() }} #}
+<script src="{{ url_for('static', filename='js/admin_user_emails.js') }}"></script>
+{% endblock scripts %}

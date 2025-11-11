@@ -1,0 +1,136 @@
+{% extends "base.html" %}
+{% block title %}Capa de Seguridad - Reglas{% endblock %}
+
+{% block head %}
+  {{ super() }}
+  <meta name="csrf_token" content="{{ csrf_token() }}">
+{% endblock %}
+
+{% block content %}
+<div class="admin-card form-container-wide">
+    <div class="d-flex justify-content-between align-items-center mb-1">
+        <h3>Reglas de Seguridad</h3>
+        <a href="{{ url_for('admin_bp.dashboard') }}" class="btn btn-blue text-decoration-none">Volver al Panel</a>
+    </div>
+
+    <!-- Buscador (ahora con ID para JS) -->
+    <form id="securityRuleSearchForm" class="mb-1 d-flex gap-05">
+        <label for="securityRuleSearchInput" class="sr-only">Buscar por remitente o descripción</label>
+        <input type="search" id="securityRuleSearchInput" name="search_query" placeholder="Buscar por remitente o descripción..." value="{{ search_query or '' }}" class="flex-grow-1" autocomplete="off">
+    </form>
+
+    <!-- Lista de Reglas -->
+    <div id="security-rules-list">
+        {% if rules %}
+            {% for rule in rules %}
+            <div class="regex-item mb-1">
+                <div><strong>Remitente:</strong> {{ rule.sender or '(Cualquiera)' }}</div>
+                <div><strong>Descripción:</strong> {{ rule.description or '(Sin descripción)' }}</div>
+                <div><strong>Patrón Activador:</strong> <code>{{ rule.trigger_pattern }}</code></div>
+                <div><strong>Patrón Observador:</strong> <code>{{ rule.observer_pattern }}</code></div>
+                <div><strong>Servidor IMAP:</strong> {{ rule.imap_server_id if rule.imap_server_id else '(Todos)' }}{% if rule.imap_folder %} / Carpeta: {{ rule.imap_folder }}{% endif %}</div>
+                <div> 
+                    <a href="{{ url_for('admin_bp.edit_security_rule_page', rule_id=rule.id) }}" class="btn-panel btn-orange btn-sm">Editar</a>
+                    <button class="btn-panel btn-red btn-sm delete-security-rule" data-id="{{ rule.id }}" title="Eliminar">
+                      <i class="fas fa-trash"></i>
+                    </button>
+                    {% if rule.enabled %}
+                        <button class="btn btn-red toggle-security-rule" data-id="{{ rule.id }}" data-enabled="true">Off</button>
+                    {% else %}
+                        <button class="btn btn-green toggle-security-rule" data-id="{{ rule.id }}" data-enabled="false">On</button>
+                    {% endif %}
+                </div>
+            </div>
+            {% endfor %}
+        {% else %}
+            <p>No hay reglas de seguridad creadas.</p>
+        {% endif %}
+    </div>
+
+    <hr class="hr-margin-1"/>
+
+    <!-- Crear Nueva Regla -->
+    <h4>Crear Nueva Regla de Seguridad</h4>
+    <form id="createSecurityRuleForm" method="POST" action="{{ url_for('admin_bp.security_rules_page') }}" class="mb-0">
+        <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+        
+        <!-- Campo Target Email ELIMINADO -->
+
+        <label for="newRuleSender" class="sr-only">Remitente del correo (opcional):</label>
+        <input type="text" id="newRuleSender" name="sender" class="d-block w-100 mb-05" placeholder="Remitente del correo (opcional): Ej: info@netflix.com" autocomplete="off">
+
+        <label for="newRuleDescription" class="sr-only">Descripción (opcional):</label>
+        <input type="text" id="newRuleDescription" name="description" class="d-block w-100 mb-05" placeholder="Descripción (opcional): Ej: Alerta cambio correo Netflix" autocomplete="off">
+
+        <label for="newRuleTriggerPattern" class="sr-only">Patrón Activador (Regex para detectar contenido sensible):</label>
+        <input type="text" id="newRuleTriggerPattern" name="trigger_pattern" class="d-block w-100 mb-05" required placeholder="Patrón Activador (Regex para detectar contenido sensible): Ej: (?i)código de seguridad" autocomplete="off">
+
+        <label for="newRuleObserverPattern" class="sr-only">Patrón Observador (Regex para detectar el cambio no deseado):</label>
+        <input type="text" id="newRuleObserverPattern" name="observer_pattern" class="d-block w-100 mb-05" required placeholder="Patrón Observador (Regex para detectar el cambio no deseado): Ej: (?i)tu correo ha sido cambiado a" autocomplete="off">
+
+        <!-- Campos de servidor/carpeta eliminados: las reglas usan ahora los servidores IMAP Observador -->
+
+        <small class="d-block mb-1">
+            Nota: Las reglas se aplicarán a los correos recibidos en la dirección de imaps buscadas. 
+            Si el "Patrón Activador" coincide, se buscará el "Patrón Observador".
+            Si ambos coinciden, se tomarán acciones (futura implementación).
+        </small>
+
+        <button type="submit" class="btn btn-green">Crear Regla</button>
+    </form>
+</div>
+
+<script src="{{ url_for('static', filename='js/admin_security_rules.js') }}"></script>
+<script src="{{ url_for('static', filename='js/admin_observer_imap.js') }}"></script>
+
+<!-- Sección Servidores IMAP Observador -->
+<div class="admin-card form-container-wide mt-1">
+  <h3>Servidores IMAP Observador</h3>
+  <form id="observerImapSearchForm" class="d-flex gap-05 mb-1">
+    <label for="observerImapSearchInput" class="sr-only">Buscar host o usuario</label>
+    <input type="text" id="observerImapSearchInput" placeholder="Buscar host o usuario..." class="flex-grow-1" autocomplete="off">
+  </form>
+
+  <div id="observerImapList">
+    {% for s in observer_servers %}
+      <div class="imap-item mb-1">
+        <strong>Usuario: {{ s.username }}</strong><br>
+        <em>Carpetas:</em> {{ s.folders }}
+        <div class="mt-05">
+          <form action="{{ url_for('admin_bp.observer_test_imap', server_id=s.id) }}" method="POST" class="d-inline">
+            <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+            <button type="submit" class="btn-blue btn-imap-action btn-imap-small">Probar</button>
+          </form>
+          {% if s.enabled %}
+            <button class="btn-red toggle-observer-imap ml-03 btn-imap-action btn-imap-small" data-id="{{ s.id }}" data-enabled="true">Off</button>
+          {% else %}
+            <button class="btn-green toggle-observer-imap ml-03 btn-imap-action btn-imap-small" data-id="{{ s.id }}" data-enabled="false">On</button>
+          {% endif %}
+          <button type="button" class="btn-orange ml-03 edit-observer-imap btn-imap-action btn-imap-small" data-url="{{ url_for('admin_bp.observer_edit_imap', server_id=s.id) }}">Editar</button>
+          <button type="button" class="btn-panel btn-red btn-sm delete-observer-imap ml-03" data-id="{{ s.id }}" title="Eliminar">
+            <i class="fas fa-trash"></i>
+          </button>
+        </div>
+      </div>
+    {% endfor %}
+  </div>
+
+  <form action="{{ url_for('admin_bp.observer_manage_imap') }}" method="POST" class="mt-1">
+    <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+    <h4>Crear Nuevo Servidor IMAP Observador</h4>
+    <label for="imapHost" class="sr-only">Host</label>
+    <input type="text" id="imapHost" name="host" placeholder="Host" required class="d-block mb-05" autocomplete="off">
+    <label for="imapPort" class="sr-only">Puerto</label>
+    <input type="number" id="imapPort" name="port" value="993" class="d-block mb-05" autocomplete="off">
+    <label for="imapUsername" class="sr-only">Usuario</label>
+    <input type="text" id="imapUsername" name="username" placeholder="Usuario" required class="d-block mb-05" autocomplete="username">
+    <label for="imapPassword" class="sr-only">Password</label>
+    <input type="password" id="imapPassword" name="password" placeholder="Password" class="d-block mb-05" autocomplete="current-password">
+    <label for="imapFolders">Carpetas (separadas por comas):</label>
+    <input type="text" id="imapFolders" name="folders" value="INBOX" class="d-block mb-05" autocomplete="off">
+    <button type="submit" class="btn-green">Crear</button>
+  </form>
+</div>
+
+{% endblock %}
+<!-- Force cache refresh: 20241220-fix-edit-button --> 

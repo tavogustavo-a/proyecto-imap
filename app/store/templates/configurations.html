@@ -1,0 +1,360 @@
+{% extends "base.html" %}
+
+{% block title %}Configuraciones{% endblock %}
+
+{% block head %}
+  {{ super() }}
+  <link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}">
+  <meta name="csrf_token" content="{{ csrf_token() }}">
+{% endblock %}
+{% block scripts %}
+  {{ super() }}
+  <script src="{{ url_for('store_bp.static', filename='js/admin_gsheets_config.js') }}" defer></script>
+  <script src="{{ url_for('store_bp.static', filename='js/drive_manager.js') }}" defer></script>
+  <script src="{{ url_for('store_bp.static', filename='js/whatsapp_manager.js') }}" defer></script>
+{% endblock %}
+{% block content %}
+<div class="container container-max-width-900 store-light maxw-800 mx-auto mt-3 br-8">
+  <!-- Primer contenedor blanco: Google Sheets -->
+    <div class="d-flex justify-content-between align-items-center mb-1">
+      <h2 class="m-0">Configuraciones</h2>
+      <button 
+        id="btnVolverPanel" 
+        type="button" 
+        class="btn-blue"
+        data-url="{{ url_for('store_bp.admin_store') }}"
+      >
+        Volver
+      </button>
+    </div>
+    <h4 class="mb-1">Vinculación de plantillas con Google Sheets</h4>
+    <form id="gsheets-config-form" method="post" autocomplete="off">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div class="mb-1">
+        <label for="gsheets-template" class="form-label">Selecciona la plantilla a vincular:</label>
+        <select id="gsheets-template" name="gsheets_template" class="form-select" required autocomplete="off">
+          <option value="">-- Selecciona una plantilla --</option>
+          <option value="hojas_de_calculo">Hojas de cálculo</option>
+          <option value="usuarios">Usuarios</option>
+          <option value="productos">Productos</option>
+          <option value="roles">Roles</option>
+        </select>
+      </div>
+      <div class="mb-1">
+        <label for="gsheets-credentials-json" class="form-label">Pega aquí el JSON de credenciales de Google:</label>
+        <textarea id="gsheets-credentials-json" name="gsheets_credentials_json" class="form-control" rows="8" placeholder="{\n  \"type\": \"service_account\", ...\n}" required autocomplete="off"></textarea>
+      </div>
+      <div class="mb-1">
+        <label for="gsheets-sheet-id" class="form-label">ID de la hoja de Google Sheets:</label>
+        <input type="text" id="gsheets-sheet-id" name="gsheets_sheet_id" class="form-control" placeholder="Ej: 1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms" required autocomplete="off">
+      </div>
+      <div class="mb-1">
+        <label for="gsheets-tab-name" class="form-label">Nombre de la hoja/tab (worksheet):</label>
+        <input type="text" id="gsheets-tab-name" name="gsheets_tab_name" class="form-control" placeholder="Ej: Hoja1" required autocomplete="off">
+      </div>
+      <div class="mb-1">
+        <button type="button" id="test-gsheets-connection" class="btn-panel btn-blue">Probar conexión</button>
+        <button type="submit" class="btn-green ms-2">Guardar</button>
+      </div>
+      <div id="gsheets-status" class="mt-2"></div>
+    </form>
+    <h5 class="mb-3">Vinculaciones actuales</h5>
+    <div id="gsheets-links-table-container" class="mb-4">
+      <!-- Aquí se renderizará la tabla de vinculaciones con JS -->
+    </div>
+  </div>
+  
+  <!-- Segundo contenedor blanco: Pasar de Drive a Drive -->
+  <div class="container container-max-width-900 store-light maxw-800 mx-auto mt-3 br-8">
+    <h4 class="mb-1">Pasar de Drive a Drive</h4>
+    <form id="drive-transfer-form" method="post" autocomplete="off">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div class="mb-1">
+        <label for="drive-credentials-json" class="form-label">Pega aquí el JSON de credenciales de Google:</label>
+        <textarea id="drive-credentials-json" name="drive_credentials_json" class="form-control" rows="8" placeholder="{\n  \"type\": \"service_account\", ...\n}" required autocomplete="off"></textarea>
+      </div>
+      <div class="mb-1">
+        <label for="drive-original-id" class="form-label">ID de Drive original:</label>
+        <input type="text" id="drive-original-id" name="drive_original_id" class="form-control" placeholder="Ej: 1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms" required autocomplete="off">
+      </div>
+      <div class="mb-1">
+        <label for="drive-destination" class="form-label">Drive procesado:</label>
+        <input type="text" id="drive-destination" name="drive_destination" class="form-control" placeholder="Ej: 1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms" required autocomplete="off">
+      </div>
+      <div class="mb-1">
+        <label for="drive-deleted" class="form-label">Drive eliminados (opcional):</label>
+        <input type="text" id="drive-deleted" name="drive_deleted" class="form-control" placeholder="Ej: 1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms" autocomplete="off">
+        <small class="form-text text-muted">Carpeta donde se moverán los archivos durante la limpieza. Si no se especifica, se eliminarán permanentemente.</small>
+      </div>
+      <div class="mb-1">
+        <label for="drive-processing-time" class="form-label">Hora colombiana en que se procesará:</label>
+        <input type="time" id="drive-processing-time" name="drive_processing_time" class="form-control" required autocomplete="off">
+      </div>
+      <div class="mb-1">
+        <button type="button" id="test-drive-connection" class="btn-panel btn-blue">Probar conexión</button>
+        <button type="submit" class="btn-green ms-2">Guardar</button>
+      </div>
+      <div id="drive-status" class="mt-2"></div>
+    </form>
+    <h5 class="mb-3">Configuraciones de Drive Transfer</h5>
+    <div id="drive-transfers-table-container" class="mb-4">
+      <!-- Aquí se renderizará la tabla de configuraciones con JS -->
+    </div>
+  </div>
+  
+  <!-- Tercer contenedor blanco: API WhatsApp -->
+  <div class="container container-max-width-900 store-light maxw-800 mx-auto mt-3 br-8">
+    <h4 class="mb-1">API WhatsApp</h4>
+    <p class="text-muted mb-3">Configuración para envío automático de mensajes de WhatsApp cuando se realicen compras en la tienda pública.</p>
+    
+    <form id="whatsapp-config-form" method="post" autocomplete="off">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      
+      <div class="mb-1">
+        <label for="whatsapp-api-key" class="form-label">API Key de WhatsApp Business:</label>
+        <input type="text" id="whatsapp-api-key" name="whatsapp_api_key" class="form-control" placeholder="Ej: EAABwzLixnjYBOZC..." required autocomplete="off">
+        <small class="form-text text-muted">Obtén tu API Key desde el Panel de Desarrolladores de Meta</small>
+      </div>
+      
+      <div class="mb-1">
+        <label for="whatsapp-phone-number" class="form-label">Número de teléfono de WhatsApp Business:</label>
+        <input type="text" id="whatsapp-phone-number" name="whatsapp_phone_number" class="form-control" placeholder="Ej: 573001234567" required autocomplete="off">
+        <small class="form-text text-muted">Número en formato internacional sin el símbolo +</small>
+      </div>
+      
+      <div class="mb-1">
+        <label for="whatsapp-webhook-verify-token" class="form-label">Webhook Verify Token:</label>
+        <input type="text" id="whatsapp-webhook-verify-token" name="whatsapp_webhook_verify_token" class="form-control" placeholder="Token personalizado para verificar webhooks" required autocomplete="off">
+      </div>
+      
+      <div class="mb-1">
+        <label for="whatsapp-template-message" class="form-label">Plantilla de mensaje para compras:</label>
+        <textarea id="whatsapp-template-message" name="whatsapp_template_message" class="form-control" rows="4" placeholder="Hola {{customer_name}}, tu compra #{{order_id}} por ${{total_amount}} ha sido confirmada. ¡Gracias por tu compra!" required autocomplete="off"></textarea>
+        <small class="form-text text-muted">Usa variables: {{customer_name}}, {{order_id}}, {{total_amount}}, {{product_names}}</small>
+      </div>
+      
+      <div class="mb-1">
+        <label for="whatsapp-notification-time" class="form-label">Hora de envío de notificaciones:</label>
+        <input type="time" id="whatsapp-notification-time" name="whatsapp_notification_time" class="form-control" value="09:00" required autocomplete="off">
+        <small class="form-text text-muted">Hora colombiana para enviar notificaciones (máximo 1 por día)</small>
+      </div>
+      
+      <div class="mb-1">
+        <div class="form-check">
+          <input class="form-check-input" type="checkbox" id="whatsapp-enabled" name="whatsapp_enabled" checked>
+          <label class="form-check-label" for="whatsapp-enabled">
+            Activar notificaciones de WhatsApp
+          </label>
+        </div>
+      </div>
+      
+      <div class="mb-1">
+        <button type="button" id="test-whatsapp-connection" class="btn-panel btn-blue">Probar conexión</button>
+        <button type="submit" class="btn-green ms-2">Guardar configuración</button>
+      </div>
+      
+      <div id="whatsapp-status" class="mt-2"></div>
+    </form>
+    
+    <h5 class="mb-3 mt-4">Configuraciones de WhatsApp</h5>
+    <div id="whatsapp-configs-table-container" class="mb-4">
+      <!-- Aquí se renderizará la tabla de configuraciones con JS -->
+    </div>
+    
+    <!-- Modal de edición para WhatsApp -->
+    <div id="whatsapp-edit-modal" class="modal d-none" tabindex="-1">
+      <div class="modal-content bg-white mx-auto p-20 w-90 maxw-500 br-8 rel">
+        <h4>Editar configuración de WhatsApp</h4>
+        <form id="whatsapp-edit-form" autocomplete="off">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <input type="hidden" id="edit-whatsapp-id" name="edit_whatsapp_id">
+          
+          <div class="mb-1">
+            <label for="edit-whatsapp-api-key" class="form-label">API Key:</label>
+            <input type="text" id="edit-whatsapp-api-key" name="whatsapp_api_key" class="form-control" required autocomplete="off">
+          </div>
+          
+          <div class="mb-1">
+            <label for="edit-whatsapp-phone-number" class="form-label">Número de teléfono:</label>
+            <input type="text" id="edit-whatsapp-phone-number" name="whatsapp_phone_number" class="form-control" required autocomplete="off">
+          </div>
+          
+          <div class="mb-1">
+            <label for="edit-whatsapp-webhook-verify-token" class="form-label">Webhook Verify Token:</label>
+            <input type="text" id="edit-whatsapp-webhook-verify-token" name="whatsapp_webhook_verify_token" class="form-control" required autocomplete="off">
+          </div>
+          
+          <div class="mb-1">
+            <label for="edit-whatsapp-template-message" class="form-label">Plantilla de mensaje:</label>
+            <textarea id="edit-whatsapp-template-message" name="whatsapp_template_message" class="form-control" rows="3" required autocomplete="off"></textarea>
+          </div>
+          
+          <div class="mb-1">
+            <label for="edit-whatsapp-notification-time" class="form-label">Hora de notificaciones:</label>
+            <input type="time" id="edit-whatsapp-notification-time" name="whatsapp_notification_time" class="form-control" required autocomplete="off">
+          </div>
+          
+          <div class="mb-1">
+            <div class="form-check">
+              <input class="form-check-input" type="checkbox" id="edit-whatsapp-enabled" name="whatsapp_enabled">
+              <label class="form-check-label" for="edit-whatsapp-enabled">
+                Activar notificaciones
+              </label>
+            </div>
+          </div>
+          
+          <div class="mb-1 d-flex justify-content-end gap-1">
+            <button type="button" id="close-whatsapp-edit-modal" class="btn-panel btn-red">Cancelar</button>
+            <button type="submit" class="btn-panel btn-green">Guardar cambios</button>
+          </div>
+        </form>
+      </div>
+    </div>
+    
+    <!-- Espacio adicional al final de toda la página -->
+    <div class="mb-5"></div>
+  </div>
+</div>
+
+<!-- Modales (fuera de los contenedores) -->
+<!-- Modal de edición para Google Sheets -->
+    <div id="gsheets-edit-modal" class="modal d-none" tabindex="-1">
+      <div class="modal-content bg-white mx-auto p-20 w-90 maxw-400 br-8 rel">
+        <h4>Editar vinculación</h4>
+        <form id="gsheets-edit-form" autocomplete="off">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <input type="hidden" id="edit-link-id" name="edit_link_id">
+          <div class="mb-1">
+            <label for="edit-gsheets-template" class="form-label">Plantilla:</label>
+            <select id="edit-gsheets-template" name="gsheets_template" class="form-select" required autocomplete="off">
+              <option value="hojas_de_calculo">Hojas de cálculo</option>
+              <option value="usuarios">Usuarios</option>
+              <option value="productos">Productos</option>
+              <option value="roles">Roles</option>
+            </select>
+          </div>
+          <div class="mb-1">
+            <label for="edit-gsheets-credentials-json" class="form-label">Credenciales JSON:</label>
+            <textarea id="edit-gsheets-credentials-json" name="gsheets_credentials_json" class="form-control" rows="6" required autocomplete="off"></textarea>
+          </div>
+          <div class="mb-1">
+            <label for="edit-gsheets-sheet-id" class="form-label">ID de hoja:</label>
+            <input type="text" id="edit-gsheets-sheet-id" name="gsheets_sheet_id" class="form-control" required autocomplete="off">
+          </div>
+          <div class="mb-1">
+            <label for="edit-gsheets-tab-name" class="form-label">Nombre de hoja/tab:</label>
+            <input type="text" id="edit-gsheets-tab-name" name="gsheets_tab_name" class="form-control" required autocomplete="off">
+          </div>
+          <div class="mb-1 d-flex justify-content-end gap-1">
+        <button type="button" id="close-edit-modal" class="btn-panel btn-red">Cancelar</button>
+        <button type="submit" class="btn-panel btn-green">Guardar cambios</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Modal de edición para Drive Transfer -->
+<div id="drive-edit-modal" class="modal d-none" tabindex="-1">
+  <div class="modal-content bg-white mx-auto p-20 w-90 maxw-400 br-8 rel">
+    <h4>Editar configuración de Drive Transfer</h4>
+    <form id="drive-edit-form" autocomplete="off">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="hidden" id="edit-drive-id" name="edit_drive_id">
+      <div class="mb-1">
+        <label for="edit-drive-credentials-json" class="form-label">Credenciales JSON:</label>
+        <textarea id="edit-drive-credentials-json" name="drive_credentials_json" class="form-control" rows="6" required autocomplete="off"></textarea>
+      </div>
+      <div class="mb-1">
+        <label for="edit-drive-original-id" class="form-label">ID de Drive original:</label>
+        <input type="text" id="edit-drive-original-id" name="drive_original_id" class="form-control" required autocomplete="off">
+      </div>
+      <div class="mb-1">
+        <label for="edit-drive-destination" class="form-label">Drive procesado:</label>
+        <input type="text" id="edit-drive-destination" name="drive_destination" class="form-control" required autocomplete="off">
+      </div>
+      <div class="mb-1">
+        <label for="edit-drive-deleted" class="form-label">Drive eliminados (opcional):</label>
+        <input type="text" id="edit-drive-deleted" name="drive_deleted" class="form-control" placeholder="Ej: 1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms" autocomplete="off">
+        <small class="form-text text-muted">Carpeta donde se moverán los archivos durante la limpieza. Si no se especifica, se eliminarán permanentemente.</small>
+      </div>
+      <div class="mb-1">
+        <label for="edit-drive-processing-time" class="form-label">Hora de procesamiento:</label>
+        <input type="time" id="edit-drive-processing-time" name="drive_processing_time" class="form-control" required autocomplete="off">
+      </div>
+      <div class="mb-1 d-flex justify-content-end gap-1">
+        <button type="button" id="close-drive-edit-modal" class="btn-panel btn-red">Cancelar</button>
+            <button type="submit" class="btn-panel btn-green">Guardar cambios</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+<!-- Modal de limpieza de archivos -->
+<div id="drive-cleanup-modal" class="modal d-none" tabindex="-1">
+  <div class="modal-content bg-white mx-auto p-20 w-90 maxw-400 br-8 rel">
+    <h4>Limpiar archivos antiguos</h4>
+    <form id="drive-cleanup-form" autocomplete="off">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="hidden" id="cleanup-drive-id" name="cleanup_drive_id">
+      <div class="mb-1">
+        <label for="cleanup-days" class="form-label">Eliminar archivos más antiguos que:</label>
+        <select id="cleanup-days" name="cleanup_days" class="form-control" required autocomplete="off">
+          <option value="">-- Selecciona días --</option>
+          <option value="0">0 días (TODOS los archivos)</option>
+          <option value="7">7 días</option>
+          <option value="15">15 días</option>
+          <option value="30">30 días</option>
+          <option value="60">60 días</option>
+          <option value="90">90 días</option>
+          <option value="180">180 días</option>
+          <option value="365">1 año</option>
+        </select>
+      </div>
+      <div class="mb-1">
+        <label for="cleanup-schedule-time" class="form-label">Hora de programación (opcional):</label>
+        <input type="time" id="cleanup-schedule-time" name="cleanup_schedule_time" class="form-control" autocomplete="off">
+        <small class="form-text text-muted">Si no especificas hora, se ejecutará inmediatamente</small>
+      </div>
+      <div class="mb-1">
+        <div class="alert alert-warning">
+          <strong>⚠️ Advertencia:</strong> Esta acción eliminará permanentemente fotos y videos del Drive procesado. No se puede deshacer.<br>
+          <strong>💀 0 días:</strong> Elimina TODOS los archivos sin importar la antigüedad.
+        </div>
+      </div>
+      
+      <!-- Sección de progreso (oculta inicialmente) -->
+      <div id="cleanup-progress-section" class="mb-1 d-none">
+        <div class="mb-2">
+          <div class="d-flex justify-content-between align-items-center mb-1">
+            <span class="form-label mb-0">Progreso de limpieza:</span>
+            <span id="cleanup-progress-text">0%</span>
+          </div>
+          <div class="progress progress-cleanup">
+            <div id="cleanup-progress-bar" class="progress-bar progress-bar-striped progress-bar-animated progress-bar-initial" 
+                 role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100">
+            </div>
+          </div>
+        </div>
+        <div class="mb-2">
+          <div class="d-flex justify-content-between">
+            <small class="text-muted">Archivos procesados: <span id="cleanup-files-processed">0</span></small>
+            <small class="text-muted">Archivos eliminados: <span id="cleanup-files-deleted">0</span></small>
+          </div>
+        </div>
+        <div class="mb-2">
+          <div class="d-flex justify-content-center">
+            <button type="button" id="stop-cleanup-btn" class="btn-panel btn-red">
+              <i class="fas fa-stop"></i> Detener limpieza
+            </button>
+          </div>
+        </div>
+      </div>
+      
+      <div class="mb-1 d-flex justify-content-end gap-1">
+        <button type="button" id="close-cleanup-modal" class="btn-panel btn-red">Cancelar</button>
+        <button type="submit" id="execute-cleanup-btn" class="btn-panel btn-green">Ejecutar limpieza</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %} 

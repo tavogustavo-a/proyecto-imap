@@ -1,0 +1,121 @@
+{% extends "base.html" %}
+
+{% block title %}Editar API{% endblock %}
+
+{% block head %}
+  {{ super() }}
+  <link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="store-light maxw-800 mx-auto mt-3 br-8 store-container-padding">
+    <div class="d-flex justify-content-between align-items-center mb-05">
+      <h2 class="m-0">Editar API</h2>
+      <a href="{{ url_for('store_bp.admin_tools') }}" class="btn-panel btn-blue">Volver</a>
+    </div>
+    
+    <div class="mb-3 w-100 text-center">
+      <strong>Estado:</strong>
+      {% if api.enabled %}
+        <span class="badge bg-success">Habilitada</span>
+      {% else %}
+        <span class="badge bg-danger">Inactiva</span>
+      {% endif %}
+    </div>
+
+    <form id="apiForm" class="no-form-styles" method="POST" action="{{ url_for('store_bp.update_api', api_id=api.id) }}">
+        <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+        <div class="mb-3">
+            <label for="title" class="form-label text-center d-block">Título</label>
+            <input type="text" class="form-control" id="title" name="title" value="{{ api.title }}" required autocomplete="off">
+        </div>
+        <div class="mb-3" id="api-key-field-group">
+            <label for="api_key" class="form-label text-center d-block">Clave API</label>
+            {% if not api.api_type or api.api_type == "" %}
+                {# Para APIs genéricas, mostrar como HTML #}
+                <textarea class="form-control" id="api_key" name="api_key" rows="10" required autocomplete="off">{{ api.api_key }}</textarea>
+                <div id="api-key-help" class="form-text text-muted api-key-help">Puedes usar HTML en este campo para APIs genéricas.</div>
+            {% else %}
+                {# Para otras APIs, mostrar como texto plano #}
+                <textarea class="form-control" id="api_key" name="api_key" rows="5" required autocomplete="off">{{ api.api_key }}</textarea>
+                <div id="api-key-help" class="form-text text-muted api-key-help">Pega aquí el <b>JSON de credenciales</b> de tu cuenta de servicio de Google (Google Service Account). Puedes obtenerlo desde la consola de Google Cloud &rarr; IAM &amp; admin &rarr; Cuentas de servicio &rarr; Crear clave.</div>
+            {% endif %}
+        </div>
+
+        <div class="mb-3">
+            <label for="api_type" class="form-label text-center d-block">Tipo de API</label>
+            <select class="form-select" id="api_type" name="api_type" autocomplete="off">
+                <option value="" {% if not api.api_type %}selected{% endif %}>Genérica / Ninguno</option>
+                <option value="Búsqueda de Medios" {% if api.api_type == "Búsqueda de Medios" %}selected{% endif %}>Búsqueda de Medios</option>
+                <option value="Drive" {% if api.api_type == "Drive" %}selected{% endif %}>Drive</option>
+            </select>
+        </div>
+
+        <div id="drive-folder-id-field" class="drive-folder-id-field mb-3">
+            <label for="api_url" class="form-label text-center d-block">ID de Carpeta de Drive</label>
+            <input type="text" class="form-control" id="api_url" name="api_url" placeholder="Pega aquí el ID de la carpeta de Drive" value="{{ api.api_url if api.api_url else '' }}" autocomplete="off">
+            <div id="drive-subtitles-fields" class="drive-subtitles-fields">
+                <label for="drive_subtitle_photos" class="form-label text-center d-block">Subtítulos para la galería pública</label>
+                <input type="text" class="form-control mb-05" id="drive_subtitle_photos" name="drive_subtitle_photos" placeholder="Subtítulo para fotos (opcional)" value="{{ api.drive_subtitle_photos if api.drive_subtitle_photos else '' }}" autocomplete="off">
+                <input type="text" class="form-control mb-05" id="drive_subtitle_videos" name="drive_subtitle_videos" placeholder="Subtítulo para videos (opcional)" value="{{ api.drive_subtitle_videos if api.drive_subtitle_videos else '' }}" autocomplete="off">
+                <div id="drive-subtitles-warning" class="text-danger mt-1 drive-subtitles-warning"></div>
+            </div>
+        </div>
+
+        <!-- Sección de la tabla de usuarios -->
+        <div class="d-flex flex-column align-items-center edit-tool-main-container">
+          <div class="mt-3 w-100">
+            <h4 class="mb-1 text-center">Usuarios con acceso a esta API</h4>
+            <div class="d-flex flex-wrap align-items-center mb-2 justify-content-center gap-1">
+              <div class="search-container">
+                <label for="searchUserInput" class="sr-only">Buscar usuario</label>
+                <input type="search" id="searchUserInput" placeholder="Buscar usuario..." class="form-control" autocomplete="off">
+              </div>
+              <div>
+                <label for="showUserCount" class="sr-only">Mostrar cantidad usuarios</label>
+                <select id="showUserCount" class="form-select" autocomplete="off">
+                  <option value="5">5</option>
+                  <option value="10">10</option>
+                  <option value="20">20</option>
+                  <option value="50">50</option>
+                  <option value="all">Todos</option>
+                </select>
+              </div>
+            </div>
+            <div class="table-responsive">
+              <table class="table table-bordered mt-2">
+                <thead>
+                  <tr>
+                    <th>Usuario</th>
+                    <th>Nombre</th>
+                    <th class="text-center">Vincular</th>
+                  </tr>
+                </thead>
+                <tbody id="users-table-body">
+                  <tr>
+                    <td colspan="3" class="text-center">Cargando usuarios...</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="d-flex justify-content-center mt-2 pagination-buttons">
+              <!-- Paginación generada por JavaScript -->
+            </div>
+            <div class="d-flex justify-content-center gap-2 mb-4">
+              <button type="button" id="checkAllBtn" class="btn-panel btn-sm btn-blue">Marcar Todos</button>
+              <button type="button" id="uncheckAllBtn" class="btn-panel btn-sm btn-orange">Desmarcar Todos</button>
+            </div>
+            <div class="mt-2 text-center">
+              <button type="submit" class="btn-panel btn-green">Guardar</button>
+              <a href="{{ url_for('store_bp.admin_tools') }}" class="btn-panel btn-red">Cancelar</a>
+            </div>
+          </div>
+        </div>
+    </form>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script src="{{ url_for('store_bp.static', filename='js/admin_api.js') }}" defer></script>
+{% endblock %} 

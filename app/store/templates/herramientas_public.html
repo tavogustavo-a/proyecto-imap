@@ -1,0 +1,594 @@
+{% extends "base.html" %}
+
+{% block title %}Herramientas Públicas{% endblock %}
+
+{% block head %}
+  {{ super() }}
+  <link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='fontawesome/css/all.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="store-light maxw-800 mx-auto mt-3 br-8 public-tools-container">
+  {% set blocked_users = ['soporte','soporte1','soporte2','soporte3'] %}
+  {% if session.get('logged_in') and (not session.get('username') or session.get('username').lower() not in blocked_users) %}
+    <div class="d-flex justify-content-start menu-toggle-container">
+      {% if session.get('username') == ADMIN_USER %}
+        <!-- Botones de menú para administradores -->
+        <div class="d-flex gap-05">
+          <button id="menuToggleBtn" class="btn-blue menu-btn-worksheet">&#9776; Menú</button>
+          <button id="menu2ToggleBtn" class="btn-blue menu-btn-worksheet">&#9776; Menú2</button>
+          <button id="menu3ToggleBtn" class="btn-blue menu-btn-worksheet">&#9776; Menú3</button>
+        </div>
+              {% else %}
+          <!-- Botón de menú para usuarios normales -->
+          <button id="menuToggleBtn" class="btn-blue menu-btn-worksheet">&#9776; Menú</button>
+        {% endif %}
+    </div>
+
+    <!-- MENÚ LATERAL MÓVIL PARA ADMINISTRADORES -->
+    {% if session.get('username') == ADMIN_USER %}
+    <div id="mobileMenu" class="mobile-menu-store hidden">
+      <div class="menu-title-row">
+        <i class="fas fa-bars"></i>
+        <h3>Menú</h3>
+      </div>
+      <a href="{{ url_for('admin_bp.dashboard') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-cogs"></i> Administración</a>
+      <a href="{{ url_for('admin_bp.parrafos_page') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-paragraph"></i> Párrafos</a>
+      <a href="{{ url_for('admin_bp.filters_page') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-filter"></i> Filtros</a>
+      <a href="{{ url_for('admin_bp.regex_page') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-random"></i> Regex</a>
+      <a href="{{ url_for('admin_bp.services_page') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-cogs"></i> Servicios</a>
+      <a href="{{ url_for('admin_bp.usuarios_page') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-users"></i> Usuarios</a>
+      <a href="{{ url_for('admin_bp.security_rules_page') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-shield-alt"></i> Reglas de Seguridad</a>
+      <a href="{{ url_for('admin_bp.view_trigger_logs_page') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-clipboard-list"></i> Consultar logs</a>
+      <button id="btnClearTriggerLogMenu" type="button" class="btn-panel btn-red mobile-menu-btn mb-04"><i class="fas fa-trash"></i> Limpiar Logs</button>
+      <a href="{{ url_for('auth_bp.logout') }}" class="btn-panel btn-red mobile-menu-btn mb-04"><i class="fas fa-sign-out-alt"></i> Cerrar Sesión</a>
+    </div>
+    {% else %}
+    <!-- MENÚ LATERAL MÓVIL PARA USUARIOS NORMALES Y SUB-USUARIOS -->
+    <div id="mobileMenu" class="mobile-menu-store hidden">
+      <div class="menu-title-row">
+        <i class="fas fa-bars"></i>
+        <h3>Menú</h3>
+      </div>
+      {% set current_user_id = session.get("user_id") %}
+      {% if current_user_id %}
+        {% set user_object = User.query.get(current_user_id) %}
+        {% set show_store = False %}
+        {% if session.get('username') == ADMIN_USER %}
+          {% set show_store = True %}
+        {% elif user_object.parent_id %}
+          {% if user_object.can_access_store %}
+            {% set parent = User.query.get(user_object.parent_id) %}
+            {% if parent and parent.roles_tienda and parent.roles_tienda[0].enabled %}
+              {% set show_store = True %}
+            {% endif %}
+          {% endif %}
+        {% elif user_object.roles_tienda and user_object.roles_tienda[0].enabled %}
+          {% set show_store = True %}
+        {% endif %}
+        {% if show_store %}
+          <a href="{{ url_for('store_bp.store_front') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-store"></i> Tienda</a>
+          <a href="{{ url_for('store_bp.historial_compras_usuario') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-receipt"></i> Mi Historial de Compras</a>
+        {% endif %}
+      {% endif %}
+      {% if user_object and user_object.has_public_tools_access() %}
+        <a href="{{ url_for('store_bp.tools_public') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-tools"></i> Herramientas</a>
+      {% endif %}
+      <a href="{{ url_for('main_bp.home') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-code"></i> Códigos</a>
+      {% if user_has_codigos2_access() %}
+      <a href="{{ url_for('main_bp.home2') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-code"></i> Códigos 2</a>
+      {% endif %}
+      {% if user_object %}
+        {% if session.get('username') == ADMIN_USER %}
+          <a href="{{ url_for('user_auth_bp.estadisticas') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-chart-bar"></i> Estadísticas</a>
+        {% elif not user_object.parent_id and user_object.roles_tienda and user_object.roles_tienda[0].enabled %}
+          <a href="{{ url_for('user_auth_bp.estadisticas') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-chart-bar"></i> Estadísticas</a>
+        {% elif user_object.parent_id and user_object.can_access_store %}
+          <a href="{{ url_for('user_auth_bp.estadisticas') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-chart-bar"></i> Estadísticas</a>
+        {% endif %}
+      {% endif %}
+      {% if session.get('is_user') and current_user %}
+        {% if current_user.is_support %}
+          <a href="{{ url_for('store_bp.support_dashboard') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-headset"></i> Chat de Soporte Admin</a>
+        {% elif current_user.can_chat %}
+          <a href="{{ url_for('store_bp.user_chat_soporte') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-headset"></i> Chat de Soporte</a>
+        {% endif %}
+      {% endif %}
+      {% if session.get('is_user') and user_object and user_object.can_create_subusers %}
+        <a href="{{ url_for('subuser_bp.manage_subusers') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-users"></i> Sub-usuarios</a>
+      {% endif %}
+      {% if session.get('is_user') and not current_user.parent_id and user_has_worksheet_access(current_user) %}
+  <a href="{{ url_for('store_bp.user_work_sheets') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-table"></i> Hojas de Cálculo</a>
+{% endif %}
+      {% if session.get('username') == ADMIN_USER %}
+        <a href="{{ url_for('admin_bp.dashboard') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-cogs"></i> Administración</a>
+      {% endif %}
+      {% if session.get('username') == ADMIN_USER %}
+        <a href="{{ url_for('auth_bp.logout') }}" class="btn-panel btn-red mobile-menu-btn mb-04"><i class="fas fa-sign-out-alt"></i> Cerrar Sesión</a>
+      {% elif session.get('is_user') %}
+        <a href="{{ url_for('user_auth_bp.logout') }}" class="btn-panel btn-red mobile-menu-btn mb-04"><i class="fas fa-sign-out-alt"></i> Cerrar Sesión</a>
+      {% else %}
+        <a href="{{ url_for('user_auth_bp.logout') }}" class="btn-panel btn-red mobile-menu-btn mb-04"><i class="fas fa-sign-out-alt"></i> Cerrar Sesión</a>
+      {% endif %}
+    </div>
+    {% endif %}
+
+    <!-- Modal Menú2 para administradores -->
+    {% if session.get('username') == ADMIN_USER %}
+    <div id="mobileMenu2" class="mobile-menu-store hidden">
+      <div class="menu-title-row">
+        <i class="fas fa-bars"></i>
+        <h3>Licencias</h3>
+      </div>
+      <a href="{{ url_for('store_bp.admin_store') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-store"></i> Licencias</a>
+      <a href="{{ url_for('store_bp.admin_productos') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-box"></i> Productos</a>
+      <a href="{{ url_for('store_bp.admin_coupons') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-ticket-alt"></i> Cupones</a>
+      <a href="{{ url_for('store_bp.admin_roles') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-user-tag"></i> Roles</a>
+      <a href="{{ url_for('store_bp.admin_tools') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-tools"></i> Herramientas Admin</a>
+      <a href="{{ url_for('store_bp.admin_payments') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-credit-card"></i> Pagos</a>
+      <a href="{{ url_for('store_bp.admin_work_sheets') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-table"></i> Hojas de Cálculo</a>
+      <a href="{{ url_for('store_bp.admin_configurations') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-cog"></i> Configuraciones</a>
+      <a href="{{ url_for('store_bp.admin_support') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-headset"></i> Chat Soporte</a>
+      <a href="{{ url_for('auth_bp.logout') }}" class="btn-panel btn-red mobile-menu-btn mb-04"><i class="fas fa-sign-out-alt"></i> Cerrar Sesión</a>
+    </div>
+
+    <!-- Modal Menú3 para administradores -->
+    <div id="mobileMenu3" class="mobile-menu-store hidden">
+      <div class="menu-title-row">
+        <i class="fas fa-bars"></i>
+        <h3>Parte Pública</h3>
+      </div>
+      <a href="{{ url_for('store_bp.store_front') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-store"></i> Tienda Pública</a>
+      <a href="{{ url_for('store_bp.tools_public') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-tools"></i> Herramientas Pública</a>
+      <a href="{{ url_for('store_bp.historial_compras_usuario') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-receipt"></i> Mi Historial de Compras</a>
+      <a href="{{ url_for('main_bp.home') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-code"></i> Códigos</a>
+      {% if user_has_codigos2_access() %}
+      <a href="{{ url_for('main_bp.home2') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-code"></i> Códigos 2</a>
+      {% endif %}
+      <a href="{{ url_for('auth_bp.logout') }}" class="btn-panel btn-red mobile-menu-btn mb-04"><i class="fas fa-sign-out-alt"></i> Cerrar Sesión</a>
+    </div>
+    {% endif %}
+    <div id="menuOverlay" class="menu-overlay"></div>
+
+    <!-- Form de búsqueda de herramientas -->
+    <div class="mt-4 search-section">
+      <form id="ajax-search-form" class="mb-3-5 d-flex flex-column gap-05" name="toolsSearchForm">
+        <div class="search-form-inner">
+          <label for="searchTools" class="sr-only">Buscar herramienta</label>
+          <input
+            type="search"
+            id="searchTools"
+            class="search-input"
+            placeholder="Buscar herramienta..."
+            required
+            autocomplete="off"
+          >
+          <button type="button" id="clearSearchTools" class="btn-search">Limpiar</button>
+        </div>
+      </form>
+    </div>
+
+    {% set accessible_tools = [] %}
+    {% for tool in tools %}
+      {% if username == ADMIN_USER or tool.user_has_access(current_user) %}
+        {% set _ = accessible_tools.append(tool) %}
+      {% endif %}
+    {% endfor %}
+
+    {% if accessible_tools %}
+    <h4 class="text-center my-3">Herramientas de Cálculo</h4>
+    <div class="d-flex flex-column gap-3">
+      {% for tool in accessible_tools %}
+        <div class="card herramienta-accordion">
+          <div class="accordion-header d-flex align-items-center justify-content-between w-100">
+            <span>• {{ tool.title }}</span>
+            <div class="accordion-arrow"></div>
+          </div>
+          <div class="accordion-body hidden">
+              <div class="tool-calculator-form-container">{{ tool.text | safe }}</div>
+              <form class="form-calc-porcentaje" autocomplete="off" name="formCalcPorcentaje">
+                <div class="d-flex align-items-end gap-1 mb-1 tool-calculator-form-row">
+                  <div class="flex-2">
+                    <label for="x-{{ tool.id }}" class="sr-only">Número X (Porcentaje: {{ tool.percent }}%)</label>
+                    <input type="number" step="any" min="0" class="form-control input-x" id="x-{{ tool.id }}" name="x-{{ tool.id }}" placeholder="Ingresa un número" autocomplete="off">
+                  </div>
+                  <div class="flex-1">
+                    <label for="resultadoPorcentaje">Resultado</label>
+                    <input type="text" class="form-control resultado-porcentaje" readonly placeholder="0" name="resultado_porcentaje" id="resultadoPorcentaje" autocomplete="off">
+                  </div>
+                </div>
+              </form>
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    {% set accessible_html = [] %}
+    {% for html_content in html_contents %}
+        {% if html_content.user_has_access(current_user) %}
+          {% set _ = accessible_html.append(html_content) %}
+        {% endif %}
+    {% endfor %}
+
+    {% if accessible_html %}
+    <hr class="compact-hr my-4">
+    <h4 class="text-center my-3">informacion variada/adicional</h4>
+    <div class="d-flex flex-column gap-3">
+      {% for html_content in accessible_html %}
+          <div class="card herramienta-accordion">
+            <div class="accordion-header d-flex align-items-center justify-content-between w-100">
+              <span>• {{ html_content.title }}</span>
+              <div class="accordion-arrow"></div>
+            </div>
+            <div class="accordion-body hidden">
+              {{ html_content.text | safe }}
+            </div>
+          </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    {% set accessible_listings = [] %}
+    {% for listing in youtube_listings %}
+        {% if username == ADMIN_USER or listing.user_has_access(current_user) %}
+          {% set _ = accessible_listings.append(listing) %}
+        {% endif %}
+    {% endfor %}
+    
+    {% if accessible_listings %}
+    <hr class="compact-hr my-4">
+    <h4 class="text-center my-3">Videos de Producción</h4>
+    <div class="d-flex flex-column gap-3">
+      {% for listing in accessible_listings %}
+        <div class="card herramienta-accordion">
+          <div class="accordion-header d-flex align-items-center justify-content-between w-100">
+            <span>• {{ listing.title }}</span>
+            <div class="accordion-arrow"></div>
+          </div>
+          <div class="accordion-body hidden">
+            {{ listing.content | default('', true) | safe }}
+            
+            {% if listing.production_links %}
+            <div class="production-links-list-container">
+              <div class="d-flex flex-column gap-2 mt-3">
+                  {% for link in listing.production_links %}
+                  <div class="card herramienta-accordion nested-accordion">
+                      <div class="accordion-header d-flex align-items-center justify-content-between w-100">
+                          <span>• {{ link.title }}</span>
+                          <div class="d-flex align-items-center">
+                              <button class="btn-panel btn-blue btn-copy-link btn-small" data-link="{{ link.url }}">Copiar</button>
+                              <div class="accordion-arrow ms-2"></div>
+                          </div>
+                      </div>
+                      <div class="accordion-body hidden no-padding">
+                          {% if '/shorts/' in link.url %}
+                            {% set video_id = link.url.split('/shorts/')[-1].split('?')[0] %}
+                          {% elif '/embed/' in link.url %}
+                            {% set video_id = link.url.split('/embed/')[-1].split('?')[0].split('&')[0] %}
+                          {% elif '/v/' in link.url %}
+                            {% set video_id = link.url.split('/v/')[-1].split('?')[0].split('&')[0] %}
+                          {% elif 'youtu.be/' in link.url %}
+                            {% set video_id = link.url.split('youtu.be/')[-1].split('?')[0].split('&')[0] %}
+                          {% elif 'v=' in link.url %}
+                            {% set video_id = link.url.split('v=')[-1].split('&')[0] %}
+                          {% else %}
+                            {% set video_id = '' %}
+                          {% endif %}
+                          <div class="video-container" role="region" aria-label="Reproductor de video: {{ link.title }}">
+                              <iframe 
+                                  src="https://www.youtube.com/embed/{{ video_id }}?modestbranding=1&fs=1&rel=0&controls=1&disablekb=1&iv_load_policy=3&cc_load_policy=0&playsinline=1&showinfo=0&autohide=1&color=white&theme=light&wmode=transparent&enablejsapi=0&origin={{ request.host_url }}" 
+                                  frameborder="0" 
+                                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
+                                  allowfullscreen 
+                                  sandbox="allow-scripts allow-same-origin allow-presentation allow-popups" 
+                                  loading="lazy"
+                                  title="Reproductor de video de YouTube: {{ link.title }}"
+                                  aria-label="Reproductor de video de YouTube: {{ link.title }}"
+                                  aria-describedby="youtube-description-{{ video_id }}"
+                                  name="youtube-player-{{ video_id }}"
+                                  id="youtube-player-{{ video_id }}"
+                                  role="application"
+                              ></iframe>
+                              <span id="youtube-description-{{ video_id }}" class="sr-only">Reproductor de video de YouTube para: {{ link.title }}</span>
+                          </div>
+                      </div>
+                  </div>
+                  {% endfor %}
+              </div>
+            </div>
+            {% endif %}
+
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    {% if apis %}
+    <hr class="compact-hr my-4">
+    <h4 class="text-center my-3">Extras de búsqueda/consultas</h4>
+    <div class="d-flex flex-column gap-3">
+      {% for api in apis if api.api_type != 'Drive' %}
+        <div class="card herramienta-accordion">
+          <div class="accordion-header d-flex align-items-center justify-content-between w-100">
+            <span>• {{ api.title }}</span>
+            <div class="accordion-arrow"></div>
+          </div>
+          <div class="accordion-body hidden {% if api.api_type in ['Búsqueda de Medios'] %}no-padding{% endif %}">
+            {% if api.api_type == "Búsqueda de Medios" %}
+              <div class="media-search-container">
+                <form class="media-search-form mb-05" name="mediaSearchForm">
+                  <div class="d-flex gap-05 w-100">
+                    <label for="media_search_title" class="sr-only">Título a buscar</label>
+                    <input type="text" id="media_search_title" class="search-input media-search-input flex-grow-1" placeholder="Escribe un título..." required name="media_search_title" autocomplete="off">
+                    <label for="media_country" class="sr-only">País</label>
+                    <select id="media_country" class="form-select media-country-select w-120px" name="media_country" autocomplete="off">
+                      <option value="CO">Colom</option>
+                      <option value="US">USA</option>
+                      <option value="ES">España</option>
+                      <option value="MX">México</option>
+                      <option value="AR">Argentina</option>
+                      <option value="BR">Brasil</option>
+                      <option value="FR">Francia</option>
+                      <option value="DE">Alemania</option>
+                      <option value="IT">Italia</option>
+                      <option value="GB">Reino Unido</option>
+                      <option value="CA">Canadá</option>
+                      <option value="AU">Australia</option>
+                      <option value="NZ">Nueva Zelanda</option>
+                      <option value="NL">Países Bajos</option>
+                      <option value="BE">Bélgica</option>
+                      <option value="CH">Suiza</option>
+                      <option value="AT">Austria</option>
+                      <option value="SE">Suecia</option>
+                      <option value="NO">Noruega</option>
+                      <option value="DK">Dinamarca</option>
+                      <option value="FI">Finlandia</option>
+                      <option value="PL">Polonia</option>
+                      <option value="CZ">República Checa</option>
+                      <option value="HU">Hungría</option>
+                      <option value="RO">Rumania</option>
+                      <option value="BG">Bulgaria</option>
+                      <option value="HR">Croacia</option>
+                      <option value="SI">Eslovenia</option>
+                      <option value="SK">Eslovaquia</option>
+                      <option value="EE">Estonia</option>
+                      <option value="LV">Letonia</option>
+                      <option value="LT">Lituania</option>
+                      <option value="PT">Portugal</option>
+                      <option value="IE">Irlanda</option>
+                      <option value="GR">Grecia</option>
+                      <option value="CY">Chipre</option>
+                      <option value="MT">Malta</option>
+                      <option value="LU">Luxemburgo</option>
+                      <option value="IS">Islandia</option>
+                      <option value="CL">Chile</option>
+                      <option value="PE">Perú</option>
+                      <option value="UY">Uruguay</option>
+                      <option value="PY">Paraguay</option>
+                      <option value="BO">Bolivia</option>
+                      <option value="EC">Ecuador</option>
+                      <option value="VE">Venezuela</option>
+                      <option value="CR">Costa Rica</option>
+                      <option value="PA">Panamá</option>
+                      <option value="GT">Guatemala</option>
+                      <option value="SV">El Salvador</option>
+                      <option value="HN">Honduras</option>
+                      <option value="NI">Nicaragua</option>
+                      <option value="DO">República Dominicana</option>
+                      <option value="PR">Puerto Rico</option>
+                      <option value="CU">Cuba</option>
+                      <option value="JM">Jamaica</option>
+                      <option value="TT">Trinidad y Tobago</option>
+                      <option value="GY">Guyana</option>
+                      <option value="SR">Surinam</option>
+                      <option value="GF">Guayana Francesa</option>
+                      <option value="FK">Islas Malvinas</option>
+                      <option value="ZA">Sudáfrica</option>
+                      <option value="EG">Egipto</option>
+                      <option value="MA">Marruecos</option>
+                      <option value="TN">Túnez</option>
+                      <option value="DZ">Argelia</option>
+                      <option value="LY">Libia</option>
+                      <option value="SD">Sudán</option>
+                      <option value="ET">Etiopía</option>
+                      <option value="KE">Kenia</option>
+                      <option value="NG">Nigeria</option>
+                      <option value="GH">Ghana</option>
+                      <option value="CI">Costa de Marfil</option>
+                      <option value="SN">Senegal</option>
+                      <option value="ML">Malí</option>
+                      <option value="BF">Burkina Faso</option>
+                      <option value="NE">Níger</option>
+                      <option value="TD">Chad</option>
+                      <option value="CM">Camerún</option>
+                      <option value="CF">República Centroafricana</option>
+                      <option value="CG">Congo</option>
+                      <option value="CD">República Democrática del Congo</option>
+                      <option value="GA">Gabón</option>
+                      <option value="GQ">Guinea Ecuatorial</option>
+                      <option value="ST">Santo Tomé y Príncipe</option>
+                      <option value="AO">Angola</option>
+                      <option value="ZM">Zambia</option>
+                      <option value="ZW">Zimbabue</option>
+                      <option value="BW">Botsuana</option>
+                      <option value="NA">Namibia</option>
+                      <option value="LS">Lesoto</option>
+                      <option value="SZ">Esuatini</option>
+                      <option value="MG">Madagascar</option>
+                      <option value="MU">Mauricio</option>
+                      <option value="SC">Seychelles</option>
+                      <option value="KM">Comoras</option>
+                      <option value="DJ">Yibuti</option>
+                      <option value="SO">Somalia</option>
+                      <option value="ER">Eritrea</option>
+                      <option value="SS">Sudán del Sur</option>
+                      <option value="UG">Uganda</option>
+                      <option value="RW">Ruanda</option>
+                      <option value="BI">Burundi</option>
+                      <option value="TZ">Tanzania</option>
+                      <option value="MZ">Mozambique</option>
+                      <option value="MW">Malawi</option>
+                      <option value="ZW">Zimbabue</option>
+                      <option value="ZM">Zambia</option>
+                      <option value="AO">Angola</option>
+                      <option value="CG">Congo</option>
+                      <option value="CD">República Democrática del Congo</option>
+                      <option value="CF">República Centroafricana</option>
+                      <option value="TD">Chad</option>
+                      <option value="NE">Níger</option>
+                      <option value="BF">Burkina Faso</option>
+                      <option value="ML">Malí</option>
+                      <option value="SN">Senegal</option>
+                      <option value="CI">Costa de Marfil</option>
+                      <option value="GH">Ghana</option>
+                      <option value="NG">Nigeria</option>
+                      <option value="KE">Kenia</option>
+                      <option value="ET">Etiopía</option>
+                      <option value="SD">Sudán</option>
+                      <option value="LY">Libia</option>
+                      <option value="DZ">Argelia</option>
+                      <option value="TN">Túnez</option>
+                      <option value="MA">Marruecos</option>
+                      <option value="EG">Egipto</option>
+                      <option value="ZA">Sudáfrica</option>
+                      <option value="FK">Islas Malvinas</option>
+                      <option value="GF">Guayana Francesa</option>
+                      <option value="SR">Surinam</option>
+                      <option value="GY">Guyana</option>
+                      <option value="TT">Trinidad y Tobago</option>
+                      <option value="JM">Jamaica</option>
+                      <option value="CU">Cuba</option>
+                      <option value="PR">Puerto Rico</option>
+                      <option value="DO">República Dominicana</option>
+                      <option value="NI">Nicaragua</option>
+                      <option value="HN">Honduras</option>
+                      <option value="SV">El Salvador</option>
+                      <option value="GT">Guatemala</option>
+                      <option value="PA">Panamá</option>
+                      <option value="CR">Costa Rica</option>
+                      <option value="VE">Venezuela</option>
+                      <option value="EC">Ecuador</option>
+                      <option value="BO">Bolivia</option>
+                      <option value="PY">Paraguay</option>
+                      <option value="UY">Uruguay</option>
+                      <option value="PE">Perú</option>
+                      <option value="CL">Chile</option>
+                      <option value="IS">Islandia</option>
+                      <option value="LU">Luxemburgo</option>
+                      <option value="MT">Malta</option>
+                      <option value="CY">Chipre</option>
+                      <option value="GR">Grecia</option>
+                      <option value="IE">Irlanda</option>
+                      <option value="PT">Portugal</option>
+                      <option value="LT">Lituania</option>
+                      <option value="LV">Letonia</option>
+                      <option value="EE">Estonia</option>
+                      <option value="SK">Eslovaquia</option>
+                      <option value="SI">Eslovenia</option>
+                      <option value="HR">Croacia</option>
+                      <option value="BG">Bulgaria</option>
+                      <option value="RO">Rumania</option>
+                      <option value="HU">Hungría</option>
+                      <option value="CZ">República Checa</option>
+                      <option value="PL">Polonia</option>
+                      <option value="FI">Finlandia</option>
+                      <option value="DK">Dinamarca</option>
+                      <option value="NO">Noruega</option>
+                      <option value="SE">Suecia</option>
+                      <option value="AT">Austria</option>
+                      <option value="CH">Suiza</option>
+                      <option value="BE">Bélgica</option>
+                      <option value="NL">Países Bajos</option>
+                      <option value="NZ">Nueva Zelanda</option>
+                      <option value="AU">Australia</option>
+                      <option value="CA">Canadá</option>
+                    </select>
+                    <button type="submit" class="btn-search media-search-btn">Buscar</button>
+                  </div>
+                </form>
+                <div class="media-results-container mt-3"></div>
+              </div>
+            {% else %}
+              {% if api.api_type and api.api_type != "" %}
+              <div class="d-flex justify-content-between align-items-center">
+                  <span class="api-key-text word-break-all"><strong>Clave:</strong> {{ api.api_key }}</span>
+                  <button class="btn-panel btn-blue btn-copy-link btn-small minw-70" data-link="{{ api.api_key }}">Copiar</button>
+              </div>
+              {% else %}
+              {# API Genérica - mostrar como HTML #}
+              <div class="api-key-html-content">
+                  {{ api.api_key | safe }}
+              </div>
+              {% endif %}
+            {% endif %}
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+    
+    <!-- Sección de múltiples galerías de Google Drive -->
+    {% if drive_apis and drive_apis|length > 0 %}
+    <hr class="compact-hr my-4">
+    <h4 class="text-center my-3">Fotos y Videos - Google Drive</h4>
+    {% for drive_api in drive_apis %}
+      <div class="mb-4">
+        <!-- Acordeón de Fotos -->
+        {% if drive_api.drive_subtitle_photos %}
+        <div class="card herramienta-accordion">
+          <div class="accordion-header d-flex align-items-center justify-content-between w-100">
+            <span>• {{ drive_api.drive_subtitle_photos }}</span>
+            <div class="accordion-arrow"></div>
+          </div>
+          <div class="accordion-body hidden">
+            <div class="drive-photos-container">
+              <div id="photosPaginationTop-{{ drive_api.id }}" class="pagination-container mb-2"></div>
+              <div class="d-flex justify-content-center mb-2">
+                <button type="button" id="loadPhotosBtn-{{ drive_api.id }}" class="btn-panel btn-blue">Cargar Fotos</button>
+              </div>
+              <div id="photosGallery-{{ drive_api.id }}" class="drive-gallery"></div>
+              <div id="photosPagination-{{ drive_api.id }}" class="pagination-container mt-2"></div>
+            </div>
+          </div>
+        </div>
+        {% endif %}
+        <!-- Acordeón de Videos -->
+        {% if drive_api.drive_subtitle_videos %}
+        <div class="card herramienta-accordion">
+          <div class="accordion-header d-flex align-items-center justify-content-between w-100">
+            <span>• {{ drive_api.drive_subtitle_videos }}</span>
+            <div class="accordion-arrow"></div>
+          </div>
+          <div class="accordion-body hidden">
+            <div class="drive-videos-container">
+              <div id="videosPaginationTop-{{ drive_api.id }}" class="pagination-container mb-2"></div>
+              <div class="d-flex justify-content-center mb-2">
+                <button type="button" id="loadVideosBtn-{{ drive_api.id }}" class="btn-panel btn-blue">Cargar Videos</button>
+              </div>
+              <div id="videosGallery-{{ drive_api.id }}" class="drive-gallery"></div>
+              <div id="videosPagination-{{ drive_api.id }}" class="pagination-container mt-2"></div>
+            </div>
+          </div>
+        </div>
+        {% endif %}
+      </div>
+    {% endfor %}
+    {% endif %}
+    
+  {% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script>
+  // Variables globales para JavaScript externo
+  window.clearTriggerLogUrl = '{{ url_for("admin_bp.clear_trigger_log") }}';
+</script>
+<script src="{{ url_for('store_bp.static', filename='js/menu_herramientas.js') }}" defer></script>
+<script src="{{ url_for('store_bp.static', filename='js/drive_manager.js') }}" defer></script>
+<script src="{{ url_for('static', filename='js/clear_trigger_logs.js') }}" defer></script>
+{% endblock %} 

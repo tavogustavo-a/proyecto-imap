@@ -1,0 +1,145 @@
+{% extends "base.html" %}
+
+{% block title %}Editar Listado YouTube{% endblock %}
+
+{% block head %}
+  {{ super() }}
+  <link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="store-light maxw-800 mx-auto mt-3 br-8 edit-youtube-container">
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <h2 class="m-0">{{ title }}</h2>
+    <a href="{{ url_for('store_bp.admin_tools') }}" class="btn-panel btn-blue">Volver</a>
+  </div>
+
+  <form method="POST" action="{{ url_for('store_bp.edit_youtube_listing', listing_id=listing.id) }}" class="mb-05 edit-youtube-form no-form-styles">
+    <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="enabled" value="{{ '1' if listing.enabled else '0' }}">
+    
+    <div class="mb-3">
+      <label for="title" class="form-label">Título</label>
+      <input type="text" name="title" id="title" class="form-control" value="{{ listing.title }}" required autocomplete="off">
+    </div>
+    
+    <div class="mb-3">
+      <label for="content">Descripcion YouTube</label>
+      <textarea name="content" id="content" class="form-control" rows="5" autocomplete="off">{% if listing.content and listing.content != 'None' %}{{ listing.content }}{% endif %}</textarea>
+    </div>
+    
+    <div class="mb-3 text-center">
+      <strong>Estado:</strong>
+      {% if listing.enabled %}
+        <span class="badge bg-success ms-2">Activado</span>
+      {% else %}
+        <span class="badge bg-danger ms-2">Desactivado</span>
+      {% endif %}
+    </div>
+    
+    <hr class="compact-hr my-3">
+
+    <div class="user-linking-section edit-youtube-user-section" data-listing-id="{{ listing.id }}">
+      <h4 class="text-center mb-05">Usuarios con acceso a este listado</h4>
+      
+      <div class="d-flex flex-wrap align-items-center mb-05 justify-content-center gap-2">
+        <div class="search-container">
+          <label for="searchInput" class="sr-only">Buscar usuario</label>
+          <input type="search" id="searchInput" placeholder="Buscar usuario..." class="form-control" autocomplete="off">
+        </div>
+        <div class="d-flex align-items-center">
+          <label for="perPageSelect" class="sr-only">Mostrar cantidad por página</label>
+          <select id="perPageSelect" class="" autocomplete="off">
+            <option value="5" selected>5</option>
+            <option value="10">10</option>
+            <option value="20">20</option>
+            <option value="50">50</option>
+            <option value="all">Todos</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="table-responsive">
+        <table class="table table-bordered table-striped" id="users-table">
+          <thead class="thead-dark">
+            <tr>
+              <th>Usuario</th>
+              <th>Nombre</th>
+              <th class="text-center">Vincular</th>
+            </tr>
+          </thead>
+          <tbody id="users-table-body">
+            <!-- Las filas de usuarios se cargarán aquí con JavaScript -->
+          </tbody>
+        </table>
+      </div>
+      
+      <div class="d-flex justify-content-center mt-2 pagination-buttons">
+        <button type="button" id="prevPageBtn" class="btn-panel btn-blue">&lt; Anterior</button>
+        <span id="pageIndicator">Página 1 de 1</span>
+        <button type="button" id="nextPageBtn" class="btn-panel btn-blue">Siguiente &gt;</button>
+      </div>
+
+      <div class="d-flex justify-content-center gap-2 mb-05">
+        <button type="button" id="selectAllBtn" class="btn-panel btn-green">Marcar Todos</button>
+        <button type="button" id="deselectAllBtn" class="btn-panel btn-red">Desmarcar Todos</button>
+      </div>
+
+      <div class="mt-4 text-center">
+        <button type="submit" id="saveChangesBtn" class="btn-panel btn-green">Guardar</button>
+        <a href="{{ url_for('store_bp.admin_tools') }}" class="btn-panel btn-red">Cancelar</a>
+      </div>
+    </div>
+
+    <hr class="compact-hr my-3">
+
+    <div class="production-links-section edit-youtube-links-section">
+      <h4 class="text-center mb-3">Links de Producción</h4>
+      <div id="production-links-container">
+        <!-- Los links existentes se cargarán aquí -->
+      </div>
+      <div id="add-link-form" class="mt-3">
+        <div class="d-flex flex-column flex-md-row align-items-stretch gap-1">
+          <label for="new-link-url" class="sr-only">URL del nuevo link</label>
+          <input type="url" id="new-link-url" class="form-control edit-youtube-link-url" placeholder="https://youtube.com/..." autocomplete="off">
+          <label for="new-link-title" class="sr-only">Título del nuevo link</label>
+          <input type="text" id="new-link-title" class="form-control edit-youtube-link-title" placeholder="Título" autocomplete="off">
+          <button type="button" id="add-link-btn" class="btn-panel btn-green">+</button>
+        </div>
+      </div>
+    </div>
+
+  </form>
+</div>
+
+<!-- Modal para editar link -->
+<div id="edit-link-modal" class="modal-background edit-youtube-modal">
+  <div class="modal-content">
+    <div class="modal-header">
+      <h5 class="modal-title">Editar Link</h5>
+      <button type="button" class="btn-close" id="close-modal-btn">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div class="d-flex flex-column gap-2">
+        <div>
+          <label for="edit-link-input">URL del Link</label>
+          <input type="url" id="edit-link-input" class="form-control" autocomplete="off">
+        </div>
+        <div>
+          <label for="edit-link-title-input">Título</label>
+          <input type="text" id="edit-link-title-input" class="form-control" autocomplete="off">
+        </div>
+      </div>
+      <input type="hidden" id="edit-link-id-input">
+    </div>
+    <div class="modal-footer">
+      <button type="button" id="cancel-edit-btn" class="btn-panel btn-red">Cancelar</button>
+      <button type="button" id="save-edit-btn" class="btn-panel btn-green">Guardar</button>
+    </div>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+  {{ super() }}
+  <script src="{{ url_for('store_bp.static', filename='js/edit_youtube_listing.js') }}" defer></script>
+{% endblock %} 

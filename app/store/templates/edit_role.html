@@ -1,0 +1,196 @@
+{% extends "base.html" %}
+
+{% block title %}Editar Rol{% endblock %}
+
+{% block head %}
+  {{ super() }}
+  <link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="container container-max-width-900 edit-role-container">
+  <div class="store-light edit-role-card maxw-800 mx-auto mt-3 br-8">
+    <form id="editRoleForm" class="edit-role-form d-flex flex-column lign-items-center" data-role-id="{{ role.id }}">
+      <div class="d-flex align-items-center justify-content-between w-100">
+        <h3 class="text-center mb-1 edit-role-title">Editar Rol</h3>
+        <a href="{{ url_for('store_bp.admin_roles') }}" class="btn-panel btn-blue edit-role-back-btn">Volver a Roles</a>
+      </div>
+      <input type="hidden" name="role_id" id="roleId" value="{{ role.id }}">
+      <div class="d-flex align-items-center mb-1 w-100 justify-content-between">
+        <span><strong>Estado:</strong> <span id="roleStatus" class="badge {{ 'bg-success' if role.enabled else 'bg-danger' }}">{{ 'Activo' if role.enabled else 'Desactivado' }}</span></span>
+      </div>
+      <div class="d-flex align-items-center mb-1 w-100">
+        <input type="text" name="name" id="roleName" placeholder="Nombre del rol" required value="{{ role.name }}" class="edit-role-name-input" autocomplete="off">
+      </div>
+      <div class="d-flex align-items-center mb-1 w-100 justify-content-center edit-role-discount-container">
+        <input type="number" name="discount_usd" id="discountUsdEdit" placeholder="Descuento USD (opcional)" step="0.01" value="{{ role.descuentos.usd | default(0) }}" class="edit-role-discount-input">
+        <input type="number" name="discount_cop" id="discountCopEdit" placeholder="Descuento COP (opcional)" step="0.01" value="{{ role.descuentos.cop | default(0) }}" class="edit-role-discount-input">
+      </div>
+      <div class="d-flex align-items-center mb-1 w-100 justify-content-center">
+        <label class="edit-role-price-label" for="tipoUsdEdit">Tipo de precio:</label>
+        <input type="radio" name="tipo_precio" value="USD" id="tipoUsdEdit" {% if role.tipo_precio == 'USD' %}checked{% endif %}> USD
+        <input type="radio" name="tipo_precio" value="COP" id="tipoCopEdit" class="edit-role-price-radio" {% if role.tipo_precio == 'COP' %}checked{% endif %}> COP
+      </div>
+      <div class="edit-role-price-warning mb-1">
+        <small class="text-warning">
+          <i class="fas fa-exclamation-triangle"></i>
+          <strong>Advertencia:</strong> Cambiar el tipo de precio limpiará automáticamente el saldo de la moneda anterior de todos los usuarios vinculados a este rol.
+        </small>
+      </div>
+      <h4 class="mb-1 edit-role-section-title">Productos Asociados</h4>
+      <!-- Controles de búsqueda y paginación -->
+      <div class="d-flex flex-wrap align-items-center mb-1 productos-buscar-mostrar">
+        <div class="search-container">
+          <input type="search" id="searchProductInput" name="searchProductInput" placeholder="Buscar producto..." autocomplete="off">
+        </div>
+        <div class="d-flex align-items-center gap-1">
+          <select id="showCount" name="showCount">
+          <option value="5">5</option>
+          <option value="10">10</option>
+          <option value="20">20</option>
+          <option value="30">30</option>
+          <option value="40">40</option>
+          <option value="50">50</option>
+          <option value="100">100</option>
+          <option value="all">Todas</option>
+          </select>
+        </div>
+      </div>
+      <div class="table-wrapper-store roles-table-wrapper edit-role-table-wrapper">
+        <table class="table table-bordered mt-2 edit-role-products-table" id="roles-products-table">
+          <thead>
+            <tr>
+              <th class="edit-role-product-header">Producto</th>
+              <th>Ver</th>
+              <th>$ original</th>
+              <th>D. General</th>
+              <th>D. Adicional</th>
+              <th class="edit-role-price-header">$ Final</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for p in productos %}
+            <tr data-product-id="{{ p.id }}" data-price-cop="{{ p.price_cop }}" data-price-usd="{{ p.price_usd }}">
+              <td class="edit-role-product-cell">{{ p.name }}</td>
+              <td><input type="checkbox" name="visible_{{ p.id }}" {% if p.id in productos_ids %}checked{% endif %}></td>
+              <td>
+                {% if role.tipo_precio == 'COP' %}
+                  ${{ format_number(p.price_cop|float|round(2)) }} COP
+                {% else %}
+                  ${{ format_number(p.price_usd|float|round(2)) }} USD
+                {% endif %}
+              </td>
+              <td>
+                {% if role.tipo_precio == 'COP' %}
+                  -${{ format_number(role.descuentos.cop|default(0)|float|round(2)) }} COP
+                {% else %}
+                  -${{ format_number(role.descuentos.usd|default(0)|float|round(2)) }} USD
+                {% endif %}
+              </td>
+              <td>
+                <div class="edit-role-discount-inputs">
+                  <input type="number" name="discount_cop_extra_{{ p.id }}" value="{{ p.discount_cop_extra if p.discount_cop_extra is not none else 0 }}" placeholder="COP" class="edit-role-discount-input-small">
+                  <input type="number" name="discount_usd_extra_{{ p.id }}" value="{{ p.discount_usd_extra if p.discount_usd_extra is not none else 0 }}" placeholder="USD" class="edit-role-discount-input-small">
+                </div>
+              </td>
+              <td class="td-final-price">
+                {% if role.tipo_precio == 'COP' %}
+                  ${% set final_cop = (p.price_cop|float - (role.descuentos.cop|default(0)|float) - (p.discount_cop_extra|default(0)|float)) %}{{ format_number(final_cop) }} COP
+                {% else %}
+                  ${% set final_usd = (p.price_usd|float - (role.descuentos.usd|default(0)|float) - (p.discount_usd_extra|default(0)|float)) %}{{ format_number(final_usd) }} USD
+                {% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+            <!-- Redondear las esquinas inferiores -->
+            {# Fila extra eliminada para evitar espacio vacío al final de la tabla #}
+          </tbody>
+        </table>
+      </div>
+      <div class="d-flex justify-content-center mt-2 mb-2 pagination-buttons edit-role-pagination">
+        <button id="prevPageBtn" class="btn-blue btn-panel" type="button">&lt; Anterior</button>
+        <button id="nextPageBtn" class="btn-blue btn-panel" type="button">Siguiente &gt;</button>
+      </div>
+      <button type="submit" class="btn-panel btn-green mt-3 edit-role-save-btn">Guardar</button>
+    </form>
+  </div>
+  <!-- Bloque blanco para usuarios principales -->
+  <div class="store-light edit-role-users-card">
+    <h4 class="mb-1 edit-role-section-title">Usuarios principales</h4>
+    <div class="d-flex flex-wrap align-items-center mb-1 usuarios-buscar-mostrar">
+      <div class="search-container">
+        <input type="search" id="searchUserInput" name="searchUserInput" placeholder="Buscar usuario..." autocomplete="off">
+      </div>
+      <div class="d-flex align-items-center gap-1">
+        <select id="showUserCount" name="showUserCount">
+          <option value="5">5</option>
+          <option value="10">10</option>
+          <option value="20">20</option>
+          <option value="30">30</option>
+          <option value="40">40</option>
+          <option value="50">50</option>
+          <option value="100">100</option>
+          <option value="all">Todos</option>
+        </select>
+      </div>
+    </div>
+    <div class="table-wrapper-store users-table-wrapper edit-role-table-wrapper">
+      <table class="table table-bordered mt-2 edit-role-users-table" id="users-table">
+        <thead>
+          <tr>
+            <th>Usuario</th>
+            <th>Nombre</th>
+            <th>Vincular</th>
+            <th>Ya vinculado</th>
+          </tr>
+        </thead>
+        <tbody id="users-table-body">
+          <tr><td colspan="4" class="edit-role-loading-cell">Cargando usuarios...</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="d-flex justify-content-center mt-2 mb-2 pagination-buttons edit-role-users-pagination">
+      <button id="prevUserPageBtn" class="btn-blue btn-panel" type="button">&lt; Anterior</button>
+      <button id="nextUserPageBtn" class="btn-blue btn-panel" type="button">Siguiente &gt;</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal de Productos -->
+<div id="productsModal" class="edit-role-modal">
+  <div class="modal-content edit-role-modal-content">
+    <span id="closeModal" class="edit-role-modal-close">&times;</span>
+    <h2>Seleccionar Productos</h2>
+    <div class="d-flex justify-content-between mb-2">
+      <button id="selectAllProducts" class="btn-panel btn-blue">Seleccionar Todos</button>
+      <button id="deselectAllProducts" class="btn-panel btn-red">Deseleccionar Todos</button>
+    </div>
+    <div id="productsCheckboxList" class="d-flex flex-column gap-1">
+      {% for p in productos %}
+        <label class="d-flex align-items-center gap-03">
+          <input type="checkbox" class="product-checkbox" name="products" value="{{ p.id }}" {% if p.id in productos_ids %}checked{% endif %}>
+          <span>{{ p.name }}</span>
+        </label>
+      {% endfor %}
+    </div>
+    <button id="saveProducts" class="btn-panel btn-green mt-2">Guardar Selección</button>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script src="{{ url_for('store_bp.static', filename='js/roles.js') }}?v=20241220-edit"></script>
+<script src="{{ url_for('store_bp.static', filename='js/edit_role.js') }}"></script>
+<script src="{{ url_for('store_bp.static', filename='js/edit_role_users.js') }}"></script>
+{% endblock %}
+
+{% macro format_number(n) %}
+    {%- set n = n|float -%}
+    {%- set n = (n * 100)|round / 100 -%}
+    {%- if n % 1 == 0 -%}
+        {{ n|int }}
+    {%- else -%}
+        {{ ('%.2f' % n).replace('.00','').replace('0$', '') }}
+    {%- endif -%}
+{% endmacro %} 

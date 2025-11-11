@@ -1,0 +1,307 @@
+{% extends "base.html" %}
+
+{% block title %}Chat de Soporte{% endblock %}
+
+{% block head %}
+  <meta name="csrf_token" content="{{ csrf_token() }}">
+  {% if current_user %}
+  <meta name="current-user-id" content="{{ current_user.id }}">
+  <meta name="current-username" content="{{ current_user.username }}">
+  <meta name="current-user-type" content="{% if current_user.username == ADMIN_USER %}admin{% elif current_user.is_support %}support{% else %}user{% endif %}">
+  
+  {% endif %}
+  
+  <!-- ✅ NUEVO: Favicon para evitar error 404 -->
+  <link rel="icon" href="{{ url_for('static', filename='images/favicon.svg') }}" type="image/svg+xml">
+  
+  <!-- ✅ NUEVO: Meta tags para permisos de micrófono en móviles -->
+  <meta name="permissions-policy" content="microphone=*">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  
+
+  
+  <!-- ✅ NUEVO: Polyfill para navegadores antiguos -->
+  <script src="{{ url_for('store_bp.static', filename='js/audio_polyfill.js') }}"></script>
+  
+  <!-- ✅ NUEVO: Fix específico para audio en móviles -->
+  <script src="{{ url_for('store_bp.static', filename='js/audio_mobile_fix.js') }}"></script>
+  
+  <!-- ✅ NUEVO: Sistema de reconexión y sincronización -->
+  <script src="{{ url_for('store_bp.static', filename='js/chat_reconnection.js') }}"></script>
+  
+  <link rel="stylesheet" href="{{ url_for('static', filename='fontawesome/css/all.min.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/store.css') }}">
+  <link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/chat_soporte.css') }}">
+  
+  <!-- ✅ NUEVO: Estilos para reconexión y sincronización -->
+  <link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/chat_reconnection.css') }}">
+  
+  <!-- ✅ NUEVO: Chat Enhancements CSS -->
+  <link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/chat_enhancements.css') }}">
+
+{% endblock head %}
+
+{% block content %}
+
+
+<div class="form-container-wide">
+  {% if current_user and current_user.is_support %}
+    <!-- CONTORNO: Dashboard de Chat de Soporte (solo para usuarios soporte) -->
+    <div class="admin-card">
+      <div class="d-flex justify-content-between align-items-center mb-1">
+        <h3 class="m-0">Dashboard de Chat de Soporte</h3>
+        <div class="ml-auto text-right">
+          <button
+            id="btnVolverTienda"
+            type="button"
+            class="btn-blue"
+            data-url="{{ url_for('store_bp.store_front') }}"
+          >
+            Volver a Tienda
+          </button>
+        </div>
+      </div>
+
+      <!-- Dashboard de Chat Integrado -->
+      <div class="container container-max-width-900 mt-2">
+
+        {% if session.get('username') == ADMIN_USER %}
+        <div class="d-flex justify-content-between align-items-center mb-1">
+          <div></div>
+          <button id="btnLimpiarMensajes" type="button" class="btn-red">
+            <i class="fas fa-trash"></i> Limpiar Mensajes Antiguos
+          </button>
+        </div>
+        {% endif %}
+
+        <!-- Contenedor principal del chat estilo WhatsApp -->
+        <div class="chat-whatsapp-container">
+          <!-- Lista de chats (lado izquierdo) -->
+          <div class="chat-list-container">
+            <div class="chat-list-header">
+              <h5 class="mb-0">
+                <i class="fas fa-comments"></i> Chats
+              </h5>
+            </div>
+            <div class="chat-list" id="usersList">
+              <!-- Los chats se cargarán dinámicamente aquí -->
+            </div>
+          </div>
+
+          <!-- Área de chat (lado derecho) -->
+          <div class="chat-conversation-container">
+            <div class="chat-conversation-header" id="chatHeader">
+              <div class="chat-user-info">
+                <div class="chat-user-avatar">
+                  <i class="fas fa-user"></i>
+                </div>
+                <div class="chat-user-details">
+                  <h6 class="mb-0" id="chatTitle">Selecciona un usuario para chatear</h6>
+                  <small class="text-muted" id="chatStatus">Selecciona un chat para comenzar</small>
+                </div>
+              </div>
+            </div>
+            
+            <!-- Área de mensajes -->
+            <div id="chatMessagesArea" class="chat-messages-area">
+              <div class="text-center text-muted mt-5">
+                <i class="fas fa-comments fa-3x mb-3"></i>
+                <p>Selecciona un usuario de la lista para comenzar a chatear</p>
+              </div>
+            </div>
+            
+            <!-- Área de input -->
+            <div class="chat-input-area" id="chatInputArea">
+              <form id="chatInputForm" class="chat-input-form" novalidate>
+                <div class="chat-input-wrapper">
+                  <input 
+                    type="text" 
+                    id="chatInputField" 
+                    class="chat-input-field" 
+                    placeholder="Escribe tu mensaje..." 
+                    autocomplete="off"
+                  >
+                                <div class="chat-attachment-controls">
+                <label for="chat-file-input" class="chat-attachment-btn" title="Adjuntar archivo (imagen, video, audio, PDF, Word, Excel, texto)">
+                  <i class="fas fa-paperclip"></i>
+                </label>
+                    <input 
+                      type="file" 
+                      id="chat-file-input" 
+                      class="chat-file-input" 
+                      accept="image/*,video/*,audio/*,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/plain,text/csv"
+                      multiple
+                    >
+                    <button 
+                      type="button" 
+                      id="audioRecordBtn" 
+                      class="chat-audio-record-btn" 
+                      title="Mantén presionado para grabar audio"
+                    >
+                      <i class="fas fa-microphone"></i>
+                    </button>
+                  </div>
+                </div>
+                <button type="submit" id="chatSendButton" class="chat-send-button">
+                  <i class="fas fa-paper-plane"></i>
+                </button>
+              </form>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  {% else %}
+    <!-- CONTORNO: Chat de Soporte (para usuarios normales) -->
+    <div class="admin-card">
+      <!-- Botón de menú separado -->
+      <div class="chat-menu-container">
+        <button id="menuToggleBtn" class="btn-blue menu-btn-worksheet">&#9776; Menú</button>
+      </div>
+
+      <!-- Área del chat con header integrado -->
+      <div class="chat-container-professional">
+        <!-- Header del chat integrado -->
+        <div class="chat-header-professional">
+          <div class="chat-title-section">
+            <i class="fas fa-comments chat-title-icon"></i>
+            <h3 class="chat-title">Chat de Soporte</h3>
+          </div>
+        </div>
+
+        <!-- Área del chat (idéntica al modal) -->
+        <div class="chat-modal-body">
+        <div id="chatMessagesAreaUser" class="chat-messages-area">
+          <div class="chat-message support">
+            <div class="chat-message-bubble">
+              <div class="message-text">¡Hola! ¿En qué puedo ayudarte hoy?</div>
+            </div>
+            <div class="chat-message-time">Ahora</div>
+          </div>
+        </div>
+        <div class="chat-input-area">
+          <form id="chatInputFormUser" class="chat-input-form" novalidate>
+            <div class="chat-input-wrapper">
+              <input 
+                type="text" 
+                id="chatInputFieldUser" 
+                class="chat-input-field" 
+                placeholder="Escribe tu mensaje..." 
+                autocomplete="off"
+              >
+              <div class="chat-attachment-controls">
+                <label for="chat-file-input-user" class="chat-attachment-btn" title="Adjuntar archivo (imagen, video, audio, PDF, Word, Excel, texto)">
+                  <i class="fas fa-paperclip"></i>
+                </label>
+                <input 
+                  type="file" 
+                  id="chat-file-input-user" 
+                  class="chat-file-input" 
+                  accept="image/*,video/*,audio/*,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/plain,text/csv"
+                  multiple
+                >
+                <button 
+                  type="button" 
+                  id="audioRecordBtnUser" 
+                  class="chat-audio-record-btn" 
+                  title="Mantén presionado para grabar audio"
+                >
+                  <i class="fas fa-microphone"></i>
+                </button>
+              </div>
+              <button type="submit" id="chatSendButtonUser" class="chat-send-button">
+                <i class="fas fa-paper-plane"></i>
+              </button>
+            </div>
+          </form>
+        </div>
+        </div> <!-- Cierre chat-modal-body -->
+      </div> <!-- Cierre chat-container-professional -->
+    </div>
+  {% endif %}
+</div>
+
+<!-- MENÚ LATERAL MÓVIL PARA USUARIOS NORMALES -->
+<div id="mobileMenu" class="mobile-menu-store hidden menu-mobile-fixed">
+  <div class="menu-title-row menu-title-row-custom">
+    <i class="fas fa-bars icon-menu-bar"></i>
+    <h3 class="h3-menu-title">Menú</h3>
+  </div>
+  {% set current_user_id = session.get("user_id") %}
+  {% if current_user_id %}
+    {% set user_object = User.query.get(current_user_id) %}
+    {% set show_store = False %}
+    {% if session.get('username') == ADMIN_USER %}
+      {% set show_store = True %}
+    {% elif user_object.parent_id %}
+      {% if user_object.can_access_store %}
+        {% set parent = User.query.get(user_object.parent_id) %}
+        {% if parent and parent.roles_tienda and parent.roles_tienda[0].enabled %}
+          {% set show_store = True %}
+        {% endif %}
+      {% endif %}
+    {% elif user_object.roles_tienda and user_object.roles_tienda[0].enabled %}
+      {% set show_store = True %}
+    {% endif %}
+    {% if show_store %}
+      <a href="{{ url_for('store_bp.store_front') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-store"></i> Tienda</a>
+      <a href="{{ url_for('store_bp.historial_compras_usuario') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-receipt"></i> Mi Historial de Compras</a>
+    {% endif %}
+  {% endif %}
+  {% if user_object and user_object.has_public_tools_access() %}
+    <a href="{{ url_for('store_bp.tools_public') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-tools"></i> Herramientas</a>
+  {% endif %}
+  <a href="{{ url_for('main_bp.home') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-code"></i> Códigos</a>
+  {% if user_has_codigos2_access() %}
+  <a href="{{ url_for('main_bp.home2') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-code"></i> Códigos 2</a>
+  {% endif %}
+  {% if user_object %}
+    {% if session.get('username') == ADMIN_USER %}
+      <a href="{{ url_for('user_auth_bp.estadisticas') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-chart-bar"></i> Estadísticas</a>
+    {% elif not user_object.parent_id and user_object.roles_tienda and user_object.roles_tienda[0].enabled %}
+      <a href="{{ url_for('user_auth_bp.estadisticas') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-chart-bar"></i> Estadísticas</a>
+    {% elif user_object.parent_id and user_object.can_access_store %}
+    <a href="{{ url_for('user_auth_bp.estadisticas') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-chart-bar"></i> Estadísticas</a>
+    {% endif %}
+  {% endif %}
+  {% if session.get('is_user') and current_user %}
+    {% if current_user.is_support %}
+      <a href="{{ url_for('store_bp.support_dashboard') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-headset"></i> Chat de Soporte Admin</a>
+    {% elif current_user.can_chat %}
+      <a href="{{ url_for('store_bp.user_chat_soporte') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-headset"></i> Chat de Soporte</a>
+    {% endif %}
+  {% endif %}
+  {% if session.get('is_user') and not current_user.parent_id and user_has_worksheet_access(current_user) %}
+    <a href="{{ url_for('store_bp.user_work_sheets') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-table"></i> Hojas de Cálculo</a>
+  {% endif %}
+  {% if session.get('is_user') and user_object and user_object.can_create_subusers %}
+    <a href="{{ url_for('subuser_bp.manage_subusers') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-users"></i> Sub-usuarios</a>
+  {% endif %}
+  <a href="{{ url_for('user_auth_bp.logout') }}" class="btn-panel btn-red mobile-menu-btn mb-04"><i class="fas fa-sign-out-alt"></i> Cerrar Sesión</a>
+</div>
+<div id="menuOverlay" class="menu-overlay"></div>
+
+{% endblock %}
+
+{% block scripts %}
+<!-- SocketIO Client -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.js"></script>
+
+<script src="{{ url_for('static', filename='js/menu_busqueda.js') }}" defer></script>
+<!-- ✅ ELIMINADO: admin_imap.js innecesario para chat de soporte -->
+{% if current_user and current_user.is_support %}
+  <!-- JavaScript unificado para usuarios soporte -->
+  <script src="{{ url_for('store_bp.static', filename='js/support_users.js') }}" defer></script>
+  <script src="{{ url_for('store_bp.static', filename='js/chat_dashboard_integrated.js') }}" defer></script>
+{% else %}
+  <!-- JavaScript para usuarios normales - Solo chat_unified.js que ya incluye SocketIO -->
+  <script src="{{ url_for('store_bp.static', filename='js/chat_unified.js') }}" defer></script>
+{% endif %}
+
+<!-- JavaScript común para todos los usuarios -->
+<script src="{{ url_for('store_bp.static', filename='js/video-utils.js') }}" defer></script>
+
+<!-- ✅ NUEVO: Chat Enhancements - Funcionalidades mejoradas compartidas -->
+<script src="{{ url_for('store_bp.static', filename='js/chat_enhancements.js') }}" defer></script>
+{% endblock %}

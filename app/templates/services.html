@@ -1,0 +1,214 @@
+{% extends "base.html" %}
+
+{% block title %}Servicios{% endblock %}
+
+{% block head %}
+  {{ super() }}
+  <meta name="csrf_token" content="{{ csrf_token() }}">
+{% endblock %}
+
+{% block content %}
+<!-- Card 1: Lista de Servicios -->
+<div class="admin-card">
+  <div class="d-flex justify-content-between align-items-center mb-1">
+    <h3 class="m-0">Lista de Servicios</h3>
+    <button
+      id="btnVolverPanelServices"
+      type="button"
+      class="btn-red text-decoration-none"
+      data-dashboard-url="{{ url_for('admin_bp.dashboard') }}"
+    >
+      Volver al Panel
+    </button>
+  </div>
+
+  <form
+    id="serviceSearchForm"
+    class="mb-1 d-flex gap-05"
+  >
+    <label for="serviceSearchInput" class="sr-only">Buscar servicio</label>
+    <input
+      type="search"
+      id="serviceSearchInput"
+      placeholder="Buscar servicio..."
+      class="flex-grow-1"
+      autocomplete="off"
+    >
+  </form>
+
+  <div id="service-list"></div>
+</div>
+
+<!-- Card 2: Configuración de Colores y Crear Servicio -->
+<div class="admin-card">
+  <div class="d-flex justify-content-between align-items-center mb-1">
+    <h3 class="m-0">Configuración de Colores</h3>
+  </div>
+
+  <!-- Sección unificada con contorno único -->
+  <div class="service-config-section">
+    <!-- Subsección Colores de Alias -->
+    <div class="alias-colors-section">
+      <h4>Colores de Alias</h4>
+      <div class="d-flex gap-05 flex-wrap mb-1 mt-05 align-items-end">
+      <div class="d-flex gap-03 align-items-center">
+        <input
+          type="color"
+          id="newAliasColor1"
+          value="#000000"
+          class="popup-color-input"
+          title="Color inicial del degradado para alias"
+        >
+      </div>
+      <div class="d-flex gap-03 align-items-center">
+        <input
+          type="color"
+          id="newAliasColor2"
+          value="#000000"
+          class="popup-color-input"
+          title="Color final del degradado para alias"
+        >
+      </div>
+      <div class="gradient-preview-container">
+        <span class="service-color-label">Vista previa:</span>
+        <div id="aliasGradientPreview" class="gradient-preview"></div>
+        <button type="button" id="resetAliasColorsBtn" class="btn-panel btn-sm btn-orange" title="Restablecer colores predeterminados">
+          <i class="fas fa-undo"></i>
+        </button>
+      </div>
+      <div class="d-flex gap-03">
+        <button type="button" id="saveAliasColorsBtn" class="btn-panel btn-sm btn-green">
+          <i class="fas fa-save"></i> Guardar
+        </button>
+        <button type="button" id="cancelAliasColorsBtn" class="btn-panel btn-sm btn-red">
+          <i class="fas fa-times"></i> Cancelar
+        </button>
+      </div>
+      </div>
+    </div>
+
+    <!-- Subsección Cuando se da clic -->
+    <div class="click-colors-section">
+      <h4>Cuando se da clic</h4>
+      <div class="d-flex gap-05 flex-wrap mb-1 mt-05 align-items-end">
+      <div class="d-flex gap-03 align-items-center">
+        <input
+          type="color"
+          id="newClickColor1"
+          value="#031faa"
+          class="popup-color-input"
+          title="Color inicial del degradado al hacer clic"
+        >
+      </div>
+      <div class="d-flex gap-03 align-items-center">
+        <input
+          type="color"
+          id="newClickColor2"
+          value="#031faa"
+          class="popup-color-input"
+          title="Color final del degradado al hacer clic"
+        >
+      </div>
+      <div class="gradient-preview-container">
+        <span class="service-color-label">Vista previa:</span>
+        <div id="clickGradientPreview" class="gradient-preview"></div>
+        <button type="button" id="resetClickColorsBtn" class="btn-panel btn-sm btn-orange" title="Restablecer colores predeterminados">
+          <i class="fas fa-undo"></i>
+        </button>
+      </div>
+      <div class="d-flex gap-03">
+        <button type="button" id="saveClickColorsBtn" class="btn-panel btn-sm btn-green">
+          <i class="fas fa-save"></i> Guardar
+        </button>
+        <button type="button" id="cancelClickColorsBtn" class="btn-panel btn-sm btn-red">
+          <i class="fas fa-times"></i> Cancelar
+        </button>
+      </div>
+      </div>
+    </div>
+
+    <!-- Subsección Sin darle clic -->
+    <div class="normal-colors-section">
+      <h4>Sin darle clic</h4>
+      <div class="d-flex gap-05 flex-wrap mb-1 mt-05 align-items-end">
+      <div class="d-flex gap-03 align-items-center">
+        <input
+          type="color"
+          id="newNormalColor1"
+          value="#764ba2"
+          class="popup-color-input"
+          title="Color inicial del degradado normal"
+        >
+      </div>
+      <div class="d-flex gap-03 align-items-center">
+        <input
+          type="color"
+          id="newNormalColor2"
+          value="#667eea"
+          class="popup-color-input"
+          title="Color final del degradado normal"
+        >
+      </div>
+      <div class="gradient-preview-container">
+        <span class="service-color-label">Vista previa:</span>
+        <div id="normalGradientPreview" class="gradient-preview"></div>
+        <button type="button" id="resetNormalColorsBtn" class="btn-panel btn-sm btn-orange" title="Restablecer colores predeterminados">
+          <i class="fas fa-undo"></i>
+        </button>
+      </div>
+      <div class="d-flex gap-03">
+        <button type="button" id="saveNormalColorsBtn" class="btn-panel btn-sm btn-green">
+          <i class="fas fa-save"></i> Guardar
+        </button>
+        <button type="button" id="cancelNormalColorsBtn" class="btn-panel btn-sm btn-red">
+          <i class="fas fa-times"></i> Cancelar
+        </button>
+      </div>
+      </div>
+    </div>
+
+    <!-- Subsección Crear Nuevo Servicio -->
+    <div class="create-service-section">
+      <h4>Crear Nuevo Servicio</h4>
+      <div class="d-flex gap-05 flex-wrap mb-1 mt-05">
+      <label for="newServiceName" class="sr-only">Nombre</label>
+      <input
+        type="text"
+        id="newServiceName"
+        placeholder="Nombre del servicio"
+        class="flex-grow-1"
+      >
+      <button type="button" id="createServiceBtn" class="btn-green">Crear</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="popupRegex" class="popup-base popup-small">
+  <h4>Vincular Regex</h4>
+  <select id="regexSelect" class="select-min-width-200"></select>
+  <br><br>
+  <button id="regexLinkSaveBtn" class="popup-button-confirm">Vincular</button>
+  <button id="regexLinkCancelBtn" class="popup-button-cancel">Cancelar</button>
+</div>
+
+<div id="popupFilter" class="popup-base popup-small">
+  <h4>Vincular Filtro</h4>
+  <select id="filterSelect" class="select-min-width-200"></select>
+  <br><br>
+  <button id="filterLinkSaveBtn" class="popup-button-confirm">Vincular</button>
+  <button id="filterLinkCancelBtn" class="popup-button-cancel">Cancelar</button>
+</div>
+
+<div id="iconGridOverlay" class="popup-overlay">
+  <div id="iconGridContainer" class="popup-base popup-medium">
+    <h4 class="mt-0">Selecciona un ícono para el servicio</h4>
+    <div id="iconGrid" class="popup-grid"></div>
+    <button id="closeIconGridBtn" class="popup-button-cancel">
+      Cerrar
+    </button>
+  </div>
+</div>
+
+    <script src="{{ url_for('static', filename='js/admin_services_list.js') }}?v=20241220-remove-netflix-logs"></script>
+{% endblock %}
