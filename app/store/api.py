@@ -24,17 +24,54 @@ def format_colombia_time(utc_datetime):
         return "N/A"
     
     try:
-        # Intentar usar zoneinfo (Python 3.9+)
-        colombia_tz = ZoneInfo('America/Bogota')
-        colombia_time = utc_datetime.replace(tzinfo=ZoneInfo('UTC')).astimezone(colombia_tz)
-        return colombia_time.strftime('%d/%m/%Y  %I:%M %p')
-    except NameError:
-        # Fallback para versiones anteriores (UTC-5 fijo)
-        colombia_offset = timezone(timedelta(hours=-5))
-        colombia_time = utc_datetime.replace(tzinfo=timezone.utc).astimezone(colombia_offset)
-        return colombia_time.strftime('%d/%m/%Y  %I:%M %p')
+        from datetime import timezone as dt_timezone, timedelta
+        
+        # Crear una copia para no modificar el original
+        dt = utc_datetime
+        
+        # Si el datetime es naive (sin timezone), asumir que está en UTC
+        # Esto es común cuando viene de SQLite que no guarda timezone
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=dt_timezone.utc)
+        
+        try:
+            # Intentar usar zoneinfo (Python 3.9+)
+            from zoneinfo import ZoneInfo
+            colombia_tz = ZoneInfo('America/Bogota')
+            # Convertir a Colombia (dt ya tiene timezone UTC)
+            colombia_time = dt.astimezone(colombia_tz)
+            return colombia_time.strftime('%d/%m/%Y  %I:%M %p')
+        except (NameError, ImportError):
+            # Fallback para versiones anteriores o si zoneinfo no está disponible
+            # Usar pytz si está disponible
+            try:
+                from pytz import timezone as pytz_timezone
+                utc_tz = pytz_timezone('UTC')
+                colombia_tz = pytz_timezone('America/Bogota')
+                
+                # Si el datetime es naive, localizarlo como UTC
+                if dt.tzinfo is None:
+                    dt = utc_tz.localize(dt)
+                elif dt.tzinfo != utc_tz:
+                    # Convertir a UTC primero si tiene otro timezone
+                    dt = dt.astimezone(utc_tz)
+                
+                colombia_time = dt.astimezone(colombia_tz)
+                return colombia_time.strftime('%d/%m/%Y  %I:%M %p')
+            except ImportError:
+                # Fallback final: UTC-5 fijo (no considera horario de verano)
+                colombia_offset = dt_timezone(timedelta(hours=-5))
+                # Si el datetime es naive, asumir UTC
+                if dt.tzinfo is None:
+                    dt = dt.replace(tzinfo=dt_timezone.utc)
+                colombia_time = dt.astimezone(colombia_offset)
+                return colombia_time.strftime('%d/%m/%Y  %I:%M %p')
     except Exception as e:
-        return "N/A"
+        # En caso de error, retornar el datetime original formateado
+        try:
+            return utc_datetime.strftime('%d/%m/%Y  %I:%M %p')
+        except:
+            return "N/A"
 
 # ⭐ NUEVO: Función para formatear rangos de tiempo
 def format_colombia_time_range(log):

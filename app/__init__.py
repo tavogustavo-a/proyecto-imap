@@ -20,7 +20,7 @@ else:
 # --- FIN CARGA DE .ENV ---
 
 # Y LUEGO, DESPUÉS DEL BLOQUE ANTERIOR, DEBEN VENIR ESTAS IMPORTACIONES
-from flask import Flask
+from flask import Flask, session
 from config import Config
 from werkzeug.security import generate_password_hash
 from sqlalchemy import inspect
@@ -222,6 +222,45 @@ def create_app(config_class_passed=None):
 
     # Aplicar exenciones de CSRF después de registrar todos los blueprints
     apply_csrf_exemptions()
+
+    # ✅ VERIFICACIÓN GLOBAL DE REVOCACIÓN DE SESIONES (Cerrar sesión de todos)
+    @app.before_request
+    def check_global_session_revocation():
+        """
+        Verifica si el contador global de revocación de sesiones cambió.
+        Si cambió, fuerza cierre de sesión para TODOS los usuarios (admin, usuarios normales y sub-usuarios).
+        Esto se activa cuando el admin usa "Cerrar sesión de todos".
+        """
+        # Solo verificar si hay una sesión activa
+        if "logged_in" in session or "is_user" in session:
+            from app.admin.site_settings import get_site_setting
+            from flask import redirect, url_for, flash
+            
+            # Obtener el contador global actual
+            current_global_count = int(get_site_setting("session_revocation_count", "0"))
+            
+            # Obtener el contador guardado en la sesión (puede no existir en sesiones antiguas)
+            session_count = session.get("session_revocation_count", 0)
+            
+            # Si el contador global es mayor que el de la sesión, forzar logout
+            if current_global_count > session_count:
+                # Guardar el tipo de usuario antes de limpiar la sesión
+                is_admin = "username" in session and session.get("username") == app.config.get("ADMIN_USER", "admin")
+                is_user_normal = "is_user" in session
+                
+                session.clear()
+                flash("Tu sesión ha sido cerrada por el administrador.", "info")
+                
+                # Redirigir según el tipo de usuario
+                if is_admin:
+                    # Admin
+                    return redirect(url_for("auth_bp.login"))
+                elif is_user_normal:
+                    # Usuario normal o sub-usuario
+                    return redirect(url_for("user_auth_bp.login"))
+                else:
+                    # Fallback: admin por defecto
+                    return redirect(url_for("auth_bp.login"))
 
     # ⭐ NUEVO: Inicializar sistema de limpieza automática de registros de conexión
     try:
