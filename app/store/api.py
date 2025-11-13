@@ -29,16 +29,46 @@ def format_colombia_time(utc_datetime):
         # Crear una copia para no modificar el original
         dt = utc_datetime
         
-        # Si el datetime es naive (sin timezone), asumir que está en UTC
-        # Esto es común cuando viene de SQLite que no guarda timezone
+        # PROBLEMA DETECTADO: Si el servidor está en otra zona horaria (ej: UTC+1),
+        # SQLite puede guardar el timestamp en la zona horaria del servidor en lugar de UTC.
+        # Si muestra 10:07 PM cuando son 9:07 PM en Colombia, el timestamp guardado
+        # puede estar en la zona horaria del servidor (UTC+1) en lugar de UTC.
+        
+        # Si el datetime es naive (sin timezone), SQLite lo guardó sin timezone
         if dt.tzinfo is None:
+            # CORRECCIÓN: Detectar si el servidor está guardando en su zona horaria local
+            # Si el servidor está en UTC+1 y guarda 10:07 PM, eso es realmente 9:07 PM UTC.
+            # Necesitamos restar el offset del servidor para convertirlo a UTC.
+            try:
+                # Obtener la zona horaria del servidor
+                import time
+                # time.timezone es negativo para zonas horarias positivas (ej: UTC+1 = -3600)
+                server_offset_seconds = time.timezone if time.daylight == 0 else time.altzone
+                server_offset_hours = -server_offset_seconds / 3600  # Convertir a horas (negativo de negativo = positivo)
+                
+                # Si el servidor NO está en UTC (offset != 0), el timestamp puede estar
+                # en la zona horaria del servidor. Necesitamos restar el offset para convertirlo a UTC.
+                # Ejemplo: Si servidor está en UTC+1 y guarda 10:07 PM, eso es 9:07 PM UTC.
+                # Entonces restamos 1 hora: 10:07 PM - 1 hora = 9:07 PM UTC.
+                if server_offset_hours != 0:
+                    # Restar el offset para convertir de hora del servidor a UTC
+                    dt = dt - timedelta(hours=server_offset_hours)
+            except:
+                # Si no podemos detectar la zona horaria, asumir UTC (no ajustar)
+                pass
+            
+            # Asumir UTC después del ajuste
             dt = dt.replace(tzinfo=dt_timezone.utc)
+        else:
+            # Si tiene timezone, asegurarnos de que esté en UTC
+            if dt.tzinfo != dt_timezone.utc:
+                dt = dt.astimezone(dt_timezone.utc)
         
         try:
             # Intentar usar zoneinfo (Python 3.9+)
             from zoneinfo import ZoneInfo
             colombia_tz = ZoneInfo('America/Bogota')
-            # Convertir a Colombia (dt ya tiene timezone UTC)
+            # Convertir a Colombia (UTC-5)
             colombia_time = dt.astimezone(colombia_tz)
             return colombia_time.strftime('%d/%m/%Y  %I:%M %p')
         except (NameError, ImportError):
@@ -56,6 +86,7 @@ def format_colombia_time(utc_datetime):
                     # Convertir a UTC primero si tiene otro timezone
                     dt = dt.astimezone(utc_tz)
                 
+                # Convertir a Colombia (UTC-5)
                 colombia_time = dt.astimezone(colombia_tz)
                 return colombia_time.strftime('%d/%m/%Y  %I:%M %p')
             except ImportError:
@@ -64,6 +95,7 @@ def format_colombia_time(utc_datetime):
                 # Si el datetime es naive, asumir UTC
                 if dt.tzinfo is None:
                     dt = dt.replace(tzinfo=dt_timezone.utc)
+                # Convertir a Colombia (UTC-5)
                 colombia_time = dt.astimezone(colombia_offset)
                 return colombia_time.strftime('%d/%m/%Y  %I:%M %p')
     except Exception as e:

@@ -127,7 +127,11 @@ class DriveTransferService:
     def transfer_files(self, source_folder_id: str, destination_folder_id: str) -> Dict[str, Any]:
         """Transfiere todos los archivos de fotos y videos de una carpeta a otra"""
         if not self.service:
-            raise Exception("Servicio no autenticado")
+            # Intentar autenticar si no está autenticado
+            try:
+                self._authenticate()
+            except Exception as e:
+                raise Exception(f"Servicio no autenticado y error al autenticar: {str(e)}")
         
         try:
             
@@ -584,6 +588,7 @@ def should_execute_simple(transfer):
     """Verifica si debe ejecutar (método simple)"""
     try:
         from pytz import timezone as pytz_timezone
+        from datetime import timedelta
         
         # Hora actual de Colombia
         col_tz = pytz_timezone('America/Bogota')
@@ -594,50 +599,156 @@ def should_execute_simple(transfer):
         
         # Verificar si es la hora (margen de 5 minutos para mayor flexibilidad)
         target_time = transfer.processing_time
-        time_diff = abs((current_time.hour * 60 + current_time.minute) - 
-                      (target_time.hour * 60 + target_time.minute))
+        current_minutes = current_time.hour * 60 + current_time.minute
+        target_minutes = target_time.hour * 60 + target_time.minute
+        time_diff = abs(current_minutes - target_minutes)
         
+        # NUEVA LÓGICA: Verificar si la hora fue modificada recientemente (últimos 30 minutos)
+        # Si fue modificada recientemente Y la nueva hora ya pasó, ejecutar incluso si ya se ejecutó hoy
+        hora_modificada_recientemente = False
+        if transfer.updated_at:
+            updated_at_utc = transfer.updated_at
+            if updated_at_utc.tzinfo is None:
+                updated_at_col = updated_at_utc.replace(tzinfo=pytz_timezone('UTC')).astimezone(col_tz)
+            else:
+                updated_at_col = updated_at_utc.astimezone(col_tz)
+            
+            time_since_update = now_colombia - updated_at_col
+            if time_since_update <= timedelta(minutes=30):
+                hora_modificada_recientemente = True
+                minutos_desde_update = time_since_update.seconds // 60
+                logger.debug(f"[DRIVE_TRANSFER] Transfer {transfer.id}: ⏰ Hora modificada hace {minutos_desde_update} minutos - Permitir ejecución aunque ya se ejecutó hoy")
+        
+        # Verificar si ya se ejecutó hoy (pero permitir si la hora fue modificada recientemente)
+        if transfer.last_processed and not hora_modificada_recientemente:
+            last_execution = transfer.last_processed
+            if last_execution.tzinfo is None:
+                last_execution_col = last_execution.replace(tzinfo=pytz_timezone('UTC')).astimezone(col_tz)
+            else:
+                last_execution_col = last_execution.astimezone(col_tz)
+            
+            # Si ya se ejecutó hoy Y la hora NO fue modificada recientemente, no ejecutar
+            if current_date == last_execution_col.date():
+                logger.debug(f"[DRIVE_TRANSFER] Transfer {transfer.id}: Ya se ejecutó hoy ({last_execution_col.date()}), saltando ejecución")
+                return False
+        
+        # LÓGICA MEJORADA: Si la hora objetivo ya pasó hoy, ejecutar inmediatamente
+        # (especialmente si la hora fue modificada recientemente)
+        if current_minutes >= target_minutes:
+            # La hora objetivo ya pasó hoy
+            if not transfer.last_processed or (transfer.last_processed and 
+                transfer.last_processed.replace(tzinfo=pytz_timezone('UTC')).astimezone(col_tz).date() < current_date) or hora_modificada_recientemente:
+                # No se ha ejecutado hoy O la hora fue modificada recientemente, ejecutar inmediatamente
+                motivo = "hora modificada recientemente" if hora_modificada_recientemente else "hora objetivo ya pasó"
+                logger.info(f"[DRIVE_TRANSFER] Transfer {transfer.id}: ⚡ Ejecutando inmediatamente - {motivo}")
+                return True
+        
+        # Lógica normal: ejecutar si está dentro del margen de 5 minutos
         should_execute = time_diff <= 5
         
+        # Log para debugging (solo si está cerca de la hora o si la hora ya pasó)
+        if time_diff <= 30 or current_minutes >= target_minutes:  # Loggear si está cerca o si ya pasó
+            logger.debug(f"[DRIVE_TRANSFER] Transfer {transfer.id}: Hora actual: {current_time.strftime('%H:%M')}, "
+                       f"Objetivo: {target_time.strftime('%H:%M')}, Diff: {time_diff} min, Execute: {should_execute}")
+        
         if should_execute:
-            # Verificar si ya se ejecutó hoy
-            if transfer.last_processed:
-                last_execution = transfer.last_processed
-                if last_execution.tzinfo is None:
-                    last_execution_col = last_execution.replace(tzinfo=pytz_timezone('UTC')).astimezone(col_tz)
-                else:
-                    last_execution_col = last_execution.astimezone(col_tz)
-                
-                # Si ya se ejecutó hoy, no ejecutar (independientemente de la hora)
-                if current_date == last_execution_col.date():
-                    return False
-            
+            logger.info(f"[DRIVE_TRANSFER] Transfer {transfer.id}: ✅ Ejecutando transferencia")
             return True
         else:
             return False
         
     except Exception as e:
+        logger.error(f"[DRIVE_TRANSFER] Error en should_execute_simple para transfer {transfer.id}: {str(e)}", exc_info=True)
         return False
 
 def execute_transfer_simple(transfer, app):
     """Ejecuta transferencia (método simple)"""
+    transfer_id = transfer.id
+    credentials_json = transfer.credentials_json
+    drive_original_id = transfer.drive_original_id
+    drive_processed_id = transfer.drive_processed_id
+    
     try:
+        logger.info(f"[DRIVE_TRANSFER] Iniciando transferencia {transfer_id}: {drive_original_id[:20]}... -> {drive_processed_id[:20]}...")
+        
+        # Crear servicio (fuera del contexto de app para evitar problemas)
+        service = DriveTransferService(credentials_json)
+        
+        # Ejecutar transferencia
+        result = service.transfer_files(
+            drive_original_id,
+            drive_processed_id
+        )
+        logger.info(f"[DRIVE_TRANSFER] Transferencia {transfer_id} completada. Archivos movidos: {result.get('files_moved', 0)}, Fallidos: {result.get('files_failed', 0)}")
+        
+        # Actualizar base de datos dentro del contexto de app
         with app.app_context():
-            # Crear servicio
-            service = DriveTransferService(transfer.credentials_json)
-            
-            # Ejecutar transferencia
-            result = service.transfer_files(
-                transfer.drive_original_id,
-                transfer.drive_processed_id
-            )
-            
-            # Actualizar base de datos
-            transfer.last_processed = datetime.utcnow()
-            db.session.commit()
+            # Recargar el objeto desde la base de datos para evitar problemas de sesión
+            transfer_obj = DriveTransfer.query.get(transfer_id)
+            if transfer_obj:
+                transfer_obj.last_processed = datetime.utcnow()
+                transfer_obj.consecutive_errors = 0
+                transfer_obj.last_error = None
+                db.session.commit()
+            else:
+                logger.error(f"[DRIVE_TRANSFER] No se encontró transfer {transfer_id} en la base de datos")
+        
+        return result
         
     except Exception as e:
-        pass
+        logger.error(f"[DRIVE_TRANSFER] ❌ Error ejecutando transferencia {transfer_id}: {str(e)}", exc_info=True)
+        # Actualizar contador de errores
+        try:
+            with app.app_context():
+                transfer_obj = DriveTransfer.query.get(transfer_id)
+                if transfer_obj:
+                    transfer_obj.consecutive_errors = (transfer_obj.consecutive_errors or 0) + 1
+                    transfer_obj.last_error = str(e)[:500]  # Limitar longitud del error
+                    db.session.commit()
+        except Exception as update_error:
+            logger.error(f"[DRIVE_TRANSFER] Error actualizando contador de errores: {str(update_error)}", exc_info=True)
+        
+        # Re-lanzar la excepción para que la ruta pueda manejarla
+        raise
+
+def calculate_smart_wait_time(transfers):
+    """Calcula tiempo de espera inteligente basado en las transferencias"""
+    try:
+        from pytz import timezone as pytz_timezone
+        
+        if not transfers:
+            return 3600  # 1 hora si no hay transferencias
+        
+        col_tz = pytz_timezone('America/Bogota')
+        now_utc = datetime.utcnow()
+        now_colombia = now_utc.replace(tzinfo=pytz_timezone('UTC')).astimezone(col_tz)
+        current_time = now_colombia.time()
+        
+        min_wait = 3600  # Mínimo 1 hora
+        
+        for transfer in transfers:
+            target_time = transfer.processing_time
+            time_diff = abs((current_time.hour * 60 + current_time.minute) - 
+                          (target_time.hour * 60 + target_time.minute))
+            
+            # Si está extremadamente cerca (menos de 30 minutos), verificar cada 2 minutos
+            if time_diff <= 30:
+                min_wait = min(min_wait, 120)  # 2 minutos
+            # Si está muy cerca (menos de 60 minutos), verificar cada 5 minutos
+            elif time_diff <= 60:
+                min_wait = min(min_wait, 300)  # 5 minutos
+            # Si está cerca (menos de 120 minutos), verificar cada 20 minutos
+            elif time_diff <= 120:
+                min_wait = min(min_wait, 1200)  # 20 minutos
+            # Si está lejos (más de 120 minutos), verificar cada 1 hora
+            else:
+                min_wait = min(min_wait, 3600)  # 1 hora
+        
+        return min_wait
+        
+    except Exception as e:
+        logger.error(f"[DRIVE_TRANSFER] Error calculando tiempo de espera: {str(e)}")
+        return 300  # 5 minutos en caso de error
 
 def start_simple_drive_loop():
     """Inicia el loop simple basado en tu código que funciona"""
@@ -649,6 +760,7 @@ def start_simple_drive_loop():
         """Loop simple como tu código que funciona"""
         # Crear contexto de aplicación Flask
         app = create_app()
+        logger.info("[DRIVE_TRANSFER] 🚀 Loop de transferencia de Drive iniciado")
         
         while True:
             try:
@@ -660,8 +772,11 @@ def start_simple_drive_loop():
                     active_transfers = DriveTransfer.query.filter_by(is_active=True).all()
                     
                     if not active_transfers:
+                        logger.debug("[DRIVE_TRANSFER] No hay transferencias activas, esperando 1 hora...")
                         time.sleep(3600)  # Esperar 1 hora si no hay transferencias
                         continue
+                    
+                    logger.debug(f"[DRIVE_TRANSFER] Verificando {len(active_transfers)} transferencia(s) activa(s)")
                     
                     # Verificar cada transferencia
                     for transfer in active_transfers:
@@ -670,52 +785,17 @@ def start_simple_drive_loop():
                 
                 # Calcular tiempo de espera inteligente
                 wait_time = calculate_smart_wait_time(active_transfers)
+                logger.debug(f"[DRIVE_TRANSFER] Esperando {wait_time} segundos ({wait_time/60:.1f} minutos) hasta la próxima verificación")
                 time.sleep(wait_time)
                 
             except Exception as e:
+                logger.error(f"[DRIVE_TRANSFER] Error en el loop principal: {str(e)}", exc_info=True)
                 time.sleep(3600)  # Esperar 1 hora antes de reintentar
     
     # Iniciar loop en thread separado
     thread = threading.Thread(target=simple_drive_loop, daemon=True)
     thread.start()
-    
-    def calculate_smart_wait_time(transfers):
-        """Calcula tiempo de espera inteligente basado en las transferencias"""
-        try:
-            from pytz import timezone as pytz_timezone
-            
-            if not transfers:
-                return 3600  # 1 hora si no hay transferencias
-            
-            col_tz = pytz_timezone('America/Bogota')
-            now_utc = datetime.utcnow()
-            now_colombia = now_utc.replace(tzinfo=pytz_timezone('UTC')).astimezone(col_tz)
-            current_time = now_colombia.time()
-            
-            min_wait = 3600  # Mínimo 1 hora
-            
-            for transfer in transfers:
-                target_time = transfer.processing_time
-                time_diff = abs((current_time.hour * 60 + current_time.minute) - 
-                              (target_time.hour * 60 + target_time.minute))
-                
-                # Si está extremadamente cerca (menos de 30 minutos), verificar cada 2 minutos
-                if time_diff <= 30:
-                    min_wait = min(min_wait, 120)  # 2 minutos
-                # Si está muy cerca (menos de 60 minutos), verificar cada 5 minutos
-                elif time_diff <= 60:
-                    min_wait = min(min_wait, 300)  # 5 minutos
-                # Si está cerca (menos de 120 minutos), verificar cada 20 minutos
-                elif time_diff <= 120:
-                    min_wait = min(min_wait, 1200)  # 20 minutos
-                # Si está lejos (más de 120 minutos), verificar cada 1 hora
-                else:
-                    min_wait = min(min_wait, 3600)  # 1 hora
-            
-            return min_wait
-            
-        except Exception as e:
-            return 3600  # 1 hora en caso de error
+    logger.info("[DRIVE_TRANSFER] Thread de loop iniciado")
 
 # ==================== SISTEMA DE LIMPIEZA PROGRAMADA ====================
 

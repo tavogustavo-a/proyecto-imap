@@ -18597,8 +18597,19 @@ document.addEventListener('DOMContentLoaded', function() {
  */
 
 // ⭐ NUEVO: Configurar variables globales para el usuario INMEDIATAMENTE
+// IMPORTANTE: Solo establecer isSharedMode = true si realmente estamos en modo compartido
+// Verificar la ruta para determinar si estamos en shared_worksheet
+// NO sobrescribir si ya está definido explícitamente en el template
 if (typeof window.isSharedMode === 'undefined') {
-    window.isSharedMode = true;
+    // Verificar si estamos en una ruta de worksheet compartida
+    const path = window.location.pathname.toLowerCase();
+    const isSharedWorksheetPath = path.includes('/shared_worksheet') || path.includes('/shared-worksheet') || path.includes('/worksheet/shared');
+    // Solo establecer como true si estamos en una ruta compartida
+    window.isSharedMode = isSharedWorksheetPath;
+} else if (window.isSharedMode === false) {
+    // Si ya está definido como false (desde work_sheets.html), mantenerlo así
+    // No hacer nada, solo asegurarse de que no se sobrescriba
+    // Esto previene problemas de timing en producción
 }
 if (typeof window.currentUsername === 'undefined') {
     window.currentUsername = window.currentUsername || 'Usuario';

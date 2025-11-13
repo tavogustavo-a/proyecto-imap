@@ -7110,6 +7110,51 @@ def update_drive_transfer(transfer_id):
         db.session.rollback()
         return jsonify({'success': False, 'error': f'Error al actualizar: {str(e)}'}), 500
 
+@store_bp.route('/admin/drive_transfers/<int:transfer_id>/execute_now', methods=['POST'])
+@admin_required
+def execute_drive_transfer_now(transfer_id):
+    """Ejecuta una transferencia de Drive manualmente (para pruebas)"""
+    import logging
+    logger = logging.getLogger(__name__)
+    
+    try:
+        logger.info(f"[DRIVE_TRANSFER] Ejecución manual iniciada para transfer {transfer_id}")
+        
+        transfer = DriveTransfer.query.get_or_404(transfer_id)
+        
+        if not transfer.is_active:
+            logger.warning(f"[DRIVE_TRANSFER] Transfer {transfer_id} está inactivo (muestra ON verde)")
+            return jsonify({'success': False, 'error': 'La transferencia no está activa (debe mostrar OFF rojo)'}), 400
+        
+        from .drive_manager import DriveTransferService, execute_transfer_simple
+        from app import create_app
+        
+        app = create_app()
+        
+        # Ejecutar transferencia
+        result = execute_transfer_simple(transfer, app)
+        
+        # Recargar el objeto desde la base de datos para obtener los valores actualizados
+        db.session.refresh(transfer)
+        
+        message = f'✅ Transferencia ejecutada manualmente. '
+        if result and isinstance(result, dict):
+            files_moved = result.get('files_moved', 0)
+            files_failed = result.get('files_failed', 0)
+            message += f'Archivos movidos: {files_moved}, Fallidos: {files_failed}. '
+        message += f'Última ejecución: {transfer.last_processed.strftime("%Y-%m-%d %H:%M:%S UTC") if transfer.last_processed else "N/A"}'
+        
+        return jsonify({
+            'success': True, 
+            'message': message,
+            'last_processed': transfer.last_processed.isoformat() if transfer.last_processed else None,
+            'result': result if result and isinstance(result, dict) else None
+        })
+        
+    except Exception as e:
+        logger.error(f"[DRIVE_TRANSFER] ❌ Error en ejecución manual: {str(e)}", exc_info=True)
+        return jsonify({'success': False, 'error': f'Error al ejecutar transferencia: {str(e)}'}), 500
+
 @store_bp.route('/admin/drive_transfers/<int:transfer_id>/toggle', methods=['POST'])
 @admin_required
 def toggle_drive_transfer(transfer_id):

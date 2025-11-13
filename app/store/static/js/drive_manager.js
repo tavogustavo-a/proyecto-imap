@@ -334,6 +334,14 @@ async function loadDriveTransfersTable() {
                     deleteBtn.innerHTML = '<i class="fas fa-trash"></i>';
                     td5.appendChild(deleteBtn);
                     
+                    // Botón para ejecutar transferencia manualmente
+                    const executeBtn = document.createElement('button');
+                    executeBtn.className = 'btn-panel btn-green btn-table-action drive-transfer-execute';
+                    executeBtn.dataset.transferId = transfer.id;
+                    executeBtn.title = 'Ejecutar transferencia ahora';
+                    executeBtn.innerHTML = '<i class="fas fa-play"></i>';
+                    td5.appendChild(executeBtn);
+                    
                     tr.appendChild(td5);
                     tbody.appendChild(tr);
                 });
@@ -376,6 +384,13 @@ async function loadDriveTransfersTable() {
                     btn.addEventListener('click', function() {
                         const transferId = parseInt(this.dataset.transferId);
                         deleteDriveTransfer(transferId);
+                    });
+                });
+                
+                tableContainer.querySelectorAll('.drive-transfer-execute').forEach(btn => {
+                    btn.addEventListener('click', function() {
+                        const transferId = parseInt(this.dataset.transferId);
+                        executeDriveTransferNow(transferId);
                     });
                 });
             } else {
@@ -555,6 +570,65 @@ window.editDriveTransfer = async function(transferId) {
 }
 
 // Función para eliminar configuración
+// Función global para ejecutar transferencia manualmente
+window.executeDriveTransferNow = async function(transferId) {
+    if (!confirm('¿Ejecutar la transferencia de Drive ahora? Esto moverá los archivos del Drive original al Drive procesado.')) {
+        return;
+    }
+    
+    try {
+        const csrfToken = document.querySelector('meta[name="csrf_token"]')?.content || '';
+        
+        showDriveStatus('Ejecutando transferencia...', true);
+        console.log(`[DRIVE_TRANSFER] Iniciando ejecución manual para transfer ${transferId}`);
+        
+        const response = await fetch(`/tienda/admin/drive_transfers/${transferId}/execute_now`, {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': csrfToken,
+                'Content-Type': 'application/json'
+            }
+        });
+        
+        console.log(`[DRIVE_TRANSFER] Respuesta recibida. Status: ${response.status}`);
+        
+        if (!response.ok) {
+            // Intentar parsear el error
+            try {
+                const errorResult = await response.json();
+                console.error('[DRIVE_TRANSFER] Error en respuesta:', errorResult);
+                showDriveStatus(`Error ${response.status}: ${errorResult.error || 'Error desconocido'}`, false);
+            } catch (e) {
+                console.error('[DRIVE_TRANSFER] Error parseando respuesta:', e);
+                showDriveStatus(`Error ${response.status}: No se pudo obtener detalles del error`, false);
+            }
+            return;
+        }
+        
+        const result = await response.json();
+        console.log('[DRIVE_TRANSFER] Resultado:', result);
+        
+        if (result.success) {
+            let message = result.message || 'Transferencia ejecutada exitosamente';
+            if (result.result) {
+                const r = result.result;
+                message += ` | Archivos movidos: ${r.files_moved || 0}, Fallidos: ${r.files_failed || 0}`;
+            }
+            showDriveStatus(message, true);
+            // Recargar la tabla para mostrar la última ejecución actualizada
+            setTimeout(() => {
+                window.loadDriveTransfersTable();
+            }, 1000);
+        } else {
+            console.error('[DRIVE_TRANSFER] Error en resultado:', result);
+            showDriveStatus(`Error: ${result.error || 'Error desconocido'}`, false);
+        }
+    } catch (error) {
+        console.error('[DRIVE_TRANSFER] Error ejecutando transferencia:', error);
+        showDriveStatus(`Error de conexión: ${error.message}. Verifica la consola para más detalles.`, false);
+    }
+};
+
 // Función global para eliminar Drive Transfer
 window.deleteDriveTransfer = async function(transferId) {
     if (!confirm('¿Estás seguro de que quieres eliminar esta configuración?')) {
