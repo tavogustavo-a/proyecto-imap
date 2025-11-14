@@ -3,8 +3,13 @@
  * Refactorizado desde usuarios.html
  */
 
-// Función auxiliar para obtener URL desde data-* attributes
+// Función auxiliar para obtener URL desde meta tags o data-* attributes (cumple con CSP)
 function getClearTriggerLogUrl() {
+  // Primero intentar leer desde meta tag (más seguro, cumple con CSP)
+  const metaTag = document.querySelector('meta[name="clear_trigger_log_url"]');
+  if (metaTag) {
+    return metaTag.getAttribute('content');
+  }
   // Buscar en el contenedor principal o en cualquier elemento con el atributo
   const container = document.querySelector('[data-clear-trigger-log-url]');
   if (container) {

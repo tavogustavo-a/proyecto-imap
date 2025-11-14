@@ -18600,31 +18600,197 @@ document.addEventListener('DOMContentLoaded', function() {
 // IMPORTANTE: Solo establecer isSharedMode = true si realmente estamos en modo compartido
 // Verificar la ruta para determinar si estamos en shared_worksheet
 // NO sobrescribir si ya está definido explícitamente en el template
-if (typeof window.isSharedMode === 'undefined') {
-    // Verificar si estamos en una ruta de worksheet compartida
-    const path = window.location.pathname.toLowerCase();
-    const isSharedWorksheetPath = path.includes('/shared_worksheet') || path.includes('/shared-worksheet') || path.includes('/worksheet/shared');
-    // Solo establecer como true si estamos en una ruta compartida
-    window.isSharedMode = isSharedWorksheetPath;
-} else if (window.isSharedMode === false) {
-    // Si ya está definido como false (desde work_sheets.html), mantenerlo así
-    // No hacer nada, solo asegurarse de que no se sobrescriba
-    // Esto previene problemas de timing en producción
+// Inicializar variables globales desde meta tags (cumple con CSP - sin scripts inline)
+(function initializeGlobalVariablesFromMetaTags() {
+    // Obtener valores de los meta tags (más seguro que inline scripts)
+    const adminUserMeta = document.querySelector('meta[name="admin_user"]');
+    const currentUserMeta = document.querySelector('meta[name="current_user"]');
+    const isLoggedInMeta = document.querySelector('meta[name="is_logged_in"]');
+    const isAdminMeta = document.querySelector('meta[name="is_admin"]');
+    const hasWorksheetAccessMeta = document.querySelector('meta[name="has_worksheet_access"]');
+    const clearTriggerLogUrlMeta = document.querySelector('meta[name="clear_trigger_log_url"]');
+    const userIPMeta = document.querySelector('meta[name="user_ip"]');
+    const isSharedModeMeta = document.querySelector('meta[name="is_shared_mode"]');
+    const isReadonlyMeta = document.querySelector('meta[name="is_readonly"]');
+    const sharedTokenMeta = document.querySelector('meta[name="shared_token"]');
+    const accessTypeMeta = document.querySelector('meta[name="access_type"]');
+    
+    // Configurar variables globales solo si no están definidas
+    if (typeof window.isAdmin === 'undefined') {
+        window.isAdmin = isAdminMeta && isAdminMeta.getAttribute('content') === 'true';
+    }
+    if (typeof window.isLoggedIn === 'undefined') {
+        window.isLoggedIn = isLoggedInMeta && isLoggedInMeta.getAttribute('content') === 'true';
+    }
+    if (typeof window.currentUsername === 'undefined') {
+        window.currentUsername = currentUserMeta ? currentUserMeta.getAttribute('content') : 'Usuario';
+    }
+    if (typeof window.hasWorksheetAccess === 'undefined') {
+        window.hasWorksheetAccess = hasWorksheetAccessMeta && hasWorksheetAccessMeta.getAttribute('content') === 'true';
+    }
+    if (typeof window.clearTriggerLogUrl === 'undefined') {
+        window.clearTriggerLogUrl = clearTriggerLogUrlMeta ? clearTriggerLogUrlMeta.getAttribute('content') : '';
+    }
+    if (typeof window.adminUser === 'undefined') {
+        window.adminUser = adminUserMeta ? adminUserMeta.getAttribute('content') : '';
+    }
+    if (typeof window.userIP === 'undefined') {
+        window.userIP = userIPMeta ? userIPMeta.getAttribute('content') : '';
+    }
+    
+    // Variables para modo compartido (inicializadas como false/vacías para modo normal)
+    if (typeof window.isSharedMode === 'undefined') {
+        if (isSharedModeMeta && isSharedModeMeta.getAttribute('content') === 'true') {
+            window.isSharedMode = true;
+        } else {
+            // Verificar si estamos en una ruta de worksheet compartida
+            const path = window.location.pathname.toLowerCase();
+            const isSharedWorksheetPath = path.includes('/shared_worksheet') || path.includes('/shared-worksheet') || path.includes('/worksheet/shared');
+            // Solo establecer como true si estamos en una ruta compartida
+            window.isSharedMode = isSharedWorksheetPath;
+        }
+    } else if (window.isSharedMode === false) {
+        // Si ya está definido como false (desde work_sheets.html), mantenerlo así
+        // No hacer nada, solo asegurarse de que no se sobrescriba
+        // Esto previene problemas de timing en producción
+    }
+    
+    // Inicializar variables de modo compartido si no están definidas
+    if (typeof window.isReadonly === 'undefined') {
+        window.isReadonly = isReadonlyMeta && isReadonlyMeta.getAttribute('content') === 'true';
+    }
+    if (typeof window.sharedToken === 'undefined') {
+        window.sharedToken = sharedTokenMeta ? sharedTokenMeta.getAttribute('content') : '';
+    }
+    if (typeof window.accessType === 'undefined') {
+        window.accessType = accessTypeMeta ? accessTypeMeta.getAttribute('content') : 'readonly';
+    }
+    
+    // Inicializar sharedWorksheetData desde data attribute si existe (para datos grandes)
+    const sharedDataElement = document.querySelector('[data-shared-worksheet-data]');
+    if (sharedDataElement && typeof window.sharedWorksheetData === 'undefined') {
+        try {
+            const dataJson = sharedDataElement.getAttribute('data-shared-worksheet-data');
+            if (dataJson) {
+                window.sharedWorksheetData = JSON.parse(dataJson);
+            }
+        } catch (e) {
+            console.error('Error parsing sharedWorksheetData:', e);
+        }
+    }
+    
+    // Inicializar plantilla compartida si estamos en modo compartido y hay datos
+    if (window.isSharedMode && window.sharedWorksheetData) {
+        // Esperar a que el DOM esté listo
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', initializeSharedWorksheetSimple);
+        } else {
+            initializeSharedWorksheetSimple();
+        }
+    }
+})();
+
+// Función de renderizado simple para modo compartido (cumple con CSP - sin scripts inline)
+function renderSimpleTable() {
+    const container = document.getElementById('worksheetTableContainer');
+    if (!container) {
+        return;
+    }
+    
+    if (!window.sharedWorksheetData) {
+        container.innerHTML = '<div class="shared-worksheet-error"><h3>No hay datos para mostrar</h3></div>';
+        return;
+    }
+    
+    const data = window.sharedWorksheetData.data;
+    const fields = window.sharedWorksheetData.fields;
+    
+    if (!data || !Array.isArray(data) || data.length === 0) {
+        container.innerHTML = '<div class="shared-worksheet-error"><h3>No hay datos para mostrar</h3></div>';
+        return;
+    }
+    
+    if (!fields || !Array.isArray(fields) || fields.length === 0) {
+        container.innerHTML = '<div class="shared-worksheet-error"><h3>No hay campos definidos</h3></div>';
+        return;
+    }
+    
+    let html = `
+        <div class="shared-worksheet-container">
+            <h3 class="shared-worksheet-title">
+                📊 ${window.sharedWorksheetData.title}
+            </h3>
+            <p class="shared-worksheet-info">
+                Mostrando ${data.length} filas • ${fields.length} columnas
+            </p>
+            <div class="shared-worksheet-table-container">
+                <table class="shared-worksheet-table">
+                    <thead class="shared-worksheet-thead">
+                        <tr class="shared-worksheet-header-row">
+    `;
+    
+    // Encabezados
+    fields.forEach((field) => {
+        html += `<th class="shared-worksheet-header-cell">${field}</th>`;
+    });
+    
+    html += `
+                        </tr>
+                    </thead>
+                    <tbody>
+    `;
+    
+    // Filas de datos
+    data.forEach((row, rowIndex) => {
+        if (rowIndex >= 100) return; // Limitar a 100 filas para rendimiento
+        
+        const rowClass = rowIndex % 2 === 0 ? 'shared-worksheet-row-even' : 'shared-worksheet-row-odd';
+        html += `<tr class="${rowClass}">`;
+        
+        // Asegurar que la fila tenga la cantidad correcta de celdas
+        for (let i = 0; i < fields.length; i++) {
+            const cellValue = row[i] || '';
+            const displayValue = cellValue.toString().length > 50 ? 
+                              cellValue.toString().substring(0, 50) + '...' : 
+                              cellValue.toString();
+            html += `<td class="shared-worksheet-cell">${displayValue}</td>`;
+        }
+        
+        html += `</tr>`;
+    });
+    
+    html += `
+                    </tbody>
+                </table>
+            </div>
+            <div class="shared-worksheet-status">
+                ✅ <strong>Tabla cargada exitosamente</strong><br>
+                ${fields.length} columnas • ${Math.min(data.length, 100)} filas mostradas de ${data.length} disponibles<br>
+                <small>Modo: ${window.isReadonly ? 'Solo lectura' : 'Editable'}</small>
+            </div>
+        </div>
+    `;
+    
+    container.innerHTML = html;
 }
-if (typeof window.currentUsername === 'undefined') {
-    window.currentUsername = window.currentUsername || 'Usuario';
-}
-if (typeof window.isAdmin === 'undefined') {
-    window.isAdmin = window.isAdmin || false;
-}
-if (typeof window.isLoggedIn === 'undefined') {
-    window.isLoggedIn = window.isLoggedIn || false;
-}
-if (typeof window.adminUser === 'undefined') {
-    window.adminUser = window.adminUser || '';
-}
-if (typeof window.userIP === 'undefined') {
-    window.userIP = window.userIP || '';
+
+// Función para inicializar la plantilla compartida
+function initializeSharedWorksheetSimple() {
+    if (typeof window.sharedWorksheetData !== 'undefined' && typeof renderSimpleTable === 'function') {
+        renderSimpleTable();
+        
+        // Mostrar contenido cuando esté completamente cargado
+        setTimeout(function() {
+            document.body.classList.add('loaded');
+        }, 100);
+    }
+    
+    // Fallback: mostrar contenido después de un tiempo máximo
+    setTimeout(function() {
+        if (!document.body.classList.contains('loaded')) {
+            document.body.classList.add('loaded');
+        }
+    }, 1000);
 }
 
 // Inicializar sistema de presencia cuando el DOM esté listo

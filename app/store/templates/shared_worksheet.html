@@ -8,6 +8,16 @@
     <meta name="current_user" content="{{ current_username or 'Usuario' }}">
     <meta name="is_logged_in" content="{{ 'true' if is_logged_in else 'false' }}">
     <meta name="is_admin" content="{{ 'true' if is_admin else 'false' }}">
+    <meta name="user_ip" content="{{ user_ip }}">
+    <meta name="is_shared_mode" content="true">
+    <meta name="is_readonly" content="{{ 'true' if is_readonly else 'false' }}">
+    <meta name="shared_token" content="{{ token }}">
+    <meta name="access_type" content="{{ access_type }}">
+    <meta name="worksheet_id" content="{{ worksheet.id }}">
+    <meta name="worksheet_title" content="{{ worksheet.title }}">
+    <meta name="worksheet_fields" content="{{ worksheet.fields | tojson | e }}">
+    <meta name="worksheet_data_total" content="{{ data | length }}">
+    <meta name="worksheet_formato" content="{{ formato | tojson | e }}">
     <title>{{ worksheet.title }} - Hoja de Cálculo Compartida</title>
     
     <!-- CSS exactamente igual que el admin work_sheets.html -->
@@ -160,130 +170,12 @@
         </div>
     </div>
     
+    <!-- Datos de la plantilla compartida (usando data attribute para JSON grande - cumple con CSP) -->
+    <div id="sharedWorksheetDataContainer" 
+         data-shared-worksheet-data='{"id":{{ worksheet.id }},"title":"{{ worksheet.title|e }}","fields":{{ worksheet.fields | tojson }},"data":{{ data | tojson }},"dataTotal":{{ data | length }},"formato":{{ formato | tojson }}}}'
+         class="sr-only"></div>
+    
     <!-- Scripts necesarios -->
-    <script>
-        // Variables globales para JavaScript externo
-        window.currentUsername = '{{ current_username or "Usuario" }}';
-        window.isAdmin = {{ 'true' if is_admin else 'false' }};
-        window.isLoggedIn = {{ 'true' if is_logged_in else 'false' }};
-        window.adminUser = '{{ admin_user }}';
-        window.userIP = '{{ user_ip }}';
-        
-        // ⭐ NUEVO: Variables específicas para modo compartido
-        window.isSharedMode = true;
-        window.isReadonly = {{ 'true' if is_readonly else 'false' }};
-        window.sharedToken = '{{ token }}';
-        window.accessType = '{{ access_type }}';
-        
-        
-        // Inicializar plantilla directamente con datos del servidor
-        window.sharedWorksheetData = {
-            id: {{ worksheet.id }},
-            title: '{{ worksheet.title }}',
-            fields: {{ worksheet.fields | tojson }},
-            data: {{ data | tojson }},
-            dataTotal: {{ data | length }},
-            formato: {{ formato | tojson }}
-        };
-        
-        
-        // Inicializar plantilla cuando el DOM esté listo
-        document.addEventListener('DOMContentLoaded', function() {
-            renderSimpleTable();
-            
-            // Mostrar contenido cuando esté completamente cargado
-            setTimeout(function() {
-                document.body.classList.add('loaded');
-            }, 100);
-        });
-        
-        // Fallback: mostrar contenido después de un tiempo máximo
-        setTimeout(function() {
-            if (!document.body.classList.contains('loaded')) {
-                document.body.classList.add('loaded');
-            }
-        }, 1000);
-        
-        // Función de renderizado simple
-        function renderSimpleTable() {
-            const container = document.getElementById('worksheetTableContainer');
-            if (!container) {
-                return;
-            }
-            
-            const data = window.sharedWorksheetData.data;
-            const fields = window.sharedWorksheetData.fields;
-            
-            if (!data || !Array.isArray(data) || data.length === 0) {
-                container.innerHTML = '<div class="shared-worksheet-error"><h3>No hay datos para mostrar</h3></div>';
-                return;
-            }
-            
-            if (!fields || !Array.isArray(fields) || fields.length === 0) {
-                container.innerHTML = '<div class="shared-worksheet-error"><h3>No hay campos definidos</h3></div>';
-                return;
-            }
-            
-               let html = `
-                   <div class="shared-worksheet-container">
-                       <h3 class="shared-worksheet-title">
-                           📊 ${window.sharedWorksheetData.title}
-                       </h3>
-                       <p class="shared-worksheet-info">
-                           Mostrando ${data.length} filas • ${fields.length} columnas
-                       </p>
-                       <div class="shared-worksheet-table-container">
-                           <table class="shared-worksheet-table">
-                               <thead class="shared-worksheet-thead">
-                                   <tr class="shared-worksheet-header-row">
-               `;
-            
-            // Encabezados
-            fields.forEach((field, index) => {
-                html += `<th class="shared-worksheet-header-cell">${field}</th>`;
-            });
-            
-            html += `
-                                </tr>
-                            </thead>
-                            <tbody>
-            `;
-            
-            // Filas de datos
-            data.forEach((row, rowIndex) => {
-                if (rowIndex >= 100) return; // Limitar a 100 filas para rendimiento
-                
-                const rowClass = rowIndex % 2 === 0 ? 'shared-worksheet-row-even' : 'shared-worksheet-row-odd';
-                html += `<tr class="${rowClass}">`;
-                
-                // Asegurar que la fila tenga la cantidad correcta de celdas
-                for (let i = 0; i < fields.length; i++) {
-                    const cellValue = row[i] || '';
-                    const displayValue = cellValue.toString().length > 50 ? 
-                                      cellValue.toString().substring(0, 50) + '...' : 
-                                      cellValue.toString();
-                    html += `<td class="shared-worksheet-cell">${displayValue}</td>`;
-                }
-                
-                html += `</tr>`;
-            });
-            
-            html += `
-                            </tbody>
-                        </table>
-                    </div>
-                    <div class="shared-worksheet-status">
-                        ✅ <strong>Tabla cargada exitosamente</strong><br>
-                        ${fields.length} columnas • ${Math.min(data.length, 100)} filas mostradas de ${data.length} disponibles<br>
-                        <small>Modo: ${window.isReadonly ? 'Solo lectura' : 'Editable'}</small>
-                    </div>
-                </div>
-            `;
-            
-            container.innerHTML = html;
-        }
-        
-    </script>
     <script src="{{ url_for('store_bp.static', filename='js/admin_work_sheets.js') }}" defer></script>
 </body>
 </html> 

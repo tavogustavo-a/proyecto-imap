@@ -398,11 +398,7 @@
 <script src="{{ url_for('store_bp.static', filename='js/video-utils.js') }}" defer></script>
 <script src="{{ url_for('store_bp.static', filename='js/support_users.js') }}" defer></script>
 <script src="{{ url_for('store_bp.static', filename='js/chat_dashboard_integrated.js') }}" defer></script>
-
-<script>
-  // Variables globales para JavaScript externo
-  window.clearTriggerLogUrl = '{{ url_for("admin_bp.clear_trigger_log") }}';
-</script>
+<meta name="clear_trigger_log_url" content="{{ url_for('admin_bp.clear_trigger_log') }}">
 <script src="{{ url_for('static', filename='js/clear_trigger_logs.js') }}" defer></script>
 
 <!-- ✅ NUEVO: Chat Enhancements - Funcionalidades mejoradas compartidas -->

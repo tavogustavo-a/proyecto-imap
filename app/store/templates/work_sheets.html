@@ -10,18 +10,8 @@
   <meta name="is_admin" content="{{ 'true' if current_user and current_user.username == ADMIN_USER else 'false' }}">
   <link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='fontawesome/css/all.css') }}">
-  <script>
-    // Variables globales para el JavaScript
-    window.isAdmin = {{ 'true' if current_user and current_user.username == ADMIN_USER else 'false' }};
-    window.isLoggedIn = {{ 'true' if session.get('logged_in') else 'false' }};
-    window.hasWorksheetAccess = {{ 'true' if current_user and user_has_worksheet_access(current_user) else 'false' }};
-    window.currentUsername = '{{ current_user.username if current_user else "" }}';
-    
-    // Variables para modo compartido (inicializadas como false/vacías para modo normal)
-    window.isSharedMode = false;
-    window.sharedToken = '';
-    window.accessType = 'readonly';
-  </script>
+  <meta name="has_worksheet_access" content="{{ 'true' if current_user and user_has_worksheet_access(current_user) else 'false' }}">
+  <meta name="clear_trigger_log_url" content="{{ url_for('admin_bp.clear_trigger_log') }}">
 {% endblock %}
 {% block content %}
 <div class="container container-max-width-900 store-light worksheet-panel admin-licencias-page">
@@ -314,10 +304,6 @@
 
 {% block scripts %}
   {{ super() }}
-  <script>
-    // Variables globales para JavaScript externo
-    window.clearTriggerLogUrl = '{{ url_for("admin_bp.clear_trigger_log") }}';
-  </script>
   <script src="{{ url_for('store_bp.static', filename='js/admin_work_sheets.js') }}" defer></script>
   <script src="{{ url_for('store_bp.static', filename='js/menu_tienda.js') }}" defer></script>
   <script src="{{ url_for('static', filename='js/clear_trigger_logs.js') }}" defer></script>
