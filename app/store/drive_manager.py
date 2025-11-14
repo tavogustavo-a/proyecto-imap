@@ -18,6 +18,48 @@ from app.store.models import DriveTransfer
 
 logger = logging.getLogger(__name__)
 
+# ==================== HELPER FUNCIONES DE ZONA HORARIA ====================
+
+def get_colombia_datetime():
+    """
+    Obtiene la fecha y hora actual en zona horaria de Colombia.
+    Siempre usa UTC como base, independientemente de la zona horaria del servidor.
+    Esto asegura que funcione correctamente en servidores de cualquier ubicación.
+    
+    Returns:
+        datetime: Fecha y hora actual en zona horaria de Colombia (America/Bogota)
+    """
+    try:
+        from pytz import timezone as pytz_timezone
+        col_tz = pytz_timezone('America/Bogota')
+        # Siempre obtener UTC primero, luego convertir a Colombia
+        now_utc = datetime.utcnow()
+        now_utc_with_tz = now_utc.replace(tzinfo=pytz_timezone('UTC'))
+        colombia_time = now_utc_with_tz.astimezone(col_tz)
+        return colombia_time
+    except Exception as e:
+        logger.error(f"[DRIVE_TRANSFER] Error obteniendo hora de Colombia: {str(e)}")
+        # Fallback: retornar UTC si hay error
+        return datetime.utcnow()
+
+def get_colombia_time():
+    """
+    Obtiene solo la hora (time) actual en zona horaria de Colombia.
+    
+    Returns:
+        time: Hora actual en zona horaria de Colombia
+    """
+    return get_colombia_datetime().time()
+
+def get_colombia_date():
+    """
+    Obtiene solo la fecha (date) actual en zona horaria de Colombia.
+    
+    Returns:
+        date: Fecha actual en zona horaria de Colombia
+    """
+    return get_colombia_datetime().date()
+
 # ==================== SERVICIO DE TRANSFERENCIA ====================
 
 class DriveTransferService:
@@ -811,7 +853,8 @@ def schedule_cleanup_task(transfer_id, days_old, scheduled_time):
         from pytz import timezone as pytz_timezone
         
         # Generar ID único para la tarea
-        task_id = f"cleanup_{transfer_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        # Usar UTC para el task_id, independientemente de la zona horaria del servidor
+        task_id = f"cleanup_{transfer_id}_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}"
         
         # Almacenar información de la tarea (thread-safe)
         with cleanup_tasks_lock:
@@ -819,7 +862,7 @@ def schedule_cleanup_task(transfer_id, days_old, scheduled_time):
                 'transfer_id': transfer_id,
                 'days_old': days_old,
                 'scheduled_time': scheduled_time,
-                'created_at': datetime.now(),
+                'created_at': datetime.utcnow(),  # Siempre usar UTC
                 'status': 'scheduled'
             }
         
@@ -871,7 +914,8 @@ def cleanup_completed_tasks():
         from datetime import datetime, timedelta
         
         # Eliminar tareas completadas o fallidas de hace más de 1 hora (más agresivo)
-        cutoff_time = datetime.now() - timedelta(hours=1)
+        # Usar UTC para comparaciones, independientemente de la zona horaria del servidor
+        cutoff_time = datetime.utcnow() - timedelta(hours=1)
         
         tasks_to_remove = []
         for task_id, task_info in scheduled_cleanup_tasks.items():
@@ -930,11 +974,11 @@ def execute_scheduled_cleanup(task_id):
             if result['success']:
                 scheduled_cleanup_tasks[task_id]['status'] = 'completed'
                 scheduled_cleanup_tasks[task_id]['result'] = result
-                scheduled_cleanup_tasks[task_id]['completed_at'] = datetime.now()
+                scheduled_cleanup_tasks[task_id]['completed_at'] = datetime.utcnow()  # Siempre usar UTC
             else:
                 scheduled_cleanup_tasks[task_id]['status'] = 'failed'
                 scheduled_cleanup_tasks[task_id]['error'] = result['message']
-                scheduled_cleanup_tasks[task_id]['failed_at'] = datetime.now()
+                scheduled_cleanup_tasks[task_id]['failed_at'] = datetime.utcnow()  # Siempre usar UTC
             
             return result['success']
             

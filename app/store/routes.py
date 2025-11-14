@@ -7128,6 +7128,7 @@ def execute_drive_transfer_now(transfer_id):
         
         from .drive_manager import DriveTransferService, execute_transfer_simple
         from app import create_app
+        from .api import format_colombia_time
         
         app = create_app()
         
@@ -7142,7 +7143,9 @@ def execute_drive_transfer_now(transfer_id):
             files_moved = result.get('files_moved', 0)
             files_failed = result.get('files_failed', 0)
             message += f'Archivos movidos: {files_moved}, Fallidos: {files_failed}. '
-        message += f'Última ejecución: {transfer.last_processed.strftime("%Y-%m-%d %H:%M:%S UTC") if transfer.last_processed else "N/A"}'
+        # Formatear hora en formato 12 horas (AM/PM) en hora de Colombia
+        last_execution_formatted = format_colombia_time(transfer.last_processed) if transfer.last_processed else "N/A"
+        message += f'Última ejecución: {last_execution_formatted}'
         
         return jsonify({
             'success': True, 

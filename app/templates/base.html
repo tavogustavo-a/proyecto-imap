@@ -37,10 +37,10 @@
     {% block content %}{% endblock %}
   </div>
 
-  {# Sistema de protección contra copia de código (solo en producción) #}
-  {% if not config.DEBUG %}
+  {# Sistema de protección contra copia de código - DESACTIVADO #}
+  {# {% if not config.DEBUG %}
   <script src="{{ url_for('static', filename='js/code_protection.js') }}" defer></script>
-  {% endif %}
+  {% endif %} #}
   
   <script src="{{ url_for('static', filename='js/main.js') }}?v=20241220-fix-empty-mail-cards"></script>
   <script src="{{ url_for('static', filename='js/loading_overlay.js') }}" defer></script>

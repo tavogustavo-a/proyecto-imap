@@ -24,40 +24,16 @@ def format_colombia_time(utc_datetime):
         return "N/A"
     
     try:
-        from datetime import timezone as dt_timezone, timedelta
+        from datetime import timezone as dt_timezone
         
         # Crear una copia para no modificar el original
         dt = utc_datetime
         
-        # PROBLEMA DETECTADO: Si el servidor está en otra zona horaria (ej: UTC+1),
-        # SQLite puede guardar el timestamp en la zona horaria del servidor en lugar de UTC.
-        # Si muestra 10:07 PM cuando son 9:07 PM en Colombia, el timestamp guardado
-        # puede estar en la zona horaria del servidor (UTC+1) en lugar de UTC.
-        
-        # Si el datetime es naive (sin timezone), SQLite lo guardó sin timezone
+        # IMPORTANTE: Todos los datetimes se guardan con datetime.utcnow(), 
+        # por lo que siempre están en UTC, incluso si son naive (sin timezone).
+        # Si el datetime es naive, asumir que está en UTC (no en la zona horaria del servidor).
         if dt.tzinfo is None:
-            # CORRECCIÓN: Detectar si el servidor está guardando en su zona horaria local
-            # Si el servidor está en UTC+1 y guarda 10:07 PM, eso es realmente 9:07 PM UTC.
-            # Necesitamos restar el offset del servidor para convertirlo a UTC.
-            try:
-                # Obtener la zona horaria del servidor
-                import time
-                # time.timezone es negativo para zonas horarias positivas (ej: UTC+1 = -3600)
-                server_offset_seconds = time.timezone if time.daylight == 0 else time.altzone
-                server_offset_hours = -server_offset_seconds / 3600  # Convertir a horas (negativo de negativo = positivo)
-                
-                # Si el servidor NO está en UTC (offset != 0), el timestamp puede estar
-                # en la zona horaria del servidor. Necesitamos restar el offset para convertirlo a UTC.
-                # Ejemplo: Si servidor está en UTC+1 y guarda 10:07 PM, eso es 9:07 PM UTC.
-                # Entonces restamos 1 hora: 10:07 PM - 1 hora = 9:07 PM UTC.
-                if server_offset_hours != 0:
-                    # Restar el offset para convertir de hora del servidor a UTC
-                    dt = dt - timedelta(hours=server_offset_hours)
-            except:
-                # Si no podemos detectar la zona horaria, asumir UTC (no ajustar)
-                pass
-            
-            # Asumir UTC después del ajuste
+            # Asumir UTC directamente (porque se guardó con datetime.utcnow())
             dt = dt.replace(tzinfo=dt_timezone.utc)
         else:
             # Si tiene timezone, asegurarnos de que esté en UTC

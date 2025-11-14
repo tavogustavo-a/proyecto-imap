@@ -4,11 +4,15 @@ from app.models.user import User
 from sqlalchemy.dialects.sqlite import JSON
 
 def get_colombia_time():
-    """Obtiene la fecha y hora actual en zona horaria de Colombia"""
+    """Obtiene la fecha y hora actual en zona horaria de Colombia
+    Siempre usa UTC como base, independientemente de la zona horaria del servidor"""
     from pytz import timezone as pytz_timezone
     col_tz = pytz_timezone('America/Bogota')
-    # Obtener la hora actual en Colombia directamente
-    colombia_time = datetime.now(col_tz)
+    # Siempre obtener UTC primero, luego convertir a Colombia
+    # Esto asegura que funcione correctamente sin importar dónde esté el servidor
+    now_utc = datetime.utcnow()
+    now_utc_with_tz = now_utc.replace(tzinfo=pytz_timezone('UTC'))
+    colombia_time = now_utc_with_tz.astimezone(col_tz)
     return colombia_time
 
 class Product(db.Model):
