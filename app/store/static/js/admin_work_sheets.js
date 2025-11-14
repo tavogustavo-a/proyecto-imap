@@ -367,9 +367,17 @@ function renderSelectedCriteria() {
         `<div class="filtro-orden-item" data-id="${criterion.id}" data-index="${index}" draggable="true">
             <span class="orden-numero">${index + 1}</span>
             <span class="criterio-texto">${criterion.displayText}</span>
-            <span class="remove-filter" onclick="removeCriterionById(${criterion.id})">&times;</span>
+            <span class="remove-filter" data-action="remove-criterion" data-criterion-id="${criterion.id}">&times;</span>
         </div>`
     ).join('');
+    
+    // Configurar event listeners para eliminar criterios
+    container.querySelectorAll('[data-action="remove-criterion"]').forEach(btn => {
+        btn.addEventListener('click', function() {
+            const criterionId = parseInt(this.getAttribute('data-criterion-id'));
+            removeCriterionById(criterionId);
+        });
+    });
     
     const validCriteria = FiltersState.validateCriteria();
     updateApplyButtonState(validCriteria.length > 0);
@@ -1285,9 +1293,17 @@ function renderizarCriteriosOrden() {
         `<div class="filtro-orden-item" data-index="${index}" draggable="true">
             <span class="orden-numero">${index + 1}</span>
             <span class="criterio-texto">${criterio.textoDisplay || criterio.valor || 'Criterio'}</span>
-            <span class="remove-filter" onclick="eliminarCriterio(${index})">&times;</span>
+            <span class="remove-filter" data-action="eliminar-criterio" data-index="${index}">&times;</span>
         </div>`
     ).join('');
+    
+    // Configurar event listeners para eliminar criterios
+    container.querySelectorAll('[data-action="eliminar-criterio"]').forEach(btn => {
+        btn.addEventListener('click', function() {
+            const index = parseInt(this.getAttribute('data-index'));
+            eliminarCriterio(index);
+        });
+    });
 
     updateApplyButtonState(criteriosOrden.length > 0);
     
@@ -1975,8 +1991,7 @@ function splitTextAcrossColumns() {
     modal.innerHTML = `
         <div style='background:#fff;padding:24px 32px;border-radius:10px;max-width:600px;box-shadow:0 4px 20px rgba(0,0,0,0.15);position:relative;'>
             <button id='btnCerrarDivision' style='position:absolute;top:10px;right:10px;background:none;border:none;font-size:24px;color:#666;cursor:pointer;padding:5px 10px;line-height:1;border-radius:4px;transition:all 0.2s;' 
-                    onmouseover='this.style.color="#dc3545";this.style.background="#f8f9fa";' 
-                    onmouseout='this.style.color="#666";this.style.background="none";' 
+                    class='worksheet-action-btn' 
                     title='Cerrar'>
                 <i class='fas fa-times'></i>
             </button>
@@ -2191,6 +2206,19 @@ function splitTextAcrossColumns() {
     `;
     
     document.body.appendChild(modal);
+    
+    // Configurar event listener para botón cerrar división (CSP compliant)
+    const closeBtn = modal.querySelector('#btnCerrarDivision');
+    if (closeBtn) {
+        closeBtn.addEventListener('mouseenter', function() {
+            this.style.color = '#dc3545';
+            this.style.background = '#f8f9fa';
+        });
+        closeBtn.addEventListener('mouseleave', function() {
+            this.style.color = '#666';
+            this.style.background = 'none';
+        });
+    }
     
     let selectedSeparator = ',';
     let selectedMode = 'personalizado';
@@ -2652,9 +2680,17 @@ function splitTextAcrossColumns() {
         } else {
             container.innerHTML = selectedFields.map((field, index) => `
                 <span class="selected-field worksheet-selected-field" data-field="${field}">
-                    ${field} <i class="fas fa-times" style="margin-left:5px;cursor:pointer;" onclick="removeField('${field}')"></i>
+                    ${field} <i class="fas fa-times remove-field-btn" style="margin-left:5px;cursor:pointer;" data-action="remove-field" data-field="${field}"></i>
                 </span>
             `).join('');
+            
+            // Configurar event listeners para eliminar campos
+            container.querySelectorAll('[data-action="remove-field"]').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    const field = this.getAttribute('data-field');
+                    removeField(field);
+                });
+            });
         }
     }
     
@@ -2671,9 +2707,19 @@ function splitTextAcrossColumns() {
         } else {
             container.innerHTML = selectedFields.map((field, index) => `
                 <span class="selected-field worksheet-selected-field" data-field="${field}">
-                    ${field} <i class="fas fa-times" style="margin-left:5px;cursor:pointer;" onclick="removeGmailField('${field}')"></i>
+                    ${field} <i class="fas fa-times remove-gmail-field-btn" style="margin-left:5px;cursor:pointer;" data-action="remove-gmail-field" data-field="${field}"></i>
                 </span>
             `).join('');
+            
+            // Configurar event listeners para eliminar campos de Gmail
+            container.querySelectorAll('[data-action="remove-gmail-field"]').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    const field = this.getAttribute('data-field');
+                    if (typeof window.removeGmailField === 'function') {
+                        window.removeGmailField(field);
+                    }
+                });
+            });
             
             // Mostrar sección de entrada cuando hay campos seleccionados
             inputSection.style.display = 'block';
@@ -7194,11 +7240,12 @@ function renderEditableCell(campo, valor, filaIdx, colIdx) {
         if (campo === 'informacion-adicional') {
             // En modo copiar, usar icono compacto con modal (igual que standard y filtro)
             if (valor && valor.trim() !== '') {
-                return `<div class='cell-info-adicional' tabindex="0" onclick="showInfoModal(${filaIdx}, ${colIdx}, '${valor || ''}')" title="Editar información adicional">
+                const escapedValor = (valor || '').replace(/'/g, "&#39;").replace(/"/g, "&quot;");
+                return `<div class='cell-info-adicional' tabindex="0" data-action="show-info-modal" data-row="${filaIdx}" data-col="${colIdx}" data-value="${escapedValor}" title="Editar información adicional">
                     <i class="fas fa-info-circle"></i>
                 </div>`;
             } else {
-                return `<div class='cell-info-adicional' tabindex="0" onclick="showInfoModal(${filaIdx}, ${colIdx}, '')" title="Agregar información adicional">
+                return `<div class='cell-info-adicional' tabindex="0" data-action="show-info-modal" data-row="${filaIdx}" data-col="${colIdx}" data-value="" title="Agregar información adicional">
                     <i class="fas fa-plus"></i>
                 </div>`;
             }
@@ -7262,12 +7309,13 @@ function renderEditableCell(campo, valor, filaIdx, colIdx) {
         }
         // En TODOS los otros modos (standard, filtro, copiar), mostrar icono de información
         if (valor && valor.trim() !== '') {
-            return `<div class='cell-info-adicional' tabindex="0" onclick="showInfoModal(${filaIdx}, ${colIdx}, '${valor || ''}')" title="Editar información adicional">
+            const escapedValor = (valor || '').replace(/'/g, "&#39;").replace(/"/g, "&quot;");
+            return `<div class='cell-info-adicional' tabindex="0" data-action="show-info-modal" data-row="${filaIdx}" data-col="${colIdx}" data-value="${escapedValor}" title="Editar información adicional">
                 <i class="fas fa-info-circle"></i>
             </div>`;
         } else {
             // No hay valor, mostrar celda vacía pero clickeable para abrir modal
-            return `<div class='cell-info-adicional' tabindex="0" onclick="showInfoModal(${filaIdx}, ${colIdx}, '')" title="Agregar información adicional">
+            return `<div class='cell-info-adicional' tabindex="0" data-action="show-info-modal" data-row="${filaIdx}" data-col="${colIdx}" data-value="" title="Agregar información adicional">
                 <i class="fas fa-plus"></i>
             </div>`;
         }
@@ -9524,11 +9572,19 @@ function showAddFieldConfirmModal(colIdx, side, tipo) {
             <h4>¿Seguro que quieres añadir el campo <b>${tipo.replace('-', ' ')}</b> ${side === 'right' ? 'a la derecha' : 'a la izquierda'}?</h4>
             <div style='margin-top:18px;'>
                 <button id='confirm-add-field-btn' style='background-color:#28a745;color:#fff;border:none;padding:8px 16px;border-radius:4px;cursor:pointer;'>Sí, añadir</button>
-                <button onclick='document.querySelectorAll(".add-field-confirm-modal").forEach(el=>el.remove())' style='margin-left:10px;background-color:#dc3545;color:#fff;border:none;padding:8px 16px;border-radius:4px;cursor:pointer;'>Cancelar</button>
+                <button id='cancel-add-field-btn' class='cancel-add-field-modal-btn' style='margin-left:10px;background-color:#dc3545;color:#fff;border:none;padding:8px 16px;border-radius:4px;cursor:pointer;'>Cancelar</button>
             </div>
         </div>
     `;
     document.body.appendChild(modal);
+    
+    // Configurar event listener para botón cancelar (CSP compliant)
+    const cancelBtn = modal.querySelector('#cancel-add-field-btn');
+    if (cancelBtn) {
+        cancelBtn.addEventListener('click', function() {
+            document.querySelectorAll('.add-field-confirm-modal').forEach(el => el.remove());
+        });
+    }
     
     // NUEVO: Listener para cerrar modal de confirmación al hacer clic fuera
     modal.addEventListener('click', function(e) {
@@ -9627,6 +9683,20 @@ document.addEventListener('mousedown', function(e) {
 document.addEventListener('click', function(e) {
     // Función inicial unificada
     if (!isValidEventTarget(e)) return;
+    
+    // Manejar clicks en elementos de información adicional (CSP compliant)
+    const infoAdicional = safeEventTargetClosest(e, '[data-action="show-info-modal"]');
+    if (infoAdicional) {
+        e.stopPropagation();
+        e.preventDefault();
+        const row = parseInt(infoAdicional.getAttribute('data-row'));
+        const col = parseInt(infoAdicional.getAttribute('data-col'));
+        const value = infoAdicional.getAttribute('data-value') || '';
+        // Decodificar entidades HTML
+        const decodedValue = value.replace(/&#39;/g, "'").replace(/&quot;/g, '"');
+        showInfoModal(row, col, decodedValue);
+        return;
+    }
     
     // En un engranaje de columna
     const gearIcon = safeEventTargetClosest(e, '.th-gear-icon');
@@ -9799,11 +9869,19 @@ function showDeleteFieldModal(colIdx) {
             <h4>¿Seguro que quieres eliminar este campo?</h4>
             <div style='margin-top:18px;'>
                 <button id='confirm-delete-field-btn' style='background:#dc3545;color:#fff;border:none;padding:8px 16px;border-radius:4px;cursor:pointer;'>Sí, eliminar</button>
-                <button onclick='document.querySelectorAll(".delete-field-modal").forEach(el=>el.remove())' style='margin-left:10px;background:#6c757d;color:#fff;border:none;padding:8px 16px;border-radius:4px;cursor:pointer;'>Cancelar</button>
+                <button id='cancel-delete-field-btn' class='cancel-delete-field-modal-btn' style='margin-left:10px;background:#6c757d;color:#fff;border:none;padding:8px 16px;border-radius:4px;cursor:pointer;'>Cancelar</button>
             </div>
         </div>
     `;
     document.body.appendChild(modal);
+    
+    // Configurar event listener para botón cancelar (CSP compliant)
+    const cancelBtn = modal.querySelector('#cancel-delete-field-btn');
+    if (cancelBtn) {
+        cancelBtn.addEventListener('click', function() {
+            document.querySelectorAll('.delete-field-modal').forEach(el => el.remove());
+        });
+    }
     
     // Listener para cerrar al hacer clic fuera del modal
     modal.addEventListener('click', function(e) {
@@ -9870,11 +9948,19 @@ function showChangeFieldModal(colIdx) {
             </div>
             <div style='margin-top:18px;'>
                 <button id='confirm-change-field-btn' style='background:#28a745;color:#fff;border:none;padding:8px 16px;border-radius:4px;cursor:pointer;margin-right:10px;'>Cambiar campo</button>
-                <button onclick='document.querySelectorAll(".change-field-modal").forEach(el=>el.remove())' style='background:#dc3545;color:#fff;border:none;padding:8px 16px;border-radius:4px;cursor:pointer;'>Cancelar</button>
+                <button id='cancel-change-field-btn' class='cancel-change-field-modal-btn' style='background:#dc3545;color:#fff;border:none;padding:8px 16px;border-radius:4px;cursor:pointer;'>Cancelar</button>
             </div>
         </div>
     `;
     document.body.appendChild(modal);
+    
+    // Configurar event listener para botón cancelar (CSP compliant)
+    const cancelBtn = modal.querySelector('#cancel-change-field-btn');
+    if (cancelBtn) {
+        cancelBtn.addEventListener('click', function() {
+            document.querySelectorAll('.change-field-modal').forEach(el => el.remove());
+        });
+    }
     
     // Listener para cerrar al hacer clic fuera del modal
     modal.addEventListener('click', function(e) {
@@ -9966,11 +10052,19 @@ function showDeleteFieldFinalModal(colIdx) {
             <h4>Esta acción es irreversible.<br>¿Deseas continuar?</h4>
             <div style='margin-top:18px;'>
                 <button id='final-delete-field-btn' style='background:#dc3545;color:#fff;border:none;padding:8px 16px;border-radius:4px;cursor:pointer;'>Sí, eliminar definitivamente</button>
-                <button onclick='document.querySelectorAll(".delete-field-confirm-modal").forEach(el=>el.remove())' style='margin-left:10px;background:#6c757d;color:#fff;border:none;padding:8px 16px;border-radius:4px;cursor:pointer;'>Cancelar</button>
+                <button id='cancel-final-delete-field-btn' class='cancel-final-delete-field-modal-btn' style='margin-left:10px;background:#6c757d;color:#fff;border:none;padding:8px 16px;border-radius:4px;cursor:pointer;'>Cancelar</button>
             </div>
         </div>
     `;
     document.body.appendChild(modal);
+    
+    // Configurar event listener para botón cancelar (CSP compliant)
+    const cancelBtn = modal.querySelector('#cancel-final-delete-field-btn');
+    if (cancelBtn) {
+        cancelBtn.addEventListener('click', function() {
+            document.querySelectorAll('.delete-field-confirm-modal').forEach(el => el.remove());
+        });
+    }
     
     // Listener para cerrar al hacer clic fuera del modal
     modal.addEventListener('click', function(e) {
@@ -15205,8 +15299,8 @@ function showSearchReplaceDialog() {
             
             globalResults.slice(0, 20).forEach((result, index) => { 
                 html += `
-                    <div style="padding: 4px; border-bottom: 1px solid #eee; cursor: pointer; hover: background-color: #f0f0f0;" 
-                         onclick="jumpToGlobalResult(${result.plantillaIndex}, ${result.row}, ${result.col})" 
+                    <div class="global-result-item" style="padding: 4px; border-bottom: 1px solid #eee; cursor: pointer; hover: background-color: #f0f0f0;" 
+                         data-action="jump-to-result" data-plantilla-index="${result.plantillaIndex}" data-row="${result.row}" data-col="${result.col}" 
                          title="Hacer clic para ir a este resultado">
                         <div style="font-weight: bold; color: #0078d4;">${result.plantillaTitulo}</div>
                         <div style="font-size: 10px; color: #666;">Fila ${result.row + 1}, ${result.campo}: "${result.value}"</div>
@@ -16335,13 +16429,12 @@ function showPermissionsModal() {
             usersWithAccess.forEach(user => {
                 html += `
                     <div style='display: flex; align-items: center; justify-content: space-between; padding: 8px; margin-bottom: 4px; border: 1px solid #c3e6cb; border-radius: 4px; background: white; transition: background 0.2s;' 
-                         class='user-item-with-access' data-user-id='${user.id}' onmouseover='this.style.background="#f8fff8"' onmouseout='this.style.background="white"'>
+                         class='user-item-with-access' data-user-id='${user.id}'>
                         <div>
                             <div style='font-weight: 500; color: #28a745;'>${user.username || user.name || 'Usuario'}</div>
                         </div>
-                        <button onclick='revokeUserAccess(${user.id})' 
-                                style='background: #dc3545; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 12px; transition: background 0.2s;'
-                                onmouseover='this.style.background="#c82333"' onmouseout='this.style.background="#dc3545"'>
+                        <button class='revoke-user-access-btn' data-action='revoke-access' data-user-id='${user.id}' 
+                                style='background: #dc3545; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 12px; transition: background 0.2s;'>
                             <i class='fas fa-times'></i> Revocar
                         </button>
                     </div>
@@ -16358,13 +16451,14 @@ function showPermissionsModal() {
             usersWithoutAccess.forEach(user => {
                 html += `
                     <div style='display: flex; align-items: center; justify-content: space-between; padding: 8px; margin-bottom: 4px; border: 1px solid #dee2e6; border-radius: 4px; background: white; transition: background 0.2s;' 
-                         class='user-item-available' data-user-id='${user.id}' onmouseover='this.style.background="#f8f9fa"' onmouseout='this.style.background="white"'>
+                         class='user-item-available' data-user-id='${user.id}'>
                         <div>
                     <div style='font-weight: 500;'>${user.username || user.name || 'Usuario'}</div>
                 </div>
-                        <button onclick='grantUserAccess(${user.id}, "${(user.username || user.name || 'Usuario').replace(/'/g, "\\'")}","${(user.email || '').replace(/'/g, "\\'")}")' 
-                                style='background: #28a745; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 12px; transition: background 0.2s;'
-                                onmouseover='this.style.background="#218838"' onmouseout='this.style.background="#28a745"'>
+                        <button class='grant-user-access-btn' data-action='grant-access' data-user-id='${user.id}' 
+                                data-username='${(user.username || user.name || 'Usuario').replace(/'/g, "&#39;")}' 
+                                data-email='${(user.email || '').replace(/'/g, "&#39;")}'
+                                style='background: #28a745; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 12px; transition: background 0.2s;'>
                             <i class='fas fa-plus'></i> Agregar
                         </button>
                     </div>
@@ -16379,6 +16473,55 @@ function showPermissionsModal() {
         }
         
         unifiedList.innerHTML = html;
+        
+        // Configurar event listeners para botones de usuarios (CSP compliant)
+        unifiedList.querySelectorAll('[data-action="revoke-access"]').forEach(btn => {
+            btn.addEventListener('click', function() {
+                const userId = parseInt(this.getAttribute('data-user-id'));
+                if (typeof window.revokeUserAccess === 'function') {
+                    window.revokeUserAccess(userId);
+                }
+            });
+            // Agregar estilos hover con event listeners en lugar de inline
+            btn.addEventListener('mouseenter', function() {
+                this.style.background = '#c82333';
+            });
+            btn.addEventListener('mouseleave', function() {
+                this.style.background = '#dc3545';
+            });
+        });
+        
+        unifiedList.querySelectorAll('[data-action="grant-access"]').forEach(btn => {
+            btn.addEventListener('click', function() {
+                const userId = parseInt(this.getAttribute('data-user-id'));
+                const username = this.getAttribute('data-username').replace(/&#39;/g, "'");
+                const email = this.getAttribute('data-email').replace(/&#39;/g, "'");
+                if (typeof window.grantUserAccess === 'function') {
+                    window.grantUserAccess(userId, username, email);
+                }
+            });
+            // Agregar estilos hover con event listeners en lugar de inline
+            btn.addEventListener('mouseenter', function() {
+                this.style.background = '#218838';
+            });
+            btn.addEventListener('mouseleave', function() {
+                this.style.background = '#28a745';
+            });
+        });
+        
+        // Agregar hover a los items de usuario
+        unifiedList.querySelectorAll('.user-item-with-access, .user-item-available').forEach(item => {
+            item.addEventListener('mouseenter', function() {
+                if (this.classList.contains('user-item-with-access')) {
+                    this.style.background = '#f8fff8';
+                } else {
+                    this.style.background = '#f8f9fa';
+                }
+            });
+            item.addEventListener('mouseleave', function() {
+                this.style.background = 'white';
+            });
+        });
     }
     
     // Funciones para gestionar accesos de usuarios
@@ -16669,20 +16812,28 @@ function showInfoModal(row, col, currentValue) {
             <div style='background:#fff;padding:20px 20px;border-radius:10px;min-width:250px;max-width:500px;box-shadow:0 4px 20px rgba(0,0,0,0.15);margin:0;position:relative;left:-20px;transform:none;'>
                 <div style='display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;'>
                     <h4 style='margin:0;color:#333;'>Información Adicional</h4>
-                    <span onclick="closeInfoModal()" style='cursor:pointer;font-size:24px;color:#666;'>&times;</span>
+                    <span id="closeInfoModalBtn" class="info-modal-close" style='cursor:pointer;font-size:24px;color:#666;'>&times;</span>
                 </div>
                 <div style='margin-bottom:20px;'>
                     <textarea id="infoModalTextarea" placeholder="Escribe la información adicional aquí..." 
                               style='width:calc(100% - 4px);min-height:120px;padding:12px;border:2px solid #000;border-radius:4px;resize:vertical;font-family:inherit;box-sizing:border-box;'></textarea>
                 </div>
                 <div style='display:flex;gap:10px;justify-content:center;'>
-                    <button onclick="closeInfoModal()" style='background:#dc3545;color:#fff;border:none;padding:8px 16px;border-radius:4px;cursor:pointer;'>Cancelar</button>
-                    <button onclick="saveInfoModal()" style='background:#28a745;color:#fff;border:none;padding:8px 16px;border-radius:4px;cursor:pointer;'>Guardar</button>
+                    <button id="cancelInfoModalBtn" class="info-modal-cancel" style='background:#dc3545;color:#fff;border:none;padding:8px 16px;border-radius:4px;cursor:pointer;'>Cancelar</button>
+                    <button id="saveInfoModalBtn" class="info-modal-save" style='background:#28a745;color:#fff;border:none;padding:8px 16px;border-radius:4px;cursor:pointer;'>Guardar</button>
                 </div>
             </div>
         `;
         
         document.body.appendChild(modal);
+        
+        // Configurar event listeners para el modal de información
+        const closeBtn = document.getElementById('closeInfoModalBtn');
+        const cancelBtn = document.getElementById('cancelInfoModalBtn');
+        const saveBtn = document.getElementById('saveInfoModalBtn');
+        if (closeBtn) closeBtn.addEventListener('click', closeInfoModal);
+        if (cancelBtn) cancelBtn.addEventListener('click', closeInfoModal);
+        if (saveBtn) saveBtn.addEventListener('click', saveInfoModal);
     }
     
     const textarea = document.getElementById('infoModalTextarea');
