@@ -2,7 +2,6 @@
 
 from app.extensions import db
 from datetime import datetime
-import pytz
 
 # Tabla de asociación para la relación many-to-many entre emails y etiquetas
 email_tags = db.Table('email_tags',
@@ -172,9 +171,8 @@ class ReceivedEmail(db.Model):
     def get_colombia_datetime(self):
         """Convierte la fecha UTC a zona horaria de Colombia"""
         if self.received_at:
-            utc_dt = pytz.utc.localize(self.received_at) if self.received_at.tzinfo is None else self.received_at
-            colombia_tz = pytz.timezone('America/Bogota')
-            return utc_dt.astimezone(colombia_tz)
+            from app.utils.timezone import utc_to_colombia
+            return utc_to_colombia(self.received_at)
         return None
     
     def get_time_12h(self):

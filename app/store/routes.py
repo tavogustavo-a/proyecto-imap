@@ -1,5 +1,6 @@
 from flask import render_template, request, redirect, url_for, flash, jsonify, current_app, session, Response, stream_template, send_file
 from datetime import datetime
+from app.utils.timezone import get_colombia_now, colombia_strftime, utc_to_colombia, get_colombia_datetime
 # Importa tus modelos y db. Asumo nombres comunes, ajústalos si es necesario.
 from .models import Product, Sale, Coupon, coupon_products, Role, role_products, role_users, ProductionLink, ApiInfo, WorksheetTemplate, WorksheetData, WorksheetPermission, DriveTransfer, WhatsAppConfig, GSheetsLink
 
@@ -17,7 +18,6 @@ def csrf_exempt_route(func):
     return func
 from app.models.user import User
 from sqlalchemy.orm import joinedload, selectinload
-from pytz import timezone
 from app.store.models import ToolInfo, HtmlInfo, YouTubeListing, StoreSetting
 import requests
 import time
@@ -421,9 +421,8 @@ def create_coupon():
     if Coupon.query.filter_by(name=name).first():
         return jsonify({'success': False, 'error': 'Ya existe un cupón con ese nombre.'}), 400
     # Obtener la fecha actual en zona horaria de Colombia
-    from pytz import timezone as pytz_timezone
-    col_tz = pytz_timezone('America/Bogota')
-    colombia_now = datetime.now(col_tz)
+    # Usar módulo centralizado de timezone
+    colombia_now = get_colombia_datetime()
     
     coupon = Coupon(
         name=name,
@@ -642,10 +641,8 @@ def editar_cupon(coupon_id):
     # Convertir la fecha de creación a zona horaria de Colombia
     created_at_col = None
     if coupon.created_at:
-        from pytz import timezone as pytz_timezone
-        utc = pytz_timezone('UTC')
-        col = pytz_timezone('America/Bogota')
-        created_at_col = coupon.created_at.replace(tzinfo=utc).astimezone(col)
+        # Usar módulo centralizado de timezone
+        created_at_col = utc_to_colombia(coupon.created_at)
     if request.method == 'POST':
         coupon.name = request.form.get('coupon_name', '').strip()
         coupon.discount_cop = request.form.get('discount_cop', 0)
@@ -2370,8 +2367,8 @@ def send_email():
             'subject': subject,
             'message_preview': message[:100] + '...' if len(message) > 100 else message,
             'status': 'sent',
-            'message_id': f'msg_{int(time.time())}_{len(to_email)}',
-            'sent_at': time.strftime('%Y-%m-%d %H:%M:%S'),
+            'message_id': f'msg_{int(get_colombia_now().timestamp())}_{len(to_email)}',
+            'sent_at': colombia_strftime('%Y-%m-%d %H:%M:%S'),
             'from_email': 'noreply@tusitio.com'
         }
 
@@ -2418,7 +2415,7 @@ def post_social_media():
             'content': content,
             'status': 'posted',
             'post_id': f'post_{int(time.time())}_{len(content)}',
-            'posted_at': time.strftime('%Y-%m-%d %H:%M:%S'),
+            'posted_at': colombia_strftime('%Y-%m-%d %H:%M:%S'),
             'views': 0,
             'likes': 0,
             'shares': 0,
@@ -2516,7 +2513,7 @@ def analyze_image():
                 'size_kb': random.randint(50, 500)
             },
             'analysis_confidence': random.randint(85, 98),
-            'processed_at': time.strftime('%Y-%m-%d %H:%M:%S')
+            'processed_at': colombia_strftime('%Y-%m-%d %H:%M:%S')
         }
 
         return jsonify({'result': result})
@@ -2612,8 +2609,8 @@ def chat_with_ai():
             'accuracy_percentage': accuracy,
             'model_used': 'GPT-3.5-turbo',
             'tokens_used': random.randint(50, 200),
-            'response_timestamp': time.strftime('%Y-%m-%d %H:%M:%S'),
-            'conversation_id': f'conv_{int(time.time())}_{len(message)}'
+            'response_timestamp': colombia_strftime('%Y-%m-%d %H:%M:%S'),
+            'conversation_id': f'conv_{int(get_colombia_now().timestamp())}_{len(message)}'
         }
 
         return jsonify({'result': result})
@@ -3170,19 +3167,11 @@ def validate_coupon():
         # Verificar si el cupón ha expirado usando zona horaria de Colombia
         if coupon.duration_days and coupon.created_at:
             from datetime import datetime, timedelta
-            from pytz import timezone as pytz_timezone
-            col_tz = pytz_timezone('America/Bogota')
-            colombia_now = datetime.now(col_tz)
+            # Usar módulo centralizado de timezone
+            colombia_now = get_colombia_datetime()
             
-            # Asegurar que created_at tenga zona horaria para la comparación
-            if coupon.created_at.tzinfo is None:
-                # Si created_at es naive, asumir que está en UTC y convertir a Colombia
-                utc = pytz_timezone('UTC')
-                created_at_utc = utc.localize(coupon.created_at)
-                created_at_col = created_at_utc.astimezone(col_tz)
-            else:
-                # Si ya tiene zona horaria, convertir a Colombia
-                created_at_col = coupon.created_at.astimezone(col_tz)
+            # Convertir created_at a zona horaria de Colombia usando módulo centralizado
+            created_at_col = utc_to_colombia(coupon.created_at)
             
             expiration_date = created_at_col + timedelta(days=coupon.duration_days)
             if colombia_now > expiration_date:
@@ -3418,10 +3407,6 @@ def historial_compras_usuario():
     
     # Obtener todas las compras del usuario, ordenadas por fecha más reciente
     from app.store.models import Sale, Product
-    from pytz import timezone as pytz_timezone
-    from datetime import datetime
-    
-    col_tz = pytz_timezone('America/Bogota')
     
     # Obtener compras con información del producto
     compras = db.session.query(Sale, Product).join(
@@ -3435,10 +3420,8 @@ def historial_compras_usuario():
         # Formatear fecha en zona horaria de Colombia
         fecha_colombia = sale.created_at
         if fecha_colombia:
-            if fecha_colombia.tzinfo is None:
-                fecha_colombia = col_tz.localize(fecha_colombia)
-            else:
-                fecha_colombia = fecha_colombia.astimezone(col_tz)
+            # Convertir a zona horaria de Colombia usando módulo centralizado
+            fecha_colombia = utc_to_colombia(fecha_colombia)
             fecha_str = fecha_colombia.strftime('%Y-%m-%d %H:%M:%S')
         else:
             fecha_str = 'Fecha no disponible'
@@ -4881,7 +4864,7 @@ def send_chat_message():
                     
                     # Generar nombre seguro
                     filename = secure_filename(file.filename)
-                    timestamp = datetime.utcnow().strftime('%Y%m%d_%H%M%S')
+                    timestamp = get_colombia_now().strftime('%Y%m%d_%H%M%S')
                     unique_filename = f"{timestamp}_{filename}"
                     
                     # Determinar tipo de archivo
@@ -5134,7 +5117,7 @@ def send_chat_message():
                         'sender_id': current_user.id,
                         'recipient_id': recipient_id,
                         'message_type': message_type,
-                        'created_at': datetime.utcnow().isoformat(),
+                        'created_at': get_colombia_now().isoformat(),
                         'attachment_type': 'unknown',
                         'attachment_filename': 'Archivo enviado',
                         'attachment_path': 'unknown'
@@ -6166,7 +6149,7 @@ def sync_messages():
             'status': 'success',
             'data': messages_data,
             'count': len(messages_data),
-            'sync_time': datetime.utcnow().isoformat()
+            'sync_time': get_colombia_now().isoformat()
         })
         
     except Exception as e:

@@ -1,9 +1,6 @@
 from datetime import datetime, time
-import pytz
 from app import db
-
-# Timezone de Colombia
-COLOMBIA_TZ = pytz.timezone('America/Bogota')
+from app.utils.timezone import get_colombia_now, COLOMBIA_TZ
 
 class EmailCleanup(db.Model):
     __tablename__ = 'email_cleanup'
@@ -58,9 +55,7 @@ class EmailCleanup(db.Model):
     
     def get_colombia_datetime(self):
         """Obtiene la fecha/hora actual en timezone de Colombia"""
-        utc_now = datetime.utcnow().replace(tzinfo=pytz.UTC)
-        colombia_now = utc_now.astimezone(COLOMBIA_TZ)
-        return colombia_now
+        return get_colombia_now()
     
     def to_dict(self):
         return {

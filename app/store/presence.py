@@ -286,14 +286,13 @@ def schedule_daily_cleanup():
     """Programar limpieza diaria a las 5:00 AM hora Colombia"""
     import threading
     import time
-    from datetime import timezone, timedelta
     
     def daily_cleanup_worker():
         while True:
             try:
-                # Obtener hora actual en zona horaria Colombia
-                colombia_tz = timezone(timedelta(hours=-5))  # UTC-5
-                now = datetime.now(colombia_tz)
+                # Obtener hora actual en zona horaria Colombia usando módulo centralizado
+                from app.utils.timezone import get_colombia_now
+                now = get_colombia_now()
                 
                 # Ejecutar limpieza a las 5:00 AM
                 if now.hour == 5 and now.minute < 30:

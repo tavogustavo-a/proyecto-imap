@@ -19,37 +19,8 @@ from app.store.models import DriveTransfer
 logger = logging.getLogger(__name__)
 
 # ==================== HELPER FUNCIONES DE ZONA HORARIA ====================
-
-def get_colombia_datetime():
-    """
-    Obtiene la fecha y hora actual en zona horaria de Colombia.
-    Siempre usa UTC como base, independientemente de la zona horaria del servidor.
-    Esto asegura que funcione correctamente en servidores de cualquier ubicación.
-    
-    Returns:
-        datetime: Fecha y hora actual en zona horaria de Colombia (America/Bogota)
-    """
-    try:
-        from pytz import timezone as pytz_timezone
-        col_tz = pytz_timezone('America/Bogota')
-        # Siempre obtener UTC primero, luego convertir a Colombia
-        now_utc = datetime.utcnow()
-        now_utc_with_tz = now_utc.replace(tzinfo=pytz_timezone('UTC'))
-        colombia_time = now_utc_with_tz.astimezone(col_tz)
-        return colombia_time
-    except Exception as e:
-        logger.error(f"[DRIVE_TRANSFER] Error obteniendo hora de Colombia: {str(e)}")
-        # Fallback: retornar UTC si hay error
-        return datetime.utcnow()
-
-def get_colombia_time():
-    """
-    Obtiene solo la hora (time) actual en zona horaria de Colombia.
-    
-    Returns:
-        time: Hora actual en zona horaria de Colombia
-    """
-    return get_colombia_datetime().time()
+# Usar módulo centralizado de timezone
+from app.utils.timezone import get_colombia_now as get_colombia_datetime, get_colombia_time, utc_to_colombia
 
 def get_colombia_date():
     """
@@ -425,12 +396,8 @@ class DriveScheduler:
     def _should_execute_transfer(self, transfer: DriveTransfer) -> bool:
         """Verifica si debe ejecutar una transferencia"""
         try:
-            from pytz import timezone as pytz_timezone
-            
-            # Obtener hora actual de Colombia
-            col_tz = pytz_timezone('America/Bogota')
-            now_utc = datetime.utcnow()
-            now_colombia = now_utc.replace(tzinfo=pytz_timezone('UTC')).astimezone(col_tz)
+            # Obtener hora actual de Colombia usando módulo centralizado
+            now_colombia = get_colombia_datetime()
             current_time = now_colombia.time()
             current_date = now_colombia.date()
             
@@ -440,11 +407,7 @@ class DriveScheduler:
             if transfer.last_processed:
                 last_execution = transfer.last_processed
                 # Convertir last_processed a zona horaria de Colombia para comparar
-                if last_execution.tzinfo is None:
-                    # Si no tiene zona horaria, asumir UTC
-                    last_execution_col = last_execution.replace(tzinfo=pytz_timezone('UTC')).astimezone(col_tz)
-                else:
-                    last_execution_col = last_execution.astimezone(col_tz)
+                last_execution_col = utc_to_colombia(last_execution)
                 
                 if current_date == last_execution_col.date():
                     return False
@@ -587,11 +550,8 @@ class DriveAutoScheduler:
             if not active_transfers:
                 return 3600  # 1 hora si no hay configuraciones
             
-            # Usar hora de Colombia para el cálculo
-            from pytz import timezone as pytz_timezone
-            col_tz = pytz_timezone('America/Bogota')
-            now_utc = datetime.utcnow()
-            now_colombia = now_utc.replace(tzinfo=pytz_timezone('UTC')).astimezone(col_tz)
+            # Usar hora de Colombia para el cálculo (módulo centralizado)
+            now_colombia = get_colombia_datetime()
             current_time = now_colombia.time()
             
             # Encontrar la próxima hora de ejecución
@@ -629,13 +589,10 @@ class DriveAutoScheduler:
 def should_execute_simple(transfer):
     """Verifica si debe ejecutar (método simple)"""
     try:
-        from pytz import timezone as pytz_timezone
         from datetime import timedelta
         
-        # Hora actual de Colombia
-        col_tz = pytz_timezone('America/Bogota')
-        now_utc = datetime.utcnow()
-        now_colombia = now_utc.replace(tzinfo=pytz_timezone('UTC')).astimezone(col_tz)
+        # Hora actual de Colombia usando módulo centralizado
+        now_colombia = get_colombia_datetime()
         current_time = now_colombia.time()
         current_date = now_colombia.date()
         
@@ -650,10 +607,7 @@ def should_execute_simple(transfer):
         hora_modificada_recientemente = False
         if transfer.updated_at:
             updated_at_utc = transfer.updated_at
-            if updated_at_utc.tzinfo is None:
-                updated_at_col = updated_at_utc.replace(tzinfo=pytz_timezone('UTC')).astimezone(col_tz)
-            else:
-                updated_at_col = updated_at_utc.astimezone(col_tz)
+            updated_at_col = utc_to_colombia(updated_at_utc)
             
             time_since_update = now_colombia - updated_at_col
             if time_since_update <= timedelta(minutes=30):
@@ -664,10 +618,7 @@ def should_execute_simple(transfer):
         # Verificar si ya se ejecutó hoy (pero permitir si la hora fue modificada recientemente)
         if transfer.last_processed and not hora_modificada_recientemente:
             last_execution = transfer.last_processed
-            if last_execution.tzinfo is None:
-                last_execution_col = last_execution.replace(tzinfo=pytz_timezone('UTC')).astimezone(col_tz)
-            else:
-                last_execution_col = last_execution.astimezone(col_tz)
+            last_execution_col = utc_to_colombia(last_execution)
             
             # Si ya se ejecutó hoy Y la hora NO fue modificada recientemente, no ejecutar
             if current_date == last_execution_col.date():
@@ -679,7 +630,7 @@ def should_execute_simple(transfer):
         if current_minutes >= target_minutes:
             # La hora objetivo ya pasó hoy
             if not transfer.last_processed or (transfer.last_processed and 
-                transfer.last_processed.replace(tzinfo=pytz_timezone('UTC')).astimezone(col_tz).date() < current_date) or hora_modificada_recientemente:
+                utc_to_colombia(transfer.last_processed).date() < current_date) or hora_modificada_recientemente:
                 # No se ha ejecutado hoy O la hora fue modificada recientemente, ejecutar inmediatamente
                 motivo = "hora modificada recientemente" if hora_modificada_recientemente else "hora objetivo ya pasó"
                 logger.info(f"[DRIVE_TRANSFER] Transfer {transfer.id}: ⚡ Ejecutando inmediatamente - {motivo}")
@@ -756,14 +707,11 @@ def execute_transfer_simple(transfer, app):
 def calculate_smart_wait_time(transfers):
     """Calcula tiempo de espera inteligente basado en las transferencias"""
     try:
-        from pytz import timezone as pytz_timezone
-        
         if not transfers:
             return 3600  # 1 hora si no hay transferencias
         
-        col_tz = pytz_timezone('America/Bogota')
-        now_utc = datetime.utcnow()
-        now_colombia = now_utc.replace(tzinfo=pytz_timezone('UTC')).astimezone(col_tz)
+        # Usar módulo centralizado de timezone
+        now_colombia = get_colombia_datetime()
         current_time = now_colombia.time()
         
         min_wait = 3600  # Mínimo 1 hora
@@ -850,7 +798,6 @@ def schedule_cleanup_task(transfer_id, days_old, scheduled_time):
     """Programa una tarea de limpieza para una hora específica"""
     try:
         from datetime import datetime, time as dt_time
-        from pytz import timezone as pytz_timezone
         
         # Generar ID único para la tarea
         # Usar UTC para el task_id, independientemente de la zona horaria del servidor
@@ -875,12 +822,10 @@ def check_scheduled_cleanups():
     """Verifica si hay limpiezas programadas que deben ejecutarse"""
     try:
         from datetime import datetime, time as dt_time
-        from pytz import timezone as pytz_timezone
         from app import create_app
         
-        col_tz = pytz_timezone('America/Bogota')
-        now_utc = datetime.utcnow()
-        now_colombia = now_utc.replace(tzinfo=pytz_timezone('UTC')).astimezone(col_tz)
+        # Usar módulo centralizado de timezone
+        now_colombia = get_colombia_datetime()
         current_time = now_colombia.time()
         
         tasks_to_execute = []

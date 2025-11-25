@@ -4,7 +4,7 @@
 
 import threading
 import time
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta
 from app import db
 
 def initialize_cleanup_system(mode='smart'):
@@ -28,9 +28,9 @@ def schedule_smart_cleanup():
     def smart_cleanup_worker():
         while True:
             try:
-                # Obtener hora actual en Colombia (UTC-5)
-                colombia_tz = timezone(timedelta(hours=-5))
-                now = datetime.now(colombia_tz)
+                # Obtener hora actual en Colombia usando módulo centralizado
+                from app.utils.timezone import get_colombia_now
+                now = get_colombia_now()
                 
                 # Verificar si es 5:00 AM y día 28 del mes
                 if now.hour == 5 and now.minute == 0 and now.day == 28:
@@ -66,9 +66,9 @@ def schedule_daily_cleanup():
     def daily_cleanup_worker():
         while True:
             try:
-                # Obtener hora actual en Colombia (UTC-5)
-                colombia_tz = timezone(timedelta(hours=-5))
-                now = datetime.now(colombia_tz)
+                # Obtener hora actual en Colombia usando módulo centralizado
+                from app.utils.timezone import get_colombia_now
+                now = get_colombia_now()
                 
                 # Verificar si es 5:00 AM
                 if now.hour == 5 and now.minute == 0:

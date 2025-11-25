@@ -28,6 +28,17 @@ from flask_seasurf import SeaSurf
 from app.extensions import db, migrate
 from app.models import User  # <-- Importa tu modelo User
 
+# ⭐ Configurar zona horaria de Colombia a nivel de aplicación
+import os
+os.environ['TZ'] = 'America/Bogota'
+try:
+    import time
+    time.tzset()  # Solo funciona en Unix/Linux
+except (AttributeError, ImportError):
+    # En Windows, tzset no existe, pero no es crítico
+    # La aplicación usará las funciones de timezone.py
+    pass
+
 def create_app(config_class_passed=None):
     current_app = Flask(__name__)
 

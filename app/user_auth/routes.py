@@ -169,11 +169,10 @@ def estadisticas():
         return redirect(url_for("main_bp.home"))
     
     # Calcular fecha límite (3 meses hacia atrás desde hoy)
-    from datetime import datetime, timedelta
-    from pytz import timezone as pytz_timezone
+    from datetime import timedelta
     
-    col_tz = pytz_timezone('America/Bogota')
-    fecha_hoy = datetime.now(col_tz)
+    from app.utils.timezone import get_colombia_now, utc_to_colombia
+    fecha_hoy = get_colombia_now()
     fecha_limite = fecha_hoy - timedelta(days=90)  # 3 meses = aproximadamente 90 días
     
     # Obtener compras de los últimos 3 meses
@@ -267,10 +266,8 @@ def estadisticas():
     for sale, product in compras:
         fecha_colombia = sale.created_at
         if fecha_colombia:
-            if fecha_colombia.tzinfo is None:
-                fecha_colombia = col_tz.localize(fecha_colombia)
-            else:
-                fecha_colombia = fecha_colombia.astimezone(col_tz)
+            # Convertir a zona horaria de Colombia usando módulo centralizado
+            fecha_colombia = utc_to_colombia(fecha_colombia)
             fecha_str = fecha_colombia.strftime('%Y-%m-%d %H:%M:%S')
             fecha_corta = fecha_colombia.strftime('%d/%m/%Y')
         else:
