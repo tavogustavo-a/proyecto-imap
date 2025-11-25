@@ -231,11 +231,7 @@ function initializeNotifications() {
         banner.className = 'notification-permission-banner';
         banner.innerHTML = `
             <p>¿Permitir notificaciones para recibir mensajes nuevos?</p>
-            <button onclick="requestNotificationPermission().then(permission => {
-                if (permission) {
-                    this.parentElement.style.display = 'none';
-                }
-            })">Permitir</button>
+            <button class="request-notification-permission-btn" data-action="request-notification-permission">Permitir</button>
         `;
         document.body.appendChild(banner);
     }
@@ -465,3 +461,24 @@ window.ChatEnhancements = {
 document.addEventListener('DOMContentLoaded', initializeChatEnhancements);
 
 } // Cerrar el bloque else
+
+// ============================================================================
+// EVENT LISTENERS DELEGADOS PARA CSP COMPLIANCE
+// ============================================================================
+
+// Event listener delegado para solicitar permisos de notificación (CSP compliant)
+document.addEventListener('click', function(e) {
+    const target = e.target.closest('[data-action="request-notification-permission"]');
+    if (!target) return;
+    
+    if (typeof requestNotificationPermission === 'function') {
+        requestNotificationPermission().then(permission => {
+            if (permission) {
+                const banner = target.closest('.notification-permission-banner');
+                if (banner) {
+                    banner.style.display = 'none';
+                }
+            }
+        });
+    }
+});

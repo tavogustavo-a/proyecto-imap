@@ -242,7 +242,7 @@ function renderLicensesGrid() {
 function createArchivedLicenseCard(license) {
     return `
         <div class="archived-license-card" data-license-id="${license.id}">
-            <button class="archived-license-action-btn" onclick="showArchivedLicenseMenu(${license.id})" title="Opciones">
+            <button class="archived-license-action-btn" data-action="show-archived-license-menu" data-license-id="${license.id}" title="Opciones">
                 <i class="fas fa-ellipsis-v"></i>
             </button>
             <div class="archived-license-card-header">
@@ -293,13 +293,13 @@ function createAccountItem(account) {
             <div class="account-password">${account.password}</div>
             
             <div class="account-actions">
-                <button class="account-action-btn" onclick="editAccount(${account.id})" title="Editar cuenta">
+                <button class="account-action-btn" data-action="edit-account" data-account-id="${account.id}" title="Editar cuenta">
                     <i class="fas fa-edit"></i>
                 </button>
-                <button class="account-action-btn" onclick="assignAccount(${account.id})" title="Asignar cuenta">
+                <button class="account-action-btn" data-action="assign-account" data-account-id="${account.id}" title="Asignar cuenta">
                     <i class="fas fa-user-plus"></i>
                 </button>
-                <button class="account-action-btn danger" onclick="removeAccount(${account.id})" title="Eliminar cuenta">
+                <button class="account-action-btn danger" data-action="remove-account" data-account-id="${account.id}" title="Eliminar cuenta">
                     <i class="fas fa-trash"></i>
                 </button>
             </div>
@@ -641,11 +641,11 @@ function showPositionModal(currentPosition) {
     modal.innerHTML = `
         <div class="license-position-content">
             <h3>Editar Posición</h3>
-            <form class="license-position-form" onsubmit="updateLicensePosition(event)">
+            <form class="license-position-form" data-action="update-license-position" data-license-id="${licenseId}">
                 <label for="newPosition">Nueva posición:</label>
                 <input type="number" id="newPosition" value="${currentPosition}" min="1" required>
                 <div class="license-position-buttons">
-                    <button type="button" class="btn-panel btn-red" onclick="closePositionModal()">Cancelar</button>
+                    <button type="button" class="btn-panel btn-red" data-action="close-position-modal">Cancelar</button>
                     <button type="submit" class="btn-panel btn-green">Guardar</button>
                 </div>
             </form>
@@ -653,6 +653,22 @@ function showPositionModal(currentPosition) {
     `;
     
     document.body.appendChild(modal);
+    
+    // Configurar event listeners para formulario y botones (CSP compliant)
+    const form = modal.querySelector('.license-position-form');
+    if (form) {
+        form.addEventListener('submit', function(e) {
+            e.preventDefault();
+            const licenseId = parseInt(form.getAttribute('data-license-id'));
+            currentLicenseId = licenseId;
+            updateLicensePosition(e);
+        });
+    }
+    
+    const cancelBtn = modal.querySelector('[data-action="close-position-modal"]');
+    if (cancelBtn) {
+        cancelBtn.addEventListener('click', closePositionModal);
+    }
     
     // Cerrar modal al hacer clic fuera
     modal.addEventListener('click', function(e) {
@@ -752,7 +768,7 @@ function showAddAccountModal(licenseId) {
     modal.innerHTML = `
         <div class="license-position-content">
             <h3>Agregar Cuenta</h3>
-            <form class="license-position-form" onsubmit="addAccount(event, ${licenseId})">
+            <form class="license-position-form" data-action="add-account" data-license-id="${licenseId}">
                 <label for="accountIdentifier">Identificador de cuenta:</label>
                 <input type="text" id="accountIdentifier" placeholder="Ej: disneyprem5+0k9" required>
                 
@@ -763,7 +779,7 @@ function showAddAccountModal(licenseId) {
                 <input type="text" id="accountPassword" placeholder="Ej: 3dw9k65tz" required>
                 
                 <div class="license-position-buttons">
-                    <button type="button" class="btn-panel btn-red" onclick="closeAddAccountModal()">Cancelar</button>
+                    <button type="button" class="btn-panel btn-red" data-action="close-add-account-modal">Cancelar</button>
                     <button type="submit" class="btn-panel btn-green">Agregar</button>
                 </div>
             </form>
@@ -771,6 +787,21 @@ function showAddAccountModal(licenseId) {
     `;
     
     document.body.appendChild(modal);
+    
+    // Configurar event listeners para formulario y botones (CSP compliant)
+    const form = modal.querySelector('.license-position-form');
+    if (form) {
+        form.addEventListener('submit', function(e) {
+            e.preventDefault();
+            const licenseId = parseInt(form.getAttribute('data-license-id'));
+            addAccount(e, licenseId);
+        });
+    }
+    
+    const cancelBtn = modal.querySelector('[data-action="close-add-account-modal"]');
+    if (cancelBtn) {
+        cancelBtn.addEventListener('click', closeAddAccountModal);
+    }
     
     // Cerrar modal al hacer clic fuera
     modal.addEventListener('click', function(e) {
@@ -2262,7 +2293,7 @@ function createArchivedLicenseMenu(licenseId) {
 
     menu.innerHTML = `
         <div class="archived-license-menu-content">
-            <button class="archived-license-menu-item" onclick="restoreLicense(${licenseId})">
+            <button class="archived-license-menu-item" data-action="restore-license" data-license-id="${licenseId}">
                 <i class="fas fa-undo"></i> Desarchivar
             </button>
         </div>
@@ -2402,10 +2433,10 @@ function createLicenseMenu(licenseId) {
 
     menu.innerHTML = `
         <div class="license-menu-content">
-            <button class="license-menu-item" onclick="changeLicensePosition(${licenseId})">
+            <button class="license-menu-item" data-action="change-license-position" data-license-id="${licenseId}">
                 <i class="fas fa-sort"></i> ${position} Cambiar Posición
             </button>
-            <button class="license-menu-item" onclick="archiveLicense(${licenseId})">
+            <button class="license-menu-item" data-action="archive-license" data-license-id="${licenseId}">
                 <i class="fas fa-archive"></i> Archivar
             </button>
         </div>
@@ -2636,10 +2667,10 @@ function showGestionarProductosModal() {
                                     <strong style="font-size: 0.8rem; font-weight: 600;">${license.product_name}</strong>
                                 </div>
                                 <div style="display: flex; gap: 0.4rem; align-items: center;">
-                                    <button class="btn btn-sm" style="padding: 4px 8px; font-size: 0.7rem;" onclick="changeProductPosition(${license.id})">
+                                    <button class="btn btn-sm" style="padding: 4px 8px; font-size: 0.7rem;" data-action="change-product-position" data-license-id="${license.id}">
                                         C. P. <span style="color: #666; font-size: 0.7rem;">${license.position}</span>
                                     </button>
-                                    <button class="btn btn-sm btn-danger" style="padding: 4px 8px; font-size: 0.85rem;" onclick="archiveProductFromModal(${license.id})" title="Archivar">
+                                    <button class="btn btn-sm btn-danger" style="padding: 4px 8px; font-size: 0.85rem;" data-action="archive-product-from-modal" data-license-id="${license.id}" title="Archivar">
                                         <i class="fas fa-archive"></i>
                                     </button>
                                 </div>
@@ -2823,3 +2854,70 @@ async function archiveProductFromModal(licenseId) {
         showError('Error de conexión al archivar el producto');
     }
 }
+
+// ============================================================================
+// EVENT LISTENERS DELEGADOS PARA CSP COMPLIANCE
+// ============================================================================
+
+// Event listener delegado para todos los data-actions (CSP compliant)
+document.addEventListener('click', function(e) {
+    const target = e.target.closest('[data-action]');
+    if (!target) return;
+    
+    const action = target.getAttribute('data-action');
+    
+    switch(action) {
+        case 'show-archived-license-menu':
+            const archivedLicenseId = parseInt(target.getAttribute('data-license-id'));
+            showArchivedLicenseMenu(archivedLicenseId);
+            break;
+            
+        case 'edit-account':
+            const editAccountId = parseInt(target.getAttribute('data-account-id'));
+            editAccount(editAccountId);
+            break;
+            
+        case 'assign-account':
+            const assignAccountId = parseInt(target.getAttribute('data-account-id'));
+            assignAccount(assignAccountId);
+            break;
+            
+        case 'remove-account':
+            const removeAccountId = parseInt(target.getAttribute('data-account-id'));
+            removeAccount(removeAccountId);
+            break;
+            
+        case 'restore-license':
+            const restoreLicenseId = parseInt(target.getAttribute('data-license-id'));
+            restoreLicense(restoreLicenseId);
+            break;
+            
+        case 'change-license-position':
+            const changePosLicenseId = parseInt(target.getAttribute('data-license-id'));
+            changeLicensePosition(changePosLicenseId);
+            break;
+            
+        case 'archive-license':
+            const archiveLicenseId = parseInt(target.getAttribute('data-license-id'));
+            archiveLicense(archiveLicenseId);
+            break;
+            
+        case 'change-product-position':
+            const changeProductPosId = parseInt(target.getAttribute('data-license-id'));
+            changeProductPosition(changeProductPosId);
+            break;
+            
+        case 'archive-product-from-modal':
+            const archiveProductId = parseInt(target.getAttribute('data-license-id'));
+            archiveProductFromModal(archiveProductId);
+            break;
+            
+        case 'close-position-modal':
+            closePositionModal();
+            break;
+            
+        case 'close-add-account-modal':
+            closeAddAccountModal();
+            break;
+    }
+});

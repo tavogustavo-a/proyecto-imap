@@ -551,7 +551,7 @@ function initMediaSearch() {
         results.forEach(result => {
             const poster = result.poster_path || null;
             const posterHtml = poster 
-                ? `<img src="${poster}" alt="Poster" class="media-poster" style="width: 150px; height: 225px; object-fit: cover; border-radius: 8px;" onerror="this.style.display='none'">`
+                ? `<img src="${poster}" alt="Poster" class="media-poster" style="width: 150px; height: 225px; object-fit: cover; border-radius: 8px;" data-action-error="hide-on-error">`
                 : '<div class="no-image-placeholder" style="width: 150px; height: 225px; background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 8px; display: flex; align-items: center; justify-content: center; text-align: center; font-size: 12px; color: #6c757d;">No se encontró imagen para este resultado</div>';
             
             // Restaurar estado del botón
@@ -868,7 +868,7 @@ function initTraduccionForm() {
                                 </div>
                                 <hr>
                                 <div class="text-center">
-                                    <button class="btn btn-sm btn-outline-primary" onclick="navigator.clipboard.writeText('${translation.translated_text.replace(/'/g, "\\'")}')">
+                                    <button class="btn btn-sm btn-outline-primary copy-to-clipboard-btn" data-action="copy-to-clipboard" data-text="${translation.translated_text.replace(/'/g, "&#39;").replace(/"/g, "&quot;")}">
                                         <i class="fas fa-copy"></i> Copiar traducción
                                     </button>
                                 </div>
@@ -979,7 +979,7 @@ function initGeolocalizacionForm() {
                                     <a href="${mapUrl}" target="_blank" class="btn btn-sm btn-outline-primary">
                                         <i class="fas fa-map"></i> Ver en Mapa
                                     </a>
-                                    <button class="btn btn-sm btn-outline-secondary ms-2" onclick="navigator.clipboard.writeText('${location.latitude}, ${location.longitude}')">
+                                    <button class="btn btn-sm btn-outline-secondary ms-2 copy-to-clipboard-btn" data-action="copy-to-clipboard" data-text="${location.latitude}, ${location.longitude}">
                                         <i class="fas fa-copy"></i> Copiar Coordenadas
                                     </button>
                                 </div>
@@ -1043,7 +1043,7 @@ function initNoticiasForm() {
                         <div class="row g-0">
                             ${article.image_url ? `
                                 <div class="col-md-3">
-                                    <img src="${article.image_url}" class="img-fluid rounded-start h-100" style="object-fit: cover;" alt="Imagen de noticia" onerror="this.style.display='none'">
+                                    <img src="${article.image_url}" class="img-fluid rounded-start h-100" style="object-fit: cover;" alt="Imagen de noticia" data-action-error="hide-on-error">
                                 </div>
                             ` : ''}
                             <div class="col-md-${article.image_url ? '9' : '12'}">
@@ -1307,7 +1307,7 @@ function initRedesSocialesForm() {
                                     <a href="${social.url}" target="_blank" class="btn btn-sm btn-outline-primary">
                                         <i class="fas fa-external-link-alt"></i> Ver Publicación
                                     </a>
-                                    <button class="btn btn-sm btn-outline-secondary ms-2" onclick="navigator.clipboard.writeText('${social.url}')">
+                                    <button class="btn btn-sm btn-outline-secondary ms-2 copy-to-clipboard-btn" data-action="copy-to-clipboard" data-text="${social.url.replace(/'/g, "&#39;").replace(/"/g, "&quot;")}">
                                         <i class="fas fa-copy"></i> Copiar URL
                                     </button>
                                 </div>
@@ -1374,7 +1374,7 @@ function initReconocimientoImagenesForm() {
                                         <h6 class="text-warning">
                                             <i class="fas fa-image"></i> Vista Previa
                                         </h6>
-                                        <img src="${analysis.image_url}" alt="Imagen analizada" class="img-fluid rounded" style="max-height: 200px; object-fit: cover;" onerror="this.style.display='none'">
+                                        <img src="${analysis.image_url}" alt="Imagen analizada" class="img-fluid rounded" style="max-height: 200px; object-fit: cover;" data-action-error="hide-on-error">
                                     </div>
                                     <div class="col-md-6">
                                         <h6 class="text-info">
@@ -1983,5 +1983,37 @@ document.addEventListener('DOMContentLoaded', function() {
     }
   });
 }); 
+
+// ============================================================================
+// EVENT LISTENERS DELEGADOS PARA CSP COMPLIANCE
+// ============================================================================
+
+// Event listener delegado para copiar al portapapeles (CSP compliant)
+document.addEventListener('click', function(e) {
+    const target = e.target.closest('[data-action="copy-to-clipboard"]');
+    if (!target) return;
+    
+    const text = target.getAttribute('data-text').replace(/&#39;/g, "'").replace(/&quot;/g, '"');
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(() => {
+            // Opcional: mostrar notificación de éxito
+            const originalText = target.innerHTML;
+            target.innerHTML = '<i class="fas fa-check"></i> Copiado';
+            setTimeout(() => {
+                target.innerHTML = originalText;
+            }, 2000);
+        }).catch(err => {
+            console.error('Error al copiar:', err);
+        });
+    }
+});
+
+// Event listener para errores de imagen (CSP compliant)
+document.addEventListener('error', function(e) {
+    const target = e.target;
+    if (target.tagName === 'IMG' && target.hasAttribute('data-action-error') && target.getAttribute('data-action-error') === 'hide-on-error') {
+        target.style.display = 'none';
+    }
+}, true);
 
 

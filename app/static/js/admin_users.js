@@ -61,7 +61,9 @@ document.addEventListener("DOMContentLoaded", function() {
   // --- Búsqueda instantánea de usuarios ---
   if (userSearchInput && userListContainer) {
     let searchTimeout = null;
-    userSearchInput.addEventListener('input', function() {
+    
+    // Función de búsqueda reutilizable
+    function performSearch() {
       clearTimeout(searchTimeout);
       searchTimeout = setTimeout(() => {
         const query = userSearchInput.value.trim();
@@ -78,8 +80,20 @@ document.addEventListener("DOMContentLoaded", function() {
           }
         })
         .catch(err => console.error("Error searchUsers:", err));
-      }, 200);
+      }, 150); // Reducido de 200ms a 150ms para mejor respuesta
+    }
+    
+    // Múltiples listeners para compatibilidad con Chrome y otros navegadores
+    userSearchInput.addEventListener('input', performSearch);
+    userSearchInput.addEventListener('keyup', function(e) {
+      // Evitar búsqueda en teclas especiales
+      if (e.key === 'Enter' || e.key === 'Escape' || e.key === 'Tab') {
+        return;
+      }
+      performSearch();
     });
+    // Para campos type="search" en Chrome
+    userSearchInput.addEventListener('search', performSearch);
   }
 
   // Función para verificar si un email ya existe
@@ -550,19 +564,47 @@ document.addEventListener("DOMContentLoaded", function() {
   // Event listeners para el popup
   const editUserOverlay = document.getElementById('editUserOverlay');
   
+  // Función para manejar clic en overlay (compatible con Chrome)
+  function handleOverlayClick(e) {
+    // Verificar que el clic es directamente en el overlay
+    if (e.target === editUserOverlay || e.target.id === 'editUserOverlay') {
+      e.preventDefault();
+      e.stopPropagation();
+      hideEditUserPopup();
+      return false;
+    }
+  }
+  
   if (editUserOverlay) {
-    editUserOverlay.addEventListener('click', function(e) {
-      // Solo cerrar si el clic es directamente en el overlay, no en el popup
-      if (e.target === editUserOverlay) {
-        hideEditUserPopup();
+    // Múltiples formas de capturar el evento para compatibilidad con Chrome
+    editUserOverlay.addEventListener('click', handleOverlayClick, true); // Capture phase
+    editUserOverlay.addEventListener('mousedown', function(e) {
+      // También capturar mousedown para mejor compatibilidad
+      if (e.target === editUserOverlay || e.target.id === 'editUserOverlay') {
+        e.preventDefault();
+        e.stopPropagation();
       }
-    });
+    }, true);
+    
+    // Prevenir que el popup cierre cuando se hace clic dentro de él
+    if (editUserPopup) {
+      editUserPopup.addEventListener('click', function(e) {
+        e.stopPropagation();
+      });
+      
+      // También prevenir mousedown dentro del popup
+      editUserPopup.addEventListener('mousedown', function(e) {
+        e.stopPropagation();
+      });
+    }
   }
   
   // También agregar listener para cerrar con ESC
   document.addEventListener('keydown', function(e) {
-    if (e.key === 'Escape' && editUserPopup.style.display === 'block') {
-      hideEditUserPopup();
+    if (e.key === 'Escape' || e.keyCode === 27) {
+      if (editUserPopup && editUserPopup.style.display === 'block') {
+        hideEditUserPopup();
+      }
     }
   });
 

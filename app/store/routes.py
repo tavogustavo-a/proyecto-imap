@@ -2621,10 +2621,12 @@ def chat_with_ai():
     except Exception as e:
         return jsonify({'error': f'Ocurrió un error inesperado: {str(e)}'}), 500
 
-from flask import jsonify
+from flask import jsonify, stream_with_context, request as flask_request
 import json
+import io
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
+import mimetypes
 
 @store_bp.route('/api/drive-files')
 def api_drive_files():
@@ -2660,6 +2662,147 @@ def api_drive_files():
     except Exception as e:
         import traceback
         return jsonify({'error': f'Error al consultar Drive: {str(e)}'}), 500
+
+@store_bp.route('/drive/proxy', methods=['GET', 'HEAD', 'OPTIONS'])
+def api_drive_media():
+    """Proxy mejorado para servir imágenes y videos de Google Drive con streaming y compatibilidad móvil/SSL"""
+    # Manejar CORS preflight (OPTIONS)
+    if flask_request.method == 'OPTIONS':
+        response = Response()
+        origin = flask_request.headers.get('Origin')
+        if origin:
+            response.headers['Access-Control-Allow-Origin'] = origin
+            response.headers['Access-Control-Allow-Credentials'] = 'true'
+            response.headers['Access-Control-Allow-Methods'] = 'GET, HEAD, OPTIONS'
+            response.headers['Access-Control-Allow-Headers'] = 'Range, Content-Type, Accept, Authorization'
+            response.headers['Access-Control-Max-Age'] = '3600'
+        return response
+    
+    file_id = flask_request.args.get('file_id')
+    api_id = flask_request.args.get('api_id')
+    media_type = flask_request.args.get('type', 'image')  # 'image' o 'video'
+    
+    if not file_id:
+        return jsonify({'error': 'Falta file_id'}), 400
+    
+    if api_id:
+        api = ApiInfo.query.get(api_id)
+        if not api or api.api_type != "Drive" or not api.enabled:
+            return jsonify({'error': 'API no encontrada'}), 404
+    else:
+        api = ApiInfo.query.filter_by(api_type="Drive", enabled=True).first()
+        if not api:
+            return jsonify({'error': 'API no configurada'}), 500
+    
+    try:
+        import google.auth.transport.requests
+        import requests
+        
+        cred_json_str = api.api_key
+        cred_dict = json.loads(cred_json_str)
+        SCOPES = ['https://www.googleapis.com/auth/drive.readonly']
+        creds = service_account.Credentials.from_service_account_info(
+            cred_dict, scopes=SCOPES
+        )
+        
+        # Refrescar token de acceso
+        auth_req = google.auth.transport.requests.Request()
+        creds.refresh(auth_req)
+        access_token = creds.token
+        
+        # URL directa a la API de Drive
+        url = f"https://www.googleapis.com/drive/v3/files/{file_id}?alt=media"
+        headers = {"Authorization": f"Bearer {access_token}"}
+        
+        # Soporte para Range requests (necesario para streaming de video en móviles)
+        range_header = flask_request.headers.get('Range')
+        if range_header:
+            headers['Range'] = range_header
+        
+        # Request con streaming habilitado y timeout aumentado para móviles
+        req = requests.get(url, headers=headers, stream=True, timeout=(10, 300))
+        
+        if req.status_code not in [200, 206]:  # 206 = Partial Content (Range request)
+            return jsonify({'error': f'Drive error: {req.status_code}'}), req.status_code
+        
+        # Detectar Content-Type si no viene en headers
+        content_type = req.headers.get('Content-Type')
+        if not content_type:
+            # Intentar detectar por tipo de media
+            if media_type == 'video':
+                content_type = 'video/mp4'  # Default para videos
+            else:
+                content_type = 'image/jpeg'  # Default para imágenes
+        
+        # Asegurar Content-Type correcto para compatibilidad móvil
+        if media_type == 'video' and 'video' not in content_type:
+            content_type = 'video/mp4'
+        elif media_type == 'image' and 'image' not in content_type:
+            content_type = 'image/jpeg'
+        
+        def generate():
+            try:
+                for chunk in req.iter_content(chunk_size=8192):
+                    if chunk:
+                        yield chunk
+            except Exception as e:
+                current_app.logger.error(f'Error streaming chunk: {str(e)}')
+                raise
+        
+        # Crear respuesta streaming
+        response = Response(
+            stream_with_context(generate()),
+            status=req.status_code,
+            content_type=content_type,
+            direct_passthrough=False
+        )
+        
+        # Headers esenciales para SSL estricto y compatibilidad móvil
+        response.headers['X-Content-Type-Options'] = 'nosniff'
+        response.headers['X-Frame-Options'] = 'SAMEORIGIN'
+        response.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'
+        
+        # Headers para CORS (necesario para algunos móviles)
+        origin = flask_request.headers.get('Origin')
+        if origin:
+            response.headers['Access-Control-Allow-Origin'] = origin
+            response.headers['Access-Control-Allow-Credentials'] = 'true'
+            response.headers['Access-Control-Allow-Methods'] = 'GET, HEAD, OPTIONS'
+            response.headers['Access-Control-Allow-Headers'] = 'Range, Content-Type, Accept'
+            response.headers['Access-Control-Expose-Headers'] = 'Content-Length, Content-Range, Accept-Ranges'
+        
+        # Headers para streaming y cache
+        headers_to_copy = ['Content-Length', 'Content-Range', 'Accept-Ranges', 'Last-Modified', 'ETag']
+        for header in headers_to_copy:
+            if header in req.headers:
+                response.headers[header] = req.headers[header]
+        
+        # Cache control optimizado para móviles
+        if 'Cache-Control' not in response.headers:
+            if media_type == 'video':
+                # Videos: cache más largo pero permitir revalidación
+                response.headers['Cache-Control'] = 'public, max-age=7200, must-revalidate'
+            else:
+                # Imágenes: cache largo
+                response.headers['Cache-Control'] = 'public, max-age=86400'
+        
+        # Headers adicionales para compatibilidad móvil
+        response.headers['Accept-Ranges'] = 'bytes'
+        response.headers['Content-Disposition'] = 'inline'  # Mostrar en lugar de descargar
+        
+        # Para SSL estricto: asegurar que no haya contenido mixto
+        response.headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains'
+        
+        return response
+        
+    except requests.exceptions.Timeout:
+        return jsonify({'error': 'Timeout al conectar con Google Drive'}), 504
+    except requests.exceptions.RequestException as e:
+        current_app.logger.error(f'Error en request a Drive: {str(e)}')
+        return jsonify({'error': f'Error de conexión: {str(e)}'}), 502
+    except Exception as e:
+        current_app.logger.error(f'Error inesperado en proxy: {str(e)}')
+        return jsonify({'error': str(e)}), 500
 
 @store_bp.route('/admin/work_sheets')
 @admin_required

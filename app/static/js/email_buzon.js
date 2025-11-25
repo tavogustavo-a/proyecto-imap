@@ -702,15 +702,41 @@ function deleteEmailPermanently() {
   }
 }
 
-// Cerrar modal al hacer clic fuera
+// Cerrar modal al hacer clic fuera (mejorado para Chrome)
 document.addEventListener('DOMContentLoaded', function() {
   const modal = document.getElementById('viewEmailModal');
+  
+  // Función para manejar clic en modal (compatible con Chrome)
+  function handleModalClick(e) {
+    if (e.target === modal || e.target.id === 'viewEmailModal') {
+      e.preventDefault();
+      e.stopPropagation();
+      closeViewEmailModal();
+      return false;
+    }
+  }
+  
   if (modal) {
-    modal.addEventListener('click', function(e) {
-      if (e.target === modal) {
-        closeViewEmailModal();
+    // Múltiples formas de capturar el evento para compatibilidad con Chrome
+    modal.addEventListener('click', handleModalClick, true); // Capture phase
+    modal.addEventListener('mousedown', function(e) {
+      // También capturar mousedown para mejor compatibilidad
+      if (e.target === modal || e.target.id === 'viewEmailModal') {
+        e.preventDefault();
+        e.stopPropagation();
       }
-    });
+    }, true);
+    
+    // Prevenir que el contenido del modal cierre el modal cuando se hace clic dentro
+    const modalContent = modal.querySelector('.edit-modal-content, .modal-content');
+    if (modalContent) {
+      modalContent.addEventListener('click', function(e) {
+        e.stopPropagation();
+      });
+      modalContent.addEventListener('mousedown', function(e) {
+        e.stopPropagation();
+      });
+    }
   }
 });
 
@@ -1123,22 +1149,31 @@ document.addEventListener('DOMContentLoaded', function() {
   const clearSearchBtn = document.getElementById('clearSearchBtn');
   
   if (searchInput) {
-    // Búsqueda automática mientras escribes
-    searchInput.addEventListener('input', function() {
-      searchEmails(this.value);
-      // Mostrar/ocultar botón X según si hay texto
-      if (clearSearchBtn) {
-        clearSearchBtn.style.display = this.value.length > 0 ? 'flex' : 'none';
-      }
-    });
+    let searchTimeout = null;
     
-    // También funciona con keyup para compatibilidad
-    searchInput.addEventListener('keyup', function() {
-      searchEmails(this.value);
-      if (clearSearchBtn) {
-        clearSearchBtn.style.display = this.value.length > 0 ? 'flex' : 'none';
+    // Función de búsqueda reutilizable con debounce
+    function performEmailSearch() {
+      clearTimeout(searchTimeout);
+      searchTimeout = setTimeout(() => {
+        searchEmails(searchInput.value);
+        // Mostrar/ocultar botón X según si hay texto
+        if (clearSearchBtn) {
+          clearSearchBtn.style.display = searchInput.value.length > 0 ? 'flex' : 'none';
+        }
+      }, 150); // Timeout reducido para mejor respuesta
+    }
+    
+    // Múltiples listeners para compatibilidad con Chrome y otros navegadores
+    searchInput.addEventListener('input', performEmailSearch);
+    searchInput.addEventListener('keyup', function(e) {
+      // Evitar búsqueda en teclas especiales
+      if (e.key === 'Enter' || e.key === 'Escape' || e.key === 'Tab') {
+        return;
       }
+      performEmailSearch();
     });
+    // Para campos type="search" en Chrome
+    searchInput.addEventListener('search', performEmailSearch);
   }
   
   // Event listener para botón X de limpiar búsqueda
@@ -1427,13 +1462,37 @@ function showNotification(message, type) {
 }
 
   // Event listeners para el modal
+  // Event listeners para el modal de edición (mejorado para Chrome)
   const editModal = document.getElementById('editModal');
   if (editModal) {
-    editModal.addEventListener('click', function(e) {
-      if (e.target === this) {
+    // Función para manejar clic en modal (compatible con Chrome)
+    function handleEditModalClick(e) {
+      if (e.target === editModal || e.target.id === 'editModal') {
+        e.preventDefault();
+        e.stopPropagation();
         closeEditModal();
+        return false;
       }
-    });
+    }
+    
+    editModal.addEventListener('click', handleEditModalClick, true); // Capture phase
+    editModal.addEventListener('mousedown', function(e) {
+      if (e.target === editModal || e.target.id === 'editModal') {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+    }, true);
+    
+    // Prevenir que el contenido del modal cierre el modal
+    const editModalContent = editModal.querySelector('.edit-modal-content, .modal-content');
+    if (editModalContent) {
+      editModalContent.addEventListener('click', function(e) {
+        e.stopPropagation();
+      });
+      editModalContent.addEventListener('mousedown', function(e) {
+        e.stopPropagation();
+      });
+    }
   }
 
   const closeEditModalBtn = document.getElementById('closeEditModal');
@@ -1469,14 +1528,37 @@ function showNotification(message, type) {
     });
   });
 
-  // Event listeners para el modal de etiquetas
+  // Event listeners para el modal de etiquetas (mejorado para Chrome)
   const editTagModal = document.getElementById('editTagModal');
   if (editTagModal) {
-    editTagModal.addEventListener('click', function(e) {
-      if (e.target === this) {
+    // Función para manejar clic en modal (compatible con Chrome)
+    function handleEditTagModalClick(e) {
+      if (e.target === editTagModal || e.target.id === 'editTagModal') {
+        e.preventDefault();
+        e.stopPropagation();
         closeEditTagModal();
+        return false;
       }
-    });
+    }
+    
+    editTagModal.addEventListener('click', handleEditTagModalClick, true); // Capture phase
+    editTagModal.addEventListener('mousedown', function(e) {
+      if (e.target === editTagModal || e.target.id === 'editTagModal') {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+    }, true);
+    
+    // Prevenir que el contenido del modal cierre el modal
+    const editTagModalContent = editTagModal.querySelector('.edit-modal-content');
+    if (editTagModalContent) {
+      editTagModalContent.addEventListener('click', function(e) {
+        e.stopPropagation();
+      });
+      editTagModalContent.addEventListener('mousedown', function(e) {
+        e.stopPropagation();
+      });
+    }
   }
 
   const closeEditTagModalBtn = document.getElementById('closeEditTagModal');
@@ -1489,14 +1571,37 @@ function showNotification(message, type) {
     cancelEditTagModalBtn.addEventListener('click', closeEditTagModal);
   }
 
-  // Event listeners para el modal de filtros
+  // Event listeners para el modal de filtros (mejorado para Chrome)
   const filterModal = document.getElementById('filterModal');
   if (filterModal) {
-    filterModal.addEventListener('click', function(e) {
-      if (e.target === this) {
+    // Función para manejar clic en modal (compatible con Chrome)
+    function handleFilterModalClick(e) {
+      if (e.target === filterModal || e.target.id === 'filterModal') {
+        e.preventDefault();
+        e.stopPropagation();
         closeFilterModal();
+        return false;
       }
-    });
+    }
+    
+    filterModal.addEventListener('click', handleFilterModalClick, true); // Capture phase
+    filterModal.addEventListener('mousedown', function(e) {
+      if (e.target === filterModal || e.target.id === 'filterModal') {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+    }, true);
+    
+    // Prevenir que el contenido del modal cierre el modal
+    const filterModalContent = filterModal.querySelector('.edit-modal-content');
+    if (filterModalContent) {
+      filterModalContent.addEventListener('click', function(e) {
+        e.stopPropagation();
+      });
+      filterModalContent.addEventListener('mousedown', function(e) {
+        e.stopPropagation();
+      });
+    }
   }
 
   const closeFilterModalBtn = document.getElementById('closeFilterModal');
@@ -1509,14 +1614,37 @@ function showNotification(message, type) {
     cancelFilterModalBtn.addEventListener('click', closeFilterModal);
   }
 
-  // Event listeners para el modal de crear etiqueta
+  // Event listeners para el modal de crear etiqueta (mejorado para Chrome)
   const createTagModal = document.getElementById('createTagModal');
   if (createTagModal) {
-    createTagModal.addEventListener('click', function(e) {
-      if (e.target === this) {
+    // Función para manejar clic en modal (compatible con Chrome)
+    function handleCreateTagModalClick(e) {
+      if (e.target === createTagModal || e.target.id === 'createTagModal') {
+        e.preventDefault();
+        e.stopPropagation();
         closeCreateTagModal();
+        return false;
       }
-    });
+    }
+    
+    createTagModal.addEventListener('click', handleCreateTagModalClick, true); // Capture phase
+    createTagModal.addEventListener('mousedown', function(e) {
+      if (e.target === createTagModal || e.target.id === 'createTagModal') {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+    }, true);
+    
+    // Prevenir que el contenido del modal cierre el modal
+    const createTagModalContent = createTagModal.querySelector('.edit-modal-content');
+    if (createTagModalContent) {
+      createTagModalContent.addEventListener('click', function(e) {
+        e.stopPropagation();
+      });
+      createTagModalContent.addEventListener('mousedown', function(e) {
+        e.stopPropagation();
+      });
+    }
   }
 
   const closeCreateTagModalBtn = document.getElementById('closeCreateTagModal');
@@ -1613,14 +1741,37 @@ function showNotification(message, type) {
     });
   });
 
-  // Event listener para cerrar modal de forwarding al hacer clic fuera
+  // Event listener para cerrar modal de forwarding al hacer clic fuera (mejorado para Chrome)
   const editForwardingModal = document.getElementById('editForwardingModal');
   if (editForwardingModal) {
-    editForwardingModal.addEventListener('click', function(e) {
-      if (e.target === this) {
+    // Función para manejar clic en modal (compatible con Chrome)
+    function handleEditForwardingModalClick(e) {
+      if (e.target === editForwardingModal || e.target.id === 'editForwardingModal') {
+        e.preventDefault();
+        e.stopPropagation();
         closeEditForwardingModal();
+        return false;
       }
-    });
+    }
+    
+    editForwardingModal.addEventListener('click', handleEditForwardingModalClick, true); // Capture phase
+    editForwardingModal.addEventListener('mousedown', function(e) {
+      if (e.target === editForwardingModal || e.target.id === 'editForwardingModal') {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+    }, true);
+    
+    // Prevenir que el contenido del modal cierre el modal
+    const editForwardingModalContent = editForwardingModal.querySelector('.edit-modal-content');
+    if (editForwardingModalContent) {
+      editForwardingModalContent.addEventListener('click', function(e) {
+        e.stopPropagation();
+      });
+      editForwardingModalContent.addEventListener('mousedown', function(e) {
+        e.stopPropagation();
+      });
+    }
   }
 
   // Event listeners para botones de limpieza automática
@@ -1660,14 +1811,37 @@ function showNotification(message, type) {
     });
   });
 
-  // Event listener para cerrar modal de cleanup al hacer clic fuera
+  // Event listener para cerrar modal de cleanup al hacer clic fuera (mejorado para Chrome)
   const editCleanupModal = document.getElementById('editCleanupModal');
   if (editCleanupModal) {
-    editCleanupModal.addEventListener('click', function(e) {
-      if (e.target === this) {
+    // Función para manejar clic en modal (compatible con Chrome)
+    function handleEditCleanupModalClick(e) {
+      if (e.target === editCleanupModal || e.target.id === 'editCleanupModal') {
+        e.preventDefault();
+        e.stopPropagation();
         closeEditCleanupModal();
+        return false;
       }
-    });
+    }
+    
+    editCleanupModal.addEventListener('click', handleEditCleanupModalClick, true); // Capture phase
+    editCleanupModal.addEventListener('mousedown', function(e) {
+      if (e.target === editCleanupModal || e.target.id === 'editCleanupModal') {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+    }, true);
+    
+    // Prevenir que el contenido del modal cierre el modal
+    const editCleanupModalContent = editCleanupModal.querySelector('.edit-modal-content');
+    if (editCleanupModalContent) {
+      editCleanupModalContent.addEventListener('click', function(e) {
+        e.stopPropagation();
+      });
+      editCleanupModalContent.addEventListener('mousedown', function(e) {
+        e.stopPropagation();
+      });
+    }
   }
 });
 
@@ -1867,24 +2041,70 @@ document.addEventListener('DOMContentLoaded', function() {
     forwardForm.addEventListener('submit', handleForwardSubmit);
   }
 
-  // Event listener para cerrar modal de respuesta al hacer clic fuera
+  // Event listener para cerrar modal de respuesta al hacer clic fuera (mejorado para Chrome)
   const replyModal = document.getElementById('replyEmailModal');
   if (replyModal) {
-    replyModal.addEventListener('click', function(e) {
-      if (e.target === replyModal) {
+    // Función para manejar clic en modal (compatible con Chrome)
+    function handleReplyModalClick(e) {
+      if (e.target === replyModal || e.target.id === 'replyEmailModal') {
+        e.preventDefault();
+        e.stopPropagation();
         closeReplyModal();
+        return false;
       }
-    });
+    }
+    
+    replyModal.addEventListener('click', handleReplyModalClick, true); // Capture phase
+    replyModal.addEventListener('mousedown', function(e) {
+      if (e.target === replyModal || e.target.id === 'replyEmailModal') {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+    }, true);
+    
+    // Prevenir que el contenido del modal cierre el modal
+    const replyModalContent = replyModal.querySelector('.edit-modal-content, .modal-content');
+    if (replyModalContent) {
+      replyModalContent.addEventListener('click', function(e) {
+        e.stopPropagation();
+      });
+      replyModalContent.addEventListener('mousedown', function(e) {
+        e.stopPropagation();
+      });
+    }
   }
 
-  // Event listener para cerrar modal de reenvío al hacer clic fuera
+  // Event listener para cerrar modal de reenvío al hacer clic fuera (mejorado para Chrome)
   const forwardModal = document.getElementById('forwardEmailModal');
   if (forwardModal) {
-    forwardModal.addEventListener('click', function(e) {
-      if (e.target === forwardModal) {
+    // Función para manejar clic en modal (compatible con Chrome)
+    function handleForwardModalClick(e) {
+      if (e.target === forwardModal || e.target.id === 'forwardEmailModal') {
+        e.preventDefault();
+        e.stopPropagation();
         closeForwardModal();
+        return false;
       }
-    });
+    }
+    
+    forwardModal.addEventListener('click', handleForwardModalClick, true); // Capture phase
+    forwardModal.addEventListener('mousedown', function(e) {
+      if (e.target === forwardModal || e.target.id === 'forwardEmailModal') {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+    }, true);
+    
+    // Prevenir que el contenido del modal cierre el modal
+    const forwardModalContent = forwardModal.querySelector('.edit-modal-content, .modal-content');
+    if (forwardModalContent) {
+      forwardModalContent.addEventListener('click', function(e) {
+        e.stopPropagation();
+      });
+      forwardModalContent.addEventListener('mousedown', function(e) {
+        e.stopPropagation();
+      });
+    }
   }
 
   // Event listeners para el menú contextual

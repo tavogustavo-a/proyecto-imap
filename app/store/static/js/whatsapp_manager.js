@@ -139,19 +139,19 @@ async function loadWhatsAppConfigsTable() {
                                     <td>${config.notification_time || '--:--'}</td>
                                     <td>
                                         <button class="action-btn ${config.is_enabled ? 'action-red' : 'action-green'}" 
-                                                onclick="toggleWhatsAppConfig(${config.id})">
+                                                data-action="toggle-whatsapp-config" data-config-id="${config.id}">
                                             ${config.is_enabled ? 'OFF' : 'ON'}
                                         </button>
                                     </td>
                                     <td>${config.last_sent ? new Date(config.last_sent).toLocaleString() : 'Nunca'}</td>
                                     <td>
-                                        <button class="btn-panel btn-blue btn-table-action" onclick="testWhatsAppConnection(${config.id})" title="Probar conexión">
+                                        <button class="btn-panel btn-blue btn-table-action" data-action="test-whatsapp-connection" data-config-id="${config.id}" title="Probar conexión">
                                             <i class="fas fa-plug"></i>
                                         </button>
-                                        <button class="btn-panel btn-orange btn-table-action" onclick="editWhatsAppConfig(${config.id})" title="Editar">
+                                        <button class="btn-panel btn-orange btn-table-action" data-action="edit-whatsapp-config" data-config-id="${config.id}" title="Editar">
                                             <i class="fas fa-edit"></i>
                                         </button>
-                                        <button class="btn-panel btn-red btn-table-action" onclick="deleteWhatsAppConfig(${config.id})" title="Eliminar">
+                                        <button class="btn-panel btn-red btn-table-action" data-action="delete-whatsapp-config" data-config-id="${config.id}" title="Eliminar">
                                             <i class="fas fa-trash"></i>
                                         </button>
                                     </td>
@@ -370,3 +370,42 @@ function setupWhatsAppModal() {
         }
     });
 }
+
+// ============================================================================
+// EVENT LISTENERS DELEGADOS PARA CSP COMPLIANCE
+// ============================================================================
+
+// Event listener delegado para acciones de WhatsApp (CSP compliant)
+document.addEventListener('click', function(e) {
+    const target = e.target.closest('[data-action]');
+    if (!target) return;
+    
+    const action = target.getAttribute('data-action');
+    const configId = parseInt(target.getAttribute('data-config-id'));
+    
+    switch(action) {
+        case 'toggle-whatsapp-config':
+            if (typeof window.toggleWhatsAppConfig === 'function') {
+                window.toggleWhatsAppConfig(configId);
+            }
+            break;
+            
+        case 'test-whatsapp-connection':
+            if (typeof window.testWhatsAppConnection === 'function') {
+                window.testWhatsAppConnection(configId);
+            }
+            break;
+            
+        case 'edit-whatsapp-config':
+            if (typeof window.editWhatsAppConfig === 'function') {
+                window.editWhatsAppConfig(configId);
+            }
+            break;
+            
+        case 'delete-whatsapp-config':
+            if (typeof window.deleteWhatsAppConfig === 'function') {
+                window.deleteWhatsAppConfig(configId);
+            }
+            break;
+    }
+});

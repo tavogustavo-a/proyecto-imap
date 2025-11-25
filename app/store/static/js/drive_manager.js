@@ -1049,21 +1049,41 @@ class DriveGallery {
             if (paginationTopEl) paginationTopEl.innerHTML = '';
             return;
         }
-        galleryEl.innerHTML = `<div class='photos-grid'>${pagePhotos.map(photo => this.createPhotoItem(photo)).join('')}</div>`;
+        galleryEl.innerHTML = `<div class='photos-grid'>${pagePhotos.map((photo, idx) => this.createPhotoItem(photo, start + idx, apiId)).join('')}</div>`;
         const pagHtml = this.renderPagination(gallery.currentPhotoPage, gallery.photos.length, 12, 'photo', apiId, false);
         const pagHtmlTop = this.renderPagination(gallery.currentPhotoPage, gallery.photos.length, 12, 'photo', apiId, true);
         if (paginationEl) paginationEl.innerHTML = pagHtml;
         if (paginationTopEl) paginationTopEl.innerHTML = pagHtmlTop;
         this.addPaginationListeners('photo', apiId);
-        // Agregar event listeners para botones de fotos
-        galleryEl.querySelectorAll('.drive-photo-open').forEach(btn => {
-            btn.addEventListener('click', function() {
-                window.open(this.dataset.url, '_blank');
+        // Agregar event listeners para botón de descargar fotos
+        galleryEl.querySelectorAll('.drive-photo-download').forEach(btn => {
+            btn.addEventListener('click', function(e) {
+                e.stopPropagation();
+                e.preventDefault();
+                const photoItem = this.closest('.photo-item');
+                const fileId = this.dataset.fileId || (photoItem ? photoItem.dataset.fileId : null);
+                const apiId = photoItem ? photoItem.dataset.apiId : null;
+                // Usar proxy del backend para descarga directa
+                const proxyUrl = fileId && apiId ? `/tienda/drive/proxy?file_id=${fileId}&api_id=${apiId}&type=image` : null;
+                if (proxyUrl) {
+                    driveGallery.downloadFile(proxyUrl, this.dataset.name, 'image', fileId, apiId);
+                } else {
+                    console.error('No se pudo obtener fileId o apiId para descargar');
+                }
             });
         });
-        galleryEl.querySelectorAll('.drive-photo-download').forEach(btn => {
-            btn.addEventListener('click', function() {
-                driveGallery.downloadFile(this.dataset.url, this.dataset.name);
+        
+        // Agregar event listeners para botón de compartir fotos
+        this.addShareAndDownloadListeners(galleryEl);
+        
+        // Agregar event listeners para abrir visor al hacer clic en las fotos
+        galleryEl.querySelectorAll('.photo-item').forEach(item => {
+            item.addEventListener('click', function(e) {
+                // No abrir si se hizo clic en los botones
+                if (e.target.closest('.photo-actions')) return;
+                const index = parseInt(this.dataset.index);
+                const apiId = this.dataset.apiId;
+                driveGallery.openViewer('photo', apiId, index);
             });
         });
     }
@@ -1082,21 +1102,41 @@ class DriveGallery {
             if (paginationTopEl) paginationTopEl.innerHTML = '';
             return;
         }
-        galleryEl.innerHTML = `<div class='videos-grid'>${pageVideos.map(video => this.createVideoItem(video)).join('')}</div>`;
+        galleryEl.innerHTML = `<div class='videos-grid'>${pageVideos.map((video, idx) => this.createVideoItem(video, start + idx, apiId)).join('')}</div>`;
         const pagHtml = this.renderPagination(gallery.currentVideoPage, gallery.videos.length, 12, 'video', apiId, false);
         const pagHtmlTop = this.renderPagination(gallery.currentVideoPage, gallery.videos.length, 12, 'video', apiId, true);
         if (paginationEl) paginationEl.innerHTML = pagHtml;
         if (paginationTopEl) paginationTopEl.innerHTML = pagHtmlTop;
         this.addPaginationListeners('video', apiId);
-        // Agregar event listeners para botones de videos
-        galleryEl.querySelectorAll('.drive-video-open').forEach(btn => {
-            btn.addEventListener('click', function() {
-                window.open(this.dataset.url, '_blank');
+        // Agregar event listeners para botón de descargar videos
+        galleryEl.querySelectorAll('.drive-video-download').forEach(btn => {
+            btn.addEventListener('click', function(e) {
+                e.stopPropagation();
+                e.preventDefault();
+                const videoItem = this.closest('.video-item');
+                const fileId = this.dataset.fileId || (videoItem ? videoItem.dataset.fileId : null);
+                const apiId = videoItem ? videoItem.dataset.apiId : null;
+                // Usar proxy del backend para descarga directa
+                const proxyUrl = fileId && apiId ? `/tienda/drive/proxy?file_id=${fileId}&api_id=${apiId}&type=video` : null;
+                if (proxyUrl) {
+                    driveGallery.downloadFile(proxyUrl, this.dataset.name, 'video', fileId, apiId);
+                } else {
+                    console.error('No se pudo obtener fileId o apiId para descargar');
+                }
             });
         });
-        galleryEl.querySelectorAll('.drive-video-download').forEach(btn => {
-            btn.addEventListener('click', function() {
-                driveGallery.downloadFile(this.dataset.url, this.dataset.name);
+        
+        // Agregar event listeners para botón de compartir videos
+        this.addShareAndDownloadListeners(galleryEl);
+        
+        // Agregar event listeners para abrir visor al hacer clic en los videos
+        galleryEl.querySelectorAll('.video-item').forEach(item => {
+            item.addEventListener('click', function(e) {
+                // No abrir si se hizo clic en los botones
+                if (e.target.closest('.video-actions')) return;
+                const index = parseInt(this.dataset.index);
+                const apiId = this.dataset.apiId;
+                driveGallery.openViewer('video', apiId, index);
             });
         });
     }
@@ -1149,58 +1189,731 @@ class DriveGallery {
         if (nextBtnTop) nextBtnTop.addEventListener('click', goNext);
     }
 
-    createPhotoItem(photo) {
+    createPhotoItem(photo, index, apiId) {
         const thumbnailUrl = `https://drive.google.com/thumbnail?id=${photo.id}&sz=w400`;
         const fullUrl = `https://drive.google.com/uc?export=view&id=${photo.id}`;
-        const downloadUrl = `https://drive.google.com/uc?export=download&id=${photo.id}`;
+        const proxyUrl = `/tienda/drive/proxy?file_id=${photo.id}&api_id=${apiId}&type=image`;
         const escapedName = escapeHtml(photo.name);
         return `
-            <div class="photo-item">
-                <img src="${escapeHtml(thumbnailUrl)}" alt="${escapedName}" loading="lazy">
-                <div class="photo-info">
-                    <div class="photo-name">${escapedName}</div>
+            <div class="photo-item drive-media-item" data-type="photo" data-index="${index}" data-api-id="${apiId}" data-file-id="${photo.id}" data-full-url="${escapeHtml(fullUrl)}" data-name="${escapedName}">
+                <img src="${escapeHtml(thumbnailUrl)}" alt="${escapedName}" loading="lazy" class="drive-photo-thumbnail">
                     <div class="photo-actions">
-                        <button class="btn-panel btn-blue drive-photo-open" data-url="${escapeHtml(fullUrl)}">
-                            Abrir
+                    <button class="btn-download-icon drive-photo-download" data-file-id="${photo.id}" data-name="${escapedName}" title="Descargar">
+                        <i class="fas fa-download"></i>
                         </button>
-                        <button class="btn-panel btn-orange drive-photo-download" data-url="${escapeHtml(downloadUrl)}" data-name="${escapedName}">
-                            Descargar
-                        </button>
-                    </div>
                 </div>
             </div>
         `;
     }
 
-    createVideoItem(video) {
+    createVideoItem(video, index, apiId) {
         const thumbnailUrl = `https://drive.google.com/thumbnail?id=${video.id}&sz=w400`;
         const fullUrl = `https://drive.google.com/uc?export=download&id=${video.id}`;
+        const proxyUrl = `/tienda/drive/proxy?file_id=${video.id}&api_id=${apiId}&type=video`;
         const escapedName = escapeHtml(video.name);
         return `
-            <div class="video-item">
-                <video src="${escapeHtml(fullUrl)}" poster="${escapeHtml(thumbnailUrl)}" preload="none"></video>
-                <div class="video-info">
-                    <div class="video-name">${escapedName}</div>
-                    <div class="video-actions">
-                        <button class="btn-panel btn-blue drive-video-open" data-url="${escapeHtml(fullUrl)}">
-                            Abrir
-                        </button>
-                        <button class="btn-panel btn-orange drive-video-download" data-url="${escapeHtml(fullUrl)}" data-name="${escapedName}">
-                            Descargar
-                        </button>
-                    </div>
+            <div class="video-item drive-media-item" data-type="video" data-index="${index}" data-api-id="${apiId}" data-file-id="${video.id}" data-full-url="${escapeHtml(fullUrl)}" data-name="${escapedName}">
+                <video src="${escapeHtml(fullUrl)}" poster="${escapeHtml(thumbnailUrl)}" preload="none" class="drive-video-thumbnail"></video>
+                <div class="video-actions">
+                    <button class="btn-download-icon drive-video-download" data-file-id="${video.id}" data-name="${escapedName}" title="Descargar">
+                        <i class="fas fa-download"></i>
+                    </button>
                 </div>
             </div>
         `;
     }
 
-    downloadFile(url, filename) {
+    addShareAndDownloadListeners(galleryEl) {
+        // Esta función ya no es necesaria ya que eliminamos el icono de compartir
+        // Se mantiene por compatibilidad pero no hace nada
+    }
+
+    downloadFile(url, filename, mediaType = null, fileId = null, apiId = null) {
+        // Determinar si es imagen o video
+        const isImage = mediaType === 'image' || /\.(jpg|jpeg|png|gif|webp|bmp)$/i.test(filename);
+        const isVideo = mediaType === 'video' || /\.(mp4|avi|mov|wmv|flv|webm|mkv)$/i.test(filename);
+        
+        // Detectar si es móvil
+        const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+        
+        // Siempre usar proxy del backend si está disponible (evita problemas de CORS y pestañas nuevas)
+        const downloadUrl = (fileId && apiId) ? `/tienda/drive/proxy?file_id=${fileId}&api_id=${apiId}&type=${mediaType || (isImage ? 'image' : 'video')}` : url;
+        
+        // Para imágenes y videos, usar fetch y blob para descarga directa
+        if (isImage || isVideo) {
+            // Mostrar indicador de carga
+            const loadingMsg = document.createElement('div');
+            loadingMsg.className = 'drive-download-loading';
+            loadingMsg.textContent = 'Descargando...';
+            document.body.appendChild(loadingMsg);
+            
+            // Usar fetch con el proxy del backend
+            fetch(downloadUrl, {
+                method: 'GET',
+                headers: {
+                    'Accept': isImage ? 'image/*' : 'video/*'
+                },
+                // Evitar que se abra en nueva pestaña
+                credentials: 'same-origin'
+            })
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error(`Error ${response.status}: ${response.statusText}`);
+                    }
+                    return response.blob();
+                })
+                .then(blob => {
+                    // Determinar tipo MIME correcto
+                    let mimeType = blob.type;
+                    if (!mimeType || mimeType === 'application/octet-stream') {
+                        if (isImage) {
+                            // Detectar tipo de imagen por extensión
+                            const ext = filename.toLowerCase().split('.').pop();
+                            mimeType = {
+                                'jpg': 'image/jpeg',
+                                'jpeg': 'image/jpeg',
+                                'png': 'image/png',
+                                'gif': 'image/gif',
+                                'webp': 'image/webp',
+                                'bmp': 'image/bmp'
+                            }[ext] || 'image/jpeg';
+                        } else if (isVideo) {
+                            const ext = filename.toLowerCase().split('.').pop();
+                            mimeType = {
+                                'mp4': 'video/mp4',
+                                'avi': 'video/x-msvideo',
+                                'mov': 'video/quicktime',
+                                'wmv': 'video/x-ms-wmv',
+                                'flv': 'video/x-flv',
+                                'webm': 'video/webm',
+                                'mkv': 'video/x-matroska'
+                            }[ext] || 'video/mp4';
+                        }
+                    }
+                    
+                    // Crear blob con tipo MIME correcto
+                    const typedBlob = new Blob([blob], { type: mimeType });
+                    const blobUrl = window.URL.createObjectURL(typedBlob);
+                    
+                    // Crear link de descarga
         const a = document.createElement('a');
-        a.href = url;
+                    a.href = blobUrl;
         a.download = filename;
+                    a.setAttribute('download', filename);
+                    a.className = 'drive-download-link-hidden';
+                    
+                    // Para móviles, asegurar que se guarde en galería
+                    if (isMobile) {
+                        // Agregar atributos adicionales para móviles
+                        a.setAttribute('download', filename);
+                    }
+                    
         document.body.appendChild(a);
+                    
+                    // Intentar descargar
+                    try {
         a.click();
-        document.body.removeChild(a);
+                    } catch (err) {
+                        console.error('Error al hacer clic en link de descarga:', err);
+                        // Fallback: intentar con Web Share API en móviles
+                        if (isMobile && navigator.share && navigator.canShare) {
+                            const file = new File([typedBlob], filename, { type: mimeType });
+                            if (navigator.canShare({ files: [file] })) {
+                                navigator.share({
+                                    files: [file],
+                                    title: filename
+                                }).catch(shareErr => {
+                                    console.error('Error compartiendo:', shareErr);
+                                });
+                            }
+                        }
+                    }
+                    
+                    // Limpiar después de un tiempo
+                    setTimeout(() => {
+                        if (a.parentNode) document.body.removeChild(a);
+                        window.URL.revokeObjectURL(blobUrl);
+                        if (loadingMsg.parentNode) document.body.removeChild(loadingMsg);
+                    }, 2000);
+                })
+                .catch(error => {
+                    console.error('Error descargando archivo:', error);
+                    if (loadingMsg.parentNode) document.body.removeChild(loadingMsg);
+                    
+                    // Mostrar mensaje de error al usuario
+                    const errorMsg = document.createElement('div');
+                    errorMsg.className = 'drive-download-loading drive-download-error';
+                    errorMsg.textContent = 'Error al descargar. Intenta nuevamente.';
+                    document.body.appendChild(errorMsg);
+                    setTimeout(() => {
+                        if (errorMsg.parentNode) document.body.removeChild(errorMsg);
+                    }, 3000);
+                });
+        } else {
+            // Para otros tipos de archivo, usar método tradicional con proxy
+            const a = document.createElement('a');
+            a.href = downloadUrl;
+            a.download = filename;
+            a.className = 'drive-download-link-hidden';
+            document.body.appendChild(a);
+            a.click();
+            setTimeout(() => {
+                if (a.parentNode) document.body.removeChild(a);
+            }, 100);
+        }
+    }
+    
+    shareFile(shareUrl, fileName, platform) {
+        const encodedUrl = encodeURIComponent(shareUrl);
+        const encodedText = encodeURIComponent(`Mira esto: ${fileName}`);
+        
+        switch(platform) {
+            case 'whatsapp':
+                // WhatsApp Web/App
+                window.open(`https://wa.me/?text=${encodedText}%20${encodedUrl}`, '_blank');
+                break;
+            case 'telegram':
+                // Telegram Web/App
+                window.open(`https://t.me/share/url?url=${encodedUrl}&text=${encodedText}`, '_blank');
+                break;
+            case 'native':
+                // Web Share API (nativo del dispositivo)
+                if (navigator.share) {
+                    navigator.share({
+                        title: fileName,
+                        text: `Mira esto: ${fileName}`,
+                        url: shareUrl
+                    }).catch(err => {
+                        console.log('Error compartiendo:', err);
+                        // Fallback: copiar al portapapeles
+                        this.copyToClipboard(shareUrl);
+                    });
+                } else {
+                    // Fallback: copiar al portapapeles
+                    this.copyToClipboard(shareUrl);
+                }
+                break;
+        }
+    }
+    
+    async shareMediaFile(mediaUrl, fileName, platform, mediaType, fileId = null, apiId = null) {
+        // Mostrar indicador de carga
+        const loadingMsg = document.createElement('div');
+        loadingMsg.className = 'drive-download-loading';
+        loadingMsg.textContent = 'Preparando archivo para compartir...';
+        document.body.appendChild(loadingMsg);
+        
+        try {
+            // Descargar el archivo como blob usando el proxy del backend
+            const response = await fetch(mediaUrl, {
+                method: 'GET',
+                headers: {
+                    'Accept': mediaType === 'photo' ? 'image/*' : 'video/*'
+                },
+                credentials: 'same-origin'
+            });
+            
+            if (!response.ok) {
+                throw new Error(`Error ${response.status}: ${response.statusText}`);
+            }
+            
+            const blob = await response.blob();
+            
+            // Determinar tipo MIME correcto
+            let mimeType = blob.type;
+            if (!mimeType || mimeType === 'application/octet-stream') {
+                const ext = fileName.toLowerCase().split('.').pop();
+                if (mediaType === 'photo') {
+                    mimeType = {
+                        'jpg': 'image/jpeg',
+                        'jpeg': 'image/jpeg',
+                        'png': 'image/png',
+                        'gif': 'image/gif',
+                        'webp': 'image/webp',
+                        'bmp': 'image/bmp'
+                    }[ext] || 'image/jpeg';
+                } else {
+                    mimeType = {
+                        'mp4': 'video/mp4',
+                        'avi': 'video/x-msvideo',
+                        'mov': 'video/quicktime',
+                        'wmv': 'video/x-ms-wmv',
+                        'flv': 'video/x-flv',
+                        'webm': 'video/webm',
+                        'mkv': 'video/x-matroska'
+                    }[ext] || 'video/mp4';
+                }
+            }
+            
+            // Crear File object con el tipo MIME correcto
+            const file = new File([blob], fileName, { type: mimeType });
+            
+            // Ocultar loading
+            if (loadingMsg.parentNode) document.body.removeChild(loadingMsg);
+            
+            // Intentar usar Web Share API con el archivo real
+            if (navigator.share && navigator.canShare) {
+                try {
+                    // Verificar si podemos compartir archivos
+                    if (navigator.canShare({ files: [file] })) {
+                        await navigator.share({
+                            title: fileName,
+                            text: fileName,
+                            files: [file]
+                        });
+                        return; // Éxito, salir
+                    }
+                } catch (shareError) {
+                    console.log('Error compartiendo con Web Share API:', shareError);
+                    // Continuar con métodos específicos de plataforma
+                }
+            }
+            
+            // Si Web Share API no está disponible o falló, usar métodos específicos
+            if (platform === 'whatsapp') {
+                // Para WhatsApp, intentar compartir el archivo directamente
+                if (navigator.share && navigator.canShare) {
+                    try {
+                        if (navigator.canShare({ files: [file] })) {
+                            await navigator.share({
+                                files: [file],
+                                title: fileName
+                            });
+                            return;
+                        }
+                    } catch (e) {
+                        console.log('Error compartiendo a WhatsApp:', e);
+                    }
+                }
+                // Fallback: abrir WhatsApp Web (pero esto compartirá el link, no el archivo)
+                // Mejor mostrar mensaje al usuario
+                alert('Por favor, usa la opción de compartir nativa de tu dispositivo para compartir el archivo en WhatsApp.');
+            } else if (platform === 'telegram') {
+                // Para Telegram, intentar compartir el archivo directamente
+                if (navigator.share && navigator.canShare) {
+                    try {
+                        if (navigator.canShare({ files: [file] })) {
+                            await navigator.share({
+                                files: [file],
+                                title: fileName
+                            });
+                            return;
+                        }
+                    } catch (e) {
+                        console.log('Error compartiendo a Telegram:', e);
+                    }
+                }
+                // Fallback: mostrar mensaje
+                alert('Por favor, usa la opción de compartir nativa de tu dispositivo para compartir el archivo en Telegram.');
+            } else {
+                // Para compartir nativo, usar Web Share API
+                if (navigator.share) {
+                    try {
+                        if (navigator.canShare({ files: [file] })) {
+                            await navigator.share({
+                                files: [file],
+                                title: fileName
+                            });
+                            return;
+                        }
+                    } catch (e) {
+                        console.log('Error compartiendo:', e);
+                    }
+                }
+                alert('La función de compartir no está disponible en este navegador.');
+            }
+            
+        } catch (error) {
+            console.error('Error compartiendo archivo:', error);
+            if (loadingMsg.parentNode) document.body.removeChild(loadingMsg);
+            
+            // Mostrar mensaje de error
+            const errorMsg = document.createElement('div');
+            errorMsg.className = 'drive-download-loading drive-download-error';
+            errorMsg.textContent = 'Error al preparar el archivo. Intenta nuevamente.';
+            document.body.appendChild(errorMsg);
+            setTimeout(() => {
+                if (errorMsg.parentNode) document.body.removeChild(errorMsg);
+            }, 3000);
+        }
+    }
+    
+    copyToClipboard(text) {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(text).then(() => {
+                alert('Enlace copiado al portapapeles');
+            }).catch(err => {
+                console.error('Error copiando:', err);
+            });
+        } else {
+            // Fallback para navegadores antiguos
+            const textarea = document.createElement('textarea');
+            textarea.value = text;
+            textarea.className = 'drive-clipboard-textarea-hidden';
+            document.body.appendChild(textarea);
+            textarea.select();
+            try {
+                document.execCommand('copy');
+                alert('Enlace copiado al portapapeles');
+            } catch (err) {
+                console.error('Error copiando:', err);
+            }
+            document.body.removeChild(textarea);
+        }
+    }
+    
+    openViewer(type, apiId, currentIndex) {
+        const gallery = this.galleries[apiId];
+        if (!gallery) return;
+        
+        const items = type === 'photo' ? gallery.photos : gallery.videos;
+        if (!items || items.length === 0) return;
+        
+        // Crear o reutilizar el visor
+        let viewer = document.getElementById('drive-media-viewer');
+        if (!viewer) {
+            viewer = this.createViewer();
+            document.body.appendChild(viewer);
+        }
+        
+        // Guardar información del visor
+        this.currentViewer = {
+            type: type,
+            apiId: apiId,
+            currentIndex: currentIndex,
+            items: items
+        };
+        
+        // Mostrar el visor
+        viewer.classList.add('viewer-open');
+        document.body.classList.add('viewer-body-overflow-hidden');
+        // Pequeño delay para asegurar que el DOM esté listo
+        setTimeout(() => {
+            this.showViewerItem(currentIndex);
+        }, 10);
+    }
+    
+    createViewer() {
+        const viewer = document.createElement('div');
+        viewer.id = 'drive-media-viewer';
+        viewer.className = 'drive-media-viewer';
+        viewer.innerHTML = `
+            <div class="viewer-overlay"></div>
+            <button class="viewer-close" aria-label="Cerrar visor">
+                <i class="fas fa-times"></i>
+            </button>
+            <button class="viewer-nav viewer-nav-prev" aria-label="Anterior">
+                <i class="fas fa-chevron-left"></i>
+            </button>
+            <button class="viewer-nav viewer-nav-next" aria-label="Siguiente">
+                <i class="fas fa-chevron-right"></i>
+            </button>
+            <div class="viewer-content">
+                <div class="viewer-media-container">
+                    <img class="viewer-image" alt="">
+                    <video class="viewer-video" controls></video>
+                </div>
+                <div class="viewer-info">
+                    <span class="viewer-counter"></span>
+                    <span class="viewer-name"></span>
+                </div>
+            </div>
+        `;
+        
+        // Event listeners
+        viewer.querySelector('.viewer-overlay').addEventListener('click', () => this.closeViewer());
+        viewer.querySelector('.viewer-close').addEventListener('click', () => this.closeViewer());
+        viewer.querySelector('.viewer-nav-prev').addEventListener('click', () => this.navigateViewer(-1));
+        viewer.querySelector('.viewer-nav-next').addEventListener('click', () => this.navigateViewer(1));
+        
+        // Navegación con teclado
+        const keyboardHandler = (e) => {
+            if (viewer.classList.contains('viewer-open')) {
+                if (e.key === 'Escape') {
+                    this.closeViewer();
+                } else if (e.key === 'ArrowLeft') {
+                    this.navigateViewer(-1);
+                } else if (e.key === 'ArrowRight') {
+                    this.navigateViewer(1);
+                }
+            }
+        };
+        document.addEventListener('keydown', keyboardHandler);
+        
+        // Soporte para gestos táctiles (swipe) en móviles
+        let touchStartX = 0;
+        let touchEndX = 0;
+        
+        viewer.addEventListener('touchstart', (e) => {
+            touchStartX = e.changedTouches[0].screenX;
+        }, { passive: true });
+        
+        viewer.addEventListener('touchend', (e) => {
+            touchEndX = e.changedTouches[0].screenX;
+            handleSwipe();
+        }, { passive: true });
+        
+        const handleSwipe = () => {
+            const swipeThreshold = 50;
+            const diff = touchStartX - touchEndX;
+            
+            if (Math.abs(diff) > swipeThreshold) {
+                if (diff > 0) {
+                    // Swipe izquierda - siguiente
+                    this.navigateViewer(1);
+                } else {
+                    // Swipe derecha - anterior
+                    this.navigateViewer(-1);
+                }
+            }
+        };
+        
+        return viewer;
+    }
+    
+    showViewerItem(index) {
+        if (!this.currentViewer) return;
+        
+        const { type, items, apiId } = this.currentViewer;
+        if (index < 0 || index >= items.length) return;
+        
+        this.currentViewer.currentIndex = index;
+        const item = items[index];
+        const viewer = document.getElementById('drive-media-viewer');
+        
+        const imageEl = viewer.querySelector('.viewer-image');
+        const videoEl = viewer.querySelector('.viewer-video');
+        const counterEl = viewer.querySelector('.viewer-counter');
+        const nameEl = viewer.querySelector('.viewer-name');
+        const prevBtn = viewer.querySelector('.viewer-nav-prev');
+        const nextBtn = viewer.querySelector('.viewer-nav-next');
+        const mediaContainer = viewer.querySelector('.viewer-media-container');
+        
+        // Mostrar indicador de carga
+        if (mediaContainer) {
+            mediaContainer.classList.add('loading');
+        }
+        
+        // Ocultar ambos medios primero
+        imageEl.classList.remove('viewer-active');
+        videoEl.classList.remove('viewer-active');
+        imageEl.classList.add('viewer-hidden');
+        videoEl.classList.add('viewer-hidden');
+        
+        if (type === 'photo') {
+            // Usar proxy del backend para evitar problemas de CORS/CSP
+            const proxyUrl = `/tienda/drive/proxy?file_id=${item.id}&api_id=${apiId}&type=image`;
+            
+            // Limpiar eventos anteriores y mensajes de error
+            imageEl.onload = null;
+            imageEl.onerror = null;
+            const existingError = mediaContainer?.querySelector('.viewer-error');
+            if (existingError) existingError.remove();
+            
+            // Función para ocultar loading
+            const hideLoading = () => {
+                if (mediaContainer) {
+                    mediaContainer.classList.remove('loading');
+                }
+            };
+            
+            // Función para mostrar error
+            const showError = (message) => {
+                hideLoading();
+                if (mediaContainer) {
+                    const errorMsg = document.createElement('div');
+                    errorMsg.className = 'viewer-error';
+                    errorMsg.textContent = message;
+                    errorMsg.style.cssText = 'color: #fff; padding: 20px; text-align: center; font-size: 1.1rem;';
+                    mediaContainer.appendChild(errorMsg);
+                }
+            };
+            
+            // Detectar si es móvil para optimizar carga
+            const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+            
+            // Preload para mejor compatibilidad móvil
+            imageEl.loading = isMobile ? 'eager' : 'lazy';
+            imageEl.decoding = 'async';
+            
+            // Cargar imagen desde el proxy con timestamp para evitar cache en desarrollo
+            const cacheBuster = isMobile ? `&t=${Date.now()}` : '';
+            imageEl.src = proxyUrl + cacheBuster;
+            imageEl.alt = item.name || '';
+            imageEl.classList.add('viewer-active');
+            imageEl.classList.remove('viewer-hidden');
+            
+            // Timeout para móviles con conexión lenta
+            let loadTimeout;
+            if (isMobile) {
+                loadTimeout = setTimeout(() => {
+                    if (!imageEl.complete) {
+                        console.warn('Imagen tardando en cargar, verificando...');
+                    }
+                }, 10000);
+            }
+            
+            // Cuando la imagen carga exitosamente
+            imageEl.onload = () => {
+                if (loadTimeout) clearTimeout(loadTimeout);
+                hideLoading();
+                // Forzar repaint en algunos navegadores móviles
+                imageEl.classList.add('viewer-image-fade-in');
+            };
+            
+            // Si falla, intentar con URL directa de Drive como fallback
+            imageEl.onerror = function() {
+                if (loadTimeout) clearTimeout(loadTimeout);
+                this.onerror = null; // Evitar loop infinito
+                console.warn('Proxy falló, intentando URL directa de Drive');
+                
+                // Intentar con URL directa de Drive
+                const fallbackUrl = `https://drive.google.com/uc?export=view&id=${item.id}`;
+                this.src = fallbackUrl;
+                
+                // Si también falla, mostrar error
+                this.onerror = () => {
+                    showError('No se pudo cargar la imagen. Verifica tu conexión.');
+                };
+            };
+        } else {
+            // Para videos, usar proxy del backend con mejor compatibilidad móvil
+            const proxyUrl = `/tienda/drive/proxy?file_id=${item.id}&api_id=${apiId}&type=video`;
+            
+            // Limpiar video anterior y mensajes de error
+            videoEl.pause();
+            videoEl.src = '';
+            videoEl.load();
+            videoEl.onerror = null;
+            videoEl.onloadeddata = null;
+            videoEl.oncanplay = null;
+            videoEl.onloadedmetadata = null;
+            const existingError = mediaContainer?.querySelector('.viewer-error');
+            if (existingError) existingError.remove();
+            
+            // Función para ocultar loading
+            const hideLoading = () => {
+                if (mediaContainer) {
+                    mediaContainer.classList.remove('loading');
+                }
+            };
+            
+            // Función para mostrar error
+            const showError = (message) => {
+                hideLoading();
+                if (mediaContainer) {
+                    const errorMsg = document.createElement('div');
+                    errorMsg.className = 'viewer-error viewer-error-message';
+                    errorMsg.textContent = message;
+                    mediaContainer.appendChild(errorMsg);
+                }
+            };
+            
+            // Detectar si es móvil
+            const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+            
+            // Configuraciones para mejor compatibilidad móvil
+            videoEl.preload = isMobile ? 'metadata' : 'auto';
+            videoEl.playsInline = true; // Importante para iOS
+            videoEl.controls = true;
+            videoEl.muted = false;
+            
+            // Cargar nuevo video desde el proxy
+            videoEl.src = proxyUrl;
+            videoEl.classList.add('viewer-active');
+            videoEl.classList.remove('viewer-hidden');
+            
+            // Timeout para móviles
+            let loadTimeout;
+            if (isMobile) {
+                loadTimeout = setTimeout(() => {
+                    if (videoEl.readyState < 2) {
+                        console.warn('Video tardando en cargar, verificando...');
+                    }
+                }, 15000);
+            }
+            
+            // Múltiples eventos para mejor compatibilidad
+            const handleVideoLoad = () => {
+                if (loadTimeout) clearTimeout(loadTimeout);
+                hideLoading();
+            };
+            
+            videoEl.onloadedmetadata = handleVideoLoad;
+            videoEl.onloadeddata = handleVideoLoad;
+            videoEl.oncanplay = handleVideoLoad;
+            videoEl.oncanplaythrough = handleVideoLoad;
+            
+            // Manejar errores de carga de video
+            videoEl.onerror = function() {
+                if (loadTimeout) clearTimeout(loadTimeout);
+                const error = this.error;
+                console.error('Error cargando video desde proxy:', item.name, error);
+                
+                // Limpiar eventos para evitar loops
+                this.onerror = null;
+                this.onloadeddata = null;
+                this.oncanplay = null;
+                
+                // Intentar con URL directa de Drive como fallback
+                console.warn('Proxy falló, intentando URL directa de Drive');
+                const fallbackUrl = `https://drive.google.com/uc?export=download&id=${item.id}`;
+                this.src = fallbackUrl;
+                this.load();
+                
+                // Si también falla, mostrar error
+                this.onerror = () => {
+                    showError('No se pudo cargar el video. Verifica tu conexión.');
+                };
+            };
+            
+            // Forzar carga del video
+            try {
+                videoEl.load();
+            } catch (e) {
+                console.error('Error al cargar video:', e);
+                showError('Error al iniciar la carga del video');
+            }
+        }
+        
+        // Actualizar información
+        counterEl.textContent = `${index + 1} de ${items.length}`;
+        nameEl.textContent = item.name || '';
+        
+        // Habilitar/deshabilitar botones de navegación
+        prevBtn.disabled = index === 0;
+        nextBtn.disabled = index === items.length - 1;
+    }
+    
+    navigateViewer(direction) {
+        if (!this.currentViewer) return;
+        const newIndex = this.currentViewer.currentIndex + direction;
+        this.showViewerItem(newIndex);
+    }
+    
+    closeViewer() {
+        const viewer = document.getElementById('drive-media-viewer');
+        if (viewer) {
+            viewer.classList.remove('viewer-open');
+            document.body.classList.remove('viewer-body-overflow-hidden');
+            
+            // Pausar video si está reproduciendo
+            const videoEl = viewer.querySelector('.viewer-video');
+            if (videoEl) {
+                videoEl.pause();
+                videoEl.src = '';
+                videoEl.classList.remove('viewer-active');
+            }
+            
+            // Ocultar imagen
+            const imageEl = viewer.querySelector('.viewer-image');
+            if (imageEl) {
+                imageEl.classList.remove('viewer-active');
+                imageEl.classList.add('viewer-hidden');
+            }
+            
+            this.currentViewer = null;
+        }
     }
 }
 

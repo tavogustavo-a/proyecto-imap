@@ -2472,7 +2472,7 @@ function showTextFilePreview(fileUrl, fileName) {
                 <div class="file-preview-modal">
                     <div class="file-preview-header">
                         <span class="file-preview-title">📄 ${fileName}</span>
-                        <button class="file-preview-close" onclick="this.closest('.file-preview-modal-overlay').remove()">
+                        <button class="file-preview-close" data-action="close-file-preview-modal">
                             <i class="fas fa-times"></i>
                         </button>
                     </div>
@@ -2510,7 +2510,7 @@ function showFileInfo(fileUrl, fileName, fileType) {
         <div class="file-info-modal">
             <div class="file-info-header">
                 <span class="file-info-title">📎 ${fileName}</span>
-                <button class="file-info-close" onclick="this.closest('.file-info-modal-overlay').remove()">
+                <button class="file-info-close" data-action="close-file-info-modal">
                     <i class="fas fa-times"></i>
                 </button>
             </div>
@@ -2525,7 +2525,7 @@ function showFileInfo(fileUrl, fileName, fileType) {
                     <a href="${fileUrl}" download="${fileName}" class="file-download-btn-large">
                         <i class="fas fa-download"></i> Descargar
                     </a>
-                    <button class="file-open-btn" onclick="window.open('${fileUrl}', '_blank')">
+                    <button class="file-open-btn" data-action="open-file-new-tab" data-file-url="${fileUrl.replace(/'/g, "&#39;").replace(/"/g, "&quot;")}">
                         <i class="fas fa-external-link-alt"></i> Abrir
                     </button>
                 </div>
@@ -3262,7 +3262,7 @@ window.openImageModal = function(imageUrl, fileName) {
         <div class="image-modal">
             <div class="image-modal-header">
                 <span class="image-modal-title">${fileName}</span>
-                <button class="image-modal-close" onclick="this.closest('.image-modal-overlay').remove()">
+                <button class="image-modal-close" data-action="close-image-modal">
                     <i class="fas fa-times"></i>
                 </button>
             </div>
@@ -5074,3 +5074,43 @@ function checkDashboardConnection() {
     
     return false;
 }
+
+// ============================================================================
+// EVENT LISTENERS DELEGADOS PARA CSP COMPLIANCE
+// ============================================================================
+
+// Event listener delegado para modales y acciones de archivos (CSP compliant)
+document.addEventListener('click', function(e) {
+    const target = e.target.closest('[data-action]');
+    if (!target) return;
+    
+    const action = target.getAttribute('data-action');
+    
+    switch(action) {
+        case 'close-file-preview-modal':
+            const filePreviewModal = target.closest('.file-preview-modal-overlay');
+            if (filePreviewModal) {
+                filePreviewModal.remove();
+            }
+            break;
+            
+        case 'close-file-info-modal':
+            const fileInfoModal = target.closest('.file-info-modal-overlay');
+            if (fileInfoModal) {
+                fileInfoModal.remove();
+            }
+            break;
+            
+        case 'close-image-modal':
+            const imageModal = target.closest('.image-modal-overlay');
+            if (imageModal) {
+                imageModal.remove();
+            }
+            break;
+            
+        case 'open-file-new-tab':
+            const fileUrl = target.getAttribute('data-file-url').replace(/&#39;/g, "'").replace(/&quot;/g, '"');
+            window.open(fileUrl, '_blank');
+            break;
+    }
+});

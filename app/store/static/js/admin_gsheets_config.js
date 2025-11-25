@@ -85,13 +85,13 @@ document.addEventListener('DOMContentLoaded', function() {
           <td style="padding: 12px 15px; vertical-align: middle;">${link.tab_name}</td>
           <td style="padding: 12px 15px; vertical-align: middle;">
             <div style="display: flex; gap: 8px; align-items: center;">
-              <button class="btn-panel btn-blue btn-sm" onclick="testLinkConnection(${link.id})" title="Probar conexión">
+              <button class="btn-panel btn-blue btn-sm" data-action="test-link-connection" data-link-id="${link.id}" title="Probar conexión">
                 <i class="fas fa-plug"></i>
               </button>
-              <button class="btn-orange" onclick="editLink(${link.id})" title="Editar">
+              <button class="btn-orange" data-action="edit-link" data-link-id="${link.id}" title="Editar">
                 Editar
               </button>
-              <button class="btn-panel btn-red btn-sm" onclick="deleteLink(${link.id})" title="Eliminar">
+              <button class="btn-panel btn-red btn-sm" data-action="delete-link" data-link-id="${link.id}" title="Eliminar">
                 <i class="fas fa-trash"></i>
               </button>
             </div>
@@ -287,3 +287,36 @@ document.addEventListener('DOMContentLoaded', function() {
   // Inicio
   loadLinksTable();
 }); 
+
+// ============================================================================
+// EVENT LISTENERS DELEGADOS PARA CSP COMPLIANCE
+// ============================================================================
+
+// Event listener delegado para acciones de links (CSP compliant)
+document.addEventListener('click', function(e) {
+    const target = e.target.closest('[data-action]');
+    if (!target) return;
+    
+    const action = target.getAttribute('data-action');
+    const linkId = parseInt(target.getAttribute('data-link-id'));
+    
+    switch(action) {
+        case 'test-link-connection':
+            if (typeof window.testLinkConnection === 'function') {
+                window.testLinkConnection(linkId);
+            }
+            break;
+            
+        case 'edit-link':
+            if (typeof window.editLink === 'function') {
+                window.editLink(linkId);
+            }
+            break;
+            
+        case 'delete-link':
+            if (typeof window.deleteLink === 'function') {
+                window.deleteLink(linkId);
+            }
+            break;
+    }
+});

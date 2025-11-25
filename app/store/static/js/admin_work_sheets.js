@@ -2946,12 +2946,8 @@ function splitTextAcrossColumns() {
         modal.remove();
     });
     
-    // Cerrar modal al hacer clic fuera del contenido
-    modal.addEventListener('click', function(e) {
-        if (e.target === modal) {
-            modal.remove();
-        }
-    });
+    // NOTA: Se eliminó el cierre automático al hacer clic fuera del modal
+    // El modal solo se cierra con el botón X para evitar cierres accidentales
     
     // Seleccionar "Personalizado" por defecto
     const personalizadoBtn = modal.querySelector('[data-mode="personalizado"]');
@@ -2964,13 +2960,6 @@ function splitTextAcrossColumns() {
     if (spaceRadio) {
         spaceRadio.checked = true;
     }
-    
-    
-    modal.addEventListener('click', function(e) {
-        if (e.target === modal) {
-            modal.remove();
-        }
-    });
 }
 
 // Ejecutar división personalizada (correo y contraseña)

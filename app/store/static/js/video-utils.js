@@ -246,16 +246,20 @@ window.displayFileInChat = function(messageData) {
     // ✅ CONFIGURACIÓN SIMPLE: Solo usar controles nativos del navegador
     
     if (fileType.startsWith('image/') || isImageFile(fileName)) {
+        const escapedFileUrl = fileUrl.replace(/'/g, "&#39;").replace(/"/g, "&quot;");
+        const escapedFileName = fileName.replace(/'/g, "&#39;").replace(/"/g, "&quot;");
         return `
             <div class="file-attachment image-attachment">
-                <img src="${fileUrl}" alt="${fileName}" class="chat-image" onclick="openImageModal('${fileUrl}', '${fileName}')" oncontextmenu="return false;" draggable="false">
+                <img src="${fileUrl}" alt="${fileName}" class="chat-image" data-action="open-image-modal" data-file-url="${escapedFileUrl}" data-file-name="${escapedFileName}" draggable="false">
             </div>
         `;
     } else if (fileType === 'application/pdf' || fileName.toLowerCase().endsWith('.pdf')) {
         // ✅ PDF: Vista previa minimalista - solo imagen
+        const escapedFileUrl = fileUrl.replace(/'/g, "&#39;").replace(/"/g, "&quot;");
+        const escapedFileName = fileName.replace(/'/g, "&#39;").replace(/"/g, "&quot;");
         return `
             <div class="file-attachment pdf-attachment">
-                <div class="pdf-preview" style="position: relative; width: 100%; max-width: 200px; height: 150px; border-radius: 8px; background: linear-gradient(135deg, #dc3545, #c82333); display: flex; align-items: center; justify-content: center; cursor: pointer; box-shadow: 0 4px 12px rgba(0,0,0,0.15); transition: all 0.3s ease;" onclick="openPdfModal('${fileUrl}', '${fileName}')" onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 6px 20px rgba(0,0,0,0.2)'" onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 4px 12px rgba(0,0,0,0.15)'">
+                <div class="pdf-preview" data-action="open-pdf-modal" data-file-url="${escapedFileUrl}" data-file-name="${escapedFileName}" style="position: relative; width: 100%; max-width: 200px; height: 150px; border-radius: 8px; background: linear-gradient(135deg, #dc3545, #c82333); display: flex; align-items: center; justify-content: center; cursor: pointer; box-shadow: 0 4px 12px rgba(0,0,0,0.15); transition: all 0.3s ease;">
                     <div style="background: rgba(255,255,255,0.2); border-radius: 50%; padding: 25px;">
                         <i class="fas fa-file-pdf" style="font-size: 48px; color: white; opacity: 0.9;"></i>
                     </div>
@@ -274,18 +278,19 @@ window.displayFileInChat = function(messageData) {
                            preload="metadata" 
                            playsinline 
                            controls 
-                           oncontextmenu="return false;" 
+                           data-action="prevent-context-menu"
                            controlsList="nodownload"
                            style="width: 100%; max-width: 100%; max-height: 250px; height: auto; aspect-ratio: 16/9; border-radius: 8px; background: #000; display: block; object-fit: contain;"
-                           onerror="console.error('❌ Error cargando video:', this.src, this.error); this.style.display='none'; this.nextElementSibling.style.display='block';">
+                           data-action-error="handle-mov-video-error"
+                           data-file-url="${fileUrl.replace(/'/g, "&#39;").replace(/"/g, "&quot;")}">
                         <source src="${fileUrl}" type="video/quicktime">
                         <source src="${fileUrl}" type="video/mp4">
                         <p>Tu navegador no soporta la reproducción de este video.</p>
                     </video>
-                    <div style="display: none; padding: 20px; text-align: center; color: white; background: #000; border-radius: 8px;">
+                    <div class="mov-video-error-fallback" style="display: none; padding: 20px; text-align: center; color: white; background: #000; border-radius: 8px;">
                         <i class="fas fa-play-circle" style="font-size: 48px; margin-bottom: 10px;"></i>
                         <p>Video no compatible</p>
-                        <button onclick="window.open('${fileUrl}', '_blank')" style="background: #007bff; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer;">
+                        <button class="open-video-new-tab-btn" data-action="open-video-new-tab" data-file-url="${fileUrl.replace(/'/g, "&#39;").replace(/"/g, "&quot;")}" style="background: #007bff; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer;">
                             Abrir en nueva pestaña
                         </button>
                     </div>
@@ -472,7 +477,7 @@ window.displayFileInChat = function(messageData) {
                             <i class="fas fa-video" style="color: #2196f3; font-size: 24px; margin-bottom: 10px;"></i>
                             <p style="margin: 0 0 10px 0; color: #1976d2; font-weight: 500;">Video ${formatName} disponible</p>
                             <p style="margin: 0 0 15px 0; color: #666; font-size: 14px;">Este formato no se puede reproducir directamente en Firefox</p>
-                            <button onclick="tryVideoInNewTab('${fileUrl}')" class="btn btn-primary btn-sm" style="background: #2196f3; border: none; padding: 8px 16px; border-radius: 4px; color: white; text-decoration: none; display: inline-block;">
+                            <button class="try-video-new-tab-btn" data-action="try-video-new-tab" data-file-url="${fileUrl.replace(/'/g, "&#39;").replace(/"/g, "&quot;")}" class="btn btn-primary btn-sm" style="background: #2196f3; border: none; padding: 8px 16px; border-radius: 4px; color: white; text-decoration: none; display: inline-block;">
                                 <i class="fas fa-external-link-alt"></i> Abrir en nueva pestaña
                             </button>
                         </div>
@@ -486,9 +491,10 @@ window.displayFileInChat = function(messageData) {
                                preload="metadata" 
                                playsinline 
                                controls 
-                               oncontextmenu="return false;" 
+                               data-action="prevent-context-menu"
                                controlsList="nodownload"
-                               onerror="handleFirefoxVideoError(this, '${fileUrl}')"
+                               data-action-error="handle-firefox-video-error"
+                               data-file-url="${fileUrl.replace(/'/g, "&#39;").replace(/"/g, "&quot;")}"
                                style="width: 100%; max-width: 100%; max-height: 250px; height: auto; aspect-ratio: 16/9; border-radius: 8px; background: #000; display: block; object-fit: contain;">
                             <source src="${fileUrl}" type="${actualFileType}">
                             <p>Tu navegador no soporta la reproducción de este video.</p>
@@ -504,9 +510,10 @@ window.displayFileInChat = function(messageData) {
                            preload="metadata" 
                            playsinline 
                            controls 
-                           oncontextmenu="return false;" 
+                           data-action="prevent-context-menu"
                            controlsList="nodownload"
-                           onerror="handleVideoError(this, '${fileUrl}')">
+                           data-action-error="handle-video-error"
+                           data-file-url="${fileUrl.replace(/'/g, "&#39;").replace(/"/g, "&quot;")}">
                         <!-- ✅ USAR ARCHIVO ORIGINAL CON TIPO MIME CORRECTO -->
                         <source src="${fileUrl}" type="${actualFileType}">
                         <!-- ✅ MENSAJE DE FALLO -->
@@ -537,7 +544,7 @@ window.displayFileInChat = function(messageData) {
                     </div>
                 </div>
                 <div class="file-actions">
-                    <button class="file-preview-btn" onclick="previewGenericFile('${fileUrl}', '${fileName}', '${fileType}')">
+                    <button class="file-preview-btn" data-action="preview-generic-file" data-file-url="${fileUrl.replace(/'/g, "&#39;").replace(/"/g, "&quot;")}" data-file-name="${fileName.replace(/'/g, "&#39;").replace(/"/g, "&quot;")}" data-file-type="${fileType.replace(/'/g, "&#39;").replace(/"/g, "&quot;")}">
                         <i class="fas fa-external-link-alt"></i>
                     </button>
                     <a href="${fileUrl}" download="${fileName}" class="file-download-btn" title="Descargar ${fileName}">
@@ -837,7 +844,7 @@ window.handleFirefoxVideoError = function(videoElement, originalUrl) {
             <i class="fas fa-video" style="color: #2196f3; font-size: 24px; margin-bottom: 10px;"></i>
             <p style="margin: 0 0 10px 0; color: #1976d2; font-weight: 500;">Video disponible</p>
             <p style="margin: 0 0 15px 0; color: #666; font-size: 14px;">Este video no se puede reproducir directamente en Firefox</p>
-            <button onclick="tryVideoInNewTab('${originalUrl}')" class="btn btn-primary btn-sm" style="background: #2196f3; border: none; padding: 8px 16px; border-radius: 4px; color: white; text-decoration: none; display: inline-block;">
+            <button class="try-video-new-tab-btn" data-action="try-video-new-tab" data-file-url="${originalUrl.replace(/'/g, "&#39;").replace(/"/g, "&quot;")}" class="btn btn-primary btn-sm" style="background: #2196f3; border: none; padding: 8px 16px; border-radius: 4px; color: white; text-decoration: none; display: inline-block;">
                 <i class="fas fa-external-link-alt"></i> Abrir en nueva pestaña
             </button>
         </div>
@@ -912,14 +919,14 @@ window.openPdfModal = function(pdfUrl, fileName) {
                 justify-content: flex-end;
                 align-items: center;
             ">
-                <button onclick="closePdfModal()" class="btn btn-sm btn-outline-secondary" style="padding: 6px 12px;">
+                <button id="closePdfModalBtn" class="btn btn-sm btn-outline-secondary" style="padding: 6px 12px;">
                     <i class="fas fa-times"></i> Cerrar
                 </button>
             </div>
             <div style="flex: 1; overflow: hidden;">
                 <iframe src="${pdfUrl}#toolbar=0&navpanes=0&scrollbar=0&zoom=FitH&view=FitH&pagemode=none&disableprint=1&disablesave=1&disableopenfile=1&disablebookmark=1&disablefullscreen=1&disableannotation=1&disablecopy=1&disablemodify=1&disableprint=1&disablesave=1&disableopenfile=1&disablebookmark=1&disablefullscreen=1&disableannotation=1&disablecopy=1&disablemodify=1" 
                         style="width: 100%; height: 100%; border: none;"
-                        oncontextmenu="return false;">
+                        data-action="prevent-context-menu">
                 </iframe>
             </div>
         </div>
@@ -927,6 +934,12 @@ window.openPdfModal = function(pdfUrl, fileName) {
     
     // Agregar al body
     document.body.appendChild(modal);
+    
+    // Configurar event listener para botón cerrar (CSP compliant)
+    const closeBtn = modal.querySelector('#closePdfModalBtn');
+    if (closeBtn) {
+        closeBtn.addEventListener('click', closePdfModal);
+    }
     
     // Cerrar con ESC
     const handleKeyPress = (e) => {
@@ -1016,7 +1029,7 @@ window.handlePdfError = function(iframe, pdfUrl) {
             <h5 style="margin-bottom: 15px;">No se puede mostrar el PDF</h5>
             <p style="margin-bottom: 20px;">El navegador no puede cargar este archivo PDF directamente.</p>
                             <div>
-                                <button onclick="openPdfInNewTab('${pdfUrl}')" class="btn btn-primary">
+                                <button class="open-pdf-new-tab-btn" data-action="open-pdf-new-tab" data-pdf-url="${pdfUrl.replace(/'/g, "&#39;").replace(/"/g, "&quot;")}" class="btn btn-primary">
                                     <i class="fas fa-external-link-alt"></i> Abrir en nueva pestaña
                                 </button>
                             </div>
@@ -1383,7 +1396,7 @@ window.previewGenericFile = function(fileUrl, fileName, fileType) {
                     <div style="background: white; padding: 20px; border-radius: 8px; max-width: 80%; max-height: 80%; overflow: auto;">
                         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
                             <h3>${fileName}</h3>
-                            <button onclick="this.closest('.text-preview-modal').remove()" style="background: #e74c3c; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer;">Cerrar</button>
+                            <button class="close-text-preview-btn" data-action="close-text-preview" style="background: #e74c3c; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer;">Cerrar</button>
                         </div>
                         <pre style="white-space: pre-wrap; font-family: monospace; font-size: 12px;">${text}</pre>
                     </div>
@@ -1563,3 +1576,116 @@ function compressImage(file, maxSize) {
         img.src = URL.createObjectURL(file);
     });
 }
+
+// ============================================================================
+// EVENT LISTENERS DELEGADOS PARA CSP COMPLIANCE
+// ============================================================================
+
+// Event listener delegado para todos los data-actions (CSP compliant)
+document.addEventListener('click', function(e) {
+    const target = e.target.closest('[data-action]');
+    if (!target) return;
+    
+    const action = target.getAttribute('data-action');
+    
+    switch(action) {
+        case 'open-image-modal':
+            const imageUrl = target.getAttribute('data-file-url').replace(/&#39;/g, "'").replace(/&quot;/g, '"');
+            const imageName = target.getAttribute('data-file-name').replace(/&#39;/g, "'").replace(/&quot;/g, '"');
+            if (typeof window.openImageModal === 'function') {
+                window.openImageModal(imageUrl, imageName);
+            }
+            break;
+            
+        case 'open-pdf-modal':
+            const pdfUrl = target.getAttribute('data-file-url').replace(/&#39;/g, "'").replace(/&quot;/g, '"');
+            const pdfName = target.getAttribute('data-file-name').replace(/&#39;/g, "'").replace(/&quot;/g, '"');
+            if (typeof window.openPdfModal === 'function') {
+                window.openPdfModal(pdfUrl, pdfName);
+            }
+            // Agregar hover effect para PDF preview
+            target.addEventListener('mouseenter', function() {
+                this.style.transform = 'translateY(-2px)';
+                this.style.boxShadow = '0 6px 20px rgba(0,0,0,0.2)';
+            });
+            target.addEventListener('mouseleave', function() {
+                this.style.transform = 'translateY(0)';
+                this.style.boxShadow = '0 4px 12px rgba(0,0,0,0.15)';
+            });
+            break;
+            
+        case 'open-video-new-tab':
+        case 'try-video-new-tab':
+            const videoUrl = target.getAttribute('data-file-url').replace(/&#39;/g, "'").replace(/&quot;/g, '"');
+            if (typeof window.tryVideoInNewTab === 'function') {
+                window.tryVideoInNewTab(videoUrl);
+            }
+            break;
+            
+        case 'open-pdf-new-tab':
+            const pdfUrlNewTab = target.getAttribute('data-pdf-url').replace(/&#39;/g, "'").replace(/&quot;/g, '"');
+            if (typeof window.openPdfInNewTab === 'function') {
+                window.openPdfInNewTab(pdfUrlNewTab);
+            }
+            break;
+            
+        case 'preview-generic-file':
+            const fileUrl = target.getAttribute('data-file-url').replace(/&#39;/g, "'").replace(/&quot;/g, '"');
+            const fileName = target.getAttribute('data-file-name').replace(/&#39;/g, "'").replace(/&quot;/g, '"');
+            const fileType = target.getAttribute('data-file-type').replace(/&#39;/g, "'").replace(/&quot;/g, '"');
+            if (typeof window.previewGenericFile === 'function') {
+                window.previewGenericFile(fileUrl, fileName, fileType);
+            }
+            break;
+            
+        case 'close-text-preview':
+            const textModal = target.closest('.text-preview-modal');
+            if (textModal) {
+                textModal.remove();
+            }
+            break;
+    }
+});
+
+// Event listener para prevenir menú contextual (CSP compliant)
+document.addEventListener('contextmenu', function(e) {
+    const target = e.target.closest('[data-action="prevent-context-menu"]');
+    if (target) {
+        e.preventDefault();
+        return false;
+    }
+}, true);
+
+// Event listeners para errores de video (CSP compliant)
+document.addEventListener('error', function(e) {
+    const target = e.target;
+    if (target.tagName === 'VIDEO' && target.hasAttribute('data-action-error')) {
+        const action = target.getAttribute('data-action-error');
+        const fileUrl = target.getAttribute('data-file-url').replace(/&#39;/g, "'").replace(/&quot;/g, '"');
+        
+        if (action === 'handle-mov-video-error') {
+            console.error('❌ Error cargando video:', target.src, target.error);
+            target.style.display = 'none';
+            const fallback = target.nextElementSibling;
+            if (fallback && fallback.classList.contains('mov-video-error-fallback')) {
+                fallback.style.display = 'block';
+            }
+        } else if (action === 'handle-firefox-video-error') {
+            if (typeof window.handleFirefoxVideoError === 'function') {
+                window.handleFirefoxVideoError(target, fileUrl);
+            }
+        } else if (action === 'handle-video-error') {
+            if (typeof window.handleVideoError === 'function') {
+                window.handleVideoError(target, fileUrl);
+            }
+        }
+    }
+}, true);
+
+// Event listener para errores de imagen (CSP compliant)
+document.addEventListener('error', function(e) {
+    const target = e.target;
+    if (target.tagName === 'IMG' && target.hasAttribute('data-action-error')) {
+        target.style.display = 'none';
+    }
+}, true);
