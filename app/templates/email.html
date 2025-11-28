@@ -39,15 +39,11 @@
 
     {# Aplicada clase HR #}
     <hr class="hr-margin-15">
-    <h3 class="mb-05">Búsqueda y Eliminacion de Correos</h3>
-    {# Aplicadas clases de texto y margen #}
-    <p class="text-smaller text-secondary mb-075">
-      Ingresa uno o varios correos (separados por comas, espacios o saltos de línea) para eliminar individualmente o todos los resultados.
-    </p>
+    <h3 class="mb-05 text-center">Búsqueda y Eliminacion de Correos</h3>
     {# Clase searchEmailsForm aplicada desde CSS #}
     <form id="searchEmailsForm" name="searchEmailsForm">
       <label for="searchEmailsInput" class="sr-only">Buscar y eliminar correos</label>
-      <textarea id="searchEmailsInput" rows="2" class="flex-grow-1 resize-vertical" placeholder="correo1@gmail.com, correo2@gmail.com" autocomplete="off"></textarea>
+      <textarea id="searchEmailsInput" rows="2" class="flex-grow-1 resize-vertical" placeholder="Ingresa uno o varios correos (separados por comas, espacios o saltos de línea)." autocomplete="off"></textarea>
       <button type="submit" class="btn-search">Limpiar</button>
     </form>
     <div id="emailsSearchResults" class="search-results-container">
@@ -67,10 +63,9 @@
   </div>
 
   <div class="admin-card">
-    <h3>Correos Permitidos</h3>
     <div id="allowedEmailsContainer" class="mb-0">
       <div class="d-flex justify-content-between align-items-center flex-wrap gap-1 mb-05">
-        <label for="perPageSelect"><strong>Lista de Correos:</strong></label>
+        <label for="perPageSelect"><strong>Lista Correos permitidos:</strong></label>
         <div class="d-flex align-items-center gap-05">
           <span><strong>Mostrar:</strong></span>
           <select id="perPageSelect" class="select-padding-3px" autocomplete="off">
@@ -92,30 +87,21 @@
           <button id="nextPageBtn" class="btn-panel btn-blue ml-05" disabled>Siguiente &gt;</button>
         </div>
       </div>
-    </div>
-  </div>
-
-  <div class="admin-card">
-    <strong class="d-block mb-05">¿Cómo agregar correos?</strong>
-    {# Aplicada clase de lista y padding #}
-    <ol class="m-0 list-padding-left-15">
-      <li>Escribe varias direcciones en el campo (separadas por comas, saltos de línea o espacios).</li>
-      <li>Da clic en <b>"Añadir Correos"</b>.</li>
-    </ol>
-
-    {# Aplicada clase HR #}
-    <hr class="hr-margin-15">
-    <h4>Añadir Nuevos Correos Masivamente</h4>
-    <div id="addEmailsSection" class="mb-0">
-      <label for="addEmailsInput"><strong>Nuevos Correos (separados por comas, espacios o saltos de línea):</strong></label>
-      {# Aplicadas clases display, margen, textarea-wide #}
-      <textarea id="addEmailsInput" name="add_emails_input" rows="2" class="d-block mt-05 mb-05 textarea-wide" placeholder="nuevo1@ejemplo.com, nuevo2@ejemplo.com..." autocomplete="off"></textarea>
-      <div class="text-center">
-        <button type="button" id="addEmailsBtn" class="btn-blue">Añadir Correos</button>
-      </div>
-      {# Aplicadas clases margen y texto #}
-      <div class="text-center mt-05">
-        <span id="addEmailsMsg" class="text-italic text-success"></span>
+      
+      {# Aplicada clase HR #}
+      <hr class="hr-margin-15">
+      
+      <div id="addEmailsSection" class="mb-0">
+        <label for="addEmailsInput" class="sr-only">Nuevos Correos</label>
+        {# Aplicadas clases display, margen, textarea-wide #}
+        <textarea id="addEmailsInput" name="add_emails_input" rows="2" class="d-block mx-auto mt-05 mb-05 textarea-wide" placeholder="Ingresa uno o varios correos (separados por comas, espacios o saltos de línea). Ejemplo: nuevo1@ejemplo.com, nuevo2@ejemplo.com..." autocomplete="off"></textarea>
+        <div class="text-center">
+          <button type="button" id="addEmailsBtn" class="btn-blue">Añadir Correos</button>
+        </div>
+        {# Aplicadas clases margen y texto #}
+        <div class="text-center mt-05">
+          <span id="addEmailsMsg" class="text-italic text-success"></span>
+        </div>
       </div>
     </div>
   </div>

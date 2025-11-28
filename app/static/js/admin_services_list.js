@@ -703,8 +703,8 @@ document.addEventListener("DOMContentLoaded", function() {
   // ------------------ Funciones: toggleVisibility, renderServiceItems etc. ------------------------
   
   function getNextAvailableState(currentState, serviceId) {
-    // Ciclo base: off -> on-no-usuarios -> on-usuarios -> on-no-usuarios-no-visible -> codigos-2 -> off
-    const baseCycle = ["off", "on-no-usuarios", "on-usuarios", "on-no-usuarios-no-visible", "codigos-2"];
+    // Ciclo base: off -> on-no-usuarios -> on-usuarios -> on-no-usuarios-no-visible -> codigos-2 -> sms -> off
+    const baseCycle = ["off", "on-no-usuarios", "on-usuarios", "on-no-usuarios-no-visible", "codigos-2", "sms"];
     
     const currentIndex = baseCycle.indexOf(currentState);
     
@@ -940,6 +940,8 @@ document.addEventListener("DOMContentLoaded", function() {
         visibilityBtnClass = 'visibility-btn-on-no-usuarios-no-visible';
       } else if (s.visibility_mode === 'codigos-2') {
         visibilityBtnClass = 'visibility-btn-codigos-2';
+      } else if (s.visibility_mode === 'sms') {
+        visibilityBtnClass = 'visibility-btn-sms';
       }
       const visibilityBtnText = s.visibility_mode || 'off'; // Texto del botón
 
@@ -974,15 +976,26 @@ document.addEventListener("DOMContentLoaded", function() {
       `;
         // Restaurar botones para servicios NO protegidos
         if (!(s.protected && s.name === "Pais Netflix")) {
-            html += `
-                <button class="edit-service btn-orange" data-id="${s.id}">Editar</button>
-                <button class="link-regex-service btn-blue" data-id="${s.id}">re</button>
-                <button class="link-filter-service btn-blue" data-id="${s.id}">fi</button>
-                <button class="add-service-icon-btn btn-blue" data-id="${s.id}">+Icon</button>
-                <button class="btn-panel btn-red btn-sm delete-service" data-id="${s.id}" title="Eliminar">
-                  <i class="fas fa-trash"></i>
-                </button>
-            `;
+            // Si es SMS, no mostrar botones "re" y "fi"
+            if (s.visibility_mode === 'sms') {
+                html += `
+                    <button class="edit-service btn-orange" data-id="${s.id}">Editar</button>
+                    <button class="add-service-icon-btn btn-blue" data-id="${s.id}">+Icon</button>
+                    <button class="btn-panel btn-red btn-sm delete-service" data-id="${s.id}" title="Eliminar">
+                      <i class="fas fa-trash"></i>
+                    </button>
+                `;
+            } else {
+                html += `
+                    <button class="edit-service btn-orange" data-id="${s.id}">Editar</button>
+                    <button class="link-regex-service btn-blue" data-id="${s.id}">re</button>
+                    <button class="link-filter-service btn-blue" data-id="${s.id}">fi</button>
+                    <button class="add-service-icon-btn btn-blue" data-id="${s.id}">+Icon</button>
+                    <button class="btn-panel btn-red btn-sm delete-service" data-id="${s.id}" title="Eliminar">
+                      <i class="fas fa-trash"></i>
+                    </button>
+                `;
+            }
         } else { // Para servicio protegido, solo Editar e Icono
              html += `
                 <button class="edit-service btn-orange" data-id="${s.id}">Editar</button>

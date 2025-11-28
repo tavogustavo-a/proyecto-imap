@@ -114,6 +114,46 @@
                     {% endif %}
                   </button>
                 </div>
+              {% elif srv.visibility_mode == "sms" %}
+                <!-- Admin ve servicios sms (está logueado) -->
+                <div class="service-btn-container">
+                  <button
+                    class="service-btn"
+                    data-service-id="{{ srv.id }}"
+                    data-visibility-mode="sms"
+                    data-bg-color="{{ srv.border_color }}"
+                    data-gradient-color="{{ srv.gradient_color if srv.gradient_color else '#764ba2' }}"
+                    data-click-color1="{{ srv.click_color1 if srv.click_color1 else '#031faa' }}"
+                    data-click-color2="{{ srv.click_color2 if srv.click_color2 else '#031faa' }}"
+                    data-service-aliases='[
+                      {% for al in srv.aliases %}
+                        {
+                          "alias_name": {{ al.alias_name|tojson }},
+                          "alias_icons": [
+                            {% for ai in al.alias_icons %}
+                              "{{ ai.icon_name }}"{% if not loop.last %},{% endif %}
+                            {% endfor %}
+                          ],
+                          "alias_color": {{ al.border_color|tojson }},
+                          "alias_color2": {{ al.gradient_color|tojson }}
+                        }{% if not loop.last %},{% endif %}
+                      {% endfor %}
+                    ]'
+                  >
+                    {% if srv.service_icons and srv.service_icons|length > 0 %}
+                      {% for icon_obj in srv.service_icons %}
+                        <img
+                          src="{{ url_for('static', filename='images/' ~ icon_obj.icon_name) }}"
+                          alt="icon"
+                        >
+                      {% endfor %}
+                    {% endif %}
+                    {{ srv.name }}
+                    {% if srv.aliases and srv.aliases|length > 0 %}
+                      <span class="info-icon">ℹ️</span>
+                    {% endif %}
+                  </button>
+                </div>
               {% endif %}
             {% endfor %}
           </div>
@@ -229,6 +269,45 @@
                     {% endif %}
                   </button>
                 </div>
+              {% elif srv.visibility_mode == "sms" and session.get("logged_in") %}
+                <div class="service-btn-container">
+                  <button
+                    class="service-btn"
+                    data-service-id="{{ srv.id }}"
+                    data-visibility-mode="sms"
+                    data-bg-color="{{ srv.border_color }}"
+                    data-gradient-color="{{ srv.gradient_color if srv.gradient_color else '#764ba2' }}"
+                    data-click-color1="{{ srv.click_color1 if srv.click_color1 else '#031faa' }}"
+                    data-click-color2="{{ srv.click_color2 if srv.click_color2 else '#031faa' }}"
+                    data-service-aliases='[
+                      {% for al in srv.aliases %}
+                        {
+                          "alias_name": {{ al.alias_name|tojson }},
+                          "alias_icons": [
+                            {% for ai in al.alias_icons %}
+                              "{{ ai.icon_name }}"{% if not loop.last %},{% endif %}
+                            {% endfor %}
+                          ],
+                          "alias_color": {{ al.border_color|tojson }},
+                        "alias_color2": {{ al.gradient_color|tojson }}
+                        }{% if not loop.last %},{% endif %}
+                      {% endfor %}
+                    ]'
+                  >
+                    {% if srv.service_icons and srv.service_icons|length > 0 %}
+                      {% for icon_obj in srv.service_icons %}
+                        <img
+                          src="{{ url_for('static', filename='images/' ~ icon_obj.icon_name) }}"
+                          alt="icon"
+                        >
+                      {% endfor %}
+                    {% endif %}
+                    {{ srv.name }}
+                    {% if srv.aliases and srv.aliases|length > 0 %}
+                      <span class="info-icon">ℹ️</span>
+                    {% endif %}
+                  </button>
+                </div>
               {% endif %}
             {% endfor %}
           </div>
@@ -283,6 +362,7 @@
     <a href="{{ url_for('admin_bp.usuarios_page') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-users"></i> Usuarios</a>
     <a href="{{ url_for('admin_bp.security_rules_page') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-shield-alt"></i> Reglas de Seguridad</a>
     <a href="{{ url_for('admin_bp.view_trigger_logs_page') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-clipboard-list"></i> Consultar logs</a>
+    <a href="{{ url_for('store_bp.admin_sms') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-sms"></i> Consulta SMS</a>
     <button id="btnClearTriggerLogMenu" type="button" class="btn-panel btn-red mobile-menu-btn mb-04"><i class="fas fa-trash"></i> Limpiar Logs</button>
     <a href="{{ url_for('auth_bp.logout') }}" class="btn-panel btn-red mobile-menu-btn mb-04"><i class="fas fa-sign-out-alt"></i> Cerrar Sesión</a>
   </div>

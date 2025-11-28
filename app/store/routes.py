@@ -2,7 +2,7 @@ from flask import render_template, request, redirect, url_for, flash, jsonify, c
 from datetime import datetime
 from app.utils.timezone import get_colombia_now, colombia_strftime, utc_to_colombia, get_colombia_datetime
 # Importa tus modelos y db. Asumo nombres comunes, ajústalos si es necesario.
-from .models import Product, Sale, Coupon, coupon_products, Role, role_products, role_users, ProductionLink, ApiInfo, WorksheetTemplate, WorksheetData, WorksheetPermission, DriveTransfer, WhatsAppConfig, GSheetsLink
+from .models import Product, Sale, Coupon, coupon_products, Role, role_products, role_users, ProductionLink, ApiInfo, WorksheetTemplate, WorksheetData, WorksheetPermission, DriveTransfer, WhatsAppConfig, GSheetsLink, SMSConfig, SMSMessage, AllowedSMSNumber
 
 # Identificadores internos del módulo store
 _STORE_MODULE_IDENTIFIER = 0x7C8D
@@ -2873,6 +2873,12 @@ def get_user_worksheets():
 @admin_required
 def admin_configurations():
     return render_template('configurations.html', title="Configuraciones")
+
+@store_bp.route('/admin/sms')
+@admin_required
+def admin_sms():
+    """Página para consultar mensajes SMS recibidos"""
+    return render_template('sms.html', title="Consulta de Códigos SMS")
 
 @store_bp.route('/admin/support')
 @admin_required
@@ -7538,4 +7544,546 @@ def test_whatsapp_connection():
         return jsonify({'success': False, 'error': f'Error de conexión: {str(e)}'}), 500
 
 
+# ==================== RUTAS PARA SMS (TWILIO) ====================
+
+@store_bp.route('/admin/sms_configs', methods=['GET'])
+@admin_required
+def list_sms_configs():
+    """Lista todas las configuraciones SMS. Asegura que todos los números estén habilitados."""
+    configs = SMSConfig.query.order_by(SMSConfig.created_at.desc()).all()
+    
+    # Asegurar que todos los números estén habilitados (siempre deben estar habilitados)
+    needs_commit = False
+    for config in configs:
+        if not config.is_enabled:
+            config.is_enabled = True
+            needs_commit = True
+    
+    # Guardar cambios si hubo alguno
+    if needs_commit:
+        try:
+            db.session.commit()
+        except Exception as e:
+            db.session.rollback()
+            current_app.logger.error(f"Error habilitando números SMS: {e}", exc_info=True)
+    
+    configs_data = [{
+        'id': config.id,
+        'name': config.name,
+        'phone_number': config.phone_number,
+        'twilio_account_sid': config.twilio_account_sid,
+        'is_enabled': True,  # Siempre True
+        'description': config.description,
+        'created_at': colombia_strftime('%Y-%m-%d %H:%M:%S') if config.created_at else None,
+        'messages_count': config.messages.count()
+    } for config in configs]
+    return jsonify({'success': True, 'configs': configs_data})
+
+@store_bp.route('/admin/sms_configs', methods=['POST'])
+@admin_required
+def create_sms_config():
+    """Crea una nueva configuración SMS"""
+    data = request.form if request.form else request.json
+    
+    name = data.get('name')
+    twilio_account_sid = data.get('twilio_account_sid')
+    twilio_auth_token = data.get('twilio_auth_token')
+    phone_number = data.get('phone_number')
+    description = data.get('description', '')
+    # Los números SMS siempre deben estar habilitados
+    is_enabled = True
+    
+    if not all([name, twilio_account_sid, twilio_auth_token, phone_number]):
+        return jsonify({'success': False, 'error': 'Faltan campos requeridos'}), 400
+    
+    try:
+        if not phone_number.startswith('+'):
+            return jsonify({'success': False, 'error': 'El número debe incluir código de país (ej: +12672441170)'}), 400
+        
+        config = SMSConfig(
+            name=name,
+            twilio_account_sid=twilio_account_sid,
+            twilio_auth_token=twilio_auth_token,
+            phone_number=phone_number,
+            description=description,
+            is_enabled=is_enabled
+        )
+        
+        db.session.add(config)
+        db.session.commit()
+        
+        return jsonify({'success': True, 'message': 'Configuración SMS creada correctamente.', 'config_id': config.id})
+    
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': f'Error al crear: {str(e)}'}), 500
+
+@store_bp.route('/admin/sms_configs/<int:config_id>', methods=['PUT'])
+@admin_required
+def update_sms_config(config_id):
+    """Actualiza una configuración SMS existente"""
+    config = SMSConfig.query.get_or_404(config_id)
+    data = request.form if request.form else request.json
+    
+    name = data.get('name')
+    twilio_account_sid = data.get('twilio_account_sid')
+    twilio_auth_token = data.get('twilio_auth_token')
+    phone_number = data.get('phone_number')
+    description = data.get('description', '')
+    # Los números SMS siempre deben estar habilitados
+    is_enabled = True
+    
+    if not all([name, twilio_account_sid, phone_number]):
+        return jsonify({'success': False, 'error': 'Faltan campos requeridos'}), 400
+    
+    try:
+        if not phone_number.startswith('+'):
+            return jsonify({'success': False, 'error': 'El número debe incluir código de país (ej: +12672441170)'}), 400
+        
+        # Verificar si el número ya existe en otra configuración
+        existing = SMSConfig.query.filter(
+            SMSConfig.phone_number == phone_number,
+            SMSConfig.id != config_id
+        ).first()
+        if existing:
+            return jsonify({'success': False, 'error': 'Este número ya está configurado en otra cuenta'}), 400
+        
+        config.name = name
+        config.twilio_account_sid = twilio_account_sid
+        # Solo actualizar el token si se proporciona uno nuevo
+        if twilio_auth_token:
+            config.twilio_auth_token = twilio_auth_token
+        config.phone_number = phone_number
+        config.description = description
+        config.is_enabled = is_enabled
+        
+        db.session.commit()
+        
+        return jsonify({'success': True, 'message': 'Configuración SMS actualizada correctamente.'})
+    
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': f'Error al actualizar: {str(e)}'}), 500
+
+@store_bp.route('/admin/sms_configs/<int:config_id>', methods=['DELETE'])
+@admin_required
+def delete_sms_config(config_id):
+    """Elimina una configuración SMS. Si es el último, elimina también todos los números permitidos."""
+    config = SMSConfig.query.get_or_404(config_id)
+    
+    try:
+        # Verificar si es el último SMSConfig antes de eliminar
+        remaining_configs_count = SMSConfig.query.filter(SMSConfig.id != config_id).count()
+        
+        # Eliminar la configuración (los AllowedSMSNumber se eliminarán en cascada por la foreign key)
+        db.session.delete(config)
+        
+        db.session.commit()
+        
+        return jsonify({'success': True, 'message': 'Configuración SMS eliminada correctamente.'})
+    
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': f'Error al eliminar: {str(e)}'}), 500
+
+@store_bp.route('/admin/sms_configs/<int:config_id>/toggle', methods=['POST'])
+@admin_required
+def toggle_sms_config(config_id):
+    """Los números SMS siempre deben estar habilitados. Esta ruta mantiene el estado habilitado."""
+    config = SMSConfig.query.get_or_404(config_id)
+    
+    try:
+        # Siempre mantener habilitado
+        config.is_enabled = True
+        db.session.commit()
+        
+        return jsonify({'success': True, 'message': 'Los números SMS siempre están habilitados.', 'is_enabled': True})
+    
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': f'Error al actualizar estado: {str(e)}'}), 500
+
+@store_bp.route('/admin/sms_configs/<int:config_id>/messages', methods=['GET'])
+@admin_required
+def list_sms_messages(config_id):
+    """Lista los mensajes recibidos para una configuración SMS"""
+    config = SMSConfig.query.get_or_404(config_id)
+    
+    page = request.args.get('page', 1, type=int)
+    per_page = request.args.get('per_page', 50, type=int)
+    
+    messages = SMSMessage.query.filter_by(sms_config_id=config_id).order_by(
+        SMSMessage.created_at.desc()
+    ).paginate(page=page, per_page=per_page, error_out=False)
+    
+    messages_data = [{
+        'id': msg.id,
+        'from_number': msg.from_number,
+        'to_number': msg.to_number,
+        'message_body': msg.message_body,
+        'twilio_status': msg.twilio_status,
+        'processed': msg.processed,
+        'created_at': utc_to_colombia(msg.created_at).strftime('%Y-%m-%d %H:%M:%S') if msg.created_at else None,
+    } for msg in messages.items]
+    
+    return jsonify({
+        'success': True,
+        'messages': messages_data,
+        'total': messages.total,
+        'pages': messages.pages,
+        'current_page': page
+    })
+
+@store_bp.route('/admin/sms/all-messages', methods=['GET'])
+@admin_required
+def get_all_sms_messages():
+    """Obtiene todos los mensajes SMS de todos los números configurados (ordenados del más reciente al más antiguo)"""
+    page = request.args.get('page', 1, type=int)
+    per_page = request.args.get('per_page', 100, type=int)
+    
+    # Siempre ordenar del más reciente al más antiguo
+    messages = SMSMessage.query.order_by(SMSMessage.created_at.desc()).paginate(
+        page=page, per_page=per_page, error_out=False
+    )
+    
+    messages_data = [{
+        'id': msg.id,
+        'sms_config_id': msg.sms_config_id,
+        'from_number': msg.from_number,
+        'to_number': msg.to_number,
+        'message_body': msg.message_body,
+        'twilio_status': msg.twilio_status,
+        'processed': msg.processed,
+        'created_at': utc_to_colombia(msg.created_at).strftime('%Y-%m-%d %H:%M:%S') if msg.created_at else None,
+    } for msg in messages.items]
+    
+    return jsonify({
+        'success': True,
+        'messages': messages_data,
+        'total': messages.total,
+        'pages': messages.pages,
+        'current_page': page
+    })
+
+@store_bp.route('/admin/sms/message/<int:message_id>', methods=['GET'])
+@admin_required
+def get_sms_message_by_id(message_id):
+    """Obtiene un mensaje SMS por su ID (sin necesidad de config_id)"""
+    message = SMSMessage.query.get_or_404(message_id)
+    
+    return jsonify({
+        'success': True,
+        'message': {
+            'id': message.id,
+            'sms_config_id': message.sms_config_id,
+            'from_number': message.from_number,
+            'to_number': message.to_number,
+            'message_body': message.message_body,
+            'twilio_message_sid': message.twilio_message_sid,
+            'twilio_status': message.twilio_status,
+            'processed': message.processed,
+            'raw_data': message.raw_data,
+            'created_at': utc_to_colombia(message.created_at).strftime('%Y-%m-%d %H:%M:%S') if message.created_at else None,
+            'processed_at': utc_to_colombia(message.processed_at).strftime('%Y-%m-%d %H:%M:%S') if message.processed_at else None
+        }
+    })
+
+@store_bp.route('/admin/sms/set-selected-number', methods=['POST'])
+@admin_required
+def set_selected_sms_number():
+    """Guarda el número SMS seleccionado en la sesión del usuario"""
+    data = request.get_json()
+    sms_config_id = data.get('sms_config_id', type=int)
+    
+    if sms_config_id:
+        # Validar que el sms_config_id existe
+        sms_config = SMSConfig.query.get(sms_config_id)
+        if not sms_config:
+            return jsonify({'success': False, 'message': 'Número SMS no encontrado.'}), 404
+        session['selected_sms_config_id'] = sms_config_id
+    else:
+        session.pop('selected_sms_config_id', None)
+    
+    return jsonify({'success': True, 'message': 'Número seleccionado guardado.'})
+
+@store_bp.route('/admin/sms/allowed-numbers/paginated', methods=['GET'])
+@admin_required
+def list_allowed_sms_numbers_paginated():
+    """Devuelve una lista paginada de números permitidos para SMS filtrados por sms_config_id"""
+    page = request.args.get('page', 1, type=int)
+    per_page = request.args.get('per_page', 10, type=int)
+    sms_config_id = request.args.get('sms_config_id', type=int)
+    
+    if not sms_config_id:
+        return jsonify({'success': False, 'message': 'Debe seleccionar un número SMS primero.'}), 400
+    
+    # Validar que el sms_config_id existe
+    sms_config = SMSConfig.query.get(sms_config_id)
+    if not sms_config:
+        return jsonify({'success': False, 'message': 'Número SMS no encontrado.'}), 404
+    
+    # Validar per_page, si se pide "Todos", usar un número muy grande
+    query = AllowedSMSNumber.query.filter_by(sms_config_id=sms_config_id)
+    if per_page == -1:
+        total_count = query.count()
+        per_page = total_count + 1 if total_count > 0 else 10
+    
+    # Consulta paginada filtrada por sms_config_id
+    pagination = query.order_by(AllowedSMSNumber.phone_number.asc()).paginate(
+        page=page, per_page=per_page, error_out=False
+    )
+    
+    numbers_data = [num.phone_number for num in pagination.items]
+    
+    return jsonify({
+        'success': True,
+        'numbers': numbers_data,
+        'pagination': {
+            'page': pagination.page,
+            'per_page': pagination.per_page if per_page > 0 else -1,
+            'total_pages': pagination.pages,
+            'total_items': pagination.total,
+            'has_prev': pagination.has_prev,
+            'has_next': pagination.has_next
+        }
+    })
+
+@store_bp.route('/admin/sms/allowed-numbers/search', methods=['POST'])
+@admin_required
+def search_allowed_sms_numbers():
+    """Busca correos/números dentro de AllowedSMSNumber filtrados por sms_config_id, aceptando múltiples términos"""
+    import re
+    from sqlalchemy import or_, func
+    
+    data = request.get_json()
+    search_text = data.get('search_text', '').strip()
+    sms_config_id = data.get('sms_config_id', type=int)
+    
+    if not sms_config_id:
+        return jsonify({'success': False, 'message': 'Debe seleccionar un número SMS primero.'}), 400
+    
+    # Validar que el sms_config_id existe
+    sms_config = SMSConfig.query.get(sms_config_id)
+    if not sms_config:
+        return jsonify({'success': False, 'message': 'Número SMS no encontrado.'}), 404
+    
+    # Procesar el texto de búsqueda para obtener una lista de términos no vacíos
+    search_terms = [t.strip().lower() for t in re.split(r'[,\n\r\s]+', search_text) if t.strip()]
+    
+    # Base query filtrada por sms_config_id
+    base_query = AllowedSMSNumber.query.filter_by(sms_config_id=sms_config_id)
+    
+    if not search_terms:
+        numbers_query = base_query.filter(db.false()).order_by(AllowedSMSNumber.phone_number.asc())
+    else:
+        # Construir una condición OR con ILIKE para cada término (normalizado a minúsculas)
+        # Usar LOWER() para comparar en minúsculas ya que los correos se guardan en minúsculas
+        conditions = []
+        for term in search_terms:
+            conditions.append(func.lower(AllowedSMSNumber.phone_number).like(f'%{term}%'))
+        # Aplicar el filtro OR a la consulta
+        numbers_query = base_query.filter(or_(*conditions)).order_by(AllowedSMSNumber.phone_number.asc())
+    
+    found_numbers = [num.phone_number for num in numbers_query.all()]
+    
+    return jsonify({'success': True, 'numbers': found_numbers})
+
+@store_bp.route('/admin/sms/allowed-numbers/delete', methods=['POST'])
+@admin_required
+def delete_allowed_sms_number():
+    """Elimina un correo/número específico de AllowedSMSNumber filtrado por sms_config_id"""
+    import re
+    data = request.get_json()
+    phone_number = data.get('phone_number', '').strip()
+    sms_config_id = data.get('sms_config_id', type=int)
+    
+    if not phone_number:
+        return jsonify({'success': False, 'message': 'Falta el correo o número.'}), 400
+    
+    if not sms_config_id:
+        return jsonify({'success': False, 'message': 'Debe seleccionar un número SMS primero.'}), 400
+    
+    # Normalizar: si es correo, convertir a minúsculas; si es número, agregar +
+    phone_number_normalized = phone_number.lower()
+    email_pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+    if not re.match(email_pattern, phone_number_normalized):
+        # No es correo, tratar como número
+        if not phone_number_normalized.startswith('+'):
+            phone_number_normalized = '+' + phone_number_normalized
+    
+    # Buscar tanto con el valor original como con el normalizado, filtrado por sms_config_id
+    deleted_count = AllowedSMSNumber.query.filter(
+        AllowedSMSNumber.sms_config_id == sms_config_id,
+        db.or_(
+            AllowedSMSNumber.phone_number == phone_number,
+            AllowedSMSNumber.phone_number == phone_number_normalized
+        )
+    ).delete()
+    
+    try:
+        db.session.commit()
+        if deleted_count > 0:
+            return jsonify({'success': True, 'message': 'Correo eliminado correctamente.'})
+        else:
+            return jsonify({'success': False, 'message': 'Correo no encontrado.'})
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Error al eliminar correo '{phone_number}': {e}", exc_info=True)
+        return jsonify({'success': False, 'message': 'Error al eliminar el correo.'}), 500
+
+@store_bp.route('/admin/sms/allowed-numbers/delete-many', methods=['POST'])
+@admin_required
+def delete_many_allowed_sms_numbers():
+    """Elimina varios correos/números a la vez de AllowedSMSNumber filtrados por sms_config_id"""
+    import re
+    data = request.get_json()
+    phone_numbers = data.get('phone_numbers', [])
+    sms_config_id = data.get('sms_config_id', type=int)
+    
+    if not phone_numbers:
+        return jsonify({'success': False, 'message': 'No se proporcionaron correos o números.'}), 400
+    
+    if not sms_config_id:
+        return jsonify({'success': False, 'message': 'Debe seleccionar un número SMS primero.'}), 400
+    
+    # Normalizar: correos a minúsculas, números con +
+    normalized_numbers = []
+    email_pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+    
+    for num in phone_numbers:
+        if isinstance(num, str) and num.strip():
+            normalized = num.strip().lower()
+            # Si no es correo, tratar como número
+            if not re.match(email_pattern, normalized):
+                if not normalized.startswith('+'):
+                    normalized = '+' + normalized
+            normalized_numbers.append(normalized)
+    
+    # También incluir los valores originales por si acaso
+    all_numbers = list(set(normalized_numbers + [n.strip() for n in phone_numbers if isinstance(n, str) and n.strip()]))
+    
+    if not all_numbers:
+        return jsonify({'success': False, 'message': 'No hay correos o números válidos para eliminar.'}), 400
+    
+    deleted_count = AllowedSMSNumber.query.filter(
+        AllowedSMSNumber.sms_config_id == sms_config_id,
+        AllowedSMSNumber.phone_number.in_(all_numbers)
+    ).delete(synchronize_session=False)
+    
+    try:
+        db.session.commit()
+        return jsonify({'success': True, 'message': f'{deleted_count} correo(s) eliminado(s).'})
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Error al eliminar múltiples correos: {e}", exc_info=True)
+        return jsonify({'success': False, 'message': 'Error al eliminar los correos.'}), 500
+
+@store_bp.route('/admin/sms/allowed-numbers/delete-all', methods=['POST'])
+@admin_required
+def delete_all_allowed_sms_numbers():
+    """Elimina TODOS los números permitidos de un sms_config_id específico"""
+    data = request.get_json()
+    sms_config_id = data.get('sms_config_id', type=int)
+    
+    if not sms_config_id:
+        return jsonify({'success': False, 'message': 'Debe seleccionar un número SMS primero.'}), 400
+    
+    try:
+        deleted_count = AllowedSMSNumber.query.filter_by(sms_config_id=sms_config_id).delete()
+        db.session.commit()
+        return jsonify({'success': True, 'message': f'{deleted_count} número(s) eliminado(s).'})
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Error al eliminar todos los números: {e}", exc_info=True)
+        return jsonify({'success': False, 'message': 'Error interno al eliminar todos los números.'}), 500
+
+@store_bp.route('/admin/sms/allowed-numbers/add', methods=['POST'])
+@admin_required
+def add_allowed_sms_numbers():
+    """Añade una lista de nuevos números permitidos vinculados a un sms_config_id específico. Evita añadir duplicados."""
+    import re
+    
+    data = request.get_json()
+    phone_numbers = data.get('phone_numbers', [])
+    sms_config_id = data.get('sms_config_id', type=int)
+    
+    if not sms_config_id:
+        return jsonify({'success': False, 'message': 'Debe seleccionar un número SMS primero.'}), 400
+    
+    # Validar que el sms_config_id existe
+    sms_config = SMSConfig.query.get(sms_config_id)
+    if not sms_config:
+        return jsonify({'success': False, 'message': 'Número SMS no encontrado.'}), 404
+    
+    if not phone_numbers:
+        return jsonify({'success': False, 'message': 'No se proporcionaron números.'}), 400
+    
+    # Normalizar y asegurar unicidad en la lista de entrada
+    # Aceptar tanto números de teléfono como correos electrónicos
+    normalized_new_numbers = []
+    
+    for num in phone_numbers:
+        if isinstance(num, str) and num.strip():
+            normalized = num.strip().lower()  # Normalizar a minúsculas para correos
+            
+            # Verificar si es un correo electrónico
+            email_pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+            if re.match(email_pattern, normalized):
+                normalized_new_numbers.append(normalized)
+            else:
+                # Si no es correo, tratar como número de teléfono
+                # Agregar + si no lo tiene
+                if not normalized.startswith('+'):
+                    normalized = '+' + normalized
+                # Validar formato básico (al menos 10 caracteres después del +)
+                if len(normalized) >= 11 and normalized[1:].replace(' ', '').isdigit():
+                    normalized_new_numbers.append(normalized)
+    
+    # Eliminar duplicados
+    normalized_new_numbers = list(set(normalized_new_numbers))
+    
+    if not normalized_new_numbers:
+        return jsonify({'success': False, 'message': 'No hay correos o números válidos para añadir.'}), 400
+    
+    # Obtener los números que YA existen para este sms_config_id para evitar IntegrityError
+    existing_numbers = {num.phone_number for num in AllowedSMSNumber.query.filter(
+        AllowedSMSNumber.sms_config_id == sms_config_id,
+        AllowedSMSNumber.phone_number.in_(normalized_new_numbers)
+    ).all()}
+    
+    new_number_objects = []
+    actually_added_count = 0
+    for number in normalized_new_numbers:
+        if number not in existing_numbers:
+            new_number_objects.append(AllowedSMSNumber(phone_number=number, sms_config_id=sms_config_id))
+            actually_added_count += 1
+    
+    if not new_number_objects:
+        return jsonify({'success': True, 'added_count': 0, 'message': 'Todos los números proporcionados ya existían para este número SMS.'})
+    
+    # Añadir los que realmente son nuevos
+    db.session.bulk_save_objects(new_number_objects)
+    
+    try:
+        db.session.commit()
+        return jsonify({'success': True, 'added_count': actually_added_count, 'message': f'{actually_added_count} número(s) agregado(s).'})
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Error en bulk insert para añadir números: {e}", exc_info=True)
+        return jsonify({'success': False, 'message': 'Error al guardar los nuevos números.'}), 500
+
+@store_bp.route('/sms/webhook', methods=['POST'])
+def sms_webhook():
+    """Webhook público para recibir SMS de Twilio"""
+    from app.services.sms_service import receive_sms_webhook
+    
+    try:
+        twiml_response = receive_sms_webhook()
+        return twiml_response, 200, {'Content-Type': 'text/xml'}
+    
+    except Exception as e:
+        current_app.logger.error(f"Error en webhook SMS: {str(e)}", exc_info=True)
+        from twilio.twiml.messaging_response import MessagingResponse
+        response = MessagingResponse()
+        return str(response), 200, {'Content-Type': 'text/xml'}
 

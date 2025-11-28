@@ -4,6 +4,10 @@ from flask import Blueprint, jsonify, request, session
 from app.services.search_service import search_and_apply_filters, search_and_apply_filters2
 from app.models import User
 from app.models.user import AllowedEmail
+from app.models.service import ServiceModel
+from app.store.models import SMSConfig, SMSMessage, AllowedSMSNumber
+from app.extensions import db
+from app.utils.timezone import utc_to_colombia
 
 api_bp = Blueprint("api_bp", __name__)
 
@@ -22,7 +26,14 @@ def search_mails():
     else:
         user = None  # usuario anónimo
 
-    # Validar usuario
+    # Verificar si el servicio es SMS
+    if service_id:
+        service = ServiceModel.query.get(service_id)
+        if service and service.visibility_mode == 'sms':
+            # Lógica para búsqueda SMS (pasar el usuario para validaciones)
+            return search_sms_messages(email_to_search, user)
+
+    # Validar usuario (para búsquedas normales de correos)
     if user:
         if not user.enabled:
             return jsonify({"error": "No tienes permiso al consultar este correo."}), 403
@@ -46,6 +57,67 @@ def search_mails():
         return jsonify({"results": []}), 200
 
     return jsonify({"results": [mail_result]}), 200
+
+def search_sms_messages(email_to_search, user=None):
+    """Busca mensajes SMS para un correo específico"""
+    # Normalizar el correo a minúsculas
+    email_normalized = email_to_search.lower().strip()
+    
+    # PRIMERO: Validar permisos del usuario (igual que en search_mails)
+    if user:
+        if not user.enabled:
+            return jsonify({"error": "No tienes permiso al consultar este correo."}), 403
+        
+        # Si el usuario NO puede buscar cualquiera, verificamos si el email está permitido
+        if not user.can_search_any:
+            # Consulta a la tabla AllowedEmail del usuario
+            is_allowed = user.allowed_email_entries.filter_by(email=email_normalized).first() is not None
+            
+            if not is_allowed:
+                return jsonify({"error": "No tienes permiso para consultar este correo específico."}), 403
+    
+    # SEGUNDO: Verificar que el correo esté en la lista global de SMS y obtener su sms_config_id
+    allowed_sms_entry = AllowedSMSNumber.query.filter_by(phone_number=email_normalized).first()
+    if not allowed_sms_entry:
+        return jsonify({"error": "No tienes permiso al consultar este correo."}), 403
+    
+    # Usar el sms_config_id del correo encontrado
+    sms_config = SMSConfig.query.get(allowed_sms_entry.sms_config_id)
+    if not sms_config:
+        return jsonify({"error": "Configuración SMS asociada al correo no encontrada."}), 404
+    
+    # Verificar que la configuración esté habilitada (aunque siempre debería estar)
+    if not sms_config.is_enabled:
+        return jsonify({"error": "La configuración SMS asociada no está habilitada."}), 500
+    
+    # Obtener los últimos 10 mensajes SMS recibidos para este número específico
+    messages = SMSMessage.query.filter_by(sms_config_id=sms_config.id).order_by(
+        SMSMessage.created_at.desc()
+    ).limit(10).all()
+    
+    # Formatear los mensajes para el frontend
+    messages_data = []
+    for msg in messages:
+        messages_data.append({
+            'id': msg.id,
+            'from_number': msg.from_number,
+            'to_number': msg.to_number,
+            'message_body': msg.message_body,
+            'twilio_status': msg.twilio_status,
+            'created_at': utc_to_colombia(msg.created_at).strftime('%Y-%m-%d %H:%M:%S') if msg.created_at else None,
+            'is_sms': True  # Flag para identificar que son mensajes SMS
+        })
+    
+    # Devolver en formato similar a los correos pero con flag SMS
+    # Incluso si no hay mensajes, devolver la estructura con lista vacía
+    return jsonify({
+        "results": [{
+            "sms_messages": messages_data,
+            "sms_config_phone": sms_config.phone_number,
+            "email_searched": email_to_search,
+            "is_sms_result": True
+        }]
+    }), 200
 
 @api_bp.route("/search_mails2", methods=["POST"])
 def search_mails2():

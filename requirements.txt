@@ -38,3 +38,5 @@ google-auth-oauthlib>=1.2.3
 google-auth>=2.0.0
 gspread>=6.2.1
 eventlet==0.40.3
+# ===== SMS Y MENSAJERÍA =====
+twilio>=9.0.0

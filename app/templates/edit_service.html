@@ -46,6 +46,7 @@
             <option value="on-usuarios" {% if srv.visibility_mode == 'on-usuarios' %}selected{% endif %}>on-usuarios</option>
             <option value="on-no-usuarios-no-visible" {% if srv.visibility_mode == 'on-no-usuarios-no-visible' %}selected{% endif %}>on-no-usuarios-no-visible</option>
             <option value="codigos-2" {% if srv.visibility_mode == 'codigos-2' %}selected{% endif %}>codigos-2</option>
+            <option value="sms" {% if srv.visibility_mode == 'sms' %}selected{% endif %}>sms</option>
           </select>
         </div>
         <div class="d-flex align-items-center flex-wrap gap-1-5 justify-content-center edit-service-buttons">
@@ -105,6 +106,7 @@
 
 
   <!-- ======================= TARJETA 3: Regex y Filtros Activos ======================= -->
+  {% if srv.visibility_mode != 'sms' %}
   <div class="admin-card">
     <h3>Regex Activos</h3>
     <ul class="styled-list">
@@ -142,6 +144,7 @@
       {% endif %}
     </ul>
   </div> <!-- FIN TARJETA 3 -->
+  {% endif %}
 
 </div> <!-- FIN Contenedor General -->
 

@@ -2,7 +2,8 @@ from datetime import datetime, timezone
 from app.extensions import db
 from app.models.user import User
 from sqlalchemy.dialects.sqlite import JSON
-from app.utils.timezone import get_colombia_now as get_colombia_time
+# Nota: Los defaults de BD usan datetime.utcnow() para consistencia.
+# Para mostrar fechas al usuario, usar utc_to_colombia() del módulo app.utils.timezone
 
 class Product(db.Model):
     __tablename__ = "store_products"
@@ -37,8 +38,8 @@ class Coupon(db.Model):
     duration_days = db.Column(db.Integer, nullable=False, default=1)
     max_uses_per_user = db.Column(db.Integer, nullable=True, default=None)
     enabled = db.Column(db.Boolean, default=True, index=True)
-    created_at = db.Column(db.DateTime, default=get_colombia_time)
-    updated_at = db.Column(db.DateTime, default=get_colombia_time, onupdate=get_colombia_time)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     description = db.Column(db.Text, nullable=True)
     min_amount = db.Column(db.Numeric(10, 2), nullable=True)
     show_public = db.Column(db.Boolean, default=False)
@@ -351,6 +352,42 @@ class WhatsAppConfig(db.Model):
     def __repr__(self):
         return f'<WhatsAppConfig {self.phone_number}>'
 
+class SMSConfig(db.Model):
+    """Configuración de números SMS para recibir mensajes de texto"""
+    __tablename__ = "sms_configs"
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), nullable=False)  # Nombre descriptivo
+    twilio_account_sid = db.Column(db.String(255), nullable=False)
+    twilio_auth_token = db.Column(db.String(255), nullable=False)
+    phone_number = db.Column(db.String(20), nullable=False, unique=True)  # Formato: +12672441170
+    is_enabled = db.Column(db.Boolean, default=True, nullable=False, index=True)
+    description = db.Column(db.Text, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    messages = db.relationship('SMSMessage', backref='sms_config', lazy='dynamic', cascade='all, delete-orphan')
+    
+    def __repr__(self):
+        return f'<SMSConfig {self.phone_number} ({self.name})>'
+
+class SMSMessage(db.Model):
+    """Mensajes SMS recibidos"""
+    __tablename__ = "sms_messages"
+    id = db.Column(db.Integer, primary_key=True)
+    sms_config_id = db.Column(db.Integer, db.ForeignKey('sms_configs.id', ondelete='CASCADE'), nullable=False, index=True)
+    from_number = db.Column(db.String(20), nullable=False, index=True)
+    to_number = db.Column(db.String(20), nullable=False)
+    message_body = db.Column(db.Text, nullable=False)
+    twilio_message_sid = db.Column(db.String(255), nullable=True, unique=True)
+    twilio_status = db.Column(db.String(50), nullable=True)
+    raw_data = db.Column(JSON, nullable=True)
+    processed = db.Column(db.Boolean, default=False, nullable=False, index=True)
+    processed_at = db.Column(db.DateTime, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
+    
+    def __repr__(self):
+        return f'<SMSMessage {self.from_number} -> {self.to_number} ({self.created_at})>'
+
 # ⭐ NUEVO: Modelo para registros de conexión de worksheets
 class WorksheetConnectionLog(db.Model):
     __tablename__ = 'worksheet_connection_logs'
@@ -454,5 +491,27 @@ class LicenseAccount(db.Model):
             return None
         delta = self.expires_at - datetime.utcnow()
         return delta.days if delta.days > 0 else 0
+
+class AllowedSMSNumber(db.Model):
+    """Modelo para almacenar números de teléfono permitidos para recibir SMS vinculados a un número SMS específico"""
+    __tablename__ = "allowed_sms_numbers"
+    __table_args__ = (
+        db.UniqueConstraint('phone_number', 'sms_config_id', name='uq_allowed_sms_number_config'),
+        db.Index('ix_allowed_sms_numbers_phone_number', 'phone_number'),
+        db.Index('ix_allowed_sms_numbers_sms_config_id', 'sms_config_id')
+    )
+    
+    id = db.Column(db.Integer, primary_key=True)
+    phone_number = db.Column(db.String(255), nullable=False, index=True)  # Aumentado para soportar correos electrónicos
+    sms_config_id = db.Column(db.Integer, db.ForeignKey('sms_configs.id', ondelete='CASCADE'), nullable=False, index=True)
+    description = db.Column(db.String(255), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Relación con SMSConfig
+    sms_config = db.relationship('SMSConfig', backref='allowed_numbers')
+    
+    def __repr__(self):
+        return f'<AllowedSMSNumber {self.phone_number} (config: {self.sms_config_id})>'
 
  

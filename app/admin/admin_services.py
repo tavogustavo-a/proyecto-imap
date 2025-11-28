@@ -330,6 +330,17 @@ def edit_service(service_id):
                 flash(f"❌ Error: Solo puede haber un servicio con modo 'codigos-2'. El servicio '{existing_codigos2.name}' ya tiene este modo activo. Cambia primero ese servicio a otro modo.", "danger")
                 return redirect(url_for("admin_bp.edit_service", service_id=srv.id))
         
+        # Validar unicidad para sms
+        if new_vis_mode == "sms":
+            existing_sms = ServiceModel.query.filter(
+                ServiceModel.visibility_mode == "sms",
+                ServiceModel.id != srv.id
+            ).first()
+            
+            if existing_sms:
+                flash(f"❌ Error: Solo puede haber un servicio con modo 'sms'. El servicio '{existing_sms.name}' ya tiene este modo activo. Cambia primero ese servicio a otro modo.", "danger")
+                return redirect(url_for("admin_bp.edit_service", service_id=srv.id))
+        
         # Validar conflictos entre on-no-usuarios y on-no-usuarios-no-visible
         if new_vis_mode == "on-no-usuarios-no-visible":
             conflicting_usuarios = ServiceModel.query.filter(
@@ -794,8 +805,8 @@ def check_visibility_uniqueness_ajax():
         mode = data.get("mode")
         current_service_id = data.get("current_service_id")
         
-        # Solo verificar unicidad para on-no-usuarios-no-visible y codigos-2
-        if mode not in ["on-no-usuarios-no-visible", "codigos-2"]:
+        # Solo verificar unicidad para on-no-usuarios-no-visible, codigos-2 y sms
+        if mode not in ["on-no-usuarios-no-visible", "codigos-2", "sms"]:
             return jsonify({"status": "ok", "message": "Modo no requiere unicidad"})
         
         # Buscar otros servicios con el mismo modo (excluyendo el servicio actual)

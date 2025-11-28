@@ -1,0 +1,366 @@
+/* Estilos para página SMS - CSP Compliant */
+
+.sms-message-row {
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.sms-message-row:hover {
+  background-color: #f8f9fa;
+}
+
+.sms-message-unread {
+  background-color: #fff3cd !important;
+  border-left: 4px solid #ffc107;
+}
+
+.sms-message-read {
+  border-left: 4px solid #28a745;
+}
+
+#sms-messages-container table {
+  margin-bottom: 0;
+}
+
+.message-preview {
+  max-width: 300px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Estilos para gestión de números SMS */
+.search-results-container {
+  display: none; /* Oculto inicialmente */
+  max-height: 360px;
+  overflow-y: auto;
+  border: 1px solid #ccc;
+  margin-top: 0.5rem;
+  background-color: #ffffff;
+}
+
+.search-result-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.25rem 0.6rem;
+  border-bottom: 1px solid #eee;
+  font-size: 0.95em;
+}
+
+.search-result-item:nth-child(odd) {
+  background-color: #ffffff;
+}
+
+.search-result-item:nth-child(even) {
+  background-color: #f1f3f5;
+}
+
+.search-result-item:last-child {
+  border-bottom: none;
+}
+
+.search-result-item span {
+  flex-grow: 1;
+  margin-right: 0.25rem;
+  word-break: break-all;
+}
+
+.btn-delete-item {
+  background-color: #dc3545;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  padding: 4px 8px;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.btn-delete-item:hover {
+  background-color: #c82333;
+}
+
+.allowed-emails-display {
+  background-color: #f8f9fa;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  padding: 15px;
+  min-height: 100px;
+  max-height: 400px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  font-family: monospace;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.btn-search {
+  background-color: #6c757d;
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 4px;
+  cursor: pointer;
+  margin-left: 10px;
+}
+
+.btn-search:hover {
+  background-color: #5a6268;
+}
+
+.min-height-2-5rem {
+  min-height: 2.5rem;
+}
+
+.text-smaller {
+  font-size: 0.9em;
+}
+
+.text-secondary {
+  color: #555;
+}
+
+.mb-05 {
+  margin-bottom: 0.5rem;
+}
+
+.mb-075 {
+  margin-bottom: 0.75rem;
+}
+
+.mb-2 {
+  margin-bottom: 1rem;
+}
+
+.mb-3 {
+  margin-bottom: 1.5rem;
+}
+
+.flex-grow-1 {
+  flex-grow: 1;
+}
+
+.resize-vertical {
+  resize: vertical;
+}
+
+.select-padding-3px {
+  padding: 3px;
+}
+
+.gap-05 {
+  gap: 0.5rem;
+}
+
+.gap-1 {
+  gap: 1rem;
+}
+
+.ml-05 {
+  margin-left: 0.5rem;
+}
+
+.ml-auto {
+  margin-left: auto;
+}
+
+.justify-content-end {
+  justify-content: flex-end;
+}
+
+.d-flex {
+  display: flex;
+}
+
+#addNumbersForm textarea {
+  width: 100%;
+  border: 1px solid #ced4da;
+  border-radius: 4px;
+}
+
+#addNumbersForm textarea:focus {
+  border-color: #80bdff;
+  outline: 0;
+  box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
+}
+
+.admin-card h3 {
+  margin-top: 0;
+  margin-bottom: 1rem;
+  font-size: 1.25rem;
+  font-weight: 600;
+}
+
+.sms-instructions-list {
+  padding-left: 20px;
+  line-height: 1.8;
+}
+
+.sms-numbers-textarea {
+  font-family: monospace;
+  font-size: 14px;
+  padding: 12px;
+}
+
+.sms-table-th-date {
+  width: 150px;
+}
+
+.sms-table-th-number {
+  width: 120px;
+}
+
+.sms-table-th-from {
+  width: 150px;
+}
+
+.sms-table-th-status {
+  width: 100px;
+}
+
+.sms-table-th-actions {
+  width: 80px;
+}
+
+.sms-message-detail-text {
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  font-size: 1.1em;
+}
+
+.sms-raw-data-pre {
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.sms-error-message {
+  color: red;
+}
+
+#searchNumbersForm {
+  display: flex;
+  margin-bottom: 0.5rem;
+  align-items: center;
+}
+
+.sms-select-width,
+.sms-input-width {
+  max-width: 400px;
+  width: 100%;
+  flex: 1 1 auto;
+  min-width: 200px;
+}
+
+#btn-consult-number,
+#btn-refresh-messages {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.sms-controls-row {
+  flex-wrap: wrap;
+}
+
+/* En pantallas pequeñas, asegurar que los botones estén en la misma línea */
+@media (max-width: 768px) {
+  .sms-controls-row {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    padding: 0 0.5rem;
+  }
+  
+  .sms-select-width,
+  .sms-input-width {
+    min-width: 120px;
+    max-width: calc(100% - 150px);
+    flex: 1 1 auto;
+  }
+  
+  #btn-consult-number,
+  #btn-refresh-messages {
+    min-width: 130px;
+    flex-shrink: 0;
+  }
+}
+
+/* Estilos para modal SMS */
+.modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.5);
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+}
+
+.modal:not(.d-none) {
+  display: flex;
+}
+
+.modal.d-none {
+  display: none !important;
+}
+
+.sms-modal-content {
+  background-color: white;
+  border-radius: 8px;
+  padding: 2rem;
+  max-width: 90%;
+  width: 800px;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+}
+
+/* Centrar títulos */
+.admin-card h3.text-center {
+  text-align: center;
+}
+
+/* Mejorar botones de paginación */
+#sms-pagination .btn-panel {
+  min-width: 120px;
+}
+
+#sms-pagination .btn-panel.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Estilos para paginación de números permitidos (igual que emails) */
+@media (max-width: 768px) {
+  #allowedNumbersPagination {
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    justify-content: space-between;
+  }
+  
+  #allowedNumbersPagination > #deleteAllNumbersBtn {
+    margin-left: auto;
+    margin-right: 0;
+  }
+  
+  #allowedNumbersPagination > .ml-auto {
+    width: 100%;
+    display: flex;
+    justify-content: center;
+    margin-left: 0 !important;
+    margin-right: 0;
+    order: 3;
+  }
+}
+
+/* Centrar elementos en secciones SMS */
+#sms-management-container .admin-card > div.mb-1.text-center {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+#sms-management-container .admin-card > div.mb-1.text-center button {
+  margin-top: 0.5rem;
+}
+

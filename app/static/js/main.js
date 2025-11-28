@@ -401,11 +401,32 @@ document.addEventListener("DOMContentLoaded", function () {
       .then(response => {
         // Incorporamos la comprobación de 403 => "No tienes permiso"
         if (!response.ok) {
-          if (response.status === 403) {
-            // Lanzamos directamente el mensaje
-            throw new Error("No tienes permiso al consultar este correo");
-          }
-          throw new Error(`Error HTTP ${response.status}`);
+          // Leer el cuerpo de la respuesta como texto primero (solo se puede leer una vez)
+          return response.text().then(text => {
+            let errorMessage = `Error HTTP ${response.status}`;
+            
+            // Intentar parsear como JSON
+            try {
+              const errData = JSON.parse(text);
+              if (errData.error) {
+                errorMessage = errData.error;
+              }
+            } catch (parseError) {
+              // Si no se puede parsear, intentar extraer con regex
+              const errorMatch = text.match(/"error"\s*:\s*"([^"]+)"/);
+              if (errorMatch && errorMatch[1]) {
+                errorMessage = errorMatch[1];
+              }
+            }
+            
+            // Mensaje especial para 403
+            if (response.status === 403) {
+              throw new Error("No tienes permiso al consultar este correo");
+            }
+            
+            // Lanzar error con el mensaje extraído
+            throw new Error(errorMessage);
+          });
         }
         return response.json();
       })
@@ -433,8 +454,14 @@ document.addEventListener("DOMContentLoaded", function () {
           return;
         }
 
-        // Tomamos el primer correo
+        // Verificar si es resultado SMS
         const mail = results[0];
+        if (mail.is_sms_result && mail.sms_messages) {
+          renderSMSMessages(mail.sms_messages, mail.sms_config_phone, mail.email_searched);
+          return;
+        }
+
+        // Lógica normal para correos
         const regexDict = mail.regex_matches;
         const mailDateFormatted = mail.formatted_date || "";
         const filterMatched = mail.filter_matched === true;
@@ -699,6 +726,66 @@ document.addEventListener("DOMContentLoaded", function () {
         }
       });
     }
+  }
+
+  function renderSMSMessages(messages, smsConfigPhone, emailSearched) {
+    if (!resultsDiv) return;
+    
+    resultsDiv.innerHTML = '';
+    resultsDiv.style.display = 'block';
+    
+    if (!messages || messages.length === 0) {
+      const noMessages = document.createElement('p');
+      noMessages.textContent = 'No se encontraron mensajes.';
+      noMessages.style.textAlign = 'center';
+      resultsDiv.appendChild(noMessages);
+      return;
+    }
+    
+    // Solo mostrar los códigos/mensajes, sin títulos informativos
+    // Crear contenedor similar al de regex para mantener consistencia
+    const container = document.createElement('div');
+    container.classList.add('regex-result-container');
+    container.style.textAlign = 'center';
+    
+    // Mostrar solo el primer mensaje (código) de forma destacada, similar a regex
+    const firstMessage = messages[0];
+    const messageText = firstMessage.message_body || '';
+    
+    const pCode = document.createElement('p');
+    pCode.classList.add('regex-result-code');
+    
+    const strongCode = document.createElement('strong');
+    strongCode.id = "regex-code";
+    strongCode.textContent = messageText;
+    
+    pCode.appendChild(strongCode);
+    container.appendChild(pCode);
+    
+    // Botón Copiar
+    const buttonsContainer = document.createElement('div');
+    buttonsContainer.style.marginTop = '0.5rem';
+    
+    const copyButton = document.createElement('button');
+    copyButton.classList.add('btn', 'btn-search', 'btn-rounded', 'regex-result-copy-btn');
+    copyButton.id = "copyRegexBtn";
+    copyButton.setAttribute("data-valor", messageText);
+    copyButton.textContent = "Copiar";
+    buttonsContainer.appendChild(copyButton);
+    container.appendChild(buttonsContainer);
+    
+    // Si hay fecha, mostrarla
+    if (firstMessage.created_at) {
+      const pDate = document.createElement('p');
+      pDate.classList.add('regex-result-date');
+      pDate.textContent = `Fecha: ${firstMessage.created_at}`;
+      container.appendChild(pDate);
+    }
+    
+    resultsDiv.appendChild(container);
+    
+    // Adjuntar listener para el botón copiar
+    attachCopyButtonListener();
   }
 
   // Función decideIconPath (movida de search.html)

@@ -1,0 +1,270 @@
+{% extends "base.html" %}
+
+{% block title %}Consulta de SMS{% endblock %}
+
+{% block head %}
+  {{ super() }}
+  <link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/sms.css') }}">
+  <meta name="csrf_token" content="{{ csrf_token() }}">
+{% endblock %}
+
+{% block scripts %}
+  {{ super() }}
+  <script src="{{ url_for('store_bp.static', filename='js/sms_configs.js') }}" defer></script>
+  <script src="{{ url_for('store_bp.static', filename='js/sms_list.js') }}" defer></script>
+  <script src="{{ url_for('store_bp.static', filename='js/sms_numbers.js') }}" defer></script>
+{% endblock %}
+
+{% block content %}
+
+<div id="sms-management-container" class="form-container-large">
+  <div class="admin-card">
+    <div class="d-flex align-items-center flex-wrap gap-1 mb-1 justify-content-between">
+      <h2 class="m-0 no-shrink">Consulta de SMS</h2>
+      <div>
+        <button 
+          id="btnVolverPanel" 
+          type="button" 
+          class="btn-blue"
+          data-url="{{ url_for('store_bp.admin_store') }}"
+        >
+          Volver
+        </button>
+      </div>
+    </div>
+
+    <hr class="hr-margin-15">
+    <h3 class="mb-05 text-center">Búsqueda y Eliminación de Correos</h3>
+    <form id="searchNumbersForm" name="searchNumbersForm">
+      <label for="searchNumbersInput" class="sr-only">Buscar y eliminar correos</label>
+      <textarea id="searchNumbersInput" rows="2" class="flex-grow-1 resize-vertical" placeholder="Ingresa uno o varios correos (separados por comas, espacios o saltos de línea)." autocomplete="off"></textarea>
+      <button type="submit" class="btn-search">Limpiar</button>
+    </form>
+    <div id="numbersSearchResults" class="search-results-container">
+        <!-- Resultados aquí -->
+    </div>
+    <div class="d-flex justify-content-between align-items-center min-height-2-5rem">
+      <div id="searchStatus" class="text-italic text-secondary"></div>
+      <div id="delete-displayed-container">
+          <button id="deleteDisplayedBtn" class="btn-red btn-small d-none">
+              Eliminar X Mostrados
+          </button>
+      </div>
+    </div>
+  </div>
+
+  <div class="admin-card">
+    <div id="allowedNumbersContainer" class="mb-0">
+      <div class="d-flex justify-content-between align-items-center flex-wrap gap-1 mb-05">
+        <label for="perPageSelectNumbers"><strong>Lista Correos permitidos:</strong></label>
+        <div class="d-flex align-items-center gap-05">
+          <span><strong>Mostrar:</strong></span>
+          <select id="perPageSelectNumbers" class="select-padding-3px" autocomplete="off">
+             <option value="10" selected>10</option><option value="20">20</option><option value="30">30</option><option value="50">50</option><option value="100">100</option><option value="300">300</option><option value="-1">Todos</option>
+          </select>
+        </div>
+      </div>
+      <div id="allowedNumbersTextContainer" class="allowed-emails-display">
+        <p>Cargando correos...</p>
+      </div>
+      <div id="allowedNumbersPagination" class="d-flex justify-content-between align-items-center">
+        <span id="paginationInfoNumbers"></span>
+        <button id="deleteAllNumbersBtn" class="btn-panel btn-red btn-sm" title="Eliminar TODOS los correos permitidos">
+          <i class="fas fa-trash"></i> Eliminar Todos
+        </button>
+        <div class="ml-auto">
+          <button id="prevPageBtnNumbers" class="btn-panel btn-blue" disabled>&lt; Anterior</button>
+          <button id="nextPageBtnNumbers" class="btn-panel btn-blue ml-05" disabled>Siguiente &gt;</button>
+        </div>
+      </div>
+      
+      <hr class="hr-margin-15">
+      
+      <div id="addNumbersSection" class="mb-0">
+        <label for="newNumbersInput" class="sr-only">Nuevos Correos</label>
+        <textarea id="newNumbersInput" name="new_numbers_input" rows="2" class="d-block mx-auto mt-05 mb-05 textarea-wide" placeholder="Ingresa uno o varios correos (separados por comas, espacios o saltos de línea). Ejemplo: correo1@gmail.com, correo2@gmail.com..." autocomplete="off"></textarea>
+        <div class="text-center">
+          <button type="button" id="addNumbersBtn" class="btn-blue">Añadir Correos</button>
+        </div>
+        <div class="text-center mt-05">
+          <span id="addNumbersMsg" class="text-italic text-success"></span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="admin-card">
+    <!-- Sección de Gestión de Números SMS -->
+    <div id="sms-configs-section" class="mb-2">
+      <h4 class="mb-1 text-center">Gestionar Números SMS</h4>
+      
+      <!-- Formulario para crear configuración -->
+      <form id="sms-config-form" class="mb-2">
+        
+        <label for="sms-config-name" class="sr-only">Nombre</label>
+        <input
+          type="text"
+          id="sms-config-name"
+          placeholder="Nombre (obligatorio)"
+          required
+          class="d-block mb-05"
+          autocomplete="off"
+        >
+        
+        <label for="sms-config-account-sid" class="sr-only">Twilio Account SID</label>
+        <input
+          type="text"
+          id="sms-config-account-sid"
+          placeholder="Twilio Account SID (obligatorio)"
+          required
+          class="d-block mb-05"
+          autocomplete="off"
+        >
+        
+        <label for="sms-config-auth-token" class="sr-only">Twilio Auth Token</label>
+        <input
+          type="password"
+          id="sms-config-auth-token"
+          placeholder="Twilio Auth Token (obligatorio)"
+          required
+          class="d-block mb-05"
+          autocomplete="off"
+        >
+        
+        <label for="sms-config-phone" class="sr-only">Número de Teléfono</label>
+        <input
+          type="text"
+          id="sms-config-phone"
+          placeholder="Número de Teléfono (obligatorio, ej: +12672441170)"
+          required
+          class="d-block mb-05"
+          autocomplete="off"
+        >
+        
+        <div class="text-center">
+          <button type="submit" id="sms-config-save-btn" class="btn-green">Crear</button>
+        </div>
+        
+        <div id="sms-config-message" class="mt-05"></div>
+      </form>
+      
+      <!-- Lista de configuraciones existentes -->
+      <div id="sms-configs-list" class="mb-2">
+        <p class="text-center">Cargando configuraciones...</p>
+      </div>
+    </div>
+    
+    <hr class="hr-margin-15">
+    
+    <h3 class="text-center mb-2">Consultar Mensajes SMS</h3>
+    
+    <div class="mb-1 d-flex gap-05 justify-content-center align-items-center sms-controls-row">
+      <select id="sms-number-select" class="sms-select-width" autocomplete="off">
+        <option value="">-- Selecciona un número --</option>
+      </select>
+      <button type="button" id="btn-consult-number" class="btn-green">
+        <i class="fas fa-search"></i> Consultar SMS
+      </button>
+    </div>
+    
+    <div class="mb-1 d-flex gap-05 justify-content-center align-items-center sms-controls-row">
+      <input 
+        type="text" 
+        id="sms-search-input" 
+        class="sms-input-width" 
+        placeholder="Buscar códigos por nombre..."
+        autocomplete="off"
+      >
+      <button type="button" id="btn-refresh-messages" class="btn-blue">
+        <i class="fas fa-search"></i> Buscar
+      </button>
+    </div>
+    
+    <div id="sms-messages-container" class="mt-3">
+      <div class="text-center py-5">
+        <i class="fas fa-inbox fa-3x text-muted mb-3"></i>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal para editar configuración SMS -->
+<div id="sms-edit-config-modal" class="modal d-none" tabindex="-1">
+  <div class="sms-modal-content">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+      <h4 class="m-0 text-center flex-grow-1">Editar Configuración SMS</h4>
+      <button type="button" class="btn-panel btn-red" id="close-edit-config-modal" title="Cerrar">
+        <i class="fas fa-times"></i>
+      </button>
+    </div>
+    
+    <form id="sms-edit-config-form">
+      <input type="hidden" id="edit-sms-config-id" value="">
+      
+      <label for="edit-sms-config-name" class="sr-only">Nombre</label>
+      <input
+        type="text"
+        id="edit-sms-config-name"
+        placeholder="Nombre (obligatorio)"
+        required
+        class="d-block mb-05"
+        autocomplete="off"
+      >
+      
+      <label for="edit-sms-config-account-sid" class="sr-only">Twilio Account SID</label>
+      <input
+        type="text"
+        id="edit-sms-config-account-sid"
+        placeholder="Twilio Account SID (obligatorio)"
+        required
+        class="d-block mb-05"
+        autocomplete="off"
+      >
+      
+      <label for="edit-sms-config-auth-token" class="sr-only">Twilio Auth Token</label>
+      <input
+        type="password"
+        id="edit-sms-config-auth-token"
+        placeholder="Twilio Auth Token (opcional, déjalo vacío para mantener el actual)"
+        class="d-block mb-05"
+        autocomplete="off"
+      >
+      
+      <label for="edit-sms-config-phone" class="sr-only">Número de Teléfono</label>
+      <input
+        type="text"
+        id="edit-sms-config-phone"
+        placeholder="Número de Teléfono (obligatorio, ej: +12672441170)"
+        required
+        class="d-block mb-05"
+        autocomplete="off"
+      >
+      
+      <div class="mt-3 text-center">
+        <button type="submit" id="update-sms-config-btn" class="btn-green">Actualizar</button>
+      </div>
+      
+      <div id="edit-sms-config-message" class="mt-05"></div>
+    </form>
+  </div>
+</div>
+
+<!-- Modal para ver mensaje completo -->
+<div id="sms-message-modal" class="modal d-none" tabindex="-1">
+  <div class="sms-modal-content">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+      <h4 class="m-0 text-center flex-grow-1">Detalles del Mensaje</h4>
+      <button type="button" class="btn-close" id="close-sms-modal"></button>
+    </div>
+    
+    <div id="sms-message-details">
+      <!-- Contenido dinámico -->
+    </div>
+    
+    <div class="mt-3 text-center">
+      <button type="button" id="close-sms-modal-btn" class="btn-panel btn-red">Cerrar</button>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
