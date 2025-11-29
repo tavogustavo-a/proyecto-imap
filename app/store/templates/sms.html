@@ -56,9 +56,9 @@
   <div class="admin-card">
     <div id="allowedNumbersContainer" class="mb-0">
       <div class="d-flex justify-content-between align-items-center flex-wrap gap-1 mb-05">
-        <label for="perPageSelectNumbers"><strong>Lista Correos permitidos:</strong></label>
+        <div><strong>Lista Correos permitidos:</strong></div>
         <div class="d-flex align-items-center gap-05">
-          <span><strong>Mostrar:</strong></span>
+          <label for="perPageSelectNumbers"><strong>Mostrar:</strong></label>
           <select id="perPageSelectNumbers" class="select-padding-3px" autocomplete="off">
              <option value="10" selected>10</option><option value="20">20</option><option value="30">30</option><option value="50">50</option><option value="100">100</option><option value="300">300</option><option value="-1">Todos</option>
           </select>
@@ -141,8 +141,9 @@
           autocomplete="off"
         >
         
-        <div class="text-center">
+        <div class="text-center d-flex gap-05 justify-content-center">
           <button type="submit" id="sms-config-save-btn" class="btn-green">Crear</button>
+          <button type="button" id="test-number-states-btn" class="btn-blue">Probar Estado de Números</button>
         </div>
         
         <div id="sms-config-message" class="mt-05"></div>
@@ -163,6 +164,7 @@
     </div>
     
     <div class="mb-1 d-flex gap-05 justify-content-center align-items-center sms-controls-row">
+      <label for="sms-search-input" class="sr-only">Buscar mensajes SMS</label>
       <input 
         type="text" 
         id="sms-search-input" 
@@ -278,7 +280,9 @@
     
     <!-- Formulario para crear nuevo regex -->
     <div class="mb-2 regex-form-container">
+      <label for="new-regex-name" class="sr-only">Nombre del regex</label>
       <input type="text" id="new-regex-name" placeholder="Nombre del regex" class="d-block mb-05 w-100" autocomplete="off">
+      <label for="new-regex-pattern" class="sr-only">Patrón regex</label>
       <input type="text" id="new-regex-pattern" placeholder="Patrón regex (ej: código|code)" class="d-block mb-05 w-100" autocomplete="off">
       <div class="text-center mt-1">
         <button type="button" id="create-regex-btn" class="btn-green btn-sm">Crear Regex</button>
@@ -324,4 +328,5 @@
   </div>
 </div>
 {% endblock %}
+
 

@@ -243,19 +243,18 @@ document.addEventListener('DOMContentLoaded', function() {
                 return `
                     <div class="d-flex align-items-center justify-content-between mb-1 p-1 regex-item-container">
                         <div class="d-flex align-items-center flex-grow-1">
-                            <input 
-                                type="checkbox" 
-                                id="regex-${regex.id}" 
-                                class="sms-regex-checkbox" 
-                                data-regex-id="${regex.id}"
-                                ${isChecked ? 'checked' : ''}
-                            >
-                            <label for="regex-${regex.id}" class="ml-1 mb-0 flex-grow-1">
+                            <span class="ml-1 mb-0 flex-grow-1">
                                 <strong>${escapeHtml(regex.name || 'Sin nombre')}</strong>
+                                ${isChecked ? '<span class="text-success ml-1">✓ Asociado</span>' : ''}
                                 <br><small class="text-secondary">${escapeHtml(regex.pattern || 'Sin patrón')}</small>
-                            </label>
+                            </span>
                         </div>
                         <div class="d-flex gap-05">
+                            ${!isChecked ? `
+                                <button type="button" class="btn-green btn-sm associate-regex-btn" data-regex-id="${regex.id}" title="Asociar a este número">
+                                    <i class="fas fa-plus"></i>
+                                </button>
+                            ` : ''}
                             <button type="button" class="btn-orange btn-sm edit-sms-regex-btn" data-regex-id="${regex.id}" title="Editar">
                                 <i class="fas fa-edit"></i>
                             </button>
@@ -269,12 +268,11 @@ document.addEventListener('DOMContentLoaded', function() {
             
             regexList.innerHTML = regexHTML;
             
-            // Agregar event listeners a los checkboxes
-            regexList.querySelectorAll('.sms-regex-checkbox').forEach(checkbox => {
-                checkbox.addEventListener('change', function() {
+            // Agregar event listeners a los botones de asociar
+            regexList.querySelectorAll('.associate-regex-btn').forEach(btn => {
+                btn.addEventListener('click', function() {
                     const regexId = parseInt(this.getAttribute('data-regex-id'));
-                    const isChecked = this.checked;
-                    updateSMSConfigRegex(configId, regexId, isChecked);
+                    updateSMSConfigRegex(configId, regexId, true);
                 });
             });
             
@@ -421,13 +419,16 @@ document.addEventListener('DOMContentLoaded', function() {
             return;
         }
         
+        // Obtener el configId actual del modal
+        const configId = currentRegexModalConfigId;
+        
         fetch('/tienda/admin/sms/regex', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
                 'X-CSRFToken': getCsrfToken()
             },
-            body: JSON.stringify({ name, pattern })
+            body: JSON.stringify({ name, pattern, sms_config_id: configId })
         })
         .then(handleFetchResponse)
         .then(data => {
@@ -744,6 +745,40 @@ document.addEventListener('DOMContentLoaded', function() {
             if (e.target === editRegexModal) {
                 editRegexModal.classList.add('d-none');
             }
+        });
+    }
+    
+    // Botón para probar estados de números
+    const testNumberStatesBtn = document.getElementById('test-number-states-btn');
+    if (testNumberStatesBtn) {
+        testNumberStatesBtn.addEventListener('click', function() {
+            // Deshabilitar botón mientras se procesa
+            testNumberStatesBtn.disabled = true;
+            const originalText = testNumberStatesBtn.textContent;
+            testNumberStatesBtn.textContent = 'Probando...';
+            
+            fetch('/tienda/admin/sms_configs/test-number-states', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': getCsrfToken()
+                }
+            })
+            .then(handleFetchResponse)
+            .then(data => {
+                if (data.success) {
+                    // Recargar la lista para mostrar los nuevos estados
+                    loadSMSConfigs();
+                }
+            })
+            .catch(err => {
+                alert(`Error: ${err.message}`);
+            })
+            .finally(() => {
+                // Rehabilitar botón
+                testNumberStatesBtn.disabled = false;
+                testNumberStatesBtn.textContent = originalText;
+            });
         });
     }
     

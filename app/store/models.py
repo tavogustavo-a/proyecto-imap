@@ -386,6 +386,7 @@ class SMSConfig(db.Model):
     twilio_auth_token = db.Column(db.String(255), nullable=False)
     phone_number = db.Column(db.String(20), nullable=False, unique=True)  # Formato: +12672441170
     is_enabled = db.Column(db.Boolean, default=True, nullable=False, index=True)
+    number_type = db.Column(db.String(20), default='desconocido', nullable=True, server_default='desconocido')  # 'comprado', 'temporal', 'desconocido'
     description = db.Column(db.Text, nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

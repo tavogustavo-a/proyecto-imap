@@ -7623,9 +7623,8 @@ def list_sms_configs():
         # Usar conteo optimizado en lugar de config.messages.count()
         messages_count = messages_dict.get(config.id, 0)
         
-        # NO consultar Twilio en cada carga (muy lento) - usar 'desconocido' por defecto
-        # El tipo de número se puede verificar manualmente cuando sea necesario
-        number_type = 'desconocido'
+        # Usar el tipo de número guardado en la base de datos
+        number_type = getattr(config, 'number_type', 'desconocido') or 'desconocido'
         
         configs_data.append({
             'id': config.id,
@@ -7778,10 +7777,17 @@ def delete_sms_config(config_id):
         
         # Identificar regex que solo están asociados a este SMSConfig (huérfanos)
         orphaned_regexes = []
+        from sqlalchemy import select, func
+        from app.store.models import sms_config_regex as scr_table
         for regex in associated_regexes:
-            # Contar cuántos SMSConfig están asociados a este regex
-            other_configs_count = regex.sms_configs.filter(SMSConfig.id != config_id).count()
-            if other_configs_count == 0:
+            # Contar cuántos SMSConfig están asociados a este regex usando consulta directa
+            total_configs = db.session.execute(
+                select(func.count()).select_from(scr_table).where(
+                    scr_table.c.sms_regex_id == regex.id
+                )
+            ).scalar() or 0
+            # Si solo hay 1 asociación (la del config que se está eliminando), es huérfano
+            if total_configs == 1:
                 # Este regex solo está asociado al SMSConfig que se está eliminando
                 orphaned_regexes.append(regex)
         
@@ -7839,22 +7845,37 @@ def list_sms_regex():
 @store_bp.route('/admin/sms/regex', methods=['POST'])
 @admin_required
 def create_sms_regex():
-    """Crea un nuevo regex específico para SMS"""
+    """Crea un nuevo regex específico para SMS y lo asocia automáticamente al SMSConfig actual"""
     try:
         data = request.get_json()
         name = data.get('name', '').strip()
         pattern = data.get('pattern', '').strip()
+        sms_config_id = data.get('sms_config_id')  # ID del SMSConfig al que se asociará automáticamente
         
         if not name or not pattern:
             return jsonify({'success': False, 'error': 'Nombre y patrón son requeridos'}), 400
         
         new_regex = SMSRegex(name=name, pattern=pattern, enabled=True)
         db.session.add(new_regex)
+        db.session.flush()  # Para obtener el ID del nuevo regex
+        
+        # Si se proporciona un sms_config_id, asociar automáticamente el regex
+        if sms_config_id:
+            try:
+                sms_config_id = int(sms_config_id)
+                config = SMSConfig.query.get(sms_config_id)
+                if config:
+                    # Verificar que no esté ya asociado
+                    if new_regex.id not in [r.id for r in config.regexes]:
+                        config.regexes.append(new_regex)
+            except (ValueError, TypeError):
+                pass  # Si el sms_config_id no es válido, continuar sin asociar
+        
         db.session.commit()
         
         return jsonify({
             'success': True,
-            'message': 'Regex creado correctamente',
+            'message': 'Regex creado correctamente' + (' y asociado al número SMS' if sms_config_id else ''),
             'regex': {
                 'id': new_regex.id,
                 'name': new_regex.name,
@@ -7910,7 +7931,14 @@ def delete_sms_regex(regex_id):
         regex = SMSRegex.query.get_or_404(regex_id)
         
         # Contar asociaciones que se eliminarán en cascada
-        associations_count = regex.sms_configs.count()
+        # Usar consulta directa en lugar del backref para evitar problemas con lazy loading
+        from sqlalchemy import select, func
+        from app.store.models import sms_config_regex
+        associations_count = db.session.execute(
+            select(func.count()).select_from(sms_config_regex).where(
+                sms_config_regex.c.sms_regex_id == regex_id
+            )
+        ).scalar() or 0
         
         # Eliminar el regex (las asociaciones en sms_config_regex se eliminan automáticamente por CASCADE)
         # La tabla sms_config_regex tiene ondelete='CASCADE' en el foreign key de sms_regex_id
@@ -8021,6 +8049,71 @@ def toggle_sms_config(config_id):
     except Exception as e:
         db.session.rollback()
         return jsonify({'success': False, 'error': f'Error al actualizar estado: {str(e)}'}), 500
+
+@store_bp.route('/admin/sms_configs/test-number-states', methods=['POST'])
+@admin_required
+def test_sms_number_states():
+    """Prueba y actualiza el estado (comprado/temporal) de todos los números SMS"""
+    try:
+        # Obtener todos los SMSConfig
+        configs = SMSConfig.query.all()
+        
+        if not configs:
+            return jsonify({'success': True, 'message': 'No hay números SMS configurados', 'updated': 0}), 200
+        
+        updated_count = 0
+        results = []
+        
+        for config in configs:
+            try:
+                # Consultar Twilio para obtener el tipo de número
+                number_type = check_twilio_number_type(
+                    config.phone_number,
+                    config.twilio_account_sid,
+                    config.twilio_auth_token
+                )
+                
+                # Actualizar en la base de datos
+                config.number_type = number_type
+                updated_count += 1
+                
+                type_labels = {
+                    'comprado': 'Comprado',
+                    'temporal': 'Temporal',
+                    'desconocido': 'Desconocido'
+                }
+                
+                results.append({
+                    'phone_number': config.phone_number,
+                    'name': config.name,
+                    'number_type': number_type,
+                    'label': type_labels.get(number_type, 'Desconocido')
+                })
+                
+            except Exception as e:
+                current_app.logger.error(f"Error verificando número {config.phone_number}: {e}", exc_info=True)
+                results.append({
+                    'phone_number': config.phone_number,
+                    'name': config.name,
+                    'number_type': 'desconocido',
+                    'label': 'Error al verificar',
+                    'error': str(e)
+                })
+        
+        # Guardar todos los cambios
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': f'Estados actualizados correctamente. {updated_count} número(s) verificados.',
+            'updated': updated_count,
+            'results': results
+        })
+    
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Error probando estados de números SMS: {e}", exc_info=True)
+        return jsonify({'success': False, 'error': f'Error al probar estados: {str(e)}'}), 500
 
 @store_bp.route('/admin/sms_configs/<int:config_id>/messages', methods=['GET'])
 @admin_required

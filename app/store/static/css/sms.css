@@ -485,3 +485,9 @@
   box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25) !important;
 }
 
+/* Estilos para botón de probar estados */
+#test-number-states-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+

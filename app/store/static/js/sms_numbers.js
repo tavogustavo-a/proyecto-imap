@@ -58,7 +58,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const smsConfigId = getSelectedSMSConfigId();
         if (!smsConfigId) {
             if (allowedNumbersTextContainer) {
-                allowedNumbersTextContainer.textContent = "Debe seleccionar un número SMS primero.";
+                allowedNumbersTextContainer.textContent = "";
             }
             // Deshabilitar formulario
             if (addNumbersBtn) addNumbersBtn.disabled = true;
@@ -236,8 +236,8 @@ document.addEventListener('DOMContentLoaded', function() {
         const smsConfigId = getSelectedSMSConfigId();
         if (!smsConfigId) {
             if (numbersSearchResults) {
-                numbersSearchResults.innerHTML = "<p class='sms-error-message'>Debe seleccionar un número SMS primero.</p>";
-                numbersSearchResults.style.display = 'block';
+                numbersSearchResults.innerHTML = "";
+                numbersSearchResults.style.display = 'none';
             }
             return;
         }
@@ -334,7 +334,6 @@ document.addEventListener('DOMContentLoaded', function() {
 
                 const smsConfigId = getSelectedSMSConfigId();
                 if (!smsConfigId) {
-                    alert("Debe seleccionar un número SMS primero.");
                     button.disabled = false;
                     button.textContent = 'X';
                     return;
@@ -383,7 +382,6 @@ document.addEventListener('DOMContentLoaded', function() {
             if (displayedNumbers.length === 0) return;
             const smsConfigId = getSelectedSMSConfigId();
             if (!smsConfigId) {
-                alert("Debe seleccionar un número SMS primero.");
                 return;
             }
             if (!confirm(`¿Estás seguro de eliminar ${displayedNumbers.length} correo(s)?`)) return;
@@ -424,7 +422,6 @@ document.addEventListener('DOMContentLoaded', function() {
         deleteAllNumbersBtn.addEventListener("click", function() {
             const smsConfigId = getSelectedSMSConfigId();
             if (!smsConfigId) {
-                alert("Debe seleccionar un número SMS primero.");
                 return;
             }
             if (!confirm("¿Seguro que quieres eliminar TODOS los correos permitidos de este número SMS? Esta acción no se puede deshacer.")) {
@@ -467,26 +464,22 @@ document.addEventListener('DOMContentLoaded', function() {
         // Deshabilitar/habilitar el formulario de agregar números
         if (addNumbersBtn) {
             addNumbersBtn.disabled = !hasSelection;
-            if (!hasSelection) {
-                addNumbersBtn.title = "Debe seleccionar un número SMS primero.";
-            } else {
-                addNumbersBtn.title = "";
-            }
+            addNumbersBtn.title = "";
         }
         
         if (newNumbersInput) {
             newNumbersInput.disabled = !hasSelection;
-            if (!hasSelection) {
-                newNumbersInput.placeholder = "Debe seleccionar un número SMS primero.";
-            } else {
+            if (hasSelection) {
                 newNumbersInput.placeholder = "Ingresa uno o varios correos (separados por comas, espacios o saltos de línea). Ejemplo: correo1@gmail.com, correo2@gmail.com...";
+            } else {
+                newNumbersInput.placeholder = "";
             }
         }
         
-        // Mostrar mensaje informativo si no hay selección
+        // Limpiar mensaje si no hay selección
         if (addNumbersMsg && !hasSelection && !addNumbersMsg.textContent.includes("Se agregaron")) {
-            addNumbersMsg.textContent = "Debe seleccionar un número SMS en 'Consultar Mensajes SMS' antes de agregar correos permitidos.";
-            addNumbersMsg.className = "text-italic text-danger";
+            addNumbersMsg.textContent = "";
+            addNumbersMsg.className = "";
         } else if (addNumbersMsg && hasSelection && !addNumbersMsg.textContent.includes("Se agregaron")) {
             addNumbersMsg.textContent = "";
             addNumbersMsg.className = "";
@@ -497,7 +490,7 @@ document.addEventListener('DOMContentLoaded', function() {
             fetchAllowedNumbers(1, currentPerPageNumbers);
         } else {
             if (allowedNumbersTextContainer) {
-                allowedNumbersTextContainer.textContent = "Debe seleccionar un número SMS primero.";
+                allowedNumbersTextContainer.textContent = "";
             }
         }
     }
@@ -554,8 +547,8 @@ document.addEventListener('DOMContentLoaded', function() {
             const smsConfigId = getSelectedSMSConfigId();
             if (!smsConfigId) {
                 if (addNumbersMsg) {
-                    addNumbersMsg.textContent = "Debe seleccionar un número SMS primero.";
-                    addNumbersMsg.className = "text-italic text-danger";
+                    addNumbersMsg.textContent = "";
+                    addNumbersMsg.className = "";
                 }
                 return;
             }
