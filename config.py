@@ -42,8 +42,8 @@ class Config:
     SMTP_SEND_PORT = int(os.getenv("SMTP_SEND_PORT", "587"))
     SMTP_SEND_HOST = os.getenv("SMTP_SEND_HOST", "127.0.0.1")
 
-    # Para inactividad de 48 horas
-    PERMANENT_SESSION_LIFETIME = timedelta(hours=48)
+    # Para sesión permanente de 15 días
+    PERMANENT_SESSION_LIFETIME = timedelta(days=15)
 
     # Si estás en producción, setea estas variables en .env
     SESSION_COOKIE_SECURE_ENV = os.getenv("SESSION_COOKIE_SECURE")

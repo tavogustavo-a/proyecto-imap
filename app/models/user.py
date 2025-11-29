@@ -180,6 +180,9 @@ class User(db.Model):
     can_chat = db.Column(db.Boolean, default=False, nullable=False)
     can_manage_subusers = db.Column(db.Boolean, default=False, nullable=False)
     is_support = db.Column(db.Boolean, default=False, nullable=False)
+    
+    # Campo para guardar el último número SMS seleccionado (persiste entre sesiones)
+    last_selected_sms_config_id = db.Column(db.Integer, db.ForeignKey('sms_configs.id', ondelete='SET NULL'), nullable=True)
 
     def has_public_tools_access(self):
         """

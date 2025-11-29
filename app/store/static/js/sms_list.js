@@ -14,8 +14,11 @@ document.addEventListener('DOMContentLoaded', function() {
         return meta ? meta.getAttribute('content') : '';
     }
 
-    // Cargar números disponibles al inicio
-    loadSMSNumbers();
+    // Cargar números disponibles al inicio (coordinado con sms_configs.js)
+    // Esperar un momento para que otros scripts se inicialicen
+    setTimeout(() => {
+        loadSMSNumbers();
+    }, 100);
 
     // Event listeners
     const smsNumberSelect = document.getElementById('sms-number-select');
@@ -41,7 +44,7 @@ document.addEventListener('DOMContentLoaded', function() {
                         window.checkSMSConfigsAndToggleForm();
                     }
                 })
-                .catch(err => console.error("Error guardando número seleccionado:", err));
+                .catch(() => {});
                 loadMessages(currentConfigId);
             } else {
                 // Si se deselecciona, limpiar el estado guardado
@@ -62,21 +65,18 @@ document.addEventListener('DOMContentLoaded', function() {
                         window.checkSMSConfigsAndToggleForm();
                     }
                 })
-                .catch(err => console.error("Error limpiando selección:", err));
+                .catch(() => {});
                 clearMessages();
             }
         });
     }
 
+    /* 
+    // Botón Consultar eliminado
     document.getElementById('btn-consult-number').addEventListener('click', function() {
-        // Consultar todos los mensajes de todos los números
-        currentConfigId = null;
-        // Limpiar el estado guardado cuando se consultan todos
-        localStorage.removeItem(STORAGE_KEY);
-        // Limpiar el selector
-        document.getElementById('sms-number-select').value = '';
-        loadAllMessages();
+        // ... lógica eliminada ...
     });
+    */
 
     document.getElementById('sms-search-input').addEventListener('input', function() {
         currentSearch = this.value.trim();
@@ -119,60 +119,99 @@ document.addEventListener('DOMContentLoaded', function() {
 
     async function loadSMSNumbers() {
         try {
-            const response = await fetch('/tienda/admin/sms_configs');
-            const result = await response.json();
+            // Intentar usar datos ya cargados si están disponibles
+            let configs = null;
+            let lastSelectedId = null;
+            
+            if (window.smsConfigsData) {
+                configs = window.smsConfigsData;
+                lastSelectedId = window.smsLastSelectedId;
+            } else {
+                // Si no están disponibles, cargar desde el servidor
+                window.smsConfigsLoading = true;
+                const response = await fetch('/tienda/admin/sms_configs');
+                const result = await response.json();
+                window.smsConfigsLoading = false;
+                
+                if (result.success && result.configs) {
+                    configs = result.configs;
+                    lastSelectedId = result.last_selected_id || null;
+                    window.smsConfigsData = configs;
+                    window.smsLastSelectedId = lastSelectedId;
+                } else {
+                    configs = [];
+                }
+            }
 
             const select = document.getElementById('sms-number-select');
-            select.innerHTML = '<option value="">-- Selecciona un número --</option>';
+            if (!select) return;
+            
+            select.innerHTML = '';
 
-            if (result.success && result.configs && result.configs.length > 0) {
+            if (configs && configs.length > 0) {
                 // Todos los números siempre están habilitados, mostrar todos
-                result.configs.forEach(config => {
+                configs.forEach(config => {
                     const option = document.createElement('option');
                     option.value = config.id;
+                    // Mostrar: Número - Nombre (X mensajes)
                     option.textContent = `${config.phone_number} - ${config.name} (${config.messages_count || 0} mensajes)`;
                     select.appendChild(option);
                 });
                 
-                // Restaurar el estado guardado
-                const savedConfigId = localStorage.getItem(STORAGE_KEY);
-                if (savedConfigId) {
-                    // Verificar que el número guardado aún existe
-                    const configExists = result.configs.some(c => c.id.toString() === savedConfigId);
-                    if (configExists) {
-                        select.value = savedConfigId;
-                        currentConfigId = parseInt(savedConfigId);
-                        // Guardar también en la sesión del servidor
-                        fetch('/tienda/admin/sms/set-selected-number', {
-                            method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/json',
-                                'X-CSRFToken': getCsrfToken()
-                            },
-                            body: JSON.stringify({ sms_config_id: currentConfigId })
-                        })
-                        .then(() => {
-                            // Notificar a sms_numbers.js que actualice el estado
-                            if (typeof window.checkSMSConfigsAndToggleForm === 'function') {
-                                window.checkSMSConfigsAndToggleForm();
-                            }
-                        })
-                        .catch(err => console.error("Error guardando número seleccionado:", err));
-                        // Cargar los mensajes automáticamente
-                        loadMessages(currentConfigId);
-                    } else {
-                        // Si el número guardado ya no existe, limpiar el estado
-                        localStorage.removeItem(STORAGE_KEY);
-                    }
+                // Prioridad para seleccionar número:
+                // 1. Último seleccionado desde la base de datos (persistente)
+                // 2. Guardado en localStorage
+                // 3. Guardado en sesión del servidor
+                // 4. Primero disponible
+                let configToSelect = null;
+                
+                if (lastSelectedId && configs.some(c => c.id === lastSelectedId)) {
+                    // Usar el último seleccionado desde la base de datos
+                    configToSelect = lastSelectedId;
                 } else {
-                    // Si no hay número guardado, notificar a sms_numbers.js para deshabilitar formulario
-                    if (typeof window.checkSMSConfigsAndToggleForm === 'function') {
-                        window.checkSMSConfigsAndToggleForm();
+                    const savedConfigId = localStorage.getItem(STORAGE_KEY);
+                    if (savedConfigId && configs.some(c => c.id.toString() === savedConfigId)) {
+                        configToSelect = savedConfigId;
+                    } else {
+                        // Si no hay guardado, seleccionar el primero automáticamente
+                        configToSelect = configs[0].id;
                     }
+                }
+                
+                if (configToSelect) {
+                    select.value = configToSelect;
+                    currentConfigId = parseInt(configToSelect);
+                    
+                    // Guardar en localStorage y sesión del servidor
+                    localStorage.setItem(STORAGE_KEY, configToSelect.toString());
+                    fetch('/tienda/admin/sms/set-selected-number', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRFToken': getCsrfToken()
+                        },
+                        body: JSON.stringify({ sms_config_id: parseInt(configToSelect) })
+                    })
+                    .then(() => {
+                        // Disparar evento change para cargar mensajes
+                        const event = new Event('change');
+                        select.dispatchEvent(event);
+                    })
+                    .catch(() => {
+                        // Aún así disparar el evento aunque falle guardar en servidor
+                        const event = new Event('change');
+                        select.dispatchEvent(event);
+                    });
+                }
+            } else {
+                // No hay configuraciones
+                select.innerHTML = '<option value="">-- No hay números configurados --</option>';
+                if (typeof window.checkSMSConfigsAndToggleForm === 'function') {
+                    window.checkSMSConfigsAndToggleForm();
                 }
             }
         } catch (error) {
-            console.error('Error cargando números SMS:', error);
+            // Error silenciado
         }
     }
 
@@ -195,7 +234,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
             }
         } catch (error) {
-            console.error('Error consultando número:', error);
             alert('Error al consultar el número');
         }
     }
@@ -216,7 +254,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 showError('Error cargando mensajes: ' + (result.error || 'Desconocido'));
             }
         } catch (error) {
-            console.error('Error cargando mensajes:', error);
             showError('Error de conexión al cargar mensajes');
         }
     }
@@ -239,7 +276,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 showError('Error cargando mensajes: ' + (result.error || 'Desconocido'));
             }
         } catch (error) {
-            console.error('Error cargando mensajes:', error);
             showError('Error de conexión al cargar mensajes');
         }
     }
@@ -501,7 +537,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 alert('Error cargando detalles del mensaje');
             }
         } catch (error) {
-            console.error('Error:', error);
             alert('Error de conexión');
         }
     };

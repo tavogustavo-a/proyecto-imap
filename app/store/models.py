@@ -366,6 +366,7 @@ class SMSConfig(db.Model):
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
     messages = db.relationship('SMSMessage', backref='sms_config', lazy='dynamic', cascade='all, delete-orphan')
+    allowed_numbers = db.relationship('AllowedSMSNumber', backref='sms_config', lazy='dynamic', cascade='all, delete-orphan')
     
     def __repr__(self):
         return f'<SMSConfig {self.phone_number} ({self.name})>'
@@ -508,8 +509,7 @@ class AllowedSMSNumber(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
-    # Relación con SMSConfig
-    sms_config = db.relationship('SMSConfig', backref='allowed_numbers')
+    # Relación con SMSConfig (backref 'sms_config' está definido en SMSConfig.allowed_numbers con cascade)
     
     def __repr__(self):
         return f'<AllowedSMSNumber {self.phone_number} (config: {self.sms_config_id})>'

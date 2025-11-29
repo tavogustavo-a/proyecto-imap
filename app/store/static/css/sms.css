@@ -29,6 +29,54 @@
   white-space: nowrap;
 }
 
+/* Estilos para badges de tipo de número SMS - CSP Compliant */
+.badge-success {
+  background-color: #28a745;
+  color: white;
+  padding: 2px 8px;
+  border-radius: 3px;
+  font-size: 0.85em;
+  margin-left: 5px;
+  display: inline-block;
+}
+
+.badge-warning {
+  background-color: #ffc107;
+  color: #000;
+  padding: 2px 8px;
+  border-radius: 3px;
+  font-size: 0.85em;
+  margin-left: 5px;
+  display: inline-block;
+}
+
+.badge-secondary {
+  background-color: #6c757d;
+  color: white;
+  padding: 2px 8px;
+  border-radius: 3px;
+  font-size: 0.85em;
+  margin-left: 5px;
+  display: inline-block;
+}
+
+/* Clases de texto con colores para mensajes SMS - CSP Compliant */
+.text-success {
+  color: #28a745 !important;
+}
+
+.text-danger {
+  color: #dc3545 !important;
+}
+
+.text-info {
+  color: #002678 !important;
+}
+
+.text-secondary {
+  color: #6c757d !important;
+}
+
 /* Estilos para gestión de números SMS */
 .search-results-container {
   display: none; /* Oculto inicialmente */

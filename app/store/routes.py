@@ -1,6 +1,6 @@
 from flask import render_template, request, redirect, url_for, flash, jsonify, current_app, session, Response, stream_template, send_file
 from datetime import datetime
-from app.utils.timezone import get_colombia_now, colombia_strftime, utc_to_colombia, get_colombia_datetime
+from app.utils.timezone import get_colombia_now, colombia_strftime, utc_to_colombia, get_colombia_datetime, timesince
 # Importa tus modelos y db. Asumo nombres comunes, ajústalos si es necesario.
 from .models import Product, Sale, Coupon, coupon_products, Role, role_products, role_users, ProductionLink, ApiInfo, WorksheetTemplate, WorksheetData, WorksheetPermission, DriveTransfer, WhatsAppConfig, GSheetsLink, SMSConfig, SMSMessage, AllowedSMSNumber
 
@@ -7071,8 +7071,17 @@ def socketio_emit_message():
 # Ruta para favicon.ico para evitar error 404
 @store_bp.route('/favicon.ico')
 def favicon():
-    """Redirigir favicon.ico a favicon.svg para evitar error 404"""
-    return redirect(url_for('static', filename='images/favicon.svg'))
+    """Servir favicon.svg directamente con tipo MIME correcto"""
+    from flask import send_from_directory
+    import os
+    favicon_path = os.path.join(current_app.static_folder, 'images', 'favicon.svg')
+    if os.path.exists(favicon_path):
+        return send_from_directory(
+            os.path.join(current_app.static_folder, 'images'),
+            'favicon.svg',
+            mimetype='image/svg+xml'
+        )
+    return '', 404
 
 @store_bp.route('/api/chat/push-subscription', methods=['POST'])
 def save_push_subscription():
@@ -7546,10 +7555,44 @@ def test_whatsapp_connection():
 
 # ==================== RUTAS PARA SMS (TWILIO) ====================
 
+def check_twilio_number_type(phone_number, account_sid, auth_token):
+    """Consulta la API de Twilio para determinar si un número es temporal o comprado"""
+    try:
+        from twilio.rest import Client
+        from twilio.base.exceptions import TwilioRestException
+        
+        if not account_sid or not auth_token:
+            return 'desconocido'
+        
+        client = Client(account_sid, auth_token)
+        
+        # Buscar el número en la lista de números activos de Twilio
+        incoming_phone_numbers = client.incoming_phone_numbers.list(phone_number=phone_number)
+        
+        if incoming_phone_numbers and len(incoming_phone_numbers) > 0:
+            return 'comprado'
+        else:
+            # Intentar buscar sin el + si tiene
+            if phone_number.startswith('+'):
+                alt_phone = phone_number[1:]
+                incoming_phone_numbers = client.incoming_phone_numbers.list(phone_number=alt_phone)
+                if incoming_phone_numbers and len(incoming_phone_numbers) > 0:
+                    return 'comprado'
+            
+            return 'temporal'
+            
+    except Exception as e:
+        # Solo loguear si es un error crítico, para evitar ruido en la consola por errores de conexión ocasionales
+        # current_app.logger.error(f"Error consultando tipo de número Twilio: {e}")
+        return 'desconocido'
+
 @store_bp.route('/admin/sms_configs', methods=['GET'])
 @admin_required
 def list_sms_configs():
-    """Lista todas las configuraciones SMS. Asegura que todos los números estén habilitados."""
+    """
+    Lista todas las configuraciones SMS. Asegura que todos los números estén habilitados.
+    También devuelve el último número seleccionado por el usuario desde la base de datos.
+    """
     configs = SMSConfig.query.order_by(SMSConfig.created_at.desc()).all()
     
     # Asegurar que todos los números estén habilitados (siempre deben estar habilitados)
@@ -7565,19 +7608,72 @@ def list_sms_configs():
             db.session.commit()
         except Exception as e:
             db.session.rollback()
-            current_app.logger.error(f"Error habilitando números SMS: {e}", exc_info=True)
     
-    configs_data = [{
-        'id': config.id,
-        'name': config.name,
-        'phone_number': config.phone_number,
-        'twilio_account_sid': config.twilio_account_sid,
-        'is_enabled': True,  # Siempre True
-        'description': config.description,
-        'created_at': colombia_strftime('%Y-%m-%d %H:%M:%S') if config.created_at else None,
-        'messages_count': config.messages.count()
-    } for config in configs]
-    return jsonify({'success': True, 'configs': configs_data})
+    # Optimizar: obtener conteos de mensajes en una sola consulta
+    from sqlalchemy import func
+    messages_counts = db.session.query(
+        SMSMessage.sms_config_id,
+        func.count(SMSMessage.id).label('count')
+    ).group_by(SMSMessage.sms_config_id).all()
+    
+    messages_dict = {config_id: count for config_id, count in messages_counts}
+    
+    configs_data = []
+    for config in configs:
+        # Usar conteo optimizado en lugar de config.messages.count()
+        messages_count = messages_dict.get(config.id, 0)
+        
+        # NO consultar Twilio en cada carga (muy lento) - usar 'desconocido' por defecto
+        # El tipo de número se puede verificar manualmente cuando sea necesario
+        number_type = 'desconocido'
+        
+        configs_data.append({
+            'id': config.id,
+            'name': config.name,
+            'phone_number': config.phone_number,
+            'twilio_account_sid': config.twilio_account_sid,
+            'is_enabled': True,  # Siempre True
+            'description': config.description,
+            'created_at': colombia_strftime('%Y-%m-%d %H:%M:%S') if config.created_at else None,
+            'messages_count': messages_count,
+            'number_type': number_type
+        })
+    
+    # Obtener el último número seleccionado por el usuario desde la base de datos
+    current_user = get_current_user()
+    last_selected_id = None
+    if current_user and current_user.last_selected_sms_config_id:
+        # Verificar que el número seleccionado aún existe
+        selected_config = SMSConfig.query.get(current_user.last_selected_sms_config_id)
+        if selected_config:
+            last_selected_id = current_user.last_selected_sms_config_id
+        else:
+            # Si el número ya no existe, limpiar la referencia
+            current_user.last_selected_sms_config_id = None
+            try:
+                db.session.commit()
+            except Exception:
+                db.session.rollback()
+    
+    # También verificar si hay uno guardado en la sesión (prioridad más alta)
+    session_selected_id = session.get('selected_sms_config_id')
+    if session_selected_id:
+        # Validar que existe
+        if SMSConfig.query.get(session_selected_id):
+            last_selected_id = session_selected_id
+            # Sincronizar con la base de datos
+            if current_user and current_user.last_selected_sms_config_id != session_selected_id:
+                current_user.last_selected_sms_config_id = session_selected_id
+                try:
+                    db.session.commit()
+                except Exception:
+                    db.session.rollback()
+        
+    return jsonify({
+        'success': True, 
+        'configs': configs_data,
+        'last_selected_id': last_selected_id  # ID del último número seleccionado
+    })
 
 @store_bp.route('/admin/sms_configs', methods=['POST'])
 @admin_required
@@ -7668,19 +7764,32 @@ def update_sms_config(config_id):
 @store_bp.route('/admin/sms_configs/<int:config_id>', methods=['DELETE'])
 @admin_required
 def delete_sms_config(config_id):
-    """Elimina una configuración SMS. Si es el último, elimina también todos los números permitidos."""
+    """Elimina una configuración SMS. Los correos permitidos y mensajes se eliminan automáticamente en cascada."""
     config = SMSConfig.query.get_or_404(config_id)
     
     try:
-        # Verificar si es el último SMSConfig antes de eliminar
-        remaining_configs_count = SMSConfig.query.filter(SMSConfig.id != config_id).count()
+        # Contar correos permitidos y mensajes que se eliminarán en cascada
+        allowed_count = AllowedSMSNumber.query.filter_by(sms_config_id=config_id).count()
+        messages_count = SMSMessage.query.filter_by(sms_config_id=config_id).count()
         
-        # Eliminar la configuración (los AllowedSMSNumber se eliminarán en cascada por la foreign key)
+        # Eliminar la configuración (los AllowedSMSNumber y SMSMessage se eliminarán en cascada)
+        # Esto funciona por:
+        # 1. Foreign key con ondelete='CASCADE' en la base de datos
+        # 2. Relación SQLAlchemy con cascade='all, delete-orphan'
         db.session.delete(config)
         
         db.session.commit()
         
-        return jsonify({'success': True, 'message': 'Configuración SMS eliminada correctamente.'})
+        message = 'Configuración SMS eliminada correctamente.'
+        if allowed_count > 0 or messages_count > 0:
+            details = []
+            if allowed_count > 0:
+                details.append(f'{allowed_count} correo(s) permitido(s)')
+            if messages_count > 0:
+                details.append(f'{messages_count} mensaje(s)')
+            message += f' También se eliminaron: {", ".join(details)}.'
+        
+        return jsonify({'success': True, 'message': message})
     
     except Exception as e:
         db.session.rollback()
@@ -7791,18 +7900,47 @@ def get_sms_message_by_id(message_id):
 @store_bp.route('/admin/sms/set-selected-number', methods=['POST'])
 @admin_required
 def set_selected_sms_number():
-    """Guarda el número SMS seleccionado en la sesión del usuario"""
+    """Guarda el número SMS seleccionado en la sesión y en la base de datos del usuario"""
     data = request.get_json()
-    sms_config_id = data.get('sms_config_id', type=int)
+    sms_config_id = data.get('sms_config_id')
+    if sms_config_id is not None:
+        try:
+            sms_config_id = int(sms_config_id)
+        except (ValueError, TypeError):
+            sms_config_id = None
     
     if sms_config_id:
         # Validar que el sms_config_id existe
         sms_config = SMSConfig.query.get(sms_config_id)
         if not sms_config:
             return jsonify({'success': False, 'message': 'Número SMS no encontrado.'}), 404
+        
+        # Guardar en sesión (para uso inmediato)
         session['selected_sms_config_id'] = sms_config_id
+        
+        # Guardar en base de datos (para persistencia entre sesiones)
+        current_user = get_current_user()
+        if current_user:
+            try:
+                current_user.last_selected_sms_config_id = sms_config_id
+                db.session.commit()
+            except Exception as e:
+                db.session.rollback()
+                # No fallar si hay error, solo loguear
+                current_app.logger.debug(f"Error guardando SMS config en BD: {e}")
     else:
+        # Limpiar selección
         session.pop('selected_sms_config_id', None)
+        
+        # Limpiar también en base de datos
+        current_user = get_current_user()
+        if current_user:
+            try:
+                current_user.last_selected_sms_config_id = None
+                db.session.commit()
+            except Exception as e:
+                db.session.rollback()
+                current_app.logger.debug(f"Error limpiando SMS config en BD: {e}")
     
     return jsonify({'success': True, 'message': 'Número seleccionado guardado.'})
 
@@ -7857,7 +7995,12 @@ def search_allowed_sms_numbers():
     
     data = request.get_json()
     search_text = data.get('search_text', '').strip()
-    sms_config_id = data.get('sms_config_id', type=int)
+    sms_config_id = data.get('sms_config_id')
+    if sms_config_id is not None:
+        try:
+            sms_config_id = int(sms_config_id)
+        except (ValueError, TypeError):
+            sms_config_id = None
     
     if not sms_config_id:
         return jsonify({'success': False, 'message': 'Debe seleccionar un número SMS primero.'}), 400
@@ -7895,7 +8038,12 @@ def delete_allowed_sms_number():
     import re
     data = request.get_json()
     phone_number = data.get('phone_number', '').strip()
-    sms_config_id = data.get('sms_config_id', type=int)
+    sms_config_id = data.get('sms_config_id')
+    if sms_config_id is not None:
+        try:
+            sms_config_id = int(sms_config_id)
+        except (ValueError, TypeError):
+            sms_config_id = None
     
     if not phone_number:
         return jsonify({'success': False, 'message': 'Falta el correo o número.'}), 400
@@ -7928,7 +8076,6 @@ def delete_allowed_sms_number():
             return jsonify({'success': False, 'message': 'Correo no encontrado.'})
     except Exception as e:
         db.session.rollback()
-        current_app.logger.error(f"Error al eliminar correo '{phone_number}': {e}", exc_info=True)
         return jsonify({'success': False, 'message': 'Error al eliminar el correo.'}), 500
 
 @store_bp.route('/admin/sms/allowed-numbers/delete-many', methods=['POST'])
@@ -7938,7 +8085,12 @@ def delete_many_allowed_sms_numbers():
     import re
     data = request.get_json()
     phone_numbers = data.get('phone_numbers', [])
-    sms_config_id = data.get('sms_config_id', type=int)
+    sms_config_id = data.get('sms_config_id')
+    if sms_config_id is not None:
+        try:
+            sms_config_id = int(sms_config_id)
+        except (ValueError, TypeError):
+            sms_config_id = None
     
     if not phone_numbers:
         return jsonify({'success': False, 'message': 'No se proporcionaron correos o números.'}), 400
@@ -7975,7 +8127,6 @@ def delete_many_allowed_sms_numbers():
         return jsonify({'success': True, 'message': f'{deleted_count} correo(s) eliminado(s).'})
     except Exception as e:
         db.session.rollback()
-        current_app.logger.error(f"Error al eliminar múltiples correos: {e}", exc_info=True)
         return jsonify({'success': False, 'message': 'Error al eliminar los correos.'}), 500
 
 @store_bp.route('/admin/sms/allowed-numbers/delete-all', methods=['POST'])
@@ -7983,7 +8134,12 @@ def delete_many_allowed_sms_numbers():
 def delete_all_allowed_sms_numbers():
     """Elimina TODOS los números permitidos de un sms_config_id específico"""
     data = request.get_json()
-    sms_config_id = data.get('sms_config_id', type=int)
+    sms_config_id = data.get('sms_config_id')
+    if sms_config_id is not None:
+        try:
+            sms_config_id = int(sms_config_id)
+        except (ValueError, TypeError):
+            sms_config_id = None
     
     if not sms_config_id:
         return jsonify({'success': False, 'message': 'Debe seleccionar un número SMS primero.'}), 400
@@ -7994,7 +8150,6 @@ def delete_all_allowed_sms_numbers():
         return jsonify({'success': True, 'message': f'{deleted_count} número(s) eliminado(s).'})
     except Exception as e:
         db.session.rollback()
-        current_app.logger.error(f"Error al eliminar todos los números: {e}", exc_info=True)
         return jsonify({'success': False, 'message': 'Error interno al eliminar todos los números.'}), 500
 
 @store_bp.route('/admin/sms/allowed-numbers/add', methods=['POST'])
@@ -8005,7 +8160,12 @@ def add_allowed_sms_numbers():
     
     data = request.get_json()
     phone_numbers = data.get('phone_numbers', [])
-    sms_config_id = data.get('sms_config_id', type=int)
+    sms_config_id = data.get('sms_config_id')
+    if sms_config_id is not None:
+        try:
+            sms_config_id = int(sms_config_id)
+        except (ValueError, TypeError):
+            sms_config_id = None
     
     if not sms_config_id:
         return jsonify({'success': False, 'message': 'Debe seleccionar un número SMS primero.'}), 400
@@ -8039,37 +8199,110 @@ def add_allowed_sms_numbers():
                 if len(normalized) >= 11 and normalized[1:].replace(' ', '').isdigit():
                     normalized_new_numbers.append(normalized)
     
-    # Eliminar duplicados
+    # Eliminar duplicados de la lista de entrada
     normalized_new_numbers = list(set(normalized_new_numbers))
     
     if not normalized_new_numbers:
         return jsonify({'success': False, 'message': 'No hay correos o números válidos para añadir.'}), 400
     
-    # Obtener los números que YA existen para este sms_config_id para evitar IntegrityError
-    existing_numbers = {num.phone_number for num in AllowedSMSNumber.query.filter(
-        AllowedSMSNumber.sms_config_id == sms_config_id,
+    # 1. Verificar si alguno de los correos YA existe en CUALQUIER número (Unicidad Global)
+    existing_records = AllowedSMSNumber.query.filter(
         AllowedSMSNumber.phone_number.in_(normalized_new_numbers)
-    ).all()}
+    ).all()
     
+    existing_emails = {record.phone_number for record in existing_records}
+    
+    # 2. Filtrar los que NO existen para agregarlos
+    to_add = [num for num in normalized_new_numbers if num not in existing_emails]
+    
+    # 3. Si no hay ninguno para agregar (todos ya existen)
+    if not to_add:
+        error_messages = []
+        processed_emails = []  # Correos que se procesaron (ya en este número)
+        remaining_emails = []  # Correos que quedan pendientes (en otros números)
+        
+        for record in existing_records:
+            if record.sms_config_id == sms_config_id:
+                # Ya existe en ESTE mismo número (azul) - se procesó
+                error_messages.append(f'<span class="text-info">• {record.phone_number} (ya agregado a este número)</span>')
+                processed_emails.append(record.phone_number)
+            else:
+                # Existe en OTRO número (rojo) - queda pendiente
+                config = SMSConfig.query.get(record.sms_config_id)
+                config_info = f"{config.name} ({config.phone_number})" if config else f"ID {record.sms_config_id}"
+                error_messages.append(f'<span class="text-danger">• {record.phone_number} (ya está en {config_info})</span>')
+                remaining_emails.append(record.phone_number)
+            
+        msg_html = '<div class="mb-1">Detalle de los correos no agregados:<br>' + '<br>'.join(error_messages) + '</div>'
+        return jsonify({
+            'success': False, 
+            'message': msg_html,
+            'is_html': True,
+            'added_count': 0,
+            'processed_emails': processed_emails,  # Correos que se procesaron y deben eliminarse del input
+            'remaining_emails': remaining_emails  # Correos que quedan pendientes
+        }), 200
+
+    # 4. Agregar los nuevos
     new_number_objects = []
-    actually_added_count = 0
-    for number in normalized_new_numbers:
-        if number not in existing_numbers:
-            new_number_objects.append(AllowedSMSNumber(phone_number=number, sms_config_id=sms_config_id))
-            actually_added_count += 1
+    for number in to_add:
+        new_number_objects.append(AllowedSMSNumber(phone_number=number, sms_config_id=sms_config_id))
     
-    if not new_number_objects:
-        return jsonify({'success': True, 'added_count': 0, 'message': 'Todos los números proporcionados ya existían para este número SMS.'})
-    
-    # Añadir los que realmente son nuevos
     db.session.bulk_save_objects(new_number_objects)
+    actually_added_count = len(new_number_objects)
     
     try:
         db.session.commit()
-        return jsonify({'success': True, 'added_count': actually_added_count, 'message': f'{actually_added_count} número(s) agregado(s).'})
+        
+        # Construir mensaje de respuesta
+        if existing_records:
+            # Éxito parcial
+            error_messages = []
+            processed_emails = []  # Correos que se procesaron (agregados o ya en este número)
+            remaining_emails = []  # Correos que quedan pendientes (en otros números)
+            
+            for record in existing_records:
+                if record.sms_config_id == sms_config_id:
+                    # Ya existe en ESTE mismo número (azul) - se procesó
+                    error_messages.append(f'<span class="text-info">• {record.phone_number} (ya agregado a este número)</span>')
+                    processed_emails.append(record.phone_number)
+                else:
+                    # Existe en OTRO número (rojo) - queda pendiente
+                    config = SMSConfig.query.get(record.sms_config_id)
+                    config_info = f"{config.name} ({config.phone_number})" if config else f"ID {record.sms_config_id}"
+                    error_messages.append(f'<span class="text-danger">• {record.phone_number} (ya está en {config_info})</span>')
+                    remaining_emails.append(record.phone_number)
+            
+            # Agregar los correos que se agregaron exitosamente a la lista de procesados
+            processed_emails.extend(to_add)
+            
+            # Construir mensaje HTML
+            msg_html = ""
+            if actually_added_count > 0:
+                msg_html += f'<div class="text-success mb-2">✔ Se agregaron {actually_added_count} correos correctamente.</div>'
+            
+            msg_html += '<div class="mb-1">Detalle de los no agregados:<br>' + '<br>'.join(error_messages) + '</div>'
+            
+            return jsonify({
+                'success': False, # Para no limpiar el input automáticamente
+                'message': msg_html,
+                'added_count': actually_added_count,
+                'is_html': True,
+                'processed_emails': processed_emails,  # Correos que se procesaron y deben eliminarse del input
+                'remaining_emails': remaining_emails  # Correos que quedan pendientes
+            }), 200
+        else:
+            # Éxito total - todos los correos se agregaron
+            return jsonify({
+                'success': True, 
+                'added_count': actually_added_count, 
+                'message': f'Se agregaron {actually_added_count} correos correctamente.',
+                'processed_emails': to_add,  # Todos los correos se procesaron
+                'remaining_emails': []
+            })
+            
     except Exception as e:
         db.session.rollback()
-        current_app.logger.error(f"Error en bulk insert para añadir números: {e}", exc_info=True)
         return jsonify({'success': False, 'message': 'Error al guardar los nuevos números.'}), 500
 
 @store_bp.route('/sms/webhook', methods=['POST'])
@@ -8082,8 +8315,57 @@ def sms_webhook():
         return twiml_response, 200, {'Content-Type': 'text/xml'}
     
     except Exception as e:
-        current_app.logger.error(f"Error en webhook SMS: {str(e)}", exc_info=True)
         from twilio.twiml.messaging_response import MessagingResponse
         response = MessagingResponse()
         return str(response), 200, {'Content-Type': 'text/xml'}
+
+@store_bp.route('/sms/my-messages', methods=['GET'])
+def get_my_sms_messages():
+    """
+    Obtiene los últimos 15 mensajes SMS permitidos para el usuario logueado.
+    Verifica si el correo del usuario está en AllowedSMSNumber.
+    """
+    current_user = get_current_user()
+    if not current_user:
+        return jsonify({'success': False, 'error': 'Usuario no autenticado'}), 401
+    
+    # Normalizar correo del usuario
+    user_email = current_user.username.lower() if '@' in current_user.username else None
+    
+    if not user_email:
+        # Si el username no es un email, intentar buscar el email asociado si existe un campo email
+        user_email = current_user.username.lower()
+
+    # Buscar configuraciones SMS permitidas para este correo
+    # Buscar en AllowedSMSNumber
+    from sqlalchemy import func
+    allowed_configs = db.session.query(AllowedSMSNumber.sms_config_id).filter(
+        func.lower(AllowedSMSNumber.phone_number) == user_email
+    ).all()
+    
+    if not allowed_configs:
+        return jsonify({'success': True, 'messages': [], 'message': 'No tienes acceso a ningún número SMS.'})
+    
+    allowed_config_ids = [r[0] for r in allowed_configs]
+    
+    # Obtener los últimos 15 mensajes de los números permitidos
+    messages = SMSMessage.query.filter(
+        SMSMessage.sms_config_id.in_(allowed_config_ids)
+    ).order_by(
+        SMSMessage.created_at.desc()
+    ).limit(15).all()
+    
+    messages_data = [{
+        'id': msg.id,
+        'from_number': msg.from_number,
+        'message_body': msg.message_body,
+        'created_at': utc_to_colombia(msg.created_at).strftime('%Y-%m-%d %H:%M:%S') if msg.created_at else None,
+        'ago': timesince(msg.created_at) if msg.created_at else ''
+    } for msg in messages]
+    
+    return jsonify({
+        'success': True, 
+        'messages': messages_data,
+        'count': len(messages_data)
+    })
 

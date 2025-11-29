@@ -1553,7 +1553,7 @@ form {
 
 /* Área de contenido con fondo tema1.png */
 .content-area {
-  background: url(../images/tema1.png) no-repeat center center fixed;
+  background: url(/static/images/tema1.png) no-repeat center center fixed;
   background-size: cover;
 }
 

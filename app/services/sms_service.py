@@ -37,7 +37,6 @@ def receive_sms_webhook():
         if not config:
             config = SMSConfig.query.filter_by(is_enabled=True).first()
             if not config:
-                logger.error("No hay configuración SMS disponible")
                 response = MessagingResponse()
                 return str(response)
         
@@ -63,13 +62,10 @@ def receive_sms_webhook():
         db.session.add(sms_message)
         db.session.commit()
         
-        logger.info(f"SMS recibido: {from_number} -> {to_number} | {message_body[:50]}")
-        
         response = MessagingResponse()
         return str(response)
     
     except Exception as e:
-        logger.error(f"Error procesando webhook SMS: {str(e)}", exc_info=True)
         response = MessagingResponse()
         return str(response)
 

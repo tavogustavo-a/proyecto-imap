@@ -58,17 +58,17 @@ body.theme-active {
 
 /* ============= Temas de fondo (tema1..tema17, temaadmin) ============= */
 body.theme-active.tema1 {
-  background: url("../images/tema1.png") no-repeat center center fixed;
+  background: url("/static/images/tema1.png") no-repeat center center fixed;
   background-size: cover;
   color: var(--text-color);
 }
 body.theme-active.tema2 {
-  background: url("../images/tema2.png") no-repeat center center fixed;
+  background: url("/static/images/tema2.png") no-repeat center center fixed;
   background-size: cover;
   color: var(--text-color);
 }
 body.theme-active.tema3 {
-  background: url("../images/tema3.png") no-repeat center center fixed;
+  background: url("/static/images/tema3.png") no-repeat center center fixed;
   background-size: cover;
   color: var(--text-color);
 }

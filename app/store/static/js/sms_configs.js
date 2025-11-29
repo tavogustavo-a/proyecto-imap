@@ -26,8 +26,14 @@ document.addEventListener('DOMContentLoaded', function() {
         return response.json();
     }
     
-    // Cargar configuraciones al iniciar
+    // Cargar configuraciones al iniciar (solo si no se cargaron desde otro script)
     function loadSMSConfigs() {
+        // Verificar si ya se están cargando desde sms_list.js para evitar llamadas duplicadas
+        if (window.smsConfigsLoading) {
+            return;
+        }
+        
+        window.smsConfigsLoading = true;
         fetch('/tienda/admin/sms_configs', {
             method: 'GET',
             headers: {
@@ -37,15 +43,28 @@ document.addEventListener('DOMContentLoaded', function() {
         })
         .then(handleFetchResponse)
         .then(data => {
+            window.smsConfigsLoading = false;
             if (data.success) {
                 renderConfigsList(data.configs);
                 updateSMSNumberSelect(data.configs);
+                // Notificar a otros scripts que los datos están listos
+                window.smsConfigsData = data.configs;
+                window.smsLastSelectedId = data.last_selected_id || null;
+                // Disparar evento personalizado para que otros scripts se enteren
+                window.dispatchEvent(new CustomEvent('smsConfigsLoaded', { detail: data.configs }));
+                if (typeof window.onSMSConfigsLoaded === 'function') {
+                    window.onSMSConfigsLoaded(data.configs);
+                }
             }
         })
         .catch(err => {
-            console.error('Error cargando configuraciones:', err);
+            window.smsConfigsLoading = false;
             if (smsConfigsList) {
-                smsConfigsList.innerHTML = `<p class="sms-error-message">Error al cargar configuraciones: ${err.message}</p>`;
+                const errorDiv = document.createElement('p');
+                errorDiv.className = 'sms-error-message';
+                errorDiv.textContent = `Error al cargar configuraciones: ${err.message}`;
+                smsConfigsList.innerHTML = '';
+                smsConfigsList.appendChild(errorDiv);
             }
         });
     }
@@ -60,16 +79,27 @@ document.addEventListener('DOMContentLoaded', function() {
         }
         
         const configsHTML = configs.map(config => {
+            // Determinar el tipo de número y el color del badge (CSP Compliant - sin estilos inline)
+            let numberTypeBadge = '';
+            if (config.number_type === 'comprado') {
+                numberTypeBadge = '<span class="badge badge-success">Comprado</span>';
+            } else if (config.number_type === 'temporal') {
+                numberTypeBadge = '<span class="badge badge-warning">Temporal</span>';
+            } else {
+                numberTypeBadge = '<span class="badge badge-secondary">Desconocido</span>';
+            }
+            
             return `
-                <div class="regex-item">
-                    <strong>Nombre:</strong> ${escapeHtml(config.name)}<br>
-                    <strong>Número:</strong> ${escapeHtml(config.phone_number)}<br>
-                    <strong>Twilio Account SID:</strong> ${escapeHtml(config.twilio_account_sid)}<br>
-                    <div class="mt-05">
-                        <button type="button" class="btn-orange mr-05 edit-sms-config" data-config-id="${config.id}">
-                            Editar
+                <div class="regex-item d-flex justify-content-between align-items-center p-2">
+                    <div class="flex-grow-1">
+                        <div class="font-weight-bold mb-05">${escapeHtml(config.name)}</div>
+                        <div class="text-secondary">${escapeHtml(config.phone_number)}${numberTypeBadge}</div>
+                    </div>
+                    <div class="d-flex gap-05 ml-2">
+                        <button type="button" class="btn-orange btn-sm edit-sms-config" data-config-id="${config.id}" title="Editar">
+                            <i class="fas fa-edit"></i>
                         </button>
-                        <button type="button" class="btn-red delete-sms-config mr-05 btn-imap-action btn-imap-small" data-id="${config.id}" title="Eliminar">
+                        <button type="button" class="btn-red btn-sm delete-sms-config btn-imap-action btn-imap-small" data-id="${config.id}" title="Eliminar">
                             <i class="fas fa-trash"></i>
                         </button>
                     </div>
@@ -106,7 +136,7 @@ document.addEventListener('DOMContentLoaded', function() {
         configs.forEach(config => {
             const option = document.createElement('option');
             option.value = config.id;
-            option.textContent = `${config.phone_number} - ${config.name} (${config.messages_count || 0} mensajes)`;
+            option.textContent = `${config.phone_number} (${config.messages_count || 0} mensajes)`;
             smsNumberSelect.appendChild(option);
         });
     }
@@ -132,7 +162,6 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         })
         .catch(err => {
-            console.error('Error eliminando configuración:', err);
             showMessage(`Error al eliminar: ${err.message}`, 'error');
         });
     }
@@ -200,7 +229,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
             })
             .catch(err => {
-                console.error('Error creando configuración:', err);
                 showMessage(`Error: ${err.message}`, 'error');
             });
         });
@@ -291,7 +319,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
             })
             .catch(err => {
-                console.error('Error actualizando configuración:', err);
                 if (editConfigMessage) {
                     editConfigMessage.textContent = `Error: ${err.message}`;
                     editConfigMessage.className = 'sms-error-message';

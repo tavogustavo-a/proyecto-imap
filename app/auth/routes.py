@@ -30,9 +30,9 @@ from . import auth_bp
 @auth_bp.before_app_request
 def check_session_revocation():
     """
-    1) Verifica si hay que forzar logout individual por user_session_rev_count.
-    2) Verifica si han transcurrido 10 días desde el login de un usuario normal (no admin).
+    Verifica si hay que forzar logout individual por user_session_rev_count.
     NOTA: La verificación global session_revocation_count ahora se maneja en app/__init__.py
+    NOTA: La expiración automática de sesión se maneja mediante PERMANENT_SESSION_LIFETIME (15 días)
     """
     if "logged_in" in session and "username" in session:
         user_id = session.get("user_id")
@@ -42,22 +42,6 @@ def check_session_revocation():
                 session.clear()
                 flash("Tu sesión se ha cerrado por un cambio en tu configuración de usuario.", "info")
                 return redirect(url_for("auth_bp.login"))
-
-        admin_username = current_app.config.get("ADMIN_USER", "admin")
-        if session.get("username") != admin_username:
-            login_time_str = session.get("login_time")
-            if login_time_str:
-                try:
-                    login_time_dt = datetime.fromisoformat(login_time_str)
-                except ValueError:
-                    login_time_dt = datetime.utcnow()
-                    session["login_time"] = login_time_dt.isoformat()
-
-                diff_days = (datetime.utcnow() - login_time_dt).days
-                if diff_days >= 10:
-                    session.clear()
-                    flash("Se ha cerrado tu sesión por protección (10 días).", "info")
-                    return redirect(url_for("user_auth_bp.login"))
 
 
 @auth_bp.route("/login", methods=["GET", "POST"])

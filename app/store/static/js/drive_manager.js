@@ -1214,10 +1214,10 @@ class DriveGallery {
         return `
             <div class="video-item drive-media-item" data-type="video" data-index="${index}" data-api-id="${apiId}" data-file-id="${video.id}" data-full-url="${escapeHtml(fullUrl)}" data-name="${escapedName}">
                 <video src="${escapeHtml(fullUrl)}" poster="${escapeHtml(thumbnailUrl)}" preload="none" class="drive-video-thumbnail"></video>
-                <div class="video-actions">
+                    <div class="video-actions">
                     <button class="btn-download-icon drive-video-download" data-file-id="${video.id}" data-name="${escapedName}" title="Descargar">
                         <i class="fas fa-download"></i>
-                    </button>
+                        </button>
                 </div>
             </div>
         `;

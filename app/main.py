@@ -21,9 +21,17 @@ def inject_worksheet_access():
 # ✅ NUEVO: Ruta para favicon.ico para evitar error 404
 @main_bp.route('/favicon.ico')
 def favicon():
-    """Redirigir favicon.ico a favicon.svg para evitar error 404"""
-    from flask import redirect, url_for
-    return redirect(url_for('static', filename='images/favicon.svg'))
+    """Servir favicon.svg directamente con tipo MIME correcto"""
+    from flask import send_from_directory
+    import os
+    favicon_path = os.path.join(current_app.static_folder, 'images', 'favicon.svg')
+    if os.path.exists(favicon_path):
+        return send_from_directory(
+            os.path.join(current_app.static_folder, 'images'),
+            'favicon.svg',
+            mimetype='image/svg+xml'
+        )
+    return '', 404
 
 @main_bp.route("/", methods=["GET"])
 def home():

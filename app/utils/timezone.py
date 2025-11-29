@@ -90,3 +90,37 @@ def colombia_to_utc(colombia_datetime):
     
     return colombia_datetime.astimezone(UTC_TZ)
 
+def timesince(dt, default="ahora"):
+    """
+    Devuelve una cadena que representa el tiempo transcurrido desde una fecha.
+    Ejemplo: "hace 5 minutos", "hace 2 horas", "ayer".
+    """
+    if not dt:
+        return ""
+        
+    now = get_colombia_now()
+    
+    # Asegurar que dt tenga zona horaria
+    if dt.tzinfo is None:
+        # Si no tiene zona horaria, asumimos que es UTC y convertimos a Colombia
+        dt = utc_to_colombia(dt)
+    elif dt.tzinfo == UTC_TZ:
+        dt = utc_to_colombia(dt)
+        
+    diff = now - dt
+    
+    periods = (
+        (diff.days // 365, "año", "años"),
+        (diff.days // 30, "mes", "meses"),
+        (diff.days // 7, "semana", "semanas"),
+        (diff.days, "día", "días"),
+        (diff.seconds // 3600, "hora", "horas"),
+        (diff.seconds // 60, "minuto", "minutos"),
+        (diff.seconds, "segundo", "segundos"),
+    )
+    
+    for period, singular, plural in periods:
+        if period:
+            return "hace %d %s" % (period, singular if period == 1 else plural)
+            
+    return default

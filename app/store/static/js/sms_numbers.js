@@ -97,7 +97,6 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         })
         .catch(err => {
-            console.error("Fetch error list numbers:", err);
             if (allowedNumbersTextContainer) {
                 const errorDiv = document.createElement('p');
                 errorDiv.className = 'sms-error-message';
@@ -243,7 +242,6 @@ document.addEventListener('DOMContentLoaded', function() {
             return;
         }
         
-        console.log("Buscando:", searchText); // Debug
         if (numbersSearchResults) {
             numbersSearchResults.innerHTML = "<p>Buscando...</p>";
             numbersSearchResults.style.display = 'block';
@@ -260,7 +258,6 @@ document.addEventListener('DOMContentLoaded', function() {
         })
         .then(handleFetchResponse)
         .then(data => {
-            console.log("Resultados de búsqueda:", data); // Debug
             if (data.success) {
                 displayedNumbers = data.numbers || [];
                 renderSearchResults(displayedNumbers);
@@ -277,7 +274,6 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         })
         .catch(err => {
-            console.error("Search error:", err);
             if (numbersSearchResults) {
                 const errorDiv = document.createElement('p');
                 errorDiv.className = 'sms-error-message';
@@ -418,7 +414,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
             })
             .catch(err => {
-                console.error("Delete many error:", err);
                 alert(`Error de conexión: ${err.message}`);
             });
         });
@@ -454,7 +449,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
             })
             .catch(err => {
-                console.error("Delete all error:", err);
                 alert(`Error de red: ${err.message}`);
             });
         });
@@ -536,9 +530,7 @@ document.addEventListener('DOMContentLoaded', function() {
                         updateFormState();
                     }
                 })
-                .catch(err => {
-                    console.error("Error guardando número seleccionado:", err);
-                });
+                .catch(() => {});
             } else {
                 // Limpiar selección
                 fetch('/tienda/admin/sms/set-selected-number', {
@@ -550,7 +542,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     body: JSON.stringify({ sms_config_id: null })
                 })
                 .then(() => updateFormState())
-                .catch(err => console.error("Error limpiando selección:", err));
+                .catch(() => {});
             }
         });
     }
@@ -598,33 +590,120 @@ document.addEventListener('DOMContentLoaded', function() {
                 },
                 body: JSON.stringify({ phone_numbers: numbers, sms_config_id: smsConfigId })
             })
-            .then(handleFetchResponse)
+            .then(response => {
+                if (!response.ok) {
+                    return response.json().then(errData => {
+                        throw new Error(errData.message || `Error del servidor: ${response.status}`);
+                    });
+                }
+                return response.json();
+            })
             .then(data => {
-                if (data.success) {
-                    if (addNumbersMsg) {
-                        addNumbersMsg.textContent = `Se agregaron ${data.added_count || 0} correo(s) exitosamente.`;
-                        addNumbersMsg.className = "text-italic text-success";
-                    }
-                    if (newNumbersInput) newNumbersInput.value = "";
-                    fetchAllowedNumbers(currentPageNumbers, currentPerPageNumbers);
-                } else {
-                    if (addNumbersMsg) {
-                        addNumbersMsg.textContent = `Error: ${data.message || 'No se pudieron agregar los números'}`;
-                        addNumbersMsg.className = "text-italic text-danger";
+                if (addNumbersMsg) {
+                    // Limpiar clases previas
+                    addNumbersMsg.className = "text-italic";
+                    
+                    if (data.success) {
+                        // Si hay HTML, usar innerHTML, sino textContent
+                        if (data.is_html && data.message) {
+                            addNumbersMsg.innerHTML = data.message;
+                        } else {
+                            addNumbersMsg.textContent = data.message || `Se agregaron ${data.added_count || 0} correo(s) exitosamente.`;
+                            addNumbersMsg.className = "text-italic text-success";
+                        }
+                        
+                        // Eliminar correos procesados del campo de entrada
+                        if (data.processed_emails && data.processed_emails.length > 0 && newNumbersInput) {
+                            removeProcessedEmailsFromInput(newNumbersInput, data.processed_emails);
+                        } else if (newNumbersInput) {
+                            // Si todos se procesaron, limpiar completamente
+                            newNumbersInput.value = "";
+                        }
+                        
+                        fetchAllowedNumbers(currentPageNumbers, currentPerPageNumbers);
+                    } else {
+                        // Error: si hay HTML, usar innerHTML, sino textContent
+                        if (data.is_html && data.message) {
+                            addNumbersMsg.innerHTML = data.message;
+                        } else {
+                            addNumbersMsg.textContent = `Error: ${data.message || 'No se pudieron agregar los números'}`;
+                            addNumbersMsg.className = "text-italic text-danger";
+                        }
+                        
+                        // Eliminar solo los correos procesados del campo de entrada (mantener los que están en otros números)
+                        if (data.processed_emails && data.processed_emails.length > 0 && newNumbersInput) {
+                            removeProcessedEmailsFromInput(newNumbersInput, data.processed_emails);
+                        }
                     }
                 }
             })
             .catch(err => {
-                console.error("Add numbers error:", err);
                 if (addNumbersMsg) {
-                    addNumbersMsg.textContent = `Error de conexión: ${err.message}`;
-                    addNumbersMsg.className = "text-italic text-danger";
+                    // Intentar parsear el mensaje de error como JSON si es posible
+                    // Si el error viene del backend con HTML, usarlo directamente
+                    addNumbersMsg.innerHTML = err.message || "Error al agregar correos"; 
+                    addNumbersMsg.className = "text-italic"; // Limpiar clases específicas para que apliquen las del HTML
                 }
             });
         });
     }
 
+    /**
+     * Elimina correos procesados del campo de entrada, manteniendo solo los que quedan pendientes
+     * @param {HTMLTextAreaElement} inputElement - El elemento textarea del input
+     * @param {string[]} processedEmails - Array de correos que se procesaron y deben eliminarse
+     */
+    function removeProcessedEmailsFromInput(inputElement, processedEmails) {
+        if (!inputElement || !processedEmails || processedEmails.length === 0) {
+            return;
+        }
+        
+        // Obtener el contenido actual del input
+        const currentValue = inputElement.value.trim();
+        if (!currentValue) {
+            return;
+        }
+        
+        // Normalizar los correos procesados a minúsculas para comparación
+        const processedSet = new Set(processedEmails.map(email => email.toLowerCase().trim()));
+        
+        // Dividir el contenido en líneas y procesar cada línea
+        const lines = currentValue.split(/[,\n\r]+/).map(line => line.trim()).filter(line => line.length > 0);
+        
+        // Filtrar los correos que NO están en la lista de procesados
+        const remainingLines = lines.filter(line => {
+            const normalizedLine = line.toLowerCase().trim();
+            return !processedSet.has(normalizedLine);
+        });
+        
+        // Actualizar el campo con solo los correos que quedan pendientes
+        if (remainingLines.length > 0) {
+            inputElement.value = remainingLines.join('\n');
+        } else {
+            // Si no quedan correos, limpiar el campo
+            inputElement.value = "";
+        }
+    }
+
     // Inicializar estado del formulario al cargar
-    updateFormState();
+    // Esperar a que se carguen las configuraciones SMS antes de actualizar el estado
+    function initializeAfterConfigsLoad() {
+        // Verificar si ya hay datos cargados o esperar un momento
+        if (window.smsConfigsData) {
+            updateFormState();
+        } else {
+            // Esperar un poco más si aún no se han cargado
+            setTimeout(() => {
+                updateFormState();
+            }, 200);
+        }
+    }
+    
+    initializeAfterConfigsLoad();
+    
+    // También escuchar cuando se carguen las configuraciones
+    window.addEventListener('smsConfigsLoaded', function() {
+        updateFormState();
+    });
 });
 

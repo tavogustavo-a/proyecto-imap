@@ -1,5 +1,6 @@
 from flask import Blueprint
 from decimal import Decimal, InvalidOperation
+import os
 from .models import Product, Sale
 from app.store.models import WorksheetTemplate, WorksheetData
 from app.store.api import api_bp
@@ -8,7 +9,7 @@ store_bp = Blueprint(
     'store_bp',
     __name__,
     template_folder='templates',
-    static_folder='static',
+    static_folder=os.path.join(os.path.dirname(__file__), 'static'),
     static_url_path='/store/static'
 )
 
