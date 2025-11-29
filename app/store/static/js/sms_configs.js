@@ -96,6 +96,9 @@ document.addEventListener('DOMContentLoaded', function() {
                         <div class="text-secondary">${escapeHtml(config.phone_number)}${numberTypeBadge}</div>
                     </div>
                     <div class="d-flex gap-05 ml-2">
+                        <button type="button" class="btn-blue btn-sm reg-sms-config" data-config-id="${config.id}" title="Regex">
+                            Reg
+                        </button>
                         <button type="button" class="btn-orange btn-sm edit-sms-config" data-config-id="${config.id}" title="Editar">
                             <i class="fas fa-edit"></i>
                         </button>
@@ -114,6 +117,14 @@ document.addEventListener('DOMContentLoaded', function() {
             btn.addEventListener('click', function() {
                 const configId = parseInt(this.getAttribute('data-id'));
                 deleteConfig(configId);
+            });
+        });
+        
+        // Agregar event listeners para regex
+        smsConfigsList.querySelectorAll('.reg-sms-config').forEach(btn => {
+            btn.addEventListener('click', function() {
+                const configId = parseInt(this.getAttribute('data-config-id'));
+                openRegexModal(configId, configs);
             });
         });
         
@@ -163,6 +174,297 @@ document.addEventListener('DOMContentLoaded', function() {
         })
         .catch(err => {
             showMessage(`Error al eliminar: ${err.message}`, 'error');
+        });
+    }
+    
+    // Variable global para almacenar el configId actual del modal
+    let currentRegexModalConfigId = null;
+    
+    // Abrir modal de regex
+    function openRegexModal(configId, configs) {
+        const config = configs.find(c => c.id === configId);
+        if (!config) return;
+        
+        currentRegexModalConfigId = configId;
+        
+        const regexModal = document.getElementById('sms-regex-modal');
+        const regexConfigName = document.getElementById('sms-regex-config-name');
+        const regexList = document.getElementById('sms-regex-list');
+        const regexMessage = document.getElementById('sms-regex-message');
+        
+        if (!regexModal || !regexConfigName || !regexList) return;
+        
+        regexConfigName.textContent = `${config.name} (${config.phone_number})`;
+        regexList.innerHTML = '<p class="text-center text-secondary">Cargando regex...</p>';
+        if (regexMessage) {
+            regexMessage.textContent = '';
+            regexMessage.className = '';
+        }
+        
+        regexModal.classList.remove('d-none');
+        
+        // Cargar regex SMS disponibles y los asociados a este SMS config
+        loadRegexList(configId);
+    }
+    
+    // Función para cargar la lista de regex (reutilizable)
+    function loadRegexList(configId) {
+        const regexList = document.getElementById('sms-regex-list');
+        if (!regexList) return;
+        
+        Promise.all([
+            fetch('/tienda/admin/sms/regex', {
+                headers: {
+                    'X-CSRFToken': getCsrfToken()
+                }
+            }).then(r => r.json()),
+            fetch(`/tienda/admin/sms_configs/${configId}/regex`, {
+                headers: {
+                    'X-CSRFToken': getCsrfToken()
+                }
+            }).then(r => r.json())
+        ])
+        .then(([allRegexData, configRegexData]) => {
+            if (!allRegexData.success || !configRegexData.success) {
+                regexList.innerHTML = '<p class="text-center text-danger">Error al cargar regex.</p>';
+                return;
+            }
+            
+            const allRegex = allRegexData.regexes || [];
+            const configRegexIds = (configRegexData.regex_ids || []).map(id => parseInt(id));
+            
+            if (allRegex.length === 0) {
+                regexList.innerHTML = '<p class="text-center text-secondary">No hay regex disponibles. Crea uno nuevo arriba.</p>';
+                return;
+            }
+            
+            const regexHTML = allRegex.map(regex => {
+                const isChecked = configRegexIds.includes(regex.id);
+                return `
+                    <div class="d-flex align-items-center justify-content-between mb-1 p-1 regex-item-container">
+                        <div class="d-flex align-items-center flex-grow-1">
+                            <input 
+                                type="checkbox" 
+                                id="regex-${regex.id}" 
+                                class="sms-regex-checkbox" 
+                                data-regex-id="${regex.id}"
+                                ${isChecked ? 'checked' : ''}
+                            >
+                            <label for="regex-${regex.id}" class="ml-1 mb-0 flex-grow-1">
+                                <strong>${escapeHtml(regex.name || 'Sin nombre')}</strong>
+                                <br><small class="text-secondary">${escapeHtml(regex.pattern || 'Sin patrón')}</small>
+                            </label>
+                        </div>
+                        <div class="d-flex gap-05">
+                            <button type="button" class="btn-orange btn-sm edit-sms-regex-btn" data-regex-id="${regex.id}" title="Editar">
+                                <i class="fas fa-edit"></i>
+                            </button>
+                            <button type="button" class="btn-red btn-sm delete-sms-regex-btn" data-regex-id="${regex.id}" title="Eliminar">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+            
+            regexList.innerHTML = regexHTML;
+            
+            // Agregar event listeners a los checkboxes
+            regexList.querySelectorAll('.sms-regex-checkbox').forEach(checkbox => {
+                checkbox.addEventListener('change', function() {
+                    const regexId = parseInt(this.getAttribute('data-regex-id'));
+                    const isChecked = this.checked;
+                    updateSMSConfigRegex(configId, regexId, isChecked);
+                });
+            });
+            
+            // Agregar event listeners a los botones de editar
+            regexList.querySelectorAll('.edit-sms-regex-btn').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    const regexId = parseInt(this.getAttribute('data-regex-id'));
+                    const regex = allRegex.find(r => r.id === regexId);
+                    if (regex) {
+                        openEditRegexModal(regex);
+                    }
+                });
+            });
+            
+            // Agregar event listeners a los botones de eliminar
+            regexList.querySelectorAll('.delete-sms-regex-btn').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    const regexId = parseInt(this.getAttribute('data-regex-id'));
+                    const regex = allRegex.find(r => r.id === regexId);
+                    if (regex) {
+                        if (confirm(`¿Estás seguro de que deseas eliminar el regex "${escapeHtml(regex.name || 'Sin nombre')}"?`)) {
+                            deleteSMSRegex(regexId);
+                        }
+                    }
+                });
+            });
+        })
+        .catch(err => {
+            regexList.innerHTML = '<p class="text-center text-danger">Error al cargar regex.</p>';
+        });
+    }
+    
+    // Actualizar regex asociado a SMS config
+    function updateSMSConfigRegex(configId, regexId, add) {
+        const regexMessage = document.getElementById('sms-regex-message');
+        
+        fetch(`/tienda/admin/sms_configs/${configId}/regex`, {
+            method: add ? 'POST' : 'DELETE',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCsrfToken()
+            },
+            body: JSON.stringify({ regex_id: regexId })
+        })
+        .then(handleFetchResponse)
+        .then(data => {
+            if (data.success) {
+                if (regexMessage) {
+                    regexMessage.textContent = add ? 'Regex agregado correctamente.' : 'Regex eliminado correctamente.';
+                    regexMessage.className = 'text-success';
+                    setTimeout(() => {
+                        if (regexMessage) {
+                            regexMessage.textContent = '';
+                            regexMessage.className = '';
+                        }
+                    }, 2000);
+                }
+            }
+        })
+        .catch(err => {
+            if (regexMessage) {
+                regexMessage.textContent = `Error: ${err.message}`;
+                regexMessage.className = 'text-danger';
+            }
+        });
+    }
+    
+    // Abrir modal para editar regex
+    function openEditRegexModal(regex) {
+        const editModal = document.getElementById('sms-regex-edit-modal');
+        const editRegexId = document.getElementById('edit-regex-id');
+        const editRegexName = document.getElementById('edit-regex-name');
+        const editRegexPattern = document.getElementById('edit-regex-pattern');
+        const editRegexMessage = document.getElementById('edit-regex-message');
+        
+        if (!editModal || !editRegexId || !editRegexName || !editRegexPattern) return;
+        
+        editRegexId.value = regex.id;
+        editRegexName.value = regex.name || '';
+        editRegexPattern.value = regex.pattern || '';
+        if (editRegexMessage) {
+            editRegexMessage.textContent = '';
+            editRegexMessage.className = '';
+        }
+        
+        editModal.classList.remove('d-none');
+    }
+    
+    // Eliminar regex SMS
+    function deleteSMSRegex(regexId) {
+        const regexMessage = document.getElementById('sms-regex-message');
+        
+        fetch(`/tienda/admin/sms/regex/${regexId}`, {
+            method: 'DELETE',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCsrfToken()
+            }
+        })
+        .then(handleFetchResponse)
+        .then(data => {
+            if (data.success) {
+                if (regexMessage) {
+                    regexMessage.textContent = 'Regex eliminado correctamente.';
+                    regexMessage.className = 'text-success';
+                }
+                // Recargar la lista de regex usando el configId guardado
+                if (currentRegexModalConfigId !== null) {
+                    loadRegexList(currentRegexModalConfigId);
+                }
+                // Limpiar mensaje después de 2 segundos
+                setTimeout(() => {
+                    if (regexMessage) {
+                        regexMessage.textContent = '';
+                        regexMessage.className = '';
+                    }
+                }, 2000);
+            }
+        })
+        .catch(err => {
+            if (regexMessage) {
+                regexMessage.textContent = `Error: ${err.message}`;
+                regexMessage.className = 'text-danger';
+            }
+        });
+    }
+    
+    // Crear nuevo regex
+    function createSMSRegex() {
+        const newRegexName = document.getElementById('new-regex-name');
+        const newRegexPattern = document.getElementById('new-regex-pattern');
+        const regexMessage = document.getElementById('sms-regex-message');
+        
+        if (!newRegexName || !newRegexPattern) return;
+        
+        const name = newRegexName.value.trim();
+        const pattern = newRegexPattern.value.trim();
+        
+        if (!name || !pattern) {
+            if (regexMessage) {
+                regexMessage.textContent = 'Nombre y patrón son requeridos.';
+                regexMessage.className = 'text-danger';
+            }
+            return;
+        }
+        
+        fetch('/tienda/admin/sms/regex', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCsrfToken()
+            },
+            body: JSON.stringify({ name, pattern })
+        })
+        .then(handleFetchResponse)
+        .then(data => {
+            if (data.success) {
+                if (regexMessage) {
+                    regexMessage.textContent = 'Regex creado correctamente.';
+                    regexMessage.className = 'text-success';
+                }
+                // Limpiar campos
+                newRegexName.value = '';
+                newRegexPattern.value = '';
+                // Recargar la lista de regex (necesitamos el configId)
+                const regexModal = document.getElementById('sms-regex-modal');
+                if (regexModal && !regexModal.classList.contains('d-none')) {
+                    // Obtener el configId del modal abierto
+                    const configNameEl = document.getElementById('sms-regex-config-name');
+                    if (configNameEl && configNameEl.textContent) {
+                        // Buscar el configId desde window.smsConfigsData
+                        if (window.smsConfigsData) {
+                            const configIdMatch = configNameEl.textContent.match(/\((\+\d+)\)/);
+                            if (configIdMatch && window.smsConfigsData) {
+                                const phoneNumber = configIdMatch[1];
+                                const config = window.smsConfigsData.find(c => c.phone_number === phoneNumber);
+                                if (config) {
+                                    openRegexModal(config.id, window.smsConfigsData);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        })
+        .catch(err => {
+            if (regexMessage) {
+                regexMessage.textContent = `Error: ${err.message}`;
+                regexMessage.className = 'text-danger';
+            }
         });
     }
     
@@ -349,6 +651,98 @@ document.addEventListener('DOMContentLoaded', function() {
                     editConfigMessage.textContent = '';
                     editConfigMessage.className = '';
                 }
+            }
+        });
+    }
+    
+    // Modal de regex
+    const regexModal = document.getElementById('sms-regex-modal');
+    const closeRegexModal = document.getElementById('close-regex-modal');
+    const createRegexBtn = document.getElementById('create-regex-btn');
+    
+    if (closeRegexModal) {
+        closeRegexModal.addEventListener('click', function() {
+            if (regexModal) regexModal.classList.add('d-none');
+        });
+    }
+    
+    if (regexModal) {
+        regexModal.addEventListener('click', function(e) {
+            if (e.target === regexModal) {
+                regexModal.classList.add('d-none');
+            }
+        });
+    }
+    
+    if (createRegexBtn) {
+        createRegexBtn.addEventListener('click', createSMSRegex);
+    }
+    
+    // Modal de editar regex
+    const editRegexModal = document.getElementById('sms-regex-edit-modal');
+    const editRegexForm = document.getElementById('edit-regex-form');
+    const closeEditRegexModal = document.getElementById('close-edit-regex-modal');
+    
+    if (editRegexForm) {
+        editRegexForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const regexId = document.getElementById('edit-regex-id').value;
+            const name = document.getElementById('edit-regex-name').value.trim();
+            const pattern = document.getElementById('edit-regex-pattern').value.trim();
+            const editRegexMessage = document.getElementById('edit-regex-message');
+            
+            if (!name || !pattern) {
+                if (editRegexMessage) {
+                    editRegexMessage.textContent = 'Nombre y patrón son requeridos.';
+                    editRegexMessage.className = 'text-danger';
+                }
+                return;
+            }
+            
+            fetch(`/tienda/admin/sms/regex/${regexId}`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': getCsrfToken()
+                },
+                body: JSON.stringify({ name, pattern })
+            })
+            .then(handleFetchResponse)
+            .then(data => {
+                if (data.success) {
+                    if (editRegexMessage) {
+                        editRegexMessage.textContent = 'Regex actualizado correctamente.';
+                        editRegexMessage.className = 'text-success';
+                    }
+                    // Cerrar modal y recargar lista
+                    if (editRegexModal) editRegexModal.classList.add('d-none');
+                    // Recargar la lista de regex usando el configId guardado
+                    if (currentRegexModalConfigId !== null) {
+                        loadRegexList(currentRegexModalConfigId);
+                    }
+                }
+            })
+            .catch(err => {
+                if (editRegexMessage) {
+                    editRegexMessage.textContent = `Error: ${err.message}`;
+                    editRegexMessage.className = 'text-danger';
+                }
+            });
+        });
+    }
+    
+    if (closeEditRegexModal) {
+        closeEditRegexModal.addEventListener('click', function() {
+            if (editRegexModal) editRegexModal.classList.add('d-none');
+            if (editRegexForm) editRegexForm.reset();
+        });
+    }
+    
+    if (editRegexModal) {
+        editRegexModal.addEventListener('click', function(e) {
+            if (e.target === editRegexModal) {
+                editRegexModal.classList.add('d-none');
             }
         });
     }

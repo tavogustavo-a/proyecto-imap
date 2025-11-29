@@ -261,5 +261,67 @@
     </div>
   </div>
 </div>
+
+<!-- Modal para gestionar Regex de SMS Config -->
+<div id="sms-regex-modal" class="modal d-none" tabindex="-1">
+  <div class="sms-modal-content admin-card">
+    <div class="d-flex justify-content-between align-items-center mb-1">
+      <h4 class="m-0 text-center flex-grow-1">Gestionar Regex para SMS</h4>
+      <button type="button" class="btn-panel btn-red" id="close-regex-modal" title="Cerrar">
+        <i class="fas fa-times"></i>
+      </button>
+    </div>
+    
+    <div id="sms-regex-config-name" class="mb-1 text-center font-weight-bold"></div>
+    
+    <hr class="hr-margin-15">
+    
+    <!-- Formulario para crear nuevo regex -->
+    <div class="mb-2 regex-form-container">
+      <input type="text" id="new-regex-name" placeholder="Nombre del regex" class="d-block mb-05 w-100" autocomplete="off">
+      <input type="text" id="new-regex-pattern" placeholder="Patrón regex (ej: código|code)" class="d-block mb-05 w-100" autocomplete="off">
+      <div class="text-center mt-1">
+        <button type="button" id="create-regex-btn" class="btn-green btn-sm">Crear Regex</button>
+      </div>
+    </div>
+    
+    <div class="mb-2">
+      <label><strong>Regex disponibles:</strong></label>
+      <div id="sms-regex-list" class="mb-2 regex-list-container">
+        <p class="text-center text-secondary">Cargando regex...</p>
+      </div>
+    </div>
+    
+    <div id="sms-regex-message" class="mt-05"></div>
+  </div>
+</div>
+
+<!-- Modal para editar Regex -->
+<div id="sms-regex-edit-modal" class="modal d-none" tabindex="-1">
+  <div class="sms-modal-content">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+      <h4 class="m-0 text-center flex-grow-1">Editar Regex</h4>
+      <button type="button" class="btn-panel btn-red" id="close-edit-regex-modal" title="Cerrar">
+        <i class="fas fa-times"></i>
+      </button>
+    </div>
+    
+    <form id="edit-regex-form">
+      <input type="hidden" id="edit-regex-id" value="">
+      
+      <label for="edit-regex-name" class="sr-only">Nombre</label>
+      <input type="text" id="edit-regex-name" placeholder="Nombre del regex" class="d-block mb-05 w-100" required autocomplete="off">
+      
+      <label for="edit-regex-pattern" class="sr-only">Patrón</label>
+      <input type="text" id="edit-regex-pattern" placeholder="Patrón regex" class="d-block mb-05 w-100" required autocomplete="off">
+      
+      <div class="text-center mt-2">
+        <button type="submit" id="update-regex-btn" class="btn-green">Actualizar</button>
+      </div>
+      
+      <div id="edit-regex-message" class="mt-05"></div>
+    </form>
+  </div>
+</div>
 {% endblock %}
 

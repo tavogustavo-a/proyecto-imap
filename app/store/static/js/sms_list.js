@@ -271,7 +271,12 @@ document.addEventListener('DOMContentLoaded', function() {
             const result = await response.json();
 
             if (result.success) {
-                displayMessages(result.messages, result.total);
+                // Limitar a 15 mensajes si hay más (como especificó el usuario)
+                let messagesToShow = result.messages;
+                if (messagesToShow.length > 15) {
+                    messagesToShow = messagesToShow.slice(0, 15);
+                }
+                displayMessages(messagesToShow, result.total);
             } else {
                 showError('Error cargando mensajes: ' + (result.error || 'Desconocido'));
             }

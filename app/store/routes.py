@@ -2,7 +2,7 @@ from flask import render_template, request, redirect, url_for, flash, jsonify, c
 from datetime import datetime
 from app.utils.timezone import get_colombia_now, colombia_strftime, utc_to_colombia, get_colombia_datetime, timesince
 # Importa tus modelos y db. Asumo nombres comunes, ajústalos si es necesario.
-from .models import Product, Sale, Coupon, coupon_products, Role, role_products, role_users, ProductionLink, ApiInfo, WorksheetTemplate, WorksheetData, WorksheetPermission, DriveTransfer, WhatsAppConfig, GSheetsLink, SMSConfig, SMSMessage, AllowedSMSNumber
+from .models import Product, Sale, Coupon, coupon_products, Role, role_products, role_users, ProductionLink, ApiInfo, WorksheetTemplate, WorksheetData, WorksheetPermission, DriveTransfer, WhatsAppConfig, GSheetsLink, SMSConfig, SMSMessage, AllowedSMSNumber, SMSRegex
 
 # Identificadores internos del módulo store
 _STORE_MODULE_IDENTIFIER = 0x7C8D
@@ -7764,7 +7764,7 @@ def update_sms_config(config_id):
 @store_bp.route('/admin/sms_configs/<int:config_id>', methods=['DELETE'])
 @admin_required
 def delete_sms_config(config_id):
-    """Elimina una configuración SMS. Los correos permitidos y mensajes se eliminan automáticamente en cascada."""
+    """Elimina una configuración SMS. Los correos permitidos, mensajes y regex huérfanos se eliminan automáticamente en cascada."""
     config = SMSConfig.query.get_or_404(config_id)
     
     try:
@@ -7772,7 +7772,26 @@ def delete_sms_config(config_id):
         allowed_count = AllowedSMSNumber.query.filter_by(sms_config_id=config_id).count()
         messages_count = SMSMessage.query.filter_by(sms_config_id=config_id).count()
         
+        # Obtener regex asociados a este SMSConfig
+        associated_regexes = list(config.regexes.all())
+        regex_associations_count = len(associated_regexes)
+        
+        # Identificar regex que solo están asociados a este SMSConfig (huérfanos)
+        orphaned_regexes = []
+        for regex in associated_regexes:
+            # Contar cuántos SMSConfig están asociados a este regex
+            other_configs_count = regex.sms_configs.filter(SMSConfig.id != config_id).count()
+            if other_configs_count == 0:
+                # Este regex solo está asociado al SMSConfig que se está eliminando
+                orphaned_regexes.append(regex)
+        
+        # Eliminar regex huérfanos primero (para evitar violaciones de foreign key)
+        orphaned_count = len(orphaned_regexes)
+        for regex in orphaned_regexes:
+            db.session.delete(regex)
+        
         # Eliminar la configuración (los AllowedSMSNumber y SMSMessage se eliminarán en cascada)
+        # Las asociaciones con regex también se eliminan automáticamente por CASCADE en la tabla de asociación
         # Esto funciona por:
         # 1. Foreign key con ondelete='CASCADE' en la base de datos
         # 2. Relación SQLAlchemy con cascade='all, delete-orphan'
@@ -7781,19 +7800,210 @@ def delete_sms_config(config_id):
         db.session.commit()
         
         message = 'Configuración SMS eliminada correctamente.'
-        if allowed_count > 0 or messages_count > 0:
-            details = []
-            if allowed_count > 0:
-                details.append(f'{allowed_count} correo(s) permitido(s)')
-            if messages_count > 0:
-                details.append(f'{messages_count} mensaje(s)')
+        details = []
+        if allowed_count > 0:
+            details.append(f'{allowed_count} correo(s) permitido(s)')
+        if messages_count > 0:
+            details.append(f'{messages_count} mensaje(s)')
+        if regex_associations_count > 0:
+            details.append(f'{regex_associations_count} asociación(es) de regex')
+        if orphaned_count > 0:
+            details.append(f'{orphaned_count} regex huérfano(s)')
+        if details:
             message += f' También se eliminaron: {", ".join(details)}.'
         
         return jsonify({'success': True, 'message': message})
     
     except Exception as e:
         db.session.rollback()
+        current_app.logger.error(f"Error eliminando SMS config {config_id}: {e}", exc_info=True)
         return jsonify({'success': False, 'error': f'Error al eliminar: {str(e)}'}), 500
+
+@store_bp.route('/admin/sms/regex', methods=['GET'])
+@admin_required
+def list_sms_regex():
+    """Lista todos los regex específicos de SMS"""
+    try:
+        regexes = SMSRegex.query.order_by(SMSRegex.name.asc()).all()
+        regex_data = [{
+            'id': regex.id,
+            'name': regex.name or '',
+            'pattern': regex.pattern or '',
+            'enabled': regex.enabled
+        } for regex in regexes]
+        return jsonify({'success': True, 'regexes': regex_data})
+    except Exception as e:
+        current_app.logger.error(f"Error listando regex SMS: {e}", exc_info=True)
+        return jsonify({'success': False, 'error': f'Error al listar regex: {str(e)}'}), 500
+
+@store_bp.route('/admin/sms/regex', methods=['POST'])
+@admin_required
+def create_sms_regex():
+    """Crea un nuevo regex específico para SMS"""
+    try:
+        data = request.get_json()
+        name = data.get('name', '').strip()
+        pattern = data.get('pattern', '').strip()
+        
+        if not name or not pattern:
+            return jsonify({'success': False, 'error': 'Nombre y patrón son requeridos'}), 400
+        
+        new_regex = SMSRegex(name=name, pattern=pattern, enabled=True)
+        db.session.add(new_regex)
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': 'Regex creado correctamente',
+            'regex': {
+                'id': new_regex.id,
+                'name': new_regex.name,
+                'pattern': new_regex.pattern,
+                'enabled': new_regex.enabled
+            }
+        })
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Error creando regex SMS: {e}", exc_info=True)
+        return jsonify({'success': False, 'error': f'Error al crear regex: {str(e)}'}), 500
+
+@store_bp.route('/admin/sms/regex/<int:regex_id>', methods=['PUT'])
+@admin_required
+def update_sms_regex(regex_id):
+    """Actualiza un regex específico de SMS"""
+    try:
+        regex = SMSRegex.query.get_or_404(regex_id)
+        data = request.get_json()
+        
+        name = data.get('name', '').strip()
+        pattern = data.get('pattern', '').strip()
+        
+        if not name or not pattern:
+            return jsonify({'success': False, 'error': 'Nombre y patrón son requeridos'}), 400
+        
+        regex.name = name
+        regex.pattern = pattern
+        regex.updated_at = datetime.utcnow()
+        
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': 'Regex actualizado correctamente',
+            'regex': {
+                'id': regex.id,
+                'name': regex.name,
+                'pattern': regex.pattern,
+                'enabled': regex.enabled
+            }
+        })
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Error actualizando regex SMS {regex_id}: {e}", exc_info=True)
+        return jsonify({'success': False, 'error': f'Error al actualizar regex: {str(e)}'}), 500
+
+@store_bp.route('/admin/sms/regex/<int:regex_id>', methods=['DELETE'])
+@admin_required
+def delete_sms_regex(regex_id):
+    """Elimina un regex específico de SMS y todas sus asociaciones"""
+    try:
+        regex = SMSRegex.query.get_or_404(regex_id)
+        
+        # Contar asociaciones que se eliminarán en cascada
+        associations_count = regex.sms_configs.count()
+        
+        # Eliminar el regex (las asociaciones en sms_config_regex se eliminan automáticamente por CASCADE)
+        # La tabla sms_config_regex tiene ondelete='CASCADE' en el foreign key de sms_regex_id
+        db.session.delete(regex)
+        db.session.commit()
+        
+        message = 'Regex eliminado correctamente.'
+        if associations_count > 0:
+            message += f' Se eliminaron {associations_count} asociación(es) con número(s) SMS.'
+        
+        return jsonify({'success': True, 'message': message})
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Error eliminando regex SMS {regex_id}: {e}", exc_info=True)
+        return jsonify({'success': False, 'error': f'Error al eliminar regex: {str(e)}'}), 500
+
+@store_bp.route('/admin/sms_configs/<int:config_id>/regex', methods=['GET'])
+@admin_required
+def get_sms_config_regex(config_id):
+    """Obtiene los IDs de los regex asociados a un SMS config"""
+    try:
+        config = SMSConfig.query.get_or_404(config_id)
+        # Intentar obtener regex asociados, si la tabla no existe aún devolver lista vacía
+        try:
+            regex_ids = [regex.id for regex in config.regexes]
+        except Exception:
+            # Si la tabla no existe aún, devolver lista vacía
+            regex_ids = []
+        return jsonify({'success': True, 'regex_ids': regex_ids})
+    except Exception as e:
+        current_app.logger.error(f"Error obteniendo regex de SMS config {config_id}: {e}", exc_info=True)
+        # Si hay error, devolver lista vacía en lugar de error 500
+        return jsonify({'success': True, 'regex_ids': []})
+
+@store_bp.route('/admin/sms_configs/<int:config_id>/regex', methods=['POST'])
+@admin_required
+def add_sms_config_regex(config_id):
+    """Agrega un regex SMS a un SMS config"""
+    data = request.get_json()
+    regex_id = data.get('regex_id')
+    
+    if not regex_id:
+        return jsonify({'success': False, 'error': 'regex_id es requerido'}), 400
+    
+    config = SMSConfig.query.get_or_404(config_id)
+    regex = SMSRegex.query.get(regex_id)
+    
+    if not regex:
+        return jsonify({'success': False, 'error': 'Regex no encontrado'}), 404
+    
+    # Verificar si ya está asociado usando la relación
+    existing_regexes = [r.id for r in config.regexes]
+    if regex_id not in existing_regexes:
+        config.regexes.append(regex)
+        try:
+            db.session.commit()
+            return jsonify({'success': True, 'message': 'Regex agregado correctamente'})
+        except Exception as e:
+            db.session.rollback()
+            current_app.logger.error(f"Error agregando regex {regex_id} a SMS config {config_id}: {e}", exc_info=True)
+            return jsonify({'success': False, 'error': f'Error al agregar regex: {str(e)}'}), 500
+    
+    return jsonify({'success': True, 'message': 'Regex ya estaba asociado'})
+
+@store_bp.route('/admin/sms_configs/<int:config_id>/regex', methods=['DELETE'])
+@admin_required
+def remove_sms_config_regex(config_id):
+    """Elimina un regex SMS de un SMS config"""
+    data = request.get_json()
+    regex_id = data.get('regex_id')
+    
+    if not regex_id:
+        return jsonify({'success': False, 'error': 'regex_id es requerido'}), 400
+    
+    config = SMSConfig.query.get_or_404(config_id)
+    regex = SMSRegex.query.get(regex_id)
+    
+    if not regex:
+        return jsonify({'success': False, 'error': 'Regex no encontrado'}), 404
+    
+    # Verificar si está asociado usando la relación
+    existing_regexes = [r.id for r in config.regexes]
+    if regex_id in existing_regexes:
+        config.regexes.remove(regex)
+        try:
+            db.session.commit()
+            return jsonify({'success': True, 'message': 'Regex eliminado correctamente'})
+        except Exception as e:
+            db.session.rollback()
+            current_app.logger.error(f"Error eliminando regex {regex_id} de SMS config {config_id}: {e}", exc_info=True)
+            return jsonify({'success': False, 'error': f'Error al eliminar regex: {str(e)}'}), 500
+    
+    return jsonify({'success': True, 'message': 'Regex no estaba asociado'})
 
 @store_bp.route('/admin/sms_configs/<int:config_id>/toggle', methods=['POST'])
 @admin_required
@@ -7815,33 +8025,98 @@ def toggle_sms_config(config_id):
 @store_bp.route('/admin/sms_configs/<int:config_id>/messages', methods=['GET'])
 @admin_required
 def list_sms_messages(config_id):
-    """Lista los mensajes recibidos para una configuración SMS"""
-    config = SMSConfig.query.get_or_404(config_id)
-    
-    page = request.args.get('page', 1, type=int)
-    per_page = request.args.get('per_page', 50, type=int)
-    
-    messages = SMSMessage.query.filter_by(sms_config_id=config_id).order_by(
-        SMSMessage.created_at.desc()
-    ).paginate(page=page, per_page=per_page, error_out=False)
-    
-    messages_data = [{
-        'id': msg.id,
-        'from_number': msg.from_number,
-        'to_number': msg.to_number,
-        'message_body': msg.message_body,
-        'twilio_status': msg.twilio_status,
-        'processed': msg.processed,
-        'created_at': utc_to_colombia(msg.created_at).strftime('%Y-%m-%d %H:%M:%S') if msg.created_at else None,
-    } for msg in messages.items]
-    
-    return jsonify({
-        'success': True,
-        'messages': messages_data,
-        'total': messages.total,
-        'pages': messages.pages,
-        'current_page': page
-    })
+    """Lista los mensajes recibidos para una configuración SMS, filtrados por regex si existen"""
+    import re
+    try:
+        config = SMSConfig.query.get_or_404(config_id)
+        
+        page = request.args.get('page', 1, type=int)
+        per_page = request.args.get('per_page', 50, type=int)
+        
+        # Obtener todos los mensajes del config
+        query = SMSMessage.query.filter_by(sms_config_id=config_id)
+        
+        # Obtener regex SMS asociados a este SMS config (manejar si la tabla no existe aún)
+        try:
+            config_regexes = list(config.regexes.filter_by(enabled=True).all())
+        except Exception:
+            # Si la tabla no existe aún, no hay regex asociados
+            config_regexes = []
+        
+        # Si hay regex asociados, filtrar mensajes
+        if config_regexes:
+            # Obtener todos los mensajes primero
+            all_messages = query.order_by(SMSMessage.created_at.desc()).all()
+            
+            # Filtrar mensajes que cumplan al menos un regex
+            filtered_messages = []
+            for msg in all_messages:
+                for regex_obj in config_regexes:
+                    try:
+                        # Verificar si el patrón coincide con el cuerpo del mensaje
+                        if regex_obj.pattern and re.search(regex_obj.pattern, msg.message_body, re.IGNORECASE):
+                            # Si hay sender especificado, también verificar
+                            if regex_obj.sender:
+                                if re.search(regex_obj.sender, msg.from_number, re.IGNORECASE):
+                                    filtered_messages.append(msg)
+                                    break
+                            else:
+                                filtered_messages.append(msg)
+                                break
+                    except re.error:
+                        # Si el regex es inválido, ignorarlo
+                        continue
+            
+            # Ordenar por fecha descendente
+            filtered_messages.sort(key=lambda x: x.created_at, reverse=True)
+            
+            # Paginación manual
+            total = len(filtered_messages)
+            start = (page - 1) * per_page
+            end = start + per_page
+            paginated_messages = filtered_messages[start:end]
+            
+            messages_data = [{
+                'id': msg.id,
+                'from_number': msg.from_number,
+                'to_number': msg.to_number,
+                'message_body': msg.message_body,
+                'twilio_status': msg.twilio_status,
+                'processed': msg.processed,
+                'created_at': utc_to_colombia(msg.created_at).strftime('%Y-%m-%d %H:%M:%S') if msg.created_at else None,
+            } for msg in paginated_messages]
+            
+            return jsonify({
+                'success': True,
+                'messages': messages_data,
+                'total': total,
+                'pages': (total + per_page - 1) // per_page if per_page > 0 else 1,
+                'current_page': page
+            })
+        else:
+            # Sin regex, devolver todos los mensajes normalmente
+            messages = query.order_by(SMSMessage.created_at.desc()).paginate(page=page, per_page=per_page, error_out=False)
+            
+            messages_data = [{
+                'id': msg.id,
+                'from_number': msg.from_number,
+                'to_number': msg.to_number,
+                'message_body': msg.message_body,
+                'twilio_status': msg.twilio_status,
+                'processed': msg.processed,
+                'created_at': utc_to_colombia(msg.created_at).strftime('%Y-%m-%d %H:%M:%S') if msg.created_at else None,
+            } for msg in messages.items]
+            
+            return jsonify({
+                'success': True,
+                'messages': messages_data,
+                'total': messages.total,
+                'pages': messages.pages,
+                'current_page': page
+            })
+    except Exception as e:
+        current_app.logger.error(f"Error listando mensajes SMS para config {config_id}: {e}", exc_info=True)
+        return jsonify({'success': False, 'error': f'Error al listar mensajes: {str(e)}'}), 500
 
 @store_bp.route('/admin/sms/all-messages', methods=['GET'])
 @admin_required
@@ -8324,7 +8599,9 @@ def get_my_sms_messages():
     """
     Obtiene los últimos 15 mensajes SMS permitidos para el usuario logueado.
     Verifica si el correo del usuario está en AllowedSMSNumber.
+    Filtra por regex si están configurados para cada SMS config.
     """
+    import re
     current_user = get_current_user()
     if not current_user:
         return jsonify({'success': False, 'error': 'Usuario no autenticado'}), 401
@@ -8348,12 +8625,50 @@ def get_my_sms_messages():
     
     allowed_config_ids = [r[0] for r in allowed_configs]
     
-    # Obtener los últimos 15 mensajes de los números permitidos
-    messages = SMSMessage.query.filter(
+    # Obtener todos los mensajes de los números permitidos
+    all_messages = SMSMessage.query.filter(
         SMSMessage.sms_config_id.in_(allowed_config_ids)
     ).order_by(
         SMSMessage.created_at.desc()
-    ).limit(15).all()
+    ).all()
+    
+    # Filtrar por regex SMS si están configurados
+    filtered_messages = []
+    for msg in all_messages:
+        config = SMSConfig.query.get(msg.sms_config_id)
+        if config:
+            try:
+                regex_count = config.regexes.count()
+            except Exception:
+                regex_count = 0
+            
+            if regex_count > 0:
+                # Si hay regex SMS configurados, filtrar
+                try:
+                    regexes = list(config.regexes.filter_by(enabled=True).all())
+                except Exception:
+                    regexes = []
+                
+                matches_regex = False
+                for regex_obj in regexes:
+                    try:
+                        if regex_obj.pattern and re.search(regex_obj.pattern, msg.message_body, re.IGNORECASE):
+                            matches_regex = True
+                            break
+                    except re.error:
+                        continue
+                if matches_regex:
+                    filtered_messages.append(msg)
+            else:
+                # Si no hay regex configurados, incluir todos los mensajes
+                filtered_messages.append(msg)
+        else:
+            # Si no hay config, incluir el mensaje
+            filtered_messages.append(msg)
+    
+    # Ordenar por fecha descendente y limitar a 15
+    filtered_messages.sort(key=lambda x: x.created_at, reverse=True)
+    filtered_messages = filtered_messages[:15]
     
     messages_data = [{
         'id': msg.id,
@@ -8361,7 +8676,7 @@ def get_my_sms_messages():
         'message_body': msg.message_body,
         'created_at': utc_to_colombia(msg.created_at).strftime('%Y-%m-%d %H:%M:%S') if msg.created_at else None,
         'ago': timesince(msg.created_at) if msg.created_at else ''
-    } for msg in messages]
+    } for msg in filtered_messages]
     
     return jsonify({
         'success': True, 

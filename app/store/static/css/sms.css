@@ -331,14 +331,15 @@
   }
 }
 
-/* Estilos para modal SMS */
+/* Estilos para modal SMS - Diseño mejorado con transparencia */
 .modal {
   position: fixed;
   top: 0;
   left: 0;
   width: 100%;
   height: 100%;
-  background-color: rgba(0, 0, 0, 0.5);
+  background-color: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(3px);
   align-items: center;
   justify-content: center;
   z-index: 2000;
@@ -353,14 +354,17 @@
 }
 
 .sms-modal-content {
-  background-color: white;
-  border-radius: 8px;
-  padding: 2rem;
+  background-color: var(--card-bg, #fff) !important;
+  color: var(--text-color, #111) !important;
+  border: none !important;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.07) !important;
+  padding: 0.75rem !important;
+  border-radius: 16px !important;
   max-width: 90%;
-  width: 800px;
-  max-height: 90vh;
+  width: 600px;
+  max-height: 85vh;
   overflow-y: auto;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+  position: relative;
 }
 
 /* Centrar títulos */
@@ -410,5 +414,74 @@
 
 #sms-management-container .admin-card > div.mb-1.text-center button {
   margin-top: 0.5rem;
+}
+
+/* Estilos para formulario y lista de regex SMS */
+.regex-form-container {
+  padding: 0.5rem 0;
+}
+
+.regex-form-container input[type="text"] {
+  width: 98% !important;
+  background: #fff !important;
+  color: #111 !important;
+  padding: 0.3rem !important;
+  border-radius: 4px !important;
+  border: 1px solid #ced4da !important;
+  margin-bottom: 0.5rem;
+  transition: border-color 0.2s ease;
+}
+
+.regex-form-container input[type="text"]:focus {
+  outline: 0 !important;
+  border-color: #80bdff !important;
+  box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25) !important;
+}
+
+.regex-list-container {
+  max-height: 300px;
+  overflow-y: auto;
+  border: none;
+  padding: 0;
+  background-color: transparent;
+}
+
+.regex-item-container {
+  border: 1.5px solid var(--card-border, #ccc) !important;
+  margin: 0.5rem 0;
+  padding: 0.5rem;
+  border-radius: 6px;
+  background-color: var(--card-bg, #fff) !important;
+  transition: background-color 0.2s ease;
+}
+
+.regex-item-container:hover {
+  background-color: #f8f9fa;
+}
+
+/* Estilos para inputs dentro del modal de editar regex */
+#sms-regex-edit-modal .sms-modal-content {
+  background-color: var(--card-bg, #fff) !important;
+  color: var(--text-color, #111) !important;
+  border: none !important;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.07) !important;
+  padding: 0.75rem !important;
+  border-radius: 16px !important;
+}
+
+#sms-regex-edit-modal input[type="text"] {
+  width: 98% !important;
+  background: #fff !important;
+  color: #111 !important;
+  padding: 0.3rem !important;
+  border-radius: 4px !important;
+  border: 1px solid #ced4da !important;
+  margin-bottom: 0.5rem;
+}
+
+#sms-regex-edit-modal input[type="text"]:focus {
+  outline: 0 !important;
+  border-color: #80bdff !important;
+  box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25) !important;
 }
 
