@@ -354,28 +354,21 @@ class WhatsAppConfig(db.Model):
 
 # Modelo para Regex específicos de SMS
 class SMSRegex(db.Model):
-    """Regex específicos para filtrar mensajes SMS"""
+    """Regex específicos para filtrar mensajes SMS - Cada regex pertenece a un solo SMSConfig"""
     __tablename__ = "sms_regex"
     id = db.Column(db.Integer, primary_key=True)
+    sms_config_id = db.Column(db.Integer, db.ForeignKey('sms_configs.id', ondelete='CASCADE'), nullable=False, index=True)
     name = db.Column(db.String(200), nullable=False)  # Nombre descriptivo del regex
     pattern = db.Column(db.String(500), nullable=False)  # Patrón regex
     enabled = db.Column(db.Boolean, default=True, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
-    # Nota: La relación con SMSConfig se define en SMSConfig.regexes con backref='sms_configs'
-    # Esto permite acceder a los SMSConfig desde un SMSRegex usando: regex.sms_configs
+    # Relación uno-a-muchos: cada regex pertenece a un solo SMSConfig
+    sms_config = db.relationship('SMSConfig', backref='regexes')
     
     def __repr__(self):
         return f'<SMSRegex {self.name} ({self.pattern[:30]}...)>'
-
-# Tabla de relación muchos-a-muchos entre SMSConfig y SMSRegex
-sms_config_regex = db.Table(
-    'sms_config_regex',
-    db.Column('sms_config_id', db.Integer, db.ForeignKey('sms_configs.id', ondelete='CASCADE'), primary_key=True),
-    db.Column('sms_regex_id', db.Integer, db.ForeignKey('sms_regex.id', ondelete='CASCADE'), primary_key=True),
-    db.Index('ix_sms_config_regex_ids', 'sms_config_id', 'sms_regex_id')
-)
 
 class SMSConfig(db.Model):
     """Configuración de números SMS para recibir mensajes de texto"""
@@ -394,13 +387,8 @@ class SMSConfig(db.Model):
     messages = db.relationship('SMSMessage', backref='sms_config', lazy='dynamic', cascade='all, delete-orphan')
     allowed_numbers = db.relationship('AllowedSMSNumber', backref='sms_config', lazy='dynamic', cascade='all, delete-orphan')
     
-    # Relación muchos-a-muchos con SMSRegex (regex específicos para SMS)
-    regexes = db.relationship(
-        'SMSRegex',
-        secondary=sms_config_regex,
-        backref='sms_configs',
-        lazy='dynamic'
-    )
+    # Relación uno-a-muchos con SMSRegex (cada regex pertenece a un solo SMSConfig)
+    # La relación se define en SMSRegex con backref='sms_config'
     
     def __repr__(self):
         return f'<SMSConfig {self.phone_number} ({self.name})>'

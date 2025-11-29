@@ -7771,36 +7771,17 @@ def delete_sms_config(config_id):
         allowed_count = AllowedSMSNumber.query.filter_by(sms_config_id=config_id).count()
         messages_count = SMSMessage.query.filter_by(sms_config_id=config_id).count()
         
-        # Obtener regex asociados a este SMSConfig
-        associated_regexes = list(config.regexes.all())
+        # Obtener regex asociados a este SMSConfig (uno-a-muchos: cada regex pertenece a un solo SMSConfig)
+        associated_regexes = SMSRegex.query.filter_by(sms_config_id=config_id).all()
         regex_associations_count = len(associated_regexes)
         
-        # Identificar regex que solo están asociados a este SMSConfig (huérfanos)
-        orphaned_regexes = []
-        from sqlalchemy import select, func
-        from app.store.models import sms_config_regex as scr_table
-        for regex in associated_regexes:
-            # Contar cuántos SMSConfig están asociados a este regex usando consulta directa
-            total_configs = db.session.execute(
-                select(func.count()).select_from(scr_table).where(
-                    scr_table.c.sms_regex_id == regex.id
-                )
-            ).scalar() or 0
-            # Si solo hay 1 asociación (la del config que se está eliminando), es huérfano
-            if total_configs == 1:
-                # Este regex solo está asociado al SMSConfig que se está eliminando
-                orphaned_regexes.append(regex)
+        # Con la nueva relación uno-a-muchos, todos los regex de este config se eliminarán automáticamente por CASCADE
+        # gracias al foreign key con ondelete='CASCADE' en sms_regex.sms_config_id
         
-        # Eliminar regex huérfanos primero (para evitar violaciones de foreign key)
-        orphaned_count = len(orphaned_regexes)
-        for regex in orphaned_regexes:
-            db.session.delete(regex)
-        
-        # Eliminar la configuración (los AllowedSMSNumber y SMSMessage se eliminarán en cascada)
-        # Las asociaciones con regex también se eliminan automáticamente por CASCADE en la tabla de asociación
+        # Eliminar la configuración (los AllowedSMSNumber, SMSMessage y SMSRegex se eliminarán en cascada)
         # Esto funciona por:
         # 1. Foreign key con ondelete='CASCADE' en la base de datos
-        # 2. Relación SQLAlchemy con cascade='all, delete-orphan'
+        # 2. Relación SQLAlchemy con cascade='all, delete-orphan' para AllowedSMSNumber y SMSMessage
         db.session.delete(config)
         
         db.session.commit()
@@ -7812,9 +7793,7 @@ def delete_sms_config(config_id):
         if messages_count > 0:
             details.append(f'{messages_count} mensaje(s)')
         if regex_associations_count > 0:
-            details.append(f'{regex_associations_count} asociación(es) de regex')
-        if orphaned_count > 0:
-            details.append(f'{orphaned_count} regex huérfano(s)')
+            details.append(f'{regex_associations_count} regex asociado(s)')
         if details:
             message += f' También se eliminaron: {", ".join(details)}.'
         
@@ -7828,14 +7807,21 @@ def delete_sms_config(config_id):
 @store_bp.route('/admin/sms/regex', methods=['GET'])
 @admin_required
 def list_sms_regex():
-    """Lista todos los regex específicos de SMS"""
+    """Lista todos los regex específicos de SMS de un número específico"""
     try:
-        regexes = SMSRegex.query.order_by(SMSRegex.name.asc()).all()
+        config_id = request.args.get('config_id', type=int)
+        if config_id:
+            # Listar solo los regexes del número SMS especificado
+            regexes = SMSRegex.query.filter_by(sms_config_id=config_id).order_by(SMSRegex.name.asc()).all()
+        else:
+            # Si no se especifica config_id, devolver lista vacía
+            regexes = []
         regex_data = [{
             'id': regex.id,
             'name': regex.name or '',
             'pattern': regex.pattern or '',
-            'enabled': regex.enabled
+            'enabled': regex.enabled,
+            'sms_config_id': regex.sms_config_id
         } for regex in regexes]
         return jsonify({'success': True, 'regexes': regex_data})
     except Exception as e:
@@ -7845,42 +7831,48 @@ def list_sms_regex():
 @store_bp.route('/admin/sms/regex', methods=['POST'])
 @admin_required
 def create_sms_regex():
-    """Crea un nuevo regex específico para SMS y lo asocia automáticamente al SMSConfig actual"""
+    """Crea un nuevo regex específico para SMS - Cada regex pertenece a un solo SMSConfig"""
     try:
         data = request.get_json()
         name = data.get('name', '').strip()
         pattern = data.get('pattern', '').strip()
-        sms_config_id = data.get('sms_config_id')  # ID del SMSConfig al que se asociará automáticamente
+        sms_config_id = data.get('sms_config_id')  # ID del SMSConfig al que pertenece el regex
         
         if not name or not pattern:
             return jsonify({'success': False, 'error': 'Nombre y patrón son requeridos'}), 400
         
-        new_regex = SMSRegex(name=name, pattern=pattern, enabled=True)
+        if not sms_config_id:
+            return jsonify({'success': False, 'error': 'sms_config_id es requerido'}), 400
+        
+        try:
+            sms_config_id = int(sms_config_id)
+        except (ValueError, TypeError):
+            return jsonify({'success': False, 'error': 'sms_config_id debe ser un número válido'}), 400
+        
+        # Verificar que el SMSConfig existe
+        config = SMSConfig.query.get(sms_config_id)
+        if not config:
+            return jsonify({'success': False, 'error': 'SMSConfig no encontrado'}), 404
+        
+        # Crear el regex asociado directamente al SMSConfig
+        new_regex = SMSRegex(
+            name=name,
+            pattern=pattern,
+            enabled=True,
+            sms_config_id=sms_config_id
+        )
         db.session.add(new_regex)
-        db.session.flush()  # Para obtener el ID del nuevo regex
-        
-        # Si se proporciona un sms_config_id, asociar automáticamente el regex
-        if sms_config_id:
-            try:
-                sms_config_id = int(sms_config_id)
-                config = SMSConfig.query.get(sms_config_id)
-                if config:
-                    # Verificar que no esté ya asociado
-                    if new_regex.id not in [r.id for r in config.regexes]:
-                        config.regexes.append(new_regex)
-            except (ValueError, TypeError):
-                pass  # Si el sms_config_id no es válido, continuar sin asociar
-        
         db.session.commit()
         
         return jsonify({
             'success': True,
-            'message': 'Regex creado correctamente' + (' y asociado al número SMS' if sms_config_id else ''),
+            'message': 'Regex creado correctamente',
             'regex': {
                 'id': new_regex.id,
                 'name': new_regex.name,
                 'pattern': new_regex.pattern,
-                'enabled': new_regex.enabled
+                'enabled': new_regex.enabled,
+                'sms_config_id': new_regex.sms_config_id
             }
         })
     except Exception as e:
@@ -7926,30 +7918,16 @@ def update_sms_regex(regex_id):
 @store_bp.route('/admin/sms/regex/<int:regex_id>', methods=['DELETE'])
 @admin_required
 def delete_sms_regex(regex_id):
-    """Elimina un regex específico de SMS y todas sus asociaciones"""
+    """Elimina un regex específico de SMS (uno-a-muchos: cada regex pertenece a un solo SMSConfig)"""
     try:
         regex = SMSRegex.query.get_or_404(regex_id)
         
-        # Contar asociaciones que se eliminarán en cascada
-        # Usar consulta directa en lugar del backref para evitar problemas con lazy loading
-        from sqlalchemy import select, func
-        from app.store.models import sms_config_regex
-        associations_count = db.session.execute(
-            select(func.count()).select_from(sms_config_regex).where(
-                sms_config_regex.c.sms_regex_id == regex_id
-            )
-        ).scalar() or 0
-        
-        # Eliminar el regex (las asociaciones en sms_config_regex se eliminan automáticamente por CASCADE)
-        # La tabla sms_config_regex tiene ondelete='CASCADE' en el foreign key de sms_regex_id
+        # Con la nueva relación uno-a-muchos, el regex pertenece a un solo SMSConfig
+        # Se elimina directamente sin necesidad de manejar asociaciones
         db.session.delete(regex)
         db.session.commit()
         
-        message = 'Regex eliminado correctamente.'
-        if associations_count > 0:
-            message += f' Se eliminaron {associations_count} asociación(es) con número(s) SMS.'
-        
-        return jsonify({'success': True, 'message': message})
+        return jsonify({'success': True, 'message': 'Regex eliminado correctamente.'})
     except Exception as e:
         db.session.rollback()
         current_app.logger.error(f"Error eliminando regex SMS {regex_id}: {e}", exc_info=True)

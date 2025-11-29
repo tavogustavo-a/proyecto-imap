@@ -207,54 +207,38 @@ document.addEventListener('DOMContentLoaded', function() {
         loadRegexList(configId);
     }
     
-    // Función para cargar la lista de regex (reutilizable)
+    // Función para cargar la lista de regex (reutilizable) - uno-a-muchos
     function loadRegexList(configId) {
         const regexList = document.getElementById('sms-regex-list');
         if (!regexList) return;
         
-        Promise.all([
-            fetch('/tienda/admin/sms/regex', {
-                headers: {
-                    'X-CSRFToken': getCsrfToken()
-                }
-            }).then(r => r.json()),
-            fetch(`/tienda/admin/sms_configs/${configId}/regex`, {
-                headers: {
-                    'X-CSRFToken': getCsrfToken()
-                }
-            }).then(r => r.json())
-        ])
-        .then(([allRegexData, configRegexData]) => {
-            if (!allRegexData.success || !configRegexData.success) {
-                regexList.innerHTML = '<p class="text-center text-danger">Error al cargar regex.</p>';
-                return;
+        // Cargar solo los regexes del número SMS actual (uno-a-muchos)
+        fetch(`/tienda/admin/sms/regex?config_id=${configId}`, {
+            method: 'GET',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCsrfToken()
             }
+        })
+        .then(handleFetchResponse)
+        .then(data => {
+            const regexes = data.regexes || [];
             
-            const allRegex = allRegexData.regexes || [];
-            const configRegexIds = (configRegexData.regex_ids || []).map(id => parseInt(id));
-            
-            if (allRegex.length === 0) {
+            if (regexes.length === 0) {
                 regexList.innerHTML = '<p class="text-center text-secondary">No hay regex disponibles. Crea uno nuevo arriba.</p>';
                 return;
             }
             
-            const regexHTML = allRegex.map(regex => {
-                const isChecked = configRegexIds.includes(regex.id);
+            const regexHTML = regexes.map(regex => {
                 return `
                     <div class="d-flex align-items-center justify-content-between mb-1 p-1 regex-item-container">
                         <div class="d-flex align-items-center flex-grow-1">
                             <span class="ml-1 mb-0 flex-grow-1">
                                 <strong>${escapeHtml(regex.name || 'Sin nombre')}</strong>
-                                ${isChecked ? '<span class="text-success ml-1">✓ Asociado</span>' : ''}
                                 <br><small class="text-secondary">${escapeHtml(regex.pattern || 'Sin patrón')}</small>
                             </span>
                         </div>
                         <div class="d-flex gap-05">
-                            ${!isChecked ? `
-                                <button type="button" class="btn-green btn-sm associate-regex-btn" data-regex-id="${regex.id}" title="Asociar a este número">
-                                    <i class="fas fa-plus"></i>
-                                </button>
-                            ` : ''}
                             <button type="button" class="btn-orange btn-sm edit-sms-regex-btn" data-regex-id="${regex.id}" title="Editar">
                                 <i class="fas fa-edit"></i>
                             </button>
@@ -268,19 +252,11 @@ document.addEventListener('DOMContentLoaded', function() {
             
             regexList.innerHTML = regexHTML;
             
-            // Agregar event listeners a los botones de asociar
-            regexList.querySelectorAll('.associate-regex-btn').forEach(btn => {
-                btn.addEventListener('click', function() {
-                    const regexId = parseInt(this.getAttribute('data-regex-id'));
-                    updateSMSConfigRegex(configId, regexId, true);
-                });
-            });
-            
             // Agregar event listeners a los botones de editar
             regexList.querySelectorAll('.edit-sms-regex-btn').forEach(btn => {
                 btn.addEventListener('click', function() {
                     const regexId = parseInt(this.getAttribute('data-regex-id'));
-                    const regex = allRegex.find(r => r.id === regexId);
+                    const regex = regexes.find(r => r.id === regexId);
                     if (regex) {
                         openEditRegexModal(regex);
                     }
@@ -291,7 +267,7 @@ document.addEventListener('DOMContentLoaded', function() {
             regexList.querySelectorAll('.delete-sms-regex-btn').forEach(btn => {
                 btn.addEventListener('click', function() {
                     const regexId = parseInt(this.getAttribute('data-regex-id'));
-                    const regex = allRegex.find(r => r.id === regexId);
+                    const regex = regexes.find(r => r.id === regexId);
                     if (regex) {
                         if (confirm(`¿Estás seguro de que deseas eliminar el regex "${escapeHtml(regex.name || 'Sin nombre')}"?`)) {
                             deleteSMSRegex(regexId);
@@ -421,6 +397,14 @@ document.addEventListener('DOMContentLoaded', function() {
         
         // Obtener el configId actual del modal
         const configId = currentRegexModalConfigId;
+        
+        if (!configId) {
+            if (regexMessage) {
+                regexMessage.textContent = 'Error: No se ha seleccionado un número SMS.';
+                regexMessage.className = 'text-danger';
+            }
+            return;
+        }
         
         fetch('/tienda/admin/sms/regex', {
             method: 'POST',
