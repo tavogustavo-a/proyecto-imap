@@ -336,7 +336,7 @@
     </div>
 
     <!-- Spinner debajo del formulario de búsqueda -->
-    <div id="spinner" class="text-center mb-0"> 
+    <div id="spinner" class="text-center mb-0 d-none"> 
       <img src="{{ url_for('static', filename='images/spinner.gif') }}" alt="Cargando..." class="spinner-image">
       <p>Buscando correos, por favor espera...</p>
     </div>
@@ -344,7 +344,7 @@
     <!-- Resultados (Quitado style inline) -->
     <div
       id="search-results"
-      class="search-results-display search-results-mobile-padding"
+      class="search-results-display search-results-mobile-padding d-none"
     ></div>
   </div>
   <!-- MENÚ LATERAL MÓVIL PARA ADMINISTRADORES -->

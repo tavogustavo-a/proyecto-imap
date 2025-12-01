@@ -565,7 +565,8 @@ document.addEventListener("DOMContentLoaded", function () {
           }
 
           // 4. Mostrar el contenedor y añadir listeners
-          resultsDiv.style.display = "block";
+          resultsDiv.classList.remove('d-none');
+          resultsDiv.classList.add('d-block');
           attachCopyButtonListener();
         }
       })

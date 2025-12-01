@@ -650,6 +650,7 @@ noscript p {
 .w-100 { width: 100%; }
 
 /* Otras utilidades comunes */
+.d-none { display: none !important; }
 .d-block { display: block; }
 .d-inline { display: inline; }
 .text-decoration-none { text-decoration: none; }
