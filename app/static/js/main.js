@@ -802,7 +802,7 @@ document.addEventListener("DOMContentLoaded", function () {
       messages.forEach((msg, index) => {
         const messageText = msg.message_body || '';
         
-        // Contenedor para cada código
+        // Contenedor para cada código - flexbox para alinear en línea
         const codeContainer = document.createElement('div');
         codeContainer.classList.add('sms-code-container');
         
@@ -848,7 +848,7 @@ document.addEventListener("DOMContentLoaded", function () {
         
         codeContainer.appendChild(copyButton);
         
-        // Fecha y hora
+        // Fecha y hora - en la misma línea
         if (msg.created_at) {
           const spanDate = document.createElement('span');
           spanDate.classList.add('regex-result-date', 'sms-date-text');

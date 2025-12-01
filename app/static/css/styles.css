@@ -2138,6 +2138,39 @@ body .edit-service-page #aliasPopup {
   margin-top: 0.75rem; /* Reducir margen superior */
 }
 
+/* Estilos para múltiples códigos SMS - todo en la misma línea */
+.sms-code-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: nowrap;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+  padding: 0.5rem;
+}
+
+.sms-code-container .sms-code-text {
+  font-size: 1.4rem;
+  color: #444;
+  margin: 0;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.sms-code-container .sms-copy-btn {
+  margin: 0;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.sms-code-container .sms-date-text {
+  font-size: 0.9rem;
+  color: #666;
+  margin: 0;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
 .regex-result-date-only {
   font-size: 0.9rem;
   color: #666;
@@ -2146,6 +2179,7 @@ body .edit-service-page #aliasPopup {
 
 
 /* --- Ajustes Móviles para Regex Results --- */
+@media (max-width: 768px) {
   .regex-result-code {
      font-size: 1.2rem; /* Reducir tamaño fuente código */
      display: block; /* Hacer que ocupe su línea */
@@ -2157,6 +2191,12 @@ body .edit-service-page #aliasPopup {
       margin-left: 0; /* Sin margen izquierdo en móvil */
        margin-right: 0.5rem; /* Espacio entre botones si se envuelven */
        margin-top: 0.25rem; /* Espacio superior si se envuelven */
+  }
+  
+  /* En móvil, los códigos SMS pueden envolverse */
+  .sms-code-container {
+    flex-wrap: wrap;
+    justify-content: flex-start;
   }
 }
 
