@@ -313,39 +313,33 @@ document.addEventListener('DOMContentLoaded', function() {
                 <table class="table table-striped table-hover">
                     <thead>
                         <tr>
-                            <th class="sms-table-th-date">Fecha/Hora</th>
+                            <th class="sms-table-th-date">Fecha/H</th>
                             <th class="sms-table-th-number">Número</th>
-                            <th class="sms-table-th-from">De</th>
                             <th>Código/Mensaje</th>
-                            <th class="sms-table-th-status">Estado</th>
-                            <th class="sms-table-th-actions">Acciones</th>
                         </tr>
                     </thead>
                     <tbody>
         `;
 
         filteredMessages.forEach(msg => {
-            const date = msg.created_at || 'N/A';
+            let dateDisplay = 'N/A';
+            if (msg.created_at) {
+                const parts = msg.created_at.split('|');
+                if (parts.length === 2) {
+                    dateDisplay = `<div class="sms-date-date">${escapeHtml(parts[0])}</div><div class="sms-date-time">${escapeHtml(parts[1])}</div>`;
+                } else {
+                    dateDisplay = escapeHtml(msg.created_at);
+                }
+            }
             const isUnread = !msg.processed;
             const rowClass = isUnread ? 'sms-message-unread' : 'sms-message-read';
             
             tableHTML += `
                 <tr class="sms-message-row ${rowClass}" data-message-id="${msg.id}" data-config-id="${msg.sms_config_id || ''}">
-                    <td><small>${date}</small></td>
+                    <td class="sms-date-cell"><small>${dateDisplay}</small></td>
                     <td><code>${escapeHtml(msg.to_number || 'N/A')}</code></td>
-                    <td><code>${escapeHtml(msg.from_number)}</code></td>
-                    <td class="message-preview" title="${escapeHtml(msg.message_body)}">
+                    <td class="message-preview">
                         <strong>${escapeHtml(msg.message_body)}</strong>
-                    </td>
-                    <td>
-                        <span class="badge ${msg.processed ? 'badge-success' : 'badge-warning'}">
-                            ${msg.processed ? 'Procesado' : 'Pendiente'}
-                        </span>
-                    </td>
-                    <td>
-                        <button class="btn btn-sm btn-info btn-view-message" data-message-id="${msg.id}" data-config-id="${msg.sms_config_id || ''}" title="Ver detalles">
-                            <i class="fas fa-eye"></i>
-                        </button>
                     </td>
                 </tr>
             `;
@@ -358,15 +352,6 @@ document.addEventListener('DOMContentLoaded', function() {
         `;
 
         container.innerHTML = tableHTML;
-
-        // Agregar event listeners a los botones de ver detalles
-        container.querySelectorAll('.btn-view-message').forEach(btn => {
-            btn.addEventListener('click', function() {
-                const messageId = this.getAttribute('data-message-id');
-                const configId = this.getAttribute('data-config-id');
-                viewMessageDetails(messageId, configId);
-            });
-        });
     }
 
     function displayMessages(messages, total, totalPages) {
@@ -396,37 +381,31 @@ document.addEventListener('DOMContentLoaded', function() {
                 <table class="table table-striped table-hover">
                     <thead>
                         <tr>
-                            <th class="sms-table-th-date">Fecha/Hora</th>
-                            <th class="sms-table-th-from">De</th>
+                            <th class="sms-table-th-date">Fecha/H</th>
                             <th>Código/Mensaje</th>
-                            <th class="sms-table-th-status">Estado</th>
-                            <th class="sms-table-th-actions">Acciones</th>
                         </tr>
                     </thead>
                     <tbody>
         `;
 
         filteredMessages.forEach(msg => {
-            const date = msg.created_at || 'N/A';
+            let dateDisplay = 'N/A';
+            if (msg.created_at) {
+                const parts = msg.created_at.split('|');
+                if (parts.length === 2) {
+                    dateDisplay = `<div class="sms-date-date">${escapeHtml(parts[0])}</div><div class="sms-date-time">${escapeHtml(parts[1])}</div>`;
+                } else {
+                    dateDisplay = escapeHtml(msg.created_at);
+                }
+            }
             const isUnread = !msg.processed;
             const rowClass = isUnread ? 'sms-message-unread' : 'sms-message-read';
             
             tableHTML += `
                 <tr class="sms-message-row ${rowClass}" data-message-id="${msg.id}" data-config-id="${currentConfigId}">
-                    <td><small>${date}</small></td>
-                    <td><code>${escapeHtml(msg.from_number)}</code></td>
-                    <td class="message-preview" title="${escapeHtml(msg.message_body)}">
+                    <td class="sms-date-cell"><small>${dateDisplay}</small></td>
+                    <td class="message-preview">
                         <strong>${escapeHtml(msg.message_body)}</strong>
-                    </td>
-                    <td>
-                        <span class="badge ${msg.processed ? 'badge-success' : 'badge-warning'}">
-                            ${msg.processed ? 'Procesado' : 'Pendiente'}
-                        </span>
-                    </td>
-                    <td>
-                        <button class="btn btn-sm btn-info btn-view-message" data-message-id="${msg.id}" data-config-id="${currentConfigId}" title="Ver detalles">
-                            <i class="fas fa-eye"></i>
-                        </button>
                     </td>
                 </tr>
             `;
@@ -439,15 +418,6 @@ document.addEventListener('DOMContentLoaded', function() {
         `;
 
         container.innerHTML = tableHTML;
-
-        // Agregar event listeners a los botones de ver detalles
-        container.querySelectorAll('.btn-view-message').forEach(btn => {
-            btn.addEventListener('click', function() {
-                const messageId = this.getAttribute('data-message-id');
-                const configId = this.getAttribute('data-config-id');
-                viewMessageDetails(messageId, configId);
-            });
-        });
     }
 
     function clearMessages() {
@@ -499,7 +469,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 infoDiv.innerHTML = `
                     <strong>De:</strong> <code>${escapeHtml(msg.from_number)}</code><br>
                     <strong>Para:</strong> <code>${escapeHtml(msg.to_number)}</code><br>
-                    <strong>Fecha:</strong> ${msg.created_at || 'N/A'}<br>
+                    <strong>Fecha:</strong> ${escapeHtml(msg.created_at || 'N/A')}<br>
                     <strong>Estado Twilio:</strong> <span class="badge badge-info">${escapeHtml(msg.twilio_status || 'N/A')}</span><br>
                     <strong>Procesado:</strong> <span class="badge ${msg.processed ? 'badge-success' : 'badge-warning'}">${msg.processed ? 'Sí' : 'No'}</span>
                 `;

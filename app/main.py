@@ -22,7 +22,7 @@ def inject_worksheet_access():
 @main_bp.route('/favicon.ico')
 def favicon():
     """Servir favicon.svg directamente con tipo MIME correcto"""
-    from flask import send_from_directory
+    from flask import send_from_directory, current_app
     import os
     favicon_path = os.path.join(current_app.static_folder, 'images', 'favicon.svg')
     if os.path.exists(favicon_path):
@@ -61,6 +61,10 @@ def home():
         current_user = User.query.filter_by(username=username).first()
     elif user_id:
         current_user = User.query.get(user_id)
+
+    # El botón SMS siempre será visible si el servicio SMS está activo
+    # La validación de permisos se hace al buscar (en search_sms_messages)
+    # No necesitamos verificar permisos aquí para mostrar el botón
 
     return render_template(
         "search.html",

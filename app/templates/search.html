@@ -114,8 +114,8 @@
                     {% endif %}
                   </button>
                 </div>
-              {% elif srv.visibility_mode == "sms" %}
-                <!-- Admin ve servicios sms (está logueado) -->
+              {% elif srv.visibility_mode == "sms" and session.get("logged_in") %}
+                <!-- Todos los usuarios logueados ven servicios SMS (la validación se hace al buscar) -->
                 <div class="service-btn-container">
                   <button
                     class="service-btn"

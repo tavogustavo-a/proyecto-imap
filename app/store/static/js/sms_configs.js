@@ -27,7 +27,7 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     
     // Cargar configuraciones al iniciar (solo si no se cargaron desde otro script)
-    function loadSMSConfigs() {
+    function loadSMSConfigs(deletedConfigId = null) {
         // Verificar si ya se están cargando desde sms_list.js para evitar llamadas duplicadas
         if (window.smsConfigsLoading) {
             return;
@@ -46,7 +46,8 @@ document.addEventListener('DOMContentLoaded', function() {
             window.smsConfigsLoading = false;
             if (data.success) {
                 renderConfigsList(data.configs);
-                updateSMSNumberSelect(data.configs);
+                // Pasar el deletedConfigId para que updateSMSNumberSelect sepa si se eliminó el número seleccionado
+                updateSMSNumberSelect(data.configs, !deletedConfigId, deletedConfigId);
                 // Notificar a otros scripts que los datos están listos
                 window.smsConfigsData = data.configs;
                 window.smsLastSelectedId = data.last_selected_id || null;
@@ -138,8 +139,12 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     
     // Actualizar select de números SMS
-    function updateSMSNumberSelect(configs) {
+    function updateSMSNumberSelect(configs, preserveSelection = true, deletedConfigId = null) {
         if (!smsNumberSelect) return;
+        
+        // Guardar la selección actual antes de actualizar
+        const currentSelection = preserveSelection ? smsNumberSelect.value : null;
+        const wasDeletedSelected = deletedConfigId && currentSelection === deletedConfigId.toString();
         
         smsNumberSelect.innerHTML = '<option value="">-- Selecciona un número --</option>';
         
@@ -147,9 +152,30 @@ document.addEventListener('DOMContentLoaded', function() {
         configs.forEach(config => {
             const option = document.createElement('option');
             option.value = config.id;
-            option.textContent = `${config.phone_number} (${config.messages_count || 0} mensajes)`;
+            option.textContent = `${config.phone_number} - ${config.name} (${config.messages_count || 0} mensajes)`;
             smsNumberSelect.appendChild(option);
         });
+        
+        // Si se eliminó el número seleccionado o no hay selección, seleccionar el primero disponible
+        let configToSelect = null;
+        if (wasDeletedSelected || !currentSelection) {
+            // Si se eliminó el seleccionado o no había selección, seleccionar el primero
+            if (configs.length > 0) {
+                configToSelect = configs[0].id;
+            }
+        } else if (currentSelection && configs.some(c => c.id.toString() === currentSelection)) {
+            // Si la selección actual todavía existe, mantenerla
+            configToSelect = currentSelection;
+        } else if (configs.length > 0) {
+            // Si la selección actual ya no existe pero hay números disponibles, seleccionar el primero
+            configToSelect = configs[0].id;
+        }
+        
+        if (configToSelect) {
+            smsNumberSelect.value = configToSelect;
+            // Disparar evento change para notificar a sms_list.js
+            smsNumberSelect.dispatchEvent(new Event('change'));
+        }
     }
     
     // Eliminar configuración
@@ -169,7 +195,8 @@ document.addEventListener('DOMContentLoaded', function() {
         .then(data => {
             if (data.success) {
                 showMessage('Configuración eliminada correctamente.', 'success');
-                loadSMSConfigs();
+                // Recargar configuraciones y actualizar select, pasando el ID del número eliminado
+                loadSMSConfigs(configId);
             }
         })
         .catch(err => {

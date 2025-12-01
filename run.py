@@ -514,6 +514,49 @@ def main():
             next_run_time=datetime.now(timezone.utc) + timedelta(minutes=1, seconds=30) 
         )
 
+        # Tarea para limpiar mensajes SMS antiguos (mayores a 20 minutos)
+        def cleanup_old_sms_messages_job():
+            """Elimina mensajes SMS mayores a 20 minutos de la base de datos"""
+            with app.app_context():
+                try:
+                    from app.store.models import SMSMessage
+                    
+                    # Calcular la fecha límite: mensajes mayores a 20 minutos
+                    time_limit = datetime.utcnow() - timedelta(minutes=20)
+                    
+                    # Buscar mensajes antiguos
+                    old_messages = SMSMessage.query.filter(
+                        SMSMessage.created_at < time_limit
+                    ).all()
+                    
+                    # Solo eliminar si hay mensajes
+                    if old_messages:
+                        count = len(old_messages)
+                        for msg in old_messages:
+                            db.session.delete(msg)
+                        db.session.commit()
+                        # Log opcional (puedes comentarlo si no quieres logs)
+                        # print(f"✅ Eliminados {count} mensajes SMS antiguos (mayores a 20 minutos)")
+                    # Si no hay mensajes, no hacer nada (como solicitó el usuario)
+                    
+                except Exception as e:
+                    # En caso de error, hacer rollback y continuar
+                    db.session.rollback()
+                    # Log opcional de error (puedes comentarlo si no quieres logs)
+                    # print(f"❌ Error al limpiar mensajes SMS: {str(e)}")
+                    pass
+
+        sms_cleanup_job_id = 'cleanup_old_sms_messages'
+        scheduler_call_freq_sms_cleanup = 5  # Ejecutar cada 5 minutos
+        scheduler.add_job(
+            func=cleanup_old_sms_messages_job,
+            trigger='interval',
+            minutes=scheduler_call_freq_sms_cleanup,
+            id=sms_cleanup_job_id,
+            replace_existing=True,
+            next_run_time=datetime.now(timezone.utc) + timedelta(minutes=1)  # Empezar después de 1 minuto
+        )
+
     
     import atexit
     scheduler.start()

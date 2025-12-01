@@ -217,10 +217,12 @@ document.addEventListener('DOMContentLoaded', function() {
                 // Limpiar resultados y ocultar botón
                 if (numbersSearchResults) {
                     numbersSearchResults.innerHTML = '';
-                    numbersSearchResults.style.display = 'none';
+                    numbersSearchResults.classList.add('d-none');
+                    numbersSearchResults.classList.remove('d-block');
                 }
                 if (deleteDisplayedBtn) {
-                    deleteDisplayedBtn.style.display = 'none';
+                    deleteDisplayedBtn.classList.add('d-none');
+                    deleteDisplayedBtn.classList.remove('d-inline-block');
                 }
                 if (searchStatus) {
                     searchStatus.textContent = '';
@@ -237,14 +239,16 @@ document.addEventListener('DOMContentLoaded', function() {
         if (!smsConfigId) {
             if (numbersSearchResults) {
                 numbersSearchResults.innerHTML = "";
-                numbersSearchResults.style.display = 'none';
+                numbersSearchResults.classList.add('d-none');
+                numbersSearchResults.classList.remove('d-block');
             }
             return;
         }
         
         if (numbersSearchResults) {
             numbersSearchResults.innerHTML = "<p>Buscando...</p>";
-            numbersSearchResults.style.display = 'block';
+            numbersSearchResults.classList.remove('d-none');
+            numbersSearchResults.classList.add('d-block');
         }
         if (searchStatus) searchStatus.textContent = "";
         
@@ -270,7 +274,10 @@ document.addEventListener('DOMContentLoaded', function() {
                     numbersSearchResults.appendChild(errorDiv);
                 }
                 if (searchStatus) searchStatus.textContent = '';
-                if (deleteDisplayedBtn) deleteDisplayedBtn.style.display = 'none';
+                if (deleteDisplayedBtn) {
+                    deleteDisplayedBtn.classList.add('d-none');
+                    deleteDisplayedBtn.classList.remove('d-inline-block');
+                }
             }
         })
         .catch(err => {
@@ -282,7 +289,10 @@ document.addEventListener('DOMContentLoaded', function() {
                 numbersSearchResults.appendChild(errorDiv);
             }
             if (searchStatus) searchStatus.textContent = '';
-            if (deleteDisplayedBtn) deleteDisplayedBtn.style.display = 'none';
+            if (deleteDisplayedBtn) {
+                deleteDisplayedBtn.classList.add('d-none');
+                deleteDisplayedBtn.classList.remove('d-inline-block');
+            }
         });
     }
 
@@ -290,13 +300,18 @@ document.addEventListener('DOMContentLoaded', function() {
         if (!numbersSearchResults) return;
         numbersSearchResults.innerHTML = '';
         if (!numbers || numbers.length === 0) {
-            numbersSearchResults.style.display = 'none';
-            if (deleteDisplayedBtn) deleteDisplayedBtn.style.display = 'none';
+            numbersSearchResults.classList.add('d-none');
+        numbersSearchResults.classList.remove('d-block');
+            if (deleteDisplayedBtn) {
+                deleteDisplayedBtn.classList.add('d-none');
+                deleteDisplayedBtn.classList.remove('d-inline-block');
+            }
             if (searchStatus) searchStatus.textContent = '';
             return;
         }
 
-        numbersSearchResults.style.display = 'block';
+        numbersSearchResults.classList.remove('d-none');
+        numbersSearchResults.classList.add('d-block');
         numbers.forEach(num => {
             const itemDiv = document.createElement('div');
             itemDiv.classList.add('search-result-item');
@@ -309,7 +324,8 @@ document.addEventListener('DOMContentLoaded', function() {
 
         if (deleteDisplayedBtn) {
             deleteDisplayedBtn.textContent = `Eliminar ${numbers.length} Mostrados`;
-            deleteDisplayedBtn.style.display = 'inline-block';
+            deleteDisplayedBtn.classList.remove('d-none');
+            deleteDisplayedBtn.classList.add('d-inline-block');
             deleteDisplayedBtn.disabled = false;
         }
         
@@ -354,11 +370,18 @@ document.addEventListener('DOMContentLoaded', function() {
                         displayedNumbers = displayedNumbers.filter(num => num !== numberToDelete);
                         if (displayedNumbers.length > 0) {
                             if (deleteDisplayedBtn) deleteDisplayedBtn.textContent = `Eliminar ${displayedNumbers.length} Mostrados`;
-                            if (deleteDisplayedBtn) deleteDisplayedBtn.style.display = 'inline-block';
+                            if (deleteDisplayedBtn) {
+                                deleteDisplayedBtn.classList.remove('d-none');
+                                deleteDisplayedBtn.classList.add('d-inline-block');
+                            }
                             if (searchStatus) searchStatus.textContent = '';
                         } else {
-                            numbersSearchResults.style.display = 'none';
-                            if (deleteDisplayedBtn) deleteDisplayedBtn.style.display = 'none';
+                            numbersSearchResults.classList.add('d-none');
+                            numbersSearchResults.classList.remove('d-block');
+                            if (deleteDisplayedBtn) {
+                    deleteDisplayedBtn.classList.add('d-none');
+                    deleteDisplayedBtn.classList.remove('d-inline-block');
+                }
                             if (searchStatus) searchStatus.textContent = '';
                         }
                         fetchAllowedNumbers(currentPageNumbers, currentPerPageNumbers);
@@ -401,10 +424,14 @@ document.addEventListener('DOMContentLoaded', function() {
                     if (searchNumbersInput) searchNumbersInput.value = "";
                     if (numbersSearchResults) {
                         numbersSearchResults.innerHTML = "";
-                        numbersSearchResults.style.display = 'none';
+                        numbersSearchResults.classList.add('d-none');
+                        numbersSearchResults.classList.remove('d-block');
                     }
                     if (searchStatus) searchStatus.textContent = "";
-                    if (deleteDisplayedBtn) deleteDisplayedBtn.style.display = 'none';
+                    if (deleteDisplayedBtn) {
+                    deleteDisplayedBtn.classList.add('d-none');
+                    deleteDisplayedBtn.classList.remove('d-inline-block');
+                }
                     displayedNumbers = [];
                     fetchAllowedNumbers(currentPageNumbers, currentPerPageNumbers);
                 } else {
@@ -599,6 +626,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     if (data.success) {
                         // Si hay HTML, usar innerHTML, sino textContent
                         if (data.is_html && data.message) {
+                            // Si el servidor envía HTML, confiar en que está escapado correctamente
                             addNumbersMsg.innerHTML = data.message;
                         } else {
                             addNumbersMsg.textContent = data.message || `Se agregaron ${data.added_count || 0} correo(s) exitosamente.`;
@@ -617,6 +645,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     } else {
                         // Error: si hay HTML, usar innerHTML, sino textContent
                         if (data.is_html && data.message) {
+                            // Si el servidor envía HTML, confiar en que está escapado correctamente
                             addNumbersMsg.innerHTML = data.message;
                         } else {
                             addNumbersMsg.textContent = `Error: ${data.message || 'No se pudieron agregar los números'}`;
@@ -634,7 +663,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 if (addNumbersMsg) {
                     // Intentar parsear el mensaje de error como JSON si es posible
                     // Si el error viene del backend con HTML, usarlo directamente
-                    addNumbersMsg.innerHTML = err.message || "Error al agregar correos"; 
+                    addNumbersMsg.textContent = escapeHtml(err.message || "Error al agregar correos"); 
                     addNumbersMsg.className = "text-italic"; // Limpiar clases específicas para que apliquen las del HTML
                 }
             });

@@ -377,9 +377,13 @@ document.addEventListener("DOMContentLoaded", function () {
       }
 
       isSubmitting = true; // Marcar como enviando
-      if (spinner) spinner.style.display = "block";
+      if (spinner) {
+        spinner.classList.remove('d-none');
+        spinner.classList.add('d-block');
+      }
       if (resultsDiv) {
-        resultsDiv.style.display = "none";
+        resultsDiv.classList.add('d-none');
+        resultsDiv.classList.remove('d-block');
         resultsDiv.innerHTML = "";
       }
 
@@ -431,11 +435,15 @@ document.addEventListener("DOMContentLoaded", function () {
         return response.json();
       })
       .then(data => {
-        if (spinner) spinner.style.display = "none";
+        if (spinner) {
+          spinner.classList.add('d-none');
+          spinner.classList.remove('d-block');
+        }
 
         if (data.error) {
           if (resultsDiv) {
-            resultsDiv.style.display = "block";
+            resultsDiv.classList.remove('d-none');
+            resultsDiv.classList.add('d-block');
             const errorDiv = document.createElement('div');
             errorDiv.className = 'text-danger';
             errorDiv.textContent = `Error: ${escapeHtml(data.error)}`;
@@ -448,7 +456,8 @@ document.addEventListener("DOMContentLoaded", function () {
         const results = data.results || [];
         if (results.length === 0) {
           if (resultsDiv) {
-            resultsDiv.style.display = "block";
+            resultsDiv.classList.remove('d-none');
+            resultsDiv.classList.add('d-block');
             resultsDiv.innerHTML = `<p>No se encontraron resultados.</p>`;
           }
           return;
@@ -561,9 +570,13 @@ document.addEventListener("DOMContentLoaded", function () {
         }
       })
       .catch(err => {
-        if (spinner) spinner.style.display = "none";
+        if (spinner) {
+          spinner.classList.add('d-none');
+          spinner.classList.remove('d-block');
+        }
         if (resultsDiv) {
-          resultsDiv.style.display = "block";
+          resultsDiv.classList.remove('d-none');
+          resultsDiv.classList.add('d-block');
           // Ajuste => sin "Error de red:", solo el mensaje en grande
           const errorDiv = document.createElement('div');
           errorDiv.className = 'text-danger error-message-large';
@@ -732,60 +745,128 @@ document.addEventListener("DOMContentLoaded", function () {
     if (!resultsDiv) return;
     
     resultsDiv.innerHTML = '';
-    resultsDiv.style.display = 'block';
+    resultsDiv.classList.remove('d-none');
+    resultsDiv.classList.add('d-block');
     
     if (!messages || messages.length === 0) {
       const noMessages = document.createElement('p');
       noMessages.textContent = 'No se encontraron mensajes.';
-      noMessages.style.textAlign = 'center';
+      noMessages.classList.add('text-center');
       resultsDiv.appendChild(noMessages);
       return;
     }
     
-    // Solo mostrar los códigos/mensajes, sin títulos informativos
-    // Crear contenedor similar al de regex para mantener consistencia
+    // Crear contenedor principal
     const container = document.createElement('div');
-    container.classList.add('regex-result-container');
-    container.style.textAlign = 'center';
+    container.classList.add('regex-result-container', 'text-center');
     
-    // Mostrar solo el primer mensaje (código) de forma destacada, similar a regex
-    const firstMessage = messages[0];
-    const messageText = firstMessage.message_body || '';
-    
-    const pCode = document.createElement('p');
-    pCode.classList.add('regex-result-code');
-    
-    const strongCode = document.createElement('strong');
-    strongCode.id = "regex-code";
-    strongCode.textContent = messageText;
-    
-    pCode.appendChild(strongCode);
-    container.appendChild(pCode);
-    
-    // Botón Copiar
-    const buttonsContainer = document.createElement('div');
-    buttonsContainer.style.marginTop = '0.5rem';
-    
-    const copyButton = document.createElement('button');
-    copyButton.classList.add('btn', 'btn-search', 'btn-rounded', 'regex-result-copy-btn');
-    copyButton.id = "copyRegexBtn";
-    copyButton.setAttribute("data-valor", messageText);
-    copyButton.textContent = "Copiar";
-    buttonsContainer.appendChild(copyButton);
-    container.appendChild(buttonsContainer);
-    
-    // Si hay fecha, mostrarla
-    if (firstMessage.created_at) {
-      const pDate = document.createElement('p');
-      pDate.classList.add('regex-result-date');
-      pDate.textContent = `Fecha: ${firstMessage.created_at}`;
-      container.appendChild(pDate);
+    // Si hay solo 1 código, mostrarlo como antes
+    if (messages.length === 1) {
+      const firstMessage = messages[0];
+      const messageText = firstMessage.message_body || '';
+      
+      const pCode = document.createElement('p');
+      pCode.classList.add('regex-result-code');
+      
+      const strongCode = document.createElement('strong');
+      strongCode.id = "regex-code";
+      strongCode.textContent = messageText;
+      
+      pCode.appendChild(strongCode);
+      container.appendChild(pCode);
+      
+      // Botón Copiar
+      const buttonsContainer = document.createElement('div');
+      buttonsContainer.classList.add('mt-05');
+      
+      const copyButton = document.createElement('button');
+      copyButton.classList.add('btn', 'btn-search', 'btn-rounded', 'regex-result-copy-btn');
+      copyButton.id = "copyRegexBtn";
+      copyButton.setAttribute("data-valor", messageText);
+      copyButton.textContent = "Copiar";
+      buttonsContainer.appendChild(copyButton);
+      container.appendChild(buttonsContainer);
+      
+      // Si hay fecha, mostrarla
+      if (firstMessage.created_at) {
+        const pDate = document.createElement('p');
+        pDate.classList.add('regex-result-date');
+        // Formatear fecha: convertir "30/11/2025|01:48 AM" a "30/11/2025 01:48 AM"
+        const formattedDate = firstMessage.created_at.replace('|', ' ');
+        pDate.textContent = `Fecha: ${formattedDate}`;
+        container.appendChild(pDate);
+      }
+    } else {
+      // Si hay múltiples códigos (hasta 15), mostrar cada uno con código, botón copiar y fecha en la misma línea
+      messages.forEach((msg, index) => {
+        const messageText = msg.message_body || '';
+        
+        // Contenedor para cada código
+        const codeContainer = document.createElement('div');
+        codeContainer.classList.add('sms-code-container');
+        
+        // Código
+        const strongCode = document.createElement('strong');
+        strongCode.classList.add('regex-result-code', 'sms-code-text');
+        strongCode.textContent = messageText;
+        codeContainer.appendChild(strongCode);
+        
+        // Botón Copiar
+        const copyButton = document.createElement('button');
+        copyButton.classList.add('btn', 'btn-search', 'btn-rounded', 'regex-result-copy-btn', 'sms-copy-btn');
+        copyButton.setAttribute("data-valor", messageText);
+        copyButton.textContent = "Copiar";
+        
+        // Agregar listener directamente al botón usando la misma función que el botón único
+        copyButton.addEventListener('click', function() {
+          const valorACopiar = this.getAttribute("data-valor") || "";
+          if (valorACopiar) {
+            copyTextToClipboard(valorACopiar)
+              .then(() => {
+                const originalText = this.textContent;
+                this.textContent = "COPIADO";
+                this.classList.add('copied-state');
+                
+                setTimeout(() => {
+                  this.textContent = originalText;
+                  this.classList.remove('copied-state');
+                }, 2000);
+              })
+              .catch((err) => {
+                const originalText = this.textContent;
+                this.textContent = "ERROR";
+                this.classList.add('error-state');
+                
+                setTimeout(() => {
+                  this.textContent = originalText;
+                  this.classList.remove('error-state');
+                }, 2000);
+              });
+          }
+        });
+        
+        codeContainer.appendChild(copyButton);
+        
+        // Fecha y hora
+        if (msg.created_at) {
+          const spanDate = document.createElement('span');
+          spanDate.classList.add('regex-result-date', 'sms-date-text');
+          // Formatear fecha: convertir "30/11/2025|01:48 AM" a "30/11/2025 01:48 AM"
+          const formattedDate = msg.created_at.replace('|', ' ');
+          spanDate.textContent = formattedDate;
+          codeContainer.appendChild(spanDate);
+        }
+        
+        container.appendChild(codeContainer);
+      });
     }
     
     resultsDiv.appendChild(container);
     
-    // Adjuntar listener para el botón copiar
-    attachCopyButtonListener();
+    // Si solo hay un mensaje, adjuntar listener para el botón copiar
+    if (messages.length === 1) {
+      attachCopyButtonListener();
+    }
   }
 
   // Función decideIconPath (movida de search.html)
@@ -801,8 +882,12 @@ document.addEventListener("DOMContentLoaded", function () {
   // Quitar overlay de carga al terminar
   window.addEventListener("load", () => {
     const overlay = document.getElementById("loading-overlay");
-    if (overlay) overlay.style.display = "none";
-    document.body.style.display = "block";
+    if (overlay) {
+      overlay.classList.add('d-none');
+      overlay.classList.remove('d-block');
+    }
+    document.body.classList.remove('d-none');
+    document.body.classList.add('d-block');
   });
 
   // Verificar si la función existe antes de llamarla

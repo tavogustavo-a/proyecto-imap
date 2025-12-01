@@ -5,9 +5,11 @@ from app.services.search_service import search_and_apply_filters, search_and_app
 from app.models import User
 from app.models.user import AllowedEmail
 from app.models.service import ServiceModel
-from app.store.models import SMSConfig, SMSMessage, AllowedSMSNumber
+from app.store.models import SMSConfig, SMSMessage, AllowedSMSNumber, SMSRegex
 from app.extensions import db
 from app.utils.timezone import utc_to_colombia
+from datetime import datetime, timedelta
+import re
 
 api_bp = Blueprint("api_bp", __name__)
 
@@ -90,23 +92,76 @@ def search_sms_messages(email_to_search, user=None):
     if not sms_config.is_enabled:
         return jsonify({"error": "La configuración SMS asociada no está habilitada."}), 500
     
-    # Obtener los últimos 10 mensajes SMS recibidos para este número específico
-    messages = SMSMessage.query.filter_by(sms_config_id=sms_config.id).order_by(
+    # Obtener los regexes habilitados para este SMSConfig
+    regexes = SMSRegex.query.filter_by(
+        sms_config_id=sms_config.id,
+        enabled=True
+    ).order_by(SMSRegex.created_at.asc()).all()
+    
+    # Si no hay regexes configurados, no devolver ningún mensaje
+    if not regexes:
+        return jsonify({
+            "results": [{
+                "sms_messages": [],
+                "sms_config_phone": sms_config.phone_number,
+                "email_searched": email_to_search,
+                "is_sms_result": True
+            }]
+        }), 200
+    
+    # Calcular la fecha límite: últimos 15 minutos
+    time_limit = datetime.utcnow() - timedelta(minutes=15)
+    
+    # Obtener TODOS los mensajes SMS para este número específico
+    # Ordenar por fecha descendente para obtener los más recientes primero
+    all_messages = SMSMessage.query.filter(
+        SMSMessage.sms_config_id == sms_config.id
+    ).order_by(
         SMSMessage.created_at.desc()
-    ).limit(10).all()
+    ).limit(200).all()  # Obtener más mensajes para asegurar que encontramos los que coinciden
     
     # Formatear los mensajes para el frontend
+    # Solo incluir mensajes que coincidan con algún regex Y sean de los últimos 15 minutos
     messages_data = []
-    for msg in messages:
-        messages_data.append({
-            'id': msg.id,
-            'from_number': msg.from_number,
-            'to_number': msg.to_number,
-            'message_body': msg.message_body,
-            'twilio_status': msg.twilio_status,
-            'created_at': utc_to_colombia(msg.created_at).strftime('%Y-%m-%d %H:%M:%S') if msg.created_at else None,
-            'is_sms': True  # Flag para identificar que son mensajes SMS
-        })
+    
+    for msg in all_messages:
+        # Verificar que el mensaje sea de los últimos 15 minutos
+        if not msg.created_at or msg.created_at < time_limit:
+            continue  # Saltar mensajes más antiguos de 15 minutos
+        
+        extracted_code = None
+        
+        # Buscar el primer regex que coincida
+        for regex_obj in regexes:
+            try:
+                match = re.search(regex_obj.pattern, msg.message_body, re.IGNORECASE)
+                if match:
+                    # Si hay grupos de captura, usar el primer grupo
+                    if match.groups():
+                        extracted_code = match.group(1)  # Primer grupo de captura
+                    else:
+                        # Si no hay grupos, usar el match completo
+                        extracted_code = match.group(0)
+                    break  # Usar el primer regex que coincida
+            except re.error as e:
+                # Si el regex es inválido, continuar con el siguiente
+                continue
+        
+        # Solo agregar el mensaje si coincidió con algún regex
+        if extracted_code is not None:
+            messages_data.append({
+                'id': msg.id,
+                'from_number': msg.from_number,
+                'to_number': msg.to_number,
+                'message_body': extracted_code,  # Usar el código extraído
+                'twilio_status': msg.twilio_status,
+                'created_at': utc_to_colombia(msg.created_at).strftime('%d/%m/%Y|%I:%M %p') if msg.created_at else None,
+                'is_sms': True  # Flag para identificar que son mensajes SMS
+            })
+            
+            # Limitar a máximo 15 códigos
+            if len(messages_data) >= 15:
+                break
     
     # Devolver en formato similar a los correos pero con flag SMS
     # Incluso si no hay mensajes, devolver la estructura con lista vacía

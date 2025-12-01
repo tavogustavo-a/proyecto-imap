@@ -7,9 +7,6 @@ from twilio.twiml.messaging_response import MessagingResponse
 from app.extensions import db
 from app.store.models import SMSConfig, SMSMessage
 from app.utils.timezone import get_colombia_now
-import logging
-
-logger = logging.getLogger(__name__)
 
 
 def get_twilio_client(account_sid=None, auth_token=None):

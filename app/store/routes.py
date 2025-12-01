@@ -7775,10 +7775,13 @@ def delete_sms_config(config_id):
         associated_regexes = SMSRegex.query.filter_by(sms_config_id=config_id).all()
         regex_associations_count = len(associated_regexes)
         
-        # Con la nueva relación uno-a-muchos, todos los regex de este config se eliminarán automáticamente por CASCADE
-        # gracias al foreign key con ondelete='CASCADE' en sms_regex.sms_config_id
+        # Eliminar explícitamente los regex primero para evitar problemas con SQLAlchemy
+        # Aunque hay cascade='all, delete-orphan' y ondelete='CASCADE', eliminarlos explícitamente
+        # asegura que SQLAlchemy no intente hacer UPDATE con NULL
+        for regex in associated_regexes:
+            db.session.delete(regex)
         
-        # Eliminar la configuración (los AllowedSMSNumber, SMSMessage y SMSRegex se eliminarán en cascada)
+        # Eliminar la configuración (los AllowedSMSNumber y SMSMessage se eliminarán en cascada)
         # Esto funciona por:
         # 1. Foreign key con ondelete='CASCADE' en la base de datos
         # 2. Relación SQLAlchemy con cascade='all, delete-orphan' para AllowedSMSNumber y SMSMessage
@@ -7801,7 +7804,6 @@ def delete_sms_config(config_id):
     
     except Exception as e:
         db.session.rollback()
-        current_app.logger.error(f"Error eliminando SMS config {config_id}: {e}", exc_info=True)
         return jsonify({'success': False, 'error': f'Error al eliminar: {str(e)}'}), 500
 
 @store_bp.route('/admin/sms/regex', methods=['GET'])
@@ -7825,7 +7827,6 @@ def list_sms_regex():
         } for regex in regexes]
         return jsonify({'success': True, 'regexes': regex_data})
     except Exception as e:
-        current_app.logger.error(f"Error listando regex SMS: {e}", exc_info=True)
         return jsonify({'success': False, 'error': f'Error al listar regex: {str(e)}'}), 500
 
 @store_bp.route('/admin/sms/regex', methods=['POST'])
@@ -7877,7 +7878,6 @@ def create_sms_regex():
         })
     except Exception as e:
         db.session.rollback()
-        current_app.logger.error(f"Error creando regex SMS: {e}", exc_info=True)
         return jsonify({'success': False, 'error': f'Error al crear regex: {str(e)}'}), 500
 
 @store_bp.route('/admin/sms/regex/<int:regex_id>', methods=['PUT'])
@@ -7912,7 +7912,6 @@ def update_sms_regex(regex_id):
         })
     except Exception as e:
         db.session.rollback()
-        current_app.logger.error(f"Error actualizando regex SMS {regex_id}: {e}", exc_info=True)
         return jsonify({'success': False, 'error': f'Error al actualizar regex: {str(e)}'}), 500
 
 @store_bp.route('/admin/sms/regex/<int:regex_id>', methods=['DELETE'])
@@ -7930,7 +7929,6 @@ def delete_sms_regex(regex_id):
         return jsonify({'success': True, 'message': 'Regex eliminado correctamente.'})
     except Exception as e:
         db.session.rollback()
-        current_app.logger.error(f"Error eliminando regex SMS {regex_id}: {e}", exc_info=True)
         return jsonify({'success': False, 'error': f'Error al eliminar regex: {str(e)}'}), 500
 
 @store_bp.route('/admin/sms_configs/<int:config_id>/regex', methods=['GET'])
@@ -7947,7 +7945,6 @@ def get_sms_config_regex(config_id):
             regex_ids = []
         return jsonify({'success': True, 'regex_ids': regex_ids})
     except Exception as e:
-        current_app.logger.error(f"Error obteniendo regex de SMS config {config_id}: {e}", exc_info=True)
         # Si hay error, devolver lista vacía en lugar de error 500
         return jsonify({'success': True, 'regex_ids': []})
 
@@ -7976,7 +7973,6 @@ def add_sms_config_regex(config_id):
             return jsonify({'success': True, 'message': 'Regex agregado correctamente'})
         except Exception as e:
             db.session.rollback()
-            current_app.logger.error(f"Error agregando regex {regex_id} a SMS config {config_id}: {e}", exc_info=True)
             return jsonify({'success': False, 'error': f'Error al agregar regex: {str(e)}'}), 500
     
     return jsonify({'success': True, 'message': 'Regex ya estaba asociado'})
@@ -8006,7 +8002,6 @@ def remove_sms_config_regex(config_id):
             return jsonify({'success': True, 'message': 'Regex eliminado correctamente'})
         except Exception as e:
             db.session.rollback()
-            current_app.logger.error(f"Error eliminando regex {regex_id} de SMS config {config_id}: {e}", exc_info=True)
             return jsonify({'success': False, 'error': f'Error al eliminar regex: {str(e)}'}), 500
     
     return jsonify({'success': True, 'message': 'Regex no estaba asociado'})
@@ -8069,7 +8064,6 @@ def test_sms_number_states():
                 })
                 
             except Exception as e:
-                current_app.logger.error(f"Error verificando número {config.phone_number}: {e}", exc_info=True)
                 results.append({
                     'phone_number': config.phone_number,
                     'name': config.name,
@@ -8090,103 +8084,42 @@ def test_sms_number_states():
     
     except Exception as e:
         db.session.rollback()
-        current_app.logger.error(f"Error probando estados de números SMS: {e}", exc_info=True)
         return jsonify({'success': False, 'error': f'Error al probar estados: {str(e)}'}), 500
 
 @store_bp.route('/admin/sms_configs/<int:config_id>/messages', methods=['GET'])
 @admin_required
 def list_sms_messages(config_id):
-    """Lista los mensajes recibidos para una configuración SMS, filtrados por regex si existen"""
-    import re
+    """Lista los mensajes recibidos para una configuración SMS (sin filtrar por regex - los regex solo se aplican en la plantilla de búsqueda)"""
     try:
         config = SMSConfig.query.get_or_404(config_id)
         
         page = request.args.get('page', 1, type=int)
         per_page = request.args.get('per_page', 50, type=int)
         
-        # Obtener todos los mensajes del config
+        # Obtener todos los mensajes del config (sin filtrar por regex en admin)
         query = SMSMessage.query.filter_by(sms_config_id=config_id)
         
-        # Obtener regex SMS asociados a este SMS config (manejar si la tabla no existe aún)
-        try:
-            config_regexes = list(config.regexes.filter_by(enabled=True).all())
-        except Exception:
-            # Si la tabla no existe aún, no hay regex asociados
-            config_regexes = []
+        # Devolver todos los mensajes normalmente (los regex solo se aplican en la plantilla de búsqueda para usuarios)
+        messages = query.order_by(SMSMessage.created_at.desc()).paginate(page=page, per_page=per_page, error_out=False)
         
-        # Si hay regex asociados, filtrar mensajes
-        if config_regexes:
-            # Obtener todos los mensajes primero
-            all_messages = query.order_by(SMSMessage.created_at.desc()).all()
-            
-            # Filtrar mensajes que cumplan al menos un regex
-            filtered_messages = []
-            for msg in all_messages:
-                for regex_obj in config_regexes:
-                    try:
-                        # Verificar si el patrón coincide con el cuerpo del mensaje
-                        if regex_obj.pattern and re.search(regex_obj.pattern, msg.message_body, re.IGNORECASE):
-                            # Si hay sender especificado, también verificar
-                            if regex_obj.sender:
-                                if re.search(regex_obj.sender, msg.from_number, re.IGNORECASE):
-                                    filtered_messages.append(msg)
-                                    break
-                            else:
-                                filtered_messages.append(msg)
-                                break
-                    except re.error:
-                        # Si el regex es inválido, ignorarlo
-                        continue
-            
-            # Ordenar por fecha descendente
-            filtered_messages.sort(key=lambda x: x.created_at, reverse=True)
-            
-            # Paginación manual
-            total = len(filtered_messages)
-            start = (page - 1) * per_page
-            end = start + per_page
-            paginated_messages = filtered_messages[start:end]
-            
-            messages_data = [{
-                'id': msg.id,
-                'from_number': msg.from_number,
-                'to_number': msg.to_number,
-                'message_body': msg.message_body,
-                'twilio_status': msg.twilio_status,
-                'processed': msg.processed,
-                'created_at': utc_to_colombia(msg.created_at).strftime('%Y-%m-%d %H:%M:%S') if msg.created_at else None,
-            } for msg in paginated_messages]
-            
-            return jsonify({
-                'success': True,
-                'messages': messages_data,
-                'total': total,
-                'pages': (total + per_page - 1) // per_page if per_page > 0 else 1,
-                'current_page': page
-            })
-        else:
-            # Sin regex, devolver todos los mensajes normalmente
-            messages = query.order_by(SMSMessage.created_at.desc()).paginate(page=page, per_page=per_page, error_out=False)
-            
-            messages_data = [{
-                'id': msg.id,
-                'from_number': msg.from_number,
-                'to_number': msg.to_number,
-                'message_body': msg.message_body,
-                'twilio_status': msg.twilio_status,
-                'processed': msg.processed,
-                'created_at': utc_to_colombia(msg.created_at).strftime('%Y-%m-%d %H:%M:%S') if msg.created_at else None,
-            } for msg in messages.items]
-            
-            return jsonify({
-                'success': True,
-                'messages': messages_data,
-                'total': messages.total,
-                'pages': messages.pages,
-                'current_page': page
-            })
+        messages_data = [{
+            'id': msg.id,
+            'from_number': msg.from_number,
+            'to_number': msg.to_number,
+            'message_body': msg.message_body,
+            'twilio_status': msg.twilio_status,
+            'processed': msg.processed,
+            'created_at': utc_to_colombia(msg.created_at).strftime('%d/%m/%Y|%I:%M %p') if msg.created_at else None,
+        } for msg in messages.items]
+        
+        return jsonify({
+            'success': True,
+            'messages': messages_data,
+            'total': messages.total,
+            'pages': messages.pages,
+            'current_page': page
+        })
     except Exception as e:
-        current_app.logger.error(f"Error listando mensajes SMS para config {config_id}: {e}", exc_info=True)
         return jsonify({'success': False, 'error': f'Error al listar mensajes: {str(e)}'}), 500
 
 @store_bp.route('/admin/sms/all-messages', methods=['GET'])
@@ -8209,7 +8142,7 @@ def get_all_sms_messages():
         'message_body': msg.message_body,
         'twilio_status': msg.twilio_status,
         'processed': msg.processed,
-        'created_at': utc_to_colombia(msg.created_at).strftime('%Y-%m-%d %H:%M:%S') if msg.created_at else None,
+        'created_at': utc_to_colombia(msg.created_at).strftime('%m/%d %I:%M %p') if msg.created_at else None,
     } for msg in messages.items]
     
     return jsonify({
@@ -8238,8 +8171,8 @@ def get_sms_message_by_id(message_id):
             'twilio_status': message.twilio_status,
             'processed': message.processed,
             'raw_data': message.raw_data,
-            'created_at': utc_to_colombia(message.created_at).strftime('%Y-%m-%d %H:%M:%S') if message.created_at else None,
-            'processed_at': utc_to_colombia(message.processed_at).strftime('%Y-%m-%d %H:%M:%S') if message.processed_at else None
+            'created_at': utc_to_colombia(message.created_at).strftime('%d/%m/%Y|%I:%M %p') if message.created_at else None,
+            'processed_at': utc_to_colombia(message.processed_at).strftime('%d/%m/%Y|%I:%M %p') if message.processed_at else None
         }
     })
 
@@ -8272,8 +8205,6 @@ def set_selected_sms_number():
                 db.session.commit()
             except Exception as e:
                 db.session.rollback()
-                # No fallar si hay error, solo loguear
-                current_app.logger.debug(f"Error guardando SMS config en BD: {e}")
     else:
         # Limpiar selección
         session.pop('selected_sms_config_id', None)
@@ -8286,7 +8217,6 @@ def set_selected_sms_number():
                 db.session.commit()
             except Exception as e:
                 db.session.rollback()
-                current_app.logger.debug(f"Error limpiando SMS config en BD: {e}")
     
     return jsonify({'success': True, 'message': 'Número seleccionado guardado.'})
 
@@ -8651,6 +8581,7 @@ def add_allowed_sms_numbers():
         db.session.rollback()
         return jsonify({'success': False, 'message': 'Error al guardar los nuevos números.'}), 500
 
+@csrf_exempt_route
 @store_bp.route('/sms/webhook', methods=['POST'])
 def sms_webhook():
     """Webhook público para recibir SMS de Twilio"""
@@ -8723,9 +8654,12 @@ def get_my_sms_messages():
                 matches_regex = False
                 for regex_obj in regexes:
                     try:
-                        if regex_obj.pattern and re.search(regex_obj.pattern, msg.message_body, re.IGNORECASE):
-                            matches_regex = True
-                            break
+                        # Buscar en el cuerpo del mensaje y en el número de origen
+                        if regex_obj.pattern:
+                            if re.search(regex_obj.pattern, msg.message_body, re.IGNORECASE) or \
+                               re.search(regex_obj.pattern, msg.from_number, re.IGNORECASE):
+                                matches_regex = True
+                                break
                     except re.error:
                         continue
                 if matches_regex:
@@ -8745,7 +8679,7 @@ def get_my_sms_messages():
         'id': msg.id,
         'from_number': msg.from_number,
         'message_body': msg.message_body,
-        'created_at': utc_to_colombia(msg.created_at).strftime('%Y-%m-%d %H:%M:%S') if msg.created_at else None,
+        'created_at': utc_to_colombia(msg.created_at).strftime('%m/%d %I:%M %p') if msg.created_at else None,
         'ago': timesince(msg.created_at) if msg.created_at else ''
     } for msg in filtered_messages]
     

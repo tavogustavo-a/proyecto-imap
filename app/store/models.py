@@ -365,7 +365,8 @@ class SMSRegex(db.Model):
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
     # Relación uno-a-muchos: cada regex pertenece a un solo SMSConfig
-    sms_config = db.relationship('SMSConfig', backref='regexes')
+    # El backref 'regexes' se define en SMSConfig para evitar conflictos
+    sms_config = db.relationship('SMSConfig', back_populates='regexes')
     
     def __repr__(self):
         return f'<SMSRegex {self.name} ({self.pattern[:30]}...)>'
@@ -386,9 +387,10 @@ class SMSConfig(db.Model):
     
     messages = db.relationship('SMSMessage', backref='sms_config', lazy='dynamic', cascade='all, delete-orphan')
     allowed_numbers = db.relationship('AllowedSMSNumber', backref='sms_config', lazy='dynamic', cascade='all, delete-orphan')
+    regexes = db.relationship('SMSRegex', back_populates='sms_config', lazy='dynamic', cascade='all, delete-orphan')
     
     # Relación uno-a-muchos con SMSRegex (cada regex pertenece a un solo SMSConfig)
-    # La relación se define en SMSRegex con backref='sms_config'
+    # La relación también se define en SMSRegex con backref='sms_config' para acceso bidireccional
     
     def __repr__(self):
         return f'<SMSConfig {self.phone_number} ({self.name})>'
