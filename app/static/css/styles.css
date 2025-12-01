@@ -3662,3 +3662,57 @@ a.btn-search.btn-rounded:hover {
 .form-checkbox-input {
   margin-right: 8px;
 }
+
+/* ================== CLASES CSP COMPLIANT PARA MAIN.JS ================== */
+/* Clases para reemplazar estilos inline y cumplir CSP estricto */
+
+/* Clases de utilidad adicionales */
+.mt-05 {
+  margin-top: 0.5rem;
+}
+
+/* Clases para alias popup items */
+.alias-popup-item {
+  color: #fff;
+  border: none;
+  border-radius: 20px;
+  font-size: 1rem;
+  margin: 0.2rem 0px;
+  padding: 0.5rem 1rem;
+  word-wrap: break-word;
+  display: flex;
+  align-items: center;
+  gap: 0.1rem;
+}
+
+/* Clases para iconos de alias */
+.alias-icon-img {
+  height: 1.9rem;
+  margin-right: 0.2rem;
+  vertical-align: middle;
+}
+
+/* Clases para textarea oculto (copiar al portapapeles) */
+.hidden-textarea {
+  position: fixed;
+  left: -999999px;
+}
+
+/* Clases para mensajes de estado */
+.text-waiting {
+  color: orange;
+}
+
+.text-success-msg {
+  color: green;
+}
+
+.text-error-msg {
+  color: red;
+}
+
+/* Clases para botones de servicio seleccionados */
+.service-btn-selected {
+  transform: scale(0.98);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+}

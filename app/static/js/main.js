@@ -36,15 +36,19 @@ document.addEventListener("DOMContentLoaded", function () {
     const bgColor = button.dataset.bgColor; // Lee data-bg-color
     const gradientColor = button.dataset.gradientColor; // Lee data-gradient-color (con fallback en template)
     
+    // Usar CSS variables para cumplir CSP estricto (valores dinámicos de datos)
     if (bgColor && gradientColor) {
-      // Aplicar degradado - gradientColor ya tiene fallback en el template
-      button.style.background = `linear-gradient(135deg, ${bgColor} 0%, ${gradientColor} 100%)`;
+      // Aplicar degradado usando CSS variables
+      button.style.setProperty('--btn-bg-color', bgColor);
+      button.style.setProperty('--btn-gradient-color', gradientColor);
+      button.style.setProperty('background', 'linear-gradient(135deg, var(--btn-bg-color) 0%, var(--btn-gradient-color) 100%)');
     } else if (bgColor) {
       // Fallback a color sólido si solo hay bgColor
-      button.style.backgroundColor = bgColor;
+      button.style.setProperty('--btn-bg-color', bgColor);
+      button.style.setProperty('background-color', 'var(--btn-bg-color)');
     } else {
       // Fallback completo si no hay colores definidos
-      button.style.background = `linear-gradient(135deg, #764ba2 0%, #667eea 100%)`;
+      button.style.setProperty('background', 'linear-gradient(135deg, #764ba2 0%, #667eea 100%)');
     }
   });
 
@@ -139,7 +143,8 @@ document.addEventListener("DOMContentLoaded", function () {
       aliasPopupSearch.classList.remove("popup-visible");
     }
     if (aliasPopupOverlay) {
-      aliasPopupOverlay.style.display = "none";
+      aliasPopupOverlay.classList.add('d-none');
+      aliasPopupOverlay.classList.remove('d-block');
     }
   }
 
@@ -160,33 +165,24 @@ document.addEventListener("DOMContentLoaded", function () {
         const div = document.createElement("div");
         div.classList.add("alias-popup-item");
         try {
-            // Si hay dos colores, usar degradado; si no, usar color sólido
+            // Usar CSS variables para colores dinámicos (CSP compliant)
             if (al.alias_color2 && al.alias_color2 !== al.alias_color) {
-                div.style.background = `linear-gradient(135deg, ${al.alias_color || '#888'}, ${al.alias_color2})`;
+                div.style.setProperty('--alias-bg-color', al.alias_color || '#888');
+                div.style.setProperty('--alias-bg-color2', al.alias_color2);
+                div.style.setProperty('background', 'linear-gradient(135deg, var(--alias-bg-color), var(--alias-bg-color2))');
             } else {
-                div.style.backgroundColor = al.alias_color || '#888';
+                div.style.setProperty('--alias-bg-color', al.alias_color || '#888');
+                div.style.setProperty('background-color', 'var(--alias-bg-color)');
             }
         } catch (styleErr) {
-            div.style.backgroundColor = '#888';
+            div.style.setProperty('background-color', '#888');
         }
-        div.style.color = "#fff";
-        div.style.border = "none";
-        div.style.borderRadius = "20px";
-        div.style.fontSize = "1rem";
-        div.style.margin = "0.2rem 0px";
-        div.style.padding = "0.5rem 1rem";
-        div.style.wordWrap = "break-word";
-        div.style.display = "flex";
-        div.style.alignItems = "center";
-        div.style.gap = "0.1rem";
 
         if (al.alias_icons && al.alias_icons.length > 0) {
           al.alias_icons.forEach(iconName => {
             const img = document.createElement("img");
             img.src = decideIconPath(iconName);
-            img.style.height = "1.9rem";
-            img.style.marginRight = "0.2rem";
-            img.style.verticalAlign = "middle"; // Añadido para asegurar alineación
+            img.classList.add("alias-icon-img");
             div.appendChild(img);
           });
         }
@@ -198,7 +194,8 @@ document.addEventListener("DOMContentLoaded", function () {
     }
     // Mostrar el overlay y el popup
     if (aliasPopupOverlay) {
-      aliasPopupOverlay.style.display = "block";
+      aliasPopupOverlay.classList.remove('d-none');
+      aliasPopupOverlay.classList.add('d-block');
     }
     if(popup) popup.classList.add('popup-visible');
   }
@@ -239,7 +236,8 @@ document.addEventListener("DOMContentLoaded", function () {
       if (container) {
         const gif = container.querySelector(".gif-outside");
         if (gif) {
-          gif.style.display = "none";
+          gif.classList.add('d-none');
+          gif.classList.remove('d-block');
         }
       }
     });
@@ -253,7 +251,8 @@ document.addEventListener("DOMContentLoaded", function () {
     if (currentContainer) {
       const gif = currentContainer.querySelector(".gif-outside");
       if (gif) {
-        gif.style.display = "block";
+        gif.classList.remove('d-none');
+        gif.classList.add('d-block');
       }
     }
   }
@@ -271,10 +270,10 @@ document.addEventListener("DOMContentLoaded", function () {
       restoreButtonToNormal(currentSelectedButton);
     }
     
-    // Aplicar colores de clic persistentes al botón actual
-    button.style.background = `linear-gradient(135deg, ${clickColor1} 0%, ${clickColor2} 100%)`;
-    button.style.transform = 'scale(0.98)';
-    button.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.4)';
+    // Aplicar colores de clic persistentes al botón actual usando CSS variables
+    button.style.setProperty('--click-color1', clickColor1);
+    button.style.setProperty('--click-color2', clickColor2);
+    button.style.setProperty('background', 'linear-gradient(135deg, var(--click-color1) 0%, var(--click-color2) 100%)');
     button.classList.add('service-btn-selected');
     
     // Actualizar el botón actualmente seleccionado
@@ -286,9 +285,9 @@ document.addEventListener("DOMContentLoaded", function () {
     const originalBgColor = button.dataset.bgColor || '#764ba2';
     const originalGradientColor = button.dataset.gradientColor || '#667eea';
     
-    button.style.background = `linear-gradient(135deg, ${originalBgColor} 0%, ${originalGradientColor} 100%)`;
-    button.style.transform = 'scale(1)';
-    button.style.boxShadow = '';
+    button.style.setProperty('--btn-bg-color', originalBgColor);
+    button.style.setProperty('--btn-gradient-color', originalGradientColor);
+    button.style.setProperty('background', 'linear-gradient(135deg, var(--btn-bg-color) 0%, var(--btn-gradient-color) 100%)');
     button.classList.remove('service-btn-selected');
   }
 
@@ -315,7 +314,10 @@ document.addEventListener("DOMContentLoaded", function () {
         hiddenServiceId.value = firstId;
         firstBtn.classList.add("selected-service");
         const gif = firstVisibleContainer.querySelector(".gif-outside");
-        if (gif) gif.style.display = "block";
+        if (gif) {
+          gif.classList.remove('d-none');
+          gif.classList.add('d-block');
+        }
         
         // ✅ APLICAR EFECTO VISUAL DE SELECCIÓN
         applyClickEffect(firstBtn);
@@ -506,7 +508,7 @@ document.addEventListener("DOMContentLoaded", function () {
             // CASO 1: Hay ambos - mostrar solo FILTRO
             const mainContainer = document.createElement('div');
             mainContainer.classList.add('regex-result-container');
-            mainContainer.style.textAlign = 'center';
+            mainContainer.classList.add('text-center');
 
             // Añadir el contenido del filtro
             mainContainer.appendChild(mailContentContainer);
@@ -539,7 +541,7 @@ document.addEventListener("DOMContentLoaded", function () {
             // CASO 3: Solo hay filtro - mostrar FILTRO
             const mainContainer = document.createElement('div');
             mainContainer.classList.add('regex-result-container');
-            mainContainer.style.textAlign = 'center';
+            mainContainer.classList.add('text-center');
 
             // Añadir el contenido del filtro
             mainContainer.appendChild(mailContentContainer);
@@ -620,7 +622,7 @@ document.addEventListener("DOMContentLoaded", function () {
     // --- Construcción con DOM APIs y Clases CSS ---
     const divContainer = document.createElement('div');
     divContainer.classList.add('regex-result-container');
-    divContainer.style.textAlign = 'center'; // <--- CENTRAR CONTENIDO
+    divContainer.classList.add('text-center'); // <--- CENTRAR CONTENIDO
 
     const pCode = document.createElement('p');
     pCode.classList.add('regex-result-code');
@@ -634,7 +636,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
     // Crear contenedor para botones
     const buttonsContainer = document.createElement('div');
-    buttonsContainer.style.marginTop = '0.5rem'; // Espacio entre texto y botones
+    buttonsContainer.classList.add('mt-05'); // Espacio entre texto y botones
     // No es necesario centrar este div, ya que divContainer ya centra
 
     // Botón Copiar (siempre visible)
@@ -726,8 +728,7 @@ document.addEventListener("DOMContentLoaded", function () {
       return new Promise((resolve, reject) => {
         const textArea = document.createElement("textarea");
         textArea.value = text;
-        textArea.style.position = "fixed";
-        textArea.style.left = "-999999px";
+        textArea.classList.add("hidden-textarea");
         document.body.appendChild(textArea);
         textArea.focus();
         textArea.select();
@@ -914,7 +915,8 @@ document.addEventListener("DOMContentLoaded", function () {
           // Deshabilitar botón y limpiar mensaje anterior
           resendBtnCreds.disabled = true;
           resendMsgCreds.textContent = "Enviando...";
-          resendMsgCreds.style.color = "orange"; // Color de espera
+          resendMsgCreds.classList.add("text-waiting");
+          resendMsgCreds.classList.remove("text-success-msg", "text-error-msg");
           clearTimeout(resendCredsTimeout);
 
           fetch("/admin/resend_2fa_code_for_creds", {
@@ -933,7 +935,8 @@ document.addEventListener("DOMContentLoaded", function () {
           .then(data => {
               if (data.status === "ok") {
                   resendMsgCreds.textContent = "Código reenviado.";
-                  resendMsgCreds.style.color = "green";
+                  resendMsgCreds.classList.remove("text-waiting", "text-error-msg");
+                  resendMsgCreds.classList.add("text-success-msg");
                   // Iniciar cooldown (ej. 60 segundos)
                   let seconds = 60;
                   resendBtnCreds.textContent = `Reenviar (${seconds}s)`;
@@ -954,7 +957,8 @@ document.addEventListener("DOMContentLoaded", function () {
           })
           .catch(err => {
               resendMsgCreds.textContent = `Error: ${err.message}`;
-              resendMsgCreds.style.color = "red";
+              resendMsgCreds.classList.remove("text-waiting", "text-success-msg");
+              resendMsgCreds.classList.add("text-error-msg");
               resendBtnCreds.disabled = false; // Habilitar de nuevo si hay error
               resendBtnCreds.textContent = "Reenviar código";
           });
@@ -1028,7 +1032,7 @@ document.addEventListener("DOMContentLoaded", function () {
               const tempLink = document.createElement('a');
               tempLink.href = url;
               tempLink.setAttribute('download', 'proyectoimap_config.json');
-              tempLink.style.display = 'none';
+              tempLink.classList.add('d-none');
               document.body.appendChild(tempLink);
               tempLink.click();
               document.body.removeChild(tempLink);

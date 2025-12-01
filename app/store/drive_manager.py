@@ -605,6 +605,7 @@ def should_execute_simple(transfer):
         # NUEVA LÓGICA: Verificar si la hora fue modificada recientemente (últimos 30 minutos)
         # Si fue modificada recientemente Y la nueva hora ya pasó, ejecutar incluso si ya se ejecutó hoy
         hora_modificada_recientemente = False
+        minutos_desde_update = 0
         if transfer.updated_at:
             updated_at_utc = transfer.updated_at
             updated_at_col = utc_to_colombia(updated_at_utc)
@@ -613,45 +614,46 @@ def should_execute_simple(transfer):
             if time_since_update <= timedelta(minutes=30):
                 hora_modificada_recientemente = True
                 minutos_desde_update = time_since_update.seconds // 60
-                logger.debug(f"[DRIVE_TRANSFER] Transfer {transfer.id}: ⏰ Hora modificada hace {minutos_desde_update} minutos - Permitir ejecución aunque ya se ejecutó hoy")
         
-        # Verificar si ya se ejecutó hoy (pero permitir si la hora fue modificada recientemente)
+        # PRIORIDAD 1: Si la hora objetivo ya pasó hoy Y no se ha ejecutado hoy, ejecutar inmediatamente
+        if current_minutes >= target_minutes:
+            # Verificar si ya se ejecutó hoy
+            ya_ejecutado_hoy = False
+            if transfer.last_processed:
+                last_execution = transfer.last_processed
+                last_execution_col = utc_to_colombia(last_execution)
+                if current_date == last_execution_col.date():
+                    ya_ejecutado_hoy = True
+            
+            # Si NO se ha ejecutado hoy, ejecutar inmediatamente (sin importar si la hora fue modificada)
+            if not ya_ejecutado_hoy:
+                return True
+            
+            # Si ya se ejecutó hoy PERO la hora fue modificada recientemente, también ejecutar
+            if ya_ejecutado_hoy and hora_modificada_recientemente:
+                return True
+            
+            # Si ya se ejecutó hoy Y la hora NO fue modificada recientemente, no ejecutar
+            return False
+        
+        # PRIORIDAD 2: Verificar si ya se ejecutó hoy (pero permitir si la hora fue modificada recientemente)
         if transfer.last_processed and not hora_modificada_recientemente:
             last_execution = transfer.last_processed
             last_execution_col = utc_to_colombia(last_execution)
             
             # Si ya se ejecutó hoy Y la hora NO fue modificada recientemente, no ejecutar
             if current_date == last_execution_col.date():
-                logger.debug(f"[DRIVE_TRANSFER] Transfer {transfer.id}: Ya se ejecutó hoy ({last_execution_col.date()}), saltando ejecución")
                 return False
         
-        # LÓGICA MEJORADA: Si la hora objetivo ya pasó hoy, ejecutar inmediatamente
-        # (especialmente si la hora fue modificada recientemente)
-        if current_minutes >= target_minutes:
-            # La hora objetivo ya pasó hoy
-            if not transfer.last_processed or (transfer.last_processed and 
-                utc_to_colombia(transfer.last_processed).date() < current_date) or hora_modificada_recientemente:
-                # No se ha ejecutado hoy O la hora fue modificada recientemente, ejecutar inmediatamente
-                motivo = "hora modificada recientemente" if hora_modificada_recientemente else "hora objetivo ya pasó"
-                logger.info(f"[DRIVE_TRANSFER] Transfer {transfer.id}: ⚡ Ejecutando inmediatamente - {motivo}")
-                return True
-        
-        # Lógica normal: ejecutar si está dentro del margen de 5 minutos
+        # PRIORIDAD 3: Lógica normal: ejecutar si está dentro del margen de 5 minutos
         should_execute = time_diff <= 5
         
-        # Log para debugging (solo si está cerca de la hora o si la hora ya pasó)
-        if time_diff <= 30 or current_minutes >= target_minutes:  # Loggear si está cerca o si ya pasó
-            logger.debug(f"[DRIVE_TRANSFER] Transfer {transfer.id}: Hora actual: {current_time.strftime('%H:%M')}, "
-                       f"Objetivo: {target_time.strftime('%H:%M')}, Diff: {time_diff} min, Execute: {should_execute}")
-        
         if should_execute:
-            logger.info(f"[DRIVE_TRANSFER] Transfer {transfer.id}: ✅ Ejecutando transferencia")
             return True
         else:
             return False
         
     except Exception as e:
-        logger.error(f"[DRIVE_TRANSFER] Error en should_execute_simple para transfer {transfer.id}: {str(e)}", exc_info=True)
         return False
 
 def execute_transfer_simple(transfer, app):
@@ -662,8 +664,6 @@ def execute_transfer_simple(transfer, app):
     drive_processed_id = transfer.drive_processed_id
     
     try:
-        logger.info(f"[DRIVE_TRANSFER] Iniciando transferencia {transfer_id}: {drive_original_id[:20]}... -> {drive_processed_id[:20]}...")
-        
         # Crear servicio (fuera del contexto de app para evitar problemas)
         service = DriveTransferService(credentials_json)
         
@@ -672,7 +672,6 @@ def execute_transfer_simple(transfer, app):
             drive_original_id,
             drive_processed_id
         )
-        logger.info(f"[DRIVE_TRANSFER] Transferencia {transfer_id} completada. Archivos movidos: {result.get('files_moved', 0)}, Fallidos: {result.get('files_failed', 0)}")
         
         # Actualizar base de datos dentro del contexto de app
         with app.app_context():
@@ -683,13 +682,10 @@ def execute_transfer_simple(transfer, app):
                 transfer_obj.consecutive_errors = 0
                 transfer_obj.last_error = None
                 db.session.commit()
-            else:
-                logger.error(f"[DRIVE_TRANSFER] No se encontró transfer {transfer_id} en la base de datos")
         
         return result
         
     except Exception as e:
-        logger.error(f"[DRIVE_TRANSFER] ❌ Error ejecutando transferencia {transfer_id}: {str(e)}", exc_info=True)
         # Actualizar contador de errores
         try:
             with app.app_context():
@@ -698,14 +694,20 @@ def execute_transfer_simple(transfer, app):
                     transfer_obj.consecutive_errors = (transfer_obj.consecutive_errors or 0) + 1
                     transfer_obj.last_error = str(e)[:500]  # Limitar longitud del error
                     db.session.commit()
-        except Exception as update_error:
-            logger.error(f"[DRIVE_TRANSFER] Error actualizando contador de errores: {str(update_error)}", exc_info=True)
+        except Exception:
+            pass
         
         # Re-lanzar la excepción para que la ruta pueda manejarla
         raise
 
 def calculate_smart_wait_time(transfers):
-    """Calcula tiempo de espera inteligente basado en las transferencias"""
+    """Calcula tiempo de espera inteligente basado en las transferencias
+    
+    Estrategia:
+    - Si la próxima ejecución está muy lejos (> 1 hora), esperar hasta 1 hora máximo
+    - Si la próxima ejecución está cerca (< 1 hora), esperar menos tiempo (mínimo 60 segundos)
+    - Cada configuración es independiente, se toma la más próxima
+    """
     try:
         if not transfers:
             return 3600  # 1 hora si no hay transferencias
@@ -713,32 +715,62 @@ def calculate_smart_wait_time(transfers):
         # Usar módulo centralizado de timezone
         now_colombia = get_colombia_datetime()
         current_time = now_colombia.time()
+        current_date = now_colombia.date()
         
-        min_wait = 3600  # Mínimo 1 hora
+        min_wait_seconds = None
         
         for transfer in transfers:
             target_time = transfer.processing_time
-            time_diff = abs((current_time.hour * 60 + current_time.minute) - 
-                          (target_time.hour * 60 + target_time.minute))
+            current_minutes = current_time.hour * 60 + current_time.minute
+            target_minutes = target_time.hour * 60 + target_time.minute
             
-            # Si está extremadamente cerca (menos de 30 minutos), verificar cada 2 minutos
-            if time_diff <= 30:
-                min_wait = min(min_wait, 120)  # 2 minutos
-            # Si está muy cerca (menos de 60 minutos), verificar cada 5 minutos
-            elif time_diff <= 60:
-                min_wait = min(min_wait, 300)  # 5 minutos
-            # Si está cerca (menos de 120 minutos), verificar cada 20 minutos
-            elif time_diff <= 120:
-                min_wait = min(min_wait, 1200)  # 20 minutos
-            # Si está lejos (más de 120 minutos), verificar cada 1 hora
+            # Calcular minutos hasta la próxima ejecución (considerando si es hoy o mañana)
+            if target_minutes > current_minutes:
+                # La hora objetivo es hoy mismo
+                minutes_until = target_minutes - current_minutes
             else:
-                min_wait = min(min_wait, 3600)  # 1 hora
+                # La hora objetivo es mañana
+                minutes_until = (24 * 60) - current_minutes + target_minutes
+            
+            # Verificar si ya se ejecutó hoy
+            ya_ejecutado_hoy = False
+            if transfer.last_processed:
+                last_execution_col = utc_to_colombia(transfer.last_processed)
+                if current_date == last_execution_col.date():
+                    ya_ejecutado_hoy = True
+            
+            # Calcular tiempo de espera según la proximidad
+            if minutes_until <= 5:
+                # Muy cerca (menos de 5 minutos) - verificar cada 60 segundos
+                wait_seconds = 60
+            elif minutes_until <= 30:
+                # Cerca (menos de 30 minutos) - verificar cada 2 minutos
+                wait_seconds = 120
+            elif minutes_until <= 60:
+                # Moderadamente cerca (menos de 1 hora) - verificar cada 5 minutos
+                wait_seconds = 300
+            elif minutes_until <= 120:
+                # Lejos pero no tanto (menos de 2 horas) - verificar cada 20 minutos
+                wait_seconds = 1200
+            else:
+                # Muy lejos (más de 2 horas) - verificar cada 1 hora máximo
+                wait_seconds = 3600
+            
+            # Si la hora ya pasó hoy y no se ejecutó, verificar más frecuentemente
+            if current_minutes >= target_minutes and not ya_ejecutado_hoy:
+                wait_seconds = min(wait_seconds, 60)  # Máximo 60 segundos
+            
+            # Tomar el mínimo entre todas las transferencias (la más próxima)
+            if min_wait_seconds is None or wait_seconds < min_wait_seconds:
+                min_wait_seconds = wait_seconds
         
-        return min_wait
+        # Asegurar mínimo de 60 segundos y máximo de 1 hora
+        if min_wait_seconds is None:
+            return 3600
+        return max(60, min(min_wait_seconds, 3600))
         
     except Exception as e:
-        logger.error(f"[DRIVE_TRANSFER] Error calculando tiempo de espera: {str(e)}")
-        return 300  # 5 minutos en caso de error
+        return 3600  # 1 hora en caso de error
 
 def start_simple_drive_loop():
     """Inicia el loop simple basado en tu código que funciona"""
@@ -750,7 +782,6 @@ def start_simple_drive_loop():
         """Loop simple como tu código que funciona"""
         # Crear contexto de aplicación Flask
         app = create_app()
-        logger.info("[DRIVE_TRANSFER] 🚀 Loop de transferencia de Drive iniciado")
         
         while True:
             try:
@@ -762,30 +793,24 @@ def start_simple_drive_loop():
                     active_transfers = DriveTransfer.query.filter_by(is_active=True).all()
                     
                     if not active_transfers:
-                        logger.debug("[DRIVE_TRANSFER] No hay transferencias activas, esperando 1 hora...")
-                        time.sleep(3600)  # Esperar 1 hora si no hay transferencias
+                        time.sleep(60)  # Esperar 1 minuto para detectar cambios rápido
                         continue
-                    
-                    logger.debug(f"[DRIVE_TRANSFER] Verificando {len(active_transfers)} transferencia(s) activa(s)")
                     
                     # Verificar cada transferencia
                     for transfer in active_transfers:
                         if should_execute_simple(transfer):
                             execute_transfer_simple(transfer, app)
                 
-                # Calcular tiempo de espera inteligente
+                # Calcular tiempo de espera inteligente (ya optimizado internamente)
                 wait_time = calculate_smart_wait_time(active_transfers)
-                logger.debug(f"[DRIVE_TRANSFER] Esperando {wait_time} segundos ({wait_time/60:.1f} minutos) hasta la próxima verificación")
                 time.sleep(wait_time)
                 
             except Exception as e:
-                logger.error(f"[DRIVE_TRANSFER] Error en el loop principal: {str(e)}", exc_info=True)
-                time.sleep(3600)  # Esperar 1 hora antes de reintentar
+                time.sleep(60)  # Esperar 1 minuto antes de reintentar
     
     # Iniciar loop en thread separado
     thread = threading.Thread(target=simple_drive_loop, daemon=True)
     thread.start()
-    logger.info("[DRIVE_TRANSFER] Thread de loop iniciado")
 
 # ==================== SISTEMA DE LIMPIEZA PROGRAMADA ====================
 

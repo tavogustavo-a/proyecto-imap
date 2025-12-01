@@ -23,12 +23,14 @@ document.addEventListener('DOMContentLoaded', function() {
         const credentialsJson = document.getElementById('drive-credentials-json').value;
         const originalId = document.getElementById('drive-original-id').value;
         const destinationId = document.getElementById('drive-destination').value;
+        const deletedId = document.getElementById('drive-deleted').value || ''; // Campo opcional
         const processingTime = document.getElementById('drive-processing-time').value;
         
         const data = {
             drive_credentials_json: credentialsJson,
             drive_original_id: originalId,
             drive_destination: destinationId,
+            drive_deleted: deletedId,
             drive_processing_time: processingTime
         };
         
@@ -97,7 +99,6 @@ document.addEventListener('DOMContentLoaded', function() {
             }
             
         } catch (error) {
-            console.error('Error:', error);
             showStatus('Error de conexión', false);
         }
     });
@@ -145,7 +146,6 @@ document.addEventListener('DOMContentLoaded', function() {
             }
             
         } catch (error) {
-            console.error('Error:', error);
             showStatus('Error de conexión', false);
         }
     });
@@ -194,7 +194,7 @@ document.addEventListener('DOMContentLoaded', function() {
             }
             
         } catch (error) {
-            console.error('Error cargando configuraciones:', error);
+            // Error silencioso
         }
     }
 });
@@ -296,15 +296,23 @@ async function loadDriveTransfersTable() {
                     
                     // Estado
                     const td4 = document.createElement('td');
-                    const toggleBtn = document.createElement('button');
-                    toggleBtn.className = `action-btn ${transfer.is_active ? 'action-red' : 'action-green'} drive-transfer-toggle`;
-                    toggleBtn.textContent = transfer.is_active ? 'OFF' : 'ON';
-                    toggleBtn.dataset.transferId = transfer.id;
-                    td4.appendChild(toggleBtn);
+                    // Indicador visual de estado
+                    const statusBadge = document.createElement('span');
+                    statusBadge.className = transfer.is_active ? 'badge badge-success' : 'badge badge-danger';
+                    statusBadge.textContent = transfer.is_active ? 'ACTIVO' : 'INACTIVO';
+                    td4.appendChild(statusBadge);
                     tr.appendChild(td4);
                     
                     // Acciones
                     const td5 = document.createElement('td');
+                    
+                    // Botón Toggle (Power)
+                    const toggleBtn = document.createElement('button');
+                    toggleBtn.className = `btn-panel ${transfer.is_active ? 'btn-red' : 'btn-green'} btn-table-action drive-transfer-toggle`;
+                    toggleBtn.dataset.transferId = transfer.id;
+                    toggleBtn.title = transfer.is_active ? 'Desactivar transferencia' : 'Activar transferencia';
+                    toggleBtn.innerHTML = '<i class="fas fa-power-off"></i>';
+                    td5.appendChild(toggleBtn);
                     
                     const testBtn = document.createElement('button');
                     testBtn.className = 'btn-panel btn-blue btn-table-action drive-transfer-test';
@@ -398,7 +406,6 @@ async function loadDriveTransfersTable() {
             }
             
         } catch (error) {
-            console.error('Error cargando tabla de Drive Transfer:', error);
             document.getElementById('drive-transfers-table-container').innerHTML = 
                 '<div class="text-danger text-center my-3">Error al cargar las configuraciones.</div>';
         }
@@ -484,7 +491,6 @@ window.toggleDriveTransfer = async function(transferId) {
         }
         
     } catch (error) {
-        console.error('Error:', error);
         showDriveStatus('Error de conexión', false);
     }
 }
@@ -527,7 +533,6 @@ window.testDriveTransferConnection = async function(transferId) {
         }
         
     } catch (error) {
-        console.error('Error:', error);
         showDriveStatus('Error de conexión', false);
     }
 }
@@ -564,7 +569,6 @@ window.editDriveTransfer = async function(transferId) {
         document.getElementById('drive-edit-modal').classList.remove('d-none');
         
     } catch (error) {
-        console.error('Error:', error);
         showDriveStatus('Error al cargar configuración', false);
     }
 }
@@ -580,33 +584,25 @@ window.executeDriveTransferNow = async function(transferId) {
         const csrfToken = document.querySelector('meta[name="csrf_token"]')?.content || '';
         
         showDriveStatus('Ejecutando transferencia...', true);
-        console.log(`[DRIVE_TRANSFER] Iniciando ejecución manual para transfer ${transferId}`);
         
         const response = await fetch(`/tienda/admin/drive_transfers/${transferId}/execute_now`, {
             method: 'POST',
             headers: {
-                'X-CSRFToken': csrfToken,
-                'Content-Type': 'application/json'
+                'X-CSRFToken': csrfToken
             }
         });
         
-        console.log(`[DRIVE_TRANSFER] Respuesta recibida. Status: ${response.status}`);
-        
         if (!response.ok) {
-            // Intentar parsear el error
             try {
                 const errorResult = await response.json();
-                console.error('[DRIVE_TRANSFER] Error en respuesta:', errorResult);
                 showDriveStatus(`Error ${response.status}: ${errorResult.error || 'Error desconocido'}`, false);
             } catch (e) {
-                console.error('[DRIVE_TRANSFER] Error parseando respuesta:', e);
                 showDriveStatus(`Error ${response.status}: No se pudo obtener detalles del error`, false);
             }
             return;
         }
         
         const result = await response.json();
-        console.log('[DRIVE_TRANSFER] Resultado:', result);
         
         if (result.success) {
             let message = result.message || 'Transferencia ejecutada exitosamente';
@@ -620,12 +616,10 @@ window.executeDriveTransferNow = async function(transferId) {
                 window.loadDriveTransfersTable();
             }, 1000);
         } else {
-            console.error('[DRIVE_TRANSFER] Error en resultado:', result);
             showDriveStatus(`Error: ${result.error || 'Error desconocido'}`, false);
         }
     } catch (error) {
-        console.error('[DRIVE_TRANSFER] Error ejecutando transferencia:', error);
-        showDriveStatus(`Error de conexión: ${error.message}. Verifica la consola para más detalles.`, false);
+        showDriveStatus(`Error de conexión: ${error.message}`, false);
     }
 };
 
@@ -655,7 +649,6 @@ window.deleteDriveTransfer = async function(transferId) {
             }
         
     } catch (error) {
-        console.error('Error:', error);
         showDriveStatus('Error de conexión', false);
     }
 }
@@ -743,7 +736,6 @@ function setupDriveEditModal() {
             }
             
         } catch (error) {
-            console.error('Error:', error);
             showDriveStatus('Error de conexión', false);
         }
     });
@@ -908,7 +900,6 @@ async function startCleanup(transferId, daysOld, scheduleTime) {
         if (error.name === 'AbortError') {
             showDriveStatus('Limpieza detenida por el usuario', false);
         } else {
-            console.error('Error:', error);
             showDriveStatus('Error de conexión', false);
         }
         resetCleanupModal();
@@ -935,11 +926,20 @@ function updateCleanupProgress(percentage, filesProcessed, filesDeleted) {
     const filesProcessedSpan = document.getElementById('cleanup-files-processed');
     const filesDeletedSpan = document.getElementById('cleanup-files-deleted');
     
-    progressBar.style.width = `${percentage}%`;
+    // Usar setProperty para cumplir CSP estricto
+    if (progressBar) {
+        progressBar.style.setProperty('width', `${percentage}%`);
     progressBar.setAttribute('aria-valuenow', percentage);
+    }
+    if (progressText) {
     progressText.textContent = `${Math.round(percentage)}%`;
+    }
+    if (filesProcessedSpan) {
     filesProcessedSpan.textContent = filesProcessed;
+    }
+    if (filesDeletedSpan) {
     filesDeletedSpan.textContent = filesDeleted;
+    }
 }
 
 // Función para resetear el modal de limpieza
@@ -1005,7 +1005,11 @@ class DriveGallery {
             this.galleries[apiId].currentPhotoPage = 0;
             this.renderPhotos(apiId);
         } catch (error) {
-            galleryEl.innerHTML = `<div class='text-danger text-center my-3'>Error al cargar las fotos: ${error.message}</div>`;
+            const errorDiv = document.createElement('div');
+            errorDiv.className = 'text-danger text-center my-3';
+            errorDiv.textContent = 'Error al cargar las fotos: ' + escapeHtml(error.message);
+            galleryEl.innerHTML = '';
+            galleryEl.appendChild(errorDiv);
         } finally {
             btn.disabled = false;
         }
@@ -1029,7 +1033,11 @@ class DriveGallery {
             this.galleries[apiId].currentVideoPage = 0;
             this.renderVideos(apiId);
         } catch (error) {
-            galleryEl.innerHTML = `<div class='text-danger text-center my-3'>Error al cargar los videos: ${error.message}</div>`;
+            const errorDiv = document.createElement('div');
+            errorDiv.className = 'text-danger text-center my-3';
+            errorDiv.textContent = 'Error al cargar los videos: ' + escapeHtml(error.message);
+            galleryEl.innerHTML = '';
+            galleryEl.appendChild(errorDiv);
         } finally {
             btn.disabled = false;
         }
@@ -1322,8 +1330,8 @@ class DriveGallery {
                                 navigator.share({
                                     files: [file],
                                     title: filename
-                                }).catch(shareErr => {
-                                    console.error('Error compartiendo:', shareErr);
+                                }).catch(() => {
+                                    // Error silencioso
                                 });
                             }
                         }
@@ -1337,7 +1345,6 @@ class DriveGallery {
                     }, 2000);
                 })
                 .catch(error => {
-                    console.error('Error descargando archivo:', error);
                     if (loadingMsg.parentNode) document.body.removeChild(loadingMsg);
                     
                     // Mostrar mensaje de error al usuario
@@ -1384,7 +1391,6 @@ class DriveGallery {
                         text: `Mira esto: ${fileName}`,
                         url: shareUrl
                     }).catch(err => {
-                        console.log('Error compartiendo:', err);
                         // Fallback: copiar al portapapeles
                         this.copyToClipboard(shareUrl);
                     });
@@ -1482,7 +1488,7 @@ class DriveGallery {
                             return;
                         }
                     } catch (e) {
-                        console.log('Error compartiendo a WhatsApp:', e);
+                        // Error silencioso
                     }
                 }
                 // Fallback: abrir WhatsApp Web (pero esto compartirá el link, no el archivo)
@@ -1500,7 +1506,7 @@ class DriveGallery {
                             return;
                         }
                     } catch (e) {
-                        console.log('Error compartiendo a Telegram:', e);
+                        // Error silencioso
                     }
                 }
                 // Fallback: mostrar mensaje
@@ -1517,14 +1523,13 @@ class DriveGallery {
                             return;
                         }
                     } catch (e) {
-                        console.log('Error compartiendo:', e);
+                        // Error silencioso
                     }
                 }
                 alert('La función de compartir no está disponible en este navegador.');
             }
             
         } catch (error) {
-            console.error('Error compartiendo archivo:', error);
             if (loadingMsg.parentNode) document.body.removeChild(loadingMsg);
             
             // Mostrar mensaje de error
@@ -1556,7 +1561,7 @@ class DriveGallery {
                 document.execCommand('copy');
                 alert('Enlace copiado al portapapeles');
             } catch (err) {
-                console.error('Error copiando:', err);
+                // Error silencioso
             }
             document.body.removeChild(textarea);
         }
@@ -1705,8 +1710,7 @@ class DriveGallery {
             const proxyUrl = `/tienda/drive/proxy?file_id=${item.id}&api_id=${apiId}&type=image`;
             
             // Limpiar eventos anteriores y mensajes de error
-            imageEl.onload = null;
-            imageEl.onerror = null;
+            // Nota: Los event listeners se limpian automáticamente al reemplazar con addEventListener
             const existingError = mediaContainer?.querySelector('.viewer-error');
             if (existingError) existingError.remove();
             
@@ -1722,9 +1726,8 @@ class DriveGallery {
                 hideLoading();
                 if (mediaContainer) {
                     const errorMsg = document.createElement('div');
-                    errorMsg.className = 'viewer-error';
+                    errorMsg.className = 'viewer-error viewer-error-message';
                     errorMsg.textContent = message;
-                    errorMsg.style.cssText = 'color: #fff; padding: 20px; text-align: center; font-size: 1.1rem;';
                     mediaContainer.appendChild(errorMsg);
                 }
             };
@@ -1747,35 +1750,35 @@ class DriveGallery {
             let loadTimeout;
             if (isMobile) {
                 loadTimeout = setTimeout(() => {
-                    if (!imageEl.complete) {
-                        console.warn('Imagen tardando en cargar, verificando...');
-                    }
+                    // Timeout para móviles con conexión lenta
                 }, 10000);
             }
             
-            // Cuando la imagen carga exitosamente
-            imageEl.onload = () => {
+            // Cuando la imagen carga exitosamente (CSP-compliant)
+            const handleImageLoad = () => {
                 if (loadTimeout) clearTimeout(loadTimeout);
                 hideLoading();
-                // Forzar repaint en algunos navegadores móviles
                 imageEl.classList.add('viewer-image-fade-in');
+                imageEl.removeEventListener('load', handleImageLoad);
             };
             
-            // Si falla, intentar con URL directa de Drive como fallback
-            imageEl.onerror = function() {
+            // Si falla, intentar con URL directa de Drive como fallback (CSP-compliant)
+            let errorAttempts = 0;
+            const handleImageError = function() {
                 if (loadTimeout) clearTimeout(loadTimeout);
-                this.onerror = null; // Evitar loop infinito
-                console.warn('Proxy falló, intentando URL directa de Drive');
+                errorAttempts++;
                 
-                // Intentar con URL directa de Drive
-                const fallbackUrl = `https://drive.google.com/uc?export=view&id=${item.id}`;
-                this.src = fallbackUrl;
-                
-                // Si también falla, mostrar error
-                this.onerror = () => {
+                if (errorAttempts === 1) {
+                    const fallbackUrl = `https://drive.google.com/uc?export=view&id=${item.id}`;
+                    this.src = fallbackUrl;
+                } else {
+                    this.removeEventListener('error', handleImageError);
                     showError('No se pudo cargar la imagen. Verifica tu conexión.');
-                };
+                }
             };
+            
+            imageEl.addEventListener('load', handleImageLoad);
+            imageEl.addEventListener('error', handleImageError);
         } else {
             // Para videos, usar proxy del backend con mejor compatibilidad móvil
             const proxyUrl = `/tienda/drive/proxy?file_id=${item.id}&api_id=${apiId}&type=video`;
@@ -1784,10 +1787,7 @@ class DriveGallery {
             videoEl.pause();
             videoEl.src = '';
             videoEl.load();
-            videoEl.onerror = null;
-            videoEl.onloadeddata = null;
-            videoEl.oncanplay = null;
-            videoEl.onloadedmetadata = null;
+            // Nota: Los event listeners se limpian automáticamente al reemplazar con addEventListener
             const existingError = mediaContainer?.querySelector('.viewer-error');
             if (existingError) existingError.remove();
             
@@ -1827,9 +1827,7 @@ class DriveGallery {
             let loadTimeout;
             if (isMobile) {
                 loadTimeout = setTimeout(() => {
-                    if (videoEl.readyState < 2) {
-                        console.warn('Video tardando en cargar, verificando...');
-                    }
+                    // Timeout para móviles con conexión lenta
                 }, 15000);
             }
             
@@ -1839,39 +1837,34 @@ class DriveGallery {
                 hideLoading();
             };
             
-            videoEl.onloadedmetadata = handleVideoLoad;
-            videoEl.onloadeddata = handleVideoLoad;
-            videoEl.oncanplay = handleVideoLoad;
-            videoEl.oncanplaythrough = handleVideoLoad;
+            // Event listeners para carga exitosa (CSP-compliant)
+            videoEl.addEventListener('loadedmetadata', handleVideoLoad, { once: true });
+            videoEl.addEventListener('loadeddata', handleVideoLoad, { once: true });
+            videoEl.addEventListener('canplay', handleVideoLoad, { once: true });
+            videoEl.addEventListener('canplaythrough', handleVideoLoad, { once: true });
             
-            // Manejar errores de carga de video
-            videoEl.onerror = function() {
+            // Manejar errores de carga de video (CSP-compliant)
+            let videoErrorAttempts = 0;
+            const handleVideoError = function() {
                 if (loadTimeout) clearTimeout(loadTimeout);
-                const error = this.error;
-                console.error('Error cargando video desde proxy:', item.name, error);
+                videoErrorAttempts++;
                 
-                // Limpiar eventos para evitar loops
-                this.onerror = null;
-                this.onloadeddata = null;
-                this.oncanplay = null;
-                
-                // Intentar con URL directa de Drive como fallback
-                console.warn('Proxy falló, intentando URL directa de Drive');
-                const fallbackUrl = `https://drive.google.com/uc?export=download&id=${item.id}`;
-                this.src = fallbackUrl;
-                this.load();
-                
-                // Si también falla, mostrar error
-                this.onerror = () => {
+                if (videoErrorAttempts === 1) {
+                    const fallbackUrl = `https://drive.google.com/uc?export=download&id=${item.id}`;
+                    this.src = fallbackUrl;
+                    this.load();
+                } else {
+                    this.removeEventListener('error', handleVideoError);
                     showError('No se pudo cargar el video. Verifica tu conexión.');
-                };
+                }
             };
+            
+            videoEl.addEventListener('error', handleVideoError);
             
             // Forzar carga del video
             try {
                 videoEl.load();
             } catch (e) {
-                console.error('Error al cargar video:', e);
                 showError('Error al iniciar la carga del video');
             }
         }

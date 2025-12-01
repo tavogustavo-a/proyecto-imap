@@ -7118,8 +7118,12 @@ def save_push_subscription():
 @store_bp.route('/admin/drive_transfers', methods=['GET'])
 @admin_required
 def list_drive_transfers():
+    from app.utils.timezone import get_colombia_datetime
+    server_time = get_colombia_datetime()
+    
     transfers = DriveTransfer.query.all()
     return jsonify({
+            'server_time_colombia': server_time.strftime('%I:%M %p'),
             'transfers': [
                 {
                     'id': t.id,
@@ -7255,17 +7259,11 @@ def update_drive_transfer(transfer_id):
 @admin_required
 def execute_drive_transfer_now(transfer_id):
     """Ejecuta una transferencia de Drive manualmente (para pruebas)"""
-    import logging
-    logger = logging.getLogger(__name__)
-    
     try:
-        logger.info(f"[DRIVE_TRANSFER] Ejecución manual iniciada para transfer {transfer_id}")
-        
         transfer = DriveTransfer.query.get_or_404(transfer_id)
         
         if not transfer.is_active:
-            logger.warning(f"[DRIVE_TRANSFER] Transfer {transfer_id} está inactivo (muestra ON verde)")
-            return jsonify({'success': False, 'error': 'La transferencia no está activa (debe mostrar OFF rojo)'}), 400
+            return jsonify({'success': False, 'error': 'La transferencia no está activa'}), 400
         
         from .drive_manager import DriveTransferService, execute_transfer_simple
         from app import create_app
@@ -7296,7 +7294,6 @@ def execute_drive_transfer_now(transfer_id):
         })
         
     except Exception as e:
-        logger.error(f"[DRIVE_TRANSFER] ❌ Error en ejecución manual: {str(e)}", exc_info=True)
         return jsonify({'success': False, 'error': f'Error al ejecutar transferencia: {str(e)}'}), 500
 
 @store_bp.route('/admin/drive_transfers/<int:transfer_id>/toggle', methods=['POST'])
@@ -8595,6 +8592,67 @@ def sms_webhook():
         from twilio.twiml.messaging_response import MessagingResponse
         response = MessagingResponse()
         return str(response), 200, {'Content-Type': 'text/xml'}
+
+@store_bp.route('/admin/sms/cleanup', methods=['POST'])
+@admin_required
+def cleanup_sms_messages():
+    """Elimina mensajes SMS antiguos (más de 15 minutos) y huérfanos manualmente"""
+    try:
+        from datetime import datetime, timedelta
+        
+        # Calcular la fecha límite: mensajes mayores a 15 minutos
+        time_limit = datetime.utcnow() - timedelta(minutes=15)
+        
+        # Buscar mensajes antiguos
+        old_messages = SMSMessage.query.filter(
+            SMSMessage.created_at < time_limit
+        ).all()
+        
+        # Buscar mensajes huérfanos (sin sms_config asociado)
+        orphan_messages = SMSMessage.query.filter(
+            ~SMSMessage.sms_config_id.in_(
+                db.session.query(SMSConfig.id)
+            )
+        ).all()
+        
+        # Combinar ambos tipos de mensajes a eliminar (sin duplicados)
+        messages_to_delete = list(set(old_messages + orphan_messages))
+        
+        deleted_count = 0
+        orphan_count = 0
+        
+        if messages_to_delete:
+            for msg in messages_to_delete:
+                # Verificar si es huérfano
+                if msg not in old_messages:
+                    orphan_count += 1
+                db.session.delete(msg)
+                deleted_count += 1
+            
+            db.session.commit()
+            
+            return jsonify({
+                'success': True,
+                'message': f'Se eliminaron {deleted_count} mensajes SMS ({len(old_messages)} antiguos, {orphan_count} huérfanos).',
+                'deleted_count': deleted_count,
+                'old_count': len(old_messages),
+                'orphan_count': orphan_count
+            }), 200
+        else:
+            return jsonify({
+                'success': True,
+                'message': 'No hay mensajes SMS antiguos o huérfanos para eliminar.',
+                'deleted_count': 0,
+                'old_count': 0,
+                'orphan_count': 0
+            }), 200
+            
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({
+            'success': False,
+            'message': f'Error al limpiar mensajes SMS: {str(e)}'
+        }), 500
 
 @store_bp.route('/sms/my-messages', methods=['GET'])
 def get_my_sms_messages():

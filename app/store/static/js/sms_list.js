@@ -87,6 +87,54 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
 
+    // Event listener para botón de limpieza de mensajes
+    const btnCleanupSMS = document.getElementById('btn-cleanup-sms');
+    if (btnCleanupSMS) {
+        btnCleanupSMS.addEventListener('click', function() {
+            if (!confirm('¿Estás seguro de que deseas eliminar todos los mensajes SMS antiguos (más de 15 minutos) y huérfanos? Esta acción no se puede deshacer.')) {
+                return;
+            }
+            
+            // Deshabilitar botón mientras se procesa
+            btnCleanupSMS.disabled = true;
+            const originalHTML = btnCleanupSMS.innerHTML;
+            btnCleanupSMS.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+            
+            fetch('/tienda/admin/sms/cleanup', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': getCsrfToken()
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    // Mostrar mensaje de éxito
+                    alert(data.message);
+                    
+                    // Recargar mensajes si hay un número seleccionado
+                    if (currentConfigId) {
+                        loadMessages(currentConfigId);
+                    } else {
+                        // Si no hay número seleccionado, recargar todos los mensajes
+                        loadAllMessages();
+                    }
+                } else {
+                    alert('Error: ' + (data.message || 'No se pudieron eliminar los mensajes'));
+                }
+            })
+            .catch(err => {
+                alert('Error de conexión: ' + err.message);
+            })
+            .finally(() => {
+                // Restaurar botón
+                btnCleanupSMS.disabled = false;
+                btnCleanupSMS.innerHTML = originalHTML;
+            });
+        });
+    }
+
     document.getElementById('btn-refresh-messages').addEventListener('click', function() {
         // Verificar configuraciones SMS antes de buscar (si la función está disponible)
         if (typeof window.checkSMSConfigsAndToggleForm === 'function') {
