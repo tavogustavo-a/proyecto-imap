@@ -514,29 +514,42 @@ def main():
             next_run_time=datetime.now(timezone.utc) + timedelta(minutes=1, seconds=30) 
         )
 
-        # Tarea para limpiar mensajes SMS antiguos (mayores a 20 minutos)
+        # Tarea para limpiar mensajes SMS antiguos (mayores a 15 minutos) y huérfanos
         def cleanup_old_sms_messages_job():
-            """Elimina mensajes SMS mayores a 20 minutos de la base de datos"""
+            """Elimina mensajes SMS mayores a 15 minutos y huérfanos de la base de datos"""
             with app.app_context():
                 try:
-                    from app.store.models import SMSMessage
+                    from app.store.models import SMSMessage, SMSConfig
+                    from sqlalchemy import and_
                     
-                    # Calcular la fecha límite: mensajes mayores a 20 minutos
-                    time_limit = datetime.utcnow() - timedelta(minutes=20)
+                    # Calcular la fecha límite: mensajes mayores a 15 minutos
+                    time_limit = datetime.utcnow() - timedelta(minutes=15)
                     
                     # Buscar mensajes antiguos
                     old_messages = SMSMessage.query.filter(
                         SMSMessage.created_at < time_limit
                     ).all()
                     
+                    # Buscar mensajes huérfanos (sin sms_config asociado)
+                    # Usar LEFT JOIN para encontrar mensajes cuyo sms_config_id no existe en sms_configs
+                    orphan_messages = db.session.query(SMSMessage).outerjoin(
+                        SMSConfig, SMSMessage.sms_config_id == SMSConfig.id
+                    ).filter(
+                        SMSConfig.id.is_(None)
+                    ).all()
+                    
+                    # Combinar ambos tipos de mensajes a eliminar (sin duplicados)
+                    messages_to_delete = list(set(old_messages + orphan_messages))
+                    
                     # Solo eliminar si hay mensajes
-                    if old_messages:
-                        count = len(old_messages)
-                        for msg in old_messages:
+                    if messages_to_delete:
+                        count = len(messages_to_delete)
+                        orphan_count = len(orphan_messages)
+                        for msg in messages_to_delete:
                             db.session.delete(msg)
                         db.session.commit()
                         # Log opcional (puedes comentarlo si no quieres logs)
-                        # print(f"✅ Eliminados {count} mensajes SMS antiguos (mayores a 20 minutos)")
+                        # print(f"✅ Eliminados {count} mensajes SMS ({count - orphan_count} antiguos, {orphan_count} huérfanos)")
                     # Si no hay mensajes, no hacer nada (como solicitó el usuario)
                     
                 except Exception as e:

@@ -8609,10 +8609,12 @@ def cleanup_sms_messages():
         ).all()
         
         # Buscar mensajes huérfanos (sin sms_config asociado)
-        orphan_messages = SMSMessage.query.filter(
-            ~SMSMessage.sms_config_id.in_(
-                db.session.query(SMSConfig.id)
-            )
+        # Usar LEFT JOIN para encontrar mensajes cuyo sms_config_id no existe en sms_configs
+        from sqlalchemy import and_
+        orphan_messages = db.session.query(SMSMessage).outerjoin(
+            SMSConfig, SMSMessage.sms_config_id == SMSConfig.id
+        ).filter(
+            SMSConfig.id.is_(None)
         ).all()
         
         # Combinar ambos tipos de mensajes a eliminar (sin duplicados)

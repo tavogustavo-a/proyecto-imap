@@ -651,7 +651,7 @@ noscript p {
 
 /* Otras utilidades comunes */
 .d-none { display: none !important; }
-.d-block { display: block; }
+.d-block { display: block !important; }
 .d-inline { display: inline; }
 .text-decoration-none { text-decoration: none; }
 .vertical-align-middle { vertical-align: middle; }
@@ -2140,35 +2140,38 @@ body .edit-service-page #aliasPopup {
 
 /* Estilos para múltiples códigos SMS - todo en la misma línea */
 .sms-code-container {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-wrap: nowrap;
-  gap: 0.75rem;
-  margin-bottom: 1rem;
-  padding: 0.5rem;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  flex-wrap: nowrap !important;
+  gap: 0.75rem !important;
+  margin-bottom: 1rem !important;
+  padding: 0.5rem !important;
 }
 
 .sms-code-container .sms-code-text {
-  font-size: 1.4rem;
-  color: #444;
-  margin: 0;
-  white-space: nowrap;
-  flex-shrink: 0;
+  font-size: 1.4rem !important;
+  color: #444 !important;
+  margin: 0 !important;
+  white-space: nowrap !important;
+  flex-shrink: 0 !important;
+  display: inline-block !important;
 }
 
 .sms-code-container .sms-copy-btn {
-  margin: 0;
-  flex-shrink: 0;
-  white-space: nowrap;
+  margin: 0 !important;
+  flex-shrink: 0 !important;
+  white-space: nowrap !important;
+  display: inline-block !important;
 }
 
 .sms-code-container .sms-date-text {
-  font-size: 0.9rem;
-  color: #666;
-  margin: 0;
-  white-space: nowrap;
-  flex-shrink: 0;
+  font-size: 0.9rem !important;
+  color: #666 !important;
+  margin: 0 !important;
+  white-space: nowrap !important;
+  flex-shrink: 0 !important;
+  display: inline-block !important;
 }
 
 .regex-result-date-only {
@@ -2180,11 +2183,19 @@ body .edit-service-page #aliasPopup {
 
 /* --- Ajustes Móviles para Regex Results --- */
 @media (max-width: 768px) {
-  .regex-result-code {
+  /* Solo aplicar display:block a regex-result-code que NO esté dentro de sms-code-container */
+  .regex-result-code:not(.sms-code-text) {
      font-size: 1.2rem; /* Reducir tamaño fuente código */
      display: block; /* Hacer que ocupe su línea */
      margin-bottom: 0.75rem; /* Más margen inferior */
   }
+  
+  /* Asegurar que sms-code-text dentro de sms-code-container mantenga inline/inline-block */
+  .sms-code-container .sms-code-text {
+    display: inline-block !important;
+    margin-bottom: 0 !important;
+  }
+  
   /* Ajustes específicos para móvil - los estilos base se heredan de btn-search.btn-rounded */
   .regex-result-copy-btn,
   .regex-result-open-link-btn {
@@ -2193,7 +2204,7 @@ body .edit-service-page #aliasPopup {
        margin-top: 0.25rem; /* Espacio superior si se envuelven */
   }
   
-  /* En móvil, los códigos SMS pueden envolverse */
+  /* En móvil, los códigos SMS pueden envolverse solo si es necesario */
   .sms-code-container {
     flex-wrap: wrap;
     justify-content: flex-start;
