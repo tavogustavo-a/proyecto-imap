@@ -7265,36 +7265,71 @@ def execute_drive_transfer_now(transfer_id):
         if not transfer.is_active:
             return jsonify({'success': False, 'error': 'La transferencia no está activa'}), 400
         
-        from .drive_manager import DriveTransferService, execute_transfer_simple
+        from .drive_manager import execute_transfer_simple
         from app import create_app
         from .api import format_colombia_time
         
         app = create_app()
         
-        # Ejecutar transferencia
+        # Ejecutar transferencia (ahora maneja errores internamente y no lanza excepciones)
         result = execute_transfer_simple(transfer, app)
         
         # Recargar el objeto desde la base de datos para obtener los valores actualizados
         db.session.refresh(transfer)
         
-        message = f'✅ Transferencia ejecutada manualmente. '
+        # Verificar si la ejecución fue exitosa
         if result and isinstance(result, dict):
+            success = result.get('success', False)
             files_moved = result.get('files_moved', 0)
             files_failed = result.get('files_failed', 0)
-            message += f'Archivos movidos: {files_moved}, Fallidos: {files_failed}. '
+            files_processed = result.get('files_processed', 0)
+            result_message = result.get('message', 'Sin mensaje')
+            
+            if success:
+                message = f'✅ Transferencia ejecutada exitosamente. '
+            else:
+                message = f'⚠️ Transferencia ejecutada con errores. '
+            
+            message += f'Archivos procesados: {files_processed}, Movidos: {files_moved}, Fallidos: {files_failed}. '
+            
+            if files_failed > 0:
+                message += f'Detalles: {result_message}'
+        else:
+            # Si no hay resultado válido, usar información del objeto transfer
+            success = False
+            message = '⚠️ Transferencia ejecutada pero no se obtuvo resultado válido. '
+            files_moved = 0
+            files_failed = 0
+        
         # Formatear hora en formato 12 horas (AM/PM) en hora de Colombia
         last_execution_formatted = format_colombia_time(transfer.last_processed) if transfer.last_processed else "N/A"
-        message += f'Última ejecución: {last_execution_formatted}'
+        message += f' Última ejecución: {last_execution_formatted}'
+        
+        # Si hay errores consecutivos, agregar advertencia
+        if transfer.consecutive_errors and transfer.consecutive_errors > 0:
+            message += f' (Errores consecutivos: {transfer.consecutive_errors})'
+        
+        # Si fue desactivada por errores, informar
+        if not transfer.is_active and transfer.consecutive_errors and transfer.consecutive_errors >= 5:
+            message += ' ⚠️ Transferencia desactivada automáticamente por múltiples errores.'
         
         return jsonify({
-            'success': True, 
+            'success': success, 
             'message': message,
             'last_processed': transfer.last_processed.isoformat() if transfer.last_processed else None,
-            'result': result if result and isinstance(result, dict) else None
+            'result': result if result and isinstance(result, dict) else None,
+            'consecutive_errors': transfer.consecutive_errors or 0,
+            'is_active': transfer.is_active
         })
         
     except Exception as e:
-        return jsonify({'success': False, 'error': f'Error al ejecutar transferencia: {str(e)}'}), 500
+        # Capturar cualquier error inesperado y devolver información útil
+        error_msg = str(e)[:500]
+        return jsonify({
+            'success': False, 
+            'error': f'Error al ejecutar transferencia: {error_msg}',
+            'error_type': type(e).__name__
+        }), 500
 
 @store_bp.route('/admin/drive_transfers/<int:transfer_id>/toggle', methods=['POST'])
 @admin_required

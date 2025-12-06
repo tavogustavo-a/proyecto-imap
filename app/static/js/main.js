@@ -174,8 +174,29 @@ document.addEventListener("DOMContentLoaded", function () {
                 div.style.setProperty('--alias-bg-color', al.alias_color || '#888');
                 div.style.setProperty('background-color', 'var(--alias-bg-color)');
             }
+            // Aplicar todos los estilos necesarios (CSP compliant)
+            div.style.setProperty('color', '#fff');
+            div.style.setProperty('border', 'none');
+            div.style.setProperty('border-radius', '20px');
+            div.style.setProperty('font-size', '1rem');
+            div.style.setProperty('margin', '0.2rem 0px');
+            div.style.setProperty('padding', '0.5rem 1rem');
+            div.style.setProperty('word-wrap', 'break-word');
+            div.style.setProperty('display', 'flex');
+            div.style.setProperty('align-items', 'center');
+            div.style.setProperty('gap', '0.1rem');
         } catch (styleErr) {
             div.style.setProperty('background-color', '#888');
+            div.style.setProperty('color', '#fff');
+            div.style.setProperty('border', 'none');
+            div.style.setProperty('border-radius', '20px');
+            div.style.setProperty('font-size', '1rem');
+            div.style.setProperty('margin', '0.2rem 0px');
+            div.style.setProperty('padding', '0.5rem 1rem');
+            div.style.setProperty('word-wrap', 'break-word');
+            div.style.setProperty('display', 'flex');
+            div.style.setProperty('align-items', 'center');
+            div.style.setProperty('gap', '0.1rem');
         }
 
         if (al.alias_icons && al.alias_icons.length > 0) {
@@ -188,6 +209,8 @@ document.addEventListener("DOMContentLoaded", function () {
         }
         const textSpan = document.createElement("span");
         textSpan.textContent = al.alias_name;
+        // Asegurar que el texto del span sea blanco (CSP compliant)
+        textSpan.style.setProperty('color', '#fff');
         div.appendChild(textSpan);
         listContainer.appendChild(div);
       });

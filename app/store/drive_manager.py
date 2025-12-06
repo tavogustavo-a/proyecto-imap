@@ -137,17 +137,31 @@ class DriveTransferService:
             logger.error(f"Error moviendo archivo {file_id}: {str(e)}")
             return False
     
-    def transfer_files(self, source_folder_id: str, destination_folder_id: str) -> Dict[str, Any]:
-        """Transfiere todos los archivos de fotos y videos de una carpeta a otra"""
+    def transfer_files(self, source_folder_id: str, destination_folder_id: str, max_files_per_batch: int = 20) -> Dict[str, Any]:
+        """Transfiere archivos de fotos y videos de forma gradual en lotes pequeños
+        
+        Args:
+            source_folder_id: ID de la carpeta origen
+            destination_folder_id: ID de la carpeta destino
+            max_files_per_batch: Máximo de archivos a procesar por ejecución (default: 20)
+        """
         if not self.service:
             # Intentar autenticar si no está autenticado
             try:
                 self._authenticate()
             except Exception as e:
-                raise Exception(f"Servicio no autenticado y error al autenticar: {str(e)}")
+                # Retornar error en lugar de lanzar excepción
+                return {
+                    'success': False,
+                    'message': f'Servicio no autenticado y error al autenticar: {str(e)}',
+                    'files_processed': 0,
+                    'files_moved': 0,
+                    'files_failed': 0,
+                    'transfer_completed': False,
+                    'remaining_files': 0
+                }
         
         try:
-            
             # Obtener archivos de la carpeta origen
             files = self.get_files_in_folder(source_folder_id)
             
@@ -158,54 +172,105 @@ class DriveTransferService:
                     'files_processed': 0,
                     'files_moved': 0,
                     'files_failed': 0,
-                    'transfer_completed': True  # Indica que la transferencia está completa
+                    'transfer_completed': True,
+                    'remaining_files': 0
                 }
             
+            # Limitar cantidad de archivos a procesar en esta ejecución
+            files_to_process = files[:max_files_per_batch]
+            remaining_files = len(files) - len(files_to_process)
             
             files_moved = 0
             files_failed = 0
             failed_files = []
             
-            # Mover cada archivo con control de rate limiting
-            for i, file in enumerate(files, 1):
+            # Procesar archivos de forma gradual con pausas inteligentes
+            for i, file in enumerate(files_to_process, 1):
                 file_id = file['id']
                 file_name = file['name']
                 file_size = file.get('size', 'N/A')
                 file_mime = file.get('mimeType', 'unknown')
                 
+                # Detectar si es video o imagen
+                is_video = file_mime.startswith('video/')
+                is_image = file_mime.startswith('image/')
+                
+                # Convertir tamaño a bytes si es posible
+                file_size_bytes = 0
+                try:
+                    if file_size != 'N/A' and file_size:
+                        file_size_bytes = int(file_size)
+                except (ValueError, TypeError):
+                    file_size_bytes = 0
+                
+                # Determinar pausa según tipo y tamaño de archivo
+                if is_video:
+                    # Videos: pausa más larga, especialmente si son grandes
+                    if file_size_bytes > 50 * 1024 * 1024:  # > 50MB
+                        pause_time = 3.0  # 3 segundos para videos grandes
+                    elif file_size_bytes > 10 * 1024 * 1024:  # > 10MB
+                        pause_time = 2.0  # 2 segundos para videos medianos
+                    else:
+                        pause_time = 1.5  # 1.5 segundos para videos pequeños
+                elif is_image:
+                    # Imágenes: pausa más corta
+                    if file_size_bytes > 10 * 1024 * 1024:  # > 10MB
+                        pause_time = 1.0  # 1 segundo para imágenes grandes
+                    else:
+                        pause_time = 0.5  # 0.5 segundos para imágenes normales
+                else:
+                    # Otros tipos: pausa estándar
+                    pause_time = 1.0
                 
                 try:
+                    # Mover archivo
                     if self.move_file(file_id, source_folder_id, destination_folder_id):
                         files_moved += 1
                     else:
                         files_failed += 1
                         failed_files.append(file_name)
-                        logger.error(f"Error moviendo archivo: {file_name}")
                     
-                    # Rate limiting: pausa cada 10 archivos para evitar límites de API
-                    if i % 10 == 0:
-                        time.sleep(1)  # Pausa de 1 segundo cada 10 archivos
+                    # Pausa después de cada archivo para dar tiempo al procesamiento
+                    # Pausa más larga si es video o archivo grande
+                    time.sleep(pause_time)
+                    
+                    # Pausa adicional cada 5 archivos para evitar saturación
+                    if i % 5 == 0:
+                        time.sleep(1.0)  # Pausa adicional de 1 segundo cada 5 archivos
                         
                 except Exception as e:
                     files_failed += 1
                     failed_files.append(file_name)
-                    logger.error(f"Error procesando archivo {file_name}: {str(e)}")
                     
-                    # Si hay muchos errores consecutivos, pausa más tiempo
-                    if files_failed > 5:
-                        time.sleep(5)  # Pausa de 5 segundos si hay muchos errores
+                    # Si hay errores, pausa más tiempo antes de continuar
+                    if files_failed <= 3:
+                        time.sleep(2.0)  # 2 segundos si hay pocos errores
+                    else:
+                        time.sleep(5.0)  # 5 segundos si hay muchos errores
+                    
+                    # Si hay demasiados errores consecutivos, detener el batch
+                    if files_failed >= 10:
+                        break
             
-            # Determinar si la transferencia está completa
-            transfer_completed = files_moved > 0 and files_failed == 0
+            # Determinar si la transferencia está completa (no quedan archivos pendientes)
+            transfer_completed = remaining_files == 0 and files_failed == 0
+            
+            # Mensaje informativo
+            if remaining_files > 0:
+                message = f'Procesados {len(files_to_process)} de {len(files)} archivos. {files_moved} movidos, {files_failed} fallaron. Quedan {remaining_files} pendientes.'
+            else:
+                message = f'Transferencia completada. {files_moved} archivos movidos, {files_failed} fallaron.'
             
             result = {
                 'success': files_failed == 0,
-                'message': f'Transferencia completada. {files_moved} archivos movidos, {files_failed} fallaron',
-                'files_processed': len(files),
+                'message': message,
+                'files_processed': len(files_to_process),
+                'files_total': len(files),
                 'files_moved': files_moved,
                 'files_failed': files_failed,
                 'failed_files': failed_files,
-                'transfer_completed': transfer_completed
+                'transfer_completed': transfer_completed,
+                'remaining_files': remaining_files
             }
             
             return result
@@ -217,7 +282,9 @@ class DriveTransferService:
                 'message': f'Error en transferencia: {str(e)}',
                 'files_processed': 0,
                 'files_moved': 0,
-                'files_failed': 0
+                'files_failed': 0,
+                'transfer_completed': False,
+                'remaining_files': 0
             }
     
     def test_connection(self) -> Dict[str, Any]:
@@ -615,7 +682,27 @@ def should_execute_simple(transfer):
                 hora_modificada_recientemente = True
                 minutos_desde_update = time_since_update.seconds // 60
         
-        # PRIORIDAD 1: Si la hora objetivo ya pasó hoy Y no se ha ejecutado hoy, ejecutar inmediatamente
+        # Verificar si hay archivos pendientes de la última ejecución
+        has_pending_files = False
+        if transfer.last_error and transfer.last_error.startswith("PENDING_FILES:"):
+            try:
+                pending_count = int(transfer.last_error.split(":")[1])
+                if pending_count > 0:
+                    has_pending_files = True
+            except (ValueError, IndexError):
+                pass
+        
+        # PRIORIDAD 1: Si hay archivos pendientes, ejecutar si pasaron al menos 5 minutos desde la última ejecución
+        if has_pending_files and transfer.last_processed:
+            last_execution = transfer.last_processed
+            last_execution_col = utc_to_colombia(last_execution)
+            time_since_last = now_colombia - last_execution_col
+            
+            # Si pasaron al menos 5 minutos desde la última ejecución parcial, ejecutar de nuevo
+            if time_since_last >= timedelta(minutes=5):
+                return True
+        
+        # PRIORIDAD 2: Si la hora objetivo ya pasó hoy Y no se ha ejecutado hoy, ejecutar inmediatamente
         if current_minutes >= target_minutes:
             # Verificar si ya se ejecutó hoy
             ya_ejecutado_hoy = False
@@ -657,7 +744,7 @@ def should_execute_simple(transfer):
         return False
 
 def execute_transfer_simple(transfer, app):
-    """Ejecuta transferencia (método simple)"""
+    """Ejecuta transferencia (método simple) - NO lanza excepciones, retorna resultado con error si falla"""
     transfer_id = transfer.id
     credentials_json = transfer.credentials_json
     drive_original_id = transfer.drive_original_id
@@ -673,32 +760,76 @@ def execute_transfer_simple(transfer, app):
             drive_processed_id
         )
         
-        # Actualizar base de datos dentro del contexto de app
-        with app.app_context():
-            # Recargar el objeto desde la base de datos para evitar problemas de sesión
-            transfer_obj = DriveTransfer.query.get(transfer_id)
-            if transfer_obj:
-                transfer_obj.last_processed = datetime.utcnow()
-                transfer_obj.consecutive_errors = 0
-                transfer_obj.last_error = None
-                db.session.commit()
+        # Verificar si la transferencia fue exitosa (completa o parcial)
+        if result and isinstance(result, dict):
+            transfer_completed = result.get('transfer_completed', False)
+            files_moved = result.get('files_moved', 0)
+            remaining_files = result.get('remaining_files', 0)
+            
+            # Actualizar base de datos dentro del contexto de app
+            try:
+                with app.app_context():
+                    # Recargar el objeto desde la base de datos para evitar problemas de sesión
+                    transfer_obj = DriveTransfer.query.get(transfer_id)
+                    if transfer_obj:
+                        # Si se movieron archivos o se completó, actualizar last_processed
+                        if files_moved > 0 or transfer_completed:
+                            transfer_obj.last_processed = datetime.utcnow()
+                        
+                        # Si la transferencia está completa, resetear errores
+                        if transfer_completed:
+                            transfer_obj.consecutive_errors = 0
+                            transfer_obj.last_error = None
+                        elif files_moved > 0:
+                            # Si se procesaron archivos pero quedan pendientes, reducir errores pero no resetear
+                            if transfer_obj.consecutive_errors > 0:
+                                transfer_obj.consecutive_errors = max(0, transfer_obj.consecutive_errors - 1)
+                            
+                            # Guardar información de archivos pendientes en last_error para permitir ejecuciones más frecuentes
+                            if remaining_files > 0:
+                                transfer_obj.last_error = f"PENDING_FILES:{remaining_files}"  # Marcar que hay archivos pendientes
+                            else:
+                                transfer_obj.last_error = None
+                        
+                        db.session.commit()
+            except Exception as db_error:
+                # Si falla la actualización de BD, no es crítico, continuar
+                pass
         
         return result
         
     except Exception as e:
-        # Actualizar contador de errores
+        error_msg = str(e)
+        error_type = type(e).__name__
+        
+        # Actualizar contador de errores en base de datos
         try:
             with app.app_context():
                 transfer_obj = DriveTransfer.query.get(transfer_id)
                 if transfer_obj:
                     transfer_obj.consecutive_errors = (transfer_obj.consecutive_errors or 0) + 1
-                    transfer_obj.last_error = str(e)[:500]  # Limitar longitud del error
+                    transfer_obj.last_error = error_msg[:500]  # Limitar longitud del error
+                    
+                    # Si hay muchos errores consecutivos (5 o más), desactivar automáticamente
+                    if transfer_obj.consecutive_errors >= 5:
+                        transfer_obj.is_active = False
+                    
                     db.session.commit()
-        except Exception:
+        except Exception as db_error:
+            # Si falla la actualización de BD, continuar de todas formas
             pass
         
-        # Re-lanzar la excepción para que la ruta pueda manejarla
-        raise
+        # Retornar resultado con error en lugar de lanzar excepción
+        return {
+            'success': False,
+            'error': error_msg,
+            'error_type': error_type,
+            'transfer_completed': False,
+            'files_moved': 0,
+            'files_failed': 0,
+            'files_processed': 0,
+            'consecutive_errors': getattr(transfer, 'consecutive_errors', 0) + 1
+        }
 
 def calculate_smart_wait_time(transfers):
     """Calcula tiempo de espera inteligente basado en las transferencias
@@ -786,26 +917,62 @@ def start_simple_drive_loop():
         while True:
             try:
                 with app.app_context():
-                    # Verificar limpiezas programadas
-                    check_scheduled_cleanups()
+                    # Verificar limpiezas programadas (con manejo de errores)
+                    try:
+                        check_scheduled_cleanups()
+                    except Exception as cleanup_error:
+                        # Error en limpieza programada, continuar de todas formas
+                        pass
                     
                     # Obtener configuraciones activas
-                    active_transfers = DriveTransfer.query.filter_by(is_active=True).all()
+                    try:
+                        active_transfers = DriveTransfer.query.filter_by(is_active=True).all()
+                    except Exception as query_error:
+                        # Error al consultar BD, esperar y reintentar
+                        time.sleep(60)
+                        continue
                     
                     if not active_transfers:
                         time.sleep(60)  # Esperar 1 minuto para detectar cambios rápido
                         continue
                     
-                    # Verificar cada transferencia
+                    # Verificar cada transferencia con manejo individual de errores
                     for transfer in active_transfers:
-                        if should_execute_simple(transfer):
-                            execute_transfer_simple(transfer, app)
+                        try:
+                            if should_execute_simple(transfer):
+                                # Ejecutar transferencia (no lanza excepciones, retorna resultado con error si falla)
+                                result = execute_transfer_simple(transfer, app)
+                                # El resultado ya maneja errores internamente, no lanzará excepciones
+                                # Si hay error, está registrado en result y en la BD, continuar con siguiente
+                        except Exception as transfer_error:
+                            # Capturar cualquier error inesperado sin detener el loop
+                            try:
+                                with app.app_context():
+                                    transfer_obj = DriveTransfer.query.get(transfer.id)
+                                    if transfer_obj:
+                                        transfer_obj.consecutive_errors = (transfer_obj.consecutive_errors or 0) + 1
+                                        transfer_obj.last_error = str(transfer_error)[:500]
+                                        if transfer_obj.consecutive_errors >= 5:
+                                            transfer_obj.is_active = False
+                                        db.session.commit()
+                            except Exception:
+                                # Si falla la actualización de BD, continuar de todas formas
+                                pass
+                            # Continuar con la siguiente transferencia sin detener el loop
+                            continue
                 
                 # Calcular tiempo de espera inteligente (ya optimizado internamente)
-                wait_time = calculate_smart_wait_time(active_transfers)
+                try:
+                    wait_time = calculate_smart_wait_time(active_transfers)
+                except Exception:
+                    # Si falla el cálculo, usar tiempo por defecto seguro
+                    wait_time = 60
+                
                 time.sleep(wait_time)
                 
             except Exception as e:
+                # Error crítico en el loop principal, esperar y reintentar
+                # No detener el loop nunca
                 time.sleep(60)  # Esperar 1 minuto antes de reintentar
     
     # Iniciar loop en thread separado

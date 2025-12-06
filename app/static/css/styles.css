@@ -1665,6 +1665,12 @@ noscript p {
   max-height: 80vh;
   overflow-y: auto;
   position: relative; /* Para posicionar la X correctamente */
+  color: #111; /* Color por defecto para el texto del popup */
+}
+
+/* Asegurar que el contenedor de lista no herede colores que afecten los items */
+#aliasListContainer {
+  color: inherit; /* Heredar del popup, pero los items lo sobrescriben con !important */
 }
 
 /* Estilos específicos para el popup de alias en edit_service.html */
@@ -3682,18 +3688,66 @@ a.btn-search.btn-rounded:hover {
   margin-top: 0.5rem;
 }
 
-/* Clases para alias popup items */
+/* Clases para alias popup items - Aplicar siempre, no solo en móvil */
+/* Selector más específico para evitar herencia del color del padre */
+#aliasPopup #aliasListContainer .alias-popup-item,
+#aliasPopup .alias-popup-item,
 .alias-popup-item {
-  color: #fff;
-  border: none;
-  border-radius: 20px;
-  font-size: 1rem;
-  margin: 0.2rem 0px;
-  padding: 0.5rem 1rem;
-  word-wrap: break-word;
-  display: flex;
-  align-items: center;
-  gap: 0.1rem;
+  color: #fff !important;
+  border: none !important;
+  border-radius: 20px !important;
+  font-size: 1rem !important;
+  margin: 0.2rem 0px !important;
+  padding: 0.5rem 1rem !important;
+  word-wrap: break-word !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 0.1rem !important;
+  cursor: pointer !important;
+  transition: opacity 0.2s ease !important;
+}
+
+/* Asegurar que el texto dentro de alias-popup-item también sea blanco */
+#aliasPopup #aliasListContainer .alias-popup-item span,
+#aliasPopup .alias-popup-item span,
+.alias-popup-item span {
+  color: #fff !important;
+}
+
+/* Media query para pantallas grandes - Replicar estilos de móvil */
+@media (min-width: 769px) {
+  #aliasPopup #aliasListContainer .alias-popup-item,
+  #aliasPopup .alias-popup-item,
+  .alias-popup-item {
+    color: #fff !important;
+    border: none !important;
+    border-radius: 20px !important;
+    font-size: 1rem !important;
+    margin: 0.2rem 0px !important;
+    padding: 0.5rem 1rem !important;
+    word-wrap: break-word !important;
+    display: flex !important;
+    align-items: center !important;
+    gap: 0.1rem !important;
+    cursor: pointer !important;
+    transition: opacity 0.2s ease !important;
+  }
+  
+  /* Asegurar que el texto dentro de alias-popup-item también sea blanco en pantallas grandes */
+  #aliasPopup #aliasListContainer .alias-popup-item span,
+  #aliasPopup .alias-popup-item span,
+  .alias-popup-item span {
+    color: #fff !important;
+  }
+  
+  /* Estilos para iconos dentro de alias-popup-item en pantallas grandes */
+  #aliasPopup #aliasListContainer .alias-popup-item .alias-icon-img,
+  #aliasPopup .alias-popup-item .alias-icon-img,
+  .alias-popup-item .alias-icon-img {
+    height: 1.9rem !important;
+    margin-right: 0.2rem !important;
+    vertical-align: middle !important;
+  }
 }
 
 /* Clases para iconos de alias */
