@@ -325,9 +325,10 @@ class DriveTransfer(db.Model):
     drive_original_id = db.Column(db.String(128), nullable=False)
     drive_processed_id = db.Column(db.String(128), nullable=False)
     drive_deleted_id = db.Column(db.String(128), nullable=True)  # Carpeta para archivos eliminados
-    processing_time = db.Column(db.Time, nullable=False)  # Hora colombiana
+    processing_time = db.Column(db.String(20), nullable=False)  # Intervalo: "5h" o "10m" (horas o minutos)
     is_active = db.Column(db.Boolean, default=True, nullable=False)
     last_processed = db.Column(db.DateTime, nullable=True)
+    activated_at = db.Column(db.DateTime, nullable=True)  # Momento en que se activó por primera vez
     consecutive_errors = db.Column(db.Integer, default=0, nullable=False)  # Contador de errores consecutivos
     last_error = db.Column(db.Text, nullable=True)  # Último error de conexión
     created_at = db.Column(db.DateTime, default=datetime.utcnow)

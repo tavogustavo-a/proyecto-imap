@@ -87,8 +87,8 @@
         <small class="form-text text-muted">Carpeta donde se moverán los archivos durante la limpieza. Si no se especifica, se eliminarán permanentemente.</small>
       </div>
       <div class="mb-1">
-        <label for="drive-processing-time" class="form-label">Hora colombiana en que se procesará:</label>
-        <input type="time" id="drive-processing-time" name="drive_processing_time" class="form-control" required autocomplete="off">
+        <label for="drive-processing-time" class="form-label">Intervalo de ejecución:</label>
+        <input type="text" id="drive-processing-time" name="drive_processing_time" class="form-control" placeholder="Ej: 5h (cada 5 horas) o 10m (cada 10 minutos)" required autocomplete="off" pattern="[0-9]+[hHmM]" title="Formato: número seguido de 'h' (horas) o 'm' (minutos). Ejemplos: 1h, 2h, 30m, 60m">
       </div>
       <div class="mb-1">
         <button type="button" id="test-drive-connection" class="btn-panel btn-blue">Probar conexión</button>
@@ -278,8 +278,8 @@
         <small class="form-text text-muted">Carpeta donde se moverán los archivos durante la limpieza. Si no se especifica, se eliminarán permanentemente.</small>
       </div>
       <div class="mb-1">
-        <label for="edit-drive-processing-time" class="form-label">Hora de procesamiento:</label>
-        <input type="time" id="edit-drive-processing-time" name="drive_processing_time" class="form-control" required autocomplete="off">
+        <label for="edit-drive-processing-time" class="form-label">Intervalo de ejecución:</label>
+        <input type="text" id="edit-drive-processing-time" name="drive_processing_time" class="form-control" placeholder="Ej: 5h (cada 5 horas) o 10m (cada 10 minutos)" required autocomplete="off" pattern="[0-9]+[hHmM]" title="Formato: número seguido de 'h' (horas) o 'm' (minutos). Ejemplos: 1h, 2h, 30m, 60m">
       </div>
       <div class="mb-1 d-flex justify-content-end gap-1">
         <button type="button" id="close-drive-edit-modal" class="btn-panel btn-red">Cancelar</button>

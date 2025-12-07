@@ -31,6 +31,93 @@ def get_colombia_date():
     """
     return get_colombia_datetime().date()
 
+# ==================== HELPER FUNCIONES PARA INTERVALOS ====================
+
+def parse_interval(interval_str: str) -> Optional[timedelta]:
+    """
+    Parsea un intervalo en formato "5h" o "10m" y retorna un timedelta.
+    
+    Args:
+        interval_str: String con formato "5h", "10m", "5H", "10M", etc.
+    
+    Returns:
+        timedelta: Intervalo en segundos, o None si el formato es inválido
+    """
+    if not interval_str:
+        return None
+    
+    interval_str = interval_str.strip().upper()
+    
+    try:
+        # Extraer número y unidad
+        if interval_str.endswith('H'):
+            # Horas
+            hours = int(interval_str[:-1])
+            if hours <= 0:
+                return None
+            return timedelta(hours=hours)
+        elif interval_str.endswith('M'):
+            # Minutos
+            minutes = int(interval_str[:-1])
+            if minutes <= 0:
+                return None
+            return timedelta(minutes=minutes)
+        else:
+            # Intentar parsear como número puro (asumir minutos)
+            minutes = int(interval_str)
+            if minutes <= 0:
+                return None
+            return timedelta(minutes=minutes)
+    except (ValueError, AttributeError):
+        return None
+
+def should_execute_by_interval(transfer: DriveTransfer) -> bool:
+    """
+    Verifica si debe ejecutar basándose en el intervalo configurado.
+    
+    Args:
+        transfer: Objeto DriveTransfer con la configuración
+    
+    Returns:
+        bool: True si debe ejecutar, False en caso contrario
+    """
+    try:
+        # Parsear intervalo
+        interval = parse_interval(transfer.processing_time)
+        if not interval:
+            return False
+        
+        now_utc = datetime.utcnow()
+        
+        # Si nunca se ha ejecutado, usar activated_at o created_at como referencia
+        if not transfer.last_processed:
+            # Si tiene activated_at, usar ese; si no, usar created_at
+            reference_time = transfer.activated_at or transfer.created_at
+            if not reference_time:
+                # Si no hay referencia, ejecutar inmediatamente
+                return True
+            
+            # Calcular tiempo desde la referencia
+            time_since_reference = now_utc - reference_time
+            
+            # Si ya pasó el intervalo desde la referencia, ejecutar
+            if time_since_reference >= interval:
+                return True
+            return False
+        
+        # Si ya se ejecutó antes, calcular desde la última ejecución
+        time_since_last = now_utc - transfer.last_processed
+        
+        # Si ya pasó el intervalo desde la última ejecución, ejecutar
+        if time_since_last >= interval:
+            return True
+        
+        return False
+        
+    except Exception as e:
+        logger.error(f"Error verificando intervalo para transfer {transfer.id}: {str(e)}")
+        return False
+
 # ==================== SERVICIO DE TRANSFERENCIA ====================
 
 class DriveTransferService:
@@ -184,7 +271,10 @@ class DriveTransferService:
             files_failed = 0
             failed_files = []
             
-            # Procesar archivos de forma gradual con pausas inteligentes
+            # Procesar archivos de forma gradual con pausas inteligentes y manejo robusto de errores
+            consecutive_errors = 0
+            max_consecutive_errors = 5  # Máximo de errores consecutivos antes de pausar más tiempo
+            
             for i, file in enumerate(files_to_process, 1):
                 file_id = file['id']
                 file_name = file['name']
@@ -222,35 +312,58 @@ class DriveTransferService:
                     # Otros tipos: pausa estándar
                     pause_time = 1.0
                 
-                try:
-                    # Mover archivo
-                    if self.move_file(file_id, source_folder_id, destination_folder_id):
-                        files_moved += 1
-                    else:
-                        files_failed += 1
-                        failed_files.append(file_name)
-                    
-                    # Pausa después de cada archivo para dar tiempo al procesamiento
-                    # Pausa más larga si es video o archivo grande
-                    time.sleep(pause_time)
-                    
-                    # Pausa adicional cada 5 archivos para evitar saturación
-                    if i % 5 == 0:
-                        time.sleep(1.0)  # Pausa adicional de 1 segundo cada 5 archivos
+                # Intentar mover archivo con reintentos
+                max_retries = 3
+                retry_delay = 2.0  # Segundos a esperar entre reintentos
+                file_moved_successfully = False
+                
+                for attempt in range(max_retries):
+                    try:
+                        # Mover archivo
+                        if self.move_file(file_id, source_folder_id, destination_folder_id):
+                            files_moved += 1
+                            file_moved_successfully = True
+                            consecutive_errors = 0  # Resetear contador de errores consecutivos
+                            break  # Salir del loop de reintentos
+                        else:
+                            # Si move_file retorna False, puede ser que el archivo ya esté movido
+                            # Verificar si realmente falló o ya está en destino
+                            files_failed += 1
+                            failed_files.append(file_name)
+                            consecutive_errors += 1
+                            break
+                            
+                    except Exception as e:
+                        consecutive_errors += 1
                         
-                except Exception as e:
-                    files_failed += 1
-                    failed_files.append(file_name)
-                    
-                    # Si hay errores, pausa más tiempo antes de continuar
-                    if files_failed <= 3:
-                        time.sleep(2.0)  # 2 segundos si hay pocos errores
+                        # Si es el último intento, marcar como fallido
+                        if attempt == max_retries - 1:
+                            files_failed += 1
+                            failed_files.append(file_name)
+                        else:
+                            # Esperar antes de reintentar (pausa progresiva)
+                            time.sleep(retry_delay * (attempt + 1))
+                
+                # Si hubo errores consecutivos, pausar más tiempo antes de continuar
+                if consecutive_errors > 0:
+                    if consecutive_errors >= max_consecutive_errors:
+                        # Si hay muchos errores consecutivos, pausar más tiempo (5-10 segundos)
+                        pause_after_error = min(5.0 + (consecutive_errors - max_consecutive_errors) * 1.0, 10.0)
+                        time.sleep(pause_after_error)
                     else:
-                        time.sleep(5.0)  # 5 segundos si hay muchos errores
-                    
-                    # Si hay demasiados errores consecutivos, detener el batch
-                    if files_failed >= 10:
-                        break
+                        # Pausa moderada si hay pocos errores consecutivos
+                        time.sleep(2.0)
+                else:
+                    # Pausa normal después de cada archivo para dar tiempo al procesamiento
+                    time.sleep(pause_time)
+                
+                # Pausa adicional cada 5 archivos para evitar saturación
+                if i % 5 == 0:
+                    time.sleep(1.0)  # Pausa adicional de 1 segundo cada 5 archivos
+                
+                # Si hay demasiados errores consecutivos, detener el batch para evitar saturación
+                if consecutive_errors >= 10:
+                    break
             
             # Determinar si la transferencia está completa (no quedan archivos pendientes)
             transfer_completed = remaining_files == 0 and files_failed == 0
@@ -654,20 +767,10 @@ class DriveAutoScheduler:
 # ==================== SISTEMA SIMPLE (BASADO EN TU CÓDIGO) ====================
 
 def should_execute_simple(transfer):
-    """Verifica si debe ejecutar (método simple)"""
+    """Verifica si debe ejecutar basándose en el intervalo configurado"""
     try:
-        from datetime import timedelta
-        
-        # Hora actual de Colombia usando módulo centralizado
-        now_colombia = get_colombia_datetime()
-        current_time = now_colombia.time()
-        current_date = now_colombia.date()
-        
-        # Verificar si es la hora (margen de 5 minutos para mayor flexibilidad)
-        target_time = transfer.processing_time
-        current_minutes = current_time.hour * 60 + current_time.minute
-        target_minutes = target_time.hour * 60 + target_time.minute
-        time_diff = abs(current_minutes - target_minutes)
+        # Usar la nueva función de intervalos
+        return should_execute_by_interval(transfer)
         
         # NUEVA LÓGICA: Verificar si la hora fue modificada recientemente (últimos 30 minutos)
         # Si fue modificada recientemente Y la nueva hora ya pasó, ejecutar incluso si ya se ejecutó hoy
@@ -772,6 +875,10 @@ def execute_transfer_simple(transfer, app):
                     # Recargar el objeto desde la base de datos para evitar problemas de sesión
                     transfer_obj = DriveTransfer.query.get(transfer_id)
                     if transfer_obj:
+                        # Establecer activated_at si es la primera vez que se ejecuta
+                        if not transfer_obj.activated_at:
+                            transfer_obj.activated_at = datetime.utcnow()
+                        
                         # Si se movieron archivos o se completó, actualizar last_processed
                         if files_moved > 0 or transfer_completed:
                             transfer_obj.last_processed = datetime.utcnow()
@@ -832,73 +939,69 @@ def execute_transfer_simple(transfer, app):
         }
 
 def calculate_smart_wait_time(transfers):
-    """Calcula tiempo de espera inteligente basado en las transferencias
+    """Calcula tiempo de espera inteligente basado en los intervalos de las transferencias
     
     Estrategia:
-    - Si la próxima ejecución está muy lejos (> 1 hora), esperar hasta 1 hora máximo
-    - Si la próxima ejecución está cerca (< 1 hora), esperar menos tiempo (mínimo 60 segundos)
-    - Cada configuración es independiente, se toma la más próxima
+    - Calcula cuándo será la próxima ejecución para cada transferencia
+    - Toma el intervalo más corto y espera hasta 5 minutos antes de esa ejecución
+    - Mínimo 30 segundos, máximo 1 hora
     """
     try:
         if not transfers:
             return 3600  # 1 hora si no hay transferencias
         
-        # Usar módulo centralizado de timezone
-        now_colombia = get_colombia_datetime()
-        current_time = now_colombia.time()
-        current_date = now_colombia.date()
-        
-        min_wait_seconds = None
+        now_utc = datetime.utcnow()
+        next_execution_times = []
         
         for transfer in transfers:
-            target_time = transfer.processing_time
-            current_minutes = current_time.hour * 60 + current_time.minute
-            target_minutes = target_time.hour * 60 + target_time.minute
+            # Parsear intervalo
+            interval = parse_interval(transfer.processing_time)
+            if not interval:
+                continue
             
-            # Calcular minutos hasta la próxima ejecución (considerando si es hoy o mañana)
-            if target_minutes > current_minutes:
-                # La hora objetivo es hoy mismo
-                minutes_until = target_minutes - current_minutes
+            # Calcular tiempo hasta la próxima ejecución
+            if not transfer.last_processed:
+                # Si nunca se ejecutó, usar activated_at o created_at
+                reference_time = transfer.activated_at or transfer.created_at
+                if not reference_time:
+                    # Si no hay referencia, puede ejecutarse inmediatamente
+                    next_execution_times.append(0)
+                    continue
+                
+                # Calcular tiempo desde la referencia
+                time_since_reference = now_utc - reference_time
+                
+                if time_since_reference >= interval:
+                    # Ya debería ejecutarse
+                    next_execution_times.append(0)
+                else:
+                    # Calcular cuánto falta
+                    time_until = interval - time_since_reference
+                    next_execution_times.append(time_until.total_seconds())
             else:
-                # La hora objetivo es mañana
-                minutes_until = (24 * 60) - current_minutes + target_minutes
-            
-            # Verificar si ya se ejecutó hoy
-            ya_ejecutado_hoy = False
-            if transfer.last_processed:
-                last_execution_col = utc_to_colombia(transfer.last_processed)
-                if current_date == last_execution_col.date():
-                    ya_ejecutado_hoy = True
-            
-            # Calcular tiempo de espera según la proximidad
-            if minutes_until <= 5:
-                # Muy cerca (menos de 5 minutos) - verificar cada 60 segundos
-                wait_seconds = 60
-            elif minutes_until <= 30:
-                # Cerca (menos de 30 minutos) - verificar cada 2 minutos
-                wait_seconds = 120
-            elif minutes_until <= 60:
-                # Moderadamente cerca (menos de 1 hora) - verificar cada 5 minutos
-                wait_seconds = 300
-            elif minutes_until <= 120:
-                # Lejos pero no tanto (menos de 2 horas) - verificar cada 20 minutos
-                wait_seconds = 1200
-            else:
-                # Muy lejos (más de 2 horas) - verificar cada 1 hora máximo
-                wait_seconds = 3600
-            
-            # Si la hora ya pasó hoy y no se ejecutó, verificar más frecuentemente
-            if current_minutes >= target_minutes and not ya_ejecutado_hoy:
-                wait_seconds = min(wait_seconds, 60)  # Máximo 60 segundos
-            
-            # Tomar el mínimo entre todas las transferencias (la más próxima)
-            if min_wait_seconds is None or wait_seconds < min_wait_seconds:
-                min_wait_seconds = wait_seconds
+                # Si ya se ejecutó, calcular desde la última ejecución
+                time_since_last = now_utc - transfer.last_processed
+                
+                if time_since_last >= interval:
+                    # Ya debería ejecutarse
+                    next_execution_times.append(0)
+                else:
+                    # Calcular cuánto falta
+                    time_until = interval - time_since_last
+                    next_execution_times.append(time_until.total_seconds())
         
-        # Asegurar mínimo de 60 segundos y máximo de 1 hora
-        if min_wait_seconds is None:
-            return 3600
-        return max(60, min(min_wait_seconds, 3600))
+        if not next_execution_times:
+            return 3600  # 1 hora por defecto
+        
+        # Tomar el tiempo más corto y esperar hasta 5 minutos antes (mínimo 30 segundos)
+        min_time = min(next_execution_times)
+        wait_time = max(min_time - 300, 30)  # 5 minutos antes, mínimo 30 segundos
+        
+        # Limitar a máximo 1 hora
+        return min(int(wait_time), 3600)
+        
+    except Exception as e:
+        return 3600  # 1 hora en caso de error
         
     except Exception as e:
         return 3600  # 1 hora en caso de error

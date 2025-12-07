@@ -289,9 +289,10 @@ async function loadDriveTransfersTable() {
                     td2.appendChild(code2);
                     tr.appendChild(td2);
                     
-                    // Hora
+                    // Intervalo
                     const td3 = document.createElement('td');
-                    td3.textContent = transfer.processing_time || '--:-- --';
+                    // Mostrar el intervalo tal como está (ej: "5H", "10M")
+                    td3.textContent = transfer.processing_time || '--';
                     tr.appendChild(td3);
                     
                     // Estado
@@ -560,9 +561,8 @@ window.editDriveTransfer = async function(transferId) {
         document.getElementById('edit-drive-destination').value = transfer.drive_processed_id || '';
         document.getElementById('edit-drive-deleted').value = transfer.drive_deleted_id || '';
         
-        // Convertir hora de formato 12h a 24h para el input time
-        const timeValue = convert12hTo24h(transfer.processing_time);
-        document.getElementById('edit-drive-processing-time').value = timeValue;
+        // Mostrar intervalo tal como está (ej: "5H", "10M")
+        document.getElementById('edit-drive-processing-time').value = transfer.processing_time || '';
         
         
         // Mostrar modal

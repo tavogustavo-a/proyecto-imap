@@ -7131,9 +7131,10 @@ def list_drive_transfers():
                     'drive_original_id': t.drive_original_id,
                     'drive_processed_id': t.drive_processed_id,
                     'drive_deleted_id': t.drive_deleted_id,  # Campo opcional
-                    'processing_time': t.processing_time.strftime('%I:%M %p') if t.processing_time else None,
+                    'processing_time': t.processing_time if isinstance(t.processing_time, str) else (t.processing_time.strftime('%I:%M %p') if t.processing_time else None),  # Soporta ambos formatos (legacy y nuevo)
                     'is_active': t.is_active,
                     'last_processed': t.last_processed.isoformat() if t.last_processed else None,
+                    'activated_at': t.activated_at.isoformat() if t.activated_at else None,
                     'created_at': t.created_at.isoformat()
                 } for t in transfers
             ]
@@ -7171,21 +7172,11 @@ def create_drive_transfer():
         return jsonify({'success': False, 'error': 'Credenciales JSON inválidas'}), 400
     
     try:
-        # Convertir string de tiempo a objeto Time
-        from datetime import time
-        # Manejar diferentes formatos de tiempo
-        if ':' in processing_time_str:
-            # Formato HH:MM o HH:MM:SS
-            time_parts = processing_time_str.split(':')
-            if len(time_parts) >= 2:
-                hour = int(time_parts[0])
-                minute = int(time_parts[1])
-                second = int(time_parts[2]) if len(time_parts) > 2 else 0
-                processing_time = time(hour, minute, second)
-            else:
-                raise ValueError("Formato de tiempo inválido")
-        else:
-            raise ValueError("Formato de tiempo inválido")
+        # Validar formato de intervalo (5h, 10m, 5H, 10M, etc.)
+        from app.store.drive_manager import parse_interval
+        interval = parse_interval(processing_time_str)
+        if not interval:
+            return jsonify({'success': False, 'error': 'Formato de intervalo inválido. Use formato "5h" (horas) o "10m" (minutos). Ejemplos: 1h, 2h, 30m, 60m'}), 400
         
         # Crear nueva configuración (Drive Transfer permite múltiples configuraciones)
         transfer = DriveTransfer(
@@ -7193,7 +7184,8 @@ def create_drive_transfer():
             drive_original_id=drive_original_id,
             drive_processed_id=drive_processed_id,
             drive_deleted_id=drive_deleted_id,  # Campo opcional
-            processing_time=processing_time,
+            processing_time=processing_time_str.upper(),  # Guardar como string (ej: "5H", "10M")
+            activated_at=datetime.utcnow(),  # Establecer activated_at al crear
             consecutive_errors=0,  # Valor por defecto para el campo NOT NULL
             last_error=None  # Valor por defecto para el campo nullable
         )
@@ -7231,20 +7223,18 @@ def update_drive_transfer(transfer_id):
         if 'drive_deleted' in data:
             transfer.drive_deleted_id = data['drive_deleted']  # Campo opcional
         if 'drive_processing_time' in data:
-            from datetime import time
+            from app.store.drive_manager import parse_interval
             processing_time_str = data['drive_processing_time']
-            # Manejar diferentes formatos de tiempo
-            if ':' in processing_time_str:
-                time_parts = processing_time_str.split(':')
-                if len(time_parts) >= 2:
-                    hour = int(time_parts[0])
-                    minute = int(time_parts[1])
-                    second = int(time_parts[2]) if len(time_parts) > 2 else 0
-                    transfer.processing_time = time(hour, minute, second)
-                else:
-                    raise ValueError("Formato de tiempo inválido")
-            else:
-                raise ValueError("Formato de tiempo inválido")
+            # Validar formato de intervalo (5h, 10m, 5H, 10M, etc.)
+            interval = parse_interval(processing_time_str)
+            if not interval:
+                return jsonify({'success': False, 'error': 'Formato de intervalo inválido. Use formato "5h" (horas) o "10m" (minutos). Ejemplos: 1h, 2h, 30m, 60m'}), 400
+            
+            transfer.processing_time = processing_time_str.upper()  # Guardar como string (ej: "5H", "10M")
+            
+            # Si se cambia el intervalo y está activo, resetear activated_at para que empiece desde ahora
+            if transfer.is_active:
+                transfer.activated_at = datetime.utcnow()
         
         transfer.updated_at = datetime.utcnow()
         db.session.commit()
