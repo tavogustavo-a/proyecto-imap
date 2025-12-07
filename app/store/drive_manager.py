@@ -75,6 +75,9 @@ def should_execute_by_interval(transfer: DriveTransfer) -> bool:
     """
     Verifica si debe ejecutar basándose en el intervalo configurado.
     
+    PRIORIDAD 1: Si hay archivos pendientes, ejecutar cada 5 minutos hasta completarlos.
+    PRIORIDAD 2: Si pasó el intervalo configurado, ejecutar normalmente.
+    
     Args:
         transfer: Objeto DriveTransfer con la configuración
     
@@ -82,12 +85,30 @@ def should_execute_by_interval(transfer: DriveTransfer) -> bool:
         bool: True si debe ejecutar, False en caso contrario
     """
     try:
+        now_utc = datetime.utcnow()
+        
+        # PRIORIDAD 1: Verificar si hay archivos pendientes de la última ejecución
+        has_pending_files = False
+        if transfer.last_error and transfer.last_error.startswith("PENDING_FILES:"):
+            try:
+                pending_count = int(transfer.last_error.split(":")[1])
+                if pending_count > 0:
+                    has_pending_files = True
+            except (ValueError, IndexError):
+                pass
+        
+        # Si hay archivos pendientes, ejecutar si pasaron al menos 5 minutos desde la última ejecución
+        if has_pending_files and transfer.last_processed:
+            time_since_last = now_utc - transfer.last_processed
+            # Ejecutar cada 5 minutos cuando hay archivos pendientes
+            if time_since_last >= timedelta(minutes=5):
+                return True
+        
+        # PRIORIDAD 2: Verificar intervalo normal
         # Parsear intervalo
         interval = parse_interval(transfer.processing_time)
         if not interval:
             return False
-        
-        now_utc = datetime.utcnow()
         
         # Si nunca se ha ejecutado, usar activated_at o created_at como referencia
         if not transfer.last_processed:
@@ -942,6 +963,7 @@ def calculate_smart_wait_time(transfers):
     """Calcula tiempo de espera inteligente basado en los intervalos de las transferencias
     
     Estrategia:
+    - Si hay archivos pendientes, revisar cada 5 minutos (máximo)
     - Calcula cuándo será la próxima ejecución para cada transferencia
     - Toma el intervalo más corto y espera hasta 5 minutos antes de esa ejecución
     - Mínimo 30 segundos, máximo 1 hora
@@ -952,9 +974,33 @@ def calculate_smart_wait_time(transfers):
         
         now_utc = datetime.utcnow()
         next_execution_times = []
+        has_pending_files = False
         
         for transfer in transfers:
-            # Parsear intervalo
+            # Verificar si hay archivos pendientes
+            if transfer.last_error and transfer.last_error.startswith("PENDING_FILES:"):
+                try:
+                    pending_count = int(transfer.last_error.split(":")[1])
+                    if pending_count > 0:
+                        has_pending_files = True
+                        # Si hay archivos pendientes, calcular tiempo desde última ejecución
+                        if transfer.last_processed:
+                            time_since_last = now_utc - transfer.last_processed
+                            # Si pasaron menos de 5 minutos, calcular cuánto falta
+                            if time_since_last < timedelta(minutes=5):
+                                time_until = timedelta(minutes=5) - time_since_last
+                                next_execution_times.append(time_until.total_seconds())
+                            else:
+                                # Ya pasaron 5 minutos, ejecutar inmediatamente
+                                next_execution_times.append(0)
+                        else:
+                            # No se ha ejecutado, puede ejecutarse inmediatamente
+                            next_execution_times.append(0)
+                        continue  # Ya procesamos este transfer, pasar al siguiente
+                except (ValueError, IndexError):
+                    pass
+            
+            # Parsear intervalo para transferencias sin archivos pendientes
             interval = parse_interval(transfer.processing_time)
             if not interval:
                 continue
@@ -993,6 +1039,14 @@ def calculate_smart_wait_time(transfers):
         if not next_execution_times:
             return 3600  # 1 hora por defecto
         
+        # Si hay archivos pendientes, revisar más frecuentemente (máximo 5 minutos)
+        if has_pending_files:
+            min_time = min(next_execution_times)
+            # Esperar hasta 1 minuto antes (mínimo 30 segundos) cuando hay archivos pendientes
+            wait_time = max(min_time - 60, 30)  # 1 minuto antes, mínimo 30 segundos
+            # Limitar a máximo 5 minutos cuando hay archivos pendientes
+            return min(int(wait_time), 300)
+        
         # Tomar el tiempo más corto y esperar hasta 5 minutos antes (mínimo 30 segundos)
         min_time = min(next_execution_times)
         wait_time = max(min_time - 300, 30)  # 5 minutos antes, mínimo 30 segundos
@@ -1002,12 +1056,22 @@ def calculate_smart_wait_time(transfers):
         
     except Exception as e:
         return 3600  # 1 hora en caso de error
-        
-    except Exception as e:
-        return 3600  # 1 hora en caso de error
+
+# Variable global para evitar múltiples inicializaciones
+_drive_loop_started = False
+_drive_loop_lock = threading.Lock()
 
 def start_simple_drive_loop():
-    """Inicia el loop simple basado en tu código que funciona"""
+    """Inicia el loop simple basado en tu código que funciona
+    Solo se ejecuta una vez, incluso si se llama múltiples veces"""
+    global _drive_loop_started
+    
+    # Verificar si ya está iniciado (thread-safe)
+    with _drive_loop_lock:
+        if _drive_loop_started:
+            return  # Ya está corriendo, no hacer nada
+        _drive_loop_started = True
+    
     import threading
     import time
     from app import create_app

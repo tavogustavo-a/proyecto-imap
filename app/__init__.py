@@ -287,6 +287,15 @@ def create_app(config_class_passed=None):
         initialize_connection_system()
     except Exception as e:
         pass
+    
+    # ⭐ NUEVO: Inicializar loop de Drive Transfer (se ejecuta siempre, incluso con Gunicorn)
+    try:
+        from app.store.drive_manager import start_simple_drive_loop
+        # Iniciar el loop en un thread separado (solo se ejecuta una vez por proceso)
+        start_simple_drive_loop()
+    except Exception as e:
+        # No fallar si hay error, solo continuar
+        pass
 
     # ✅ CORREGIDO: Los eventos de SocketIO se cargan solo en socketio_server.py
     # No se cargan aquí para evitar conflictos con la aplicación principal IMAP
