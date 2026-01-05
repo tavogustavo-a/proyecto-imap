@@ -241,6 +241,12 @@ def _post_2fa_redirect(username):
 
 @auth_bp.route("/logout")
 def logout():
+    # ✅ SEGURIDAD: Revocar token de sesión antes de limpiar
+    from app.auth.session_tokens import revoke_session_token
+    session_token = session.get("session_token")
+    if session_token:
+        revoke_session_token(session_token)
+    
     # ✅ CORREGIDO: No incrementar el contador global al cerrar sesión individual
     # Solo limpiar la sesión del usuario actual sin afectar a otros usuarios
     session.clear()
@@ -379,9 +385,18 @@ def resend_2fa_email_user(username):
 
 
 def _setup_session(user):
+    from app.auth.session_tokens import generate_session_token
+    
+    admin_user = current_app.config.get("ADMIN_USER", "admin")
+    is_admin = user.username == admin_user and user.parent_id is None
+    
+    # ✅ SEGURIDAD: Generar token de sesión único para prevenir duplicaciones
+    session_token = generate_session_token(user.id, is_admin=is_admin)
+    
     session["logged_in"] = True
     session["username"] = user.username
     session["user_id"] = user.id
+    session["session_token"] = session_token  # ✅ Token único de sesión
     session.permanent = True
 
     from app.admin.site_settings import get_site_setting

@@ -95,3 +95,8 @@ class Config:
             print("[WARN] Usando SECRET_KEY insegura por defecto SOLO para desarrollo.")
         else:
             raise RuntimeError("SECRET_KEY no configurada en entorno de producción.")
+    
+    # ✅ Configuración para recibir SMS desde Android
+    # Opcional: API key para autenticar requests desde apps Android
+    # Si no se configura, el endpoint funcionará sin autenticación (menos seguro)
+    ANDROID_SMS_API_KEY = os.getenv("ANDROID_SMS_API_KEY", None)

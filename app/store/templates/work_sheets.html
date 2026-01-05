@@ -7,7 +7,7 @@
   <meta name="admin_user" content="{{ ADMIN_USER }}">
   <meta name="current_user" content="{{ current_user.username if current_user else '' }}">
   <meta name="is_logged_in" content="{{ 'true' if session.get('logged_in') else 'false' }}">
-  <meta name="is_admin" content="{{ 'true' if current_user and current_user.username == ADMIN_USER else 'false' }}">
+  <meta name="is_admin" content="{{ 'true' if is_admin else 'false' }}">
   <link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='fontawesome/css/all.css') }}">
   <meta name="has_worksheet_access" content="{{ 'true' if current_user and user_has_worksheet_access(current_user) else 'false' }}">
@@ -17,7 +17,7 @@
 <div class="container container-max-width-900 store-light worksheet-panel admin-licencias-page">
   <div class="d-flex align-items-center justify-content-between mb-1 p-05-12">
     <div class="d-flex gap-05 admin-store-menus">
-      {% if current_user and current_user.username == ADMIN_USER %}
+      {% if is_admin %}
         <!-- Botones de menú para administradores -->
         <button id="menu1ToggleBtn" class="btn-blue menu-btn-worksheet"><i class="fas fa-table"></i></button>
         <button id="menu2ToggleBtn" class="btn-blue menu-btn-worksheet">&#9776; Menú</button>
@@ -31,7 +31,7 @@
     </div>
   </div>
       <!-- Menú1 para admin (menú original de hojas de cálculo) -->
-      {% if current_user and current_user.username == ADMIN_USER %}
+      {% if is_admin %}
       <div id="mobileMenu" class="mobile-menu-store hidden">
         <div class="menu-title-row">
           <i class="fas fa-bars"></i>
@@ -62,7 +62,7 @@
       {% endif %}
     
     <!-- Menú2 para usuarios normales -->
-    {% if current_user and current_user.username != ADMIN_USER %}
+    {% if current_user and not is_admin %}
     <div id="mobileMenu2" class="mobile-menu-store hidden">
       <div class="menu-title-row">
         <i class="fas fa-bars"></i>
@@ -72,7 +72,7 @@
       {% if current_user_id %}
         {% set user_object = User.query.get(current_user_id) %}
         {% set show_store = False %}
-        {% if session.get('username') == ADMIN_USER %}
+        {% if is_admin %}
           {% set show_store = True %}
         {% elif user_object.parent_id %}
           {% if user_object.can_access_store %}
@@ -97,7 +97,7 @@
       <a href="{{ url_for('main_bp.home2') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-code"></i> Códigos 2</a>
       {% endif %}
       {% if user_object %}
-        {% if current_user.username == ADMIN_USER %}
+        {% if is_admin %}
           <a href="{{ url_for('user_auth_bp.estadisticas') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-chart-bar"></i> Estadísticas</a>
         {% elif not user_object.parent_id and user_object.roles_tienda and user_object.roles_tienda[0].enabled %}
           <a href="{{ url_for('user_auth_bp.estadisticas') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-chart-bar"></i> Estadísticas</a>
@@ -105,22 +105,22 @@
         <a href="{{ url_for('user_auth_bp.estadisticas') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-chart-bar"></i> Estadísticas</a>
         {% endif %}
       {% endif %}
-      {% if session.get('is_user') and current_user %}
+      {% if is_user and current_user %}
         {% if current_user.is_support %}
           <a href="{{ url_for('store_bp.support_dashboard') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-headset"></i> Chat de Soporte Admin</a>
         {% elif current_user.can_chat %}
           <a href="{{ url_for('store_bp.user_chat_soporte') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-headset"></i> Chat de Soporte</a>
         {% endif %}
       {% endif %}
-      {% if session.get('is_user') and not current_user.parent_id and user_has_worksheet_access(current_user) %}
+      {% if is_user and not current_user.parent_id and user_has_worksheet_access(current_user) %}
         <a href="{{ url_for('store_bp.user_work_sheets') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-table"></i> Hojas de Cálculo</a>
       {% endif %}
-      {% if session.get('is_user') and user_object and user_object.can_create_subusers %}
+      {% if is_user and user_object and user_object.can_create_subusers %}
         <a href="{{ url_for('subuser_bp.manage_subusers') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-users"></i> Sub-usuarios</a>
       {% endif %}
-      {% if session.get('username') == ADMIN_USER %}
+      {% if is_admin %}
         <a href="{{ url_for('auth_bp.logout') }}" class="btn-panel btn-red mobile-menu-btn mb-04"><i class="fas fa-sign-out-alt"></i> Cerrar Sesión</a>
-      {% elif session.get('is_user') %}
+      {% elif is_user %}
         <a href="{{ url_for('auth_bp.logout') }}" class="btn-panel btn-red mobile-menu-btn mb-04"><i class="fas fa-sign-out-alt"></i> Cerrar Sesión</a>
       {% else %}
         <a href="{{ url_for('auth_bp.logout') }}" class="btn-panel btn-red mobile-menu-btn mb-04"><i class="fas fa-sign-out-alt"></i> Cerrar Sesión</a>
@@ -129,7 +129,7 @@
     {% endif %}
     
     <!-- Menús para administradores -->
-    {% if current_user and current_user.username == ADMIN_USER %}
+    {% if is_admin %}
     <!-- Modal Menú2 para administradores (Administración) -->
     <div id="mobileMenu2" class="mobile-menu-store hidden">
       <div class="menu-title-row">

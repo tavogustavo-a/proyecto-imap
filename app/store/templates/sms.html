@@ -94,6 +94,105 @@
   </div>
 
   <div class="admin-card">
+    <!-- Sección de Configuración Android -->
+    <div id="android-sms-section" class="mb-2">
+      <h4 class="mb-1 text-center">📱 Números Android</h4>
+      <p class="text-center text-secondary mb-1" style="font-size: 0.9rem;">
+        Configura múltiples números Android para recibir SMS directamente desde tus celulares usando SMS Forwarder
+      </p>
+      
+      <!-- Formulario para agregar/editar número Android -->
+      <form id="android-sms-form" class="mb-2">
+        <input type="hidden" id="android-config-id" value="">
+        <label for="android-config-name" class="sr-only">Nombre</label>
+        <input
+          type="text"
+          id="android-config-name"
+          placeholder="Nombre (obligatorio, ej: Mi Celular Principal)"
+          required
+          class="d-block mb-05 w-100"
+          autocomplete="off"
+        >
+        <label for="android-phone-number" class="sr-only">Número Android</label>
+        <input
+          type="text"
+          id="android-phone-number"
+          placeholder="Tu número Android (ej: +573001234567)"
+          required
+          class="d-block mb-05 w-100"
+          autocomplete="off"
+          pattern="^\+[1-9]\d{1,14}$"
+          title="Formato: +573001234567 (con código de país)"
+        >
+        
+        <label for="android-api-key" class="sr-only">API Key (Opcional)</label>
+        <div class="d-flex align-items-center gap-05 mb-05">
+          <div class="flex-grow-1 d-flex align-items-center" style="position: relative;">
+            <input
+              type="password"
+              id="android-api-key"
+              placeholder="API Key (opcional, para mayor seguridad)"
+              class="flex-grow-1"
+              autocomplete="off"
+              style="padding-right: 2.5rem;"
+            >
+            <button 
+              type="button" 
+              id="toggle-api-key-visibility" 
+              class="btn-blue btn-small" 
+              title="Mostrar/Ocultar API Key"
+              style="position: absolute; right: 0.25rem; padding: 0.25rem 0.5rem; border: none; background: transparent; color: #666;"
+            >
+              <i class="fas fa-eye" id="api-key-eye-icon"></i>
+            </button>
+          </div>
+          <button type="button" id="generate-api-key-btn" class="btn-blue btn-small" title="Generar API Key aleatoria">
+            <i class="fas fa-key"></i> Generar
+          </button>
+        </div>
+        
+        <div class="text-center">
+          <button type="submit" id="android-sms-save-btn" class="btn-green">Agregar Número Android</button>
+          <button type="button" id="android-sms-cancel-btn" class="btn-blue d-none">Cancelar</button>
+        </div>
+        
+        <div id="android-sms-message" class="mt-05 text-center"></div>
+      </form>
+      
+      <!-- Lista de números Android configurados (OCULTA - solo se usa el modal de edición) -->
+      <div id="android-configs-list" class="mb-2" style="display: none;">
+        <p class="text-center">Cargando números Android...</p>
+      </div>
+      
+      <div class="alert-info p-1 mb-1" style="font-size: 0.85rem;">
+        <strong>📋 Instrucciones para SMS Forwarder:</strong>
+        <ol class="mb-0" style="padding-left: 1.2rem;">
+          <li><strong>Agrega el número Android:</strong> Ingresa el número con código de país (ej: +573001234567) y guarda</li>
+          <li><strong>Copia la URL del webhook:</strong> Haz clic en "Editar" del número Android y copia la URL del webhook que aparece</li>
+          <li><strong>Abre SMS Forwarder en tu celular:</strong>
+            <ul style="padding-left: 1.5rem; margin-top: 0.25rem;">
+              <li>Ve a "Webhooks" o "HTTP POST"</li>
+              <li>Crea un nuevo webhook</li>
+              <li>Pega la URL copiada en el campo "URL"</li>
+              <li>Método: <strong>POST</strong></li>
+              <li>Content-Type: <strong>application/json</strong></li>
+            </ul>
+          </li>
+          <li><strong>Configura el Body JSON:</strong> En el campo "Body" o "JSON Body", pega exactamente esto (reemplaza TU_API_KEY con tu API key si la configuraste):
+            <pre style="background: #f5f5f5; padding: 0.5rem; border-radius: 4px; margin-top: 0.25rem; font-size: 0.8rem; overflow-x: auto;"><code>{"from_number": "{in-number}", "to_number": "{out-number}", "message_body": "{msg}", "api_key": "TU_API_KEY"}</code></pre>
+            <strong>Nota:</strong> Si no configuraste API key, puedes omitir el campo "api_key" o dejarlo vacío:
+            <pre style="background: #f5f5f5; padding: 0.5rem; border-radius: 4px; margin-top: 0.25rem; font-size: 0.8rem; overflow-x: auto;"><code>{"from_number": "{in-number}", "to_number": "{out-number}", "message_body": "{msg}"}</code></pre>
+          </li>
+          <li><strong>Guarda y activa:</strong> Guarda la configuración y activa el webhook en SMS Forwarder</li>
+        </ol>
+        <p class="mb-0 mt-05" style="font-size: 0.8rem;">
+          <strong>💡 Tip:</strong> Los placeholders <code>{in-number}</code>, <code>{out-number}</code> y <code>{msg}</code> son reemplazados automáticamente por SMS Forwarder con los datos reales del SMS recibido.
+        </p>
+      </div>
+    </div>
+    
+    <hr class="hr-margin-15">
+    
     <!-- Sección de Gestión de Números SMS -->
     <div id="sms-configs-section" class="mb-2">
       <h4 class="mb-1 text-center">Gestionar Números SMS</h4>
@@ -200,36 +299,102 @@
     
     <form id="sms-edit-config-form">
       <input type="hidden" id="edit-sms-config-id" value="">
+      <input type="hidden" id="edit-sms-config-type" value=""> <!-- Para detectar si es Android -->
       
-      <label for="edit-sms-config-name" class="sr-only">Nombre</label>
-      <input
-        type="text"
-        id="edit-sms-config-name"
-        placeholder="Nombre (obligatorio)"
-        required
-        class="d-block mb-05"
-        autocomplete="off"
-      >
+      <!-- Campos para Twilio (ocultos si es Android) -->
+      <div id="edit-twilio-fields">
+        <label for="edit-sms-config-name" class="sr-only">Nombre</label>
+        <input
+          type="text"
+          id="edit-sms-config-name"
+          placeholder="Nombre (obligatorio)"
+          required
+          class="d-block mb-05"
+          autocomplete="off"
+        >
+        
+        <label for="edit-sms-config-account-sid" class="sr-only">Twilio Account SID</label>
+        <input
+          type="text"
+          id="edit-sms-config-account-sid"
+          placeholder="Twilio Account SID (obligatorio)"
+          required
+          class="d-block mb-05"
+          autocomplete="off"
+        >
+        
+        <label for="edit-sms-config-auth-token" class="sr-only">Twilio Auth Token</label>
+        <input
+          type="password"
+          id="edit-sms-config-auth-token"
+          placeholder="Twilio Auth Token (opcional, déjalo vacío para mantener el actual)"
+          class="d-block mb-05"
+          autocomplete="off"
+        >
+      </div>
       
-      <label for="edit-sms-config-account-sid" class="sr-only">Twilio Account SID</label>
-      <input
-        type="text"
-        id="edit-sms-config-account-sid"
-        placeholder="Twilio Account SID (obligatorio)"
-        required
-        class="d-block mb-05"
-        autocomplete="off"
-      >
+      <!-- Campos para Android (ocultos si es Twilio) -->
+      <div id="edit-android-fields" style="display: none;">
+        <label for="edit-android-config-name" class="sr-only">Nombre</label>
+        <input
+          type="text"
+          id="edit-android-config-name"
+          placeholder="Nombre (obligatorio, ej: Mi Celular Principal)"
+          required
+          class="d-block mb-05"
+          autocomplete="off"
+        >
+        <label for="edit-android-phone-number" class="sr-only">Número Android</label>
+        <input
+          type="text"
+          id="edit-android-phone-number"
+          placeholder="Tu número Android (ej: +573001234567)"
+          required
+          class="d-block mb-05"
+          autocomplete="off"
+          pattern="^\+[1-9]\d{1,14}$"
+          title="Formato: +573001234567 (con código de país)"
+        >
+        
+        <label for="edit-android-api-key" class="sr-only">API Key</label>
+        <div class="d-flex align-items-center gap-05 mb-05">
+          <div class="flex-grow-1 d-flex align-items-center" style="position: relative;">
+            <input
+              type="text"
+              id="edit-android-api-key"
+              placeholder="API Key (opcional, para mayor seguridad)"
+              class="flex-grow-1"
+              autocomplete="off"
+              style="padding-right: 2.5rem;"
+            >
+            <button 
+              type="button" 
+              id="toggle-edit-api-key-visibility" 
+              class="btn-blue btn-small" 
+              title="Mostrar/Ocultar API Key"
+              style="position: absolute; right: 0.25rem; padding: 0.25rem 0.5rem; border: none; background: transparent; color: #666;"
+            >
+              <i class="fas fa-eye" id="edit-api-key-eye-icon"></i>
+            </button>
+          </div>
+          <button type="button" id="generate-edit-api-key-btn" class="btn-blue btn-small" title="Generar API Key aleatoria">
+            <i class="fas fa-key"></i> Generar
+          </button>
+        </div>
+        
+        <!-- URL del Webhook para Android -->
+        <div class="mb-05 p-1" style="background-color: #f5f5f5; border-radius: 4px; font-size: 0.85rem;">
+          <strong>URL del Webhook:</strong>
+          <div class="d-flex align-items-center gap-05 mt-05">
+            <code id="edit-webhook-url" class="flex-grow-1" style="word-break: break-all; font-size: 0.8rem;">Cargando...</code>
+            <button type="button" id="copy-edit-webhook-btn" class="btn-blue btn-small" title="Copiar URL">
+              <i class="fas fa-copy"></i> Copiar
+            </button>
+          </div>
+        </div>
+      </div>
       
-      <label for="edit-sms-config-auth-token" class="sr-only">Twilio Auth Token</label>
-      <input
-        type="password"
-        id="edit-sms-config-auth-token"
-        placeholder="Twilio Auth Token (opcional, déjalo vacío para mantener el actual)"
-        class="d-block mb-05"
-        autocomplete="off"
-      >
-      
+      <!-- Campo común: Número de Teléfono -->
       <label for="edit-sms-config-phone" class="sr-only">Número de Teléfono</label>
       <input
         type="text"
@@ -293,7 +458,7 @@
     </div>
     
     <div class="mb-2">
-      <label><strong>Regex disponibles:</strong></label>
+      <div class="mb-05"><strong>Regex disponibles:</strong></div>
       <div id="sms-regex-list" class="mb-2 regex-list-container">
         <p class="text-center text-secondary">Cargando regex...</p>
       </div>

@@ -73,13 +73,77 @@ from functools import wraps
 def admin_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
+        admin_user = current_app.config.get("ADMIN_USER", "admin")
+        
+        # 1) ✅ SEGURIDAD: Verificar que NO sea un usuario normal o sub-usuario PRIMERO
+        # Los usuarios normales tienen session["is_user"] = True
+        if session.get("is_user"):
+            flash("Solo el administrador puede acceder a esta sección.", "danger")
+            session.clear()  # Limpiar sesión inválida
+            return redirect(url_for("user_auth_bp.login"))
+        
+        # 2) ✅ SEGURIDAD: Verificar que esté logueado
         if not session.get("logged_in"):
             flash("Inicia sesión para acceder.", "danger")
             return redirect(url_for("auth_bp.login"))
-        admin_user = current_app.config.get("ADMIN_USER", "admin")
-        if session.get("username") != admin_user:
-            flash("Solo el administrador puede acceder a la tienda.", "danger")
+        
+        # 3) ✅ SEGURIDAD CRÍTICA: Verificar token de sesión único ANTES de verificar user_id
+        # Esto previene sesiones duplicadas - el token debe estar registrado en el servidor
+        from app.auth.session_tokens import validate_session_token
+        session_token = session.get("session_token")
+        user_id = session.get("user_id")
+        
+        if not session_token:
+            # No hay token de sesión - sesión inválida o duplicada sin token
+            flash("Solo el administrador puede acceder a esta sección.", "danger")
+            session.clear()
             return redirect(url_for("auth_bp.login"))
+        
+        # Validar el token - debe existir en el servidor y ser de admin
+        if not validate_session_token(session_token, expected_user_id=user_id, require_admin=True):
+            # Token inválido, expirado, o no es de admin - sesión duplicada o inválida
+            flash("Solo el administrador puede acceder a esta sección.", "danger")
+            session.clear()
+            return redirect(url_for("auth_bp.login"))
+
+        # 4) ✅ SEGURIDAD CRÍTICA: Verificar que el user_id corresponda realmente al admin en la BD
+        # Esta es la verificación más importante - debe existir y ser el admin
+        if not user_id:
+            # Si no hay user_id, no puede ser una sesión válida de admin
+            flash("Solo el administrador puede acceder a esta sección.", "danger")
+            session.clear()
+            return redirect(url_for("auth_bp.login"))
+        
+        # Verificar en la BD que el user_id corresponda al admin
+        user_obj = User.query.get(user_id)
+        if not user_obj:
+            # Usuario no existe en la BD
+            flash("Solo el administrador puede acceder a esta sección.", "danger")
+            session.clear()
+            return redirect(url_for("auth_bp.login"))
+        
+        # Verificar que el usuario de la BD sea realmente el admin
+        if user_obj.username != admin_user or user_obj.parent_id is not None:
+            # No es admin o es sub-usuario
+            flash("Solo el administrador puede acceder a esta sección.", "danger")
+            session.clear()
+            return redirect(url_for("auth_bp.login"))
+
+        # 5) ✅ SEGURIDAD ADICIONAL: Verificar que el username en sesión coincida con el de la BD
+        # Esto previene sesiones donde se falsifica solo el username pero no el user_id
+        session_username = session.get("username")
+        if session_username != admin_user:
+            flash("Solo el administrador puede acceder a esta sección.", "danger")
+            session.clear()
+            return redirect(url_for("auth_bp.login"))
+
+        # 6) ✅ SEGURIDAD ADICIONAL: Verificar que la sesión tenga login_time (sesión válida iniciada correctamente)
+        # Esto previene sesiones que no fueron iniciadas mediante el proceso de login normal
+        if not session.get("login_time"):
+            flash("Solo el administrador puede acceder a esta sección.", "danger")
+            session.clear()
+            return redirect(url_for("auth_bp.login"))
+        
         return f(*args, **kwargs)
     return decorated_function
 
@@ -7696,6 +7760,182 @@ def list_sms_configs():
         'last_selected_id': last_selected_id  # ID del último número seleccionado
     })
 
+@store_bp.route('/admin/android-sms-config', methods=['GET'])
+@admin_required
+def get_android_sms_config():
+    """Obtiene todas las configuraciones SMS Android (múltiples números)"""
+    from flask import url_for
+    import socket
+    
+    # Obtener todas las configuraciones Android
+    android_configs = SMSConfig.query.filter_by(number_type='android').order_by(SMSConfig.created_at.desc()).all()
+    
+    # Obtener URL del webhook base
+    try:
+        base_url = request.url_root.rstrip('/')
+        
+        # ✅ DETECCIÓN AUTOMÁTICA DE IP LOCAL PARA PRUEBAS
+        if current_app.config.get('FLASK_ENV') == 'development' and ('127.0.0.1' in base_url or 'localhost' in base_url):
+            try:
+                s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+                s.connect(("8.8.8.8", 80))
+                local_ip = s.getsockname()[0]
+                s.close()
+                if '127.0.0.1' in base_url:
+                    base_url = base_url.replace('127.0.0.1', local_ip)
+                elif 'localhost' in base_url:
+                    base_url = base_url.replace('localhost', local_ip)
+            except Exception:
+                pass
+        
+        webhook_url = base_url + url_for('api_bp.receive_sms_from_android')
+    except:
+        try:
+            base_url = request.url_root.rstrip('/')
+            if current_app.config.get('FLASK_ENV') == 'development' and ('127.0.0.1' in base_url or 'localhost' in base_url):
+                try:
+                    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+                    s.connect(("8.8.8.8", 80))
+                    local_ip = s.getsockname()[0]
+                    s.close()
+                    if '127.0.0.1' in base_url:
+                        base_url = base_url.replace('127.0.0.1', local_ip)
+                    elif 'localhost' in base_url:
+                        base_url = base_url.replace('localhost', local_ip)
+                except Exception:
+                    pass
+            webhook_url = base_url + '/api/sms/android-receive'
+        except:
+            webhook_url = request.url_root.rstrip('/') + '/api/sms/android-receive'
+    
+    # Obtener API key global (si existe) o de cada configuración
+    from app.admin.site_settings import get_site_setting
+    global_api_key = get_site_setting("android_sms_api_key", "")
+    
+    configs_data = []
+    for config in android_configs:
+        # Obtener API key específica de la descripción o usar la global
+        api_key = global_api_key  # Por defecto usar la global
+        
+        # Intentar extraer API key de la descripción si está guardada ahí
+        if config.description and 'api_key:' in config.description:
+            try:
+                api_key = config.description.split('api_key:')[1].strip().split('\n')[0]
+            except:
+                pass
+        
+        configs_data.append({
+            'id': config.id,
+            'phone_number': config.phone_number,
+            'name': config.name,
+            'api_key': api_key,
+            'webhook_url': webhook_url,
+            'is_enabled': config.is_enabled
+        })
+    
+    return jsonify({
+        'success': True,
+        'configs': configs_data,
+        'webhook_url': webhook_url,
+        'global_api_key': global_api_key  # Mantener compatibilidad
+    })
+
+
+@store_bp.route('/admin/android-sms-config', methods=['POST'])
+@csrf_exempt_route  # ✅ Exentar del CSRF para evitar errores al guardar
+@admin_required
+def save_android_sms_config():
+    """Guarda una nueva configuración de SMS Android (permite múltiples números)"""
+    from app.admin.site_settings import get_site_setting, set_site_setting
+    
+    try:
+        data = request.get_json()
+        name = data.get('name', '').strip()
+        phone_number = data.get('phone_number', '').strip()
+        api_key = data.get('api_key', '').strip()
+        config_id = data.get('config_id')  # Para editar existente
+        
+        if not name:
+            return jsonify({'success': False, 'message': 'El nombre es obligatorio'}), 400
+        
+        if not phone_number:
+            return jsonify({'success': False, 'message': 'El número de teléfono es obligatorio'}), 400
+        
+        # Validar formato del número
+        import re
+        if not re.match(r'^\+[1-9]\d{1,14}$', phone_number):
+            return jsonify({
+                'success': False,
+                'message': 'Formato inválido. Debe ser: +573001234567 (con código de país)'
+            }), 400
+        
+        # Verificar si el número ya existe en otra configuración Android
+        existing_config = SMSConfig.query.filter_by(
+            phone_number=phone_number,
+            number_type='android'
+        ).first()
+        
+        if existing_config and (not config_id or existing_config.id != int(config_id)):
+            return jsonify({
+                'success': False,
+                'message': f'Este número Android ya está configurado: {existing_config.name}'
+            }), 400
+        
+        # ✅ API KEY OPCIONAL: Guardar solo si se proporciona, permitir vacío
+        if api_key:
+            set_site_setting("android_sms_api_key", api_key)
+        else:
+            # Si no se proporciona API key, guardar como vacío (eliminar si existía)
+            set_site_setting("android_sms_api_key", "")
+            api_key = ""
+        
+        # Guardar descripción de la configuración
+        description = "Configuración automática para SMS desde Android"
+        if api_key:
+            description += f"\napi_key: {api_key}"
+        
+        if config_id:
+            # Editar configuración existente
+            config = SMSConfig.query.get(config_id)
+            if not config or config.number_type != 'android':
+                return jsonify({'success': False, 'message': 'Configuración no encontrada'}), 404
+            
+            config.name = name
+            config.phone_number = phone_number
+            config.description = description
+            if not config.twilio_account_sid:
+                config.twilio_account_sid = "android_dummy"
+            if not config.twilio_auth_token:
+                config.twilio_auth_token = "android_dummy"
+            config.is_enabled = True
+            db.session.commit()
+        else:
+            # Crear nueva configuración Android
+            config = SMSConfig(
+                name=name,
+                phone_number=phone_number,
+                twilio_account_sid="android_dummy",
+                twilio_auth_token="android_dummy",
+                is_enabled=True,
+                number_type="android",
+                description=description
+            )
+            db.session.add(config)
+            db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': 'Configuración Android guardada correctamente',
+            'sms_config_id': config.id,
+            'api_key': api_key
+        })
+    
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Error al guardar configuración Android: {e}", exc_info=True)
+        return jsonify({'success': False, 'message': f'Error: {str(e)}'}), 500
+
+
 @store_bp.route('/admin/sms_configs', methods=['POST'])
 @admin_required
 def create_sms_config():
@@ -7785,30 +8025,31 @@ def update_sms_config(config_id):
 @store_bp.route('/admin/sms_configs/<int:config_id>', methods=['DELETE'])
 @admin_required
 def delete_sms_config(config_id):
-    """Elimina una configuración SMS. Los correos permitidos, mensajes y regex huérfanos se eliminan automáticamente en cascada."""
+    """Elimina una configuración SMS. Los correos permitidos, mensajes y regex se eliminan automáticamente en cascada."""
     config = SMSConfig.query.get_or_404(config_id)
     
     try:
-        # Contar correos permitidos y mensajes que se eliminarán en cascada
+        # Contar elementos que se eliminarán en cascada
         allowed_count = AllowedSMSNumber.query.filter_by(sms_config_id=config_id).count()
         messages_count = SMSMessage.query.filter_by(sms_config_id=config_id).count()
+        regex_count = SMSRegex.query.filter_by(sms_config_id=config_id).count()
         
-        # Obtener regex asociados a este SMSConfig (uno-a-muchos: cada regex pertenece a un solo SMSConfig)
-        associated_regexes = SMSRegex.query.filter_by(sms_config_id=config_id).all()
-        regex_associations_count = len(associated_regexes)
+        # Eliminar explícitamente todos los elementos relacionados para asegurar eliminación completa
+        # Esto garantiza que todo se elimine incluso si hay problemas con las relaciones SQLAlchemy
         
-        # Eliminar explícitamente los regex primero para evitar problemas con SQLAlchemy
-        # Aunque hay cascade='all, delete-orphan' y ondelete='CASCADE', eliminarlos explícitamente
-        # asegura que SQLAlchemy no intente hacer UPDATE con NULL
-        for regex in associated_regexes:
-            db.session.delete(regex)
+        # 1. Eliminar regex asociados
+        SMSRegex.query.filter_by(sms_config_id=config_id).delete()
         
-        # Eliminar la configuración (los AllowedSMSNumber y SMSMessage se eliminarán en cascada)
-        # Esto funciona por:
-        # 1. Foreign key con ondelete='CASCADE' en la base de datos
-        # 2. Relación SQLAlchemy con cascade='all, delete-orphan' para AllowedSMSNumber y SMSMessage
+        # 2. Eliminar correos permitidos asociados
+        AllowedSMSNumber.query.filter_by(sms_config_id=config_id).delete()
+        
+        # 3. Eliminar mensajes SMS asociados
+        SMSMessage.query.filter_by(sms_config_id=config_id).delete()
+        
+        # 4. Eliminar la configuración SMS
         db.session.delete(config)
         
+        # Commit todas las eliminaciones a la base de datos
         db.session.commit()
         
         message = 'Configuración SMS eliminada correctamente.'
@@ -7817,8 +8058,8 @@ def delete_sms_config(config_id):
             details.append(f'{allowed_count} correo(s) permitido(s)')
         if messages_count > 0:
             details.append(f'{messages_count} mensaje(s)')
-        if regex_associations_count > 0:
-            details.append(f'{regex_associations_count} regex asociado(s)')
+        if regex_count > 0:
+            details.append(f'{regex_count} regex asociado(s)')
         if details:
             message += f' También se eliminaron: {", ".join(details)}.'
         
@@ -7826,6 +8067,7 @@ def delete_sms_config(config_id):
     
     except Exception as e:
         db.session.rollback()
+        current_app.logger.error(f"Error al eliminar SMSConfig {config_id}: {e}", exc_info=True)
         return jsonify({'success': False, 'error': f'Error al eliminar: {str(e)}'}), 500
 
 @store_bp.route('/admin/sms/regex', methods=['GET'])
@@ -8503,33 +8745,26 @@ def add_allowed_sms_numbers():
     if not normalized_new_numbers:
         return jsonify({'success': False, 'message': 'No hay correos o números válidos para añadir.'}), 400
     
-    # 1. Verificar si alguno de los correos YA existe en CUALQUIER número (Unicidad Global)
+    # 1. Verificar si alguno de los correos YA existe en ESTE MISMO número (solo verificar duplicados dentro del mismo número)
     existing_records = AllowedSMSNumber.query.filter(
-        AllowedSMSNumber.phone_number.in_(normalized_new_numbers)
+        AllowedSMSNumber.phone_number.in_(normalized_new_numbers),
+        AllowedSMSNumber.sms_config_id == sms_config_id  # ✅ Solo verificar en el mismo número SMS
     ).all()
     
     existing_emails = {record.phone_number for record in existing_records}
     
-    # 2. Filtrar los que NO existen para agregarlos
+    # 2. Filtrar los que NO existen en este número para agregarlos
     to_add = [num for num in normalized_new_numbers if num not in existing_emails]
     
-    # 3. Si no hay ninguno para agregar (todos ya existen)
+    # 3. Si no hay ninguno para agregar (todos ya existen en este número)
     if not to_add:
         error_messages = []
-        processed_emails = []  # Correos que se procesaron (ya en este número)
-        remaining_emails = []  # Correos que quedan pendientes (en otros números)
+        processed_emails = []  # Correos que ya están en este número
         
         for record in existing_records:
-            if record.sms_config_id == sms_config_id:
-                # Ya existe en ESTE mismo número (azul) - se procesó
-                error_messages.append(f'<span class="text-info">• {record.phone_number} (ya agregado a este número)</span>')
-                processed_emails.append(record.phone_number)
-            else:
-                # Existe en OTRO número (rojo) - queda pendiente
-                config = SMSConfig.query.get(record.sms_config_id)
-                config_info = f"{config.name} ({config.phone_number})" if config else f"ID {record.sms_config_id}"
-                error_messages.append(f'<span class="text-danger">• {record.phone_number} (ya está en {config_info})</span>')
-                remaining_emails.append(record.phone_number)
+            # Ya existe en ESTE mismo número
+            error_messages.append(f'<span class="text-info">• {record.phone_number} (ya agregado a este número)</span>')
+            processed_emails.append(record.phone_number)
             
         msg_html = '<div class="mb-1">Detalle de los correos no agregados:<br>' + '<br>'.join(error_messages) + '</div>'
         return jsonify({
@@ -8538,7 +8773,7 @@ def add_allowed_sms_numbers():
             'is_html': True,
             'added_count': 0,
             'processed_emails': processed_emails,  # Correos que se procesaron y deben eliminarse del input
-            'remaining_emails': remaining_emails  # Correos que quedan pendientes
+            'remaining_emails': []  # Ya no hay correos pendientes de otros números
         }), 200
 
     # 4. Agregar los nuevos

@@ -19,7 +19,7 @@
     </div>
     {% if current_user %}
       {% set show_store = False %}
-      {% if session.get('username') == ADMIN_USER %}
+      {% if is_admin %}
         {% set show_store = True %}
       {% elif current_user.parent_id %}
         {% if current_user.can_access_store %}
@@ -48,20 +48,20 @@
     <a href="{{ url_for('main_bp.home2') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-code"></i> Códigos 2</a>
     {% endif %}
     <a href="{{ url_for('user_auth_bp.estadisticas') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-chart-bar"></i> Estadísticas</a>
-    {% if session.get('is_user') and current_user %}
+    {% if is_user and current_user %}
       {% if current_user.is_support %}
         <a href="{{ url_for('store_bp.support_dashboard') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-headset"></i> Chat de Soporte Admin</a>
       {% elif current_user.can_chat %}
         <a href="{{ url_for('store_bp.user_chat_soporte') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-headset"></i> Chat de Soporte</a>
       {% endif %}
     {% endif %}
-    {% if session.get('is_user') and current_user and current_user.can_create_subusers %}
+    {% if is_user and current_user and current_user.can_create_subusers %}
       <a href="{{ url_for('subuser_bp.manage_subusers') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-users"></i> Sub-usuarios</a>
     {% endif %}
-    {% if session.get('is_user') and not current_user.parent_id and user_has_worksheet_access(current_user) %}
+    {% if is_user and not current_user.parent_id and user_has_worksheet_access(current_user) %}
   <a href="{{ url_for('store_bp.user_work_sheets') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-table"></i> Hojas de Cálculo</a>
 {% endif %}
-    {% if session.get('is_user') %}
+    {% if is_user %}
       <a href="{{ url_for('user_auth_bp.logout') }}" class="btn-panel btn-red mobile-menu-btn mb-04"><i class="fas fa-sign-out-alt"></i> Cerrar Sesión</a>
     {% else %}
       <a href="{{ url_for('user_auth_bp.logout') }}" class="btn-panel btn-red mobile-menu-btn mb-04"><i class="fas fa-sign-out-alt"></i> Cerrar Sesión</a>

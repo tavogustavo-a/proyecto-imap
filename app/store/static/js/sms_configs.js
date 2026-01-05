@@ -82,7 +82,9 @@ document.addEventListener('DOMContentLoaded', function() {
         const configsHTML = configs.map(config => {
             // Determinar el tipo de número y el color del badge (CSP Compliant - sin estilos inline)
             let numberTypeBadge = '';
-            if (config.number_type === 'comprado') {
+            if (config.number_type === 'android') {
+                numberTypeBadge = '<span class="badge badge-info">Android</span>';
+            } else if (config.number_type === 'comprado') {
                 numberTypeBadge = '<span class="badge badge-success">Comprado</span>';
             } else if (config.number_type === 'temporal') {
                 numberTypeBadge = '<span class="badge badge-warning">Temporal</span>';
@@ -133,6 +135,7 @@ document.addEventListener('DOMContentLoaded', function() {
         smsConfigsList.querySelectorAll('.edit-sms-config').forEach(btn => {
             btn.addEventListener('click', function() {
                 const configId = parseInt(this.getAttribute('data-config-id'));
+                // ✅ Siempre usar el modal normal (ahora soporta Android)
                 editConfig(configId, configs);
             });
         });
@@ -492,20 +495,91 @@ document.addEventListener('DOMContentLoaded', function() {
         const editModal = document.getElementById('sms-edit-config-modal');
         const editForm = document.getElementById('sms-edit-config-form');
         const editConfigId = document.getElementById('edit-sms-config-id');
+        const editConfigType = document.getElementById('edit-sms-config-type');
         const editName = document.getElementById('edit-sms-config-name');
         const editAccountSid = document.getElementById('edit-sms-config-account-sid');
         const editAuthToken = document.getElementById('edit-sms-config-auth-token');
         const editPhone = document.getElementById('edit-sms-config-phone');
         
-        if (editModal && editForm && editConfigId && editName && editAccountSid && editAuthToken && editPhone) {
+        // Campos Android
+        const editAndroidFields = document.getElementById('edit-android-fields');
+        const editTwilioFields = document.getElementById('edit-twilio-fields');
+        const editAndroidConfigName = document.getElementById('edit-android-config-name');
+        const editAndroidPhone = document.getElementById('edit-android-phone-number');
+        const editAndroidApiKey = document.getElementById('edit-android-api-key');
+        const editWebhookUrl = document.getElementById('edit-webhook-url');
+        const copyEditWebhookBtn = document.getElementById('copy-edit-webhook-btn');
+        
+        if (!editModal || !editForm || !editConfigId || !editPhone) return;
+        
             editConfigId.value = config.id;
-            editName.value = config.name;
-            editAccountSid.value = config.twilio_account_sid;
-            editAuthToken.value = ''; // No mostrar el token por seguridad
             editPhone.value = config.phone_number;
             
-            editModal.classList.remove('d-none');
+        // ✅ Detectar si es Android
+        const isAndroid = config.number_type === 'android';
+        
+        if (editConfigType) {
+            editConfigType.value = isAndroid ? 'android' : 'twilio';
         }
+        
+        if (isAndroid) {
+            // Mostrar campos Android, ocultar campos Twilio
+            if (editAndroidFields) editAndroidFields.style.display = 'block';
+            if (editTwilioFields) editTwilioFields.style.display = 'none';
+            if (editName) editName.required = false;
+            if (editAccountSid) editAccountSid.required = false;
+            
+            // Poblar campos Android
+            if (editAndroidConfigName) {
+                editAndroidConfigName.value = config.name || '';
+                editAndroidConfigName.required = true;
+            }
+            if (editAndroidPhone) {
+                editAndroidPhone.value = config.phone_number;
+                editAndroidPhone.required = true;
+            }
+            
+            // Cargar API key y webhook URL desde la configuración Android
+            fetch('/tienda/admin/android-sms-config', {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': getCsrfToken()
+                }
+            })
+            .then(handleFetchResponse)
+            .then(data => {
+                if (data.success && data.configs) {
+                    const androidConfig = data.configs.find(c => c.id === configId);
+                    if (androidConfig) {
+                        if (editAndroidApiKey) {
+                            editAndroidApiKey.value = androidConfig.api_key || '';
+                        }
+                        // ✅ Mostrar URL del webhook en el modal
+                        if (editWebhookUrl && data.webhook_url) {
+                            editWebhookUrl.textContent = data.webhook_url;
+                        }
+                    }
+                }
+            })
+            .catch(err => {
+                console.error('Error al cargar configuración Android:', err);
+            });
+        } else {
+            // Mostrar campos Twilio, ocultar campos Android
+            if (editAndroidFields) editAndroidFields.style.display = 'none';
+            if (editTwilioFields) editTwilioFields.style.display = 'block';
+            if (editName) editName.required = true;
+            if (editAccountSid) editAccountSid.required = true;
+            if (editAndroidPhone) editAndroidPhone.required = false;
+            
+            // Poblar campos Twilio
+            if (editName) editName.value = config.name;
+            if (editAccountSid) editAccountSid.value = config.twilio_account_sid;
+            if (editAuthToken) editAuthToken.value = ''; // No mostrar el token por seguridad
+        }
+        
+        editModal.classList.remove('d-none');
     }
     
     // Manejar envío del formulario
@@ -587,7 +661,80 @@ document.addEventListener('DOMContentLoaded', function() {
             e.preventDefault();
             
             const configId = document.getElementById('edit-sms-config-id').value;
-            const formData = {
+            const configType = document.getElementById('edit-sms-config-type') ? document.getElementById('edit-sms-config-type').value : '';
+            const isAndroid = configType === 'android';
+            
+            let formData;
+            
+            if (isAndroid) {
+                // Formulario Android
+                const editAndroidConfigName = document.getElementById('edit-android-config-name');
+                const editAndroidPhone = document.getElementById('edit-android-phone-number');
+                const editAndroidApiKey = document.getElementById('edit-android-api-key');
+                
+                if (!editAndroidConfigName || !editAndroidConfigName.value.trim()) {
+                    if (editConfigMessage) {
+                        editConfigMessage.textContent = 'Por favor ingresa el nombre.';
+                        editConfigMessage.className = 'sms-error-message';
+                    }
+                    return;
+                }
+                
+                if (!editAndroidPhone || !editAndroidPhone.value.trim()) {
+                    if (editConfigMessage) {
+                        editConfigMessage.textContent = 'Por favor ingresa el número Android.';
+                        editConfigMessage.className = 'sms-error-message';
+                    }
+                    return;
+                }
+                
+                formData = {
+                    name: editAndroidConfigName.value.trim(),
+                    phone_number: editAndroidPhone.value.trim(),
+                    api_key: editAndroidApiKey ? editAndroidApiKey.value.trim() : '',
+                    config_id: configId
+                };
+                
+                // Usar endpoint de Android
+                fetch('/tienda/admin/android-sms-config', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': getCsrfToken()
+                    },
+                    body: JSON.stringify(formData)
+                })
+                .then(handleFetchResponse)
+                .then(data => {
+                    if (data.success) {
+                        if (editConfigMessage) {
+                            editConfigMessage.textContent = data.message || 'Configuración Android actualizada correctamente.';
+                            editConfigMessage.className = 'text-success';
+                        }
+                        if (editModal) editModal.classList.add('d-none');
+                        // Recargar listas
+                        loadSMSConfigs();
+                        if (typeof loadAndroidSmsConfigs === 'function') {
+                            loadAndroidSmsConfigs();
+                        }
+                    } else {
+                        if (editConfigMessage) {
+                            editConfigMessage.textContent = data.message || data.error || 'Error al actualizar';
+                            editConfigMessage.className = 'sms-error-message';
+                        }
+                    }
+                })
+                .catch(err => {
+                    console.error('Error:', err);
+                    if (editConfigMessage) {
+                        editConfigMessage.textContent = `Error: ${err.message}`;
+                        editConfigMessage.className = 'sms-error-message';
+                    }
+                });
+                return;
+            } else {
+                // Formulario Twilio (normal)
+                formData = {
                 name: document.getElementById('edit-sms-config-name').value.trim(),
                 twilio_account_sid: document.getElementById('edit-sms-config-account-sid').value.trim(),
                 twilio_auth_token: document.getElementById('edit-sms-config-auth-token').value.trim(),
@@ -600,6 +747,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     editConfigMessage.className = 'sms-error-message';
                 }
                 return;
+                }
             }
             
             fetch(`/tienda/admin/sms_configs/${configId}`, {
@@ -619,7 +767,16 @@ document.addEventListener('DOMContentLoaded', function() {
                     }
                     setTimeout(() => {
                         if (editModal) editModal.classList.add('d-none');
-                        if (editConfigForm) editConfigForm.reset();
+                            if (editConfigForm) {
+                                editConfigForm.reset();
+                                // Resetear campos específicos
+                                const editConfigType = document.getElementById('edit-sms-config-type');
+                                if (editConfigType) editConfigType.value = '';
+                                const editAndroidFields = document.getElementById('edit-android-fields');
+                                const editTwilioFields = document.getElementById('edit-twilio-fields');
+                                if (editAndroidFields) editAndroidFields.style.display = 'none';
+                                if (editTwilioFields) editTwilioFields.style.display = 'block';
+                            }
                         if (editConfigMessage) {
                             editConfigMessage.textContent = '';
                             editConfigMessage.className = '';
@@ -628,6 +785,10 @@ document.addEventListener('DOMContentLoaded', function() {
                         // Recargar números en sms_list.js si existe
                         if (typeof loadSMSNumbers === 'function') {
                             loadSMSNumbers();
+                        }
+                            // Recargar configuraciones Android si existe
+                            if (typeof loadAndroidSmsConfigs === 'function') {
+                                loadAndroidSmsConfigs();
                         }
                     }, 1500);
                 }
@@ -645,7 +806,23 @@ document.addEventListener('DOMContentLoaded', function() {
     if (closeEditModalBtn) {
         closeEditModalBtn.addEventListener('click', function() {
             if (editModal) editModal.classList.add('d-none');
-            if (editConfigForm) editConfigForm.reset();
+            if (editConfigForm) {
+                editConfigForm.reset();
+                // Resetear campos específicos
+                const editConfigType = document.getElementById('edit-sms-config-type');
+                if (editConfigType) editConfigType.value = '';
+                const editAndroidFields = document.getElementById('edit-android-fields');
+                const editTwilioFields = document.getElementById('edit-twilio-fields');
+                if (editAndroidFields) editAndroidFields.style.display = 'none';
+                if (editTwilioFields) editTwilioFields.style.display = 'block';
+                // Resetear campos requeridos
+                const editName = document.getElementById('edit-sms-config-name');
+                const editAccountSid = document.getElementById('edit-sms-config-account-sid');
+                const editAndroidPhone = document.getElementById('edit-android-phone-number');
+                if (editName) editName.required = true;
+                if (editAccountSid) editAccountSid.required = true;
+                if (editAndroidPhone) editAndroidPhone.required = false;
+            }
             if (editConfigMessage) {
                 editConfigMessage.textContent = '';
                 editConfigMessage.className = '';
@@ -795,5 +972,359 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Cargar configuraciones al iniciar
     loadSMSConfigs();
+    
+    // ============================================
+    // 📱 CONFIGURACIÓN ANDROID SMS (MÚLTIPLES NÚMEROS)
+    // ============================================
+    const androidSmsForm = document.getElementById('android-sms-form');
+    const androidConfigName = document.getElementById('android-config-name');
+    const androidPhoneNumber = document.getElementById('android-phone-number');
+    const androidApiKey = document.getElementById('android-api-key');
+    const androidConfigId = document.getElementById('android-config-id');
+    const generateApiKeyBtn = document.getElementById('generate-api-key-btn');
+    const androidSmsSaveBtn = document.getElementById('android-sms-save-btn');
+    const androidSmsCancelBtn = document.getElementById('android-sms-cancel-btn');
+    const androidSmsMessage = document.getElementById('android-sms-message');
+    const androidConfigsList = document.getElementById('android-configs-list');
+    
+    // Cargar configuraciones Android al iniciar
+    function loadAndroidSmsConfigs() {
+        if (!androidConfigsList) return;
+        
+        androidConfigsList.innerHTML = '<p class="text-center">Cargando...</p>';
+        
+        fetch('/tienda/admin/android-sms-config', {
+            method: 'GET',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCsrfToken()
+            }
+        })
+        .then(handleFetchResponse)
+        .then(data => {
+            if (data.success) {
+                renderAndroidConfigsList(data.configs || [], data.webhook_url || '');
+            } else {
+                androidConfigsList.innerHTML = '<p class="text-center text-danger">Error al cargar configuraciones</p>';
+            }
+        })
+        .catch(error => {
+            console.error('Error al cargar configuraciones Android:', error);
+            androidConfigsList.innerHTML = '<p class="text-center text-danger">Error al cargar configuraciones</p>';
+        });
+    }
+    
+    // Renderizar lista de configuraciones Android (OCULTA - no se usa)
+    function renderAndroidConfigsList(configs, webhookUrl) {
+        // ✅ Lista oculta - los números Android se gestionan desde la lista general y el modal de edición
+        if (!androidConfigsList) return;
+        // No renderizar nada, la lista está oculta
+        androidConfigsList.innerHTML = '';
+    }
+    
+    // Editar configuración Android
+    function editAndroidConfig(config) {
+        if (androidConfigName) androidConfigName.value = config.name || '';
+        if (androidPhoneNumber) androidPhoneNumber.value = config.phone_number || '';
+        if (androidApiKey) androidApiKey.value = config.api_key || '';
+        if (androidConfigId) androidConfigId.value = config.id || '';
+        if (androidSmsSaveBtn) androidSmsSaveBtn.textContent = 'Actualizar Configuración';
+        if (androidSmsCancelBtn) androidSmsCancelBtn.classList.remove('d-none');
+        if (androidSmsMessage) androidSmsMessage.textContent = '';
+    }
+    
+    // Cancelar edición
+    if (androidSmsCancelBtn) {
+        androidSmsCancelBtn.addEventListener('click', function() {
+            resetAndroidForm();
+        });
+    }
+    
+    // Resetear formulario Android
+    function resetAndroidForm() {
+        if (androidPhoneNumber) androidPhoneNumber.value = '';
+        if (androidApiKey) androidApiKey.value = '';
+        if (androidConfigId) androidConfigId.value = '';
+        if (androidSmsSaveBtn) androidSmsSaveBtn.textContent = 'Agregar Número Android';
+        if (androidSmsCancelBtn) androidSmsCancelBtn.classList.add('d-none');
+        if (androidSmsMessage) androidSmsMessage.textContent = '';
+    }
+    
+    // Eliminar configuración Android
+    function deleteAndroidConfig(configId) {
+        if (!confirm('¿Estás seguro de que quieres eliminar esta configuración Android?')) {
+            return;
+        }
+        
+        // Eliminar usando el endpoint de SMS configs (ya existe)
+        fetch(`/tienda/admin/sms_configs/${configId}`, {
+            method: 'DELETE',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCsrfToken()
+            }
+        })
+        .then(response => {
+            // Verificar si la respuesta es JSON o HTML (error 404/500)
+            const contentType = response.headers.get('content-type');
+            if (contentType && contentType.includes('application/json')) {
+                return response.json();
+            } else {
+                // Si no es JSON, probablemente es un error HTML
+                return response.text().then(text => {
+                    throw new Error(`Error del servidor: ${response.status} ${response.statusText}`);
+                });
+            }
+        })
+        .then(data => {
+            if (data.success) {
+                // Recargar lista de configuraciones Android
+                loadAndroidSmsConfigs();
+                // También recargar lista general de SMS configs
+                if (typeof loadSMSConfigs === 'function') {
+                    loadSMSConfigs();
+                }
+                resetAndroidForm();
+                
+                // Mostrar mensaje de éxito
+                if (androidSmsMessage) {
+                    androidSmsMessage.textContent = 'Configuración Android eliminada correctamente';
+                    androidSmsMessage.className = 'mt-05 text-center text-success';
+                }
+            } else {
+                const errorMsg = data.message || data.error || 'Error desconocido';
+                alert('Error al eliminar: ' + errorMsg);
+            }
+        })
+        .catch(error => {
+            console.error('Error al eliminar configuración Android:', error);
+            alert('Error al eliminar configuración: ' + (error.message || 'Error desconocido'));
+        });
+    }
+    
+    // Generar API key aleatoria
+    if (generateApiKeyBtn) {
+        generateApiKeyBtn.addEventListener('click', function() {
+            // Generar una clave aleatoria de 32 caracteres
+            const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+            let apiKey = '';
+            for (let i = 0; i < 32; i++) {
+                apiKey += chars.charAt(Math.floor(Math.random() * chars.length));
+            }
+            androidApiKey.value = apiKey;
+            // Cambiar a tipo text para mostrar la clave generada
+            androidApiKey.type = 'text';
+            const eyeIcon = document.getElementById('api-key-eye-icon');
+            if (eyeIcon) {
+                eyeIcon.classList.remove('fa-eye');
+                eyeIcon.classList.add('fa-eye-slash');
+            }
+            androidSmsMessage.textContent = 'API Key generada. No olvides guardar la configuración.';
+            androidSmsMessage.className = 'mt-05 text-center text-success';
+        });
+    }
+    
+    // Toggle mostrar/ocultar API key
+    const toggleApiKeyVisibility = document.getElementById('toggle-api-key-visibility');
+    if (toggleApiKeyVisibility && androidApiKey) {
+        toggleApiKeyVisibility.addEventListener('click', function() {
+            const eyeIcon = document.getElementById('api-key-eye-icon');
+            if (androidApiKey.type === 'password') {
+                androidApiKey.type = 'text';
+                if (eyeIcon) {
+                    eyeIcon.classList.remove('fa-eye');
+                    eyeIcon.classList.add('fa-eye-slash');
+                }
+            } else {
+                androidApiKey.type = 'password';
+                if (eyeIcon) {
+                    eyeIcon.classList.remove('fa-eye-slash');
+                    eyeIcon.classList.add('fa-eye');
+                }
+            }
+        });
+    }
+    
+    // El código para copiar webhook ahora está dentro de renderAndroidConfigsList()
+    // No se necesita aquí porque cada configuración tiene su propio botón de copiar
+    
+    // Guardar configuración Android
+    if (androidSmsForm) {
+        androidSmsForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const configName = androidConfigName ? androidConfigName.value.trim() : '';
+            const phoneNumber = androidPhoneNumber.value.trim();
+            const apiKey = androidApiKey.value.trim();
+            
+            if (!configName) {
+                androidSmsMessage.textContent = 'Por favor ingresa un nombre para identificar este número';
+                androidSmsMessage.className = 'mt-05 text-center text-danger';
+                return;
+            }
+            
+            if (!phoneNumber) {
+                androidSmsMessage.textContent = 'Por favor ingresa tu número Android';
+                androidSmsMessage.className = 'mt-05 text-center text-danger';
+                return;
+            }
+            
+            // Validar formato del número
+            const phoneRegex = /^\+[1-9]\d{1,14}$/;
+            if (!phoneRegex.test(phoneNumber)) {
+                androidSmsMessage.textContent = 'Formato inválido. Debe ser: +573001234567 (con código de país)';
+                androidSmsMessage.className = 'mt-05 text-center text-danger';
+                return;
+            }
+            
+            androidSmsSaveBtn.disabled = true;
+            androidSmsSaveBtn.textContent = 'Guardando...';
+            androidSmsMessage.textContent = '';
+            
+            const configId = androidConfigId ? androidConfigId.value : null;
+            
+            fetch('/tienda/admin/android-sms-config', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': getCsrfToken()
+                },
+                body: JSON.stringify({
+                    name: configName,
+                    phone_number: phoneNumber,
+                    api_key: apiKey,
+                    config_id: configId || undefined
+                })
+            })
+            .then(handleFetchResponse)
+            .then(data => {
+                if (data.success) {
+                    androidSmsMessage.textContent = data.message + (data.api_key ? ' API Key: ' + data.api_key : '');
+                    androidSmsMessage.className = 'mt-05 text-center text-success';
+                    
+                    // Actualizar API key si se generó una nueva
+                    if (data.api_key && !apiKey) {
+                        androidApiKey.value = data.api_key;
+                    }
+                    
+                    // Recargar lista de configuraciones Android
+                    setTimeout(() => {
+                        loadAndroidSmsConfigs();
+                        resetAndroidForm();
+                    }, 500);
+                } else {
+                    androidSmsMessage.textContent = data.message || 'Error al guardar';
+                    androidSmsMessage.className = 'mt-05 text-center text-danger';
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                androidSmsMessage.textContent = 'Error al guardar configuración: ' + error.message;
+                androidSmsMessage.className = 'mt-05 text-center text-danger';
+            })
+            .finally(() => {
+                androidSmsSaveBtn.disabled = false;
+                androidSmsSaveBtn.textContent = configId ? 'Actualizar Configuración' : 'Agregar Número Android';
+            });
+        });
+    }
+    
+    // Cargar configuraciones Android al iniciar
+    if (androidConfigsList) {
+        // Asegurar que el formulario esté vacío al iniciar
+        resetAndroidForm();
+        loadAndroidSmsConfigs();
+    }
+    
+    // ✅ Funcionalidad para campos Android en el modal de edición
+    const generateEditApiKeyBtn = document.getElementById('generate-edit-api-key-btn');
+    const toggleEditApiKeyVisibility = document.getElementById('toggle-edit-api-key-visibility');
+    const editAndroidApiKey = document.getElementById('edit-android-api-key');
+    
+    // Generar API key en el modal de edición
+    if (generateEditApiKeyBtn && editAndroidApiKey) {
+        generateEditApiKeyBtn.addEventListener('click', function() {
+            const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+            let apiKey = '';
+            for (let i = 0; i < 32; i++) {
+                apiKey += chars.charAt(Math.floor(Math.random() * chars.length));
+            }
+            editAndroidApiKey.value = apiKey;
+            editAndroidApiKey.type = 'text';
+            const eyeIcon = document.getElementById('edit-api-key-eye-icon');
+            if (eyeIcon) {
+                eyeIcon.classList.remove('fa-eye');
+                eyeIcon.classList.add('fa-eye-slash');
+            }
+        });
+    }
+    
+    // Toggle mostrar/ocultar API key en el modal de edición
+    if (toggleEditApiKeyVisibility && editAndroidApiKey) {
+        toggleEditApiKeyVisibility.addEventListener('click', function() {
+            const eyeIcon = document.getElementById('edit-api-key-eye-icon');
+            if (editAndroidApiKey.type === 'password' || editAndroidApiKey.type === 'text') {
+                editAndroidApiKey.type = editAndroidApiKey.type === 'password' ? 'text' : 'password';
+                if (eyeIcon) {
+                    if (editAndroidApiKey.type === 'text') {
+                        eyeIcon.classList.remove('fa-eye');
+                        eyeIcon.classList.add('fa-eye-slash');
+                    } else {
+                        eyeIcon.classList.remove('fa-eye-slash');
+                        eyeIcon.classList.add('fa-eye');
+                    }
+                }
+            }
+        });
+    }
+    
+    // ✅ Copiar URL del webhook desde el modal de edición
+    const copyEditWebhookBtn = document.getElementById('copy-edit-webhook-btn');
+    if (copyEditWebhookBtn) {
+        copyEditWebhookBtn.addEventListener('click', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            
+            const editWebhookUrl = document.getElementById('edit-webhook-url');
+            if (!editWebhookUrl) return;
+            
+            const url = editWebhookUrl.textContent;
+            if (!url || url === 'Cargando...') {
+                console.error('URL del webhook no disponible');
+                return;
+            }
+            
+            navigator.clipboard.writeText(url).then(() => {
+                const originalText = this.innerHTML;
+                this.innerHTML = '<i class="fas fa-check"></i> Copiado';
+                this.classList.add('btn-green');
+                this.classList.remove('btn-blue');
+                setTimeout(() => {
+                    this.innerHTML = originalText;
+                    this.classList.remove('btn-green');
+                    this.classList.add('btn-blue');
+                }, 2000);
+            }).catch(err => {
+                console.error('Error al copiar URL:', err);
+                // Fallback
+                const tempInput = document.createElement('input');
+                tempInput.value = url;
+                document.body.appendChild(tempInput);
+                tempInput.select();
+                document.execCommand('copy');
+                document.body.removeChild(tempInput);
+                
+                const originalText = this.innerHTML;
+                this.innerHTML = '<i class="fas fa-check"></i> Copiado';
+                this.classList.add('btn-green');
+                this.classList.remove('btn-blue');
+                setTimeout(() => {
+                    this.innerHTML = originalText;
+                    this.classList.remove('btn-green');
+                    this.classList.add('btn-blue');
+                }, 2000);
+            });
+        });
+    }
 });
 

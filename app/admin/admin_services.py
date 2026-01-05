@@ -714,6 +714,7 @@ def save_global_normal_colors_ajax():
         return jsonify({"status": "error", "message": "Error interno al guardar colores normales."}), 500
 
 @admin_bp.route("/get_global_colors_ajax", methods=["GET"])
+@admin_required
 def get_global_colors_ajax():
     """Obtiene los colores globales actuales"""
     try:

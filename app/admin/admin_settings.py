@@ -272,6 +272,11 @@ def change_theme():
 @admin_required
 def logout_all_users():
     from app.models import RememberDevice
+    from app.auth.session_tokens import revoke_all_tokens
+    
+    # ✅ SEGURIDAD: Revocar todos los tokens de sesión
+    revoke_all_tokens()
+    
     RememberDevice.query.delete()
     db.session.commit()
 

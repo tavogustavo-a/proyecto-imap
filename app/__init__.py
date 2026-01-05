@@ -188,7 +188,48 @@ def create_app(config_class_passed=None):
 
     @app.context_processor
     def inject_admin_user():
-        return {"ADMIN_USER": app.config.get("ADMIN_USER")}
+        """Inyecta el nombre del admin y verifica si el usuario actual es realmente admin."""
+        from flask import session
+        admin_username = app.config.get("ADMIN_USER", "admin")
+        
+        # ✅ SEGURIDAD: Verificar que el usuario sea realmente admin basándose en la BD
+        is_admin = False
+        is_user = False
+        is_subuser = False
+        is_normal_user = False
+        current_user_obj = None
+        
+        username = session.get('username')
+        user_id = session.get('user_id')
+        
+        # Obtener el usuario de la base de datos
+        if username:
+            current_user_obj = User.query.filter_by(username=username).first()
+        elif user_id:
+            current_user_obj = User.query.get(user_id)
+        
+        if current_user_obj:
+            # Verificar si es admin
+            if current_user_obj.username == admin_username and current_user_obj.parent_id is None:
+                is_admin = True
+            # Verificar si es sub-usuario
+            elif current_user_obj.parent_id is not None:
+                is_subuser = True
+                is_user = True  # Los sub-usuarios también son usuarios
+            # Verificar si es usuario normal (principal, no admin)
+            elif session.get("is_user") or not session.get("username"):
+                # Si tiene session["is_user"] o no tiene session["username"], es usuario normal
+                is_user = True
+                is_normal_user = True
+        
+        return {
+            "ADMIN_USER": admin_username,
+            "is_admin": is_admin,  # Variable segura para usar en plantillas
+            "is_user": is_user,  # Variable segura: True si es usuario normal o sub-usuario
+            "is_subuser": is_subuser,  # Variable segura: True si es sub-usuario
+            "is_normal_user": is_normal_user,  # Variable segura: True si es usuario principal (no admin, no sub-usuario)
+            "current_user_obj": current_user_obj  # Objeto User de la BD para uso en plantillas
+        }
 
     @app.context_processor
     def inject_worksheet_access():

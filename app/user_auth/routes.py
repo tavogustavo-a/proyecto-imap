@@ -20,6 +20,12 @@ from app.auth.security import (
 # Importar el decorador de control de acceso a la tienda
 from app.store.routes import store_access_required
 
+# Decorador para excluir rutas del CSRF
+def csrf_exempt_route(func):
+    """Decorator para excluir rutas del CSRF"""
+    func._csrf_exempt = True
+    return func
+
 def login_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
@@ -56,6 +62,7 @@ def check_session_revocation_user():
                 return redirect(url_for("user_auth_bp.login"))
 
 @user_auth_bp.route("/login", methods=["GET", "POST"])
+@csrf_exempt_route
 def login():
     """
     Pantalla de login para usuarios normales (o sub-usuarios).
@@ -97,12 +104,19 @@ def login():
         # a) Resetear contadores (antes de commit)
         reset_failed_attempts(user) 
         # b) Configurar sesión
+        from app.auth.session_tokens import generate_session_token
+        
+        # ✅ SEGURIDAD: Generar token de sesión único para prevenir duplicaciones
+        session_token = generate_session_token(user.id, is_admin=False)
+        
         session.clear()
         session["logged_in"] = True
         session["user_id"] = user.id
         session["is_user"] = True
+        session["session_token"] = session_token  # ✅ Token único de sesión
         session.permanent = True
         session["user_session_rev_count_local"] = user.user_session_rev_count
+        session["login_time"] = datetime.utcnow().isoformat()  # ✅ SEGURIDAD: Timestamp de login
         
         # ✅ AGREGADO: Asignar contador global de revocación para "cerrar sesión de todos"
         from app.admin.site_settings import get_site_setting
@@ -152,6 +166,12 @@ def login():
 @user_auth_bp.route("/logout")
 def logout():
     if "logged_in" in session and "is_user" in session:
+        # ✅ SEGURIDAD: Revocar token de sesión antes de limpiar
+        from app.auth.session_tokens import revoke_session_token
+        session_token = session.get("session_token")
+        if session_token:
+            revoke_session_token(session_token)
+        
         session.clear()
         flash("Sesión de usuario cerrada.", "info")
     return redirect(url_for("user_auth_bp.login"))

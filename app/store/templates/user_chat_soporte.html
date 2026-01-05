@@ -7,7 +7,7 @@
   {% if current_user %}
   <meta name="current-user-id" content="{{ current_user.id }}">
   <meta name="current-username" content="{{ current_user.username }}">
-  <meta name="current-user-type" content="{% if current_user.username == ADMIN_USER %}admin{% elif current_user.is_support %}support{% else %}user{% endif %}">
+  <meta name="current-user-type" content="{% if is_admin %}admin{% elif current_user.is_support %}support{% else %}user{% endif %}">
   
   {% endif %}
   
@@ -66,7 +66,7 @@
       <!-- Dashboard de Chat Integrado -->
       <div class="container container-max-width-900 mt-2">
 
-        {% if session.get('username') == ADMIN_USER %}
+        {% if is_admin %}
         <div class="d-flex justify-content-between align-items-center mb-1">
           <div></div>
           <button id="btnLimpiarMensajes" type="button" class="btn-red">
@@ -232,7 +232,7 @@
   {% if current_user_id %}
     {% set user_object = User.query.get(current_user_id) %}
     {% set show_store = False %}
-    {% if session.get('username') == ADMIN_USER %}
+    {% if is_admin %}
       {% set show_store = True %}
     {% elif user_object.parent_id %}
       {% if user_object.can_access_store %}
@@ -257,7 +257,7 @@
   <a href="{{ url_for('main_bp.home2') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-code"></i> Códigos 2</a>
   {% endif %}
   {% if user_object %}
-    {% if session.get('username') == ADMIN_USER %}
+    {% if is_admin %}
       <a href="{{ url_for('user_auth_bp.estadisticas') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-chart-bar"></i> Estadísticas</a>
     {% elif not user_object.parent_id and user_object.roles_tienda and user_object.roles_tienda[0].enabled %}
       <a href="{{ url_for('user_auth_bp.estadisticas') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-chart-bar"></i> Estadísticas</a>
@@ -265,17 +265,17 @@
     <a href="{{ url_for('user_auth_bp.estadisticas') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-chart-bar"></i> Estadísticas</a>
     {% endif %}
   {% endif %}
-  {% if session.get('is_user') and current_user %}
+  {% if is_user and current_user %}
     {% if current_user.is_support %}
       <a href="{{ url_for('store_bp.support_dashboard') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-headset"></i> Chat de Soporte Admin</a>
     {% elif current_user.can_chat %}
       <a href="{{ url_for('store_bp.user_chat_soporte') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-headset"></i> Chat de Soporte</a>
     {% endif %}
   {% endif %}
-  {% if session.get('is_user') and not current_user.parent_id and user_has_worksheet_access(current_user) %}
+  {% if is_user and not current_user.parent_id and user_has_worksheet_access(current_user) %}
     <a href="{{ url_for('store_bp.user_work_sheets') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-table"></i> Hojas de Cálculo</a>
   {% endif %}
-  {% if session.get('is_user') and user_object and user_object.can_create_subusers %}
+  {% if is_user and user_object and user_object.can_create_subusers %}
     <a href="{{ url_for('subuser_bp.manage_subusers') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-users"></i> Sub-usuarios</a>
   {% endif %}
   <a href="{{ url_for('user_auth_bp.logout') }}" class="btn-panel btn-red mobile-menu-btn mb-04"><i class="fas fa-sign-out-alt"></i> Cerrar Sesión</a>
