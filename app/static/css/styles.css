@@ -1505,6 +1505,55 @@ noscript p {
   margin-left: auto;
 }
 
+/* Estilos para lista de sub-usuarios en modal (sin estilos inline) */
+.modal-subuser-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.modal-subuser-list-item {
+  margin-bottom: 0.7rem;
+  border-bottom: 1px solid #ccc;
+  padding-bottom: 0.5rem;
+}
+
+.modal-subuser-list-item-content {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.modal-subuser-list-item-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+/* Estilos para items de regex/filtros en modales (sin estilos inline) */
+.modal-regex-item,
+.modal-filter-item {
+  padding: 6px;
+  text-align: left;
+}
+
+.modal-regex-item-even,
+.modal-filter-item-even {
+  background: #f9f9f9;
+}
+
+.modal-regex-item-odd,
+.modal-filter-item-odd {
+  background: #fff;
+}
+
+.modal-regex-item-label,
+.modal-filter-item-label {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  text-align: left;
+}
+
 /* Responsive styles for edit_service.html header buttons */
 @media (max-width: 600px) { /* O el breakpoint que prefieras */
   .edit-service-header-container {
@@ -2924,8 +2973,8 @@ a.btn-search.btn-rounded:hover {
   background: #fff !important;
   border: 1px solid #ccc !important;
   border-radius: 8px !important;
-  padding: 1rem !important;
-  margin-bottom: 0.6rem !important;
+  padding: 0.75rem !important;
+  margin-bottom: 0.5rem !important;
   word-break: break-word;
   overflow-wrap: anywhere;
   white-space: normal;
@@ -2936,7 +2985,7 @@ a.btn-search.btn-rounded:hover {
   justify-content: space-between !important;
   align-items: center !important;
   width: 100% !important;
-  gap: 1rem !important;
+  gap: 0.75rem !important;
 }
 
 /* ========== Estilos para Gestión de Correos en manage_subusers.html ========== */
@@ -3099,22 +3148,27 @@ a.btn-search.btn-rounded:hover {
   flex-shrink: 0;
 }
 @media (max-width: 600px) {
-  .subuser-card, .subuser-card-content {
+  .subuser-card {
+    padding: 0.35rem 0.5rem !important;
+    margin-bottom: 0.25rem !important;
+  }
+  .subuser-card-content {
     flex-direction: column;
     align-items: stretch;
-    gap: 0.5rem;
+    gap: 0.15rem !important;
   }
   .subuser-card-username {
-    margin-bottom: 0.5rem;
+    margin-bottom: 0.1rem;
     text-align: left;
   }
   .subuser-card-actions {
     justify-content: flex-start;
     width: 100%;
+    gap: 0.2rem !important;
   }
   .subuser-card-actions button {
-    font-size: 0.92rem;
-    padding: 0.32rem 0.6rem;
+    font-size: 0.8rem;
+    padding: 0.2rem 0.4rem;
   }
 }
 

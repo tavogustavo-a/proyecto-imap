@@ -191,7 +191,8 @@ def create_subuser_ajax():
         parent_id=parent_user.id, # Usar ID del padre obtenido
         enabled=True,
         can_add_own_emails=False,  # Por defecto desactivado
-        can_bulk_delete_emails=False  # Por defecto desactivado (los sub-usuarios no pueden tener este permiso)
+        can_bulk_delete_emails=False,  # Por defecto desactivado (los sub-usuarios no pueden tener este permiso)
+        can_manage_2fa_emails=False  # Por defecto desactivado (los sub-usuarios no pueden tener este permiso)
         # Otros campos por defecto: color, position, can_search_any=False, etc.
     )
     db.session.add(new_subuser)
@@ -1709,3 +1710,342 @@ def _get_subusers_data(parent_id):
         })
     return data_resp
 # --- Fin Función Auxiliar ---
+
+# ============================================================================
+# ✅ RUTAS PARA GESTIÓN DE 2FA POR CORREO (PARA USUARIOS PRINCIPALES)
+# ============================================================================
+
+@subuser_bp.route('/twofa-configs', methods=['GET'])
+def list_twofa_configs_subuser():
+    """Lista todas las configuraciones 2FA (para usuarios principales con permiso)"""
+    if not can_access_subusers():
+        return jsonify({'success': False, 'error': 'No autorizado'}), 403
+
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({'success': False, 'error': 'No hay usuario logueado.'}), 401
+    
+    user = User.query.get(user_id)
+    if not user:
+        return jsonify({'success': False, 'error': 'Usuario no encontrado.'}), 404
+    
+    if user.parent_id:
+        return jsonify({'success': False, 'error': 'Los sub-usuarios no pueden gestionar 2FA.'}), 403
+    
+    if not user.can_manage_2fa_emails:
+        return jsonify({'success': False, 'error': 'No tienes permiso para gestionar 2FA por correo.'}), 403
+
+    try:
+        from app.store.models import TwoFAConfig
+        configs = TwoFAConfig.query.order_by(TwoFAConfig.created_at.desc()).all()
+        configs_data = []
+        for config in configs:
+            configs_data.append({
+                'id': config.id,
+                'secret_key': config.secret_key,
+                'emails': config.emails,
+                'emails_list': config.get_emails_list(),
+                'is_enabled': config.is_enabled,
+                'created_at': config.created_at.isoformat() if config.created_at else None,
+                'updated_at': config.updated_at.isoformat() if config.updated_at else None
+            })
+        return jsonify({'success': True, 'configs': configs_data}), 200
+    except Exception as e:
+        current_app.logger.error(f"Error al listar configuraciones 2FA: {e}", exc_info=True)
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@subuser_bp.route('/twofa-configs', methods=['POST'])
+def create_twofa_config_subuser():
+    """Crea una nueva configuración 2FA (para usuarios principales con permiso)"""
+    if not can_access_subusers():
+        return jsonify({'success': False, 'error': 'No autorizado'}), 403
+
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({'success': False, 'error': 'No hay usuario logueado.'}), 401
+    
+    user = User.query.get(user_id)
+    if not user:
+        return jsonify({'success': False, 'error': 'Usuario no encontrado.'}), 404
+    
+    if user.parent_id:
+        return jsonify({'success': False, 'error': 'Los sub-usuarios no pueden gestionar 2FA.'}), 403
+    
+    if not user.can_manage_2fa_emails:
+        return jsonify({'success': False, 'error': 'No tienes permiso para gestionar 2FA por correo.'}), 403
+
+    try:
+        from app.store.models import TwoFAConfig
+        
+        data = request.get_json()
+        if not data:
+            return jsonify({'success': False, 'error': 'No se recibieron datos'}), 400
+        
+        secret_key = data.get('secret_key', '').strip()
+        emails_input = data.get('emails', '').strip()
+        
+        if not secret_key:
+            return jsonify({'success': False, 'error': 'El secreto TOTP es obligatorio'}), 400
+        
+        if not emails_input:
+            return jsonify({'success': False, 'error': 'Debes agregar al menos un correo'}), 400
+        
+        # Normalizar correos: separar por coma o espacio, limpiar y validar
+        emails_list = []
+        for email in re.split(r'[,\s]+', emails_input):
+            email = email.strip().lower()
+            if email:
+                # Validar formato básico de email
+                if re.match(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$', email):
+                    emails_list.append(email)
+                else:
+                    return jsonify({'success': False, 'error': f'Correo inválido: {email}'}), 400
+        
+        if not emails_list:
+            return jsonify({'success': False, 'error': 'No se encontraron correos válidos'}), 400
+        
+        # Verificar si algún correo ya está asociado a otra configuración
+        existing_configs = TwoFAConfig.query.filter_by(is_enabled=True).all()
+        for existing_config in existing_configs:
+            existing_emails = existing_config.get_emails_list()
+            duplicates = set(emails_list) & set(existing_emails)
+            if duplicates:
+                return jsonify({
+                    'success': False, 
+                    'error': f'Los correos {", ".join(duplicates)} ya están asociados a otra configuración 2FA'
+                }), 400
+        
+        # Crear nueva configuración
+        new_config = TwoFAConfig(
+            secret_key=secret_key,
+            emails=','.join(emails_list),
+            is_enabled=True
+        )
+        db.session.add(new_config)
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': 'Configuración 2FA creada correctamente',
+            'config': {
+                'id': new_config.id,
+                'secret_key': new_config.secret_key,
+                'emails': new_config.emails,
+                'emails_list': new_config.get_emails_list()
+            }
+        }), 201
+        
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Error al crear configuración 2FA: {e}", exc_info=True)
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@subuser_bp.route('/twofa-configs/<int:config_id>', methods=['PUT'])
+def update_twofa_config_subuser(config_id):
+    """Actualiza una configuración 2FA (para usuarios principales con permiso)"""
+    if not can_access_subusers():
+        return jsonify({'success': False, 'error': 'No autorizado'}), 403
+
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({'success': False, 'error': 'No hay usuario logueado.'}), 401
+    
+    user = User.query.get(user_id)
+    if not user:
+        return jsonify({'success': False, 'error': 'Usuario no encontrado.'}), 404
+    
+    if user.parent_id:
+        return jsonify({'success': False, 'error': 'Los sub-usuarios no pueden gestionar 2FA.'}), 403
+    
+    if not user.can_manage_2fa_emails:
+        return jsonify({'success': False, 'error': 'No tienes permiso para gestionar 2FA por correo.'}), 403
+
+    try:
+        from app.store.models import TwoFAConfig
+        
+        config = TwoFAConfig.query.get_or_404(config_id)
+        data = request.get_json()
+        
+        if not data:
+            return jsonify({'success': False, 'error': 'No se recibieron datos'}), 400
+        
+        # Actualizar secreto si se proporciona
+        if 'secret_key' in data:
+            secret_key = data.get('secret_key', '').strip()
+            if secret_key:
+                config.secret_key = secret_key
+        
+        # Actualizar correos si se proporcionan
+        if 'emails' in data:
+            emails_input = data.get('emails', '').strip()
+            if emails_input:
+                emails_list = []
+                for email in re.split(r'[,\s]+', emails_input):
+                    email = email.strip().lower()
+                    if email:
+                        if re.match(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$', email):
+                            emails_list.append(email)
+                        else:
+                            return jsonify({'success': False, 'error': f'Correo inválido: {email}'}), 400
+                
+                if emails_list:
+                    # Verificar duplicados en otras configuraciones (excluyendo la actual)
+                    existing_configs = TwoFAConfig.query.filter(
+                        TwoFAConfig.id != config_id,
+                        TwoFAConfig.is_enabled == True
+                    ).all()
+                    for existing_config in existing_configs:
+                        existing_emails = existing_config.get_emails_list()
+                        duplicates = set(emails_list) & set(existing_emails)
+                        if duplicates:
+                            return jsonify({
+                                'success': False,
+                                'error': f'Los correos {", ".join(duplicates)} ya están asociados a otra configuración 2FA'
+                            }), 400
+                    
+                    config.emails = ','.join(emails_list)
+        
+        # Actualizar estado si se proporciona
+        if 'is_enabled' in data:
+            config.is_enabled = bool(data.get('is_enabled'))
+        
+        config.updated_at = datetime.utcnow()
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': 'Configuración 2FA actualizada correctamente',
+            'config': {
+                'id': config.id,
+                'secret_key': config.secret_key,
+                'emails': config.emails,
+                'emails_list': config.get_emails_list(),
+                'is_enabled': config.is_enabled
+            }
+        }), 200
+        
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Error al actualizar configuración 2FA: {e}", exc_info=True)
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@subuser_bp.route('/twofa-configs/<int:config_id>', methods=['DELETE'])
+def delete_twofa_config_subuser(config_id):
+    """Elimina una configuración 2FA (para usuarios principales con permiso)"""
+    if not can_access_subusers():
+        return jsonify({'success': False, 'error': 'No autorizado'}), 403
+
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({'success': False, 'error': 'No hay usuario logueado.'}), 401
+    
+    user = User.query.get(user_id)
+    if not user:
+        return jsonify({'success': False, 'error': 'Usuario no encontrado.'}), 404
+    
+    if user.parent_id:
+        return jsonify({'success': False, 'error': 'Los sub-usuarios no pueden gestionar 2FA.'}), 403
+    
+    if not user.can_manage_2fa_emails:
+        return jsonify({'success': False, 'error': 'No tienes permiso para gestionar 2FA por correo.'}), 403
+
+    try:
+        from app.store.models import TwoFAConfig
+        
+        config = TwoFAConfig.query.get_or_404(config_id)
+        emails = config.emails
+        db.session.delete(config)
+        db.session.commit()
+        return jsonify({
+            'success': True,
+            'message': f'Configuración 2FA eliminada correctamente (correos: {emails})'
+        }), 200
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Error al eliminar configuración 2FA: {e}", exc_info=True)
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@subuser_bp.route('/twofa-configs/read-qr', methods=['POST'])
+def read_qr_code_subuser():
+    """Lee un código QR y extrae el secreto TOTP (para usuarios principales con permiso)"""
+    if not can_access_subusers():
+        return jsonify({'success': False, 'error': 'No autorizado'}), 403
+
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({'success': False, 'error': 'No hay usuario logueado.'}), 401
+    
+    user = User.query.get(user_id)
+    if not user:
+        return jsonify({'success': False, 'error': 'Usuario no encontrado.'}), 404
+    
+    if user.parent_id:
+        return jsonify({'success': False, 'error': 'Los sub-usuarios no pueden gestionar 2FA.'}), 403
+    
+    if not user.can_manage_2fa_emails:
+        return jsonify({'success': False, 'error': 'No tienes permiso para gestionar 2FA por correo.'}), 403
+
+    try:
+        from PIL import Image
+        import io
+        
+        if 'qr_file' not in request.files:
+            return jsonify({'success': False, 'error': 'No se recibió archivo QR'}), 400
+        
+        qr_file = request.files['qr_file']
+        if qr_file.filename == '':
+            return jsonify({'success': False, 'error': 'No se seleccionó ningún archivo'}), 400
+        
+        # Leer la imagen
+        image_data = qr_file.read()
+        image = Image.open(io.BytesIO(image_data))
+        
+        # Intentar leer el QR code
+        try:
+            try:
+                from pyzbar import pyzbar
+                decoded_objects = pyzbar.decode(image)
+            except ImportError:
+                # Intentar import alternativo
+                from pyzbar.pyzbar import decode as pyzbar_decode
+                decoded_objects = pyzbar_decode(image)
+            
+            if not decoded_objects:
+                return jsonify({'success': False, 'error': 'No se pudo leer el código QR'}), 400
+            
+            qr_data = decoded_objects[0].data.decode('utf-8')
+            
+            # Extraer el secreto del formato otpauth://totp/...
+            # Formato: otpauth://totp/Label?secret=SECRET&issuer=Issuer
+            secret_match = re.search(r'secret=([A-Z0-9]+)', qr_data, re.IGNORECASE)
+            if secret_match:
+                secret_key = secret_match.group(1).upper()
+                return jsonify({
+                    'success': True,
+                    'secret_key': secret_key,
+                    'qr_data': qr_data
+                }), 200
+            else:
+                # Si no está en formato otpauth, intentar usar el contenido completo como secreto
+                # (algunos QR codes solo contienen el secreto)
+                if re.match(r'^[A-Z0-9]{16,}$', qr_data, re.IGNORECASE):
+                    return jsonify({
+                        'success': True,
+                        'secret_key': qr_data.upper()
+                    }), 200
+                else:
+                    return jsonify({
+                        'success': False,
+                        'error': 'El QR code no contiene un secreto TOTP válido'
+                    }), 400
+                    
+        except ImportError:
+            # Si pyzbar no está instalado, intentar con qrcode (solo lectura básica)
+            return jsonify({
+                'success': False,
+                'error': 'Librería pyzbar no instalada. Instala con: pip install pyzbar Pillow'
+            }), 500
+            
+    except Exception as e:
+        current_app.logger.error(f"Error al leer QR: {e}", exc_info=True)
+        return jsonify({'success': False, 'error': f'Error al leer QR: {str(e)}'}), 500

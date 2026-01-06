@@ -6,6 +6,7 @@
 {% block head %}
 <meta name="csrf_token" content="{{ csrf_token() }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/store.css') }}">
+<link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/sms.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='fontawesome/css/all.css') }}">
 {% endblock head %}
 
@@ -239,6 +240,163 @@
 
       <div id="bulkDeleteEmailsSubuserMessage" class="mt-05 text-center"></div>
     </form>
+  </div>
+  {% endif %}
+
+  <!-- CONTORNO 1.7: Gestión de 2FA por Correo -->
+  {% if current_user and not current_user.parent_id and current_user.can_manage_2fa_emails %}
+  <div class="admin-card mb-1 twofa-section-card">
+    <h4 class="mb-1 text-center">🔐 Gestión de 2FA por Correo</h4>
+    
+    <!-- Formulario para agregar/editar configuración 2FA -->
+    <form id="subuser-twofa-config-form" class="mb-2">
+      <input type="hidden" id="subuser-twofa-config-id" value="">
+      
+      <label for="subuser-twofa-emails-input" class="sr-only">Correos</label>
+      <textarea
+        id="subuser-twofa-emails-input"
+        rows="2"
+        placeholder="Correos (separados por coma o espacio): correo1@test.com, correo2@test.com"
+        required
+        class="d-block mb-05 w-100"
+        autocomplete="off"
+      ></textarea>
+      
+      <!-- Línea compacta: Código manual | Subir QR | Botón Agregar -->
+      <div class="d-flex gap-05 align-items-center mb-05 twofa-compact-row">
+        <label for="subuser-twofa-secret-input" class="sr-only">Código Secreto</label>
+        <input
+          type="text"
+          id="subuser-twofa-secret-input"
+          placeholder="Código secreto"
+          class="flex-grow-1"
+          autocomplete="off"
+          pattern="[A-Z0-9]{16,}"
+          title="Código secreto TOTP (solo letras mayúsculas y números)"
+        >
+        <label for="subuser-twofa-qr-file" class="sr-only">Archivo QR</label>
+        <input
+          type="file"
+          id="subuser-twofa-qr-file"
+          accept="image/*"
+          class="d-none"
+        >
+        <button type="button" id="subuser-twofa-upload-qr-btn" class="btn-blue btn-small">
+          <i class="fas fa-qrcode"></i> QR
+        </button>
+        <button type="submit" id="subuser-twofa-save-btn" class="btn-green btn-small">Agregar</button>
+        <button type="button" id="subuser-twofa-cancel-btn" class="btn-blue btn-small d-none">Cancelar</button>
+      </div>
+      
+      <!-- Preview del QR (oculto por defecto) -->
+      <div id="subuser-twofa-qr-preview" class="text-center mb-05 d-none"></div>
+      
+      <!-- Display del secreto configurado (oculto por defecto) -->
+      <div id="subuser-twofa-secret-display" class="d-none mb-05 text-center">
+        <strong>Secreto configurado:</strong> <code id="subuser-twofa-secret-display-value"></code>
+      </div>
+      
+      <div id="subuser-twofa-message" class="mt-05 text-center"></div>
+    </form>
+    
+    <!-- Búsqueda y Mostrar -->
+    <div class="d-flex flex-wrap align-items-center mb-1 productos-buscar-mostrar">
+      <div class="search-container">
+        <label for="subuser-searchTwofaInput" class="sr-only">Buscar configuraciones 2FA</label>
+        <input type="search" id="subuser-searchTwofaInput" placeholder="Buscar..." autocomplete="off">
+      </div>
+      <div class="d-flex align-items-center">
+        <label for="subuser-showTwofaCount" class="sr-only">Mostrar cantidad</label>
+        <select id="subuser-showTwofaCount" autocomplete="off">
+          <option value="5">5</option>
+          <option value="10">10</option>
+          <option value="20" selected>20</option>
+          <option value="30">30</option>
+          <option value="40">40</option>
+          <option value="50">50</option>
+          <option value="100">100</option>
+          <option value="all">Todos</option>
+        </select>
+      </div>
+    </div>
+    
+    <!-- Lista de configuraciones 2FA -->
+    <div id="subuser-twofa-configs-list" class="mt-2">
+      <p class="text-center text-secondary">Cargando configuraciones...</p>
+    </div>
+    
+    <!-- Botones de paginación -->
+    <div class="d-flex justify-content-center mt-2 mb-05 pagination-buttons">
+      <button id="subuser-prevTwofaPageBtn" class="btn-blue btn-panel" type="button">&lt; Anterior</button>
+      <button id="subuser-nextTwofaPageBtn" class="btn-blue btn-panel" type="button">Siguiente &gt;</button>
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- Modal para editar configuración 2FA -->
+  {% if current_user and not current_user.parent_id and current_user.can_manage_2fa_emails %}
+  <div id="subuser-twofa-edit-modal" class="modal d-none" tabindex="-1">
+    <div class="sms-modal-content">
+      <div class="d-flex justify-content-between align-items-center mb-3">
+        <h4 class="m-0 text-center flex-grow-1">Editar Configuración 2FA</h4>
+        <button type="button" class="btn-panel btn-red" id="subuser-close-edit-twofa-modal" title="Cerrar">
+          <i class="fas fa-times"></i>
+        </button>
+      </div>
+      
+      <form id="subuser-twofa-edit-form">
+        <input type="hidden" id="subuser-edit-twofa-config-id" value="">
+        
+        <label for="subuser-edit-twofa-emails-input" class="sr-only">Correos</label>
+        <textarea
+          id="subuser-edit-twofa-emails-input"
+          rows="2"
+          placeholder="Correos (separados por coma o espacio): correo1@test.com, correo2@test.com"
+          required
+          class="d-block mb-05 w-100"
+          autocomplete="off"
+        ></textarea>
+        
+        <!-- Línea compacta: Código manual | Subir QR -->
+        <div class="d-flex gap-05 align-items-center mb-05 twofa-compact-row">
+          <label for="subuser-edit-twofa-secret-input" class="sr-only">Código Secreto</label>
+          <input
+            type="text"
+            id="subuser-edit-twofa-secret-input"
+            placeholder="Código secreto"
+            class="flex-grow-1"
+            autocomplete="off"
+            pattern="[A-Z0-9]{16,}"
+            title="Código secreto TOTP (solo letras mayúsculas y números)"
+          >
+          <label for="subuser-edit-twofa-qr-file" class="sr-only">Archivo QR</label>
+          <input
+            type="file"
+            id="subuser-edit-twofa-qr-file"
+            accept="image/*"
+            class="d-none"
+          >
+          <button type="button" id="subuser-edit-twofa-upload-qr-btn" class="btn-blue btn-small">
+            <i class="fas fa-qrcode"></i> QR
+          </button>
+        </div>
+        
+        <!-- Preview del QR (oculto por defecto) -->
+        <div id="subuser-edit-twofa-qr-preview" class="text-center mb-05 d-none"></div>
+        
+        <!-- Display del secreto configurado -->
+        <div id="subuser-edit-twofa-secret-display" class="mb-05 text-center">
+          <strong>Secreto configurado:</strong> <code id="subuser-edit-twofa-secret-display-value"></code>
+        </div>
+        
+        <div class="text-center">
+          <button type="submit" id="subuser-edit-twofa-save-btn" class="btn-green">Actualizar</button>
+          <button type="button" id="subuser-edit-twofa-cancel-btn" class="btn-blue">Cancelar</button>
+        </div>
+        
+        <div id="subuser-edit-twofa-message" class="mt-05 text-center"></div>
+      </form>
+    </div>
   </div>
   {% endif %}
 

@@ -70,7 +70,15 @@ document.addEventListener("DOMContentLoaded", function() {
     }
     const url = `/admin/list_allowed_emails_paginated?user_id=${userId}&page=${page}&per_page=${perPage}`;
     
-    if (allowedEmailsTextContainer) allowedEmailsTextContainer.innerHTML = "<p>Cargando...</p>";
+    if (allowedEmailsTextContainer) {
+      // Limpiar contenedor
+      while(allowedEmailsTextContainer.firstChild) {
+        allowedEmailsTextContainer.removeChild(allowedEmailsTextContainer.firstChild);
+      }
+      const loadingP = document.createElement('p');
+      loadingP.textContent = 'Cargando...';
+      allowedEmailsTextContainer.appendChild(loadingP);
+    }
     
     fetch(url, {
       method: "GET",
@@ -279,10 +287,18 @@ document.addEventListener("DOMContentLoaded", function() {
     emails.forEach(email => {
         const itemDiv = document.createElement('div');
         itemDiv.classList.add('search-result-item');
-        itemDiv.innerHTML = `
-            <span>${escapeHtml(email)}</span>
-            <button class="delete-search-result-btn" data-email="${escapeHtml(email)}" title="Eliminar este correo">X</button>
-        `;
+        
+        const span = document.createElement('span');
+        span.textContent = escapeHtml(email);
+        itemDiv.appendChild(span);
+        
+        const deleteBtn = document.createElement('button');
+        deleteBtn.className = 'delete-search-result-btn';
+        deleteBtn.setAttribute('data-email', escapeHtml(email));
+        deleteBtn.title = 'Eliminar este correo';
+        deleteBtn.textContent = 'X';
+        itemDiv.appendChild(deleteBtn);
+        
         emailsSearchResults.appendChild(itemDiv);
     });
 
@@ -516,31 +532,46 @@ document.addEventListener("DOMContentLoaded", function() {
 
   function renderPrincipalRegexList(rxArr){
     if (!regexListContainer) return;
-    let html="";
-    if (!rxArr || rxArr.length === 0) {
-        html = "<p>No hay Regex definidos en el sistema.</p>"
-    } else {
-        rxArr.forEach((rx,i)=>{
-          const bg = (i%2===0) ? "#f9f9f9" : "#fff";
-          html += `
-            <div style="background:${bg}; padding:6px; text-align:left;">
-              <label style="display:flex; gap:0.5rem; align-items:center; text-align:left;">
-                <input
-                  type="checkbox"
-                  class="principal-regex-cb"
-                  id="principal-regex-cb-${rx.id}"
-                  name="principal-regex-cb-${rx.id}"
-                  data-id="${rx.id}"
-                  ${rx.allowed ? "checked" : ""}
-                >
-                <strong style='text-align:left;'>${escapeHtml(truncateRegexDisplay(rx.pattern))}</strong>
-                <small>(${escapeHtml(rx.description||"")})</small>
-              </label>
-            </div>
-          `;
-        });
+    
+    // Limpiar contenedor
+    while(regexListContainer.firstChild) {
+      regexListContainer.removeChild(regexListContainer.firstChild);
     }
-    regexListContainer.innerHTML = html;
+    
+    if (!rxArr || rxArr.length === 0) {
+      const p = document.createElement('p');
+      p.textContent = "No hay Regex definidos en el sistema.";
+      regexListContainer.appendChild(p);
+      return;
+    }
+    
+    rxArr.forEach((rx,i)=>{
+      const itemDiv = document.createElement('div');
+      itemDiv.className = i%2===0 ? 'modal-regex-item modal-regex-item-even' : 'modal-regex-item modal-regex-item-odd';
+      
+      const label = document.createElement('label');
+      label.className = 'modal-regex-item-label';
+      
+      const checkbox = document.createElement('input');
+      checkbox.type = 'checkbox';
+      checkbox.className = 'principal-regex-cb';
+      checkbox.id = `principal-regex-cb-${rx.id}`;
+      checkbox.name = `principal-regex-cb-${rx.id}`;
+      checkbox.setAttribute('data-id', rx.id);
+      if (rx.allowed) checkbox.checked = true;
+      
+      const strong = document.createElement('strong');
+      strong.textContent = escapeHtml(truncateRegexDisplay(rx.pattern));
+      
+      const small = document.createElement('small');
+      small.textContent = `(${escapeHtml(rx.description||"")})`;
+      
+      label.appendChild(checkbox);
+      label.appendChild(strong);
+      label.appendChild(small);
+      itemDiv.appendChild(label);
+      regexListContainer.appendChild(itemDiv);
+    });
   }
 
   if(saveRegexSelectionBtn){
@@ -634,30 +665,42 @@ document.addEventListener("DOMContentLoaded", function() {
 
   function renderPrincipalFiltersList(ftArr){
     if(!filtersListContainer) return;
-    let html="";
-     if (!ftArr || ftArr.length === 0) {
-        html = "<p>No hay Filtros definidos en el sistema.</p>"
-    } else {
-        ftArr.forEach((f,i)=>{
-          const bg = (i%2===0) ? "#f9f9f9" : "#fff";
-          html += `
-            <div style="background:${bg}; padding:6px;">
-              <label style="display:flex; gap:0.5rem; align-items:center;">
-                <input
-                  type="checkbox"
-                  class="principal-filter-cb"
-                  id="principal-filter-cb-${f.id}"
-                  name="principal-filter-cb-${f.id}"
-                  data-id="${f.id}"
-                  ${f.allowed ? "checked" : ""}
-                >
-                <strong>(${escapeHtml(f.sender||"?")}) - ${escapeHtml(f.keyword||"?")}</strong>
-              </label>
-            </div>
-          `;
-        });
+    
+    // Limpiar contenedor
+    while(filtersListContainer.firstChild) {
+      filtersListContainer.removeChild(filtersListContainer.firstChild);
     }
-    filtersListContainer.innerHTML = html;
+    
+    if (!ftArr || ftArr.length === 0) {
+      const p = document.createElement('p');
+      p.textContent = "No hay Filtros definidos en el sistema.";
+      filtersListContainer.appendChild(p);
+      return;
+    }
+    
+    ftArr.forEach((f,i)=>{
+      const itemDiv = document.createElement('div');
+      itemDiv.className = i%2===0 ? 'modal-filter-item modal-filter-item-even' : 'modal-filter-item modal-filter-item-odd';
+      
+      const label = document.createElement('label');
+      label.className = 'modal-filter-item-label';
+      
+      const checkbox = document.createElement('input');
+      checkbox.type = 'checkbox';
+      checkbox.className = 'principal-filter-cb';
+      checkbox.id = `principal-filter-cb-${f.id}`;
+      checkbox.name = `principal-filter-cb-${f.id}`;
+      checkbox.setAttribute('data-id', f.id);
+      if (f.allowed) checkbox.checked = true;
+      
+      const strong = document.createElement('strong');
+      strong.textContent = `(${escapeHtml(f.sender||"?")}) - ${escapeHtml(f.keyword||"?")}`;
+      
+      label.appendChild(checkbox);
+      label.appendChild(strong);
+      itemDiv.appendChild(label);
+      filtersListContainer.appendChild(itemDiv);
+    });
   }
 
   if(saveFiltersSelectionBtn){
@@ -816,40 +859,58 @@ document.addEventListener("DOMContentLoaded", function() {
 
   function renderSubusersForModal(arr){
     if(!subusersList) return;
+    
+    // Limpiar contenedor usando textContent (más seguro que innerHTML)
+    while(subusersList.firstChild) {
+      subusersList.removeChild(subusersList.firstChild);
+    }
+    
     if(!arr || !arr.length){
-      subusersList.innerHTML="<p>No hay sub-usuarios creados por este usuario.</p>";
+      const p = document.createElement('p');
+      p.textContent = "No hay sub-usuarios creados por este usuario.";
+      subusersList.appendChild(p);
       return;
     }
-    let html="<ul style='list-style:none; margin:0; padding:0;'>";
+    
+    const ul = document.createElement('ul');
+    ul.className = 'modal-subuser-list';
+    
     arr.forEach(su=>{
       const toggleLabel = su.enabled ? "OFF" : "ON";
       const toggleClass = su.enabled ? "btn-red" : "btn-green";
-      // Usar data-* attributes para los botones en lugar de onclick global
-      html += `
-        <li style="margin-bottom:0.7rem; border-bottom:1px solid #ccc; padding-bottom:0.5rem;">
-          <div style="display:flex; align-items:center; justify-content:space-between;">
-            <strong>${escapeHtml(su.username)}</strong>
-            <div style="display:flex; gap:0.5rem;">
-              <button
-                class="${toggleClass} btn-small modal-toggle-subuser"
-                data-id="${su.id}"
-                data-enabled="${su.enabled}"
-              >
-                ${toggleLabel}
-              </button>
-              <button
-                class="btn-red btn-small modal-delete-subuser"
-                data-id="${su.id}"
-              >
-                Eliminar
-              </button>
-            </div>
-          </div>
-        </li>
-      `;
+      
+      const li = document.createElement('li');
+      li.className = 'modal-subuser-list-item';
+      
+      const contentDiv = document.createElement('div');
+      contentDiv.className = 'modal-subuser-list-item-content';
+      
+      const strong = document.createElement('strong');
+      strong.textContent = escapeHtml(su.username);
+      contentDiv.appendChild(strong);
+      
+      const actionsDiv = document.createElement('div');
+      actionsDiv.className = 'modal-subuser-list-item-actions';
+      
+      const toggleBtn = document.createElement('button');
+      toggleBtn.className = `${toggleClass} btn-small modal-toggle-subuser`;
+      toggleBtn.setAttribute('data-id', su.id);
+      toggleBtn.setAttribute('data-enabled', su.enabled);
+      toggleBtn.textContent = toggleLabel;
+      actionsDiv.appendChild(toggleBtn);
+      
+      const deleteBtn = document.createElement('button');
+      deleteBtn.className = 'btn-red btn-small modal-delete-subuser';
+      deleteBtn.setAttribute('data-id', su.id);
+      deleteBtn.textContent = 'Eliminar';
+      actionsDiv.appendChild(deleteBtn);
+      
+      contentDiv.appendChild(actionsDiv);
+      li.appendChild(contentDiv);
+      ul.appendChild(li);
     });
-    html += "</ul>";
-    subusersList.innerHTML = html;
+    
+    subusersList.appendChild(ul);
   }
 
   // Delegación de eventos DENTRO del modal de subusuarios
@@ -975,36 +1036,55 @@ document.addEventListener("DOMContentLoaded", function() {
 
   function renderGlobalSubusersRegex(arr){
     if (!subusersRegexList) return;
-    let html="";
-     if (!arr || arr.length === 0) {
-        html = "<p>No hay Regex definidos en el sistema.</p>"
-    } else {
-        arr.forEach((rx,i)=>{
-          const bg=(i%2===0)?"#f9f9f9":"#fff";
-          html+=`
-            <div style="background:${bg}; padding:6px; text-align:left;">
-              <label style="display:flex; align-items:center; gap:0.5rem; text-align:left;">
-                <input
-                  type="checkbox"
-                  class="subusers-regex-global-cb"
-                  id="subusers-regex-global-cb-${rx.id}"
-                  name="subusers-regex-global-cb-${rx.id}"
-                  data-id="${rx.id}"
-                  ${rx.enabled ? "checked" : ""}
-                  ${rx.locked ? "disabled" : ""}
-                >
-                <strong style='text-align:left;'>${escapeHtml(truncateRegexDisplay(rx.pattern))}</strong>
-                <small>(${escapeHtml(rx.description||"")})</small>
-                ${ rx.locked
-                   ? "<em style='color:#dc3545; font-size:0.8rem; margin-left: auto;'>(Bloqueado: Padre inactivo)</em>"
-                   : ""
-                }
-              </label>
-            </div>
-          `
-        });
+    
+    // Limpiar contenedor
+    while(subusersRegexList.firstChild) {
+      subusersRegexList.removeChild(subusersRegexList.firstChild);
     }
-    subusersRegexList.innerHTML = html;
+    
+    if (!arr || arr.length === 0) {
+      const p = document.createElement('p');
+      p.textContent = "No hay Regex definidos en el sistema.";
+      subusersRegexList.appendChild(p);
+      return;
+    }
+    
+    arr.forEach((rx,i)=>{
+      const itemDiv = document.createElement('div');
+      itemDiv.className = i%2===0 ? 'modal-regex-item modal-regex-item-even' : 'modal-regex-item modal-regex-item-odd';
+      
+      const label = document.createElement('label');
+      label.className = 'modal-regex-item-label';
+      
+      const checkbox = document.createElement('input');
+      checkbox.type = 'checkbox';
+      checkbox.className = 'subusers-regex-global-cb';
+      checkbox.id = `subusers-regex-global-cb-${rx.id}`;
+      checkbox.name = `subusers-regex-global-cb-${rx.id}`;
+      checkbox.setAttribute('data-id', rx.id);
+      if (rx.enabled) checkbox.checked = true;
+      if (rx.locked) checkbox.disabled = true;
+      
+      const strong = document.createElement('strong');
+      strong.textContent = escapeHtml(truncateRegexDisplay(rx.pattern));
+      
+      const small = document.createElement('small');
+      small.textContent = `(${escapeHtml(rx.description||"")})`;
+      
+      label.appendChild(checkbox);
+      label.appendChild(strong);
+      label.appendChild(small);
+      
+      if (rx.locked) {
+        const em = document.createElement('em');
+        em.className = 'locked-indicator';
+        em.textContent = '(Bloqueado: Padre inactivo)';
+        label.appendChild(em);
+      }
+      
+      itemDiv.appendChild(label);
+      subusersRegexList.appendChild(itemDiv);
+    });
   }
 
   if(saveSubusersRegexBtn){
@@ -1099,35 +1179,51 @@ document.addEventListener("DOMContentLoaded", function() {
 
   function renderGlobalSubusersFilters(arr){
     if (!subusersFiltersList) return;
-    let html="";
-     if (!arr || arr.length === 0) {
-        html = "<p>No hay Filtros definidos en el sistema.</p>"
-    } else {
-        arr.forEach((f,i)=>{
-          const bg = (i%2===0) ? "#f9f9f9" : "#fff";
-          html += `
-            <div style="background:${bg}; padding:6px;">
-              <label style="display:flex; gap:0.5rem; align-items:center;">
-                <input
-                  type="checkbox"
-                  class="subusers-filters-global-cb"
-                  id="subusers-filters-global-cb-${f.id}"
-                  name="subusers-filters-global-cb-${f.id}"
-                  data-id="${f.id}"
-                  ${f.enabled ? "checked" : ""} 
-                  ${f.locked ? "disabled" : ""}
-                >
-                <strong>(${escapeHtml(f.sender||"?")}) - ${escapeHtml(f.keyword||"?")}</strong>
-                ${ f.locked
-                   ? "<em style='color:#dc3545; font-size:0.8rem; margin-left: auto;'>(Bloqueado: Padre inactivo)</em>"
-                   : ""
-                }
-              </label>
-            </div>
-          `;
-        });
+    
+    // Limpiar contenedor
+    while(subusersFiltersList.firstChild) {
+      subusersFiltersList.removeChild(subusersFiltersList.firstChild);
     }
-    subusersFiltersList.innerHTML = html;
+    
+    if (!arr || arr.length === 0) {
+      const p = document.createElement('p');
+      p.textContent = "No hay Filtros definidos en el sistema.";
+      subusersFiltersList.appendChild(p);
+      return;
+    }
+    
+    arr.forEach((f,i)=>{
+      const itemDiv = document.createElement('div');
+      itemDiv.className = i%2===0 ? 'modal-filter-item modal-filter-item-even' : 'modal-filter-item modal-filter-item-odd';
+      
+      const label = document.createElement('label');
+      label.className = 'modal-filter-item-label';
+      
+      const checkbox = document.createElement('input');
+      checkbox.type = 'checkbox';
+      checkbox.className = 'subusers-filters-global-cb';
+      checkbox.id = `subusers-filters-global-cb-${f.id}`;
+      checkbox.name = `subusers-filters-global-cb-${f.id}`;
+      checkbox.setAttribute('data-id', f.id);
+      if (f.enabled) checkbox.checked = true;
+      if (f.locked) checkbox.disabled = true;
+      
+      const strong = document.createElement('strong');
+      strong.textContent = `(${escapeHtml(f.sender||"?")}) - ${escapeHtml(f.keyword||"?")}`;
+      
+      label.appendChild(checkbox);
+      label.appendChild(strong);
+      
+      if (f.locked) {
+        const em = document.createElement('em');
+        em.className = 'locked-indicator';
+        em.textContent = '(Bloqueado: Padre inactivo)';
+        label.appendChild(em);
+      }
+      
+      itemDiv.appendChild(label);
+      subusersFiltersList.appendChild(itemDiv);
+    });
   }
 
   if(saveSubusersFiltersBtn){

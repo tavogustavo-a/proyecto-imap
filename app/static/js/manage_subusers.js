@@ -316,8 +316,11 @@ document.addEventListener("DOMContentLoaded", function() {
   const subuserManagementContainer = document.getElementById("subuser-management-container");
   const currentUserId = subuserManagementContainer ? subuserManagementContainer.dataset.userId : null;
 
-  if (!currentUserId) {
-    console.warn("No se encontró user_id para gestión de correos");
+  // Solo ejecutar el código de gestión de correos si el contenedor existe
+  // (el contenedor solo existe si el usuario tiene el permiso can_add_own_emails)
+  if (!subuserManagementContainer || !currentUserId) {
+    // No mostrar warning si el contenedor no existe (usuario sin permiso)
+    // console.warn("No se encontró user_id para gestión de correos");
   } else {
     // Variables de paginación
     let subuserCurrentPage = 1;
@@ -359,8 +362,13 @@ document.addEventListener("DOMContentLoaded", function() {
       return response.json();
     }
 
-    // Función para cargar correos
+    // Función para cargar correos (solo si el contenedor existe)
     function fetchSubuserAllowedEmails(page = 1, perPage = 20) {
+      // Verificar que el contenedor existe antes de hacer la petición
+      if (!subuserAllowedEmailsTextContainer) {
+        return; // Salir silenciosamente si no hay contenedor (usuario sin permiso)
+      }
+      
       subuserCurrentPage = page;
       subuserCurrentPerPage = parseInt(perPage, 10) || 20;
       if (subuserCurrentPerPage === -1) {
@@ -371,13 +379,11 @@ document.addEventListener("DOMContentLoaded", function() {
       
       const url = `/subusers/list_current_user_emails_paginated?page=${page}&per_page=${perPage}`;
       
-      if (subuserAllowedEmailsTextContainer) {
-        const loadingP = document.createElement('p');
-        loadingP.classList.add('text-secondary');
-        loadingP.textContent = 'Cargando...';
-        subuserAllowedEmailsTextContainer.innerHTML = '';
-        subuserAllowedEmailsTextContainer.appendChild(loadingP);
-      }
+      const loadingP = document.createElement('p');
+      loadingP.classList.add('text-secondary');
+      loadingP.textContent = 'Cargando...';
+      subuserAllowedEmailsTextContainer.innerHTML = '';
+      subuserAllowedEmailsTextContainer.appendChild(loadingP);
       
       fetch(url, {
         method: "GET",
@@ -448,18 +454,18 @@ document.addEventListener("DOMContentLoaded", function() {
       }
     }
 
-    // Event listeners para paginación
-    if (subuserPrevPageBtn) {
+    // Event listeners para paginación (solo si el contenedor existe)
+    if (subuserPrevPageBtn && subuserAllowedEmailsTextContainer) {
       subuserPrevPageBtn.addEventListener("click", () => {
         if (subuserCurrentPage > 1) fetchSubuserAllowedEmails(subuserCurrentPage - 1, subuserCurrentPerPage);
       });
     }
-    if (subuserNextPageBtn) {
+    if (subuserNextPageBtn && subuserAllowedEmailsTextContainer) {
       subuserNextPageBtn.addEventListener("click", () => {
         fetchSubuserAllowedEmails(subuserCurrentPage + 1, subuserCurrentPerPage);
       });
     }
-    if (subuserPerPageSelect) {
+    if (subuserPerPageSelect && subuserAllowedEmailsTextContainer) {
       subuserPerPageSelect.addEventListener("change", () => {
         const newPerPage = parseInt(subuserPerPageSelect.value, 10);
         fetchSubuserAllowedEmails(1, newPerPage);
@@ -754,8 +760,10 @@ document.addEventListener("DOMContentLoaded", function() {
       });
     }
 
-    // Cargar correos al iniciar
-    fetchSubuserAllowedEmails(1, subuserCurrentPerPage);
+    // Cargar correos al iniciar (solo si el contenedor existe)
+    if (subuserAllowedEmailsTextContainer) {
+      fetchSubuserAllowedEmails(1, subuserCurrentPerPage);
+    }
   }
   // ======= FIN GESTIÓN DE CORREOS DEL USUARIO PRINCIPAL =======
 
@@ -852,5 +860,676 @@ document.addEventListener("DOMContentLoaded", function() {
     });
   }
   // ======= FIN ELIMINACIÓN MASIVA DE CORREOS =======
+
+  // ======= GESTIÓN DE 2FA POR CORREO =======
+  // Verificar si la sección de 2FA existe en el DOM (solo si el usuario tiene permiso)
+  const subuserTwofaForm = document.getElementById('subuser-twofa-config-form');
+  if (subuserTwofaForm) {
+    // Solo ejecutar el código de 2FA si el formulario existe (usuario tiene permiso)
+    // Esto evita errores cuando el usuario no tiene el permiso can_manage_2fa_emails
+  const subuserTwofaConfigsList = document.getElementById('subuser-twofa-configs-list');
+  const subuserTwofaEmailsInput = document.getElementById('subuser-twofa-emails-input');
+  const subuserTwofaConfigId = document.getElementById('subuser-twofa-config-id');
+  const subuserTwofaSecretInput = document.getElementById('subuser-twofa-secret-input');
+  const subuserTwofaQrFile = document.getElementById('subuser-twofa-qr-file');
+  const subuserTwofaSecretDisplay = document.getElementById('subuser-twofa-secret-display');
+  const subuserTwofaSecretDisplayValue = document.getElementById('subuser-twofa-secret-display-value');
+  const subuserTwofaSaveBtn = document.getElementById('subuser-twofa-save-btn');
+  const subuserTwofaCancelBtn = document.getElementById('subuser-twofa-cancel-btn');
+  const subuserTwofaMessage = document.getElementById('subuser-twofa-message');
+  const subuserTwofaUploadQrBtn = document.getElementById('subuser-twofa-upload-qr-btn');
+  const subuserTwofaQrPreview = document.getElementById('subuser-twofa-qr-preview');
+  
+  let subuserCurrentSecret = null;
+  let subuserCurrentConfigs = [];
+  
+  // Elementos de búsqueda y paginación
+  const subuserSearchTwofaInput = document.getElementById('subuser-searchTwofaInput');
+  const subuserShowTwofaCount = document.getElementById('subuser-showTwofaCount');
+  const subuserPrevTwofaPageBtn = document.getElementById('subuser-prevTwofaPageBtn');
+  const subuserNextTwofaPageBtn = document.getElementById('subuser-nextTwofaPageBtn');
+  
+  let subuserCurrentTwofaPage = 1;
+  let subuserPerPage = subuserShowTwofaCount ? (parseInt(subuserShowTwofaCount.value) || 20) : 20;
+  
+  // Función para mostrar mensaje
+  function showSubuserTwofaMessage(message, type = 'success') {
+    if (!subuserTwofaMessage) return;
+    subuserTwofaMessage.textContent = message;
+    subuserTwofaMessage.className = `mt-05 text-center text-${type === 'error' ? 'danger' : type === 'success' ? 'success' : 'info'}`;
+    setTimeout(() => {
+      subuserTwofaMessage.textContent = '';
+      subuserTwofaMessage.className = 'mt-05 text-center';
+    }, 5000);
+  }
+  
+  // Función para resetear formulario
+  function resetSubuserTwofaForm() {
+    if (subuserTwofaEmailsInput) subuserTwofaEmailsInput.value = '';
+    if (subuserTwofaConfigId) subuserTwofaConfigId.value = '';
+    if (subuserTwofaSecretInput) subuserTwofaSecretInput.value = '';
+    if (subuserTwofaQrFile) subuserTwofaQrFile.value = '';
+    subuserCurrentSecret = null;
+    if (subuserTwofaSecretDisplay) subuserTwofaSecretDisplay.classList.add('d-none');
+    if (subuserTwofaSaveBtn) subuserTwofaSaveBtn.textContent = 'Agregar';
+    if (subuserTwofaCancelBtn) subuserTwofaCancelBtn.classList.add('d-none');
+    if (subuserTwofaQrPreview) {
+      subuserTwofaQrPreview.innerHTML = '';
+      subuserTwofaQrPreview.classList.add('d-none');
+    }
+  }
+  
+  // Manejar click en "Subir QR"
+  if (subuserTwofaUploadQrBtn) {
+    subuserTwofaUploadQrBtn.addEventListener('click', function() {
+      if (subuserTwofaQrFile) {
+        subuserTwofaQrFile.click();
+      }
+    });
+  }
+  
+  // Manejar subida de archivo QR
+  if (subuserTwofaQrFile) {
+    subuserTwofaQrFile.addEventListener('change', async function(e) {
+      const file = e.target.files[0];
+      if (!file) return;
+      
+      if (!file.type.startsWith('image/')) {
+        showSubuserTwofaMessage('Por favor selecciona un archivo de imagen', 'error');
+        return;
+      }
+      
+      // Mostrar preview
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        if (subuserTwofaQrPreview) {
+          const img = document.createElement('img');
+          img.src = e.target.result;
+          img.alt = 'QR Preview';
+          img.className = 'twofa-qr-preview-img';
+          subuserTwofaQrPreview.innerHTML = '';
+          subuserTwofaQrPreview.appendChild(img);
+          subuserTwofaQrPreview.classList.remove('d-none');
+        }
+      };
+      reader.readAsDataURL(file);
+      
+      // Leer QR y extraer secreto
+      const formData = new FormData();
+      formData.append('qr_file', file);
+      
+      try {
+        const response = await fetch('/subusers/twofa-configs/read-qr', {
+          method: 'POST',
+          headers: {
+            'X-CSRFToken': getCsrfToken()
+          },
+          body: formData
+        });
+        
+        const data = await response.json();
+        
+        if (data.success && data.secret_key) {
+          subuserCurrentSecret = data.secret_key;
+          if (subuserTwofaSecretInput) {
+            subuserTwofaSecretInput.value = subuserCurrentSecret;
+          }
+          if (subuserTwofaSecretDisplay && subuserTwofaSecretDisplayValue) {
+            subuserTwofaSecretDisplayValue.textContent = subuserCurrentSecret;
+            subuserTwofaSecretDisplay.classList.remove('d-none');
+          }
+          showSubuserTwofaMessage('QR code leído correctamente', 'success');
+        } else {
+          showSubuserTwofaMessage(data.error || 'Error al leer el código QR', 'error');
+        }
+      } catch (error) {
+        showSubuserTwofaMessage('Error al procesar el QR: ' + error.message, 'error');
+      }
+    });
+  }
+  
+  // Manejar entrada manual de secreto
+  if (subuserTwofaSecretInput) {
+    subuserTwofaSecretInput.addEventListener('input', function(e) {
+      const secret = e.target.value.trim().toUpperCase();
+      if (secret && /^[A-Z0-9]{16,}$/.test(secret)) {
+        subuserCurrentSecret = secret;
+        if (subuserTwofaSecretDisplay && subuserTwofaSecretDisplayValue) {
+          subuserTwofaSecretDisplayValue.textContent = subuserCurrentSecret;
+          subuserTwofaSecretDisplay.classList.remove('d-none');
+        }
+      } else if (secret.length === 0) {
+        subuserCurrentSecret = null;
+        if (subuserTwofaSecretDisplay) subuserTwofaSecretDisplay.classList.add('d-none');
+      }
+    });
+  }
+  
+  // Manejar envío del formulario (SOLO PARA CREAR)
+  if (subuserTwofaForm) {
+    subuserTwofaForm.addEventListener('submit', async function(e) {
+      e.preventDefault();
+      
+      const emails = subuserTwofaEmailsInput ? subuserTwofaEmailsInput.value.trim() : '';
+      
+      if (!emails) {
+        showSubuserTwofaMessage('Debes ingresar al menos un correo', 'error');
+        return;
+      }
+      
+      const secretFromInput = subuserTwofaSecretInput ? subuserTwofaSecretInput.value.trim().toUpperCase() : '';
+      if (secretFromInput && /^[A-Z0-9]{16,}$/.test(secretFromInput)) {
+        subuserCurrentSecret = secretFromInput;
+      }
+      
+      if (!subuserCurrentSecret) {
+        showSubuserTwofaMessage('Debes proporcionar un secreto TOTP (ingresa el código manual o sube un QR)', 'error');
+        return;
+      }
+      
+      try {
+        const response = await fetch('/subusers/twofa-configs', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': getCsrfToken()
+          },
+          body: JSON.stringify({
+            emails: emails,
+            secret_key: subuserCurrentSecret
+          })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+          showSubuserTwofaMessage(data.message || 'Configuración guardada correctamente', 'success');
+          resetSubuserTwofaForm();
+          loadSubuserTwofaConfigs();
+        } else {
+          showSubuserTwofaMessage(data.error || 'Error al guardar la configuración', 'error');
+        }
+      } catch (error) {
+        showSubuserTwofaMessage('Error al guardar: ' + error.message, 'error');
+      }
+    });
+  }
+  
+  // Manejar cancelar
+  if (subuserTwofaCancelBtn) {
+    subuserTwofaCancelBtn.addEventListener('click', function() {
+      resetSubuserTwofaForm();
+    });
+  }
+  
+  // Función para cargar configuraciones
+  async function loadSubuserTwofaConfigs() {
+    try {
+      const response = await fetch('/subusers/twofa-configs', {
+        method: 'GET',
+        headers: {
+          'X-CSRFToken': getCsrfToken()
+        }
+      });
+      
+      const data = await response.json();
+      
+      if (data.success && data.configs) {
+        subuserCurrentConfigs = data.configs;
+        renderSubuserTwofaConfigsList(data.configs);
+      } else {
+        if (subuserTwofaConfigsList) {
+          const p = document.createElement('p');
+          p.className = 'text-center text-secondary';
+          p.textContent = 'No hay configuraciones 2FA.';
+          subuserTwofaConfigsList.innerHTML = '';
+          subuserTwofaConfigsList.appendChild(p);
+        }
+      }
+    } catch (error) {
+      if (subuserTwofaConfigsList) {
+        const p = document.createElement('p');
+        p.className = 'text-center text-danger';
+        p.textContent = 'Error al cargar configuraciones.';
+        subuserTwofaConfigsList.innerHTML = '';
+        subuserTwofaConfigsList.appendChild(p);
+      }
+    }
+  }
+  
+  // Función para obtener filas filtradas
+  function getFilteredSubuserTwofaConfigs() {
+    if (!subuserTwofaConfigsList) return [];
+    const searchTerm = subuserSearchTwofaInput ? subuserSearchTwofaInput.value.toLowerCase() : '';
+    const configItems = Array.from(subuserTwofaConfigsList.querySelectorAll('.regex-item[data-emails]'));
+    
+    return configItems.filter(item => {
+      if (!searchTerm) return true;
+      const emails = item.getAttribute('data-emails').toLowerCase();
+      return emails.includes(searchTerm);
+    });
+  }
+  
+  // Función para renderizar página
+  function renderSubuserTwofaPage() {
+    const filteredConfigs = getFilteredSubuserTwofaConfigs();
+    const totalConfigs = filteredConfigs.length;
+    const showCount = subuserShowTwofaCount ? subuserShowTwofaCount.value : '20';
+    const totalPages = showCount === 'all' ? 1 : Math.ceil(totalConfigs / subuserPerPage);
+    
+    let start = showCount === 'all' ? 0 : (subuserCurrentTwofaPage - 1) * subuserPerPage;
+    let end = showCount === 'all' ? totalConfigs : start + subuserPerPage;
+    
+    const allConfigs = Array.from(subuserTwofaConfigsList.querySelectorAll('.regex-item[data-emails]'));
+    allConfigs.forEach(item => {
+      item.classList.add('d-none');
+    });
+    
+    filteredConfigs.slice(start, end).forEach(item => {
+      item.classList.remove('d-none');
+    });
+    
+    if (subuserPrevTwofaPageBtn) {
+      subuserPrevTwofaPageBtn.disabled = subuserCurrentTwofaPage <= 1;
+    }
+    if (subuserNextTwofaPageBtn) {
+      subuserNextTwofaPageBtn.disabled = subuserCurrentTwofaPage >= totalPages || showCount === 'all';
+    }
+  }
+  
+  // Función para filtrar configuraciones
+  function filterSubuserTwofaConfigs() {
+    subuserCurrentTwofaPage = 1;
+    renderSubuserTwofaPage();
+  }
+  
+  // Función para escapar HTML
+  function escapeHtmlSubuser(text) {
+    if (text == null) return '';
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+  }
+  
+  // Función para renderizar lista de configuraciones
+  function renderSubuserTwofaConfigsList(configs) {
+    if (!subuserTwofaConfigsList) return;
+    
+    if (!configs || configs.length === 0) {
+      const p = document.createElement('p');
+      p.className = 'text-center text-secondary';
+      p.textContent = 'No hay configuraciones 2FA. Agrega una nueva configuración arriba.';
+      subuserTwofaConfigsList.innerHTML = '';
+      subuserTwofaConfigsList.appendChild(p);
+      return;
+    }
+    
+    subuserTwofaConfigsList.innerHTML = '';
+    
+    configs.forEach(config => {
+      const emailsList = config.emails_list || [];
+      const emailsDisplay = emailsList.length > 0 ? emailsList.join(', ') : config.emails || '';
+      
+      const itemDiv = document.createElement('div');
+      itemDiv.className = 'regex-item d-flex justify-content-between align-items-center p-2';
+      itemDiv.setAttribute('data-emails', emailsDisplay.toLowerCase());
+      
+      const contentDiv = document.createElement('div');
+      contentDiv.className = 'flex-grow-1';
+      
+      const emailDiv = document.createElement('div');
+      emailDiv.className = 'font-weight-bold';
+      emailDiv.textContent = emailsDisplay;
+      contentDiv.appendChild(emailDiv);
+      
+      const actionsDiv = document.createElement('div');
+      actionsDiv.className = 'd-flex gap-05 ml-2';
+      
+      const editBtn = document.createElement('button');
+      editBtn.type = 'button';
+      editBtn.className = 'btn-orange btn-sm edit-subuser-twofa-config';
+      editBtn.setAttribute('data-config-id', config.id);
+      editBtn.title = 'Editar';
+      const editIcon = document.createElement('i');
+      editIcon.className = 'fas fa-edit';
+      editBtn.appendChild(editIcon);
+      editBtn.addEventListener('click', function() {
+        editSubuserTwofaConfig(config.id);
+      });
+      
+      const deleteBtn = document.createElement('button');
+      deleteBtn.type = 'button';
+      deleteBtn.className = 'btn-red btn-sm delete-subuser-twofa-config btn-imap-action btn-imap-small';
+      deleteBtn.setAttribute('data-id', config.id);
+      deleteBtn.title = 'Eliminar';
+      const deleteIcon = document.createElement('i');
+      deleteIcon.className = 'fas fa-trash';
+      deleteBtn.appendChild(deleteIcon);
+      deleteBtn.addEventListener('click', function() {
+        deleteSubuserTwofaConfig(config.id);
+      });
+      
+      actionsDiv.appendChild(editBtn);
+      actionsDiv.appendChild(deleteBtn);
+      
+      itemDiv.appendChild(contentDiv);
+      itemDiv.appendChild(actionsDiv);
+      subuserTwofaConfigsList.appendChild(itemDiv);
+    });
+    
+    renderSubuserTwofaPage();
+  }
+  
+  // Elementos del modal de edición
+  const subuserTwofaEditModal = document.getElementById('subuser-twofa-edit-modal');
+  const subuserTwofaEditForm = document.getElementById('subuser-twofa-edit-form');
+  const subuserEditTwofaConfigId = document.getElementById('subuser-edit-twofa-config-id');
+  const subuserEditTwofaEmailsInput = document.getElementById('subuser-edit-twofa-emails-input');
+  const subuserEditTwofaSecretInput = document.getElementById('subuser-edit-twofa-secret-input');
+  const subuserEditTwofaQrFile = document.getElementById('subuser-edit-twofa-qr-file');
+  const subuserEditTwofaQrPreview = document.getElementById('subuser-edit-twofa-qr-preview');
+  const subuserEditTwofaSecretDisplay = document.getElementById('subuser-edit-twofa-secret-display');
+  const subuserEditTwofaSecretDisplayValue = document.getElementById('subuser-edit-twofa-secret-display-value');
+  const subuserEditTwofaUploadQrBtn = document.getElementById('subuser-edit-twofa-upload-qr-btn');
+  const subuserEditTwofaSaveBtn = document.getElementById('subuser-edit-twofa-save-btn');
+  const subuserEditTwofaCancelBtn = document.getElementById('subuser-edit-twofa-cancel-btn');
+  const subuserEditTwofaMessage = document.getElementById('subuser-edit-twofa-message');
+  const subuserCloseEditTwofaModal = document.getElementById('subuser-close-edit-twofa-modal');
+  
+  let subuserCurrentEditSecret = null;
+  
+  // Función para mostrar mensaje en el modal
+  function showSubuserEditTwofaMessage(message, type = 'success') {
+    if (!subuserEditTwofaMessage) return;
+    subuserEditTwofaMessage.textContent = message;
+    subuserEditTwofaMessage.className = `mt-05 text-center text-${type === 'error' ? 'danger' : type === 'success' ? 'success' : 'info'}`;
+    setTimeout(() => {
+      subuserEditTwofaMessage.textContent = '';
+      subuserEditTwofaMessage.className = 'mt-05 text-center';
+    }, 5000);
+  }
+  
+  // Función para resetear formulario del modal
+  function resetSubuserEditTwofaForm() {
+    if (subuserEditTwofaEmailsInput) subuserEditTwofaEmailsInput.value = '';
+    if (subuserEditTwofaConfigId) subuserEditTwofaConfigId.value = '';
+    if (subuserEditTwofaSecretInput) subuserEditTwofaSecretInput.value = '';
+    if (subuserEditTwofaQrFile) subuserEditTwofaQrFile.value = '';
+    subuserCurrentEditSecret = null;
+    if (subuserEditTwofaSecretDisplay) {
+      if (subuserEditTwofaSecretDisplayValue) subuserEditTwofaSecretDisplayValue.textContent = '';
+    }
+    if (subuserEditTwofaQrPreview) {
+      subuserEditTwofaQrPreview.innerHTML = '';
+      subuserEditTwofaQrPreview.classList.add('d-none');
+    }
+  }
+  
+  // Función para abrir modal de edición
+  function openSubuserEditTwofaModal() {
+    if (subuserTwofaEditModal) {
+      subuserTwofaEditModal.classList.remove('d-none');
+    }
+  }
+  
+  // Función para cerrar modal de edición
+  function closeSubuserEditTwofaModal() {
+    if (subuserTwofaEditModal) {
+      subuserTwofaEditModal.classList.add('d-none');
+    }
+    resetSubuserEditTwofaForm();
+  }
+  
+  // Función para editar configuración
+  function editSubuserTwofaConfig(configId) {
+    const config = subuserCurrentConfigs.find(c => c.id == configId);
+    if (!config) {
+      showSubuserTwofaMessage('Configuración no encontrada', 'error');
+      return;
+    }
+    
+    if (subuserEditTwofaEmailsInput) {
+      const emailsList = config.emails_list || [];
+      subuserEditTwofaEmailsInput.value = emailsList.length > 0 ? emailsList.join(', ') : config.emails || '';
+    }
+    if (subuserEditTwofaConfigId) subuserEditTwofaConfigId.value = config.id;
+    subuserCurrentEditSecret = config.secret_key;
+    
+    if (subuserEditTwofaSecretDisplay && subuserEditTwofaSecretDisplayValue) {
+      subuserEditTwofaSecretDisplayValue.textContent = subuserCurrentEditSecret;
+      subuserEditTwofaSecretDisplay.classList.remove('d-none');
+    }
+    
+    if (subuserEditTwofaSecretInput) subuserEditTwofaSecretInput.value = '';
+    
+    openSubuserEditTwofaModal();
+  }
+  
+  // Función para eliminar configuración
+  async function deleteSubuserTwofaConfig(configId) {
+    if (!confirm('¿Estás seguro de eliminar esta configuración 2FA?')) {
+      return;
+    }
+    
+    try {
+      const response = await fetch(`/subusers/twofa-configs/${configId}`, {
+        method: 'DELETE',
+        headers: {
+          'X-CSRFToken': getCsrfToken()
+        }
+      });
+      
+      const data = await response.json();
+      
+      if (data.success) {
+        showSubuserTwofaMessage(data.message || 'Configuración eliminada correctamente', 'success');
+        loadSubuserTwofaConfigs();
+      } else {
+        showSubuserTwofaMessage(data.error || 'Error al eliminar la configuración', 'error');
+      }
+    } catch (error) {
+      showSubuserTwofaMessage('Error al eliminar: ' + error.message, 'error');
+    }
+  }
+  
+  // Manejar click en "Subir QR" del modal de edición
+  if (subuserEditTwofaUploadQrBtn) {
+    subuserEditTwofaUploadQrBtn.addEventListener('click', function() {
+      if (subuserEditTwofaQrFile) {
+        subuserEditTwofaQrFile.click();
+      }
+    });
+  }
+  
+  // Manejar selección de archivo QR en el modal de edición
+  if (subuserEditTwofaQrFile) {
+    subuserEditTwofaQrFile.addEventListener('change', async function(e) {
+      const file = e.target.files[0];
+      if (!file) return;
+      
+      if (!file.type.startsWith('image/')) {
+        showSubuserEditTwofaMessage('El archivo debe ser una imagen', 'error');
+        return;
+      }
+      
+      try {
+        const formData = new FormData();
+        formData.append('qr_file', file);
+        
+        const response = await fetch('/subusers/twofa-configs/read-qr', {
+          method: 'POST',
+          headers: {
+            'X-CSRFToken': getCsrfToken()
+          },
+          body: formData
+        });
+        
+        const data = await response.json();
+        
+        if (data.success && data.secret_key) {
+          subuserCurrentEditSecret = data.secret_key;
+          if (subuserEditTwofaSecretInput) {
+            subuserEditTwofaSecretInput.value = subuserCurrentEditSecret;
+          }
+          if (subuserEditTwofaSecretDisplay && subuserEditTwofaSecretDisplayValue) {
+            subuserEditTwofaSecretDisplayValue.textContent = subuserCurrentEditSecret;
+            subuserEditTwofaSecretDisplay.classList.remove('d-none');
+          }
+          showSubuserEditTwofaMessage('QR code leído correctamente', 'success');
+        } else {
+          showSubuserEditTwofaMessage(data.error || 'Error al leer el código QR', 'error');
+        }
+      } catch (error) {
+        showSubuserEditTwofaMessage('Error al procesar el QR: ' + error.message, 'error');
+      }
+    });
+  }
+  
+  // Manejar entrada manual de secreto en el modal de edición
+  if (subuserEditTwofaSecretInput) {
+    subuserEditTwofaSecretInput.addEventListener('input', function(e) {
+      const secret = e.target.value.trim().toUpperCase();
+      if (secret && /^[A-Z0-9]{16,}$/.test(secret)) {
+        subuserCurrentEditSecret = secret;
+        if (subuserEditTwofaSecretDisplay && subuserEditTwofaSecretDisplayValue) {
+          subuserEditTwofaSecretDisplayValue.textContent = subuserCurrentEditSecret;
+          subuserEditTwofaSecretDisplay.classList.remove('d-none');
+        }
+      } else if (secret.length === 0) {
+        if (!subuserCurrentEditSecret) {
+          if (subuserEditTwofaSecretDisplay) subuserEditTwofaSecretDisplay.classList.add('d-none');
+        }
+      }
+    });
+  }
+  
+  // Manejar envío del formulario de edición
+  if (subuserTwofaEditForm) {
+    subuserTwofaEditForm.addEventListener('submit', async function(e) {
+      e.preventDefault();
+      
+      const emails = subuserEditTwofaEmailsInput ? subuserEditTwofaEmailsInput.value.trim() : '';
+      const configId = subuserEditTwofaConfigId ? subuserEditTwofaConfigId.value : '';
+      
+      if (!emails) {
+        showSubuserEditTwofaMessage('Debes ingresar al menos un correo', 'error');
+        return;
+      }
+      
+      if (!configId) {
+        showSubuserEditTwofaMessage('ID de configuración no encontrado', 'error');
+        return;
+      }
+      
+      const secretFromInput = subuserEditTwofaSecretInput ? subuserEditTwofaSecretInput.value.trim().toUpperCase() : '';
+      let secretToUse = subuserCurrentEditSecret;
+      
+      if (secretFromInput && /^[A-Z0-9]{16,}$/.test(secretFromInput)) {
+        secretToUse = secretFromInput;
+      }
+      
+      if (!secretToUse) {
+        showSubuserEditTwofaMessage('Debes proporcionar un secreto TOTP (ingresa el código manual o sube un QR)', 'error');
+        return;
+      }
+      
+      try {
+        const response = await fetch(`/subusers/twofa-configs/${configId}`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': getCsrfToken()
+          },
+          body: JSON.stringify({
+            emails: emails,
+            secret_key: secretToUse
+          })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+          showSubuserEditTwofaMessage(data.message || 'Configuración actualizada correctamente', 'success');
+          setTimeout(() => {
+            closeSubuserEditTwofaModal();
+            loadSubuserTwofaConfigs();
+          }, 1000);
+        } else {
+          showSubuserEditTwofaMessage(data.error || 'Error al actualizar la configuración', 'error');
+        }
+      } catch (error) {
+        showSubuserEditTwofaMessage('Error al actualizar: ' + error.message, 'error');
+      }
+    });
+  }
+  
+  // Manejar cerrar modal de edición
+  if (subuserCloseEditTwofaModal) {
+    subuserCloseEditTwofaModal.addEventListener('click', function() {
+      closeSubuserEditTwofaModal();
+    });
+  }
+  
+  // Manejar cancelar en el modal de edición
+  if (subuserEditTwofaCancelBtn) {
+    subuserEditTwofaCancelBtn.addEventListener('click', function() {
+      closeSubuserEditTwofaModal();
+    });
+  }
+  
+  // Cerrar modal al hacer click fuera de él
+  if (subuserTwofaEditModal) {
+    subuserTwofaEditModal.addEventListener('click', function(e) {
+      if (e.target === subuserTwofaEditModal) {
+        closeSubuserEditTwofaModal();
+      }
+    });
+  }
+  
+  // Event listeners para búsqueda y paginación
+  if (subuserSearchTwofaInput) {
+    subuserSearchTwofaInput.addEventListener('input', filterSubuserTwofaConfigs);
+    subuserSearchTwofaInput.addEventListener('search', function() {
+      if (this.value === '') {
+        filterSubuserTwofaConfigs();
+      }
+    });
+  }
+  
+  if (subuserShowTwofaCount) {
+    subuserShowTwofaCount.addEventListener('change', function() {
+      subuserPerPage = this.value === 'all' ? 999999 : parseInt(this.value);
+      subuserCurrentTwofaPage = 1;
+      renderSubuserTwofaPage();
+    });
+  }
+  
+  if (subuserPrevTwofaPageBtn) {
+    subuserPrevTwofaPageBtn.addEventListener('click', function() {
+      if (subuserCurrentTwofaPage > 1) {
+        subuserCurrentTwofaPage--;
+        renderSubuserTwofaPage();
+      }
+    });
+  }
+  
+  if (subuserNextTwofaPageBtn) {
+    subuserNextTwofaPageBtn.addEventListener('click', function() {
+      const filteredConfigs = getFilteredSubuserTwofaConfigs();
+      const showCount = subuserShowTwofaCount ? subuserShowTwofaCount.value : '20';
+      const totalPages = showCount === 'all' ? 1 : Math.ceil(filteredConfigs.length / subuserPerPage);
+      if (subuserCurrentTwofaPage < totalPages) {
+        subuserCurrentTwofaPage++;
+        renderSubuserTwofaPage();
+      }
+    });
+  }
+  
+  // Cargar configuraciones al iniciar (solo si la sección existe)
+  if (subuserTwofaForm && subuserTwofaConfigsList) {
+    loadSubuserTwofaConfigs();
+  }
+  } // Fin del bloque if que verifica si existe la sección de 2FA
+  // ======= FIN GESTIÓN DE 2FA POR CORREO =======
 
 }); // Fin DOMContentLoaded 
