@@ -36,7 +36,6 @@ def _get_principal_users_data(admin_username):
             "position": usr.position,
             "can_search_any": usr.can_search_any,
             "can_create_subusers": usr.can_create_subusers,
-            "can_manage_emails": usr.can_manage_emails,
             "parent_id": usr.parent_id if usr.parent_id else None,
             "full_name": usr.full_name or "",
             "phone": usr.phone or "",
@@ -97,7 +96,6 @@ def search_users_ajax():
             "position": u.position,
             "can_search_any": u.can_search_any,
             "can_create_subusers": u.can_create_subusers,
-            "can_manage_emails": u.can_manage_emails,
             "parent_id": u.parent_id if u.parent_id else None,
             "full_name": u.full_name or "",
             "phone": u.phone or "",
@@ -384,7 +382,6 @@ def update_user_ajax():
         new_position = data.get("position", 1) if "position" in data else 1
         can_search_any = data.get("can_search_any", False) if "can_search_any" in data else False
         new_can_create_subusers = data.get("can_create_subusers", False) if "can_create_subusers" in data else False
-        new_can_manage_emails = data.get("can_manage_emails", False) if "can_manage_emails" in data else False
         new_full_name = data.get("full_name", "").strip() if "full_name" in data else ""
         new_phone = data.get("phone", "").strip() if "phone" in data else ""
         new_email = data.get("email", None)
@@ -447,15 +444,6 @@ def update_user_ajax():
         old_can_sub = user_to_update.can_create_subusers
         new_can_sub = bool(new_can_create_subusers)
         user_to_update.can_create_subusers = new_can_sub
-        
-        # Manejo de can_manage_emails
-        user_to_update.can_manage_emails = bool(new_can_manage_emails)
-
-        # Manejo de can_manage_emails
-        user_to_update.can_manage_emails = bool(new_can_manage_emails)
-
-        # Manejo de can_manage_emails
-        user_to_update.can_manage_emails = bool(new_can_manage_emails)
 
         # --- INICIO: Lógica de Inicialización/Limpieza de Defaults ---
         if not old_can_sub and new_can_sub:
@@ -548,10 +536,11 @@ def user_emails_page(user_id):
         # Obtener la lista de correos permitidos desde la relación
         allowed_emails_list = [entry.email for entry in user.allowed_email_entries.all()]
         # Unirlos en una cadena multilínea
-        multiline = "\\n".join(allowed_emails_list)
+        multiline = "\n".join(allowed_emails_list)
     except AttributeError:
         # Manejo de error por si acaso, aunque el error original era diferente
         current_app.logger.error(f"Error al acceder a allowed_email_entries para el usuario {user_id}", exc_info=True)
+        multiline = ""
     
     return render_template("email.html", user=user, allowed_emails_text=multiline)
 
@@ -593,6 +582,7 @@ def search_allowed_emails_ajax():
 
 
 @admin_bp.route("/delete_allowed_email_ajax", methods=["POST"])
+@admin_required
 def delete_allowed_email_ajax():
     """
     Elimina un correo específico de AllowedEmail de un usuario principal
@@ -605,10 +595,7 @@ def delete_allowed_email_ajax():
     if not user_id or not email_to_delete:
         return jsonify({"status":"error","message":"Faltan datos (user_id o email)."}), 400
 
-    can_manage, user = can_manage_user_emails(user_id)
-    if not can_manage:
-        return jsonify({"status": "error", "message": "No tienes permiso para gestionar estos correos."}), 403
-    
+    user = User.query.get_or_404(user_id)
     if user.parent_id is not None:
         return jsonify({"status": "error", "message": "Usuario no es principal"}), 403
 
@@ -1026,10 +1013,6 @@ def list_allowed_emails_paginated():
             "per_page": pagination.per_page if per_page > 0 else -1, # Devolver -1 si es "Todos"
             "total_pages": pagination.pages,
             "total_items": pagination.total,
-            "has_prev": pagination.has_prev,
-            "has_next": pagination.has_next
-        }
-    })
             "has_prev": pagination.has_prev,
             "has_next": pagination.has_next
         }

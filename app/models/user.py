@@ -98,7 +98,6 @@ class User(db.Model):
 
     parent_id = db.Column(db.Integer, db.ForeignKey("users.id", ondelete='CASCADE'), nullable=True)
     can_create_subusers = db.Column(db.Boolean, default=False)
-    can_manage_emails = db.Column(db.Boolean, default=False)
 
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -271,7 +270,6 @@ class User(db.Model):
             'user_session_rev_count': self.user_session_rev_count,
             'parent_id': self.parent_id, # Clave para reconstruir jerarquía
             'can_create_subusers': self.can_create_subusers,
-            'can_manage_emails': self.can_manage_emails,
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None,
             'color': self.color,

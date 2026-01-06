@@ -330,10 +330,18 @@
       <label for="editUserCanCreateSubusers">Puede crear sub-usuarios</label>
     </div>
 
-    <!-- Checkbox para "Puede gestionar sus propios correos" -->
+    <!-- Campo simple para agregar correos -->
     <div class="mb-05">
-      <input type="checkbox" id="editUserCanManageEmails" name="editUserCanManageEmails">
-      <label for="editUserCanManageEmails">Puede gestionar sus propios correos</label>
+      <label for="editUserAddEmailsInput" class="label-block">Agregar Correos:</label>
+      <textarea 
+        id="editUserAddEmailsInput" 
+        rows="2" 
+        class="d-block w-100 mb-05" 
+        placeholder="Ingresa correos separados por comas, espacios o saltos de línea"
+        autocomplete="off"
+      ></textarea>
+      <button type="button" id="editUserAddEmailsBtn" class="btn-blue btn-small">Agregar</button>
+      <span id="editUserAddEmailsMsg" class="text-success text-small ml-05"></span>
     </div>
 
     <button type="submit" id="editUserSaveBtn" class="btn-green mr-05">Guardar</button>
