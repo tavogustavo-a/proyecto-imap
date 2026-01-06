@@ -82,12 +82,24 @@ document.addEventListener("DOMContentLoaded", function() {
         if (allowedEmailsTextContainer) renderAllowedEmailsText(data.emails);
         if (paginationInfo) updatePaginationControls(data.pagination);
       } else {
-        if (allowedEmailsTextContainer) allowedEmailsTextContainer.innerHTML = `<p style="color:red;">Error: ${data.message || 'No se pudieron cargar los correos.'}</p>`;
+        if (allowedEmailsTextContainer) {
+          const errorP = document.createElement('p');
+          errorP.classList.add('error-message-text');
+          errorP.textContent = `Error: ${data.message || 'No se pudieron cargar los correos.'}`;
+          allowedEmailsTextContainer.innerHTML = '';
+          allowedEmailsTextContainer.appendChild(errorP);
+        }
       }
     })
     .catch(err => {
       console.error("Fetch error list emails:", err);
-      if (allowedEmailsTextContainer) allowedEmailsTextContainer.innerHTML = `<p style="color:red;">Error al cargar correos: ${err.message}</p>`;
+      if (allowedEmailsTextContainer) {
+        const errorP = document.createElement('p');
+        errorP.classList.add('error-message-text');
+        errorP.textContent = `Error al cargar correos: ${err.message}`;
+        allowedEmailsTextContainer.innerHTML = '';
+        allowedEmailsTextContainer.appendChild(errorP);
+      }
     });
   }
 
@@ -113,7 +125,7 @@ document.addEventListener("DOMContentLoaded", function() {
         if (totalItems > 0) {
             deleteAllEmailsBtn.textContent = `Eliminar Todos (${totalItems})`;
             deleteAllEmailsBtn.disabled = false;
-            deleteAllEmailsBtn.style.display = 'inline-block';
+            deleteAllEmailsBtn.classList.add('btn-inline-block');
         } else {
             deleteAllEmailsBtn.textContent = 'Eliminar Todos';
             deleteAllEmailsBtn.disabled = true;
@@ -221,16 +233,30 @@ document.addEventListener("DOMContentLoaded", function() {
           currentlyDisplayedEmails = data.emails || [];
           renderEmailsResults(currentlyDisplayedEmails);
         } else {
-          emailsSearchResults.innerHTML = `<p style="color:red;">Error: ${data.message || 'Respuesta inválida'}</p>`;
+          const errorP = document.createElement('p');
+          errorP.classList.add('error-message-text');
+          errorP.textContent = `Error: ${data.message || 'Respuesta inválida'}`;
+          emailsSearchResults.innerHTML = '';
+          emailsSearchResults.appendChild(errorP);
            if(searchStatusDiv) searchStatusDiv.textContent = '';
-           deleteDisplayedBtn.style.display = 'none';
+           if(deleteDisplayedBtn) {
+             deleteDisplayedBtn.classList.remove('btn-inline-block');
+             deleteDisplayedBtn.classList.add('hide-element');
+           }
         }
       })
       .catch(err => {
         console.error("Fetch error search:", err);
-        emailsSearchResults.innerHTML = `<p style="color:red;">Error al buscar: ${err.message}</p>`;
+        const errorP = document.createElement('p');
+        errorP.classList.add('error-message-text');
+        errorP.textContent = `Error al buscar: ${err.message}`;
+        emailsSearchResults.innerHTML = '';
+        emailsSearchResults.appendChild(errorP);
          if(searchStatusDiv) searchStatusDiv.textContent = '';
-         deleteDisplayedBtn.style.display = 'none';
+         if(deleteDisplayedBtn) {
+           deleteDisplayedBtn.classList.remove('btn-inline-block');
+           deleteDisplayedBtn.classList.add('hide-element');
+         }
       });
     });
   }
@@ -239,12 +265,17 @@ document.addEventListener("DOMContentLoaded", function() {
     if (!emailsSearchResults) return;
     emailsSearchResults.innerHTML = '';
     if (!emails || emails.length === 0) {
-        emailsSearchResults.style.display = 'none';
-        if(deleteDisplayedBtn) deleteDisplayedBtn.style.display = 'none';
+        emailsSearchResults.classList.remove('show-block');
+        emailsSearchResults.classList.add('hide-element');
+        if(deleteDisplayedBtn) {
+          deleteDisplayedBtn.classList.remove('btn-inline-block');
+          deleteDisplayedBtn.classList.add('hide-element');
+        }
         return;
     }
 
-    emailsSearchResults.style.display = 'block';
+    emailsSearchResults.classList.remove('hide-element');
+    emailsSearchResults.classList.add('show-block');
     emails.forEach(email => {
         const itemDiv = document.createElement('div');
         itemDiv.classList.add('search-result-item');
@@ -257,7 +288,8 @@ document.addEventListener("DOMContentLoaded", function() {
 
     if(deleteDisplayedBtn) {
         deleteDisplayedBtn.textContent = `Eliminar ${emails.length} Mostrados`;
-        deleteDisplayedBtn.style.display = 'inline-block';
+        deleteDisplayedBtn.classList.remove('hide-element');
+        deleteDisplayedBtn.classList.add('btn-inline-block');
         deleteDisplayedBtn.disabled = false;
     }
   }
@@ -285,10 +317,17 @@ document.addEventListener("DOMContentLoaded", function() {
             currentlyDisplayedEmails = currentlyDisplayedEmails.filter(email => email !== emailToRemove);
             if (currentlyDisplayedEmails.length > 0) {
                  if(deleteDisplayedBtn) deleteDisplayedBtn.textContent = `Eliminar ${currentlyDisplayedEmails.length} Mostrados`;
-                 if(deleteDisplayedBtn) deleteDisplayedBtn.style.display = 'inline-block';
+                 if(deleteDisplayedBtn) {
+                   deleteDisplayedBtn.classList.remove('hide-element');
+                   deleteDisplayedBtn.classList.add('btn-inline-block');
+                 }
             } else {
-                 emailsSearchResults.style.display = 'none';
-                 if(deleteDisplayedBtn) deleteDisplayedBtn.style.display = 'none';
+                 emailsSearchResults.classList.remove('show-block');
+                 emailsSearchResults.classList.add('hide-element');
+                 if(deleteDisplayedBtn) {
+                   deleteDisplayedBtn.classList.remove('btn-inline-block');
+                   deleteDisplayedBtn.classList.add('hide-element');
+                 }
             }
             fetchAllowedEmails(currentPage, currentPerPage);
           } else {
@@ -324,8 +363,14 @@ document.addEventListener("DOMContentLoaded", function() {
          .then(data => {
            if(data.status === "ok"){
              if(emailsSearchResults) emailsSearchResults.innerHTML = "";
-             if(emailsSearchResults) emailsSearchResults.style.display = 'none';
-             deleteDisplayedBtn.style.display = 'none';
+             if(emailsSearchResults) {
+               emailsSearchResults.classList.remove('show-block');
+               emailsSearchResults.classList.add('hide-element');
+             }
+             if(deleteDisplayedBtn) {
+               deleteDisplayedBtn.classList.remove('btn-inline-block');
+               deleteDisplayedBtn.classList.add('hide-element');
+             }
              currentlyDisplayedEmails = [];
              fetchAllowedEmails(currentPage, currentPerPage);
            } else {
@@ -351,16 +396,28 @@ document.addEventListener("DOMContentLoaded", function() {
     addEmailsBtn.addEventListener("click", function() {
       const rawText = addEmailsInput.value.trim();
       if (!rawText) {
-         if(addEmailsMsg) { addEmailsMsg.textContent = 'Campo vacío.'; addEmailsMsg.style.color = 'orange';}
+         if(addEmailsMsg) { 
+           addEmailsMsg.textContent = 'Campo vacío.'; 
+           addEmailsMsg.classList.remove('text-color-green', 'text-color-red');
+           addEmailsMsg.classList.add('text-color-orange');
+         }
          return;
       }
       const emailsToAdd = rawText.split(/[\s,;\n]+/).map(e => e.trim().toLowerCase()).filter(e => e && e.includes('@'));
       if (!emailsToAdd.length) {
-         if(addEmailsMsg) { addEmailsMsg.textContent = 'No se encontraron correos válidos.'; addEmailsMsg.style.color = 'orange';}
+         if(addEmailsMsg) { 
+           addEmailsMsg.textContent = 'No se encontraron correos válidos.'; 
+           addEmailsMsg.classList.remove('text-color-green', 'text-color-red');
+           addEmailsMsg.classList.add('text-color-orange');
+         }
          return;
       }
 
-      if(addEmailsMsg) { addEmailsMsg.textContent = "Añadiendo..."; addEmailsMsg.style.color = "orange"; }
+      if(addEmailsMsg) { 
+        addEmailsMsg.textContent = "Añadiendo..."; 
+        addEmailsMsg.classList.remove('text-color-green', 'text-color-red');
+        addEmailsMsg.classList.add('text-color-orange');
+      }
       addEmailsBtn.disabled = true;
 
       fetch("/admin/add_allowed_emails_ajax", {
@@ -373,7 +430,8 @@ document.addEventListener("DOMContentLoaded", function() {
         if (data.status === "ok") {
           if(addEmailsMsg) {
               addEmailsMsg.textContent = `${data.added_count || 0} añadidos, ${data.skipped_count || 0} omitidos. Recargando lista...`;
-              addEmailsMsg.style.color = "green";
+              addEmailsMsg.classList.remove('text-color-orange', 'text-color-red');
+              addEmailsMsg.classList.add('text-color-green');
           }
           addEmailsInput.value = "";
           fetchAllowedEmails(1, currentPerPage);
@@ -382,7 +440,11 @@ document.addEventListener("DOMContentLoaded", function() {
         }
       })
       .catch(err => {
-        if(addEmailsMsg) { addEmailsMsg.textContent = `Error: ${err.message}`; addEmailsMsg.style.color = "red"; }
+        if(addEmailsMsg) { 
+          addEmailsMsg.textContent = `Error: ${err.message}`; 
+          addEmailsMsg.classList.remove('text-color-orange', 'text-color-green');
+          addEmailsMsg.classList.add('text-color-red');
+        }
       })
       .finally(() => {
           addEmailsBtn.disabled = false;
@@ -400,13 +462,19 @@ document.addEventListener("DOMContentLoaded", function() {
 
   if(openRegexModalBtn){
     openRegexModalBtn.addEventListener("click", ()=>{
-      if(regexModal) regexModal.style.display="block";
+      if(regexModal) {
+        regexModal.classList.remove('popup-hide');
+        regexModal.classList.add('popup-show');
+      }
       loadPrincipalRegex();
     });
   }
   if(closeRegexModalBtn){
     closeRegexModalBtn.addEventListener("click", ()=>{
-      if(regexModal) regexModal.style.display="none";
+      if(regexModal) {
+        regexModal.classList.remove('popup-show');
+        regexModal.classList.add('popup-hide');
+      }
     });
   }
 
@@ -421,12 +489,20 @@ document.addEventListener("DOMContentLoaded", function() {
       if(data.status==="ok"){
         renderPrincipalRegexList(data.regexes);
       } else {
-        regexListContainer.innerHTML=`<p style="color:red;">Error: ${data.message}</p>`;
+        const errorP = document.createElement('p');
+        errorP.classList.add('error-message-text');
+        errorP.textContent = `Error: ${data.message}`;
+        regexListContainer.innerHTML = '';
+        regexListContainer.appendChild(errorP);
       }
     })
     .catch(err=>{
       console.error("Fetch error list regex principal:", err);
-      regexListContainer.innerHTML=`<p style="color:red;">Error: ${err.message}</p>`;
+      const errorP = document.createElement('p');
+      errorP.classList.add('error-message-text');
+      errorP.textContent = `Error: ${err.message}`;
+      regexListContainer.innerHTML = '';
+      regexListContainer.appendChild(errorP);
     });
   }
 
@@ -490,7 +566,10 @@ document.addEventListener("DOMContentLoaded", function() {
       .then(data=>{
         if(data.status==="ok"){
           alert("Regex principal actualizados.");
-          if(regexModal) regexModal.style.display="none";
+          if(regexModal) {
+        regexModal.classList.remove('popup-show');
+        regexModal.classList.add('popup-hide');
+      }
         } else {
           alert("Error: " + data.message);
         }
@@ -509,13 +588,19 @@ document.addEventListener("DOMContentLoaded", function() {
 
   if(openFiltersModalBtn){
     openFiltersModalBtn.addEventListener("click", ()=>{
-      if(filtersModal) filtersModal.style.display="block";
+      if(filtersModal) {
+        filtersModal.classList.remove('popup-hide');
+        filtersModal.classList.add('popup-show');
+      }
       loadPrincipalFilters();
     });
   }
   if(closeFiltersModalBtn){
     closeFiltersModalBtn.addEventListener("click", ()=>{
-      if(filtersModal) filtersModal.style.display="none";
+      if(filtersModal) {
+        filtersModal.classList.remove('popup-show');
+        filtersModal.classList.add('popup-hide');
+      }
     });
   }
 
@@ -530,12 +615,20 @@ document.addEventListener("DOMContentLoaded", function() {
       if(data.status==="ok"){
         renderPrincipalFiltersList(data.filters);
       } else {
-        filtersListContainer.innerHTML = `<p style="color:red;">Error: ${data.message}</p>`;
+        const errorP = document.createElement('p');
+        errorP.classList.add('error-message-text');
+        errorP.textContent = `Error: ${data.message}`;
+        filtersListContainer.innerHTML = '';
+        filtersListContainer.appendChild(errorP);
       }
     })
     .catch(err=>{
       console.error("Fetch error list filters principal:", err);
-      filtersListContainer.innerHTML = `<p style="color:red;">Error: ${err.message}</p>`;
+      const errorP = document.createElement('p');
+      errorP.classList.add('error-message-text');
+      errorP.textContent = `Error: ${err.message}`;
+      filtersListContainer.innerHTML = '';
+      filtersListContainer.appendChild(errorP);
     });
   }
 
@@ -590,7 +683,10 @@ document.addEventListener("DOMContentLoaded", function() {
       .then(data=>{
         if(data.status==="ok"){
           alert("Filtros principal actualizados.");
-          if(filtersModal) filtersModal.style.display="none";
+          if(filtersModal) {
+        filtersModal.classList.remove('popup-show');
+        filtersModal.classList.add('popup-hide');
+      }
         } else {
           alert("Error: " + data.message);
         }
@@ -673,13 +769,19 @@ document.addEventListener("DOMContentLoaded", function() {
 
   if(btnShowSubusers){
     btnShowSubusers.addEventListener("click", ()=>{
-      if(subusersModal) subusersModal.style.display="block";
+      if(subusersModal) {
+        subusersModal.classList.remove('popup-hide');
+        subusersModal.classList.add('popup-show');
+      }
       loadSubusersForModal(); // Renombrada para claridad
     });
   }
   if(closeSubusersModalBtn){
     closeSubusersModalBtn.addEventListener("click", ()=>{
-      if(subusersModal) subusersModal.style.display="none";
+      if(subusersModal) {
+        subusersModal.classList.remove('popup-show');
+        subusersModal.classList.add('popup-hide');
+      }
     });
   }
 
@@ -695,12 +797,20 @@ document.addEventListener("DOMContentLoaded", function() {
       if(data.status==="ok"){
         renderSubusersForModal(data.subusers);
       } else {
-        subusersList.innerHTML=`<p style="color:red;">Error: ${data.message}</p>`;
+        const errorP = document.createElement('p');
+        errorP.classList.add('error-message-text');
+        errorP.textContent = `Error: ${data.message}`;
+        subusersList.innerHTML = '';
+        subusersList.appendChild(errorP);
       }
     })
     .catch(err=>{
       console.error("Fetch error list subusers for modal:", err);
-      subusersList.innerHTML=`<p style="color:red;">Error: ${err.message}</p>`;
+      const errorP = document.createElement('p');
+      errorP.classList.add('error-message-text');
+      errorP.textContent = `Error: ${err.message}`;
+      subusersList.innerHTML = '';
+      subusersList.appendChild(errorP);
     });
   }
 
@@ -820,13 +930,19 @@ document.addEventListener("DOMContentLoaded", function() {
 
   if(btnSubusersRegexGlobal){
     btnSubusersRegexGlobal.addEventListener("click", ()=>{
-      if(subusersRegexModal) subusersRegexModal.style.display="block";
+      if(subusersRegexModal) {
+        subusersRegexModal.classList.remove('popup-hide');
+        subusersRegexModal.classList.add('popup-show');
+      }
       loadGlobalSubusersRegex();
     });
   }
   if(closeSubusersRegexModalBtn){
     closeSubusersRegexModalBtn.addEventListener("click", ()=>{
-      if(subusersRegexModal) subusersRegexModal.style.display="none";
+      if(subusersRegexModal) {
+        subusersRegexModal.classList.remove('popup-show');
+        subusersRegexModal.classList.add('popup-hide');
+      }
     });
   }
 
@@ -840,12 +956,20 @@ document.addEventListener("DOMContentLoaded", function() {
       if(data.status==="ok"){
         renderGlobalSubusersRegex(data.items);
       } else {
-        subusersRegexList.innerHTML=`<p style="color:red;">Error: ${data.message}</p>`;
+        const errorP = document.createElement('p');
+        errorP.classList.add('error-message-text');
+        errorP.textContent = `Error: ${data.message}`;
+        subusersRegexList.innerHTML = '';
+        subusersRegexList.appendChild(errorP);
       }
     })
     .catch(err=>{
       console.error("Fetch error list global sub regex:", err);
-      subusersRegexList.innerHTML=`<p style="color:red;">Error: ${err.message}</p>`;
+      const errorP = document.createElement('p');
+      errorP.classList.add('error-message-text');
+      errorP.textContent = `Error: ${err.message}`;
+      subusersRegexList.innerHTML = '';
+      subusersRegexList.appendChild(errorP);
     });
   }
 
@@ -908,7 +1032,10 @@ document.addEventListener("DOMContentLoaded", function() {
       .then(data => {
         if(data.status === "ok"){
           alert("Configuración de Regex para sub-usuarios guardada.");
-          if(subusersRegexModal) subusersRegexModal.style.display = "none";
+          if(subusersRegexModal) {
+            subusersRegexModal.classList.remove('popup-show');
+            subusersRegexModal.classList.add('popup-hide');
+          }
         } else {
           alert("Error al guardar Regex para sub-usuarios: " + (data.message || 'Error desconocido'));
         }
@@ -927,13 +1054,19 @@ document.addEventListener("DOMContentLoaded", function() {
 
   if(btnSubusersFilterGlobal){
     btnSubusersFilterGlobal.addEventListener("click", ()=>{
-      if(subusersFiltersModal) subusersFiltersModal.style.display="block";
+      if(subusersFiltersModal) {
+        subusersFiltersModal.classList.remove('popup-hide');
+        subusersFiltersModal.classList.add('popup-show');
+      }
       loadGlobalSubusersFilters();
     });
   }
   if(closeSubusersFiltersModalBtn){
     closeSubusersFiltersModalBtn.addEventListener("click", ()=>{
-      if(subusersFiltersModal) subusersFiltersModal.style.display="none";
+      if(subusersFiltersModal) {
+        subusersFiltersModal.classList.remove('popup-show');
+        subusersFiltersModal.classList.add('popup-hide');
+      }
     });
   }
 
@@ -947,12 +1080,20 @@ document.addEventListener("DOMContentLoaded", function() {
       if(data.status==="ok"){
         renderGlobalSubusersFilters(data.items);
       } else {
-        subusersFiltersList.innerHTML=`<p style="color:red;">Error: ${data.message}</p>`;
+        const errorP = document.createElement('p');
+        errorP.classList.add('error-message-text');
+        errorP.textContent = `Error: ${data.message}`;
+        subusersFiltersList.innerHTML = '';
+        subusersFiltersList.appendChild(errorP);
       }
     })
     .catch(err=>{
       console.error("Fetch error list global sub filters:", err);
-      subusersFiltersList.innerHTML=`<p style="color:red;">Error: ${err.message}</p>`;
+      const errorP = document.createElement('p');
+      errorP.classList.add('error-message-text');
+      errorP.textContent = `Error: ${err.message}`;
+      subusersFiltersList.innerHTML = '';
+      subusersFiltersList.appendChild(errorP);
     });
   }
 
@@ -1014,7 +1155,10 @@ document.addEventListener("DOMContentLoaded", function() {
       .then(data => {
         if(data.status === "ok"){
           alert("Configuración de Filtros para sub-usuarios guardada.");
-          if(subusersFiltersModal) subusersFiltersModal.style.display = "none";
+          if(subusersFiltersModal) {
+            subusersFiltersModal.classList.remove('popup-show');
+            subusersFiltersModal.classList.add('popup-hide');
+          }
         } else {
           alert("Error al guardar Filtros para sub-usuarios: " + (data.message || 'Error desconocido'));
         }
@@ -1129,10 +1273,10 @@ document.addEventListener("DOMContentLoaded", function() {
     const popup = document.getElementById(popupId);
     if (popup) {
       document.addEventListener('mousedown', function(e) {
-        if (popup.style.display === 'block' || popup.classList.contains('popup-visible')) {
+        if (popup.classList.contains('popup-show') || popup.classList.contains('popup-visible')) {
           if (!popup.contains(e.target)) {
-            popup.style.display = 'none';
-            popup.classList.remove('popup-visible');
+            popup.classList.remove('popup-show', 'popup-visible');
+            popup.classList.add('popup-hide');
           }
         }
       });

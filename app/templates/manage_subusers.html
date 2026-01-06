@@ -132,6 +132,7 @@
   </div>
 
   <!-- CONTORNO 1.5: Gestión de Correos del Usuario Principal -->
+  {% if current_user and not current_user.parent_id and current_user.can_add_own_emails %}
   <div class="admin-card mb-1">
     <h4 class="mt-0">Gestión de Correos</h4>
     
@@ -139,15 +140,19 @@
     <h5 class="mb-05 text-center text-small">Búsqueda y Eliminación de Correos</h5>
     <form id="searchSubuserEmailsForm" class="mb-05">
       <label for="searchSubuserEmailsInput" class="sr-only">Buscar y eliminar correos</label>
-      <textarea 
-        id="searchSubuserEmailsInput" 
-        rows="2" 
-        class="d-block w-100 mb-05 resize-vertical" 
-        placeholder="Ingresa uno o varios correos (separados por comas, espacios o saltos de línea)."
-        autocomplete="off"
-      ></textarea>
-      <div class="d-flex gap-05 justify-content-between align-items-center">
-        <button type="submit" class="btn-search btn-small">Limpiar</button>
+      <div class="search-textarea-wrapper">
+        <textarea 
+          id="searchSubuserEmailsInput" 
+          rows="2" 
+          class="d-block mb-05 resize-vertical" 
+          placeholder="Ingresa uno o varios correos (separados por comas, espacios o saltos de línea)."
+          autocomplete="off"
+        ></textarea>
+        <button type="button" id="clearSubuserSearchBtn" class="search-textarea-clear-btn" aria-label="Limpiar búsqueda">
+          <i class="fas fa-times"></i>
+        </button>
+      </div>
+      <div class="d-flex gap-05 justify-content-end align-items-center">
         <div id="subuserDeleteDisplayedContainer" class="d-none">
           <button type="button" id="subuserDeleteDisplayedBtn" class="btn-red btn-small">
             Eliminar X Mostrados
@@ -164,7 +169,7 @@
         <label for="subuserPerPageSelect" class="text-small"><strong>Lista Correos permitidos:</strong></label>
         <div class="d-flex align-items-center gap-05">
           <span class="text-small"><strong>Mostrar:</strong></span>
-          <select id="subuserPerPageSelect" class="select-padding-3px" autocomplete="off" style="font-size: 0.9rem;">
+          <select id="subuserPerPageSelect" class="select-padding-3px select-small" autocomplete="off">
             <option value="10">10</option>
             <option value="20" selected>20</option>
             <option value="30">30</option>
@@ -175,17 +180,17 @@
           </select>
         </div>
       </div>
-      <div id="subuserAllowedEmailsTextContainer" class="allowed-emails-display mb-05" style="max-height: 200px; overflow-y: auto; font-size: 0.85rem;">
+      <div id="subuserAllowedEmailsTextContainer" class="allowed-emails-display mb-05 allowed-emails-scroll">
         <p class="text-secondary">Cargando correos...</p>
       </div>
       <div id="subuserAllowedEmailsPagination" class="d-flex justify-content-between align-items-center flex-wrap gap-05 mb-05">
         <span id="subuserPaginationInfo" class="text-small"></span>
-        <button id="subuserDeleteAllEmailsBtn" class="btn-red btn-small" title="Eliminar TODOS los correos permitidos" style="font-size: 0.85rem;">
+        <button id="subuserDeleteAllEmailsBtn" class="btn-red btn-small btn-small-font" title="Eliminar TODOS los correos permitidos">
           <i class="fas fa-trash"></i> Eliminar Todos
         </button>
         <div class="d-flex gap-05">
-          <button id="subuserPrevPageBtn" class="btn-blue btn-small" disabled style="font-size: 0.85rem;">&lt; Anterior</button>
-          <button id="subuserNextPageBtn" class="btn-blue btn-small" disabled style="font-size: 0.85rem;">Siguiente &gt;</button>
+          <button id="subuserPrevPageBtn" class="btn-blue btn-small btn-small-font" disabled>&lt; Anterior</button>
+          <button id="subuserNextPageBtn" class="btn-blue btn-small btn-small-font" disabled>Siguiente &gt;</button>
         </div>
       </div>
     </div>
@@ -211,6 +216,7 @@
       </div>
     </div>
   </div>
+  {% endif %}
 
   <!-- CONTORNO 2: Búsqueda y Listado de Sub-usuarios -->
   <div class="admin-card">

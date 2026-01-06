@@ -215,6 +215,8 @@ document.addEventListener("DOMContentLoaded", function() {
       const positionVal = editUserPosition.value.trim() || "1";
       const canSearch = editUserCanSearchAny.checked;
       const canCreateSub = editUserCanCreateSubusers.checked;
+      const editUserCanAddOwnEmails = document.getElementById("editUserCanAddOwnEmails");
+      const canAddOwnEmails = editUserCanAddOwnEmails ? editUserCanAddOwnEmails.checked : false;
       const fullNameVal = editUserFullName.value.trim();
       const phoneVal = editUserPhone.value.trim();
       const emailVal = editUserEmail.value.trim();
@@ -236,6 +238,7 @@ document.addEventListener("DOMContentLoaded", function() {
         position: positionVal,
         can_search_any: canSearch,
         can_create_subusers: canCreateSub,
+        can_add_own_emails: canAddOwnEmails,
         full_name: fullNameVal,
         phone: phoneVal,
         email: emailVal
@@ -254,9 +257,13 @@ document.addEventListener("DOMContentLoaded", function() {
         if (data.status === "ok") {
           userListContainer.innerHTML = renderUserItems(data.users);
           // Ocultar popup y overlay al guardar correctamente
-          editUserPopup.style.display = "none";
+          editUserPopup.classList.remove('popup-show');
+          editUserPopup.classList.add('popup-hide');
           const overlay = document.getElementById("editUserOverlay");
-          if (overlay) overlay.style.display = "none";
+          if (overlay) {
+            overlay.classList.remove('overlay-show');
+            overlay.classList.add('overlay-hide');
+          }
         } else {
           alert("Error: " + data.message);
         }
@@ -400,6 +407,7 @@ document.addEventListener("DOMContentLoaded", function() {
       const position = target.getAttribute("data-position") || "1";
       const canSearch = (target.getAttribute("data-cansearch") === "true");
       const canCreateSubusers = (target.getAttribute("data-cancreatesubusers") === "true");
+      const canAddOwnEmails = (target.getAttribute("data-canaddownemails") === "true");
       const fullName = target.getAttribute("data-fullname") || "";
       const phone = target.getAttribute("data-phone") || "";
       const email = target.getAttribute("data-email") || "";
@@ -411,15 +419,11 @@ document.addEventListener("DOMContentLoaded", function() {
       editUserPosition.value = position;
       editUserCanSearchAny.checked = canSearch;
       editUserCanCreateSubusers.checked = canCreateSubusers;
+      const editUserCanAddOwnEmailsCheckbox = document.getElementById("editUserCanAddOwnEmails");
+      if (editUserCanAddOwnEmailsCheckbox) editUserCanAddOwnEmailsCheckbox.checked = canAddOwnEmails;
       editUserFullName.value = fullName;
       editUserPhone.value = phone;
       editUserEmail.value = email;
-
-      // Establecer el userId actual para agregar correos
-      editUserCurrentUserId = userId;
-      // Limpiar campo de correos
-      if (editUserAddEmailsInput) editUserAddEmailsInput.value = "";
-      if (editUserAddEmailsMsg) editUserAddEmailsMsg.textContent = "";
 
       // Mostrar popup y overlay correctamente
       showEditUserPopup();
@@ -523,6 +527,7 @@ document.addEventListener("DOMContentLoaded", function() {
       editBtn.dataset.position = escapeHtml(u.position || '');
       editBtn.dataset.cansearch = u.can_search_any ? 'true' : 'false';
       editBtn.dataset.cancreatesubusers = u.can_create_subusers ? 'true' : 'false';
+      editBtn.dataset.canaddownemails = u.can_add_own_emails ? 'true' : 'false';
       editBtn.dataset.fullname = escapeHtml(u.full_name || '');
       editBtn.dataset.phone = escapeHtml(u.phone || '');
       editBtn.dataset.email = escapeHtml(u.email || '');
@@ -534,7 +539,9 @@ document.addEventListener("DOMContentLoaded", function() {
       deleteBtn.className = 'btn-panel btn-red btn-sm delete-user';
       deleteBtn.dataset.id = u.id;
       deleteBtn.title = 'Eliminar';
-      deleteBtn.innerHTML = '<i class="fas fa-trash"></i>';
+      const icon = document.createElement('i');
+      icon.classList.add('fas', 'fa-trash');
+      deleteBtn.appendChild(icon);
       actionsDiv.appendChild(deleteBtn);
       
       userItem.appendChild(actionsDiv);
@@ -556,15 +563,27 @@ document.addEventListener("DOMContentLoaded", function() {
   function showEditUserPopup() {
     const overlay = document.getElementById('editUserOverlay');
     const popup = document.getElementById('editUserPopup');
-    if (overlay) overlay.style.display = 'block';
-    if (popup) popup.style.display = 'block';
+    if (overlay) {
+      overlay.classList.remove('overlay-hide');
+      overlay.classList.add('overlay-show');
+    }
+    if (popup) {
+      popup.classList.remove('popup-hide');
+      popup.classList.add('popup-show');
+    }
   }
   
   function hideEditUserPopup() {
     const overlay = document.getElementById('editUserOverlay');
     const popup = document.getElementById('editUserPopup');
-    if (overlay) overlay.style.display = 'none';
-    if (popup) popup.style.display = 'none';
+    if (overlay) {
+      overlay.classList.remove('overlay-show');
+      overlay.classList.add('overlay-hide');
+    }
+    if (popup) {
+      popup.classList.remove('popup-show');
+      popup.classList.add('popup-hide');
+    }
     // Limpiar userId cuando se cierra el modal
     editUserCurrentUserId = null;
   }
@@ -610,7 +629,7 @@ document.addEventListener("DOMContentLoaded", function() {
   // También agregar listener para cerrar con ESC
   document.addEventListener('keydown', function(e) {
     if (e.key === 'Escape' || e.keyCode === 27) {
-      if (editUserPopup && editUserPopup.style.display === 'block') {
+      if (editUserPopup && editUserPopup.classList.contains('popup-show')) {
         hideEditUserPopup();
       }
     }
@@ -722,13 +741,15 @@ document.addEventListener("DOMContentLoaded", function() {
     
     bulkDeleteEmailsMessage.textContent = message;
     bulkDeleteEmailsMessage.className = `mt-05 text-center ${isError ? 'text-danger' : 'text-success'}`;
-    bulkDeleteEmailsMessage.style.display = 'block';
+    bulkDeleteEmailsMessage.classList.remove('hide-element');
+    bulkDeleteEmailsMessage.classList.add('show-block');
     
     // Ocultar mensaje después de 5 segundos si es éxito
     if (!isError) {
       setTimeout(() => {
         if (bulkDeleteEmailsMessage) {
-          bulkDeleteEmailsMessage.style.display = 'none';
+          bulkDeleteEmailsMessage.classList.remove('show-block');
+          bulkDeleteEmailsMessage.classList.add('hide-element');
         }
       }, 5000);
     }
@@ -759,7 +780,8 @@ document.addEventListener("DOMContentLoaded", function() {
       // Deshabilitar botón y mostrar estado de carga
       bulkDeleteEmailsBtn.disabled = true;
       bulkDeleteEmailsBtn.textContent = 'Eliminando...';
-      bulkDeleteEmailsMessage.style.display = 'none';
+      bulkDeleteEmailsMessage.classList.remove('show-block');
+      bulkDeleteEmailsMessage.classList.add('hide-element');
 
       // Enviar petición al servidor
       fetch("/admin/delete_emails_from_all_users_ajax", {
@@ -801,110 +823,4 @@ document.addEventListener("DOMContentLoaded", function() {
   }
 
   // ======= FIN ELIMINACIÓN MASIVA DE CORREOS =======
-
-  // ======= AGREGAR CORREOS SIMPLE EN EL MODAL =======
-  const editUserAddEmailsInput = document.getElementById("editUserAddEmailsInput");
-  const editUserAddEmailsBtn = document.getElementById("editUserAddEmailsBtn");
-  const editUserAddEmailsMsg = document.getElementById("editUserAddEmailsMsg");
-  let editUserCurrentUserId = null;
-
-  // Añadir correos simple
-  if (editUserAddEmailsBtn && editUserAddEmailsInput && editUserAddEmailsMsg) {
-    editUserAddEmailsBtn.addEventListener("click", function() {
-      if (!editUserCurrentUserId) {
-        if (editUserAddEmailsMsg) { 
-          editUserAddEmailsMsg.textContent = 'Abre el modal de edición primero.'; 
-          editUserAddEmailsMsg.style.color = 'orange'; 
-        }
-        return;
-      }
-
-      const rawText = editUserAddEmailsInput.value.trim();
-      if (!rawText) {
-        if (editUserAddEmailsMsg) { 
-          editUserAddEmailsMsg.textContent = 'Campo vacío.'; 
-          editUserAddEmailsMsg.style.color = 'orange'; 
-        }
-        return;
-      }
-      
-      const emailsToAdd = rawText.split(/[\s,;\n]+/).map(e => e.trim().toLowerCase()).filter(e => e && e.includes('@'));
-      if (!emailsToAdd.length) {
-        if (editUserAddEmailsMsg) { 
-          editUserAddEmailsMsg.textContent = 'No se encontraron correos válidos.'; 
-          editUserAddEmailsMsg.style.color = 'orange'; 
-        }
-        return;
-      }
-
-      if (editUserAddEmailsMsg) { 
-        editUserAddEmailsMsg.textContent = "Añadiendo..."; 
-        editUserAddEmailsMsg.style.color = "orange"; 
-      }
-      editUserAddEmailsBtn.disabled = true;
-
-      fetch("/admin/add_allowed_emails_ajax", {
-        method: "POST",
-        headers: {"Content-Type": "application/json", "X-CSRFToken": getCsrfToken()},
-        body: JSON.stringify({ user_id: parseInt(editUserCurrentUserId, 10), emails: emailsToAdd })
-      })
-      .then(response => {
-        if (!response.ok) {
-          return response.json().then(errData => {
-            throw new Error(errData.message || `Error del servidor: ${response.status}`);
-          });
-        }
-        return response.json();
-      })
-      .then(data => {
-        if (data.status === "ok") {
-          if (editUserAddEmailsMsg) {
-            editUserAddEmailsMsg.textContent = `${data.added_count || 0} añadidos, ${data.skipped_count || 0} omitidos.`;
-            editUserAddEmailsMsg.style.color = "green";
-          }
-          editUserAddEmailsInput.value = "";
-          setTimeout(() => {
-            if (editUserAddEmailsMsg) editUserAddEmailsMsg.textContent = "";
-          }, 3000);
-        } else {
-          throw new Error(data.message || 'Error desconocido');
-        }
-      })
-      .catch(err => {
-        if (editUserAddEmailsMsg) { 
-          editUserAddEmailsMsg.textContent = `Error: ${err.message}`; 
-          editUserAddEmailsMsg.style.color = "red"; 
-        }
-      })
-      .finally(() => {
-        editUserAddEmailsBtn.disabled = false;
-      });
-    });
-  }
-
-  // Establecer userId cuando se abre el modal
-  if (userListContainer) {
-    userListContainer.addEventListener('click', function(e) {
-      if (e.target.classList.contains("edit-user-btn")) {
-        const userId = e.target.getAttribute("data-id");
-        if (userId) {
-          editUserCurrentUserId = userId;
-          // Limpiar campo y mensaje
-          if (editUserAddEmailsInput) editUserAddEmailsInput.value = "";
-          if (editUserAddEmailsMsg) editUserAddEmailsMsg.textContent = "";
-        }
-      }
-    });
-  }
-
-  // Limpiar cuando se cierra el modal
-  if (editUserCancelBtn) {
-    editUserCancelBtn.addEventListener('click', function() {
-      editUserCurrentUserId = null;
-      if (editUserAddEmailsInput) editUserAddEmailsInput.value = "";
-      if (editUserAddEmailsMsg) editUserAddEmailsMsg.textContent = "";
-    });
-  }
-
-  // ======= FIN AGREGAR CORREOS SIMPLE =======
 });

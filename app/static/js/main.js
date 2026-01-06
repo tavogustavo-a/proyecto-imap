@@ -1197,10 +1197,7 @@ document.addEventListener("DOMContentLoaded", function () {
           const errorDiv = document.createElement('p');
           errorDiv.id = 'twofa-error-message';
           errorDiv.className = 'text-danger text-center';
-          errorDiv.style.fontWeight = 'bold';
-          errorDiv.style.fontSize = '1.1rem';
-          errorDiv.style.marginTop = '1rem';
-          errorDiv.style.color = '#dc3545';
+          errorDiv.classList.add('twofa-error-message');
           errorDiv.textContent = errorMessage;
           resultsDiv.appendChild(errorDiv);
         }
@@ -1220,10 +1217,7 @@ document.addEventListener("DOMContentLoaded", function () {
           const errorDiv = document.createElement('p');
           errorDiv.id = 'twofa-error-message';
           errorDiv.className = 'text-danger text-center';
-          errorDiv.style.fontWeight = 'bold';
-          errorDiv.style.fontSize = '1.1rem';
-          errorDiv.style.marginTop = '1rem';
-          errorDiv.style.color = '#dc3545';
+          errorDiv.classList.add('twofa-error-message');
           errorDiv.textContent = data.error;
           resultsDiv.appendChild(errorDiv);
         }
@@ -1262,7 +1256,7 @@ document.addEventListener("DOMContentLoaded", function () {
     twofaContainer = document.createElement('div');
     twofaContainer.id = 'twofa-code-container';
     twofaContainer.className = 'twofa-code-display';
-    twofaContainer.style.display = 'block'; // Asegurar que sea visible
+    twofaContainer.classList.add('twofa-code-display-block');
     
     // Insertar al principio del contenedor de resultados
     if (resultsDiv.firstChild) {
@@ -1276,24 +1270,17 @@ document.addEventListener("DOMContentLoaded", function () {
     
     const wrapper = document.createElement('div');
     wrapper.className = 'twofa-code-wrapper';
-    wrapper.style.display = 'flex';
-    wrapper.style.flexDirection = 'column';
-    wrapper.style.alignItems = 'center';
-    wrapper.style.justifyContent = 'center';
+    wrapper.classList.add('twofa-code-wrapper-flex');
     
     // Primera línea: Código y botón Copiar centrados
     const topRow = document.createElement('div');
     topRow.className = 'twofa-code-top-row';
-    topRow.style.display = 'flex';
-    topRow.style.justifyContent = 'center';
-    topRow.style.alignItems = 'center';
-    topRow.style.gap = '1rem';
-    topRow.style.marginBottom = '0.75rem';
+    topRow.classList.add('twofa-code-top-row-flex');
     
     const codeValue = document.createElement('div');
     codeValue.className = 'twofa-code-value';
     codeValue.textContent = code;
-    codeValue.style.marginBottom = '0';
+    codeValue.classList.add('twofa-code-value-no-margin');
     
     const copyBtn = document.createElement('button');
     copyBtn.id = 'twofa-copy-btn';
@@ -1308,9 +1295,7 @@ document.addEventListener("DOMContentLoaded", function () {
     timer.id = 'twofa-timer';
     timer.className = 'twofa-timer';
     timer.textContent = timeRemaining + 's';
-    timer.style.textAlign = 'center';
-    timer.style.marginTop = '0';
-    timer.style.width = '100%';
+    timer.classList.add('twofa-timer-centered');
     
     wrapper.appendChild(topRow);
     wrapper.appendChild(timer);

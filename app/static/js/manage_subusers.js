@@ -95,11 +95,19 @@ document.addEventListener("DOMContentLoaded", function() {
               if(data.status==="ok"){
                 renderSubusers(data.subusers || []);
               } else {
-                subusersContainer.innerHTML = `<p style="color:red;">Error: ${data.message}</p>`;
+                const errorP = document.createElement('p');
+                errorP.classList.add('error-message-text');
+                errorP.textContent = `Error: ${data.message}`;
+                subusersContainer.innerHTML = '';
+                subusersContainer.appendChild(errorP);
               }
             })
             .catch(err=>{
-              subusersContainer.innerHTML = `<p style=\"color:red;\">Error: ${err}</p>`;
+              const errorP = document.createElement('p');
+              errorP.classList.add('error-message-text');
+              errorP.textContent = `Error: ${err}`;
+              subusersContainer.innerHTML = '';
+              subusersContainer.appendChild(errorP);
             });
           }, 200);
         });
@@ -127,12 +135,20 @@ document.addEventListener("DOMContentLoaded", function() {
       if(data.status==="ok"){
         renderSubusers(data.subusers || []);
       } else {
-        subusersContainer.innerHTML = `<p style="color:red;">Error: ${data.message}</p>`;
+        const errorP = document.createElement('p');
+        errorP.classList.add('error-message-text');
+        errorP.textContent = `Error: ${data.message}`;
+        subusersContainer.innerHTML = '';
+        subusersContainer.appendChild(errorP);
       }
     })
     .catch(err=> { 
         console.error("Error cargando subusuarios:", err);
-        subusersContainer.innerHTML = `<p style="color:red;">Error al cargar subusuarios: ${err}</p>`;
+        const errorP = document.createElement('p');
+        errorP.classList.add('error-message-text');
+        errorP.textContent = `Error al cargar subusuarios: ${err}`;
+        subusersContainer.innerHTML = '';
+        subusersContainer.appendChild(errorP);
     });
   }
 
@@ -140,58 +156,63 @@ document.addEventListener("DOMContentLoaded", function() {
   function renderSubusers(subuserList) {
     if(!subusersContainer) return; // Salir si el contenedor no existe
     if(!subuserList.length){
-      subusersContainer.innerHTML = "<p>No hay sub-usuarios creados.</p>";
+      const p = document.createElement('p');
+      p.textContent = "No hay sub-usuarios creados.";
+      subusersContainer.innerHTML = '';
+      subusersContainer.appendChild(p);
       return;
     }
-    let html = "";
+    
+    // Limpiar contenedor
+    subusersContainer.innerHTML = '';
     
     subuserList.forEach(su => {
-      html += `
-        <div class="subuser-card">
-          <div class="subuser-card-content">
-            <div class="subuser-card-username">${su.username}</div>
-            <div class="subuser-card-actions">
-              <button
-                class="btn-orange edit-subuser-btn"
-                data-id="${su.id}"
-              >
-                Editar
-              </button>
-              `;
+      const card = document.createElement('div');
+      card.classList.add('subuser-card');
+      
+      const content = document.createElement('div');
+      content.classList.add('subuser-card-content');
+      
+      const usernameDiv = document.createElement('div');
+      usernameDiv.classList.add('subuser-card-username');
+      usernameDiv.textContent = escapeHtml(su.username);
+      content.appendChild(usernameDiv);
+      
+      const actionsDiv = document.createElement('div');
+      actionsDiv.classList.add('subuser-card-actions');
+      
+      // Botón Editar
+      const editBtn = document.createElement('button');
+      editBtn.classList.add('btn-orange', 'edit-subuser-btn');
+      editBtn.setAttribute('data-id', su.id);
+      editBtn.textContent = 'Editar';
+      actionsDiv.appendChild(editBtn);
+      
+      // Botón Toggle (On/Off)
+      const toggleBtn = document.createElement('button');
       if(su.enabled){
-        html += `
-              <button
-                class="btn-red toggle-subuser"
-                data-id="${su.id}"
-                data-enabled="true"
-              >
-                Off
-              </button>
-        `;
+        toggleBtn.classList.add('btn-red', 'toggle-subuser');
+        toggleBtn.setAttribute('data-enabled', 'true');
+        toggleBtn.textContent = 'Off';
       } else {
-        html += `
-              <button
-                class="btn-green toggle-subuser"
-                data-id="${su.id}"
-                data-enabled="false"
-              >
-                On
-              </button>
-        `;
+        toggleBtn.classList.add('btn-green', 'toggle-subuser');
+        toggleBtn.setAttribute('data-enabled', 'false');
+        toggleBtn.textContent = 'On';
       }
-      html += `
-              <button
-                class="btn-red delete-subuser"
-                data-id="${su.id}"
-              >
-                Eliminar
-              </button>
-            </div>
-          </div>
-        </div>
-      `;
+      toggleBtn.setAttribute('data-id', su.id);
+      actionsDiv.appendChild(toggleBtn);
+      
+      // Botón Eliminar
+      const deleteBtn = document.createElement('button');
+      deleteBtn.classList.add('btn-red', 'delete-subuser');
+      deleteBtn.setAttribute('data-id', su.id);
+      deleteBtn.textContent = 'Eliminar';
+      actionsDiv.appendChild(deleteBtn);
+      
+      content.appendChild(actionsDiv);
+      card.appendChild(content);
+      subusersContainer.appendChild(card);
     });
-    subusersContainer.innerHTML = html;
   }
 
   // 5) Delegación de eventos
@@ -331,7 +352,13 @@ document.addEventListener("DOMContentLoaded", function() {
       
       const url = `/subusers/list_current_user_emails_paginated?page=${page}&per_page=${perPage}`;
       
-      if (subuserAllowedEmailsTextContainer) subuserAllowedEmailsTextContainer.innerHTML = "<p class='text-secondary'>Cargando...</p>";
+      if (subuserAllowedEmailsTextContainer) {
+        const loadingP = document.createElement('p');
+        loadingP.classList.add('text-secondary');
+        loadingP.textContent = 'Cargando...';
+        subuserAllowedEmailsTextContainer.innerHTML = '';
+        subuserAllowedEmailsTextContainer.appendChild(loadingP);
+      }
       
       fetch(url, {
         method: "GET",
@@ -343,12 +370,24 @@ document.addEventListener("DOMContentLoaded", function() {
           if (subuserAllowedEmailsTextContainer) renderSubuserAllowedEmailsText(data.emails);
           if (subuserPaginationInfo) updateSubuserPaginationControls(data.pagination);
         } else {
-          if (subuserAllowedEmailsTextContainer) subuserAllowedEmailsTextContainer.innerHTML = `<p class='text-danger'>Error: ${data.message || 'No se pudieron cargar los correos.'}</p>`;
+          if (subuserAllowedEmailsTextContainer) {
+            const errorP = document.createElement('p');
+            errorP.classList.add('text-danger');
+            errorP.textContent = `Error: ${data.message || 'No se pudieron cargar los correos.'}`;
+            subuserAllowedEmailsTextContainer.innerHTML = '';
+            subuserAllowedEmailsTextContainer.appendChild(errorP);
+          }
         }
       })
       .catch(err => {
         console.error("Fetch error list emails:", err);
-        if (subuserAllowedEmailsTextContainer) subuserAllowedEmailsTextContainer.innerHTML = `<p class='text-danger'>Error al cargar correos: ${err.message}</p>`;
+        if (subuserAllowedEmailsTextContainer) {
+          const errorP = document.createElement('p');
+          errorP.classList.add('text-danger');
+          errorP.textContent = `Error al cargar correos: ${err.message}`;
+          subuserAllowedEmailsTextContainer.innerHTML = '';
+          subuserAllowedEmailsTextContainer.appendChild(errorP);
+        }
       });
     }
 
@@ -374,7 +413,7 @@ document.addEventListener("DOMContentLoaded", function() {
         if (totalItems > 0) {
           subuserDeleteAllEmailsBtn.textContent = `Eliminar Todos (${totalItems})`;
           subuserDeleteAllEmailsBtn.disabled = false;
-          subuserDeleteAllEmailsBtn.style.display = 'inline-block';
+          subuserDeleteAllEmailsBtn.classList.add('btn-inline-block');
         } else {
           subuserDeleteAllEmailsBtn.textContent = 'Eliminar Todos';
           subuserDeleteAllEmailsBtn.disabled = true;
@@ -441,16 +480,34 @@ document.addEventListener("DOMContentLoaded", function() {
 
     // Búsqueda y eliminación de correos
     if (subuserSearchEmailsForm && subuserSearchEmailsInput && subuserEmailsSearchResults) {
-      const limpiarBtn = subuserSearchEmailsForm.querySelector('button[type="submit"]');
-      if (limpiarBtn) {
-        limpiarBtn.type = 'button';
-        limpiarBtn.addEventListener('click', function(e) {
-          subuserSearchEmailsInput.value = '';
-          subuserEmailsSearchResults.innerHTML = '';
-          subuserEmailsSearchResults.style.display = 'none';
-          if (subuserSearchStatus) subuserSearchStatus.textContent = '';
-          if (subuserDeleteDisplayedContainer) subuserDeleteDisplayedContainer.classList.add('d-none');
-          subuserCurrentlyDisplayedEmails = [];
+      const clearSearchBtn = document.getElementById('clearSubuserSearchBtn');
+      
+      // Función para limpiar el campo de búsqueda
+      function clearSearch() {
+        subuserSearchEmailsInput.value = '';
+        subuserSearchEmailsInput.dispatchEvent(new Event('input'));
+        subuserEmailsSearchResults.innerHTML = '';
+        subuserEmailsSearchResults.classList.add('hide-element');
+        if (subuserSearchStatus) subuserSearchStatus.textContent = '';
+        if (subuserDeleteDisplayedContainer) subuserDeleteDisplayedContainer.classList.add('d-none');
+        subuserCurrentlyDisplayedEmails = [];
+        if (clearSearchBtn) clearSearchBtn.classList.remove('show');
+      }
+      
+      // Mostrar/ocultar botón X según si hay texto
+      if (subuserSearchEmailsInput && clearSearchBtn) {
+        subuserSearchEmailsInput.addEventListener('input', function() {
+          if (subuserSearchEmailsInput.value.trim()) {
+            clearSearchBtn.classList.add('show');
+          } else {
+            clearSearchBtn.classList.remove('show');
+          }
+        });
+        
+        // Click en el botón X para limpiar
+        clearSearchBtn.addEventListener('click', function(e) {
+          e.preventDefault();
+          clearSearch();
         });
       }
 
@@ -476,14 +533,22 @@ document.addEventListener("DOMContentLoaded", function() {
             subuserCurrentlyDisplayedEmails = data.emails || [];
             renderSubuserEmailsResults(subuserCurrentlyDisplayedEmails);
           } else {
-            subuserEmailsSearchResults.innerHTML = `<p class='text-danger'>Error: ${data.message || 'Respuesta inválida'}</p>`;
+            const errorP = document.createElement('p');
+            errorP.classList.add('text-danger');
+            errorP.textContent = `Error: ${data.message || 'Respuesta inválida'}`;
+            subuserEmailsSearchResults.innerHTML = '';
+            subuserEmailsSearchResults.appendChild(errorP);
             if (subuserSearchStatus) subuserSearchStatus.textContent = '';
             if (subuserDeleteDisplayedContainer) subuserDeleteDisplayedContainer.classList.add('d-none');
           }
         })
         .catch(err => {
           console.error("Fetch error search:", err);
-          subuserEmailsSearchResults.innerHTML = `<p class='text-danger'>Error al buscar: ${err.message}</p>`;
+          const errorP = document.createElement('p');
+          errorP.classList.add('text-danger');
+          errorP.textContent = `Error al buscar: ${err.message}`;
+          subuserEmailsSearchResults.innerHTML = '';
+          subuserEmailsSearchResults.appendChild(errorP);
           if (subuserSearchStatus) subuserSearchStatus.textContent = '';
           if (subuserDeleteDisplayedContainer) subuserDeleteDisplayedContainer.classList.add('d-none');
         });
@@ -494,19 +559,28 @@ document.addEventListener("DOMContentLoaded", function() {
       if (!subuserEmailsSearchResults) return;
       subuserEmailsSearchResults.innerHTML = '';
       if (!emails || emails.length === 0) {
-        subuserEmailsSearchResults.style.display = 'none';
+        subuserEmailsSearchResults.classList.add('hide-element');
         if (subuserDeleteDisplayedContainer) subuserDeleteDisplayedContainer.classList.add('d-none');
         return;
       }
 
-      subuserEmailsSearchResults.style.display = 'block';
+      subuserEmailsSearchResults.classList.remove('hide-element');
+      subuserEmailsSearchResults.classList.add('show-block');
       emails.forEach(email => {
         const itemDiv = document.createElement('div');
         itemDiv.classList.add('search-result-item');
-        itemDiv.innerHTML = `
-          <span>${escapeHtml(email)}</span>
-          <button class="delete-search-result-btn" data-email="${escapeHtml(email)}" title="Eliminar este correo">X</button>
-        `;
+        
+        const span = document.createElement('span');
+        span.textContent = email;
+        itemDiv.appendChild(span);
+        
+        const button = document.createElement('button');
+        button.classList.add('delete-search-result-btn');
+        button.setAttribute('data-email', email);
+        button.setAttribute('title', 'Eliminar este correo');
+        button.textContent = 'X';
+        itemDiv.appendChild(button);
+        
         subuserEmailsSearchResults.appendChild(itemDiv);
       });
 
@@ -542,7 +616,7 @@ document.addEventListener("DOMContentLoaded", function() {
                 if (subuserDeleteDisplayedBtn) subuserDeleteDisplayedBtn.textContent = `Eliminar ${subuserCurrentlyDisplayedEmails.length} Mostrados`;
                 if (subuserDeleteDisplayedContainer) subuserDeleteDisplayedContainer.classList.remove('d-none');
               } else {
-                subuserEmailsSearchResults.style.display = 'none';
+                subuserEmailsSearchResults.classList.add('hide-element');
                 if (subuserDeleteDisplayedContainer) subuserDeleteDisplayedContainer.classList.add('d-none');
               }
               fetchSubuserAllowedEmails(subuserCurrentPage, subuserCurrentPerPage);
@@ -579,7 +653,10 @@ document.addEventListener("DOMContentLoaded", function() {
         .then(data => {
           if (data.status === "ok") {
             if (subuserEmailsSearchResults) subuserEmailsSearchResults.innerHTML = "";
-            if (subuserEmailsSearchResults) subuserEmailsSearchResults.style.display = 'none';
+            if (subuserEmailsSearchResults) {
+              subuserEmailsSearchResults.classList.remove('show-block');
+              subuserEmailsSearchResults.classList.add('hide-element');
+            }
             if (subuserDeleteDisplayedContainer) subuserDeleteDisplayedContainer.classList.add('d-none');
             subuserCurrentlyDisplayedEmails = [];
             fetchSubuserAllowedEmails(subuserCurrentPage, subuserCurrentPerPage);
@@ -602,16 +679,28 @@ document.addEventListener("DOMContentLoaded", function() {
       subuserAddEmailsBtn.addEventListener("click", function() {
         const rawText = subuserAddEmailsInput.value.trim();
         if (!rawText) {
-          if (subuserAddEmailsMsg) { subuserAddEmailsMsg.textContent = 'Campo vacío.'; subuserAddEmailsMsg.style.color = 'orange'; }
+          if (subuserAddEmailsMsg) { 
+            subuserAddEmailsMsg.textContent = 'Campo vacío.'; 
+            subuserAddEmailsMsg.classList.remove('text-color-green', 'text-color-red');
+            subuserAddEmailsMsg.classList.add('text-color-orange'); 
+          }
           return;
         }
         const emailsToAdd = rawText.split(/[\s,;\n]+/).map(e => e.trim().toLowerCase()).filter(e => e && e.includes('@'));
         if (!emailsToAdd.length) {
-          if (subuserAddEmailsMsg) { subuserAddEmailsMsg.textContent = 'No se encontraron correos válidos.'; subuserAddEmailsMsg.style.color = 'orange'; }
+          if (subuserAddEmailsMsg) { 
+            subuserAddEmailsMsg.textContent = 'No se encontraron correos válidos.'; 
+            subuserAddEmailsMsg.classList.remove('text-color-green', 'text-color-red');
+            subuserAddEmailsMsg.classList.add('text-color-orange'); 
+          }
           return;
         }
 
-        if (subuserAddEmailsMsg) { subuserAddEmailsMsg.textContent = "Añadiendo..."; subuserAddEmailsMsg.style.color = "orange"; }
+        if (subuserAddEmailsMsg) { 
+          subuserAddEmailsMsg.textContent = "Añadiendo..."; 
+          subuserAddEmailsMsg.classList.remove('text-color-green', 'text-color-red');
+          subuserAddEmailsMsg.classList.add('text-color-orange'); 
+        }
         subuserAddEmailsBtn.disabled = true;
 
         fetch("/subusers/add_current_user_emails_ajax", {
@@ -624,7 +713,8 @@ document.addEventListener("DOMContentLoaded", function() {
           if (data.status === "ok") {
             if (subuserAddEmailsMsg) {
               subuserAddEmailsMsg.textContent = `${data.added_count || 0} añadidos, ${data.skipped_count || 0} omitidos. Recargando lista...`;
-              subuserAddEmailsMsg.style.color = "green";
+              subuserAddEmailsMsg.classList.remove('text-color-orange', 'text-color-red');
+              subuserAddEmailsMsg.classList.add('text-color-green');
             }
             subuserAddEmailsInput.value = "";
             fetchSubuserAllowedEmails(1, subuserCurrentPerPage);
@@ -633,7 +723,11 @@ document.addEventListener("DOMContentLoaded", function() {
           }
         })
         .catch(err => {
-          if (subuserAddEmailsMsg) { subuserAddEmailsMsg.textContent = `Error: ${err.message}`; subuserAddEmailsMsg.style.color = "red"; }
+          if (subuserAddEmailsMsg) { 
+            subuserAddEmailsMsg.textContent = `Error: ${err.message}`; 
+            subuserAddEmailsMsg.classList.remove('text-color-orange', 'text-color-green');
+            subuserAddEmailsMsg.classList.add('text-color-red'); 
+          }
         })
         .finally(() => {
           subuserAddEmailsBtn.disabled = false;

@@ -189,7 +189,8 @@ def create_subuser_ajax():
         username=username,
         password=hashed_pass,
         parent_id=parent_user.id, # Usar ID del padre obtenido
-        enabled=True
+        enabled=True,
+        can_add_own_emails=False  # Por defecto desactivado
         # Otros campos por defecto: color, position, can_search_any=False, etc.
     )
     db.session.add(new_subuser)
@@ -1207,6 +1208,7 @@ def update_subuser_emails_ajax():
 def list_current_user_emails_paginated():
     """
     Devuelve una lista paginada de correos permitidos para el usuario actual (principal).
+    Solo usuarios principales (no sub-usuarios) pueden usar esta función.
     """
     if not can_access_subusers():
         return jsonify({"status":"error","message":"No autorizado"}),403
@@ -1215,13 +1217,26 @@ def list_current_user_emails_paginated():
     if not user_id:
         return jsonify({"status":"error","message":"No hay usuario logueado."}), 401
     
+    # Verificar que el usuario sea principal (no sub-usuario)
+    current_user = User.query.get(user_id)
+    if not current_user:
+        return jsonify({"status":"error","message":"Usuario no encontrado."}), 404
+    
+    if current_user.parent_id:
+        return jsonify({"status":"error","message":"Los sub-usuarios no pueden gestionar sus propios correos."}), 403
+    
+    if not current_user.can_add_own_emails:
+        return jsonify({"status":"error","message":"No tienes permiso para gestionar tus correos."}), 403
+    
     user = User.query.get(user_id)
     if not user:
         return jsonify({"status":"error","message":"Usuario no encontrado."}), 404
     
-    # Solo usuarios principales (no sub-usuarios)
-    if user.parent_id is not None:
-        return jsonify({"status":"error","message":"Esta función es solo para usuarios principales."}), 403
+    if user.parent_id:
+        return jsonify({"status":"error","message":"Los sub-usuarios no pueden gestionar sus propios correos."}), 403
+    
+    if not user.can_add_own_emails:
+        return jsonify({"status":"error","message":"No tienes permiso para gestionar tus correos."}), 403
     
     page = request.args.get("page", 1, type=int)
     per_page = request.args.get("per_page", 20, type=int)
@@ -1255,6 +1270,7 @@ def list_current_user_emails_paginated():
 def search_current_user_emails_ajax():
     """
     Busca correos dentro de AllowedEmail del usuario actual (principal).
+    Solo usuarios principales (no sub-usuarios) pueden usar esta función.
     """
     if not can_access_subusers():
         return jsonify({"status":"error","message":"No autorizado"}),403
@@ -1263,13 +1279,16 @@ def search_current_user_emails_ajax():
     if not user_id:
         return jsonify({"status":"error","message":"No hay usuario logueado."}), 401
     
+    # Verificar que el usuario sea principal (no sub-usuario) y tenga permiso
     user = User.query.get(user_id)
     if not user:
         return jsonify({"status":"error","message":"Usuario no encontrado."}), 404
     
-    # Solo usuarios principales
-    if user.parent_id is not None:
-        return jsonify({"status":"error","message":"Esta función es solo para usuarios principales."}), 403
+    if user.parent_id:
+        return jsonify({"status":"error","message":"Los sub-usuarios no pueden gestionar sus propios correos."}), 403
+    
+    if not user.can_add_own_emails:
+        return jsonify({"status":"error","message":"No tienes permiso para gestionar tus correos."}), 403
 
     data = request.get_json()
     search_text = data.get("search_text", "").strip()
@@ -1305,9 +1324,11 @@ def delete_current_user_email_ajax():
     if not user:
         return jsonify({"status":"error","message":"Usuario no encontrado."}), 404
     
-    # Solo usuarios principales
-    if user.parent_id is not None:
-        return jsonify({"status":"error","message":"Esta función es solo para usuarios principales."}), 403
+    if user.parent_id:
+        return jsonify({"status":"error","message":"Los sub-usuarios no pueden gestionar sus propios correos."}), 403
+    
+    if not user.can_add_own_emails:
+        return jsonify({"status":"error","message":"No tienes permiso para gestionar tus correos."}), 403
 
     data = request.get_json()
     email_to_remove = data.get("email", "").strip().lower()
@@ -1344,9 +1365,11 @@ def delete_many_current_user_emails_ajax():
     if not user:
         return jsonify({"status":"error","message":"Usuario no encontrado."}), 404
     
-    # Solo usuarios principales
-    if user.parent_id is not None:
-        return jsonify({"status":"error","message":"Esta función es solo para usuarios principales."}), 403
+    if user.parent_id:
+        return jsonify({"status":"error","message":"Los sub-usuarios no pueden gestionar sus propios correos."}), 403
+    
+    if not user.can_add_own_emails:
+        return jsonify({"status":"error","message":"No tienes permiso para gestionar tus correos."}), 403
 
     data = request.get_json()
     emails_array = data.get("emails", [])
@@ -1387,9 +1410,11 @@ def delete_all_current_user_emails_ajax():
     if not user:
         return jsonify({"status":"error","message":"Usuario no encontrado."}), 404
     
-    # Solo usuarios principales
-    if user.parent_id is not None:
-        return jsonify({"status":"error","message":"Esta función es solo para usuarios principales."}), 403
+    if user.parent_id:
+        return jsonify({"status":"error","message":"Los sub-usuarios no pueden gestionar sus propios correos."}), 403
+    
+    if not user.can_add_own_emails:
+        return jsonify({"status":"error","message":"No tienes permiso para gestionar tus correos."}), 403
 
     deleted_count = AllowedEmail.query.filter_by(user_id=user_id).delete()
     
@@ -1417,9 +1442,11 @@ def add_current_user_emails_ajax():
     if not user:
         return jsonify({"status":"error","message":"Usuario no encontrado."}), 404
     
-    # Solo usuarios principales
-    if user.parent_id is not None:
-        return jsonify({"status":"error","message":"Esta función es solo para usuarios principales."}), 403
+    if user.parent_id:
+        return jsonify({"status":"error","message":"Los sub-usuarios no pueden gestionar sus propios correos."}), 403
+    
+    if not user.can_add_own_emails:
+        return jsonify({"status":"error","message":"No tienes permiso para gestionar tus correos."}), 403
 
     data = request.get_json()
     emails_to_add = data.get("emails", [])

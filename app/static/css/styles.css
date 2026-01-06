@@ -2921,26 +2921,173 @@ a.btn-search.btn-rounded:hover {
 
 /* --- SUBUSER CARD --- */
 .subuser-card {
-  background: #fff;
-  border: 1px solid #ccc;
-  border-radius: 8px;
-  padding: 1rem;
-  margin-bottom: 0.6rem;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 1rem;
+  background: #fff !important;
+  border: 1px solid #ccc !important;
+  border-radius: 8px !important;
+  padding: 1rem !important;
+  margin-bottom: 0.6rem !important;
   word-break: break-word;
   overflow-wrap: anywhere;
   white-space: normal;
+  display: block !important;
 }
 .subuser-card-content {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  width: 100%;
-  gap: 1rem;
+  display: flex !important;
+  justify-content: space-between !important;
+  align-items: center !important;
+  width: 100% !important;
+  gap: 1rem !important;
 }
+
+/* ========== Estilos para Gestión de Correos en manage_subusers.html ========== */
+/* Contenedor del textarea de búsqueda con botón X */
+.search-textarea-wrapper {
+  position: relative;
+  width: 100%;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+/* Textarea de búsqueda con padding para el botón X */
+.search-textarea-wrapper textarea {
+  padding-right: 35px;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 100%;
+}
+
+/* Botón X para limpiar búsqueda */
+.search-textarea-clear-btn {
+  position: absolute;
+  right: 8px;
+  top: 8px;
+  background: none;
+  border: none;
+  color: #666;
+  cursor: pointer;
+  font-size: 18px;
+  padding: 4px 8px;
+  display: none;
+  z-index: 10;
+  width: 24px;
+  height: 24px;
+  align-items: center;
+  justify-content: center;
+}
+
+.search-textarea-clear-btn:hover {
+  color: #333;
+}
+
+/* Select de paginación pequeño */
+.select-small {
+  font-size: 0.9rem;
+}
+
+/* Contenedor de correos permitidos con scroll */
+.allowed-emails-scroll {
+  max-height: 200px;
+  overflow-y: auto;
+  font-size: 0.85rem;
+}
+
+/* Botones pequeños en gestión de correos */
+.btn-small-font {
+  font-size: 0.85rem;
+}
+
+/* Clase para mostrar/ocultar el botón X */
+.search-textarea-clear-btn.show {
+  display: flex;
+}
+
+/* Clases para mostrar/ocultar elementos */
+.show-block {
+  display: block !important;
+}
+
+.hide-element {
+  display: none !important;
+}
+
+/* Clases para colores de mensajes */
+.text-color-orange {
+  color: orange !important;
+}
+
+.text-color-green {
+  color: green !important;
+}
+
+.text-color-red {
+  color: red !important;
+}
+
+/* Clase para mensajes de error */
+.error-message-text {
+  color: red !important;
+}
+
+/* Clase para botón inline-block */
+.btn-inline-block {
+  display: inline-block !important;
+}
+
+/* Clases para mensajes de error 2FA */
+.twofa-error-message {
+  font-weight: bold !important;
+  font-size: 1.1rem !important;
+  margin-top: 1rem !important;
+  color: #dc3545 !important;
+}
+
+/* Clases para contenedor 2FA */
+.twofa-code-display-block {
+  display: block !important;
+}
+
+.twofa-code-wrapper-flex {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
+.twofa-code-top-row-flex {
+  display: flex !important;
+  justify-content: center !important;
+  align-items: center !important;
+  gap: 1rem !important;
+  margin-bottom: 0.75rem !important;
+}
+
+.twofa-code-value-no-margin {
+  margin-bottom: 0 !important;
+}
+
+.twofa-timer-centered {
+  text-align: center !important;
+  margin-top: 0 !important;
+  width: 100% !important;
+}
+
+/* Clases para popups y overlays */
+.popup-show {
+  display: block !important;
+}
+
+.popup-hide {
+  display: none !important;
+}
+
+.overlay-show {
+  display: block !important;
+}
+
+.overlay-hide {
+  display: none !important;
+}
+
 .subuser-card-username {
   font-weight: bold;
   flex: 1 1 0;
