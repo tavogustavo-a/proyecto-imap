@@ -12,7 +12,7 @@ const roleTableBody = document.getElementById('roles-table-body');
 const showRoleCount = document.getElementById('showRoleCount');
 const searchRoleInput = document.getElementById('searchRoleInput');
 let roleCurrentPage = 1;
-let rolePerPage = showRoleCount ? (showRoleCount.value === 'all' ? 9999 : parseInt(showRoleCount.value)) : 10;
+let rolePerPage = showRoleCount ? (showRoleCount.value === 'all' ? 9999 : parseInt(showRoleCount.value)) : 20;
 
 function renderRolesTable(roles) {
     const tbody = document.getElementById('roles-table-body');

@@ -9,7 +9,7 @@ document.addEventListener('DOMContentLoaded', function() {
   const nextBtn = document.getElementById('nextUserPageBtn');
   const searchInput = document.getElementById('searchUserInput');
   let currentPage = 1;
-  let perPage = parseInt(showCountSelect.value) || 5;
+  let perPage = parseInt(showCountSelect.value) || 20;
 
   function getFilteredRows() {
     return rows.filter(row => !row.classList.contains('filtered-out'));

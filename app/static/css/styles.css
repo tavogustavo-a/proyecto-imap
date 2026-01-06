@@ -437,12 +437,54 @@ input[type="submit"],
   }
 }
 
+/* Asegurar que los admin-card en la página de usuarios tengan el mismo estilo */
+.usuarios-page .container-max-width-900 .admin-card {
+  background-color: var(--card-bg) !important;
+  color: var(--text-color) !important;
+  border: none !important;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.07);
+  margin: 0.001rem auto;
+  padding: 0.75rem;
+  border-radius: 16px;
+  max-width: 750px;
+  overflow-x: visible;
+  box-sizing: border-box;
+}
+
+/* Margen superior específico para el segundo admin-card (eliminación masiva) - Pantallas grandes */
+@media (min-width: 769px) {
+  .usuarios-page .container-max-width-900.mt-2 {
+    margin-top: 1.5rem !important;
+    margin-bottom: 0 !important;
+  }
+  
+  .usuarios-page .container-max-width-900.mt-2 .admin-card {
+    margin-top: 0 !important;
+    margin-bottom: 0 !important;
+  }
+}
+
+/* Regla base (se sobrescribe en media queries) */
+.usuarios-page .container-max-width-900.mt-2 {
+  margin-top: 1.5rem !important;
+}
+
 /* =========================
    media query ~768px
 ========================= */
 @media (max-width: 768px) {
   .admin-card {
     margin: 0.1rem auto;
+  }
+  
+  /* Regla específica solo para la página de usuarios */
+  .usuarios-page .admin-card {
+    margin: 0.8rem auto;
+  }
+  
+  /* En móviles, reducir el margen superior del contenedor */
+  .usuarios-page .container-max-width-900.mt-2 {
+    margin-top: 1.5rem;
   }
   .search-container {
     max-width: 600px;
@@ -634,6 +676,8 @@ noscript p {
 .mt-1 { margin-top: 1rem; }
 .mt-1-5 { margin-top: 1.5rem; }
 .mt-2 { margin-top: 2rem; }
+.mt-3 { margin-top: 3rem; }
+.mt-4 { margin-top: 4rem; }
 .mb-04 { margin-bottom: 0.4rem; }
 .mb-05 { margin-bottom: 0.5rem; }
 .mb-1 { margin-bottom: 1rem; }
@@ -2186,6 +2230,63 @@ body .edit-service-page #aliasPopup {
   margin-top: 1rem;
 }
 
+
+/* ✅ NUEVO: Estilos para código 2FA - CSP Compliant */
+.twofa-code-display {
+  background: #f8f9fa;
+  border: none;
+  border-radius: 8px;
+  padding: 1rem;
+  margin: 1rem 0;
+  text-align: center;
+}
+
+.twofa-code-wrapper {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.twofa-code-content {
+  flex-grow: 1;
+}
+
+.twofa-code-value {
+  font-size: 1.8rem;
+  font-weight: bold;
+  color: #667eea;
+  font-family: 'Courier New', monospace;
+  margin-bottom: 0.25rem;
+}
+
+.twofa-code-email {
+  font-size: 0.85rem;
+  color: #666;
+}
+
+.twofa-code-actions {
+  text-align: right;
+}
+
+.twofa-timer {
+  font-size: 1rem;
+  color: #28a745;
+  font-weight: bold;
+  margin-bottom: 0.25rem;
+}
+
+.twofa-timer-warning {
+  font-size: 1rem;
+  color: #dc3545;
+  font-weight: bold;
+  margin-bottom: 0.25rem;
+}
+
+.twofa-copy-btn {
+  padding: 0.5rem 1rem;
+}
 
 /* --- Ajustes Móviles para Regex Results --- */
 @media (max-width: 768px) {

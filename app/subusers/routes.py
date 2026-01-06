@@ -1202,6 +1202,264 @@ def update_subuser_emails_ajax():
         current_app.logger.error(f"Error al actualizar correos para sub-usuario {subuser_id}: {e}", exc_info=True)
         return jsonify({"status": "error", "message": "Error interno al guardar los correos."}), 500
 
+# ================== Manejo de Correos del Usuario Principal ==================
+@subuser_bp.route("/list_current_user_emails_paginated", methods=["GET"])
+def list_current_user_emails_paginated():
+    """
+    Devuelve una lista paginada de correos permitidos para el usuario actual (principal).
+    """
+    if not can_access_subusers():
+        return jsonify({"status":"error","message":"No autorizado"}),403
+    
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"status":"error","message":"No hay usuario logueado."}), 401
+    
+    user = User.query.get(user_id)
+    if not user:
+        return jsonify({"status":"error","message":"Usuario no encontrado."}), 404
+    
+    # Solo usuarios principales (no sub-usuarios)
+    if user.parent_id is not None:
+        return jsonify({"status":"error","message":"Esta función es solo para usuarios principales."}), 403
+    
+    page = request.args.get("page", 1, type=int)
+    per_page = request.args.get("per_page", 20, type=int)
+
+    # Validar per_page, si se pide "Todos", usar un número muy grande
+    if per_page == -1:
+        per_page = user.allowed_email_entries.count() + 1
+        if per_page == 1: per_page = 10
+
+    # Consulta paginada
+    pagination = user.allowed_email_entries.order_by(AllowedEmail.email.asc()).paginate(
+        page=page, per_page=per_page, error_out=False
+    )
+
+    emails_data = [ae.email for ae in pagination.items]
+    
+    return jsonify({
+        "status": "ok",
+        "emails": emails_data,
+        "pagination": {
+            "page": pagination.page,
+            "per_page": pagination.per_page if per_page > 0 else -1,
+            "total_pages": pagination.pages,
+            "total_items": pagination.total,
+            "has_prev": pagination.has_prev,
+            "has_next": pagination.has_next
+        }
+    })
+
+@subuser_bp.route("/search_current_user_emails_ajax", methods=["POST"])
+def search_current_user_emails_ajax():
+    """
+    Busca correos dentro de AllowedEmail del usuario actual (principal).
+    """
+    if not can_access_subusers():
+        return jsonify({"status":"error","message":"No autorizado"}),403
+
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"status":"error","message":"No hay usuario logueado."}), 401
+    
+    user = User.query.get(user_id)
+    if not user:
+        return jsonify({"status":"error","message":"Usuario no encontrado."}), 404
+    
+    # Solo usuarios principales
+    if user.parent_id is not None:
+        return jsonify({"status":"error","message":"Esta función es solo para usuarios principales."}), 403
+
+    data = request.get_json()
+    search_text = data.get("search_text", "").strip()
+
+    # Procesar texto de búsqueda
+    search_terms = [t.lower() for t in re.split(r"[,\n\r\s]+", search_text) if t.strip()]
+
+    if not search_terms:
+        email_query = user.allowed_email_entries.filter(db.false()).order_by(AllowedEmail.email.asc())
+    else:
+        conditions = []
+        for term in search_terms:
+            conditions.append(AllowedEmail.email.ilike(f"%{term}%"))
+        email_query = user.allowed_email_entries.filter(or_(*conditions)).order_by(AllowedEmail.email.asc())
+        
+    found_emails = [ae.email for ae in email_query.all()]
+    
+    return jsonify({"status": "ok", "emails": found_emails})
+
+@subuser_bp.route("/delete_current_user_email_ajax", methods=["POST"])
+def delete_current_user_email_ajax():
+    """
+    Elimina 1 correo específico de AllowedEmail del usuario actual (principal).
+    """
+    if not can_access_subusers():
+        return jsonify({"status":"error","message":"No autorizado"}),403
+
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"status":"error","message":"No hay usuario logueado."}), 401
+    
+    user = User.query.get(user_id)
+    if not user:
+        return jsonify({"status":"error","message":"Usuario no encontrado."}), 404
+    
+    # Solo usuarios principales
+    if user.parent_id is not None:
+        return jsonify({"status":"error","message":"Esta función es solo para usuarios principales."}), 403
+
+    data = request.get_json()
+    email_to_remove = data.get("email", "").strip().lower()
+
+    if not email_to_remove:
+        return jsonify({"status":"error","message":"Falta email."}), 400
+
+    deleted_count = AllowedEmail.query.filter_by(user_id=user_id, email=email_to_remove).delete()
+    
+    try:
+        db.session.commit()
+        if deleted_count > 0:
+            return jsonify({"status":"ok"})
+        else:
+            return jsonify({"status":"error","message":"Correo no encontrado."})
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Error al eliminar correo '{email_to_remove}' para usuario {user_id}: {e}")
+        return jsonify({"status":"error","message":"Error al eliminar correo."}), 500
+
+@subuser_bp.route("/delete_many_current_user_emails_ajax", methods=["POST"])
+def delete_many_current_user_emails_ajax():
+    """
+    Elimina varios correos a la vez de AllowedEmail del usuario actual (principal).
+    """
+    if not can_access_subusers():
+        return jsonify({"status":"error","message":"No autorizado"}),403
+
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"status":"error","message":"No hay usuario logueado."}), 401
+    
+    user = User.query.get(user_id)
+    if not user:
+        return jsonify({"status":"error","message":"Usuario no encontrado."}), 404
+    
+    # Solo usuarios principales
+    if user.parent_id is not None:
+        return jsonify({"status":"error","message":"Esta función es solo para usuarios principales."}), 403
+
+    data = request.get_json()
+    emails_array = data.get("emails", [])
+
+    if not emails_array:
+        return jsonify({"status":"error","message":"Faltan emails."}), 400
+
+    normalized_emails = [e.strip().lower() for e in emails_array if isinstance(e, str) and e.strip()]
+    if not normalized_emails:
+        return jsonify({"status":"ok", "message":"No emails validos para eliminar."})
+        
+    deleted_count = AllowedEmail.query.filter(
+        AllowedEmail.user_id == user_id,
+        AllowedEmail.email.in_(normalized_emails)
+    ).delete(synchronize_session=False)
+    
+    try:
+        db.session.commit()
+        return jsonify({"status":"ok", "deleted_count": deleted_count})
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Error al eliminar multiples correos para usuario {user_id}: {e}")
+        return jsonify({"status":"error","message":"Error al eliminar correos."}), 500
+
+@subuser_bp.route("/delete_all_current_user_emails_ajax", methods=["POST"])
+def delete_all_current_user_emails_ajax():
+    """
+    Elimina TODOS los correos permitidos del usuario actual (principal).
+    """
+    if not can_access_subusers():
+        return jsonify({"status":"error","message":"No autorizado"}),403
+
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"status":"error","message":"No hay usuario logueado."}), 401
+    
+    user = User.query.get(user_id)
+    if not user:
+        return jsonify({"status":"error","message":"Usuario no encontrado."}), 404
+    
+    # Solo usuarios principales
+    if user.parent_id is not None:
+        return jsonify({"status":"error","message":"Esta función es solo para usuarios principales."}), 403
+
+    deleted_count = AllowedEmail.query.filter_by(user_id=user_id).delete()
+    
+    try:
+        db.session.commit()
+        return jsonify({"status":"ok", "deleted_count": deleted_count})
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Error al eliminar todos los correos para usuario {user_id}: {e}")
+        return jsonify({"status":"error","message":"Error al eliminar todos los correos."}), 500
+
+@subuser_bp.route("/add_current_user_emails_ajax", methods=["POST"])
+def add_current_user_emails_ajax():
+    """
+    Añade una lista de nuevos correos permitidos para el usuario actual (principal).
+    """
+    if not can_access_subusers():
+        return jsonify({"status":"error","message":"No autorizado"}),403
+
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"status":"error","message":"No hay usuario logueado."}), 401
+    
+    user = User.query.get(user_id)
+    if not user:
+        return jsonify({"status":"error","message":"Usuario no encontrado."}), 404
+    
+    # Solo usuarios principales
+    if user.parent_id is not None:
+        return jsonify({"status":"error","message":"Esta función es solo para usuarios principales."}), 403
+
+    data = request.get_json()
+    emails_to_add = data.get("emails", [])
+
+    if not emails_to_add:
+        return jsonify({"status":"error","message":"Faltan emails."}), 400
+
+    normalized_new_emails = list(set(
+        e.strip().lower() 
+        for e in emails_to_add if isinstance(e, str) and e.strip()
+    ))
+    
+    if not normalized_new_emails:
+        return jsonify({"status":"ok", "added_count": 0, "skipped_count": 0, "message":"No emails válidos para añadir."})
+
+    existing_emails = {ae.email for ae in user.allowed_email_entries.filter(AllowedEmail.email.in_(normalized_new_emails)).all()}
+    
+    new_email_objects = []
+    actually_added_count = 0
+    skipped_count = 0
+    for email in normalized_new_emails:
+        if email not in existing_emails:
+            new_email_objects.append(AllowedEmail(user_id=user_id, email=email))
+            actually_added_count += 1
+        else:
+            skipped_count += 1
+    
+    if not new_email_objects:
+        return jsonify({"status":"ok", "added_count": 0, "skipped_count": skipped_count, "message":"Todos los correos proporcionados ya existían."})
+
+    db.session.bulk_save_objects(new_email_objects)
+    
+    try:
+        db.session.commit()
+        return jsonify({"status":"ok", "added_count": actually_added_count, "skipped_count": skipped_count})
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Error en bulk insert para añadir correos a usuario {user_id}: {e}")
+        return jsonify({"status":"error","message":"Error al guardar los nuevos correos."}), 500
+
 @subuser_bp.route("/save_tools_permissions/<int:subuser_id>", methods=["POST"])
 def save_tools_permissions(subuser_id):
     """

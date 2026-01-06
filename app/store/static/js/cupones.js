@@ -7,7 +7,7 @@ const prevCouponBtn = document.getElementById('prevCouponPageBtn');
 const nextCouponBtn = document.getElementById('nextCouponPageBtn');
 const searchCouponInput = document.getElementById('searchCouponInput');
 let couponCurrentPage = 1;
-let couponPerPage = showCouponCount ? (showCouponCount.value === 'all' ? 9999 : parseInt(showCouponCount.value)) : 10;
+let couponPerPage = showCouponCount ? (showCouponCount.value === 'all' ? 9999 : parseInt(showCouponCount.value)) : 20;
 
 // Paginación para cupones ---
 function getCouponRows() {

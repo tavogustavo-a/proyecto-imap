@@ -5,7 +5,7 @@ from app.services.search_service import search_and_apply_filters, search_and_app
 from app.models import User
 from app.models.user import AllowedEmail
 from app.models.service import ServiceModel
-from app.store.models import SMSConfig, SMSMessage, AllowedSMSNumber, SMSRegex
+from app.store.models import SMSConfig, SMSMessage, AllowedSMSNumber, SMSRegex, TwoFAConfig
 from app.extensions import db
 from app.utils.timezone import utc_to_colombia
 from datetime import datetime, timedelta
@@ -33,28 +33,63 @@ def search_mails():
         user = User.query.get(user_id)
     else:
         user = None  # usuario anónimo
+    
 
     # Verificar si el servicio es SMS
     if service_id:
         service = ServiceModel.query.get(service_id)
         if service and service.visibility_mode == 'sms':
             # Lógica para búsqueda SMS (pasar el usuario para validaciones)
+            # search_sms_messages ya maneja la verificación de 2FA internamente
             return search_sms_messages(email_to_search, user)
 
+    # PRIMERO: Verificar si existe configuración 2FA para este correo (solo para correos normales, no SMS)
+    # Si existe, el correo ya está vinculado y no necesita estar en AllowedEmail
+    email_normalized = email_to_search.lower().strip()
+    has_2fa_config = False
+    configs_2fa = TwoFAConfig.query.filter(TwoFAConfig.is_enabled == True).all()
+    for cfg in configs_2fa:
+        emails_list = cfg.get_emails_list()
+        if email_normalized in emails_list:
+            has_2fa_config = True
+            break
+
     # Validar usuario (para búsquedas normales de correos)
+    # El admin puede consultar sin restricciones
+    # Si existe configuración 2FA, el correo ya está vinculado (no necesita AllowedEmail)
     if user:
-        if not user.enabled:
-            return jsonify({"error": "No tienes permiso al consultar este correo."}), 403
+        admin_username = current_app.config.get("ADMIN_USER", "admin")
+        # Verificar si es admin basándose SOLO en la base de datos (más confiable)
+        # Admin: username == admin_username Y parent_id is None
+        is_admin = (user.username == admin_username and user.parent_id is None)
         
-        # Si el usuario NO puede buscar cualquiera, verificamos si el email está permitido
-        if not user.can_search_any:
-            # Consulta a la nueva tabla AllowedEmail
-            is_allowed = user.allowed_email_entries.filter_by(email=email_to_search.lower()).first() is not None
-            # Alternativa (puede ser ligeramente más eficiente si no necesitas el objeto):
-            # is_allowed = db.session.query(AllowedEmail.query.filter_by(user_id=user.id, email=email_to_search.lower()).exists()).scalar()
+        # Si es admin, puede consultar sin restricciones (saltar todas las validaciones)
+        if is_admin:
+            # Admin puede consultar cualquier correo sin restricciones
+            pass
+        elif has_2fa_config:
+            # Si existe configuración 2FA, validar permisos ANTES de permitir búsqueda
+            # Esto evita mostrar el spinner cuando el usuario no tiene permisos
+            if not user.enabled:
+                return jsonify({"error": "No tienes permiso al consultar este correo."}), 403
             
-            if not is_allowed:
-                return jsonify({"error": "No tienes permiso para consultar este correo específico."}), 403
+            # Si el usuario NO puede buscar cualquiera, verificar AllowedEmail (igual que SMS)
+            if not user.can_search_any:
+                is_allowed = user.allowed_email_entries.filter_by(email=email_normalized).first() is not None
+                if not is_allowed:
+                    return jsonify({"error": "No tienes permiso al consultar este correo."}), 403
+            # Si tiene configuración 2FA y pasa las validaciones, permitir acceso
+        else:
+            # Si no es admin y NO tiene configuración 2FA, validar permisos normalmente
+            if not user.enabled:
+                return jsonify({"error": "No tienes permiso al consultar este correo."}), 403
+            
+            # Si el usuario NO puede buscar cualquiera, verificamos si el email está permitido
+            if not user.can_search_any:
+                # Verificar AllowedEmail (solo si NO tiene configuración 2FA)
+                is_allowed = user.allowed_email_entries.filter_by(email=email_normalized).first() is not None
+                if not is_allowed:
+                    return jsonify({"error": "No tienes permiso para consultar este correo específico."}), 403
     else:
         # Usuario anónimo => se permite o no (tu lógica actual)
         pass
@@ -71,34 +106,68 @@ def search_sms_messages(email_to_search, user=None):
     # Normalizar el correo a minúsculas
     email_normalized = email_to_search.lower().strip()
     
-    # PRIMERO: Validar permisos del usuario (igual que en search_mails)
+    # PRIMERO: Verificar si existe configuración 2FA para este correo
+    has_2fa_config = False
+    configs_2fa = TwoFAConfig.query.filter(TwoFAConfig.is_enabled == True).all()
+    for cfg in configs_2fa:
+        emails_list = cfg.get_emails_list()
+        if email_normalized in emails_list:
+            has_2fa_config = True
+            break
+    
+    # SEGUNDO: Validar permisos del usuario y determinar si es admin
+    is_admin_user = False
     if user:
-        if not user.enabled:
+        admin_username = current_app.config.get("ADMIN_USER", "admin")
+        # Verificar si es admin basándose SOLO en la base de datos
+        is_admin_user = (user.username == admin_username and user.parent_id is None)
+        
+        # Si es admin, puede consultar sin restricciones
+        if is_admin_user:
+            pass  # Admin puede consultar cualquier correo sin restricciones
+        elif has_2fa_config:
+            # Si existe configuración 2FA, el correo ya está vinculado (no necesita AllowedEmail)
+            # Validar solo que el usuario esté habilitado
+            if not user.enabled:
+                return jsonify({"error": "No tienes permiso al consultar este correo."}), 403
+            # Si tiene configuración 2FA, permitir acceso (no verificar can_search_any ni AllowedEmail)
+        else:
+            # Si no es admin y NO tiene configuración 2FA, validar permisos normalmente
+            if not user.enabled:
+                return jsonify({"error": "No tienes permiso al consultar este correo."}), 403
+            
+            # Si el usuario NO puede buscar cualquiera, verificamos si el email está permitido
+            if not user.can_search_any:
+                # Consulta a la tabla AllowedEmail del usuario
+                is_allowed = user.allowed_email_entries.filter_by(email=email_normalized).first() is not None
+                if not is_allowed:
+                    return jsonify({"error": "No tienes permiso para consultar este correo específico."}), 403
+    
+    # TERCERO: Obtener configuraciones SMS según permisos
+    # Si es admin o tiene configuración 2FA, buscar en TODAS las configuraciones SMS habilitadas
+    # Si no, buscar solo en las configuraciones donde el correo esté agregado en AllowedSMSNumber
+    
+    if is_admin_user or has_2fa_config:
+        # Admin o correo con 2FA: buscar en TODAS las configuraciones SMS habilitadas
+        enabled_configs = SMSConfig.query.filter_by(is_enabled=True).all()
+        if not enabled_configs:
+            return jsonify({"error": "No hay configuraciones SMS habilitadas."}), 500
+    else:
+        # Usuario normal sin 2FA: buscar solo en configuraciones donde el correo esté agregado
+        allowed_sms_entries = AllowedSMSNumber.query.filter_by(phone_number=email_normalized).all()
+        if not allowed_sms_entries:
             return jsonify({"error": "No tienes permiso al consultar este correo."}), 403
         
-        # Si el usuario NO puede buscar cualquiera, verificamos si el email está permitido
-        if not user.can_search_any:
-            # Consulta a la tabla AllowedEmail del usuario
-            is_allowed = user.allowed_email_entries.filter_by(email=email_normalized).first() is not None
-            
-            if not is_allowed:
-                return jsonify({"error": "No tienes permiso para consultar este correo específico."}), 403
-    
-    # SEGUNDO: Obtener TODOS los números SMS donde este correo esté agregado
-    allowed_sms_entries = AllowedSMSNumber.query.filter_by(phone_number=email_normalized).all()
-    if not allowed_sms_entries:
-        return jsonify({"error": "No tienes permiso al consultar este correo."}), 403
-    
-    # Obtener todos los sms_config_id únicos donde el correo esté agregado
-    sms_config_ids = list(set([entry.sms_config_id for entry in allowed_sms_entries]))
-    
-    # Obtener todas las configuraciones SMS
-    sms_configs = SMSConfig.query.filter(SMSConfig.id.in_(sms_config_ids)).all()
-    
-    # Verificar que todas las configuraciones estén habilitadas
-    enabled_configs = [config for config in sms_configs if config.is_enabled]
-    if not enabled_configs:
-        return jsonify({"error": "Ninguna configuración SMS asociada está habilitada."}), 500
+        # Obtener todos los sms_config_id únicos donde el correo esté agregado
+        sms_config_ids = list(set([entry.sms_config_id for entry in allowed_sms_entries]))
+        
+        # Obtener todas las configuraciones SMS
+        sms_configs = SMSConfig.query.filter(SMSConfig.id.in_(sms_config_ids)).all()
+        
+        # Verificar que todas las configuraciones estén habilitadas
+        enabled_configs = [config for config in sms_configs if config.is_enabled]
+        if not enabled_configs:
+            return jsonify({"error": "Ninguna configuración SMS asociada está habilitada."}), 500
     
     # Calcular la fecha límite: últimos 15 minutos
     time_limit = datetime.utcnow() - timedelta(minutes=15)
@@ -187,6 +256,80 @@ def search_sms_messages(email_to_search, user=None):
             "is_sms_result": True
         }]
     }), 200
+
+@api_bp.route("/2fa/code/<email>", methods=["GET"])
+def get_2fa_code_for_email(email):
+    """Obtiene el código 2FA actual para un correo específico"""
+    try:
+        import pyotp
+        from flask import session
+        
+        # Normalizar el correo
+        email_normalized = email.lower().strip()
+        
+        # PRIMERO: Buscar configuración 2FA para este correo (igual que SMS busca en AllowedSMSNumber)
+        configs = TwoFAConfig.query.filter(
+            TwoFAConfig.is_enabled == True
+        ).all()
+        
+        matching_config = None
+        for cfg in configs:
+            emails_list = cfg.get_emails_list()
+            if email_normalized in emails_list:
+                matching_config = cfg
+                break
+        
+        # Si no hay configuración 2FA para este correo, devolver error
+        if not matching_config:
+            return jsonify({"error": "No hay configuración 2FA para este correo"}), 404
+        
+        # SEGUNDO: Validar permisos del usuario (MISMA LÓGICA QUE SMS Y CORREOS NORMALES)
+        user_id = session.get("user_id")
+        
+        # Verificar si el usuario es admin ANTES de cualquier validación
+        # Basarse SOLO en la base de datos (más confiable que la sesión)
+        is_admin = False
+        if user_id:
+            user = User.query.get(user_id)
+            if user:
+                admin_username = current_app.config.get("ADMIN_USER", "admin")
+                # Verificar si es admin: username == admin_username y parent_id is None
+                is_admin = (user.username == admin_username and user.parent_id is None)
+        
+        # Si es admin, puede consultar sin restricciones (saltar TODAS las validaciones)
+        if not is_admin and user_id:
+            user = User.query.get(user_id)
+            if user:
+                # Si no es admin, validar permisos generales básicos
+                if not user.enabled:
+                    return jsonify({"error": "No tienes permiso al consultar este correo."}), 403
+                
+                # Si el usuario NO puede buscar cualquiera, verificar AllowedEmail (igual que SMS y correos normales)
+                if not user.can_search_any:
+                    # Verificar AllowedEmail: el correo debe estar en la lista de correos permitidos del usuario
+                    is_allowed = user.allowed_email_entries.filter_by(email=email_normalized).first() is not None
+                    if not is_allowed:
+                        return jsonify({"error": "No tienes permiso al consultar este correo."}), 403
+        
+        # Si llegamos aquí, el usuario tiene permisos (o es admin) y hay configuración 2FA
+        # Generar código TOTP
+        totp = pyotp.TOTP(matching_config.secret_key)
+        current_code = totp.now()
+        
+        # Calcular tiempo restante hasta el próximo código (30 segundos)
+        import time
+        current_time = int(time.time())
+        time_remaining = 30 - (current_time % 30)
+        
+        return jsonify({
+            "success": True,
+            "code": current_code,
+            "time_remaining": time_remaining,
+            "email": email_normalized
+        }), 200
+        
+    except Exception as e:
+        return jsonify({"error": f"Error al generar código 2FA: {str(e)}"}), 500
 
 @api_bp.route("/sms/android-receive", methods=["POST"])
 @api_bp.route("/sms/android/receive", methods=["POST"])  # ✅ Alias para compatibilidad con SMS Forwarder

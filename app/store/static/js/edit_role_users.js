@@ -2,7 +2,7 @@
 
 let allUsers = [];
 let currentUserPage = 1;
-let usersPerPage = 5;
+let usersPerPage = 20;
 let userSearch = '';
 
 function fetchAndRenderUsers() {

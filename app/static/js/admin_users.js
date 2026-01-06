@@ -26,6 +26,7 @@ document.addEventListener("DOMContentLoaded", function() {
   const editUserPosition = document.getElementById("editUserPosition");
   const editUserCanSearchAny = document.getElementById("editUserCanSearchAny");
   const editUserCanCreateSubusers = document.getElementById("editUserCanCreateSubusers");
+  const editUserCanManageEmails = document.getElementById("editUserCanManageEmails");
   const editUserSaveBtn = document.getElementById("editUserSaveBtn");
   const editUserCancelBtn = document.getElementById("editUserCancelBtn");
   const toggleEditPass = document.getElementById("toggleEditPass");
@@ -215,6 +216,7 @@ document.addEventListener("DOMContentLoaded", function() {
       const positionVal = editUserPosition.value.trim() || "1";
       const canSearch = editUserCanSearchAny.checked;
       const canCreateSub = editUserCanCreateSubusers.checked;
+      const canManageEmails = editUserCanManageEmails ? editUserCanManageEmails.checked : false;
       const fullNameVal = editUserFullName.value.trim();
       const phoneVal = editUserPhone.value.trim();
       const emailVal = editUserEmail.value.trim();
@@ -400,6 +402,7 @@ document.addEventListener("DOMContentLoaded", function() {
       const position = target.getAttribute("data-position") || "1";
       const canSearch = (target.getAttribute("data-cansearch") === "true");
       const canCreateSubusers = (target.getAttribute("data-cancreatesubusers") === "true");
+      const canManageEmails = (target.getAttribute("data-canmanageemails") === "true");
       const fullName = target.getAttribute("data-fullname") || "";
       const phone = target.getAttribute("data-phone") || "";
       const email = target.getAttribute("data-email") || "";
@@ -411,9 +414,16 @@ document.addEventListener("DOMContentLoaded", function() {
       editUserPosition.value = position;
       editUserCanSearchAny.checked = canSearch;
       editUserCanCreateSubusers.checked = canCreateSubusers;
+      if (editUserCanManageEmails) editUserCanManageEmails.checked = canManageEmails;
       editUserFullName.value = fullName;
       editUserPhone.value = phone;
       editUserEmail.value = email;
+
+      // Establecer el userId actual para agregar correos
+      editUserCurrentUserId = userId;
+      // Limpiar campo de correos
+      if (editUserAddEmailsInput) editUserAddEmailsInput.value = "";
+      if (editUserAddEmailsMsg) editUserAddEmailsMsg.textContent = "";
 
       // Mostrar popup y overlay correctamente
       showEditUserPopup();
@@ -517,6 +527,7 @@ document.addEventListener("DOMContentLoaded", function() {
       editBtn.dataset.position = escapeHtml(u.position || '');
       editBtn.dataset.cansearch = u.can_search_any ? 'true' : 'false';
       editBtn.dataset.cancreatesubusers = u.can_create_subusers ? 'true' : 'false';
+      editBtn.dataset.canmanageemails = (u.can_manage_emails || false) ? 'true' : 'false';
       editBtn.dataset.fullname = escapeHtml(u.full_name || '');
       editBtn.dataset.phone = escapeHtml(u.phone || '');
       editBtn.dataset.email = escapeHtml(u.email || '');
@@ -559,6 +570,8 @@ document.addEventListener("DOMContentLoaded", function() {
     const popup = document.getElementById('editUserPopup');
     if (overlay) overlay.style.display = 'none';
     if (popup) popup.style.display = 'none';
+    // Limpiar userId cuando se cierra el modal
+    editUserCurrentUserId = null;
   }
 
   // Event listeners para el popup
@@ -682,4 +695,337 @@ document.addEventListener("DOMContentLoaded", function() {
   if (editUserPhone) {
     validatePhoneInput(editUserPhone);
   }
+
+  // ======= ELIMINACIÓN MASIVA DE CORREOS DE TODOS LOS USUARIOS =======
+  const bulkDeleteEmailsForm = document.getElementById("bulkDeleteEmailsForm");
+  const bulkDeleteEmailsInput = document.getElementById("bulkDeleteEmailsInput");
+  const bulkDeleteEmailsBtn = document.getElementById("bulkDeleteEmailsBtn");
+  const bulkDeleteEmailsMessage = document.getElementById("bulkDeleteEmailsMessage");
+
+  // Función para parsear correos del texto (separados por comas, espacios o saltos de línea)
+  function parseEmailsFromText(text) {
+    if (!text || !text.trim()) {
+      return [];
+    }
+    
+    // Dividir por comas, espacios, saltos de línea, punto y coma, etc.
+    const emails = text
+      .split(/[,\s\n\r;]+/)
+      .map(email => email.trim().toLowerCase())
+      .filter(email => {
+        // Validar formato básico de email
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        return email && emailRegex.test(email);
+      });
+    
+    return [...new Set(emails)]; // Eliminar duplicados
+  }
+
+  // Función para mostrar mensaje
+  function showBulkDeleteMessage(message, isError = false) {
+    if (!bulkDeleteEmailsMessage) return;
+    
+    bulkDeleteEmailsMessage.textContent = message;
+    bulkDeleteEmailsMessage.className = `mt-05 text-center ${isError ? 'text-danger' : 'text-success'}`;
+    bulkDeleteEmailsMessage.style.display = 'block';
+    
+    // Ocultar mensaje después de 5 segundos si es éxito
+    if (!isError) {
+      setTimeout(() => {
+        if (bulkDeleteEmailsMessage) {
+          bulkDeleteEmailsMessage.style.display = 'none';
+        }
+      }, 5000);
+    }
+  }
+
+  // Manejar envío del formulario
+  if (bulkDeleteEmailsForm && bulkDeleteEmailsInput && bulkDeleteEmailsBtn) {
+    bulkDeleteEmailsForm.addEventListener("submit", function(e) {
+      e.preventDefault();
+      
+      const text = bulkDeleteEmailsInput.value.trim();
+      if (!text) {
+        showBulkDeleteMessage("Por favor ingresa al menos un correo.", true);
+        return;
+      }
+
+      const emailsToDelete = parseEmailsFromText(text);
+      if (emailsToDelete.length === 0) {
+        showBulkDeleteMessage("No se encontraron correos válidos en el texto ingresado.", true);
+        return;
+      }
+
+      // Confirmar antes de eliminar
+      if (!confirm(`¿Estás seguro de eliminar ${emailsToDelete.length} correo(s) de todos los usuarios?\n\nCorreos a eliminar:\n${emailsToDelete.join('\n')}`)) {
+        return;
+      }
+
+      // Deshabilitar botón y mostrar estado de carga
+      bulkDeleteEmailsBtn.disabled = true;
+      bulkDeleteEmailsBtn.textContent = 'Eliminando...';
+      bulkDeleteEmailsMessage.style.display = 'none';
+
+      // Enviar petición al servidor
+      fetch("/admin/delete_emails_from_all_users_ajax", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-CSRFToken": getCsrfToken()
+        },
+        body: JSON.stringify({ emails: emailsToDelete })
+      })
+      .then(response => {
+        if (!response.ok) {
+          return response.json().then(errData => {
+            throw new Error(errData.message || `Error del servidor: ${response.status}`);
+          });
+        }
+        return response.json();
+      })
+      .then(data => {
+        if (data.status === "ok") {
+          showBulkDeleteMessage(
+            data.message || `Se eliminaron ${data.deleted_count || emailsToDelete.length} instancia(s) de correo(s) de todos los usuarios.`,
+            false
+          );
+          bulkDeleteEmailsInput.value = ""; // Limpiar el campo
+        } else {
+          showBulkDeleteMessage(data.message || "Error desconocido al eliminar correos.", true);
+        }
+      })
+      .catch(err => {
+        console.error("Error al eliminar correos masivamente:", err);
+        showBulkDeleteMessage(`Error: ${err.message}`, true);
+      })
+      .finally(() => {
+        bulkDeleteEmailsBtn.disabled = false;
+        bulkDeleteEmailsBtn.textContent = 'Eliminar Correos de Todos los Usuarios';
+      });
+    });
+  }
+
+  // ======= FIN ELIMINACIÓN MASIVA DE CORREOS =======
+
+  // ======= AGREGAR CORREOS SIMPLE EN EL MODAL =======
+  const editUserAddEmailsInput = document.getElementById("editUserAddEmailsInput");
+  const editUserAddEmailsBtn = document.getElementById("editUserAddEmailsBtn");
+  const editUserAddEmailsMsg = document.getElementById("editUserAddEmailsMsg");
+  let editUserCurrentUserId = null;
+
+  // Añadir correos simple
+  if (editUserAddEmailsBtn && editUserAddEmailsInput && editUserAddEmailsMsg) {
+    editUserAddEmailsBtn.addEventListener("click", function() {
+      if (!editUserCurrentUserId) {
+        if (editUserAddEmailsMsg) { 
+          editUserAddEmailsMsg.textContent = 'Abre el modal de edición primero.'; 
+          editUserAddEmailsMsg.style.color = 'orange'; 
+        }
+        return;
+      }
+
+      const rawText = editUserAddEmailsInput.value.trim();
+      if (!rawText) {
+        if (editUserAddEmailsMsg) { 
+          editUserAddEmailsMsg.textContent = 'Campo vacío.'; 
+          editUserAddEmailsMsg.style.color = 'orange'; 
+        }
+        return;
+      }
+      
+      const emailsToAdd = rawText.split(/[\s,;\n]+/).map(e => e.trim().toLowerCase()).filter(e => e && e.includes('@'));
+      if (!emailsToAdd.length) {
+        if (editUserAddEmailsMsg) { 
+          editUserAddEmailsMsg.textContent = 'No se encontraron correos válidos.'; 
+          editUserAddEmailsMsg.style.color = 'orange'; 
+        }
+        return;
+      }
+
+      if (editUserAddEmailsMsg) { 
+        editUserAddEmailsMsg.textContent = "Añadiendo..."; 
+        editUserAddEmailsMsg.style.color = "orange"; 
+      }
+      editUserAddEmailsBtn.disabled = true;
+
+      fetch("/admin/add_allowed_emails_ajax", {
+        method: "POST",
+        headers: {"Content-Type": "application/json", "X-CSRFToken": getCsrfToken()},
+        body: JSON.stringify({ user_id: parseInt(editUserCurrentUserId, 10), emails: emailsToAdd })
+      })
+      .then(response => {
+        if (!response.ok) {
+          return response.json().then(errData => {
+            throw new Error(errData.message || `Error del servidor: ${response.status}`);
+          });
+        }
+        return response.json();
+      })
+      .then(data => {
+        if (data.status === "ok") {
+          if (editUserAddEmailsMsg) {
+            editUserAddEmailsMsg.textContent = `${data.added_count || 0} añadidos, ${data.skipped_count || 0} omitidos.`;
+            editUserAddEmailsMsg.style.color = "green";
+          }
+          editUserAddEmailsInput.value = "";
+          setTimeout(() => {
+            if (editUserAddEmailsMsg) editUserAddEmailsMsg.textContent = "";
+          }, 3000);
+        } else {
+          throw new Error(data.message || 'Error desconocido');
+        }
+      })
+      .catch(err => {
+        if (editUserAddEmailsMsg) { 
+          editUserAddEmailsMsg.textContent = `Error: ${err.message}`; 
+          editUserAddEmailsMsg.style.color = "red"; 
+        }
+      })
+      .finally(() => {
+        editUserAddEmailsBtn.disabled = false;
+      });
+    });
+  }
+
+  // Establecer userId cuando se abre el modal
+  if (userListContainer) {
+    userListContainer.addEventListener('click', function(e) {
+      if (e.target.classList.contains("edit-user-btn")) {
+        const userId = e.target.getAttribute("data-id");
+        if (userId) {
+          editUserCurrentUserId = userId;
+          // Limpiar campo y mensaje
+          if (editUserAddEmailsInput) editUserAddEmailsInput.value = "";
+          if (editUserAddEmailsMsg) editUserAddEmailsMsg.textContent = "";
+        }
+      }
+    });
+  }
+
+  // Limpiar cuando se cierra el modal
+  if (editUserCancelBtn) {
+    editUserCancelBtn.addEventListener('click', function() {
+      editUserCurrentUserId = null;
+      if (editUserAddEmailsInput) editUserAddEmailsInput.value = "";
+      if (editUserAddEmailsMsg) editUserAddEmailsMsg.textContent = "";
+    });
+  }
+
+  // ======= FIN AGREGAR CORREOS SIMPLE =======
+});
+      .finally(() => {
+        bulkDeleteEmailsBtn.disabled = false;
+        bulkDeleteEmailsBtn.textContent = 'Eliminar Correos de Todos los Usuarios';
+      });
+    });
+  }
+
+  // ======= FIN ELIMINACIÓN MASIVA DE CORREOS =======
+
+  // ======= AGREGAR CORREOS SIMPLE EN EL MODAL =======
+  const editUserAddEmailsInput = document.getElementById("editUserAddEmailsInput");
+  const editUserAddEmailsBtn = document.getElementById("editUserAddEmailsBtn");
+  const editUserAddEmailsMsg = document.getElementById("editUserAddEmailsMsg");
+  let editUserCurrentUserId = null;
+
+  // Añadir correos simple
+  if (editUserAddEmailsBtn && editUserAddEmailsInput && editUserAddEmailsMsg) {
+    editUserAddEmailsBtn.addEventListener("click", function() {
+      if (!editUserCurrentUserId) {
+        if (editUserAddEmailsMsg) { 
+          editUserAddEmailsMsg.textContent = 'Abre el modal de edición primero.'; 
+          editUserAddEmailsMsg.style.color = 'orange'; 
+        }
+        return;
+      }
+
+      const rawText = editUserAddEmailsInput.value.trim();
+      if (!rawText) {
+        if (editUserAddEmailsMsg) { 
+          editUserAddEmailsMsg.textContent = 'Campo vacío.'; 
+          editUserAddEmailsMsg.style.color = 'orange'; 
+        }
+        return;
+      }
+      
+      const emailsToAdd = rawText.split(/[\s,;\n]+/).map(e => e.trim().toLowerCase()).filter(e => e && e.includes('@'));
+      if (!emailsToAdd.length) {
+        if (editUserAddEmailsMsg) { 
+          editUserAddEmailsMsg.textContent = 'No se encontraron correos válidos.'; 
+          editUserAddEmailsMsg.style.color = 'orange'; 
+        }
+        return;
+      }
+
+      if (editUserAddEmailsMsg) { 
+        editUserAddEmailsMsg.textContent = "Añadiendo..."; 
+        editUserAddEmailsMsg.style.color = "orange"; 
+      }
+      editUserAddEmailsBtn.disabled = true;
+
+      fetch("/admin/add_allowed_emails_ajax", {
+        method: "POST",
+        headers: {"Content-Type": "application/json", "X-CSRFToken": getCsrfToken()},
+        body: JSON.stringify({ user_id: parseInt(editUserCurrentUserId, 10), emails: emailsToAdd })
+      })
+      .then(response => {
+        if (!response.ok) {
+          return response.json().then(errData => {
+            throw new Error(errData.message || `Error del servidor: ${response.status}`);
+          });
+        }
+        return response.json();
+      })
+      .then(data => {
+        if (data.status === "ok") {
+          if (editUserAddEmailsMsg) {
+            editUserAddEmailsMsg.textContent = `${data.added_count || 0} añadidos, ${data.skipped_count || 0} omitidos.`;
+            editUserAddEmailsMsg.style.color = "green";
+          }
+          editUserAddEmailsInput.value = "";
+          setTimeout(() => {
+            if (editUserAddEmailsMsg) editUserAddEmailsMsg.textContent = "";
+          }, 3000);
+        } else {
+          throw new Error(data.message || 'Error desconocido');
+        }
+      })
+      .catch(err => {
+        if (editUserAddEmailsMsg) { 
+          editUserAddEmailsMsg.textContent = `Error: ${err.message}`; 
+          editUserAddEmailsMsg.style.color = "red"; 
+        }
+      })
+      .finally(() => {
+        editUserAddEmailsBtn.disabled = false;
+      });
+    });
+  }
+
+  // Establecer userId cuando se abre el modal
+  if (userListContainer) {
+    userListContainer.addEventListener('click', function(e) {
+      if (e.target.classList.contains("edit-user-btn")) {
+        const userId = e.target.getAttribute("data-id");
+        if (userId) {
+          editUserCurrentUserId = userId;
+          // Limpiar campo y mensaje
+          if (editUserAddEmailsInput) editUserAddEmailsInput.value = "";
+          if (editUserAddEmailsMsg) editUserAddEmailsMsg.textContent = "";
+        }
+      }
+    });
+  }
+
+  // Limpiar cuando se cierra el modal
+  if (editUserCancelBtn) {
+    editUserCancelBtn.addEventListener('click', function() {
+      editUserCurrentUserId = null;
+      if (editUserAddEmailsInput) editUserAddEmailsInput.value = "";
+      if (editUserAddEmailsMsg) editUserAddEmailsMsg.textContent = "";
+    });
+  }
+
+  // ======= FIN AGREGAR CORREOS SIMPLE =======
+});
 });

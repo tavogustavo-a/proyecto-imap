@@ -36,6 +36,7 @@ def _get_principal_users_data(admin_username):
             "position": usr.position,
             "can_search_any": usr.can_search_any,
             "can_create_subusers": usr.can_create_subusers,
+            "can_manage_emails": usr.can_manage_emails,
             "parent_id": usr.parent_id if usr.parent_id else None,
             "full_name": usr.full_name or "",
             "phone": usr.phone or "",
@@ -96,6 +97,7 @@ def search_users_ajax():
             "position": u.position,
             "can_search_any": u.can_search_any,
             "can_create_subusers": u.can_create_subusers,
+            "can_manage_emails": u.can_manage_emails,
             "parent_id": u.parent_id if u.parent_id else None,
             "full_name": u.full_name or "",
             "phone": u.phone or "",
@@ -382,6 +384,7 @@ def update_user_ajax():
         new_position = data.get("position", 1) if "position" in data else 1
         can_search_any = data.get("can_search_any", False) if "can_search_any" in data else False
         new_can_create_subusers = data.get("can_create_subusers", False) if "can_create_subusers" in data else False
+        new_can_manage_emails = data.get("can_manage_emails", False) if "can_manage_emails" in data else False
         new_full_name = data.get("full_name", "").strip() if "full_name" in data else ""
         new_phone = data.get("phone", "").strip() if "phone" in data else ""
         new_email = data.get("email", None)
@@ -444,6 +447,15 @@ def update_user_ajax():
         old_can_sub = user_to_update.can_create_subusers
         new_can_sub = bool(new_can_create_subusers)
         user_to_update.can_create_subusers = new_can_sub
+        
+        # Manejo de can_manage_emails
+        user_to_update.can_manage_emails = bool(new_can_manage_emails)
+
+        # Manejo de can_manage_emails
+        user_to_update.can_manage_emails = bool(new_can_manage_emails)
+
+        # Manejo de can_manage_emails
+        user_to_update.can_manage_emails = bool(new_can_manage_emails)
 
         # --- INICIO: Lógica de Inicialización/Limpieza de Defaults ---
         if not old_can_sub and new_can_sub:
@@ -581,7 +593,6 @@ def search_allowed_emails_ajax():
 
 
 @admin_bp.route("/delete_allowed_email_ajax", methods=["POST"])
-@admin_required
 def delete_allowed_email_ajax():
     """
     Elimina un correo específico de AllowedEmail de un usuario principal
@@ -594,7 +605,10 @@ def delete_allowed_email_ajax():
     if not user_id or not email_to_delete:
         return jsonify({"status":"error","message":"Faltan datos (user_id o email)."}), 400
 
-    user = User.query.get_or_404(user_id)
+    can_manage, user = can_manage_user_emails(user_id)
+    if not can_manage:
+        return jsonify({"status": "error", "message": "No tienes permiso para gestionar estos correos."}), 403
+    
     if user.parent_id is not None:
         return jsonify({"status": "error", "message": "Usuario no es principal"}), 403
 
@@ -699,6 +713,45 @@ def delete_many_emails_ajax():
     except Exception as e:
         db.session.rollback()
         current_app.logger.error(f"Error al eliminar multiples correos para user {user_id} y/o sus sub-usuarios: {e}", exc_info=True)
+        return jsonify({"status":"error","message":"Error al eliminar correos."}), 500
+
+
+@admin_bp.route("/delete_emails_from_all_users_ajax", methods=["POST"])
+@admin_required
+def delete_emails_from_all_users_ajax():
+    """
+    Elimina correos masivamente de TODOS los usuarios que los tengan vinculados.
+    Similar a la funcionalidad de búsqueda y eliminación en la plantilla email,
+    pero elimina el correo de todos los usuarios de una vez.
+    """
+    data = request.get_json()
+    emails_to_delete = data.get("emails", [])
+
+    if not emails_to_delete:
+        return jsonify({"status":"error","message":"Faltan datos (lista de emails)."}), 400
+
+    # Normalizar emails a eliminar
+    normalized_emails = [e.strip().lower() for e in emails_to_delete if isinstance(e, str) and e.strip()]
+    if not normalized_emails:
+        return jsonify({"status":"ok", "message":"No emails validos para eliminar."})
+
+    try:
+        # Eliminar de TODOS los usuarios (principales y sub-usuarios) usando IN clause
+        deleted_count = AllowedEmail.query.filter(
+            AllowedEmail.email.in_(normalized_emails)
+        ).delete(synchronize_session=False)
+
+        db.session.commit()
+
+        return jsonify({
+            "status":"ok",
+            "message":f"Se eliminaron {deleted_count} instancia(s) de correo(s) de todos los usuarios.",
+            "deleted_count": deleted_count
+        })
+
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Error al eliminar correos masivamente de todos los usuarios: {e}", exc_info=True)
         return jsonify({"status":"error","message":"Error al eliminar correos."}), 500
 
 
@@ -973,6 +1026,10 @@ def list_allowed_emails_paginated():
             "per_page": pagination.per_page if per_page > 0 else -1, # Devolver -1 si es "Todos"
             "total_pages": pagination.pages,
             "total_items": pagination.total,
+            "has_prev": pagination.has_prev,
+            "has_next": pagination.has_next
+        }
+    })
             "has_prev": pagination.has_prev,
             "has_next": pagination.has_next
         }

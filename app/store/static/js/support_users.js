@@ -76,7 +76,7 @@ document.addEventListener('DOMContentLoaded', function() {
             // Mostrar todos los usuarios
             pageUsers = filteredUsers;
         } else {
-            const perPage = parseInt(perPageValue) || 10;
+            const perPage = parseInt(perPageValue) || 20;
             const startIndex = (currentPage - 1) * perPage;
             const endIndex = startIndex + perPage;
             pageUsers = filteredUsers.slice(startIndex, endIndex);
@@ -111,7 +111,7 @@ document.addEventListener('DOMContentLoaded', function() {
             paginationButtons.style.display = 'none';
             return;
         } else {
-            const perPage = parseInt(perPageValue) || 10;
+            const perPage = parseInt(perPageValue) || 20;
             totalPages = Math.ceil(filteredUsers.length / perPage);
             paginationButtons.style.display = totalPages > 1 ? 'flex' : 'none';
         }

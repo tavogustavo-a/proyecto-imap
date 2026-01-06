@@ -11,7 +11,7 @@
 
 {% block content %}
 
-<div class="container container-max-width-900"
+<div class="container container-max-width-900 usuarios-page"
      data-clear-trigger-log-url="{{ url_for('admin_bp.clear_trigger_log') }}">
 
   <!-- MENÚ LATERAL MÓVIL -->
@@ -209,6 +209,30 @@
   </div>
 </div>
 
+<!-- Sección de Eliminación Masiva de Correos -->
+<div class="container container-max-width-900 usuarios-page mt-2">
+  <div class="admin-card">
+    <h4 class="mb-1 text-center">🗑️ Sacar Masivamente Correos de los Usuarios</h4>
+
+    <form id="bulkDeleteEmailsForm">
+      <label for="bulkDeleteEmailsInput" class="sr-only">Correos a eliminar</label>
+      <textarea
+        id="bulkDeleteEmailsInput"
+        rows="4"
+        placeholder="Ingresa uno o varios correos (separados por comas, espacios o saltos de línea). Ejemplo: correo1@test.com, correo2@test.com..."
+        class="d-block mb-05 w-100"
+        autocomplete="off"
+      ></textarea>
+
+      <div class="d-flex gap-05 justify-content-center">
+        <button type="submit" id="bulkDeleteEmailsBtn" class="btn-red">Eliminar Correos de Todos los Usuarios</button>
+      </div>
+
+      <div id="bulkDeleteEmailsMessage" class="mt-05 text-center"></div>
+    </form>
+  </div>
+</div>
+
 
 <!-- POPUP Editar Usuario -->
 <div
@@ -304,6 +328,12 @@
     <div class="mb-05">
       <input type="checkbox" id="editUserCanCreateSubusers" name="editUserCanCreateSubusers">
       <label for="editUserCanCreateSubusers">Puede crear sub-usuarios</label>
+    </div>
+
+    <!-- Checkbox para "Puede gestionar sus propios correos" -->
+    <div class="mb-05">
+      <input type="checkbox" id="editUserCanManageEmails" name="editUserCanManageEmails">
+      <label for="editUserCanManageEmails">Puede gestionar sus propios correos</label>
     </div>
 
     <button type="submit" id="editUserSaveBtn" class="btn-green mr-05">Guardar</button>

@@ -57,12 +57,12 @@ document.addEventListener("DOMContentLoaded", function() {
 
   
   let currentPage = 1;
-  let currentPerPage = 10;
+  let currentPerPage = 20;
   if (perPageSelect) perPageSelect.value = currentPerPage;
 
-  function fetchAllowedEmails(page = 1, perPage = 10) {
+  function fetchAllowedEmails(page = 1, perPage = 20) {
     currentPage = page;
-    currentPerPage = parseInt(perPage, 10) || 10;
+    currentPerPage = parseInt(perPage, 10) || 20;
     if (currentPerPage === -1) {
         perPage = 999999;
     } else {

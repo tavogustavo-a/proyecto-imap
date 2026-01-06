@@ -54,7 +54,7 @@ document.addEventListener('DOMContentLoaded', function() {
         return null;
     }
 
-    function fetchAllowedNumbers(page = 1, perPage = 10) {
+    function fetchAllowedNumbers(page = 1, perPage = 20) {
         const smsConfigId = getSelectedSMSConfigId();
         if (!smsConfigId) {
             if (allowedNumbersTextContainer) {
@@ -158,7 +158,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     if (perPageSelectNumbers) {
         perPageSelectNumbers.addEventListener("change", function() {
-            currentPerPageNumbers = parseInt(this.value, 10) || 10;
+            currentPerPageNumbers = parseInt(this.value, 10) || 20;
             fetchAllowedNumbers(1, currentPerPageNumbers);
         });
     }

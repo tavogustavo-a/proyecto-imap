@@ -272,4 +272,378 @@ document.addEventListener("DOMContentLoaded", function() {
       }); // Fin del event listener principal
   } // Fin if (subusersContainer)
 
+  // ======= GESTIÓN DE CORREOS DEL USUARIO PRINCIPAL =======
+  const subuserManagementContainer = document.getElementById("subuser-management-container");
+  const currentUserId = subuserManagementContainer ? subuserManagementContainer.dataset.userId : null;
+
+  if (!currentUserId) {
+    console.warn("No se encontró user_id para gestión de correos");
+  } else {
+    // Variables de paginación
+    let subuserCurrentPage = 1;
+    let subuserCurrentPerPage = 20;
+
+    // Elementos
+    const subuserSearchEmailsForm = document.getElementById("searchSubuserEmailsForm");
+    const subuserSearchEmailsInput = document.getElementById("searchSubuserEmailsInput");
+    const subuserEmailsSearchResults = document.getElementById("subuserEmailsSearchResults");
+    const subuserSearchStatus = document.getElementById("subuserSearchStatus");
+    const subuserDeleteDisplayedBtn = document.getElementById("subuserDeleteDisplayedBtn");
+    const subuserDeleteDisplayedContainer = document.getElementById("subuserDeleteDisplayedContainer");
+    const subuserPerPageSelect = document.getElementById("subuserPerPageSelect");
+    const subuserAllowedEmailsTextContainer = document.getElementById("subuserAllowedEmailsTextContainer");
+    const subuserPaginationInfo = document.getElementById("subuserPaginationInfo");
+    const subuserDeleteAllEmailsBtn = document.getElementById("subuserDeleteAllEmailsBtn");
+    const subuserPrevPageBtn = document.getElementById("subuserPrevPageBtn");
+    const subuserNextPageBtn = document.getElementById("subuserNextPageBtn");
+    const subuserAddEmailsInput = document.getElementById("subuserAddEmailsInput");
+    const subuserAddEmailsBtn = document.getElementById("subuserAddEmailsBtn");
+    const subuserAddEmailsMsg = document.getElementById("subuserAddEmailsMsg");
+
+    let subuserCurrentlyDisplayedEmails = [];
+
+    // Función helper
+    function escapeHtml(text) {
+      if (!text) return '';
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    function handleFetchResponse(response) {
+      if (!response.ok) {
+        return response.json().then(errData => {
+          throw new Error(errData.message || `Error del servidor: ${response.status}`);
+        });
+      }
+      return response.json();
+    }
+
+    // Función para cargar correos
+    function fetchSubuserAllowedEmails(page = 1, perPage = 20) {
+      subuserCurrentPage = page;
+      subuserCurrentPerPage = parseInt(perPage, 10) || 20;
+      if (subuserCurrentPerPage === -1) {
+        perPage = 999999;
+      } else {
+        perPage = subuserCurrentPerPage;
+      }
+      
+      const url = `/subusers/list_current_user_emails_paginated?page=${page}&per_page=${perPage}`;
+      
+      if (subuserAllowedEmailsTextContainer) subuserAllowedEmailsTextContainer.innerHTML = "<p class='text-secondary'>Cargando...</p>";
+      
+      fetch(url, {
+        method: "GET",
+        headers: { "X-CSRFToken": getCsrfToken() }
+      })
+      .then(handleFetchResponse)
+      .then(data => {
+        if (data.status === "ok") {
+          if (subuserAllowedEmailsTextContainer) renderSubuserAllowedEmailsText(data.emails);
+          if (subuserPaginationInfo) updateSubuserPaginationControls(data.pagination);
+        } else {
+          if (subuserAllowedEmailsTextContainer) subuserAllowedEmailsTextContainer.innerHTML = `<p class='text-danger'>Error: ${data.message || 'No se pudieron cargar los correos.'}</p>`;
+        }
+      })
+      .catch(err => {
+        console.error("Fetch error list emails:", err);
+        if (subuserAllowedEmailsTextContainer) subuserAllowedEmailsTextContainer.innerHTML = `<p class='text-danger'>Error al cargar correos: ${err.message}</p>`;
+      });
+    }
+
+    function renderSubuserAllowedEmailsText(emails) {
+      if (!subuserAllowedEmailsTextContainer) return;
+      if (!emails || emails.length === 0) {
+        subuserAllowedEmailsTextContainer.textContent = "No hay correos permitidos asignados.";
+        return;
+      }
+      subuserAllowedEmailsTextContainer.textContent = emails.join('\n');
+    }
+
+    function updateSubuserPaginationControls(pagination) {
+      if (!pagination) return;
+
+      if (subuserPaginationInfo) subuserPaginationInfo.textContent = `Página ${pagination.page} de ${pagination.total_pages}.`;
+
+      if (subuserPrevPageBtn) subuserPrevPageBtn.disabled = !pagination.has_prev;
+      if (subuserNextPageBtn) subuserNextPageBtn.disabled = !pagination.has_next;
+      
+      if (subuserDeleteAllEmailsBtn) {
+        const totalItems = pagination.total_items || 0;
+        if (totalItems > 0) {
+          subuserDeleteAllEmailsBtn.textContent = `Eliminar Todos (${totalItems})`;
+          subuserDeleteAllEmailsBtn.disabled = false;
+          subuserDeleteAllEmailsBtn.style.display = 'inline-block';
+        } else {
+          subuserDeleteAllEmailsBtn.textContent = 'Eliminar Todos';
+          subuserDeleteAllEmailsBtn.disabled = true;
+        }
+      }
+      
+      if (subuserPerPageSelect) {
+        if (pagination.per_page >= 999999) {
+          subuserPerPageSelect.value = "-1";
+        } else {
+          subuserPerPageSelect.value = pagination.per_page;
+        }
+      }
+    }
+
+    // Event listeners para paginación
+    if (subuserPrevPageBtn) {
+      subuserPrevPageBtn.addEventListener("click", () => {
+        if (subuserCurrentPage > 1) fetchSubuserAllowedEmails(subuserCurrentPage - 1, subuserCurrentPerPage);
+      });
+    }
+    if (subuserNextPageBtn) {
+      subuserNextPageBtn.addEventListener("click", () => {
+        fetchSubuserAllowedEmails(subuserCurrentPage + 1, subuserCurrentPerPage);
+      });
+    }
+    if (subuserPerPageSelect) {
+      subuserPerPageSelect.addEventListener("change", () => {
+        const newPerPage = parseInt(subuserPerPageSelect.value, 10);
+        fetchSubuserAllowedEmails(1, newPerPage);
+      });
+    }
+
+    // Eliminar todos los correos
+    if (subuserDeleteAllEmailsBtn) {
+      subuserDeleteAllEmailsBtn.addEventListener("click", () => {
+        if (!confirm("¿Seguro que quieres eliminar TODOS los correos permitidos para este usuario? Esta acción no se puede deshacer.")) {
+          return;
+        }
+        
+        fetch("/subusers/delete_all_current_user_emails_ajax", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-CSRFToken": getCsrfToken()
+          },
+          body: JSON.stringify({})
+        })
+        .then(handleFetchResponse)
+        .then(data => {
+          if (data.status === "ok") {
+            alert(`${data.deleted_count || 0} correos eliminados.`);
+            fetchSubuserAllowedEmails(1, subuserCurrentPerPage);
+          } else {
+            alert(`Error al eliminar todos: ${data.message || 'Error desconocido'}`);
+          }
+        })
+        .catch(err => {
+          console.error("Fetch error delete all:", err);
+          alert(`Error de red al eliminar todos: ${err.message}`);
+        });
+      });
+    }
+
+    // Búsqueda y eliminación de correos
+    if (subuserSearchEmailsForm && subuserSearchEmailsInput && subuserEmailsSearchResults) {
+      const limpiarBtn = subuserSearchEmailsForm.querySelector('button[type="submit"]');
+      if (limpiarBtn) {
+        limpiarBtn.type = 'button';
+        limpiarBtn.addEventListener('click', function(e) {
+          subuserSearchEmailsInput.value = '';
+          subuserEmailsSearchResults.innerHTML = '';
+          subuserEmailsSearchResults.style.display = 'none';
+          if (subuserSearchStatus) subuserSearchStatus.textContent = '';
+          if (subuserDeleteDisplayedContainer) subuserDeleteDisplayedContainer.classList.add('d-none');
+          subuserCurrentlyDisplayedEmails = [];
+        });
+      }
+
+      subuserSearchEmailsForm.addEventListener("submit", function(e) {
+        e.preventDefault();
+        const searchText = subuserSearchEmailsInput.value.trim();
+        if (!searchText) {
+          renderSubuserEmailsResults([]);
+          return;
+        }
+
+        fetch("/subusers/search_current_user_emails_ajax", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-CSRFToken": getCsrfToken()
+          },
+          body: JSON.stringify({ search_text: searchText })
+        })
+        .then(handleFetchResponse)
+        .then(data => {
+          if (data.status === "ok") {
+            subuserCurrentlyDisplayedEmails = data.emails || [];
+            renderSubuserEmailsResults(subuserCurrentlyDisplayedEmails);
+          } else {
+            subuserEmailsSearchResults.innerHTML = `<p class='text-danger'>Error: ${data.message || 'Respuesta inválida'}</p>`;
+            if (subuserSearchStatus) subuserSearchStatus.textContent = '';
+            if (subuserDeleteDisplayedContainer) subuserDeleteDisplayedContainer.classList.add('d-none');
+          }
+        })
+        .catch(err => {
+          console.error("Fetch error search:", err);
+          subuserEmailsSearchResults.innerHTML = `<p class='text-danger'>Error al buscar: ${err.message}</p>`;
+          if (subuserSearchStatus) subuserSearchStatus.textContent = '';
+          if (subuserDeleteDisplayedContainer) subuserDeleteDisplayedContainer.classList.add('d-none');
+        });
+      });
+    }
+
+    function renderSubuserEmailsResults(emails) {
+      if (!subuserEmailsSearchResults) return;
+      subuserEmailsSearchResults.innerHTML = '';
+      if (!emails || emails.length === 0) {
+        subuserEmailsSearchResults.style.display = 'none';
+        if (subuserDeleteDisplayedContainer) subuserDeleteDisplayedContainer.classList.add('d-none');
+        return;
+      }
+
+      subuserEmailsSearchResults.style.display = 'block';
+      emails.forEach(email => {
+        const itemDiv = document.createElement('div');
+        itemDiv.classList.add('search-result-item');
+        itemDiv.innerHTML = `
+          <span>${escapeHtml(email)}</span>
+          <button class="delete-search-result-btn" data-email="${escapeHtml(email)}" title="Eliminar este correo">X</button>
+        `;
+        subuserEmailsSearchResults.appendChild(itemDiv);
+      });
+
+      if (subuserDeleteDisplayedBtn && subuserDeleteDisplayedContainer) {
+        subuserDeleteDisplayedBtn.textContent = `Eliminar ${emails.length} Mostrados`;
+        subuserDeleteDisplayedContainer.classList.remove('d-none');
+        subuserDeleteDisplayedBtn.disabled = false;
+      }
+    }
+
+    if (subuserEmailsSearchResults) {
+      subuserEmailsSearchResults.addEventListener("click", function(e) {
+        if (e.target.classList.contains("delete-search-result-btn")) {
+          e.preventDefault();
+          const button = e.target;
+          const emailToRemove = button.getAttribute("data-email");
+          if (!emailToRemove || !confirm(`¿Eliminar ${emailToRemove}?`)) { return; }
+
+          button.disabled = true;
+          button.textContent = '...';
+
+          fetch("/subusers/delete_current_user_email_ajax", {
+            method: "POST",
+            headers: {"Content-Type": "application/json", "X-CSRFToken": getCsrfToken()},
+            body: JSON.stringify({ email: emailToRemove })
+          })
+          .then(handleFetchResponse)
+          .then(data => {
+            if (data.status === "ok") {
+              button.closest('.search-result-item').remove();
+              subuserCurrentlyDisplayedEmails = subuserCurrentlyDisplayedEmails.filter(email => email !== emailToRemove);
+              if (subuserCurrentlyDisplayedEmails.length > 0) {
+                if (subuserDeleteDisplayedBtn) subuserDeleteDisplayedBtn.textContent = `Eliminar ${subuserCurrentlyDisplayedEmails.length} Mostrados`;
+                if (subuserDeleteDisplayedContainer) subuserDeleteDisplayedContainer.classList.remove('d-none');
+              } else {
+                subuserEmailsSearchResults.style.display = 'none';
+                if (subuserDeleteDisplayedContainer) subuserDeleteDisplayedContainer.classList.add('d-none');
+              }
+              fetchSubuserAllowedEmails(subuserCurrentPage, subuserCurrentPerPage);
+            } else {
+              alert(`Error: ${data.message || 'Error desconocido'}`);
+              button.disabled = false;
+            }
+          })
+          .catch(err => {
+            alert(`Error de red: ${err.message}`);
+            button.disabled = false;
+          });
+        }
+      });
+    }
+
+    if (subuserDeleteDisplayedBtn) {
+      subuserDeleteDisplayedBtn.addEventListener('click', function(e) {
+        e.preventDefault();
+        const emailsToDelete = subuserCurrentlyDisplayedEmails;
+
+        if (!emailsToDelete || emailsToDelete.length === 0) { return; }
+        if (!confirm(`¿Eliminar los ${emailsToDelete.length} correos mostrados?`)) { return; }
+
+        subuserDeleteDisplayedBtn.disabled = true;
+        subuserDeleteDisplayedBtn.textContent = 'Eliminando...';
+
+        fetch("/subusers/delete_many_current_user_emails_ajax", {
+          method: "POST",
+          headers: {"Content-Type": "application/json", "X-CSRFToken": getCsrfToken()},
+          body: JSON.stringify({ emails: emailsToDelete })
+        })
+        .then(handleFetchResponse)
+        .then(data => {
+          if (data.status === "ok") {
+            if (subuserEmailsSearchResults) subuserEmailsSearchResults.innerHTML = "";
+            if (subuserEmailsSearchResults) subuserEmailsSearchResults.style.display = 'none';
+            if (subuserDeleteDisplayedContainer) subuserDeleteDisplayedContainer.classList.add('d-none');
+            subuserCurrentlyDisplayedEmails = [];
+            fetchSubuserAllowedEmails(subuserCurrentPage, subuserCurrentPerPage);
+          } else {
+            alert(`Error: ${data.message || 'Error desconocido'}`);
+          }
+        })
+        .catch(err => {
+          alert(`Error de red: ${err.message}`);
+        })
+        .finally(() => {
+          subuserDeleteDisplayedBtn.disabled = false;
+          subuserDeleteDisplayedBtn.textContent = 'Eliminar X Mostrados';
+        });
+      });
+    }
+
+    // Añadir correos
+    if (subuserAddEmailsBtn && subuserAddEmailsInput && subuserAddEmailsMsg) {
+      subuserAddEmailsBtn.addEventListener("click", function() {
+        const rawText = subuserAddEmailsInput.value.trim();
+        if (!rawText) {
+          if (subuserAddEmailsMsg) { subuserAddEmailsMsg.textContent = 'Campo vacío.'; subuserAddEmailsMsg.style.color = 'orange'; }
+          return;
+        }
+        const emailsToAdd = rawText.split(/[\s,;\n]+/).map(e => e.trim().toLowerCase()).filter(e => e && e.includes('@'));
+        if (!emailsToAdd.length) {
+          if (subuserAddEmailsMsg) { subuserAddEmailsMsg.textContent = 'No se encontraron correos válidos.'; subuserAddEmailsMsg.style.color = 'orange'; }
+          return;
+        }
+
+        if (subuserAddEmailsMsg) { subuserAddEmailsMsg.textContent = "Añadiendo..."; subuserAddEmailsMsg.style.color = "orange"; }
+        subuserAddEmailsBtn.disabled = true;
+
+        fetch("/subusers/add_current_user_emails_ajax", {
+          method: "POST",
+          headers: {"Content-Type": "application/json", "X-CSRFToken": getCsrfToken()},
+          body: JSON.stringify({ emails: emailsToAdd })
+        })
+        .then(handleFetchResponse)
+        .then(data => {
+          if (data.status === "ok") {
+            if (subuserAddEmailsMsg) {
+              subuserAddEmailsMsg.textContent = `${data.added_count || 0} añadidos, ${data.skipped_count || 0} omitidos. Recargando lista...`;
+              subuserAddEmailsMsg.style.color = "green";
+            }
+            subuserAddEmailsInput.value = "";
+            fetchSubuserAllowedEmails(1, subuserCurrentPerPage);
+          } else {
+            throw new Error(data.message || 'Error desconocido');
+          }
+        })
+        .catch(err => {
+          if (subuserAddEmailsMsg) { subuserAddEmailsMsg.textContent = `Error: ${err.message}`; subuserAddEmailsMsg.style.color = "red"; }
+        })
+        .finally(() => {
+          subuserAddEmailsBtn.disabled = false;
+        });
+      });
+    }
+
+    // Cargar correos al iniciar
+    fetchSubuserAllowedEmails(1, subuserCurrentPerPage);
+  }
+  // ======= FIN GESTIÓN DE CORREOS DEL USUARIO PRINCIPAL =======
+
 }); // Fin DOMContentLoaded 

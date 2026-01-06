@@ -7,7 +7,7 @@ let currentRoleId = null;
 // Obtener todos los productos de la tabla al cargar (del DOM)
 let allEditProducts = [];
 let currentEditPage = 1;
-let editProductsPerPage = 5;
+let editProductsPerPage = 20;
 let editProductSearch = '';
 
 function getEditProductsFromDOM() {

@@ -539,4 +539,26 @@ class AllowedSMSNumber(db.Model):
     def __repr__(self):
         return f'<AllowedSMSNumber {self.phone_number} (config: {self.sms_config_id})>'
 
+class TwoFAConfig(db.Model):
+    """Modelo para almacenar configuraciones de 2FA por correo (TOTP)"""
+    __tablename__ = "twofa_configs"
+    
+    id = db.Column(db.Integer, primary_key=True)
+    secret_key = db.Column(db.String(255), nullable=False)  # Secreto TOTP (ej: LDPUPZLQRGQ5VDD6HORPH44OMXGCDGFP)
+    emails = db.Column(db.Text, nullable=False)  # Correos asociados separados por coma
+    is_enabled = db.Column(db.Boolean, default=True, nullable=False, index=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    def get_emails_list(self):
+        """Retorna una lista de correos normalizados"""
+        if not self.emails:
+            return []
+        # Separar por coma o espacio, normalizar y limpiar
+        emails = self.emails.replace(',', ' ').split()
+        return [email.strip().lower() for email in emails if email.strip()]
+    
+    def __repr__(self):
+        return f'<TwoFAConfig id={self.id} emails={self.emails[:50]}...>'
+
  

@@ -13,6 +13,7 @@
   <script src="{{ url_for('store_bp.static', filename='js/sms_configs.js') }}" defer></script>
   <script src="{{ url_for('store_bp.static', filename='js/sms_list.js') }}" defer></script>
   <script src="{{ url_for('store_bp.static', filename='js/sms_numbers.js') }}" defer></script>
+  <script src="{{ url_for('store_bp.static', filename='js/twofa_configs.js') }}" defer></script>
 {% endblock %}
 
 {% block content %}
@@ -60,7 +61,7 @@
         <div class="d-flex align-items-center gap-05">
           <label for="perPageSelectNumbers"><strong>Mostrar:</strong></label>
           <select id="perPageSelectNumbers" class="select-padding-3px" autocomplete="off">
-             <option value="10" selected>10</option><option value="20">20</option><option value="30">30</option><option value="50">50</option><option value="100">100</option><option value="300">300</option><option value="-1">Todos</option>
+             <option value="10">10</option><option value="20" selected>20</option><option value="30">30</option><option value="50">50</option><option value="100">100</option><option value="300">300</option><option value="-1">Todos</option>
           </select>
         </div>
       </div>
@@ -97,7 +98,7 @@
     <!-- Sección de Configuración Android -->
     <div id="android-sms-section" class="mb-2">
       <h4 class="mb-1 text-center">📱 Números Android</h4>
-      <p class="text-center text-secondary mb-1" style="font-size: 0.9rem;">
+      <p class="text-center text-secondary mb-1 twofa-description-text">
         Configura múltiples números Android para recibir SMS directamente desde tus celulares usando SMS Forwarder
       </p>
       
@@ -127,21 +128,19 @@
         
         <label for="android-api-key" class="sr-only">API Key (Opcional)</label>
         <div class="d-flex align-items-center gap-05 mb-05">
-          <div class="flex-grow-1 d-flex align-items-center" style="position: relative;">
+          <div class="flex-grow-1 d-flex align-items-center twofa-api-key-container">
             <input
               type="password"
               id="android-api-key"
               placeholder="API Key (opcional, para mayor seguridad)"
-              class="flex-grow-1"
+              class="flex-grow-1 twofa-api-key-input"
               autocomplete="off"
-              style="padding-right: 2.5rem;"
             >
             <button 
               type="button" 
               id="toggle-api-key-visibility" 
-              class="btn-blue btn-small" 
+              class="btn-blue btn-small twofa-api-key-toggle" 
               title="Mostrar/Ocultar API Key"
-              style="position: absolute; right: 0.25rem; padding: 0.25rem 0.5rem; border: none; background: transparent; color: #666;"
             >
               <i class="fas fa-eye" id="api-key-eye-icon"></i>
             </button>
@@ -160,17 +159,17 @@
       </form>
       
       <!-- Lista de números Android configurados (OCULTA - solo se usa el modal de edición) -->
-      <div id="android-configs-list" class="mb-2" style="display: none;">
+      <div id="android-configs-list" class="mb-2 d-none">
         <p class="text-center">Cargando números Android...</p>
       </div>
       
-      <div class="alert-info p-1 mb-1" style="font-size: 0.85rem;">
+      <div class="alert-info p-1 mb-1 twofa-instructions-text">
         <strong>📋 Instrucciones para SMS Forwarder:</strong>
-        <ol class="mb-0" style="padding-left: 1.2rem;">
+        <ol class="mb-0 twofa-instructions-list">
           <li><strong>Agrega el número Android:</strong> Ingresa el número con código de país (ej: +573001234567) y guarda</li>
           <li><strong>Copia la URL del webhook:</strong> Haz clic en "Editar" del número Android y copia la URL del webhook que aparece</li>
           <li><strong>Abre SMS Forwarder en tu celular:</strong>
-            <ul style="padding-left: 1.5rem; margin-top: 0.25rem;">
+            <ul class="twofa-instructions-sublist">
               <li>Ve a "Webhooks" o "HTTP POST"</li>
               <li>Crea un nuevo webhook</li>
               <li>Pega la URL copiada en el campo "URL"</li>
@@ -179,13 +178,13 @@
             </ul>
           </li>
           <li><strong>Configura el Body JSON:</strong> En el campo "Body" o "JSON Body", pega exactamente esto (reemplaza TU_API_KEY con tu API key si la configuraste):
-            <pre style="background: #f5f5f5; padding: 0.5rem; border-radius: 4px; margin-top: 0.25rem; font-size: 0.8rem; overflow-x: auto;"><code>{"from_number": "{in-number}", "to_number": "{out-number}", "message_body": "{msg}", "api_key": "TU_API_KEY"}</code></pre>
+            <pre class="twofa-code-block"><code>{"from_number": "{in-number}", "to_number": "{out-number}", "message_body": "{msg}", "api_key": "TU_API_KEY"}</code></pre>
             <strong>Nota:</strong> Si no configuraste API key, puedes omitir el campo "api_key" o dejarlo vacío:
-            <pre style="background: #f5f5f5; padding: 0.5rem; border-radius: 4px; margin-top: 0.25rem; font-size: 0.8rem; overflow-x: auto;"><code>{"from_number": "{in-number}", "to_number": "{out-number}", "message_body": "{msg}"}</code></pre>
+            <pre class="twofa-code-block"><code>{"from_number": "{in-number}", "to_number": "{out-number}", "message_body": "{msg}"}</code></pre>
           </li>
           <li><strong>Guarda y activa:</strong> Guarda la configuración y activa el webhook en SMS Forwarder</li>
         </ol>
-        <p class="mb-0 mt-05" style="font-size: 0.8rem;">
+        <p class="mb-0 mt-05 twofa-tip-text">
           <strong>💡 Tip:</strong> Los placeholders <code>{in-number}</code>, <code>{out-number}</code> y <code>{msg}</code> son reemplazados automáticamente por SMS Forwarder con los datos reales del SMS recibido.
         </p>
       </div>
@@ -285,6 +284,159 @@
       </div>
     </div>
   </div>
+
+  <!-- ✅ NUEVO: Sección de Gestión de 2FA por Correo -->
+  <div class="admin-card twofa-section-card">
+    <h4 class="mb-1 text-center">🔐 Gestión de 2FA por Correo</h4>
+    
+    <!-- Formulario para agregar/editar configuración 2FA -->
+    <form id="twofa-config-form" class="mb-2">
+      <input type="hidden" id="twofa-config-id" value="">
+      
+      <label for="twofa-emails-input" class="sr-only">Correos</label>
+      <textarea
+        id="twofa-emails-input"
+        rows="2"
+        placeholder="Correos (separados por coma o espacio): correo1@test.com, correo2@test.com"
+        required
+        class="d-block mb-05 w-100"
+        autocomplete="off"
+      ></textarea>
+      
+      <!-- Línea compacta: Código manual | Subir QR | Botón Agregar -->
+      <div class="d-flex gap-05 align-items-center mb-05 twofa-compact-row">
+        <label for="twofa-secret-input" class="sr-only">Código Secreto</label>
+        <input
+          type="text"
+          id="twofa-secret-input"
+          placeholder="Código secreto"
+          class="flex-grow-1"
+          autocomplete="off"
+          pattern="[A-Z0-9]{16,}"
+          title="Código secreto TOTP (solo letras mayúsculas y números)"
+        >
+        <label for="twofa-qr-file" class="sr-only">Archivo QR</label>
+        <input
+          type="file"
+          id="twofa-qr-file"
+          accept="image/*"
+          class="d-none"
+        >
+        <button type="button" id="twofa-upload-qr-btn" class="btn-blue btn-small">
+          <i class="fas fa-qrcode"></i> QR
+        </button>
+        <button type="submit" id="twofa-save-btn" class="btn-green btn-small">Agregar</button>
+        <button type="button" id="twofa-cancel-btn" class="btn-blue btn-small d-none">Cancelar</button>
+      </div>
+      
+      <!-- Preview del QR (oculto por defecto) -->
+      <div id="twofa-qr-preview" class="text-center mb-05 d-none"></div>
+      
+      <!-- Display del secreto configurado (oculto por defecto) -->
+      <div id="twofa-secret-display" class="d-none mb-05 text-center">
+        <strong>Secreto configurado:</strong> <code id="twofa-secret-display-value"></code>
+      </div>
+      
+      <div id="twofa-message" class="mt-05 text-center"></div>
+    </form>
+    
+    <!-- Búsqueda y Mostrar -->
+    <div class="d-flex flex-wrap align-items-center mb-1 productos-buscar-mostrar">
+      <div class="search-container">
+        <label for="searchTwofaInput" class="sr-only">Buscar configuraciones 2FA</label>
+        <input type="search" id="searchTwofaInput" placeholder="Buscar..." autocomplete="off">
+      </div>
+      <div class="d-flex align-items-center">
+        <label for="showTwofaCount" class="sr-only">Mostrar cantidad</label>
+        <select id="showTwofaCount" autocomplete="off">
+          <option value="5">5</option>
+          <option value="10">10</option>
+          <option value="20" selected>20</option>
+          <option value="30">30</option>
+          <option value="40">40</option>
+          <option value="50">50</option>
+          <option value="100">100</option>
+          <option value="all">Todos</option>
+        </select>
+      </div>
+    </div>
+    
+    <!-- Lista de configuraciones 2FA -->
+    <div id="twofa-configs-list" class="mt-2">
+      <p class="text-center text-secondary">Cargando configuraciones...</p>
+    </div>
+    
+    <!-- Botones de paginación -->
+    <div class="d-flex justify-content-center mt-2 mb-05 pagination-buttons">
+      <button id="prevTwofaPageBtn" class="btn-blue btn-panel" type="button">&lt; Anterior</button>
+      <button id="nextTwofaPageBtn" class="btn-blue btn-panel" type="button">Siguiente &gt;</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal para editar configuración 2FA -->
+<div id="twofa-edit-modal" class="modal d-none" tabindex="-1">
+  <div class="sms-modal-content">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+      <h4 class="m-0 text-center flex-grow-1">Editar Configuración 2FA</h4>
+      <button type="button" class="btn-panel btn-red" id="close-edit-twofa-modal" title="Cerrar">
+        <i class="fas fa-times"></i>
+      </button>
+    </div>
+    
+    <form id="twofa-edit-form">
+      <input type="hidden" id="edit-twofa-config-id" value="">
+      
+      <label for="edit-twofa-emails-input" class="sr-only">Correos</label>
+      <textarea
+        id="edit-twofa-emails-input"
+        rows="2"
+        placeholder="Correos (separados por coma o espacio): correo1@test.com, correo2@test.com"
+        required
+        class="d-block mb-05 w-100"
+        autocomplete="off"
+      ></textarea>
+      
+      <!-- Línea compacta: Código manual | Subir QR -->
+      <div class="d-flex gap-05 align-items-center mb-05 twofa-compact-row">
+        <label for="edit-twofa-secret-input" class="sr-only">Código Secreto</label>
+        <input
+          type="text"
+          id="edit-twofa-secret-input"
+          placeholder="Código secreto"
+          class="flex-grow-1"
+          autocomplete="off"
+          pattern="[A-Z0-9]{16,}"
+          title="Código secreto TOTP (solo letras mayúsculas y números)"
+        >
+        <label for="edit-twofa-qr-file" class="sr-only">Archivo QR</label>
+        <input
+          type="file"
+          id="edit-twofa-qr-file"
+          accept="image/*"
+          class="d-none"
+        >
+        <button type="button" id="edit-twofa-upload-qr-btn" class="btn-blue btn-small">
+          <i class="fas fa-qrcode"></i> QR
+        </button>
+      </div>
+      
+      <!-- Preview del QR (oculto por defecto) -->
+      <div id="edit-twofa-qr-preview" class="text-center mb-05 d-none"></div>
+      
+      <!-- Display del secreto configurado -->
+      <div id="edit-twofa-secret-display" class="mb-05 text-center">
+        <strong>Secreto configurado:</strong> <code id="edit-twofa-secret-display-value"></code>
+      </div>
+      
+      <div class="text-center">
+        <button type="submit" id="edit-twofa-save-btn" class="btn-green">Actualizar</button>
+        <button type="button" id="edit-twofa-cancel-btn" class="btn-blue">Cancelar</button>
+      </div>
+      
+      <div id="edit-twofa-message" class="mt-05 text-center"></div>
+    </form>
+  </div>
 </div>
 
 <!-- Modal para editar configuración SMS -->
@@ -334,7 +486,7 @@
       </div>
       
       <!-- Campos para Android (ocultos si es Twilio) -->
-      <div id="edit-android-fields" style="display: none;">
+      <div id="edit-android-fields" class="d-none">
         <label for="edit-android-config-name" class="sr-only">Nombre</label>
         <input
           type="text"
@@ -358,21 +510,19 @@
         
         <label for="edit-android-api-key" class="sr-only">API Key</label>
         <div class="d-flex align-items-center gap-05 mb-05">
-          <div class="flex-grow-1 d-flex align-items-center" style="position: relative;">
+          <div class="flex-grow-1 d-flex align-items-center twofa-api-key-container">
             <input
               type="text"
               id="edit-android-api-key"
               placeholder="API Key (opcional, para mayor seguridad)"
-              class="flex-grow-1"
+              class="flex-grow-1 twofa-api-key-input"
               autocomplete="off"
-              style="padding-right: 2.5rem;"
             >
             <button 
               type="button" 
               id="toggle-edit-api-key-visibility" 
-              class="btn-blue btn-small" 
+              class="btn-blue btn-small twofa-api-key-toggle" 
               title="Mostrar/Ocultar API Key"
-              style="position: absolute; right: 0.25rem; padding: 0.25rem 0.5rem; border: none; background: transparent; color: #666;"
             >
               <i class="fas fa-eye" id="edit-api-key-eye-icon"></i>
             </button>
@@ -383,10 +533,10 @@
         </div>
         
         <!-- URL del Webhook para Android -->
-        <div class="mb-05 p-1" style="background-color: #f5f5f5; border-radius: 4px; font-size: 0.85rem;">
+        <div class="mb-05 p-1 twofa-info-box">
           <strong>URL del Webhook:</strong>
           <div class="d-flex align-items-center gap-05 mt-05">
-            <code id="edit-webhook-url" class="flex-grow-1" style="word-break: break-all; font-size: 0.8rem;">Cargando...</code>
+            <code id="edit-webhook-url" class="flex-grow-1 twofa-webhook-code">Cargando...</code>
             <button type="button" id="copy-edit-webhook-btn" class="btn-blue btn-small" title="Copiar URL">
               <i class="fas fa-copy"></i> Copiar
             </button>

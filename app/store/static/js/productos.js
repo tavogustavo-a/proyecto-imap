@@ -8,7 +8,7 @@ document.addEventListener('DOMContentLoaded', function() {
   const nextBtn = document.getElementById('nextPageBtn');
   const searchInput = document.getElementById('searchProductInput');
   let currentPage = 1;
-  let perPage = parseInt(showCountSelect.value) || 10;
+  let perPage = parseInt(showCountSelect.value) || 20;
 
   function getFilteredRows() {
     return rows.filter(row => !row.classList.contains('filtered-out'));

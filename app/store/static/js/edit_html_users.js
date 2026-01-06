@@ -11,7 +11,7 @@ document.addEventListener("DOMContentLoaded", function() {
 
     let currentPage = 1;
     let currentSearch = "";
-    let perPage = 5;
+    let perPage = 20;
 
     function fetchUsers() {
         currentSearch = searchUserInput.value;

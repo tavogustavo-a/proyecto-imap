@@ -479,20 +479,62 @@ document.addEventListener("DOMContentLoaded", function () {
         }
 
         const results = data.results || [];
+        // Obtener el email buscado del input o de los resultados
+        const searchEmailInput = document.getElementById("searchEmail");
+        const emailSearched = email ? email.toLowerCase() : (searchEmailInput ? searchEmailInput.value.trim().toLowerCase() : '');
+        
         if (results.length === 0) {
-          if (resultsDiv) {
-            resultsDiv.classList.remove('d-none');
-            resultsDiv.classList.add('d-block');
-            resultsDiv.innerHTML = `<p>No se encontraron resultados.</p>`;
+          // Si no hay resultados, primero intentar mostrar código 2FA (si existe configuración)
+          // Solo mostrar "No se encontraron resultados" si no hay código 2FA o hay error 404
+          if (emailSearched) {
+            // Limpiar el contenedor antes de intentar mostrar 2FA
+            if (resultsDiv) {
+              resultsDiv.classList.remove('d-none');
+              resultsDiv.classList.add('d-block');
+              resultsDiv.innerHTML = ''; // Limpiar para que checkAndDisplay2FACode pueda mostrar el código o error
+            }
+            // checkAndDisplay2FACode mostrará el código 2FA si existe, o el error si no hay permisos
+            checkAndDisplay2FACode(emailSearched).then((hasContent) => {
+              // Si después de intentar mostrar 2FA no hay nada en el contenedor (404 = no hay configuración 2FA),
+              // mostrar mensaje de no resultados
+              if (resultsDiv && resultsDiv.children.length === 0 && !hasContent) {
+                resultsDiv.innerHTML = `<p>No se encontraron resultados.</p>`;
+              }
+            });
+          } else {
+            // Si no hay email, mostrar mensaje de no resultados
+            if (resultsDiv) {
+              resultsDiv.classList.remove('d-none');
+              resultsDiv.classList.add('d-block');
+              resultsDiv.innerHTML = `<p>No se encontraron resultados.</p>`;
+            }
           }
           return;
         }
 
         // Verificar si es resultado SMS
         const mail = results[0];
-        if (mail.is_sms_result && mail.sms_messages) {
-          renderSMSMessages(mail.sms_messages, mail.sms_config_phone, mail.email_searched);
+        if (mail.is_sms_result) {
+          // Verificar si hay mensajes SMS (puede ser array vacío)
+          const smsMessages = mail.sms_messages || [];
+          const emailToCheck = mail.email_searched || emailSearched;
+          
+          // Renderizar mensajes SMS primero
+          renderSMSMessages(smsMessages, mail.sms_config_phone, mail.email_searched);
+          
+          // También buscar y mostrar código 2FA si existe (SIEMPRE, incluso si no hay mensajes SMS)
+          // Usar setTimeout para asegurar que renderSMSMessages termine primero
+          if (emailToCheck) {
+            setTimeout(() => {
+              checkAndDisplay2FACode(emailToCheck);
+            }, 200);
+          }
           return;
+        }
+        
+        // Verificar si hay código 2FA para el correo buscado (correos normales)
+        if (emailSearched) {
+          checkAndDisplay2FACode(emailSearched);
         }
 
         // Lógica normal para correos
@@ -777,6 +819,7 @@ document.addEventListener("DOMContentLoaded", function () {
       const noMessages = document.createElement('p');
       noMessages.textContent = 'No se encontraron mensajes.';
       noMessages.classList.add('text-center');
+      noMessages.id = 'no-sms-messages';
       resultsDiv.appendChild(noMessages);
       return;
     }
@@ -1118,5 +1161,219 @@ document.addEventListener("DOMContentLoaded", function () {
       });
   }
   // --- FIN: Listener para Limpiar Log ---
+
+  // ✅ NUEVO: Función para verificar y mostrar código 2FA
+  async function checkAndDisplay2FACode(email) {
+    if (!email) {
+      return Promise.resolve();
+    }
+    
+    try {
+      const response = await fetch(`/api/2fa/code/${encodeURIComponent(email)}`);
+      
+      // Si la respuesta no es exitosa, manejar el error
+      if (!response.ok) {
+        // Si es 404, significa que no hay configuración 2FA (no es un error de permisos)
+        if (response.status === 404) {
+          return Promise.resolve(false); // Retornar false para indicar que no hay contenido 2FA
+        }
+        
+        // Para otros errores (403, etc.), intentar obtener el mensaje de error
+        let errorMessage = 'No tienes permiso al consultar este correo.';
+        try {
+          const errorData = await response.json();
+          if (errorData.error) {
+            errorMessage = errorData.error;
+          }
+        } catch (e) {
+          // Si no se puede parsear como JSON, usar el mensaje por defecto
+        }
+        
+        // Mostrar el mensaje de error
+        const resultsDiv = document.getElementById('search-results') || document.getElementById('results');
+        if (resultsDiv) {
+          // Limpiar cualquier contenido previo y mostrar solo el error
+          resultsDiv.innerHTML = '';
+          const errorDiv = document.createElement('p');
+          errorDiv.id = 'twofa-error-message';
+          errorDiv.className = 'text-danger text-center';
+          errorDiv.style.fontWeight = 'bold';
+          errorDiv.style.fontSize = '1.1rem';
+          errorDiv.style.marginTop = '1rem';
+          errorDiv.style.color = '#dc3545';
+          errorDiv.textContent = errorMessage;
+          resultsDiv.appendChild(errorDiv);
+        }
+        return Promise.resolve(true); // Retornar true para indicar que se mostró contenido (error)
+      }
+      
+      const data = await response.json();
+      
+      if (data.success && data.code) {
+        display2FACode(data.code, data.time_remaining, email);
+        return Promise.resolve(true); // Retornar true para indicar que se mostró contenido (código 2FA)
+      } else if (data.error) {
+        // Si hay un error en la respuesta, mostrarlo
+        const resultsDiv = document.getElementById('search-results') || document.getElementById('results');
+        if (resultsDiv) {
+          resultsDiv.innerHTML = '';
+          const errorDiv = document.createElement('p');
+          errorDiv.id = 'twofa-error-message';
+          errorDiv.className = 'text-danger text-center';
+          errorDiv.style.fontWeight = 'bold';
+          errorDiv.style.fontSize = '1.1rem';
+          errorDiv.style.marginTop = '1rem';
+          errorDiv.style.color = '#dc3545';
+          errorDiv.textContent = data.error;
+          resultsDiv.appendChild(errorDiv);
+        }
+        return Promise.resolve(true); // Retornar true para indicar que se mostró contenido (error)
+      }
+      return Promise.resolve(false); // No hay contenido
+    } catch (error) {
+      // Si hay un error de red u otro error, retornar false para permitir mostrar "No se encontraron resultados"
+      return Promise.resolve(false);
+    }
+  }
+  
+  // ✅ NUEVO: Función para mostrar código 2FA con contador
+  function display2FACode(code, timeRemaining, email) {
+    // Buscar el contenedor de resultados (puede ser 'search-results' o 'results')
+    let resultsDiv = document.getElementById('search-results');
+    if (!resultsDiv) {
+      resultsDiv = document.getElementById('results');
+    }
+    if (!resultsDiv) {
+      return;
+    }
+    
+    // Si hay un mensaje "No se encontraron mensajes", eliminarlo completamente para mostrar el código 2FA
+    const noSMSMessage = document.getElementById('no-sms-messages');
+    if (noSMSMessage) {
+      noSMSMessage.remove();
+    }
+    
+    // Limpiar cualquier contenedor 2FA existente y crear uno nuevo
+    let twofaContainer = document.getElementById('twofa-code-container');
+    if (twofaContainer) {
+      twofaContainer.remove();
+    }
+    
+    twofaContainer = document.createElement('div');
+    twofaContainer.id = 'twofa-code-container';
+    twofaContainer.className = 'twofa-code-display';
+    twofaContainer.style.display = 'block'; // Asegurar que sea visible
+    
+    // Insertar al principio del contenedor de resultados
+    if (resultsDiv.firstChild) {
+      resultsDiv.insertBefore(twofaContainer, resultsDiv.firstChild);
+    } else {
+      resultsDiv.appendChild(twofaContainer);
+    }
+    
+    // Crear elementos usando DOM (sin innerHTML con estilos inline)
+    twofaContainer.innerHTML = '';
+    
+    const wrapper = document.createElement('div');
+    wrapper.className = 'twofa-code-wrapper';
+    wrapper.style.display = 'flex';
+    wrapper.style.flexDirection = 'column';
+    wrapper.style.alignItems = 'center';
+    wrapper.style.justifyContent = 'center';
+    
+    // Primera línea: Código y botón Copiar centrados
+    const topRow = document.createElement('div');
+    topRow.className = 'twofa-code-top-row';
+    topRow.style.display = 'flex';
+    topRow.style.justifyContent = 'center';
+    topRow.style.alignItems = 'center';
+    topRow.style.gap = '1rem';
+    topRow.style.marginBottom = '0.75rem';
+    
+    const codeValue = document.createElement('div');
+    codeValue.className = 'twofa-code-value';
+    codeValue.textContent = code;
+    codeValue.style.marginBottom = '0';
+    
+    const copyBtn = document.createElement('button');
+    copyBtn.id = 'twofa-copy-btn';
+    copyBtn.className = 'btn btn-search btn-rounded twofa-copy-btn';
+    copyBtn.textContent = 'Copiar';
+    
+    topRow.appendChild(codeValue);
+    topRow.appendChild(copyBtn);
+    
+    // Segunda línea: Contador centrado abajo
+    const timer = document.createElement('div');
+    timer.id = 'twofa-timer';
+    timer.className = 'twofa-timer';
+    timer.textContent = timeRemaining + 's';
+    timer.style.textAlign = 'center';
+    timer.style.marginTop = '0';
+    timer.style.width = '100%';
+    
+    wrapper.appendChild(topRow);
+    wrapper.appendChild(timer);
+    twofaContainer.appendChild(wrapper);
+    
+    // Agregar listener para copiar
+    copyBtn.addEventListener('click', function() {
+      copyTextToClipboard(code)
+        .then(() => {
+          const originalText = this.textContent;
+          this.textContent = "COPIADO";
+          this.classList.add('copied-state');
+          setTimeout(() => {
+            this.textContent = originalText;
+            this.classList.remove('copied-state');
+          }, 2000);
+        })
+        .catch((err) => {
+          const originalText = this.textContent;
+          this.textContent = "ERROR";
+          this.classList.add('error-state');
+          setTimeout(() => {
+            this.textContent = originalText;
+            this.classList.remove('error-state');
+          }, 2000);
+        });
+    });
+    
+    // Actualizar contador cada segundo
+    let currentTime = timeRemaining;
+    const timerInterval = setInterval(() => {
+      currentTime--;
+      if (currentTime <= 0) {
+        currentTime = 30; // Reiniciar contador
+        // Recargar código cuando llegue a 0
+        checkAndDisplay2FACode(email);
+      }
+      if (timer) {
+        timer.textContent = currentTime + 's';
+        if (currentTime <= 5) {
+          timer.classList.add('twofa-timer-warning');
+          timer.classList.remove('twofa-timer');
+        } else {
+          timer.classList.remove('twofa-timer-warning');
+          timer.classList.add('twofa-timer');
+        }
+      }
+    }, 1000);
+    
+    // Limpiar intervalo cuando se elimine el contenedor
+    const observer = new MutationObserver((mutations) => {
+      mutations.forEach((mutation) => {
+        if (mutation.removedNodes.length > 0) {
+          mutation.removedNodes.forEach((node) => {
+            if (node === twofaContainer || (node.contains && node.contains(twofaContainer))) {
+              clearInterval(timerInterval);
+              observer.disconnect();
+            }
+          });
+        }
+      });
+    });
+    observer.observe(resultsDiv, { childList: true, subtree: true });
+  }
 
 }); // Fin DOMContentLoaded

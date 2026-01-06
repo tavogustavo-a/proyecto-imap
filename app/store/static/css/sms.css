@@ -262,6 +262,131 @@
   margin-bottom: 1.5rem;
 }
 
+/* ✅ NUEVO: Estilos para Gestión de 2FA por Correo - CSP Compliant */
+.twofa-section-card {
+  background: white;
+  margin-top: 1rem;
+}
+
+/* Estilos para búsqueda y mostrar en sección 2FA (igual que herramientas) */
+.twofa-section-card .productos-buscar-mostrar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.twofa-section-card .productos-buscar-mostrar .search-container {
+  flex: 1;
+  min-width: 200px;
+}
+
+.twofa-section-card .productos-buscar-mostrar .search-container input[type="search"] {
+  height: 32px !important;
+  padding: 6px 10px !important;
+  border: 1.5px solid #111;
+  border-radius: 5px;
+  font-size: 14px;
+  width: 100%;
+  box-sizing: border-box;
+  line-height: 1.5;
+}
+
+.twofa-section-card .productos-buscar-mostrar select {
+  height: 32px !important;
+  padding: 6px 10px !important;
+  border: 1.5px solid #111;
+  border-radius: 5px;
+  font-size: 14px;
+  width: 80px;
+  box-sizing: border-box;
+  line-height: 1.5;
+}
+
+.twofa-description-text {
+  font-size: 0.9rem;
+}
+
+.twofa-qr-preview img {
+  max-width: 200px;
+  max-height: 200px;
+}
+
+.twofa-secret-display code {
+  font-family: 'Courier New', monospace;
+  background: #f5f5f5;
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+}
+
+.twofa-api-key-container {
+  position: relative;
+}
+
+.twofa-api-key-input {
+  padding-right: 2.5rem;
+}
+
+.twofa-api-key-toggle {
+  position: absolute;
+  right: 0.25rem;
+  padding: 0.25rem 0.5rem;
+  border: none;
+  background: transparent;
+  color: #666;
+}
+
+.twofa-instructions-text {
+  font-size: 0.85rem;
+}
+
+.twofa-instructions-list {
+  padding-left: 1.2rem;
+}
+
+.twofa-instructions-sublist {
+  padding-left: 1.5rem;
+  margin-top: 0.25rem;
+}
+
+.twofa-code-block {
+  background: #f5f5f5;
+  padding: 0.5rem;
+  border-radius: 4px;
+  margin-top: 0.25rem;
+  font-size: 0.8rem;
+  overflow-x: auto;
+}
+
+.twofa-tip-text {
+  font-size: 0.8rem;
+}
+
+.twofa-webhook-code {
+  word-break: break-all;
+  font-size: 0.8rem;
+}
+
+.twofa-info-box {
+  background-color: #f5f5f5;
+  border-radius: 4px;
+  font-size: 0.85rem;
+}
+
+/* ✅ NUEVO: Estilos para fila compacta de 2FA */
+.twofa-compact-row {
+  flex-wrap: nowrap;
+}
+
+.twofa-compact-row input[type="text"] {
+  min-width: 200px;
+}
+
+.twofa-qr-preview-img {
+  max-width: 200px;
+  max-height: 200px;
+}
+
 .flex-grow-1 {
   flex-grow: 1;
 }

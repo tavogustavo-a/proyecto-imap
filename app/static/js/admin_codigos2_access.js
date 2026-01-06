@@ -10,7 +10,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     let currentPage = 1;
     let currentSearch = "";
-    let perPage = 10;
+    let perPage = 20;
 
     // Función helper para escapar HTML y prevenir XSS
     function escapeHtml(text) {

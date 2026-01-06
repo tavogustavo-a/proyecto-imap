@@ -90,7 +90,7 @@
 </div>
 <div id="menuOverlay" class="menu-overlay"></div>
 
-<div class="form-container-wide">
+<div class="form-container-wide" id="subuser-management-container" data-user-id="{{ current_user.id if current_user else '' }}">
 
   <!-- CONTORNO 1: Panel Sub-usuarios + Crear Sub-usuario -->
   <div class="admin-card mb-1">
@@ -129,6 +129,87 @@
       <button type="submit" class="btn-green">Crear</button>
     </form>
     <div id="createSubuserMsg" class="mt-05 error-message"></div>
+  </div>
+
+  <!-- CONTORNO 1.5: Gestión de Correos del Usuario Principal -->
+  <div class="admin-card mb-1">
+    <h4 class="mt-0">Gestión de Correos</h4>
+    
+    <!-- Búsqueda y Eliminación de Correos -->
+    <h5 class="mb-05 text-center text-small">Búsqueda y Eliminación de Correos</h5>
+    <form id="searchSubuserEmailsForm" class="mb-05">
+      <label for="searchSubuserEmailsInput" class="sr-only">Buscar y eliminar correos</label>
+      <textarea 
+        id="searchSubuserEmailsInput" 
+        rows="2" 
+        class="d-block w-100 mb-05 resize-vertical" 
+        placeholder="Ingresa uno o varios correos (separados por comas, espacios o saltos de línea)."
+        autocomplete="off"
+      ></textarea>
+      <div class="d-flex gap-05 justify-content-between align-items-center">
+        <button type="submit" class="btn-search btn-small">Limpiar</button>
+        <div id="subuserDeleteDisplayedContainer" class="d-none">
+          <button type="button" id="subuserDeleteDisplayedBtn" class="btn-red btn-small">
+            Eliminar X Mostrados
+          </button>
+        </div>
+      </div>
+    </form>
+    <div id="subuserEmailsSearchResults" class="mb-05 text-small"></div>
+    <div id="subuserSearchStatus" class="text-italic text-secondary mb-05 text-small"></div>
+
+    <!-- Lista de Correos Permitidos -->
+    <div class="mb-05">
+      <div class="d-flex justify-content-between align-items-center flex-wrap gap-05 mb-05">
+        <label for="subuserPerPageSelect" class="text-small"><strong>Lista Correos permitidos:</strong></label>
+        <div class="d-flex align-items-center gap-05">
+          <span class="text-small"><strong>Mostrar:</strong></span>
+          <select id="subuserPerPageSelect" class="select-padding-3px" autocomplete="off" style="font-size: 0.9rem;">
+            <option value="10">10</option>
+            <option value="20" selected>20</option>
+            <option value="30">30</option>
+            <option value="50">50</option>
+            <option value="100">100</option>
+            <option value="300">300</option>
+            <option value="-1">Todos</option>
+          </select>
+        </div>
+      </div>
+      <div id="subuserAllowedEmailsTextContainer" class="allowed-emails-display mb-05" style="max-height: 200px; overflow-y: auto; font-size: 0.85rem;">
+        <p class="text-secondary">Cargando correos...</p>
+      </div>
+      <div id="subuserAllowedEmailsPagination" class="d-flex justify-content-between align-items-center flex-wrap gap-05 mb-05">
+        <span id="subuserPaginationInfo" class="text-small"></span>
+        <button id="subuserDeleteAllEmailsBtn" class="btn-red btn-small" title="Eliminar TODOS los correos permitidos" style="font-size: 0.85rem;">
+          <i class="fas fa-trash"></i> Eliminar Todos
+        </button>
+        <div class="d-flex gap-05">
+          <button id="subuserPrevPageBtn" class="btn-blue btn-small" disabled style="font-size: 0.85rem;">&lt; Anterior</button>
+          <button id="subuserNextPageBtn" class="btn-blue btn-small" disabled style="font-size: 0.85rem;">Siguiente &gt;</button>
+        </div>
+      </div>
+    </div>
+
+    <hr class="hr-margin-15">
+
+    <!-- Añadir Correos -->
+    <h5 class="mb-05 text-center text-small">Añadir Correos</h5>
+    <div id="subuserAddEmailsSection">
+      <label for="subuserAddEmailsInput" class="sr-only">Nuevos Correos</label>
+      <textarea 
+        id="subuserAddEmailsInput" 
+        rows="2" 
+        class="d-block w-100 mb-05" 
+        placeholder="Ingresa uno o varios correos (separados por comas, espacios o saltos de línea). Ejemplo: nuevo1@ejemplo.com, nuevo2@ejemplo.com..."
+        autocomplete="off"
+      ></textarea>
+      <div class="text-center">
+        <button type="button" id="subuserAddEmailsBtn" class="btn-blue btn-small">Añadir Correos</button>
+      </div>
+      <div class="text-center mt-05">
+        <span id="subuserAddEmailsMsg" class="text-italic text-success text-small"></span>
+      </div>
+    </div>
   </div>
 
   <!-- CONTORNO 2: Búsqueda y Listado de Sub-usuarios -->

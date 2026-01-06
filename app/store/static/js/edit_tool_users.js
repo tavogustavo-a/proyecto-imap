@@ -9,7 +9,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     let currentPage = 1;
     let currentSearch = "";
-    let perPage = 5;
+    let perPage = 20;
 
     function updateTable(users, linked_user_ids) {
         usersTableBody.innerHTML = ''; // Render rows
