@@ -190,7 +190,8 @@ def create_subuser_ajax():
         password=hashed_pass,
         parent_id=parent_user.id, # Usar ID del padre obtenido
         enabled=True,
-        can_add_own_emails=False  # Por defecto desactivado
+        can_add_own_emails=False,  # Por defecto desactivado
+        can_bulk_delete_emails=False  # Por defecto desactivado (los sub-usuarios no pueden tener este permiso)
         # Otros campos por defecto: color, position, can_search_any=False, etc.
     )
     db.session.add(new_subuser)
@@ -1425,6 +1426,59 @@ def delete_all_current_user_emails_ajax():
         db.session.rollback()
         current_app.logger.error(f"Error al eliminar todos los correos para usuario {user_id}: {e}")
         return jsonify({"status":"error","message":"Error al eliminar todos los correos."}), 500
+
+@subuser_bp.route("/delete_emails_from_all_users_ajax", methods=["POST"])
+def delete_emails_from_all_users_ajax():
+    """
+    Elimina correos masivamente de TODOS los usuarios que los tengan vinculados.
+    Similar a la funcionalidad de admin, pero para usuarios principales con permiso.
+    """
+    if not can_access_subusers():
+        return jsonify({"status":"error","message":"No autorizado"}),403
+
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"status":"error","message":"No hay usuario logueado."}), 401
+    
+    user = User.query.get(user_id)
+    if not user:
+        return jsonify({"status":"error","message":"Usuario no encontrado."}), 404
+    
+    if user.parent_id:
+        return jsonify({"status":"error","message":"Los sub-usuarios no pueden borrar correos masivamente."}), 403
+    
+    if not user.can_bulk_delete_emails:
+        return jsonify({"status":"error","message":"No tienes permiso para borrar correos masivamente."}), 403
+
+    data = request.get_json()
+    emails_to_delete = data.get("emails", [])
+
+    if not emails_to_delete:
+        return jsonify({"status":"error","message":"Faltan datos (lista de emails)."}), 400
+
+    # Normalizar emails a eliminar
+    normalized_emails = [e.strip().lower() for e in emails_to_delete if isinstance(e, str) and e.strip()]
+    if not normalized_emails:
+        return jsonify({"status":"ok", "message":"No emails validos para eliminar."})
+
+    try:
+        # Eliminar de TODOS los usuarios (principales y sub-usuarios) usando IN clause
+        deleted_count = AllowedEmail.query.filter(
+            AllowedEmail.email.in_(normalized_emails)
+        ).delete(synchronize_session=False)
+
+        db.session.commit()
+
+        return jsonify({
+            "status":"ok",
+            "message":f"Se eliminaron {deleted_count} instancia(s) de correo(s) de todos los usuarios.",
+            "deleted_count": deleted_count
+        })
+
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Error al eliminar correos masivamente de todos los usuarios: {e}", exc_info=True)
+        return jsonify({"status":"error","message":"Error al eliminar correos."}), 500
 
 @subuser_bp.route("/add_current_user_emails_ajax", methods=["POST"])
 def add_current_user_emails_ajax():

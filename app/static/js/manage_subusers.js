@@ -4,6 +4,25 @@ document.addEventListener("DOMContentLoaded", function() {
     return meta ? meta.getAttribute('content') : '';
   }
 
+  // Función para parsear correos del texto (separados por comas, espacios o saltos de línea)
+  function parseEmailsFromText(text) {
+    if (!text || !text.trim()) {
+      return [];
+    }
+    
+    // Dividir por comas, espacios, saltos de línea, punto y coma, etc.
+    const emails = text
+      .split(/[,\s\n\r;]+/)
+      .map(email => email.trim().toLowerCase())
+      .filter(email => {
+        // Validar formato básico de email
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        return email && emailRegex.test(email);
+      });
+    
+    return [...new Set(emails)]; // Eliminar duplicados
+  }
+
   const createForm = document.getElementById("createSubuserForm");
   const subUsername = document.getElementById("subUsername");
   const subPassword = document.getElementById("subPassword");
@@ -739,5 +758,99 @@ document.addEventListener("DOMContentLoaded", function() {
     fetchSubuserAllowedEmails(1, subuserCurrentPerPage);
   }
   // ======= FIN GESTIÓN DE CORREOS DEL USUARIO PRINCIPAL =======
+
+  // ======= ELIMINACIÓN MASIVA DE CORREOS DE TODOS LOS USUARIOS =======
+  const bulkDeleteEmailsSubuserForm = document.getElementById("bulkDeleteEmailsSubuserForm");
+  const bulkDeleteEmailsSubuserInput = document.getElementById("bulkDeleteEmailsSubuserInput");
+  const bulkDeleteEmailsSubuserBtn = document.getElementById("bulkDeleteEmailsSubuserBtn");
+  const bulkDeleteEmailsSubuserMessage = document.getElementById("bulkDeleteEmailsSubuserMessage");
+
+  // Función para mostrar mensaje
+  function showBulkDeleteSubuserMessage(message, isError = false) {
+    if (!bulkDeleteEmailsSubuserMessage) return;
+    
+    bulkDeleteEmailsSubuserMessage.textContent = message;
+    bulkDeleteEmailsSubuserMessage.className = `mt-05 text-center ${isError ? 'text-danger' : 'text-success'}`;
+    bulkDeleteEmailsSubuserMessage.classList.remove('hide-element');
+    bulkDeleteEmailsSubuserMessage.classList.add('show-block');
+    
+    // Ocultar mensaje después de 5 segundos si es éxito
+    if (!isError) {
+      setTimeout(() => {
+        if (bulkDeleteEmailsSubuserMessage) {
+          bulkDeleteEmailsSubuserMessage.classList.remove('show-block');
+          bulkDeleteEmailsSubuserMessage.classList.add('hide-element');
+        }
+      }, 5000);
+    }
+  }
+
+  // Manejar envío del formulario
+  if (bulkDeleteEmailsSubuserForm && bulkDeleteEmailsSubuserInput && bulkDeleteEmailsSubuserBtn) {
+    bulkDeleteEmailsSubuserForm.addEventListener("submit", function(e) {
+      e.preventDefault();
+      
+      const text = bulkDeleteEmailsSubuserInput.value.trim();
+      if (!text) {
+        showBulkDeleteSubuserMessage("Por favor ingresa al menos un correo.", true);
+        return;
+      }
+
+      const emailsToDelete = parseEmailsFromText(text);
+      if (emailsToDelete.length === 0) {
+        showBulkDeleteSubuserMessage("No se encontraron correos válidos en el texto ingresado.", true);
+        return;
+      }
+
+      // Confirmar antes de eliminar
+      if (!confirm(`¿Estás seguro de eliminar ${emailsToDelete.length} correo(s) de todos los usuarios?\n\nCorreos a eliminar:\n${emailsToDelete.join('\n')}`)) {
+        return;
+      }
+
+      // Deshabilitar botón y mostrar estado de carga
+      bulkDeleteEmailsSubuserBtn.disabled = true;
+      bulkDeleteEmailsSubuserBtn.textContent = 'Eliminando...';
+      bulkDeleteEmailsSubuserMessage.classList.remove('show-block');
+      bulkDeleteEmailsSubuserMessage.classList.add('hide-element');
+
+      // Enviar petición al servidor
+      fetch("/subusers/delete_emails_from_all_users_ajax", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-CSRFToken": getCsrfToken()
+        },
+        body: JSON.stringify({ emails: emailsToDelete })
+      })
+      .then(response => {
+        if (!response.ok) {
+          return response.json().then(errData => {
+            throw new Error(errData.message || `Error del servidor: ${response.status}`);
+          });
+        }
+        return response.json();
+      })
+      .then(data => {
+        if (data.status === "ok") {
+          showBulkDeleteSubuserMessage(
+            data.message || `Se eliminaron ${data.deleted_count || emailsToDelete.length} instancia(s) de correo(s) de todos los usuarios.`,
+            false
+          );
+          bulkDeleteEmailsSubuserInput.value = ""; // Limpiar el campo
+        } else {
+          showBulkDeleteSubuserMessage(data.message || "Error desconocido al eliminar correos.", true);
+        }
+      })
+      .catch(err => {
+        console.error("Error al eliminar correos masivamente:", err);
+        showBulkDeleteSubuserMessage(`Error: ${err.message}`, true);
+      })
+      .finally(() => {
+        bulkDeleteEmailsSubuserBtn.disabled = false;
+        bulkDeleteEmailsSubuserBtn.textContent = 'Eliminar Correos de Todos los Usuarios';
+      });
+    });
+  }
+  // ======= FIN ELIMINACIÓN MASIVA DE CORREOS =======
 
 }); // Fin DOMContentLoaded 

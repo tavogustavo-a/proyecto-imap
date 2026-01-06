@@ -460,12 +460,11 @@ document.addEventListener("DOMContentLoaded", function () {
         return response.json();
       })
       .then(data => {
-        if (spinner) {
-          spinner.classList.add('d-none');
-          spinner.classList.remove('d-block');
-        }
-
         if (data.error) {
+          if (spinner) {
+            spinner.classList.add('d-none');
+            spinner.classList.remove('d-block');
+          }
           if (resultsDiv) {
             resultsDiv.classList.remove('d-none');
             resultsDiv.classList.add('d-block');
@@ -487,22 +486,31 @@ document.addEventListener("DOMContentLoaded", function () {
           // Si no hay resultados, primero intentar mostrar código 2FA (si existe configuración)
           // Solo mostrar "No se encontraron resultados" si no hay código 2FA o hay error 404
           if (emailSearched) {
-            // Limpiar el contenedor antes de intentar mostrar 2FA
-            if (resultsDiv) {
-              resultsDiv.classList.remove('d-none');
-              resultsDiv.classList.add('d-block');
-              resultsDiv.innerHTML = ''; // Limpiar para que checkAndDisplay2FACode pueda mostrar el código o error
-            }
+            // NO limpiar el contenedor todavía, mantener el spinner visible mientras se verifica 2FA
             // checkAndDisplay2FACode mostrará el código 2FA si existe, o el error si no hay permisos
             checkAndDisplay2FACode(emailSearched).then((hasContent) => {
-              // Si después de intentar mostrar 2FA no hay nada en el contenedor (404 = no hay configuración 2FA),
-              // mostrar mensaje de no resultados
-              if (resultsDiv && resultsDiv.children.length === 0 && !hasContent) {
-                resultsDiv.innerHTML = `<p>No se encontraron resultados.</p>`;
+              // Ocultar el spinner después de que termine la verificación 2FA
+              if (spinner) {
+                spinner.classList.add('d-none');
+                spinner.classList.remove('d-block');
+              }
+              // Mostrar el contenedor de resultados SOLO después de que termine la verificación
+              if (resultsDiv) {
+                resultsDiv.classList.remove('d-none');
+                resultsDiv.classList.add('d-block');
+                // Si después de intentar mostrar 2FA no hay nada en el contenedor (404 = no hay configuración 2FA),
+                // mostrar mensaje de no resultados
+                if (resultsDiv.children.length === 0 && !hasContent) {
+                  resultsDiv.innerHTML = `<p>No se encontraron resultados.</p>`;
+                }
               }
             });
           } else {
-            // Si no hay email, mostrar mensaje de no resultados
+            // Si no hay email, ocultar spinner y mostrar mensaje de no resultados
+            if (spinner) {
+              spinner.classList.add('d-none');
+              spinner.classList.remove('d-block');
+            }
             if (resultsDiv) {
               resultsDiv.classList.remove('d-none');
               resultsDiv.classList.add('d-block');
@@ -510,6 +518,12 @@ document.addEventListener("DOMContentLoaded", function () {
             }
           }
           return;
+        }
+        
+        // Si hay resultados, ocultar el spinner inmediatamente
+        if (spinner) {
+          spinner.classList.add('d-none');
+          spinner.classList.remove('d-block');
         }
 
         // Verificar si es resultado SMS
@@ -1189,10 +1203,11 @@ document.addEventListener("DOMContentLoaded", function () {
           // Si no se puede parsear como JSON, usar el mensaje por defecto
         }
         
-        // Mostrar el mensaje de error
+        // Preparar el mensaje de error pero NO mostrar el contenedor todavía
+        // El código que llama a esta función manejará la visibilidad del contenedor
         const resultsDiv = document.getElementById('search-results') || document.getElementById('results');
         if (resultsDiv) {
-          // Limpiar cualquier contenido previo y mostrar solo el error
+          // Limpiar cualquier contenido previo y preparar el error (sin mostrar el contenedor todavía)
           resultsDiv.innerHTML = '';
           const errorDiv = document.createElement('p');
           errorDiv.id = 'twofa-error-message';
@@ -1210,7 +1225,8 @@ document.addEventListener("DOMContentLoaded", function () {
         display2FACode(data.code, data.time_remaining, email);
         return Promise.resolve(true); // Retornar true para indicar que se mostró contenido (código 2FA)
       } else if (data.error) {
-        // Si hay un error en la respuesta, mostrarlo
+        // Si hay un error en la respuesta, prepararlo pero NO mostrar el contenedor todavía
+        // El código que llama a esta función manejará la visibilidad del contenedor
         const resultsDiv = document.getElementById('search-results') || document.getElementById('results');
         if (resultsDiv) {
           resultsDiv.innerHTML = '';
@@ -1240,6 +1256,9 @@ document.addEventListener("DOMContentLoaded", function () {
     if (!resultsDiv) {
       return;
     }
+    
+    // NO mostrar el contenedor aquí - el código que llama a esta función manejará la visibilidad
+    // Solo preparar el contenido del código 2FA
     
     // Si hay un mensaje "No se encontraron mensajes", eliminarlo completamente para mostrar el código 2FA
     const noSMSMessage = document.getElementById('no-sms-messages');

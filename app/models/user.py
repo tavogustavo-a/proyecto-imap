@@ -114,6 +114,9 @@ class User(db.Model):
     
     # Campo para indicar si el usuario puede agregar sus propios correos
     can_add_own_emails = db.Column(db.Boolean, default=False, nullable=False)
+    
+    # Campo para indicar si el usuario puede borrar correos masivamente de todos los usuarios
+    can_bulk_delete_emails = db.Column(db.Boolean, default=False, nullable=False)
 
     # Campo para nombre completo
     full_name = db.Column(db.String(120), nullable=True)

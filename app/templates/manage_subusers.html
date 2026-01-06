@@ -218,6 +218,30 @@
   </div>
   {% endif %}
 
+  <!-- CONTORNO 1.6: Borrado Masivo de Correos -->
+  {% if current_user and not current_user.parent_id and current_user.can_bulk_delete_emails %}
+  <div class="admin-card mb-1">
+    <h4 class="mb-1 text-center">🗑️ Sacar Masivamente Correos de los Usuarios</h4>
+
+    <form id="bulkDeleteEmailsSubuserForm">
+      <label for="bulkDeleteEmailsSubuserInput" class="sr-only">Correos a eliminar</label>
+      <textarea
+        id="bulkDeleteEmailsSubuserInput"
+        rows="4"
+        placeholder="Ingresa uno o varios correos (separados por comas, espacios o saltos de línea). Ejemplo: correo1@test.com, correo2@test.com..."
+        class="d-block mb-05 w-100"
+        autocomplete="off"
+      ></textarea>
+
+      <div class="d-flex gap-05 justify-content-center">
+        <button type="submit" id="bulkDeleteEmailsSubuserBtn" class="btn-red">Eliminar Correos de Todos los Usuarios</button>
+      </div>
+
+      <div id="bulkDeleteEmailsSubuserMessage" class="mt-05 text-center"></div>
+    </form>
+  </div>
+  {% endif %}
+
   <!-- CONTORNO 2: Búsqueda y Listado de Sub-usuarios -->
   <div class="admin-card">
     <h4 class="mt-0">Buscar Sub-usuarios</h4>

@@ -37,6 +37,7 @@ def _get_principal_users_data(admin_username):
             "can_search_any": usr.can_search_any,
             "can_create_subusers": usr.can_create_subusers,
             "can_add_own_emails": usr.can_add_own_emails,
+            "can_bulk_delete_emails": usr.can_bulk_delete_emails,
             "parent_id": usr.parent_id if usr.parent_id else None,
             "full_name": usr.full_name or "",
             "phone": usr.phone or "",
@@ -98,6 +99,7 @@ def search_users_ajax():
             "can_search_any": u.can_search_any,
             "can_create_subusers": u.can_create_subusers,
             "can_add_own_emails": u.can_add_own_emails,
+            "can_bulk_delete_emails": u.can_bulk_delete_emails,
             "parent_id": u.parent_id if u.parent_id else None,
             "full_name": u.full_name or "",
             "phone": u.phone or "",
@@ -173,7 +175,8 @@ def create_user_ajax():
             full_name=full_name,
             phone=phone,
             email=email,
-            can_add_own_emails=False  # Por defecto desactivado
+            can_add_own_emails=False,  # Por defecto desactivado
+            can_bulk_delete_emails=False  # Por defecto desactivado
         )
         # Asignar can_search_any después de crear el objeto (como lo teníamos)
         new_user.can_search_any = bool(can_search_any)
@@ -386,6 +389,7 @@ def update_user_ajax():
         can_search_any = data.get("can_search_any", False) if "can_search_any" in data else False
         new_can_create_subusers = data.get("can_create_subusers", False) if "can_create_subusers" in data else False
         new_can_add_own_emails = data.get("can_add_own_emails", False) if "can_add_own_emails" in data else False
+        new_can_bulk_delete_emails = data.get("can_bulk_delete_emails", False) if "can_bulk_delete_emails" in data else False
         new_full_name = data.get("full_name", "").strip() if "full_name" in data else ""
         new_phone = data.get("phone", "").strip() if "phone" in data else ""
         new_email = data.get("email", None)
@@ -451,6 +455,9 @@ def update_user_ajax():
         
         # Manejo de can_add_own_emails
         user_to_update.can_add_own_emails = bool(new_can_add_own_emails)
+        
+        # Manejo de can_bulk_delete_emails
+        user_to_update.can_bulk_delete_emails = bool(new_can_bulk_delete_emails)
 
         # --- INICIO: Lógica de Inicialización/Limpieza de Defaults ---
         if not old_can_sub and new_can_sub:

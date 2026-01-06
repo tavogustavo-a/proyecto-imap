@@ -217,6 +217,8 @@ document.addEventListener("DOMContentLoaded", function() {
       const canCreateSub = editUserCanCreateSubusers.checked;
       const editUserCanAddOwnEmails = document.getElementById("editUserCanAddOwnEmails");
       const canAddOwnEmails = editUserCanAddOwnEmails ? editUserCanAddOwnEmails.checked : false;
+      const editUserCanBulkDeleteEmails = document.getElementById("editUserCanBulkDeleteEmails");
+      const canBulkDeleteEmails = editUserCanBulkDeleteEmails ? editUserCanBulkDeleteEmails.checked : false;
       const fullNameVal = editUserFullName.value.trim();
       const phoneVal = editUserPhone.value.trim();
       const emailVal = editUserEmail.value.trim();
@@ -239,6 +241,7 @@ document.addEventListener("DOMContentLoaded", function() {
         can_search_any: canSearch,
         can_create_subusers: canCreateSub,
         can_add_own_emails: canAddOwnEmails,
+        can_bulk_delete_emails: canBulkDeleteEmails,
         full_name: fullNameVal,
         phone: phoneVal,
         email: emailVal
@@ -408,6 +411,7 @@ document.addEventListener("DOMContentLoaded", function() {
       const canSearch = (target.getAttribute("data-cansearch") === "true");
       const canCreateSubusers = (target.getAttribute("data-cancreatesubusers") === "true");
       const canAddOwnEmails = (target.getAttribute("data-canaddownemails") === "true");
+      const canBulkDeleteEmails = (target.getAttribute("data-canbulkdeleteemails") === "true");
       const fullName = target.getAttribute("data-fullname") || "";
       const phone = target.getAttribute("data-phone") || "";
       const email = target.getAttribute("data-email") || "";
@@ -421,6 +425,8 @@ document.addEventListener("DOMContentLoaded", function() {
       editUserCanCreateSubusers.checked = canCreateSubusers;
       const editUserCanAddOwnEmailsCheckbox = document.getElementById("editUserCanAddOwnEmails");
       if (editUserCanAddOwnEmailsCheckbox) editUserCanAddOwnEmailsCheckbox.checked = canAddOwnEmails;
+      const editUserCanBulkDeleteEmailsCheckbox = document.getElementById("editUserCanBulkDeleteEmails");
+      if (editUserCanBulkDeleteEmailsCheckbox) editUserCanBulkDeleteEmailsCheckbox.checked = canBulkDeleteEmails;
       editUserFullName.value = fullName;
       editUserPhone.value = phone;
       editUserEmail.value = email;
@@ -528,6 +534,7 @@ document.addEventListener("DOMContentLoaded", function() {
       editBtn.dataset.cansearch = u.can_search_any ? 'true' : 'false';
       editBtn.dataset.cancreatesubusers = u.can_create_subusers ? 'true' : 'false';
       editBtn.dataset.canaddownemails = u.can_add_own_emails ? 'true' : 'false';
+      editBtn.dataset.canbulkdeleteemails = u.can_bulk_delete_emails ? 'true' : 'false';
       editBtn.dataset.fullname = escapeHtml(u.full_name || '');
       editBtn.dataset.phone = escapeHtml(u.phone || '');
       editBtn.dataset.email = escapeHtml(u.email || '');
