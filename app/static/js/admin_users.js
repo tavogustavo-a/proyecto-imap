@@ -513,7 +513,13 @@ document.addEventListener("DOMContentLoaded", function() {
     .then(res => res.json())
     .then(data => {
       if (data.status === "ok") {
-        userListContainer.innerHTML = renderUserItems(data.users);
+        // Limpiar contenedor
+        while(userListContainer.firstChild) {
+          userListContainer.removeChild(userListContainer.firstChild);
+        }
+        // Agregar elementos directamente sin usar innerHTML
+        const fragment = renderUserItems(data.users);
+        userListContainer.appendChild(fragment);
       } else {
         alert("Error: " + data.message);
       }
