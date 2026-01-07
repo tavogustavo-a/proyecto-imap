@@ -4955,7 +4955,7 @@ def send_chat_message():
                         
                         # Llamada interna al endpoint SocketIO
                         response = requests.post(
-                            'http://127.0.0.1:5002/api/chat/socketio_emit',
+                            'http://127.0.0.1:5001/api/chat/socketio_emit',
                             json=socketio_data,
                             headers={'Content-Type': 'application/json'}
                         )

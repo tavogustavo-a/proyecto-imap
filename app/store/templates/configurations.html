@@ -14,7 +14,7 @@
   <script src="{{ url_for('store_bp.static', filename='js/whatsapp_manager.js') }}" defer></script>
 {% endblock %}
 {% block content %}
-<div class="container container-max-width-900 store-light maxw-800 mx-auto mt-3 br-8">
+<div class="container container-max-width-900 store-light maxw-800 mx-auto br-8">
   <!-- Primer contenedor blanco: Google Sheets -->
     <div class="d-flex justify-content-between align-items-center mb-1">
       <h2 class="m-0">Configuraciones</h2>
@@ -65,7 +65,7 @@
   </div>
   
   <!-- Segundo contenedor blanco: Pasar de Drive a Drive -->
-  <div class="container container-max-width-900 store-light maxw-800 mx-auto mt-3 br-8">
+  <div class="container container-max-width-900 store-light maxw-800 mx-auto br-8">
     <h4 class="mb-1">Pasar de Drive a Drive</h4>
     <form id="drive-transfer-form" method="post" autocomplete="off">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -103,7 +103,7 @@
   </div>
   
   <!-- Tercer contenedor blanco: API WhatsApp -->
-  <div class="container container-max-width-900 store-light maxw-800 mx-auto mt-3 br-8">
+  <div class="container container-max-width-900 store-light maxw-800 mx-auto br-8">
     <h4 class="mb-1">API WhatsApp</h4>
     <p class="text-muted mb-3">Configuración para envío automático de mensajes de WhatsApp cuando se realicen compras en la tienda pública.</p>
     

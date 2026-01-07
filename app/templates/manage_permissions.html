@@ -1,0 +1,75 @@
+<!-- app/templates/manage_permissions.html -->
+{% extends "base.html" %}
+
+{% block title %}Gestión de Permisos{% endblock %}
+
+{% block head %}
+<meta name="csrf_token" content="{{ csrf_token() }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/store.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/manage_permissions.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='fontawesome/css/all.css') }}">
+{% endblock %}
+
+{% block content %}
+
+<div class="container container-max-width-1200">
+  <div class="admin-card">
+    <div class="d-flex justify-content-between align-items-center mb-1">
+      <h3 class="m-0">🔐 Gestión Centralizada de Permisos</h3>
+      <a href="{{ url_for('admin_bp.dashboard') }}" class="btn-panel btn-blue">
+        <i class="fas fa-arrow-left"></i> Volver
+      </a>
+    </div>
+    
+    <div class="d-flex align-items-center justify-content-between gap-2 mb-1 search-stats-container">
+      <input 
+        type="text" 
+        id="searchUsersInput" 
+        class="search-users-input search-users-input-flex" 
+        placeholder="Buscar usuario..."
+        autocomplete="off"
+      >
+      <div class="stat-card stat-card-inline">
+        <span class="stat-label-inline">Usuarios: </span>
+        <span class="stat-value-inline" id="totalUsers">0</span>
+      </div>
+    </div>
+    
+    <div class="permissions-table-container">
+      <table class="permissions-table">
+        <thead>
+          <tr>
+            <th>Usuario</th>
+            <th title="Consultar Correos Sin Restricciones">Consultar<br>Sin<br>Restricciones</th>
+            <th title="Agregar Sus Propios Correos">Agregar<br>Correos</th>
+            <th title="Borrar Correos Masivamente">Borrar<br>Masivamente</th>
+            <th title="Gestionar 2FA por Correo">Gestionar<br>2FA</th>
+            <th title="Crear Sub-usuarios">Crear<br>Sub-usuarios</th>
+            <th title="Acceso a Tienda">Tienda</th>
+            <th title="Acceso a Códigos 2">Códigos<br>2</th>
+            <th title="Acceso a Chat Soporte">Chat</th>
+            <th title="Gestionar Sub-usuarios">Gestionar<br>Sub-usuarios</th>
+            <th title="Usuario de Soporte">Soporte</th>
+          </tr>
+        </thead>
+        <tbody id="permissionsTableBody">
+          <tr>
+            <td colspan="10" class="text-center text-secondary">Cargando usuarios...</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    
+    <div class="d-flex justify-content-center mt-1">
+      <button id="savePermissionsBtn" class="btn-panel btn-green save-permissions-btn">
+        <i class="fas fa-save"></i> Guardar Cambios
+      </button>
+    </div>
+    
+    <div id="saveStatus" class="mt-1 text-center"></div>
+  </div>
+</div>
+
+<script src="{{ url_for('static', filename='js/manage_permissions.js') }}"></script>
+
+{% endblock %}

@@ -997,6 +997,103 @@ def update_user_rfs_ajax():
 
 # ============ FIN Manejo Regex/Filter Usuario Principal ============
 
+@admin_bp.route("/manage_permissions", methods=["GET"])
+@admin_required
+def manage_permissions_page():
+    """Página para gestionar todos los permisos de usuarios de forma centralizada"""
+    return render_template("manage_permissions.html")
+
+@admin_bp.route("/update_permissions_bulk_ajax", methods=["POST"])
+@admin_required
+def update_permissions_bulk_ajax():
+    """
+    Actualiza permisos de múltiples usuarios de forma masiva.
+    Recibe: { "updates": [{"user_id": 1, "permissions": {"can_search_any": true, ...}}, ...] }
+    """
+    try:
+        data = request.get_json()
+        if not data or "updates" not in data:
+            return jsonify({"status": "error", "message": "Formato de datos inválido"}), 400
+        
+        updates = data.get("updates", [])
+        if not updates:
+            return jsonify({"status": "error", "message": "No hay actualizaciones para aplicar"}), 400
+        
+        # Lista de permisos válidos
+        valid_permissions = [
+            'can_search_any',
+            'can_create_subusers',
+            'can_add_own_emails',
+            'can_bulk_delete_emails',
+            'can_manage_2fa_emails',
+            'can_access_store',
+            'can_access_codigos2',
+            'can_chat',
+            'can_manage_subusers',
+            'is_support'
+        ]
+        
+        updated_count = 0
+        errors = []
+        
+        for update_data in updates:
+            user_id = update_data.get("user_id")
+            permissions = update_data.get("permissions", {})
+            
+            if not user_id:
+                errors.append("user_id faltante en una actualización")
+                continue
+            
+            # Obtener usuario
+            user = User.query.get(user_id)
+            if not user:
+                errors.append(f"Usuario {user_id} no encontrado")
+                continue
+            
+            # Verificar que no sea admin
+            admin_username = current_app.config.get("ADMIN_USER", "admin")
+            if user.username == admin_username:
+                errors.append(f"No se pueden modificar permisos del usuario admin")
+                continue
+            
+            # Actualizar cada permiso válido
+            for perm_key, perm_value in permissions.items():
+                if perm_key in valid_permissions:
+                    # Convertir a boolean
+                    bool_value = bool(perm_value) if perm_value is not None else False
+                    setattr(user, perm_key, bool_value)
+                else:
+                    errors.append(f"Permiso inválido: {perm_key}")
+            
+            updated_count += 1
+        
+        # Guardar cambios en la base de datos
+        try:
+            db.session.commit()
+            message = f"Se actualizaron {updated_count} usuario(s)"
+            if errors:
+                message += f". Advertencias: {len(errors)}"
+            return jsonify({
+                "status": "ok",
+                "message": message,
+                "updated_count": updated_count,
+                "errors": errors if errors else None
+            })
+        except Exception as e:
+            db.session.rollback()
+            current_app.logger.error(f"Error al guardar permisos: {e}", exc_info=True)
+            return jsonify({
+                "status": "error",
+                "message": f"Error al guardar en la base de datos: {str(e)}"
+            }), 500
+        
+    except Exception as e:
+        current_app.logger.error(f"Error en update_permissions_bulk_ajax: {e}", exc_info=True)
+        return jsonify({
+            "status": "error",
+            "message": f"Error interno: {str(e)}"
+        }), 500
+
 @admin_bp.route("/list_allowed_emails_paginated", methods=["GET"])
 @admin_required
 def list_allowed_emails_paginated():

@@ -4,7 +4,7 @@
 
 {% block head %}{{ super() }}<link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}"><link rel="stylesheet" href="{{ url_for('static', filename='fontawesome/css/all.css') }}">{% endblock %}
 {% block content %}
-<div class="container container-max-width-900 mt-3 store-light store-front-main px-2 pb-3 purchase-history-container">
+<div class="container container-max-width-900 store-light store-front-main px-2 pb-3 purchase-history-container">
   {% set blocked_users = ['soporte','soporte1','soporte2','soporte3'] %}
   {% if session.get('logged_in') and (not session.get('username') or session.get('username').lower() not in blocked_users) %}
     <div class="d-flex justify-content-between align-items-center store-front-header gap-2 espaciado-responsive">

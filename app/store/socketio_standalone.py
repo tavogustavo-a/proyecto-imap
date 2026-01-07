@@ -20,9 +20,23 @@ if not cors_origins:
         # Esto forzará que se configure en .env
         cors_origins = []
 
+# ✅ CORREGIDO: Asegurar que CORS funcione correctamente
+# Si cors_origins es "*", convertirlo a lista para compatibilidad
+if cors_origins == "*":
+    cors_origins_list = "*"
+else:
+    # Si es una cadena con múltiples orígenes separados por coma, convertir a lista
+    if isinstance(cors_origins, str) and "," in cors_origins:
+        cors_origins_list = [origin.strip() for origin in cors_origins.split(",")]
+    elif isinstance(cors_origins, str):
+        cors_origins_list = [cors_origins]
+    else:
+        cors_origins_list = cors_origins
+
 # ✅ SIMPLIFICADO: SocketIO independiente solo para la tienda
 tienda_socketio = SocketIO(
-    cors_allowed_origins=cors_origins,
+    cors_allowed_origins=cors_origins_list,
+    cors_credentials=True,  # ✅ NUEVO: Permitir credenciales en CORS
     async_mode='eventlet',  # Forzar modo eventlet para mejor compatibilidad
     logger=False,           # ✅ DESHABILITADO: Para reducir ruido
     engineio_logger=False,  # ✅ DESHABILITADO: Para reducir ruido
