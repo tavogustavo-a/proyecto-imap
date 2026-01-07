@@ -865,10 +865,11 @@ class ChatReconnectionManager {
         return new Promise((resolve, reject) => {
             try {
                 // Detectar si es móvil
-                const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-                const baseUrl = isMobile ? 
+                // Conectar a SocketIO: en producción usa el proxy de Nginx, en local usa puerto directo
+                const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+                const baseUrl = isLocal ? 
                     `${window.location.protocol}//${window.location.hostname}:5001` : 
-                    'http://127.0.0.1:5001';
+                    window.location.origin;
                 
                 // Crear nuevo socket
                 window.socket = io(baseUrl, {
