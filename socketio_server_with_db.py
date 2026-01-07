@@ -15,20 +15,34 @@ warnings.filterwarnings('ignore', category=RuntimeWarning)
 # Configurar monkey_patch para evitar problemas en Windows
 # Los errores de símbolos en Windows pueden ignorarse si no afectan la funcionalidad
 class FilteredStderr:
-    """Clase que filtra mensajes de error conocidos de eventlet en Windows"""
+    """Clase que filtra mensajes de error conocidos de eventlet en Windows y logs de acceso HTTP"""
     def __init__(self, original_stderr):
         self.original_stderr = original_stderr
         self.buffer = StringIO()
     
     def write(self, message):
+        message_str = str(message)
+        message_lower = message_str.lower()
+        
         # Filtrar mensajes conocidos de eventlet en Windows
-        message_lower = message.lower()
         if any(keyword in message_lower for keyword in [
             'kernel32.dll', 'ntdll.dll', 'rtlntstatus', 'cancelioex', 
             'ffi.error', 'monkey_patching', 'exception was thrown'
         ]):
-            # No escribir estos mensajes
             return
+        
+        # Filtrar logs de acceso HTTP (pueden ir a stderr también)
+        if any(pattern in message_str for pattern in [
+            'HTTP/1.1"',
+            'HTTP/1.0"',
+            'accepted (',
+            'GET /socket.io/',
+            'POST /socket.io/',
+            'wsgi starting up',
+            'wsgi exited'
+        ]):
+            return
+        
         # Escribir otros mensajes normalmente
         self.original_stderr.write(message)
     
@@ -54,8 +68,9 @@ except (Exception, SystemError):
         # Si aún falla, continuar sin monkey_patch completo
         pass
 finally:
-    # Restaurar stderr original
-    sys.stderr = old_stderr
+    # Mantener el filtro activo para seguir filtrando logs de acceso HTTP
+    # sys.stderr = old_stderr  # Comentado para mantener el filtro activo
+    pass
 
 from datetime import datetime, timezone
 
@@ -147,10 +162,41 @@ if __name__ == "__main__":
         logging.getLogger('socketio').setLevel(logging.WARNING)
         logging.getLogger('engineio').setLevel(logging.WARNING)
         
-        # ✅ PRODUCCIÓN: Logs informativos
-        print(f"[SocketIO] Iniciando servidor en {host}:{port}")
-        print(f"[SocketIO] Modo: {'DEBUG' if debug else 'PRODUCCIÓN'}")
-        print(f"[SocketIO] CORS Origins: {config.SOCKETIO_CORS_ORIGINS}")
+        # ✅ NUEVO: Deshabilitar logs de acceso HTTP de eventlet/WSGI
+        logging.getLogger('eventlet.wsgi.server').setLevel(logging.ERROR)
+        logging.getLogger('eventlet').setLevel(logging.ERROR)
+        
+        # ✅ NUEVO: Redirigir stdout para evitar logs de acceso HTTP
+        original_stdout = sys.stdout
+        
+        class FilteredStdout:
+            """Clase que filtra logs de acceso HTTP de eventlet"""
+            def __init__(self, original_stdout):
+                self.original_stdout = original_stdout
+            
+            def write(self, message):
+                # Filtrar logs de acceso HTTP (formato: "127.0.0.1 - [date] "GET/POST ... HTTP/1.1" ...")
+                # También filtrar mensajes de "accepted" y otros logs de eventlet
+                message_str = str(message)
+                if any(pattern in message_str for pattern in [
+                    'HTTP/1.1"',
+                    'HTTP/1.0"',
+                    'accepted (',
+                    'GET /socket.io/',
+                    'POST /socket.io/',
+                    'wsgi starting up',
+                    'wsgi exited'
+                ]):
+                    return  # No mostrar logs de acceso HTTP
+                self.original_stdout.write(message)
+            
+            def flush(self):
+                self.original_stdout.flush()
+            
+            def __getattr__(self, name):
+                return getattr(self.original_stdout, name)
+        
+        sys.stdout = FilteredStdout(original_stdout)
         
         # Usar eventlet para producción
         tienda_socketio.run(app, host=host, port=port, debug=debug, use_reloader=False)

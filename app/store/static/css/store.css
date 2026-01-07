@@ -4286,10 +4286,18 @@ html, body {
     display: none;
   }
   
-  .drive-subtitles-warning {
-    display: none;
-    font-size: 0.98em;
-  }
+.drive-subtitles-warning {
+  display: none;
+  font-size: 0.98em;
+}
+
+.modal-visible {
+  display: flex !important;
+}
+
+.opacity-50 {
+  opacity: 0.5;
+}
   
   /* Responsive para herramientas.html */
   @media (max-width: 700px) {
@@ -7950,7 +7958,7 @@ html, body {
   }
   
   .plantilla-menu-item:hover {
-    transform: translateY(-3px) scale(1.02) !important;
+    /* ✅ Quitado transform para evitar agrandamiento/flotación - solo mantener brillo */
     box-shadow: 
       0 12px 40px rgba(0,0,0,0.25),
       0 6px 20px rgba(0,0,0,0.15),
@@ -7968,7 +7976,7 @@ html, body {
   }
   
   .plantilla-menu-item:active {
-    transform: translateY(-1px) scale(1.01) !important;
+    /* ✅ Quitado transform para evitar agrandamiento/flotación */
     transition: all 0.1s ease;
   }
   
@@ -7984,7 +7992,7 @@ html, body {
   .plantilla-menu-item:hover i {
     color: #66BB6A !important;
     opacity: 1;
-    transform: scale(1.1);
+    /* ✅ Quitado transform scale para evitar agrandamiento del icono */
     text-shadow: 0 0 15px rgba(102, 187, 106, 0.5);
   }
   
@@ -8005,12 +8013,12 @@ html, body {
   .plantilla-menu-item.active i {
     color: #A5D6A7 !important;
     text-shadow: 0 0 15px rgba(165, 214, 167, 0.6);
-    transform: scale(1.05);
+    /* ✅ Quitado transform scale para evitar agrandamiento del icono */
   }
   
   .plantilla-menu-item.active:hover {
     background: linear-gradient(145deg, #388E3C 0%, #43A047 50%, #388E3C 100%) !important;
-    transform: translateY(-2px) scale(1.01) !important;
+    /* ✅ Quitado transform para evitar agrandamiento/flotación - solo mantener brillo */
     box-shadow: 
       0 10px 35px rgba(46, 125, 50, 0.5),
       0 5px 18px rgba(46, 125, 50, 0.3),

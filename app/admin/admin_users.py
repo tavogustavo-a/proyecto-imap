@@ -91,6 +91,17 @@ def search_users_ajax():
         if hasattr(u, 'roles_tienda') and u.roles_tienda:
             rol_actual = u.roles_tienda[0].id  # Suponiendo que solo puede estar en un rol
             rol_nombre = u.roles_tienda[0].name
+        # Verificar can_access_codigos2 desde la tabla codigos2_users también
+        from app.models.codigos2_access import codigos2_users
+        from sqlalchemy import select
+        has_codigos2_access_table = db.session.execute(
+            select(codigos2_users.c.user_id).where(codigos2_users.c.user_id == u.id)
+        ).first() is not None
+        
+        # Combinar can_access_codigos2 del modelo con el estado de la tabla
+        can_access_codigos2_value = u.can_access_codigos2 if u.can_access_codigos2 is not None else False
+        can_access_codigos2_final = can_access_codigos2_value or has_codigos2_access_table
+        
         data.append({
             "id": u.id,
             "username": u.username,
@@ -102,6 +113,10 @@ def search_users_ajax():
             "can_add_own_emails": u.can_add_own_emails if u.can_add_own_emails is not None else False,
             "can_bulk_delete_emails": u.can_bulk_delete_emails if u.can_bulk_delete_emails is not None else False,
             "can_manage_2fa_emails": u.can_manage_2fa_emails if u.can_manage_2fa_emails is not None else False,
+            "can_access_codigos2": can_access_codigos2_final,
+            "can_chat": u.can_chat if u.can_chat is not None else False,
+            "can_manage_subusers": u.can_manage_subusers if u.can_manage_subusers is not None else False,
+            "is_support": u.is_support if u.is_support is not None else False,
             "parent_id": u.parent_id if u.parent_id else None,
             "full_name": u.full_name or "",
             "phone": u.phone or "",
@@ -1026,7 +1041,6 @@ def update_permissions_bulk_ajax():
             'can_add_own_emails',
             'can_bulk_delete_emails',
             'can_manage_2fa_emails',
-            'can_access_store',
             'can_access_codigos2',
             'can_chat',
             'can_manage_subusers',
@@ -1062,8 +1076,36 @@ def update_permissions_bulk_ajax():
                     # Convertir a boolean
                     bool_value = bool(perm_value) if perm_value is not None else False
                     setattr(user, perm_key, bool_value)
+                    
+                    # Sincronizar can_access_codigos2 con la tabla codigos2_users
+                    if perm_key == 'can_access_codigos2':
+                        from app.models.codigos2_access import Codigos2Access, codigos2_users
+                        from sqlalchemy import select, insert, delete
+                        
+                        # Verificar si el usuario está en codigos2_users
+                        existing = db.session.execute(
+                            select(codigos2_users.c.user_id).where(codigos2_users.c.user_id == user.id)
+                        ).first()
+                        
+                        if bool_value:
+                            # Si se otorga permiso y no está en la tabla, agregarlo
+                            if not existing:
+                                db.session.execute(
+                                    insert(codigos2_users).values(user_id=user.id)
+                                )
+                        else:
+                            # Si se revoca permiso y está en la tabla, eliminarlo
+                            if existing:
+                                db.session.execute(
+                                    delete(codigos2_users).where(codigos2_users.c.user_id == user.id)
+                                )
                 else:
                     errors.append(f"Permiso inválido: {perm_key}")
+            
+            # ✅ REGLA: Si is_support es True, forzar can_chat y can_manage_subusers a False
+            if user.is_support:
+                user.can_chat = False
+                user.can_manage_subusers = False
             
             updated_count += 1
         
@@ -1135,3 +1177,182 @@ def list_allowed_emails_paginated():
             "has_next": pagination.has_next
         }
     })
+
+@admin_bp.route("/get_tools_resources_ajax", methods=["GET"])
+@admin_required
+def get_tools_resources_ajax():
+    """
+    Obtiene todos los recursos de herramientas admin (ToolInfo, HtmlInfo, YouTubeListing, ApiInfo)
+    con sus usuarios vinculados.
+    """
+    try:
+        from app.store.models import ToolInfo, HtmlInfo, YouTubeListing, ApiInfo
+        
+        # Obtener todos los recursos
+        tools = ToolInfo.query.order_by(ToolInfo.id.desc()).all()
+        htmls = HtmlInfo.query.order_by(HtmlInfo.id.desc()).all()
+        youtube_listings = YouTubeListing.query.order_by(YouTubeListing.id.desc()).all()
+        apis = ApiInfo.query.order_by(ApiInfo.id.desc()).all()
+        
+        # Serializar recursos con sus usuarios vinculados
+        resources = []
+        
+        # ToolInfo (Información añadida)
+        for tool in tools:
+            user_ids = [u.id for u in tool.usuarios_vinculados.all()]
+            resources.append({
+                "id": tool.id,
+                "type": "tool",
+                "title": tool.title,
+                "category": "Información añadida",
+                "enabled": tool.enabled,
+                "user_ids": user_ids
+            })
+        
+        # HtmlInfo (HTML añadidos)
+        for html in htmls:
+            user_ids = [u.id for u in html.users.all()]
+            resources.append({
+                "id": html.id,
+                "type": "html",
+                "title": html.title,
+                "category": "HTML añadidos",
+                "enabled": html.enabled,
+                "user_ids": user_ids
+            })
+        
+        # YouTubeListing (Listado de YouTube)
+        for yt in youtube_listings:
+            user_ids = [u.id for u in yt.users.all()]
+            resources.append({
+                "id": yt.id,
+                "type": "youtube",
+                "title": yt.title,
+                "category": "Listado de YouTube",
+                "enabled": yt.enabled,
+                "user_ids": user_ids
+            })
+        
+        # ApiInfo (Lista de Creación de APIs)
+        for api in apis:
+            user_ids = [u.id for u in api.users.all()]
+            resources.append({
+                "id": api.id,
+                "type": "api",
+                "title": api.title,
+                "category": "Lista de Creación de APIs",
+                "enabled": api.enabled,
+                "user_ids": user_ids
+            })
+        
+        return jsonify({
+            "status": "ok",
+            "resources": resources
+        })
+        
+    except Exception as e:
+        current_app.logger.error(f"Error en get_tools_resources_ajax: {e}", exc_info=True)
+        return jsonify({
+            "status": "error",
+            "message": f"Error interno: {str(e)}"
+        }), 500
+
+@admin_bp.route("/update_tools_resources_permissions_ajax", methods=["POST"])
+@admin_required
+def update_tools_resources_permissions_ajax():
+    """
+    Actualiza los permisos de acceso a recursos de herramientas admin.
+    Recibe: { "updates": [{"resource_id": 1, "resource_type": "tool", "user_ids": [1, 2, 3]}, ...] }
+    """
+    try:
+        from app.store.models import ToolInfo, HtmlInfo, YouTubeListing, ApiInfo
+        
+        data = request.get_json()
+        if not data or "updates" not in data:
+            return jsonify({"status": "error", "message": "Formato de datos inválido"}), 400
+        
+        updates = data.get("updates", [])
+        if not updates:
+            return jsonify({"status": "error", "message": "No hay actualizaciones para aplicar"}), 400
+        
+        updated_count = 0
+        errors = []
+        
+        for update_data in updates:
+            resource_id = update_data.get("resource_id")
+            resource_type = update_data.get("resource_type")
+            user_ids = update_data.get("user_ids", [])
+            
+            if not resource_id or not resource_type:
+                errors.append("resource_id o resource_type faltante en una actualización")
+                continue
+            
+            try:
+                # Obtener usuarios
+                users = User.query.filter(User.id.in_(user_ids)).all() if user_ids else []
+                
+                # Actualizar según el tipo de recurso
+                if resource_type == "tool":
+                    resource = ToolInfo.query.get(resource_id)
+                    if not resource:
+                        errors.append(f"ToolInfo {resource_id} no encontrado")
+                        continue
+                    resource.usuarios_vinculados = users
+                    
+                elif resource_type == "html":
+                    resource = HtmlInfo.query.get(resource_id)
+                    if not resource:
+                        errors.append(f"HtmlInfo {resource_id} no encontrado")
+                        continue
+                    resource.users = users
+                    
+                elif resource_type == "youtube":
+                    resource = YouTubeListing.query.get(resource_id)
+                    if not resource:
+                        errors.append(f"YouTubeListing {resource_id} no encontrado")
+                        continue
+                    resource.users = users
+                    
+                elif resource_type == "api":
+                    resource = ApiInfo.query.get(resource_id)
+                    if not resource:
+                        errors.append(f"ApiInfo {resource_id} no encontrado")
+                        continue
+                    resource.users = users
+                    
+                else:
+                    errors.append(f"Tipo de recurso inválido: {resource_type}")
+                    continue
+                
+                updated_count += 1
+                
+            except Exception as e:
+                errors.append(f"Error al actualizar recurso {resource_id}: {str(e)}")
+                continue
+        
+        # Guardar cambios en la base de datos
+        try:
+            db.session.commit()
+            message = f"Se actualizaron {updated_count} recurso(s)"
+            if errors:
+                message += f". Advertencias: {len(errors)}"
+            return jsonify({
+                "status": "ok",
+                "message": message,
+                "updated_count": updated_count,
+                "errors": errors if errors else None
+            })
+        except Exception as e:
+            db.session.rollback()
+            current_app.logger.error(f"Error al guardar permisos de recursos: {e}", exc_info=True)
+            return jsonify({
+                "status": "error",
+                "message": f"Error al guardar en la base de datos: {str(e)}"
+            }), 500
+        
+    except Exception as e:
+        current_app.logger.error(f"Error en update_tools_resources_permissions_ajax: {e}", exc_info=True)
+        return jsonify({
+            "status": "error",
+            "message": f"Error interno: {str(e)}"
+        }), 500

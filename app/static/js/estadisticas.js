@@ -13,28 +13,31 @@ document.addEventListener('DOMContentLoaded', function() {
   function mostrarResumen() {
     tabResumen.classList.add('active');
     tabLista.classList.remove('active');
-    vistaResumen.style.display = 'block';
-    vistaLista.classList.add('hidden');
-    vistaLista.style.display = 'none';
+    vistaResumen.classList.remove('estadisticas-vista-hidden');
+    vistaResumen.classList.add('estadisticas-vista-visible');
+    vistaLista.classList.remove('estadisticas-vista-visible');
+    vistaLista.classList.add('estadisticas-vista-hidden');
   }
   
   function mostrarLista() {
     tabResumen.classList.remove('active');
     tabLista.classList.add('active');
-    vistaResumen.style.display = 'none';
-    vistaLista.classList.remove('hidden');
-    vistaLista.style.display = 'block';
+    vistaResumen.classList.remove('estadisticas-vista-visible');
+    vistaResumen.classList.add('estadisticas-vista-hidden');
+    vistaLista.classList.remove('estadisticas-vista-hidden');
+    vistaLista.classList.add('estadisticas-vista-visible');
   }
   
   tabResumen.addEventListener('click', mostrarResumen);
   tabLista.addEventListener('click', mostrarLista);
   
-  // Inicializar anchos de barras de porcentaje dinámicamente
+  // Aplicar anchos de barras usando CSS custom properties (CSP compliant)
   const barras = document.querySelectorAll('.gasto-mes-bar[data-porcentaje]');
   barras.forEach(function(barra) {
     const porcentaje = barra.getAttribute('data-porcentaje');
     if (porcentaje) {
-      barra.style.width = porcentaje + '%';
+      // Usar setProperty en lugar de style.width para cumplir CSP
+      barra.style.setProperty('--bar-width', porcentaje + '%');
     }
   });
 });

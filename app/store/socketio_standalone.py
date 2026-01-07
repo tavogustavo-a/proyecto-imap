@@ -12,12 +12,35 @@ load_dotenv()
 # Obtener CORS origins desde .env o usar '*' por defecto solo en desarrollo
 FLASK_ENV = os.getenv("FLASK_ENV", "development")
 cors_origins = os.getenv('SOCKETIO_CORS_ORIGINS')
-if not cors_origins:
-    if FLASK_ENV == "development":
+
+# ✅ CORREGIDO: En desarrollo, siempre permitir localhost
+if FLASK_ENV == "development":
+    if not cors_origins:
         cors_origins = "*"  # Permitir todos en desarrollo
     else:
-        # En producción, si no está configurado, usar lista vacía (solo mismo origen)
-        # Esto forzará que se configure en .env
+        # Si ya hay CORS origins configurados, agregar localhost
+        if isinstance(cors_origins, str) and "," in cors_origins:
+            origins_list = [origin.strip() for origin in cors_origins.split(",")]
+        elif isinstance(cors_origins, str):
+            origins_list = [cors_origins]
+        else:
+            origins_list = cors_origins if isinstance(cors_origins, list) else []
+        
+        # Agregar localhost si no está ya incluido
+        localhost_origins = [
+            "http://127.0.0.1:5000",
+            "http://127.0.0.1:5001",
+            "http://localhost:5000",
+            "http://localhost:5001"
+        ]
+        for localhost_origin in localhost_origins:
+            if localhost_origin not in origins_list:
+                origins_list.append(localhost_origin)
+        
+        cors_origins = ",".join(origins_list) if origins_list else "*"
+else:
+    # En producción, si no está configurado, usar lista vacía (solo mismo origen)
+    if not cors_origins:
         cors_origins = []
 
 # ✅ CORREGIDO: Asegurar que CORS funcione correctamente

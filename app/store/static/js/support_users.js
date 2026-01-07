@@ -124,7 +124,7 @@ document.addEventListener('DOMContentLoaded', function() {
         // Botón anterior (siempre visible, deshabilitado si es página 1)
         const prevBtn = document.createElement('button');
         prevBtn.textContent = '← Anterior';
-        prevBtn.className = 'pagination-btn';
+        prevBtn.className = 'btn-panel btn-blue';
         prevBtn.disabled = currentPage <= 1;
         prevBtn.onclick = () => {
             if (currentPage > 1) {
@@ -135,7 +135,7 @@ document.addEventListener('DOMContentLoaded', function() {
         };
         paginationButtons.appendChild(prevBtn);
         
-        // Información de página (solo texto, no botones)
+        // Información de página (solo texto, no botones) - centrada
         const pageInfo = document.createElement('span');
         pageInfo.textContent = `Página ${currentPage} de ${totalPages}`;
         pageInfo.className = 'pagination-info';
@@ -144,7 +144,7 @@ document.addEventListener('DOMContentLoaded', function() {
         // Botón siguiente (siempre visible, deshabilitado si es la última página)
         const nextBtn = document.createElement('button');
         nextBtn.textContent = 'Siguiente →';
-        nextBtn.className = 'pagination-btn';
+        nextBtn.className = 'btn-panel btn-blue';
         nextBtn.disabled = currentPage >= totalPages;
         nextBtn.onclick = () => {
             if (currentPage < totalPages) {

@@ -22,13 +22,24 @@
     </div>
     
     <div class="d-flex align-items-center justify-content-between gap-2 mb-1 search-stats-container">
-      <input 
-        type="text" 
-        id="searchUsersInput" 
-        class="search-users-input search-users-input-flex" 
-        placeholder="Buscar usuario..."
-        autocomplete="off"
-      >
+      <div class="search-input-wrapper">
+        <input 
+          type="text" 
+          id="searchUsersInput" 
+          class="search-users-input search-users-input-flex" 
+          placeholder="Buscar usuario..."
+          autocomplete="off"
+        >
+        <button 
+          type="button" 
+          id="clearUsersSearchBtn" 
+          class="search-clear-btn"
+          title="Limpiar búsqueda"
+          aria-label="Limpiar búsqueda"
+        >
+          <i class="fas fa-times"></i>
+        </button>
+      </div>
       <div class="stat-card stat-card-inline">
         <span class="stat-label-inline">Usuarios: </span>
         <span class="stat-value-inline" id="totalUsers">0</span>
@@ -45,7 +56,6 @@
             <th title="Borrar Correos Masivamente">Borrar<br>Masivamente</th>
             <th title="Gestionar 2FA por Correo">Gestionar<br>2FA</th>
             <th title="Crear Sub-usuarios">Crear<br>Sub-usuarios</th>
-            <th title="Acceso a Tienda">Tienda</th>
             <th title="Acceso a Códigos 2">Códigos<br>2</th>
             <th title="Acceso a Chat Soporte">Chat</th>
             <th title="Gestionar Sub-usuarios">Gestionar<br>Sub-usuarios</th>
@@ -67,6 +77,62 @@
     </div>
     
     <div id="saveStatus" class="mt-1 text-center"></div>
+  </div>
+  
+  <!-- Nueva sección para gestionar permisos de recursos de herramientas admin -->
+  <div class="admin-card mt-2">
+    <div class="d-flex justify-content-between align-items-center mb-1">
+      <h3 class="m-0">🔧 Gestión de Permisos de Herramientas Admin</h3>
+    </div>
+    
+    <div class="d-flex align-items-center justify-content-between gap-2 mb-1 search-stats-container">
+      <div class="search-input-wrapper">
+        <input 
+          type="text" 
+          id="searchResourcesInput" 
+          class="search-users-input search-users-input-flex" 
+          placeholder="Buscar usuario..."
+          autocomplete="off"
+        >
+        <button 
+          type="button" 
+          id="clearResourcesSearchBtn" 
+          class="search-clear-btn"
+          title="Limpiar búsqueda"
+          aria-label="Limpiar búsqueda"
+        >
+          <i class="fas fa-times"></i>
+        </button>
+      </div>
+      <div class="stat-card stat-card-inline">
+        <span class="stat-label-inline">Recursos: </span>
+        <span class="stat-value-inline" id="totalResources">0</span>
+      </div>
+    </div>
+    
+    <div class="permissions-table-container">
+      <table class="permissions-table" id="resourcesPermissionsTable">
+        <thead>
+          <tr>
+            <th>Usuario</th>
+            <!-- Los headers de recursos se generarán dinámicamente -->
+          </tr>
+        </thead>
+        <tbody id="resourcesPermissionsTableBody">
+          <tr>
+            <td colspan="1" class="text-center text-secondary">Cargando recursos...</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    
+    <div class="d-flex justify-content-center mt-1">
+      <button id="saveResourcesPermissionsBtn" class="btn-panel btn-green save-permissions-btn">
+        <i class="fas fa-save"></i> Guardar Cambios de Recursos
+      </button>
+    </div>
+    
+    <div id="saveResourcesStatus" class="mt-1 text-center"></div>
   </div>
 </div>
 

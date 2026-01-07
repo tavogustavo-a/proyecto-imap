@@ -27,11 +27,33 @@ def get_codigos2_users():
     if search_query:
         users_query = users_query.filter(User.username.ilike(f'%{search_query}%'))
     
-    # Obtener IDs de usuarios con acceso
+    # Obtener IDs de usuarios con acceso desde codigos2_users
     linked_user_ids_result = db.session.execute(
         select(codigos2_users.c.user_id)
     ).all()
-    linked_user_ids = {row[0] for row in linked_user_ids_result}
+    linked_user_ids_from_table = {row[0] for row in linked_user_ids_result}
+    
+    # También obtener usuarios con can_access_codigos2=True para sincronización
+    users_with_permission = User.query.filter(
+        User.can_access_codigos2 == True,
+        User.username != admin_username,
+        User.parent_id == None
+    ).all()
+    linked_user_ids_from_field = {user.id for user in users_with_permission}
+    
+    # Sincronizar: Si un usuario tiene can_access_codigos2=True pero no está en codigos2_users, agregarlo
+    to_sync = linked_user_ids_from_field - linked_user_ids_from_table
+    if to_sync:
+        for user_id in to_sync:
+            db.session.execute(
+                insert(codigos2_users).values(user_id=user_id)
+            )
+        db.session.commit()
+        # Actualizar linked_user_ids_from_table después de la sincronización
+        linked_user_ids_from_table = linked_user_ids_from_table | to_sync
+    
+    # Combinar ambos (unión) para mostrar todos los usuarios con acceso
+    linked_user_ids = linked_user_ids_from_table | linked_user_ids_from_field
     
     # Manejar el caso cuando per_page es "all"
     if per_page_param == 'all':
@@ -119,6 +141,14 @@ def save_codigos2_access():
                     db.session.execute(
                         insert(codigos2_users).values(user_id=user_id)
                     )
+                # Sincronizar can_access_codigos2 en el modelo User
+                user.can_access_codigos2 = True
+        
+        # Desvincular usuarios también actualiza can_access_codigos2
+        for user_id in to_remove:
+            user = User.query.get(user_id)
+            if user and user.username != admin_username:
+                user.can_access_codigos2 = False
         
         db.session.commit()
         flash('Accesos a Códigos 2 actualizados correctamente.', 'success')

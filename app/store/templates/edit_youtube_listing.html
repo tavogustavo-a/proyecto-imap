@@ -8,7 +8,7 @@
 {% endblock %}
 
 {% block content %}
-<div class="store-light maxw-800 mx-auto mt-3 br-8 edit-youtube-container">
+<div class="store-light maxw-800 mx-auto br-8 edit-youtube-container">
   <div class="d-flex justify-content-between align-items-center mb-3">
     <h2 class="m-0">{{ title }}</h2>
     <a href="{{ url_for('store_bp.admin_tools') }}" class="btn-panel btn-blue">Volver</a>
@@ -52,9 +52,9 @@
           <select id="perPageSelect" class="" autocomplete="off">
             <option value="5">5</option>
             <option value="10">10</option>
-            <option value="20" selected>20</option>
+            <option value="20">20</option>
             <option value="50">50</option>
-            <option value="all">Todos</option>
+            <option value="all" selected>Todos</option>
           </select>
         </div>
       </div>
@@ -85,7 +85,7 @@
         <button type="button" id="deselectAllBtn" class="btn-panel btn-red">Desmarcar Todos</button>
       </div>
 
-      <div class="mt-4 text-center">
+      <div class="text-center">
         <button type="submit" id="saveChangesBtn" class="btn-panel btn-green">Guardar</button>
         <a href="{{ url_for('store_bp.admin_tools') }}" class="btn-panel btn-red">Cancelar</a>
       </div>
@@ -113,7 +113,7 @@
 </div>
 
 <!-- Modal para editar link -->
-<div id="edit-link-modal" class="modal-background edit-youtube-modal">
+<div id="edit-link-modal" class="modal-background edit-youtube-modal modal-hidden">
   <div class="modal-content">
     <div class="modal-header">
       <h5 class="modal-title">Editar Link</h5>

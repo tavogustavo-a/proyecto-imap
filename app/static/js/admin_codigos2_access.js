@@ -10,7 +10,9 @@ document.addEventListener('DOMContentLoaded', function() {
 
     let currentPage = 1;
     let currentSearch = "";
-    let perPage = 20;
+    let perPage = 'all';
+    // Guardar estado de checkboxes marcados (independiente de la paginación)
+    const checkedUserIds = new Set();
 
     // Función helper para escapar HTML y prevenir XSS
     function escapeHtml(text) {
@@ -21,7 +23,10 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     function updateTable(users, linked_user_ids) {
-        usersTableBody.innerHTML = '';
+        while (usersTableBody.firstChild) {
+            usersTableBody.removeChild(usersTableBody.firstChild);
+        }
+        
         if (users.length === 0) {
             const tr = document.createElement('tr');
             const td = document.createElement('td');
@@ -34,7 +39,8 @@ document.addEventListener('DOMContentLoaded', function() {
         }
 
         users.forEach(user => {
-            const isChecked = linked_user_ids.includes(user.id);
+            // Verificar estado guardado primero, luego el del servidor
+            const isChecked = checkedUserIds.has(user.id);
             const tr = document.createElement('tr');
             
             const td1 = document.createElement('td');
@@ -53,6 +59,16 @@ document.addEventListener('DOMContentLoaded', function() {
             checkbox.value = user.id;
             checkbox.setAttribute('form', 'codigos2Form');
             if (isChecked) checkbox.checked = true;
+            
+            // Event listener para actualizar el estado guardado
+            checkbox.addEventListener('change', function() {
+                if (this.checked) {
+                    checkedUserIds.add(user.id);
+                } else {
+                    checkedUserIds.delete(user.id);
+                }
+            });
+            
             td3.appendChild(checkbox);
             tr.appendChild(td3);
             
@@ -60,42 +76,86 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
+    function restorePaginationButtons() {
+        if (!paginationContainer) return;
+        
+        // Solo restaurar si el contenedor está vacío
+        if (paginationContainer.children.length === 0) {
+            // Restaurar botón Anterior
+            const prevBtn = document.createElement('button');
+            prevBtn.type = 'button';
+            prevBtn.className = 'btn-panel btn-blue';
+            prevBtn.textContent = '< Anterior';
+            prevBtn.addEventListener('click', () => {
+                if (currentPage > 1) {
+                    currentPage--;
+                    fetchUsers(currentPage);
+                }
+            });
+            paginationContainer.appendChild(prevBtn);
+            
+            // Restaurar indicador de página
+            const indicator = document.createElement('span');
+            indicator.className = 'mx-2';
+            indicator.textContent = 'Página 1 de 1';
+            paginationContainer.appendChild(indicator);
+            
+            // Restaurar botón Siguiente
+            const nextBtn = document.createElement('button');
+            nextBtn.type = 'button';
+            nextBtn.className = 'btn-panel btn-blue';
+            nextBtn.textContent = 'Siguiente >';
+            nextBtn.addEventListener('click', () => {
+                currentPage++;
+                fetchUsers(currentPage);
+            });
+            paginationContainer.appendChild(nextBtn);
+        }
+    }
+    
     function updatePagination(pagination) {
-        paginationContainer.innerHTML = '';
+        if (!paginationContainer) return;
         
-        const prevButton = document.createElement('button');
-        prevButton.innerHTML = "&lt; Anterior";
-        prevButton.type = "button";
-        prevButton.className = "btn-panel btn-blue";
-        prevButton.disabled = !pagination.has_prev;
-        prevButton.addEventListener("click", () => {
-            if (pagination.has_prev) {
-                fetchUsers(pagination.prev_num);
-            }
-        });
-        paginationContainer.appendChild(prevButton);
-
-        const pageInfo = document.createElement("span");
-        pageInfo.className = "mx-2";
-        pageInfo.innerText = `Página ${pagination.page} de ${pagination.pages}`;
-        paginationContainer.appendChild(pageInfo);
+        let pageIndicatorEl = paginationContainer.querySelector('span');
+        let prevPageBtnEl = paginationContainer.querySelector('button:first-child');
+        let nextPageBtnEl = paginationContainer.querySelector('button:last-child');
         
-        const nextButton = document.createElement("button");
-        nextButton.innerHTML = "Siguiente &gt;";
-        nextButton.type = "button";
-        nextButton.className = "btn-panel btn-blue";
-        nextButton.disabled = !pagination.has_next;
-        nextButton.addEventListener("click", () => {
-            if (pagination.has_next) {
-                fetchUsers(pagination.next_num);
-            }
-        });
-        paginationContainer.appendChild(nextButton);
+        // Si los elementos no existen, restaurarlos
+        if (!pageIndicatorEl || !prevPageBtnEl || !nextPageBtnEl) {
+            restorePaginationButtons();
+            pageIndicatorEl = paginationContainer.querySelector('span');
+            prevPageBtnEl = paginationContainer.querySelector('button:first-child');
+            nextPageBtnEl = paginationContainer.querySelector('button:last-child');
+        }
+        
+        if (!pageIndicatorEl || !prevPageBtnEl || !nextPageBtnEl) {
+            return;
+        }
+        
+        pageIndicatorEl.textContent = `Página ${pagination.page} de ${pagination.pages || 1}`;
+        
+        // Anterior
+        if (!pagination.has_prev) {
+            prevPageBtnEl.disabled = true;
+            prevPageBtnEl.setAttribute('disabled', 'disabled');
+        } else {
+            prevPageBtnEl.disabled = false;
+            prevPageBtnEl.removeAttribute('disabled');
+        }
+        
+        // Siguiente
+        if (!pagination.has_next) {
+            nextPageBtnEl.disabled = true;
+            nextPageBtnEl.setAttribute('disabled', 'disabled');
+        } else {
+            nextPageBtnEl.disabled = false;
+            nextPageBtnEl.removeAttribute('disabled');
+        }
     }
 
     async function fetchUsers(page = 1) {
         const searchValue = searchInput.value;
-        const perPage = showCountSelect.value;
+        perPage = showCountSelect.value;
         
         let url;
         if (perPage === 'all') {
@@ -110,11 +170,20 @@ document.addEventListener('DOMContentLoaded', function() {
                 throw new Error('Network response was not ok');
             }
             const data = await response.json();
+            // Inicializar checkedUserIds con los IDs del servidor si es la primera carga
+            if (checkedUserIds.size === 0) {
+                data.linked_user_ids.forEach(id => checkedUserIds.add(id));
+            }
             updateTable(data.users, data.linked_user_ids);
+            // Solo mostrar paginación si no es "all"
             if (perPage !== 'all') {
+                restorePaginationButtons();
                 updatePagination(data.pagination);
             } else {
-                paginationContainer.innerHTML = "";
+                // Ocultar paginación cuando se selecciona "all"
+                while (paginationContainer.firstChild) {
+                    paginationContainer.removeChild(paginationContainer.firstChild);
+                }
             }
         } catch (error) {
             usersTableBody.innerHTML = '';
@@ -132,6 +201,12 @@ document.addEventListener('DOMContentLoaded', function() {
         const checkboxes = usersTableBody.querySelectorAll('input[type="checkbox"]');
         checkboxes.forEach(checkbox => {
             checkbox.checked = checked;
+            const userId = parseInt(checkbox.value);
+            if (checked) {
+                checkedUserIds.add(userId);
+            } else {
+                checkedUserIds.delete(userId);
+            }
         });
     }
 
@@ -159,6 +234,25 @@ document.addEventListener('DOMContentLoaded', function() {
         showCountSelect.addEventListener('change', () => fetchUsers(1));
     }
 
+    // Interceptar el envío del formulario para incluir todos los IDs marcados
+    const codigos2Form = document.getElementById('codigos2Form');
+    if (codigos2Form) {
+        codigos2Form.addEventListener('submit', function(e) {
+            // Eliminar campos ocultos anteriores si existen
+            const existingHiddenInputs = codigos2Form.querySelectorAll('input[type="hidden"][name="user_ids"]');
+            existingHiddenInputs.forEach(input => input.remove());
+            
+            // Agregar campos ocultos para todos los IDs marcados
+            checkedUserIds.forEach(userId => {
+                const hiddenInput = document.createElement('input');
+                hiddenInput.type = 'hidden';
+                hiddenInput.name = 'user_ids';
+                hiddenInput.value = userId;
+                codigos2Form.appendChild(hiddenInput);
+            });
+        });
+    }
+    
     // Initial fetch to populate the table on page load
     fetchUsers(1);
 });

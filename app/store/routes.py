@@ -6671,15 +6671,80 @@ def auto_cleanup_inactive_users():
 def schedule_weekly_cleanup():
     """Programar limpieza automática semanal (para ser llamada por cron job)"""
     try:
-        from datetime import datetime
+        from app.models.user import User
+        from app.models.chat import ChatMessage, ChatSession
+        import os
+        from datetime import datetime, timedelta
         
-        # Ejecutar limpieza automática
-        cleanup_result = auto_cleanup_inactive_users()
+        # Usar días por defecto para limpieza semanal
+        INACTIVITY_DAYS = 5
         
-        # Tarea programada ejecutada
-
+        # Configuración de inactividad
+        cutoff_date = datetime.utcnow() - timedelta(days=INACTIVITY_DAYS)
         
-        return cleanup_result
+        # Buscar usuarios inactivos
+        inactive_users = []
+        total_cleanup_stats = {
+            'users_processed': 0,
+            'users_cleaned': 0,
+            'total_messages_deleted': 0,
+            'total_sessions_deleted': 0,
+            'total_files_deleted': 0,
+            'total_orphaned_files_deleted': 0,
+            'errors': []
+        }
+        
+        # Obtener todos los usuarios
+        all_users = User.query.all()
+        
+        for user in all_users:
+            # Verificar si el usuario es inactivo
+            last_activity = get_user_last_chat_activity(user.id)
+            
+            if last_activity and last_activity < cutoff_date:
+                inactive_users.append({
+                    'user': user,
+                    'last_activity': last_activity,
+                    'days_inactive': (datetime.utcnow() - last_activity).days
+                })
+        
+        # Ordenar por días de inactividad
+        inactive_users.sort(key=lambda x: x['days_inactive'], reverse=True)
+        
+        # Procesar cada usuario inactivo
+        for user_info in inactive_users:
+            user = user_info['user']
+            
+            try:
+                # Limpiar chat del usuario inactivo
+                cleanup_result = cleanup_inactive_user_chat(user.id)
+                
+                # Verificar que la limpieza fue completa
+                verification = verify_cleanup_completeness(user.id)
+                
+                total_cleanup_stats['users_processed'] += 1
+                total_cleanup_stats['users_cleaned'] += 1
+                total_cleanup_stats['total_messages_deleted'] += cleanup_result['messages_deleted']
+                total_cleanup_stats['total_sessions_deleted'] += cleanup_result['sessions_deleted']
+                total_cleanup_stats['total_files_deleted'] += cleanup_result['files_deleted']
+                total_cleanup_stats['total_orphaned_files_deleted'] += cleanup_result['orphaned_files_deleted']
+                
+            except Exception as e:
+                error_msg = f"Error limpiando usuario {user.username}: {str(e)}"
+                total_cleanup_stats['errors'].append(error_msg)
+        
+        # Limpieza final de archivos huérfanos
+        final_cleanup = cleanup_orphaned_files()
+        total_cleanup_stats['total_orphaned_files_deleted'] += final_cleanup
+        
+        return jsonify({
+            'status': 'success',
+            'message': f'Limpieza semanal completada: {total_cleanup_stats["users_cleaned"]} usuarios inactivos por {INACTIVITY_DAYS}+ días limpiados',
+            'data': {
+                **total_cleanup_stats,
+                'days_used': INACTIVITY_DAYS
+            }
+        })
         
     except Exception as e:
         return jsonify({'status': 'error', 'message': f'Error en limpieza semanal: {str(e)}'}), 500

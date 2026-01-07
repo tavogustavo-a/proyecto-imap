@@ -8,7 +8,7 @@
 {% endblock %}
 
 {% block content %}
-<div class="store-light maxw-800 mx-auto mt-3 br-8 edit-html-container">
+<div class="store-light maxw-800 mx-auto br-8 edit-html-container">
     <div class="d-flex justify-content-between align-items-center mb-05">
       <h2 class="m-0">Editar HTML</h2>
       <a href="{{ url_for('store_bp.admin_tools') }}" class="btn-panel btn-blue">Volver</a>
@@ -48,9 +48,9 @@
                 <select id="showUserCount" class="form-select" autocomplete="off">
                   <option value="5">5</option>
                   <option value="10">10</option>
-                  <option value="20" selected>20</option>
+                  <option value="20">20</option>
                   <option value="50">50</option>
-                  <option value="all">Todos</option>
+                  <option value="all" selected>Todos</option>
                 </select>
               </div>
             </div>

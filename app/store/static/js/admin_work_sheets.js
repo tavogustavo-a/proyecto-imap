@@ -7577,43 +7577,33 @@ function applyCorrectNumberColoring(rowIndex, colIndex, numeroValue, plantilla) 
 
 // Función para aplicar color a toda la fila en tiempo real
 function applyRowColorInRealTime(rowIndex, colIndex, numeroValue, plantilla) {
-    console.log('🔍 applyRowColorInRealTime llamada:', { rowIndex, colIndex, numeroValue, plantilla: !!plantilla });
-    
     if (!plantilla) {
-        console.log('❌ No hay plantilla');
         return;
     }
     
     // Encontrar la fila en el DOM - probar diferentes selectores
     let row = document.querySelector(`tr[data-row-index="${rowIndex}"]`);
-    console.log('🔍 Fila encontrada con selector 1:', row);
     
     if (!row) {
         // Intentar con selector alternativo
         row = document.querySelector(`#worksheetTable tr[data-row-index="${rowIndex}"]`);
-        console.log('🔍 Fila encontrada con selector 2:', row);
     }
     
     if (!row) {
         // Intentar buscar por índice de fila
         const allRows = document.querySelectorAll('#worksheetTable tr');
-        console.log('🔍 Todas las filas encontradas:', allRows.length);
         if (allRows[rowIndex]) {
             row = allRows[rowIndex];
-            console.log('🔍 Fila encontrada por índice:', row);
         }
     }
     
     if (!row) {
-        console.log('❌ No se encontró la fila con ningún selector');
         return;
     }
     
     // Obtener todas las celdas de la fila
     const cells = row.querySelectorAll('td');
-    console.log('🔍 Celdas encontradas:', cells.length, cells);
     if (!cells.length) {
-        console.log('❌ No se encontraron celdas');
         return;
     }
     
@@ -7656,16 +7646,13 @@ function applyRowColorInRealTime(rowIndex, colIndex, numeroValue, plantilla) {
     const { color, borderColor, textColor } = colors;
     
     // Aplicar color a todas las celdas de la fila con máxima prioridad
-    console.log('🔍 Aplicando colores a', cells.length, 'celdas:', { color, textColor, borderColor });
     cells.forEach((cell, index) => {
         cell.style.cssText += `background-color: ${color} !important; color: ${textColor} !important; border-color: ${borderColor} !important;`;
-        console.log(`🔍 Celda ${index} coloreada:`, cell.style.cssText);
         
         // Aplicar también al input si existe
         const input = cell.querySelector('input');
         if (input) {
             input.style.cssText += `background-color: ${color} !important; color: ${textColor} !important;`;
-            console.log(`🔍 Input ${index} coloreado:`, input.style.cssText);
         }
     });
 }
@@ -11585,15 +11572,7 @@ const optimizedLogger = {
         const messageLevel = levels[level] || 0;
         
         if (messageLevel >= currentLevel) {
-            const prefix = level === 'ERROR' ? '❌' : 
-                          level === 'WARN' ? '⚠️' : 
-                          level === 'INFO' ? 'ℹ️' : '🔍';
-            
-            if (data) {
-                console.log(`${prefix} [${level}] ${message}`, data);
-            } else {
-                console.log(`${prefix} [${level}] ${message}`);
-            }
+            // Logs deshabilitados
         }
     },
     

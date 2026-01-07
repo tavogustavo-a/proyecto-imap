@@ -86,49 +86,41 @@
     </div>
     
     <!-- Vista de Resumen -->
-    <div id="vistaResumen" class="estadisticas-vista">
-      <div class="row g-3 mb-3">
+    <div id="vistaResumen" class="estadisticas-vista estadisticas-vista-visible">
+      <div class="estadisticas-cards-container">
         <!-- Total Gastado -->
-        <div class="col-md-6">
-          <div class="estadistica-card">
-            <div class="estadistica-icon"><i class="fas fa-dollar-sign"></i></div>
-            <div class="estadistica-content">
-              <h3 class="estadistica-label">Total Gastado</h3>
-              <p class="estadistica-valor">${{ "{:,.2f}".format(total_gastado) }}</p>
-            </div>
+        <div class="estadistica-card">
+          <div class="estadistica-icon"><i class="fas fa-dollar-sign"></i></div>
+          <div class="estadistica-content">
+            <h3 class="estadistica-label">Total Gastado</h3>
+            <p class="estadistica-valor">${{ "{:,.2f}".format(total_gastado) }}</p>
           </div>
         </div>
         
         <!-- Total Compras -->
-        <div class="col-md-6">
-          <div class="estadistica-card">
-            <div class="estadistica-icon"><i class="fas fa-shopping-cart"></i></div>
-            <div class="estadistica-content">
-              <h3 class="estadistica-label">Total de Compras</h3>
-              <p class="estadistica-valor">{{ total_compras }}</p>
-            </div>
+        <div class="estadistica-card">
+          <div class="estadistica-icon"><i class="fas fa-shopping-cart"></i></div>
+          <div class="estadistica-content">
+            <h3 class="estadistica-label">Total de Compras</h3>
+            <p class="estadistica-valor">{{ total_compras }}</p>
           </div>
         </div>
         
         <!-- Promedio por Compra -->
-        <div class="col-md-6">
-          <div class="estadistica-card">
-            <div class="estadistica-icon"><i class="fas fa-chart-line"></i></div>
-            <div class="estadistica-content">
-              <h3 class="estadistica-label">Promedio por Compra</h3>
-              <p class="estadistica-valor">${{ "{:,.2f}".format(promedio_compra) }}</p>
-            </div>
+        <div class="estadistica-card">
+          <div class="estadistica-icon"><i class="fas fa-chart-line"></i></div>
+          <div class="estadistica-content">
+            <h3 class="estadistica-label">Promedio por Compra</h3>
+            <p class="estadistica-valor">${{ "{:,.2f}".format(promedio_compra) }}</p>
           </div>
         </div>
         
         <!-- Período -->
-        <div class="col-md-6">
-          <div class="estadistica-card">
-            <div class="estadistica-icon"><i class="fas fa-calendar-alt"></i></div>
-            <div class="estadistica-content">
-              <h3 class="estadistica-label">Período</h3>
-              <p class="estadistica-valor">Últimos 3 meses</p>
-            </div>
+        <div class="estadistica-card">
+          <div class="estadistica-icon"><i class="fas fa-calendar-alt"></i></div>
+          <div class="estadistica-content">
+            <h3 class="estadistica-label">Período</h3>
+            <p class="estadistica-valor">Últimos 3 meses</p>
           </div>
         </div>
       </div>
@@ -182,7 +174,7 @@
     </div>
     
     <!-- Vista de Lista -->
-    <div id="vistaLista" class="estadisticas-vista hidden">
+    <div id="vistaLista" class="estadisticas-vista estadisticas-vista-hidden">
       {% if compras_detalladas %}
       <div class="table-responsive">
         <table class="table table-striped table-hover">

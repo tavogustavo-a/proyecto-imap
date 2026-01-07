@@ -11,7 +11,9 @@ document.addEventListener("DOMContentLoaded", function() {
 
     let currentPage = 1;
     let currentSearch = "";
-    let perPage = 20;
+    let perPage = 'all';
+    // Guardar estado de checkboxes marcados (independiente de la paginación)
+    const checkedUserIds = new Set();
 
     function fetchUsers() {
         currentSearch = searchUserInput.value;
@@ -29,43 +31,95 @@ document.addEventListener("DOMContentLoaded", function() {
         fetch(url)
             .then(response => response.json())
             .then(data => {
+                // Inicializar checkedUserIds con los IDs del servidor si es la primera carga
+                if (checkedUserIds.size === 0) {
+                    data.linked_user_ids.forEach(id => checkedUserIds.add(id));
+                }
                 renderTable(data.users, data.linked_user_ids);
                 // Solo mostrar paginación si no es "all"
                 if (perPage !== 'all') {
                     renderPagination(data.pagination);
                 } else {
                     // Ocultar paginación cuando se selecciona "all"
-                    paginationButtons.innerHTML = "";
+                    while (paginationButtons.firstChild) {
+                        paginationButtons.removeChild(paginationButtons.firstChild);
+                    }
                 }
             })
             .catch(error => {
-                usersTableBody.innerHTML = `<tr><td colspan="3" class="text-center">Error al cargar usuarios.</td></tr>`;
+                while (usersTableBody.firstChild) {
+                    usersTableBody.removeChild(usersTableBody.firstChild);
+                }
+                const errorRow = document.createElement('tr');
+                const errorCell = document.createElement('td');
+                errorCell.colSpan = 3;
+                errorCell.className = 'text-center';
+                errorCell.textContent = 'Error al cargar usuarios.';
+                errorRow.appendChild(errorCell);
+                usersTableBody.appendChild(errorRow);
             });
     }
 
     function renderTable(users, linkedUserIds) {
-        usersTableBody.innerHTML = "";
+        while (usersTableBody.firstChild) {
+            usersTableBody.removeChild(usersTableBody.firstChild);
+        }
+        
         if (users.length === 0) {
-            usersTableBody.innerHTML = `<tr><td colspan="3" class="text-center">No se encontraron usuarios.</td></tr>`;
+            const noUsersRow = document.createElement('tr');
+            const noUsersCell = document.createElement('td');
+            noUsersCell.colSpan = 3;
+            noUsersCell.className = 'text-center';
+            noUsersCell.textContent = 'No se encontraron usuarios.';
+            noUsersRow.appendChild(noUsersCell);
+            usersTableBody.appendChild(noUsersRow);
             return;
         }
 
         users.forEach(user => {
-            const isChecked = linkedUserIds.includes(user.id);
+            // Verificar estado guardado primero, luego el del servidor
+            const isChecked = checkedUserIds.has(user.id);
             const row = document.createElement("tr");
-            row.innerHTML = `
-                <td>${user.username}</td>
-                <td>${user.full_name || ''}</td>
-                <td class="text-center">
-                    <input type="checkbox" name="user_ids" value="${user.id}" form="htmlForm" ${isChecked ? 'checked' : ''}>
-                </td>
-            `;
+            
+            const usernameCell = document.createElement("td");
+            usernameCell.textContent = user.username;
+            row.appendChild(usernameCell);
+            
+            const nameCell = document.createElement("td");
+            nameCell.textContent = user.full_name || '';
+            row.appendChild(nameCell);
+            
+            const checkboxCell = document.createElement("td");
+            checkboxCell.className = 'text-center';
+            const checkbox = document.createElement("input");
+            checkbox.type = "checkbox";
+            checkbox.name = "user_ids";
+            checkbox.value = user.id;
+            checkbox.setAttribute('form', 'htmlForm');
+            if (isChecked) {
+                checkbox.checked = true;
+            }
+            
+            // Event listener para actualizar el estado guardado
+            checkbox.addEventListener('change', function() {
+                if (this.checked) {
+                    checkedUserIds.add(user.id);
+                } else {
+                    checkedUserIds.delete(user.id);
+                }
+            });
+            
+            checkboxCell.appendChild(checkbox);
+            row.appendChild(checkboxCell);
+            
             usersTableBody.appendChild(row);
         });
     }
 
     function renderPagination(pagination) {
-        paginationButtons.innerHTML = "";
+        while (paginationButtons.firstChild) {
+            paginationButtons.removeChild(paginationButtons.firstChild);
+        }
         if (pagination.pages <= 1) return;
 
         // Botón Anterior
@@ -103,6 +157,12 @@ document.addEventListener("DOMContentLoaded", function() {
         const checkboxes = usersTableBody.querySelectorAll('input[type="checkbox"]');
         checkboxes.forEach(checkbox => {
             checkbox.checked = checked;
+            const userId = parseInt(checkbox.value);
+            if (checked) {
+                checkedUserIds.add(userId);
+            } else {
+                checkedUserIds.delete(userId);
+            }
         });
     }
 
@@ -140,4 +200,23 @@ document.addEventListener("DOMContentLoaded", function() {
 
     // Inicial
     fetchUsers();
+    
+    // Interceptar el envío del formulario para incluir todos los IDs marcados
+    const htmlForm = document.getElementById('htmlForm');
+    if (htmlForm) {
+        htmlForm.addEventListener('submit', function(e) {
+            // Eliminar campos ocultos anteriores si existen
+            const existingHiddenInputs = htmlForm.querySelectorAll('input[type="hidden"][name="user_ids"]');
+            existingHiddenInputs.forEach(input => input.remove());
+            
+            // Agregar campos ocultos para todos los IDs marcados
+            checkedUserIds.forEach(userId => {
+                const hiddenInput = document.createElement('input');
+                hiddenInput.type = 'hidden';
+                hiddenInput.name = 'user_ids';
+                hiddenInput.value = userId;
+                htmlForm.appendChild(hiddenInput);
+            });
+        });
+    }
 }); 

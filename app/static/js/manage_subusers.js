@@ -519,14 +519,42 @@ document.addEventListener("DOMContentLoaded", function() {
         if (clearSearchBtn) clearSearchBtn.classList.remove('show');
       }
       
-      // Mostrar/ocultar botón X según si hay texto
+      // Mostrar/ocultar botón X según si hay texto y búsqueda automática
       if (subuserSearchEmailsInput && clearSearchBtn) {
+        let searchTimeout = null;
+        
+        // Función de búsqueda automática con debounce
+        function performSubuserEmailSearch() {
+          clearTimeout(searchTimeout);
+          searchTimeout = setTimeout(() => {
+            // Disparar el submit del formulario para ejecutar la búsqueda
+            if (subuserSearchEmailsForm) {
+              subuserSearchEmailsForm.requestSubmit();
+            }
+          }, 250); // Debounce de 250ms
+        }
+        
+        // Listener para búsqueda automática mientras escribe
         subuserSearchEmailsInput.addEventListener('input', function() {
+          // Mostrar/ocultar botón X
           if (subuserSearchEmailsInput.value.trim()) {
             clearSearchBtn.classList.add('show');
           } else {
             clearSearchBtn.classList.remove('show');
+            // Si el campo está vacío, limpiar resultados
+            renderSubuserEmailsResults([]);
           }
+          // Ejecutar búsqueda automática
+          performSubuserEmailSearch();
+        });
+        
+        // También escuchar eventos keyup para mejor compatibilidad
+        subuserSearchEmailsInput.addEventListener('keyup', function(e) {
+          // Evitar búsqueda en teclas especiales
+          if (e.key === 'Enter' || e.key === 'Escape' || e.key === 'Tab') {
+            return;
+          }
+          performSubuserEmailSearch();
         });
         
         // Click en el botón X para limpiar

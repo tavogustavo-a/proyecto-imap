@@ -15,88 +15,223 @@ document.addEventListener('DOMContentLoaded', function () {
 
     let currentPage = 1;
     let searchTimeout;
+    // Guardar estado de checkboxes marcados (independiente de la paginación)
+    const checkedUserIds = new Set();
 
     function fetchUsers() {
         const perPage = perPageSelect.value;
         const searchQuery = searchInput.value;
-        const url = `/tienda/admin/api/${apiId}/users?page=${currentPage}&per_page=${perPage}&search=${searchQuery}`;
+        
+        // Si "Todos", no enviar parámetros de paginación
+        let url;
+        if (perPage === 'all') {
+            url = `/tienda/admin/api/${apiId}/users?per_page=all&search=${searchQuery}`;
+        } else {
+            url = `/tienda/admin/api/${apiId}/users?page=${currentPage}&per_page=${perPage}&search=${searchQuery}`;
+        }
 
         fetch(url)
             .then(response => response.json())
             .then(data => {
+                // Inicializar checkedUserIds con los IDs del servidor si es la primera carga
+                if (checkedUserIds.size === 0) {
+                    data.linked_user_ids.forEach(id => checkedUserIds.add(id));
+                }
                 renderTable(data.users, new Set(data.linked_user_ids));
-                renderPagination(data.pagination);
+                // Solo mostrar paginación si no es "all"
+                if (perPage !== 'all') {
+                    restorePaginationButtons();
+                    renderPagination(data.pagination);
+                } else {
+                    // Ocultar paginación cuando se selecciona "all"
+                    if (paginationButtons) {
+                        while (paginationButtons.firstChild) {
+                            paginationButtons.removeChild(paginationButtons.firstChild);
+                        }
+                    }
+                }
             })
             .catch(error => {
-                usersTableBody.innerHTML = '<tr><td colspan="3" class="text-center">Error al cargar usuarios.</td></tr>';
+                while (usersTableBody.firstChild) {
+                    usersTableBody.removeChild(usersTableBody.firstChild);
+                }
+                const errorRow = document.createElement('tr');
+                const errorCell = document.createElement('td');
+                errorCell.colSpan = 3;
+                errorCell.className = 'text-center';
+                errorCell.textContent = 'Error al cargar usuarios.';
+                errorRow.appendChild(errorCell);
+                usersTableBody.appendChild(errorRow);
             });
     }
 
     function renderTable(users, linkedUserIds) {
-        usersTableBody.innerHTML = '';
+        while (usersTableBody.firstChild) {
+            usersTableBody.removeChild(usersTableBody.firstChild);
+        }
+        
         if (users.length === 0) {
-            usersTableBody.innerHTML = '<tr><td colspan="3" class="text-center">No se encontraron usuarios.</td></tr>';
+            const noUsersRow = document.createElement('tr');
+            const noUsersCell = document.createElement('td');
+            noUsersCell.colSpan = 3;
+            noUsersCell.className = 'text-center';
+            noUsersCell.textContent = 'No se encontraron usuarios.';
+            noUsersRow.appendChild(noUsersCell);
+            usersTableBody.appendChild(noUsersRow);
             return;
         }
 
         users.forEach(user => {
-            const isChecked = linkedUserIds.has(user.id);
+            // Verificar estado guardado primero, luego el del servidor
+            const isChecked = checkedUserIds.has(user.id);
             const row = document.createElement("tr");
-            row.innerHTML = `
-                <td>${user.username}</td>
-                <td>${user.name || ''}</td>
-                <td class="text-center">
-                    <input type="checkbox" name="user_ids" value="${user.id}" class="user-link-checkbox" ${isChecked ? 'checked' : ''}>
-                </td>
-            `;
+            
+            const usernameCell = document.createElement("td");
+            usernameCell.textContent = user.username;
+            row.appendChild(usernameCell);
+            
+            const nameCell = document.createElement("td");
+            nameCell.textContent = user.name || '';
+            row.appendChild(nameCell);
+            
+            const checkboxCell = document.createElement("td");
+            checkboxCell.className = 'text-center';
+            const checkbox = document.createElement("input");
+            checkbox.type = "checkbox";
+            checkbox.name = "user_ids";
+            checkbox.value = user.id;
+            checkbox.className = "user-link-checkbox";
+            if (isChecked) {
+                checkbox.checked = true;
+            }
+            
+            // Event listener para actualizar el estado guardado
+            checkbox.addEventListener('change', function() {
+                if (this.checked) {
+                    checkedUserIds.add(user.id);
+                } else {
+                    checkedUserIds.delete(user.id);
+                }
+            });
+            
+            checkboxCell.appendChild(checkbox);
+            row.appendChild(checkboxCell);
+            
             usersTableBody.appendChild(row);
         });
     }
 
-    function renderPagination(pagination) {
-        paginationButtons.innerHTML = "";
+    function restorePaginationButtons() {
+        if (!paginationButtons) return;
         
-        const prevButton = document.createElement("button");
-        prevButton.innerHTML = "&lt; Anterior";
-        prevButton.type = "button";
-        prevButton.className = "btn-panel btn-blue";
-        prevButton.disabled = !pagination.has_prev;
-        prevButton.addEventListener("click", () => {
-            if (pagination.has_prev) {
-                currentPage--;
-                fetchUsers();
-            }
-        });
-        paginationButtons.appendChild(prevButton);
-
-        const pageInfo = document.createElement("span");
-        pageInfo.className = "mx-2";
-        pageInfo.innerText = `Página ${pagination.page} de ${pagination.pages}`;
-        paginationButtons.appendChild(pageInfo);
-        
-        const nextButton = document.createElement("button");
-        nextButton.innerHTML = "Siguiente &gt;";
-        nextButton.type = "button";
-        nextButton.className = "btn-panel btn-blue";
-        nextButton.disabled = !pagination.has_next;
-        nextButton.addEventListener("click", () => {
-            if (pagination.has_next) {
+        // Solo restaurar si el contenedor está vacío
+        if (paginationButtons.children.length === 0) {
+            // Restaurar botón Anterior
+            const prevBtn = document.createElement('button');
+            prevBtn.type = 'button';
+            prevBtn.className = 'btn-panel btn-blue';
+            prevBtn.textContent = '< Anterior';
+            prevBtn.addEventListener('click', () => {
+                if (currentPage > 1) {
+                    currentPage--;
+                    fetchUsers();
+                }
+            });
+            paginationButtons.appendChild(prevBtn);
+            
+            // Restaurar indicador de página
+            const indicator = document.createElement('span');
+            indicator.className = 'mx-2';
+            indicator.textContent = 'Página 1 de 1';
+            paginationButtons.appendChild(indicator);
+            
+            // Restaurar botón Siguiente
+            const nextBtn = document.createElement('button');
+            nextBtn.type = 'button';
+            nextBtn.className = 'btn-panel btn-blue';
+            nextBtn.textContent = 'Siguiente >';
+            nextBtn.addEventListener('click', () => {
                 currentPage++;
                 fetchUsers();
-            }
-        });
-        paginationButtons.appendChild(nextButton);
+            });
+            paginationButtons.appendChild(nextBtn);
+        }
+    }
+    
+    function renderPagination(pagination) {
+        if (!paginationButtons) return;
+        
+        let pageIndicatorEl = paginationButtons.querySelector('span');
+        let prevPageBtnEl = paginationButtons.querySelector('button:first-child');
+        let nextPageBtnEl = paginationButtons.querySelector('button:last-child');
+        
+        // Si los elementos no existen, restaurarlos
+        if (!pageIndicatorEl || !prevPageBtnEl || !nextPageBtnEl) {
+            restorePaginationButtons();
+            pageIndicatorEl = paginationButtons.querySelector('span');
+            prevPageBtnEl = paginationButtons.querySelector('button:first-child');
+            nextPageBtnEl = paginationButtons.querySelector('button:last-child');
+        }
+        
+        if (!pageIndicatorEl || !prevPageBtnEl || !nextPageBtnEl) {
+            return;
+        }
+        
+        pageIndicatorEl.textContent = `Página ${pagination.page} de ${pagination.pages || 1}`;
+        
+        // Anterior
+        if (!pagination.has_prev) {
+            prevPageBtnEl.disabled = true;
+            prevPageBtnEl.setAttribute('disabled', 'disabled');
+        } else {
+            prevPageBtnEl.disabled = false;
+            prevPageBtnEl.removeAttribute('disabled');
+        }
+        
+        // Siguiente
+        if (!pagination.has_next) {
+            nextPageBtnEl.disabled = true;
+            nextPageBtnEl.setAttribute('disabled', 'disabled');
+        } else {
+            nextPageBtnEl.disabled = false;
+            nextPageBtnEl.removeAttribute('disabled');
+        }
     }
 
     function setAllCheckboxes(checked) {
         const checkboxes = usersTableBody.querySelectorAll('.user-link-checkbox');
         checkboxes.forEach(checkbox => {
             checkbox.checked = checked;
+            const userId = parseInt(checkbox.value);
+            if (checked) {
+                checkedUserIds.add(userId);
+            } else {
+                checkedUserIds.delete(userId);
+            }
         });
     }
 
     if (checkAllBtn) checkAllBtn.addEventListener("click", () => setAllCheckboxes(true));
     if (uncheckAllBtn) uncheckAllBtn.addEventListener("click", () => setAllCheckboxes(false));
+    
+    // Interceptar el envío del formulario para incluir todos los IDs marcados
+    const apiForm = document.getElementById('apiForm');
+    if (apiForm) {
+        apiForm.addEventListener('submit', function(e) {
+            // Eliminar campos ocultos anteriores si existen
+            const existingHiddenInputs = apiForm.querySelectorAll('input[type="hidden"][name="user_ids"]');
+            existingHiddenInputs.forEach(input => input.remove());
+            
+            // Agregar campos ocultos para todos los IDs marcados
+            checkedUserIds.forEach(userId => {
+                const hiddenInput = document.createElement('input');
+                hiddenInput.type = 'hidden';
+                hiddenInput.name = 'user_ids';
+                hiddenInput.value = userId;
+                apiForm.appendChild(hiddenInput);
+            });
+        });
+    }
     
     searchInput.addEventListener('input', () => {
         clearTimeout(searchTimeout);
@@ -139,36 +274,51 @@ document.addEventListener('DOMContentLoaded', function() {
         const apiKeyTextarea = apiKeyFieldGroup ? apiKeyFieldGroup.querySelector('textarea') : null;
         
         if (tipoApi.value === 'Drive') {
-            driveField.style.display = '';
-            if(apiKeyHelp) apiKeyHelp.style.display = '';
+            driveField.classList.remove('drive-folder-id-field');
+            if(apiKeyHelp) apiKeyHelp.classList.remove('api-key-help');
             if(apiKeyTextarea) {
                 apiKeyTextarea.rows = 5;
                 apiKeyTextarea.placeholder = '{\n  "type": "service_account", ...\n}';
             }
-            if(driveSubtitlesFields) driveSubtitlesFields.style.display = '';
-            if(apiKeyHelp) apiKeyHelp.innerHTML = 'Pega aquí el <b>JSON de credenciales</b> de tu cuenta de servicio de Google (Google Service Account). Puedes obtenerlo desde la consola de Google Cloud &rarr; IAM &amp; admin &rarr; Cuentas de servicio &rarr; Crear clave.';
+            if(driveSubtitlesFields) driveSubtitlesFields.classList.remove('drive-subtitles-fields');
+            if(apiKeyHelp) {
+                while (apiKeyHelp.firstChild) {
+                    apiKeyHelp.removeChild(apiKeyHelp.firstChild);
+                }
+                const text = document.createTextNode('Pega aquí el ');
+                const bold = document.createElement('b');
+                bold.textContent = 'JSON de credenciales';
+                const text2 = document.createTextNode(' de tu cuenta de servicio de Google (Google Service Account). Puedes obtenerlo desde la consola de Google Cloud → IAM & admin → Cuentas de servicio → Crear clave.');
+                apiKeyHelp.appendChild(text);
+                apiKeyHelp.appendChild(bold);
+                apiKeyHelp.appendChild(text2);
+            }
         } else if (tipoApi.value === '' || tipoApi.value === null) {
             // API Genérica / Ninguno - permitir HTML
-            driveField.style.display = 'none';
+            driveField.classList.add('drive-folder-id-field');
             if (apiUrlInput) apiUrlInput.value = '';
-            if(apiKeyHelp) apiKeyHelp.style.display = '';
+            if(apiKeyHelp) apiKeyHelp.classList.remove('api-key-help');
             if(apiKeyTextarea) {
                 apiKeyTextarea.rows = 10;
                 apiKeyTextarea.placeholder = '';
             }
-            if(driveSubtitlesFields) driveSubtitlesFields.style.display = 'none';
-            if(apiKeyHelp) apiKeyHelp.innerHTML = 'Puedes usar HTML en este campo para APIs genéricas.';
+            if(driveSubtitlesFields) driveSubtitlesFields.classList.add('drive-subtitles-fields');
+            if(apiKeyHelp) {
+                apiKeyHelp.textContent = 'Puedes usar HTML en este campo para APIs genéricas.';
+            }
         } else {
             // Búsqueda de Medios u otros
-            driveField.style.display = 'none';
+            driveField.classList.add('drive-folder-id-field');
             if (apiUrlInput) apiUrlInput.value = '';
-            if(apiKeyHelp) apiKeyHelp.style.display = 'none';
+            if(apiKeyHelp) apiKeyHelp.classList.add('api-key-help');
             if(apiKeyTextarea) {
                 apiKeyTextarea.rows = 5;
                 apiKeyTextarea.placeholder = '';
             }
-            if(driveSubtitlesFields) driveSubtitlesFields.style.display = 'none';
-            if(apiKeyHelp) apiKeyHelp.innerHTML = '';
+            if(driveSubtitlesFields) driveSubtitlesFields.classList.add('drive-subtitles-fields');
+            if(apiKeyHelp) {
+                apiKeyHelp.textContent = '';
+            }
         }
     }
 
@@ -182,12 +332,12 @@ document.addEventListener('DOMContentLoaded', function() {
                 const videos = driveSubtitleVideos.value.trim();
                 if(!photos && !videos) {
                     driveSubtitlesWarning.textContent = 'Debes ingresar al menos un subtítulo para fotos o videos.';
-                    driveSubtitlesWarning.style.display = '';
+                    driveSubtitlesWarning.classList.remove('drive-subtitles-warning');
                     e.preventDefault();
                     return false;
                 } else {
                     driveSubtitlesWarning.textContent = '';
-                    driveSubtitlesWarning.style.display = 'none';
+                    driveSubtitlesWarning.classList.add('drive-subtitles-warning');
                 }
             }
         });

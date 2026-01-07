@@ -28,6 +28,8 @@ document.addEventListener('DOMContentLoaded', function () {
 
     let currentPage = 1;
     let searchTimeout;
+    // Guardar estado de checkboxes marcados (independiente de la paginación)
+    const checkedUserIds = new Set();
 
     function fetchUsers() {
         const perPage = perPageSelect.value;
@@ -44,8 +46,25 @@ document.addEventListener('DOMContentLoaded', function () {
         fetch(url)
             .then(response => response.json())
             .then(data => {
+                // Inicializar checkedUserIds con los IDs del servidor si es la primera carga
+                if (checkedUserIds.size === 0) {
+                    data.linked_user_ids.forEach(id => checkedUserIds.add(id));
+                }
                 renderTable(data.users, data.linked_user_ids);
-                renderPagination(data.pagination);
+                // Solo mostrar paginación si no es "all"
+                if (perPage !== 'all') {
+                    // Restaurar los botones de paginación si fueron eliminados
+                    restorePaginationButtons();
+                    renderPagination(data.pagination);
+                } else {
+                    // Ocultar paginación cuando se selecciona "all"
+                    const paginationContainer = document.querySelector('.pagination-buttons');
+                    if (paginationContainer) {
+                        while (paginationContainer.firstChild) {
+                            paginationContainer.removeChild(paginationContainer.firstChild);
+                        }
+                    }
+                }
             })
             .catch(error => {
                 // Error loading users
@@ -53,70 +72,154 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     function renderTable(users, linked_user_ids) {
-        usersTableBody.innerHTML = '';
+        while (usersTableBody.firstChild) {
+            usersTableBody.removeChild(usersTableBody.firstChild);
+        }
+        
         if (users.length === 0) {
-            usersTableBody.innerHTML = '<tr><td colspan="3" class="text-center">No se encontraron usuarios.</td></tr>';
+            const noUsersRow = document.createElement('tr');
+            const noUsersCell = document.createElement('td');
+            noUsersCell.colSpan = 3;
+            noUsersCell.className = 'text-center';
+            noUsersCell.textContent = 'No se encontraron usuarios.';
+            noUsersRow.appendChild(noUsersCell);
+            usersTableBody.appendChild(noUsersRow);
             return;
         }
 
         users.forEach(user => {
-            const isChecked = linked_user_ids.includes(user.id);
-            const row = `
-                <tr>
-                    <td>${user.username}</td>
-                    <td>${user.full_name}</td>
-                    <td class="text-center">
-                        <input type="checkbox" name="user_ids" value="${user.id}" class="form-check-input" ${isChecked ? 'checked' : ''}>
-                    </td>
-                </tr>
-            `;
-            usersTableBody.insertAdjacentHTML('beforeend', row);
+            // Verificar estado guardado primero, luego el del servidor
+            const isChecked = checkedUserIds.has(user.id);
+            const row = document.createElement("tr");
+            
+            const usernameCell = document.createElement("td");
+            usernameCell.textContent = user.username;
+            row.appendChild(usernameCell);
+            
+            const nameCell = document.createElement("td");
+            nameCell.textContent = user.full_name;
+            row.appendChild(nameCell);
+            
+            const checkboxCell = document.createElement("td");
+            checkboxCell.className = 'text-center';
+            const checkbox = document.createElement("input");
+            checkbox.type = "checkbox";
+            checkbox.name = "user_ids";
+            checkbox.value = user.id;
+            checkbox.className = "form-check-input";
+            if (isChecked) {
+                checkbox.checked = true;
+            }
+            
+            // Event listener para actualizar el estado guardado
+            checkbox.addEventListener('change', function() {
+                if (this.checked) {
+                    checkedUserIds.add(user.id);
+                } else {
+                    checkedUserIds.delete(user.id);
+                }
+            });
+            
+            checkboxCell.appendChild(checkbox);
+            row.appendChild(checkboxCell);
+            
+            usersTableBody.appendChild(row);
         });
     }
 
+    function restorePaginationButtons() {
+        const paginationContainer = document.querySelector('.pagination-buttons');
+        if (!paginationContainer) return;
+        
+        // Solo restaurar si el contenedor está vacío
+        if (paginationContainer.children.length === 0) {
+            // Restaurar botón Anterior
+            const prevBtn = document.createElement('button');
+            prevBtn.type = 'button';
+            prevBtn.id = 'prevPageBtn';
+            prevBtn.className = 'btn-panel btn-blue';
+            prevBtn.textContent = '< Anterior';
+            prevBtn.addEventListener('click', () => {
+                if (currentPage > 1) {
+                    currentPage--;
+                    fetchUsers();
+                }
+            });
+            paginationContainer.appendChild(prevBtn);
+            
+            // Restaurar indicador de página
+            const indicator = document.createElement('span');
+            indicator.id = 'pageIndicator';
+            indicator.textContent = 'Página 1 de 1';
+            paginationContainer.appendChild(indicator);
+            
+            // Restaurar botón Siguiente
+            const nextBtn = document.createElement('button');
+            nextBtn.type = 'button';
+            nextBtn.id = 'nextPageBtn';
+            nextBtn.className = 'btn-panel btn-blue';
+            nextBtn.textContent = 'Siguiente >';
+            nextBtn.addEventListener('click', () => {
+                currentPage++;
+                fetchUsers();
+            });
+            paginationContainer.appendChild(nextBtn);
+        }
+    }
+    
     function renderPagination(pagination) {
-        // Si "Todos", ocultar la paginación
-        if (perPageSelect.value === 'all') {
-            pageIndicator.textContent = 'Mostrando todos los usuarios';
-            prevPageBtn.disabled = true;
-            nextPageBtn.disabled = true;
-            prevPageBtn.setAttribute('disabled', 'disabled');
-            nextPageBtn.setAttribute('disabled', 'disabled');
+        let pageIndicatorEl = document.getElementById('pageIndicator');
+        let prevPageBtnEl = document.getElementById('prevPageBtn');
+        let nextPageBtnEl = document.getElementById('nextPageBtn');
+        
+        // Si los elementos no existen, restaurarlos
+        if (!pageIndicatorEl || !prevPageBtnEl || !nextPageBtnEl) {
+            restorePaginationButtons();
+            pageIndicatorEl = document.getElementById('pageIndicator');
+            prevPageBtnEl = document.getElementById('prevPageBtn');
+            nextPageBtnEl = document.getElementById('nextPageBtn');
+        }
+        
+        if (!pageIndicatorEl || !prevPageBtnEl || !nextPageBtnEl) {
             return;
         }
         
-        pageIndicator.textContent = `Página ${pagination.page} de ${pagination.pages || 1}`;
+        pageIndicatorEl.textContent = `Página ${pagination.page} de ${pagination.pages || 1}`;
         
         // Anterior
         if (!pagination.has_prev) {
-            prevPageBtn.disabled = true;
-            prevPageBtn.setAttribute('disabled', 'disabled');
+            prevPageBtnEl.disabled = true;
+            prevPageBtnEl.setAttribute('disabled', 'disabled');
         } else {
-            prevPageBtn.disabled = false;
-            prevPageBtn.removeAttribute('disabled');
+            prevPageBtnEl.disabled = false;
+            prevPageBtnEl.removeAttribute('disabled');
         }
         
         if (!pagination.has_next) {
-            nextPageBtn.disabled = true;
-            nextPageBtn.setAttribute('disabled', 'disabled');
+            nextPageBtnEl.disabled = true;
+            nextPageBtnEl.setAttribute('disabled', 'disabled');
         } else {
-            nextPageBtn.disabled = false;
-            nextPageBtn.removeAttribute('disabled');
+            nextPageBtnEl.disabled = false;
+            nextPageBtnEl.removeAttribute('disabled');
         }
     }
 
-    // Event Listeners
-    prevPageBtn.addEventListener('click', () => {
-        if (currentPage > 1) {
-            currentPage--;
-            fetchUsers();
-        }
-    });
+    // Event Listeners iniciales
+    if (prevPageBtn) {
+        prevPageBtn.addEventListener('click', () => {
+            if (currentPage > 1) {
+                currentPage--;
+                fetchUsers();
+            }
+        });
+    }
 
-    nextPageBtn.addEventListener('click', () => {
-        currentPage++;
-        fetchUsers();
-    });
+    if (nextPageBtn) {
+        nextPageBtn.addEventListener('click', () => {
+            currentPage++;
+            fetchUsers();
+        });
+    }
 
     perPageSelect.addEventListener('change', () => {
         currentPage = 1;
@@ -138,16 +241,41 @@ document.addEventListener('DOMContentLoaded', function () {
     });
 
     selectAllBtn.addEventListener('click', () => {
-        usersTableBody.querySelectorAll('input[type="checkbox"]').forEach(checkbox => {
+        const checkboxes = usersTableBody.querySelectorAll('input[type="checkbox"]');
+        checkboxes.forEach(checkbox => {
             checkbox.checked = true;
+            const userId = parseInt(checkbox.value);
+            checkedUserIds.add(userId);
         });
     });
 
     deselectAllBtn.addEventListener('click', () => {
-        usersTableBody.querySelectorAll('input[type="checkbox"]').forEach(checkbox => {
+        const checkboxes = usersTableBody.querySelectorAll('input[type="checkbox"]');
+        checkboxes.forEach(checkbox => {
             checkbox.checked = false;
+            const userId = parseInt(checkbox.value);
+            checkedUserIds.delete(userId);
         });
     });
+    
+    // Interceptar el envío del formulario para incluir todos los IDs marcados
+    const form = document.querySelector('.edit-youtube-form');
+    if (form) {
+        form.addEventListener('submit', function(e) {
+            // Eliminar campos ocultos anteriores si existen
+            const existingHiddenInputs = form.querySelectorAll('input[type="hidden"][name="user_ids"]');
+            existingHiddenInputs.forEach(input => input.remove());
+            
+            // Agregar campos ocultos para todos los IDs marcados
+            checkedUserIds.forEach(userId => {
+                const hiddenInput = document.createElement('input');
+                hiddenInput.type = 'hidden';
+                hiddenInput.name = 'user_ids';
+                hiddenInput.value = userId;
+                form.appendChild(hiddenInput);
+            });
+        });
+    }
 
     // Links de Producción ---
 
@@ -156,26 +284,55 @@ document.addEventListener('DOMContentLoaded', function () {
         div.className = 'production-link-item d-flex align-items-center justify-content-between gap-2 mb-1';
         div.dataset.linkId = link.id;
 
-        const titleDisplay = link.title ? `<div class="link-title"><strong>${link.title}</strong></div>` : '';
+        const linkInfo = document.createElement('div');
+        linkInfo.className = 'link-info flex-grow-1';
+        
+        if (link.title) {
+            const titleDiv = document.createElement('div');
+            titleDiv.className = 'link-title';
+            const strong = document.createElement('strong');
+            strong.textContent = link.title;
+            titleDiv.appendChild(strong);
+            linkInfo.appendChild(titleDiv);
+        }
+        
+        const urlDiv = document.createElement('div');
+        urlDiv.className = 'link-url';
+        urlDiv.title = link.url;
         const truncatedUrl = link.url.length > 15 ? link.url.substring(0, 15) + '...' : link.url;
-
-        div.innerHTML = `
-            <div class="link-info flex-grow-1">
-                ${titleDisplay}
-                <div class="link-url" title="${link.url}">${truncatedUrl}</div>
-            </div>
-            <div class="link-actions">
-                <button type="button" class="btn-panel btn-blue btn-small edit-link-btn" data-link-id="${link.id}" data-link-url="${link.url}" data-link-title="${link.title || ''}">Editar</button>
-                <button type="button" class="btn-panel btn-red btn-small remove-link-btn" data-link-id="${link.id}">-</button>
-            </div>
-        `;
+        urlDiv.textContent = truncatedUrl;
+        linkInfo.appendChild(urlDiv);
+        
+        const linkActions = document.createElement('div');
+        linkActions.className = 'link-actions';
+        
+        const editBtn = document.createElement('button');
+        editBtn.type = 'button';
+        editBtn.className = 'btn-panel btn-blue btn-small edit-link-btn';
+        editBtn.setAttribute('data-link-id', link.id);
+        editBtn.setAttribute('data-link-url', link.url);
+        editBtn.setAttribute('data-link-title', link.title || '');
+        editBtn.textContent = 'Editar';
+        linkActions.appendChild(editBtn);
+        
+        const removeBtn = document.createElement('button');
+        removeBtn.type = 'button';
+        removeBtn.className = 'btn-panel btn-red btn-small remove-link-btn';
+        removeBtn.setAttribute('data-link-id', link.id);
+        removeBtn.textContent = '-';
+        linkActions.appendChild(removeBtn);
+        
+        div.appendChild(linkInfo);
+        div.appendChild(linkActions);
         return div;
     }
 
     async function fetchLinks() {
         const response = await fetch(`/tienda/admin/youtube_listing/${listingId}/links`);
         const links = await response.json();
-        productionLinksContainer.innerHTML = '';
+        while (productionLinksContainer.firstChild) {
+            productionLinksContainer.removeChild(productionLinksContainer.firstChild);
+        }
         links.forEach(link => {
             productionLinksContainer.appendChild(createLinkRow(link));
         });
@@ -279,7 +436,7 @@ document.addEventListener('DOMContentLoaded', function () {
         
         const linkRow = productionLinksContainer.querySelector(`[data-link-id="${linkId}"]`);
         if (linkRow) {
-            linkRow.style.opacity = '0.5';
+            linkRow.classList.add('opacity-50');
         }
 
         try {
@@ -293,7 +450,7 @@ document.addEventListener('DOMContentLoaded', function () {
             if (linkRow) linkRow.remove();
 
         } catch (error) {
-            if (linkRow) linkRow.style.opacity = '1';
+            if (linkRow) linkRow.classList.remove('opacity-50');
             alert('No se pudo eliminar el link.');
         }
     }
@@ -302,11 +459,13 @@ document.addEventListener('DOMContentLoaded', function () {
         editLinkIdInput.value = linkId;
         editLinkInput.value = currentUrl;
         editLinkTitleInput.value = currentTitle;
-        modal.style.display = 'flex';
+        modal.classList.remove('modal-hidden');
+        modal.classList.add('modal-visible');
     }
 
     function closeModal() {
-        modal.style.display = 'none';
+        modal.classList.add('modal-hidden');
+        modal.classList.remove('modal-visible');
     }
     
     addLinkBtn.addEventListener('click', addLink);

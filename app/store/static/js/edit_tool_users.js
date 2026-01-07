@@ -9,35 +9,73 @@ document.addEventListener('DOMContentLoaded', function() {
 
     let currentPage = 1;
     let currentSearch = "";
-    let perPage = 20;
+    let perPage = 'all';
+    // Guardar estado de checkboxes marcados (independiente de la paginación)
+    const checkedUserIds = new Set();
 
     function updateTable(users, linked_user_ids) {
-        usersTableBody.innerHTML = ''; // Render rows
+        while (usersTableBody.firstChild) {
+            usersTableBody.removeChild(usersTableBody.firstChild);
+        }
+        
         if (users.length === 0) {
-            usersTableBody.innerHTML = '<tr><td colspan="3" style="text-align:center;">No hay usuarios disponibles.</td></tr>';
+            const noUsersRow = document.createElement('tr');
+            const noUsersCell = document.createElement('td');
+            noUsersCell.colSpan = 3;
+            noUsersCell.className = 'text-center';
+            noUsersCell.textContent = 'No hay usuarios disponibles.';
+            noUsersRow.appendChild(noUsersCell);
+            usersTableBody.appendChild(noUsersRow);
             return;
         }
 
         users.forEach(user => {
-            const isChecked = linked_user_ids.includes(user.id);
-            const row = `
-                <tr>
-                    <td>${user.username}</td>
-                    <td>${user.full_name || ''}</td>
-                    <td style="text-align:center;">
-                        <input type="checkbox" name="user_ids" value="${user.id}" form="toolForm" ${isChecked ? 'checked' : ''}>
-                    </td>
-                </tr>
-            `;
-            usersTableBody.insertAdjacentHTML('beforeend', row);
+            // Verificar estado guardado primero, luego el del servidor
+            const isChecked = checkedUserIds.has(user.id);
+            const row = document.createElement("tr");
+            
+            const usernameCell = document.createElement("td");
+            usernameCell.textContent = user.username;
+            row.appendChild(usernameCell);
+            
+            const nameCell = document.createElement("td");
+            nameCell.textContent = user.full_name || '';
+            row.appendChild(nameCell);
+            
+            const checkboxCell = document.createElement("td");
+            checkboxCell.className = 'text-center';
+            const checkbox = document.createElement("input");
+            checkbox.type = "checkbox";
+            checkbox.name = "user_ids";
+            checkbox.value = user.id;
+            checkbox.setAttribute('form', 'toolForm');
+            if (isChecked) {
+                checkbox.checked = true;
+            }
+            
+            // Event listener para actualizar el estado guardado
+            checkbox.addEventListener('change', function() {
+                if (this.checked) {
+                    checkedUserIds.add(user.id);
+                } else {
+                    checkedUserIds.delete(user.id);
+                }
+            });
+            
+            checkboxCell.appendChild(checkbox);
+            row.appendChild(checkboxCell);
+            
+            usersTableBody.appendChild(row);
         });
     }
 
     function updatePagination(pagination) {
-        paginationContainer.innerHTML = '';
+        while (paginationContainer.firstChild) {
+            paginationContainer.removeChild(paginationContainer.firstChild);
+        }
         
         const prevButton = document.createElement('button');
-        prevButton.innerHTML = "&lt; Anterior";
+        prevButton.textContent = "< Anterior";
         prevButton.type = "button";
         prevButton.className = "btn-panel btn-blue";
         prevButton.disabled = !pagination.has_prev;
@@ -50,11 +88,11 @@ document.addEventListener('DOMContentLoaded', function() {
 
         const pageInfo = document.createElement("span");
         pageInfo.className = "mx-2";
-        pageInfo.innerText = `Página ${pagination.page} de ${pagination.pages}`;
+        pageInfo.textContent = `Página ${pagination.page} de ${pagination.pages}`;
         paginationContainer.appendChild(pageInfo);
         
         const nextButton = document.createElement("button");
-        nextButton.innerHTML = "Siguiente &gt;";
+        nextButton.textContent = "Siguiente >";
         nextButton.type = "button";
         nextButton.className = "btn-panel btn-blue";
         nextButton.disabled = !pagination.has_next;
@@ -85,16 +123,31 @@ document.addEventListener('DOMContentLoaded', function() {
                 throw new Error('Network response was not ok');
             }
             const data = await response.json();
+            // Inicializar checkedUserIds con los IDs del servidor si es la primera carga
+            if (checkedUserIds.size === 0) {
+                data.linked_user_ids.forEach(id => checkedUserIds.add(id));
+            }
             updateTable(data.users, data.linked_user_ids);
             // Solo mostrar paginación si no es "all"
             if (perPage !== 'all') {
                 updatePagination(data.pagination);
             } else {
                 // Ocultar paginación cuando se selecciona "all"
-                paginationContainer.innerHTML = "";
+                while (paginationContainer.firstChild) {
+                    paginationContainer.removeChild(paginationContainer.firstChild);
+                }
             }
         } catch (error) {
-            usersTableBody.innerHTML = '<tr><td colspan="3" style="text-align:center; color: red;">Error al cargar usuarios.</td></tr>';
+            while (usersTableBody.firstChild) {
+                usersTableBody.removeChild(usersTableBody.firstChild);
+            }
+            const errorRow = document.createElement('tr');
+            const errorCell = document.createElement('td');
+            errorCell.colSpan = 3;
+            errorCell.className = 'text-center text-danger';
+            errorCell.textContent = 'Error al cargar usuarios.';
+            errorRow.appendChild(errorCell);
+            usersTableBody.appendChild(errorRow);
         }
     }
 
@@ -102,6 +155,12 @@ document.addEventListener('DOMContentLoaded', function() {
         const checkboxes = usersTableBody.querySelectorAll('input[type="checkbox"]');
         checkboxes.forEach(checkbox => {
             checkbox.checked = checked;
+            const userId = parseInt(checkbox.value);
+            if (checked) {
+                checkedUserIds.add(userId);
+            } else {
+                checkedUserIds.delete(userId);
+            }
         });
     }
 
@@ -131,4 +190,23 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Initial fetch to populate the table on page load
     fetchUsers(new URLSearchParams(window.location.search).get('page') || 1);
+    
+    // Interceptar el envío del formulario para incluir todos los IDs marcados
+    const toolForm = document.getElementById('toolForm');
+    if (toolForm) {
+        toolForm.addEventListener('submit', function(e) {
+            // Eliminar campos ocultos anteriores si existen
+            const existingHiddenInputs = toolForm.querySelectorAll('input[type="hidden"][name="user_ids"]');
+            existingHiddenInputs.forEach(input => input.remove());
+            
+            // Agregar campos ocultos para todos los IDs marcados
+            checkedUserIds.forEach(userId => {
+                const hiddenInput = document.createElement('input');
+                hiddenInput.type = 'hidden';
+                hiddenInput.name = 'user_ids';
+                hiddenInput.value = userId;
+                toolForm.appendChild(hiddenInput);
+            });
+        });
+    }
 }); 
