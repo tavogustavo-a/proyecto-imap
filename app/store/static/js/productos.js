@@ -23,15 +23,15 @@ document.addEventListener('DOMContentLoaded', function() {
     let idx = 0;
     filteredRows.forEach((row, i) => {
       if (showCountSelect.value === 'all' || (i >= start && i < end)) {
-        row.style.display = '';
+        row.classList.remove('d-none');
       } else {
-        row.style.display = 'none';
+        row.classList.add('d-none');
       }
     });
     
     rows.forEach(row => {
       if (row.classList.contains('filtered-out')) {
-        row.style.display = 'none';
+        row.classList.add('d-none');
       }
     });
     prevBtn.disabled = currentPage <= 1;

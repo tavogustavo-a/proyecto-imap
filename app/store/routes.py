@@ -2,7 +2,7 @@ from flask import render_template, request, redirect, url_for, flash, jsonify, c
 from datetime import datetime
 from app.utils.timezone import get_colombia_now, colombia_strftime, utc_to_colombia, get_colombia_datetime, timesince
 # Importa tus modelos y db. Asumo nombres comunes, ajústalos si es necesario.
-from .models import Product, Sale, Coupon, coupon_products, Role, role_products, role_users, ProductionLink, ApiInfo, WorksheetTemplate, WorksheetData, WorksheetPermission, DriveTransfer, WhatsAppConfig, GSheetsLink, SMSConfig, SMSMessage, AllowedSMSNumber, SMSRegex, TwoFAConfig
+from .models import Product, Sale, Coupon, coupon_products, ProductionLink, ApiInfo, WorksheetTemplate, WorksheetData, WorksheetPermission, DriveTransfer, WhatsAppConfig, GSheetsLink, SMSConfig, SMSMessage, AllowedSMSNumber, SMSRegex, TwoFAConfig
 
 # Identificadores internos del módulo store
 _STORE_MODULE_IDENTIFIER = 0x7C8D
@@ -100,28 +100,33 @@ def store_access_required(f):
             if not user_obj.can_access_store:
                 flash("No tienes permiso para acceder a la tienda. Solicita acceso a tu usuario principal.", "danger")
                 return redirect(url_for("main_bp.home"))
-            # Validar estado del rol del padre
+            # Validar tipo_precio del padre (ahora se usa user_prices en lugar de roles)
             parent = User.query.get(user_obj.parent_id)
-            if parent and hasattr(parent, 'roles_tienda') and parent.roles_tienda and not parent.roles_tienda[0].enabled:
-                flash("Tu rol está desactivado. Solicita acceso a un administrador.", "danger")
-                return redirect(url_for("main_bp.home"))
+            if parent:
+                parent_tipo_precio = None
+                if parent.user_prices and isinstance(parent.user_prices, dict):
+                    parent_tipo_precio = parent.user_prices.get('tipo_precio')
+                if not parent_tipo_precio or parent_tipo_precio not in ['USD', 'COP']:
+                    flash("Tu usuario principal no tiene tipo de precio configurado. Solicita acceso a un administrador.", "danger")
+                    return redirect(url_for("main_bp.home"))
             return f(*args, **kwargs)
-        # Solo usuarios principales requieren rol O permisos específicos
+        # Solo usuarios principales requieren tipo_precio O permisos específicos
         if user_obj and user_obj.username != admin_username:
             # Verificar si tiene permisos de hojas de cálculo
             has_worksheet_access = user_has_worksheet_access(user_obj)
             
-            # Si no tiene rol pero tiene permisos de hojas de cálculo, permitir acceso
+            # Si no tiene tipo_precio pero tiene permisos de hojas de cálculo, permitir acceso
             if has_worksheet_access:
                 return f(*args, **kwargs)
             
-            # Si no tiene rol ni permisos específicos, requerir rol
-            if (not hasattr(user_obj, 'roles_tienda') or not user_obj.roles_tienda or len(user_obj.roles_tienda) == 0):
-                flash("Debes estar vinculado a un rol para acceder a la tienda. Solicita a un administrador que te asigne un rol.", "danger")
-                return redirect(url_for("main_bp.home"))
-            # Validar estado del rol
-            if user_obj.roles_tienda and not user_obj.roles_tienda[0].enabled:
-                flash("Tu rol está desactivado. Solicita acceso a un administrador.", "danger")
+            # Verificar si tiene tipo_precio configurado en user_prices
+            tipo_precio = None
+            if user_obj.user_prices and isinstance(user_obj.user_prices, dict):
+                tipo_precio = user_obj.user_prices.get('tipo_precio')
+            
+            # Si no tiene tipo_precio configurado, denegar acceso
+            if not tipo_precio or tipo_precio not in ['USD', 'COP']:
+                flash("Debes tener un tipo de precio configurado (USD o COP) para acceder a la tienda. Solicita a un administrador que te configure un tipo de precio.", "danger")
                 return redirect(url_for("main_bp.home"))
         return f(*args, **kwargs)
     return decorated_function
@@ -338,23 +343,86 @@ def store_front():
             username = user.username
     admin_user = current_app.config.get("ADMIN_USER", "admin")
 
-    # Filtrar productos según el rol del usuario o del padre si es sub-usuario
+    # Filtrar productos según el tipo_precio del usuario o del padre si es sub-usuario
     if username == admin_user:
         products = Product.query.filter_by(enabled=True).order_by(Product.name).all()
     elif user:
-        # Si es sub-usuario, usar el rol del padre
+        # Si es sub-usuario, verificar tipo_precio del padre
         if user.parent_id:
             parent = User.query.get(user.parent_id)
-            if parent and parent.roles_tienda and parent.roles_tienda[0].enabled:
-                rol = parent.roles_tienda[0]
-                products = [p for p in rol.productos_permitidos if p.enabled]
+            if parent:
+                parent_tipo_precio = None
+                parent_descuentos_productos = {}
+                if parent.user_prices and isinstance(parent.user_prices, dict):
+                    parent_tipo_precio = parent.user_prices.get('tipo_precio')
+                    parent_descuentos_productos = parent.user_prices.get('descuentos_productos', {})
+                if parent_tipo_precio and parent_tipo_precio in ['USD', 'COP']:
+                    # Obtener productos permitidos desde user_prices del padre, si existen
+                    productos_permitidos_ids = None
+                    if parent.user_prices and isinstance(parent.user_prices, dict):
+                        # Verificar si la clave existe (puede ser lista vacía)
+                        if 'productos_permitidos' in parent.user_prices:
+                            productos_permitidos_ids = parent.user_prices.get('productos_permitidos', [])
+                    
+                    if productos_permitidos_ids is not None:
+                        # Si tiene productos específicos configurados (aunque esté vacío), mostrar solo esos
+                        if productos_permitidos_ids:
+                            products = Product.query.filter(
+                                Product.id.in_(productos_permitidos_ids),
+                                Product.enabled == True
+                            ).order_by(Product.name).all()
+                        else:
+                            # Lista vacía: no mostrar productos
+                            products = []
+                    else:
+                        # Si no tiene productos específicos configurados, mostrar todos los habilitados
+                        products = Product.query.filter_by(enabled=True).order_by(Product.name).all()
+                    
+                    # Aplicar descuentos a los productos
+                    for p in products:
+                        d = parent_descuentos_productos.get(str(p.id)) or parent_descuentos_productos.get(int(p.id)) or {}
+                        p.discount_cop_extra = d.get('cop', 0)
+                        p.discount_usd_extra = d.get('usd', 0)
+                else:
+                    products = []
             else:
                 products = []
-        elif hasattr(user, 'roles_tienda') and user.roles_tienda and user.roles_tienda[0].enabled:
-            rol = user.roles_tienda[0]
-            products = [p for p in rol.productos_permitidos if p.enabled]
         else:
-            products = []
+            # Usuario principal: verificar tipo_precio en user_prices
+            tipo_precio = None
+            descuentos_productos = {}
+            if user.user_prices and isinstance(user.user_prices, dict):
+                tipo_precio = user.user_prices.get('tipo_precio')
+                descuentos_productos = user.user_prices.get('descuentos_productos', {})
+            if tipo_precio and tipo_precio in ['USD', 'COP']:
+                # Obtener productos permitidos desde user_prices, si existen
+                productos_permitidos_ids = None
+                if user.user_prices and isinstance(user.user_prices, dict):
+                    # Verificar si la clave existe (puede ser lista vacía)
+                    if 'productos_permitidos' in user.user_prices:
+                        productos_permitidos_ids = user.user_prices.get('productos_permitidos', [])
+                
+                if productos_permitidos_ids is not None:
+                    # Si tiene productos específicos configurados (aunque esté vacío), mostrar solo esos
+                    if productos_permitidos_ids:
+                        products = Product.query.filter(
+                            Product.id.in_(productos_permitidos_ids),
+                            Product.enabled == True
+                        ).order_by(Product.name).all()
+                    else:
+                        # Lista vacía: no mostrar productos
+                        products = []
+                else:
+                    # Si no tiene productos específicos configurados, mostrar todos los habilitados
+                    products = Product.query.filter_by(enabled=True).order_by(Product.name).all()
+                
+                # Aplicar descuentos a los productos
+                for p in products:
+                    d = descuentos_productos.get(str(p.id)) or descuentos_productos.get(int(p.id)) or {}
+                    p.discount_cop_extra = d.get('cop', 0)
+                    p.discount_usd_extra = d.get('usd', 0)
+            else:
+                products = []
     else:
         products = []
 
@@ -452,173 +520,12 @@ def edit_coupon(coupon_id):
     # Estructura base para editar (puedes expandir luego)
     return jsonify({'success': True, 'message': 'Edición no implementada aún.'})
 
-@store_bp.route('/admin/roles/list', methods=['GET'])
-@admin_required
-def list_roles():
-    roles = Role.query.order_by(Role.id.desc()).all()
-    data = []
-    for r in roles:
-        data.append({
-            'id': r.id,
-            'name': r.name,
-            'enabled': r.enabled,
-            'productos': [{'id': p.id, 'name': p.name} for p in r.productos_permitidos],
-            'usuarios': [{'id': u.id, 'username': u.username} for u in r.usuarios_vinculados],
-            'descuentos': r.descuentos or {}
-        })
-    return jsonify({'roles': data})
-
-@store_bp.route('/admin/roles/create', methods=['POST'])
-@admin_required
-def create_role():
-    data = request.json
-    name = data.get('name', '').strip()
-    productos = data.get('productos', [])
-    usuarios = data.get('usuarios', [])
-    descuentos = data.get('descuentos', {})
-    # Permitir tanto lista de IDs como lista de objetos con 'id'
-    if productos and isinstance(productos[0], dict) and 'id' in productos[0]:
-        productos = [int(p['id']) for p in productos if 'id' in p]
-    if not name or not productos:
-        return jsonify({'success': False, 'error': 'Nombre y productos requeridos.'}), 400
-    if Role.query.filter_by(name=name).first():
-        return jsonify({'success': False, 'error': 'Ya existe un rol con ese nombre.'}), 400
-    role = Role(
-        name=name,
-        enabled=True,
-        descuentos=descuentos
-    )
-    role.productos_permitidos = Product.query.filter(Product.id.in_(productos)).all()
-    from app.models.user import User
-    role.usuarios_vinculados = User.query.filter(User.id.in_(usuarios)).all() if usuarios else []
-    db.session.add(role)
-    db.session.commit()
-    return jsonify({'success': True})
-
-@store_bp.route('/admin/roles/toggle/<int:role_id>', methods=['POST'])
-@admin_required
-def toggle_role(role_id):
-    role = Role.query.get_or_404(role_id)
-    role.enabled = not role.enabled
-    db.session.commit()
-    return jsonify({'success': True, 'new_state': 'ON' if role.enabled else 'OFF', 'new_class': 'action-green' if role.enabled else 'action-red'})
-
-@store_bp.route('/admin/roles/delete/<int:role_id>', methods=['POST'])
-@admin_required
-def delete_role(role_id):
-    role = Role.query.get_or_404(role_id)
-    db.session.delete(role)
-    db.session.commit()
-    return jsonify({'success': True})
-
-@store_bp.route('/admin/roles/edit/<int:role_id>', methods=['GET', 'POST'])
-@admin_required
-def edit_role(role_id):
-    role = Role.query.get_or_404(role_id)
-    productos = Product.query.all()
-    productos_ids = [p.id for p in role.productos_permitidos] if role.productos_permitidos else []
-
-    if request.method == 'POST':
-        if request.is_json:
-            data = request.get_json()
-            name = data.get('name')
-            tipo_precio = data.get('tipo_precio')
-            descuentos = data.get('descuentos', {})
-            productos_data = data.get('productos', [])
-
-            if not name:
-                return jsonify({'success': False, 'error': 'El nombre del rol es requerido'}), 400
-            if not tipo_precio:
-                return jsonify({'success': False, 'error': 'El tipo de precio es requerido'}), 400
-
-            # Verificar si el tipo de precio cambió
-            tipo_precio_cambio = role.tipo_precio != tipo_precio
-            tipo_precio_anterior = role.tipo_precio
-
-            # Guardar descuentos generales y por producto
-            role.name = name
-            role.tipo_precio = tipo_precio
-            role.descuentos = {
-                'cop': float(descuentos.get('cop', 0) or 0),
-                'usd': float(descuentos.get('usd', 0) or 0),
-                'productos': descuentos.get('productos', {})
-            }
-
-            # Procesar productos seleccionados
-            role.productos_permitidos.clear()
-            db.session.flush()
-            productos_ids = [int(prod['id']) for prod in productos_data]
-            role.productos_permitidos = Product.query.filter(Product.id.in_(productos_ids)).all()
-
-            # Validar que el precio final de cada producto sea mayor a 1 en COP y USD
-            productos_objs = Product.query.filter(Product.id.in_(productos_ids)).all()
-            descuentos_productos = descuentos.get('productos', {})
-            errores = []
-            for prod in productos_objs:
-                cop = float(prod.price_cop)
-                usd = float(prod.price_usd)
-                d_cop = float(descuentos.get('cop', 0) or 0)
-                d_usd = float(descuentos.get('usd', 0) or 0)
-                d_extra = descuentos_productos.get(str(prod.id)) or descuentos_productos.get(int(prod.id)) or {}
-                d_cop_extra = float(d_extra.get('cop', 0) or 0)
-                d_usd_extra = float(d_extra.get('usd', 0) or 0)
-                if tipo_precio == 'COP':
-                    final_cop = cop - d_cop - d_cop_extra
-                    if final_cop <= 0:
-                        errores.append(f"El precio final en COP para '{prod.name}' debe ser mayor a 0 (actual: {final_cop})")
-                else:
-                    final_usd = usd - d_usd - d_usd_extra
-                    if final_usd < 0.1:
-                        errores.append(f"El precio final en USD para '{prod.name}' debe ser mayor a 0.1 (actual: {final_usd})")
-            if errores:
-                return jsonify({'success': False, 'error': ' | '.join(errores)}), 400
-
-            # Si el tipo de precio cambió, actualizar usuarios vinculados
-            usuarios_afectados = []
-            if tipo_precio_cambio:
-                from app.models.user import User
-                usuarios_vinculados = role.usuarios_vinculados
-                for usuario in usuarios_vinculados:
-                    usuarios_afectados.append(usuario.username)
-                    # Limpiar el saldo de la moneda anterior
-                    if tipo_precio_anterior == 'USD':
-                        usuario.saldo_usd = 0.0
-                    elif tipo_precio_anterior == 'COP':
-                        usuario.saldo_cop = 0.0
-
-            try:
-                db.session.commit()
-                
-                # Preparar respuesta con información sobre el cambio
-                response_data = {'success': True}
-                if tipo_precio_cambio and usuarios_afectados:
-                    response_data['warning'] = {
-                        'message': f'El tipo de precio cambió de {tipo_precio_anterior} a {tipo_precio}.',
-                        'affected_users': usuarios_afectados,
-                        'details': f'Se limpió el saldo en {tipo_precio_anterior} de {len(usuarios_afectados)} usuario(s) vinculado(s).'
-                    }
-                
-                return jsonify(response_data)
-            except Exception as e:
-                db.session.rollback()
-                return jsonify({'success': False, 'error': str(e)}), 500
-
-        return jsonify({'success': False, 'error': 'Petición inválida'}), 400
-
-    # --- Al cargar la edición, pasar descuentos individuales a los productos ---
-    descuentos_productos = role.descuentos.get('productos', {}) if role.descuentos else {}
-    for p in productos:
-        d = descuentos_productos.get(str(p.id)) or descuentos_productos.get(int(p.id)) or {}
-        p.discount_cop_extra = d.get('cop', 0)
-        p.discount_usd_extra = d.get('usd', 0)
-
-    return render_template('edit_role.html', role=role, productos=productos, productos_ids=productos_ids)
 
 @store_bp.route('/admin/cupones', endpoint='admin_coupons')
 @admin_required
 def admin_coupons():
-    products = Product.query.order_by(Product.id.desc()).all()
-    return render_template('cupones.html', products=products, title="Cupones de Descuento")
+    # Redirigir a productos donde ahora está la gestión de cupones
+    return redirect(url_for('store_bp.admin_productos'))
 
 @store_bp.route('/admin/cupones/<int:coupon_id>/editar', methods=['GET', 'POST'])
 @admin_required
@@ -645,7 +552,7 @@ def editar_cupon(coupon_id):
         try:
             db.session.commit()
             flash('Cupón actualizado correctamente.', 'success')
-            return redirect(url_for('store_bp.admin_coupons'))
+            return redirect(url_for('store_bp.admin_productos'))
         except Exception as e:
             db.session.rollback()
             flash('Error al actualizar cupón: ' + str(e), 'danger')
@@ -679,39 +586,18 @@ def update_coupon():
 @store_bp.route('/admin/roles', endpoint='admin_roles')
 @admin_required
 def admin_roles():
-    products = Product.query.order_by(Product.name).all()
-    return render_template('roles.html', title="Roles", products=products)
+    # Redirigir a gestión de permisos donde ahora se gestionan los productos asociados
+    return redirect(url_for('admin_bp.manage_permissions_page'))
 
-@store_bp.route('/admin/roles/vincular_usuario_ajax', methods=['POST'])
+@store_bp.route('/admin/roles/get_or_create_for_user/<int:user_id>', methods=['GET'])
 @admin_required
-def vincular_usuario_ajax():
-    data = request.get_json()
-    user_id = data.get('user_id')
-    role_id = data.get('role_id')
-    vincular = data.get('vincular')
-    from app.models.user import User
-    user = User.query.get(user_id)
-    if not user:
-        return jsonify({'success': False, 'error': 'Usuario no encontrado.'}), 404
-    role = Role.query.get(role_id)
-    if not role:
-        return jsonify({'success': False, 'error': 'Rol no encontrado.'}), 404
-    # Verificar si el usuario ya está vinculado a algún rol
-    roles_actuales = user.roles_tienda if hasattr(user, 'roles_tienda') else []
-    if vincular:
-        if roles_actuales and roles_actuales[0].id != role.id:
-            return jsonify({'success': False, 'error': 'Desvincúlate del otro rol para vincularte aquí.'}), 400
-        if role not in user.roles_tienda:
-            user.roles_tienda.append(role)
-    else:
-        if role in user.roles_tienda:
-            user.roles_tienda.remove(role)
-    try:
-        db.session.commit()
-        return jsonify({'success': True})
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({'success': False, 'error': str(e)}), 500
+def get_or_create_role_for_user(user_id):
+    """
+    Redirige a la página de edición de productos del usuario.
+    Los roles ya no se usan, ahora se gestionan productos directamente por usuario.
+    """
+    return redirect(url_for('admin_bp.edit_user_products', user_id=user_id))
+
 
 @store_bp.route('/admin/herramientas')
 @admin_required
@@ -1356,34 +1242,6 @@ def get_youtube_listing_users(listing_id):
         'linked_user_ids': linked_user_ids
     })
 
-@store_bp.route('/admin/pagos', endpoint='admin_payments')
-@admin_required
-def admin_payments():
-    admin_user = current_app.config.get("ADMIN_USER", "admin")
-    # Solo usuarios principales (no admin, no sub-usuarios) y que tengan al menos un rol vinculado
-    users = User.query.filter(
-        User.username != admin_user,
-        User.parent_id == None,
-        User.roles_tienda.any()
-    ).order_by(User.username.desc()).all()
-    users_with_tipo_precio = []
-    for u in users:
-        tipo_precio = 'usd'
-        if hasattr(u, 'roles_tienda') and u.roles_tienda and len(u.roles_tienda) > 0:
-            raw_tipo_precio = u.roles_tienda[0].tipo_precio
-            if raw_tipo_precio and raw_tipo_precio.strip().lower() in ['usd', 'cop']:
-                tipo_precio = raw_tipo_precio.strip().lower()
-            elif raw_tipo_precio and raw_tipo_precio.strip().upper() in ['USD', 'COP']:
-                tipo_precio = raw_tipo_precio.strip().lower()
-        users_with_tipo_precio.append({
-            'id': u.id,
-            'username': u.username,
-            'full_name': u.full_name or '',
-            'saldo_usd': u.saldo_usd or 0,
-            'saldo_cop': u.saldo_cop or 0,
-            'tipo_precio': tipo_precio
-        })
-    return render_template('pagos.html', title="Pagos", users=users_with_tipo_precio)
 
 @store_bp.route('/herramientas-public', endpoint='tools_public')
 def tools_public():
@@ -3123,16 +2981,19 @@ def add_balance():
     user = User.query.filter_by(username=username).first()
     if not user:
         return jsonify({'success': False, 'error': 'Usuario no encontrado'}), 404
-    # Solo permitir añadir saldo en la moneda correspondiente al tipo_precio del rol
+    # Solo permitir añadir saldo en la moneda correspondiente al tipo_precio del usuario
     tipo_precio = None
-    if hasattr(user, 'roles_tienda') and user.roles_tienda and len(user.roles_tienda) > 0:
-        tipo_precio = user.roles_tienda[0].tipo_precio.lower() if user.roles_tienda[0].tipo_precio else 'usd'
+    # Verificar user_prices
+    if user.user_prices and isinstance(user.user_prices, dict):
+        tipo_precio_raw = user.user_prices.get('tipo_precio')
+        if tipo_precio_raw and tipo_precio_raw in ['USD', 'COP']:
+            tipo_precio = tipo_precio_raw.lower()
     if tipo_precio == 'usd':
         user.saldo_usd = (user.saldo_usd or 0) + amount_usd
     elif tipo_precio == 'cop':
         user.saldo_cop = (user.saldo_cop or 0) + amount_cop
     else:
-        return jsonify({'success': False, 'error': 'El usuario no tiene tipo de saldo definido por rol.'}), 400
+        return jsonify({'success': False, 'error': 'El usuario no tiene tipo de precio configurado (USD o COP).'}), 400
     from app import db
     db.session.commit()
     return jsonify({'success': True, 'new_saldo_usd': user.saldo_usd, 'new_saldo_cop': user.saldo_cop})

@@ -437,15 +437,9 @@ document.addEventListener('DOMContentLoaded', function() {
       const input = card.querySelector('.input-cantidad-licencia');
       const cantidad = parseInt(input.value) || 1;
       // Obtener precios por texto
-      let precioCop = 0, precioUsd = 0;
-      card.querySelectorAll('span').forEach(span => {
-        if (span.textContent.includes('COP')) {
-          precioCop = parseInt(span.textContent.replace(/[^0-9]/g, '')) || 0;
-        }
-        if (span.textContent.includes('USD')) {
-          precioUsd = parseInt(span.textContent.replace(/[^0-9]/g, '')) || 0;
-        }
-      });
+      // Obtener precios desde los atributos data (ya incluyen descuentos aplicados)
+      let precioCop = parseFloat(card.getAttribute('data-price-cop')) || 0;
+      let precioUsd = parseFloat(card.getAttribute('data-price-usd')) || 0;
       const id = parseInt(card.getAttribute('data-id'));
       const img = card.getAttribute('data-img') || '';
       // Agregar al carrito

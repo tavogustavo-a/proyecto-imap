@@ -49,6 +49,14 @@
       </label>
       <small class="text-secondary">Si está activado, el sub-usuario podrá acceder a la tienda y ver productos.</small>
     </div>
+    <div class="form-section mt-1">
+      <label class="d-flex align-items-center gap-03" for="canUseCouponsCheckbox">
+        <input type="checkbox" id="canUseCouponsCheckbox" name="can_use_coupons" {% if sub_user.can_use_coupons %}checked{% endif %}>
+        ¿Deseas que el sub-usuario pueda usar cupones?
+        <span id="coupons-permission-status" class="ml-1 text-success"></span>
+      </label>
+      <small class="text-secondary">Si está activado, el sub-usuario podrá aplicar cupones en la tienda.</small>
+    </div>
   {% endif %}
   
   <!-- Permiso de acceso a Códigos 2 -->

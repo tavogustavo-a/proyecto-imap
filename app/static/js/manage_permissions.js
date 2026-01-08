@@ -749,4 +749,493 @@ document.addEventListener("DOMContentLoaded", function() {
     loadResources();
     updateResourcesSaveButton();
   }
+  
+  // ============ Gestión de Precios por Usuario ============
+  const userPricesTableBody = document.getElementById("userPricesTableBody");
+  const saveUserPricesBtn = document.getElementById("saveUserPricesBtn");
+  const saveUserPricesStatus = document.getElementById("saveUserPricesStatus");
+  const searchUserPricesInput = document.getElementById("searchUserPricesInput");
+  const clearUserPricesSearchBtn = document.getElementById("clearUserPricesSearchBtn");
+  
+  let userPricesData = {}; // { userId: { tipo_precio: 'USD'|'COP'|null } }
+  let allUsersForPrices = []; // Todos los usuarios cargados
+  let filteredUsersForPrices = []; // Usuarios filtrados por búsqueda
+  
+  // Cargar usuarios para la tabla de precios
+  function loadUsersForPrices() {
+    if (!userPricesTableBody) return;
+    
+    fetch('/admin/search_users_ajax?query=', {
+      method: 'GET',
+      headers: {
+        'X-CSRFToken': getCsrfToken()
+      }
+    })
+    .then(res => res.json())
+    .then(data => {
+      if (data.status === "ok") {
+        allUsersForPrices = data.users || [];
+        filterUsersForPrices();
+      } else {
+        while (userPricesTableBody.firstChild) {
+          userPricesTableBody.removeChild(userPricesTableBody.firstChild);
+        }
+        const tr = document.createElement('tr');
+        const td = document.createElement('td');
+        td.colSpan = 4;
+        td.className = 'text-center text-danger';
+        td.textContent = 'Error al cargar usuarios';
+        tr.appendChild(td);
+        userPricesTableBody.appendChild(tr);
+      }
+    })
+    .catch(err => {
+      console.error('Error:', err);
+      while (userPricesTableBody.firstChild) {
+        userPricesTableBody.removeChild(userPricesTableBody.firstChild);
+      }
+      const tr = document.createElement('tr');
+      const td = document.createElement('td');
+      td.colSpan = 4;
+      td.className = 'text-center text-danger';
+      td.textContent = 'Error al cargar usuarios';
+      tr.appendChild(td);
+      userPricesTableBody.appendChild(tr);
+    });
+  }
+  
+  // Filtrar usuarios por búsqueda
+  function filterUsersForPrices() {
+    if (!searchUserPricesInput) {
+      filteredUsersForPrices = allUsersForPrices;
+      renderUserPricesTable(filteredUsersForPrices);
+      return;
+    }
+    
+    const query = searchUserPricesInput.value.trim().toLowerCase();
+    
+    if (query === '') {
+      filteredUsersForPrices = allUsersForPrices;
+      if (clearUserPricesSearchBtn) {
+        clearUserPricesSearchBtn.classList.remove('show');
+      }
+    } else {
+      filteredUsersForPrices = allUsersForPrices.filter(user => 
+        user.username.toLowerCase().includes(query)
+      );
+      if (clearUserPricesSearchBtn) {
+        clearUserPricesSearchBtn.classList.add('show');
+      }
+    }
+    
+    renderUserPricesTable(filteredUsersForPrices);
+  }
+  
+  // Renderizar tabla de precios por usuario
+  function renderUserPricesTable(users) {
+    if (!userPricesTableBody) return;
+    
+    if (users.length === 0) {
+      while (userPricesTableBody.firstChild) {
+        userPricesTableBody.removeChild(userPricesTableBody.firstChild);
+      }
+      const tr = document.createElement('tr');
+      const td = document.createElement('td');
+      td.colSpan = 4;
+      td.className = 'text-center text-secondary';
+      td.textContent = 'No hay usuarios';
+      tr.appendChild(td);
+      userPricesTableBody.appendChild(tr);
+      return;
+    }
+    
+    const fragment = document.createDocumentFragment();
+    
+    users.forEach(user => {
+      const userId = user.id;
+      // Cargar datos de precios desde el usuario si existen, sino usar valores por defecto
+      const userData = userPricesData[userId] || {
+        tipo_precio: user.tipo_precio || null
+      };
+      
+      const tr = document.createElement('tr');
+      tr.setAttribute('data-user-id', userId);
+      
+      // Usuario
+      const tdUsuario = document.createElement('td');
+      tdUsuario.className = 'edit-role-product-cell';
+      tdUsuario.textContent = user.username;
+      tr.appendChild(tdUsuario);
+      
+      // Tipo Precio (USD/COP checkboxes) - Vertical
+      const tdTipoPrecio = document.createElement('td');
+      tdTipoPrecio.className = 'text-center';
+      
+      const tipoPrecioContainer = document.createElement('div');
+      tipoPrecioContainer.className = 'd-flex flex-column align-items-center justify-content-center';
+      tipoPrecioContainer.style.setProperty('gap', '0.25rem');
+      
+      // Contenedor para USD (checkbox + label juntos sin espacio) - Arriba
+      const usdContainer = document.createElement('div');
+      usdContainer.className = 'd-flex align-items-center';
+      
+      const usdCheckbox = document.createElement('input');
+      usdCheckbox.type = 'checkbox';
+      usdCheckbox.id = `tipo_usd_${userId}`;
+      usdCheckbox.name = `tipo_precio_${userId}`;
+      usdCheckbox.value = 'USD';
+      usdCheckbox.checked = userData.tipo_precio === 'USD';
+      usdCheckbox.className = 'user-price-type-checkbox';
+      usdCheckbox.setAttribute('data-user-id', userId);
+      usdCheckbox.setAttribute('data-tipo', 'USD');
+      
+      const usdLabel = document.createElement('label');
+      usdLabel.setAttribute('for', `tipo_usd_${userId}`);
+      usdLabel.textContent = 'USD';
+      usdLabel.className = 'user-price-label';
+      usdLabel.style.setProperty('margin-left', '0.25rem');
+      usdLabel.style.setProperty('margin-bottom', '0');
+      usdLabel.style.setProperty('cursor', 'pointer');
+      
+      usdContainer.appendChild(usdCheckbox);
+      usdContainer.appendChild(usdLabel);
+      
+      // Contenedor para COP (checkbox + label juntos sin espacio) - Abajo
+      const copContainer = document.createElement('div');
+      copContainer.className = 'd-flex align-items-center';
+      
+      const copCheckbox = document.createElement('input');
+      copCheckbox.type = 'checkbox';
+      copCheckbox.id = `tipo_cop_${userId}`;
+      copCheckbox.name = `tipo_precio_${userId}`;
+      copCheckbox.value = 'COP';
+      copCheckbox.checked = userData.tipo_precio === 'COP';
+      copCheckbox.className = 'user-price-type-checkbox';
+      copCheckbox.setAttribute('data-user-id', userId);
+      copCheckbox.setAttribute('data-tipo', 'COP');
+      
+      const copLabel = document.createElement('label');
+      copLabel.setAttribute('for', `tipo_cop_${userId}`);
+      copLabel.textContent = 'COP';
+      copLabel.className = 'user-price-label';
+      copLabel.style.setProperty('margin-left', '0.25rem');
+      copLabel.style.setProperty('margin-bottom', '0');
+      copLabel.style.setProperty('cursor', 'pointer');
+      
+      copContainer.appendChild(copCheckbox);
+      copContainer.appendChild(copLabel);
+      
+      tipoPrecioContainer.appendChild(usdContainer);
+      tipoPrecioContainer.appendChild(copContainer);
+      tdTipoPrecio.appendChild(tipoPrecioContainer);
+      tr.appendChild(tdTipoPrecio);
+      
+      // Saldo (mostrar saldo actual arriba y botón Editar abajo) - Vertical
+      const tdSaldo = document.createElement('td');
+      tdSaldo.className = 'text-center';
+      
+      const saldoContainer = document.createElement('div');
+      saldoContainer.className = 'd-flex flex-column align-items-center justify-content-center';
+      saldoContainer.style.setProperty('gap', '0.5rem');
+      
+      // Determinar tipo de precio: solo de user_prices (ya no depende de roles)
+      let tipoPrecioSaldo = null;
+      if (userData.tipo_precio) {
+        tipoPrecioSaldo = userData.tipo_precio.toLowerCase();
+      }
+      
+      // Mostrar saldo solo si el usuario tiene tipo_precio configurado (tiene acceso a la tienda) - Arriba
+      const saldoText = document.createElement('span');
+      if (tipoPrecioSaldo) {
+        // Usuario tiene tipo_precio configurado, mostrar saldo según tipo de precio
+        if (tipoPrecioSaldo === 'usd') {
+          saldoText.textContent = `${Math.floor(user.saldo_usd || 0)} USD`;
+        } else if (tipoPrecioSaldo === 'cop') {
+          saldoText.textContent = `${Math.floor(user.saldo_cop || 0)} COP`;
+        } else {
+          saldoText.textContent = '-';
+        }
+      } else {
+        // Usuario no tiene tipo_precio configurado, no puede tener saldo
+        saldoText.textContent = '-';
+      }
+      saldoContainer.appendChild(saldoText);
+      
+      // Botón Editar (solo si el usuario tiene tipo_precio configurado) - Abajo
+      const actionStack = document.createElement('div');
+      actionStack.className = 'action-stack';
+      
+      if (tipoPrecioSaldo) {
+        const editBtn = document.createElement('a');
+        editBtn.href = '#';
+        editBtn.className = 'action-btn action-blue open-balance-modal';
+        editBtn.textContent = 'Editar';
+        editBtn.setAttribute('data-username', user.username);
+        editBtn.setAttribute('data-tipo-precio', tipoPrecioSaldo);
+        editBtn.setAttribute('data-user-id', userId);
+        
+        actionStack.appendChild(editBtn);
+      }
+      
+      saldoContainer.appendChild(actionStack);
+      tdSaldo.appendChild(saldoContainer);
+      tr.appendChild(tdSaldo);
+      
+      // Productos Asociados (botón Editar que dirige a editar productos del usuario)
+      const tdProductosAsociados = document.createElement('td');
+      tdProductosAsociados.className = 'text-center';
+      
+      // Mostrar botón si el usuario tiene tipo_precio configurado
+      if (tipoPrecioSaldo) {
+        const editProductsBtn = document.createElement('a');
+        editProductsBtn.href = `/admin/users/${userId}/edit_products`;
+        editProductsBtn.className = 'action-btn action-blue';
+        editProductsBtn.textContent = 'Editar';
+        tdProductosAsociados.appendChild(editProductsBtn);
+      } else {
+        tdProductosAsociados.textContent = '-';
+      }
+      
+      tr.appendChild(tdProductosAsociados);
+      
+      // Guardar datos iniciales
+      userPricesData[userId] = userData;
+      
+      fragment.appendChild(tr);
+    });
+    
+    while (userPricesTableBody.firstChild) {
+      userPricesTableBody.removeChild(userPricesTableBody.firstChild);
+    }
+    userPricesTableBody.appendChild(fragment);
+    
+    // Agregar event listeners para checkboxes mutuamente excluyentes
+    document.querySelectorAll('.user-price-type-checkbox').forEach(checkbox => {
+      checkbox.addEventListener('change', function() {
+        const userId = this.getAttribute('data-user-id');
+        const tipo = this.getAttribute('data-tipo');
+        
+        if (this.checked) {
+          // Desmarcar el otro checkbox
+          const otherCheckbox = document.querySelector(`input[name="tipo_precio_${userId}"][data-tipo="${tipo === 'USD' ? 'COP' : 'USD'}"]`);
+          if (otherCheckbox) {
+            otherCheckbox.checked = false;
+          }
+          
+          // Actualizar datos
+          if (!userPricesData[userId]) {
+            userPricesData[userId] = {
+              tipo_precio: null
+            };
+          }
+          userPricesData[userId].tipo_precio = tipo;
+        } else {
+          // Si se desmarca, establecer a null
+          if (userPricesData[userId]) {
+            userPricesData[userId].tipo_precio = null;
+          }
+        }
+      });
+    });
+  }
+  
+  // Guardar cambios de precios
+  if (saveUserPricesBtn) {
+    saveUserPricesBtn.addEventListener('click', function() {
+      if (!userPricesTableBody) return;
+      
+      const updates = [];
+      
+      // Recopilar todos los datos de la tabla
+      Object.keys(userPricesData).forEach(userId => {
+        const userData = userPricesData[userId];
+        updates.push({
+          user_id: parseInt(userId),
+          tipo_precio: userData.tipo_precio || null
+        });
+      });
+      
+      if (updates.length === 0) {
+        showUserPricesStatus('No hay cambios para guardar', 'text-warning');
+        return;
+      }
+      
+      // Deshabilitar botón mientras se guarda
+      saveUserPricesBtn.disabled = true;
+      saveUserPricesBtn.textContent = 'Guardando...';
+      showUserPricesStatus('Guardando cambios...', 'text-info');
+      
+      fetch('/admin/update_user_prices_ajax', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRFToken': getCsrfToken()
+        },
+        body: JSON.stringify({ updates: updates })
+      })
+      .then(res => res.json())
+      .then(data => {
+        if (data.status === 'ok') {
+          showUserPricesStatus(data.message || 'Cambios guardados correctamente', 'text-success');
+          // Recargar datos después de guardar
+          setTimeout(() => {
+            loadUsersForPrices();
+          }, 1000);
+        } else {
+          showUserPricesStatus(data.message || 'Error al guardar cambios', 'text-danger');
+        }
+      })
+      .catch(err => {
+        console.error('Error al guardar precios:', err);
+        showUserPricesStatus('Error al guardar cambios', 'text-danger');
+      })
+      .finally(() => {
+        saveUserPricesBtn.disabled = false;
+        while (saveUserPricesBtn.firstChild) {
+          saveUserPricesBtn.removeChild(saveUserPricesBtn.firstChild);
+        }
+        const icon = document.createElement('i');
+        icon.className = 'fas fa-save';
+        saveUserPricesBtn.appendChild(icon);
+        saveUserPricesBtn.appendChild(document.createTextNode(' Guardar Cambios de Precios'));
+      });
+    });
+  }
+  
+  function showUserPricesStatus(message, className) {
+    if (saveUserPricesStatus) {
+      saveUserPricesStatus.textContent = message;
+      saveUserPricesStatus.className = className;
+    }
+  }
+  
+  // Inicializar tabla de precios por usuario
+  if (userPricesTableBody) {
+    loadUsersForPrices();
+  }
+  
+  // Modal para añadir saldo
+  const balanceModalOverlay = document.getElementById('balance-modal-overlay');
+  const balanceModal = balanceModalOverlay ? balanceModalOverlay.querySelector('.modal-balance-content') : null;
+  const modalUsernameInput = document.getElementById('modal-username');
+  const modalBalanceUsdInput = document.getElementById('modal-balance-usd');
+  const modalBalanceCopInput = document.getElementById('modal-balance-cop');
+  const modalGroupUsd = document.getElementById('modal-group-usd');
+  const modalGroupCop = document.getElementById('modal-group-cop');
+  const modalBalanceForm = document.getElementById('modal-balance-form');
+  const closeBalanceModalBtns = document.querySelectorAll('.close-balance-modal');
+  
+  // Abrir modal al hacer clic en botón Editar
+  document.addEventListener('click', function(e) {
+    if (e.target.classList.contains('open-balance-modal')) {
+      e.preventDefault();
+      const btn = e.target;
+      const username = btn.getAttribute('data-username');
+      const tipoPrecio = btn.getAttribute('data-tipo-precio');
+      
+      if (balanceModalOverlay && balanceModal && modalUsernameInput) {
+        balanceModalOverlay.classList.remove('d-none');
+        modalUsernameInput.value = username;
+        if (modalBalanceUsdInput) modalBalanceUsdInput.value = '';
+        if (modalBalanceCopInput) modalBalanceCopInput.value = '';
+        
+        // Mostrar/ocultar campos según tipo de precio
+        if (tipoPrecio === 'usd') {
+          if (modalGroupUsd) modalGroupUsd.classList.remove('d-none');
+          if (modalGroupCop) modalGroupCop.classList.add('d-none');
+        } else if (tipoPrecio === 'cop') {
+          if (modalGroupUsd) modalGroupUsd.classList.add('d-none');
+          if (modalGroupCop) modalGroupCop.classList.remove('d-none');
+        } else {
+          if (modalGroupUsd) modalGroupUsd.classList.remove('d-none');
+          if (modalGroupCop) modalGroupCop.classList.remove('d-none');
+        }
+      }
+    }
+  });
+  
+  // Cerrar modal
+  function closeBalanceModal() {
+    if (balanceModalOverlay) {
+      balanceModalOverlay.classList.add('d-none');
+    }
+  }
+  
+  closeBalanceModalBtns.forEach(btn => {
+    btn.addEventListener('click', closeBalanceModal);
+  });
+  
+  if (balanceModalOverlay) {
+    balanceModalOverlay.addEventListener('click', function(e) {
+      if (e.target === balanceModalOverlay) {
+        closeBalanceModal();
+      }
+    });
+  }
+  
+  // Enviar formulario de añadir saldo
+  if (modalBalanceForm) {
+    modalBalanceForm.addEventListener('submit', function(e) {
+      e.preventDefault();
+      const username = modalUsernameInput ? modalUsernameInput.value.trim() : '';
+      const user = allUsersForPrices.find(u => u.username === username);
+      let amountUsd = modalBalanceUsdInput ? modalBalanceUsdInput.value.trim() : '';
+      let amountCop = modalBalanceCopInput ? modalBalanceCopInput.value.trim() : '';
+      
+      if (user) {
+        const tipoPrecio = (userPricesData[user.id]?.tipo_precio ? userPricesData[user.id].tipo_precio.toLowerCase() : null);
+        if (tipoPrecio === 'usd') {
+          amountCop = '';
+        } else if (tipoPrecio === 'cop') {
+          amountUsd = '';
+        }
+      }
+      
+      if (!user || (!amountUsd && !amountCop)) {
+        alert('Debes seleccionar un usuario y al menos un monto.');
+        return;
+      }
+      
+      fetch('/tienda/admin/pagos/add_balance', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRFToken': getCsrfToken()
+        },
+        body: JSON.stringify({ username: user.username, amount_usd: amountUsd, amount_cop: amountCop })
+      })
+      .then(r => r.json())
+      .then(data => {
+        if (data.success) {
+          const userRow = userPricesTableBody.querySelector(`tr[data-user-id="${user.id}"]`);
+          if (userRow) {
+            const saldoCell = userRow.children[2];
+            const saldoText = saldoCell.querySelector('span');
+            const tipoPrecio = (userPricesData[user.id]?.tipo_precio ? userPricesData[user.id].tipo_precio.toLowerCase() : null);
+            if (saldoText) {
+              if (tipoPrecio === 'usd') {
+                saldoText.textContent = `${parseInt(data.new_saldo_usd)} USD`;
+              } else if (tipoPrecio === 'cop') {
+                saldoText.textContent = `${parseInt(data.new_saldo_cop)} COP`;
+              } else {
+                saldoText.textContent = '-';
+              }
+            }
+            // Actualizar también en allUsersForPrices
+            const userIndex = allUsersForPrices.findIndex(u => u.id === user.id);
+            if (userIndex !== -1) {
+              allUsersForPrices[userIndex].saldo_usd = data.new_saldo_usd;
+              allUsersForPrices[userIndex].saldo_cop = data.new_saldo_cop;
+            }
+          }
+          alert('Saldo añadido correctamente');
+          modalBalanceForm.reset();
+          closeBalanceModal();
+        } else {
+          alert(data.error || 'Error al añadir saldo');
+        }
+      })
+      .catch(() => alert('Error de red o servidor.'));
+    });
+  }
 });

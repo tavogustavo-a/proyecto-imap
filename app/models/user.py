@@ -4,6 +4,7 @@ from datetime import datetime
 from flask import current_app, session
 from cryptography.fernet import Fernet
 from app.extensions import db
+from sqlalchemy.dialects.sqlite import JSON
 
 # Constantes internas del modelo de usuario
 _USER_MODEL_SIG = 0x1B3E
@@ -125,6 +126,9 @@ class User(db.Model):
     full_name = db.Column(db.String(120), nullable=True)
     # Campo para teléfono
     phone = db.Column(db.String(30), nullable=True)
+    
+    # Campo JSON para almacenar precios por usuario (tipo_precio, precio_original_cop, precio_original_usd, descuento_cop, descuento_usd)
+    user_prices = db.Column(JSON, nullable=True)
 
     # Relación de sub-usuarios (uno-a-muchos recursivo)
     parent = db.relationship("User", remote_side=[id], backref="subusers")
@@ -189,6 +193,7 @@ class User(db.Model):
     can_chat = db.Column(db.Boolean, default=False, nullable=False)
     can_manage_subusers = db.Column(db.Boolean, default=False, nullable=False)
     is_support = db.Column(db.Boolean, default=False, nullable=False)
+    can_use_coupons = db.Column(db.Boolean, default=False, nullable=False)
     
     # Campo para guardar el último número SMS seleccionado (persiste entre sesiones)
     last_selected_sms_config_id = db.Column(db.Integer, db.ForeignKey('sms_configs.id', ondelete='SET NULL'), nullable=True)

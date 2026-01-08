@@ -62,11 +62,11 @@
         {% elif user_object.parent_id %}
           {% if user_object.can_access_store %}
             {% set parent = User.query.get(user_object.parent_id) %}
-            {% if parent and parent.roles_tienda and parent.roles_tienda[0].enabled %}
+            {% if parent and parent.user_prices and parent.user_prices.get('tipo_precio') in ['USD', 'COP'] %}
               {% set show_store = True %}
             {% endif %}
           {% endif %}
-        {% elif user_object.roles_tienda and user_object.roles_tienda[0].enabled %}
+        {% elif user_object.user_prices and user_object.user_prices.get('tipo_precio') in ['USD', 'COP'] %}
           {% set show_store = True %}
         {% endif %}
         {% if show_store %}
@@ -84,7 +84,7 @@
       {% if user_object %}
         {% if is_admin %}
           <a href="{{ url_for('user_auth_bp.estadisticas') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-chart-bar"></i> Estadísticas</a>
-        {% elif not user_object.parent_id and user_object.roles_tienda and user_object.roles_tienda[0].enabled %}
+        {% elif not user_object.parent_id and user_object.user_prices and user_object.user_prices.get('tipo_precio') in ['USD', 'COP'] %}
           <a href="{{ url_for('user_auth_bp.estadisticas') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-chart-bar"></i> Estadísticas</a>
         {% elif user_object.parent_id and user_object.can_access_store %}
           <a href="{{ url_for('user_auth_bp.estadisticas') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-chart-bar"></i> Estadísticas</a>
@@ -125,10 +125,8 @@
       </div>
       <a href="{{ url_for('store_bp.admin_store') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-store"></i> Licencias</a>
       <a href="{{ url_for('store_bp.admin_productos') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-box"></i> Productos</a>
-      <a href="{{ url_for('store_bp.admin_coupons') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-ticket-alt"></i> Cupones</a>
-      <a href="{{ url_for('store_bp.admin_roles') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-user-tag"></i> Roles</a>
+      <a href="{{ url_for('store_bp.admin_productos') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-ticket-alt"></i> Cupones</a>
       <a href="{{ url_for('store_bp.admin_tools') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-tools"></i> Herramientas Admin</a>
-      <a href="{{ url_for('store_bp.admin_payments') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-credit-card"></i> Pagos</a>
       <a href="{{ url_for('store_bp.admin_work_sheets') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-table"></i> Hojas de Cálculo</a>
       <a href="{{ url_for('store_bp.admin_configurations') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-cog"></i> Configuraciones</a>
       <a href="{{ url_for('store_bp.admin_support') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-headset"></i> Chat Soporte</a>

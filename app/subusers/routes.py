@@ -472,7 +472,7 @@ def edit_subuser(sub_id):
                            subuser_youtube_listings=subuser_youtube_listings,
                            parent_apis=parent_apis,
                            subuser_apis=subuser_apis,
-                           parent_has_store_role=(hasattr(parent_user, 'roles_tienda') and parent_user.roles_tienda and len(parent_user.roles_tienda) > 0),
+                           parent_has_store_role=(parent_user.user_prices and isinstance(parent_user.user_prices, dict) and parent_user.user_prices.get('tipo_precio') in ['USD', 'COP']),
                            parent_has_codigos2_access=parent_has_codigos2_access,
                            parent_can_manage_subusers=parent_user.can_manage_subusers
                            )
@@ -1650,6 +1650,27 @@ def update_subuser_store_permission():
     sub_user.can_access_store = bool(can_access_store)
     db.session.commit()
     return jsonify({"status": "ok", "can_access_store": sub_user.can_access_store})
+
+@subuser_bp.route("/update_subuser_coupons_permission", methods=["POST"])
+def update_subuser_coupons_permission():
+    """
+    Actualiza el permiso de uso de cupones para un sub-usuario.
+    """
+    if not can_access_subusers():
+        return jsonify({"status": "error", "message": "No autorizado"}), 403
+
+    data = request.get_json()
+    subuser_id = data.get("subuser_id")
+    can_use_coupons = data.get("can_use_coupons", False)
+
+    sub_user = User.query.get_or_404(subuser_id)
+    parent_user = User.query.get(sub_user.parent_id)
+    if not parent_user or (session.get("user_id") != parent_user.id and session.get("username") != current_app.config.get("ADMIN_USER", "admin")):
+        return jsonify({"status": "error", "message": "No tienes permiso para modificar este sub-usuario."}), 403
+
+    sub_user.can_use_coupons = bool(can_use_coupons)
+    db.session.commit()
+    return jsonify({"status": "ok", "can_use_coupons": sub_user.can_use_coupons})
 
 @subuser_bp.route("/update_subuser_codigos2_permission", methods=["POST"])
 def update_subuser_codigos2_permission():

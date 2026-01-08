@@ -26,11 +26,11 @@
         {% elif user_object.parent_id %}
           {% if user_object.can_access_store %}
             {% set parent = User.query.get(user_object.parent_id) %}
-            {% if parent and parent.roles_tienda and parent.roles_tienda[0].enabled %}
+            {% if parent and parent.user_prices and parent.user_prices.get('tipo_precio') in ['USD', 'COP'] %}
               {% set show_store = True %}
             {% endif %}
           {% endif %}
-        {% elif user_object.roles_tienda and user_object.roles_tienda[0].enabled %}
+        {% elif user_object.user_prices and user_object.user_prices.get('tipo_precio') in ['USD', 'COP'] %}
           {% set show_store = True %}
         {% endif %}
         {% if show_store %}
@@ -48,7 +48,7 @@
       {% if current_user %}
         {% if is_admin %}
           <a href="{{ url_for('user_auth_bp.estadisticas') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-chart-bar"></i> Estadísticas</a>
-        {% elif not current_user.parent_id and current_user.roles_tienda and current_user.roles_tienda[0].enabled %}
+        {% elif not current_user.parent_id and current_user.user_prices and current_user.user_prices.get('tipo_precio') in ['USD', 'COP'] %}
           <a href="{{ url_for('user_auth_bp.estadisticas') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-chart-bar"></i> Estadísticas</a>
         {% elif current_user.parent_id and current_user.can_access_store %}
         <a href="{{ url_for('user_auth_bp.estadisticas') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-chart-bar"></i> Estadísticas</a>

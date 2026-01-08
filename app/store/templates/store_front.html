@@ -60,12 +60,21 @@
         {% elif user_object.parent_id %}
           {% if user_object.can_access_store %}
             {% set parent = User.query.get(user_object.parent_id) %}
-            {% if parent and parent.roles_tienda and parent.roles_tienda[0].enabled %}
-              {% set show_store = True %}
+            {% if parent %}
+              {% set parent_tipo_precio = None %}
+              {% if parent.user_prices and parent.user_prices is mapping %}
+                {% set parent_tipo_precio = parent.user_prices.get('tipo_precio') %}
+              {% endif %}
+              {% if parent_tipo_precio and parent_tipo_precio in ['USD', 'COP'] %}
+                {% set show_store = True %}
+              {% endif %}
             {% endif %}
           {% endif %}
-        {% elif user_object.roles_tienda and user_object.roles_tienda[0].enabled %}
-          {% set show_store = True %}
+        {% elif user_object.user_prices and user_object.user_prices is mapping %}
+          {% set tipo_precio = user_object.user_prices.get('tipo_precio') %}
+          {% if tipo_precio and tipo_precio in ['USD', 'COP'] %}
+            {% set show_store = True %}
+          {% endif %}
         {% endif %}
         {% if show_store %}
           <a href="{{ url_for('store_bp.store_front') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-store"></i> Tienda</a>
@@ -82,10 +91,25 @@
       {% if user_object %}
         {% if is_admin %}
           <a href="{{ url_for('user_auth_bp.estadisticas') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-chart-bar"></i> Estadísticas</a>
-        {% elif not user_object.parent_id and user_object.roles_tienda and user_object.roles_tienda[0].enabled %}
-          <a href="{{ url_for('user_auth_bp.estadisticas') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-chart-bar"></i> Estadísticas</a>
+        {% elif not user_object.parent_id %}
+          {% set tipo_precio = None %}
+          {% if user_object.user_prices and user_object.user_prices is mapping %}
+            {% set tipo_precio = user_object.user_prices.get('tipo_precio') %}
+          {% endif %}
+          {% if tipo_precio and tipo_precio in ['USD', 'COP'] %}
+            <a href="{{ url_for('user_auth_bp.estadisticas') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-chart-bar"></i> Estadísticas</a>
+          {% endif %}
         {% elif user_object.parent_id and user_object.can_access_store %}
-        <a href="{{ url_for('user_auth_bp.estadisticas') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-chart-bar"></i> Estadísticas</a>
+          {% set parent = User.query.get(user_object.parent_id) %}
+          {% if parent %}
+            {% set parent_tipo_precio = None %}
+            {% if parent.user_prices and parent.user_prices is mapping %}
+              {% set parent_tipo_precio = parent.user_prices.get('tipo_precio') %}
+            {% endif %}
+            {% if parent_tipo_precio and parent_tipo_precio in ['USD', 'COP'] %}
+              <a href="{{ url_for('user_auth_bp.estadisticas') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-chart-bar"></i> Estadísticas</a>
+            {% endif %}
+          {% endif %}
         {% endif %}
       {% endif %}
       {% if is_user and current_user %}
@@ -123,10 +147,8 @@
       </div>
       <a href="{{ url_for('store_bp.admin_store') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-store"></i> Licencias</a>
       <a href="{{ url_for('store_bp.admin_productos') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-box"></i> Productos</a>
-      <a href="{{ url_for('store_bp.admin_coupons') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-ticket-alt"></i> Cupones</a>
-      <a href="{{ url_for('store_bp.admin_roles') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-user-tag"></i> Roles</a>
+      <a href="{{ url_for('store_bp.admin_productos') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-ticket-alt"></i> Cupones</a>
       <a href="{{ url_for('store_bp.admin_tools') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-tools"></i> Herramientas Admin</a>
-      <a href="{{ url_for('store_bp.admin_payments') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-credit-card"></i> Pagos</a>
       <a href="{{ url_for('store_bp.admin_work_sheets') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-table"></i> Hojas de Cálculo</a>
       <a href="{{ url_for('store_bp.admin_configurations') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-cog"></i> Configuraciones</a>
       <a href="{{ url_for('store_bp.admin_support') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-headset"></i> Chat Soporte</a>
@@ -173,9 +195,31 @@
 
   <div class="d-flex flex-wrap gap-1">
     {# is_admin ya está disponible desde el context processor #}
-    {% set tipo_precio = (current_user.roles_tienda[0].tipo_precio.lower() if current_user and current_user.roles_tienda and current_user.roles_tienda[0].tipo_precio else 'usd') %}
+    {% set tipo_precio = 'usd' %}
+    {% if current_user %}
+      {% if current_user.user_prices and current_user.user_prices is mapping %}
+        {% set tipo_precio_raw = current_user.user_prices.get('tipo_precio') %}
+        {% if tipo_precio_raw %}
+          {% set tipo_precio = tipo_precio_raw.lower() %}
+        {% endif %}
+      {% elif current_user.parent_id %}
+        {% set parent = User.query.get(current_user.parent_id) %}
+        {% if parent and parent.user_prices and parent.user_prices is mapping %}
+          {% set parent_tipo_precio_raw = parent.user_prices.get('tipo_precio') %}
+          {% if parent_tipo_precio_raw %}
+            {% set tipo_precio = parent_tipo_precio_raw.lower() %}
+          {% endif %}
+        {% endif %}
+      {% endif %}
+    {% endif %}
     {% for p in products %}
-      <div class="card product-texture-bg product-card" data-img="{{ url_for('static', filename='images/' + p.image_filename) }}" data-id="{{ p.id }}">
+      {% set discount_cop = p.discount_cop_extra|default(0)|float %}
+      {% set discount_usd = p.discount_usd_extra|default(0)|float %}
+      {% set calculated_price_cop = p.price_cop|float - discount_cop %}
+      {% set calculated_price_usd = p.price_usd|float - discount_usd %}
+      {% set final_price_cop = [calculated_price_cop, 0]|max %}
+      {% set final_price_usd = [calculated_price_usd, 0]|max %}
+      <div class="card product-texture-bg product-card" data-img="{{ url_for('static', filename='images/' + p.image_filename) }}" data-id="{{ p.id }}" data-price-cop="{{ final_price_cop }}" data-price-usd="{{ final_price_usd }}">
         <div class="product-img-container">
           <img src="{{ url_for('static', filename='images/' + p.image_filename) }}" alt="{{ p.name }}" class="product-img">
         </div>
@@ -195,6 +239,8 @@
           <div class="d-flex align-items-center justify-content-center mt-03">
             <button type="button" class="btn-anadir-producto-tienda">Añadir</button>
           </div>
+        {% endif %}
+        {% if current_user %}
           <div class="d-flex align-items-center justify-content-center mt-02">
             <span class="product-stock-info" data-product-id="{{ p.id }}">Cargando existencias...</span>
           </div>
@@ -207,9 +253,15 @@
                 <span class="product-price-cop">${{ p.price_cop|int }} COP</span>
                 <span class="product-price-usd">${{ p.price_usd|int }} USD</span>
               {% elif tipo_precio == 'cop' %}
-                <span class="product-price-cop">${{ p.price_cop|int }} COP</span>
+                {% set discount_cop = p.discount_cop_extra|default(0)|float %}
+                {% set calculated_price_cop = p.price_cop|float - discount_cop %}
+                {% set final_price_cop = [calculated_price_cop, 0]|max %}
+                <span class="product-price-cop">${{ final_price_cop|int }} COP</span>
               {% else %}
-                <span class="product-price-usd">${{ p.price_usd|int }} USD</span>
+                {% set discount_usd = p.discount_usd_extra|default(0)|float %}
+                {% set calculated_price_usd = p.price_usd|float - discount_usd %}
+                {% set final_price_usd = [calculated_price_usd, 0]|max %}
+                <span class="product-price-usd">${{ final_price_usd|int }} USD</span>
               {% endif %}
             </div>
           {% endif %}
@@ -252,6 +304,7 @@
           </div>
         </div>
         
+        {% if not current_user.parent_id or current_user.can_use_coupons %}
         <div class="cupon-input-group">
           <input type="text" id="cuponInput" class="cupon-input-modern" placeholder="Cupón" autocomplete="off">
           <button type="button" id="btnAplicarCupon" class="btn-cupon-aplicar">
@@ -263,15 +316,18 @@
             Quitar
           </button>
         </div>
+        {% endif %}
       </div>
       
       <!-- Información de cupón aplicado -->
+      {% if not current_user.parent_id or current_user.can_use_coupons %}
       <div id="cuponInfo" class="cupon-info-modern hidden">
         <div class="cupon-success">
           <i class="fas fa-check-circle"></i>
           <span class="cupon-aplicado"></span>
         </div>
       </div>
+      {% endif %}
       
       <!-- Resumen de totales -->
       <div class="resumen-totales">
@@ -290,7 +346,7 @@
     </div>
   </div>
 </div>
-{% if coupons and current_user and not current_user.parent_id %}
+{% if coupons and current_user and (not current_user.parent_id or current_user.can_use_coupons) %}
   {% for coupon in coupons %}
     <div class="store-light coupon-card">
       <strong class="coupon-title">{{ coupon.name }}</strong><br>

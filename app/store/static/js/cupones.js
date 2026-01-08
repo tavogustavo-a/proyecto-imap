@@ -47,15 +47,15 @@ function renderCouponPage() {
   let end = showCouponCount.value === 'all' ? totalRows : start + couponPerPage;
   filteredRows.forEach((row, i) => {
     if (showCouponCount.value === 'all' || (i >= start && i < end)) {
-      row.style.display = '';
+      row.classList.remove('d-none');
     } else {
-      row.style.display = 'none';
+      row.classList.add('d-none');
     }
   });
   // Los que no están en filteredRows deben ocultarse
   couponRows.forEach(row => {
     if (!filteredRows.includes(row)) {
-      row.style.display = 'none';
+      row.classList.add('d-none');
     }
   });
   if (prevCouponBtn) prevCouponBtn.disabled = couponCurrentPage <= 1;
@@ -279,39 +279,85 @@ document.addEventListener('DOMContentLoaded', function() {
 function renderCouponsTable(coupons) {
     const tbody = document.getElementById('coupons-table-body');
     if (!tbody) return;
-    tbody.innerHTML = '';
+    
+    // Limpiar tbody usando removeChild
+    while (tbody.firstChild) {
+      tbody.removeChild(tbody.firstChild);
+    }
+    
     if (!coupons.length) {
-        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;">No hay cupones aún.</td></tr>';
+        const tr = document.createElement('tr');
+        const td = document.createElement('td');
+        td.colSpan = 6;
+        td.className = 'text-center';
+        td.textContent = 'No hay cupones aún.';
+        tr.appendChild(td);
+        tbody.appendChild(tr);
         return;
     }
+    
     for (const c of coupons) {
         const tr = document.createElement('tr');
         tr.setAttribute('data-coupon-name', c.name.toLowerCase());
-        // Invertir lógica: si está activo, mostrar OFF (rojo); si está inactivo, mostrar ON (verde)
-        const toggleText = c.enabled ? 'OFF' : 'ON';
-        const toggleClass = c.enabled ? 'action-red' : 'action-green';
-        tr.innerHTML = `
-          <td>${c.name}</td>
-          <td>$${parseInt(c.discount_cop)} COP</td>
-          <td>$${parseInt(c.discount_usd)} USD</td>
-          <td>${c.duration_days} días</td>
-          <td>${c.max_uses_per_user ? c.max_uses_per_user : ''}</td>
-          <td>
-            <div class="action-stack">
-              <button class="action-btn btn-coupon-toggle ${toggleClass}" data-id="${c.id}">${toggleText}</button>
-              <a href="/tienda/admin/cupones/${c.id}/editar" class="action-btn action-blue">Editar</a>
-              <button class="action-btn action-red btn-coupon-delete" data-id="${c.id}" title="Eliminar">
-                <i class="fas fa-trash"></i>
-              </button>
-            </div>
-          </td>
-        `;
+        
+        // Crear celdas usando createElement
+        const tdName = document.createElement('td');
+        tdName.textContent = c.name;
+        tr.appendChild(tdName);
+        
+        const tdCop = document.createElement('td');
+        tdCop.textContent = `$${parseInt(c.discount_cop)} COP`;
+        tr.appendChild(tdCop);
+        
+        const tdUsd = document.createElement('td');
+        tdUsd.textContent = `$${parseInt(c.discount_usd)} USD`;
+        tr.appendChild(tdUsd);
+        
+        const tdDuration = document.createElement('td');
+        tdDuration.textContent = `${c.duration_days} días`;
+        tr.appendChild(tdDuration);
+        
+        const tdUses = document.createElement('td');
+        tdUses.textContent = c.max_uses_per_user ? c.max_uses_per_user : '';
+        tr.appendChild(tdUses);
+        
+        const tdActions = document.createElement('td');
+        const actionStack = document.createElement('div');
+        actionStack.className = 'action-stack';
+        
+        // Botón toggle
+        const toggleBtn = document.createElement('button');
+        toggleBtn.className = `action-btn btn-coupon-toggle ${c.enabled ? 'action-red' : 'action-green'}`;
+        toggleBtn.setAttribute('data-id', c.id);
+        toggleBtn.textContent = c.enabled ? 'OFF' : 'ON';
+        actionStack.appendChild(toggleBtn);
+        
+        // Enlace Editar
+        const editLink = document.createElement('a');
+        editLink.href = `/tienda/admin/cupones/${c.id}/editar`;
+        editLink.className = 'action-btn action-blue';
+        editLink.textContent = 'Editar';
+        actionStack.appendChild(editLink);
+        
+        // Botón Eliminar
+        const deleteBtn = document.createElement('button');
+        deleteBtn.className = 'action-btn action-red btn-coupon-delete';
+        deleteBtn.setAttribute('data-id', c.id);
+        deleteBtn.setAttribute('title', 'Eliminar');
+        const trashIcon = document.createElement('i');
+        trashIcon.className = 'fas fa-trash';
+        deleteBtn.appendChild(trashIcon);
+        actionStack.appendChild(deleteBtn);
+        
+        tdActions.appendChild(actionStack);
+        tr.appendChild(tdActions);
         tbody.appendChild(tr);
     }
-    // Asignar eventos a los nuevos botones
+    
+    // Asignar eventos a los nuevos botones usando addEventListener
     document.querySelectorAll('.btn-coupon-toggle').forEach(btn => {
-      btn.onclick = function() {
-        const id = this.dataset.id;
+      btn.addEventListener('click', function() {
+        const id = this.getAttribute('data-id');
         fetch(`/tienda/admin/coupons/toggle/${id}`, {method:'POST', headers: { 'X-CSRFToken': getCsrfToken() }})
           .then(r=>r.json())
           .then(resp=>{
@@ -328,18 +374,19 @@ function renderCouponsTable(coupons) {
               }
             }
           });
-      };
+      });
     });
+    
     document.querySelectorAll('.btn-coupon-delete').forEach(btn => {
-      btn.onclick = function() {
+      btn.addEventListener('click', function() {
         if (!confirm('¿Eliminar este cupón?')) return;
-        const id = this.dataset.id;
+        const id = this.getAttribute('data-id');
         fetch(`/tienda/admin/coupons/delete/${id}`, {method:'POST', headers: { 'X-CSRFToken': getCsrfToken() }})
           .then(r=>r.json())
           .then(resp=>{
             if (resp.success) loadCoupons();
           });
-      };
+      });
     });
 }
 

@@ -28,11 +28,11 @@
           {% if not parent %}
             {% set parent = None %}
           {% endif %}
-          {% if parent and parent.roles_tienda and parent.roles_tienda[0].enabled %}
+          {% if parent and parent.user_prices and parent.user_prices.get('tipo_precio') in ['USD', 'COP'] %}
             {% set show_store = True %}
           {% endif %}
         {% endif %}
-      {% elif current_user.roles_tienda and current_user.roles_tienda[0].enabled %}
+      {% elif current_user.user_prices and current_user.user_prices.get('tipo_precio') in ['USD', 'COP'] %}
         {% set show_store = True %}
       {% endif %}
       {% if show_store %}

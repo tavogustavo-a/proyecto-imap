@@ -126,10 +126,116 @@
       </form>
     </div>
   </div>
+
+  <!-- Tarjeta: Cupones -->
+  <div class="store-light maxw-800 mx-auto mt-2 br-8">
+    <div class="header-container">
+      <div class="d-flex align-items-center justify-content-between mb-1">
+        <h2 class="m-0">Cupones</h2>
+      </div>
+    </div>
+    <!-- Búsqueda y paginación -->
+    <div class="d-flex flex-wrap align-items-center mb-1 productos-buscar-mostrar">
+      <div class="search-container">
+        <label for="searchCouponInput" class="sr-only">Buscar cupón</label>
+        <input type="search" id="searchCouponInput" placeholder="Buscar cupón..." autocomplete="off">
+      </div>
+      <div>
+        <label for="showCouponCount" class="sr-only">Mostrar cantidad de cupones</label>
+        <select id="showCouponCount" autocomplete="off">
+          <option value="10">10</option>
+          <option value="20" selected>20</option>
+          <option value="30">30</option>
+          <option value="40">40</option>
+          <option value="50">50</option>
+          <option value="100">100</option>
+          <option value="all">Todas</option>
+        </select>
+      </div>
+    </div>
+    <!-- Solo la tabla dentro del contorno blanco -->
+    <div class="table-wrapper-store">
+      <table class="table mb-2" id="coupons-table">
+        <thead>
+          <tr><th>Nombre</th><th>D. COP</th><th>D. USD</th><th>Duración</th><th>Usos/usu</th><th>Acciones</th></tr>
+        </thead>
+        <tbody id="coupons-table-body">
+          <tr><td colspan="6" class="text-center">No hay cupones aún.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <!-- Botones de paginación -->
+    <div class="d-flex justify-content-center mt-2 mb-2 pagination-buttons mx-12">
+      <button id="prevCouponPageBtn" class="btn-blue btn-panel" type="button">&lt; Anterior</button>
+      <button id="nextCouponPageBtn" class="btn-blue btn-panel" type="button">Siguiente &gt;</button>
+    </div>
+  </div>
+  <!-- Contorno separado para crear cupón -->
+  <div class="store-light add-coupon-container maxw-800 mx-auto mt-2 br-8">
+    <h3 class="text-center mb-1">Crear Cupón</h3>
+    <form id="newCouponForm" class="d-flex flex-column gap-00 align-items-center mb-01 maxw-500 mx-auto">
+      <div class="d-flex align-items-center mb-1 w-100">
+        <label for="couponName" class="sr-only">Nombre del cupón</label>
+        <input type="text" id="couponName" name="coupon_name" placeholder="Nombre del cupón" required class="coupon-input w-100" autocomplete="off">
+      </div>
+      <div class="d-flex align-items-center mb-1 w-100 gap-1rem">
+        <label for="discountCop" class="sr-only">Descuento COP</label>
+        <input type="number" id="discountCop" name="discount_cop" placeholder="Descuento COP" required class="coupon-input flex-1" autocomplete="off">
+        <label for="discountUsd" class="sr-only">Descuento USD</label>
+        <input type="number" id="discountUsd" name="discount_usd" placeholder="Descuento USD" required class="coupon-input flex-1" autocomplete="off">
+      </div>
+      <div class="d-flex align-items-center mb-1 w-100 gap-1rem">
+        <label for="durationDays" class="sr-only">Duración en días</label>
+        <input type="number" id="durationDays" name="duration_days" placeholder="Duración (días)" min="1" class="coupon-input flex-1" autocomplete="off">
+        <label for="maxUsesPerUser" class="sr-only">Usos por usuario</label>
+        <input type="number" id="maxUsesPerUser" name="max_uses_per_user" placeholder="Usos por usuario (opcional)" min="1" class="coupon-input flex-1" autocomplete="off">
+      </div>
+      <div class="d-flex align-items-center mb-1 w-100">
+        <button type="button" id="showProductsModal" class="btn-blue btn-panel w-100">Ver Productos</button>
+        <input type="hidden" name="products_hidden" id="productsHiddenInput">
+      </div>
+      <div class="d-flex align-items-center mb-1 w-100">
+        <label for="minAmount" class="sr-only">Cuentas mínimo</label>
+        <input type="number" id="minAmount" name="min_amount" placeholder="Cuentas mínimo (opcional)" min="0" step="0.01" class="coupon-input w-100" autocomplete="off">
+      </div>
+      <div class="d-flex align-items-center mb-1 w-100">
+        <label for="couponDescription" class="sr-only">Descripción del cupón</label>
+        <textarea id="couponDescription" name="description" placeholder="Descripción (opcional)" class="coupon-input w-100 min-h-60 p-05" autocomplete="off"></textarea>
+      </div>
+      <div class="d-flex justify-content-center w-100">
+        <button type="submit" class="btn-green btn-panel minw-160">Crear Cupón</button>
+      </div>
+    </form>
+  </div>
+</div>
+<!-- Modal para mostrar productos -->
+<div id="productsModal" class="modal d-none fixed-full bg-modal z-1000" tabindex="-1">
+  <div class="modal-content bg-white mx-auto p-20 w-90 maxw-400 br-8 rel">
+    <h3>Productos Disponibles</h3>
+    <div class="d-flex flex-column gap-03 maxh-180-ovy-auto" id="productsCheckboxList">
+      {% for p in products %}
+        <label class="d-flex align-items-center gap-03">
+          <input type="checkbox" class="align-items-center gap-03 product-checkbox" value="{{ p.id }}" name="product_checkbox_{{ p.id }}" autocomplete="off">
+          <span>{{ p.name }}</span>
+        </label>
+      {% endfor %}
+    </div>
+    <div class="d-flex flex-wrap gap-1 justify-content-center mt-1 mt-1-5rem">
+      <button type="button" id="selectAllProducts" class="btn-blue btn-panel flex-1-48 minw-120">Agregar todos</button>
+      <button type="button" id="deselectAllProducts" class="btn-blue btn-panel flex-1-48 minw-120">Desactivar todos</button>
+    </div>
+    <div class="d-flex justify-content-center mt-1">
+      <button id="saveProducts" class="btn-green btn-panel minw-160">Guardar</button>
+    </div>
+    <div class="d-flex justify-content-center mt-1">
+      <button id="closeModal" class="btn-red btn-panel minw-120">Cerrar</button>
+    </div>
+  </div>
 </div>
 {% endblock %}
 {% block scripts %}
   {{ super() }}
   <script src="{{ url_for('store_bp.static', filename='js/admin_store.js') }}" defer></script>
   <script src="{{ url_for('store_bp.static', filename='js/productos.js') }}" defer></script>
+  <script src="{{ url_for('store_bp.static', filename='js/cupones.js') }}" defer></script>
 {% endblock %} 

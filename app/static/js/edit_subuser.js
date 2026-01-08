@@ -271,6 +271,50 @@ document.addEventListener('DOMContentLoaded', function() {
       });
     }
 
+    // --- Permiso de uso de cupones (can_use_coupons) ---
+    const canUseCouponsCheckbox = document.getElementById('canUseCouponsCheckbox');
+    const couponsPermissionStatus = document.getElementById('coupons-permission-status');
+    if (canUseCouponsCheckbox) {
+      canUseCouponsCheckbox.addEventListener('change', function() {
+        const subuserId = document.querySelector('[data-subuser-id]')?.dataset?.subuserId || null;
+        if (!subuserId) return;
+        fetch('/subusers/update_subuser_coupons_permission', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': getCsrfToken()
+          },
+          body: JSON.stringify({
+            subuser_id: parseInt(subuserId, 10),
+            can_use_coupons: canUseCouponsCheckbox.checked
+          })
+        })
+        .then(response => response.json())
+        .then(data => {
+          if (data.status === 'ok') {
+            if (couponsPermissionStatus) {
+              couponsPermissionStatus.textContent = canUseCouponsCheckbox.checked
+                ? 'Permiso de cupones activado'
+                : 'Permiso de cupones desactivado';
+              couponsPermissionStatus.style.color = canUseCouponsCheckbox.checked ? 'green' : 'red';
+              setTimeout(() => { couponsPermissionStatus.textContent = ''; }, 2000);
+            }
+          } else {
+            if (couponsPermissionStatus) {
+              couponsPermissionStatus.textContent = 'Error al guardar';
+              couponsPermissionStatus.style.color = 'red';
+            }
+          }
+        })
+        .catch(err => {
+          if (couponsPermissionStatus) {
+            couponsPermissionStatus.textContent = 'Error de red al guardar';
+            couponsPermissionStatus.style.color = 'red';
+          }
+        });
+      });
+    }
+
     // --- Permiso de acceso a Códigos 2 (can_access_codigos2) ---
     const canAccessCodigos2Checkbox = document.getElementById('canAccessCodigos2Checkbox');
     const codigos2PermissionStatus = document.getElementById('codigos2-permission-status');

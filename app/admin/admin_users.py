@@ -85,12 +85,7 @@ def search_users_ajax():
 
     data = []
     for u in all_users:
-        # Buscar el rol al que está vinculado el usuario (si existe)
-        rol_actual = None
-        rol_nombre = None
-        if hasattr(u, 'roles_tienda') and u.roles_tienda:
-            rol_actual = u.roles_tienda[0].id  # Suponiendo que solo puede estar en un rol
-            rol_nombre = u.roles_tienda[0].name
+        # Los roles ya no se usan, ahora se gestiona directamente con tipo_precio en user_prices
         # Verificar can_access_codigos2 desde la tabla codigos2_users también
         from app.models.codigos2_access import codigos2_users
         from sqlalchemy import select
@@ -101,6 +96,13 @@ def search_users_ajax():
         # Combinar can_access_codigos2 del modelo con el estado de la tabla
         can_access_codigos2_value = u.can_access_codigos2 if u.can_access_codigos2 is not None else False
         can_access_codigos2_final = can_access_codigos2_value or has_codigos2_access_table
+        
+        # Obtener tipo_precio desde user_prices
+        tipo_precio_rol = None
+        if u.user_prices and isinstance(u.user_prices, dict):
+            tipo_precio_raw = u.user_prices.get('tipo_precio')
+            if tipo_precio_raw and tipo_precio_raw in ['USD', 'COP']:
+                tipo_precio_rol = tipo_precio_raw.lower()
         
         data.append({
             "id": u.id,
@@ -121,9 +123,26 @@ def search_users_ajax():
             "full_name": u.full_name or "",
             "phone": u.phone or "",
             "email": u.email or "",
-            "rol_actual": rol_actual,
-            "rol_nombre": rol_nombre
+            "saldo_usd": u.saldo_usd or 0,
+            "saldo_cop": u.saldo_cop or 0,
+            "tipo_precio_rol": tipo_precio_rol
         })
+        
+        # Agregar datos de precios si existen
+        if hasattr(u, 'user_prices') and u.user_prices:
+            precio_data = u.user_prices
+            data[-1]["precio_original_cop"] = precio_data.get("precio_original_cop", 0)
+            data[-1]["precio_original_usd"] = precio_data.get("precio_original_usd", 0)
+            data[-1]["descuento_cop"] = precio_data.get("descuento_cop", 0)
+            data[-1]["descuento_usd"] = precio_data.get("descuento_usd", 0)
+            data[-1]["tipo_precio"] = precio_data.get("tipo_precio")
+        else:
+            data[-1]["precio_original_cop"] = 0
+            data[-1]["precio_original_usd"] = 0
+            data[-1]["descuento_cop"] = 0
+            data[-1]["descuento_usd"] = 0
+            data[-1]["tipo_precio"] = None
+            
     return jsonify({"status": "ok", "users": data}), 200
 
 
@@ -1356,3 +1375,201 @@ def update_tools_resources_permissions_ajax():
             "status": "error",
             "message": f"Error interno: {str(e)}"
         }), 500
+
+@admin_bp.route("/update_user_prices_ajax", methods=["POST"])
+@admin_required
+def update_user_prices_ajax():
+    """
+    Actualiza los precios por usuario de forma masiva.
+    Recibe: { "updates": [{"user_id": 1, "tipo_precio": "USD", "precio_original_cop": 0, ...}, ...] }
+    """
+    try:
+        data = request.get_json()
+        if not data or "updates" not in data:
+            return jsonify({"status": "error", "message": "Formato de datos inválido"}), 400
+        
+        updates = data.get("updates", [])
+        if not updates:
+            return jsonify({"status": "error", "message": "No hay actualizaciones para aplicar"}), 400
+        
+        updated_count = 0
+        errors = []
+        
+        for update_data in updates:
+            user_id = update_data.get("user_id")
+            if not user_id:
+                errors.append("user_id faltante en una actualización")
+                continue
+            
+            # Obtener usuario
+            user = User.query.get(user_id)
+            if not user:
+                errors.append(f"Usuario {user_id} no encontrado")
+                continue
+            
+            # Preparar datos de precios (solo tipo_precio es necesario ahora)
+            precio_data = {
+                "tipo_precio": update_data.get("tipo_precio")
+            }
+            
+            # Guardar en el campo JSON
+            user.user_prices = precio_data
+            updated_count += 1
+        
+        try:
+            db.session.commit()
+            return jsonify({
+                "status": "ok",
+                "message": f"Se actualizaron {updated_count} usuario(s) correctamente",
+                "updated_count": updated_count,
+                "errors": errors if errors else None
+            })
+        except Exception as e:
+            db.session.rollback()
+            current_app.logger.error(f"Error al guardar precios de usuarios: {e}", exc_info=True)
+            return jsonify({
+                "status": "error",
+                "message": f"Error al guardar en la base de datos: {str(e)}"
+            }), 500
+        
+    except Exception as e:
+        current_app.logger.error(f"Error en update_user_prices_ajax: {e}", exc_info=True)
+        return jsonify({
+            "status": "error",
+            "message": f"Error interno: {str(e)}"
+        }), 500
+
+
+@admin_bp.route("/users/<int:user_id>/edit_products", methods=["GET", "POST"])
+@admin_required
+def edit_user_products(user_id):
+    """
+    Edita los productos asociados a un usuario específico.
+    Los productos y descuentos se almacenan en user_prices.
+    """
+    from app.store.models import Product
+    
+    user = User.query.get_or_404(user_id)
+    
+    # Verificar que el usuario tenga tipo_precio configurado
+    tipo_precio = None
+    if user.user_prices and isinstance(user.user_prices, dict):
+        tipo_precio = user.user_prices.get('tipo_precio')
+    
+    if not tipo_precio or tipo_precio not in ['USD', 'COP']:
+        flash("El usuario debe tener un tipo de precio configurado (USD o COP) para gestionar productos asociados.", "warning")
+        return redirect(url_for('admin_bp.manage_permissions_page'))
+    
+    productos = Product.query.filter_by(enabled=True).order_by(Product.name).all()
+    
+    # Obtener productos permitidos y descuentos desde user_prices
+    productos_ids = []
+    descuentos_productos = {}
+    productos_permitidos_existe = False
+    
+    if user.user_prices and isinstance(user.user_prices, dict):
+        # Verificar si la clave 'productos_permitidos' existe (aunque esté vacía)
+        if 'productos_permitidos' in user.user_prices:
+            productos_permitidos_existe = True
+            productos_ids_raw = user.user_prices.get('productos_permitidos', [])
+            # Asegurar que los IDs sean enteros (pueden venir como strings desde JSON)
+            if productos_ids_raw:
+                productos_ids = [int(pid) for pid in productos_ids_raw if pid is not None and str(pid).strip() != '']
+        descuentos_productos = user.user_prices.get('descuentos_productos', {})
+    
+    # Si la clave 'productos_permitidos' NO existe en user_prices, marcar todos por defecto
+    # Si existe pero está vacía, mantenerla vacía (usuario explícitamente configuró que no quiere ver productos)
+    if not productos_permitidos_existe:
+        productos_ids = [p.id for p in productos]
+    
+    if request.method == 'POST':
+        if request.is_json:
+            data = request.get_json()
+            productos_permitidos = data.get('productos_permitidos', [])
+            descuentos_productos_data = data.get('descuentos_productos', {})
+            
+            # Validar que los productos existan y estén habilitados
+            productos_objs = Product.query.filter(
+                Product.id.in_(productos_permitidos),
+                Product.enabled == True
+            ).all()
+            
+            # Filtrar solo productos habilitados (no guardar productos deshabilitados)
+            productos_permitidos_enabled = [p.id for p in productos_objs]
+            
+            # Si hay productos que no existen o no están habilitados, solo guardar los válidos
+            if len(productos_permitidos_enabled) < len(productos_permitidos):
+                productos_permitidos = productos_permitidos_enabled
+            
+            # Validar precios finales solo para productos que tienen descuentos configurados
+            errores = []
+            for prod in productos_objs:
+                cop = float(prod.price_cop)
+                usd = float(prod.price_usd)
+                d_extra = descuentos_productos_data.get(str(prod.id)) or descuentos_productos_data.get(int(prod.id)) or {}
+                d_cop_extra = float(d_extra.get('cop', 0) or 0)
+                d_usd_extra = float(d_extra.get('usd', 0) or 0)
+                
+                # Solo validar si hay descuento configurado (mayor a 0)
+                if d_cop_extra > 0 or d_usd_extra > 0:
+                    if tipo_precio == 'COP':
+                        final_cop = cop - d_cop_extra
+                        if final_cop <= 0:
+                            errores.append(f"El precio final en COP para '{prod.name}' debe ser mayor a 0 (actual: {final_cop})")
+                    else:
+                        final_usd = usd - d_usd_extra
+                        if final_usd < 0.1:
+                            errores.append(f"El precio final en USD para '{prod.name}' debe ser mayor a 0.1 (actual: {final_usd})")
+            
+            if errores:
+                return jsonify({'status': 'error', 'message': ' | '.join(errores)}), 400
+            
+            # Actualizar user_prices (preservar tipo_precio y otros campos existentes)
+            if not user.user_prices:
+                user.user_prices = {}
+            
+            # Preservar tipo_precio y otros campos existentes
+            tipo_precio_existente = user.user_prices.get('tipo_precio')
+            
+            # Asegurar que los IDs sean enteros
+            productos_permitidos_int = [int(pid) for pid in productos_permitidos if pid is not None]
+            
+            # Crear un nuevo diccionario en lugar de modificar el existente (importante para SQLAlchemy)
+            new_user_prices = dict(user.user_prices) if user.user_prices else {}
+            
+            # Actualizar solo los campos necesarios, preservando el resto
+            new_user_prices['productos_permitidos'] = productos_permitidos_int
+            new_user_prices['descuentos_productos'] = descuentos_productos_data
+            
+            # Restaurar tipo_precio si existía
+            if tipo_precio_existente:
+                new_user_prices['tipo_precio'] = tipo_precio_existente
+            
+            # Asignar el nuevo diccionario completo
+            user.user_prices = new_user_prices
+            
+            # CRÍTICO: Indicar a SQLAlchemy que el campo JSON ha cambiado
+            from sqlalchemy.orm.attributes import flag_modified
+            flag_modified(user, 'user_prices')
+            
+            try:
+                db.session.commit()
+                return jsonify({'status': 'ok', 'message': 'Productos asociados actualizados correctamente.'})
+            except Exception as e:
+                db.session.rollback()
+                current_app.logger.error(f"Error al guardar productos asociados del usuario: {e}", exc_info=True)
+                return jsonify({'status': 'error', 'message': f'Error al guardar: {str(e)}'}), 500
+        
+        return jsonify({'status': 'error', 'message': 'Petición inválida'}), 400
+    
+    # Asignar descuentos a los productos para mostrarlos en la plantilla
+    for p in productos:
+        d = descuentos_productos.get(str(p.id)) or descuentos_productos.get(int(p.id)) or {}
+        p.discount_cop_extra = d.get('cop', 0)
+        p.discount_usd_extra = d.get('usd', 0)
+    
+    return render_template('edit_user_products.html', 
+                          user=user, 
+                          productos=productos, 
+                          productos_ids=productos_ids,
+                          tipo_precio=tipo_precio)

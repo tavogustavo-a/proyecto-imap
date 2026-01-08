@@ -1878,7 +1878,6 @@ html, body {
   }
   
   .table-wrapper-store.roles-table-wrapper {
-    margin-top: 1.2rem;
     margin-bottom: 1.2rem;
     padding-top: 0.7rem;
     padding-bottom: 0.7rem;
@@ -4231,7 +4230,6 @@ html, body {
   }
 
   .table-wrapper-store {
-    width: 98%;
     max-width: 100%;
     padding: 0 0.5rem;
     box-sizing: border-box;
@@ -4468,6 +4466,65 @@ html, body {
     border-top-right-radius: 1px;
   }
   
+  /* Encabezados con texto en dos líneas */
+  .edit-role-products-table th {
+    white-space: normal;
+    line-height: 1.3;
+    padding: 8px 4px;
+    text-align: center;
+    vertical-align: middle;
+  }
+  
+  /* Celdas de la tabla centradas (excepto Producto) */
+  .edit-role-products-table td {
+    text-align: center;
+    vertical-align: middle;
+  }
+  
+  /* Columna Producto alineada a la izquierda */
+  .edit-role-products-table td.edit-role-product-cell {
+    text-align: left;
+  }
+  
+  /* Asegurar que los checkboxes y inputs estén centrados */
+  .edit-role-products-table td input[type="checkbox"] {
+    margin: 0 auto;
+    display: block;
+  }
+  
+  .edit-role-products-table td .edit-role-discount-inputs {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    align-items: center;
+    justify-content: center;
+  }
+  
+  /* Responsive para dispositivos pequeños */
+  @media (max-width: 768px) {
+    .edit-role-products-table {
+      font-size: 12px;
+      min-width: 100%;
+    }
+    
+    .edit-role-products-table th {
+      padding: 6px 2px;
+      font-size: 11px;
+      line-height: 1.2;
+    }
+    
+    .edit-role-products-table td {
+      padding: 6px 2px;
+      font-size: 11px;
+    }
+    
+    .edit-role-product-header,
+    .edit-role-product-cell {
+      max-width: 80px;
+      width: 80px;
+    }
+  }
+  
   .edit-role-product-cell {
     max-width: 120px;
     width: 120px;
@@ -4489,6 +4546,14 @@ html, body {
     padding: 4px 6px !important;
     font-size: 12px !important;
     text-align: center !important;
+    /* Ocultar flechas/spinners en inputs numéricos */
+    -moz-appearance: textfield;
+  }
+  
+  .edit-role-discount-input-small::-webkit-outer-spin-button,
+  .edit-role-discount-input-small::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
   }
   
   .edit-role-pagination {
@@ -4569,6 +4634,20 @@ html, body {
     flex: 1;
     min-width: 200px;
     margin-right: 1rem;
+  }
+  
+  /* Cuando el contenedor está centrado, mantener el ancho completo */
+  .edit-role-card .productos-buscar-mostrar.justify-content-center .search-container,
+  .edit-role-card .usuarios-buscar-mostrar.justify-content-center .search-container {
+    flex: 1;
+    width: 100%;
+    max-width: 100%;
+    margin-right: 0;
+  }
+  
+  .edit-role-card .productos-buscar-mostrar.justify-content-center #searchProductInput,
+  .edit-role-card .usuarios-buscar-mostrar.justify-content-center #searchUserInput {
+    width: 100%;
   }
   
   /* Espaciado entre campos de búsqueda y mostrar */
@@ -13188,7 +13267,6 @@ body .d-flex.flex-wrap.gap-1 .card.product-texture-bg.product-card,
     border: 1px solid rgba(0, 0, 0, 0.08) !important;
     border-radius: 20px !important;
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1) !important;
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
     overflow: hidden !important;
     position: relative !important;
     backdrop-filter: blur(10px) !important;
@@ -13210,13 +13288,6 @@ body .card.product-texture-bg::before,
     background: linear-gradient(135deg, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0.05) 100%);
     pointer-events: none;
     z-index: 1;
-}
-
-body .card.product-texture-bg:hover,
-.card.product-texture-bg:hover {
-    transform: translateY(-8px) scale(1.02) !important;
-    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.15) !important;
-    border-color: rgba(102, 126, 234, 0.3) !important;
 }
 
 .product-img-container {
@@ -13342,7 +13413,6 @@ body .card.product-texture-bg:hover,
         border: 1px solid rgba(0, 0, 0, 0.08) !important;
         border-radius: 20px !important;
         box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1) !important;
-        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
         overflow: hidden !important;
         position: relative !important;
         backdrop-filter: blur(10px) !important;
@@ -13355,14 +13425,6 @@ body .card.product-texture-bg:hover,
         min-height: 240px !important;
         padding: 0 !important;
         /* NO sobrescribir margin horizontal - mantener centrado general */
-    }
-    
-    /* MANTENER efectos hover profesionales en móvil */
-    .store-front-main .card.product-texture-bg.product-card:hover,
-    .d-flex.flex-wrap.gap-1 .card.product-texture-bg.product-card:hover {
-        transform: translateY(-4px) scale(1.01) !important;
-        box-shadow: 0 15px 30px rgba(0, 0, 0, 0.12) !important;
-        border-color: rgba(102, 126, 234, 0.2) !important;
     }
     
     /* DESACTIVAR pseudo-elemento ::before en móviles para evitar efecto blanco */
@@ -13434,7 +13496,6 @@ body .card.product-texture-bg:hover,
         border: 1px solid rgba(0, 0, 0, 0.08) !important;
         border-radius: 20px !important;
         box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1) !important;
-        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
         overflow: hidden !important;
         position: relative !important;
         backdrop-filter: blur(10px) !important;
@@ -13447,14 +13508,6 @@ body .card.product-texture-bg:hover,
         min-height: 220px !important;
         padding: 0 !important;
         /* NO sobrescribir margin horizontal - mantener centrado general */
-    }
-    
-    /* MANTENER efectos hover profesionales en móvil pequeño */
-    .store-front-main .card.product-texture-bg.product-card:hover,
-    .d-flex.flex-wrap.gap-1 .card.product-texture-bg.product-card:hover {
-        transform: translateY(-3px) scale(1.005) !important;
-        box-shadow: 0 12px 25px rgba(0, 0, 0, 0.1) !important;
-        border-color: rgba(102, 126, 234, 0.15) !important;
     }
     
     /* DESACTIVAR pseudo-elemento ::before en móviles muy pequeños para evitar efecto blanco */
