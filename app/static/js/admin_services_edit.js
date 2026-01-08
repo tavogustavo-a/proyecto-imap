@@ -148,7 +148,7 @@ document.addEventListener("DOMContentLoaded", function() {
       container.classList.add('popup-visible'); 
       grid.innerHTML = "";
   
-      for(let i=1;i<=32;i++){
+      for(let i=1;i<=37;i++){
         const fileName=`stream${i}.png`;
         const div=document.createElement("div");
         div.style.width="70px";

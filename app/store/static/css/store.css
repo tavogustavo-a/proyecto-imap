@@ -693,7 +693,6 @@ html, body {
     font-size: 18px !important;
     text-align: left;
     vertical-align: middle;
-    white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
     color: #111 !important;
@@ -4331,22 +4330,47 @@ html, body {
     max-width: 320px;
   }
   
-  .edit-product-image-container {
-    max-width: 320px;
-    width: 100%;
+  /* Ocultar flechas/spinners en inputs numéricos de precio en edit_product */
+  .edit-product-form input[type="number"]::-webkit-outer-spin-button,
+  .edit-product-form input[type="number"]::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
   }
   
-  .edit-product-image-select {
-    width: 100%;
+  .edit-product-form input[type="number"] {
+    -moz-appearance: textfield;
+  }
+  
+  /* Ocultar flechas/spinners en inputs numéricos de crear cupón en productos.html */
+  .add-coupon-container input[type="number"]::-webkit-outer-spin-button,
+  .add-coupon-container input[type="number"]::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+  
+  .add-coupon-container input[type="number"] {
+    -moz-appearance: textfield;
+  }
+  
+  .edit-product-image-container {
+    max-width: 320px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+  
+  .edit-product-form .image-select-trigger-btn {
+    text-align: center !important;
+    margin: 0 auto;
   }
   
   .edit-product-preview-container {
     text-align: center;
   }
   
-  /* Alinear verticalmente los botones en edit_product */
-  .edit-product-form .d-flex.gap-1.justify-content-center {
-    align-items: center;
+  .edit-product-preview-img {
+    width: 90px;
+    height: auto;
   }
   
   /* Hacer que el botón verde tenga la misma apariencia que el azul en edit_product */
@@ -4358,16 +4382,16 @@ html, body {
     color: #fff !important;
   }
   
-  /* Quitar el borde verde del botón Guardar en edit_product */
+  /* Quitar el borde negro del botón Guardar en edit_product al hacer hover */
   .edit-product-form .btn-panel.btn-green:hover {
-    border: 2px solid #111 !important;
     background: #218838 !important;
     color: #fff !important;
+    border: none !important;
   }
   
-  /* Centrar el texto del botón Seleccionar Imagen en edit_product */
-  .edit-product-form .image-select-trigger-btn {
-    text-align: center !important;
+  /* Agregar espacio debajo de los botones Volver y Guardar */
+  .edit-product-form .d-flex.gap-1.justify-content-center {
+    margin-bottom: 0.5rem;
   }
   
   /* ================== ESTILOS PARA EDIT ROLE ================== */
@@ -6819,11 +6843,46 @@ html, body {
   /* Utilidad para max-height y overflow-y en el modal de productos de cupones */
   .maxh-180-ovy-auto { max-height: 180px !important; overflow-y: auto !important; }
   
-  #saveProducts {
-    display: block !important;
-    margin-left: auto !important;
-    margin-right: auto !important;
-    float: none !important;
+  /* Centrar botón Guardar en el modal de productos */
+  #productsModal .d-flex.flex-wrap.gap-1.justify-content-center:last-of-type {
+    justify-content: center !important;
+    align-items: center !important;
+    width: 100%;
+  }
+  
+  #productsModal #saveProducts {
+    margin: 0 auto;
+  }
+  
+  /* Botón X para cerrar el modal de productos */
+  #productsModal .modal-close-btn {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    background: none;
+    border: none;
+    font-size: 20px;
+    color: #666;
+    cursor: pointer;
+    padding: 5px 10px;
+    line-height: 1;
+    border-radius: 4px;
+    z-index: 10;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+  }
+  
+  #productsModal .modal-close-btn:hover {
+    background-color: #f0f0f0;
+    color: #333;
+  }
+  
+  #productsModal .modal-close-btn:focus {
+    outline: 2px solid #007bff;
+    outline-offset: 2px;
   }
   
   /* Centrado del formulario de añadir saldo */

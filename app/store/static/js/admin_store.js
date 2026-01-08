@@ -39,7 +39,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 return;
             }
             grid.innerHTML = ''; 
-            for (let i = 1; i <= 32; i++) {
+            for (let i = 1; i <= 37; i++) {
                 const imgEl = document.createElement('img');
                 imgEl.src = `${staticImagesPath}stream${i}.png`;
                 imgEl.alt = `stream${i}.png`;
@@ -290,18 +290,46 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    document.addEventListener('click', function(e) {
-        if (e.target.classList.contains('btn-coupon-toggle')) {
-            const id = e.target.dataset.id;
-            fetch(`/tienda/admin/coupons/toggle/${id}`, {method:'POST', headers: { 'X-CSRFToken': getCsrfToken() }})
-              .then(r=>r.json())
-              .then(resp=>{
-                if (resp.success) {
-                    e.target.textContent = resp.new_state;
-                    e.target.className = `action-btn ${resp.new_class} btn-coupon-toggle`;
+    // Manejar formularios de toggle de cupones usando la misma lógica que productos
+    const csrfTokenForCoupons = getCsrfToken();
+    document.querySelectorAll('.toggle-coupon-form').forEach(form => {
+        form.addEventListener('submit', function(event) {
+            event.preventDefault();
+            if (!csrfTokenForCoupons) {
+                return;
+            }
+            const button = this.querySelector('.action-btn');
+            button.disabled = true; // Deshabilitar mientras se procesa
+            fetch(this.dataset.action, {
+                method: 'POST',
+                headers: { 'X-CSRFToken': csrfTokenForCoupons, 'Content-Type': 'application/json' },
+                body: JSON.stringify({})
+            })
+            .then(response => {
+                if (!response.ok) { 
+                    return response.json().then(errData => { 
+                        throw new Error(errData.error || `HTTP error! status: ${response.status}`); 
+                    });
                 }
-              });
-        }
+                return response.json();
+            })
+            .then(data => {
+                if (data.success) {
+                    button.textContent = data.new_state;
+                    button.classList.remove('action-green', 'action-red');
+                    button.classList.add(data.new_class);
+                }
+            })
+            .catch(error => {
+                console.error('Error al cambiar estado del cupón:', error);
+            })
+            .finally(() => {
+                button.disabled = false; // Rehabilitar al finalizar
+            });
+        });
+    });
+    
+    document.addEventListener('click', function(e) {
         if (e.target.classList.contains('btn-coupon-delete')) {
             if (!confirm('¿Eliminar este cupón?')) return;
             const id = e.target.dataset.id;

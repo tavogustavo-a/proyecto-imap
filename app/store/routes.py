@@ -504,7 +504,12 @@ def toggle_coupon(coupon_id):
     coupon = Coupon.query.get_or_404(coupon_id)
     coupon.enabled = not coupon.enabled
     db.session.commit()
-    return jsonify({'success': True, 'new_state': 'ON' if coupon.enabled else 'OFF', 'new_class': 'action-green' if coupon.enabled else 'action-red'})
+    return jsonify({
+        'success': True,
+        'new_state': 'OFF' if coupon.enabled else 'ON',
+        'new_class': 'action-red' if coupon.enabled else 'action-green',
+        'message': f'Cupón ahora {"habilitado" if coupon.enabled else "deshabilitado"}.'
+    })
 
 @store_bp.route('/admin/coupons/delete/<int:coupon_id>', methods=['POST'])
 @admin_required

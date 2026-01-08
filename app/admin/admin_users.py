@@ -1384,6 +1384,9 @@ def update_user_prices_ajax():
     Recibe: { "updates": [{"user_id": 1, "tipo_precio": "USD", "precio_original_cop": 0, ...}, ...] }
     """
     try:
+        # Obtener el user_id del admin actual ANTES de hacer cambios
+        current_admin_id = session.get("user_id")
+        
         data = request.get_json()
         if not data or "updates" not in data:
             return jsonify({"status": "error", "message": "Formato de datos inválido"}), 400
@@ -1401,19 +1404,38 @@ def update_user_prices_ajax():
                 errors.append("user_id faltante en una actualización")
                 continue
             
-            # Obtener usuario
+            # Evitar modificar el usuario actual (admin) para prevenir problemas de sesión
+            if user_id == current_admin_id:
+                errors.append("No se puede modificar el tipo de precio del administrador actual")
+                continue
+            
+            # Obtener usuario usando merge para evitar problemas de sesión
             user = User.query.get(user_id)
             if not user:
                 errors.append(f"Usuario {user_id} no encontrado")
                 continue
             
-            # Preparar datos de precios (solo tipo_precio es necesario ahora)
-            precio_data = {
-                "tipo_precio": update_data.get("tipo_precio")
-            }
+            # Obtener tipo_precio a actualizar
+            nuevo_tipo_precio = update_data.get("tipo_precio")
             
-            # Guardar en el campo JSON
-            user.user_prices = precio_data
+            # Preservar los campos existentes en user_prices y solo actualizar tipo_precio
+            if not user.user_prices:
+                user.user_prices = {}
+            
+            # Crear una copia del diccionario existente para evitar problemas con SQLAlchemy
+            new_user_prices = dict(user.user_prices) if user.user_prices else {}
+            
+            # Actualizar solo tipo_precio, preservando el resto
+            if nuevo_tipo_precio:
+                new_user_prices['tipo_precio'] = nuevo_tipo_precio
+            elif 'tipo_precio' in new_user_prices:
+                # Si se envía None o vacío, eliminar tipo_precio
+                del new_user_prices['tipo_precio']
+            
+            # Asignar el nuevo diccionario y marcar como modificado
+            user.user_prices = new_user_prices
+            from sqlalchemy.orm.attributes import flag_modified
+            flag_modified(user, 'user_prices')
             updated_count += 1
         
         try:

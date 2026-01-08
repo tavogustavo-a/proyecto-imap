@@ -6,7 +6,7 @@ from datetime import datetime
 from flask import (
     render_template, request, redirect,
     url_for, flash, current_app, jsonify,
-    Response
+    Response, session, make_response
 )
 from werkzeug.utils import secure_filename
 from . import admin_bp
@@ -286,6 +286,78 @@ def logout_all_users():
 
     flash("Se han cerrado las sesiones de todos los usuarios.", "info")
     return redirect(url_for("admin_bp.dashboard"))
+
+@admin_bp.route("/logout_all_and_clear_cookies", methods=["POST"])
+@admin_required
+def logout_all_and_clear_cookies():
+    """
+    Cierra sesión de todos los usuarios (admin, usuarios y sub-usuarios)
+    y limpia todas las cookies del dominio.
+    Solo se ejecuta una vez por solicitud.
+    """
+    from app.models import RememberDevice
+    from app.auth.session_tokens import revoke_all_tokens
+    
+    # ✅ SEGURIDAD: Revocar todos los tokens de sesión
+    revoke_all_tokens()
+    
+    RememberDevice.query.delete()
+    db.session.commit()
+
+    rev_str = get_site_setting("session_revocation_count", "0")
+    new_count = int(rev_str) + 1
+    set_site_setting("session_revocation_count", str(new_count))
+
+    # Limpiar la sesión del admin actual
+    session.clear()
+    
+    # Crear respuesta que limpia todas las cookies
+    response = make_response(redirect(url_for("auth_bp.login")))
+    
+    # Obtener el nombre de la cookie de sesión de Flask desde la configuración
+    session_cookie_name = current_app.config.get("SESSION_COOKIE_NAME", "session")
+    
+    # Obtener también el nombre desde la interfaz de sesión si está disponible
+    try:
+        session_cookie_name_from_interface = current_app.session_interface.get_cookie_name(current_app)
+    except:
+        session_cookie_name_from_interface = session_cookie_name
+    
+    # Lista de cookies conocidas que deben eliminarse
+    known_cookies = [
+        session_cookie_name,  # Cookie de sesión de Flask (desde config)
+        session_cookie_name_from_interface,  # Cookie de sesión de Flask (desde interface)
+        'remember_username',  # Cookie de recordar usuario
+        'remember_2fa_device',  # Cookie de recordar dispositivo 2FA
+        'session',  # Cookie de sesión alternativa (valor por defecto)
+    ]
+    
+    # Eliminar duplicados manteniendo el orden
+    known_cookies = list(dict.fromkeys(known_cookies))
+    
+    # Eliminar cookies conocidas
+    for cookie_name in known_cookies:
+        response.delete_cookie(
+            cookie_name,
+            path='/',
+            domain=None,
+            secure=False,
+            httponly=True,
+            samesite='Lax'
+        )
+    
+    # Eliminar todas las cookies que el cliente envió
+    for cookie_name in request.cookies:
+        if cookie_name not in known_cookies:  # Evitar duplicados
+            # Intentar eliminar con diferentes configuraciones
+            response.delete_cookie(cookie_name, path='/', domain=None)
+            response.delete_cookie(cookie_name, path='/')
+            # También intentar con el dominio completo si está disponible
+            if request.host:
+                response.delete_cookie(cookie_name, path='/', domain=request.host)
+    
+    flash("Se han cerrado todas las sesiones y se han limpiado las cookies.", "info")
+    return response
 
 @admin_bp.route("/toggle_dark_mode", methods=["POST"])
 @admin_required

@@ -22,7 +22,7 @@
       <label for="imageSelect" class="sr-only">Seleccionar imagen</label>
       <select name="image_filename" id="imageSelect" class="visually-hidden-select edit-product-image-select" autocomplete="off">
         <option value="none" {% if product.image_filename == 'none' %}selected{% endif %}>Ninguno</option>
-        {% for img in range(1,33) %}
+        {% for img in range(1,38) %}
           <option value="stream{{ img }}.png" {% if product.image_filename == 'stream' ~ img ~ '.png' %}selected{% endif %}>stream{{ img }}.png</option>
         {% endfor %}
       </select>
@@ -30,7 +30,7 @@
       <div class="image-grid" id="imageGrid"></div>
     </div>
     <div class="mt-05 edit-product-preview-container">
-      <img id="imgPreview" src="{{ url_for('static', filename='images/' + (product.image_filename if product.image_filename and product.image_filename != 'none' else 'stream1.png')) }}" width="90">
+      <img id="imgPreview" src="{{ url_for('static', filename='images/' + (product.image_filename if product.image_filename and product.image_filename != 'none' else 'stream1.png')) }}" alt="Preview" class="edit-product-preview-img">
     </div>
     <label for="description" class="sr-only">Descripción del producto</label>
     <textarea name="description" id="description" class="textarea-black-border" placeholder="Descripción del producto (opcional)" autocomplete="off">{{ product.description or '' }}</textarea>

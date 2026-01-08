@@ -111,7 +111,7 @@ document.addEventListener('DOMContentLoaded', function() {
   const selectAllBtn = document.getElementById('selectAllProducts');
   const deselectAllBtn = document.getElementById('deselectAllProducts');
   const saveProductsBtn = document.getElementById('saveProducts');
-  const closeModalBtn = document.getElementById('closeModal');
+  const closeModalBtn = document.getElementById('closeModalX');
   const productsModal = document.getElementById('productsModal');
   const productsCheckboxList = document.getElementById('productsCheckboxList');
   const productsHiddenInput = document.getElementById('productsHiddenInput');
@@ -325,12 +325,27 @@ function renderCouponsTable(coupons) {
         const actionStack = document.createElement('div');
         actionStack.className = 'action-stack';
         
-        // Botón toggle
+        // Botón toggle - usar la misma estructura que productos
+        const toggleForm = document.createElement('form');
+        toggleForm.className = 'ajax-form toggle-coupon-form';
+        toggleForm.method = 'POST';
+        toggleForm.setAttribute('data-action', `/tienda/admin/coupons/toggle/${c.id}`);
+        
+        const csrfInput = document.createElement('input');
+        csrfInput.type = 'hidden';
+        csrfInput.name = '_csrf_token';
+        const csrfMeta = document.querySelector('meta[name="csrf_token"]');
+        if (csrfMeta) {
+            csrfInput.value = csrfMeta.getAttribute('content');
+        }
+        toggleForm.appendChild(csrfInput);
+        
         const toggleBtn = document.createElement('button');
-        toggleBtn.className = `action-btn btn-coupon-toggle ${c.enabled ? 'action-red' : 'action-green'}`;
-        toggleBtn.setAttribute('data-id', c.id);
+        toggleBtn.type = 'submit';
+        toggleBtn.className = `action-btn ${c.enabled ? 'action-red' : 'action-green'}`;
         toggleBtn.textContent = c.enabled ? 'OFF' : 'ON';
-        actionStack.appendChild(toggleBtn);
+        toggleForm.appendChild(toggleBtn);
+        actionStack.appendChild(toggleForm);
         
         // Enlace Editar
         const editLink = document.createElement('a');
@@ -354,27 +369,43 @@ function renderCouponsTable(coupons) {
         tbody.appendChild(tr);
     }
     
-    // Asignar eventos a los nuevos botones usando addEventListener
-    document.querySelectorAll('.btn-coupon-toggle').forEach(btn => {
-      btn.addEventListener('click', function() {
-        const id = this.getAttribute('data-id');
-        fetch(`/tienda/admin/coupons/toggle/${id}`, {method:'POST', headers: { 'X-CSRFToken': getCsrfToken() }})
-          .then(r=>r.json())
-          .then(resp=>{
-            if (resp.success) {
-              // Invertir lógica visual tras el toggle
-              if (resp.new_state === 'ON') {
-                this.textContent = 'OFF';
-                this.classList.remove('action-green');
-                this.classList.add('action-red');
-              } else {
-                this.textContent = 'ON';
-                this.classList.remove('action-red');
-                this.classList.add('action-green');
-              }
+    // Asignar eventos a los formularios de toggle usando la misma lógica que productos
+    const csrfToken = getCsrfToken();
+    document.querySelectorAll('.toggle-coupon-form').forEach(form => {
+        form.addEventListener('submit', function(event) {
+            event.preventDefault();
+            if (!csrfToken) {
+                return;
             }
-          });
-      });
+            const button = this.querySelector('.action-btn');
+            button.disabled = true; // Deshabilitar mientras se procesa
+            fetch(this.dataset.action, {
+                method: 'POST',
+                headers: { 'X-CSRFToken': csrfToken, 'Content-Type': 'application/json' },
+                body: JSON.stringify({})
+            })
+            .then(response => {
+                if (!response.ok) { 
+                    return response.json().then(errData => { 
+                        throw new Error(errData.error || `HTTP error! status: ${response.status}`); 
+                    });
+                }
+                return response.json();
+            })
+            .then(data => {
+                if (data.success) {
+                    button.textContent = data.new_state;
+                    button.classList.remove('action-green', 'action-red');
+                    button.classList.add(data.new_class);
+                }
+            })
+            .catch(error => {
+                console.error('Error al cambiar estado del cupón:', error);
+            })
+            .finally(() => {
+                button.disabled = false; // Rehabilitar al finalizar
+            });
+        });
     });
     
     document.querySelectorAll('.btn-coupon-delete').forEach(btn => {

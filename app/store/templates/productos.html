@@ -110,7 +110,7 @@
             <label for="imageSelect" class="sr-only">Seleccionar imagen</label>
             <select name="image_filename" id="imageSelect" class="visually-hidden-select" autocomplete="off">
                 <option value="none" selected>Ninguno</option>
-                {% for img_num in range(1, 33) %}
+                {% for img_num in range(1, 38) %}
                 <option value="stream{{ img_num }}.png">stream{{ img_num }}.png</option>
                 {% endfor %}
             </select>
@@ -211,6 +211,9 @@
 <!-- Modal para mostrar productos -->
 <div id="productsModal" class="modal d-none fixed-full bg-modal z-1000" tabindex="-1">
   <div class="modal-content bg-white mx-auto p-20 w-90 maxw-400 br-8 rel">
+    <button type="button" id="closeModalX" class="modal-close-btn" aria-label="Cerrar">
+      <i class="fas fa-times"></i>
+    </button>
     <h3>Productos Disponibles</h3>
     <div class="d-flex flex-column gap-03 maxh-180-ovy-auto" id="productsCheckboxList">
       {% for p in products %}
@@ -224,11 +227,8 @@
       <button type="button" id="selectAllProducts" class="btn-blue btn-panel flex-1-48 minw-120">Agregar todos</button>
       <button type="button" id="deselectAllProducts" class="btn-blue btn-panel flex-1-48 minw-120">Desactivar todos</button>
     </div>
-    <div class="d-flex justify-content-center mt-1">
+    <div class="d-flex flex-wrap gap-1 justify-content-center mt-1">
       <button id="saveProducts" class="btn-green btn-panel minw-160">Guardar</button>
-    </div>
-    <div class="d-flex justify-content-center mt-1">
-      <button id="closeModal" class="btn-red btn-panel minw-120">Cerrar</button>
     </div>
   </div>
 </div>
