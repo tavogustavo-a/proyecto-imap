@@ -405,11 +405,6 @@ def export_config():
         # O mantener la redirección si se prefiere:
         # return redirect(url_for('admin_bp.dashboard'))
 
-@admin_bp.route("/estadisticas_admin")
-@admin_required
-def estadisticas_admin():
-    """Página de estadísticas administrativas."""
-    return render_template("estadisticas_admin.html")
 
 @admin_bp.route('/import_config', methods=['POST'])
 @admin_required

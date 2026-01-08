@@ -57,21 +57,6 @@
   {% if user_has_codigos2_access() %}
   <a href="{{ url_for('main_bp.home2') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-code"></i> Códigos 2</a>
   {% endif %}
-  {% if user_object %}
-    {% if is_admin %}
-      <a href="{{ url_for('user_auth_bp.estadisticas') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-chart-bar"></i> Estadísticas</a>
-    {% elif not user_object.parent_id %}
-      {% set tipo_precio = None %}
-      {% if user_object.user_prices and user_object.user_prices is mapping %}
-        {% set tipo_precio = user_object.user_prices.get('tipo_precio') %}
-      {% endif %}
-      {% if tipo_precio and tipo_precio in ['USD', 'COP'] %}
-        <a href="{{ url_for('user_auth_bp.estadisticas') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-chart-bar"></i> Estadísticas</a>
-      {% endif %}
-    {% elif user_object.parent_id and user_object.can_access_store %}
-      <a href="{{ url_for('user_auth_bp.estadisticas') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-chart-bar"></i> Estadísticas</a>
-    {% endif %}
-  {% endif %}
   {% if is_user and current_user %}
     {% if current_user.is_support %}
       <a href="{{ url_for('store_bp.support_dashboard') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-headset"></i> Chat de Soporte Admin</a>
