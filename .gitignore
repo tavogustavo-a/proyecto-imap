@@ -35,9 +35,14 @@ logs/
 .DS_Store
 Thumbs.db
 
-# Migraciones (opcional - descomenta si no quieres versionar migraciones)
-# migrations/versions/*.py
-# !migrations/versions/__init__.py
+# Migraciones (no versionar migraciones - se manejan solo en el servidor)
+migrations/versions/*.py
+!migrations/versions/__init__.py
+
+# Archivos de configuración de Alembic (manejados solo en el servidor)
+migrations/alembic.ini
+migrations/env.py
+migrations/script.py.mako
 
 # Archivos temporales
 *.tmp
