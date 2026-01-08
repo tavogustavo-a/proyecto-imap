@@ -1,0 +1,281 @@
+<!-- app/templates/search.html -->
+{% extends "base.html" %}
+{% block content %}
+
+{% set current_user_id = session.get("user_id") %}
+{% if current_user_id %}
+  {# Attempting to fetch the User object, need 'User' #}
+  {% set user_object = User.query.get(current_user_id) %}
+  {# Si el usuario fue eliminado, user_object será None #}
+  {% if not user_object %}
+    {% set user_object = None %}
+  {% endif %}
+{% else %}
+  {% set user_object = None %}
+{% endif %}
+
+{% if is_user and user_object and user_object.username.lower() not in blocked_users %}
+  {# Elimina el botón de menú flotante aquí #}
+{% endif %}
+
+<div class="search-page-container search-page"
+     data-clear-trigger-log-url="{{ url_for('admin_bp.clear_trigger_log') }}"
+     data-is-user-logged-in="{% if session.get('logged_in') %}true{% else %}false{% endif %}">
+  <div class="admin-card">
+    <div class="flex-between align-items-flex-start mb-05">
+      {% if session.get('logged_in') %}
+        {% if is_admin %}
+          <!-- Botones de menú para administradores -->
+          <div class="d-flex gap-05">
+            <button id="menuToggleBtn" class="btn-panel btn-blue menu-toggle-btn" aria-label="Abrir menú principal">&#9776; Menú</button>
+            <button id="menu2ToggleBtn" class="btn-panel btn-blue menu-toggle-btn" aria-label="Abrir segundo menú">&#9776; Menú2</button>
+            <button id="menu3ToggleBtn" class="btn-panel btn-blue menu-toggle-btn" aria-label="Abrir tercer menú">&#9776; Menú3</button>
+          </div>
+        {% else %}
+          <!-- Botón de menú para usuarios normales -->
+          <button id="menuToggleBtn" class="btn-panel btn-blue" aria-label="Abrir menú de usuario">&#9776; Menú</button>
+        {% endif %}
+      {% endif %}
+      <button id="toggleThemeBtn" class="btn-gray" aria-label="Cambiar tema claro/oscuro"><i class="fas fa-moon"></i></button>
+      {% if not session.get('logged_in') %}
+        <a href="{{ url_for('user_auth_bp.login') }}" class="btn-search btn-rounded ml-auto" aria-label="Ir a la página de inicio de sesión">Iniciar Sesión</a>
+      {% endif %}
+    </div>
+
+    {# --- MOVER LOGO AQUÍ ARRIBA --- #}
+    {# Eliminado bloque de logo_enabled y logo.png #}
+    {# --- FIN MOVER LOGO --- #}
+
+    {% set p3_mode = site_settings.get('search_message3_mode','off') %}
+    {% set p3_text = site_settings.get('search_message3','') %}
+
+    {# Párrafo 3 exclusivo para codigos 2: se muestra siempre cuando está activado, sin importar si el usuario está logueado o no #}
+    {% if p3_mode == 'guests' %}
+      <div class="main-message-wrapper mb-1">
+        {{ p3_text|safe }}
+      </div>
+    {% endif %}
+
+    {% if services_in_rows %}
+      {# En search2.html los servicios con visibility_mode = "codigos-2" están activos pero invisibles #}
+      {% for row in services_in_rows %}
+        <div class="services-row">
+          {% for srv in row %}
+            {% if srv.visibility_mode == "codigos-2" %}
+              <!-- Servicio no visible pero consultable automáticamente -->
+              <div class="service-btn-container hidden">
+                <button
+                  class="service-btn service-btn-hidden"
+                  data-service-id="{{ srv.id }}"
+                  data-bg-color="{{ srv.border_color }}"
+                  data-gradient-color="{{ srv.gradient_color if srv.gradient_color else '#764ba2' }}"
+                  data-click-color1="{{ srv.click_color1 if srv.click_color1 else '#031faa' }}"
+                  data-click-color2="{{ srv.click_color2 if srv.click_color2 else '#031faa' }}"
+                  data-service-aliases='[
+                    {% for al in srv.aliases %}
+                      {
+                        "alias_name": {{ al.alias_name|tojson }},
+                        "alias_icons": [
+                          {% for ai in al.alias_icons %}
+                            "{{ ai.icon_name }}"{% if not loop.last %},{% endif %}
+                          {% endfor %}
+                        ],
+                        "alias_color": {{ al.border_color|tojson }},
+                        "alias_color2": {{ al.gradient_color|tojson }}
+                      }{% if not loop.last %},{% endif %}
+                    {% endfor %}
+                  ]'
+                >
+                  {{ srv.name }}
+                </button>
+              </div>
+            {% endif %}
+          {% endfor %}
+        </div>
+      {% endfor %}
+    {% endif %}
+
+    <!-- Form de búsqueda IMAP -->
+    <div class="search-form-container">
+      <form id="ajax-search-form" class="mb-05" data-search-endpoint="/api/search_mails2">
+        <input type="hidden" id="selectedServiceId" name="service_id" value="">
+        <div class="d-flex gap-05">
+          <label for="searchEmail" class="sr-only">Correo electrónico a buscar</label>
+          <input
+            type="text"
+            id="searchEmail"
+            name="search_email"
+            class="search-input"
+            placeholder="correo@dominio.com"
+            required
+            aria-label="Ingresa el correo electrónico que deseas buscar"
+          >
+          <button type="submit" class="btn-search-main" aria-label="Buscar correos electrónicos">Buscar</button>
+        </div>
+      </form>
+    </div>
+
+    <!-- Spinner debajo del formulario de búsqueda -->
+    <div id="spinner" class="text-center mb-0"> 
+      <img src="{{ url_for('static', filename='images/spinner.gif') }}" alt="Cargando..." class="spinner-image">
+      <p>Buscando correos, por favor espera...</p>
+    </div>
+
+    <!-- Resultados (Quitado style inline) -->
+    <div
+      id="search-results"
+      class="search-results-display search-results-mobile-padding"
+    ></div>
+  </div>
+  <!-- MENÚ LATERAL MÓVIL PARA ADMINISTRADORES -->
+  {% if is_admin %}
+  <div id="mobileMenu" class="mobile-menu-store hidden menu-mobile-fixed">
+    <div class="menu-title-row menu-title-row-custom">
+      <i class="fas fa-bars icon-menu-bar"></i>
+      <h3 class="h3-menu-title">Menú</h3>
+    </div>
+    <a href="{{ url_for('admin_bp.dashboard') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-cogs"></i> Administración</a>
+    <a href="{{ url_for('admin_bp.parrafos_page') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-paragraph"></i> Párrafos</a>
+    <a href="{{ url_for('admin_bp.filters_page') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-filter"></i> Filtros</a>
+    <a href="{{ url_for('admin_bp.regex_page') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-random"></i> Regex</a>
+    <a href="{{ url_for('admin_bp.services_page') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-cogs"></i> Servicios</a>
+    <a href="{{ url_for('admin_bp.usuarios_page') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-users"></i> Usuarios</a>
+    <a href="{{ url_for('admin_bp.security_rules_page') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-shield-alt"></i> Reglas de Seguridad</a>
+    <a href="{{ url_for('admin_bp.view_trigger_logs_page') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-clipboard-list"></i> Consultar logs</a>
+    <a href="{{ url_for('store_bp.admin_sms') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-sms"></i> Consulta SMS</a>
+    <a href="{{ url_for('admin_bp.manage_permissions_page') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-key"></i> Gestión de Permisos</a>
+    <button id="btnClearTriggerLogMenu" type="button" class="btn-panel btn-red mobile-menu-btn mb-04"><i class="fas fa-trash"></i> Limpiar Logs</button>
+    <a href="{{ url_for('auth_bp.logout') }}" class="btn-panel btn-red mobile-menu-btn mb-04"><i class="fas fa-sign-out-alt"></i> Cerrar Sesión</a>
+  </div>
+  {% else %}
+  <!-- MENÚ LATERAL MÓVIL PARA USUARIOS NORMALES Y SUB-USUARIOS -->
+  <div id="mobileMenu" class="mobile-menu-store hidden menu-mobile-fixed">
+    <div class="menu-title-row menu-title-row-custom">
+      <i class="fas fa-bars icon-menu-bar"></i>
+      <h3 class="h3-menu-title">Menú</h3>
+    </div>
+    {% if current_user_id %}
+      {% set show_store = False %}
+      {% if is_admin %}
+        {% set show_store = True %}
+      {% elif user_object.parent_id %}
+        {% if user_object.can_access_store %}
+          {% set parent = User.query.get(user_object.parent_id) %}
+          {% if parent and parent.user_prices and parent.user_prices.get('tipo_precio') in ['USD', 'COP'] %}
+            {% set show_store = True %}
+          {% endif %}
+        {% endif %}
+      {% elif user_object.user_prices and user_object.user_prices.get('tipo_precio') in ['USD', 'COP'] %}
+        {% set show_store = True %}
+      {% endif %}
+      {% if show_store %}
+        <a href="{{ url_for('store_bp.store_front') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-store"></i> Tienda</a>
+        <a href="{{ url_for('store_bp.historial_compras_usuario') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-receipt"></i> Mi Historial de Compras</a>
+      {% endif %}
+    {% endif %}
+    {% if user_object and user_object.has_public_tools_access() %}
+      <a href="{{ url_for('store_bp.tools_public') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-tools"></i> Herramientas</a>
+    {% endif %}
+    <a href="{{ url_for('main_bp.home') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-code"></i> Códigos</a>
+    {% if user_has_codigos2_access() %}
+    <a href="{{ url_for('main_bp.home2') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-code"></i> Códigos 2</a>
+    {% endif %}
+    {% if user_object %}
+      {% if is_admin %}
+        <a href="{{ url_for('user_auth_bp.estadisticas') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-chart-bar"></i> Estadísticas</a>
+      {% elif not user_object.parent_id and user_object.user_prices and user_object.user_prices.get('tipo_precio') in ['USD', 'COP'] %}
+        <a href="{{ url_for('user_auth_bp.estadisticas') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-chart-bar"></i> Estadísticas</a>
+      {% elif user_object.parent_id and user_object.can_access_store %}
+      <a href="{{ url_for('user_auth_bp.estadisticas') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-chart-bar"></i> Estadísticas</a>
+      {% endif %}
+    {% endif %}
+    {% if is_user and current_user %}
+      {% if current_user.is_support %}
+        <a href="{{ url_for('store_bp.support_dashboard') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-headset"></i> Chat de Soporte Admin</a>
+      {% elif current_user.can_chat %}
+        <a href="{{ url_for('store_bp.user_chat_soporte') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-headset"></i> Chat de Soporte</a>
+      {% endif %}
+    {% endif %}
+    {% if is_user and user_object and user_object.can_create_subusers %}
+      <a href="{{ url_for('subuser_bp.manage_subusers') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-users"></i> Sub-usuarios</a>
+    {% endif %}
+    {% if is_user and not current_user.parent_id and user_has_worksheet_access(current_user) %}
+  <a href="{{ url_for('store_bp.user_work_sheets') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-table"></i> Hojas de Cálculo</a>
+{% endif %}
+    {% if is_admin %}
+      <a href="{{ url_for('admin_bp.dashboard') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-cogs"></i> Administración</a>
+    {% endif %}
+    {% if is_admin %}
+      <a href="{{ url_for('auth_bp.logout') }}" class="btn-panel btn-red mobile-menu-btn mb-04"><i class="fas fa-sign-out-alt"></i> Cerrar Sesión</a>
+    {% elif is_user %}
+      <a href="{{ url_for('user_auth_bp.logout') }}" class="btn-panel btn-red mobile-menu-btn mb-04"><i class="fas fa-sign-out-alt"></i> Cerrar Sesión</a>
+    {% else %}
+      <a href="{{ url_for('user_auth_bp.logout') }}" class="btn-panel btn-red mobile-menu-btn mb-04"><i class="fas fa-sign-out-alt"></i> Cerrar Sesión</a>
+    {% endif %}
+  </div>
+  {% endif %}
+
+  <!-- MENÚ2 LATERAL MÓVIL -->
+  {% if is_admin %}
+  <div id="mobileMenu2" class="mobile-menu-store hidden menu-mobile-fixed">
+    <div class="menu-title-row menu-title-row-custom">
+      <i class="fas fa-bars icon-menu-bar"></i>
+      <h3 class="h3-menu-title">Licencias</h3>
+    </div>
+    <a href="{{ url_for('store_bp.admin_store') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-store"></i> Licencias</a>
+    <a href="{{ url_for('store_bp.admin_productos') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-box"></i> Productos</a>
+    <a href="{{ url_for('store_bp.admin_productos') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-ticket-alt"></i> Cupones</a>
+    <a href="{{ url_for('store_bp.admin_tools') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-tools"></i> Herramientas Admin</a>
+    <a href="{{ url_for('store_bp.admin_work_sheets') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-table"></i> Hojas de Cálculo</a>
+    <a href="{{ url_for('store_bp.admin_configurations') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-cog"></i> Configuraciones</a>
+          <a href="{{ url_for('store_bp.admin_support') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-headset"></i> Chat Soporte</a>
+    <a href="{{ url_for('auth_bp.logout') }}" class="btn-panel btn-red mobile-menu-btn mb-04"><i class="fas fa-sign-out-alt"></i> Cerrar Sesión</a>
+  </div>
+
+  <!-- MENÚ3 LATERAL MÓVIL -->
+  <div id="mobileMenu3" class="mobile-menu-store hidden menu-mobile-fixed">
+    <div class="menu-title-row menu-title-row-custom">
+      <i class="fas fa-bars icon-menu-bar"></i>
+      <h3 class="h3-menu-title">Parte Pública</h3>
+    </div>
+    <a href="{{ url_for('store_bp.store_front') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-store"></i> Tienda Pública</a>
+    <a href="{{ url_for('store_bp.tools_public') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-tools"></i> Herramientas Pública</a>
+    <a href="{{ url_for('store_bp.historial_compras_usuario') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-receipt"></i> Mi Historial de Compras</a>
+    <a href="{{ url_for('main_bp.home') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-code"></i> Códigos</a>
+    {% if user_has_codigos2_access() %}
+    <a href="{{ url_for('main_bp.home2') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-code"></i> Códigos 2</a>
+    {% endif %}
+    <a href="{{ url_for('auth_bp.logout') }}" class="btn-panel btn-red mobile-menu-btn mb-04"><i class="fas fa-sign-out-alt"></i> Cerrar Sesión</a>
+  </div>
+  {% endif %}
+  <div id="menuOverlay" class="menu-overlay"></div>
+  </div>
+  
+  <!-- Overlay opaco para el modal de alias -->
+  <div id="aliasPopupOverlay"></div>
+  
+  <!-- Modal de alias mejorado -->
+  <div id="aliasPopup">
+    <button class="alias-popup-close">×</button>
+    <div id="aliasListContainer"></div>
+  </div>
+
+
+
+{% endblock %}
+
+{% block head %}{{ super() }}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/store.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='fontawesome/css/all.css') }}">
+<link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/chat_soporte.css') }}">
+<meta name="csrf_token" content="{{ csrf_token() }}">
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script src="{{ url_for('static', filename='js/menu_busqueda.js') }}" defer></script>
+<script src="{{ url_for('static', filename='js/admin_imap.js') }}" defer></script>
+
+<script src="{{ url_for('static', filename='js/clear_trigger_logs.js') }}" defer></script>
+
+{% endblock %}

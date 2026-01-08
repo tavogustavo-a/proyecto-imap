@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}Editar Regla de Seguridad{% endblock %}
+
+{% block head %}
+  {{ super() }}
+  <meta name="csrf_token" content="{{ csrf_token() }}">
+{% endblock %}
+
+{% block content %}
+<div class="admin-card form-container-medium">
+  <h2 class="text-center">Editar Regla de Seguridad (Monitorea Correo Admin)</h2>
+
+  <form method="POST" action="{{ url_for('admin_bp.edit_security_rule_page', rule_id=rule.id) }}">
+    <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+
+    <label for="sender" class="sr-only">Remitente del correo (opcional):</label>
+    <input type="text" id="sender" name="sender" value="{{ rule.sender or '' }}" class="d-block w-100 mb-05" placeholder="Remitente del correo (opcional): Ej: info@netflix.com">
+
+    <label for="description" class="sr-only">Descripción (opcional):</label>
+    <input type="text" id="description" name="description" value="{{ rule.description or '' }}" class="d-block w-100 mb-05" placeholder="Descripción (opcional): Ej: Alerta cambio correo Netflix">
+
+    <label for="trigger_pattern" class="sr-only">Patrón Activador:</label>
+    <input type="text" id="trigger_pattern" name="trigger_pattern" value="{{ rule.trigger_pattern }}" class="d-block w-100 mb-05" required placeholder="Patrón Activador (Regex para detectar contenido sensible): Ej: (?i)código de seguridad">
+
+    <label for="observer_pattern" class="sr-only">Patrón Observador:</label>
+    <input type="text" id="observer_pattern" name="observer_pattern" value="{{ rule.observer_pattern }}" class="d-block w-100 mb-05" required placeholder="Patrón Observador (Regex para detectar el cambio no deseado): Ej: (?i)tu correo ha sido cambiado a">
+
+    <!-- Campos de servidor/carpeta eliminados: ahora se usan servidores Observador globales -->
+
+    <div class="mb-1">
+        <label for="enabled" class="d-inline-flex align-items-center cursor-pointer">
+            <input type="checkbox" id="enabled" name="enabled" {% if rule.enabled %}checked{% endif %} class="mr-03">
+            Habilitado
+        </label>
+    </div>
+    <br>
+
+    <div class="text-center">
+      <button type="submit" class="btn btn-green">Guardar Cambios</button>
+      <a href="{{ url_for('admin_bp.security_rules_page') }}" class="btn btn-blue text-decoration-none ml-05">Volver</a>
+    </div>
+  </form>
+</div>
+{% endblock %} 

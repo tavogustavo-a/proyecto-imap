@@ -1,0 +1,406 @@
+{% extends "base.html" %}
+
+{% block title %}Chat de Soporte{% endblock %}
+
+{% block head %}
+  {{ super() }}
+  {% if current_user %}
+  <meta name="current-user-id" content="{{ current_user.id }}">
+      <meta name="current-username" content="{{ current_user.username }}">
+      
+    <!-- Meta tag para detectar si el usuario es admin (solo admin puede eliminar/finalizar chats) -->
+    <meta name="is-admin" content="{{ 'true' if is_admin else 'false' }}">
+    <!-- Meta tag para detectar si el usuario es soporte -->
+    <meta name="is-support" content="{{ 'true' if current_user and current_user.is_support else 'false' }}">
+    <!-- Meta tag para el nombre del usuario admin -->
+    <meta name="admin-username" content="{{ ADMIN_USER }}">
+    <!-- Meta tag para el tipo de usuario (user, admin, support) -->
+    <meta name="current-user-type" content="{% if is_admin %}admin{% elif current_user.is_support %}support{% else %}user{% endif %}">
+    <!-- Meta tag para el token CSRF -->
+    <meta name="csrf_token" content="{{ csrf_token() }}">
+  {% endif %}
+  
+  <!-- ✅ NUEVO: Favicon para evitar error 404 -->
+  <link rel="icon" href="{{ url_for('static', filename='images/favicon.svg') }}?v=20241220" type="image/svg+xml">
+  
+  <!-- ✅ NUEVO: Meta tags para permisos de micrófono en móviles -->
+  <meta name="permissions-policy" content="microphone=*">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  
+
+  
+  <!-- ✅ NUEVO: Polyfill para navegadores antiguos -->
+  <script src="{{ url_for('store_bp.static', filename='js/audio_polyfill.js') }}"></script>
+  
+  <!-- ✅ NUEVO: Fix específico para audio en móviles -->
+  <script src="{{ url_for('store_bp.static', filename='js/audio_mobile_fix.js') }}"></script>
+  
+  <!-- ✅ NUEVO: Sistema de reconexión y sincronización -->
+  <script src="{{ url_for('store_bp.static', filename='js/chat_reconnection.js') }}"></script>
+  
+  <!-- ✅ NUEVO: SocketIO para comunicación en tiempo real -->
+  <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+  
+  <link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='fontawesome/css/all.css') }}">
+  <link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/chat_soporte.css') }}">
+  
+  <!-- ✅ NUEVO: Estilos para reconexión y sincronización -->
+  <link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/chat_reconnection.css') }}">
+  
+  <!-- ✅ NUEVO: Chat Enhancements CSS -->
+  <link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/chat_enhancements.css') }}">
+
+{% endblock %}
+{% block content %}
+<div class="container container-max-width-900 store-light store-front-main 
+            {% if is_admin %}is-admin-user{% endif %}
+            {% if is_support_user %}is-support-user{% endif %}">
+  {% set blocked_users = ['soporte','soporte1','soporte2','soporte3'] %}
+  {% if session.get('logged_in') and (not session.get('username') or session.get('username').lower() not in blocked_users) %}
+    <div class="d-flex justify-content-between align-items-center">
+      {% if is_admin %}
+        <!-- Botones de menú para administradores -->
+        <div class="d-flex gap-05">
+          <button id="menuToggleBtn" class="btn-blue menu-btn-worksheet">&#9776; Menú</button>
+          <button id="menu2ToggleBtn" class="btn-blue menu-btn-worksheet">&#9776; Menú2</button>
+          <button id="menu3ToggleBtn" class="btn-blue menu-btn-worksheet">&#9776; Menú3</button>
+        </div>
+      {% else %}
+        <!-- Botón de menú para usuarios normales -->
+        <button id="menuToggleBtn" class="btn-blue menu-btn-worksheet">&#9776; Menú</button>
+      {% endif %}
+    </div>
+    
+    <!-- MENÚ LATERAL MÓVIL PARA ADMINISTRADORES -->
+    {% if is_admin %}
+    <div id="mobileMenu" class="mobile-menu-store hidden">
+      <div class="menu-title-row">
+        <i class="fas fa-bars"></i>
+        <h3>Menú</h3>
+      </div>
+      <a href="{{ url_for('admin_bp.dashboard') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-cogs"></i> Administración</a>
+      <a href="{{ url_for('admin_bp.parrafos_page') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-paragraph"></i> Párrafos</a>
+      <a href="{{ url_for('admin_bp.filters_page') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-filter"></i> Filtros</a>
+      <a href="{{ url_for('admin_bp.regex_page') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-random"></i> Regex</a>
+      <a href="{{ url_for('admin_bp.services_page') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-cogs"></i> Servicios</a>
+      <a href="{{ url_for('admin_bp.usuarios_page') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-users"></i> Usuarios</a>
+      <a href="{{ url_for('admin_bp.security_rules_page') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-shield-alt"></i> Reglas de Seguridad</a>
+      <a href="{{ url_for('admin_bp.view_trigger_logs_page') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-clipboard-list"></i> Consultar logs</a>
+      <a href="{{ url_for('store_bp.admin_sms') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-sms"></i> Consulta SMS</a>
+      <a href="{{ url_for('admin_bp.manage_permissions_page') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-key"></i> Gestión de Permisos</a>
+      <button id="btnClearTriggerLogMenu" type="button" class="btn-panel btn-red mobile-menu-btn mb-04"><i class="fas fa-trash"></i> Limpiar Logs</button>
+      <a href="{{ url_for('auth_bp.logout') }}" class="btn-panel btn-red mobile-menu-btn mb-04"><i class="fas fa-sign-out-alt"></i> Cerrar Sesión</a>
+    </div>
+    {% else %}
+    <!-- MENÚ LATERAL MÓVIL PARA USUARIOS NORMALES Y SUB-USUARIOS -->
+    <div id="mobileMenu" class="mobile-menu-store hidden">
+      <div class="menu-title-row">
+        <i class="fas fa-bars"></i>
+        <h3>Menú</h3>
+      </div>
+      {% set current_user_id = session.get("user_id") %}
+      {% if current_user_id %}
+        {% set user_object = User.query.get(current_user_id) %}
+        {% set show_store = False %}
+        {% if is_admin %}
+          {% set show_store = True %}
+        {% elif user_object.parent_id %}
+          {% if user_object.can_access_store %}
+            {% set parent = User.query.get(user_object.parent_id) %}
+            {% if parent and parent.user_prices and parent.user_prices.get('tipo_precio') in ['USD', 'COP'] %}
+              {% set show_store = True %}
+            {% endif %}
+          {% endif %}
+        {% elif user_object.user_prices and user_object.user_prices.get('tipo_precio') in ['USD', 'COP'] %}
+          {% set show_store = True %}
+        {% endif %}
+        {% if show_store %}
+          <a href="{{ url_for('store_bp.store_front') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-store"></i> Tienda</a>
+          <a href="{{ url_for('store_bp.historial_compras_usuario') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-receipt"></i> Mi Historial de Compras</a>
+        {% endif %}
+      {% endif %}
+      {% if user_object and user_object.has_public_tools_access() %}
+        <a href="{{ url_for('store_bp.tools_public') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-tools"></i> Herramientas</a>
+      {% endif %}
+      <a href="{{ url_for('main_bp.home') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-code"></i> Códigos</a>
+      {% if user_has_codigos2_access() %}
+      <a href="{{ url_for('main_bp.home2') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-code"></i> Códigos 2</a>
+      {% endif %}
+      {% if user_object %}
+        {% if is_admin %}
+          <a href="{{ url_for('user_auth_bp.estadisticas') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-chart-bar"></i> Estadísticas</a>
+        {% elif not user_object.parent_id and user_object.user_prices and user_object.user_prices.get('tipo_precio') in ['USD', 'COP'] %}
+          <a href="{{ url_for('user_auth_bp.estadisticas') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-chart-bar"></i> Estadísticas</a>
+        {% elif user_object.parent_id and user_object.can_access_store %}
+        <a href="{{ url_for('user_auth_bp.estadisticas') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-chart-bar"></i> Estadísticas</a>
+        {% endif %}
+      {% endif %}
+      {% if is_user and user_object and user_object.can_create_subusers %}
+        <a href="{{ url_for('subuser_bp.manage_subusers') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-users"></i> Sub-usuarios</a>
+      {% endif %}
+      {% if is_user and not current_user.parent_id and user_has_worksheet_access(current_user) %}
+  <a href="{{ url_for('store_bp.user_work_sheets') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-table"></i> Hojas de Cálculo</a>
+{% endif %}
+      {% if is_admin %}
+        <a href="{{ url_for('admin_bp.dashboard') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-cogs"></i> Administración</a>
+      {% endif %}
+      {% if is_admin %}
+        <a href="{{ url_for('auth_bp.logout') }}" class="btn-panel btn-red mobile-menu-btn mb-04"><i class="fas fa-sign-out-alt"></i> Cerrar Sesión</a>
+      {% elif is_user %}
+        <a href="{{ url_for('auth_bp.logout') }}" class="btn-panel btn-red mobile-menu-btn mb-04"><i class="fas fa-sign-out-alt"></i> Cerrar Sesión</a>
+      {% else %}
+        <a href="{{ url_for('auth_bp.logout') }}" class="btn-panel btn-red mobile-menu-btn mb-04"><i class="fas fa-sign-out-alt"></i> Cerrar Sesión</a>
+      {% endif %}
+    </div>
+    {% endif %}
+
+    <!-- Modal Menú2 para administradores -->
+    {% if is_admin %}
+    <div id="mobileMenu2" class="mobile-menu-store hidden">
+      <div class="menu-title-row">
+        <i class="fas fa-bars"></i>
+        <h3>Licencias</h3>
+      </div>
+      <a href="{{ url_for('store_bp.admin_store') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-store"></i> Licencias</a>
+      <a href="{{ url_for('store_bp.admin_productos') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-box"></i> Productos</a>
+      <a href="{{ url_for('store_bp.admin_productos') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-ticket-alt"></i> Cupones</a>
+      <a href="{{ url_for('store_bp.admin_tools') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-tools"></i> Herramientas Admin</a>
+      <a href="{{ url_for('store_bp.admin_work_sheets') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-table"></i> Hojas de Cálculo</a>
+      <a href="{{ url_for('store_bp.admin_configurations') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-cog"></i> Configuraciones</a>
+      <a href="{{ url_for('store_bp.admin_support') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-headset"></i> Chat Soporte</a>
+      <a href="{{ url_for('auth_bp.logout') }}" class="btn-panel btn-red mobile-menu-btn mb-04"><i class="fas fa-sign-out-alt"></i> Cerrar Sesión</a>
+    </div>
+
+    <!-- Modal Menú3 para administradores -->
+    <div id="mobileMenu3" class="mobile-menu-store hidden">
+      <div class="menu-title-row">
+        <i class="fas fa-bars"></i>
+        <h3>Parte Pública</h3>
+      </div>
+      <a href="{{ url_for('store_bp.store_front') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-store"></i> Tienda Pública</a>
+      <a href="{{ url_for('store_bp.tools_public') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-tools"></i> Herramientas Pública</a>
+      <a href="{{ url_for('store_bp.historial_compras_usuario') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-receipt"></i> Mi Historial de Compras</a>
+      <a href="{{ url_for('main_bp.home') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-code"></i> Códigos</a>
+      {% if user_has_codigos2_access() %}
+      <a href="{{ url_for('main_bp.home2') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-code"></i> Códigos 2</a>
+      {% endif %}
+      <a href="{{ url_for('auth_bp.logout') }}" class="btn-panel btn-red mobile-menu-btn mb-04"><i class="fas fa-sign-out-alt"></i> Cerrar Sesión</a>
+    </div>
+    {% endif %}
+    <div id="menuOverlay" class="menu-overlay"></div>
+  {% endif %}
+
+  <!-- Tabla de Usuarios para Soporte -->
+  {% if is_admin and not is_support_user %}
+  <div class="container container-max-width-900">
+    <div class="d-flex justify-content-center align-items-center">
+      <h4 class="mb-0">Gestión de Usuarios para Soporte</h4>
+    </div>
+    
+    <!-- Elementos fuera del contorno blanco -->
+    <div class="d-flex flex-wrap align-items-center mb-1">
+      <div class="search-container">
+        <label for="searchUserInput" class="sr-only">Buscar usuarios</label>
+        <input type="search" id="searchUserInput" placeholder="Buscar usuarios..." autocomplete="off">
+      </div>
+      <div class="d-flex align-items-center">
+        <label for="showUserCount" class="sr-only">Mostrar cantidad</label>
+        <select id="showUserCount" autocomplete="off">
+          <option value="10">10</option>
+          <option value="20" selected>20</option>
+          <option value="50">50</option>
+          <option value="100">100</option>
+          <option value="all">Todos</option>
+        </select>
+      </div>
+    </div>
+    
+    <!-- Contorno blanco fijo solo para la tabla -->
+    <div class="store-light">
+      <div class="table-wrapper-store">
+        <table class="table mb-1" id="users-table">
+          <thead>
+            <tr>
+              <th>Usuario</th>
+              <th>Chat</th>
+              <th>Soporte</th>
+              <th>Sub-usuarios</th>
+            </tr>
+          </thead>
+          <tbody id="users-table-body">
+            {% for user in users %}
+            {% if is_admin or not user.parent_id %}
+            <tr data-username="{{ user.username|lower }}">
+              <td><strong>{{ user.username }}</strong></td>
+              <td>
+                <input type="checkbox" 
+                       id="chat_{{ user.id }}" 
+                       class="chat-checkbox" 
+                       data-user-id="{{ user.id }}"
+                       {% if user.can_chat %}checked{% endif %}>
+                <label for="chat_{{ user.id }}" class="sr-only">Chat</label>
+              </td>
+              <td>
+                <input type="checkbox" 
+                       id="soporte_{{ user.id }}" 
+                       class="soporte-checkbox" 
+                       data-user-id="{{ user.id }}"
+                       {% if user.is_support %}checked{% endif %}>
+                <label for="soporte_{{ user.id }}" class="sr-only">Soporte</label>
+              </td>
+              <td>
+                <input type="checkbox" 
+                       id="subusers_{{ user.id }}" 
+                       class="subusers-checkbox" 
+                       data-user-id="{{ user.id }}"
+                       {% if user.can_manage_subusers %}checked{% endif %}>
+                <label for="subusers_{{ user.id }}" class="sr-only">Sub-usuarios</label>
+              </td>
+            </tr>
+            {% endif %}
+            {% else %}
+            <tr><td colspan="4" class="text-center">No hay usuarios registrados.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+    
+    <!-- Paginación fuera del contorno blanco -->
+    <div class="d-flex justify-content-between align-items-center mt-2 pagination-buttons">
+      <!-- Paginación generada por JavaScript -->
+    </div>
+  </div>
+  {% endif %}
+
+      <!-- Dashboard de Chat Integrado -->
+  <div class="container container-max-width-900 mt-2">
+    
+    
+    <div class="d-flex justify-content-center align-items-center">
+        {% if is_support_user %}
+          <h4 class="mb-0">Chat de Soporte</h4>
+        {% else %}
+          <h4 class="mb-0">Dashboard de Chat de Soporte</h4>
+        {% endif %}
+      </div>
+      {% if is_admin or is_support_user %}
+      <div class="cleanup-controls-container">
+        <div class="cleanup-days-selector">
+          <select id="cleanupDaysSelect" class="cleanup-days-select">
+            <option value="1">1 día</option>
+            <option value="3">3 días</option>
+            <option value="5" selected>5 días</option>
+            <option value="7">7 días</option>
+            <option value="15">15 días</option>
+            <option value="30">30 días</option>
+          </select>
+        </div>
+        <button id="btnLimpiarMensajes" type="button" class="btn-red">
+          <i class="fas fa-trash"></i> Limpiar Mensajes Antiguos
+        </button>
+      </div>
+      {% endif %}
+    </div>
+
+    <!-- Contenedor principal del chat estilo WhatsApp -->
+    <div class="chat-whatsapp-container">
+      <!-- Lista de chats (lado izquierdo) -->
+      <div class="chat-list-container">
+        <div class="chat-list-header">
+          <h5 class="mb-0">
+            <i class="fas fa-comments"></i> Chats
+          </h5>
+          <!-- ✅ NUEVO: Botón de toggle para móvil -->
+          <button class="chat-list-toggle" id="chatListToggle" title="Mostrar/ocultar lista de chats">
+            <i class="fas fa-chevron-right"></i>
+          </button>
+        </div>
+        <div class="chat-list" id="usersList">
+          <!-- Los chats se cargarán dinámicamente aquí -->
+        </div>
+      </div>
+
+      <!-- Área de chat (lado derecho) -->
+      <div class="chat-conversation-container">
+        <div class="chat-conversation-header" id="chatHeader">
+          <div class="chat-user-info">
+            <div class="chat-user-avatar">
+              <i class="fas fa-user"></i>
+            </div>
+            <div class="chat-user-details">
+              <h6 class="mb-0" id="chatTitle">Selecciona un usuario para chatear</h6>
+            </div>
+          </div>
+        </div>
+        
+        <!-- Área de mensajes -->
+        <div id="chatMessagesArea" class="chat-messages-area">
+          <div class="text-center text-muted mt-5">
+            <i class="fas fa-comments fa-3x mb-3"></i>
+          </div>
+        </div>
+        
+        <!-- Área de input -->
+        <div class="chat-input-area" id="chatInputArea">
+          <form id="chatInputForm" class="chat-input-form" novalidate>
+            <div class="chat-input-wrapper">
+              <input 
+                type="text" 
+                id="chatInputField" 
+                class="chat-input-field" 
+                placeholder="Escribe tu mensaje..." 
+                autocomplete="off"
+              >
+              <div class="chat-attachment-controls">
+                <label for="chat-file-input" class="chat-attachment-btn" title="Adjuntar archivo (imagen, video, audio, PDF, Word, Excel, texto)">
+                  <i class="fas fa-paperclip"></i>
+                </label>
+                <input 
+                  type="file" 
+                  id="chat-file-input" 
+                  class="chat-file-input" 
+                  accept="image/*,video/*,audio/*,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/plain,text/csv"
+                  multiple
+                >
+                <button 
+                  type="button" 
+                  id="audioRecordBtn" 
+                  class="chat-audio-record-btn" 
+                  title="Mantén presionado para grabar audio"
+                >
+                  <i class="fas fa-microphone"></i>
+                </button>
+                
+
+                
+
+                <button type="submit" id="chatSendButton" class="chat-send-button">
+                  <i class="fas fa-paper-plane"></i>
+                </button>
+              </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<!-- SocketIO Client -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.js"></script>
+
+<script src="{{ url_for('store_bp.static', filename='js/menu_tienda.js') }}" defer></script>
+<!-- JavaScript unificado para admin y soporte -->
+<script src="{{ url_for('store_bp.static', filename='js/video-utils.js') }}" defer></script>
+<script src="{{ url_for('store_bp.static', filename='js/support_users.js') }}" defer></script>
+<script src="{{ url_for('store_bp.static', filename='js/chat_dashboard_integrated.js') }}" defer></script>
+<meta name="clear_trigger_log_url" content="{{ url_for('admin_bp.clear_trigger_log') }}">
+<script src="{{ url_for('static', filename='js/clear_trigger_logs.js') }}" defer></script>
+
+<!-- ✅ NUEVO: Chat Enhancements - Funcionalidades mejoradas compartidas -->
+<script src="{{ url_for('store_bp.static', filename='js/chat_enhancements.js') }}" defer></script>
+{% endblock %}

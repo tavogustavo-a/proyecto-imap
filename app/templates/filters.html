@@ -1,0 +1,234 @@
+{% extends "base.html" %}
+
+{% block title %}Filtros{% endblock %}
+
+{% block head %}
+  {{ super() }}
+  <meta name="csrf_token" content="{{ csrf_token() }}">
+{% endblock %}
+
+{% block content %}
+
+<div class="container container-max-width-900">
+
+  <div class="admin-card">
+    <div class="d-flex justify-content-between align-items-center">
+      <h3 class="m-0">Dominios Permitidos</h3>
+      <button 
+        id="btnVolverPanelTopFilter"
+        type="button"
+        class="btn-blue"
+        data-dashboard-url="{{ url_for('admin_bp.dashboard') }}"
+      >
+        Volver
+      </button>
+    </div>
+
+    <form 
+      id="domainSearchForm"
+      class="mb-1 d-flex gap-05"
+    >
+      <label for="domainSearchInput" class="sr-only">Buscar dominio</label>
+      <input 
+        type="search"
+        id="domainSearchInput"
+        placeholder="Buscar Dominio..."
+        class="flex-grow-1"
+        autocomplete="off"
+      >
+    </form>
+
+    <div id="domain-list">
+      {% if domains %}
+        {% for dom in domains %}
+          <div class="domain-item">
+            <strong>{{ dom.domain }}</strong>
+            <div class="mt-05">
+              <button
+                type="button"
+                class="btn-orange mr-05 edit-domain-btn"
+                data-url="{{ url_for('admin_bp.edit_domain', dom_id=dom.id) }}"
+              >
+                Editar
+              </button>
+
+              {% if dom.enabled %}
+                <button
+                  class="btn-red toggle-domain mr-05"
+                  data-id="{{ dom.id }}"
+                  data-enabled="true"
+                >
+                  Off
+                </button>
+              {% else %}
+                <button
+                  class="btn-green toggle-domain mr-05"
+                  data-id="{{ dom.id }}"
+                  data-enabled="false"
+                >
+                  On
+                </button>
+              {% endif %}
+
+              <button
+                class="btn-panel btn-red btn-sm delete-domain"
+                data-id="{{ dom.id }}"
+                title="Eliminar"
+              >
+                <i class="fas fa-trash"></i>
+              </button>
+            </div>
+          </div>
+        {% endfor %}
+      {% else %}
+        <p>No hay dominios registrados.</p>
+      {% endif %}
+    </div>
+
+    <div class="mt-1">
+      <h4>Agregar Nuevo Dominio</h4>
+      <form action="{{ url_for('admin_bp.create_domain') }}" method="POST">
+        <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+        <label for="newDomain" class="sr-only">Dominio</label>
+        <input
+          type="text"
+          id="newDomain"
+          name="domain"
+          placeholder="Dominio"
+          class="d-block mb-05"
+          autocomplete="off"
+        >
+        <button type="submit" class="btn-green">Crear</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="admin-card">
+    <h3>Filtros</h3>
+    <form 
+      id="filterSearchForm"
+      class="mb-1 d-flex gap-05"
+    >
+      <label for="filterSearchInput" class="sr-only">Buscar filtro</label>
+      <input 
+        type="search"
+        id="filterSearchInput"
+        placeholder="Buscar Filtro (remitente, palabra)..."
+        class="flex-grow-1"
+        autocomplete="off"
+      >
+    </form>
+
+    <div id="filter-list">
+      {% if filters %}
+        {% for f in filters %}
+          <div class="filter-item">
+            <strong>Remitente:</strong> {{ f.sender or "(vacío)" }}<br>
+            <strong>Palabra:</strong> {{ f.keyword or "(vacío)" }}<br>
+            <strong>Cortar DESDE ARRIBA:</strong> {{ f.cut_after_html or "(N/A)" }}<br>
+            <strong>Cortar DESDE ABAJO:</strong> {{ f.cut_before_html or "(N/A)" }}
+            <div class="mt-05">
+              <button
+                type="button"
+                class="btn-orange mr-05 edit-filter-btn"
+                data-url="{{ url_for('admin_bp.edit_filter', filter_id=f.id) }}"
+              >
+                Editar
+              </button>
+
+              {% if f.enabled %}
+                <button
+                  class="btn-red toggle-filter mr-05"
+                  data-id="{{ f.id }}"
+                  data-enabled="true"
+                >
+                  Off
+                </button>
+              {% else %}
+                <button
+                  class="btn-green toggle-filter mr-05"
+                  data-id="{{ f.id }}"
+                  data-enabled="false"
+                >
+                  On
+                </button>
+              {% endif %}
+
+              <button
+                class="btn-panel btn-red btn-sm delete-filter"
+                data-id="{{ f.id }}"
+                title="Eliminar"
+              >
+                <i class="fas fa-trash"></i>
+              </button>
+            </div>
+          </div>
+        {% endfor %}
+      {% else %}
+        <p>No hay filtros creados.</p>
+      {% endif %}
+    </div>
+
+    <div class="mt-1">
+      <h4>Crear Nuevo Filtro</h4>
+      <form action="{{ url_for('admin_bp.create_filter') }}" method="POST">
+        <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+
+        <label for="newFilterSender" class="sr-only">Remitente</label>
+        <input
+          type="text"
+          id="newFilterSender"
+          name="sender"
+          placeholder="Remitente (opcional)"
+          class="d-block mb-05"
+          autocomplete="off"
+        >
+        <label for="newFilterKeyword" class="sr-only">Palabra clave</label>
+        <input
+          type="text"
+          id="newFilterKeyword"
+          name="keyword"
+          placeholder="Palabra Clave (opcional)"
+          class="d-block mb-05"
+          autocomplete="off"
+        >
+        <label for="newFilterCutHtml" class="sr-only">Cortar DESDE ARRIBA</label>
+        <input
+          type="text"
+          id="newFilterCutHtml"
+          name="cut_after_html"
+          placeholder="Cortar DESDE ARRIBA (opcional)"
+          class="d-block mb-05"
+          autocomplete="off"
+        >
+        <label for="newFilterCutHtmlBefore" class="sr-only">Cortar DESDE ABAJO</label>
+        <input
+          type="text"
+          id="newFilterCutHtmlBefore"
+          name="cut_before_html"
+          placeholder="Cortar DESDE ABAJO (opcional)"
+          class="d-block mb-05"
+          autocomplete="off"
+        >
+
+        <button type="submit" class="btn-green">Crear</button>
+      </form>
+    </div>
+
+    <div class="text-right mt-2">
+      <button
+        id="btnVolverPanelBottomFilter"
+        type="button"
+        class="btn-blue"
+        data-dashboard-url="{{ url_for('admin_bp.dashboard') }}"
+      >
+        Volver
+      </button>
+    </div>
+
+  </div>
+
+</div>
+
+<script src="{{ url_for('static', filename='js/admin_filters.js') }}"></script>
+{% endblock %}

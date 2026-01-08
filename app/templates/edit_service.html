@@ -1,0 +1,183 @@
+<!-- app/templates/edit_service.html -->
+{% extends "base.html" %}
+
+{% block title %}Editar Servicio{% endblock %}
+
+{% block head %}
+{{ super() }}
+<meta name="csrf_token" content="{{ csrf_token() }}">
+{% endblock head %}
+
+{% block content %}
+
+{# Aplicada clase de contenedor #}
+<div class="form-container-wide edit-service-page">
+
+  <!-- ======================= TARJETA 1: Editar Servicio ======================= -->
+  <div class="admin-card">
+    <div class="d-flex justify-content-between align-items-center mb-1 edit-service-header-container">
+      <h2 class="m-0 heading-service-edit">Editar Servicio</h2>
+      <div class="edit-service-header-buttons">
+        <button id="btnVolverEditSrv" type="button" class="btn-blue" data-url="{{ url_for('admin_bp.services_page') }}">Volver</button>
+      </div>
+    </div>
+    <hr class="mb-1 hr-margin-1">
+
+    <form method="POST" action="{{ url_for('admin_bp.edit_service', service_id=srv.id) }}" class="mb-0">
+      <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+      {% if srv.protected and srv.name == "Pais Netflix" %}
+        <p><strong>Nombre (protegido):</strong> {{ srv.name }}</p>
+      {% else %}
+        <div class="mb-1">
+          <label for="service_name_input">Nombre del Servicio:</label><br>
+          {# Aplicada clase específica #}
+          <input id="service_name_input" type="text" name="service_name" value="{{ srv.name }}" class="service-name-input">
+        </div>
+      {% endif %}
+      <div class="position-visibility-container mb-1-5">
+        <div>
+          <label for="position_input" class="m-0">Posición:</label>
+          <input id="position_input" type="number" name="position" value="{{ srv.position }}" class="position-input-narrow">
+        </div>
+        <div>
+          <select id="visibility_mode_select" name="visibility_mode" class="visibility-select">
+            <option value="off" {% if srv.visibility_mode == 'off' %}selected{% endif %}>off</option>
+            <option value="on-no-usuarios" {% if srv.visibility_mode == 'on-no-usuarios' %}selected{% endif %}>on-no-usuarios</option>
+            <option value="on-usuarios" {% if srv.visibility_mode == 'on-usuarios' %}selected{% endif %}>on-usuarios</option>
+            <option value="on-no-usuarios-no-visible" {% if srv.visibility_mode == 'on-no-usuarios-no-visible' %}selected{% endif %}>on-no-usuarios-no-visible</option>
+            <option value="codigos-2" {% if srv.visibility_mode == 'codigos-2' %}selected{% endif %}>codigos-2</option>
+            <option value="sms" {% if srv.visibility_mode == 'sms' %}selected{% endif %}>sms</option>
+          </select>
+        </div>
+        <div class="d-flex align-items-center flex-wrap gap-1-5 justify-content-center edit-service-buttons">
+          <button type="submit" class="btn-green mr-05">Guardar</button>
+          <button id="btnCancelarEditSrv" type="button" class="btn-red" data-url="{{ url_for('admin_bp.services_page') }}">Cancelar</button>
+        </div>
+      </div>
+    </form>
+  </div> <!-- FIN TARJETA 1 -->
+
+
+  <!-- ======================= TARJETA 2: Alias ======================= -->
+  <div class="admin-card">
+    <h3>Alias</h3>
+    {% if srv.aliases %}
+      {# Aplicada clase #}
+      <ul class="list-unstyled">
+        {% for al in srv.aliases %}
+          {# Corregido de nuevo a data-border-color #}
+          <li class="alias-list-item alias-card" data-border-color="{{ al.border_color }}">
+            <div><strong>{{ al.alias_name }}</strong></div>
+            {% if al.alias_icons and al.alias_icons|length > 0 %}
+              <div class="mt-05 d-flex align-items-center flex-wrap gap-05">
+                {# Aplicada clase #}
+                <strong class="alias-icon-label">Íconos:</strong>
+                <div>
+                  {% for ai in al.alias_icons %}
+                    {# Aplicada clase #}
+                    <span class="alias-icon-wrapper">
+                      {# Aplicada clase #}
+                      <img src="{{ url_for('static', filename='images/' ~ ai.icon_name) }}" alt="Icon" class="alias-icon-img">
+                      {# Aplicada clase #}
+                      <button class="delete-alias-icon alias-icon-delete-btn" data-icon-id="{{ ai.id }}" title="Eliminar icono">x</button>
+                    </span>
+                  {% endfor %}
+                </div>
+              </div>
+            {% endif %}
+            {# Aplicada clase para contenedor y botones específicos #}
+            <div class="mt-075 alias-action-buttons">
+                <button class="add-alias-icon-btn btn-small btn-add-icon" data-alias-id="{{ al.id }}">+Icon</button>
+                <button class="edit-alias-btn btn-small ml-05 btn-edit-alias" data-alias-id="{{ al.id }}" data-alias-name="{{ al.alias_name }}" data-alias-color="{{ al.border_color }}">Editar</button>
+                <button class="btn-panel btn-red btn-sm delete-alias-btn ml-05" data-alias-id="{{ al.id }}" title="Eliminar">
+                  <i class="fas fa-trash"></i>
+                </button>
+            </div>
+          </li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <p>(No hay alias creados para este servicio)</p>
+    {% endif %}
+    <button class="open-alias-popup btn-blue mt-1" data-service-id="{{ srv.id }}">
+      + Crear Alias
+    </button>
+  </div> <!-- FIN TARJETA 2 -->
+
+
+  <!-- ======================= TARJETA 3: Regex y Filtros Activos ======================= -->
+  {% if srv.visibility_mode != 'sms' %}
+  <div class="admin-card">
+    <h3>Regex Activos</h3>
+    <ul class="styled-list">
+      {% if srv.regexes %}
+        {% for r in srv.regexes %}
+          <li>
+            <div class="d-flex justify-content-between align-items-center flex-wrap gap-05">
+                <span class="word-break-all"><code>{{ r.pattern }}</code>{% if r.description %} <small>({{ r.description }})</small>{% endif %}</span>
+                {% if srv.name == "Pais Netflix" and r.pattern == "(?i)_([A-Z]{2})_EVO" %}
+                  <small class="protected-text">(protegido)</small>
+                {% else %}
+                  <button class="unlink-regex-btn btn-red btn-small" data-service-id="{{ srv.id }}" data-regex-id="{{ r.id }}">Quitar</button>
+                {% endif %}
+            </div>
+          </li>
+        {% endfor %}
+      {% else %}
+        <li>(No hay regex vinculados a este servicio)</li>
+      {% endif %}
+    </ul>
+
+    <h3 class="mt-1-5">Filtros Activos</h3>
+    <ul class="styled-list">
+      {% if srv.filters %}
+        {% for f in srv.filters %}
+           <li>
+               <div class="d-flex justify-content-between align-items-center flex-wrap gap-05">
+                  <span class="word-break-all">{{ f.sender if f.sender else 'Cualquiera' }} / {{ f.keyword if f.keyword else 'Cualquiera' }}</span>
+                  <button class="unlink-filter-btn btn-red btn-small" data-service-id="{{ srv.id }}" data-filter-id="{{ f.id }}">Quitar</button>
+               </div>
+           </li>
+        {% endfor %}
+      {% else %}
+        <li>(No hay filtros vinculados a este servicio)</li>
+      {% endif %}
+    </ul>
+  </div> <!-- FIN TARJETA 3 -->
+  {% endif %}
+
+</div> <!-- FIN Contenedor General -->
+
+<!-- POPUPS con clases CSS -->
+<div id="aliasPopup" class="popup-base popup-small">
+  <h4 class="mt-0">Crear Alias</h4>
+  <div class="mb-05">
+    <label for="aliasNameInput">Nombre del alias:</label>
+    <input type="text" id="aliasNameInput" class="popup-input">
+  </div>
+  <button id="aliasCreateBtn" class="popup-button-confirm">Crear</button>
+  <button id="aliasCancelBtn" class="popup-button-cancel">Cancelar</button>
+</div>
+
+<div id="editAliasPopup" class="popup-base popup-small">
+  <h4 class="mt-0">Editar Alias</h4>
+  <input type="hidden" id="editAliasId">
+  <div class="mb-05">
+    <label for="editAliasName">Nombre del alias:</label>
+    <input type="text" id="editAliasName" class="popup-input">
+  </div>
+  <button id="editAliasSaveBtn" class="popup-button-confirm">Guardar</button>
+  <button id="editAliasCancelBtn" class="popup-button-cancel">Cancelar</button>
+</div>
+
+<div id="aliasIconGridOverlay" class="popup-overlay">
+  <div id="aliasIconGridContainer" class="popup-base popup-medium">
+    <h4 class="mt-0">Selecciona un ícono para el alias</h4>
+    <div id="aliasIconGrid" class="popup-grid"></div>
+    <button id="closeAliasIconGridBtn" class="popup-button-cancel mt-1">Cerrar</button> {# Usamos cancel para botón rojo #}
+  </div>
+</div>
+
+<script src="{{ url_for('static', filename='js/admin_services_edit.js') }}?v=20241220-single-back-button"></script>
+
+{% endblock %}

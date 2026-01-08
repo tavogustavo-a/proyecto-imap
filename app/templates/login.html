@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+
+{% block head %}
+  <meta name="csrf_token" content="{{ csrf_token() }}">
+{% endblock %}
+
+{% block content %}
+<div class="login-container-zoomed">
+  <div class="card text-center">
+    <h3>Iniciar Sesión</h3>
+
+    <form method="POST" class="mt-1">
+      <!-- CSRF token -->
+      <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+
+      <!-- =========== CAMPO USUARIO =========== -->
+      <label for="adminUsernameField" class="label-block">Usuario:</label>
+      <div class="d-flex justify-content-center mb-1">
+        {{ 
+          form.username(
+            size=20,
+            id="adminUsernameField",
+            class="login-input",
+            autocomplete="username"
+          )
+        }}
+      </div>
+
+      <!-- =========== CAMPO CONTRASEÑA =========== -->
+      <label for="adminPasswordField" class="label-block">Contraseña:</label>
+      <div class="d-flex justify-content-center mb-1">
+        <div class="password-input-wrapper">
+          {{
+            form.password(
+              size=20,
+              id="adminPasswordField",
+              class="login-input login-input-password",
+              autocomplete="current-password"
+            )
+          }}
+          <span id="toggleAdminPass" class="password-toggle-icon">👁</span>
+        </div>
+      </div>
+
+      <!-- =========== RECORDAR USUARIO =========== -->
+      <div class="remember-user-container">
+        <input type="checkbox" name="remember_user" id="remember_user">
+        <label for="remember_user">Recordar usuario 15 días</label>
+      </div>
+
+      <!-- =========== BOTONES: INGRESAR & VOLVER A LA BÚSQUEDA =========== -->
+      <div class="d-flex gap-05 justify-content-center">
+        <!-- Botón "Ingresar" con bordes redondeados -->
+        <button
+          type="submit"
+          class="btn-search btn-rounded"
+        >
+          Ingresar
+        </button>
+        <!-- Botón "Volver a la Búsqueda" también redondeado (Refactorizado) -->
+        <button
+          id="btnVolverBusquedaLogin"
+          type="button"
+          class="btn-blue btn-rounded"
+          data-url="{{ url_for('main_bp.home') }}"
+        >
+          Volver a la Búsqueda
+        </button>
+      </div>
+    </form>
+
+    <!-- Enlace '¿Olvidaste tu contraseña?' -->
+    <div class="mt-1">
+      <a href="{{ url_for('auth_bp.forgot_password') }}" class="btn-red">
+        ¿Olvidaste tu contraseña?
+      </a>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script src="{{ url_for('static', filename='js/logins.js') }}"></script>
+{% endblock scripts %}

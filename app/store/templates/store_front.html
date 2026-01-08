@@ -1,0 +1,390 @@
+{% extends "base.html" %}
+
+{% block title %}Tienda Pública{% endblock %}
+
+{% block head %}{{ super() }}<link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}"><link rel="stylesheet" href="{{ url_for('static', filename='fontawesome/css/all.css') }}"><link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/chat_soporte.css') }}"><meta name="csrf_token" content="{{ csrf_token() }}">{% endblock %}
+{% block content %}
+<div class="container container-max-width-900 store-light store-front-main">
+  {% set blocked_users = ['soporte','soporte1','soporte2','soporte3'] %}
+  {% if session.get('logged_in') and (not session.get('username') or session.get('username').lower() not in blocked_users) %}
+    <div class="d-flex justify-content-between align-items-center mb-2 store-front-header">
+      {% if is_admin %}
+        <!-- Botones de menú para administradores -->
+        <div class="d-flex gap-05">
+          <button id="menuToggleBtn" class="btn-blue menu-btn-worksheet">&#9776; Menú</button>
+          <button id="menu2ToggleBtn" class="btn-blue menu-btn-worksheet">&#9776; Menú2</button>
+          <button id="menu3ToggleBtn" class="btn-blue menu-btn-worksheet">&#9776; Menú3</button>
+        </div>
+              {% else %}
+          <!-- Botón de menú para usuarios normales -->
+          <button id="menuToggleBtn" class="btn-blue menu-btn-worksheet">&#9776; Menú</button>
+        {% endif %}
+      <button id="btnCarritoTienda" class="btn-carrito-tienda" type="button">
+        <i class="fas fa-shopping-cart"></i>
+        <span class="carrito-contador" id="carritoContador">0</span>
+      </button>
+    </div>
+    <!-- MENÚ LATERAL MÓVIL PARA ADMINISTRADORES -->
+    {% if is_admin %}
+    <div id="mobileMenu" class="mobile-menu-store hidden">
+      <div class="menu-title-row">
+        <i class="fas fa-bars"></i>
+        <h3>Menú</h3>
+      </div>
+      <a href="{{ url_for('admin_bp.dashboard') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-cogs"></i> Administración</a>
+      <a href="{{ url_for('admin_bp.parrafos_page') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-paragraph"></i> Párrafos</a>
+      <a href="{{ url_for('admin_bp.filters_page') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-filter"></i> Filtros</a>
+      <a href="{{ url_for('admin_bp.regex_page') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-random"></i> Regex</a>
+      <a href="{{ url_for('admin_bp.services_page') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-cogs"></i> Servicios</a>
+      <a href="{{ url_for('admin_bp.usuarios_page') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-users"></i> Usuarios</a>
+      <a href="{{ url_for('admin_bp.security_rules_page') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-shield-alt"></i> Reglas de Seguridad</a>
+      <a href="{{ url_for('admin_bp.view_trigger_logs_page') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-clipboard-list"></i> Consultar logs</a>
+      <a href="{{ url_for('store_bp.admin_sms') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-sms"></i> Consulta SMS</a>
+      <a href="{{ url_for('admin_bp.manage_permissions_page') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-key"></i> Gestión de Permisos</a>
+      <button id="btnClearTriggerLogMenu" type="button" class="btn-panel btn-red mobile-menu-btn mb-04"><i class="fas fa-trash"></i> Limpiar Logs</button>
+      <a href="{{ url_for('auth_bp.logout') }}" class="btn-panel btn-red mobile-menu-btn mb-04"><i class="fas fa-sign-out-alt"></i> Cerrar Sesión</a>
+    </div>
+    {% else %}
+    <!-- MENÚ LATERAL MÓVIL PARA USUARIOS NORMALES Y SUB-USUARIOS -->
+    <div id="mobileMenu" class="mobile-menu-store hidden">
+      <div class="menu-title-row">
+        <i class="fas fa-bars"></i>
+        <h3>Menú</h3>
+      </div>
+      {% set current_user_id = session.get("user_id") %}
+      {% if current_user_id %}
+        {% set user_object = User.query.get(current_user_id) %}
+        {% set show_store = False %}
+        {% if is_admin %}
+          {% set show_store = True %}
+        {% elif user_object.parent_id %}
+          {% if user_object.can_access_store %}
+            {% set parent = User.query.get(user_object.parent_id) %}
+            {% if parent %}
+              {% set parent_tipo_precio = None %}
+              {% if parent.user_prices and parent.user_prices is mapping %}
+                {% set parent_tipo_precio = parent.user_prices.get('tipo_precio') %}
+              {% endif %}
+              {% if parent_tipo_precio and parent_tipo_precio in ['USD', 'COP'] %}
+                {% set show_store = True %}
+              {% endif %}
+            {% endif %}
+          {% endif %}
+        {% elif user_object.user_prices and user_object.user_prices is mapping %}
+          {% set tipo_precio = user_object.user_prices.get('tipo_precio') %}
+          {% if tipo_precio and tipo_precio in ['USD', 'COP'] %}
+            {% set show_store = True %}
+          {% endif %}
+        {% endif %}
+        {% if show_store %}
+          <a href="{{ url_for('store_bp.store_front') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-store"></i> Tienda</a>
+          <a href="{{ url_for('store_bp.historial_compras_usuario') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-receipt"></i> Mi Historial de Compras</a>
+        {% endif %}
+      {% endif %}
+      {% if user_object and user_object.has_public_tools_access() %}
+        <a href="{{ url_for('store_bp.tools_public') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-tools"></i> Herramientas</a>
+      {% endif %}
+      <a href="{{ url_for('main_bp.home') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-code"></i> Códigos</a>
+      {% if user_has_codigos2_access() %}
+      <a href="{{ url_for('main_bp.home2') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-code"></i> Códigos 2</a>
+      {% endif %}
+      {% if user_object %}
+        {% if is_admin %}
+          <a href="{{ url_for('user_auth_bp.estadisticas') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-chart-bar"></i> Estadísticas</a>
+        {% elif not user_object.parent_id %}
+          {% set tipo_precio = None %}
+          {% if user_object.user_prices and user_object.user_prices is mapping %}
+            {% set tipo_precio = user_object.user_prices.get('tipo_precio') %}
+          {% endif %}
+          {% if tipo_precio and tipo_precio in ['USD', 'COP'] %}
+            <a href="{{ url_for('user_auth_bp.estadisticas') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-chart-bar"></i> Estadísticas</a>
+          {% endif %}
+        {% elif user_object.parent_id and user_object.can_access_store %}
+          {% set parent = User.query.get(user_object.parent_id) %}
+          {% if parent %}
+            {% set parent_tipo_precio = None %}
+            {% if parent.user_prices and parent.user_prices is mapping %}
+              {% set parent_tipo_precio = parent.user_prices.get('tipo_precio') %}
+            {% endif %}
+            {% if parent_tipo_precio and parent_tipo_precio in ['USD', 'COP'] %}
+              <a href="{{ url_for('user_auth_bp.estadisticas') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-chart-bar"></i> Estadísticas</a>
+            {% endif %}
+          {% endif %}
+        {% endif %}
+      {% endif %}
+      {% if is_user and current_user %}
+        {% if current_user.is_support %}
+          <a href="{{ url_for('store_bp.support_dashboard') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-headset"></i> Chat de Soporte Admin</a>
+        {% elif current_user.can_chat %}
+          <a href="{{ url_for('store_bp.user_chat_soporte') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-headset"></i> Chat de Soporte</a>
+        {% endif %}
+      {% endif %}
+      {% if is_user and user_object and user_object.can_create_subusers %}
+        <a href="{{ url_for('subuser_bp.manage_subusers') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-users"></i> Sub-usuarios</a>
+      {% endif %}
+      {% if is_user and not current_user.parent_id and user_has_worksheet_access(current_user) %}
+  <a href="{{ url_for('store_bp.user_work_sheets') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-table"></i> Hojas de Cálculo</a>
+{% endif %}
+      {% if is_admin %}
+        <a href="{{ url_for('admin_bp.dashboard') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-cogs"></i> Administración</a>
+      {% endif %}
+      {% if is_admin %}
+        <a href="{{ url_for('auth_bp.logout') }}" class="btn-panel btn-red mobile-menu-btn mb-04"><i class="fas fa-sign-out-alt"></i> Cerrar Sesión</a>
+      {% elif is_user %}
+        <a href="{{ url_for('user_auth_bp.logout') }}" class="btn-panel btn-red mobile-menu-btn mb-04"><i class="fas fa-sign-out-alt"></i> Cerrar Sesión</a>
+      {% else %}
+        <a href="{{ url_for('user_auth_bp.logout') }}" class="btn-panel btn-red mobile-menu-btn mb-04"><i class="fas fa-sign-out-alt"></i> Cerrar Sesión</a>
+      {% endif %}
+    </div>
+    {% endif %}
+
+    <!-- Modal Menú2 para administradores -->
+    {% if is_admin %}
+    <div id="mobileMenu2" class="mobile-menu-store hidden">
+      <div class="menu-title-row">
+        <i class="fas fa-bars"></i>
+        <h3>Licencias</h3>
+      </div>
+      <a href="{{ url_for('store_bp.admin_store') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-store"></i> Licencias</a>
+      <a href="{{ url_for('store_bp.admin_productos') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-box"></i> Productos</a>
+      <a href="{{ url_for('store_bp.admin_productos') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-ticket-alt"></i> Cupones</a>
+      <a href="{{ url_for('store_bp.admin_tools') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-tools"></i> Herramientas Admin</a>
+      <a href="{{ url_for('store_bp.admin_work_sheets') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-table"></i> Hojas de Cálculo</a>
+      <a href="{{ url_for('store_bp.admin_configurations') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-cog"></i> Configuraciones</a>
+      <a href="{{ url_for('store_bp.admin_support') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-headset"></i> Chat Soporte</a>
+      <a href="{{ url_for('auth_bp.logout') }}" class="btn-panel btn-red mobile-menu-btn mb-04"><i class="fas fa-sign-out-alt"></i> Cerrar Sesión</a>
+    </div>
+
+    <!-- Modal Menú3 para administradores -->
+    <div id="mobileMenu3" class="mobile-menu-store hidden">
+      <div class="menu-title-row">
+        <i class="fas fa-bars"></i>
+        <h3>Parte Pública</h3>
+      </div>
+      <a href="{{ url_for('store_bp.store_front') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-store"></i> Tienda Pública</a>
+      <a href="{{ url_for('store_bp.tools_public') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-tools"></i> Herramientas Pública</a>
+      <a href="{{ url_for('store_bp.historial_compras_usuario') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-receipt"></i> Mi Historial de Compras</a>
+      <a href="{{ url_for('main_bp.home') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-code"></i> Códigos</a>
+      {% if user_has_codigos2_access() %}
+      <a href="{{ url_for('main_bp.home2') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-code"></i> Códigos 2</a>
+      {% endif %}
+      <a href="{{ url_for('auth_bp.logout') }}" class="btn-panel btn-red mobile-menu-btn mb-04"><i class="fas fa-sign-out-alt"></i> Cerrar Sesión</a>
+    </div>
+    {% endif %}
+    <div id="menuOverlay" class="menu-overlay"></div>
+  {% endif %}
+
+  <!-- Form de búsqueda -->
+  <div class="search-form-container">
+    <form id="ajax-search-form" class="mb-05" name="storeSearchForm">
+      <div class="d-flex gap-05">
+        <label for="searchStoreInput" class="sr-only">Buscar producto</label>
+        <input
+          type="search"
+          id="searchStoreInput"
+          name="searchStoreInput"
+          class="search-input"
+          placeholder="Buscar producto..."
+          required
+          autocomplete="off"
+        >
+        <button type="button" class="btn-search" id="clearStoreSearch">Limpiar</button>
+      </div>
+    </form>
+  </div>
+
+  <div class="d-flex flex-wrap gap-1">
+    {# is_admin ya está disponible desde el context processor #}
+    {% set tipo_precio = 'usd' %}
+    {% if current_user %}
+      {% if current_user.user_prices and current_user.user_prices is mapping %}
+        {% set tipo_precio_raw = current_user.user_prices.get('tipo_precio') %}
+        {% if tipo_precio_raw %}
+          {% set tipo_precio = tipo_precio_raw.lower() %}
+        {% endif %}
+      {% elif current_user.parent_id %}
+        {% set parent = User.query.get(current_user.parent_id) %}
+        {% if parent and parent.user_prices and parent.user_prices is mapping %}
+          {% set parent_tipo_precio_raw = parent.user_prices.get('tipo_precio') %}
+          {% if parent_tipo_precio_raw %}
+            {% set tipo_precio = parent_tipo_precio_raw.lower() %}
+          {% endif %}
+        {% endif %}
+      {% endif %}
+    {% endif %}
+    {% for p in products %}
+      {% set discount_cop = p.discount_cop_extra|default(0)|float %}
+      {% set discount_usd = p.discount_usd_extra|default(0)|float %}
+      {% set calculated_price_cop = p.price_cop|float - discount_cop %}
+      {% set calculated_price_usd = p.price_usd|float - discount_usd %}
+      {% set final_price_cop = [calculated_price_cop, 0]|max %}
+      {% set final_price_usd = [calculated_price_usd, 0]|max %}
+      <div class="card product-texture-bg product-card" data-img="{{ url_for('static', filename='images/' + p.image_filename) }}" data-id="{{ p.id }}" data-price-cop="{{ final_price_cop }}" data-price-usd="{{ final_price_usd }}">
+        <div class="product-img-container">
+          <img src="{{ url_for('static', filename='images/' + p.image_filename) }}" alt="{{ p.name }}" class="product-img">
+        </div>
+        <div class="product-name mt-05">
+          {{ p.name }}
+        </div>
+        {% if current_user and not current_user.parent_id %}
+          <!-- Campo de cantidad y botones + y - integrados -->
+          <div class="d-flex align-items-center justify-content-center mt-05">
+            <div class="input-group-cantidad">
+              <button type="button" class="btn-agregar-licencia btn-restar">-</button>
+              <label for="cantidad-{{ p.id }}" class="sr-only">Cantidad de {{ p.name }}</label>
+              <input type="number" min="1" value="1" class="input-cantidad-licencia" name="cantidad" id="cantidad-{{ p.id }}" autocomplete="off">
+              <button type="button" class="btn-agregar-licencia btn-sumar">+</button>
+            </div>
+          </div>
+          <div class="d-flex align-items-center justify-content-center mt-03">
+            <button type="button" class="btn-anadir-producto-tienda">Añadir</button>
+          </div>
+        {% endif %}
+        {% if current_user %}
+          <div class="d-flex align-items-center justify-content-center mt-02">
+            <span class="product-stock-info" data-product-id="{{ p.id }}">Cargando existencias...</span>
+          </div>
+        {% endif %}
+        <!-- Fin campo de cantidad y botones + y - integrados -->
+        <div class="d-flex align-items-center justify-content-between mt-05">
+          {% if current_user and not current_user.parent_id %}
+            <div class="product-price-col">
+              {% if is_admin %}
+                <span class="product-price-cop">${{ p.price_cop|int }} COP</span>
+                <span class="product-price-usd">${{ p.price_usd|int }} USD</span>
+              {% elif tipo_precio == 'cop' %}
+                {% set discount_cop = p.discount_cop_extra|default(0)|float %}
+                {% set calculated_price_cop = p.price_cop|float - discount_cop %}
+                {% set final_price_cop = [calculated_price_cop, 0]|max %}
+                <span class="product-price-cop">${{ final_price_cop|int }} COP</span>
+              {% else %}
+                {% set discount_usd = p.discount_usd_extra|default(0)|float %}
+                {% set calculated_price_usd = p.price_usd|float - discount_usd %}
+                {% set final_price_usd = [calculated_price_usd, 0]|max %}
+                <span class="product-price-usd">${{ final_price_usd|int }} USD</span>
+              {% endif %}
+            </div>
+          {% endif %}
+          {% if p.description %}
+            <span class="info-icon info-icon-square btn-show-desc" data-desc="{{ p.description|e }}">i</span>
+          {% endif %}
+        </div>
+      </div>
+    {% else %}
+      <p>No hay productos disponibles.</p>
+    {% endfor %}
+  </div>
+
+  <!-- Resumen visual de productos seleccionados para procesar pago -->
+  <div id="resumenPago" class="resumen-pago-modern">
+    <div class="resumen-header">
+      <h4 class="resumen-title">
+        <i class="fas fa-shopping-cart"></i>
+        Resumen de productos seleccionados
+      </h4>
+    </div>
+    
+    <div class="resumen-content">
+      <div id="listaResumenPago" class="resumen-productos-lista">
+        <!-- Aquí se llenarán los productos seleccionados -->
+      </div>
+      
+      <!-- Sección de saldo y cupón en la misma línea -->
+      <div class="resumen-saldo-cupon-section">
+        <div class="saldo-info">
+          <span class="saldo-label">Saldo disponible:</span>
+          <div class="saldo-amounts">
+            {% if saldo_cop %}
+              <span class="saldo-cop">${{ saldo_cop|int }} COP</span>
+            {% endif %}
+            {% if saldo_usd %}
+              {% if saldo_cop %}<span class="saldo-separator">|</span>{% endif %}
+              <span class="saldo-usd">${{ saldo_usd|int }} USD</span>
+            {% endif %}
+          </div>
+        </div>
+        
+        {% if not current_user.parent_id or current_user.can_use_coupons %}
+        <div class="cupon-input-group">
+          <input type="text" id="cuponInput" class="cupon-input-modern" placeholder="Cupón" autocomplete="off">
+          <button type="button" id="btnAplicarCupon" class="btn-cupon-aplicar">
+            <i class="fas fa-tag"></i>
+            Aplicar
+          </button>
+          <button type="button" id="btnQuitarCupon" class="btn-cupon-quitar hidden">
+            <i class="fas fa-times"></i>
+            Quitar
+          </button>
+        </div>
+        {% endif %}
+      </div>
+      
+      <!-- Información de cupón aplicado -->
+      {% if not current_user.parent_id or current_user.can_use_coupons %}
+      <div id="cuponInfo" class="cupon-info-modern hidden">
+        <div class="cupon-success">
+          <i class="fas fa-check-circle"></i>
+          <span class="cupon-aplicado"></span>
+        </div>
+      </div>
+      {% endif %}
+      
+      <!-- Resumen de totales -->
+      <div class="resumen-totales">
+        
+        <div class="total-y-pago-container">
+          <div class="total-final">
+            <span class="total-label">Total a pagar:</span>
+            <span class="total-amount" id="saldoTotalGeneral">$0</span>
+          </div>
+          <button id="btnProcesarPago" class="btn-procesar-pago">
+            <i class="fas fa-credit-card"></i>
+            Procesar pago
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% if coupons and current_user and (not current_user.parent_id or current_user.can_use_coupons) %}
+  {% for coupon in coupons %}
+    <div class="store-light coupon-card">
+      <strong class="coupon-title">{{ coupon.name }}</strong><br>
+      <span class="coupon-desc">{{ coupon.description }}</span>
+    </div>
+  {% endfor %}
+{% endif %}
+
+<!-- Modal de descripción -->
+<div id="descModal" class="desc-modal modal-hidden">
+  <div class="desc-modal-content">
+    <button id="closeDescModalBtn" class="btn-close-desc-modal">&times;</button>
+    <div id="descModalText" class="desc-modal-text"></div>
+  </div>
+</div>
+
+<!-- Sidebar de Carrito -->
+<div id="sidebarCarritoOverlay" class="sidebar-carrito-overlay sidebar-hidden"></div>
+<div id="sidebarCarritoTienda" class="sidebar-carrito-tienda sidebar-hidden">
+  <div class="sidebar-carrito-content">
+    <button id="closeSidebarCarritoBtn" class="btn-close-sidebar-carrito">&times;</button>
+    <h3 class="sidebar-carrito-title">Carrito</h3>
+    <div id="carritoListaProductos" class="carrito-lista-productos">
+      <p class="carrito-vacio-msg" id="carritoVacioMsg">No hay productos en el carrito.</p>
+    </div>
+  </div>
+</div>
+<!-- Fin Sidebar de Carrito -->
+<div id="userSaldoData" class="user-saldo-data-hidden" data-saldo-usd="{{ saldo_usd|default(0)|int }}" data-saldo-cop="{{ saldo_cop|default(0)|int }}"></div>
+
+
+{% endblock %}
+
+{% block scripts %}
+<meta name="clear_trigger_log_url" content="{{ url_for('admin_bp.clear_trigger_log') }}">
+<script src="{{ url_for('store_bp.static', filename='js/store_front.js') }}" defer></script>
+<script src="{{ url_for('store_bp.static', filename='js/menu_tienda.js') }}" defer></script>
+<script src="{{ url_for('static', filename='js/admin_imap.js') }}" defer></script>
+<script src="{{ url_for('static', filename='js/clear_trigger_logs.js') }}" defer></script>
+
+{% endblock %} 

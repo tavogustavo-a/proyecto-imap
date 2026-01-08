@@ -1,0 +1,37 @@
+<!-- app/templates/twofa.html -->
+{% extends "base.html" %}
+{% block content %}
+<div class="admin-card max-width-400 mt-2 mb-2">
+  <h2>Verificación 2FA (TOTP / Email)</h2>
+
+  <form method="POST">
+    <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+
+    <label for="code" class="d-block text-center">Código 2FA:</label>
+    <input id="code" type="text" name="code" required class="d-block mt-1 mb-1 mx-auto login-input">
+
+    <div class="mb-1 remember-user-container">
+      <input type="checkbox" name="remember_device" id="remember_device">
+      <label for="remember_device">Recordar este dispositivo por 15 días</label>
+    </div>
+
+    <button type="submit" class="btn-green d-block mx-auto">Verificar</button>
+  </form>
+
+  {# SOLO si el user.twofa_method == "EMAIL", opcionalmente muestras este form #}
+  <div class="mt-1 text-center">
+    <p>¿No recibiste el código?</p>
+    <form 
+      method="POST"
+      action="{{ url_for('auth_bp.resend_2fa_email_user', username=username) }}"
+      class="d-inline"
+    >
+      <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+      <button type="submit" class="btn-blue mt-03">
+        Reenviar Código 2FA
+      </button>
+    </form>
+  </div>
+
+</div>
+{% endblock %}

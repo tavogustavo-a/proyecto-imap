@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="csrf_token" content="{{ csrf_token() }}">
+    <meta name="admin_user" content="{{ admin_user }}">
+    <meta name="current_user" content="{{ current_username or 'Usuario' }}">
+    <meta name="is_logged_in" content="{{ 'true' if is_logged_in else 'false' }}">
+    <meta name="is_admin" content="{{ 'true' if is_admin else 'false' }}">
+    <meta name="user_ip" content="{{ user_ip }}">
+    <meta name="is_shared_mode" content="true">
+    <meta name="is_readonly" content="{{ 'true' if is_readonly else 'false' }}">
+    <meta name="shared_token" content="{{ token }}">
+    <meta name="access_type" content="{{ access_type }}">
+    <meta name="worksheet_id" content="{{ worksheet.id }}">
+    <meta name="worksheet_title" content="{{ worksheet.title }}">
+    <meta name="worksheet_fields" content="{{ worksheet.fields | tojson | e }}">
+    <meta name="worksheet_data_total" content="{{ data | length }}">
+    <meta name="worksheet_formato" content="{{ formato | tojson | e }}">
+    <title>{{ worksheet.title }} - Hoja de Cálculo Compartida</title>
+    
+    <!-- CSS exactamente igual que el admin work_sheets.html -->
+    <link rel="icon" href="{{ url_for('static', filename='images/favicon.svg') }}?v=20241220" type="image/svg+xml">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+    <link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='fontawesome/css/all.css') }}">
+    
+
+</head>
+<body class="theme-active tema1 shared-mode {% if is_readonly %}readonly{% endif %}" data-opacity="0.8">
+
+
+    <!-- Indicador de modo simple -->
+    <div class="shared-mode-indicator">
+        {% if is_readonly %}
+            Modo Lectura
+        {% else %}
+            Modo Ver y Editar
+        {% endif %}
+    </div>
+
+    <!-- Contenedor principal con estilos base -->
+    <div class="container">
+        <div class="container-max-width-900 mt-2 store-light worksheet-panel">
+        
+        <!-- Menú móvil (oculto en compartido pero necesario para estructura) -->
+        <div id="mobileMenu" class="mobile-menu-store hidden">
+            <div class="menu-title-row"></div>
+            <div class="menu-search-row px-2 py-2">
+                <div class="input-group">
+                    <span class="input-group-text"><i class="fas fa-search"></i></span>
+                    <label for="menuSearchInput" class="sr-only">Buscar en menú</label>
+                    <input type="text" class="form-control text-center" placeholder="Buscar..." id="menuSearchInput" name="menuSearchInput" autocomplete="off">
+                </div>
+            </div>
+            <div id="plantillasMenuList" class="mt-2 px-2"></div>
+        </div>
+        <div id="menuOverlay" class="menu-overlay"></div>
+
+
+        <!-- Barra de búsqueda (igual que admin) -->
+        <div class="d-flex flex-column align-items-center justify-content-center mb-4 w-100">
+            <div class="d-flex flex-wrap align-items-center worksheet-search-container worksheet-search-centered">
+                <div class="search-container search-container-relative">
+                    <label for="mainSearchInput" class="sr-only">Buscar hojas de cálculo</label>
+                    <input type="text" class="form-control" placeholder="Buscar..." id="mainSearchInput" name="mainSearchInput" autocomplete="off">
+                    <button type="button" class="search-clear-btn hidden" id="clearMainSearch"><i class="fas fa-times"></i></button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Contenedor de la tabla (igual que admin) -->
+        <div id="worksheetTableContainer" class="mt-4"></div>
+    </div>
+
+    <!-- Modales necesarios (ocultos en modo compartido pero requeridos por JavaScript) -->
+    
+    <!-- Modal para crear plantilla de hojas de cálculo -->
+    <div id="modalCrearPlantilla" class="modal-overlay d-none">
+        <div class="modal-content worksheet-modal">
+            <div class="modal-header">
+                <h3 class="modal-title">Crear plantilla hojas de cálculo</h3>
+                <button id="closeModalCrearPlantilla" class="btn-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <label for="tituloPlantillaInput" class="sr-only">Título de la plantilla</label>
+                    <input type="text" class="form-control" id="tituloPlantillaInput" name="tituloPlantillaInput" placeholder="Título de la plantilla..." autocomplete="off">
+                </div>
+                <div class="worksheet-fields-grid">
+                    <button class="worksheet-field-btn" data-field="correo">
+                        <i class="fas fa-envelope"></i>
+                        <span>Correo</span>
+                    </button>
+                    <button class="worksheet-field-btn" data-field="contraseña">
+                        <i class="fas fa-key"></i>
+                        <span>Contraseña</span>
+                    </button>
+                    <button class="worksheet-field-btn" data-field="links">
+                        <i class="fas fa-link"></i>
+                        <span>Links</span>
+                    </button>
+                    <button class="worksheet-field-btn" data-field="letras">
+                        <i class="fas fa-font"></i>
+                        <span>Letras</span>
+                    </button>
+                    <button class="worksheet-field-btn" data-field="informacion-adicional">
+                        <i class="fas fa-info-circle"></i>
+                        <span>Información adicional</span>
+                    </button>
+                    <button class="worksheet-field-btn" data-field="numero">
+                        <i class="fas fa-hashtag"></i>
+                        <span>Número</span>
+                    </button>
+                    <button class="worksheet-field-btn" data-field="otro-campo">
+                        <i class="fas fa-ellipsis-h"></i>
+                        <span>Otro campo</span>
+                    </button>
+                </div>
+                <div class="selected-fields-container mt-3">
+                    <h5>Campos seleccionados:</h5>
+                    <div id="selectedFieldsList" class="selected-fields-list">
+                        <p class="text-muted">Ningún campo seleccionado</p>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button id="btnGenerarPlantilla" class="btn-panel btn-green" disabled>
+                    <i class="fas fa-file-excel"></i> Generar plantilla
+                </button>
+                <button id="btnCancelarPlantilla" class="btn-panel btn-red">
+                    Cancelar
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal para plantillas rápidas -->
+    <div id="modalHojasCreadas" class="modal-overlay d-none">
+        <div class="modal-content worksheet-modal">
+            <div class="modal-header">
+                <h3 class="modal-title">Crear plantilla rápida</h3>
+                <button id="closeModalHojasCreadas" class="btn-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <label for="tituloPlantillaRapidaInput" class="sr-only">Título de la plantilla rápida</label>
+                    <input type="text" class="form-control" id="tituloPlantillaRapidaInput" name="tituloPlantillaRapidaInput" placeholder="Título de la plantilla..." autocomplete="off">
+                </div>
+                <div class="mb-3">
+                    <label for="comboPlantillaRapida" class="form-label">Selecciona una combinación:</label>
+                    <select id="comboPlantillaRapida" class="form-select" autocomplete="off">
+                        <option value="correo:contraseña:correo:contraseña:numero">correo:contraseña:correo:contraseña:numero</option>
+                        <option value="correo:contraseña:letras:correo:contraseña:numero">correo:contraseña:letras:correo:contraseña:numero</option>
+                        <option value="correo:contraseña:links:correo:contraseña:numero">correo:contraseña:links:correo:contraseña:numero</option>
+                        <option value="correo:contraseña:correo:contraseña:numero:correo:contraseña:correo:contraseña:numero">correo:contraseña:correo:contraseña:numero:correo:contraseña:correo:contraseña:numero</option>
+                        <option value="correo:contraseña:links:correo:contraseña:numero:correo:contraseña:links:correo:contraseña:numero">correo:contraseña:links:correo:contraseña:numero:correo:contraseña:links:correo:contraseña:numero</option>
+                    </select>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button id="btnCrearPlantillaRapida" class="btn-panel btn-blue">
+                    <i class="fas fa-bolt"></i> Crear plantilla rápida
+                </button>
+                <button id="btnCancelarPlantillaRapida" class="btn-panel btn-red">
+                    Cancelar
+                </button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Datos de la plantilla compartida (usando data attribute para JSON grande - cumple con CSP) -->
+    <div id="sharedWorksheetDataContainer" 
+         data-shared-worksheet-data='{"id":{{ worksheet.id }},"title":"{{ worksheet.title|e }}","fields":{{ worksheet.fields | tojson }},"data":{{ data | tojson }},"dataTotal":{{ data | length }},"formato":{{ formato | tojson }}}}'
+         class="sr-only"></div>
+    
+    <!-- Scripts necesarios -->
+    <script src="{{ url_for('store_bp.static', filename='js/admin_work_sheets.js') }}" defer></script>
+</body>
+</html> 

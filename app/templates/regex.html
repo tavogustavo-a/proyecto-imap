@@ -1,0 +1,148 @@
+{% extends "base.html" %}
+
+{% block title %}Regex{% endblock %}
+
+{% block head %}
+  {{ super() }}
+  <meta name="csrf_token" content="{{ csrf_token() }}">
+{% endblock %}
+
+{% block content %}
+<div class="container container-max-width-900">
+  <div class="admin-card">
+
+    <div class="d-flex justify-content-between align-items-center mb-1">
+      <h3 class="m-0">Expresiones Regulares (Regex)</h3>
+      <button
+        id="btnVolverPanelTop"
+        type="button"
+        class="btn-blue"
+        data-dashboard-url="{{ url_for('admin_bp.dashboard') }}"
+      >
+        Volver
+      </button>
+    </div>
+
+    <!-- Búsqueda AJAX -->
+    <form id="regexSearchForm" class="mb-1 d-flex gap-05">
+      <label for="regexSearchInput" class="sr-only">Buscar regex</label>
+      <input
+        type="search"
+        id="regexSearchInput"
+        placeholder="Buscar Regex (remitente, descripción, patrón)..."
+        class="flex-grow-1"
+        autocomplete="off"
+      >
+    </form>
+
+    <!-- Lista de regex -->
+    <div id="regex-list">
+      {% if regexes %}
+        {% for r in regexes %}
+          <div class="regex-item">
+            <strong>Remitente:</strong> {{ r.sender or "(vacío)" }}<br>
+
+            {# Mostrar primero descripción, si no hay => "(vacío)" #}
+            <strong>Descripción:</strong> {{ r.description if r.description else "(vacío)" }}<br>
+
+            <strong>Patrón:</strong> {{ r.pattern }}<br>
+
+            <div class="mt-05">
+
+              {% if not r.protected %}
+                <button
+                  class="btn-orange mr-05 edit-regex-btn"
+                  data-edit-url="{{ url_for('admin_bp.edit_regex', regex_id=r.id) }}"
+                >
+                  Editar
+                </button>
+                <button
+                  class="btn-red delete-regex mr-05 btn-imap-action btn-imap-small"
+                  data-id="{{ r.id }}"
+                  title="Eliminar"
+                >
+                  <i class="fas fa-trash"></i>
+                </button>
+              {% endif %}
+
+              {% if r.enabled %}
+                <button
+                  class="btn-red toggle-regex"
+                  data-id="{{ r.id }}"
+                  data-enabled="true"
+                >
+                  Off
+                </button>
+              {% else %}
+                <button
+                  class="btn-green toggle-regex"
+                  data-id="{{ r.id }}"
+                  data-enabled="false"
+                >
+                  On
+                </button>
+              {% endif %}
+
+            </div>
+          </div>
+        {% endfor %}
+      {% else %}
+        <p>No hay Regex creados aún.</p>
+      {% endif %}
+    </div>
+
+    <div class="mt-1">
+      <h4>Crear Nuevo Regex</h4>
+      <form action="{{ url_for('admin_bp.create_regex') }}" method="POST">
+        <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+
+        <label for="newRegexSender" class="sr-only">Remitente</label>
+        <input
+          type="text"
+          id="newRegexSender"
+          name="sender"
+          placeholder="Remitente (opcional)"
+          class="d-block mb-05"
+          autocomplete="off"
+        >
+        <label for="newRegexPattern" class="sr-only">Expresión regular</label>
+        <input
+          type="text"
+          id="newRegexPattern"
+          name="pattern"
+          placeholder="Expresión Regular (obligatorio)"
+          required
+          class="d-block mb-05"
+          autocomplete="off"
+        >
+        <label for="newRegexDescription" class="sr-only">Descripción</label>
+        <input
+          type="text"
+          id="newRegexDescription"
+          name="description"
+          placeholder="Descripción (opcional)"
+          class="d-block mb-05"
+          autocomplete="off"
+        >
+
+        <button type="submit" class="btn-green">Crear</button>
+      </form>
+    </div>
+
+    <div class="text-right mt-2">
+      <button
+        id="btnVolverPanelBottom"
+        type="button"
+        class="btn-blue"
+        data-dashboard-url="{{ url_for('admin_bp.dashboard') }}"
+      >
+        Volver
+      </button>
+    </div>
+
+  </div>
+</div>
+
+<!-- Referencia al JS que maneja la búsqueda/toggle de regex (admin_regex.js) -->
+<script src="{{ url_for('static', filename='js/admin_regex.js') }}"></script>
+{% endblock %}

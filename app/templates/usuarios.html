@@ -1,0 +1,360 @@
+<!-- app/templates/usuarios.html -->
+{% extends "base.html" %}
+
+{% block title %}Usuarios{% endblock %}
+
+{% block head %}
+<meta name="csrf_token" content="{{ csrf_token() }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/store.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='fontawesome/css/all.css') }}">
+{% endblock %}
+
+{% block content %}
+
+<div class="container container-max-width-900 usuarios-page"
+     data-clear-trigger-log-url="{{ url_for('admin_bp.clear_trigger_log') }}">
+
+  <!-- MENÚ LATERAL MÓVIL -->
+  <div id="mobileMenu" class="mobile-menu-store hidden">
+    <div class="menu-title-row">
+      <i class="fas fa-bars"></i>
+      <h3>Menú</h3>
+    </div>
+    <a href="{{ url_for('admin_bp.dashboard') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-cogs"></i> Administración</a>
+    <a href="{{ url_for('admin_bp.parrafos_page') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-paragraph"></i> Párrafos</a>
+    <a href="{{ url_for('admin_bp.filters_page') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-filter"></i> Filtros</a>
+    <a href="{{ url_for('admin_bp.regex_page') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-random"></i> Regex</a>
+    <a href="{{ url_for('admin_bp.services_page') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-cogs"></i> Servicios</a>
+    <a href="{{ url_for('admin_bp.usuarios_page') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-users"></i> Usuarios</a>
+    <a href="{{ url_for('admin_bp.security_rules_page') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-shield-alt"></i> Reglas de Seguridad</a>
+    <a href="{{ url_for('admin_bp.view_trigger_logs_page') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-clipboard-list"></i> Consultar logs</a>
+    <a href="{{ url_for('store_bp.admin_sms') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-sms"></i> Consulta SMS</a>
+    <button id="btnClearTriggerLogMenu" type="button" class="btn-panel btn-red mobile-menu-btn mb-04"><i class="fas fa-trash"></i> Limpiar Logs</button>
+    <a href="{{ url_for('auth_bp.logout') }}" class="btn-panel btn-red mobile-menu-btn mb-04"><i class="fas fa-sign-out-alt"></i> Cerrar Sesión</a>
+  </div>
+
+  <!-- MENÚ2 LATERAL MÓVIL -->
+  <div id="mobileMenu2" class="mobile-menu-store hidden">
+    <div class="menu-title-row">
+      <i class="fas fa-bars"></i>
+      <h3>Menú2</h3>
+    </div>
+    <a href="{{ url_for('store_bp.admin_store') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-store"></i> Licencias</a>
+    <a href="{{ url_for('store_bp.admin_productos') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-box"></i> Productos</a>
+    <a href="{{ url_for('store_bp.admin_productos') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-ticket-alt"></i> Cupones</a>
+    <a href="{{ url_for('store_bp.admin_tools') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-tools"></i> Herramientas Admin</a>
+    <a href="{{ url_for('store_bp.admin_work_sheets') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-table"></i> Hojas de Cálculo</a>
+    <a href="{{ url_for('store_bp.admin_configurations') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-cog"></i> Configuraciones</a>
+    <a href="{{ url_for('store_bp.admin_support') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-headset"></i> Chat Soporte</a>
+    <a href="{{ url_for('auth_bp.logout') }}" class="btn-panel btn-red mobile-menu-btn mb-04"><i class="fas fa-sign-out-alt"></i> Cerrar Sesión</a>
+  </div>
+
+  <!-- MENÚ3 LATERAL MÓVIL -->
+  <div id="mobileMenu3" class="mobile-menu-store hidden">
+    <div class="menu-title-row">
+      <i class="fas fa-bars"></i>
+      <h3>Menú3</h3>
+    </div>
+    <a href="{{ url_for('store_bp.store_front') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-store"></i> Tienda Pública</a>
+    <a href="{{ url_for('store_bp.tools_public') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-tools"></i> Herramientas Pública</a>
+    <a href="{{ url_for('store_bp.historial_compras_usuario') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-history"></i> Mi Historial de Compras</a>
+    <a href="{{ url_for('main_bp.home') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-code"></i> Códigos</a>
+    {% if user_has_codigos2_access() %}
+    <a href="{{ url_for('main_bp.home2') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-code"></i> Códigos 2</a>
+    {% endif %}
+    <a href="{{ url_for('auth_bp.logout') }}" class="btn-panel btn-red mobile-menu-btn mb-04"><i class="fas fa-sign-out-alt"></i> Cerrar Sesión</a>
+  </div>
+
+  <div class="admin-card">
+    <div class="d-flex justify-content-start align-items-center">
+      <div class="d-flex gap-05">
+        <button id="menuToggleBtn" class="btn-panel btn-blue ml-2 menu-toggle-btn">&#9776; Menú</button>
+        <button id="menu2ToggleBtn" class="btn-panel btn-blue menu-toggle-btn">&#9776; Menú2</button>
+        <button id="menu3ToggleBtn" class="btn-panel btn-blue menu-toggle-btn">&#9776; Menú3</button>
+      </div>
+    </div>
+    
+    <div class="d-flex justify-content-center align-items-center mb-1 gap-1">
+      <h3 class="m-0">Usuarios Principales</h3>
+    </div>
+
+    <!-- Búsqueda AJAX de usuarios (solo principales, no sub-usuarios) -->
+    <form 
+      id="userSearchForm"
+      class="d-flex gap-05"
+    >
+      <label for="userSearchInput" class="sr-only">Buscar usuario</label>
+      <input
+        type="search"
+        id="userSearchInput"
+        placeholder="Buscar usuario..."
+        class="flex-grow-1"
+        autocomplete="off"
+      >
+    </form>
+
+    <!-- Contenedor donde se pintan los usuarios con admin_users.js -->
+    <div id="userListContainer" class="usuarios-scroll-responsive"></div>
+
+    <hr>
+
+    <!-- Crear Nuevo Usuario Principal -->
+    <div class="mt-1">
+      <h4>Crear Usuario</h4>
+
+      <form id="createUserForm">
+        <!-- FILA 0: Nombre y Teléfono -->
+        <div class="d-flex flex-wrap gap-05 mb-1">
+          <label for="newUserFullName" class="sr-only">Nombre completo</label>
+          <input
+            type="text"
+            id="newUserFullName"
+            placeholder="Nombre completo"
+            class="flex-grow-1"
+            autocomplete="name"
+          >
+          <label for="newUserPhone" class="sr-only">Teléfono</label>
+          <input
+            type="tel"
+            id="newUserPhone"
+            placeholder="Teléfono (+57 xxx xxx xxxx)"
+            pattern="\+\d{1,3} ?\d{6,14}"
+            class="w-100 input-admin-phone"
+            autocomplete="tel"
+          >
+        </div>
+
+        <!-- FILA 0.5: Correo Electrónico -->
+        <div class="d-flex flex-wrap gap-05 mb-1">
+          <label for="newUserEmail" class="sr-only">Correo electrónico</label>
+          <input
+            type="email"
+            id="newUserEmail"
+            placeholder="Correo electrónico"
+            class="flex-grow-1"
+            autocomplete="email"
+          >
+        </div>
+
+        <!-- FILA 1: Usuario + Contraseña con ojito -->
+        <div class="d-flex flex-wrap gap-05 mb-1">
+          <label for="newUsername" class="sr-only">Usuario</label>
+          <input
+            type="text"
+            id="newUsername"
+            placeholder="Usuario"
+            class="flex-grow-1"
+            autocomplete="username"
+          >
+
+          <div class="password-input-wrapper">
+            <label for="newUserPassword" class="sr-only">Contraseña</label>
+            <input
+              type="password"
+              id="newUserPassword"
+              placeholder="Contraseña"
+              class="input-password-short"
+              autocomplete="new-password"
+            >
+            <span
+              id="toggleNewPass"
+              class="password-toggle-icon-create"
+            >
+              👁
+            </span>
+          </div>
+        </div>
+
+        <!-- FILA 2: Checkbox "Consultar Correos Sin Restricciones" + Color + Posición + Botón "Crear" -->
+        <div class="d-flex align-items-center flex-wrap gap-05 mb-1">
+          <label class="d-flex align-items-center gap-03 m-0">
+            <input
+              type="checkbox"
+              id="newUserCanSearchAny"
+              name="newUserCanSearchAny"
+            >
+            Consultar Correos Sin Restricciones
+          </label>
+
+          <!-- Color picker -->
+          <label class="d-inline-flex align-items-center gap-05 m-0">
+            Color:
+            <input
+              type="color"
+              id="newUserColor"
+              name="newUserColor"
+              value="#ffffff"
+              class="color-picker-small"
+            >
+          </label>
+
+          <label class="m-0 label-no-wrap">
+            Posición
+                    <input
+            type="number"
+            id="newUserPosition"
+            name="newUserPosition"
+            class="position-input-small"
+            autocomplete="off"
+          >
+          </label>
+
+          <button type="submit" class="btn-green" id="createUserBtn">Crear Usuario</button>
+        </div>
+      </form>
+    </div>
+
+  </div>
+</div>
+
+<!-- Sección de Eliminación Masiva de Correos -->
+<div class="container container-max-width-900 usuarios-page mt-2">
+  <div class="admin-card">
+    <h4 class="mb-1 text-center">🗑️ Sacar Masivamente Correos de los Usuarios</h4>
+
+    <form id="bulkDeleteEmailsForm">
+      <label for="bulkDeleteEmailsInput" class="sr-only">Correos a eliminar</label>
+      <textarea
+        id="bulkDeleteEmailsInput"
+        rows="4"
+        placeholder="Ingresa uno o varios correos (separados por comas, espacios o saltos de línea). Ejemplo: correo1@test.com, correo2@test.com..."
+        class="d-block mb-05 w-100"
+        autocomplete="off"
+      ></textarea>
+
+      <div class="d-flex gap-05 justify-content-center">
+        <button type="submit" id="bulkDeleteEmailsBtn" class="btn-red">Eliminar Correos de Todos los Usuarios</button>
+      </div>
+
+      <div id="bulkDeleteEmailsMessage" class="mt-05 text-center"></div>
+    </form>
+  </div>
+</div>
+
+
+<!-- POPUP Editar Usuario -->
+<div
+  id="editUserPopup"
+  class="popup-base popup-medium"
+>
+  <h4 class="mt-0">Editar Usuario</h4>
+  
+  <form id="editUserForm">
+    <input type="hidden" id="editUserId">
+
+    <label class="label-block" for="editUserFullName">Nombre:</label>
+    <input
+      type="text"
+      id="editUserFullName"
+      name="editUserFullName"
+      class="d-block mb-05 w-100"
+      autocomplete="name"
+    >
+
+    <label class="label-block" for="editUserPhone">Teléfono:</label>
+    <input
+      type="tel"
+      id="editUserPhone"
+      name="phone"
+      placeholder="+57 xxx xxx xxxx"
+      pattern="\+\d{1,3} ?\d{6,14}"
+      class="d-block mb-05 w-100 input-admin-phone"
+      autocomplete="tel"
+    >
+
+    <label class="label-block" for="editUserEmail">Correo Electrónico:</label>
+    <input
+      type="email"
+      id="editUserEmail"
+      name="editUserEmail"
+      class="d-block mb-05 w-100"
+      autocomplete="email"
+    >
+
+    <label class="label-block" for="editUserUsername">Usuario:</label>
+    <input
+      type="text"
+      id="editUserUsername"
+      name="editUserUsername"
+      class="d-block mb-05 w-100"
+      autocomplete="username"
+    >
+
+    <label class="label-block" for="editUserPassword">Nueva Contraseña:</label>
+    <div class="mb-05 password-input-wrapper">
+      <input
+        type="password"
+        id="editUserPassword"
+        name="editUserPassword"
+        placeholder="(vacío = no cambiar)"
+        class="input-password-short"
+        autocomplete="new-password"
+      >
+      <span
+        id="toggleEditPass"
+        class="password-toggle-icon-edit"
+      >
+        👁
+      </span>
+    </div>
+
+    <label for="editUserColor">Color:</label>
+    <input
+      type="color"
+      id="editUserColor"
+      name="editUserColor"
+      value="#ffffff"
+      class="popup-color-input mb-05 color-picker-small"
+    >
+
+    <label for="editUserPosition">Posición:</label>
+    <input
+      type="number"
+      id="editUserPosition"
+      name="position"
+      placeholder="Posición"
+      class="mb-05 position-input-small"
+      autocomplete="off"
+    >
+
+    <div class="mb-05">
+      <input type="checkbox" id="editUserCanSearchAny" name="editUserCanSearchAny">
+      <label for="editUserCanSearchAny">Consultar Correos Sin Restricciones</label>
+    </div>
+
+    <!-- Checkbox para "Puede crear sub-usuarios" -->
+    <div class="mb-05">
+      <input type="checkbox" id="editUserCanCreateSubusers" name="editUserCanCreateSubusers">
+      <label for="editUserCanCreateSubusers">Puede crear sub-usuarios</label>
+    </div>
+
+    <!-- Checkbox para "Puede agregar sus propios correos" -->
+    <div class="mb-05">
+      <input type="checkbox" id="editUserCanAddOwnEmails" name="editUserCanAddOwnEmails">
+      <label for="editUserCanAddOwnEmails">Puede agregar sus propios correos</label>
+    </div>
+
+    <!-- Checkbox para "Puede borrar correos masivamente" -->
+    <div class="mb-05">
+      <input type="checkbox" id="editUserCanBulkDeleteEmails" name="editUserCanBulkDeleteEmails">
+      <label for="editUserCanBulkDeleteEmails">Puede borrar correos masivamente</label>
+    </div>
+
+    <!-- Checkbox para "Puede gestionar 2FA por correo" -->
+    <div class="mb-05">
+      <input type="checkbox" id="editUserCanManage2FAEmails" name="editUserCanManage2FAEmails">
+      <label for="editUserCanManage2FAEmails">Puede gestionar 2FA por correo</label>
+    </div>
+
+    <button type="submit" id="editUserSaveBtn" class="btn-green mr-05">Guardar</button>
+    <button type="button" id="editUserCancelBtn" class="btn-red">Cancelar</button>
+  </form>
+</div>
+
+<!-- Overlay para cerrar el popup al hacer clic fuera -->
+<div id="editUserOverlay" class="popup-overlay popup-overlay-hidden"></div>
+
+<script src="{{ url_for('static', filename='js/admin_users.js') }}"></script>
+<script src="{{ url_for('static', filename='js/menu_busqueda.js') }}" defer></script>
+<script src="{{ url_for('static', filename='js/clear_trigger_logs.js') }}" defer></script>
+{% endblock %}

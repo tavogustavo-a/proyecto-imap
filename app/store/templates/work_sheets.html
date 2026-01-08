@@ -1,0 +1,310 @@
+{% extends "base.html" %}
+
+{% block title %}Hojas de Cálculo{% endblock %}
+
+{% block head %}
+  {{ super() }}
+  <meta name="admin_user" content="{{ ADMIN_USER }}">
+  <meta name="current_user" content="{{ current_user.username if current_user else '' }}">
+  <meta name="is_logged_in" content="{{ 'true' if session.get('logged_in') else 'false' }}">
+  <meta name="is_admin" content="{{ 'true' if is_admin else 'false' }}">
+  <link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='fontawesome/css/all.css') }}">
+  <meta name="has_worksheet_access" content="{{ 'true' if current_user and user_has_worksheet_access(current_user) else 'false' }}">
+  <meta name="clear_trigger_log_url" content="{{ url_for('admin_bp.clear_trigger_log') }}">
+{% endblock %}
+{% block content %}
+<div class="container container-max-width-900 store-light worksheet-panel admin-licencias-page">
+  <div class="d-flex align-items-center justify-content-between mb-1 p-05-12">
+    <div class="d-flex gap-05 admin-store-menus">
+      {% if is_admin %}
+        <!-- Botones de menú para administradores -->
+        <button id="menu1ToggleBtn" class="btn-blue menu-btn-worksheet"><i class="fas fa-table"></i></button>
+        <button id="menu2ToggleBtn" class="btn-blue menu-btn-worksheet">&#9776; Menú</button>
+        <button id="menu3ToggleBtn" class="btn-blue menu-btn-worksheet">&#9776; Menú2</button>
+        <button id="menu4ToggleBtn" class="btn-blue menu-btn-worksheet">&#9776; Menú3</button>
+      {% else %}
+        <!-- Botón de menú para usuarios normales -->
+        <button id="menu1ToggleBtn" class="btn-blue menu-btn-worksheet"><i class="fas fa-table"></i></button>
+        <button id="menu2ToggleBtn" class="btn-blue menu-btn-worksheet">&#9776; Menú</button>
+      {% endif %}
+    </div>
+  </div>
+      <!-- Menú1 para admin (menú original de hojas de cálculo) -->
+      {% if is_admin %}
+      <div id="mobileMenu" class="mobile-menu-store hidden">
+        <div class="menu-title-row">
+          <i class="fas fa-bars"></i>
+          <h3>Hojas de Cálculo</h3>
+        </div>
+        <div class="menu-search-row px-2 py-2">
+          <div class="input-group">
+            <label for="menuSearchInput" class="sr-only">Buscar en menú</label>
+            <input type="search" class="form-control text-center" placeholder="Buscar..." id="menuSearchInput" name="menuSearchInput" autocomplete="off">
+          </div>
+        </div>
+        <div id="plantillasMenuList" class="mt-2 px-2"></div>
+      </div>
+      {% else %}
+      <div id="mobileMenu" class="mobile-menu-store hidden">
+        <div class="menu-title-row">
+          <i class="fas fa-bars"></i>
+          <h3>Hojas de Cálculo</h3>
+        </div>
+        <div class="menu-search-row px-2 py-2">
+          <div class="input-group">
+            <label for="menuSearchInput" class="sr-only">Buscar en menú</label>
+            <input type="text" class="form-control text-center" placeholder="Buscar..." id="menuSearchInput" name="menuSearchInput" autocomplete="off">
+          </div>
+        </div>
+        <div id="plantillasMenuList" class="mt-2 px-2"></div>
+      </div>
+      {% endif %}
+    
+    <!-- Menú2 para usuarios normales -->
+    {% if current_user and not is_admin %}
+    <div id="mobileMenu2" class="mobile-menu-store hidden">
+      <div class="menu-title-row">
+        <i class="fas fa-bars"></i>
+        <h3>Menú</h3>
+      </div>
+      {% set current_user_id = session.get("user_id") %}
+      {% if current_user_id %}
+        {% set user_object = User.query.get(current_user_id) %}
+        {% set show_store = False %}
+        {% if is_admin %}
+          {% set show_store = True %}
+        {% elif user_object.parent_id %}
+          {% if user_object.can_access_store %}
+            {% set parent = User.query.get(user_object.parent_id) %}
+            {% if parent and parent.user_prices and parent.user_prices.get('tipo_precio') in ['USD', 'COP'] %}
+              {% set show_store = True %}
+            {% endif %}
+          {% endif %}
+        {% elif user_object.user_prices and user_object.user_prices.get('tipo_precio') in ['USD', 'COP'] %}
+          {% set show_store = True %}
+        {% endif %}
+        {% if show_store %}
+          <a href="{{ url_for('store_bp.store_front') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-store"></i> Tienda</a>
+          <a href="{{ url_for('store_bp.historial_compras_usuario') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-receipt"></i> Mi Historial de Compras</a>
+        {% endif %}
+      {% endif %}
+      {% if user_object and user_object.has_public_tools_access() %}
+        <a href="{{ url_for('store_bp.tools_public') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-tools"></i> Herramientas</a>
+      {% endif %}
+      <a href="{{ url_for('main_bp.home') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-code"></i> Códigos</a>
+      {% if user_has_codigos2_access() %}
+      <a href="{{ url_for('main_bp.home2') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-code"></i> Códigos 2</a>
+      {% endif %}
+      {% if user_object %}
+        {% if is_admin %}
+          <a href="{{ url_for('user_auth_bp.estadisticas') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-chart-bar"></i> Estadísticas</a>
+        {% elif not user_object.parent_id and user_object.user_prices and user_object.user_prices.get('tipo_precio') in ['USD', 'COP'] %}
+          <a href="{{ url_for('user_auth_bp.estadisticas') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-chart-bar"></i> Estadísticas</a>
+        {% elif user_object.parent_id and user_object.can_access_store %}
+        <a href="{{ url_for('user_auth_bp.estadisticas') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-chart-bar"></i> Estadísticas</a>
+        {% endif %}
+      {% endif %}
+      {% if is_user and current_user %}
+        {% if current_user.is_support %}
+          <a href="{{ url_for('store_bp.support_dashboard') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-headset"></i> Chat de Soporte Admin</a>
+        {% elif current_user.can_chat %}
+          <a href="{{ url_for('store_bp.user_chat_soporte') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-headset"></i> Chat de Soporte</a>
+        {% endif %}
+      {% endif %}
+      {% if is_user and not current_user.parent_id and user_has_worksheet_access(current_user) %}
+        <a href="{{ url_for('store_bp.user_work_sheets') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-table"></i> Hojas de Cálculo</a>
+      {% endif %}
+      {% if is_user and user_object and user_object.can_create_subusers %}
+        <a href="{{ url_for('subuser_bp.manage_subusers') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-users"></i> Sub-usuarios</a>
+      {% endif %}
+      {% if is_admin %}
+        <a href="{{ url_for('auth_bp.logout') }}" class="btn-panel btn-red mobile-menu-btn mb-04"><i class="fas fa-sign-out-alt"></i> Cerrar Sesión</a>
+      {% elif is_user %}
+        <a href="{{ url_for('auth_bp.logout') }}" class="btn-panel btn-red mobile-menu-btn mb-04"><i class="fas fa-sign-out-alt"></i> Cerrar Sesión</a>
+      {% else %}
+        <a href="{{ url_for('auth_bp.logout') }}" class="btn-panel btn-red mobile-menu-btn mb-04"><i class="fas fa-sign-out-alt"></i> Cerrar Sesión</a>
+      {% endif %}
+    </div>
+    {% endif %}
+    
+    <!-- Menús para administradores -->
+    {% if is_admin %}
+    <!-- Modal Menú2 para administradores (Administración) -->
+    <div id="mobileMenu2" class="mobile-menu-store hidden">
+      <div class="menu-title-row">
+        <i class="fas fa-bars"></i>
+        <h3>Administración</h3>
+      </div>
+      <a href="{{ url_for('admin_bp.dashboard') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-cogs"></i> Administración</a>
+      <a href="{{ url_for('admin_bp.parrafos_page') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-paragraph"></i> Párrafos</a>
+      <a href="{{ url_for('admin_bp.filters_page') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-filter"></i> Filtros</a>
+      <a href="{{ url_for('admin_bp.regex_page') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-random"></i> Regex</a>
+      <a href="{{ url_for('admin_bp.services_page') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-cogs"></i> Servicios</a>
+      <a href="{{ url_for('admin_bp.usuarios_page') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-users"></i> Usuarios</a>
+      <a href="{{ url_for('admin_bp.security_rules_page') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-shield-alt"></i> Reglas de Seguridad</a>
+      <a href="{{ url_for('admin_bp.view_trigger_logs_page') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-clipboard-list"></i> Consultar logs</a>
+      <a href="{{ url_for('store_bp.admin_sms') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-sms"></i> Consulta SMS</a>
+      <a href="{{ url_for('admin_bp.manage_permissions_page') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-key"></i> Gestión de Permisos</a>
+      <button id="btnClearTriggerLogMenu" type="button" class="btn-panel btn-red mobile-menu-btn mb-04"><i class="fas fa-trash"></i> Limpiar Logs</button>
+      <a href="{{ url_for('auth_bp.logout') }}" class="btn-panel btn-red mobile-menu-btn mb-04"><i class="fas fa-sign-out-alt"></i> Cerrar Sesión</a>
+    </div>
+
+    <!-- Modal Menú3 para administradores (Licencias) -->
+    <div id="mobileMenu3" class="mobile-menu-store hidden">
+      <div class="menu-title-row">
+        <i class="fas fa-bars"></i>
+        <h3>Licencias</h3>
+      </div>
+      <a href="{{ url_for('store_bp.admin_store') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-store"></i> Licencias</a>
+      <a href="{{ url_for('store_bp.admin_productos') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-box"></i> Productos</a>
+      <a href="{{ url_for('store_bp.admin_productos') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-ticket-alt"></i> Cupones</a>
+      <a href="{{ url_for('store_bp.admin_tools') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-tools"></i> Herramientas Admin</a>
+      <a href="{{ url_for('store_bp.admin_work_sheets') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-table"></i> Hojas de Cálculo</a>
+      <a href="{{ url_for('store_bp.admin_configurations') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-cog"></i> Configuraciones</a>
+      <a href="{{ url_for('store_bp.admin_support') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-headset"></i> Chat Soporte</a>
+      <a href="{{ url_for('auth_bp.logout') }}" class="btn-panel btn-red mobile-menu-btn mb-04"><i class="fas fa-sign-out-alt"></i> Cerrar Sesión</a>
+    </div>
+
+    <!-- Modal Menú4 para administradores (Parte Pública) -->
+    <div id="mobileMenu4" class="mobile-menu-store hidden">
+      <div class="menu-title-row">
+        <i class="fas fa-bars"></i>
+        <h3>Parte Pública</h3>
+      </div>
+      <a href="{{ url_for('store_bp.store_front') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-store"></i> Tienda Pública</a>
+      <a href="{{ url_for('store_bp.tools_public') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-tools"></i> Herramientas Pública</a>
+      <a href="{{ url_for('store_bp.historial_compras_usuario') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-receipt"></i> Mi Historial de Compras</a>
+      <a href="{{ url_for('main_bp.home') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-code"></i> Códigos</a>
+      {% if user_has_codigos2_access() %}
+      <a href="{{ url_for('main_bp.home2') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-code"></i> Códigos 2</a>
+      {% endif %}
+      <a href="{{ url_for('auth_bp.logout') }}" class="btn-panel btn-red mobile-menu-btn mb-04"><i class="fas fa-sign-out-alt"></i> Cerrar Sesión</a>
+    </div>
+    {% endif %}
+    
+    <div id="menuOverlay" class="menu-overlay"></div>
+  <div class="d-flex justify-content-center mb-3 gap-2">
+    <button id="btnCrearPlantilla" class="btn-blue menu-btn-worksheet">
+      <i class="fas fa-plus"></i> Crear plantilla hojas de cálculo
+    </button>
+    <button id="btnHojasCreadas" class="btn-blue menu-btn-worksheet">
+      <i class="fas fa-bolt"></i> Hojas creadas
+    </button>
+  </div>
+  <div class="d-flex flex-column align-items-center justify-content-center mb-4 w-100">
+    <div class="d-flex flex-wrap align-items-center worksheet-search-container worksheet-search-centered">
+      <div class="search-container search-container-relative">
+        <label for="mainSearchInput" class="sr-only">Buscar hojas de cálculo</label>
+        <input type="text" class="form-control" placeholder="Buscar..." id="mainSearchInput" name="mainSearchInput" autocomplete="off">
+        <button type="button" class="search-clear-btn hidden" id="clearMainSearch"><i class="fas fa-times"></i></button>
+      </div>
+    </div>
+  </div>
+  <div id="worksheetTableContainer" class="mt-4"></div>
+</div>
+
+<!-- Modal para crear plantilla de hojas de cálculo -->
+<div id="modalCrearPlantilla" class="modal-overlay d-none">
+  <div class="modal-content worksheet-modal">
+    <div class="modal-header">
+      <h3 class="modal-title">Crear plantilla hojas de cálculo</h3>
+      <button id="closeModalCrearPlantilla" class="btn-close">&times;</button>
+    </div>
+    <div class="modal-body">
+
+      <div class="mb-3">
+        <label for="tituloPlantillaInput" class="sr-only">Título de la plantilla</label>
+        <input type="text" class="form-control" id="tituloPlantillaInput" name="tituloPlantillaInput" placeholder="Título de la plantilla..." autocomplete="off">
+      </div>
+      <div class="worksheet-fields-grid">
+        <button class="worksheet-field-btn" data-field="correo">
+          <i class="fas fa-envelope"></i>
+          <span>Correo</span>
+        </button>
+        <button class="worksheet-field-btn" data-field="contraseña">
+          <i class="fas fa-key"></i>
+          <span>Contraseña</span>
+        </button>
+        <button class="worksheet-field-btn" data-field="links">
+          <i class="fas fa-link"></i>
+          <span>Links</span>
+        </button>
+        <button class="worksheet-field-btn" data-field="letras">
+          <i class="fas fa-font"></i>
+          <span>Letras</span>
+        </button>
+        <button class="worksheet-field-btn" data-field="informacion-adicional">
+          <i class="fas fa-info-circle"></i>
+          <span>Información adicional</span>
+        </button>
+        <button class="worksheet-field-btn" data-field="numero">
+          <i class="fas fa-hashtag"></i>
+          <span>Número</span>
+        </button>
+        <button class="worksheet-field-btn" data-field="otro-campo">
+          <i class="fas fa-ellipsis-h"></i>
+          <span>Otro campo</span>
+        </button>
+      </div>
+      <div class="selected-fields-container mt-3">
+        <h5>Campos seleccionados:</h5>
+        <div id="selectedFieldsList" class="selected-fields-list">
+          <p class="text-muted">Ningún campo seleccionado</p>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button id="btnGenerarPlantilla" class="btn-panel btn-green" disabled>
+        <i class="fas fa-file-excel"></i> Generar plantilla
+      </button>
+      <button id="btnCancelarPlantilla" class="btn-panel btn-red">
+        Cancelar
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal para plantillas rápidas -->
+<div id="modalHojasCreadas" class="modal-overlay d-none">
+  <div class="modal-content worksheet-modal">
+    <div class="modal-header">
+      <h3 class="modal-title">Crear plantilla rápida</h3>
+      <button id="closeModalHojasCreadas" class="btn-close">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div class="mb-3">
+        <label for="tituloPlantillaRapidaInput" class="sr-only">Título de la plantilla rápida</label>
+        <input type="text" class="form-control" id="tituloPlantillaRapidaInput" name="tituloPlantillaRapidaInput" placeholder="Título de la plantilla..." autocomplete="off">
+      </div>
+      <div class="mb-3">
+        <label for="comboPlantillaRapida" class="form-label">Selecciona una combinación:</label>
+        <select id="comboPlantillaRapida" class="form-select" autocomplete="off">
+          <option value="correo:contraseña:correo:contraseña:numero">correo:contraseña:correo:contraseña:numero</option>
+          <option value="correo:contraseña:letras:correo:contraseña:numero">correo:contraseña:letras:correo:contraseña:numero</option>
+          <option value="correo:contraseña:links:correo:contraseña:numero">correo:contraseña:links:correo:contraseña:numero</option>
+          <option value="correo:contraseña:correo:contraseña:numero:correo:contraseña:correo:contraseña:numero">correo:contraseña:correo:contraseña:numero:correo:contraseña:correo:contraseña:numero</option>
+          <option value="correo:contraseña:links:correo:contraseña:numero:correo:contraseña:links:correo:contraseña:numero">correo:contraseña:links:correo:contraseña:numero:correo:contraseña:links:correo:contraseña:numero</option>
+        </select>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button id="btnCrearPlantillaRapida" class="btn-panel btn-blue">
+        <i class="fas fa-bolt"></i> Crear plantilla rápida
+      </button>
+      <button id="btnCancelarPlantillaRapida" class="btn-panel btn-red">
+        Cancelar
+      </button>
+    </div>
+  </div>
+</div>
+
+
+{% endblock %}
+
+{% block scripts %}
+  {{ super() }}
+  <script src="{{ url_for('store_bp.static', filename='js/admin_work_sheets.js') }}" defer></script>
+  <script src="{{ url_for('store_bp.static', filename='js/menu_tienda.js') }}" defer></script>
+  <script src="{{ url_for('static', filename='js/clear_trigger_logs.js') }}" defer></script>
+{% endblock %} 

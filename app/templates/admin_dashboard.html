@@ -1,0 +1,576 @@
+<!-- app/templates/admin_dashboard.html -->
+{% extends "base.html" %}
+
+{% block title %}Administración{% endblock %}
+
+{% block head %}
+<meta name="csrf_token" content="{{ csrf_token() }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/store.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='fontawesome/css/all.css') }}">
+{% endblock head %}
+{% block content %}
+
+<div class="container container-max-width-900" 
+     data-clear-trigger-log-url="{{ url_for('admin_bp.clear_trigger_log') }}"
+     data-logout-all-users-url="{{ url_for('admin_bp.logout_all_users') }}">
+
+  <!-- MENÚ LATERAL MÓVIL -->
+  <div id="mobileMenu" class="mobile-menu-store hidden">
+    <div class="menu-title-row">
+      <i class="fas fa-bars"></i>
+      <h3>Menú</h3>
+    </div>
+    <a href="{{ url_for('admin_bp.dashboard') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-cogs"></i> Administración</a>
+    <a href="{{ url_for('admin_bp.parrafos_page') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-paragraph"></i> Párrafos</a>
+    <a href="{{ url_for('admin_bp.filters_page') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-filter"></i> Filtros</a>
+    <a href="{{ url_for('admin_bp.regex_page') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-random"></i> Regex</a>
+    <a href="{{ url_for('admin_bp.services_page') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-cogs"></i> Servicios</a>
+    <a href="{{ url_for('admin_bp.usuarios_page') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-users"></i> Usuarios</a>
+    <a href="{{ url_for('admin_bp.security_rules_page') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-shield-alt"></i> Reglas de Seguridad</a>
+    <a href="{{ url_for('admin_bp.view_trigger_logs_page') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-clipboard-list"></i> Consultar logs</a>
+    <a href="{{ url_for('store_bp.admin_sms') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-sms"></i> Consulta SMS</a>
+    <a href="{{ url_for('admin_bp.manage_permissions_page') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-key"></i> Gestión de Permisos</a>
+    <button id="btnClearTriggerLogMenu" type="button" class="btn-panel btn-red mobile-menu-btn mb-04"><i class="fas fa-trash"></i> Limpiar Logs</button>
+    <a href="{{ url_for('auth_bp.logout') }}" class="btn-panel btn-red mobile-menu-btn mb-04"><i class="fas fa-sign-out-alt"></i> Cerrar Sesión</a>
+    <button id="btnLogoutAllUsers" type="button" class="btn-panel btn-red mobile-menu-btn mb-04"><i class="fas fa-users-slash"></i> Cerrar sesión de todos</button>
+  </div>
+
+  <!-- MENÚ2 LATERAL MÓVIL -->
+  <div id="mobileMenu2" class="mobile-menu-store hidden">
+    <div class="menu-title-row">
+      <i class="fas fa-bars"></i>
+      <h3>Menú2</h3>
+    </div>
+    <a href="{{ url_for('store_bp.admin_store') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-store"></i> Licencias</a>
+    <a href="{{ url_for('store_bp.admin_productos') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-box"></i> Productos</a>
+    <a href="{{ url_for('store_bp.admin_productos') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-ticket-alt"></i> Cupones</a>
+    <a href="{{ url_for('store_bp.admin_tools') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-tools"></i> Herramientas Admin</a>
+    <a href="{{ url_for('store_bp.admin_work_sheets') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-table"></i> Hojas de Cálculo</a>
+    <a href="{{ url_for('store_bp.admin_configurations') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-cog"></i> Configuraciones</a>
+          <a href="{{ url_for('store_bp.admin_support') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-headset"></i> Chat Soporte</a>
+    <a href="{{ url_for('auth_bp.logout') }}" class="btn-panel btn-red mobile-menu-btn mb-04"><i class="fas fa-sign-out-alt"></i> Cerrar Sesión</a>
+  </div>
+
+  <!-- MENÚ3 LATERAL MÓVIL -->
+  <div id="mobileMenu3" class="mobile-menu-store hidden">
+    <div class="menu-title-row">
+      <i class="fas fa-bars"></i>
+      <h3>Menú3</h3>
+    </div>
+    <a href="{{ url_for('store_bp.store_front') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-store"></i> Tienda Pública</a>
+    <a href="{{ url_for('store_bp.tools_public') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-tools"></i> Herramientas Pública</a>
+    <a href="{{ url_for('store_bp.historial_compras_usuario') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-history"></i> Mi Historial de Compras</a>
+    <a href="{{ url_for('main_bp.home') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-code"></i> Códigos</a>
+    <a href="{{ url_for('main_bp.home2') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-code"></i> Códigos 2</a>
+    <a href="{{ url_for('auth_bp.logout') }}" class="btn-panel btn-red mobile-menu-btn mb-04"><i class="fas fa-sign-out-alt"></i> Cerrar Sesión</a>
+  </div>
+
+  <div class="admin-card">
+    <div class="d-flex justify-content-between align-items-center mb-1">
+      <div class="d-flex gap-05">
+        <button id="menuToggleBtn" class="btn-panel btn-blue ml-2 menu-toggle-btn">&#9776; Menú</button>
+        <button id="menu2ToggleBtn" class="btn-panel btn-blue menu-toggle-btn">&#9776; Menú2</button>
+        <button id="menu3ToggleBtn" class="btn-panel btn-blue menu-toggle-btn">&#9776; Menú3</button>
+      </div>
+    </div>
+
+    <div class="d-flex align-items-center gap-1 flex-wrap mb-1 justify-content-center">
+      <form action="{{ url_for('admin_bp.set_opacity') }}"
+            method="POST"
+            class="d-flex gap-05 align-items-center m-0">
+        <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+        <label for="card_opacity" class="sr-only">Opacidad de tarjetas:</label>
+        <input
+          id="card_opacity"
+          type="range"
+          name="card_opacity"
+          min="0"
+          max="1"
+          step="0.1"
+          value="{{ site_settings.get('card_opacity','0.8') }}"
+          class="vertical-align-middle"
+          autocomplete="off"
+        >
+        <button type="submit" class="btn-blue">Aplicar</button>
+      </form>
+      <form action="{{ url_for('admin_bp.change_theme') }}"
+            method="POST"
+            class="d-flex gap-05 align-items-center m-0">
+        <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+        <label for="theme" class="sr-only">Seleccionar tema:</label>
+        <select name="theme" id="theme" class="admin-select select-auto" autocomplete="off">
+          <option value="tema1">Tema 1</option>
+          <option value="tema2">Tema 2</option>
+          <option value="tema3">Tema 3</option>
+        </select>
+        <button type="submit" class="btn-blue">Cambiar</button>
+      </form>
+    </div>
+
+    <hr class="admin-hr">
+
+    {% set admin_user = admin_user if admin_user else None %}
+    {% if admin_user %}
+      <div class="twofa-info-box">
+        {% if not admin_user.twofa_enabled and not admin_user.pending_2fa_method %}
+          <form action="{{ url_for('admin_bp.enable_2fa') }}" method="POST" class="d-flex align-items-center gap-1 justify-content-center mx-auto admin-form-container">
+            <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+            <label for="twofa_method" class="sr-only">Método de autenticación:</label>
+            <select name="method" id="twofa_method" class="admin-select admin-form-container-wide" autocomplete="off">
+              <option value="TOTP">TOTP (Google Authenticator)</option>
+              <option value="EMAIL">OTP por Correo</option>
+            </select>
+            <button type="submit" class="btn-green admin-btn">Activar 2FA</button>
+          </form>
+
+        {% elif admin_user.pending_2fa_method == 'TOTP' %}
+          <div class="admin-info-box">
+            <p class="admin-info-text">2FA TOTP pendiente. Escanea el código y luego confirma tu TOTP.</p>
+          <div class="mb-05">
+            <img
+              src="{{ url_for('admin_bp.qr_code') }}"
+              alt="Código QR"
+              class="qr-code-image"
+            >
+            </div>
+          </div>
+          <form action="{{ url_for('admin_bp.confirm_2fa') }}" method="POST" class="d-inline">
+            <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+            <label for="totp_code" class="sr-only">Código TOTP:</label>
+            <input type="text" id="totp_code" name="code" placeholder="Ingresa el código TOTP" required autocomplete="one-time-code">
+            <button type="submit" class="btn-green admin-btn-small">Confirmar</button>
+          </form>
+          <form action="{{ url_for('admin_bp.cancel_pending_2fa') }}" method="POST" class="d-inline ml-05">
+            <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+            <button type="submit" class="btn-red admin-btn-small">Cancelar</button>
+          </form>
+
+        {% elif admin_user.pending_2fa_method == 'EMAIL' %}
+          <p>2FA por correo pendiente. Se envió un código OTP a tu email.</p>
+          <form action="{{ url_for('admin_bp.confirm_2fa') }}" method="POST" class="d-inline">
+            <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+            <label for="email_otp_code" class="sr-only">Código OTP:</label>
+            <input type="text" id="email_otp_code" name="code" placeholder="Ingresa el código OTP" required autocomplete="one-time-code">
+            <button type="submit" class="btn-green admin-btn-small">Confirmar</button>
+          </form>
+          <form action="{{ url_for('admin_bp.cancel_pending_2fa') }}" method="POST" class="d-inline ml-05">
+            <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+            <button type="submit" class="btn-red admin-btn-small">Cancelar</button>
+          </form>
+
+          <form action="{{ url_for('admin_bp.resend_activation_email_otp') }}" method="POST" class="d-inline ml-05">
+            <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+            <button type="submit" class="btn-blue admin-btn-small">Reenviar OTP Email</button>
+          </form>
+
+        {% else %}
+          <p>2FA está <strong>activo</strong> (método: {{ admin_user.twofa_method }}).</p>
+          <div class="twofa-button-group d-flex gap-05 align-items-center">
+            <a
+              href="{{ url_for('admin_bp.start_change_admin') }}"
+              class="link-button link-button-change-creds"
+            >
+              Cambiar Credenciales (Admin)
+            </a>
+            <a
+              href="{{ url_for('admin_bp.disable_2fa') }}"
+              class="link-button link-button-disable-2fa"
+            >
+              Desactivar 2FA
+            </a>
+          </div>
+          {% if admin_user.twofa_method == "EMAIL" and not admin_user.email_verified %}
+            <p class="mt-05">(Necesitas verificar tu email para OTP correctamente.)</p>
+          {% endif %}
+        {% endif %}
+
+        {% if admin_user.email and admin_user.email_verified %}
+          <p class="mt-1 info-text-small">
+            Correo actual (recuperación/OTP): <strong>{{ admin_user.email }}</strong>
+            <br>
+            Para modificarlo, usa la sección de <em>Cambiar Credenciales</em>.
+          </p>
+        {% else %}
+          <div class="mt-1">
+            <p class="admin-center-text">Configura tu correo de recuperación/OTP:</p>
+            <form action="{{ url_for('admin_bp.set_admin_email') }}" method="POST" class="d-flex gap-05 justify-content-center mx-auto admin-form-container">
+              <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+              <label for="new_email" class="sr-only">Correo Admin (Recuperación u OTP)</label>
+              <input
+                id="new_email"
+                type="email"
+                name="new_email"
+                placeholder="Correo Admin (Recuperación u OTP)"
+                class="flex-grow-1 admin-email-input"
+                required
+                autocomplete="email"
+              >
+              <button type="submit" class="btn-blue">Guardar Correo</button>
+            </form>
+          </div>
+        {% endif %}
+      </div>
+    {% else %}
+      <p>No se encontró usuario administrador.</p>
+    {% endif %}
+
+    <!-- Sección independiente para Tienda -->
+    <div class="mt-1 mb-1 d-flex gap-05 align-items-center">
+    </div>
+  </div>
+
+  <div class="admin-card mt-1">
+    <h3>Servidores IMAP</h3>
+    <form id="imapSearchForm" class="d-flex gap-05 mb-1">
+      <label for="imapSearchInput" class="sr-only">Buscar servidores IMAP:</label>
+      <input
+        type="search"
+        id="imapSearchInput"
+        placeholder="Buscar host o usuario..."
+        class="flex-grow-1"
+        autocomplete="off"
+      >
+    </form>
+
+    <div id="imapList">
+      {% for s in servers %}
+        <div class="imap-item mb-1">
+          <strong>Usuario: {{ s.username }}</strong><br>
+          <em>Carpetas:</em> {{ s.folders }}
+          <div class="mt-05">
+            <form action="{{ url_for('admin_bp.test_imap', server_id=s.id) }}"
+                  method="POST"
+                  class="d-inline">
+              <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+              <button type="submit" class="btn-blue btn-imap-action btn-imap-small">Probar</button>
+            </form>
+            {% if s.enabled %}
+              <button
+                class="btn-red toggle-imap-btn ml-03 btn-imap-action btn-imap-small"
+                data-id="{{ s.id }}"
+                data-enabled="true"
+              >
+                Off
+              </button>
+            {% else %}
+              <button
+                class="btn-green toggle-imap-btn ml-03 btn-imap-action btn-imap-small"
+                data-id="{{ s.id }}"
+                data-enabled="false"
+              >
+                On
+              </button>
+            {% endif %}
+            <button
+              id="btnEditImap-{{ s.id }}"
+              type="button"
+              class="btn-orange ml-03 edit-imap-btn btn-imap-action btn-imap-small"
+              data-url="{{ url_for('admin_bp.edit_imap', server_id=s.id) }}"
+            >
+              Editar
+            </button>
+            <button
+              class="btn-red delete-imap-btn ml-03 btn-imap-action btn-imap-small"
+              data-id="{{ s.id }}"
+              title="Eliminar"
+            >
+              <i class="fas fa-trash"></i>
+            </button>
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+
+    <div class="mt-1">
+    <form action="{{ url_for('admin_bp.manage_imap') }}" method="POST">
+      <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+      <h4>Crear Nuevo Servidor IMAP</h4>
+      <label for="imap_host" class="sr-only">Host</label>
+      <input
+        id="imap_host"
+        type="text"
+        name="host"
+        placeholder="Host"
+        required
+        class="d-block mb-05"
+        autocomplete="off"
+      >
+      <label for="imap_port" class="sr-only">Puerto</label>
+      <input
+        id="imap_port"
+        type="number"
+        name="port"
+        placeholder="993"
+        value="993"
+        class="d-block mb-05"
+        autocomplete="off"
+      >
+      <label for="imap_username" class="sr-only">Usuario</label>
+      <input
+        id="imap_username"
+        type="text"
+        name="username"
+        placeholder="Usuario"
+        required
+        class="d-block mb-05"
+        autocomplete="username"
+      >
+      <label for="imap_password" class="sr-only">Password</label>
+      <input
+        id="imap_password"
+        type="password"
+        name="password"
+        placeholder="Password"
+        class="d-block mb-05"
+        autocomplete="current-password"
+      >
+      <label for="imap_folders">Carpetas (separadas por comas):</label>
+      <input
+        id="imap_folders"
+        type="text"
+        name="folders"
+        placeholder="INBOX,Carpeta2"
+        value="INBOX"
+        class="d-block mb-05"
+        autocomplete="off"
+      >
+      <button type="submit" class="btn-green">Crear</button>
+    </form>
+    </div>
+
+  <hr class="mt-1 mb-1">
+
+  <!-- Buzón de Mensajes y Conexiones (movido dentro de Servidores IMAP) -->
+  <div class="mt-1 text-center">
+    <h4 class="mt-1-5 mb-05 text-dark">Buzón de Mensajes y Conexiones</h4>
+    
+    <div class="d-flex gap-1 align-items-center justify-content-center">
+      <a href="{{ url_for('admin_email_buzon.manage_email_buzon') }}" class="btn-blue text-decoration-none">
+        <i class="fas fa-envelope"></i> Gestionar Buzón
+      </a>
+      <button type="button" id="toggleImapManagementBtn" class="btn-green" data-enabled="false">
+        <i class="fas fa-power-off"></i> OFF
+      </button>
+    </div>
+  </div>
+
+</div> <!-- Cierre del admin-card de Servidores IMAP -->
+
+<div class="admin-card mt-1">
+  <h3>Servidores IMAP Segunda Página</h3>
+  <form id="imap2SearchForm" class="d-flex gap-05 mb-1">
+    <label for="imap2SearchInput" class="sr-only">Buscar servidores IMAP2:</label>
+    <input
+      type="search"
+      id="imap2SearchInput"
+      placeholder="Buscar host o usuario..."
+      class="flex-grow-1"
+      autocomplete="off"
+    >
+  </form>
+
+  <div id="imap2List">
+    {% for s in servers2 %}
+      <div class="imap-item mb-1">
+        <strong>Usuario: {{ s.username }}</strong><br>
+        <em>Carpetas:</em> {{ s.folders }}
+        <div class="mt-05">
+          <form action="{{ url_for('admin_bp.test_imap2', server_id=s.id) }}"
+                method="POST"
+                class="d-inline">
+            <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+            <button type="submit" class="btn-blue btn-imap-action btn-imap-small">Probar</button>
+          </form>
+          {% if s.enabled %}
+            <button
+              class="btn-red toggle-imap2-btn ml-03 btn-imap-action btn-imap-small"
+              data-id="{{ s.id }}"
+              data-enabled="true"
+            >
+              Off
+            </button>
+          {% else %}
+            <button
+              class="btn-green toggle-imap2-btn ml-03 btn-imap-action btn-imap-small"
+              data-id="{{ s.id }}"
+              data-enabled="false"
+            >
+              On
+            </button>
+          {% endif %}
+          <button
+            id="btnEditImap2-{{ s.id }}"
+            type="button"
+            class="btn-orange ml-03 edit-imap2-btn btn-imap-action btn-imap-small"
+            data-url="{{ url_for('admin_bp.edit_imap2', server_id=s.id) }}"
+          >
+            Editar
+          </button>
+          <button
+            class="btn-red delete-imap2-btn ml-03 btn-imap-action btn-imap-small"
+            data-id="{{ s.id }}"
+            title="Eliminar"
+          >
+            <i class="fas fa-trash"></i>
+          </button>
+        </div>
+      </div>
+    {% endfor %}
+  </div>
+
+  <div class="mt-1">
+  <form action="{{ url_for('admin_bp.manage_imap2') }}" method="POST">
+    <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+    <h4>Crear Nuevo Servidor IMAP</h4>
+    <label for="imap2_host" class="sr-only">Host</label>
+    <input
+      id="imap2_host"
+      type="text"
+      name="host"
+      placeholder="Host"
+      required
+      class="d-block mb-05"
+      autocomplete="off"
+    >
+    <label for="imap2_port" class="sr-only">Puerto</label>
+    <input
+      id="imap2_port"
+      type="number"
+      name="port"
+      placeholder="993"
+      value="993"
+      class="d-block mb-05"
+      autocomplete="off"
+    >
+    <label for="imap2_username" class="sr-only">Usuario</label>
+    <input
+      id="imap2_username"
+      type="text"
+      name="username"
+      placeholder="Usuario"
+      required
+      class="d-block mb-05"
+      autocomplete="username"
+    >
+    <label for="imap2_password" class="sr-only">Password</label>
+    <input
+      id="imap2_password"
+      type="password"
+      name="password"
+      placeholder="Password"
+      class="d-block mb-05"
+      autocomplete="current-password"
+    >
+    <label for="imap2_folders">Carpetas (separadas por comas):</label>
+    <input
+      id="imap2_folders"
+      type="text"
+      name="folders"
+      placeholder="INBOX,Carpeta2"
+      value="INBOX"
+      class="d-block mb-05"
+      autocomplete="off"
+    >
+    <div class="d-flex gap-1 align-items-center">
+      <button type="submit" class="btn-green">Crear</button>
+      <a href="{{ url_for('admin_bp.accesos_codigos2_page') }}" class="btn-blue text-decoration-none">
+        <i class="fas fa-users"></i> Accesos a Códigos 2
+      </a>
+    </div>
+  </form>
+  </div>
+
+  <hr class="mt-1 mb-1">
+
+  <!-- Buzón de Mensajes y Conexiones (movido dentro de Servidores IMAP Segunda Página) -->
+  <!-- TODO: Implementar manage_email_buzon2 cuando se cree la funcionalidad del buzón para IMAP2 -->
+  {# <div class="mt-1 text-center">
+    <h4 class="mt-1-5 mb-05 text-dark">Buzón de Mensajes y Conexiones</h4>
+    
+    <div class="d-flex gap-1 align-items-center justify-content-center">
+      <a href="{{ url_for('admin_email_buzon.manage_email_buzon2') }}" class="btn-blue text-decoration-none">
+        <i class="fas fa-envelope"></i> Gestionar Buzón
+      </a>
+      <button type="button" id="toggleImap2ManagementBtn" class="btn-green" data-enabled="false">
+        <i class="fas fa-power-off"></i> OFF
+      </button>
+    </div>
+  </div> #}
+
+</div> <!-- Cierre del admin-card de Servidores IMAP Segunda Página -->
+
+<div class="admin-card mt-1">
+  <h3>Importar / Exportar Configuración</h3>
+
+  <div class="d-flex flex-wrap gap-1 align-items-end">
+    {# Input para el código de seguridad para exportar #}
+    <div>
+        <label for="exportSecurityCode" class="d-block mb-03">Código secreto para exportar:</label> 
+        <input type="text" name="export_security_code" id="exportSecurityCode" placeholder="Código secreto Exportar" autocomplete="off">
+    </div>
+    {# Botón de Exportación #}
+    <div>
+        <button type="button" class="btn-blue" id="btnExportConfig">Descargar</button>
+    </div>
+  </div>
+
+  <hr class="hr-margin-1">
+
+  {# Formulario de Importación #}
+  <form action="{{ url_for('admin_bp.import_config') }}" method="POST" enctype="multipart/form-data" class="d-flex flex-wrap gap-1 align-items-end" id="importConfigForm">
+    <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+    <div>
+      <label for="configFile" class="d-block mb-03">Archivo de configuración:</label>
+      <input type="file" name="config_file" id="configFile" accept=".json" required autocomplete="off">
+    </div>
+    <div>
+      <label for="securityCode" class="d-block mb-03">Código secreto para importar:</label> 
+      <input type="text" name="security_code" id="securityCode" required placeholder="Código secreto Importar" autocomplete="off">
+    </div>
+    <div>
+      <button type="submit" class="btn-green">Subir</button>
+    </div>
+  </form>
+
+</div>
+
+<div class="admin-card mt-1">
+  <h3>Capa de Seguridad</h3>
+
+  <form id="securitySettingsForm" method="POST" action="{{ url_for('admin_bp.save_security_settings') }}" class="mb-1">
+      <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+      <div class="d-flex flex-wrap gap-1 align-items-end">
+          <div>
+              <label for="logRetentionMinutes" class="d-block mb-03">log activadores(m):</label>
+              <input type="number" id="logRetentionMinutes" name="log_retention_minutes" min="1" step="1" value="{{ site_settings.get('log_retention_minutes', 60) }}" class="input-admin-id admin-input-width">
+          </div>
+           <div>
+              <label for="observerCheckFrequency" class="d-block mb-03">logs patrón observador (m):</label>
+              <input type="number" id="observerCheckFrequency" name="observer_check_frequency" min="1" step="1" value="{{ site_settings.get('observer_check_frequency', 5) }}" class="input-admin-id admin-input-width">
+           </div>
+           <div class="d-flex flex-column align-items-center admin-checkbox-container">
+               <label for="observerEnabled" class="d-block mb-03">Observador:</label>
+               <input type="checkbox" id="observerEnabled" name="observer_enabled" value="1" {% if site_settings.get('observer_enabled', '1') == '1' %}checked{% endif %}>
+               <span class="admin-checkbox-text">ON/OFF</span>
+           </div>
+      </div>
+      <div>
+          <button type="submit" class="btn btn-blue d-block mx-auto">Guardar Tiempos</button>
+      </div>
+  </form>
+  
+  <hr class="hr-margin-1"/>
+  
+  <div class="mt-1 d-flex flex-wrap gap-1">
+  </div>
+
+</div>
+
+</div> {# Fin contenedor principal .container #}
+
+<script src="{{ url_for('static', filename='js/admin_imap.js') }}"></script>
+<script src="{{ url_for('static', filename='js/admin_imap2.js') }}"></script>
+<script src="{{ url_for('static', filename='js/menu_busqueda.js') }}" defer></script>
+<script src="{{ url_for('static', filename='js/clear_trigger_logs.js') }}" defer></script>
+<script src="{{ url_for('static', filename='js/admin_dashboard.js') }}" defer></script>
+{% endblock %}

@@ -1,0 +1,241 @@
+{% extends "base.html" %}
+
+{% block title %}Productos{% endblock %}
+
+{% block head %}
+  {{ super() }}
+  <link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}">
+  <meta name="csrf_token" content="{{ csrf_token() }}">
+{% endblock %}
+{% block content %}
+<div class="store-light maxw-800 mx-auto br-8">
+  <!-- Tarjeta: Lista de Productos -->
+    <div class="header-container d-flex align-items-center justify-content-between mb-2">
+      <div class="section-title mb-0"><strong>Lista de Productos:</strong></div>
+        <a href="{{ url_for('store_bp.admin_store') }}" class="btn-blue btn-panel">Volver</a>
+    </div>
+    <!-- Campo mostrar y buscar en la misma línea -->
+    <div class="d-flex flex-wrap align-items-center mb-1 productos-buscar-mostrar">
+      <div class="search-container">
+        <label for="searchProductInput" class="sr-only">Buscar producto</label>
+        <input type="search" id="searchProductInput" placeholder="Buscar producto..." autocomplete="off">
+      </div>
+      <div class="d-flex align-items-center gap-1">
+        <label for="showCount" class="sr-only">Mostrar cantidad</label>
+        <select id="showCount" autocomplete="off">
+          <option value="10">10</option>
+          <option value="20" selected>20</option>
+          <option value="30">30</option>
+          <option value="40">40</option>
+          <option value="50">50</option>
+          <option value="100">100</option>
+          <option value="all">Todas</option>
+        </select>
+      </div>
+    </div>
+    <!-- Solo la tabla dentro del contorno blanco -->
+    <div class="table-wrapper-store">
+      <table class="table mb-1" id="products-table">
+        <thead>
+          <tr>
+            <th class="id-col">ID</th>
+            <th class="image-col">Imagen</th>
+            <th class="name-col">Nombre</th>
+            <th class="price-col">$ COP</th>
+            <th class="price-col">$ USD</th>
+            <th class="actions-col">Acciones</th>
+          </tr>
+        </thead>
+        <tbody id="products-table-body">
+          {% for p in products %}
+          <tr id="product-row-{{ p.id }}" data-product-name="{{ p.name|lower }}">
+            <td class="id-col">{{ p.id }}</td>
+            <td class="image-col">
+              {% if p.image_filename and p.image_filename != 'none' %}
+                <img src="{{ url_for('static', filename='images/' + p.image_filename) }}" alt="{{ p.name }}" class="product-image">
+              {% else %}
+                <span class="no-image-placeholder">-</span>
+              {% endif %}
+            </td>
+            <td class="name-col">{{ p.name }}</td>
+            <td class="price-col">{{ '$%d'|format(p.price_cop|round|int) }}</td>
+            <td class="price-col">
+              <div class="productos-usd-color">${{ p.price_usd|int }} USD</div>
+            </td>
+            <td class="actions-col">
+              <div class="action-stack">
+                <form class="ajax-form toggle-product-form" method="POST" data-action="{{ url_for('store_bp.toggle_product_ajax', product_id=p.id) }}">
+                  <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+                  <button type="submit" class="action-btn {{ 'action-red' if p.enabled else 'action-green' }}">{{ 'OFF' if p.enabled else 'ON' }}</button>
+                </form>
+                <a href="{{ url_for('store_bp.edit_product', prod_id=p.id) }}" class="action-btn action-blue">Editar</a>
+                {% if not p.is_preset %}
+                <form class="ajax-form delete-product-form" method="POST" data-action="{{ url_for('store_bp.delete_product_ajax', prod_id=p.id) }}">
+                   <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+                  <button type="submit" class="action-btn action-red" title="Eliminar">
+                    <i class="fas fa-trash"></i>
+                  </button>
+                </form>
+                {% endif %}
+              </div>
+            </td>
+          </tr>
+          {% else %}
+          <tr><td colspan="6">No hay productos todavía.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <!-- Botones de paginación fuera del contorno blanco -->
+    <div class="d-flex justify-content-center mt-2 mb-2 pagination-buttons productos-paginacion-margen">
+      <button id="prevPageBtn" class="btn-blue btn-panel" type="button">&lt; Anterior</button>
+      <button id="nextPageBtn" class="btn-blue btn-panel" type="button">Siguiente &gt;</button>
+    </div>
+  </div>
+
+  <!-- Tarjeta: Añadir Producto -->
+  <div class="store-light add-product-container">
+    <div class="table-wrapper-store">
+      <h3 class="text-center mb-1">Añadir Producto</h3>
+      <form action="{{ url_for('store_bp.create_product') }}" method="POST" class="d-flex flex-column gap-03 align-items-center" id="newProductForm">
+        <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+        <label for="productName" class="sr-only">Nombre del producto</label>
+        <input type="text" id="productName" name="name" placeholder="Nombre del producto" autocomplete="off" required>
+        <label for="productPriceCop" class="sr-only">Precio COP</label>
+        <input type="number" id="productPriceCop" step="1" name="price_cop" placeholder="Precio COP" autocomplete="off" required>
+        <label for="productPriceUsd" class="sr-only">Precio USD</label>
+        <input type="number" id="productPriceUsd" step="1" name="price_usd" placeholder="Precio USD" autocomplete="off" required>
+        <div class="image-select-container">
+            <div class="grid-overlay" id="imageGridOverlay"></div>
+            <label for="imageSelect" class="sr-only">Seleccionar imagen</label>
+            <select name="image_filename" id="imageSelect" class="visually-hidden-select" autocomplete="off">
+                <option value="none" selected>Ninguno</option>
+                {% for img_num in range(1, 33) %}
+                <option value="stream{{ img_num }}.png">stream{{ img_num }}.png</option>
+                {% endfor %}
+            </select>
+            <button type="button" id="imageSelectTrigger" class="image-select-trigger-btn">Seleccionar Imagen</button>
+            <div class="image-grid" id="imageGrid"></div>
+        </div>
+        <div class="image-preview-container">
+          <img id="imgPreview" src="{{ url_for('static', filename='images/stream1.png') }}" alt="preview">
+        </div>
+        <label for="productDescription" class="sr-only">Descripción del producto</label>
+        <textarea id="productDescription" name="description" class="textarea-black-border" placeholder="Descripción (opcional)" autocomplete="off"></textarea>
+        <button type="submit" class="btn-green">Crear Producto</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Tarjeta: Cupones -->
+  <div class="store-light maxw-800 mx-auto mt-2 br-8">
+    <div class="header-container">
+      <div class="d-flex align-items-center justify-content-between mb-1">
+        <h2 class="m-0">Cupones</h2>
+      </div>
+    </div>
+    <!-- Búsqueda y paginación -->
+    <div class="d-flex flex-wrap align-items-center mb-1 productos-buscar-mostrar">
+      <div class="search-container">
+        <label for="searchCouponInput" class="sr-only">Buscar cupón</label>
+        <input type="search" id="searchCouponInput" placeholder="Buscar cupón..." autocomplete="off">
+      </div>
+      <div>
+        <label for="showCouponCount" class="sr-only">Mostrar cantidad de cupones</label>
+        <select id="showCouponCount" autocomplete="off">
+          <option value="10">10</option>
+          <option value="20" selected>20</option>
+          <option value="30">30</option>
+          <option value="40">40</option>
+          <option value="50">50</option>
+          <option value="100">100</option>
+          <option value="all">Todas</option>
+        </select>
+      </div>
+    </div>
+    <!-- Solo la tabla dentro del contorno blanco -->
+    <div class="table-wrapper-store">
+      <table class="table mb-2" id="coupons-table">
+        <thead>
+          <tr><th>Nombre</th><th>D. COP</th><th>D. USD</th><th>Duración</th><th>Usos/usu</th><th>Acciones</th></tr>
+        </thead>
+        <tbody id="coupons-table-body">
+          <tr><td colspan="6" class="text-center">No hay cupones aún.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <!-- Botones de paginación -->
+    <div class="d-flex justify-content-center mt-2 mb-2 pagination-buttons mx-12">
+      <button id="prevCouponPageBtn" class="btn-blue btn-panel" type="button">&lt; Anterior</button>
+      <button id="nextCouponPageBtn" class="btn-blue btn-panel" type="button">Siguiente &gt;</button>
+    </div>
+  </div>
+  <!-- Contorno separado para crear cupón -->
+  <div class="store-light add-coupon-container maxw-800 mx-auto mt-2 br-8">
+    <h3 class="text-center mb-1">Crear Cupón</h3>
+    <form id="newCouponForm" class="d-flex flex-column gap-00 align-items-center mb-01 maxw-500 mx-auto">
+      <div class="d-flex align-items-center mb-1 w-100">
+        <label for="couponName" class="sr-only">Nombre del cupón</label>
+        <input type="text" id="couponName" name="coupon_name" placeholder="Nombre del cupón" required class="coupon-input w-100" autocomplete="off">
+      </div>
+      <div class="d-flex align-items-center mb-1 w-100 gap-1rem">
+        <label for="discountCop" class="sr-only">Descuento COP</label>
+        <input type="number" id="discountCop" name="discount_cop" placeholder="Descuento COP" required class="coupon-input flex-1" autocomplete="off">
+        <label for="discountUsd" class="sr-only">Descuento USD</label>
+        <input type="number" id="discountUsd" name="discount_usd" placeholder="Descuento USD" required class="coupon-input flex-1" autocomplete="off">
+      </div>
+      <div class="d-flex align-items-center mb-1 w-100 gap-1rem">
+        <label for="durationDays" class="sr-only">Duración en días</label>
+        <input type="number" id="durationDays" name="duration_days" placeholder="Duración (días)" min="1" class="coupon-input flex-1" autocomplete="off">
+        <label for="maxUsesPerUser" class="sr-only">Usos por usuario</label>
+        <input type="number" id="maxUsesPerUser" name="max_uses_per_user" placeholder="Usos por usuario (opcional)" min="1" class="coupon-input flex-1" autocomplete="off">
+      </div>
+      <div class="d-flex align-items-center mb-1 w-100">
+        <button type="button" id="showProductsModal" class="btn-blue btn-panel w-100">Ver Productos</button>
+        <input type="hidden" name="products_hidden" id="productsHiddenInput">
+      </div>
+      <div class="d-flex align-items-center mb-1 w-100">
+        <label for="minAmount" class="sr-only">Cuentas mínimo</label>
+        <input type="number" id="minAmount" name="min_amount" placeholder="Cuentas mínimo (opcional)" min="0" step="0.01" class="coupon-input w-100" autocomplete="off">
+      </div>
+      <div class="d-flex align-items-center mb-1 w-100">
+        <label for="couponDescription" class="sr-only">Descripción del cupón</label>
+        <textarea id="couponDescription" name="description" placeholder="Descripción (opcional)" class="coupon-input w-100 min-h-60 p-05" autocomplete="off"></textarea>
+      </div>
+      <div class="d-flex justify-content-center w-100">
+        <button type="submit" class="btn-green btn-panel minw-160">Crear Cupón</button>
+      </div>
+    </form>
+  </div>
+</div>
+<!-- Modal para mostrar productos -->
+<div id="productsModal" class="modal d-none fixed-full bg-modal z-1000" tabindex="-1">
+  <div class="modal-content bg-white mx-auto p-20 w-90 maxw-400 br-8 rel">
+    <h3>Productos Disponibles</h3>
+    <div class="d-flex flex-column gap-03 maxh-180-ovy-auto" id="productsCheckboxList">
+      {% for p in products %}
+        <label class="d-flex align-items-center gap-03">
+          <input type="checkbox" class="align-items-center gap-03 product-checkbox" value="{{ p.id }}" name="product_checkbox_{{ p.id }}" autocomplete="off">
+          <span>{{ p.name }}</span>
+        </label>
+      {% endfor %}
+    </div>
+    <div class="d-flex flex-wrap gap-1 justify-content-center mt-1 mt-1-5rem">
+      <button type="button" id="selectAllProducts" class="btn-blue btn-panel flex-1-48 minw-120">Agregar todos</button>
+      <button type="button" id="deselectAllProducts" class="btn-blue btn-panel flex-1-48 minw-120">Desactivar todos</button>
+    </div>
+    <div class="d-flex justify-content-center mt-1">
+      <button id="saveProducts" class="btn-green btn-panel minw-160">Guardar</button>
+    </div>
+    <div class="d-flex justify-content-center mt-1">
+      <button id="closeModal" class="btn-red btn-panel minw-120">Cerrar</button>
+    </div>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+  {{ super() }}
+  <script src="{{ url_for('store_bp.static', filename='js/admin_store.js') }}" defer></script>
+  <script src="{{ url_for('store_bp.static', filename='js/productos.js') }}" defer></script>
+  <script src="{{ url_for('store_bp.static', filename='js/cupones.js') }}" defer></script>
+{% endblock %} 

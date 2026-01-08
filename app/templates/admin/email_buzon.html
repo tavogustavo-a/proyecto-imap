@@ -1,0 +1,897 @@
+{% extends "admin_dashboard.html" %}
+
+{% block content %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/email_buzon.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/store.css') }}">
+
+<!-- Token CSRF global -->
+<input type="hidden" id="csrf_token" name="_csrf_token" value="{{ csrf_token() }}">
+
+<!-- MENÚ LATERAL MÓVIL -->
+<div id="mobileMenu" class="mobile-menu-store hidden">
+  <div class="menu-title-row">
+    <i class="fas fa-bars"></i>
+    <h3>Menú</h3>
+  </div>
+  <a href="{{ url_for('admin_bp.dashboard') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-cogs"></i> Administración</a>
+  <a href="{{ url_for('admin_bp.parrafos_page') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-paragraph"></i> Párrafos</a>
+  <a href="{{ url_for('admin_bp.filters_page') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-filter"></i> Filtros</a>
+  <a href="{{ url_for('admin_bp.regex_page') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-random"></i> Regex</a>
+  <a href="{{ url_for('admin_bp.services_page') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-cogs"></i> Servicios</a>
+  <a href="{{ url_for('admin_bp.usuarios_page') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-users"></i> Usuarios</a>
+  <a href="{{ url_for('admin_bp.security_rules_page') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-shield-alt"></i> Reglas de Seguridad</a>
+  <a href="{{ url_for('admin_bp.view_trigger_logs_page') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-clipboard-list"></i> Consultar logs</a>
+  <a href="{{ url_for('store_bp.admin_sms') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-sms"></i> Consulta SMS</a>
+  <a href="{{ url_for('admin_bp.manage_permissions_page') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-key"></i> Gestión de Permisos</a>
+  <button id="btnClearTriggerLogMenu" type="button" class="btn-panel btn-red mobile-menu-btn mb-04"><i class="fas fa-trash"></i> Limpiar Logs</button>
+  <a href="{{ url_for('auth_bp.logout') }}" class="btn-panel btn-red mobile-menu-btn mb-04"><i class="fas fa-sign-out-alt"></i> Cerrar Sesión</a>
+</div>
+
+<!-- MENÚ2 LATERAL MÓVIL -->
+<div id="mobileMenu2" class="mobile-menu-store hidden">
+  <div class="menu-title-row">
+    <i class="fas fa-bars"></i>
+    <h3>Menú2</h3>
+  </div>
+  <a href="{{ url_for('store_bp.admin_store') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-store"></i> Licencias</a>
+  <a href="{{ url_for('store_bp.admin_productos') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-box"></i> Productos</a>
+  <a href="{{ url_for('store_bp.admin_productos') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-ticket-alt"></i> Cupones</a>
+  <a href="{{ url_for('store_bp.admin_tools') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-tools"></i> Herramientas Admin</a>
+  <a href="{{ url_for('store_bp.admin_work_sheets') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-table"></i> Hojas de Cálculo</a>
+  <a href="{{ url_for('store_bp.admin_configurations') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-cog"></i> Configuraciones</a>
+  <a href="{{ url_for('store_bp.admin_support') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-headset"></i> Chat Soporte</a>
+  <a href="{{ url_for('auth_bp.logout') }}" class="btn-panel btn-red mobile-menu-btn mb-04"><i class="fas fa-sign-out-alt"></i> Cerrar Sesión</a>
+</div>
+
+<!-- MENÚ3 LATERAL MÓVIL -->
+<div id="mobileMenu3" class="mobile-menu-store hidden">
+  <div class="menu-title-row">
+    <i class="fas fa-bars"></i>
+    <h3>Menú3</h3>
+  </div>
+  <a href="{{ url_for('store_bp.store_front') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-store"></i> Tienda Pública</a>
+  <a href="{{ url_for('store_bp.tools_public') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-tools"></i> Herramientas Pública</a>
+  <a href="{{ url_for('store_bp.historial_compras_usuario') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-history"></i> Mi Historial de Compras</a>
+  <a href="{{ url_for('main_bp.home') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-code"></i> Códigos</a>
+  {% if user_has_codigos2_access() %}
+  <a href="{{ url_for('main_bp.home2') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-code"></i> Códigos 2</a>
+  {% endif %}
+  <a href="{{ url_for('auth_bp.logout') }}" class="btn-panel btn-red mobile-menu-btn mb-04"><i class="fas fa-sign-out-alt"></i> Cerrar Sesión</a>
+</div>
+
+<!-- OVERLAY PARA CERRAR MENÚS -->
+<div id="menuOverlay" class="menu-overlay"></div>
+
+<!-- Interfaz principal tipo Roundcube -->
+  <main class="email-interface" role="main">
+    <!-- Botones de menú -->
+    <nav class="email-menu-buttons" role="navigation" aria-label="Menús principales">
+      <button id="menuToggleBtn" class="btn-panel btn-blue menu-toggle-btn" aria-label="Abrir menú principal">&#9776; Menú</button>
+      <button id="menu2ToggleBtn" class="btn-panel btn-blue menu-toggle-btn" aria-label="Abrir menú secundario">&#9776; Menú2</button>
+      <button id="menu3ToggleBtn" class="btn-panel btn-blue menu-toggle-btn" aria-label="Abrir tercer menú">&#9776; Menú3</button>
+    </nav>
+    
+    <header class="email-header">
+      <h3><i class="fas fa-envelope"></i> Buzón de Mensajes</h3>
+    </header>
+  
+  <div class="email-content">
+    <aside class="email-sidebar" role="complementary" aria-label="Carpetas y etiquetas">
+      <div class="email-folder {{ 'active' if current_view == 'inbox' or not current_view else '' }}" data-filter="all" data-action="navigate" data-url="{{ url_for('admin_email_buzon.manage_email_buzon') }}">
+        <i class="fas fa-inbox"></i>
+        <span>Recibidos</span>
+        <span class="email-folder-count">{{ active_emails_count if active_emails_count is defined else recent_emails|length }}</span>
+      </div>
+      <div class="email-folder {{ 'active' if current_view == 'trash' else '' }}" data-filter="trash" data-action="navigate" data-url="{{ url_for('admin_email_buzon.view_trash') }}">
+        <i class="fas fa-trash"></i>
+        <span>Papelera</span>
+        <span class="email-folder-count">{{ trash_emails_count if trash_emails_count is defined else 1 }}</span>
+      </div>
+      <div class="email-folder {{ 'active' if current_view == 'spam' else '' }}" data-filter="spam" data-action="navigate" data-url="{{ url_for('admin_email_buzon.view_spam') }}">
+        <i class="fas fa-ban"></i>
+        <span>Spam</span>
+        <span class="email-folder-count">{{ spam_count if spam_count is defined else 0 }}</span>
+      </div>
+      
+      <!-- Etiquetas aparecen directamente debajo de Papelera -->
+      {% for tag in tags %}
+      <div class="email-folder tag-folder {{ 'active' if current_view == 'tag' and current_tag and current_tag.id == tag.id else '' }}" data-filter="tag" data-tag-id="{{ tag.id }}" data-action="navigate" data-url="{{ url_for('admin_email_buzon.filter_by_tag', tag_id=tag.id) }}">
+        <i class="fas fa-tag"></i>
+        <span>{{ tag.name }}</span>
+        <span class="email-folder-count">{{ recent_emails|selectattr('tags')|selectattr('id', 'equalto', tag.id)|list|length }}</span>
+        <button class="tag-settings-btn" data-tag-id="{{ tag.id }}" data-tag-name="{{ tag.name }}" data-tag-color="{{ tag.color }}" title="Editar etiqueta" aria-label="Editar etiqueta {{ tag.name }}" data-action="tag-settings">
+          <i class="fas fa-cog"></i>
+        </button>
+      </div>
+      {% endfor %}
+      
+      <!-- Botón para crear nueva etiqueta -->
+      <div class="create-tag-section">
+        <button class="add-tag-btn-inline" data-action="create-tag" title="Crear nueva etiqueta" aria-label="Crear nueva etiqueta">
+          <i class="fas fa-plus"></i> Nueva Etiqueta
+        </button>
+      </div>
+      
+      <section class="sidebar-section hidden" role="region" aria-labelledby="etiquetas-heading">
+        <!-- Sección oculta para mantener compatibilidad -->
+      </section>
+    </aside>
+    
+    <section class="email-main" role="region" aria-labelledby="email-list-heading">
+      <div class="email-toolbar" role="toolbar" aria-label="Herramientas de correo">
+        <div class="toolbar-row-1">
+          <div class="search-container">
+            <label for="searchInput" class="sr-only">Buscar en correos</label>
+            <input type="search" class="email-search" id="searchInput" placeholder="Buscar en correos..." aria-label="Buscar en correos" autocomplete="off">
+            <button type="button" class="search-clear-btn" id="clearSearchBtn" aria-label="Limpiar búsqueda">
+              <i class="fas fa-times"></i>
+            </button>
+          </div>
+        </div>
+        <div class="toolbar-row-2">
+          <button class="btn btn-blue" id="refreshBtn" title="Actualizar" aria-label="Actualizar lista de correos"><i class="fas fa-sync-alt"></i></button>
+          <button class="btn btn-green" id="selectAllBtn" title="Seleccionar Todos" aria-label="Seleccionar todos los correos" data-action="select-all"><i class="fas fa-check-square"></i></button>
+          <button class="btn btn-red" id="deleteSelectedBtn" title="Eliminar Seleccionados" aria-label="Eliminar correos seleccionados" data-action="delete-selected"><i class="fas fa-trash"></i></button>
+          <a href="{{ url_for('admin_email_buzon.manage_filters') }}" class="btn btn-purple" id="filtersBtn" title="Filtros" aria-label="Gestionar filtros automáticos"><i class="fas fa-filter"></i></a>
+          <div class="toolbar-spacer"></div>
+          <button class="btn btn-gray" id="cleanupTrashBtn" aria-label="Eliminar permanentemente todos los emails de papelera"><i class="fas fa-broom"></i> Vaciar Papelera</button>
+        </div>
+      </div>
+      
+      <h2 id="email-list-heading" class="sr-only">Lista de correos electrónicos</h2>
+      <div class="email-list" role="list" aria-label="Lista de correos electrónicos">
+        {% for email in recent_emails %}
+        <div class="email-item {{ 'unread' if not email.processed else '' }} {{ 'deleted' if email.deleted else '' }} cursor-pointer" 
+             data-email-id="{{ email.id }}" role="listitem" data-action="view-email">
+          <input type="checkbox" id="email-checkbox-{{ email.id }}" name="email_select" value="{{ email.id }}" class="email-checkbox" data-action="stop-propagation" aria-label="Seleccionar correo de {{ email.from_email }}">
+          <div class="email-sender">{{ email.from_email }}</div>
+          <div class="email-subject">
+            {{ email.subject or '(Sin asunto)' }}
+            {% if email.content_html %}<i class="fas fa-paperclip email-attachment"></i>{% endif %}
+          </div>
+          {% if email.tags %}
+          <div class="email-tags">
+            {% for tag in email.tags %}
+            <span class="email-tag" data-color="{{ tag.color }}">{{ tag.name }}</span>
+            {% endfor %}
+          </div>
+          {% endif %}
+          <div class="email-time">{{ email.get_time_12h() }}</div>
+          <div class="email-actions">
+            <!-- Los botones de acción se manejaran por menú contextual -->
+          </div>
+        </div>
+        {% endfor %}
+        
+        {% if not recent_emails %}
+        <div class="email-empty-state">
+          <i class="fas fa-inbox"></i>
+          <p>No hay mensajes en la bandeja de entrada</p>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Configuración de correo vía dominio -->
+<div class="email-forwarding-config">
+  <div class="accordion-header" data-action="toggle-accordion" data-target="email-forwarding-content">
+    <h4><i class="fas fa-at"></i> Correo Electrónico vía Dominio</h4>
+    <i class="fas fa-chevron-down accordion-icon"></i>
+  </div>
+  
+  <div id="email-forwarding-content" class="accordion-content hidden">
+  
+  {% for forwarding in email_forwardings %}
+  <div class="forwarding-item">
+    <div class="forwarding-info">
+      <strong>{{ forwarding.destination_email }}</strong>
+    </div>
+    <div class="forwarding-actions">
+      <button class="btn btn-green edit-forwarding-btn" 
+              data-forwarding-id="{{ forwarding.id }}" 
+              data-source="{{ forwarding.source_email }}" 
+              data-destination="{{ forwarding.destination_email }}" 
+              data-enabled="{{ forwarding.enabled|lower }}">Editar</button>
+      <button type="button" class="btn {{ 'btn-red' if forwarding.enabled else 'btn-green' }} forwarding-toggle-btn" 
+              data-forwarding-id="{{ forwarding.id }}" 
+              data-enabled="{{ forwarding.enabled|lower }}"
+              title="{{ 'Desactivar reenvío' if forwarding.enabled else 'Activar reenvío' }}">
+        <i class="fas {{ 'fa-toggle-off' if forwarding.enabled else 'fa-toggle-on' }}"></i>
+        <span>{{ 'OFF' if forwarding.enabled else 'ON' }}</span>
+      </button>
+      <form method="POST" action="{{ url_for('admin_email_buzon.delete_forwarding', forwarding_id=forwarding.id) }}" class="inline-form delete-forwarding-form">
+        <input type="hidden" id="csrf_delete_forwarding_{{ forwarding.id }}" name="_csrf_token" value="{{ csrf_token() }}">
+        <button type="submit" class="btn btn-red delete-forwarding-btn" title="Eliminar reenvío" aria-label="Eliminar reenvío de correo">
+          <i class="fas fa-trash"></i>
+        </button>
+      </form>
+    </div>
+  </div>
+  {% else %}
+  <p class="no-forwardings">No hay reenvíos configurados.</p>
+  {% endfor %}
+  
+  <form action="{{ url_for('admin_email_buzon.create_forwarding') }}" method="POST" class="create-server-form">
+    <input type="hidden" id="csrf_create_forwarding" name="_csrf_token" value="{{ csrf_token() }}">
+    <h5>Crear Correo de Recepción donde recibirás todo:</h5>
+    <div class="create-server-fields">
+      <div class="create-server-field">
+        <input type="email" id="destinationEmail" name="destination_email" placeholder="micorreo@midominio.com" required autocomplete="email" aria-label="Correo donde recibirás todo">
+      </div>
+      <button type="submit" class="btn btn-blue" aria-label="Crear nuevo correo de recepción">Crear Correo</button>
+    </div>
+  </form>
+  </div>
+</div>
+
+<!-- Configuración de eliminación automática -->
+<div class="email-forwarding-config">
+  <div class="accordion-header" data-action="toggle-accordion" data-target="email-cleanup-content">
+    <h4><i class="fas fa-clock"></i> Eliminación Automática de Correos</h4>
+    <i class="fas fa-chevron-down accordion-icon"></i>
+  </div>
+  
+  <div id="email-cleanup-content" class="accordion-content hidden">
+  
+  {% for cleanup in auto_cleanups %}
+  <div class="forwarding-item">
+    <div class="forwarding-info">
+      <strong>{{ cleanup.get_time_12h() }} - {{ cleanup.folder_name }}</strong><br>
+      <small>Limpieza diaria automática (Hora Colombia)</small>
+    </div>
+    <div class="forwarding-actions">
+      <button class="btn btn-green edit-cleanup-btn" 
+              data-cleanup-id="{{ cleanup.id }}" 
+              data-cleanup-time="{{ cleanup.time.strftime('%H:%M') }}" 
+              data-cleanup-folder="{{ cleanup.folder_type }}"
+              data-cleanup-tag-id="{{ cleanup.tag_id or '' }}">Editar</button>
+      <button type="button" class="btn {{ 'btn-red' if cleanup.enabled else 'btn-green' }} cleanup-toggle-btn" 
+              data-cleanup-id="{{ cleanup.id }}" 
+              data-enabled="{{ cleanup.enabled|lower }}"
+              title="{{ 'Desactivar limpieza' if cleanup.enabled else 'Activar limpieza' }}">
+        <i class="fas {{ 'fa-toggle-off' if cleanup.enabled else 'fa-toggle-on' }}"></i>
+        <span>{{ 'OFF' if cleanup.enabled else 'ON' }}</span>
+      </button>
+      <form method="POST" action="{{ url_for('admin_email_buzon.delete_cleanup', cleanup_id=cleanup.id) }}" class="inline-form delete-cleanup-form">
+        <input type="hidden" id="csrf_delete_cleanup_{{ cleanup.id }}" name="_csrf_token" value="{{ csrf_token() }}">
+        <button type="submit" class="btn btn-red delete-cleanup-btn" title="Eliminar limpieza automática" aria-label="Eliminar limpieza automática">
+          <i class="fas fa-trash"></i>
+        </button>
+      </form>
+    </div>
+  </div>
+  {% else %}
+  <p class="no-forwardings">No hay limpiezas automáticas configuradas.</p>
+  {% endfor %}
+  
+  <form action="{{ url_for('admin_email_buzon.create_cleanup') }}" method="POST" class="create-server-form">
+    <input type="hidden" id="csrf_create_cleanup" name="_csrf_token" value="{{ csrf_token() }}">
+    <h5>Crear Limpieza Automática:</h5>
+    <div class="create-server-fields">
+      <div class="create-server-field">
+        <label for="cleanupTime">Hora diaria (Colombia):</label>
+        <input type="time" id="cleanupTime" name="cleanup_time" required autocomplete="off" aria-label="Hora diaria para limpieza automática">
+      </div>
+      <div class="create-server-field">
+        <label for="cleanupFolder">Carpeta a limpiar:</label>
+        <select id="cleanupFolder" name="folder_type" required>
+          <option value="inbox">📥 Recibidos</option>
+          <option value="trash">🗑️ Papelera</option>
+          {% for tag in tags %}
+          <option value="tag" data-tag-id="{{ tag.id }}">🏷️ {{ tag.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <button type="submit" class="btn btn-blue" aria-label="Crear nueva limpieza automática">Crear Limpieza</button>
+    </div>
+  </form>
+  </div>
+</div>
+
+<!-- Configuración DNS para Namecheap -->
+<div class="server-config">
+  <div class="accordion-header" data-action="toggle-accordion" data-target="email-config-content">
+    <h4><i class="fas fa-cloud"></i> Configuración de Emails</h4>
+    <i class="fas fa-chevron-down accordion-icon"></i>
+  </div>
+  
+  <div id="email-config-content" class="accordion-content hidden">
+    <div class="dns-info-container">
+      
+      <div class="dns-section">
+        <div class="smtp-field">
+          <strong>Servidor SMTP:</strong>
+          <code>mail.tu-dominio.com:25</code>
+          <button type="button" class="btn btn-sm btn-green ml-10" data-action="test-smtp">
+            <i class="fas fa-vial"></i> Probar SMTP
+          </button>
+          <button type="button" class="btn btn-sm btn-blue ml-5" data-action="smtp-status">
+            <i class="fas fa-heartbeat"></i> Estado SMTP
+          </button>
+        </div>
+      </div>
+
+      <!-- Nueva sección de Verificación de Conectividad -->
+      <div class="dns-section">
+        <h5><i class="fas fa-network-wired"></i> Verificación de Conectividad</h5>
+        <div class="connectivity-checks">
+          
+          <div class="check-item">
+            <div class="check-header">
+              <strong>1. IP Pública Actual</strong>
+              <button type="button" class="btn btn-sm btn-blue" id="btnCheckPublicIP">
+                <i class="fas fa-sync"></i> Verificar IP
+              </button>
+            </div>
+            <div class="check-result">
+              <code id="publicIPResult">Haz clic para verificar...</code>
+            </div>
+          </div>
+
+          <div class="check-item">
+            <div class="check-header">
+              <strong>2. Verificación DNS Manual</strong>
+              <div class="manual-check-links">
+                <a href="https://mxtoolbox.com/SuperTool.aspx" target="_blank" class="btn btn-sm btn-blue">
+                  <i class="fas fa-external-link-alt"></i> MX Toolbox
+                </a>
+                <a href="https://dnschecker.org/" target="_blank" class="btn btn-sm btn-green">
+                  <i class="fas fa-globe"></i> DNS Checker
+                </a>
+              </div>
+            </div>
+            <div class="check-result">
+              <code>Usa herramientas externas confiables para verificar DNS</code>
+            </div>
+          </div>
+
+          <div class="check-item">
+            <div class="check-header">
+              <strong>3. Servidor SMTP</strong>
+              <button type="button" class="btn btn-sm btn-blue" data-action="check-smtp-server">
+                <i class="fas fa-server"></i> Verificar SMTP
+              </button>
+            </div>
+            <div class="check-result">
+              <code id="smtpServerResult">Haz clic para verificar...</code>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <div class="dns-section">
+        <h5><i class="fas fa-cogs"></i> Configuración DNS Requerida</h5>
+        
+        <div class="dns-record">
+          <div class="record-header">
+            <strong>Registro A (Dominio Principal)</strong>
+            <span class="priority-badge">REQUERIDO</span>
+          </div>
+          <div class="record-details">
+            <div class="record-field">
+              <strong>Tipo:</strong>
+              <code>A</code>
+            </div>
+            <div class="record-field">
+              <strong>Host:</strong>
+              <code>@</code>
+            </div>
+            <div class="record-field">
+              <strong>Valor:</strong>
+              <code>tu-ip-publica</code>
+            </div>
+            <div class="record-field">
+              <strong>TTL:</strong>
+              <code>Automatic</code>
+            </div>
+          </div>
+          <div class="record-description">
+            <i class="fas fa-info-circle"></i>
+            <span>Para que tudominio.com resuelva a tu servidor</span>
+          </div>
+        </div>
+
+        <div class="dns-record">
+          <div class="record-header">
+            <strong>Registro A (Subdominio Mail)</strong>
+            <span class="priority-badge">REQUERIDO</span>
+          </div>
+          <div class="record-details">
+            <div class="record-field">
+              <strong>Tipo:</strong>
+              <code>A</code>
+            </div>
+            <div class="record-field">
+              <strong>Host:</strong>
+              <code>mail</code>
+            </div>
+            <div class="record-field">
+              <strong>Valor:</strong>
+              <code>tu-ip-publica</code>
+            </div>
+            <div class="record-field">
+              <strong>TTL:</strong>
+              <code>Automatic</code>
+            </div>
+          </div>
+          <div class="record-description">
+            <i class="fas fa-info-circle"></i>
+            <span>Necesario para que mail.tudominio.com reciba emails via SMTP</span>
+          </div>
+        </div>
+
+        <div class="dns-record">
+          <div class="record-header">
+            <strong>Registro MX (Recepción de Emails)</strong>
+            <span class="priority-badge">REQUERIDO</span>
+          </div>
+          <div class="record-details">
+            <div class="record-field">
+              <strong>Tipo:</strong>
+              <code>MX</code>
+            </div>
+            <div class="record-field">
+              <strong>Host:</strong>
+              <code>@</code>
+            </div>
+            <div class="record-field">
+              <strong>Valor:</strong>
+              <code>mail.tudominio.com</code>
+            </div>
+            <div class="record-field">
+              <strong>Prioridad:</strong>
+              <code>10</code>
+            </div>
+            <div class="record-field">
+              <strong>TTL:</strong>
+              <code>Automatic</code>
+            </div>
+          </div>
+          <div class="record-description">
+            <i class="fas fa-info-circle"></i>
+            <span>Necesario para recibir emails via SMTP en puerto 25</span>
+          </div>
+        </div>
+
+        <div class="dns-record">
+          <div class="record-header">
+            <strong>Registro SPF (Recomendado)</strong>
+            <span class="optional-badge">OPCIONAL</span>
+          </div>
+          <div class="record-details">
+            <div class="record-field">
+              <strong>Tipo:</strong>
+              <code>TXT</code>
+            </div>
+            <div class="record-field">
+              <strong>Host:</strong>
+              <code>@</code>
+            </div>
+            <div class="record-field">
+              <strong>Valor:</strong>
+              <code>v=spf1 ip4:tu-ip-publica ~all</code>
+            </div>
+            <div class="record-field">
+              <strong>TTL:</strong>
+              <code>Automatic</code>
+            </div>
+          </div>
+          <div class="record-description">
+            <i class="fas fa-shield-alt"></i>
+            <span>Mejora la entrega de emails y reduce el spam. Autoriza tu servidor para enviar emails</span>
+          </div>
+        </div>
+
+        <div class="dns-record">
+          <div class="record-header">
+            <strong>Registro DMARC (Recomendado)</strong>
+            <span class="optional-badge">OPCIONAL</span>
+          </div>
+          <div class="record-details">
+            <div class="record-field">
+              <strong>Tipo:</strong>
+              <code>TXT</code>
+            </div>
+            <div class="record-field">
+              <strong>Host:</strong>
+              <code>_dmarc</code>
+            </div>
+            <div class="record-field">
+              <strong>Valor:</strong>
+              <code>v=DMARC1; p=quarantine; rua=mailto:dmarc@tudominio.com</code>
+            </div>
+            <div class="record-field">
+              <strong>TTL:</strong>
+              <code>Automatic</code>
+            </div>
+          </div>
+          <div class="record-description">
+            <i class="fas fa-shield-alt"></i>
+            <span>Política de autenticación de emails. Mejora la reputación del dominio y reduce el phishing</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="dns-section">
+        <h5><i class="fas fa-clock"></i> Tiempo de Propagación</h5>
+        <div class="propagation-info">
+          <div class="time-estimate">
+            <i class="fas fa-hourglass-half"></i>
+            <span><strong>24-48 horas</strong> para propagación completa</span>
+          </div>
+          <div class="time-estimate">
+            <i class="fas fa-flash"></i>
+            <span><strong>15-30 minutos</strong> para cambios básicos</span>
+          </div>
+        </div>
+        <small class="text-muted">Los cambios DNS pueden tardar en aplicarse globalmente</small>
+      </div>
+
+
+      <div class="dns-section">
+        <h5><i class="fas fa-vial"></i> Verificar Configuración</h5>
+        <div class="verification-tools">
+          <div class="tool-item">
+            <strong>Comando para verificar MX:</strong>
+            <code>nslookup -type=MX tudominio.com</code>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal para responder email -->
+<div id="replyEmailModal" class="edit-modal hidden">
+  <div class="edit-modal-content">
+    <div class="modal-header">
+      <h4><i class="fas fa-reply"></i> Responder Email</h4>
+      <button type="button" class="close-btn btn-red-close" data-action="close-reply-modal" aria-label="Cerrar modal de respuesta">
+        <i class="fas fa-times"></i>
+      </button>
+    </div>
+    
+    <form id="replyEmailForm" class="modal-form">
+      <input type="hidden" id="replyEmailId" name="email_id">
+      <input type="hidden" id="csrf_reply" name="_csrf_token" value="{{ csrf_token() }}">
+      
+      <div class="form-group">
+        <label for="replyTo">Para:</label>
+        <input type="email" id="replyTo" name="reply_to" readonly class="form-control">
+      </div>
+      
+      <div class="form-group">
+        <label for="replySubject">Asunto:</label>
+        <input type="text" id="replySubject" name="reply_subject" readonly class="form-control">
+      </div>
+      
+      <div class="form-group">
+        <label for="replyFrom">De:</label>
+        <input type="email" id="replyFrom" name="reply_from" class="form-control" placeholder="email@dominio-configurado.com" required>
+        <small class="form-text text-muted">Solo puedes enviar desde dominios configurados en "Correo Electrónico vía Dominio"</small>
+      </div>
+      
+      <div class="form-group">
+        <label for="replyMessage">Mensaje:</label>
+        <textarea id="replyMessage" name="reply_message" class="form-control" rows="8" placeholder="Escribe tu respuesta aquí..." required></textarea>
+      </div>
+      
+      <div class="modal-footer">
+        <button type="button" class="btn btn-red" data-action="close-reply-modal">Cancelar</button>
+        <button type="submit" class="btn btn-blue">
+          <i class="fas fa-paper-plane"></i> Enviar Respuesta
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Modal para reenviar email -->
+<div id="forwardEmailModal" class="edit-modal hidden">
+  <div class="edit-modal-content">
+    <div class="modal-header">
+      <h4><i class="fas fa-share"></i> Reenviar Email</h4>
+      <button type="button" class="close-btn btn-red-close" data-action="close-forward-modal" aria-label="Cerrar modal de reenvío">
+        <i class="fas fa-times"></i>
+      </button>
+    </div>
+    
+    <form id="forwardEmailForm" class="modal-form">
+      <input type="hidden" id="forwardEmailId" name="email_id">
+      <input type="hidden" id="csrf_forward" name="_csrf_token" value="{{ csrf_token() }}">
+      
+      <div class="form-group">
+        <label for="forwardTo">Para:</label>
+        <input type="email" id="forwardTo" name="forward_to" class="form-control" placeholder="destinatario@email.com" required>
+      </div>
+      
+      <div class="form-group">
+        <label for="forwardFrom">De:</label>
+        <input type="email" id="forwardFrom" name="forward_from" class="form-control" placeholder="email@dominio-configurado.com" required>
+        <small class="form-text text-muted">Solo puedes enviar desde dominios configurados en "Correo Electrónico vía Dominio"</small>
+      </div>
+      
+      <div class="form-group">
+        <label for="forwardSubject">Asunto:</label>
+        <input type="text" id="forwardSubject" name="forward_subject" readonly class="form-control">
+      </div>
+      
+      <div class="form-group">
+        <label for="forwardMessage">Mensaje adicional (opcional):</label>
+        <textarea id="forwardMessage" name="forward_message" class="form-control" rows="4" placeholder="Agrega un mensaje personal (opcional)..."></textarea>
+      </div>
+      
+      <div class="modal-footer">
+        <button type="button" class="btn btn-red" data-action="close-forward-modal">Cancelar</button>
+        <button type="submit" class="btn btn-blue">
+          <i class="fas fa-share"></i> Reenviar Email
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Menú contextual para emails -->
+<div id="contextMenu" class="context-menu hidden">
+  <div class="context-menu-item" data-action="context-reply">
+    <i class="fas fa-reply"></i>
+    <span>Responder</span>
+  </div>
+  <div class="context-menu-item" data-action="context-forward">
+    <i class="fas fa-share"></i>
+    <span>Reenviar</span>
+  </div>
+  <div class="context-menu-item" data-action="context-mark-read">
+    <i class="fas fa-envelope-open"></i>
+    <span>Marcar como leído</span>
+  </div>
+  <div class="context-menu-separator"></div>
+  <div class="context-menu-item context-submenu" data-action="context-move">
+    <i class="fas fa-folder"></i>
+    <span>Mover a</span>
+    <i class="fas fa-chevron-right context-arrow"></i>
+    <div class="context-submenu-content">
+      <div class="context-menu-item" data-action="move-to-inbox">
+        <i class="fas fa-inbox"></i>
+        <span>Recibidos</span>
+      </div>
+      <div class="context-menu-item" data-action="move-to-trash">
+        <i class="fas fa-trash"></i>
+        <span>Papelera</span>
+      </div>
+      <div class="context-menu-item" data-action="move-to-spam">
+        <i class="fas fa-exclamation-triangle"></i>
+        <span>Spam</span>
+      </div>
+      {% for tag in tags %}
+      <div class="context-menu-item" data-action="move-to-tag" data-tag-id="{{ tag.id }}">
+        <i class="fas fa-tag" data-color="{{ tag.color }}"></i>
+        <span>{{ tag.name }}</span>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  <div class="context-menu-separator"></div>
+  <div class="context-menu-item context-delete" data-action="context-delete" id="contextDeleteItem">
+    <i class="fas fa-trash"></i>
+    <span id="contextDeleteText">Eliminar</span>
+  </div>
+</div>
+
+
+<!-- Modal para editar etiqueta -->
+<div id="editTagModal" class="edit-modal">
+  <div class="edit-modal-content">
+    <div class="edit-modal-header">
+      <h3>Editar Etiqueta</h3>
+      <button id="closeEditTagModal" class="btn btn-red" aria-label="Cerrar modal de editar etiqueta">Cerrar</button>
+    </div>
+    <form id="editTagForm" method="POST" action="">
+      <input type="hidden" id="csrf_edit_tag" name="_csrf_token" value="{{ csrf_token() }}">
+      <div class="edit-form-group">
+        <label for="editTagName">Nombre:</label>
+        <input type="text" id="editTagName" name="name" required autocomplete="off">
+      </div>
+       <div class="edit-form-group">
+         <label for="editTagColor">Color:</label>
+         <input type="color" id="editTagColor" name="color" required autocomplete="off">
+       </div>
+      
+      
+          <div class="edit-modal-actions">
+            <button type="button" id="deleteTagBtn" class="btn btn-red" data-action="confirm-delete-tag" aria-label="Eliminar etiqueta">
+              <i class="fas fa-trash"></i> Eliminar
+            </button>
+            <button type="button" id="cancelEditTagModal" class="btn btn-red" aria-label="Cancelar edición de etiqueta">Cancelar</button>
+            <button type="submit" class="btn btn-green" aria-label="Guardar cambios de etiqueta">Guardar</button>
+          </div>
+    </form>
+  </div>
+</div>
+
+<!-- Modal para crear etiqueta -->
+<div id="createTagModal" class="edit-modal">
+  <div class="edit-modal-content">
+    <div class="edit-modal-header">
+      <h3>Crear Nueva Etiqueta</h3>
+      <button id="closeCreateTagModal" class="btn btn-red" aria-label="Cerrar modal de crear etiqueta">Cerrar</button>
+    </div>
+    <form id="createTagForm" method="POST" action="{{ url_for('admin_email_buzon.create_tag') }}">
+      <input type="hidden" id="csrf_create_tag" name="_csrf_token" value="{{ csrf_token() }}">
+      <div class="edit-form-group">
+        <label for="createTagName">Nombre:</label>
+        <input type="text" id="createTagName" name="name" placeholder="Nombre de la etiqueta" required autocomplete="off">
+      </div>
+      <div class="edit-form-group">
+        <label for="createTagColor">Color:</label>
+        <input type="color" id="createTagColor" name="color" value="#3498db" required autocomplete="off">
+      </div>
+      <div class="edit-modal-actions">
+        <button type="button" id="cancelCreateTagModal" class="btn btn-red" aria-label="Cancelar creación de etiqueta">Cancelar</button>
+        <button type="submit" class="btn btn-green" aria-label="Crear nueva etiqueta">Crear Etiqueta</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Modal para configurar filtros -->
+<div id="filterModal" class="edit-modal">
+  <div class="edit-modal-content">
+    <div class="edit-modal-header">
+      <h3>Configurar Filtros - <span id="filterTagName"></span></h3>
+      <button id="closeFilterModal" class="btn btn-red">Cerrar</button>
+    </div>
+    <form id="filterForm" method="POST" action="">
+      <input type="hidden" id="csrf_filter_form" name="_csrf_token" value="{{ csrf_token() }}">
+      <div class="edit-form-group">
+        <label for="filterFromEmail">Remitente contiene:</label>
+        <input type="text" id="filterFromEmail" name="filter_from_email" placeholder="ejemplo@dominio.com" autocomplete="email">
+        <small>Los emails de este remitente se etiquetarán automáticamente</small>
+      </div>
+      <div class="edit-form-group">
+        <label for="filterToEmail">Destinatario contiene:</label>
+        <input type="text" id="filterToEmail" name="filter_to_email" placeholder="destino@dominio.com" autocomplete="email">
+        <small>Los emails enviados a esta dirección se etiquetarán automáticamente</small>
+      </div>
+      <div class="edit-form-group">
+        <label for="filterSubjectContains">Asunto contiene:</label>
+        <input type="text" id="filterSubjectContains" name="filter_subject_contains" placeholder="palabra clave" autocomplete="off">
+        <small>Los emails con esta palabra en el asunto se etiquetarán automáticamente</small>
+      </div>
+      <div class="edit-form-group">
+        <label for="filterContentContains">Contenido contiene:</label>
+        <input type="text" id="filterContentContains" name="filter_content_contains" placeholder="palabra clave" autocomplete="off">
+        <small>Los emails con esta palabra en el contenido se etiquetarán automáticamente</small>
+      </div>
+      <div class="edit-modal-actions">
+        <button type="button" id="cancelFilterModal" class="btn btn-red" aria-label="Cancelar configuración de filtros">Cancelar</button>
+        <button type="submit" class="btn btn-green" aria-label="Guardar filtros de email">Guardar Filtros</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Modal para editar reenvío de correo -->
+<div id="editForwardingModal" class="edit-modal hidden">
+  <div class="edit-modal-content">
+    <div class="edit-modal-header">
+      <h3><i class="fas fa-edit"></i> Editar Correo de Recepción</h3>
+      <button type="button" class="btn-close" data-action="close-forwarding-modal" aria-label="Cerrar modal de editar correo">
+        <i class="fas fa-times"></i>
+      </button>
+    </div>
+    <form id="editForwardingForm" method="POST">
+      <input type="hidden" id="csrf_edit_forwarding" name="_csrf_token" value="{{ csrf_token() }}">
+      <div class="edit-form-group">
+        <label for="editDestinationEmail">Correo donde recibirás todo:</label>
+        <input type="email" id="editDestinationEmail" name="destination_email" required autocomplete="email">
+        <small>Configura Gmail/Outlook para reenviar a este correo</small>
+      </div>
+      <div class="edit-modal-actions">
+        <button type="button" class="btn btn-red" data-action="close-forwarding-modal" aria-label="Cancelar edición de correo">Cancelar</button>
+        <button type="submit" class="btn btn-green" aria-label="Guardar cambios de correo">Guardar</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Modal para editar limpieza automática -->
+<div id="editCleanupModal" class="edit-modal hidden">
+  <div class="edit-modal-content">
+    <div class="edit-modal-header">
+      <h3><i class="fas fa-clock"></i> Editar Limpieza Automática</h3>
+      <button type="button" class="btn-close" data-action="close-cleanup-modal" aria-label="Cerrar modal de editar limpieza">
+        <i class="fas fa-times"></i>
+      </button>
+    </div>
+    <form id="editCleanupForm" method="POST">
+      <input type="hidden" id="csrf_edit_cleanup" name="_csrf_token" value="{{ csrf_token() }}">
+      <div class="edit-form-group">
+        <label for="editCleanupTime">Hora diaria (Colombia):</label>
+        <input type="time" id="editCleanupTime" name="cleanup_time" required autocomplete="off">
+        <small>Hora en que se ejecutará la limpieza automática (Timezone Colombia)</small>
+      </div>
+      <div class="edit-form-group">
+        <label for="editCleanupFolder">Carpeta a limpiar:</label>
+        <select id="editCleanupFolder" name="folder_type" required>
+          <option value="inbox">📥 Recibidos</option>
+          <option value="trash">🗑️ Papelera</option>
+          {% for tag in tags %}
+          <option value="tag" data-tag-id="{{ tag.id }}">🏷️ {{ tag.name }}</option>
+          {% endfor %}
+        </select>
+        <small>Selecciona qué carpeta se limpiará automáticamente</small>
+      </div>
+      <div class="edit-modal-actions">
+        <button type="button" class="btn btn-red" data-action="close-cleanup-modal" aria-label="Cancelar edición de limpieza">Cancelar</button>
+        <button type="submit" class="btn btn-green" aria-label="Guardar cambios de limpieza">Guardar</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Modal para ver email completo -->
+<div id="viewEmailModal" class="edit-modal hidden">
+  <div class="edit-modal-content">
+    <div class="modal-header">
+      <h3>Ver Email</h3>
+      <button type="button" class="close-btn" data-action="close-view-modal" aria-label="Cerrar modal de ver email">
+        <i class="fas fa-times"></i>
+      </button>
+    </div>
+    <div class="modal-body">
+      <div class="email-details">
+        <div class="email-field">
+          <strong>De:</strong>
+          <span id="emailFrom"></span>
+        </div>
+        <div class="email-field">
+          <strong>Para:</strong>
+          <span id="emailTo"></span>
+        </div>
+        <div class="email-field">
+          <strong>Asunto:</strong>
+          <span id="emailSubject"></span>
+        </div>
+        <div class="email-field">
+          <strong>Fecha:</strong>
+          <span id="emailDate"></span>
+        </div>
+        <div class="email-field hidden" id="emailTagsContainer">
+          <strong>Etiquetas:</strong>
+          <div id="emailTags"></div>
+        </div>
+      </div>
+      <div class="email-content">
+        <div class="email-content-tabs">
+          <button class="tab-btn active" data-action="show-tab" data-tab="text" aria-label="Mostrar contenido como texto">Texto</button>
+          <button class="tab-btn hidden" data-action="show-tab" data-tab="html" id="htmlTabBtn" aria-label="Mostrar contenido como HTML">HTML</button>
+        </div>
+        <div class="email-content-body">
+          <div id="emailContentText" class="email-tab-content active"></div>
+          <div id="emailContentHtml" class="email-tab-content hidden"></div>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button type="button" class="btn btn-primary" data-action="mark-processed" id="markProcessedBtn" aria-label="Marcar email como procesado">
+        <i class="fas fa-check"></i> Marcar como Procesado
+      </button>
+      <button type="button" class="btn btn-red" data-action="move-to-trash" id="moveToTrashBtn" aria-label="Mover email a papelera">
+        <i class="fas fa-trash"></i> Mover a Papelera
+      </button>
+      <button type="button" class="btn btn-red hidden" data-action="delete-permanent" id="deletePermanentBtn" aria-label="Eliminar email permanentemente">
+        <i class="fas fa-times-circle"></i> Eliminar Permanentemente
+      </button>
+      <button type="button" class="btn btn-secondary" data-action="close-view-modal" aria-label="Cerrar modal de ver email">Cerrar</button>
+    </div>
+  </div>
+</div>
+
+<script src="{{ url_for('static', filename='js/email_buzon.js') }}?v=20241220-logs"></script>
+<script src="{{ url_for('static', filename='js/menu_busqueda.js') }}"></script>
+<script src="{{ url_for('static', filename='js/clear_trigger_logs.js') }}?v=20241220-original"></script>
+{% endblock %}

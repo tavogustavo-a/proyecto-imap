@@ -1,0 +1,437 @@
+{% extends "admin_dashboard.html" %}
+
+{% block content %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/email_buzon.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/store.css') }}">
+
+
+<!-- Interfaz principal de filtros -->
+<main class="email-interface" role="main">
+  
+  <header class="email-header">
+    <h1><i class="fas fa-filter" aria-hidden="true"></i> Gestión Filtros</h1>
+    <div class="email-stats">
+      <a href="{{ url_for('admin_email_buzon.manage_email_buzon') }}" class="btn btn-blue no-decoration">
+        <i class="fas fa-arrow-left" aria-hidden="true"></i> Volver
+      </a>
+    </div>
+  </header>
+
+  <!-- Token CSRF para JavaScript -->
+  <input type="hidden" id="csrf_token" name="_csrf_token" value="{{ csrf_token() }}">
+
+  <!-- Área de contenido con fondo tema1.png -->
+  <div class="content-area">
+    <!-- Primera sección: Filtros (como área principal del buzón) -->
+  <div class="filters-main-area">
+    <div class="filters-list-section">
+      <div class="filters-header">
+        <h4>Filtros</h4>
+        <button class="btn btn-green" id="createFilterBtn" data-action="create-filter" aria-label="Crear nuevo filtro">
+          <i class="fas fa-plus" aria-hidden="true"></i> Nuevo Filtro
+        </button>
+      </div>
+
+      <!-- Campo mostrar y buscar en la misma línea -->
+      <div class="d-flex flex-wrap align-items-center mb-1 productos-buscar-mostrar">
+        <div class="search-container">
+          <label for="searchFilterInput" class="sr-only">Buscar filtro</label>
+          <input type="search" id="searchFilterInput" placeholder="Buscar filtro..." autocomplete="off">
+        </div>
+        <div class="d-flex align-items-center gap-1">
+          <label for="showFilterCount" class="sr-only">Mostrar cantidad de filtros</label>
+          <select id="showFilterCount" autocomplete="off">
+            <option value="10">10</option>
+            <option value="20" selected>20</option>
+            <option value="30">30</option>
+            <option value="50">50</option>
+            <option value="all">Todos</option>
+          </select>
+        </div>
+      </div>
+
+      {% if filters %}
+        <div class="filters-table-container">
+          <table class="filters-table" id="filters-table" role="table" aria-label="Lista de filtros automáticos configurados">
+            <caption class="sr-only">Tabla de filtros automáticos de correo electrónico</caption>
+            <thead>
+              <tr>
+                <th scope="col">Nombre</th>
+                <th scope="col">Condición</th>
+                <th scope="col">Destino</th>
+                <th scope="col">Acciones</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for filter in filters %}
+              <tr class="filter-row" data-filter-id="{{ filter.id }}">
+                
+                <td class="filter-name">
+                  <i class="fas fa-filter" aria-hidden="true"></i>
+                  <strong title="{{ filter.name }}">{{ filter.name }}</strong>
+                </td>
+                
+                <td class="filter-condition">
+                  {% if filter.filter_from_email %}
+                    <span class="condition-badge from-email" title="📧 De: {{ filter.filter_from_email }}">📧 De: {{ filter.filter_from_email }}</span>
+                  {% elif filter.filter_to_email %}
+                    <span class="condition-badge to-email" title="📨 Para: {{ filter.filter_to_email }}">📨 Para: {{ filter.filter_to_email }}</span>
+                  {% elif filter.filter_subject_contains %}
+                    <span class="condition-badge subject" title="📝 Asunto: {{ filter.filter_subject_contains }}">📝 Asunto: {{ filter.filter_subject_contains }}</span>
+                  {% elif filter.filter_content_contains %}
+                    <span class="condition-badge content" title="📄 Contenido: {{ filter.filter_content_contains }}">📄 Contenido: {{ filter.filter_content_contains }}</span>
+                  {% endif %}
+                </td>
+                
+                <td class="filter-destination">
+                  {% if filter.tag_id == -1 %}
+                    <span class="filter-tag-trash">🗑️ Papelera</span>
+                  {% elif filter.tag %}
+                    <span class="filter-tag" data-tag-color="{{ filter.tag.color }}">
+                      {{ filter.tag.name }}
+                    </span>
+                  {% else %}
+                    <span class="filter-tag-orphan">⚠️ Sin asignar</span>
+                  {% endif %}
+                </td>
+                
+                <td class="filter-actions">
+                  <button class="btn btn-orange btn-sm edit-filter-btn" 
+                          data-filter-id="{{ filter.id }}"
+                          data-filter-name="{{ filter.name }}"
+                          data-filter-tag-id="{{ 'trash' if filter.tag_id == -1 else filter.tag_id or '' }}"
+                          data-filter-from-email="{{ filter.filter_from_email or '' }}"
+                          data-filter-to-email="{{ filter.filter_to_email or '' }}"
+                          data-filter-subject="{{ filter.filter_subject_contains or '' }}"
+                          data-filter-content="{{ filter.filter_content_contains or '' }}"
+                          title="Editar filtro" aria-label="Editar filtro {{ filter.name }}">
+                    <i class="fas fa-edit" aria-hidden="true"></i>
+                  </button>
+                  
+                  {% if filter.enabled %}
+                    <button class="btn btn-toggle btn-off btn-sm toggle-filter-btn" 
+                            data-filter-id="{{ filter.id }}"
+                            title="Filtro activo - Click para desactivar" 
+                            aria-label="Desactivar filtro {{ filter.name }}">
+                      OFF
+                    </button>
+                  {% else %}
+                    <button class="btn btn-toggle btn-on btn-sm toggle-filter-btn" 
+                            data-filter-id="{{ filter.id }}"
+                            title="Filtro inactivo - Click para activar" 
+                            aria-label="Activar filtro {{ filter.name }}">
+                      ON
+                    </button>
+                  {% endif %}
+                  
+                  <button class="btn btn-red btn-sm delete-filter-btn" 
+                          data-filter-id="{{ filter.id }}"
+                          title="Eliminar filtro" aria-label="Eliminar filtro {{ filter.name }}">
+                    <i class="fas fa-trash" aria-hidden="true"></i>
+                  </button>
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% else %}
+        <div class="no-filters-message">
+          <p><i class="fas fa-info-circle" aria-hidden="true"></i> No hay filtros configurados</p>
+          <p>Los filtros automáticos permiten que los correos se clasifiquen automáticamente en etiquetas según criterios específicos.</p>
+        </div>
+      {% endif %}
+      
+      <!-- Botones de paginación para filtros -->
+      <div class="d-flex justify-content-center mt-2 mb-2 pagination-buttons productos-paginacion-margen">
+        <button id="prevFilterPageBtn" class="btn-blue btn-panel" type="button">&lt; Anterior</button>
+        <button id="nextFilterPageBtn" class="btn-blue btn-panel" type="button">Siguiente &gt;</button>
+      </div>
+    </div>
+  </div>
+  
+  <!-- Segunda sección: Remitentes Bloqueados -->
+  <div>
+    <div class="blocked-senders-section">
+      <div class="filters-header">
+        <h4><i class="fas fa-paper-plane" aria-hidden="true"></i> Bloqueados</h4>
+        <button class="btn btn-red" id="createBlockedSenderBtn" data-action="create-blocked-sender" aria-label="Bloquear nuevo remitente">
+          <i class="fas fa-ban" aria-hidden="true"></i> Bloquear
+        </button>
+      </div>
+
+      <!-- Campo mostrar y buscar en la misma línea -->
+      <div class="d-flex flex-wrap align-items-center mb-1 productos-buscar-mostrar">
+        <div class="search-container">
+          <label for="searchBlockedInput" class="sr-only">Buscar remitente bloqueado</label>
+          <input type="search" id="searchBlockedInput" placeholder="Buscar remitente bloqueado..." autocomplete="off">
+        </div>
+        <div class="d-flex align-items-center gap-1">
+          <label for="showBlockedCount" class="sr-only">Mostrar cantidad de bloqueados</label>
+          <select id="showBlockedCount" autocomplete="off">
+            <option value="10">10</option>
+            <option value="20" selected>20</option>
+            <option value="30">30</option>
+            <option value="50">50</option>
+            <option value="all">Todos</option>
+          </select>
+        </div>
+      </div>
+
+      {% if blocked_senders %}
+        <div class="filters-table-container">
+          <table class="filters-table" id="blocked-senders-table" role="table" aria-label="Lista de remitentes bloqueados">
+            <caption class="sr-only">Tabla de remitentes bloqueados</caption>
+            <thead>
+              <tr>
+                <th scope="col">Remitente</th>
+                <th scope="col">Acciones</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for sender in blocked_senders %}
+              <tr class="filter-row" data-sender-id="{{ sender.id }}">
+                
+                <td class="sender-email">
+                  <i class="fas fa-ban" aria-hidden="true"></i>
+                  <strong title="{{ sender.display_name }}">{{ sender.display_name }}</strong>
+                </td>
+                
+                <td class="sender-actions">
+                  <button class="btn btn-orange btn-sm edit-blocked-sender-btn" 
+                          data-sender-id="{{ sender.id }}"
+                          data-sender-email="{{ sender.sender_email or '' }}"
+                          data-sender-domain="{{ sender.sender_domain or '' }}"
+                          title="Editar remitente bloqueado" aria-label="Editar remitente {{ sender.display_name }}">
+                    <i class="fas fa-edit" aria-hidden="true"></i>
+                  </button>
+                  
+                  {% if sender.enabled %}
+                    <button class="btn btn-toggle btn-off toggle-blocked-sender-btn" 
+                            data-sender-id="{{ sender.id }}"
+                            title="Remitente bloqueado - Click para desbloquear" 
+                            aria-label="Desbloquear remitente {{ sender.display_name }}">
+                      OFF
+                    </button>
+                  {% else %}
+                    <button class="btn btn-toggle btn-on toggle-blocked-sender-btn" 
+                            data-sender-id="{{ sender.id }}"
+                            title="Remitente desbloqueado - Click para bloquear" 
+                            aria-label="Bloquear remitente {{ sender.display_name }}">
+                      ON
+                    </button>
+                  {% endif %}
+                  
+                  <button class="btn btn-red btn-sm delete-blocked-sender-btn" 
+                          data-sender-id="{{ sender.id }}"
+                          title="Eliminar bloqueo" aria-label="Eliminar bloqueo de {{ sender.display_name }}">
+                    <i class="fas fa-trash" aria-hidden="true"></i>
+                  </button>
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% else %}
+        <div class="no-filters-message">
+          <p><i class="fas fa-info-circle" aria-hidden="true"></i> No hay remitentes bloqueados</p>
+          <p>Los remitentes bloqueados no podrán enviar correos que lleguen a tu buzón.</p>
+        </div>
+      {% endif %}
+      
+      <!-- Botones de paginación para remitentes bloqueados -->
+      <div class="d-flex justify-content-center mt-2 mb-2 pagination-buttons productos-paginacion-margen">
+        <button id="prevBlockedPageBtn" class="btn-blue btn-panel" type="button">&lt; Anterior</button>
+        <button id="nextBlockedPageBtn" class="btn-blue btn-panel" type="button">Siguiente &gt;</button>
+      </div>
+    </div>
+  </div> <!-- Cierre content-area -->
+</main>
+
+<!-- Modal para crear filtro -->
+<div id="createFilterModal" class="edit-modal" role="dialog" aria-labelledby="createFilterModalTitle" aria-hidden="true">
+  <div class="edit-modal-content">
+    <div class="edit-modal-header">
+      <h3 id="createFilterModalTitle">Crear Nuevo Filtro</h3>
+      <button id="closeCreateFilterModal" class="btn btn-red" aria-label="Cerrar modal de crear filtro">Cerrar</button>
+    </div>
+    <form id="createFilterForm" method="POST" action="{{ url_for('admin_email_buzon.create_filter_route') }}">
+      <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+      
+      <div class="edit-form-group">
+        <label for="createFilterName">Nombre del filtro:</label>
+        <input type="text" id="createFilterName" name="name" placeholder="Ej: Correos de trabajo" required>
+      </div>
+      
+      <div class="edit-form-group">
+        <label for="createFilterTag">Etiqueta de destino:</label>
+        <select id="createFilterTag" name="tag_id" required>
+          <option value="">Seleccionar destino...</option>
+          <option value="trash" class="trash-option">🗑️ Papelera (Eliminar automáticamente)</option>
+          {% for tag in tags %}
+          <option value="{{ tag.id }}">🏷️ {{ tag.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <h4>Condición del filtro:</h4>
+      
+      <div class="edit-form-group">
+        <label for="createFilterType">Tipo de filtro:</label>
+        <select id="createFilterType" name="filter_type" required>
+          <option value="">Seleccionar tipo de filtro...</option>
+          <option value="from_email">📧 Remitente contiene</option>
+          <option value="to_email">📨 Destinatario contiene</option>
+          <option value="subject">📝 Asunto contiene</option>
+          <option value="content">📄 Contenido contiene</option>
+        </select>
+      </div>
+      
+      <div class="edit-form-group">
+        <label for="createFilterValue">Valor del filtro:</label>
+        <input type="text" id="createFilterValue" name="filter_value" placeholder="Ingresa el texto a buscar..." required aria-describedby="createHelperText">
+        <small id="createHelperText">Los correos que coincidan con este criterio se procesarán automáticamente</small>
+      </div>
+      
+      <div class="edit-modal-actions">
+        <button type="button" id="cancelCreateFilterModal" class="btn btn-red">Cancelar</button>
+        <button type="submit" class="btn btn-green">Crear Filtro</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Modal para editar filtro -->
+<div id="editFilterModal" class="edit-modal" role="dialog" aria-labelledby="editFilterModalTitle" aria-hidden="true">
+  <div class="edit-modal-content">
+    <div class="edit-modal-header">
+      <h3 id="editFilterModalTitle">Editar Filtro</h3>
+      <button id="closeEditFilterModal" class="btn-close" aria-label="Cerrar modal de editar filtro">
+        <i class="fas fa-times" aria-hidden="true"></i>
+      </button>
+    </div>
+    <form id="editFilterForm" method="POST" action="">
+      <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+      
+      <div class="edit-form-group">
+        <label for="editFilterName">Nombre del filtro:</label>
+        <input type="text" id="editFilterName" name="name" required>
+      </div>
+      
+      <div class="edit-form-group">
+        <label for="editFilterTag">Etiqueta de destino:</label>
+        <select id="editFilterTag" name="tag_id">
+          <option value="">Seleccionar destino...</option>
+          <option value="trash" class="trash-option">🗑️ Papelera (Eliminar automáticamente)</option>
+          {% for tag in tags %}
+          <option value="{{ tag.id }}">🏷️ {{ tag.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <h4>Condición del filtro:</h4>
+      
+      <div class="edit-form-group">
+        <label for="editFilterType">Tipo de filtro:</label>
+        <select id="editFilterType" name="filter_type" required>
+          <option value="">Seleccionar tipo de filtro...</option>
+          <option value="from_email">📧 Remitente contiene</option>
+          <option value="to_email">📨 Destinatario contiene</option>
+          <option value="subject">📝 Asunto contiene</option>
+          <option value="content">📄 Contenido contiene</option>
+        </select>
+      </div>
+      
+      <div class="edit-form-group">
+        <label for="editFilterValue">Valor del filtro:</label>
+        <input type="text" id="editFilterValue" name="filter_value" placeholder="Ingresa el texto a buscar..." required aria-describedby="editHelperText">
+        <small id="editHelperText">Los correos que coincidan con este criterio se procesarán automáticamente</small>
+      </div>
+      
+      <div class="edit-modal-actions">
+        <button type="submit" class="btn btn-green">Guardar</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Modal para crear remitente bloqueado -->
+<div id="createBlockedSenderModal" class="edit-modal" role="dialog" aria-labelledby="createBlockedSenderModalTitle" aria-hidden="true" aria-modal="true">
+  <div class="edit-modal-content">
+    <div class="edit-modal-header">
+      <h3 id="createBlockedSenderModalTitle">Bloquear Nuevo Remitente</h3>
+      <button id="closeCreateBlockedSenderModal" class="btn-close" aria-label="Cerrar modal de bloquear remitente">
+        <i class="fas fa-times" aria-hidden="true"></i>
+      </button>
+    </div>
+    <form id="createBlockedSenderForm" method="POST" action="{{ url_for('admin_email_buzon.create_blocked_sender_route') }}">
+      <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+      
+      <div class="edit-form-group">
+        <div class="info-box">
+          <small><i class="fas fa-info-circle" aria-hidden="true"></i> <strong>Importante:</strong> Solo puede especificar <strong>un email específico</strong> O <strong>un dominio completo</strong>, no ambos a la vez.</small>
+        </div>
+      </div>
+      
+      <div class="edit-form-group">
+        <label for="createSenderEmail">Email del remitente:</label>
+        <input type="email" id="createSenderEmail" name="sender_email" placeholder="ejemplo@dominio.com" aria-describedby="createSenderEmailHelp">
+        <small id="createSenderEmailHelp">Los correos de este remitente específico serán bloqueados automáticamente</small>
+      </div>
+      
+      <div class="edit-form-group">
+        <label for="createSenderDomain">Dominio completo:</label>
+        <input type="text" id="createSenderDomain" name="sender_domain" placeholder="yahoo.com" aria-describedby="createSenderDomainHelp">
+        <small id="createSenderDomainHelp">Bloquea todos los correos de este dominio (ej: yahoo.com bloquea todos los @yahoo.com)</small>
+      </div>
+      
+      <div class="edit-modal-actions">
+        <button type="submit" class="btn btn-red">Bloquear Remitente</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Modal para editar remitente bloqueado -->
+<div id="editBlockedSenderModal" class="edit-modal" role="dialog" aria-labelledby="editBlockedSenderModalTitle" aria-hidden="true" aria-modal="true">
+  <div class="edit-modal-content">
+    <div class="edit-modal-header">
+      <h3 id="editBlockedSenderModalTitle">Editar Remitente Bloqueado</h3>
+      <button id="closeEditBlockedSenderModal" class="btn-close" aria-label="Cerrar modal de editar remitente">
+        <i class="fas fa-times" aria-hidden="true"></i>
+      </button>
+    </div>
+    <form id="editBlockedSenderForm" method="POST" action="">
+      <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+      <input type="hidden" id="editSenderId" name="sender_id" value="">
+      
+      <div class="edit-form-group">
+        <div class="info-box">
+          <small><i class="fas fa-info-circle" aria-hidden="true"></i> <strong>Importante:</strong> Solo puede especificar <strong>un email específico</strong> O <strong>un dominio completo</strong>, no ambos a la vez.</small>
+        </div>
+      </div>
+      
+      <div class="edit-form-group">
+        <label for="editSenderEmail">Email del remitente:</label>
+        <input type="email" id="editSenderEmail" name="sender_email" placeholder="ejemplo@dominio.com" aria-describedby="editSenderEmailHelp">
+        <small id="editSenderEmailHelp">Modifica el email del remitente específico bloqueado</small>
+      </div>
+      
+      <div class="edit-form-group">
+        <label for="editSenderDomain">Dominio completo:</label>
+        <input type="text" id="editSenderDomain" name="sender_domain" placeholder="yahoo.com" aria-describedby="editSenderDomainHelp">
+        <small id="editSenderDomainHelp">Modifica el dominio bloqueado (ej: yahoo.com bloquea todos los @yahoo.com)</small>
+      </div>
+      
+      <div class="edit-modal-actions">
+        <button type="submit" class="btn btn-green">Guardar</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script src="{{ url_for('static', filename='js/email_filters.js') }}"></script>
+<script src="{{ url_for('static', filename='js/menu_busqueda.js') }}"></script>
+<script src="{{ url_for('static', filename='js/clear_trigger_logs.js') }}"></script>
+{% endblock %}

@@ -1,0 +1,467 @@
+<!-- app/templates/manage_subusers.html -->
+{% extends "base.html" %}
+
+{% block title %}Gestionar Sub-usuarios{% endblock %}
+
+{% block head %}
+<meta name="csrf_token" content="{{ csrf_token() }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/store.css') }}">
+<link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/sms.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='fontawesome/css/all.css') }}">
+{% endblock head %}
+
+{% block content %}
+<div id="mobileMenu" class="mobile-menu-store hidden menu-mobile-fixed">
+  <div class="menu-title-row menu-title-row-custom">
+    <i class="fas fa-bars icon-menu-bar"></i>
+    <h3 class="h3-menu-title">Menú</h3>
+  </div>
+  {% set current_user_id = session.get('user_id') %}
+  {% if current_user_id %}
+    {% set user_object = User.query.get(current_user_id) %}
+    {# Si el usuario fue eliminado, user_object será None #}
+    {% if not user_object %}
+      {% set user_object = None %}
+    {% endif %}
+    {% if user_object %}
+      {% set show_store_menu = False %}
+      {% if not user_object.parent_id %}
+        {% set tipo_precio = None %}
+        {% if user_object.user_prices and user_object.user_prices is mapping %}
+          {% set tipo_precio = user_object.user_prices.get('tipo_precio') %}
+        {% endif %}
+        {% if tipo_precio and tipo_precio in ['USD', 'COP'] %}
+          {% set show_store_menu = True %}
+        {% endif %}
+      {% elif user_object.parent_id and user_object.can_access_store %}
+        {% set parent = User.query.get(user_object.parent_id) %}
+        {% if parent %}
+          {% set parent_tipo_precio = None %}
+          {% if parent.user_prices and parent.user_prices is mapping %}
+            {% set parent_tipo_precio = parent.user_prices.get('tipo_precio') %}
+          {% endif %}
+          {% if parent_tipo_precio and parent_tipo_precio in ['USD', 'COP'] %}
+            {% set show_store_menu = True %}
+          {% endif %}
+        {% endif %}
+      {% endif %}
+      {% if show_store_menu %}
+        <a href="{{ url_for('store_bp.store_front') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-store"></i> Tienda</a>
+      {% endif %}
+    {% endif %}
+  {% else %}
+  <a href="{{ url_for('store_bp.store_front') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-store"></i> Tienda</a>
+  {% endif %}
+  <a href="{{ url_for('store_bp.tools_public') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-tools"></i> Herramientas</a>
+  <a href="{{ url_for('main_bp.home') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-code"></i> Códigos</a>
+  {% if user_has_codigos2_access() %}
+  <a href="{{ url_for('main_bp.home2') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-code"></i> Códigos 2</a>
+  {% endif %}
+  {% if user_object %}
+    {% if is_admin %}
+      <a href="{{ url_for('user_auth_bp.estadisticas') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-chart-bar"></i> Estadísticas</a>
+    {% elif not user_object.parent_id %}
+      {% set tipo_precio = None %}
+      {% if user_object.user_prices and user_object.user_prices is mapping %}
+        {% set tipo_precio = user_object.user_prices.get('tipo_precio') %}
+      {% endif %}
+      {% if tipo_precio and tipo_precio in ['USD', 'COP'] %}
+        <a href="{{ url_for('user_auth_bp.estadisticas') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-chart-bar"></i> Estadísticas</a>
+      {% endif %}
+    {% elif user_object.parent_id and user_object.can_access_store %}
+      <a href="{{ url_for('user_auth_bp.estadisticas') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-chart-bar"></i> Estadísticas</a>
+    {% endif %}
+  {% endif %}
+  {% if is_user and current_user %}
+    {% if current_user.is_support %}
+      <a href="{{ url_for('store_bp.support_dashboard') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-headset"></i> Chat de Soporte Admin</a>
+    {% elif current_user.can_chat %}
+      <a href="{{ url_for('store_bp.user_chat_soporte') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-headset"></i> Chat de Soporte</a>
+    {% endif %}
+  {% endif %}
+  {% if is_user and current_user_id %}
+    {% if user_object and user_object.can_create_subusers %}
+      <a href="{{ url_for('subuser_bp.manage_subusers') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-users"></i> Sub-usuarios</a>
+    {% endif %}
+  {% endif %}
+  {% if is_user and not current_user.parent_id and user_has_worksheet_access(current_user) %}
+  <a href="{{ url_for('store_bp.user_work_sheets') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-table"></i> Hojas de Cálculo</a>
+{% endif %}
+  {% if is_user and current_user_id %}
+    {% set user_object = User.query.get(current_user_id) if current_user_id else None %}
+    {# Si el usuario fue eliminado, user_object será None #}
+    {% if not user_object %}
+      {% set user_object = None %}
+    {% endif %}
+    {% set show_store = False %}
+    {% if is_admin %}
+      {% set show_store = True %}
+    {% elif user_object %}
+      {% if user_object.parent_id %}
+        {% if user_object.can_access_store %}
+          {% set parent = User.query.get(user_object.parent_id) %}
+          {# Si el padre fue eliminado, parent será None #}
+          {% if not parent %}
+            {% set parent = None %}
+          {% endif %}
+          {% set parent_tipo_precio = None %}
+          {% if parent and parent.user_prices and parent.user_prices is mapping %}
+            {% set parent_tipo_precio = parent.user_prices.get('tipo_precio') %}
+          {% endif %}
+          {% if parent_tipo_precio and parent_tipo_precio in ['USD', 'COP'] %}
+            {% set show_store = True %}
+          {% endif %}
+        {% endif %}
+      {% elif not user_object.parent_id %}
+        {% set tipo_precio = None %}
+        {% if user_object.user_prices and user_object.user_prices is mapping %}
+          {% set tipo_precio = user_object.user_prices.get('tipo_precio') %}
+        {% endif %}
+        {% if tipo_precio and tipo_precio in ['USD', 'COP'] %}
+          {% set show_store = True %}
+        {% endif %}
+      {% endif %}
+    {% endif %}
+    {% if show_store %}
+      <a href="{{ url_for('store_bp.historial_compras_usuario') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-receipt"></i> Mi Historial de Compras</a>
+    {% endif %}
+  {% endif %}
+  <a href="{{ url_for('user_auth_bp.logout') }}" class="btn-panel btn-red mobile-menu-btn mb-04"><i class="fas fa-sign-out-alt"></i> Cerrar Sesión</a>
+</div>
+<div id="menuOverlay" class="menu-overlay"></div>
+
+<div class="form-container-wide" id="subuser-management-container" data-user-id="{{ current_user.id if current_user else '' }}">
+
+  <!-- CONTORNO 1: Panel Sub-usuarios + Crear Sub-usuario -->
+  <div class="admin-card mb-1">
+    <div class="d-flex justify-content-between align-items-center">
+      <button id="menuToggleBtn" class="btn-panel btn-blue">&#9776; Menú</button>
+      <button
+        id="btnVolverBusqueda"
+        type="button"
+        class="btn-blue"
+        data-home-url="{{ url_for('main_bp.home') }}"
+      >
+        Volver
+      </button>
+    </div>
+    <hr class="hr-margin-08">
+
+    <!-- CREAR SUB-USUARIO -->
+    <h4 class="mt-0">Crear Sub-usuario</h4>
+    <form id="createSubuserForm" class="d-flex gap-05 flex-wrap mt-05">
+      <input
+        type="text"
+        id="subUsername"
+        placeholder="Usuario"
+        class="flex-grow-1"
+        required
+        autocomplete="off"
+      >
+      <input
+        type="password"
+        id="subPassword"
+        placeholder="Contraseña"
+        class="flex-grow-1"
+        required
+        autocomplete="new-password"
+      >
+      <button type="submit" class="btn-green">Crear</button>
+    </form>
+    <div id="createSubuserMsg" class="mt-05 error-message"></div>
+  </div>
+
+  <!-- CONTORNO 1.5: Gestión de Correos del Usuario Principal -->
+  {% if current_user and not current_user.parent_id and current_user.can_add_own_emails %}
+  <div class="admin-card mb-1">
+    <h4 class="mt-0">Gestión de Correos</h4>
+    
+    <!-- Búsqueda y Eliminación de Correos -->
+    <h5 class="mb-05 text-center text-small">Búsqueda y Eliminación de Correos</h5>
+    <form id="searchSubuserEmailsForm" class="mb-05">
+      <label for="searchSubuserEmailsInput" class="sr-only">Buscar y eliminar correos</label>
+      <div class="search-textarea-wrapper">
+        <textarea 
+          id="searchSubuserEmailsInput" 
+          rows="2" 
+          class="d-block mb-05 resize-vertical" 
+          placeholder="Ingresa uno o varios correos (separados por comas, espacios o saltos de línea)."
+          autocomplete="off"
+        ></textarea>
+        <button type="button" id="clearSubuserSearchBtn" class="search-textarea-clear-btn" aria-label="Limpiar búsqueda">
+          <i class="fas fa-times"></i>
+        </button>
+      </div>
+      <div class="d-flex gap-05 justify-content-end align-items-center">
+        <div id="subuserDeleteDisplayedContainer" class="d-none">
+          <button type="button" id="subuserDeleteDisplayedBtn" class="btn-red btn-small">
+            Eliminar X Mostrados
+          </button>
+        </div>
+      </div>
+    </form>
+    <div id="subuserEmailsSearchResults" class="mb-05 text-small"></div>
+    <div id="subuserSearchStatus" class="text-italic text-secondary mb-05 text-small"></div>
+
+    <!-- Lista de Correos Permitidos -->
+    <div class="mb-05">
+      <div class="d-flex justify-content-between align-items-center flex-wrap gap-05 mb-05">
+        <label for="subuserPerPageSelect" class="text-small"><strong>Lista Correos permitidos:</strong></label>
+        <div class="d-flex align-items-center gap-05">
+          <span class="text-small"><strong>Mostrar:</strong></span>
+          <select id="subuserPerPageSelect" class="select-padding-3px select-small" autocomplete="off">
+            <option value="10">10</option>
+            <option value="20" selected>20</option>
+            <option value="30">30</option>
+            <option value="50">50</option>
+            <option value="100">100</option>
+            <option value="300">300</option>
+            <option value="-1">Todos</option>
+          </select>
+        </div>
+      </div>
+      <div id="subuserAllowedEmailsTextContainer" class="allowed-emails-display mb-05 allowed-emails-scroll">
+        <p class="text-secondary">Cargando correos...</p>
+      </div>
+      <div id="subuserAllowedEmailsPagination" class="d-flex justify-content-between align-items-center flex-wrap gap-05 mb-05">
+        <span id="subuserPaginationInfo" class="text-small"></span>
+        <button id="subuserDeleteAllEmailsBtn" class="btn-red btn-small btn-small-font" title="Eliminar TODOS los correos permitidos">
+          <i class="fas fa-trash"></i> Eliminar Todos
+        </button>
+        <div class="d-flex gap-05">
+          <button id="subuserPrevPageBtn" class="btn-blue btn-small btn-small-font" disabled>&lt; Anterior</button>
+          <button id="subuserNextPageBtn" class="btn-blue btn-small btn-small-font" disabled>Siguiente &gt;</button>
+        </div>
+      </div>
+    </div>
+
+    <hr class="hr-margin-15">
+
+    <!-- Añadir Correos -->
+    <h5 class="mb-05 text-center text-small">Añadir Correos</h5>
+    <div id="subuserAddEmailsSection">
+      <label for="subuserAddEmailsInput" class="sr-only">Nuevos Correos</label>
+      <textarea 
+        id="subuserAddEmailsInput" 
+        rows="2" 
+        class="d-block w-100 mb-05" 
+        placeholder="Ingresa uno o varios correos (separados por comas, espacios o saltos de línea). Ejemplo: nuevo1@ejemplo.com, nuevo2@ejemplo.com..."
+        autocomplete="off"
+      ></textarea>
+      <div class="text-center">
+        <button type="button" id="subuserAddEmailsBtn" class="btn-blue btn-small">Añadir Correos</button>
+      </div>
+      <div class="text-center mt-05">
+        <span id="subuserAddEmailsMsg" class="text-italic text-success text-small"></span>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- CONTORNO 1.6: Borrado Masivo de Correos -->
+  {% if current_user and not current_user.parent_id and current_user.can_bulk_delete_emails %}
+  <div class="admin-card mb-1">
+    <h4 class="mb-1 text-center">🗑️ Sacar Masivamente Correos de los Usuarios</h4>
+
+    <form id="bulkDeleteEmailsSubuserForm">
+      <label for="bulkDeleteEmailsSubuserInput" class="sr-only">Correos a eliminar</label>
+      <textarea
+        id="bulkDeleteEmailsSubuserInput"
+        rows="4"
+        placeholder="Ingresa uno o varios correos (separados por comas, espacios o saltos de línea). Ejemplo: correo1@test.com, correo2@test.com..."
+        class="d-block mb-05 w-100"
+        autocomplete="off"
+      ></textarea>
+
+      <div class="d-flex gap-05 justify-content-center">
+        <button type="submit" id="bulkDeleteEmailsSubuserBtn" class="btn-red">Eliminar Correos de Todos los Usuarios</button>
+      </div>
+
+      <div id="bulkDeleteEmailsSubuserMessage" class="mt-05 text-center"></div>
+    </form>
+  </div>
+  {% endif %}
+
+  <!-- CONTORNO 1.7: Gestión de 2FA por Correo -->
+  {% if current_user and not current_user.parent_id and current_user.can_manage_2fa_emails %}
+  <div class="admin-card mb-1 twofa-section-card">
+    <h4 class="mb-1 text-center">🔐 Gestión de 2FA por Correo</h4>
+    
+    <!-- Formulario para agregar/editar configuración 2FA -->
+    <form id="subuser-twofa-config-form" class="mb-2">
+      <input type="hidden" id="subuser-twofa-config-id" value="">
+      
+      <label for="subuser-twofa-emails-input" class="sr-only">Correos</label>
+      <textarea
+        id="subuser-twofa-emails-input"
+        rows="2"
+        placeholder="Correos (separados por coma o espacio): correo1@test.com, correo2@test.com"
+        required
+        class="d-block mb-05 w-100"
+        autocomplete="off"
+      ></textarea>
+      
+      <!-- Línea compacta: Código manual | Subir QR | Botón Agregar -->
+      <div class="d-flex gap-05 align-items-center mb-05 twofa-compact-row">
+        <label for="subuser-twofa-secret-input" class="sr-only">Código Secreto</label>
+        <input
+          type="text"
+          id="subuser-twofa-secret-input"
+          placeholder="Código secreto"
+          class="flex-grow-1"
+          autocomplete="off"
+          pattern="[A-Z0-9]{16,}"
+          title="Código secreto TOTP (solo letras mayúsculas y números)"
+        >
+        <label for="subuser-twofa-qr-file" class="sr-only">Archivo QR</label>
+        <input
+          type="file"
+          id="subuser-twofa-qr-file"
+          accept="image/*"
+          class="d-none"
+        >
+        <button type="button" id="subuser-twofa-upload-qr-btn" class="btn-blue btn-small">
+          <i class="fas fa-qrcode"></i> QR
+        </button>
+        <button type="submit" id="subuser-twofa-save-btn" class="btn-green btn-small">Agregar</button>
+        <button type="button" id="subuser-twofa-cancel-btn" class="btn-blue btn-small d-none">Cancelar</button>
+      </div>
+      
+      <!-- Preview del QR (oculto por defecto) -->
+      <div id="subuser-twofa-qr-preview" class="text-center mb-05 d-none"></div>
+      
+      <!-- Display del secreto configurado (oculto por defecto) -->
+      <div id="subuser-twofa-secret-display" class="d-none mb-05 text-center">
+        <strong>Secreto configurado:</strong> <code id="subuser-twofa-secret-display-value"></code>
+      </div>
+      
+      <div id="subuser-twofa-message" class="mt-05 text-center"></div>
+    </form>
+    
+    <!-- Búsqueda y Mostrar -->
+    <div class="d-flex flex-wrap align-items-center mb-1 productos-buscar-mostrar">
+      <div class="search-container">
+        <label for="subuser-searchTwofaInput" class="sr-only">Buscar configuraciones 2FA</label>
+        <input type="search" id="subuser-searchTwofaInput" placeholder="Buscar..." autocomplete="off">
+      </div>
+      <div class="d-flex align-items-center">
+        <label for="subuser-showTwofaCount" class="sr-only">Mostrar cantidad</label>
+        <select id="subuser-showTwofaCount" autocomplete="off">
+          <option value="5">5</option>
+          <option value="10">10</option>
+          <option value="20" selected>20</option>
+          <option value="30">30</option>
+          <option value="40">40</option>
+          <option value="50">50</option>
+          <option value="100">100</option>
+          <option value="all">Todos</option>
+        </select>
+      </div>
+    </div>
+    
+    <!-- Lista de configuraciones 2FA -->
+    <div id="subuser-twofa-configs-list" class="mt-2">
+      <p class="text-center text-secondary">Cargando configuraciones...</p>
+    </div>
+    
+    <!-- Botones de paginación -->
+    <div class="d-flex justify-content-center mt-2 mb-05 pagination-buttons">
+      <button id="subuser-prevTwofaPageBtn" class="btn-blue btn-panel" type="button">&lt; Anterior</button>
+      <button id="subuser-nextTwofaPageBtn" class="btn-blue btn-panel" type="button">Siguiente &gt;</button>
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- Modal para editar configuración 2FA -->
+  {% if current_user and not current_user.parent_id and current_user.can_manage_2fa_emails %}
+  <div id="subuser-twofa-edit-modal" class="modal d-none" tabindex="-1">
+    <div class="sms-modal-content">
+      <div class="d-flex justify-content-between align-items-center mb-3">
+        <h4 class="m-0 text-center flex-grow-1">Editar Configuración 2FA</h4>
+        <button type="button" class="btn-panel btn-red" id="subuser-close-edit-twofa-modal" title="Cerrar">
+          <i class="fas fa-times"></i>
+        </button>
+      </div>
+      
+      <form id="subuser-twofa-edit-form">
+        <input type="hidden" id="subuser-edit-twofa-config-id" value="">
+        
+        <label for="subuser-edit-twofa-emails-input" class="sr-only">Correos</label>
+        <textarea
+          id="subuser-edit-twofa-emails-input"
+          rows="2"
+          placeholder="Correos (separados por coma o espacio): correo1@test.com, correo2@test.com"
+          required
+          class="d-block mb-05 w-100"
+          autocomplete="off"
+        ></textarea>
+        
+        <!-- Línea compacta: Código manual | Subir QR -->
+        <div class="d-flex gap-05 align-items-center mb-05 twofa-compact-row">
+          <label for="subuser-edit-twofa-secret-input" class="sr-only">Código Secreto</label>
+          <input
+            type="text"
+            id="subuser-edit-twofa-secret-input"
+            placeholder="Código secreto"
+            class="flex-grow-1"
+            autocomplete="off"
+            pattern="[A-Z0-9]{16,}"
+            title="Código secreto TOTP (solo letras mayúsculas y números)"
+          >
+          <label for="subuser-edit-twofa-qr-file" class="sr-only">Archivo QR</label>
+          <input
+            type="file"
+            id="subuser-edit-twofa-qr-file"
+            accept="image/*"
+            class="d-none"
+          >
+          <button type="button" id="subuser-edit-twofa-upload-qr-btn" class="btn-blue btn-small">
+            <i class="fas fa-qrcode"></i> QR
+          </button>
+        </div>
+        
+        <!-- Preview del QR (oculto por defecto) -->
+        <div id="subuser-edit-twofa-qr-preview" class="text-center mb-05 d-none"></div>
+        
+        <!-- Display del secreto configurado -->
+        <div id="subuser-edit-twofa-secret-display" class="mb-05 text-center">
+          <strong>Secreto configurado:</strong> <code id="subuser-edit-twofa-secret-display-value"></code>
+        </div>
+        
+        <div class="text-center">
+          <button type="submit" id="subuser-edit-twofa-save-btn" class="btn-green">Actualizar</button>
+          <button type="button" id="subuser-edit-twofa-cancel-btn" class="btn-blue">Cancelar</button>
+        </div>
+        
+        <div id="subuser-edit-twofa-message" class="mt-05 text-center"></div>
+      </form>
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- CONTORNO 2: Búsqueda y Listado de Sub-usuarios -->
+  <div class="admin-card">
+    <h4 class="mt-0">Buscar Sub-usuarios</h4>
+    <form id="searchSubusersForm" class="d-flex gap-05 mb-05">
+      <input
+        type="text"
+        id="searchSubusersInput"
+        placeholder="Buscar sub-usuario..."
+        class="flex-grow-1"
+        autocomplete="off"
+      >
+      <button type="submit" class="btn-search">Limpiar</button>
+    </form>
+
+    <div id="subusersContainer"></div>
+  </div>
+
+</div>
+
+{% endblock content %}
+
+{% block scripts %}
+{# {{ super() }} #} {# Comentado porque base.html no tiene scripts en este bloque #}
+<script src="{{ url_for('static', filename='js/manage_subusers.js') }}"></script>
+<script src="{{ url_for('static', filename='js/menu_busqueda.js') }}" defer></script>
+{% endblock scripts %}

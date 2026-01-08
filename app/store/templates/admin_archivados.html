@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+
+{% block title %}Licencias Archivadas - Admin{% endblock %}
+
+{% block head %}
+  {{ super() }}
+  <link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='fontawesome/css/all.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="container mt-0 store-light worksheet-panel admin-licencias-page">
+  <!-- Header con botón volver y botón gestionar -->
+  <div class="d-flex justify-content-center align-items-center mb-3 position-relative">
+    <div class="admin-back-button admin-back-button-position-left">
+      <a href="{{ url_for('store_bp.admin_store') }}" class="btn-arrow-back">
+        <i class="fas fa-arrow-left"></i>
+      </a>
+    </div>
+    <button id="btnGestionarProductosArchivados" class="btn-panel btn-blue">
+      <i class="fas fa-archive"></i> Gestionar Productos Archivados
+    </button>
+  </div>
+  
+  <div class="d-flex flex-column align-items-center justify-content-center mb-4 w-100 mt-3">
+    <div class="d-flex flex-wrap align-items-center productos-buscar-mostrar productos-buscar-mostrar-centered">
+      <div class="search-container">
+        <label for="adminStoreSearch" class="sr-only">Buscar en licencias</label>
+        <input type="search" id="adminStoreSearch" class="form-control text-center" placeholder="Buscar..." autocomplete="off">
+      </div>
+    </div>
+  </div>
+  
+  <!-- Modal Gestionar Productos Archivados -->
+  <div id="modalGestionProductos" class="modal-overlay d-none">
+    <div class="modal-content worksheet-modal">
+      <div class="modal-header">
+        <h3 class="modal-title">Gestionar Productos Archivados</h3>
+        <button id="closeGestionProductos" class="btn-close">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="gestion-productos-lista" id="gestionProductosLista">
+          <!-- Los productos se cargarán dinámicamente -->
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button id="btnGuardarCambios" class="btn-panel btn-green">
+          <i class="fas fa-save"></i> Guardar Cambios
+        </button>
+        <button id="btnCancelarGestion" class="btn-panel btn-red">
+          Cancelar
+        </button>
+      </div>
+    </div>
+  </div>
+  
+  <!-- Interfaz de Licencias Archivadas -->
+  <div class="licencias-container" id="licenciasContainer">
+    <div class="licencias-content">
+      <!-- Grid de Licencias Archivadas -->
+      <div id="archivedLicensesGrid" class="licenses-grid">
+        <!-- Las licencias archivadas se cargarán dinámicamente aquí -->
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+  {{ super() }}
+  <script src="{{ url_for('store_bp.static', filename='js/archivados.js') }}"></script>
+{% endblock %}

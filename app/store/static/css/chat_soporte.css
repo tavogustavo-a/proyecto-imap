@@ -1,0 +1,4418 @@
+/* ================== ESTILOS ESPECÍFICOS DEL CHAT DE SOPORTE ================== */
+
+/* Sobrescribir estilos de form solo en el chat */
+.chat-container-professional form,
+.chat-modal-body form {
+  background-color: transparent !important;
+  padding: 0 !important;
+  border-radius: 0 !important;
+  margin: 0 !important;
+}
+
+/* ================== DISEÑO PROFESIONAL PARA CHAT DE USUARIOS ================== */
+/* Contenedor del botón de menú separado */
+.chat-menu-container {
+  display: flex;
+  justify-content: flex-start;
+}
+
+/* Contenedor principal del chat profesional */
+.chat-container-professional {
+  background: linear-gradient(135deg, #000000 0%, #000000 100%);
+  border-radius: 15px;
+  overflow: hidden;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+  border: 1px solid #2a3942;
+}
+
+/* Header del chat integrado */
+.chat-header-professional {
+  background: linear-gradient(135deg, #0c1317 0%, #1a1a1a 100%);
+  border-bottom: 2px solid #2a3942;
+  padding: 1rem 1.5rem;
+  color: white;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+/* Sección del título del chat */
+.chat-title-section {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+}
+
+/* Icono del título del chat */
+.chat-title-icon {
+  font-size: 1.5rem;
+  color: #00d4aa;
+  text-shadow: 0 0 10px rgba(0, 212, 170, 0.3);
+}
+
+/* Título del chat */
+.chat-title {
+  margin: 0;
+  font-size: 1.4rem;
+  font-weight: 700;
+  color: white;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+/* Área de mensajes del chat profesional */
+.chat-container-professional .chat-modal-body {
+  background: linear-gradient(123deg, #000000 0%, #78818a 100%);
+  min-height: 600px;
+  max-height: 85vh;
+  overflow-y: auto;
+}
+
+/* Responsive para el diseño profesional */
+@media (max-width: 768px) {
+  .chat-header-professional {
+    padding: 0.8rem 1rem;
+  }
+  
+  .chat-title-icon {
+    font-size: 1.3rem;
+  }
+  
+  .chat-title {
+    font-size: 1.2rem;
+  }
+  
+  .chat-container-professional .chat-modal-body {
+    max-height: 75vh;
+  }
+}
+
+@media (max-width: 480px) {
+  .chat-header-professional {
+    padding: 0.6rem 0.8rem;
+  }
+  
+  .chat-title-icon {
+    font-size: 1.2rem;
+  }
+  
+  .chat-title {
+    font-size: 1.1rem;
+  }
+  
+  .chat-container-professional .chat-modal-body {
+    max-height: 70vh;
+  }
+}
+/* Botón de eliminación de chat de usuario (solo admin) */
+.chat-delete-user-btn {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #dc3545;
+  border: none;
+  color: white;
+  font-size: 10px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+  margin-left: 8px;
+  opacity: 0.7;
+}
+
+.chat-item:hover .chat-delete-user-btn {
+  opacity: 1;
+}
+
+.chat-delete-user-btn:hover {
+  background: #c82333;
+  transform: scale(1.1);
+  opacity: 1;
+}
+
+.chat-delete-user-btn:active {
+  transform: scale(0.95);
+}
+/* ================== ESTILOS DEL ADMIN ================== */
+/* Contenedor principal del chat estilo WhatsApp */
+.chat-whatsapp-container {
+  display: flex;
+  flex-direction: row;
+  height: 70vh;
+  min-height: 500px;
+  max-height: 800px;
+  background: #0c1317;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+  margin-bottom: 2rem;
+  position: relative;
+}
+
+/* ✅ NUEVO: Diseño responsive para pantallas pequeñas - regla consolidada */
+@media (max-width: 768px) {
+  .chat-whatsapp-container {
+    flex-direction: column;
+    height: 70vh; /* ✅ AJUSTADO: De 60vh a 70vh para mejor comodidad */
+    min-height: 480px; /* ✅ AJUSTADO: De 400px a 480px */
+    border-radius: 12px; /* ✅ AGREGADO: Mantener bordes redondeados en pantallas medianas */
+  }
+}
+
+@media (max-width: 480px) {
+  .chat-whatsapp-container {
+    height: 65vh; /* ✅ AJUSTADO: De 55vh a 65vh para mejor comodidad */
+    min-height: 420px; /* ✅ AJUSTADO: De 350px a 420px */
+    margin: 0.3rem;
+    border-radius: 12px; /* ✅ CORREGIDO: Mantener bordes redondeados en pantallas pequeñas */
+  }
+}
+
+/* ✅ NUEVO: Regla para pantallas muy pequeñas */
+@media (max-width: 360px) {
+  .chat-whatsapp-container {
+    height: 60vh; /* ✅ AJUSTADO: De 50vh a 60vh para mejor comodidad */
+    min-height: 380px; /* ✅ AJUSTADO: De 300px a 380px */
+    margin: 0.3rem;
+    border-radius: 10px; /* ✅ Mantener bordes redondeados en pantallas muy pequeñas */
+  }
+}
+
+/* Lista de chats (lado izquierdo) */
+.chat-list-container {
+  width: 250px;
+  background: #1a1a1a;
+  border-right: 1px solid #2a3942;
+  display: flex;
+  flex-direction: column;
+  transition: all 0.3s ease;
+  overflow: hidden; /* ✅ NUEVO: Evitar desbordamiento durante transición */
+}
+
+/* ✅ NUEVO: Diseño responsive para lista de chats - mantener layout horizontal solo en pantallas pequeñas */
+@media (max-width: 768px) {
+  .chat-list-container {
+    width: 250px !important;
+    min-width: 250px !important;
+    max-width: 250px !important;
+    height: 100vh !important;
+    background: #1a1a1a !important;
+    border-right: 2px solid #2a3942 !important;
+    display: flex !important;
+    flex-direction: column !important;
+    transition: width 0.3s ease !important;
+  }
+  
+}
+
+@media (max-width: 480px) {
+  .chat-list-container {
+    width: 200px !important;
+    min-width: 200px !important;
+    max-width: 200px !important;
+  }
+  
+  .chat-list-container.collapsed {
+    width: 50px !important;
+    min-width: 10px !important;
+    max-width: 22px !important;
+  }
+}
+
+.chat-list-header {
+  padding: 0.1rem 0.8rem;
+  background: linear-gradient(135deg, #2196F3 0%, #42A5F5 100%);
+  color: white;
+  border-bottom: 2px solid #2a3942;
+  box-shadow: 0 2px 8px rgba(33, 150, 243, 0.3);
+}
+
+.chat-list {
+  flex: 1;
+  overflow-y: auto;
+  background: #1a1a1a;
+}
+
+/* Scrollbar personalizado para la lista de chats - regla consolidada */
+.chat-list::-webkit-scrollbar,
+.chat-whatsapp-container .chat-list::-webkit-scrollbar {
+  width: 6px;
+}
+
+.chat-list::-webkit-scrollbar-track,
+.chat-whatsapp-container .chat-list::-webkit-scrollbar-track {
+  background: #1a1a1a;
+}
+
+.chat-list::-webkit-scrollbar-thumb {
+  background: #2a3942;
+  border-radius: 3px;
+}
+
+.chat-list::-webkit-scrollbar-thumb:hover {
+  background: #1976d2;
+}
+
+/* Scrollbar específico para chat de WhatsApp */
+.chat-whatsapp-container .chat-list::-webkit-scrollbar-thumb {
+  background: #2a3942;
+  border-radius: 3px;
+}
+
+.chat-whatsapp-container .chat-list::-webkit-scrollbar-thumb:hover {
+  background: #2196F3;
+}
+
+/* Área de chat (lado derecho) */
+.chat-conversation-container {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  background: #0c1317;
+  min-width: 0; /* ✅ NUEVO: Permite que se encoja */
+}
+
+/* ✅ NUEVO: Diseño responsive para área de conversación */
+@media (max-width: 768px) {
+  .chat-conversation-container {
+    flex: 1;
+    min-height: 0;
+  }
+  
+  /* ✅ NUEVO: Área de mensajes más amplia en móvil */
+  .chat-messages-area {
+    padding: 0.6rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .chat-conversation-container {
+    min-height: 350px;
+  }
+}
+
+.chat-conversation-header {
+  padding: 0.75rem 1rem;
+  background: linear-gradient(135deg, #0c1317 0%, #1a1a1a 100%);
+  border-bottom: 2px solid #2a3942;
+  color: white;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+/* ✅ NUEVO: Responsive para header de conversación - regla consolidada */
+@media (max-width: 768px) {
+  .chat-conversation-header {
+    padding: 0.6rem 0.8rem !important;
+  }
+}
+
+/* ✅ NUEVO: Responsive para header de conversación del admin en pantallas pequeñas */
+@media (max-width: 480px) {
+  .chat-conversation-header {
+    padding: 0.5rem 0.7rem !important;
+  }
+}
+
+/* Información del usuario en el header */
+.chat-user-info {
+  display: flex;
+  align-items: center;
+}
+
+.chat-user-avatar {
+  width: 19px;
+  height: 19px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #25d366 0%, #4CAF50 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-right: 0.75rem;
+  box-shadow: 0 2px 8px rgba(37, 211, 102, 0.3);
+  border: 2px solid rgba(255, 255, 255, 0.2);
+}
+
+.chat-user-avatar i {
+  font-size: 0.9rem;
+  color: white;
+}
+
+.chat-user-details {
+  flex: 1;
+}
+
+.chat-user-details h6 {
+  margin: 0;
+  font-size: 1.08rem;
+  font-weight: 600;
+}
+
+.chat-user-details small {
+  font-size: 0.8rem;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+/* Estilos para los items de la lista de chats */
+.chat-item {
+  padding: 0.1rem 0.6rem;
+  border-bottom: 1px solid #4a4444;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  color: white;
+  display: flex;
+  align-items: center;
+  min-height: 42px;
+  position: relative;
+}
+
+.chat-item:hover {
+  background: linear-gradient(135deg, #2a3942 0%, #1a1a1a 100%);
+  transform: translateX(4px);
+}
+
+.chat-item.active {
+  background: linear-gradient(357deg, #326289 0%, #000000 100%);
+  border-left: 4px solid #25d366;
+}
+
+/* Usuarios con chat deshabilitado */
+.chat-item.chat-disabled {
+  opacity: 0.7;
+  background-color: #2a3942;
+}
+
+.chat-item.chat-disabled:hover {
+  background-color: #2a3942;
+  cursor: not-allowed;
+}
+
+/* ================== ESTRUCTURA INTERNA DE CADA ITEM DEL CHAT ================== */
+/* Contenido del item */
+.chat-item-content {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+/* Header del item (nombre y tiempo) */
+.chat-item-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.1rem;
+}
+
+.chat-item-name {
+  margin: 0;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: white;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.chat-item-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* Formulario de input */
+.chat-input-form {
+  display: flex;
+  flex-direction: row;
+  gap: 0.75rem;
+  align-items: center;
+}
+
+/* Contenedor del input */
+.chat-input-wrapper {
+  display: flex;
+  align-items: center;
+  flex: 1;
+  background: #1a1a1a;
+  border-radius: 10px;
+  padding: 0.3rem;
+  position: relative;
+}
+
+/* ✅ NUEVO: Responsive para wrapper del input en pantallas medianas */
+@media (max-width: 768px) {
+  .chat-input-wrapper {
+    gap: 0.4rem !important;
+    padding: 0.4rem !important;
+  }
+}
+
+/* ✅ NUEVO: Responsive para wrapper del input en pantallas pequeñas */
+@media (max-width: 480px) {
+  .chat-input-wrapper {
+    flex-direction: row !important;
+    gap: 0.4rem !important;
+    padding: 0.4rem !important;
+    border-radius: 8px !important;
+  }
+}
+
+/* ✅ NUEVO: Responsive para wrapper del input en pantallas muy pequeñas */
+@media (max-width: 360px) {
+  .chat-input-wrapper {
+    flex-direction: column !important;
+    gap: 0.5rem !important;
+    padding: 0.5rem !important;
+    border-radius: 8px !important;
+  }
+}
+
+/* Campo de texto */
+.chat-input-field {
+  flex: 1;
+  background: linear-gradient(135deg, #1a1a1a 0%, #2a2a2a 100%);
+  border: 2px solid #2a3942;
+  border-radius: 25px;
+  color: white;
+  padding: 0.75rem 1rem;
+  font-size: 0.9rem;
+  outline: none;
+  transition: all 0.3s ease;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+/* ✅ NUEVO: Responsive para campo de texto en pantallas medianas */
+@media (max-width: 768px) {
+  .chat-input-field {
+    font-size: 15px !important;
+    padding: 0.6rem 0.9rem !important;
+  }
+}
+
+/* ✅ NUEVO: Responsive para campo de texto en pantallas pequeñas */
+@media (max-width: 480px) {
+  .chat-input-field {
+    font-size: 14px !important;
+    padding: 0.5rem 0.75rem !important;
+    border-radius: 20px !important;
+  }
+}
+
+/* ✅ NUEVO: Responsive para campo de texto en pantallas muy pequeñas */
+@media (max-width: 360px) {
+  .chat-input-field {
+    font-size: 13px !important;
+    padding: 0.4rem 0.6rem !important;
+    border-radius: 18px !important;
+  }
+}
+
+.chat-input-field:focus {
+  border-color: #25d366;
+  box-shadow: 0 2px 12px rgba(37, 211, 102, 0.3);
+  transform: translateY(-1px);
+}
+
+.chat-input-field::placeholder {
+  color: #6c757d;
+}
+
+/* Controles de archivos */
+.chat-attachment-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  flex-shrink: 0;
+}
+
+/* ✅ NUEVO: Responsive para controles de archivos en pantallas medianas */
+@media (max-width: 768px) {
+  .chat-attachment-controls {
+    gap: 0.25rem !important;
+  }
+  
+  .chat-attachment-btn,
+  .chat-audio-record-btn {
+    width: 26px !important;
+    height: 26px !important;
+  }
+  
+  .chat-send-button {
+    width: 34px !important;
+    height: 34px !important;
+    min-width: 34px !important;
+    min-height: 34px !important;
+  }
+}
+
+/* ✅ NUEVO: Responsive para controles de archivos en pantallas pequeñas */
+@media (max-width: 480px) {
+  .chat-attachment-controls {
+    gap: 0.2rem !important;
+    flex-wrap: nowrap !important;
+    justify-content: flex-end !important;
+  }
+  
+  .chat-attachment-btn,
+  .chat-audio-record-btn {
+    width: 24px !important;
+    height: 24px !important;
+  }
+  
+  .chat-send-button {
+    width: 32px !important;
+    height: 32px !important;
+    min-width: 32px !important;
+    min-height: 32px !important;
+  }
+}
+
+/* ✅ NUEVO: Responsive para controles de archivos en pantallas muy pequeñas */
+@media (max-width: 360px) {
+  .chat-attachment-controls {
+    gap: 0.2rem !important;
+    flex-wrap: wrap !important;
+    justify-content: center !important;
+  }
+  
+  .chat-attachment-btn,
+  .chat-audio-record-btn {
+    width: 22px !important;
+    height: 22px !important;
+  }
+  
+  .chat-send-button {
+    width: 30px !important;
+    height: 30px !important;
+    min-width: 30px !important;
+    min-height: 30px !important;
+  }
+}
+
+/* Botón de adjuntar archivo */
+.chat-attachment-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  flex-shrink: 0;
+  position: relative;
+  background: linear-gradient(135deg, #2a3942 0%, #1a1a1a 100%);
+  border-radius: 4px;
+  width: 28px;
+  height: 28px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+
+.chat-audio-record-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  border: 1px solid #2a3942;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  flex-shrink: 0;
+  position: relative;
+  background: linear-gradient(135deg, #2a3942 0%, #1a1a1a 100%);
+  padding: 0.2rem;
+  border-radius: 4px;
+  width: 28px;
+  height: 28px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+
+.chat-attachment-btn:hover {
+  background: linear-gradient(135deg, #25d366 0%, #4CAF50 100%);
+  border-color: #25d366;
+  transform: scale(1.05);
+  box-shadow: 0 2px 6px rgba(37, 211, 102, 0.3);
+}
+
+.chat-audio-record-btn:hover {
+  background: linear-gradient(135deg, #2196F3 0%, #1976D2 100%);
+  border-color: #2196F3;
+  transform: scale(1.05);
+  box-shadow: 0 2px 6px rgba(33, 150, 243, 0.3);
+}
+/* Input de archivo oculto */
+.chat-file-input {
+  display: none;
+}
+
+/* ✅ NUEVO: Área de input oculta inicialmente */
+.chat-input-area {
+  display: none;
+}
+
+/* ✅ NUEVO: Área de input visible cuando hay chat activo */
+.chat-input-area.active {
+  display: block;
+}
+
+/* ✅ NUEVO: Responsive para área de input en pantallas medianas */
+@media (max-width: 768px) {
+  .chat-input-area {
+    padding: 0rem !important;
+  }
+}
+
+/* ✅ NUEVO: Responsive para área de input en pantallas pequeñas */
+@media (max-width: 480px) {
+  .chat-input-area {
+    padding: 0.01rem !important;
+  }
+  
+  .chat-input-wrapper {
+    flex-direction: row !important;
+    gap: 0.25rem !important;
+  }
+  
+}
+/* Botón de enviar */
+.chat-send-button {
+  background: #25d366 !important;
+  color: white !important;
+  border: none !important;
+  border-radius: 50% !important;
+  padding: 0 !important;
+  font-size: 0.9rem !important;
+  cursor: pointer !important;
+  transition: all 0.3s ease !important;
+  width: 36px !important;
+  height: 36px !important;
+  font-weight: 600 !important;
+  flex-shrink: 0 !important;
+  box-shadow: 0 4px 12px rgba(37, 211, 102, 0.3) !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  min-width: 36px !important;
+  min-height: 36px !important;
+}
+
+.chat-send-button:hover {
+  background: #128c7e !important;
+  transform: scale(1.05) !important;
+  box-shadow: 0 4px 12px rgba(37, 211, 102, 0.3) !important;
+}
+
+.chat-send-button:active {
+  transform: translateY(0);
+}
+
+.chat-send-button:disabled {
+  background: #ccc;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+/* ================== ÁREAS DEL CHAT ================== */
+/* Área de mensajes */
+.chat-messages-area {
+  flex: 1;
+  overflow-y: auto;
+  padding: 1rem;
+  background: #000000;
+  /* Optimizaciones de scroll para performance */
+  -webkit-overflow-scrolling: touch;
+  scroll-behavior: smooth;
+  overscroll-behavior: contain;
+  position: relative;
+}
+
+/* ✅ NUEVO: Responsive para área de mensajes en pantallas medianas */
+@media (max-width: 768px) {
+  .chat-messages-area {
+    padding: 0.7rem !important;
+  }
+}
+
+/* ✅ NUEVO: Responsive para área de mensajes en pantallas pequeñas */
+@media (max-width: 480px) {
+  .chat-messages-area {
+    padding: 0.5rem !important;
+  }
+}
+
+/* Scrollbar personalizado para el área de mensajes */
+.chat-messages-area::-webkit-scrollbar {
+  width: 6px;
+}
+
+.chat-messages-area::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.chat-messages-area::-webkit-scrollbar-thumb {
+  background: #2a3942;
+  border-radius: 3px;
+}
+
+.chat-messages-area::-webkit-scrollbar-thumb:hover {
+  background: #1976d2;
+}
+
+/* ================== ESTILOS ESPECÍFICOS DE LA PLANTILLA DE SOPORTE ================== */
+
+/* Estilos para la plantilla de soporte (user_chat_soporte.html) */
+.form-container-wide .admin-card .chat-modal-body {
+  height: 700px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: #000000;
+  border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+  margin-bottom: 2rem;
+}
+
+/* ================== ESTILOS UNIFICADOS PARA ADMIN Y USUARIOS SOPORTE ================== */
+
+/* Aplicar estilos del admin a usuarios soporte */
+.chat-whatsapp-container,
+.form-container-wide .admin-card .chat-modal-body {
+  display: flex;
+  height: 800px;
+  background: #000000;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+  margin-bottom: 2rem;
+}
+
+/* Header de lista unificado */
+.chat-list-header,
+.form-container-wide .admin-card .chat-list-header {
+  padding: 0.2rem 1rem;
+  background: linear-gradient(135deg, #000000 0%, #42A5F5 100%);
+  color: white;
+  border-bottom: 2px solid #2a3942;
+  box-shadow: 0 2px 8px rgba(33, 150, 243, 0.3);
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  position: relative;
+  height: 35px; /* ✅ NUEVO: Altura fija para consistencia */
+  box-sizing: border-box;
+}
+
+/* ✅ NUEVO: Header más compacto en móvil */
+@media (max-width: 768px) {
+  .chat-list-header {
+    padding: 0.3rem 0.8rem;
+  }
+  
+  .chat-list-header h5 {
+    font-size: 0.85rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .chat-list-header {
+    padding: 0.25rem 0.6rem;
+  }
+  
+  .chat-list-header h5 {
+    font-size: 0.8rem;
+  }
+}
+
+/* ✅ NUEVO: Layout horizontal solo para pantallas pequeñas - SOLO para admin dashboard */
+@media (max-width: 768px) {
+  /* ✅ CORREGIDO: Solo aplicar layout horizontal al dashboard de admin, NO al chat de usuarios */
+  .chat-whatsapp-container {
+    display: flex !important;
+    flex-direction: row !important;
+    height: 70vh !important; /* ✅ AJUSTADO: De 60vh a 70vh para mejor comodidad */
+    min-height: 480px !important; /* ✅ AJUSTADO: De 400px a 480px */
+  }
+
+
+  /* Área de conversación a la derecha en pantallas pequeñas */
+  .chat-conversation-container {
+    flex: 1 !important;
+    height: 70vh !important; /* ✅ AJUSTADO: De 60vh a 70vh para mejor comodidad */
+    min-height: 480px !important; /* ✅ AJUSTADO: De 400px a 480px */
+    display: flex !important;
+    flex-direction: column !important;
+  }
+}
+
+/* ✅ NUEVO: Contraer lista de usuarios - solo iconos cuando está contraída (solo en pantallas pequeñas) */
+@media (max-width: 768px) {
+  .chat-list-container.collapsed .chat-item {
+    justify-content: center !important;
+    align-items: center !important;
+    padding: 0.2rem 0.1rem !important;
+    margin-bottom: 0.1rem !important;
+    width: 100% !important;
+    display: flex !important;
+    height: 25px !important;
+    min-height: 25px !important;
+  }
+
+  .chat-list-container.collapsed .chat-item-name {
+    display: none !important; /* Ocultar nombres cuando está contraída */
+  }
+
+  .chat-list-container.collapsed .user-actions {
+    display: none !important; /* Ocultar botones de acción cuando está contraída */
+  }
+
+  .chat-list-container.collapsed .user-avatar {
+    font-size: 0.7rem !important;
+    width: 20px !important;
+    height: 20px !important;
+    margin: 0 auto !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    border-radius: 50% !important;
+    font-weight: bold !important;
+  }
+
+  .chat-list-container.collapsed .user-info {
+    display: none !important; /* Ocultar información del usuario cuando está contraída */
+  }
+
+  .chat-list-container.collapsed .user-typing-indicator {
+    display: none !important; /* Ocultar indicador de escritura cuando está contraída */
+  }
+
+  /* Ajustar el header cuando está contraído */
+  .chat-list-container.collapsed .chat-list-header {
+    padding: 0.1rem 0.2rem !important;
+    justify-content: center !important;
+    min-height: 25px !important;
+    position: relative !important;
+  }
+
+  /* Ocultar el texto "Chats" cuando está contraído */
+  .chat-list-container.collapsed .chat-list-header h5 {
+    display: none !important;
+  }
+
+  /* Mostrar solo el icono de la flecha cuando está contraído */
+  .chat-list-container.collapsed .chat-list-toggle {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    background: rgba(33, 150, 243, 0.9) !important;
+    border: none !important;
+    color: white !important;
+    font-size: 0.6rem !important;
+    width: 20px !important;
+    height: 20px !important;
+    border-radius: 50% !important;
+    position: absolute !important;
+    top: 40% !important;
+    right: -7px !important;
+    transform: translateY(-50%) !important;
+    z-index: 1000 !important;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3) !important;
+  }
+
+  /* Asegurar que la lista de chats solo muestre iconos */
+  .chat-list-container.collapsed .chat-list {
+    padding: 0.2rem 0.1rem !important;
+    overflow: hidden !important;
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    gap: 0.1rem !important;
+  }
+}
+
+/* ✅ NUEVO: Botón de toggle para contraer/expandir lista (solo en pantallas pequeñas) */
+@media (max-width: 768px) {
+  .chat-list-toggle {
+    display: flex !important;
+    position: absolute;
+    top: 40%;
+    right: 10px;
+    transform: translateY(-50%);
+    background: rgba(255, 255, 255, 0.2);
+    color: white;
+    border: none;
+    border-radius: 50%;
+    width: 24px;
+    height: 24px;
+    cursor: pointer;
+    z-index: 1000;
+    transition: all 0.3s ease;
+    align-items: center;
+    justify-content: center;
+  }
+}
+
+/* Ocultar botón toggle en pantallas grandes */
+.chat-list-toggle {
+  display: none;
+}
+
+/* ✅ NUEVO: Botón más visible cuando está colapsado (solo en pantallas pequeñas) */
+@media (max-width: 768px) {
+  .chat-list-container.collapsed .chat-list-toggle {
+    background: rgba(33, 150, 243, 0.9) !important;
+    box-shadow: 0 2px 8px rgba(33, 150, 243, 0.4) !important;
+    transform: translateY(-50%) scale(1.1) !important;
+  }
+}
+
+.chat-list-toggle:hover {
+  background: rgba(255, 255, 255, 0.3);
+  transform: translateY(-50%) scale(1.1);
+}
+
+.chat-list-toggle i {
+  font-size: 10px;
+}
+
+/* ✅ NUEVO: Diseño responsive para header */
+@media (max-width: 768px) {
+  .chat-list-header {
+    padding: 0.5rem 1rem;
+    justify-content: space-between;
+  }
+  
+  .chat-list-toggle {
+    display: flex !important;
+    align-items: center;
+    justify-content: center;
+  }
+}
+
+.chat-list-header h5,
+.form-container-wide .admin-card .chat-list-header h5 {
+  margin: 0;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+/* Área de conversación unificada */
+.chat-conversation-container,
+.form-container-wide .admin-card .chat-conversation-container {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  background: #0c1317;
+}
+
+
+/* Área de mensajes unificada - regla consolidada */
+.chat-messages-area,
+.form-container-wide .admin-card .chat-messages-area {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0.8rem;
+  background: linear-gradient(93deg, #EAE1D7 0%, #EAE1D7 100%);
+  position: relative;
+}
+
+/* ✅ NUEVO: Responsive para área de mensajes unificada - reglas consolidadas */
+@media (max-width: 768px) {
+  .chat-messages-area,
+  .form-container-wide .admin-card .chat-messages-area {
+    padding: 0.6rem !important;
+  }
+}
+
+@media (max-width: 480px) {
+  .chat-messages-area,
+  .form-container-wide .admin-card .chat-messages-area {
+    padding: 0.4rem !important;
+  }
+}
+/* ================== ESTILOS PARA USUARIOS NORMALES ================== */
+/* Header de conversación para usuarios normales */
+.chat-conversation-header {
+  padding: 0.6rem 0.8rem;
+  background: linear-gradient(135deg, #000000 0%, #1a1a1a 100%);
+  border-bottom: 2px solid #2a3942;
+  color: white;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+
+/* ✅ NUEVO: Responsive para header de conversación en pantallas pequeñas */
+@media (max-width: 480px) {
+  .chat-conversation-header {
+    padding: 0.4rem 0.6rem !important;
+  }
+}
+  /* Expandir el área de mensajes para que las burbujas ocupen más espacio */
+  .form-container-wide .admin-card .chat-messages-area {
+    width: 100% !important;
+    max-width: none !important;
+    margin: 0 !important;
+  }
+  
+  /* Expandir el header de conversación */
+  .form-container-wide .admin-card .chat-conversation-header {
+    width: 100% !important;
+    max-width: none !important;
+    margin: 0 !important;
+  }
+  
+  /* Expandir el área de input */
+  .form-container-wide .admin-card .chat-input-area {
+    width: 100% !important;
+    max-width: none !important;
+    margin: 0 !important;
+  }
+}
+
+/* ✅ NUEVO: Responsive para área de mensajes de usuarios normales en pantallas pequeñas */
+@media (max-width: 480px) {
+  .chat-messages-area {
+    padding: 0.4rem !important;
+  }
+}
+  /* Expandir el área de mensajes para que las burbujas ocupen más espacio */
+  .form-container-wide .admin-card .chat-messages-area {
+    width: 98% !important;
+    max-width: none !important;
+    margin: 0 !important;
+  }
+  
+  /* Expandir el header de conversación */
+  .form-container-wide .admin-card .chat-conversation-header {
+    width: 100% !important;
+    max-width: none !important;
+    margin: 0 !important;
+  }
+  
+  /* Expandir el área de input */
+  .form-container-wide .admin-card .chat-input-area {
+    width: 100% !important;
+    max-width: none !important;
+    margin: 0 !important;
+  }
+}
+
+/* ================== ESTILOS UNIFICADOS PARA CAMPOS Y BOTONES ================== */
+/* Campo de texto unificado */
+/* ================== CONTENEDOR DE AUDIO ================== */
+/* Contenedor para mensajes de audio */
+.audio-container {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+/* Ajustar el audio dentro del contenedor */
+.audio-container audio {
+  flex: 1;
+  margin: 0;
+}
+
+/* Responsive para contenedor de audio */
+@media (max-width: 768px) {
+  .audio-container {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.3rem;
+  }
+  
+  .audio-container audio {
+    width: 100%;
+  }
+  
+  .audio-speed-control {
+    align-self: center;
+    margin-left: 0 !important;
+  }
+}
+
+/* ================== ESTILOS ESPECÍFICOS DE CHATSOPORTE.HTML ================== */
+
+/* Estilos para los botones de paginación en chatsoporte.html */
+.container.container-max-width-900.store-light .pagination-buttons {
+  display: flex !important;
+  justify-content: space-between !important;
+  align-items: center !important;
+  gap: 0.5rem !important;
+  margin-top: 1rem !important;
+  margin-bottom: 0 !important;
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+  flex-wrap: nowrap !important;
+  flex-direction: row !important;
+}
+
+.container.container-max-width-900.store-light .pagination-buttons button {
+  padding: 6px 22px;
+  border: 2px solid #111;
+  border-radius: 8px;
+  background: #fff;
+  color: #111;
+  cursor: pointer;
+  font-size: 1.08rem;
+  font-weight: 600;
+  margin: 0 !important;
+  min-width: unset;
+  width: unset;
+  box-shadow: none;
+  display: inline-block;
+  text-align: center;
+  transition: background 0.15s, border-color 0.15s;
+  flex-shrink: 0;
+}
+
+.container.container-max-width-900.store-light .pagination-buttons button:hover:not(:disabled) {
+  background: #f8f9fa;
+  border-color: #0d6efd;
+}
+
+.container.container-max-width-900.store-light .pagination-buttons button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  background: #f8f9fa;
+  border-color: #dee2e6;
+  color: #6c757d;
+}
+
+.container.container-max-width-900.store-light .pagination-buttons span {
+  font-weight: bold;
+  font-size: 1.08em;
+  color: #111;
+  flex: 1;
+  text-align: center;
+  white-space: nowrap;
+}
+
+@media (max-width: 480px) {
+  .container.container-max-width-900.store-light .pagination-buttons {
+    flex-direction: row !important;
+    justify-content: space-between !important;
+    gap: 0.25rem;
+    flex-wrap: wrap;
+  }
+  
+  .container.container-max-width-900.store-light .pagination-buttons button {
+    font-size: 0.9rem;
+    padding: 4px 16px;
+    flex-shrink: 0;
+  }
+  
+  .container.container-max-width-900.store-light .pagination-buttons span {
+    order: 2;
+    flex: 1 1 100%;
+    text-align: center;
+  }
+  
+  .container.container-max-width-900.store-light .pagination-buttons button:first-child {
+    order: 1;
+  }
+  
+  .container.container-max-width-900.store-light .pagination-buttons button:last-child {
+    order: 3;
+  }
+}
+
+/* Estilos específicos para la tabla en chatsoporte.html */
+.container.container-max-width-900 .store-light {
+  border: none !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+  margin: 0 !important;
+}
+
+.container.container-max-width-900 .store-light .table-wrapper-store {
+  padding: 0;
+  background: none;
+  border-radius: 0;
+  overflow: visible;
+  margin-bottom: 0;
+  width: 100%;
+}
+
+.container.container-max-width-900 .store-light .table-wrapper-store table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 0;
+}
+
+.container.container-max-width-900 .store-light .table-wrapper-store th,
+.container.container-max-width-900 .store-light .table-wrapper-store td {
+  border: 1px solid #111;
+  padding: 8px 12px;
+  text-align: left;
+}
+
+.container.container-max-width-900 .store-light .table-wrapper-store th {
+  background: #fff;
+  font-weight: 600;
+}
+
+.container.container-max-width-900 .store-light .table-wrapper-store td {
+  background: #fff;
+}
+
+/* ================== ESTILOS PARA CHECKBOXES Y USUARIOS ================== */
+
+/* Contenedor principal del chat soporte */
+.chat-soporte-container {
+  padding: 1.5rem;
+  background: transparent;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+  margin-top: 1rem;
+  max-width: 1400px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+/* Ajustes para pantallas pequeñas */
+@media (max-width: 768px) {
+  .chat-soporte-container {
+    padding: 1rem 0.5rem;
+    margin: 0.5rem;
+    border-radius: 8px;
+  }
+}
+
+@media (max-width: 480px) {
+  .chat-soporte-container {
+    padding: 0.5rem 0.25rem;
+    margin: 0.25rem;
+    border-radius: 6px;
+  }
+}
+
+/* Asegurar simetría en todas las pantallas */
+@media (max-width: 600px) {
+  .chat-soporte-container {
+    margin-left: 0.5rem;
+    margin-right: 0.5rem;
+    padding-left: 0.5rem;
+    padding-right: 0.5rem;
+  }
+}
+
+/* Estilos para checkboxes deshabilitados en la tabla de usuarios */
+.chat-checkbox, .soporte-checkbox, .subusers-checkbox {
+  width: 16px;
+  height: 16px;
+}
+
+.subusers-checkbox:disabled {
+  opacity: 0.5 !important;
+  cursor: not-allowed !important;
+  pointer-events: none !important;
+}
+
+.subusers-checkbox:disabled + label {
+  opacity: 0.5 !important;
+  cursor: not-allowed !important;
+}
+
+/* Estilos para indicar visualmente que sub-usuarios requiere chat */
+.subusers-checkbox:disabled::after {
+  content: " (Requiere Chat)";
+  font-size: 0.8em;
+  color: #6c757d;
+  font-style: italic;
+}
+
+/* Estilos para el dashboard de chat */
+.user-item {
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.user-item:hover {
+  background-color: #f8f9fa;
+}
+
+.user-item.active {
+  background-color: #007bff;
+  color: white;
+}
+
+.user-item.active .text-muted {
+  color: #e9ecef !important;
+}
+
+/* Separadores de tiempo para usuarios normales */
+.chat-whatsapp-container .chat-date-separator,
+.form-container-wide .admin-card .chat-date-separator {
+  text-align: center;
+  margin: 1rem 0;
+  color: #ffffff;
+  font-size: 1.08rem;
+  font-weight: 600;
+  position: relative;
+}
+
+.chat-whatsapp-container .chat-date-separator span,
+.form-container-wide .admin-card .chat-date-separator span {
+  background: #ffffff;
+  padding: 0 1.5rem;
+  position: relative;
+  z-index: 2;
+  border-radius: 20px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+/* ================== LISTA DE CHATS PARA USUARIOS NORMALES ================== */
+/* Lista de chats para usuarios normales */
+.chat-whatsapp-container .chat-list {
+  flex: 1;
+  overflow-y: auto;
+  background: #000000;
+}
+
+/* Asegurar simetría en el contenedor principal - REDUCIDO para mayor ancho */
+@media (max-width: 600px) {
+  body:has(.chat-whatsapp-container) .container.container-max-width-900.store-light,
+  body:has(.form-container-wide .admin-card .chat-modal-body) .container.container-max-width-900.store-light {
+    padding-left: 0.2rem; /* ✅ REDUCIDO: De 0.5rem a 0.2rem para mayor ancho */
+    padding-right: 0.2rem; /* ✅ REDUCIDO: De 0.5rem a 0.2rem para mayor ancho */
+  }
+}
+
+/* ✅ REGLA ESPECÍFICA: Solo para la tabla de gestión de usuarios */
+@media (max-width: 768px) {
+  #users-table {
+    margin-right: 0.5rem !important; /* ✅ Agregar espacio a la derecha para que no se salga */
+  }
+}
+
+/* ✅ SOBRESCRIBIR: Regla de store.css que causa problemas */
+@media (max-width: 700px) {
+  .chat-soporte-container .container-max-width-900,
+  .chat-whatsapp-container .container-max-width-900,
+  .form-container-wide .container-max-width-900,
+  .container.container-max-width-900.mt-2 {
+    max-width: none !important; /* ✅ Quitar max-width: 99vw */
+    padding: 0 !important; /* ✅ Quitar padding: 0 2vw */
+  }
+}
+/* ================== RESPONSIVE ================== */
+@media (max-width: 768px) {
+  /* Ajustar padding para pantallas medianas */
+  .form-container-wide .admin-card {
+    margin: 0.5rem;
+    padding: 1rem 0.5rem;
+  }
+  
+}
+
+@media (max-width: 480px) {
+  /* Ajustar padding para pantallas muy pequeñas */
+  .form-container-wide .admin-card {
+    margin: 0.25rem;
+    padding: 0.5rem 0.25rem;
+  }
+  
+  /* Ajustar el contenedor principal en pantallas muy pequeñas */
+  .chat-soporte-container {
+    margin: 0.25rem;
+    padding: 0.25rem;
+  }
+}
+
+/* ================== OPTIMIZACIONES PARA NOMBRES LARGOS ================== */
+@media (max-width: 700px) {
+  .form-container-wide .admin-card .chat-modal-body {
+    height: 550px;
+  }
+  
+  .chat-whatsapp-container {
+    height: 550px;
+  }
+}
+
+/* ================== LAYOUT RESPONSIVE DEL INPUT ================== */
+
+@media (max-width: 768px) {
+  }
+
+/* ================== PANTALLAS MUY PEQUEÑAS ================== */
+
+@media (max-width: 480px) {
+
+  }
+/* ================== BOTÓN LIMPIAR MENSAJES RESPONSIVE ================== */
+
+/* Botón de limpiar mensajes en pantallas medianas */
+@media (max-width: 768px) {
+  #btnLimpiarMensajes {
+    padding: 0.5rem 0.75rem !important;
+    font-size: 0.8rem !important;
+    min-height: 36px !important;
+  }
+  
+  #btnLimpiarMensajes i {
+    font-size: 0.8rem !important;
+    margin-right: 0.3rem !important;
+  }
+}
+
+/* Botón de limpiar mensajes en pantallas pequeñas */
+@media (max-width: 480px) {
+  #btnLimpiarMensajes {
+    padding: 0.4rem 0.6rem !important;
+    font-size: 0.75rem !important;
+    min-height: 32px !important;
+    white-space: nowrap !important;
+  }
+  
+  #btnLimpiarMensajes i {
+    font-size: 0.75rem !important;
+    margin-right: 0.25rem !important;
+  }
+}
+
+/* Botón de limpiar mensajes en pantallas muy pequeñas */
+@media (max-width: 375px) {
+  #btnLimpiarMensajes {
+    padding: 0.35rem 0.5rem !important;
+    font-size: 0.7rem !important;
+    min-height: 30px !important;
+  }
+  
+  #btnLimpiarMensajes i {
+    font-size: 0.7rem !important;
+    margin-right: 0.2rem !important;
+  }
+}
+
+/* ============================================================================
+   ESTILOS PARA CHAT DE SOPORTE - CON MENSAJES TEMPORALES
+   ============================================================================ */
+/* Lista de usuarios */
+.users-list {
+    padding: 0;
+    margin: 0;
+    list-style: none;
+    overflow-y: auto;
+    height: calc(100% - 50px);
+}
+
+/* Avatar del usuario */
+.user-avatar {
+    position: relative;
+    margin-right: 12px;
+}
+
+.user-initial {
+    width: 20px;
+    height: 20px;
+    background: #6f42c1 !important; /* 🟣 MORADO por defecto */
+    color: white !important;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 600;
+    font-size: 16px;
+    box-shadow: 0 0 8px rgba(111, 66, 193, 0.6) !important;
+}
+
+/* ✅ NUEVO: Asegurar que el color morado se mantenga incluso con clases de estado */
+.user-initial:not(.status-new-message):not(.status-responded):not(.status-pending):not(.status-finished) {
+    background: #6f42c1 !important; /* 🟣 MORADO por defecto */
+    box-shadow: 0 0 8px rgba(111, 66, 193, 0.6) !important;
+}
+
+/* ================== SISTEMA DE ESTADOS DE CHAT - SIMPLIFICADO ================== */
+
+/* ✅ REGLAS BASE: Solo estados específicos, morado por defecto */
+.chat-item .user-initial.status-new-message {
+    background-color: #28a745 !important; /* 🟢 VERDE solo para mensajes nuevos */
+    box-shadow: 0 0 8px rgba(40, 167, 69, 0.6) !important;
+    color: white !important;
+    font-weight: bold !important;
+}
+
+.chat-item .user-initial.status-responded {
+    background-color: #007bff !important; /* 🔵 AZUL solo para respondidos */
+    box-shadow: 0 0 8px rgba(0, 123, 255, 0.6) !important;
+    color: white !important;
+    font-weight: bold !important;
+}
+
+/* ✅ CORREGIDO: status-pending ahora es MORADO por defecto */
+.chat-item .user-initial.status-pending {
+    background-color: #6f42c1 !important; /* 🟣 MORADO por defecto */
+    box-shadow: 0 0 8px rgba(111, 66, 193, 0.6) !important;
+    color: white !important;
+    font-weight: bold !important;
+}
+
+/* ✅ IMPORTANTE: El contenedor NUNCA debe tener color */
+.chat-item .user-avatar {
+    background: transparent !important;
+    box-shadow: none !important;
+}
+
+/* ✅ SISTEMA SIMPLIFICADO DE COLORES */
+/* 🟢 VERDE (#28a745): Solo para mensajes nuevos (new-message) */
+/* 🔵 AZUL (#007bff): Solo para respondidos (responded) */
+/* 🟣 MORADO (#6f42c1): Por defecto y para finalizados (pending, finished) */
+
+/* ✅ INDICADOR DE ESCRITURA EN LISTA DE USUARIOS */
+.user-typing-indicator {
+    margin-left: 8px !important; /* Mover un poco a la derecha */
+    font-size: 12px !important;
+    color: #6c757d !important;
+    font-style: italic !important;
+}
+
+.typing-text {
+    margin-left: 4px !important; /* Espacio adicional */
+}
+
+/* Mensajes del sistema (centrados, estilo especial) */
+.message.system-message {
+    display: flex;
+    justify-content: center;
+    margin: 20px 0;
+}
+
+.message.system-message .message-content {
+    background: rgba(0, 0, 0, 0.8) !important;
+    border-radius: 20px;
+    padding: 12px 20px 12px 20px; /* Sin padding extra abajo */
+    max-width: 400px;
+    text-align: center;
+    font-size: 14px;
+    color: #fff !important;
+    font-style: italic;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+    position: relative !important;
+    word-wrap: break-word;
+    word-break: break-all; /* ✅ NUEVO: Romper palabras largas como URLs */
+    overflow-wrap: break-word; /* ✅ NUEVO: Asegurar que el texto se rompa */
+    /* ✅ CORREGIDO: Flexbox horizontal para hora en la misma línea */
+    display: flex !important;
+    flex-direction: row !important;
+    justify-content: space-between !important;
+    align-items: center !important;
+    /* ✅ NUEVO: Asegurar que el contenido se distribuya correctamente */
+    gap: 4px !important; /* ✅ REDUCIDO: Menos separación entre elementos */
+}
+
+.message.system-message .message-sender-inline.system-inline {
+    color: #4CAF50 !important;
+    font-weight: 600;
+}
+
+/* Etiquetas inline de remitente */
+.message-sender-inline {
+    font-weight: 600;
+    margin-right: 4px; /* ✅ REDUCIDO: Menos separación del mensaje */
+    font-size: 0.45em !important; /* ✅ NUEVO: Letra más pequeña */
+    opacity: 0.8 !important; /* ✅ NUEVO: Ligeramente más sutil */
+    /* ✅ CORREGIDO: Asegurar que se alinee con el contenido */
+    flex-shrink: 0 !important;
+    white-space: nowrap !important;
+    display: inline-block !important; /* ✅ NUEVO: Asegurar comportamiento inline */
+    vertical-align: middle !important; /* ✅ NUEVO: Alineación vertical consistente */
+}
+
+.admin-inline {
+    color: #4CAF50 !important;
+}
+
+.support-inline {
+    color: #4CAF50 !important;
+}
+
+.user-inline {
+    color: #fff !important;
+}
+
+.system-inline {
+    color: #4CAF50 !important;
+}
+
+/* Información del usuario */
+.user-info {
+  flex: 1;
+}
+
+.user-name {
+    font-weight: 600;
+    margin-bottom: 4px;
+}
+
+.user-last-message {
+    font-size: 7px;
+    color: #6c757d;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 180px;
+}
+
+.chat-item.active .user-last-message {
+    color: rgba(255, 255, 255, 0.8);
+}
+/* Header de la conversación */
+.chat-header {
+    background: #075e54;
+    color: white;
+    padding: 15px;
+  display: flex;
+  align-items: center;
+    justify-content: space-between;
+    border-bottom: 1px solid #e0e0e0;
+}
+
+.chat-title {
+  margin: 0;
+    font-size: 18px;
+  font-weight: 600;
+}
+
+.chat-status {
+    font-size: 14px;
+    opacity: 0.8;
+}
+/* ================== ESTILOS UNIFICADOS DE MENSAJES ================== */
+
+/* Estructura base del mensaje */
+.message {
+    margin: 10px 0
+}
+
+/* ✅ NUEVO: Asegurar que el texto del mensaje mantenga el layout horizontal */
+.message-text {
+    display: flex !important;
+    flex-direction: row !important;
+    align-items: center !important;
+    gap: 4px !important;
+    flex-wrap: wrap !important;
+}
+
+/* ✅ NUEVO: Asegurar que los mensajes de audio también mantengan el layout horizontal - regla consolidada */
+.message-text:has(.audio-player-sent) {
+    display: flex !important;
+    flex-direction: row !important;
+    align-items: center !important;
+    gap: 4px !important;
+    flex-wrap: wrap !important;
+}
+
+/* Alineación de mensajes */
+.own-message {
+    justify-content: flex-end;
+    width: 100%;
+}
+/* Contenido del mensaje */
+.message-content {
+    max-width: 70%;
+    padding: 7px 7px 9px 7px; /* Padding normal */
+    border-radius: 18px;
+    word-wrap: break-word;
+    word-break: break-all; /* ✅ NUEVO: Romper palabras largas como URLs */
+    overflow-wrap: break-word; /* ✅ NUEVO: Asegurar que el texto se rompa */
+    position: relative !important;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+    /* ✅ CORREGIDO: Flexbox horizontal para hora en la misma línea */
+    display: flex !important;
+    flex-direction: row !important;
+    justify-content: space-between !important;
+    align-items: flex-end !important;
+    /* ✅ NUEVO: Asegurar que el contenido se distribuya correctamente */
+    gap: 4px !important; /* ✅ REDUCIDO: Menos separación entre elementos */
+}
+
+/* Mensajes del usuario (derecha, verde) - regla consolidada */
+.own-message .message-content,
+.chat-whatsapp-container .own-message .message-content,
+.chat-soporte-container .own-message .message-content,
+.message.own-message .message-content,
+div.own-message .message-content,
+div.message.own-message .message-content,
+.chat-item .own-message .message-content {
+  background: #C0FFC2 !important;
+  color: rgb(0, 0, 0) !important;
+  border-bottom-right-radius: 4px !important;
+  margin-left: auto;
+}
+
+/* Mensajes del admin/soporte (izquierda, blanco) */
+.other-message .message-content {
+    background: white !important;
+    color: #000 !important;
+    border-bottom-left-radius: 4px;
+}
+
+/* ================== ESTILOS DE TIEMPO COMPACTO (ESTILO WHATSAPP) ================== */
+
+/* ✅ NUEVO: Sobrescribir estilos de form para chat de soporte del admin */
+.chat-soporte-container form,
+.chat-whatsapp-container form {
+  background-color: transparent !important;
+  padding: 0 !important;
+  border-radius: 0 !important;
+  margin: 0 !important;
+}
+
+/* ✅ NUEVO: Contenedor del texto del mensaje */
+.message-text {
+    flex: 1 !important;
+    min-width: 0 !important;
+    /* ✅ CORREGIDO: Para mensajes de audio, mantener el nombre en la misma línea */
+    display: flex !important;
+    align-items: center !important;
+    gap: 0px !important; /* ✅ REDUCIDO: Menos separación entre nombre y contenido */
+}
+
+/* Tiempo del mensaje - Compacto y dentro del mensaje */
+.message .message-time {
+    font-size: 7px !important;
+    color: rgba(255, 255, 255, 0.8) !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    font-weight: 600 !important;
+    opacity: 1 !important;
+    /* ✅ CORREGIDO: Sin posicionamiento absoluto, usando flexbox */
+    background: transparent !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    border: none !important;
+    min-width: auto !important;
+    text-align: right !important;
+    display: block !important;
+    visibility: visible !important;
+    /* ✅ GARANTIZADO: Hora siempre visible */
+    pointer-events: none !important;
+    user-select: none !important;
+    -webkit-user-select: none !important;
+    -moz-user-select: none !important;
+    -ms-user-select: none !important;
+    /* ✅ NUEVO: Flexbox para alineación */
+    flex-shrink: 0 !important;
+    white-space: nowrap !important;
+}
+
+/* Tiempo para mensajes del usuario (derecha) */
+.message.own-message .message-time {
+    color: rgba(0, 0, 0, 0.9) !important;
+    background: transparent !important;
+    padding: 0 !important;
+    font-weight: 600 !important;
+    box-shadow: none !important;
+    border: none !important;
+    min-width: auto !important;
+    text-align: right !important;
+    /* ✅ GARANTIZADO: Hora siempre visible */
+    pointer-events: none !important;
+    user-select: none !important;
+    -webkit-user-select: none !important;
+    -moz-user-select: none !important;
+    -ms-user-select: none !important;
+    /* ✅ NUEVO: Flexbox para alineación */
+    flex-shrink: 0 !important;
+    white-space: nowrap !important;
+}
+
+/* Tiempo para mensajes del admin/soporte (izquierda) */
+.message.other-message .message-time {
+    color: rgba(0, 0, 0, 0.7) !important;
+    background: transparent !important;
+    padding: 0 !important;
+    font-weight: 600 !important;
+    box-shadow: none !important;
+    border: none !important;
+    min-width: auto !important;
+    text-align: right !important;
+    /* ✅ GARANTIZADO: Hora siempre visible */
+    pointer-events: none !important;
+    user-select: none !important;
+    -webkit-user-select: none !important;
+    -moz-user-select: none !important;
+    -ms-user-select: none !important;
+    /* ✅ NUEVO: Flexbox para alineación */
+    flex-shrink: 0 !important;
+    white-space: nowrap !important;
+}
+
+/* Tiempo para mensajes del sistema (también a la derecha) */
+.message.system-message .message-time {
+    color: rgba(255, 255, 255, 0.8) !important;
+    background: transparent !important;
+    padding: 0 !important;
+    font-weight: 600 !important;
+    box-shadow: none !important;
+    border: none !important;
+    min-width: auto !important;
+    text-align: right !important;
+    /* ✅ GARANTIZADO: Hora siempre visible */
+    pointer-events: none !important;
+    user-select: none !important;
+    -webkit-user-select: none !important;
+    -moz-user-select: none !important;
+    -ms-user-select: none !important;
+    /* ✅ NUEVO: Flexbox para alineación */
+    flex-shrink: 0 !important;
+    white-space: nowrap !important;
+}
+
+
+
+/* ================== ESTILOS PARA MENSAJES DE AUDIO ================== */
+
+/* Regla consolidada para mensajes de audio del admin/soporte */
+.other-message .message-content:has(.audio-player-sent),
+.chat-whatsapp-container .other-message .message-content:has(.audio-player-sent) {
+    background: white !important;
+    color: #000 !important;
+    padding: 8px 12px 12px 12px !important;
+}
+
+/* ================== ETIQUETAS DE REMITENTE ================== */
+
+.message-sender-inline {
+    font-weight: 600;
+}
+
+.admin-inline {
+    color: #000000 !important;
+}
+
+.support-inline {
+    color: #000000 !important;
+}
+
+.user-inline {
+    color: #fff !important;
+}
+
+.system-inline {
+    color: #4CAF50 !important;
+}
+
+/* Encabezado de fecha (sin separador visual) */
+.date-header {
+    text-align: center;
+    margin: 15px 0 10px 0;
+    color: #000000;
+    font-size: 14px;
+    font-weight: bold;
+    padding: 5px 10px;
+}
+
+/* ✅ NUEVO: Clase específica para fechas del chat del admin */
+.chat-admin .date-separator,
+.chat-whatsapp-container .date-separator {
+    text-align: center;
+    margin: 15px 0 10px 0;
+    font-size: 14px;
+    font-weight: bold;
+    padding: 5px 10px;
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+}
+
+/* ✅ NUEVO: Contenedor del chat del admin con fondo negro */
+.chat-admin .chat-conversation-container,
+.chat-whatsapp-container .chat-conversation-container {
+    background: #000000 !important;
+}
+/* ✅ NUEVO: Botón de finalizar soporte (visible para admin y usuarios de soporte) */
+.finish-support-btn {
+    background: #28a745;
+  color: white;
+    border: none;
+  border-radius: 50%;
+    width: 24px;
+    height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+    cursor: pointer;
+    font-size: 12px;
+    transition: all 0.2s ease;
+    opacity: 0.7;
+}
+
+.finish-support-btn:hover {
+    background: #218838;
+    opacity: 1;
+    transform: scale(1.1);
+}
+
+.finish-support-btn.finished {
+    background: #6f42c1 !important;
+    color: white !important;
+}
+
+.finish-support-btn.finished:hover {
+    background: #5a2d91 !important;
+}
+
+.finish-support-btn i {
+    font-size: 10px;
+}
+
+/* ✅ NUEVO: Botón de eliminación de chat (solo visible para admin) */
+.delete-chat-btn {
+    background: #dc3545;
+    color: white;
+    border: none;
+    border-radius: 50%;
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    font-size: 12px;
+    transition: all 0.2s ease;
+    opacity: 0.7;
+}
+
+.delete-chat-btn:hover {
+    background: #c82333;
+    opacity: 1;
+    transform: scale(1.1);
+}
+
+.delete-chat-btn i {
+    font-size: 10px;
+}
+
+/* ✅ NUEVO: Contenedor de acciones del usuario */
+.user-actions {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+
+/* ✅ NUEVO: Modal de previsualización de audio */
+.audio-preview-modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+  width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.8);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 9999;
+}
+
+.audio-preview-content {
+    background: #ffffff;
+  border-radius: 16px;
+    padding: 0;
+    max-width: 450px;
+    width: 90%;
+    max-height: 80vh;
+    overflow: hidden;
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
+}
+
+.audio-preview-header {
+    background: linear-gradient(135deg, #007bff 0%, #0056b3 100%);
+    color: white;
+    padding: 25px 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+}
+
+.header-controls {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+}
+
+.audio-preview-header h5 {
+    margin: 0;
+    font-size: 18px;
+}
+
+.close-modal-btn {
+    background: none;
+    border: none;
+    color: white;
+    font-size: 24px;
+    cursor: pointer;
+    padding: 0;
+    width: 30px;
+    height: 30px;
+  display: flex;
+  align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    transition: background-color 0.2s;
+}
+
+.close-modal-btn:hover {
+    background: rgba(255, 255, 255, 0.2);
+}
+
+.audio-preview-body {
+    padding: 30px;
+}
+
+.audio-player-container {
+    margin: 30px 0;
+    text-align: center;
+}
+
+.audio-player-container audio {
+    width: 100%;
+    max-width: 350px;
+    height: 45px;
+    border-radius: 8px;
+}
+
+/* Reproductor de audio inline en el chat */
+.audio-player-inline {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    background: #f8f9fa;
+    border-radius: 10px;
+    border: 1px solid #e9ecef;
+    margin: 8px 0;
+}
+
+
+
+.play-pause-btn-inline {
+    background: #007bff;
+    color: white;
+    border: none;
+    border-radius: 50%;
+    width: 35px;
+    height: 35px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    box-shadow: 0 2px 8px rgba(0, 123, 255, 0.3);
+    flex-shrink: 0;
+}
+
+.play-pause-btn-inline:hover {
+    background: #0056b3;
+    transform: scale(1.1);
+    box-shadow: 0 4px 12px rgba(0, 123, 255, 0.4);
+}
+
+.play-pause-btn-inline i {
+    font-size: 14px;
+}
+
+.audio-info {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    min-width: 60px;
+}
+
+.audio-duration {
+    font-size: 14px;
+    color: #6c757d;
+    font-weight: 500;
+}
+
+.audio-speed {
+    font-size: 12px;
+    color: #007bff;
+    font-weight: bold;
+}
+
+.audio-controls {
+    display: flex;
+    align-items: center;
+}
+
+.speed-control-wrapper {
+    display: flex;
+    align-items: center;
+}
+
+.speed-toggle-btn {
+    background: #6c757d;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    padding: 8px 12px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    font-weight: 500;
+}
+
+.speed-toggle-btn:hover {
+    background: #5a6268;
+    transform: translateY(-1px);
+}
+
+.speed-toggle-btn i {
+    font-size: 12px;
+}
+
+.current-speed-display {
+    font-weight: bold;
+    min-width: 25px;
+    text-align: center;
+}
+
+/* Reproductor de audio enviado - Nuevo diseño */
+.audio-player-sent {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px;
+    background: rgb(3 15 26); /* Semi-transparent background */
+    border-radius: 10px;
+    border: 1px solid rgba(52, 73, 94, 0.6);
+    margin: 0; /* ✅ CORREGIDO: Sin margen para alinear con el nombre */
+    min-width: 200px;
+    max-width: 100%;
+    backdrop-filter: blur(5px);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    flex-wrap: wrap;
+    /* ✅ CORREGIDO: Asegurar que se alinee con el nombre */
+    flex-shrink: 0 !important;
+}
+
+/* ✅ NUEVO: Reglas específicas para el audio player en el chat de WhatsApp */
+.chat-whatsapp-container .audio-player-sent {
+    border: 1px solid rgba(255, 255, 255, 0.2) !important;
+    backdrop-filter: blur(10px) !important;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2) !important;
+}
+
+.play-pause-btn-sent {
+    background: rgba(189, 195, 199, 0.1);
+    color: #bdc3c7;
+    border: 1.5px solid rgba(189, 195, 199, 0.4);
+    border-radius: 50%;
+    width: 28px;
+    height: 28px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    backdrop-filter: blur(5px);
+}
+
+/* ✅ NUEVO: Reglas específicas para botones de audio en el chat de WhatsApp */
+.chat-whatsapp-container .play-pause-btn-sent {
+    background: rgba(255, 255, 255, 0.2) !important;
+    color: #ffffff !important;
+    border: 1.5px solid rgba(255, 255, 255, 0.3) !important;
+}
+
+.play-pause-btn-sent:hover {
+    background: #bdc3c7;
+    color: #2c3e50;
+    transform: scale(1.05);
+}
+
+/* ✅ NUEVO: Reglas específicas para hover del botón de play/pause en el chat de WhatsApp */
+.chat-whatsapp-container .play-pause-btn-sent:hover {
+    background: rgba(255, 255, 255, 0.3) !important;
+    color: #ffffff !important;
+}
+
+
+/* Barra de progreso */
+.audio-progress-sent {
+  flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.progress-bar-sent {
+    position: relative;
+    height: 4px;
+    background: #34495e;
+    border-radius: 2px;
+  overflow: hidden;
+}
+
+.progress-fill-sent {
+    height: 100%;
+    background: #3498db;
+    border-radius: 2px;
+    width: 0%;
+    transition: width 0.1s ease;
+}
+
+.progress-knob-sent {
+    position: absolute;
+    top: 50%;
+    left: 0%;
+    transform: translate(-50%, -50%);
+    width: 12px;
+    height: 12px;
+    background: #3498db;
+    border-radius: 50%;
+    border: 2px solid #ecf0f1;
+    transition: left 0.1s ease;
+}
+
+.audio-time-sent {
+    font-size: 12px;
+    color: #bdc3c7;
+    font-weight: 500;
+}
+
+/* ✅ NUEVO: Reglas específicas para tiempo de audio en el chat de WhatsApp */
+.chat-whatsapp-container .audio-time-sent {
+    color: #ffffff !important;
+}
+
+
+.audio-info-sent {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    min-width: 60px;
+}
+
+.audio-duration-sent {
+    font-size: 14px;
+    color: #1976d2;
+    font-weight: 500;
+}
+
+/* ✅ NUEVO: Reglas específicas para duración de audio en el chat de WhatsApp */
+.chat-whatsapp-container .audio-duration-sent {
+    color: #ffffff !important;
+}
+
+/* Botón de velocidad */
+.speed-btn-sent {
+    background: #3498db;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    padding: 6px 10px;
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    min-width: 40px;
+    text-align: center;
+}
+
+/* ✅ NUEVO: Reglas específicas para botón de velocidad en el chat de WhatsApp */
+.chat-whatsapp-container .speed-btn-sent {
+    background: rgba(255, 255, 255, 0.2) !important;
+    color: #ffffff !important;
+    border: 1px solid rgba(255, 255, 255, 0.3) !important;
+}
+
+.speed-btn-sent:hover {
+    background: #2980b9;
+    transform: translateY(-1px);
+}
+
+/* ✅ NUEVO: Reglas específicas para hover del botón de velocidad en el chat de WhatsApp */
+.chat-whatsapp-container .speed-btn-sent:hover {
+    background: rgba(255, 255, 255, 0.3) !important;
+}
+
+.audio-controls-sent {
+    display: flex;
+    align-items: center;
+}
+
+.speed-toggle-btn-sent {
+    background: rgba(25, 118, 210, 0.8);
+    color: white;
+    border: none;
+    border-radius: 6px;
+    padding: 4px 8px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 10px;
+    font-weight: 500;
+    backdrop-filter: blur(5px);
+    box-shadow: 0 2px 4px rgba(25, 118, 210, 0.3);
+    flex-shrink: 0;
+}
+
+/* ✅ NUEVO: Reglas específicas para botón de velocidad en el chat de WhatsApp */
+.chat-whatsapp-container .speed-toggle-btn-sent {
+    background: rgba(255, 255, 255, 0.2) !important;
+    color: #ffffff !important;
+    border: 1px solid rgba(255, 255, 255, 0.3) !important;
+    box-shadow: 0 2px 4px rgba(255, 255, 255, 0.2) !important;
+}
+
+.speed-toggle-btn-sent:hover {
+    background: rgba(21, 101, 192, 0.9);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(25, 118, 210, 0.4);
+}
+
+/* ✅ NUEVO: Reglas específicas para hover del botón de velocidad toggle en el chat de WhatsApp */
+.chat-whatsapp-container .speed-toggle-btn-sent:hover {
+    background: rgba(255, 255, 255, 0.3) !important;
+    box-shadow: 0 4px 8px rgba(255, 255, 255, 0.3) !important;
+}
+
+.speed-toggle-btn-sent i {
+    font-size: 12px;
+}
+
+.current-speed-display-sent {
+    font-weight: bold;
+    min-width: 25px;
+    text-align: center;
+}
+
+.speed-select-inline {
+    padding: 6px 10px;
+    border: 1px solid #ced4da;
+    border-radius: 6px;
+    font-size: 13px;
+    background: white;
+    color: #495057;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    min-width: 70px;
+}
+
+.speed-select-inline:focus {
+    outline: none;
+    border-color: #007bff;
+    box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.1);
+}
+
+.speed-select-inline:hover {
+    border-color: #007bff;
+}
+
+.audio-actions-inline {
+    display: flex;
+    margin-left: auto;
+}
+
+.send-audio-btn {
+    background: #28a745;
+    color: white;
+    border: none;
+    border-radius: 50%;
+    width: 30px;
+    height: 30px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    box-shadow: 0 2px 8px rgba(40, 167, 69, 0.3);
+}
+
+.send-audio-btn:hover {
+    background: #218838;
+    transform: scale(1.1);
+    box-shadow: 0 4px 12px rgba(40, 167, 69, 0.4);
+}
+
+.cancel-audio-btn {
+    background: #dc3545;
+    color: white;
+    border: none;
+    border-radius: 50%;
+    width: 30px;
+    height: 30px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    box-shadow: 0 2px 8px rgba(220, 53, 69, 0.3);
+}
+
+.cancel-audio-btn:hover {
+    background: #c82333;
+    transform: scale(1.1);
+    box-shadow: 0 4px 12px rgba(220, 53, 69, 0.4);
+}
+
+.send-audio-btn i,
+.cancel-audio-btn i {
+    font-size: 12px;
+}
+
+/* Estilos para los botones de preview del audio */
+.audio-actions-preview {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+    margin-left: auto; /* Empuja los botones hacia la derecha */
+}
+
+.send-audio-btn-preview {
+    background: #27ae60;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    padding: 4px 8px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    font-size: 10px;
+    min-width: 40px;
+    height: 26px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 2px 4px rgba(39, 174, 96, 0.3);
+    flex-shrink: 0;
+}
+
+.send-audio-btn-preview:hover {
+    background: #229954;
+    transform: scale(1.05);
+    box-shadow: 0 4px 8px rgba(39, 174, 96, 0.4);
+}
+
+.cancel-audio-btn-preview {
+    background: #e74c3c;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    padding: 4px 8px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    font-size: 10px;
+    min-width: 40px;
+    height: 26px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 2px 4px rgba(231, 76, 60, 0.3);
+    flex-shrink: 0;
+}
+
+.cancel-audio-btn-preview:hover {
+    background: #c0392b;
+    transform: scale(1.05);
+    box-shadow: 0 4px 8px rgba(231, 76, 60, 0.4);
+}
+
+/* Media queries para pantallas pequeñas */
+@media (max-width: 768px) {
+    .audio-player-sent {
+        min-width: 180px;
+        gap: 6px;
+        padding: 5px 8px;
+    }
+    
+    .send-audio-btn-preview,
+    .cancel-audio-btn-preview {
+        min-width: 35px;
+        height: 24px;
+        padding: 3px 6px;
+        font-size: 9px;
+    }
+    
+    .speed-toggle-btn-sent {
+        padding: 3px 6px;
+        font-size: 9px;
+        gap: 3px;
+    }
+    
+    .play-pause-btn-sent {
+        width: 24px;
+        height: 24px;
+    }
+    
+    .play-pause-btn-sent i {
+        font-size: 12px;
+    }
+    
+    /* ✅ CORREGIDO: Responsive para mensajes de audio - mantener en línea */
+    .message-text {
+        flex-direction: row !important; /* ✅ CORREGIDO: Mantener en línea horizontal */
+        align-items: center !important; /* ✅ CORREGIDO: Centrar verticalmente */
+        gap: 4px !important; /* ✅ AJUSTADO: Espaciado apropiado */
+        flex-wrap: wrap !important; /* ✅ NUEVO: Permitir wrap solo si es necesario */
+    }
+    
+    
+    .message-sender-inline {
+        margin-right: 4px !important; /* ✅ MANTENIDO: Espaciado consistente */
+        margin-bottom: 0 !important; /* ✅ CORREGIDO: Sin salto de línea */
+        flex-shrink: 0 !important; /* ✅ NUEVO: Evitar que se comprima */
+    }
+}
+
+@media (max-width: 480px) {
+    .audio-player-sent {
+        min-width: 160px;
+        gap: 4px;
+        padding: 4px 6px;
+    }
+    
+    .send-audio-btn-preview,
+    .cancel-audio-btn-preview {
+        min-width: 30px;
+        height: 22px;
+        padding: 2px 4px;
+        font-size: 8px;
+    }
+    
+    .speed-toggle-btn-sent {
+        padding: 2px 4px;
+        font-size: 8px;
+        gap: 2px;
+    }
+    
+    .play-pause-btn-sent {
+        width: 22px;
+        height: 22px;
+    }
+    
+    .play-pause-btn-sent i {
+        font-size: 11px;
+    }
+    
+    /* ✅ CORREGIDO: Responsive para pantallas muy pequeñas - mantener en línea */
+    .message-text {
+        flex-direction: row !important; /* ✅ CORREGIDO: Mantener en línea horizontal */
+        align-items: center !important; /* ✅ CORREGIDO: Centrar verticalmente */
+        gap: 3px !important; /* ✅ AJUSTADO: Espaciado apropiado para móvil */
+        flex-wrap: wrap !important; /* ✅ NUEVO: Permitir wrap solo si es necesario */
+    }
+    
+    
+    .message-sender-inline {
+        margin-right: 3px !important; /* ✅ AJUSTADO: Espaciado apropiado para móvil */
+        margin-bottom: 0 !important; /* ✅ CORREGIDO: Sin salto de línea */
+        flex-shrink: 0 !important; /* ✅ NUEVO: Evitar que se comprima */
+        font-size: 0.4em !important; /* ✅ AJUSTADO: Tamaño apropiado para móvil */
+    }
+    
+    .audio-player-sent {
+        min-width: 140px !important;
+    }
+}
+
+/* Reproductor de audio personalizado */
+.custom-audio-player {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 15px;
+    background: #f8f9fa;
+    border-radius: 12px;
+    border: 1px solid #e9ecef;
+    position: relative;
+    min-height: 55px;
+}
+
+.play-pause-btn {
+    background: #007bff;
+    color: white;
+    border: none;
+    border-radius: 50%;
+    width: 40px;
+    height: 40px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    box-shadow: 0 2px 8px rgba(0, 123, 255, 0.3);
+    flex-shrink: 0;
+}
+
+.play-pause-btn:hover {
+    background: #0056b3;
+    transform: scale(1.1);
+    box-shadow: 0 4px 12px rgba(0, 123, 255, 0.4);
+}
+
+.play-pause-btn i {
+    font-size: 16px;
+}
+
+.audio-progress {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.current-time, .total-time {
+    font-size: 12px;
+    color: #6c757d;
+    font-weight: 500;
+    min-width: 30px;
+}
+
+.progress-bar {
+    flex: 1;
+    height: 6px;
+    background: #e9ecef;
+    border-radius: 3px;
+    cursor: pointer;
+    position: relative;
+}
+
+.progress-fill {
+    height: 100%;
+    background: #007bff;
+    border-radius: 3px;
+    width: 0%;
+    transition: width 0.1s ease;
+}
+
+.progress-bar:hover .progress-fill {
+    background: #0056b3;
+}
+
+.speed-control-item {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.speed-control-item label {
+    font-size: 12px;
+    color: #6c757d;
+    font-weight: 500;
+    margin: 0;
+}
+
+.speed-control-item select {
+    padding: 8px 12px;
+    border: 1px solid #ced4da;
+    border-radius: 6px;
+    font-size: 14px;
+    background: white;
+    color: #495057;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.speed-control-item select:focus {
+    outline: none;
+    border-color: #007bff;
+    box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.1);
+}
+
+.speed-control-item select:hover {
+    border-color: #007bff;
+}
+
+.audio-actions {
+    display: flex;
+    gap: 15px;
+    justify-content: center;
+}
+
+.audio-actions .btn {
+    padding: 12px 24px;
+    border: none;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: bold;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.audio-actions .btn-success {
+    background: #28a745;
+    color: white;
+}
+
+.audio-actions .btn-success:hover {
+    background: #218838;
+    transform: translateY(-2px);
+}
+
+.audio-actions .btn-danger {
+    background: #dc3545;
+    color: white;
+}
+
+.audio-actions .btn-danger:hover {
+    background: #c82333;
+    transform: translateY(-2px);
+}
+
+/* Mensaje y botón para usuarios sin chat */
+.no-users-message {
+    text-align: center;
+    padding: 20px;
+    color: #ffffff;
+}
+
+.no-users-message p {
+    margin-bottom: 15px;
+    color: #cccccc;
+    font-size: 14px;
+}
+
+.no-users-message .btn {
+    background: #007bff;
+    color: white;
+    border: none;
+    padding: 10px 20px;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 14px;
+    transition: background-color 0.2s;
+}
+
+.no-users-message .btn:hover {
+    background: #0056b3;
+}
+/* ✅ NUEVO: Icono de chat vacío en blanco */
+.chat-messages-area .fa-comments {
+    color: #000000 !important; /* Icono blanco */
+    opacity: 0.6 !important; /* Ligeramente transparente para no ser muy llamativo */
+}
+
+/* ✅ NUEVO: Texto del estado vacío del chat */
+.chat-messages-area .text-muted {
+    color: rgba(255, 255, 255, 0.7) !important; /* Texto blanco semi-transparente */
+}
+
+/* ✅ NUEVO: Responsive para icono en pantallas pequeñas */
+@media (max-width: 768px) {
+    
+}
+
+@media (max-width: 480px) {
+    .chat-messages-area .fa-comments {
+        font-size: 2em !important; /* ✅ MÁS PEQUEÑO: Para pantallas muy pequeñas */
+        opacity: 1 !important; /* ✅ COMPLETAMENTE VISIBLE: Sin transparencia en móvil */
+    }
+    
+    .chat-messages-area .text-muted {
+        color: #ffffff !important; /* ✅ BLANCO COMPLETO: Sin transparencia en móvil */
+        font-size: 0.8em !important; /* ✅ AJUSTADO: Tamaño apropiado para pantallas muy pequeñas */
+    }
+}
+
+/* Indicador de escritura */
+.typing-indicator {
+    font-style: italic;
+    color: #6c757d;
+    font-size: 14px;
+    padding: 10px 20px;
+}
+
+/* Estados de chat deshabilitado */
+.chat-disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.chat-status-disabled {
+    font-size: 12px;
+    color: #dc3545;
+    font-weight: 600;
+}
+
+/* Responsive design */
+@media (max-width: 768px) {
+    
+    
+    .message-sender-inline {
+        margin-right: 4px !important;
+        margin-bottom: 0 !important;
+        flex-shrink: 0 !important;
+        display: inline-block !important;
+        vertical-align: middle !important;
+    }
+    
+    .chat-whatsapp-container {
+        height: 70vh; /* ✅ AJUSTADO: De 60vh a 70vh para mejor comodidad */
+        min-height: 480px; /* ✅ AJUSTADO: De 400px a 480px */
+        max-height: 70vh; /* ✅ AJUSTADO: De 60vh a 70vh */
+        border-radius: 12px; /* ✅ CORREGIDO: Mantener bordes redondeados en pantallas medianas */
+    }
+    
+    .chat-conversation-container {
+        width: 100%;
+        margin-left: 0;
+    }
+    
+    /* ✅ NUEVO: Responsive para controles de archivos en pantallas medianas */
+    .chat-attachment-controls {
+        gap: 0.25rem !important;
+    }
+    
+    
+    
+    
+}
+@media (max-width: 480px) {
+    
+    
+    .message-sender-inline {
+        margin-right: 3px !important;
+        margin-bottom: 0 !important;
+        flex-shrink: 0 !important;
+        display: inline-block !important;
+        vertical-align: middle !important;
+        font-size: 0.4em !important;
+    }
+    
+    .chat-list-header {
+        padding: 10px;
+    }
+    
+    .chat-list-header h5 {
+        font-size: 16px;
+    }
+    
+    .chat-item {
+        padding: 1px;
+    }
+}
+/* Animaciones */
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+/* Scrollbar personalizado */
+.users-list::-webkit-scrollbar {
+    width: 6px;
+}
+
+.users-list::-webkit-scrollbar-track {
+    background: #f1f1f1;
+}
+
+.users-list::-webkit-scrollbar-thumb {
+    background: #c1c1c1;
+    border-radius: 3px;
+}
+
+.users-list::-webkit-scrollbar-thumb:hover {
+    background: #a8a8a8;
+}
+/* ================== ESTILOS PARA ARCHIVOS ================== */
+
+/* Preview de archivos */
+.file-preview-message {
+    background: rgba(0, 0, 0, 0.8) !important;
+    border: 2px dashed #4CAF50;
+    margin: 10px 0;
+}
+
+.file-preview-container {
+    padding: 15px;
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.file-preview-title {
+    font-weight: bold;
+    color: #4CAF50;
+    margin-bottom: 10px;
+    text-align: center;
+}
+
+.file-preview-list {
+    margin-bottom: 15px;
+}
+
+.file-preview-item {
+    display: flex;
+    align-items: center;
+    padding: 8px;
+    margin: 5px 0;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 5px;
+    gap: 10px;
+}
+
+.file-icon {
+    font-size: 1.2em;
+}
+
+.file-name {
+    flex: 1;
+    color: #fff;
+    font-size: 0.9em;
+    word-break: break-word;
+}
+
+.file-size {
+    color: #ccc;
+    font-size: 0.8em;
+}
+
+.file-preview-actions {
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+}
+
+.send-files-btn, .cancel-files-btn {
+    padding: 8px 16px;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 0.9em;
+    transition: all 0.3s ease;
+}
+
+.send-files-btn {
+    background: #4CAF50;
+    color: white;
+}
+
+.send-files-btn:hover {
+    background: #45a049;
+}
+
+.cancel-files-btn {
+    background: #f44336;
+    color: white;
+}
+
+.cancel-files-btn:hover {
+    background: #da190b;
+}
+
+/* Archivos en el chat */
+.file-attachment {
+    margin: 10px 0;
+    border-radius: 8px;
+    overflow: hidden;
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.image-attachment img.chat-image {
+    max-width: 100%;
+    max-height: 300px;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: transform 0.3s ease;
+}
+
+.image-attachment img.chat-image:hover {
+    transform: scale(1.02);
+}
+
+.file-info {
+    padding: 10px;
+    background: rgba(0, 0, 0, 0.3);
+}
+
+.file-name {
+    display: block;
+    color: #fff;
+    font-size: 0.9em;
+    margin-bottom: 5px;
+    word-break: break-word;
+}
+
+.file-type {
+    color: #ccc;
+    font-size: 0.8em;
+}
+
+.generic-attachment {
+    display: flex;
+    align-items: center;
+    padding: 15px;
+    gap: 15px;
+}
+
+
+.generic-attachment .file-info {
+    flex: 1;
+    background: none;
+    padding: 0;
+}
+
+.download-btn {
+    background: #2196F3;
+    color: white;
+    padding: 8px 12px;
+    border-radius: 5px;
+    text-decoration: none;
+    transition: background 0.3s ease;
+}
+
+.download-btn:hover {
+    background: #1976D2;
+}
+
+/* Mensajes de notificación */
+.error-message, .success-message, .info-message {
+    animation: slideInRight 0.3s ease;
+}
+
+.error-message {
+    background: #e74c3c !important;
+    box-shadow: 0 4px 12px rgba(231, 76, 60, 0.3) !important;
+}
+
+.success-message {
+    background: #27ae60 !important;
+    box-shadow: 0 4px 12px rgba(39, 174, 96, 0.3) !important;
+}
+
+.info-message {
+    background: #3498db !important;
+    box-shadow: 0 4px 12px rgba(52, 152, 219, 0.3) !important;
+}
+
+/* Estilos para archivos con error */
+.error-attachment {
+    background: #e74c3c;
+    color: white;
+    padding: 10px;
+    border-radius: 8px;
+    text-align: center;
+    font-size: 14px;
+    margin: 5px 0;
+}
+
+@keyframes slideInRight {
+    from {
+        transform: translateX(100%);
+        opacity: 0;
+    }
+    to {
+        transform: translateX(0);
+        opacity: 1;
+    }
+}
+
+/* Modal de imagen */
+.image-modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.9);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 10000;
+}
+
+.image-modal {
+    background: #1a1a1a;
+    border-radius: 10px;
+    max-width: 90%;
+    max-height: 90%;
+    overflow: hidden;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+}
+
+.image-modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 15px 20px;
+    background: #2a2a2a;
+    border-bottom: 1px solid #444;
+}
+
+.image-modal-title {
+    color: #fff;
+    font-weight: bold;
+}
+
+.image-modal-close {
+    background: none;
+    border: none;
+    color: #fff;
+    font-size: 1.5em;
+    cursor: pointer;
+    padding: 5px;
+    border-radius: 5px;
+    transition: background 0.3s ease;
+}
+
+.image-modal-close:hover {
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.image-modal-content {
+    padding: 20px;
+    text-align: center;
+}
+
+.image-modal-image {
+    max-width: 100%;
+    max-height: 70vh;
+    border-radius: 5px;
+}
+
+/* ================== ESTILOS UNIFICADOS ================== */
+.chat-back-btn {
+    background: #666;
+    color: white;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 5px;
+    cursor: pointer;
+    transition: background 0.3s ease;
+}
+
+.chat-back-btn:hover {
+    background: #555;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .chat-container {
+        margin: 10px;
+        border-radius: 8px;
+    }
+}
+
+/* ================== ESTILOS PARA MENSAJES TEMPORALES DE AUDIO ================== */
+
+/* Mensaje temporal de audio - Diseño compacto y distintivo */
+.temp-message.audio-message {
+    position: relative;
+    margin: 6px 0;
+    opacity: 0.95;
+    animation: tempMessagePulse 2s ease-in-out infinite;
+    border-left: 3px solid #0d4a1f;
+    padding-left: 6px;
+    background: rgba(13, 74, 31, 0.03);
+    border-radius: 0 6px 6px 0;
+}
+
+/* Animación de pulso para mensajes temporales */
+@keyframes tempMessagePulse {
+    0%, 100% {
+        opacity: 0.95;
+        transform: scale(1);
+    }
+    50% {
+        opacity: 1;
+        transform: scale(1.01);
+    }
+}
+
+/* Contenedor del mensaje temporal */
+.temp-message.audio-message .message-content {
+    background: rgba(255, 255, 255, 0.98) !important;
+    border: 1px solid #0d4a1f !important;
+    box-shadow: 0 2px 8px rgba(13, 74, 31, 0.2) !important;
+    position: relative;
+    overflow: visible;
+    padding: 8px 10px;
+    border-radius: 8px;
+    margin: 4px 8px;
+}
+
+/* Indicador de "PENDIENTE" en mensajes temporales */
+.temp-message.audio-message .message-content::before {
+    content: "⏳ PENDIENTE";
+    position: absolute;
+    top: -8px;
+    right: -8px;
+    background: linear-gradient(135deg, #0d4a1f, #056830);
+    color: white;
+    font-size: 9px;
+    font-weight: bold;
+    padding: 2px 6px;
+    border-radius: 8px;
+    z-index: 1000;
+    box-shadow: 0 2px 6px rgba(13, 74, 31, 0.5);
+    border: 1px solid #fff;
+    animation: pendingPulse 1.5s ease-in-out infinite;
+    white-space: nowrap;
+    overflow: visible;
+    pointer-events: none;
+}
+
+/* Animación para el indicador PENDIENTE */
+@keyframes pendingPulse {
+    0%, 100% {
+        transform: scale(1);
+        box-shadow: 0 2px 6px rgba(13, 74, 31, 0.5);
+    }
+    50% {
+        transform: scale(1.05);
+        box-shadow: 0 3px 8px rgba(13, 74, 31, 0.7);
+    }
+}
+
+/* Audio player para mensajes temporales */
+.temp-message.audio-message .audio-player-sent {
+    background: rgba(255, 255, 255, 0.95) !important;
+    border: 1px solid #0d4a1f !important;
+    box-shadow: 0 2px 6px rgba(13, 74, 31, 0.3) !important;
+    position: relative;
+    backdrop-filter: blur(8px);
+    min-width: 260px !important;
+    padding: 3px 10px !important;
+    height: auto !important;
+    border-radius: 6px;
+    display: flex !important;
+    align-items: center !important;
+    gap: 8px !important;
+    flex-wrap: wrap !important;
+}
+
+/* Controles de audio en mensajes temporales */
+.temp-message.audio-message .play-pause-btn-sent,
+.temp-message.audio-message .speed-toggle-btn-sent {
+    background: rgba(13, 74, 31, 0.15) !important;
+    border: 1px solid #0d4a1f !important;
+    color: #0d4a1f !important;
+    width: 20px !important;
+    height: 20px !important;
+    font-size: 10px !important;
+    border-radius: 50% !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    flex-shrink: 0 !important;
+}
+
+.temp-message.audio-message .play-pause-btn-sent:hover,
+.temp-message.audio-message .speed-toggle-btn-sent:hover {
+    background: #0d4a1f !important;
+    color: white !important;
+    transform: scale(1.05);
+}
+
+/* Información de audio en mensajes temporales */
+.temp-message.audio-message .audio-duration-sent,
+.temp-message.audio-message .audio-speed-sent {
+    color: #0d4a1f !important;
+    font-weight: bold;
+    font-size: 11px;
+    background: rgba(13, 74, 31, 0.08);
+    padding: 1px 4px;
+    border-radius: 4px;
+    border: 1px solid rgba(13, 74, 31, 0.2);
+    flex-shrink: 0 !important;
+    white-space: nowrap !important;
+}
+
+/* Botones de acción para mensajes temporales */
+.temp-message.audio-message .audio-actions-preview {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+    margin-left: auto;
+    padding-left: 8px;
+    border-left: 1px solid rgba(13, 74, 31, 0.2);
+    flex-shrink: 0 !important;
+}
+
+/* Botones de enviar y cancelar */
+.temp-message.audio-message .send-audio-btn-preview,
+.temp-message.audio-message .cancel-audio-btn-preview {
+    width: 20px !important;
+    height: 20px !important;
+    border-radius: 50% !important;
+    border: none !important;
+    cursor: pointer !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    transition: all 0.2s ease !important;
+    font-size: 10px !important;
+    flex-shrink: 0 !important;
+    min-width: 20px !important;
+    min-height: 20px !important;
+}
+
+.temp-message.audio-message .send-audio-btn-preview {
+    background: #2ed573;
+    color: white;
+    box-shadow: 0 1px 4px rgba(46, 213, 115, 0.4);
+    border-radius: 50% !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    flex-shrink: 0 !important;
+}
+
+.temp-message.audio-message .send-audio-btn-preview:hover {
+    background: #26d0ce;
+    transform: scale(1.05);
+    box-shadow: 0 2px 6px rgba(46, 213, 115, 0.6);
+}
+
+.temp-message.audio-message .cancel-audio-btn-preview {
+    background: #ff4757;
+    color: white;
+    box-shadow: 0 1px 4px rgba(255, 71, 87, 0.4);
+    border-radius: 50% !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    flex-shrink: 0 !important;
+}
+
+.temp-message.audio-message .cancel-audio-btn-preview:hover {
+    background: #ff3742;
+    transform: scale(1.05);
+    box-shadow: 0 2px 6px rgba(255, 71, 87, 0.6);
+}
+
+/* Tiempo oculto */
+.temp-message.audio-message .message-time {
+    display: none !important;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .temp-message.audio-message .audio-player-sent {
+        min-width: 220px !important;
+        padding: 2px 8px !important;
+        gap: 6px !important;
+    }
+    
+    .temp-message.audio-message .send-audio-btn-preview,
+    .temp-message.audio-message .cancel-audio-btn-preview {
+        width: 20px !important;
+        height: 20px !important;
+        font-size: 10px !important;
+    }
+    
+    .temp-message.audio-message .play-pause-btn-sent,
+    .temp-message.audio-message .speed-toggle-btn-sent {
+        width: 20px !important;
+        height: 20px !important;
+        font-size: 10px !important;
+    }
+    
+    /* Asegurar que el indicador PENDIENTE sea visible en pantallas medianas */
+    .temp-message.audio-message .message-content::before {
+        top: -6px;
+        right: -6px;
+        font-size: 8px;
+        padding: 1px 5px;
+    }
+    
+    /* Mejorar distribución de controles en pantallas medianas */
+    .temp-message.audio-message .audio-actions-preview {
+        padding-left: 6px !important;
+        gap: 5px !important;
+    }
+}
+
+@media (max-width: 480px) {
+    .temp-message.audio-message .audio-player-sent {
+        min-width: 200px !important;
+        padding: 2px 6px !important;
+    }
+    
+    .temp-message.audio-message .send-audio-btn-preview,
+    .temp-message.audio-message .cancel-audio-btn-preview {
+        width: 20px !important;
+        height: 20px !important;
+        font-size: 10px !important;
+    }
+    
+    .temp-message.audio-message .play-pause-btn-sent,
+    .temp-message.audio-message .speed-toggle-btn-sent {
+        width: 20px !important;
+        height: 20px !important;
+        font-size: 10px !important;
+    }
+    
+    /* Asegurar que el indicador PENDIENTE sea visible en pantallas pequeñas */
+    .temp-message.audio-message .message-content::before {
+        top: -4px;
+        right: -4px;
+        font-size: 7px;
+        padding: 1px 4px;
+    }
+    
+    /* Mejorar distribución de controles en pantallas pequeñas */
+    .temp-message.audio-message .audio-actions-preview {
+        padding-left: 4px !important;
+        gap: 4px !important;
+    }
+    
+    .temp-message.audio-message .audio-player-sent {
+        gap: 4px !important;
+    }
+}
+
+/* Efecto shimmer sutil */
+.temp-message.audio-message::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: linear-gradient(45deg, transparent 30%, rgba(13, 74, 31, 0.05) 50%, transparent 70%);
+    pointer-events: none;
+    animation: shimmer 3s ease-in-out infinite;
+}
+
+@keyframes shimmer {
+    0% { transform: translateX(-100%); }
+    100% { transform: translateX(100%); }
+}
+
+/* ================== MODAL DE IMAGEN ================== */
+.image-modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.9);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10000;
+    backdrop-filter: blur(5px);
+}
+
+.image-modal {
+    background: #1a1a1a;
+    border-radius: 12px;
+    max-width: 90vw;
+    max-height: 90vh;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.8);
+    overflow: hidden;
+    animation: modalSlideIn 0.3s ease;
+}
+
+@keyframes modalSlideIn {
+    from {
+        opacity: 0;
+        transform: scale(0.8) translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1) translateY(0);
+    }
+}
+
+.image-modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 15px 20px;
+    background: #2a2a2a;
+    border-bottom: 1px solid #3a3a3a;
+}
+
+.image-modal-title {
+    color: #fff;
+    font-size: 1.1em;
+    font-weight: 500;
+}
+
+.image-modal-close {
+    background: #dc3545;
+    color: white;
+    border: none;
+    border-radius: 50%;
+    width: 32px;
+    height: 32px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease;
+}
+
+.image-modal-close:hover {
+    background: #c82333;
+    transform: scale(1.1);
+}
+
+.image-modal-content {
+    padding: 20px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.image-modal-image {
+    max-width: 100%;
+    max-height: 70vh;
+    border-radius: 8px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+}
+
+/* ================== MEJORAS PARA ARCHIVOS ADJUNTOS ================== */
+.file-attachment {
+    margin: 10px 0;
+    border-radius: 8px;
+    overflow: hidden;
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    transition: all 0.3s ease;
+}
+
+.file-attachment:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.3);
+}
+
+.image-attachment img.chat-image {
+    max-width: 100%;
+    max-height: 300px;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: transform 0.3s ease;
+    display: block;
+}
+
+.image-attachment img.chat-image:hover {
+    transform: scale(1.02);
+}
+
+.video-attachment video.chat-video {
+    width: 100%;
+    max-width: 100%;
+    max-height: 250px;
+    height: auto;
+    aspect-ratio: 16/9;
+    border-radius: 8px;
+    background: #000;
+    display: block;
+    object-fit: contain;
+}
+
+
+.audio-attachment {
+    padding: 15px;
+    background: rgba(0, 0, 0, 0.2);
+}
+
+.audio-attachment .audio-player-sent {
+    margin-bottom: 10px;
+}
+
+.file-info {
+    padding: 12px;
+    background: rgba(0, 0, 0, 0.4);
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.file-name {
+    display: block;
+    color: #fff;
+    font-size: 0.9em;
+    margin-bottom: 5px;
+    word-break: break-word;
+    font-weight: 500;
+}
+
+.file-type {
+    color: #ccc;
+    font-size: 0.8em;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.generic-attachment {
+    display: flex;
+    align-items: center;
+    padding: 15px;
+    gap: 15px;
+}
+
+
+.generic-attachment .file-info {
+    flex: 1;
+    background: none;
+    padding: 0;
+}
+
+.download-btn {
+    background: #2196F3;
+    color: white;
+    padding: 8px 12px;
+    border-radius: 5px;
+    text-decoration: none;
+    transition: background 0.3s ease;
+    border: none;
+    cursor: pointer;
+    font-size: 0.9em;
+}
+
+.download-btn:hover {
+    background: #1976D2;
+    transform: translateY(-1px);
+}
+
+/* ================== RESPONSIVE PARA ARCHIVOS ================== */
+@media (max-width: 768px) {
+    .image-modal {
+        max-width: 95vw;
+        max-height: 95vh;
+    }
+    
+    .image-modal-header {
+        padding: 12px 15px;
+    }
+    
+    .image-modal-content {
+        padding: 15px;
+    }
+    
+    .file-attachment {
+        margin: 8px 0;
+    }
+    
+}
+
+@media (max-width: 480px) {
+    .image-modal {
+        max-width: 98vw;
+        max-height: 98vh;
+        border-radius: 8px;
+    }
+    
+    .image-modal-header {
+        padding: 10px 12px;
+    }
+    
+    .image-modal-content {
+        padding: 10px;
+    }
+    
+    .file-attachment {
+        margin: 6px 0;
+    }
+    
+    
+    .file-info {
+        padding: 10px;
+    }
+    
+    .file-name {
+        font-size: 0.8em;
+    }
+    
+    .file-type {
+        font-size: 0.7em;
+    }
+}
+
+/* ================== VIDEO SIMPLE ================== */
+/* ✅ CONSOLIDADO: Todas las propiedades de video están ahora en la definición principal */
+
+/* ================== BLOQUEAR CLICK DERECHO EN IMÁGENES ================== */
+/* ✅ Imágenes en chat */
+.image-attachment img,
+.file-attachment img {
+    /* ✅ Prevenir selección y descarga */
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+    user-select: none;
+    -webkit-touch-callout: none;
+    -webkit-tap-highlight-color: transparent;
+    pointer-events: auto;
+}
+
+/* ✅ Contenedores de archivos */
+.file-attachment {
+    /* ✅ Prevenir click derecho en contenedor */
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+    user-select: none;
+}
+
+
+
+/* ✅ Estilos para pantalla completa */
+
+/* ================== CONTROLES DE LIMPIEZA ================== */
+.cleanup-controls-container {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    flex-wrap: nowrap;
+    margin-top: 0.5rem;
+    margin-bottom: 0.5rem;
+}
+
+/* Ajustar el contenedor principal para reducir espacio extra */
+.container.container-max-width-900.mt-2 {
+    margin-top: 0.5rem !important;
+}
+
+/* Ajustar el título del dashboard */
+.container.container-max-width-900.mt-2 > .d-flex:first-of-type {
+    margin-bottom: 0.5rem;
+}
+
+.cleanup-controls-container .btn-red {
+    white-space: nowrap;
+    flex-shrink: 0;
+    min-width: 140px;
+    height: 38px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.cleanup-days-selector {
+    display: flex;
+    align-items: center;
+    flex-shrink: 0;
+}
+
+.cleanup-days-select {
+    background: #2c3e50;
+    color: white;
+    border: 2px solid #3498db;
+    border-radius: 8px;
+    padding: 0.5rem 0.75rem;
+    font-size: 0.9rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    min-width: 140px;
+    height: 38px;
+    box-sizing: border-box;
+}
+
+.cleanup-days-select:hover {
+    border-color: #2980b9;
+    background: #34495e;
+}
+
+.cleanup-days-select:focus {
+    outline: none;
+    border-color: #e74c3c;
+    box-shadow: 0 0 0 2px rgba(231, 76, 60, 0.3);
+}
+
+/* ✅ Responsive para pantallas pequeñas */
+@media (max-width: 480px) {
+    .cleanup-controls-container {
+        flex-direction: row;
+        flex-wrap: nowrap;
+        align-items: center;
+        justify-content: center;
+        gap: 0.5rem;
+        margin-top: 0.5rem;
+        margin-bottom: 0.5rem;
+    }
+    
+    .cleanup-days-selector {
+        justify-content: center;
+    }
+    
+    .cleanup-days-select {
+        min-width: 140px;
+        height: 38px;
+        font-size: 0.85rem;
+        padding: 0.4rem 0.6rem;
+        box-sizing: border-box;
+    }
+    
+    .cleanup-controls-container .btn-red {
+        min-width: 140px;
+        height: 38px;
+        font-size: 0.85rem;
+        padding: 0.4rem 0.6rem;
+        white-space: nowrap;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+}
+
+
+@media (max-width: 360px) {
+    .cleanup-controls-container {
+        flex-wrap: nowrap;
+        justify-content: center;
+        gap: 0.5rem;
+        margin-top: 0.5rem;
+        margin-bottom: 0.5rem;
+    }
+    
+    .cleanup-days-select {
+        min-width: 140px;
+        height: 38px;
+        font-size: 0.8rem;
+        padding: 0.4rem 0.6rem;
+        flex-shrink: 0;
+        box-sizing: border-box;
+    }
+    
+    .cleanup-controls-container .btn-red {
+        min-width: 140px;
+        height: 38px;
+        font-size: 0.8rem;
+        padding: 0.4rem 0.6rem;
+        white-space: nowrap;
+        flex-shrink: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+}
+
+/* ================== ESTILOS PARA ARCHIVOS GENÉRICOS ================== */
+/* ✅ Contenedor de archivo genérico */
+.file-attachment.generic-attachment {
+    background: linear-gradient(135deg, #2c3e50 0%, #34495e 100%);
+    border: 2px solid #3498db;
+    border-radius: 12px;
+    padding: 0.8rem;
+    margin: 0.5rem 0;
+    box-shadow: 0 4px 12px rgba(52, 152, 219, 0.3);
+    transition: all 0.3s ease;
+}
+
+.file-attachment.generic-attachment:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(52, 152, 219, 0.4);
+    border-color: #2980b9;
+}
+
+/* ✅ Header del archivo */
+.file-header {
+    display: flex;
+    align-items: center;
+    margin-bottom: 0.8rem;
+}
+
+/* ✅ Nombre compacto del archivo */
+.file-name-compact {
+    font-size: 0.9rem;
+    font-weight: 500;
+    color: white;
+    margin-bottom: 0.3rem;
+    word-break: break-word;
+    line-height: 1.2;
+}
+
+/* ✅ Información del archivo */
+.file-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.file-name {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: white;
+    margin-bottom: 0.3rem;
+    word-break: break-word;
+}
+
+.file-details {
+    display: flex;
+    gap: 1rem;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.file-type {
+    background: #3498db;
+    color: white;
+    padding: 0.2rem 0.6rem;
+    border-radius: 20px;
+    font-size: 0.8rem;
+    font-weight: 500;
+}
+
+.file-size {
+    color: #bdc3c7;
+    font-size: 0.9rem;
+    font-weight: 500;
+}
+
+/* ✅ Acciones del archivo */
+.file-actions {
+    display: flex;
+    gap: 0.5rem;
+    justify-content: flex-start;
+}
+
+.file-preview-btn,
+.file-download-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    border: none;
+    border-radius: 8px;
+    font-size: 1rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    text-decoration: none;
+    color: white;
+}
+
+.file-preview-btn {
+    background: #f39c12;
+    color: white;
+}
+
+.file-preview-btn:hover {
+    background: #e67e22;
+    transform: translateY(-1px);
+}
+
+.file-download-btn {
+    background: #27ae60;
+    color: white;
+}
+
+.file-download-btn:hover {
+    background: #229954;
+    transform: translateY(-1px);
+}
+
+/* ✅ Modales para archivos */
+.file-preview-modal-overlay,
+.file-info-modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.8);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10000;
+    backdrop-filter: blur(5px);
+}
+
+.file-preview-modal,
+.file-info-modal {
+    background: #2c3e50;
+    border-radius: 16px;
+    max-width: 90%;
+    max-height: 90%;
+    overflow: hidden;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+    border: 2px solid #3498db;
+}
+
+.file-preview-header,
+.file-info-header {
+    background: #34495e;
+    padding: 1rem 1.5rem;
+    border-bottom: 1px solid #2c3e50;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.file-preview-title,
+.file-info-title {
+    color: white;
+    font-size: 1.2rem;
+    font-weight: 600;
+}
+
+.file-preview-close,
+.file-info-close {
+    background: #e74c3c;
+    color: white;
+    border: none;
+    border-radius: 50%;
+    width: 32px;
+    height: 32px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease;
+}
+
+.file-preview-close:hover,
+.file-info-close:hover {
+    background: #c0392b;
+    transform: scale(1.1);
+}
+
+.file-preview-content,
+.file-info-content {
+    padding: 1.5rem;
+    max-height: 70vh;
+    overflow-y: auto;
+}
+
+.text-file-content {
+    background: #1a1a1a;
+    color: #ecf0f1;
+    padding: 1rem;
+    border-radius: 8px;
+    font-family: 'Courier New', monospace;
+    font-size: 0.9rem;
+    line-height: 1.5;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    max-height: 60vh;
+    overflow-y: auto;
+}
+
+.file-info-item {
+    color: white;
+    margin-bottom: 1rem;
+    font-size: 1rem;
+}
+
+.file-info-actions {
+    display: flex;
+    gap: 1rem;
+    margin-top: 1.5rem;
+    justify-content: center;
+}
+
+.file-download-btn-large {
+    background: #27ae60;
+    color: white;
+    padding: 0.8rem 1.5rem;
+    border-radius: 8px;
+    text-decoration: none;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-weight: 500;
+    transition: all 0.2s ease;
+}
+
+.file-download-btn-large:hover {
+    background: #229954;
+    transform: translateY(-2px);
+}
+
+.file-open-btn {
+    background: #3498db;
+    color: white;
+    border: none;
+    padding: 0.8rem 1.5rem;
+    border-radius: 8px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-weight: 500;
+    transition: all 0.2s ease;
+}
+
+.file-open-btn:hover {
+    background: #2980b9;
+    transform: translateY(-2px);
+}
+
+/* ✅ Responsive para archivos genéricos */
+@media (max-width: 768px) {
+    .file-header {
+        text-align: left;
+    }
+    
+    .file-actions {
+        justify-content: flex-start;
+        flex-wrap: wrap;
+    }
+    
+    .file-preview-modal,
+    .file-info-modal {
+        max-width: 95%;
+        margin: 1rem;
+    }
+}
+
+@media (max-width: 480px) {
+    .file-attachment.generic-attachment {
+        padding: 0.6rem;
+    }
+    
+    .file-actions {
+        gap: 0.4rem;
+    }
+    
+    .file-preview-btn,
+    .file-download-btn {
+        width: 32px;
+        height: 32px;
+        font-size: 0.9rem;
+    }
+}
+
+/* ================== CONTENEDOR DE VIDEO ================== */
+.video-attachment {
+    background: #000;
+    border-radius: 8px;
+    overflow: hidden;
+    margin-bottom: 10px;
+    position: relative;
+}
+
+
+/* ================== MEJORAS PARA PANTALLAS GRANDES ================== */
+@media (min-width: 1200px) {
+    .video-attachment video.chat-video {
+        max-width: 800px;
+        margin: 0 auto;
+    }
+    
+    .video-attachment {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+    }
+}
+
+@media (min-width: 1600px) {
+    .video-attachment video.chat-video {
+        max-width: 1000px;
+    }
+}
+
+
+/* ✅ NUEVO: Estilos para mensaje de error de duración de audio */
+.audio-error-message {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    background: #fff3cd;
+    border: 1px solid #ffeaa7;
+    border-radius: 8px;
+    color: #856404;
+    font-size: 0.9em;
+    font-weight: 500;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.audio-error-message i {
+    font-size: 1em;
+    flex-shrink: 0;
+    color: #f39c12;
+}
+
+.audio-error-message span {
+    line-height: 1.3;
+}
+
+/* Estilos para mensajes de error temporales */
+.error-message.temp-message {
+    margin: 8px 0;
+    max-width: 100%;
+    animation: fadeInOut 5s ease-in-out;
+}
+
+/* ================== INDICADOR DE ESCRITURA ================== */
+
+
+.typing-indicator .typing-dots {
+    display: flex;
+    margin-left: 8px;
+}
+
+.typing-indicator .typing-dots span {
+    width: 4px;
+    height: 4px;
+    border-radius: 50%;
+    background: #999;
+    margin: 0 1px;
+    animation: typingBounce 1.4s ease-in-out infinite both;
+}
+
+.typing-indicator .typing-dots span:nth-child(1) {
+    animation-delay: -0.32s;
+}
+
+.typing-indicator .typing-dots span:nth-child(2) {
+    animation-delay: -0.16s;
+}
+
+.typing-indicator .typing-dots span:nth-child(3) {
+    animation-delay: 0s;
+}
+
+@keyframes typingPulse {
+    0%, 100% {
+        opacity: 0.7;
+    }
+    50% {
+        opacity: 1;
+    }
+}
+
+@keyframes typingBounce {
+    0%, 80%, 100% {
+        transform: scale(0);
+    }
+    40% {
+        transform: scale(1);
+    }
+}
+
+/* Indicador de escritura en el dashboard */
+.dashboard-typing-indicator {
+    position: fixed;
+    bottom: 80px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(0, 123, 255, 0.9);
+    color: white;
+    padding: 8px 16px;
+    border-radius: 20px;
+    font-size: 12px;
+    z-index: 1000;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+    animation: typingSlideUp 0.3s ease-out;
+}
+
+.dashboard-typing-indicator .typing-content {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+}
+
+.dashboard-typing-indicator .typing-time {
+    font-size: 10px;
+    opacity: 0.8;
+    font-weight: 500;
+}
+
+@keyframes typingSlideUp {
+    from {
+        opacity: 0;
+        transform: translateX(-10%) translateY(20px); /* ✅ CORREGIDO: Usar -10% desde el inicio */
+    }
+    to {
+        opacity: 1;
+        transform: translateX(-10%) translateY(0); /* ✅ CORREGIDO: Usar -10% consistente */
+    }
+}
+
+/* Indicador de escritura en chat de usuario */
+.user-typing-indicator {
+    position: fixed;
+    bottom: 80px;
+    left: 50%;
+    transform: translateX(-10%);
+    background: #004174 !important; /* ✅ NUEVO: Color azul personalizado */
+    color: white;
+    padding: 8px 16px;
+    border-radius: 20px;
+    font-size: 12px;
+    z-index: 1000;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+    animation: typingSlideUp 0.3s ease-out;
+}
+
+.user-typing-indicator .typing-content {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+}
+
+.user-typing-indicator .typing-time {
+    font-size: 10px;
+    opacity: 0.8;
+    font-weight: 500;
+}
+
+/* ================== NOTIFICACIONES DE CONEXIÓN ================== */
+
+.connection-notification {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    background: rgba(255, 255, 255, 0.95);
+    border-radius: 8px;
+    padding: 12px 16px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    z-index: 1001;
+    animation: notificationSlideIn 0.3s ease-out;
+    border-left: 4px solid #28a745;
+}
+
+.connection-notification.offline {
+    border-left-color: #dc3545;
+}
+
+.dashboard-connection-notification {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    background: rgba(255, 255, 255, 0.95);
+    border-radius: 8px;
+    padding: 12px 16px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    z-index: 1001;
+    animation: notificationSlideIn 0.3s ease-out;
+    border-left: 4px solid #007bff;
+}
+
+.dashboard-connection-notification.offline {
+    border-left-color: #dc3545;
+}
+
+.notification-content {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.notification-icon {
+    font-size: 14px;
+}
+
+.notification-text {
+    font-size: 14px;
+    font-weight: 500;
+    color: #333;
+}
+
+@keyframes notificationSlideIn {
+    from {
+        opacity: 0;
+        transform: translateX(100%);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
+@keyframes fadeInOut {
+    0%, 20% { opacity: 0; transform: translateY(-5px); }
+    25%, 75% { opacity: 1; transform: translateY(0); }
+    80%, 100% { opacity: 0; transform: translateY(-5px); }
+}
+
+/* ================== ESPACIADOR PARA CENTRAR TÍTULO ================== */
+.chat-spacer {
+    width: 80px;
+}

@@ -1,0 +1,3 @@
+# Ignorar todos los archivos de uploads de chat
+chat/*
+!chat/.gitkeep

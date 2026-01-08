@@ -1,0 +1,799 @@
+/* Estilos para página SMS - CSP Compliant */
+
+.sms-message-row {
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.sms-message-row:hover {
+  background-color: #f8f9fa;
+}
+
+.sms-message-unread {
+  background-color: #fff3cd !important;
+  border-left: 4px solid #ffc107;
+}
+
+.sms-message-read {
+  border-left: 4px solid #28a745;
+}
+
+#sms-messages-container table {
+  margin-bottom: 0;
+}
+
+.message-preview {
+  max-width: none;
+  min-width: 500px;
+  width: 80%;
+  word-wrap: break-word;
+  white-space: normal;
+  line-height: 1.8;
+  padding: 15px 12px;
+}
+
+.sms-message-row td {
+  vertical-align: top;
+  padding: 15px 12px;
+}
+
+.sms-message-row {
+  min-height: 70px;
+}
+
+.sms-date-cell {
+  line-height: 1.2;
+}
+
+.sms-date-date {
+  line-height: 1.2;
+}
+
+.sms-date-time {
+  font-size: 0.85em;
+  color: #666;
+  margin-top: 2px;
+}
+
+.sms-table-th-date {
+  width: 20%;
+}
+
+.sms-table-th-number {
+  width: 15%;
+}
+
+/* Estilos para renderSMSMessages - CSP Compliant */
+.text-center {
+  text-align: center;
+}
+
+.mt-05 {
+  margin-top: 0.5rem;
+}
+
+.sms-code-container {
+  margin-bottom: 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.sms-code-text {
+  margin-right: 0.5rem;
+}
+
+.sms-copy-btn {
+  margin-right: 0.5rem;
+}
+
+.sms-date-text {
+  font-size: 0.9em;
+  color: #666;
+}
+
+/* Estilos para badges de tipo de número SMS - CSP Compliant */
+.badge-success {
+  background-color: #28a745;
+  color: white;
+  padding: 2px 8px;
+  border-radius: 3px;
+  font-size: 0.85em;
+  margin-left: 5px;
+  display: inline-block;
+}
+
+.badge-warning {
+  background-color: #ffc107;
+  color: #000;
+  padding: 2px 8px;
+  border-radius: 3px;
+  font-size: 0.85em;
+  margin-left: 5px;
+  display: inline-block;
+}
+
+.badge-secondary {
+  background-color: #6c757d;
+  color: white;
+  padding: 2px 8px;
+  border-radius: 3px;
+  font-size: 0.85em;
+  margin-left: 5px;
+  display: inline-block;
+}
+
+/* Clases de texto con colores para mensajes SMS - CSP Compliant */
+.text-success {
+  color: #28a745 !important;
+}
+
+.text-danger {
+  color: #dc3545 !important;
+}
+
+.text-info {
+  color: #002678 !important;
+}
+
+.text-secondary {
+  color: #6c757d !important;
+}
+
+/* Clases de display para CSP compliance */
+.d-none {
+  display: none !important;
+}
+
+.d-block {
+  display: block !important;
+}
+
+.d-inline-block {
+  display: inline-block !important;
+}
+
+/* Estilos para gestión de números SMS */
+.search-results-container {
+  display: none; /* Oculto inicialmente */
+  max-height: 360px;
+  overflow-y: auto;
+  border: 1px solid #ccc;
+  margin-top: 0.5rem;
+  background-color: #ffffff;
+}
+
+.search-result-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.25rem 0.6rem;
+  border-bottom: 1px solid #eee;
+  font-size: 0.95em;
+}
+
+.search-result-item:nth-child(odd) {
+  background-color: #ffffff;
+}
+
+.search-result-item:nth-child(even) {
+  background-color: #f1f3f5;
+}
+
+.search-result-item:last-child {
+  border-bottom: none;
+}
+
+.search-result-item span {
+  flex-grow: 1;
+  margin-right: 0.25rem;
+  word-break: break-all;
+}
+
+.btn-delete-item {
+  background-color: #dc3545;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  padding: 4px 8px;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.btn-delete-item:hover {
+  background-color: #c82333;
+}
+
+.allowed-emails-display {
+  background-color: #f8f9fa;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  padding: 15px;
+  min-height: 100px;
+  max-height: 400px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  font-family: monospace;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.btn-search {
+  background-color: #6c757d;
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 4px;
+  cursor: pointer;
+  margin-left: 10px;
+}
+
+.btn-search:hover {
+  background-color: #5a6268;
+}
+
+.min-height-2-5rem {
+  min-height: 2.5rem;
+}
+
+.text-smaller {
+  font-size: 0.9em;
+}
+
+.text-secondary {
+  color: #555;
+}
+
+.mb-05 {
+  margin-bottom: 0.5rem;
+}
+
+.mb-075 {
+  margin-bottom: 0.75rem;
+}
+
+.mb-2 {
+  margin-bottom: 1rem;
+}
+
+.mb-3 {
+  margin-bottom: 1.5rem;
+}
+
+/* ✅ NUEVO: Estilos para Gestión de 2FA por Correo - CSP Compliant */
+.twofa-section-card {
+  background: white;
+  margin-top: 1rem;
+}
+
+/* Estilos para búsqueda y mostrar en sección 2FA (igual que herramientas) */
+.twofa-section-card .productos-buscar-mostrar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.twofa-section-card .productos-buscar-mostrar .search-container {
+  flex: 1;
+  min-width: 200px;
+}
+
+.twofa-section-card .productos-buscar-mostrar .search-container input[type="search"] {
+  height: 32px !important;
+  padding: 6px 10px !important;
+  border: 1.5px solid #111;
+  border-radius: 5px;
+  font-size: 14px;
+  width: 100%;
+  box-sizing: border-box;
+  line-height: 1.5;
+}
+
+.twofa-section-card .productos-buscar-mostrar select {
+  height: 32px !important;
+  padding: 6px 10px !important;
+  border: 1.5px solid #111;
+  border-radius: 5px;
+  font-size: 14px;
+  width: 80px;
+  box-sizing: border-box;
+  line-height: 1.5;
+}
+
+.twofa-description-text {
+  font-size: 0.9rem;
+}
+
+.twofa-qr-preview img {
+  max-width: 200px;
+  max-height: 200px;
+}
+
+.twofa-secret-display code {
+  font-family: 'Courier New', monospace;
+  background: #f5f5f5;
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+}
+
+.twofa-api-key-container {
+  position: relative;
+}
+
+.twofa-api-key-input {
+  padding-right: 2.5rem;
+}
+
+.twofa-api-key-toggle {
+  position: absolute;
+  right: 0.25rem;
+  padding: 0.25rem 0.5rem;
+  border: none;
+  background: transparent;
+  color: #666;
+}
+
+.twofa-instructions-text {
+  font-size: 0.85rem;
+}
+
+.twofa-instructions-list {
+  padding-left: 1.2rem;
+}
+
+.twofa-instructions-sublist {
+  padding-left: 1.5rem;
+  margin-top: 0.25rem;
+}
+
+.twofa-code-block {
+  background: #f5f5f5;
+  padding: 0.5rem;
+  border-radius: 4px;
+  margin-top: 0.25rem;
+  font-size: 0.8rem;
+  overflow-x: auto;
+}
+
+.twofa-tip-text {
+  font-size: 0.8rem;
+}
+
+.twofa-webhook-code {
+  word-break: break-all;
+  font-size: 0.8rem;
+}
+
+.twofa-info-box {
+  background-color: #f5f5f5;
+  border-radius: 4px;
+  font-size: 0.85rem;
+}
+
+/* ✅ NUEVO: Estilos para fila compacta de 2FA */
+.twofa-compact-row {
+  flex-wrap: nowrap;
+}
+
+.twofa-compact-row input[type="text"] {
+  min-width: 200px;
+}
+
+.twofa-qr-preview-img {
+  max-width: 200px;
+  max-height: 200px;
+}
+
+.flex-grow-1 {
+  flex-grow: 1;
+}
+
+.resize-vertical {
+  resize: vertical;
+}
+
+.select-padding-3px {
+  padding: 3px;
+}
+
+.gap-05 {
+  gap: 0.5rem;
+}
+
+.gap-1 {
+  gap: 1rem;
+}
+
+.ml-05 {
+  margin-left: 0.5rem;
+}
+
+.ml-auto {
+  margin-left: auto;
+}
+
+.justify-content-end {
+  justify-content: flex-end;
+}
+
+.d-flex {
+  display: flex;
+}
+
+#addNumbersForm textarea {
+  width: 100%;
+  border: 1px solid #ced4da;
+  border-radius: 4px;
+}
+
+#addNumbersForm textarea:focus {
+  border-color: #80bdff;
+  outline: 0;
+  box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
+}
+
+.admin-card h3 {
+  margin-top: 0;
+  margin-bottom: 1rem;
+  font-size: 1.25rem;
+  font-weight: 600;
+}
+
+.sms-instructions-list {
+  padding-left: 20px;
+  line-height: 1.8;
+}
+
+.sms-numbers-textarea {
+  font-family: monospace;
+  font-size: 14px;
+  padding: 12px;
+}
+
+.sms-table-th-date {
+  width: 150px;
+}
+
+.sms-table-th-number {
+  width: 120px;
+}
+
+.sms-table-th-from {
+  width: 150px;
+}
+
+.sms-table-th-status {
+  width: 100px;
+}
+
+.sms-table-th-actions {
+  width: 80px;
+}
+
+.sms-message-detail-text {
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  font-size: 1.1em;
+}
+
+.sms-raw-data-pre {
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.sms-error-message {
+  color: red;
+}
+
+#searchNumbersForm {
+  display: flex;
+  margin-bottom: 0.5rem;
+  align-items: center;
+}
+
+.sms-select-width,
+.sms-input-width {
+  max-width: 400px;
+  width: 100%;
+  flex: 1 1 auto;
+  min-width: 200px;
+}
+
+#btn-consult-number,
+#btn-refresh-messages {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.sms-controls-row {
+  flex-wrap: wrap;
+}
+
+/* En pantallas pequeñas, asegurar que los botones estén en la misma línea */
+@media (max-width: 768px) {
+  .sms-controls-row {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    padding: 0 0.5rem;
+  }
+  
+  .sms-select-width,
+  .sms-input-width {
+    min-width: 120px;
+    max-width: calc(100% - 150px);
+    flex: 1 1 auto;
+  }
+  
+  #btn-consult-number,
+  #btn-refresh-messages {
+    min-width: 130px;
+    flex-shrink: 0;
+  }
+  
+  /* Estilos para tabla de mensajes en móviles */
+  #sms-messages-container {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    width: 100%;
+    max-width: 100%;
+  }
+  
+  #sms-messages-container .table-responsive {
+    overflow-x: visible;
+    width: 100%;
+  }
+  
+  #sms-messages-container table {
+    width: 100%;
+    table-layout: auto;
+    display: table;
+  }
+  
+  #sms-messages-container table thead {
+    display: table-header-group;
+  }
+  
+  #sms-messages-container table tbody {
+    display: table-row-group;
+  }
+  
+  #sms-messages-container table tr {
+    display: table-row;
+  }
+  
+  #sms-messages-container table td,
+  #sms-messages-container table th {
+    display: table-cell;
+    padding: 10px 8px;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+  }
+  
+  .message-preview {
+    min-width: 0 !important;
+    width: auto !important;
+    max-width: 100% !important;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+    white-space: normal;
+    line-height: 1.6;
+    padding: 12px 8px;
+  }
+  
+  .sms-table-th-date {
+    width: auto;
+    min-width: 100px;
+  }
+  
+  .sms-table-th-number {
+    width: auto;
+    min-width: 120px;
+  }
+  
+  .sms-message-row td {
+    padding: 12px 8px;
+    vertical-align: top;
+  }
+  
+  .sms-message-row {
+    min-height: auto;
+  }
+  
+  /* Asegurar que el contenedor principal no se salga */
+  #sms-management-container {
+    overflow-x: hidden;
+    max-width: 100%;
+  }
+  
+  .admin-card {
+    overflow-x: hidden;
+    max-width: 100%;
+  }
+}
+
+/* Estilos para modal SMS - Diseño mejorado con transparencia */
+.modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(3px);
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+}
+
+.modal:not(.d-none) {
+  display: flex;
+}
+
+.modal.d-none {
+  display: none !important;
+}
+
+.sms-modal-content {
+  background-color: var(--card-bg, #fff) !important;
+  color: var(--text-color, #111) !important;
+  border: none !important;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.07) !important;
+  padding: 0.75rem !important;
+  border-radius: 16px !important;
+  max-width: 90%;
+  width: 600px;
+  max-height: 85vh;
+  overflow-y: auto;
+  position: relative;
+}
+
+/* Centrar títulos */
+.admin-card h3.text-center {
+  text-align: center;
+}
+
+/* Mejorar botones de paginación */
+#sms-pagination .btn-panel {
+  min-width: 120px;
+}
+
+#sms-pagination .btn-panel.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Estilos para paginación de números permitidos (igual que emails) */
+@media (max-width: 768px) {
+  #allowedNumbersPagination {
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    justify-content: space-between;
+  }
+  
+  #allowedNumbersPagination > #deleteAllNumbersBtn {
+    margin-left: auto;
+    margin-right: 0;
+  }
+  
+  #allowedNumbersPagination > .ml-auto {
+    width: 100%;
+    display: flex;
+    justify-content: center;
+    margin-left: 0 !important;
+    margin-right: 0;
+    order: 3;
+  }
+}
+
+/* Estilos adicionales para móviles muy pequeños */
+@media (max-width: 480px) {
+  .message-preview {
+    font-size: 0.9em;
+    padding: 10px 6px;
+    line-height: 1.5;
+  }
+  
+  #sms-messages-container table td,
+  #sms-messages-container table th {
+    padding: 8px 6px;
+    font-size: 0.9em;
+  }
+  
+  .sms-message-row td code {
+    font-size: 0.85em;
+  }
+  
+  #sms-messages-container table th {
+    font-size: 0.85em;
+  }
+}
+
+/* Centrar elementos en secciones SMS */
+#sms-management-container .admin-card > div.mb-1.text-center {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+#sms-management-container .admin-card > div.mb-1.text-center button {
+  margin-top: 0.5rem;
+}
+
+/* Estilos para formulario y lista de regex SMS */
+.regex-form-container {
+  padding: 0.5rem 0;
+}
+
+.regex-form-container input[type="text"] {
+  width: 98% !important;
+  background: #fff !important;
+  color: #111 !important;
+  padding: 0.3rem !important;
+  border-radius: 4px !important;
+  border: 1px solid #ced4da !important;
+  margin-bottom: 0.5rem;
+  transition: border-color 0.2s ease;
+}
+
+.regex-form-container input[type="text"]:focus {
+  outline: 0 !important;
+  border-color: #80bdff !important;
+  box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25) !important;
+}
+
+.regex-list-container {
+  max-height: 300px;
+  overflow-y: auto;
+  border: none;
+  padding: 0;
+  background-color: transparent;
+}
+
+.regex-item-container {
+  border: 1.5px solid var(--card-border, #ccc) !important;
+  margin: 0.5rem 0;
+  padding: 0.5rem;
+  border-radius: 6px;
+  background-color: var(--card-bg, #fff) !important;
+  transition: background-color 0.2s ease;
+}
+
+.regex-item-container:hover {
+  background-color: #f8f9fa;
+}
+
+/* Estilos para inputs dentro del modal de editar regex */
+#sms-regex-edit-modal .sms-modal-content {
+  background-color: var(--card-bg, #fff) !important;
+  color: var(--text-color, #111) !important;
+  border: none !important;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.07) !important;
+  padding: 0.75rem !important;
+  border-radius: 16px !important;
+}
+
+#sms-regex-edit-modal input[type="text"] {
+  width: 98% !important;
+  background: #fff !important;
+  color: #111 !important;
+  padding: 0.3rem !important;
+  border-radius: 4px !important;
+  border: 1px solid #ced4da !important;
+  margin-bottom: 0.5rem;
+}
+
+#sms-regex-edit-modal input[type="text"]:focus {
+  outline: 0 !important;
+  border-color: #80bdff !important;
+  box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25) !important;
+}
+
+/* Estilos para botón de probar estados */
+#test-number-states-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+

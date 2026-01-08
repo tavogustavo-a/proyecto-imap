@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+
+{% block title %}Editar Herramienta{% endblock %}
+
+{% block head %}
+  {{ super() }}
+  <link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}">
+{% endblock %}
+{% block content %}
+<div class="store-light maxw-800 mx-auto br-8">
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <h2 class="m-0">Editar Información de Herramienta</h2>
+    <a href="{{ url_for('store_bp.admin_tools') }}" class="btn-panel btn-blue">Volver</a>
+  </div>
+  <div class="mb-3 text-center">
+    <strong>Estado:</strong>
+    {% if tool.enabled %}
+      <span class="badge bg-success ms-2">Habilitada</span>
+    {% else %}
+      <span class="badge bg-danger ms-2">Deshabilitada</span>
+    {% endif %}
+  </div>
+  <div class="d-flex flex-column align-items-center edit-tool-main-container">
+    <form method="POST" class="no-form-styles" id="toolForm">
+      <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+      <div class="mb-3">
+        <label for="title" class="form-label text-center d-block">Título</label>
+        <input type="text" name="title" id="title" class="form-control" required value="{{ tool.title }}" autocomplete="off">
+      </div>
+      <div class="mb-3">
+        <label for="text" class="form-label text-center d-block">Texto</label>
+        <textarea name="text" id="text" class="form-control" required autocomplete="off">{{ tool.text }}</textarea>
+      </div>
+      <div class="mb-3">
+        <label for="percent" class="form-label text-center d-block">Porcentaje (%)</label>
+        <input type="number" name="percent" id="percent" class="form-control" min="0" step="any" required value="{{ tool.percent }}" autocomplete="off">
+      </div>
+    </form>
+    <div class="mt-3 w-100">
+      <h4 class="mb-1 text-center">Usuarios con acceso a esta herramienta</h4>
+      <div class="d-flex flex-wrap align-items-center mb-2 justify-content-center gap-1">
+        <div class="search-container">
+          <label for="searchUserInput" class="sr-only">Buscar usuario</label>
+          <input type="search" id="searchUserInput" placeholder="Buscar usuario..." class="form-control" autocomplete="off" value="{{ search_query or '' }}">
+        </div>
+        <div>
+          <label for="showUserCount" class="sr-only">Mostrar cantidad usuarios</label>
+          <select id="showUserCount" class="form-select" autocomplete="off">
+            <option value="5">5</option>
+            <option value="10">10</option>
+            <option value="20">20</option>
+            <option value="50">50</option>
+            <option value="all" selected>Todos</option>
+          </select>
+        </div>
+      </div>
+      <div class="table-responsive">
+        <table class="table table-bordered mt-2">
+          <thead>
+            <tr>
+              <th>Usuario</th>
+              <th>Nombre</th>
+              <th class="text-center">Vincular</th>
+            </tr>
+          </thead>
+          <tbody id="users-table-body">
+            <tr>
+              <td colspan="3" class="text-center">Cargando usuarios...</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="d-flex justify-content-center mt-2 pagination-buttons">
+        <!-- Paginación generada por JavaScript -->
+      </div>
+      <div class="d-flex justify-content-center gap-2 mb-4">
+          <button type="button" id="checkAllBtn" class="btn-panel btn-sm btn-blue">Marcar Todos</button>
+          <button type="button" id="uncheckAllBtn" class="btn-panel btn-sm btn-orange">Desmarcar Todos</button>
+      </div>
+      <div class="mt-2 text-center">
+        <button type="submit" form="toolForm" class="btn-panel btn-green">Guardar</button>
+        <a href="{{ url_for('store_bp.admin_tools') }}" class="btn-panel btn-red">Cancelar</a>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+{{ super() }}
+<script src="{{ url_for('store_bp.static', filename='js/edit_tool_users.js') }}" defer></script>
+{% endblock %} 

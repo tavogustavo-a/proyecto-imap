@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+
+{% block title %}Editar Cupón{% endblock %}
+
+{% block head %}
+  {{ super() }}
+  <link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}">
+{% endblock %}
+{% block content %}
+<div class="store-light maxw-800 mx-auto br-8">
+  <div class="d-flex align-items-center justify-content-between mb-1 editar-cupon-header">
+    <h2 class="m-0">Editar Cupón</h2>
+    <a href="{{ url_for('store_bp.admin_productos') }}" class="btn-blue btn-panel editar-cupon-back-btn">Volver</a>
+  </div>
+  <form id="editCouponForm" class="d-flex flex-column align-items-center editar-cupon-form">
+    <input type="hidden" name="coupon_id" value="{{ coupon.id }}">
+    <div class="d-flex flex-column align-items-center w-100">
+      <label class="editar-cupon-label">Estado:</label>
+      <span class="badge {{ 'bg-success' if coupon.enabled else 'bg-danger' }} editar-cupon-badge">
+        {{ 'Habilitado' if coupon.enabled else 'Deshabilitado' }}
+      </span>
+    </div>
+    <div class="d-flex flex-column align-items-center w-100">
+      <label for="coupon_name" class="editar-cupon-label">Nombre del cupón:</label>
+      <input type="text" id="coupon_name" name="coupon_name" value="{{ coupon.name }}" required class="editar-cupon-input" autocomplete="off">
+    </div>
+    <div class="d-flex flex-column align-items-center mb-1 w-100">
+      <label for="discount_cop" class="editar-cupon-label">Descuento COP:</label>
+      <input type="number" id="discount_cop" name="discount_cop" value="{{ coupon.discount_cop|int if coupon.discount_cop is not none else '' }}" required class="editar-cupon-input" autocomplete="off">
+    </div>
+    <div class="d-flex flex-column align-items-center mb-1 w-100">
+      <label for="discount_usd" class="editar-cupon-label">Descuento USD:</label>
+      <input type="number" id="discount_usd" name="discount_usd" value="{{ coupon.discount_usd|int if coupon.discount_usd is not none else '' }}" required class="editar-cupon-input" autocomplete="off">
+    </div>
+    <div class="d-flex flex-column align-items-center mb-1 w-100">
+      <label for="duration_days" class="editar-cupon-label">Duración (días):</label>
+      <input type="number" id="duration_days" name="duration_days" value="{{ coupon.duration_days or 1 }}" min="1" class="editar-cupon-input" autocomplete="off">
+    </div>
+    <div class="d-flex flex-column align-items-center mb-1 w-100">
+      <label for="max_uses_per_user" class="editar-cupon-label">Usos por usuario:</label>
+      <input type="number" id="max_uses_per_user" name="max_uses_per_user" value="{{ coupon.max_uses_per_user if coupon.max_uses_per_user else '' }}" min="1" class="editar-cupon-input" placeholder="Opcional" autocomplete="off">
+    </div>
+    <div class="d-flex flex-column align-items-center mb-1 w-100">
+      <label for="description" class="editar-cupon-label">Descripción:</label>
+      <textarea id="description" name="description" class="editar-cupon-textarea" autocomplete="off">{{ coupon.description or '' }}</textarea>
+    </div>
+    <div class="d-flex flex-column align-items-center mb-1 w-100">
+      <label for="min_amount" class="editar-cupon-label">Cuentas mínimo:</label>
+      <input type="number" id="min_amount" name="min_amount" value="{{ coupon.min_amount|int if coupon.min_amount is not none else '' }}" min="0" step="1" class="editar-cupon-input" placeholder="Opcional" autocomplete="off">
+    </div>
+    <div class="d-flex flex-column align-items-center mb-2 w-100">
+      <label class="editar-cupon-label">Tiempo restante:</label>
+      <span id="expiration_date" data-created="{{ coupon.created_at.isoformat() }}" class="editar-cupon-display-field"></span>
+    </div>
+    <div class="d-flex flex-column align-items-center mb-2 w-100">
+      <label class="editar-cupon-label">Fecha de creación:</label>
+      <span id="created_at" class="editar-cupon-display-field">
+        {{ created_at_col.strftime('%Y-%m-%d %I:%M:%S %p') if created_at_col else 'No disponible' }}
+      </span>
+    </div>
+    <div class="d-flex align-items-center justify-content-center mb-1 w-100">
+      <input type="checkbox" id="show_public" name="show_public" value="1" {% if coupon.show_public %}checked{% endif %} autocomplete="off">
+      <label for="show_public" class="editar-cupon-checkbox-label">Ver en tienda pública</label>
+    </div>
+    <h4 class="mt-2 mb-1">Productos Asociados</h4>
+    <div class="store-light editar-cupon-products-container">
+      <div class="d-flex flex-column gap-03 editar-cupon-products-list" id="editProductsCheckboxList">
+        {% for p in products %}
+          <label class="d-flex align-items-center gap-03">
+            <input type="checkbox" class="product-checkbox" name="products" value="{{ p.id }}" {% if p.id in coupon_product_ids %}checked{% endif %} autocomplete="off">
+            <span>{{ p.name }}</span>
+          </label>
+        {% endfor %}
+      </div>
+    </div>
+    <div class="d-flex gap-1 justify-content-end mt-1">
+      <button type="button" id="selectAllEditProducts" class="btn-blue btn-panel editar-cupon-btn">Agregar todo</button>
+      <button type="button" id="deselectAllEditProducts" class="btn-blue btn-panel editar-cupon-btn">Desactivar todo</button>
+      <button type="submit" class="btn-green btn-panel editar-cupon-save-btn">Guardar</button>
+    </div>
+  </form>
+</div>
+{% endblock %}
+{% block scripts %}
+  {{ super() }}
+  <script src="{{ url_for('store_bp.static', filename='js/cupones.js') }}"></script>
+{% endblock %} 

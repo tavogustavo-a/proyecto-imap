@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+
+{% block title %}Editar Productos Asociados{% endblock %}
+
+{% block head %}
+  {{ super() }}
+  <link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="container container-max-width-900 edit-role-container">
+  <div class="store-light edit-role-card maxw-800 mx-auto br-8">
+    <form id="editUserProductsForm" class="edit-role-form d-flex flex-column lign-items-center" data-user-id="{{ user.id }}">
+      <div class="d-flex align-items-center justify-content-between w-100">
+        <h3 class="text-center mb-1 edit-role-title">Productos Asociados - {{ user.username }}</h3>
+        <a href="{{ url_for('admin_bp.manage_permissions_page') }}" class="btn-panel btn-blue edit-role-back-btn">Volver</a>
+      </div>
+      <input type="hidden" name="user_id" id="userId" value="{{ user.id }}">
+      <input type="hidden" id="tipoPrecioDisplay" value="{{ tipo_precio }}">
+      <!-- Controles de búsqueda -->
+      <div class="d-flex flex-wrap align-items-center mb-1 productos-buscar-mostrar justify-content-center">
+        <div class="search-container">
+          <input type="search" id="searchProductInput" name="searchProductInput" placeholder="Buscar producto..." autocomplete="off">
+        </div>
+      </div>
+      <div class="table-wrapper-store roles-table-wrapper edit-role-table-wrapper">
+        <table class="table table-bordered mt-2 edit-role-products-table" id="user-products-table">
+          <thead>
+            <tr>
+              <th class="edit-role-product-header">Producto</th>
+              <th>Ver<br>en tienda</th>
+              <th>Descuento<br>Adicional</th>
+              <th class="edit-role-price-header">Precio<br>Final</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for p in productos %}
+            <tr data-product-id="{{ p.id }}" data-price-cop="{{ p.price_cop }}" data-price-usd="{{ p.price_usd }}">
+              <td class="edit-role-product-cell">{{ p.name }}</td>
+              <td><input type="checkbox" name="visible_{{ p.id }}" {% if p.id in productos_ids %}checked{% endif %}></td>
+              <td>
+                <div class="edit-role-discount-inputs">
+                  <input type="number" name="discount_cop_extra_{{ p.id }}" value="{{ p.discount_cop_extra if p.discount_cop_extra is not none else 0 }}" placeholder="COP" class="edit-role-discount-input-small">
+                  <input type="number" name="discount_usd_extra_{{ p.id }}" value="{{ p.discount_usd_extra if p.discount_usd_extra is not none else 0 }}" placeholder="USD" class="edit-role-discount-input-small">
+                </div>
+              </td>
+              <td class="td-final-price">
+                {% if tipo_precio == 'COP' %}
+                  ${% set final_cop = (p.price_cop|float - (p.discount_cop_extra|default(0)|float)) %}{{ format_number(final_cop) }} COP
+                {% else %}
+                  ${% set final_usd = (p.price_usd|float - (p.discount_usd_extra|default(0)|float)) %}{{ format_number(final_usd) }} USD
+                {% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script src="{{ url_for('store_bp.static', filename='js/edit_user_products.js') }}"></script>
+{% endblock %}
+
+{% macro format_number(n) %}
+    {%- set n = n|float -%}
+    {%- set n = (n * 100)|round / 100 -%}
+    {%- if n % 1 == 0 -%}
+        {{ n|int }}
+    {%- else -%}
+        {{ ('%.2f' % n).replace('.00','').replace('0$', '') }}
+    {%- endif -%}
+{% endmacro %}

@@ -1,0 +1,218 @@
+<!-- app/templates/manage_permissions.html -->
+{% extends "base.html" %}
+
+{% block title %}Gestión de Permisos{% endblock %}
+
+{% block head %}
+<meta name="csrf_token" content="{{ csrf_token() }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/store.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/manage_permissions.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='fontawesome/css/all.css') }}">
+{% endblock %}
+
+{% block content %}
+
+<div class="container container-max-width-1200">
+  <div class="admin-card">
+    <div class="d-flex justify-content-between align-items-center mb-1">
+      <h3 class="m-0">🔐 Gestión Centralizada de Permisos</h3>
+      <a href="{{ url_for('admin_bp.dashboard') }}" class="btn-panel btn-blue">
+        <i class="fas fa-arrow-left"></i> Volver
+      </a>
+    </div>
+    
+    <div class="d-flex align-items-center justify-content-between gap-2 mb-1 search-stats-container">
+      <div class="search-input-wrapper">
+        <input 
+          type="text" 
+          id="searchUsersInput" 
+          class="search-users-input search-users-input-flex" 
+          placeholder="Buscar usuario..."
+          autocomplete="off"
+        >
+        <button 
+          type="button" 
+          id="clearUsersSearchBtn" 
+          class="search-clear-btn"
+          title="Limpiar búsqueda"
+          aria-label="Limpiar búsqueda"
+        >
+          <i class="fas fa-times"></i>
+        </button>
+      </div>
+      <div class="stat-card stat-card-inline">
+        <span class="stat-label-inline">Usuarios: </span>
+        <span class="stat-value-inline" id="totalUsers">0</span>
+      </div>
+    </div>
+    
+    <div class="permissions-table-container">
+      <table class="permissions-table">
+        <thead>
+          <tr>
+            <th>Usuario</th>
+            <th title="Consultar Correos Sin Restricciones">Consultar<br>Sin<br>Restricciones</th>
+            <th title="Agregar Sus Propios Correos">Agregar<br>Correos</th>
+            <th title="Borrar Correos Masivamente">Borrar<br>Masivamente</th>
+            <th title="Gestionar 2FA por Correo">Gestionar<br>2FA</th>
+            <th title="Crear Sub-usuarios">Crear<br>Sub-usuarios</th>
+            <th title="Acceso a Códigos 2">Códigos<br>2</th>
+            <th title="Acceso a Chat Soporte">Chat</th>
+            <th title="Gestionar Sub-usuarios">Gestionar<br>Sub-usuarios</th>
+            <th title="Usuario de Soporte">Soporte</th>
+          </tr>
+        </thead>
+        <tbody id="permissionsTableBody">
+          <tr>
+            <td colspan="10" class="text-center text-secondary">Cargando usuarios...</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    
+    <div class="d-flex justify-content-center mt-1">
+      <button id="savePermissionsBtn" class="btn-panel btn-green save-permissions-btn">
+        <i class="fas fa-save"></i> Guardar Cambios
+      </button>
+    </div>
+    
+    <div id="saveStatus" class="mt-1 text-center"></div>
+  </div>
+  
+  <!-- Nueva sección para gestionar permisos de recursos de herramientas admin -->
+  <div class="admin-card mt-2">
+    <div class="d-flex justify-content-between align-items-center mb-1">
+      <h3 class="m-0">🔧 Gestión de Permisos de Herramientas Admin</h3>
+    </div>
+    
+    <div class="d-flex align-items-center justify-content-between gap-2 mb-1 search-stats-container">
+      <div class="search-input-wrapper">
+        <input 
+          type="text" 
+          id="searchResourcesInput" 
+          class="search-users-input search-users-input-flex" 
+          placeholder="Buscar usuario..."
+          autocomplete="off"
+        >
+        <button 
+          type="button" 
+          id="clearResourcesSearchBtn" 
+          class="search-clear-btn"
+          title="Limpiar búsqueda"
+          aria-label="Limpiar búsqueda"
+        >
+          <i class="fas fa-times"></i>
+        </button>
+      </div>
+      <div class="stat-card stat-card-inline">
+        <span class="stat-label-inline">Recursos: </span>
+        <span class="stat-value-inline" id="totalResources">0</span>
+      </div>
+    </div>
+    
+    <div class="permissions-table-container">
+      <table class="permissions-table" id="resourcesPermissionsTable">
+        <thead>
+          <tr>
+            <th>Usuario</th>
+            <!-- Los headers de recursos se generarán dinámicamente -->
+          </tr>
+        </thead>
+        <tbody id="resourcesPermissionsTableBody">
+          <tr>
+            <td colspan="1" class="text-center text-secondary">Cargando recursos...</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    
+    <div class="d-flex justify-content-center mt-1">
+      <button id="saveResourcesPermissionsBtn" class="btn-panel btn-green save-permissions-btn">
+        <i class="fas fa-save"></i> Guardar Cambios de Recursos
+      </button>
+    </div>
+    
+    <div id="saveResourcesStatus" class="mt-1 text-center"></div>
+  </div>
+  
+  <!-- Nueva sección para gestión de precios por usuario -->
+  <div class="admin-card mt-2">
+    <div class="d-flex justify-content-between align-items-center mb-1">
+      <h3 class="m-0">💰 Gestión de Precios por Usuario</h3>
+    </div>
+    
+    <div class="d-flex align-items-center justify-content-between gap-2 mb-1 search-stats-container">
+      <div class="search-input-wrapper">
+        <input 
+          type="text" 
+          id="searchUserPricesInput" 
+          class="search-users-input search-users-input-flex" 
+          placeholder="Buscar usuario..."
+          autocomplete="off"
+        >
+        <button 
+          type="button" 
+          id="clearUserPricesSearchBtn" 
+          class="search-clear-btn"
+          title="Limpiar búsqueda"
+          aria-label="Limpiar búsqueda"
+        >
+          <i class="fas fa-times"></i>
+        </button>
+      </div>
+    </div>
+    
+    <div class="permissions-table-container">
+      <div class="table-wrapper-store roles-table-wrapper">
+        <table class="table table-bordered mt-2 edit-role-products-table" id="user-prices-table">
+          <thead>
+            <tr>
+              <th class="edit-role-product-header">Usuario</th>
+              <th>Tipo Precio</th>
+              <th>Saldo</th>
+              <th>Productos Asociados</th>
+            </tr>
+          </thead>
+          <tbody id="userPricesTableBody">
+            <tr>
+              <td colspan="4" class="text-center text-secondary">Cargando usuarios...</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    
+    <div class="d-flex justify-content-center mt-1">
+      <button id="saveUserPricesBtn" class="btn-panel btn-green save-permissions-btn">
+        <i class="fas fa-save"></i> Guardar Cambios de Precios
+      </button>
+    </div>
+    
+    <div id="saveUserPricesStatus" class="mt-1 text-center"></div>
+  </div>
+</div>
+
+<!-- Modal para añadir saldo -->
+<div id="balance-modal-overlay" class="modal-overlay d-none">
+  <div class="modal-balance-content">
+    <form id="modal-balance-form">
+      <input type="hidden" id="modal-username" name="username">
+      <div class="form-group" id="modal-group-usd">
+        <label for="modal-balance-usd" class="text-center">Saldo a añadir USD</label>
+        <input type="number" id="modal-balance-usd" name="usd" class="form-control" min="0" step="0.01" placeholder="Monto USD" autocomplete="off">
+      </div>
+      <div class="form-group" id="modal-group-cop">
+        <label for="modal-balance-cop" class="text-center">Saldo a añadir COP</label>
+        <input type="number" id="modal-balance-cop" name="cop" class="form-control" min="0" step="1" placeholder="Monto COP" autocomplete="off">
+      </div>
+      <div class="d-flex justify-content-between mt-1">
+        <button type="button" class="btn-panel btn-red close-balance-modal">Cancelar</button>
+        <button type="submit" class="btn-panel btn-green">Añadir saldo</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script src="{{ url_for('static', filename='js/manage_permissions.js') }}"></script>
+
+{% endblock %}

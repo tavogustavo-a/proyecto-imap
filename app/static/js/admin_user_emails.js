@@ -1,0 +1,1382 @@
+document.addEventListener("DOMContentLoaded", function() {
+  // --- Elemento Contenedor Principal (para obtener data-user-id) ---
+  // Asumimos que el div principal tiene un id="user-management-container"
+  // Este ID deberá añadirse en el HTML.
+  const mainContainer = document.getElementById("user-management-container");
+
+  // --- Variables inicializadas ---
+  const userId = mainContainer ? mainContainer.dataset.userId : null;
+
+  // Salir si no se encuentra el contenedor principal o el userId
+  if (!mainContainer || !userId) {
+    console.error("Error: No se encontró el contenedor principal (#user-management-container) o el data-user-id.");
+    return;
+  }
+
+  // --- Funciones Auxiliares ---
+  function getCsrfToken(){
+    const meta = document.querySelector('meta[name="csrf_token"]');
+    return meta ? meta.getAttribute('content') : '';
+  }
+
+  function escapeHtml(unsafe) {
+    if (!unsafe) return '';
+    return unsafe
+         .replace(/&/g, "&amp;")
+         .replace(/</g, "&lt;")
+         .replace(/>/g, "&gt;")
+         .replace(/"/g, "&quot;")
+         .replace(/'/g, "&#039;");
+  }
+
+  function handleFetchResponse(response) {
+    if (!response.ok) {
+      return response.json()
+        .then(errData => { 
+          throw new Error(errData.message || `Error del servidor: ${response.status}`); 
+        })
+        .catch(() => {
+           throw new Error(`Error del servidor: ${response.status}`);
+        });
+    }
+    return response.json();
+  }
+
+  // --- Lógica Principal --- 
+  // (Aquí va todo el código JS que estaba en email.html,
+  //  asegurándose de usar la variable 'userId' definida arriba)
+
+  // ======= PAGINACIÓN CORREOS PERMITIDOS =======
+  const allowedEmailsTextContainer = document.getElementById("allowedEmailsTextContainer");
+  const paginationInfo = document.getElementById("paginationInfo");
+  const prevPageBtn = document.getElementById("prevPageBtn");
+  const nextPageBtn = document.getElementById("nextPageBtn");
+  const perPageSelect = document.getElementById("perPageSelect");
+  const deleteAllEmailsBtn = document.getElementById("deleteAllEmailsBtn");
+  
+
+  
+  let currentPage = 1;
+  let currentPerPage = 10;
+  if (perPageSelect) perPageSelect.value = currentPerPage;
+
+  function fetchAllowedEmails(page = 1, perPage = 10) {
+    currentPage = page;
+    currentPerPage = parseInt(perPage, 10) || 10;
+    if (currentPerPage === -1) {
+        perPage = 999999;
+    } else {
+         perPage = currentPerPage;
+    }
+    const url = `/admin/list_allowed_emails_paginated?user_id=${userId}&page=${page}&per_page=${perPage}`;
+    
+    if (allowedEmailsTextContainer) {
+      // Limpiar contenedor
+      while(allowedEmailsTextContainer.firstChild) {
+        allowedEmailsTextContainer.removeChild(allowedEmailsTextContainer.firstChild);
+      }
+      const loadingP = document.createElement('p');
+      loadingP.textContent = 'Cargando...';
+      allowedEmailsTextContainer.appendChild(loadingP);
+    }
+    
+    fetch(url, {
+      method: "GET",
+      headers: { "X-CSRFToken": getCsrfToken() }
+    })
+    .then(handleFetchResponse)
+    .then(data => {
+      if (data.status === "ok") {
+        if (allowedEmailsTextContainer) renderAllowedEmailsText(data.emails);
+        if (paginationInfo) updatePaginationControls(data.pagination);
+      } else {
+        if (allowedEmailsTextContainer) {
+          const errorP = document.createElement('p');
+          errorP.classList.add('error-message-text');
+          errorP.textContent = `Error: ${data.message || 'No se pudieron cargar los correos.'}`;
+          allowedEmailsTextContainer.innerHTML = '';
+          allowedEmailsTextContainer.appendChild(errorP);
+        }
+      }
+    })
+    .catch(err => {
+      console.error("Fetch error list emails:", err);
+      if (allowedEmailsTextContainer) {
+        const errorP = document.createElement('p');
+        errorP.classList.add('error-message-text');
+        errorP.textContent = `Error al cargar correos: ${err.message}`;
+        allowedEmailsTextContainer.innerHTML = '';
+        allowedEmailsTextContainer.appendChild(errorP);
+      }
+    });
+  }
+
+  function renderAllowedEmailsText(emails) {
+    if (!allowedEmailsTextContainer) return;
+    if (!emails || emails.length === 0) {
+      allowedEmailsTextContainer.textContent = "No hay correos permitidos asignados.";
+      return;
+    }
+    allowedEmailsTextContainer.textContent = emails.join('\n'); 
+  }
+
+  function updatePaginationControls(pagination) {
+    if (!pagination) return;
+
+    if(paginationInfo) paginationInfo.textContent = `Página ${pagination.page} de ${pagination.total_pages}.`;
+
+    if (prevPageBtn) prevPageBtn.disabled = !pagination.has_prev;
+    if (nextPageBtn) nextPageBtn.disabled = !pagination.has_next;
+    
+    if (deleteAllEmailsBtn) {
+        const totalItems = pagination.total_items || 0;
+        if (totalItems > 0) {
+            deleteAllEmailsBtn.textContent = `Eliminar Todos (${totalItems})`;
+            deleteAllEmailsBtn.disabled = false;
+            deleteAllEmailsBtn.classList.add('btn-inline-block');
+        } else {
+            deleteAllEmailsBtn.textContent = 'Eliminar Todos';
+            deleteAllEmailsBtn.disabled = true;
+        }
+    }
+    
+    if (perPageSelect) {
+       if (pagination.per_page >= 999999) {
+           perPageSelect.value = "-1";
+       } else {
+           perPageSelect.value = pagination.per_page;
+       }
+    }
+  }
+
+  if(prevPageBtn) {
+      prevPageBtn.addEventListener("click", () => {
+          if (currentPage > 1) fetchAllowedEmails(currentPage - 1, currentPerPage);
+      });
+  }
+  if(nextPageBtn) {
+      nextPageBtn.addEventListener("click", () => {
+          fetchAllowedEmails(currentPage + 1, currentPerPage);
+      });
+  }
+  if(perPageSelect) {
+      perPageSelect.addEventListener("change", () => {
+          const newPerPage = parseInt(perPageSelect.value, 10);
+          fetchAllowedEmails(1, newPerPage);
+      });
+  }
+
+  if(deleteAllEmailsBtn) {
+      deleteAllEmailsBtn.addEventListener("click", () => {
+          if (!confirm("¿Seguro que quieres eliminar TODOS los correos permitidos para este usuario? Esta acción no se puede deshacer.")) {
+              return;
+          }
+          
+          fetch("/admin/delete_all_allowed_emails_ajax", {
+              method: "POST",
+              headers: {
+                  "Content-Type": "application/json",
+                  "X-CSRFToken": getCsrfToken()
+              },
+              body: JSON.stringify({ user_id: parseInt(userId, 10) })
+          })
+          .then(handleFetchResponse)
+          .then(data => {
+              if(data.status === "ok"){
+                  alert(`${data.deleted_count_parent || 0} correos eliminados.`);
+                  fetchAllowedEmails(1, currentPerPage);
+              } else {
+                  alert(`Error al eliminar todos: ${data.message || 'Error desconocido'}`);
+              }
+          })
+          .catch(err => {
+              console.error("Fetch error delete all:", err);
+              alert(`Error de red al eliminar todos: ${err.message}`);
+          });
+      });
+  }
+
+  if(allowedEmailsTextContainer) fetchAllowedEmails(currentPage, currentPerPage);
+  // ======= FIN PAGINACIÓN CORREOS PERMITIDOS =======
+
+  // ======= BÚSQUEDA Y ELIMINACIÓN DE CORREOS =======
+  const searchEmailsForm = document.getElementById("searchEmailsForm");
+  const searchEmailsInput = document.getElementById("searchEmailsInput");
+  const emailsSearchResults = document.getElementById("emailsSearchResults");
+  const searchStatusDiv = document.getElementById('searchStatus');
+  const deleteDisplayedBtn = document.getElementById('deleteDisplayedBtn');
+
+  let currentlyDisplayedEmails = [];
+
+  if(searchEmailsForm && searchEmailsInput && emailsSearchResults && deleteDisplayedBtn){
+    // Cambiar el botón Limpiar para solo limpiar el campo
+    const limpiarBtn = searchEmailsForm.querySelector('button[type="submit"]');
+    if (limpiarBtn) {
+      limpiarBtn.type = 'button';
+      limpiarBtn.addEventListener('click', function(e) {
+        searchEmailsInput.value = '';
+        searchEmailsInput.dispatchEvent(new Event('input'));
+      });
+    }
+    // Búsqueda automática sigue funcionando con input
+    searchEmailsForm.addEventListener("submit", function(e){
+      e.preventDefault();
+      const searchText = searchEmailsInput.value.trim();
+       if (!searchText) {
+           renderEmailsResults([]);
+           return;
+       }
+
+      fetch("/admin/search_allowed_emails_ajax", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-CSRFToken": getCsrfToken()
+        },
+        body: JSON.stringify({ user_id: parseInt(userId, 10), search_text: searchText })
+      })
+      .then(handleFetchResponse)
+      .then(data => {
+        if(data.status === "ok"){
+          currentlyDisplayedEmails = data.emails || [];
+          renderEmailsResults(currentlyDisplayedEmails);
+        } else {
+          const errorP = document.createElement('p');
+          errorP.classList.add('error-message-text');
+          errorP.textContent = `Error: ${data.message || 'Respuesta inválida'}`;
+          emailsSearchResults.innerHTML = '';
+          emailsSearchResults.appendChild(errorP);
+           if(searchStatusDiv) searchStatusDiv.textContent = '';
+           if(deleteDisplayedBtn) {
+             deleteDisplayedBtn.classList.remove('btn-inline-block');
+             deleteDisplayedBtn.classList.add('hide-element');
+           }
+        }
+      })
+      .catch(err => {
+        console.error("Fetch error search:", err);
+        const errorP = document.createElement('p');
+        errorP.classList.add('error-message-text');
+        errorP.textContent = `Error al buscar: ${err.message}`;
+        emailsSearchResults.innerHTML = '';
+        emailsSearchResults.appendChild(errorP);
+         if(searchStatusDiv) searchStatusDiv.textContent = '';
+         if(deleteDisplayedBtn) {
+           deleteDisplayedBtn.classList.remove('btn-inline-block');
+           deleteDisplayedBtn.classList.add('hide-element');
+         }
+      });
+    });
+  }
+
+  function renderEmailsResults(emails) {
+    if (!emailsSearchResults) return;
+    emailsSearchResults.innerHTML = '';
+    if (!emails || emails.length === 0) {
+        emailsSearchResults.classList.remove('show-block');
+        emailsSearchResults.classList.add('hide-element');
+        if(deleteDisplayedBtn) {
+          deleteDisplayedBtn.classList.remove('btn-inline-block');
+          deleteDisplayedBtn.classList.add('hide-element');
+        }
+        return;
+    }
+
+    emailsSearchResults.classList.remove('hide-element');
+    emailsSearchResults.classList.add('show-block');
+    emails.forEach(email => {
+        const itemDiv = document.createElement('div');
+        itemDiv.classList.add('search-result-item');
+        
+        const span = document.createElement('span');
+        span.textContent = escapeHtml(email);
+        itemDiv.appendChild(span);
+        
+        const deleteBtn = document.createElement('button');
+        deleteBtn.className = 'delete-search-result-btn';
+        deleteBtn.setAttribute('data-email', escapeHtml(email));
+        deleteBtn.title = 'Eliminar este correo';
+        deleteBtn.textContent = 'X';
+        itemDiv.appendChild(deleteBtn);
+        
+        emailsSearchResults.appendChild(itemDiv);
+    });
+
+    if(deleteDisplayedBtn) {
+        deleteDisplayedBtn.textContent = `Eliminar ${emails.length} Mostrados`;
+        deleteDisplayedBtn.classList.remove('hide-element');
+        deleteDisplayedBtn.classList.add('btn-inline-block');
+        deleteDisplayedBtn.disabled = false;
+    }
+  }
+
+  if(emailsSearchResults){
+    emailsSearchResults.addEventListener("click", function(e){
+      if(e.target.classList.contains("delete-search-result-btn")){
+        e.preventDefault();
+        const button = e.target;
+        const emailToRemove = button.getAttribute("data-email");
+        if(!emailToRemove || !confirm(`¿Eliminar ${emailToRemove}?`)) { return; }
+
+        button.disabled = true;
+        button.textContent = '...';
+
+        fetch("/admin/delete_allowed_email_ajax", {
+          method: "POST",
+          headers: {"Content-Type": "application/json", "X-CSRFToken": getCsrfToken()},
+          body: JSON.stringify({ user_id: parseInt(userId, 10), email: emailToRemove })
+        })
+        .then(handleFetchResponse)
+        .then(data => {
+          if(data.status === "ok"){
+            button.closest('.search-result-item').remove();
+            currentlyDisplayedEmails = currentlyDisplayedEmails.filter(email => email !== emailToRemove);
+            if (currentlyDisplayedEmails.length > 0) {
+                 if(deleteDisplayedBtn) deleteDisplayedBtn.textContent = `Eliminar ${currentlyDisplayedEmails.length} Mostrados`;
+                 if(deleteDisplayedBtn) {
+                   deleteDisplayedBtn.classList.remove('hide-element');
+                   deleteDisplayedBtn.classList.add('btn-inline-block');
+                 }
+            } else {
+                 emailsSearchResults.classList.remove('show-block');
+                 emailsSearchResults.classList.add('hide-element');
+                 if(deleteDisplayedBtn) {
+                   deleteDisplayedBtn.classList.remove('btn-inline-block');
+                   deleteDisplayedBtn.classList.add('hide-element');
+                 }
+            }
+            fetchAllowedEmails(currentPage, currentPerPage);
+          } else {
+            alert(`Error: ${data.message || 'Error desconocido'}`);
+            button.disabled = false;
+          }
+        })
+        .catch(err => {
+          alert(`Error de red: ${err.message}`);
+          button.disabled = false;
+        });
+      }
+    });
+  }
+
+  if (deleteDisplayedBtn) {
+      deleteDisplayedBtn.addEventListener('click', function(e){
+         e.preventDefault();
+         const emailsToDelete = currentlyDisplayedEmails;
+
+         if (!emailsToDelete || emailsToDelete.length === 0) { return; }
+         if(!confirm(`¿Eliminar los ${emailsToDelete.length} correos mostrados?`)) { return; }
+
+         deleteDisplayedBtn.disabled = true;
+         deleteDisplayedBtn.textContent = 'Eliminando...';
+
+         fetch("/admin/delete_many_emails_ajax", {
+           method: "POST",
+           headers: {"Content-Type": "application/json", "X-CSRFToken": getCsrfToken()},
+           body: JSON.stringify({ user_id: parseInt(userId, 10), emails: emailsToDelete })
+         })
+         .then(handleFetchResponse)
+         .then(data => {
+           if(data.status === "ok"){
+             if(emailsSearchResults) emailsSearchResults.innerHTML = "";
+             if(emailsSearchResults) {
+               emailsSearchResults.classList.remove('show-block');
+               emailsSearchResults.classList.add('hide-element');
+             }
+             if(deleteDisplayedBtn) {
+               deleteDisplayedBtn.classList.remove('btn-inline-block');
+               deleteDisplayedBtn.classList.add('hide-element');
+             }
+             currentlyDisplayedEmails = [];
+             fetchAllowedEmails(currentPage, currentPerPage);
+           } else {
+             alert(`Error: ${data.message || 'Error desconocido'}`);
+           }
+         })
+         .catch(err => {
+           alert(`Error de red: ${err.message}`);
+         })
+         .finally(() => {
+             // No restablecer el botón aquí, ya que la lista se limpia
+         });
+      });
+  }
+  // ======= FIN BÚSQUEDA Y ELIMINACIÓN =======
+
+  // ======= AÑADIR CORREOS MASIVAMENTE =======
+  const addEmailsInput = document.getElementById("addEmailsInput");
+  const addEmailsBtn = document.getElementById("addEmailsBtn");
+  const addEmailsMsg = document.getElementById("addEmailsMsg");
+
+  if(addEmailsBtn && addEmailsInput && addEmailsMsg){
+    addEmailsBtn.addEventListener("click", function() {
+      const rawText = addEmailsInput.value.trim();
+      if (!rawText) {
+         if(addEmailsMsg) { 
+           addEmailsMsg.textContent = 'Campo vacío.'; 
+           addEmailsMsg.classList.remove('text-color-green', 'text-color-red');
+           addEmailsMsg.classList.add('text-color-orange');
+         }
+         return;
+      }
+      const emailsToAdd = rawText.split(/[\s,;\n]+/).map(e => e.trim().toLowerCase()).filter(e => e && e.includes('@'));
+      if (!emailsToAdd.length) {
+         if(addEmailsMsg) { 
+           addEmailsMsg.textContent = 'No se encontraron correos válidos.'; 
+           addEmailsMsg.classList.remove('text-color-green', 'text-color-red');
+           addEmailsMsg.classList.add('text-color-orange');
+         }
+         return;
+      }
+
+      if(addEmailsMsg) { 
+        addEmailsMsg.textContent = "Añadiendo..."; 
+        addEmailsMsg.classList.remove('text-color-green', 'text-color-red');
+        addEmailsMsg.classList.add('text-color-orange');
+      }
+      addEmailsBtn.disabled = true;
+
+      fetch("/admin/add_allowed_emails_ajax", {
+        method: "POST",
+        headers: {"Content-Type": "application/json", "X-CSRFToken": getCsrfToken()},
+        body: JSON.stringify({ user_id: parseInt(userId, 10), emails: emailsToAdd })
+      })
+      .then(handleFetchResponse)
+      .then(data => {
+        if (data.status === "ok") {
+          if(addEmailsMsg) {
+              addEmailsMsg.textContent = `${data.added_count || 0} añadidos, ${data.skipped_count || 0} omitidos. Recargando lista...`;
+              addEmailsMsg.classList.remove('text-color-orange', 'text-color-red');
+              addEmailsMsg.classList.add('text-color-green');
+          }
+          addEmailsInput.value = "";
+          fetchAllowedEmails(1, currentPerPage);
+        } else {
+           throw new Error(data.message || 'Error desconocido');
+        }
+      })
+      .catch(err => {
+        if(addEmailsMsg) { 
+          addEmailsMsg.textContent = `Error: ${err.message}`; 
+          addEmailsMsg.classList.remove('text-color-orange', 'text-color-green');
+          addEmailsMsg.classList.add('text-color-red');
+        }
+      })
+      .finally(() => {
+          addEmailsBtn.disabled = false;
+      });
+    });
+  }
+  // ======= FIN AÑADIR CORREOS =======
+
+  // ======= ACCESO A REGEX (Usuario Principal) =======
+  const openRegexModalBtn = document.getElementById("openRegexModalBtn");
+  const regexModal = document.getElementById("regexModal");
+  const regexListContainer = document.getElementById("regexListContainer");
+  const saveRegexSelectionBtn = document.getElementById("saveRegexSelectionBtn");
+  const closeRegexModalBtn = document.getElementById("closeRegexModalBtn");
+
+  if(openRegexModalBtn){
+    openRegexModalBtn.addEventListener("click", ()=>{
+      if(regexModal) {
+        regexModal.classList.remove('popup-hide');
+        regexModal.classList.add('popup-show');
+      }
+      loadPrincipalRegex();
+    });
+  }
+  if(closeRegexModalBtn){
+    closeRegexModalBtn.addEventListener("click", ()=>{
+      if(regexModal) {
+        regexModal.classList.remove('popup-show');
+        regexModal.classList.add('popup-hide');
+      }
+    });
+  }
+
+  function loadPrincipalRegex(){
+    if (!regexListContainer) return;
+    fetch(`/admin/list_regex_ajax?user_id=${userId}`, {
+      method:"GET",
+      headers:{ "X-CSRFToken": getCsrfToken() }
+    })
+    .then(handleFetchResponse)
+    .then(data=>{
+      if(data.status==="ok"){
+        renderPrincipalRegexList(data.regexes);
+      } else {
+        const errorP = document.createElement('p');
+        errorP.classList.add('error-message-text');
+        errorP.textContent = `Error: ${data.message}`;
+        regexListContainer.innerHTML = '';
+        regexListContainer.appendChild(errorP);
+      }
+    })
+    .catch(err=>{
+      console.error("Fetch error list regex principal:", err);
+      const errorP = document.createElement('p');
+      errorP.classList.add('error-message-text');
+      errorP.textContent = `Error: ${err.message}`;
+      regexListContainer.innerHTML = '';
+      regexListContainer.appendChild(errorP);
+    });
+  }
+
+  function truncateRegexDisplay(pattern, maxLen = 22) {
+    if (typeof pattern !== 'string') return pattern;
+    if (pattern.length <= maxLen) return pattern;
+    const start = pattern.slice(0, 10);
+    const end = pattern.slice(-8);
+    return `${start}....${end}`;
+  }
+
+  function renderPrincipalRegexList(rxArr){
+    if (!regexListContainer) return;
+    
+    // Limpiar contenedor
+    while(regexListContainer.firstChild) {
+      regexListContainer.removeChild(regexListContainer.firstChild);
+    }
+    
+    if (!rxArr || rxArr.length === 0) {
+      const p = document.createElement('p');
+      p.textContent = "No hay Regex definidos en el sistema.";
+      regexListContainer.appendChild(p);
+      return;
+    }
+    
+    rxArr.forEach((rx,i)=>{
+      const itemDiv = document.createElement('div');
+      itemDiv.className = i%2===0 ? 'modal-regex-item modal-regex-item-even' : 'modal-regex-item modal-regex-item-odd';
+      
+      const label = document.createElement('label');
+      label.className = 'modal-regex-item-label';
+      
+      const checkbox = document.createElement('input');
+      checkbox.type = 'checkbox';
+      checkbox.className = 'principal-regex-cb';
+      checkbox.id = `principal-regex-cb-${rx.id}`;
+      checkbox.name = `principal-regex-cb-${rx.id}`;
+      checkbox.setAttribute('data-id', rx.id);
+      if (rx.allowed) checkbox.checked = true;
+      
+      const strong = document.createElement('strong');
+      strong.textContent = escapeHtml(truncateRegexDisplay(rx.pattern));
+      
+      const small = document.createElement('small');
+      small.textContent = `(${escapeHtml(rx.description||"")})`;
+      
+      label.appendChild(checkbox);
+      label.appendChild(strong);
+      label.appendChild(small);
+      itemDiv.appendChild(label);
+      regexListContainer.appendChild(itemDiv);
+    });
+  }
+
+  if(saveRegexSelectionBtn){
+    saveRegexSelectionBtn.addEventListener("click", ()=>{
+      const cbs = document.querySelectorAll(".principal-regex-cb");
+      let allowedIds = [];
+      cbs.forEach(cb=>{
+        if(cb.checked) allowedIds.push(parseInt(cb.getAttribute("data-id")));
+      });
+      fetch("/admin/update_user_rfs_ajax", {
+        method:"POST",
+        headers:{
+          "Content-Type":"application/json",
+          "X-CSRFToken": getCsrfToken()
+        },
+        body: JSON.stringify({
+          user_id:parseInt(userId, 10),
+          type:"regex",
+          allowed_ids: allowedIds
+        })
+      })
+      .then(handleFetchResponse)
+      .then(data=>{
+        if(data.status==="ok"){
+          alert("Regex principal actualizados.");
+          if(regexModal) {
+        regexModal.classList.remove('popup-show');
+        regexModal.classList.add('popup-hide');
+      }
+        } else {
+          alert("Error: " + data.message);
+        }
+      })
+      .catch(err=>alert("Error Regex: "+err.message));
+    });
+  }
+  // ======= FIN ACCESO REGEX PRINCIPAL =======
+
+  // ======= ACCESO A FILTROS (Usuario Principal) =======
+  const openFiltersModalBtn = document.getElementById("openFiltersModalBtn");
+  const filtersModal = document.getElementById("filtersModal");
+  const filtersListContainer = document.getElementById("filtersListContainer");
+  const saveFiltersSelectionBtn = document.getElementById("saveFiltersSelectionBtn");
+  const closeFiltersModalBtn = document.getElementById("closeFiltersModalBtn");
+
+  if(openFiltersModalBtn){
+    openFiltersModalBtn.addEventListener("click", ()=>{
+      if(filtersModal) {
+        filtersModal.classList.remove('popup-hide');
+        filtersModal.classList.add('popup-show');
+      }
+      loadPrincipalFilters();
+    });
+  }
+  if(closeFiltersModalBtn){
+    closeFiltersModalBtn.addEventListener("click", ()=>{
+      if(filtersModal) {
+        filtersModal.classList.remove('popup-show');
+        filtersModal.classList.add('popup-hide');
+      }
+    });
+  }
+
+  function loadPrincipalFilters(){
+    if(!filtersListContainer) return;
+    fetch(`/admin/list_filters_ajax?user_id=${userId}`, {
+      method:"GET",
+      headers:{ "X-CSRFToken": getCsrfToken() }
+    })
+    .then(handleFetchResponse)
+    .then(data=>{
+      if(data.status==="ok"){
+        renderPrincipalFiltersList(data.filters);
+      } else {
+        const errorP = document.createElement('p');
+        errorP.classList.add('error-message-text');
+        errorP.textContent = `Error: ${data.message}`;
+        filtersListContainer.innerHTML = '';
+        filtersListContainer.appendChild(errorP);
+      }
+    })
+    .catch(err=>{
+      console.error("Fetch error list filters principal:", err);
+      const errorP = document.createElement('p');
+      errorP.classList.add('error-message-text');
+      errorP.textContent = `Error: ${err.message}`;
+      filtersListContainer.innerHTML = '';
+      filtersListContainer.appendChild(errorP);
+    });
+  }
+
+  function renderPrincipalFiltersList(ftArr){
+    if(!filtersListContainer) return;
+    
+    // Limpiar contenedor
+    while(filtersListContainer.firstChild) {
+      filtersListContainer.removeChild(filtersListContainer.firstChild);
+    }
+    
+    if (!ftArr || ftArr.length === 0) {
+      const p = document.createElement('p');
+      p.textContent = "No hay Filtros definidos en el sistema.";
+      filtersListContainer.appendChild(p);
+      return;
+    }
+    
+    ftArr.forEach((f,i)=>{
+      const itemDiv = document.createElement('div');
+      itemDiv.className = i%2===0 ? 'modal-filter-item modal-filter-item-even' : 'modal-filter-item modal-filter-item-odd';
+      
+      const label = document.createElement('label');
+      label.className = 'modal-filter-item-label';
+      
+      const checkbox = document.createElement('input');
+      checkbox.type = 'checkbox';
+      checkbox.className = 'principal-filter-cb';
+      checkbox.id = `principal-filter-cb-${f.id}`;
+      checkbox.name = `principal-filter-cb-${f.id}`;
+      checkbox.setAttribute('data-id', f.id);
+      if (f.allowed) checkbox.checked = true;
+      
+      const strong = document.createElement('strong');
+      strong.textContent = `(${escapeHtml(f.sender||"?")}) - ${escapeHtml(f.keyword||"?")}`;
+      
+      label.appendChild(checkbox);
+      label.appendChild(strong);
+      itemDiv.appendChild(label);
+      filtersListContainer.appendChild(itemDiv);
+    });
+  }
+
+  if(saveFiltersSelectionBtn){
+    saveFiltersSelectionBtn.addEventListener("click", ()=>{
+      const cbs = document.querySelectorAll(".principal-filter-cb");
+      let allowedIds = [];
+      cbs.forEach(cb=>{
+        if(cb.checked) allowedIds.push(parseInt(cb.getAttribute("data-id")));
+      });
+      fetch("/admin/update_user_rfs_ajax", {
+        method:"POST",
+        headers:{
+          "Content-Type":"application/json",
+          "X-CSRFToken": getCsrfToken()
+        },
+        body: JSON.stringify({
+          user_id:parseInt(userId, 10),
+          type:"filter",
+          allowed_ids: allowedIds
+        })
+      })
+      .then(handleFetchResponse)
+      .then(data=>{
+        if(data.status==="ok"){
+          alert("Filtros principal actualizados.");
+          if(filtersModal) {
+        filtersModal.classList.remove('popup-show');
+        filtersModal.classList.add('popup-hide');
+      }
+        } else {
+          alert("Error: " + data.message);
+        }
+      })
+      .catch(err=>alert("Error Filtros:"+err.message));
+    });
+  }
+  // ======= FIN ACCESO FILTROS PRINCIPAL =======
+
+  // ======= PERMISO SUB-USUARIOS =======
+  const toggleCanCreateSubusers = document.getElementById("toggleCanCreateSubusers");
+  const saveCanCreateSubusersBtn = document.getElementById("saveCanCreateSubusersBtn");
+
+  if(saveCanCreateSubusersBtn && toggleCanCreateSubusers){
+    saveCanCreateSubusersBtn.addEventListener("click", ()=>{
+      const newVal = toggleCanCreateSubusers.checked;
+      
+      // Obtenemos los valores actuales del usuario desde el DOM (asumiendo que existen)
+      // OJO: Si no existen estos campos en el HTML, esto dará error. Necesitaríamos pasarlos 
+      // de otra forma (ej. data attributes en el botón o contenedor)
+      // Por simplicidad, dejaremos los valores hardcodeados de la plantilla original por ahora.
+      // Si da problemas, habrá que refactorizar para obtenerlos del DOM o data attributes.
+      const currentUsername = mainContainer.dataset.username; // Necesita data-username
+      const currentColor = mainContainer.dataset.color || "#ffffff";
+      const currentPosition = mainContainer.dataset.position; // Necesita data-position
+      const currentCanSearchAny = mainContainer.dataset.canSearchAny === 'true'; // Necesita data-can-search-any
+      const currentEmail = mainContainer.dataset.email || "";
+      const currentFullName = mainContainer.dataset.fullName || "";
+      const currentPhone = mainContainer.dataset.phone || "";
+
+      if (
+        currentUsername === undefined ||
+        currentColor === undefined ||
+        currentPosition === undefined ||
+        currentCanSearchAny === undefined ||
+        currentEmail === undefined
+      ) {
+          alert("Error: Faltan datos del usuario para guardar. Añade data-* attributes al contenedor #user-management-container.");
+          return;
+      }
+
+      fetch("/admin/update_user_ajax", {
+        method:"POST",
+        headers:{
+          "Content-Type":"application/json",
+          "X-CSRFToken": getCsrfToken()
+        },
+        body: JSON.stringify({
+          user_id: parseInt(userId, 10),
+          username: currentUsername,
+          color: currentColor || "#ffffff",
+          position: parseInt(currentPosition, 10),
+          can_search_any: currentCanSearchAny,
+          password: "", // No se actualiza la contraseña aquí
+          can_create_subusers: newVal,
+          email: currentEmail ? currentEmail : null,
+          full_name: currentFullName || "",
+          phone: currentPhone || ""
+        })
+      })
+      .then(handleFetchResponse)
+      .then(data=>{
+        if(data.status==="ok"){
+          alert("Permiso de sub-usuarios guardado.");
+          location.reload(); // Recargar para ver cambios (ej. aparición/desaparición sección subusuarios)
+        } else {
+          alert("Error: " + data.message);
+        }
+      })
+      .catch(err=>alert("Error:"+ err.message));
+    });
+  }
+  // ======= FIN PERMISO SUB-USUARIOS =======
+
+  // ======= Ver Sub-usuarios => modal =======
+  const btnShowSubusers = document.getElementById("btnShowSubusers");
+  const subusersModal = document.getElementById("subusersModal");
+  const subusersList = document.getElementById("subusersList");
+  const closeSubusersModalBtn = document.getElementById("closeSubusersModalBtn");
+
+  if(btnShowSubusers){
+    btnShowSubusers.addEventListener("click", ()=>{
+      if(subusersModal) {
+        subusersModal.classList.remove('popup-hide');
+        subusersModal.classList.add('popup-show');
+      }
+      loadSubusersForModal(); // Renombrada para claridad
+    });
+  }
+  if(closeSubusersModalBtn){
+    closeSubusersModalBtn.addEventListener("click", ()=>{
+      if(subusersModal) {
+        subusersModal.classList.remove('popup-show');
+        subusersModal.classList.add('popup-hide');
+      }
+    });
+  }
+
+  function loadSubusersForModal(){
+    if(!subusersList) return;
+    // La ruta ahora debe ser la de listar subusuarios de un padre específico
+    fetch(`/subusers/list_subusers_ajax?parent_id=${userId}`, { 
+      method:"GET",
+      headers:{ "X-CSRFToken": getCsrfToken() } // Probablemente innecesario para GET, pero mantenido
+    })
+    .then(handleFetchResponse)
+    .then(data=>{
+      if(data.status==="ok"){
+        renderSubusersForModal(data.subusers);
+      } else {
+        const errorP = document.createElement('p');
+        errorP.classList.add('error-message-text');
+        errorP.textContent = `Error: ${data.message}`;
+        subusersList.innerHTML = '';
+        subusersList.appendChild(errorP);
+      }
+    })
+    .catch(err=>{
+      console.error("Fetch error list subusers for modal:", err);
+      const errorP = document.createElement('p');
+      errorP.classList.add('error-message-text');
+      errorP.textContent = `Error: ${err.message}`;
+      subusersList.innerHTML = '';
+      subusersList.appendChild(errorP);
+    });
+  }
+
+  function renderSubusersForModal(arr){
+    if(!subusersList) return;
+    
+    // Limpiar contenedor usando textContent (más seguro que innerHTML)
+    while(subusersList.firstChild) {
+      subusersList.removeChild(subusersList.firstChild);
+    }
+    
+    if(!arr || !arr.length){
+      const p = document.createElement('p');
+      p.textContent = "No hay sub-usuarios creados por este usuario.";
+      subusersList.appendChild(p);
+      return;
+    }
+    
+    const ul = document.createElement('ul');
+    ul.className = 'modal-subuser-list';
+    
+    arr.forEach(su=>{
+      const toggleLabel = su.enabled ? "OFF" : "ON";
+      const toggleClass = su.enabled ? "btn-red" : "btn-green";
+      
+      const li = document.createElement('li');
+      li.className = 'modal-subuser-list-item';
+      
+      const contentDiv = document.createElement('div');
+      contentDiv.className = 'modal-subuser-list-item-content';
+      
+      const strong = document.createElement('strong');
+      strong.textContent = escapeHtml(su.username);
+      contentDiv.appendChild(strong);
+      
+      const actionsDiv = document.createElement('div');
+      actionsDiv.className = 'modal-subuser-list-item-actions';
+      
+      const toggleBtn = document.createElement('button');
+      toggleBtn.className = `${toggleClass} btn-small modal-toggle-subuser`;
+      toggleBtn.setAttribute('data-id', su.id);
+      toggleBtn.setAttribute('data-enabled', su.enabled);
+      toggleBtn.textContent = toggleLabel;
+      actionsDiv.appendChild(toggleBtn);
+      
+      const deleteBtn = document.createElement('button');
+      deleteBtn.className = 'btn-red btn-small modal-delete-subuser';
+      deleteBtn.setAttribute('data-id', su.id);
+      deleteBtn.textContent = 'Eliminar';
+      actionsDiv.appendChild(deleteBtn);
+      
+      contentDiv.appendChild(actionsDiv);
+      li.appendChild(contentDiv);
+      ul.appendChild(li);
+    });
+    
+    subusersList.appendChild(ul);
+  }
+
+  // Delegación de eventos DENTRO del modal de subusuarios
+  if(subusersModal && subusersList) {
+      subusersList.addEventListener("click", function(e) {
+          const target = e.target;
+          
+          // Toggle dentro del modal
+          if (target.classList.contains("modal-toggle-subuser")) {
+              e.preventDefault();
+              const subId = target.dataset.id;
+              const currentState = target.dataset.enabled === 'true';
+              target.disabled = true; // Deshabilitar botón temporalmente
+              target.textContent = '...';
+              
+              fetch("/subusers/toggle_subuser_ajax", {
+                  method:"POST",
+                  headers:{ "Content-Type":"application/json", "X-CSRFToken": getCsrfToken() },
+                  body: JSON.stringify({ sub_id: parseInt(subId), currently_enabled: currentState })
+              })
+              .then(handleFetchResponse)
+              .then(data => {
+                  if(data.status === "ok"){
+                      renderSubusersForModal(data.subusers); // Re-renderizar la lista del modal
+                  } else {
+                      alert("Error: " + data.message);
+                      target.disabled = false; // Rehabilitar si falla
+                      target.textContent = currentState ? 'OFF' : 'ON'; 
+                  }
+              })
+              .catch(err => {
+                  console.error("Modal toggle error:", err);
+                  alert("Error de red: " + err.message);
+                  target.disabled = false; // Rehabilitar si falla
+                  target.textContent = currentState ? 'OFF' : 'ON'; 
+              });
+          }
+          
+          // Delete dentro del modal
+          if (target.classList.contains("modal-delete-subuser")) {
+              e.preventDefault();
+              const subId = target.dataset.id;
+              if(!confirm("¿Eliminar este sub-usuario?")) return;
+              target.disabled = true; // Deshabilitar botón temporalmente
+              target.textContent = '...';
+              
+              fetch("/subusers/delete_subuser_ajax", {
+                  method:"POST",
+                  headers:{ "Content-Type":"application/json", "X-CSRFToken": getCsrfToken() },
+                  body: JSON.stringify({ subuser_id: parseInt(subId) })
+              })
+              .then(handleFetchResponse)
+              .then(data => {
+                  if(data.status === "ok"){
+                     renderSubusersForModal(data.subusers); // Re-renderizar la lista del modal
+                  } else {
+                     alert("Error: " + data.message);
+                     target.disabled = false; // Rehabilitar si falla
+                     target.textContent = 'Eliminar';
+                  }
+              })
+              .catch(err => {
+                  console.error("Modal delete error:", err);
+                  alert("Error de red: " + err.message);
+                  target.disabled = false; // Rehabilitar si falla
+                  target.textContent = 'Eliminar';
+              });
+          }
+      });
+  }
+
+  // ======= Regex Sub-usuario (Global) =======
+  const btnSubusersRegexGlobal = document.getElementById("btnSubusersRegexGlobal");
+  const subusersRegexModal = document.getElementById("subusersRegexModal");
+  const subusersRegexList = document.getElementById("subusersRegexList");
+  const saveSubusersRegexBtn = document.getElementById("saveSubusersRegexBtn");
+  const closeSubusersRegexModalBtn = document.getElementById("closeSubusersRegexModalBtn");
+
+  if(btnSubusersRegexGlobal){
+    btnSubusersRegexGlobal.addEventListener("click", ()=>{
+      if(subusersRegexModal) {
+        subusersRegexModal.classList.remove('popup-hide');
+        subusersRegexModal.classList.add('popup-show');
+      }
+      loadGlobalSubusersRegex();
+    });
+  }
+  if(closeSubusersRegexModalBtn){
+    closeSubusersRegexModalBtn.addEventListener("click", ()=>{
+      if(subusersRegexModal) {
+        subusersRegexModal.classList.remove('popup-show');
+        subusersRegexModal.classList.add('popup-hide');
+      }
+    });
+  }
+
+  function loadGlobalSubusersRegex(){
+    if(!subusersRegexList) return;
+    fetch(`/subusers/list_subusers_regex_global?parent_id=${userId}`, {
+      method:"GET"
+    })
+    .then(handleFetchResponse)
+    .then(data=>{
+      if(data.status==="ok"){
+        renderGlobalSubusersRegex(data.items);
+      } else {
+        const errorP = document.createElement('p');
+        errorP.classList.add('error-message-text');
+        errorP.textContent = `Error: ${data.message}`;
+        subusersRegexList.innerHTML = '';
+        subusersRegexList.appendChild(errorP);
+      }
+    })
+    .catch(err=>{
+      console.error("Fetch error list global sub regex:", err);
+      const errorP = document.createElement('p');
+      errorP.classList.add('error-message-text');
+      errorP.textContent = `Error: ${err.message}`;
+      subusersRegexList.innerHTML = '';
+      subusersRegexList.appendChild(errorP);
+    });
+  }
+
+  function renderGlobalSubusersRegex(arr){
+    if (!subusersRegexList) return;
+    
+    // Limpiar contenedor
+    while(subusersRegexList.firstChild) {
+      subusersRegexList.removeChild(subusersRegexList.firstChild);
+    }
+    
+    if (!arr || arr.length === 0) {
+      const p = document.createElement('p');
+      p.textContent = "No hay Regex definidos en el sistema.";
+      subusersRegexList.appendChild(p);
+      return;
+    }
+    
+    arr.forEach((rx,i)=>{
+      const itemDiv = document.createElement('div');
+      itemDiv.className = i%2===0 ? 'modal-regex-item modal-regex-item-even' : 'modal-regex-item modal-regex-item-odd';
+      
+      const label = document.createElement('label');
+      label.className = 'modal-regex-item-label';
+      
+      const checkbox = document.createElement('input');
+      checkbox.type = 'checkbox';
+      checkbox.className = 'subusers-regex-global-cb';
+      checkbox.id = `subusers-regex-global-cb-${rx.id}`;
+      checkbox.name = `subusers-regex-global-cb-${rx.id}`;
+      checkbox.setAttribute('data-id', rx.id);
+      if (rx.enabled) checkbox.checked = true;
+      if (rx.locked) checkbox.disabled = true;
+      
+      const strong = document.createElement('strong');
+      strong.textContent = escapeHtml(truncateRegexDisplay(rx.pattern));
+      
+      const small = document.createElement('small');
+      small.textContent = `(${escapeHtml(rx.description||"")})`;
+      
+      label.appendChild(checkbox);
+      label.appendChild(strong);
+      label.appendChild(small);
+      
+      if (rx.locked) {
+        const em = document.createElement('em');
+        em.className = 'locked-indicator';
+        em.textContent = '(Bloqueado: Padre inactivo)';
+        label.appendChild(em);
+      }
+      
+      itemDiv.appendChild(label);
+      subusersRegexList.appendChild(itemDiv);
+    });
+  }
+
+  if(saveSubusersRegexBtn){
+    saveSubusersRegexBtn.addEventListener("click", ()=>{
+      const cbs = document.querySelectorAll(".subusers-regex-global-cb");
+      let allowedIds = [];
+      cbs.forEach(cb=>{
+        if(cb.checked && !cb.disabled){
+          allowedIds.push(parseInt(cb.getAttribute("data-id")));
+        }
+      });
+      
+      fetch("/subusers/save_subusers_regex_global", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-CSRFToken": getCsrfToken()
+        },
+        body: JSON.stringify({
+          parent_id: parseInt(userId, 10), 
+          allowed_ids: allowedIds
+        })
+      })
+      .then(handleFetchResponse)
+      .then(data => {
+        if(data.status === "ok"){
+          alert("Configuración de Regex para sub-usuarios guardada.");
+          if(subusersRegexModal) {
+            subusersRegexModal.classList.remove('popup-show');
+            subusersRegexModal.classList.add('popup-hide');
+          }
+        } else {
+          alert("Error al guardar Regex para sub-usuarios: " + (data.message || 'Error desconocido'));
+        }
+      })
+      .catch(err => alert("Error de red al guardar Regex para sub-usuarios: " + err.message));
+    });
+  }
+  // ======= FIN REGEX SUB-USUARIO GLOBAL =======
+
+  // ======= Filtros Sub-usuario (Global) =======
+  const btnSubusersFilterGlobal = document.getElementById("btnSubusersFilterGlobal");
+  const subusersFiltersModal = document.getElementById("subusersFiltersModal");
+  const subusersFiltersList = document.getElementById("subusersFiltersList");
+  const saveSubusersFiltersBtn = document.getElementById("saveSubusersFiltersBtn");
+  const closeSubusersFiltersModalBtn = document.getElementById("closeSubusersFiltersModalBtn");
+
+  if(btnSubusersFilterGlobal){
+    btnSubusersFilterGlobal.addEventListener("click", ()=>{
+      if(subusersFiltersModal) {
+        subusersFiltersModal.classList.remove('popup-hide');
+        subusersFiltersModal.classList.add('popup-show');
+      }
+      loadGlobalSubusersFilters();
+    });
+  }
+  if(closeSubusersFiltersModalBtn){
+    closeSubusersFiltersModalBtn.addEventListener("click", ()=>{
+      if(subusersFiltersModal) {
+        subusersFiltersModal.classList.remove('popup-show');
+        subusersFiltersModal.classList.add('popup-hide');
+      }
+    });
+  }
+
+  function loadGlobalSubusersFilters(){
+    if(!subusersFiltersList) return;
+    fetch(`/subusers/list_subusers_filters_global?parent_id=${userId}`, {
+      method:"GET"
+    })
+    .then(handleFetchResponse)
+    .then(data=>{
+      if(data.status==="ok"){
+        renderGlobalSubusersFilters(data.items);
+      } else {
+        const errorP = document.createElement('p');
+        errorP.classList.add('error-message-text');
+        errorP.textContent = `Error: ${data.message}`;
+        subusersFiltersList.innerHTML = '';
+        subusersFiltersList.appendChild(errorP);
+      }
+    })
+    .catch(err=>{
+      console.error("Fetch error list global sub filters:", err);
+      const errorP = document.createElement('p');
+      errorP.classList.add('error-message-text');
+      errorP.textContent = `Error: ${err.message}`;
+      subusersFiltersList.innerHTML = '';
+      subusersFiltersList.appendChild(errorP);
+    });
+  }
+
+  function renderGlobalSubusersFilters(arr){
+    if (!subusersFiltersList) return;
+    
+    // Limpiar contenedor
+    while(subusersFiltersList.firstChild) {
+      subusersFiltersList.removeChild(subusersFiltersList.firstChild);
+    }
+    
+    if (!arr || arr.length === 0) {
+      const p = document.createElement('p');
+      p.textContent = "No hay Filtros definidos en el sistema.";
+      subusersFiltersList.appendChild(p);
+      return;
+    }
+    
+    arr.forEach((f,i)=>{
+      const itemDiv = document.createElement('div');
+      itemDiv.className = i%2===0 ? 'modal-filter-item modal-filter-item-even' : 'modal-filter-item modal-filter-item-odd';
+      
+      const label = document.createElement('label');
+      label.className = 'modal-filter-item-label';
+      
+      const checkbox = document.createElement('input');
+      checkbox.type = 'checkbox';
+      checkbox.className = 'subusers-filters-global-cb';
+      checkbox.id = `subusers-filters-global-cb-${f.id}`;
+      checkbox.name = `subusers-filters-global-cb-${f.id}`;
+      checkbox.setAttribute('data-id', f.id);
+      if (f.enabled) checkbox.checked = true;
+      if (f.locked) checkbox.disabled = true;
+      
+      const strong = document.createElement('strong');
+      strong.textContent = `(${escapeHtml(f.sender||"?")}) - ${escapeHtml(f.keyword||"?")}`;
+      
+      label.appendChild(checkbox);
+      label.appendChild(strong);
+      
+      if (f.locked) {
+        const em = document.createElement('em');
+        em.className = 'locked-indicator';
+        em.textContent = '(Bloqueado: Padre inactivo)';
+        label.appendChild(em);
+      }
+      
+      itemDiv.appendChild(label);
+      subusersFiltersList.appendChild(itemDiv);
+    });
+  }
+
+  if(saveSubusersFiltersBtn){
+    saveSubusersFiltersBtn.addEventListener("click", ()=>{
+      const cbs = document.querySelectorAll(".subusers-filters-global-cb");
+      let allowedIds = [];
+      cbs.forEach(cb=>{
+        if(cb.checked && !cb.disabled){
+          allowedIds.push(parseInt(cb.getAttribute("data-id")));
+        }
+      });
+      
+      fetch("/subusers/save_subusers_filters_global", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-CSRFToken": getCsrfToken()
+        },
+        body: JSON.stringify({
+          parent_id: parseInt(userId, 10), 
+          allowed_ids: allowedIds
+        })
+      })
+      .then(handleFetchResponse)
+      .then(data => {
+        if(data.status === "ok"){
+          alert("Configuración de Filtros para sub-usuarios guardada.");
+          if(subusersFiltersModal) {
+            subusersFiltersModal.classList.remove('popup-show');
+            subusersFiltersModal.classList.add('popup-hide');
+          }
+        } else {
+          alert("Error al guardar Filtros para sub-usuarios: " + (data.message || 'Error desconocido'));
+        }
+      })
+      .catch(err => alert("Error de red al guardar Filtros para sub-usuarios: " + err.message));
+    });
+  }
+  // ======= FIN FILTROS SUB-USUARIO GLOBAL =======
+
+  // ======= BOTONES DE NAVEGACIÓN 'VOLVER' ========
+  const btnVolverUsuarios = document.getElementById("btnVolverUsuarios");
+  const btnVolverPanel = document.getElementById("btnVolverPanel");
+
+  if (btnVolverUsuarios) {
+    btnVolverUsuarios.addEventListener("click", function() {
+      const url = this.getAttribute("data-url");
+      if (url) {
+        window.location.href = url;
+      }
+    });
+  }
+
+  if (btnVolverPanel) {
+    btnVolverPanel.addEventListener("click", function() {
+      const url = this.getAttribute("data-url");
+      if (url) {
+        window.location.href = url;
+      }
+    });
+  }
+  // ======= FIN BOTONES 'VOLVER' =======
+
+  // === TRUNCAR VISUALIZACIÓN DE REGEX EN POPUPS ===
+  function truncateRegexDisplay(pattern, maxLen = 22) {
+    if (typeof pattern !== 'string') return pattern;
+    if (pattern.length <= maxLen) return pattern;
+    const start = pattern.slice(0, 10);
+    const end = pattern.slice(-8);
+    return `${start}....${end}`;
+  }
+
+  // Hook para popups de Regex (principal y sub-usuario)
+  function patchRegexPopupDisplay() {
+    // Para el popup principal
+    const regexList = document.getElementById('regexListContainer');
+    if (regexList) {
+      regexList.querySelectorAll('.regex-item').forEach(function(item) {
+        const strongs = item.querySelectorAll('strong');
+        strongs.forEach(function(strong) {
+          if (strong.textContent.trim().toLowerCase().startsWith('patrón:')) {
+            const next = strong.nextSibling;
+            if (next && next.nodeType === 3) {
+              const original = next.textContent.trim();
+              next.textContent = ' ' + truncateRegexDisplay(original);
+            }
+          }
+        });
+      });
+    }
+    // Para el popup de sub-usuario
+    const subusersRegexList = document.getElementById('subusersRegexList');
+    if (subusersRegexList) {
+      subusersRegexList.querySelectorAll('.regex-item').forEach(function(item) {
+        const strongs = item.querySelectorAll('strong');
+        strongs.forEach(function(strong) {
+          if (strong.textContent.trim().toLowerCase().startsWith('patrón:')) {
+            const next = strong.nextSibling;
+            if (next && next.nodeType === 3) {
+              const original = next.textContent.trim();
+              next.textContent = ' ' + truncateRegexDisplay(original);
+            }
+          }
+        });
+      });
+    }
+  }
+
+  // Llamar al hook cada vez que se abre el popup
+  ['openRegexModalBtn', 'btnSubusersRegexGlobal'].forEach(function(btnId) {
+    const btn = document.getElementById(btnId);
+    if (btn) {
+      btn.addEventListener('click', function() {
+        setTimeout(patchRegexPopupDisplay, 200);
+      });
+    }
+  });
+
+  // ======= FUNCIONES DEL JAVASCRIPT INLINE =======
+  
+  // Búsqueda instantánea
+  const searchForm = document.getElementById('searchEmailsForm');
+  const searchInput = document.getElementById('searchEmailsInput');
+  if (searchForm && searchInput) {
+    let searchTimeout = null;
+    searchInput.addEventListener('input', function() {
+      clearTimeout(searchTimeout);
+      searchTimeout = setTimeout(() => {
+        searchForm.requestSubmit();
+      }, 250);
+    });
+  }
+
+  // Cierre automático de popups al hacer clic fuera
+  const popups = [
+    'regexModal',
+    'filtersModal',
+    'subusersModal',
+    'subusersRegexModal',
+    'subusersFiltersModal'
+  ];
+  popups.forEach(function(popupId) {
+    const popup = document.getElementById(popupId);
+    if (popup) {
+      document.addEventListener('mousedown', function(e) {
+        if (popup.classList.contains('popup-show') || popup.classList.contains('popup-visible')) {
+          if (!popup.contains(e.target)) {
+            popup.classList.remove('popup-show', 'popup-visible');
+            popup.classList.add('popup-hide');
+          }
+        }
+      });
+    }
+  });
+
+}); // Fin DOMContentLoaded 

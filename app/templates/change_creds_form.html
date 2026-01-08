@@ -1,0 +1,51 @@
+<!-- app/templates/change_creds_form.html -->
+{% extends "base.html" %}
+{% block content %}
+<div class="admin-card form-container-narrow text-center">
+  <h2 class="text-center">Cambiar Credenciales del Admin</h2>
+  <p class="text-center">Has verificado 2FA correctamente. Ingresa los campos que quieras cambiar (contraseña o correo). 
+  El correo será usado para recuperación y OTP.</p>
+
+  <form method="POST" class="d-flex flex-column align-items-center gap-1">
+    <!-- Campo oculto para el CSRF Token (SeaSurf) -->
+    <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+
+    <!-- Campo para la nueva contraseña (opcional) -->
+    <div class="d-flex flex-column align-items-center w-100 otp-input-container">
+      <label for="new_password">Nueva Contraseña (opcional):</label>
+      <input 
+        type="password" 
+        id="new_password"
+        name="new_password" 
+        placeholder="Deja vacío para no cambiar"
+        class="form-input-block w-100"
+        autocomplete="new-password"
+      >
+    </div>
+
+    <!-- Campo unificado para correo (recuperación + OTP) -->
+    <div class="d-flex flex-column align-items-center w-100 otp-input-container">
+      <label for="new_email">Nuevo Correo (opcional):</label>
+      <input 
+        type="email" 
+        id="new_email"
+        name="new_email" 
+        placeholder="correo@dominio.com"
+        class="form-input-block w-100"
+        autocomplete="email"
+      >
+      <small class="text-center">Si lo dejas en blanco, no se modificará el correo.</small>
+    </div>
+
+    <div class="d-flex align-items-center justify-content-center gap-1 mt-1">
+      <button type="submit" class="btn-orange">Cambiar Credenciales</button>
+      <a 
+        href="{{ url_for('admin_bp.dashboard') }}" 
+        class="btn-red btn-link-style"
+      >
+        Cancelar
+      </a>
+    </div>
+  </form>
+</div>
+{% endblock %}
