@@ -2,6 +2,19 @@
 
 from app.extensions import db
 
+# Tablas M2M para asociar filtros y regex con IMAPServer2
+imap2_filter = db.Table(
+    "imap2_filter",
+    db.Column("imap2_id", db.Integer, db.ForeignKey('imap_servers2.id', ondelete='CASCADE'), primary_key=True),
+    db.Column("filter_id", db.Integer, db.ForeignKey('filters.id', ondelete='CASCADE'), primary_key=True)
+)
+
+imap2_regex = db.Table(
+    "imap2_regex",
+    db.Column("imap2_id", db.Integer, db.ForeignKey('imap_servers2.id', ondelete='CASCADE'), primary_key=True),
+    db.Column("regex_id", db.Integer, db.ForeignKey('regexes.id', ondelete='CASCADE'), primary_key=True)
+)
+
 class IMAPServer2(db.Model):
     __tablename__ = "imap_servers2"
     id = db.Column(db.Integer, primary_key=True)
@@ -11,7 +24,21 @@ class IMAPServer2(db.Model):
     password_enc = db.Column(db.String(255), nullable=False)
     enabled = db.Column(db.Boolean, default=True)
     folders = db.Column(db.String(500), nullable=False, server_default="INBOX")
+    route_path = db.Column(db.String(100), nullable=True, unique=True)  # Ej: /pagina2, /web
+    paragraph = db.Column(db.Text, nullable=True)  # Párrafo personalizado para esta página
+
+    # Relaciones M2M con FilterModel y RegexModel
+    filters = db.relationship(
+        "FilterModel",
+        secondary=imap2_filter,
+        backref="imap2_servers"
+    )
+    regexes = db.relationship(
+        "RegexModel",
+        secondary=imap2_regex,
+        backref="imap2_servers"
+    )
 
     def __repr__(self):
-        return f"<IMAPServer2 {self.host}:{self.port}>"
+        return f"<IMAPServer2 {self.host}:{self.port} route={self.route_path}>"
 

@@ -1560,4 +1560,212 @@ document.addEventListener("DOMContentLoaded", function() {
   } // Fin del bloque if que verifica si existe la sección de 2FA
   // ======= FIN GESTIÓN DE 2FA POR CORREO =======
 
+  // ======= AÑADIR CORREOS MASIVAMENTE A SUB-USUARIOS =======
+  const bulkAddEmailsToSubusersSearch = document.getElementById("bulkAddEmailsToSubusersSearch");
+  const bulkAddEmailsToSubusersSearchResults = document.getElementById("bulkAddEmailsToSubusersSearchResults");
+  const bulkAddEmailsToSubusersSelected = document.getElementById("bulkAddEmailsToSubusersSelected");
+  const bulkAddEmailsToSubusersInput = document.getElementById("bulkAddEmailsToSubusersInput");
+  const bulkAddEmailsToSubusersBtn = document.getElementById("bulkAddEmailsToSubusersBtn");
+  const bulkAddEmailsToSubusersMessage = document.getElementById("bulkAddEmailsToSubusersMessage");
+
+  let allSubusersForBulkAdd = [];
+  let selectedSubuserIds = new Set();
+  let searchTimeoutBulkAddSubusers = null;
+
+  // Cargar sub-usuarios al iniciar
+  if (bulkAddEmailsToSubusersSearch) {
+    fetch("/subusers/search_subusers_for_bulk_add_ajax?query=", {
+      method: "GET",
+      headers: { "X-CSRFToken": getCsrfToken() }
+    })
+    .then(res => res.json())
+    .then(data => {
+      if (data.status === "ok") {
+        allSubusersForBulkAdd = data.subusers || [];
+        renderSubuserSearchResults([]);
+      }
+    })
+    .catch(err => console.error("Error cargando sub-usuarios:", err));
+  }
+
+  // Búsqueda de sub-usuarios
+  if (bulkAddEmailsToSubusersSearch) {
+    bulkAddEmailsToSubusersSearch.addEventListener("search", function() {
+      if (this.value === "") {
+        renderSubuserSearchResults([]);
+      }
+    });
+
+    bulkAddEmailsToSubusersSearch.addEventListener("input", function() {
+      const query = this.value.trim().toLowerCase();
+
+      clearTimeout(searchTimeoutBulkAddSubusers);
+      searchTimeoutBulkAddSubusers = setTimeout(() => {
+        if (query) {
+          fetch(`/subusers/search_subusers_for_bulk_add_ajax?query=${encodeURIComponent(query)}`, {
+            method: "GET",
+            headers: { "X-CSRFToken": getCsrfToken() }
+          })
+          .then(res => res.json())
+          .then(data => {
+            if (data.status === "ok") {
+              renderSubuserSearchResults(data.subusers || []);
+            }
+          })
+          .catch(err => console.error("Error buscando sub-usuarios:", err));
+        } else {
+          renderSubuserSearchResults([]);
+        }
+      }, 200);
+    });
+  }
+
+  // Renderizar resultados de búsqueda
+  function renderSubuserSearchResults(subusers) {
+    if (!bulkAddEmailsToSubusersSearchResults) return;
+
+    bulkAddEmailsToSubusersSearchResults.textContent = "";
+
+    if (subusers.length === 0 && bulkAddEmailsToSubusersSearch && bulkAddEmailsToSubusersSearch.value.trim()) {
+      const noResults = document.createElement("p");
+      noResults.className = "text-secondary text-small";
+      noResults.textContent = "No se encontraron sub-usuarios.";
+      bulkAddEmailsToSubusersSearchResults.appendChild(noResults);
+      return;
+    }
+
+    subusers.forEach(subuser => {
+      if (selectedSubuserIds.has(subuser.id)) return; // Ya está seleccionado
+
+      const subuserItem = document.createElement("div");
+      subuserItem.className = "bulk-add-emails-user-item";
+
+      const subuserInfo = document.createElement("span");
+      subuserInfo.textContent = `${subuser.username}${subuser.full_name ? ` (${subuser.full_name})` : ""}`;
+
+      const addBtn = document.createElement("button");
+      addBtn.type = "button";
+      addBtn.className = "btn-blue btn-small";
+      addBtn.textContent = "Seleccionar";
+      addBtn.addEventListener("click", function() {
+        selectedSubuserIds.add(subuser.id);
+        renderSelectedSubusers();
+        // Mantener el texto de búsqueda y actualizar los resultados para ocultar el sub-usuario seleccionado
+        if (bulkAddEmailsToSubusersSearch && bulkAddEmailsToSubusersSearch.value.trim()) {
+          bulkAddEmailsToSubusersSearch.dispatchEvent(new Event("input"));
+        }
+      });
+
+      subuserItem.appendChild(subuserInfo);
+      subuserItem.appendChild(addBtn);
+      bulkAddEmailsToSubusersSearchResults.appendChild(subuserItem);
+    });
+  }
+
+  // Renderizar sub-usuarios seleccionados
+  function renderSelectedSubusers() {
+    if (!bulkAddEmailsToSubusersSelected) return;
+
+    bulkAddEmailsToSubusersSelected.textContent = "";
+
+    if (selectedSubuserIds.size === 0) {
+      const emptyMsg = document.createElement("p");
+      emptyMsg.className = "text-secondary text-small";
+      emptyMsg.textContent = "No hay sub-usuarios seleccionados.";
+      bulkAddEmailsToSubusersSelected.appendChild(emptyMsg);
+      return;
+    }
+
+    const selectedSubusersList = Array.from(selectedSubuserIds).map(id => {
+      return allSubusersForBulkAdd.find(s => s.id === id);
+    }).filter(Boolean);
+
+    selectedSubusersList.forEach(subuser => {
+      const subuserTag = document.createElement("div");
+      subuserTag.className = "bulk-add-emails-selected-user-tag";
+
+      const subuserName = document.createElement("span");
+      subuserName.textContent = `${subuser.username}${subuser.full_name ? ` (${subuser.full_name})` : ""}`;
+
+      const removeBtn = document.createElement("button");
+      removeBtn.type = "button";
+      removeBtn.className = "btn-small bg-transparent text-white border-none p-0";
+      const removeIcon = document.createElement("i");
+      removeIcon.className = "fas fa-times";
+      removeBtn.appendChild(removeIcon);
+      removeBtn.addEventListener("click", function() {
+        selectedSubuserIds.delete(subuser.id);
+        renderSelectedSubusers();
+      });
+
+      subuserTag.appendChild(subuserName);
+      subuserTag.appendChild(removeBtn);
+      bulkAddEmailsToSubusersSelected.appendChild(subuserTag);
+    });
+  }
+
+  // Inicializar renderizado de sub-usuarios seleccionados
+  renderSelectedSubusers();
+
+  // Añadir correos masivamente
+  if (bulkAddEmailsToSubusersBtn && bulkAddEmailsToSubusersInput && bulkAddEmailsToSubusersMessage) {
+    bulkAddEmailsToSubusersBtn.addEventListener("click", function() {
+      if (selectedSubuserIds.size === 0) {
+        bulkAddEmailsToSubusersMessage.textContent = "Selecciona al menos un sub-usuario.";
+        bulkAddEmailsToSubusersMessage.className = "mt-05 text-center text-color-orange";
+        return;
+      }
+
+      const rawText = bulkAddEmailsToSubusersInput.value.trim();
+      if (!rawText) {
+        bulkAddEmailsToSubusersMessage.textContent = "Campo de correos vacío.";
+        bulkAddEmailsToSubusersMessage.className = "mt-05 text-center text-color-orange";
+        return;
+      }
+
+      const emailsToAdd = rawText.split(/[\s,;\n]+/).map(e => e.trim().toLowerCase()).filter(e => e && e.includes('@'));
+      if (!emailsToAdd.length) {
+        bulkAddEmailsToSubusersMessage.textContent = "No se encontraron correos válidos.";
+        bulkAddEmailsToSubusersMessage.className = "mt-05 text-center text-color-orange";
+        return;
+      }
+
+      bulkAddEmailsToSubusersMessage.textContent = "Añadiendo correos...";
+      bulkAddEmailsToSubusersMessage.className = "mt-05 text-center text-color-orange";
+      bulkAddEmailsToSubusersBtn.disabled = true;
+      bulkAddEmailsToSubusersBtn.textContent = "Procesando...";
+
+      fetch("/subusers/bulk_add_emails_to_subusers_ajax", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-CSRFToken": getCsrfToken()
+        },
+        body: JSON.stringify({
+          subuser_ids: Array.from(selectedSubuserIds),
+          emails: emailsToAdd
+        })
+      })
+      .then(res => res.json())
+      .then(data => {
+        if (data.status === "ok") {
+          bulkAddEmailsToSubusersMessage.textContent = data.message || `Correos añadidos correctamente. ${data.added_count || 0} añadidos, ${data.skipped_count || 0} omitidos.`;
+          bulkAddEmailsToSubusersMessage.className = "mt-05 text-center text-color-green";
+          bulkAddEmailsToSubusersInput.value = "";
+        } else {
+          throw new Error(data.message || "Error desconocido");
+        }
+      })
+      .catch(err => {
+        bulkAddEmailsToSubusersMessage.textContent = `Error: ${err.message}`;
+        bulkAddEmailsToSubusersMessage.className = "mt-05 text-center text-color-red";
+      })
+      .finally(() => {
+        bulkAddEmailsToSubusersBtn.disabled = false;
+        bulkAddEmailsToSubusersBtn.textContent = "Añadir Correos a Sub-usuarios Seleccionados";
+      });
+    });
+  }
+  // ======= FIN AÑADIR CORREOS MASIVAMENTE A SUB-USUARIOS =======
+
 }); // Fin DOMContentLoaded 

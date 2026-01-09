@@ -59,9 +59,6 @@
     <a href="{{ url_for('store_bp.tools_public') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-tools"></i> Herramientas Pública</a>
     <a href="{{ url_for('store_bp.historial_compras_usuario') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-history"></i> Mi Historial de Compras</a>
     <a href="{{ url_for('main_bp.home') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-code"></i> Códigos</a>
-    {% if user_has_codigos2_access() %}
-    <a href="{{ url_for('main_bp.home2') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-code"></i> Códigos 2</a>
-    {% endif %}
     <a href="{{ url_for('auth_bp.logout') }}" class="btn-panel btn-red mobile-menu-btn mb-04"><i class="fas fa-sign-out-alt"></i> Cerrar Sesión</a>
   </div>
 
@@ -207,9 +204,51 @@
   </div>
 </div>
 
-<!-- Sección de Eliminación Masiva de Correos -->
+<!-- Sección de Gestión Masiva de Correos -->
 <div class="container container-max-width-900 usuarios-page mt-2">
   <div class="admin-card">
+    <h4 class="mb-1 text-center">📧 Añadir Masivamente Correos a Usuarios</h4>
+
+    <!-- Búsqueda de Usuarios -->
+    <div class="mb-1">
+      <label for="bulkAddEmailsUserSearch" class="sr-only">Buscar usuarios</label>
+      <div class="search-input-wrapper">
+        <input
+          type="search"
+          id="bulkAddEmailsUserSearch"
+          placeholder="Buscar usuario o nombre..."
+          class="d-block w-100 mb-05 search-users-input-flex"
+          autocomplete="off"
+        >
+      </div>
+      
+      <!-- Lista de resultados de búsqueda -->
+      <div id="bulkAddEmailsSearchResults" class="mb-05"></div>
+      
+      <!-- Lista de usuarios seleccionados -->
+      <div id="bulkAddEmailsSelectedUsers" class="mb-05"></div>
+    </div>
+
+    <!-- Campo para añadir correos -->
+    <div class="mb-1">
+      <label for="bulkAddEmailsInput" class="sr-only">Correos a añadir</label>
+      <textarea
+        id="bulkAddEmailsInput"
+        rows="4"
+        placeholder="Ingresa uno o varios correos (separados por comas, espacios o saltos de línea). Ejemplo: correo1@ejemplo.com, correo2@ejemplo.com..."
+        class="d-block mb-05 w-100"
+        autocomplete="off"
+      ></textarea>
+
+      <div class="d-flex gap-05 justify-content-center">
+        <button type="button" id="bulkAddEmailsBtn" class="btn-green">Añadir Correos a Usuarios Seleccionados</button>
+      </div>
+
+      <div id="bulkAddEmailsMessage" class="mt-05 text-center"></div>
+    </div>
+
+    <hr class="my-1">
+
     <h4 class="mb-1 text-center">🗑️ Sacar Masivamente Correos de los Usuarios</h4>
 
     <form id="bulkDeleteEmailsForm">

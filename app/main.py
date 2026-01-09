@@ -74,37 +74,3 @@ def home():
         default_service_id=default_service_id,
         current_user=current_user
     )
-
-@main_bp.route("/codigos2", methods=["GET"])
-def home2():
-    """Ruta para la segunda página de códigos (search2.html) que usa servidores IMAP2"""
-    from flask import session
-    from app.models.user import User
-    
-    # Tomar solo servicios con visibility_mode = 'codigos-2'
-    all_visible = ServiceModel.query.filter(ServiceModel.visibility_mode == "codigos-2").all()
-
-    def priority_key(s):
-        return abs(s.position)*2 + (1 if s.position > 0 else 0)
-
-    services_sorted = sorted(all_visible, key=priority_key)
-    default_service_id = services_sorted[0].id if services_sorted else None
-
-    services_in_rows = [services_sorted[i:i+2] for i in range(0, len(services_sorted), 2)]
-
-    # Obtener usuario actual
-    current_user = None
-    username = session.get('username')
-    user_id = session.get('user_id')
-    
-    if username:
-        current_user = User.query.filter_by(username=username).first()
-    elif user_id:
-        current_user = User.query.get(user_id)
-
-    return render_template(
-        "search2.html",
-        services_in_rows=services_in_rows,
-        default_service_id=default_service_id,
-        current_user=current_user
-    )

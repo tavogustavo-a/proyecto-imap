@@ -1,0 +1,95 @@
+/* Estilos para la tabla de Filtros y Regex en edit_imap2.html */
+
+.imap2-filters-regex-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 1rem;
+  background-color: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.imap2-filters-regex-table thead {
+  background-color: #f3f4f6;
+}
+
+.imap2-filters-regex-table th {
+  padding: 0.75rem;
+  text-align: left;
+  font-weight: bold;
+  border-bottom: 2px solid #e5e7eb;
+  color: #111;
+}
+
+.imap2-filters-regex-table th:nth-child(2),
+.imap2-filters-regex-table th:nth-child(4) {
+  text-align: center;
+  width: 80px;
+}
+
+.imap2-filters-regex-table td {
+  padding: 0.75rem;
+  border-bottom: 1px solid #e5e7eb;
+  vertical-align: middle;
+}
+
+.imap2-filters-regex-table td:nth-child(2),
+.imap2-filters-regex-table td:nth-child(4) {
+  text-align: center;
+}
+
+.imap2-filters-regex-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.imap2-filters-regex-table tbody tr:hover {
+  background-color: #f9fafb;
+}
+
+.filter-keyword {
+  font-weight: 500;
+  color: #111;
+}
+
+.regex-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.regex-description {
+  font-weight: 500;
+  color: #111;
+}
+
+.regex-pattern {
+  font-family: monospace;
+  font-size: 0.875rem;
+  color: #6b7280;
+  word-break: break-all;
+}
+
+.filter-checkbox,
+.regex-checkbox {
+  width: 1.25rem;
+  height: 1.25rem;
+  cursor: pointer;
+  accent-color: #0d6efd;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .imap2-filters-regex-table {
+    font-size: 0.875rem;
+  }
+  
+  .imap2-filters-regex-table th,
+  .imap2-filters-regex-table td {
+    padding: 0.5rem 0.25rem;
+  }
+  
+  .regex-pattern {
+    font-size: 0.75rem;
+  }
+}

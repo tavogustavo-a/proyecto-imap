@@ -315,49 +315,6 @@ document.addEventListener('DOMContentLoaded', function() {
       });
     }
 
-    // --- Permiso de acceso a Códigos 2 (can_access_codigos2) ---
-    const canAccessCodigos2Checkbox = document.getElementById('canAccessCodigos2Checkbox');
-    const codigos2PermissionStatus = document.getElementById('codigos2-permission-status');
-    if (canAccessCodigos2Checkbox) {
-      canAccessCodigos2Checkbox.addEventListener('change', function() {
-        const subuserId = document.querySelector('[data-subuser-id]')?.dataset?.subuserId || null;
-        if (!subuserId) return;
-        fetch('/subusers/update_subuser_codigos2_permission', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'X-CSRFToken': getCsrfToken()
-          },
-          body: JSON.stringify({
-            subuser_id: parseInt(subuserId, 10),
-            can_access_codigos2: canAccessCodigos2Checkbox.checked
-          })
-        })
-        .then(response => response.json())
-        .then(data => {
-          if (data.status === 'ok') {
-            if (codigos2PermissionStatus) {
-              codigos2PermissionStatus.textContent = canAccessCodigos2Checkbox.checked
-                ? 'Permiso de Códigos 2 activado'
-                : 'Permiso de Códigos 2 desactivado';
-              codigos2PermissionStatus.style.color = canAccessCodigos2Checkbox.checked ? 'green' : 'red';
-              setTimeout(() => { codigos2PermissionStatus.textContent = ''; }, 2000);
-            }
-          } else {
-            if (codigos2PermissionStatus) {
-              codigos2PermissionStatus.textContent = 'Error al guardar';
-              codigos2PermissionStatus.style.color = 'red';
-            }
-          }
-        })
-        .catch(err => {
-          if (codigos2PermissionStatus) {
-            codigos2PermissionStatus.textContent = 'Error de red al guardar';
-            codigos2PermissionStatus.style.color = 'red';
-          }
-        });
-      });
-    }
 
     // --- Permiso de chat (can_chat) ---
     const canChatCheckbox = document.getElementById('canChatCheckbox');

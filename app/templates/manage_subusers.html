@@ -54,9 +54,6 @@
   {% endif %}
   <a href="{{ url_for('store_bp.tools_public') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-tools"></i> Herramientas</a>
   <a href="{{ url_for('main_bp.home') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-code"></i> Códigos</a>
-  {% if user_has_codigos2_access() %}
-  <a href="{{ url_for('main_bp.home2') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-code"></i> Códigos 2</a>
-  {% endif %}
   {% if is_user and current_user %}
     {% if current_user.is_support %}
       <a href="{{ url_for('store_bp.support_dashboard') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-headset"></i> Chat de Soporte Admin</a>
@@ -240,6 +237,53 @@
         <span id="subuserAddEmailsMsg" class="text-italic text-success text-small"></span>
       </div>
     </div>
+  </div>
+  {% endif %}
+
+  <!-- CONTORNO 1.5.5: Añadir Masivamente Correos a Sub-usuarios -->
+  {% if current_user and not current_user.parent_id and current_user.can_add_own_emails %}
+  <div class="admin-card mb-1">
+    <h4 class="mb-1 text-center">📧 Añadir Masivamente Correos a Sub-usuarios</h4>
+
+    <!-- Búsqueda de Sub-usuarios -->
+    <div class="mb-1">
+      <label for="bulkAddEmailsToSubusersSearch" class="sr-only">Buscar sub-usuarios</label>
+      <div class="search-input-wrapper">
+        <input
+          type="search"
+          id="bulkAddEmailsToSubusersSearch"
+          placeholder="Buscar sub-usuario o nombre..."
+          class="d-block w-100 mb-05 search-users-input-flex"
+          autocomplete="off"
+        >
+      </div>
+      
+      <!-- Lista de resultados de búsqueda -->
+      <div id="bulkAddEmailsToSubusersSearchResults" class="mb-05"></div>
+      
+      <!-- Lista de sub-usuarios seleccionados -->
+      <div id="bulkAddEmailsToSubusersSelected" class="mb-05"></div>
+    </div>
+
+    <!-- Campo para añadir correos -->
+    <div class="mb-1">
+      <label for="bulkAddEmailsToSubusersInput" class="sr-only">Correos a añadir</label>
+      <textarea
+        id="bulkAddEmailsToSubusersInput"
+        rows="4"
+        placeholder="Ingresa uno o varios correos (separados por comas, espacios o saltos de línea). Ejemplo: correo1@ejemplo.com, correo2@ejemplo.com..."
+        class="d-block mb-05 w-100"
+        autocomplete="off"
+      ></textarea>
+
+      <div class="d-flex gap-05 justify-content-center">
+        <button type="button" id="bulkAddEmailsToSubusersBtn" class="btn-green">Añadir Correos a Sub-usuarios Seleccionados</button>
+      </div>
+
+      <div id="bulkAddEmailsToSubusersMessage" class="mt-05 text-center"></div>
+    </div>
+
+    <hr class="my-1">
   </div>
   {% endif %}
 

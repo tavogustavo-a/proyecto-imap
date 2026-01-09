@@ -3529,6 +3529,88 @@ a.btn-search.btn-rounded:hover {
   }
 }
 
+/* ===== ESTILOS PARA BÚSQUEDA DE USUARIOS EN AÑADIR CORREOS MASIVAMENTE ===== */
+.bulk-add-emails-user-item {
+  background-color: #ffffff !important;
+  border: 1.5px solid #e5e7eb !important;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08) !important;
+  margin-bottom: 0.15rem;
+  padding: 0.2rem 0.5rem;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  transition: box-shadow 0.2s, border-color 0.2s;
+  min-height: auto;
+  line-height: 1.2;
+  height: auto;
+}
+
+.bulk-add-emails-user-item:hover {
+  border-color: #d1d5db !important;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.12) !important;
+}
+
+.bulk-add-emails-user-item span {
+  flex: 1;
+  margin-right: 0.5rem;
+  word-break: break-word;
+  padding: 0;
+  margin-top: 0;
+  margin-bottom: 0;
+  line-height: 1.2;
+}
+
+.bulk-add-emails-user-item button {
+  flex-shrink: 0;
+  white-space: nowrap;
+  padding: 0.2rem 0.45rem;
+  margin: 0;
+  font-size: 0.85rem;
+  line-height: 1.1;
+}
+
+.bulk-add-emails-selected-user-tag {
+  background-color: #0d6efd !important;
+  color: #ffffff !important;
+  border: 1px solid #0d6efd !important;
+  border-radius: 2px;
+  padding: 0.05rem 0.25rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  margin-right: 0.25rem;
+  margin-bottom: 0.25rem;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+  font-size: 0.55rem;
+  line-height: 1;
+}
+
+.bulk-add-emails-selected-user-tag button {
+  background: transparent;
+  border: none;
+  color: #ffffff;
+  cursor: pointer;
+  padding: 0;
+  margin-left: 0.08rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 0.6rem;
+  height: 0.6rem;
+  border-radius: 50%;
+  transition: background-color 0.2s;
+  font-size: 0.45rem;
+}
+
+.bulk-add-emails-selected-user-tag button i {
+  font-size: 0.4rem;
+}
+
+.bulk-add-emails-selected-user-tag button:hover {
+  background-color: rgba(255, 255, 255, 0.2);
+}
+
 /* ===== ESTILOS PROFESIONALES PARA BÚSQUEDA ===== */
 /* Campo de búsqueda con contorno similar a la foto */
 .search-input {

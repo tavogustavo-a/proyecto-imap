@@ -455,10 +455,6 @@ def edit_subuser(sub_id):
         ApiInfo.users.any(id=sub_user.id)
     ).all()
 
-    # Verificar si el usuario padre tiene acceso a Códigos 2
-    from app.models import Codigos2Access
-    parent_has_codigos2_access = Codigos2Access.user_has_access(parent_user)
-    
     return render_template("edit_subuser.html", 
                            sub_user=sub_user, 
                            assigned_emails=assigned_emails, # Lista de correos asignados al sub_user
@@ -473,7 +469,6 @@ def edit_subuser(sub_id):
                            parent_apis=parent_apis,
                            subuser_apis=subuser_apis,
                            parent_has_store_role=(parent_user.user_prices and isinstance(parent_user.user_prices, dict) and parent_user.user_prices.get('tipo_precio') in ['USD', 'COP']),
-                           parent_has_codigos2_access=parent_has_codigos2_access,
                            parent_can_manage_subusers=parent_user.can_manage_subusers
                            )
 
@@ -1205,6 +1200,196 @@ def update_subuser_emails_ajax():
         current_app.logger.error(f"Error al actualizar correos para sub-usuario {subuser_id}: {e}", exc_info=True)
         return jsonify({"status": "error", "message": "Error interno al guardar los correos."}), 500
 
+# ================== Añadir Masivamente Correos a Sub-usuarios ==================
+@subuser_bp.route("/search_subusers_for_bulk_add_ajax", methods=["GET"])
+def search_subusers_for_bulk_add_ajax():
+    """
+    Busca sub-usuarios del padre actual para añadir correos masivamente.
+    Solo devuelve sub-usuarios que pertenecen al usuario actual.
+    """
+    if not can_access_subusers():
+        return jsonify({"status": "error", "message": "No autorizado"}), 403
+    
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"status": "error", "message": "No hay usuario logueado."}), 401
+    
+    current_user = User.query.get(user_id)
+    if not current_user:
+        return jsonify({"status": "error", "message": "Usuario no encontrado."}), 404
+    
+    # Solo usuarios principales pueden usar esta función
+    if current_user.parent_id:
+        return jsonify({"status": "error", "message": "Los sub-usuarios no pueden usar esta función."}), 403
+    
+    # Verificar que el usuario tenga correos agregados
+    parent_emails_count = current_user.allowed_email_entries.count()
+    if parent_emails_count == 0:
+        return jsonify({"status": "error", "message": "Debes tener correos agregados para usar esta función."}), 403
+    
+    query_str = request.args.get("query", "").strip().lower()
+    
+    # Obtener solo los sub-usuarios del padre actual
+    subusers_query = User.query.filter_by(parent_id=current_user.id)
+    
+    if query_str:
+        subusers_query = subusers_query.filter(
+            or_(
+                User.username.ilike(f"%{query_str}%"),
+                User.full_name.ilike(f"%{query_str}%")
+            )
+        )
+    
+    subusers = subusers_query.all()
+    
+    subusers_data = []
+    for subuser in subusers:
+        subusers_data.append({
+            "id": subuser.id,
+            "username": subuser.username,
+            "full_name": subuser.full_name
+        })
+    
+    return jsonify({
+        "status": "ok",
+        "subusers": subusers_data
+    })
+
+@subuser_bp.route("/get_parent_emails_for_bulk_add_ajax", methods=["GET"])
+def get_parent_emails_for_bulk_add_ajax():
+    """
+    Obtiene los correos del usuario padre actual.
+    Solo usuarios principales pueden usar esta función.
+    """
+    if not can_access_subusers():
+        return jsonify({"status": "error", "message": "No autorizado"}), 403
+    
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"status": "error", "message": "No hay usuario logueado."}), 401
+    
+    current_user = User.query.get(user_id)
+    if not current_user:
+        return jsonify({"status": "error", "message": "Usuario no encontrado."}), 404
+    
+    if current_user.parent_id:
+        return jsonify({"status": "error", "message": "Los sub-usuarios no pueden usar esta función."}), 403
+    
+    # Obtener correos del padre
+    parent_emails = [ae.email for ae in current_user.allowed_email_entries.order_by(AllowedEmail.email.asc()).all()]
+    
+    return jsonify({
+        "status": "ok",
+        "emails": parent_emails
+    })
+
+@subuser_bp.route("/bulk_add_emails_to_subusers_ajax", methods=["POST"])
+def bulk_add_emails_to_subusers_ajax():
+    """
+    Añade correos masivamente a múltiples sub-usuarios seleccionados.
+    Solo añade correos que el padre tiene agregados.
+    """
+    if not can_access_subusers():
+        return jsonify({"status": "error", "message": "No autorizado"}), 403
+    
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"status": "error", "message": "No hay usuario logueado."}), 401
+    
+    current_user = User.query.get(user_id)
+    if not current_user:
+        return jsonify({"status": "error", "message": "Usuario no encontrado."}), 404
+    
+    if current_user.parent_id:
+        return jsonify({"status": "error", "message": "Los sub-usuarios no pueden usar esta función."}), 403
+    
+    try:
+        data = request.get_json()
+        subuser_ids = data.get("subuser_ids", [])
+        emails = data.get("emails", [])
+
+        if not subuser_ids or not isinstance(subuser_ids, list):
+            return jsonify({"status": "error", "message": "Debes seleccionar al menos un sub-usuario."}), 400
+
+        if not emails or not isinstance(emails, list):
+            return jsonify({"status": "error", "message": "Debes proporcionar al menos un correo."}), 400
+
+        # Obtener correos permitidos del padre
+        parent_allowed_set = {ae.email for ae in current_user.allowed_email_entries.all()}
+        
+        # Validar que todos los correos estén en los correos del padre
+        valid_emails = []
+        invalid_emails = []
+        for email in emails:
+            email_lower = email.lower().strip()
+            if not email_lower or '@' not in email_lower:
+                continue
+            if email_lower in parent_allowed_set:
+                valid_emails.append(email_lower)
+            else:
+                invalid_emails.append(email_lower)
+
+        if not valid_emails:
+            return jsonify({"status": "error", "message": "Ninguno de los correos proporcionados está en tu lista de correos permitidos."}), 400
+
+        added_count = 0
+        skipped_count = 0
+        errors = []
+
+        for subuser_id in subuser_ids:
+            subuser = User.query.get(subuser_id)
+            if not subuser:
+                errors.append(f"Sub-usuario {subuser_id} no encontrado")
+                continue
+
+            # Validar que el sub-usuario pertenezca al padre actual
+            if subuser.parent_id != current_user.id:
+                errors.append(f"Sub-usuario {subuser_id} no te pertenece")
+                continue
+
+            # Obtener correos actuales del sub-usuario
+            current_emails = set()
+            if subuser.allowed_email_entries:
+                current_emails = {e.email.lower() for e in subuser.allowed_email_entries}
+
+            # Añadir nuevos correos válidos
+            for email in valid_emails:
+                if email not in current_emails:
+                    try:
+                        new_allowed_email = AllowedEmail(user_id=subuser.id, email=email)
+                        db.session.add(new_allowed_email)
+                        current_emails.add(email)
+                        added_count += 1
+                    except IntegrityError:
+                        db.session.rollback()
+                        skipped_count += 1
+                else:
+                    skipped_count += 1
+
+        db.session.commit()
+
+        message = f"Correos añadidos correctamente a {len(subuser_ids)} sub-usuario(s)."
+        if invalid_emails:
+            message += f" {len(invalid_emails)} correo(s) omitido(s) porque no están en tu lista de correos permitidos."
+
+        return jsonify({
+            "status": "ok",
+            "message": message,
+            "added_count": added_count,
+            "skipped_count": skipped_count,
+            "invalid_emails_count": len(invalid_emails),
+            "errors": errors if errors else None
+        })
+
+    except IntegrityError as e:
+        db.session.rollback()
+        current_app.logger.error(f"Error de integridad al añadir correos masivamente a sub-usuarios: {e}", exc_info=True)
+        return jsonify({"status": "error", "message": "Error de integridad al añadir correos (posible duplicado)."}), 409
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Error en bulk_add_emails_to_subusers_ajax: {e}", exc_info=True)
+        return jsonify({"status": "error", "message": f"Error interno del servidor: {str(e)}"}), 500
+
 # ================== Manejo de Correos del Usuario Principal ==================
 @subuser_bp.route("/list_current_user_emails_paginated", methods=["GET"])
 def list_current_user_emails_paginated():
@@ -1672,26 +1857,6 @@ def update_subuser_coupons_permission():
     db.session.commit()
     return jsonify({"status": "ok", "can_use_coupons": sub_user.can_use_coupons})
 
-@subuser_bp.route("/update_subuser_codigos2_permission", methods=["POST"])
-def update_subuser_codigos2_permission():
-    """
-    Actualiza el permiso de acceso a Códigos 2 para un sub-usuario.
-    """
-    if not can_access_subusers():
-        return jsonify({"status": "error", "message": "No autorizado"}), 403
-
-    data = request.get_json()
-    subuser_id = data.get("subuser_id")
-    can_access_codigos2 = data.get("can_access_codigos2", False)
-
-    sub_user = User.query.get_or_404(subuser_id)
-    parent_user = User.query.get(sub_user.parent_id)
-    if not parent_user or (session.get("user_id") != parent_user.id and session.get("username") != current_app.config.get("ADMIN_USER", "admin")):
-        return jsonify({"status": "error", "message": "No tienes permiso para modificar este sub-usuario."}), 403
-
-    sub_user.can_access_codigos2 = bool(can_access_codigos2)
-    db.session.commit()
-    return jsonify({"status": "ok", "can_access_codigos2": sub_user.can_access_codigos2})
 
 @subuser_bp.route("/update_subuser_chat_permission", methods=["POST"])
 def update_subuser_chat_permission():

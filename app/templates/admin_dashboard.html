@@ -12,7 +12,6 @@
 
 <div class="container container-max-width-900" 
      data-clear-trigger-log-url="{{ url_for('admin_bp.clear_trigger_log') }}"
-     data-logout-all-users-url="{{ url_for('admin_bp.logout_all_users') }}"
      data-logout-all-cookies-url="{{ url_for('admin_bp.logout_all_and_clear_cookies') }}">
 
   <!-- MENÚ LATERAL MÓVIL -->
@@ -33,7 +32,6 @@
     <a href="{{ url_for('admin_bp.manage_permissions_page') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-key"></i> Gestión de Permisos</a>
     <button id="btnClearTriggerLogMenu" type="button" class="btn-panel btn-red mobile-menu-btn mb-04"><i class="fas fa-trash"></i> Limpiar Logs</button>
     <a href="{{ url_for('auth_bp.logout') }}" class="btn-panel btn-red mobile-menu-btn mb-04"><i class="fas fa-sign-out-alt"></i> Cerrar Sesión</a>
-    <button id="btnLogoutAllUsers" type="button" class="btn-panel btn-red mobile-menu-btn mb-04"><i class="fas fa-users-slash"></i> Cerrar sesión de todos</button>
     <button id="btnLogoutAllAndClearCookies" type="button" class="btn-panel btn-red mobile-menu-btn mb-04"><i class="fas fa-cookie-bite"></i> Cerrar sesión y limpiar cookies</button>
   </div>
 
@@ -63,7 +61,6 @@
     <a href="{{ url_for('store_bp.tools_public') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-tools"></i> Herramientas Pública</a>
     <a href="{{ url_for('store_bp.historial_compras_usuario') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-history"></i> Mi Historial de Compras</a>
     <a href="{{ url_for('main_bp.home') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-code"></i> Códigos</a>
-    <a href="{{ url_for('main_bp.home2') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-code"></i> Códigos 2</a>
     <a href="{{ url_for('auth_bp.logout') }}" class="btn-panel btn-red mobile-menu-btn mb-04"><i class="fas fa-sign-out-alt"></i> Cerrar Sesión</a>
   </div>
 
@@ -475,9 +472,6 @@
     >
     <div class="d-flex gap-1 align-items-center">
       <button type="submit" class="btn-green">Crear</button>
-      <a href="{{ url_for('admin_bp.accesos_codigos2_page') }}" class="btn-blue text-decoration-none">
-        <i class="fas fa-users"></i> Accesos a Códigos 2
-      </a>
     </div>
   </form>
   </div>

@@ -268,25 +268,6 @@ def change_theme():
     flash(f"Tema cambiado a {theme}", "info")
     return redirect(url_for("admin_bp.dashboard"))
 
-@admin_bp.route("/logout_all_users", methods=["POST"])
-@admin_required
-def logout_all_users():
-    from app.models import RememberDevice
-    from app.auth.session_tokens import revoke_all_tokens
-    
-    # ✅ SEGURIDAD: Revocar todos los tokens de sesión
-    revoke_all_tokens()
-    
-    RememberDevice.query.delete()
-    db.session.commit()
-
-    rev_str = get_site_setting("session_revocation_count", "0")
-    new_count = int(rev_str) + 1
-    set_site_setting("session_revocation_count", str(new_count))
-
-    flash("Se han cerrado las sesiones de todos los usuarios.", "info")
-    return redirect(url_for("admin_bp.dashboard"))
-
 @admin_bp.route("/logout_all_and_clear_cookies", methods=["POST"])
 @admin_required
 def logout_all_and_clear_cookies():

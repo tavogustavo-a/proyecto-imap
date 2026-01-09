@@ -878,4 +878,213 @@ document.addEventListener("DOMContentLoaded", function() {
   }
 
   // ======= FIN ELIMINACIÓN MASIVA DE CORREOS =======
+
+  // ======= AÑADIR CORREOS MASIVAMENTE A USUARIOS =======
+  const bulkAddEmailsUserSearch = document.getElementById("bulkAddEmailsUserSearch");
+  const bulkAddEmailsSearchResults = document.getElementById("bulkAddEmailsSearchResults");
+  const bulkAddEmailsSelectedUsers = document.getElementById("bulkAddEmailsSelectedUsers");
+  const bulkAddEmailsInput = document.getElementById("bulkAddEmailsInput");
+  const bulkAddEmailsBtn = document.getElementById("bulkAddEmailsBtn");
+  const bulkAddEmailsMessage = document.getElementById("bulkAddEmailsMessage");
+
+  let allUsersForBulkAdd = [];
+  let selectedUserIds = new Set();
+  let searchTimeoutBulkAdd = null;
+
+  // Cargar usuarios al iniciar
+  if (bulkAddEmailsUserSearch) {
+    fetch("/admin/search_users_ajax?query=", {
+      method: "GET",
+      headers: { "X-CSRFToken": getCsrfToken() }
+    })
+    .then(res => res.json())
+    .then(data => {
+      if (data.status === "ok") {
+        allUsersForBulkAdd = data.users || [];
+        renderUserSearchResults([]);
+      }
+    })
+    .catch(err => console.error("Error cargando usuarios:", err));
+  }
+
+  // Búsqueda de usuarios
+  if (bulkAddEmailsUserSearch) {
+    // Manejar cuando se limpia el campo usando la X nativa del campo search
+    bulkAddEmailsUserSearch.addEventListener("search", function() {
+      if (this.value === "") {
+        renderUserSearchResults([]);
+      }
+    });
+
+    bulkAddEmailsUserSearch.addEventListener("input", function() {
+      const query = this.value.trim().toLowerCase();
+
+      clearTimeout(searchTimeoutBulkAdd);
+      searchTimeoutBulkAdd = setTimeout(() => {
+        if (query) {
+          fetch(`/admin/search_users_ajax?query=${encodeURIComponent(query)}`, {
+            method: "GET",
+            headers: { "X-CSRFToken": getCsrfToken() }
+          })
+          .then(res => res.json())
+          .then(data => {
+            if (data.status === "ok") {
+              renderUserSearchResults(data.users || []);
+            }
+          })
+          .catch(err => console.error("Error buscando usuarios:", err));
+        } else {
+          renderUserSearchResults([]);
+        }
+      }, 200);
+    });
+  }
+
+  // Renderizar resultados de búsqueda
+  function renderUserSearchResults(users) {
+    if (!bulkAddEmailsSearchResults) return;
+
+    bulkAddEmailsSearchResults.textContent = "";
+
+    if (users.length === 0 && bulkAddEmailsUserSearch && bulkAddEmailsUserSearch.value.trim()) {
+      const noResults = document.createElement("p");
+      noResults.className = "text-secondary text-small";
+      noResults.textContent = "No se encontraron usuarios.";
+      bulkAddEmailsSearchResults.appendChild(noResults);
+      return;
+    }
+
+    users.forEach(user => {
+      if (selectedUserIds.has(user.id)) return; // Ya está seleccionado
+
+      const userItem = document.createElement("div");
+      userItem.className = "bulk-add-emails-user-item";
+
+      const userInfo = document.createElement("span");
+      userInfo.textContent = `${user.username}${user.full_name ? ` (${user.full_name})` : ""}`;
+
+      const addBtn = document.createElement("button");
+      addBtn.type = "button";
+      addBtn.className = "btn-blue btn-small";
+      addBtn.textContent = "Seleccionar";
+      addBtn.addEventListener("click", function() {
+        selectedUserIds.add(user.id);
+        renderSelectedUsers();
+        // Mantener el texto de búsqueda y actualizar los resultados para ocultar el usuario seleccionado
+        if (bulkAddEmailsUserSearch && bulkAddEmailsUserSearch.value.trim()) {
+          bulkAddEmailsUserSearch.dispatchEvent(new Event("input"));
+        }
+      });
+
+      userItem.appendChild(userInfo);
+      userItem.appendChild(addBtn);
+      bulkAddEmailsSearchResults.appendChild(userItem);
+    });
+  }
+
+  // Renderizar usuarios seleccionados
+  function renderSelectedUsers() {
+    if (!bulkAddEmailsSelectedUsers) return;
+
+    bulkAddEmailsSelectedUsers.textContent = "";
+
+    if (selectedUserIds.size === 0) {
+      const emptyMsg = document.createElement("p");
+      emptyMsg.className = "text-secondary text-small";
+      emptyMsg.textContent = "No hay usuarios seleccionados.";
+      bulkAddEmailsSelectedUsers.appendChild(emptyMsg);
+      return;
+    }
+
+    const selectedUsersList = Array.from(selectedUserIds).map(id => {
+      return allUsersForBulkAdd.find(u => u.id === id);
+    }).filter(Boolean);
+
+    selectedUsersList.forEach(user => {
+      const userTag = document.createElement("div");
+      userTag.className = "bulk-add-emails-selected-user-tag";
+
+      const userName = document.createElement("span");
+      userName.textContent = `${user.username}${user.full_name ? ` (${user.full_name})` : ""}`;
+
+      const removeBtn = document.createElement("button");
+      removeBtn.type = "button";
+      removeBtn.className = "btn-small bg-transparent text-white border-none p-0";
+      const removeIcon = document.createElement("i");
+      removeIcon.className = "fas fa-times";
+      removeBtn.appendChild(removeIcon);
+      removeBtn.addEventListener("click", function() {
+        selectedUserIds.delete(user.id);
+        renderSelectedUsers();
+      });
+
+      userTag.appendChild(userName);
+      userTag.appendChild(removeBtn);
+      bulkAddEmailsSelectedUsers.appendChild(userTag);
+    });
+  }
+
+  // Inicializar renderizado de usuarios seleccionados
+  renderSelectedUsers();
+
+  // Añadir correos masivamente
+  if (bulkAddEmailsBtn && bulkAddEmailsInput && bulkAddEmailsMessage) {
+    bulkAddEmailsBtn.addEventListener("click", function() {
+      if (selectedUserIds.size === 0) {
+        bulkAddEmailsMessage.textContent = "Selecciona al menos un usuario.";
+        bulkAddEmailsMessage.className = "mt-05 text-center text-color-orange";
+        return;
+      }
+
+      const rawText = bulkAddEmailsInput.value.trim();
+      if (!rawText) {
+        bulkAddEmailsMessage.textContent = "Campo de correos vacío.";
+        bulkAddEmailsMessage.className = "mt-05 text-center text-color-orange";
+        return;
+      }
+
+      const emailsToAdd = rawText.split(/[\s,;\n]+/).map(e => e.trim().toLowerCase()).filter(e => e && e.includes('@'));
+      if (!emailsToAdd.length) {
+        bulkAddEmailsMessage.textContent = "No se encontraron correos válidos.";
+        bulkAddEmailsMessage.className = "mt-05 text-center text-color-orange";
+        return;
+      }
+
+      bulkAddEmailsMessage.textContent = "Añadiendo correos...";
+      bulkAddEmailsMessage.className = "mt-05 text-center text-color-orange";
+      bulkAddEmailsBtn.disabled = true;
+      bulkAddEmailsBtn.textContent = "Procesando...";
+
+      fetch("/admin/bulk_add_emails_to_users_ajax", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-CSRFToken": getCsrfToken()
+        },
+        body: JSON.stringify({
+          user_ids: Array.from(selectedUserIds),
+          emails: emailsToAdd
+        })
+      })
+      .then(res => res.json())
+      .then(data => {
+        if (data.status === "ok") {
+          bulkAddEmailsMessage.textContent = `Correos añadidos correctamente. ${data.added_count || 0} añadidos, ${data.skipped_count || 0} omitidos.`;
+          bulkAddEmailsMessage.className = "mt-05 text-center text-color-green";
+          bulkAddEmailsInput.value = "";
+        } else {
+          throw new Error(data.message || "Error desconocido");
+        }
+      })
+      .catch(err => {
+        bulkAddEmailsMessage.textContent = `Error: ${err.message}`;
+        bulkAddEmailsMessage.className = "mt-05 text-center text-color-red";
+      })
+      .finally(() => {
+        bulkAddEmailsBtn.disabled = false;
+        bulkAddEmailsBtn.textContent = "Añadir Correos a Usuarios Seleccionados";
+      });
+    });
+  }
+  // ======= FIN AÑADIR CORREOS MASIVAMENTE A USUARIOS =======
 });

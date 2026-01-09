@@ -59,18 +59,6 @@
     </div>
   {% endif %}
   
-  <!-- Permiso de acceso a Códigos 2 -->
-  {% if parent_has_codigos2_access %}
-    <div class="form-section mt-1">
-      <label class="d-flex align-items-center gap-03" for="canAccessCodigos2Checkbox">
-        <input type="checkbox" id="canAccessCodigos2Checkbox" name="can_access_codigos2" {% if sub_user.can_access_codigos2 %}checked{% endif %}>
-        ¿Deseas que el sub-usuario vea la página de Códigos 2?
-        <span id="codigos2-permission-status" class="ml-1 text-success"></span>
-      </label>
-      <small class="text-secondary">Si está activado, el sub-usuario podrá acceder a la página de Códigos 2.</small>
-    </div>
-  {% endif %}
-  
   <!-- Permiso de chat -->
   {% if parent_can_manage_subusers %}
     <div class="form-section mt-1">

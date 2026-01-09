@@ -797,6 +797,68 @@ def delete_emails_from_all_users_ajax():
         return jsonify({"status":"error","message":"Error al eliminar correos."}), 500
 
 
+@admin_bp.route("/bulk_add_emails_to_users_ajax", methods=["POST"])
+@admin_required
+def bulk_add_emails_to_users_ajax():
+    """
+    Añade correos masivamente a múltiples usuarios seleccionados.
+    """
+    try:
+        data = request.get_json()
+        user_ids = data.get("user_ids", [])
+        emails = data.get("emails", [])
+
+        if not user_ids or not isinstance(user_ids, list):
+            return jsonify({"status": "error", "message": "Debes seleccionar al menos un usuario."}), 400
+
+        if not emails or not isinstance(emails, list):
+            return jsonify({"status": "error", "message": "Debes proporcionar al menos un correo."}), 400
+
+        added_count = 0
+        skipped_count = 0
+        errors = []
+
+        for user_id in user_ids:
+            user = User.query.get(user_id)
+            if not user:
+                errors.append(f"Usuario {user_id} no encontrado")
+                continue
+
+            # Obtener correos permitidos actuales del usuario
+            current_emails = set()
+            if user.allowed_email_entries:
+                current_emails = {e.email.lower() for e in user.allowed_email_entries.all()}
+
+            # Añadir nuevos correos
+            for email in emails:
+                email_lower = email.lower().strip()
+                if not email_lower or '@' not in email_lower:
+                    continue
+
+                if email_lower not in current_emails:
+                    new_allowed_email = AllowedEmail(user_id=user.id, email=email_lower)
+                    db.session.add(new_allowed_email)
+                    current_emails.add(email_lower)
+                    added_count += 1
+                else:
+                    skipped_count += 1
+
+        db.session.commit()
+
+        return jsonify({
+            "status": "ok",
+            "message": f"Correos añadidos correctamente a {len(user_ids)} usuario(s).",
+            "added_count": added_count,
+            "skipped_count": skipped_count,
+            "errors": errors if errors else None
+        })
+
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Error al añadir correos masivamente: {e}", exc_info=True)
+        return jsonify({"status": "error", "message": f"Error interno: {str(e)}"}), 500
+
+
 @admin_bp.route("/add_allowed_emails_ajax", methods=["POST"])
 @admin_required
 def add_allowed_emails_ajax():
