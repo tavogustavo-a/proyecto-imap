@@ -1,12 +1,10 @@
-<!-- app/templates/search.html -->
+<!-- app/templates/search_imap2_dynamic.html -->
 {% extends "base.html" %}
 {% block content %}
 
 {% set current_user_id = session.get("user_id") %}
 {% if current_user_id %}
-  {# Attempting to fetch the User object, need 'User' #}
   {% set user_object = User.query.get(current_user_id) %}
-  {# Si el usuario fue eliminado, user_object será None #}
   {% if not user_object %}
     {% set user_object = None %}
   {% endif %}
@@ -37,18 +35,17 @@
         {% endif %}
       {% endif %}
       <button id="toggleThemeBtn" class="btn-gray" aria-label="Cambiar tema claro/oscuro"><i class="fas fa-moon"></i></button>
-      {% if not session.get('logged_in') %}
-        <a href="{{ url_for('user_auth_bp.login') }}" class="btn-search btn-rounded ml-auto" aria-label="Ir a la página de inicio de sesión">Iniciar Sesión</a>
-      {% endif %}
     </div>
 
-    {# --- MOVER LOGO AQUÍ ARRIBA --- #}
-    {# Eliminado bloque de logo_enabled y logo.png #}
-    {# --- FIN MOVER LOGO --- #}
-
+    {# Mostrar párrafo personalizado del servidor IMAP2 si existe #}
+    {% if paragraph %}
+      <div class="main-message-wrapper mb-1">
+        {{ paragraph|safe }}
+      </div>
+    {% endif %}
 
     {% if services_in_rows %}
-      {# En search2.html los servicios con visibility_mode = "codigos-2" están activos pero invisibles #}
+      {# Servicios ocultos pero consultables automáticamente #}
       {% for row in services_in_rows %}
         <div class="services-row">
           {% for srv in row %}
@@ -88,7 +85,7 @@
 
     <!-- Form de búsqueda IMAP -->
     <div class="search-form-container">
-      <form id="ajax-search-form" class="mb-05" data-search-endpoint="/api/search_mails2">
+      <form id="ajax-search-form" class="mb-05" data-search-endpoint="/api/search_imap2_dynamic" data-imap-server-id="{{ imap_server.id }}">
         <input type="hidden" id="selectedServiceId" name="service_id" value="">
         <div class="d-flex gap-05">
           <label for="searchEmail" class="sr-only">Correo electrónico a buscar</label>
@@ -107,15 +104,15 @@
     </div>
 
     <!-- Spinner debajo del formulario de búsqueda -->
-    <div id="spinner" class="text-center mb-0"> 
+    <div id="spinner" class="text-center mb-0 d-none"> 
       <img src="{{ url_for('static', filename='images/spinner.gif') }}" alt="Cargando..." class="spinner-image">
       <p>Buscando correos, por favor espera...</p>
     </div>
 
-    <!-- Resultados (Quitado style inline) -->
+    <!-- Resultados -->
     <div
       id="search-results"
-      class="search-results-display search-results-mobile-padding"
+      class="search-results-display search-results-mobile-padding d-none"
     ></div>
   </div>
   <!-- MENÚ LATERAL MÓVIL PARA ADMINISTRADORES -->
@@ -251,7 +248,111 @@
 {{ super() }}
 <script src="{{ url_for('static', filename='js/menu_busqueda.js') }}" defer></script>
 <script src="{{ url_for('static', filename='js/admin_imap.js') }}" defer></script>
-
 <script src="{{ url_for('static', filename='js/clear_trigger_logs.js') }}" defer></script>
-
+<script src="{{ url_for('static', filename='js/main.js') }}" defer></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const ajaxSearchForm = document.getElementById('ajax-search-form');
+    const imapServerId = ajaxSearchForm.getAttribute("data-imap-server-id");
+    
+    // Sobrescribir el comportamiento del formulario para usar imap_server_id
+    if (ajaxSearchForm) {
+        const originalSubmit = ajaxSearchForm.onsubmit;
+        ajaxSearchForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            const searchEmail = document.getElementById('searchEmail');
+            const emailToSearch = searchEmail.value.trim();
+            
+            if (!emailToSearch) {
+                return;
+            }
+            
+            // Usar el mismo código de main.js pero con imap_server_id
+            const spinner = document.getElementById('spinner');
+            const resultsDiv = document.getElementById('search-results');
+            const csrfToken = document.querySelector('meta[name="csrf_token"]').content;
+            
+            if (spinner) {
+                spinner.classList.remove('d-none');
+                spinner.classList.add('d-block');
+            }
+            if (resultsDiv) {
+                resultsDiv.classList.add('d-none');
+                resultsDiv.classList.remove('d-block');
+                resultsDiv.innerHTML = "";
+            }
+            
+            fetch("/api/search_imap2_dynamic", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "X-CSRFToken": csrfToken
+                },
+                credentials: "same-origin",
+                body: JSON.stringify({
+                    email_to_search: emailToSearch,
+                    imap_server_id: parseInt(imapServerId)
+                })
+            })
+            .then(response => {
+                if (!response.ok) {
+                    return response.text().then(text => {
+                        let errorMessage = `Error HTTP ${response.status}`;
+                        try {
+                            const errData = JSON.parse(text);
+                            if (errData.error) {
+                                errorMessage = errData.error;
+                            }
+                        } catch (parseError) {
+                            const errorMatch = text.match(/"error"\s*:\s*"([^"]+)"/);
+                            if (errorMatch && errorMatch[1]) {
+                                errorMessage = errorMatch[1];
+                            }
+                        }
+                        if (response.status === 403) {
+                            throw new Error("No tienes permiso al consultar este correo");
+                        }
+                        throw new Error(errorMessage);
+                    });
+                }
+                return response.json();
+            })
+            .then(data => {
+                // Usar la misma lógica de renderizado que main.js
+                // El código de main.js manejará el renderizado automáticamente
+                // ya que está cargado en la página
+                if (window.handleSearchResponse) {
+                    window.handleSearchResponse(data, emailToSearch);
+                } else {
+                    // Fallback si main.js no está cargado
+                    if (spinner) {
+                        spinner.classList.add('d-none');
+                        spinner.classList.remove('d-block');
+                    }
+                    if (resultsDiv) {
+                        resultsDiv.classList.remove('d-none');
+                        resultsDiv.classList.add('d-block');
+                        if (data.results && data.results.length > 0) {
+                            resultsDiv.innerHTML = '<pre>' + JSON.stringify(data.results[0], null, 2) + '</pre>';
+                        } else {
+                            resultsDiv.innerHTML = '<p class="text-center">No se encontraron resultados.</p>';
+                        }
+                    }
+                }
+            })
+            .catch(error => {
+                if (spinner) {
+                    spinner.classList.add('d-none');
+                    spinner.classList.remove('d-block');
+                }
+                if (resultsDiv) {
+                    resultsDiv.classList.remove('d-none');
+                    resultsDiv.classList.add('d-block');
+                    resultsDiv.innerHTML = '<p class="text-center text-danger">Error: ' + error.message + '</p>';
+                }
+            });
+        });
+    }
+});
+</script>
 {% endblock %}

@@ -154,8 +154,6 @@ def create_app(config_class_passed=None):
             "search_message_mode": "off",
             "search_message2": "",
             "search_message2_mode": "off",
-            "search_message3": "",
-            "search_message3_mode": "off",
         }
         try:
             inspector2 = insp2(db.engine)
@@ -171,8 +169,6 @@ def create_app(config_class_passed=None):
                 settings_dict["search_message_mode"] = get_site_setting("search_message_mode", settings_dict["search_message_mode"])
                 settings_dict["search_message2"] = get_site_setting("search_message2", settings_dict["search_message2"])
                 settings_dict["search_message2_mode"] = get_site_setting("search_message2_mode", settings_dict["search_message2_mode"])
-                settings_dict["search_message3"] = get_site_setting("search_message3", settings_dict["search_message3"])
-                settings_dict["search_message3_mode"] = get_site_setting("search_message3_mode", settings_dict["search_message3_mode"])
         except Exception as e:
             # Usa logging.warning en lugar de print si deseas registrar este error
             pass

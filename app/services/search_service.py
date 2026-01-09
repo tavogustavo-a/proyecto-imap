@@ -270,6 +270,101 @@ def search_and_apply_filters2(to_address, service_id=None, user=None):
     return None
 
 
+def search_imap2_server_dynamic(to_address, imap_server_id, user=None):
+    """
+    Busca correos usando un servidor IMAP2 específico y sus filtros/regex asociados.
+    Similar a search_and_apply_filters2 pero usa solo el servidor IMAP2 especificado
+    y sus filtros/regex asociados directamente (no a través de un servicio).
+    """
+    # 1) Verificar el imap_server_id
+    if not imap_server_id:
+        return None
+
+    imap_server = IMAPServer2.query.get(imap_server_id)
+    if not imap_server or not imap_server.enabled:
+        return None
+
+    # 2) Obtener filtros y regex asociados directamente al servidor IMAP2
+    server_filters = [f for f in imap_server.filters if f.enabled]
+    server_regexes = [r for r in imap_server.regexes if r.enabled]
+
+    if not server_filters and not server_regexes:
+        return None
+
+    # 3) Definir filters/regex finales según el usuario
+    final_filters = server_filters
+    final_regexes = server_regexes
+
+    if user and user.enabled:
+        admin_username = current_app.config.get("ADMIN_USER", "admin")
+        is_subuser = (user.parent_id is not None)
+        parent_user = None
+        if is_subuser:
+            parent_user = User.query.get(user.parent_id)
+            if parent_user:
+                 _ = parent_user.default_filters_for_subusers.all()
+                 _ = parent_user.default_regexes_for_subusers.all()
+
+        if user.username != admin_username:
+            allowed_filter_ids = {f.id for f in user.filters_allowed}
+            allowed_regex_ids = {r.id for r in user.regexes_allowed}
+
+            currently_globally_enabled_filter_ids = { 
+                f.id for f in FilterModel.query.filter(FilterModel.enabled == True).all()
+            }
+            currently_globally_enabled_regex_ids = {
+                r.id for r in RegexModel.query.filter(RegexModel.enabled == True).all()
+            }
+
+            subuser_default_filter_ids = set()
+            subuser_default_regex_ids = set()
+            if is_subuser and parent_user:
+                subuser_default_filter_ids = {f.id for f in parent_user.default_filters_for_subusers}
+                subuser_default_regex_ids = {r.id for r in parent_user.default_regexes_for_subusers}
+
+            final_filter_ids_to_use = set()
+            if allowed_filter_ids:
+                potentially_usable_filter_ids = allowed_filter_ids.intersection(currently_globally_enabled_filter_ids)
+                if is_subuser:
+                    final_filter_ids_to_use = potentially_usable_filter_ids.intersection(subuser_default_filter_ids)
+                else:
+                    final_filter_ids_to_use = potentially_usable_filter_ids
+            
+            final_regex_ids_to_use = set()
+            if allowed_regex_ids:
+                potentially_usable_regex_ids = allowed_regex_ids.intersection(currently_globally_enabled_regex_ids)
+                if is_subuser:
+                    final_regex_ids_to_use = potentially_usable_regex_ids.intersection(subuser_default_regex_ids)
+                else:
+                     final_regex_ids_to_use = potentially_usable_regex_ids
+
+            final_filters = [f for f in server_filters if f.id in final_filter_ids_to_use]
+            final_regexes = [r for r in server_regexes if r.id in final_regex_ids_to_use]
+
+    # 4) Buscar solo en este servidor IMAP2 específico
+    servers = [imap_server]
+    
+    # -- Primer intento: 2 días
+    all_mails = search_in_all_servers(to_address, servers, limit_days=2)
+    found_mail = _process_mails(all_mails, final_filters, final_regexes, user, to_address)
+    if found_mail:
+        return found_mail
+
+    # 5) EXCEPCIÓN: Netflix
+    has_netflix_regex = any(
+        (r.sender or "").lower() == "info@account.netflix.com"
+        and r.pattern == "(?i)_([A-Z]{2})_EVO" 
+        for r in final_regexes
+    )
+    if has_netflix_regex:
+        older_mails = search_in_all_servers(to_address, servers, limit_days=None)
+        found_mail_older = _process_mails(older_mails, final_filters, final_regexes, user, to_address)
+        if found_mail_older:
+            return found_mail_older
+
+    return None
+
+
 def _process_mails(all_mails, filters, regexes, user_searching, searched_address):
     """
     Aplica los filters y regex a la lista de correos ordenada desc por fecha.

@@ -28,6 +28,36 @@ body.theme-active {
   --user-text-color: #111;
 }
 
+/* Estilos para campos del formulario de creación IMAP2 */
+.imap2-port-input {
+  width: 90px;
+  flex-shrink: 0;
+  min-width: 70px;
+  max-width: 90px;
+  box-sizing: border-box;
+}
+
+/* Asegurar que el contenedor flex no se desborde */
+#createImap2Form .d-flex {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 100%;
+}
+
+#createImap2Form input[type="text"],
+#createImap2Form input[type="number"],
+#createImap2Form input[type="password"] {
+  box-sizing: border-box;
+}
+
+@media (max-width: 768px) {
+  .imap2-port-input {
+    width: 80px;
+    min-width: 60px;
+    max-width: 80px;
+  }
+}
+
 /* ============= MODO OSCURO ============= */
 .dark-mode {
   color: #fff !important;

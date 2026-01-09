@@ -78,8 +78,6 @@ def dashboard():
     paragraph_mode = site_settings_dict.get("search_message_mode", "off")
     paragraph2 = site_settings_dict.get("search_message2", "")
     paragraph2_mode = site_settings_dict.get("search_message2_mode", "off")
-    paragraph3 = site_settings_dict.get("search_message3", "")
-    paragraph3_mode = site_settings_dict.get("search_message3_mode", "off")
     # logo_enabled = site_settings_dict.get("logo_enabled", "true")
     # card_opacity y current_theme ya se usan en la plantilla con site_settings.get
     
@@ -94,8 +92,6 @@ def dashboard():
         paragraph_mode=paragraph_mode,
         paragraph2=paragraph2,
         paragraph2_mode=paragraph2_mode,
-        paragraph3=paragraph3,
-        paragraph3_mode=paragraph3_mode,
         # card_opacity=card_opacity, # Ya no es necesario, la plantilla usa site_settings.get
         # current_theme=current_theme, # Ya no es necesario
         site_settings=site_settings_dict, # <-- PASAR EL DICCIONARIO A LA PLANTILLA
@@ -159,18 +155,12 @@ def parrafos_page():
     paragraph2 = paragraph2_item.value if paragraph2_item else ""
     paragraph2_mode = get_site_setting("search_message2_mode", "off")
 
-    paragraph3_item = SiteSettings.query.filter_by(key="search_message3").first()
-    paragraph3 = paragraph3_item.value if paragraph3_item else ""
-    paragraph3_mode = get_site_setting("search_message3_mode", "off")
-
     return render_template(
         "parrafos.html",
         paragraph=paragraph,
         paragraph_mode=paragraph_mode,
         paragraph2=paragraph2,
-        paragraph2_mode=paragraph2_mode,
-        paragraph3=paragraph3,
-        paragraph3_mode=paragraph3_mode
+        paragraph2_mode=paragraph2_mode
     )
 
 @admin_bp.route("/update_paragraph/<int:num_paragraph>", methods=["POST"])
@@ -181,8 +171,6 @@ def update_paragraph(num_paragraph):
         key = "search_message"
     elif num_paragraph == 2:
         key = "search_message2"
-    elif num_paragraph == 3:
-        key = "search_message3"
     else:
         flash("Número de párrafo inválido.", "error")
         return redirect(url_for("admin_bp.parrafos_page"))
@@ -221,16 +209,6 @@ def cycle_paragraph_mode(num_paragraph):
         # Toggle: 'off' <-> 'users'
         if current_mode == "off":
             new_mode = "users"
-        else:
-            new_mode = "off"
-        set_site_setting(mode_key, new_mode)
-
-    elif num_paragraph == 3:
-        mode_key = "search_message3_mode"
-        current_mode = get_site_setting(mode_key, "off")
-        # Toggle: 'off' <-> 'guests'
-        if current_mode == "off":
-            new_mode = "guests"
         else:
             new_mode = "off"
         set_site_setting(mode_key, new_mode)
@@ -417,7 +395,6 @@ def export_config():
         paragraph_keys = [
             ('search_message', 'search_message_mode'),
             ('search_message2', 'search_message2_mode'),
-            ('search_message3', 'search_message3_mode')
         ]
         for content_key, mode_key in paragraph_keys:
             content_item = SiteSettings.query.filter_by(key=content_key).first()
@@ -827,8 +804,7 @@ def import_config():
             # Borrar todos los párrafos existentes antes de importar
             paragraph_keys_to_delete = [
                 'search_message', 'search_message_mode',
-                'search_message2', 'search_message2_mode',
-                'search_message3', 'search_message3_mode'
+                'search_message2', 'search_message2_mode'
             ]
             for key in paragraph_keys_to_delete:
                 SiteSettings.query.filter_by(key=key).delete()
@@ -838,7 +814,6 @@ def import_config():
             paragraph_keys = [
                 ('search_message', 'search_message_mode'),
                 ('search_message2', 'search_message2_mode'),
-                ('search_message3', 'search_message3_mode')
             ]
             for content_key, mode_key in paragraph_keys:
                 # Restaurar contenido del párrafo

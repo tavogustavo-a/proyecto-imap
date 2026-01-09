@@ -1,7 +1,7 @@
 # app/api/__init__.py
 
 from flask import Blueprint, jsonify, request, session, current_app
-from app.services.search_service import search_and_apply_filters, search_and_apply_filters2
+from app.services.search_service import search_and_apply_filters, search_and_apply_filters2, search_imap2_server_dynamic
 from app.models import User
 from app.models.user import AllowedEmail
 from app.models.service import ServiceModel
@@ -516,6 +516,38 @@ def search_mails2():
     # Pasamos user=None para que use todos los filtros/regex del servicio
     # según la configuración, sin restricciones de usuario
     mail_result = search_and_apply_filters2(email_to_search, service_id, user=None)
+    if not mail_result:
+        return jsonify({"results": []}), 200
+
+    return jsonify({"results": [mail_result]}), 200
+
+@api_bp.route("/search_imap2_dynamic", methods=["POST"])
+def search_imap2_dynamic():
+    """
+    Ruta para búsqueda usando un servidor IMAP2 específico basado en route_path.
+    Usa los filtros y regex asociados directamente al servidor IMAP2.
+    """
+    data = request.get_json()
+    if not data or "email_to_search" not in data:
+        return jsonify({"error": "Missing email_to_search"}), 400
+
+    email_to_search = data["email_to_search"]
+    imap_server_id = data.get("imap_server_id")
+    
+    if not imap_server_id:
+        return jsonify({"error": "Missing imap_server_id"}), 400
+
+    # Obtener usuario actual si está logueado
+    current_user = None
+    username = session.get('username')
+    user_id = session.get('user_id')
+    
+    if username:
+        current_user = User.query.filter_by(username=username).first()
+    elif user_id:
+        current_user = User.query.get(user_id)
+
+    mail_result = search_imap2_server_dynamic(email_to_search, imap_server_id, user=current_user)
     if not mail_result:
         return jsonify({"results": []}), 200
 

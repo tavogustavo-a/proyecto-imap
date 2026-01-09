@@ -61,8 +61,8 @@ document.addEventListener("DOMContentLoaded", function() {
       div.className = "imap-item mb-1";
 
       div.innerHTML = `
-        <strong>Usuario: ${s.username}</strong><br>
-        <em>Carpetas:</em> ${s.folders || "INBOX"}
+        <strong>Usuario: ${escapeHtml(s.username)}</strong><br>
+        <em>Carpetas:</em> ${escapeHtml(s.folders || "INBOX")}
         <div class="mt-05">
           <form action="/admin/test_imap/${s.id}" method="POST" class="d-inline">
             <input type="hidden" name="_csrf_token" value="${getCsrfToken()}">
@@ -92,6 +92,13 @@ document.addEventListener("DOMContentLoaded", function() {
       `;
       imapList.appendChild(div);
     });
+  }
+
+  function escapeHtml(text) {
+    if (text == null) return '';
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
   }
 
   document.addEventListener("click", function(e) {
@@ -282,6 +289,67 @@ document.addEventListener("DOMContentLoaded", function() {
         }
       })
       .catch(err => alert('Error de red al limpiar logs: ' + err));
+    });
+  }
+
+  // Manejar creación de servidor IMAP vía AJAX
+  const createImapForm = document.getElementById('createImapForm');
+  if (createImapForm && !createImapForm.querySelector('input[name="server_id"]')) {
+    createImapForm.addEventListener("submit", function(e) {
+      e.preventDefault();
+      
+      const host = document.getElementById("imap_host").value.trim();
+      const port = parseInt(document.getElementById("imap_port").value) || 993;
+      const username = document.getElementById("imap_username").value.trim();
+      const password = document.getElementById("imap_password").value.trim();
+      const folders = document.getElementById("imap_folders").value.trim() || "INBOX";
+      
+      if (!host || !username) {
+        alert("Host y usuario son obligatorios.");
+        return;
+      }
+
+      const submitButton = createImapForm.querySelector('button[type="submit"]');
+      const originalText = submitButton.innerHTML;
+      submitButton.disabled = true;
+      submitButton.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Creando...';
+
+      fetch("/admin/create_imap_ajax", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-CSRFToken": getCsrfToken()
+        },
+        body: JSON.stringify({
+          host: host,
+          port: port,
+          username: username,
+          password: password,
+          folders: folders
+        })
+      })
+      .then(res => res.json())
+      .then(data => {
+        if (data.status === "ok") {
+          // Limpiar el formulario
+          createImapForm.reset();
+          document.getElementById("imap_port").value = "993";
+          document.getElementById("imap_folders").value = "INBOX";
+          
+          // Actualizar la lista
+          renderImapList(data.servers);
+        } else {
+          alert("Error: " + (data.message || "Error desconocido"));
+        }
+      })
+      .catch(err => {
+        console.error("Error creating IMAP:", err);
+        alert("Error de red: " + err.message);
+      })
+      .finally(() => {
+        submitButton.disabled = false;
+        submitButton.innerHTML = originalText;
+      });
     });
   }
 });

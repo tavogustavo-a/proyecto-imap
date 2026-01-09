@@ -14,11 +14,78 @@ from app.services.imap_service import (
 )
 from app.admin.decorators import admin_required
 from urllib.parse import unquote, urlparse
+import re
+
+
+def validate_route_path(route_path, server_id=None):
+    """
+    Valida que una ruta no entre en conflicto con rutas del sistema.
+    La ruta es OBLIGATORIA y debe empezar con '/'.
+    Retorna (is_valid, error_message)
+    """
+    if not route_path:
+        return False, "La ruta es obligatoria y no puede estar vacía."
+    
+    # Validar que empiece con '/'
+    if not route_path.startswith('/'):
+        return False, "La ruta debe empezar con '/' (ej: /codigos4, /pagina2)."
+    
+    # Normalizar la ruta (sin barras iniciales/finales y en minúsculas)
+    route_normalized = route_path.lower().strip('/')
+    
+    # Prefijos excluidos que no pueden usarse
+    EXCLUDED_PREFIXES = [
+        'admin',     # /admin/* - admin_bp
+        'auth',      # /auth/* - auth_bp
+        'tienda',    # /tienda/* - store_bp
+        'api',       # /api/* - api_bp
+        'smtp',      # /smtp/* - smtp_server_bp
+        'usuario',   # /usuario/* - user_auth_bp
+        'subusers',  # /subusers/* - subuser_bp
+        'static',    # /static/* - Flask maneja esto automáticamente
+    ]
+    
+    # Rutas específicas que también deben ser excluidas
+    EXCLUDED_ROUTES = [
+        'favicon.ico',
+        'robots.txt',
+        'sitemap.xml',
+    ]
+    
+    # Verificar contra rutas específicas excluidas
+    if route_normalized in EXCLUDED_ROUTES:
+        return False, f"La ruta '{route_path}' está reservada y no puede ser utilizada."
+    
+    # Verificar que la ruta no empiece con ningún prefijo excluido
+    # Esto debe validarse ANTES de verificar duplicados, porque rutas inválidas no deberían permitirse
+    for prefix in EXCLUDED_PREFIXES:
+        if route_normalized.startswith(prefix + '/') or route_normalized == prefix:
+            return False, f"La ruta '{route_path}' entra en conflicto con rutas del sistema. No puede empezar con '{prefix}'."
+    
+    # Validar caracteres permitidos (solo letras, números, guiones, guiones bajos y barras)
+    if not re.match(r'^[a-zA-Z0-9_\-/]+$', route_path):
+        return False, "La ruta solo puede contener letras, números, guiones, guiones bajos y barras."
+    
+    # Validar que no haya otro servidor con el mismo route_path
+    route_path_normalized = '/' + route_path if not route_path.startswith('/') else route_path
+    query = IMAPServer2.query.filter(
+        (IMAPServer2.route_path == route_path_normalized) |
+        (IMAPServer2.route_path == route_path)
+    )
+    if server_id:
+        query = query.filter(IMAPServer2.id != server_id)
+    existing = query.first()
+    if existing:
+        return False, f"Ya existe otro servidor con la ruta '{route_path}'"
+    
+    return True, None
+
 
 @admin_bp.route("/manage_imap2", methods=["POST"])
 @admin_required
 def manage_imap2():
     server_id = request.form.get("server_id")
+    description = request.form.get("description", "").strip()
     host = request.form.get("host", "")
     port = request.form.get("port", 993)
     username = request.form.get("username", "")
@@ -30,31 +97,35 @@ def manage_imap2():
     if server_id:
         srv = IMAPServer2.query.get_or_404(server_id)
         update_imap_server(server_id, host, port, username, password, folders, model_cls=IMAPServer2)
-        # Actualizar route_path y paragraph
-        if route_path:
-            # Validar que no haya otro servidor con el mismo route_path
-            existing = IMAPServer2.query.filter(
-                IMAPServer2.route_path == route_path,
-                IMAPServer2.id != server_id
-            ).first()
-            if existing:
-                flash(f"Ya existe otro servidor con la ruta '{route_path}'", "danger")
-                return redirect(url_for("admin_bp.edit_imap2", server_id=server_id))
-            srv.route_path = route_path
-        else:
-            srv.route_path = None
+        # Actualizar description, route_path y paragraph
+        srv.description = description if description else None
+        # IMPORTANTE: route_path es ahora obligatorio
+        if not route_path:
+            flash("La ruta es obligatoria y debe empezar con '/'.", "danger")
+            return redirect(url_for("admin_bp.edit_imap2", server_id=server_id))
+        
+        is_valid, error_msg = validate_route_path(route_path, server_id=server_id)
+        if not is_valid:
+            flash(error_msg, "danger")
+            return redirect(url_for("admin_bp.edit_imap2", server_id=server_id))
+        srv.route_path = route_path
         srv.paragraph = paragraph if paragraph else None
         db.session.commit()
         flash(f"Editado servidor IMAP2 {host}:{port}", "info")
     else:
-        # Validar que no haya otro servidor con el mismo route_path
-        if route_path:
-            existing = IMAPServer2.query.filter_by(route_path=route_path).first()
-            if existing:
-                flash(f"Ya existe otro servidor con la ruta '{route_path}'", "danger")
-                return redirect(url_for("admin_bp.dashboard"))
+        # Validar route_path (ahora es obligatorio)
+        if not route_path:
+            flash("La ruta es obligatoria y debe empezar con '/'.", "danger")
+            return redirect(url_for("admin_bp.dashboard"))
+        
+        is_valid, error_msg = validate_route_path(route_path)
+        if not is_valid:
+            flash(error_msg, "danger")
+            return redirect(url_for("admin_bp.dashboard"))
+        
         srv = create_imap_server(host, port, username, password, folders, model_cls=IMAPServer2)
-        srv.route_path = route_path if route_path else None
+        srv.description = description if description else None
+        srv.route_path = route_path
         srv.paragraph = paragraph if paragraph else None
         db.session.commit()
         flash(f"Creado servidor IMAP2 {host}:{port}", "success")
@@ -116,9 +187,69 @@ def search_imap2_ajax():
             "port": s.port,
             "username": s.username,
             "folders": s.folders,
-            "enabled": s.enabled
+            "enabled": s.enabled,
+            "route_path": s.route_path if s.route_path else None,
+            "description": s.description if s.description else None
         })
     return jsonify({"status": "ok", "servers": data})
+
+@admin_bp.route("/create_imap2_ajax", methods=["POST"])
+@admin_required
+def create_imap2_ajax():
+    """Crea un nuevo servidor IMAP2 vía AJAX"""
+    try:
+        data = request.get_json()
+        description = data.get("description", "").strip()
+        host = data.get("host", "").strip()
+        port = data.get("port", 993)
+        username = data.get("username", "").strip()
+        password = data.get("password", "").strip()
+        folders = data.get("folders", "INBOX").strip()
+        route_path = data.get("route_path", "").strip()
+
+        if not host or not username:
+            return jsonify({"status": "error", "message": "Host y usuario son obligatorios."}), 400
+
+        # Validar route_path (ahora es obligatorio)
+        if not route_path:
+            return jsonify({"status": "error", "message": "La ruta es obligatoria y debe empezar con '/'."}), 400
+        
+        is_valid, error_msg = validate_route_path(route_path)
+        if not is_valid:
+            return jsonify({"status": "error", "message": error_msg}), 400
+
+        # Crear el servidor
+        srv = create_imap_server(host, port, username, password, folders, model_cls=IMAPServer2)
+        srv.description = description if description else None
+        srv.route_path = route_path
+        srv.paragraph = None
+        db.session.commit()
+
+        # Obtener todos los servidores para devolver la lista actualizada
+        all_servers = IMAPServer2.query.all()
+        servers_data = []
+        for s in all_servers:
+            servers_data.append({
+                "id": s.id,
+                "host": s.host,
+                "port": s.port,
+                "username": s.username,
+                "folders": s.folders,
+                "enabled": s.enabled,
+                "route_path": s.route_path if s.route_path else None,
+                "description": s.description if s.description else None
+            })
+
+        return jsonify({
+            "status": "ok",
+            "message": f"Servidor IMAP2 {host}:{port} creado correctamente",
+            "servers": servers_data
+        }), 200
+
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Error al crear servidor IMAP2: {e}", exc_info=True)
+        return jsonify({"status": "error", "message": str(e)}), 500
 
 @admin_bp.route("/delete_imap2_ajax", methods=["POST"])
 @admin_required
@@ -138,7 +269,9 @@ def delete_imap2_ajax():
                 "port": s.port,
                 "username": s.username,
                 "folders": s.folders,
-                "enabled": s.enabled
+                "enabled": s.enabled,
+                "route_path": s.route_path if s.route_path else None,
+                "description": s.description if s.description else None
             })
         return jsonify({"status": "ok", "servers": data_out})
     except Exception as e:
@@ -174,7 +307,9 @@ def toggle_imap2_ajax():
                 "port": s.port,
                 "username": s.username,
                 "folders": s.folders,
-                "enabled": s.enabled
+                "enabled": s.enabled,
+                "route_path": s.route_path if s.route_path else None,
+                "description": s.description if s.description else None
             })
         return jsonify({"status": "ok", "servers": data_out})
     except Exception as e:

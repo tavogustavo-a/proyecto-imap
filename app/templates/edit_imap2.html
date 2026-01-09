@@ -15,6 +15,18 @@
       <!-- Campo oculto para indicar que se está editando el servidor con ID 'srv.id' -->
       <input type="hidden" name="server_id" value="{{ srv.id }}">
 
+      <!-- Descripción opcional -->
+      <label for="description">Descripción (opcional):</label>
+      <input
+        type="text"
+        id="description"
+        name="description"
+        placeholder="Descripción del servidor"
+        value="{{ srv.description if srv.description else '' }}"
+        class="d-block mb-05"
+        autocomplete="off"
+      >
+
       <!-- Host con label y autocomplete -->
       <label for="host">Host del servidor:</label>
       <input
@@ -84,6 +96,7 @@
         placeholder="/pagina2"
         value="{{ srv.route_path if srv.route_path else '' }}"
         class="d-block mb-05"
+        required
         autocomplete="off"
       >
       <small class="text-secondary">Esta será la URL para acceder a esta página de códigos (ej: pagina.com{{ srv.route_path if srv.route_path else '/pagina2' }})</small>
@@ -93,94 +106,101 @@
         <a href="{{ url_for('admin_bp.dashboard') }}" class="btn btn-blue text-decoration-none">Volver</a>
       </div>
     </form>
+  </div>
 
-    <!-- Div para editar párrafo -->
-    <div class="mt-2">
-      <h3 class="text-center mb-05">Párrafo Personalizado</h3>
-      <form id="saveParagraphForm" action="{{ url_for('admin_bp.update_imap2_paragraph', server_id=srv.id) }}" method="POST">
-        <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
-        <label for="paragraph" class="sr-only">Contenido del párrafo:</label>
-        <textarea
-          id="paragraph"
-          name="paragraph"
-          rows="3"
-          class="d-block w-100 resize-vertical mb-05"
-          autocomplete="off"
-        >{{ srv.paragraph if srv.paragraph else '' }}</textarea>
-        <div class="text-center">
-          <button type="submit" class="btn-green">Guardar Párrafo</button>
-        </div>
-      </form>
-    </div>
-
-    <!-- Div para tabla de Filtros y Regex -->
-    <div class="mt-2">
-      <h3 class="text-center mb-05">Filtros y Expresiones Regulares</h3>
-      <div class="table-responsive">
-        <table class="imap2-filters-regex-table">
-          <thead>
-            <tr>
-              <th>Filtros</th>
-              <th>Activar</th>
-              <th>Regex</th>
-              <th>Activar</th>
-            </tr>
-          </thead>
-          <tbody id="filtersRegexTableBody">
-            {% set max_rows = [all_filters|length, all_regexes|length]|max %}
-            {% for i in range(max_rows) %}
-              <tr>
-                <!-- Columna Filtros -->
-                <td>
-                  {% if i < all_filters|length %}
-                    <span class="filter-keyword">{{ all_filters[i].keyword }}</span>
-                  {% endif %}
-                </td>
-                <!-- Columna Checkbox Filtros -->
-                <td class="text-center">
-                  {% if i < all_filters|length %}
-                    <input
-                      type="checkbox"
-                      class="filter-checkbox"
-                      data-filter-id="{{ all_filters[i].id }}"
-                      data-server-id="{{ srv.id }}"
-                      {% if all_filters[i].id in associated_filter_ids %}checked{% endif %}
-                      autocomplete="off"
-                    >
-                  {% endif %}
-                </td>
-                <!-- Columna Regex -->
-                <td>
-                  {% if i < all_regexes|length %}
-                    <div class="regex-info">
-                      <div class="regex-description"><strong>{{ all_regexes[i].description if all_regexes[i].description else 'Sin descripción' }}</strong></div>
-                      <div class="regex-pattern text-small text-secondary">{{ all_regexes[i].pattern }}</div>
-                    </div>
-                  {% endif %}
-                </td>
-                <!-- Columna Checkbox Regex -->
-                <td class="text-center">
-                  {% if i < all_regexes|length %}
-                    <input
-                      type="checkbox"
-                      class="regex-checkbox"
-                      data-regex-id="{{ all_regexes[i].id }}"
-                      data-server-id="{{ srv.id }}"
-                      {% if all_regexes[i].id in associated_regex_ids %}checked{% endif %}
-                      autocomplete="off"
-                    >
-                  {% endif %}
-                </td>
-              </tr>
-            {% endfor %}
-          </tbody>
-        </table>
+  <!-- Card separado para Párrafo Personalizado -->
+  <div class="card mt-2">
+    <h3 class="text-center mb-05">Párrafo Personalizado</h3>
+    <form id="saveParagraphForm" action="{{ url_for('admin_bp.update_imap2_paragraph', server_id=srv.id) }}" method="POST">
+      <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+      <label for="paragraph" class="sr-only">Contenido del párrafo:</label>
+      <textarea
+        id="paragraph"
+        name="paragraph"
+        rows="3"
+        class="d-block w-100 resize-vertical mb-05"
+        autocomplete="off"
+      >{{ srv.paragraph if srv.paragraph else '' }}</textarea>
+      <div class="text-center">
+        <button type="submit" class="btn-green">Guardar Párrafo</button>
       </div>
+    </form>
+  </div>
+
+  <!-- Card separado para Filtros y Expresiones Regulares -->
+  <div class="card mt-2">
+    <h3 class="text-center mb-05">Filtros y Expresiones Regulares</h3>
+    <div class="table-responsive">
+      <table class="imap2-filters-regex-table">
+        <thead>
+          <tr>
+            <th>Filtros</th>
+            <th>Activar</th>
+            <th>Regex</th>
+            <th>Activar</th>
+          </tr>
+        </thead>
+        <tbody id="filtersRegexTableBody">
+          {% set max_rows = [all_filters|length, all_regexes|length]|max %}
+          {% for i in range(max_rows) %}
+            <tr>
+              <!-- Columna Filtros -->
+              <td>
+                {% if i < all_filters|length %}
+                  <span class="filter-keyword">{{ all_filters[i].keyword }}</span>
+                {% endif %}
+              </td>
+              <!-- Columna Checkbox Filtros -->
+              <td class="text-center">
+                {% if i < all_filters|length %}
+                  <input
+                    type="checkbox"
+                    class="filter-checkbox"
+                    data-filter-id="{{ all_filters[i].id }}"
+                    data-server-id="{{ srv.id }}"
+                    {% if all_filters[i].id in associated_filter_ids %}checked{% endif %}
+                    autocomplete="off"
+                  >
+                {% endif %}
+              </td>
+              <!-- Columna Regex -->
+              <td>
+                {% if i < all_regexes|length %}
+                  <div class="regex-info">
+                    <div class="regex-description"><strong>{{ all_regexes[i].description if all_regexes[i].description else 'Sin descripción' }}</strong></div>
+                    <div class="regex-pattern text-small text-secondary">{{ all_regexes[i].pattern }}</div>
+                  </div>
+                {% endif %}
+              </td>
+              <!-- Columna Checkbox Regex -->
+              <td class="text-center">
+                {% if i < all_regexes|length %}
+                  <input
+                    type="checkbox"
+                    class="regex-checkbox"
+                    data-regex-id="{{ all_regexes[i].id }}"
+                    data-server-id="{{ srv.id }}"
+                    {% if all_regexes[i].id in associated_regex_ids %}checked{% endif %}
+                    autocomplete="off"
+                  >
+                {% endif %}
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
     </div>
   </div>
 </div>
+{% endblock %}
 
+{% block head %}
+{{ super() }}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/edit_imap2.css') }}">
-<script src="{{ url_for('static', filename='js/edit_imap2.js') }}"></script>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script src="{{ url_for('static', filename='js/edit_imap2.js') }}" defer></script>
 {% endblock %}
 

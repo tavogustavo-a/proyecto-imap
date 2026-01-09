@@ -28,6 +28,12 @@
   width: 80px;
 }
 
+/* Línea divisoria entre filtros y regex */
+.imap2-filters-regex-table th:nth-child(2),
+.imap2-filters-regex-table td:nth-child(2) {
+  border-right: 2px solid #d1d5db;
+}
+
 .imap2-filters-regex-table td {
   padding: 0.75rem;
   border-bottom: 1px solid #e5e7eb;
@@ -78,6 +84,12 @@
   accent-color: #0d6efd;
 }
 
+/* Estilos para campos del formulario de creación */
+.imap2-port-input {
+  width: 120px;
+  flex-shrink: 0;
+}
+
 /* Responsive */
 @media (max-width: 768px) {
   .imap2-filters-regex-table {
@@ -91,5 +103,9 @@
   
   .regex-pattern {
     font-size: 0.75rem;
+  }
+  
+  .imap2-port-input {
+    width: 100px;
   }
 }

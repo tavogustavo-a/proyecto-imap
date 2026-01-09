@@ -57,8 +57,8 @@ document.addEventListener("DOMContentLoaded", function() {
       div.style.marginBottom = "1rem";
 
       div.innerHTML = `
-        <strong>Usuario: ${s.username}</strong><br>
-        <em>Carpetas:</em> ${s.folders || "INBOX"}
+        <strong>Usuario: ${escapeHtml(s.username)}</strong><br>
+        ${s.description ? escapeHtml(s.description) : ''}${s.route_path ? ` | <em>Ruta:</em> ${escapeHtml(s.route_path)}` : ''}
         <div class="mt-05">
           <form action="/admin/test_imap2/${s.id}" method="POST" class="d-inline">
             <input type="hidden" name="_csrf_token" value="${getCsrfToken()}">
@@ -189,6 +189,92 @@ document.addEventListener("DOMContentLoaded", function() {
       }
     }
   });
+
+  // Manejar creación de servidor IMAP2 vía AJAX
+  const createImap2Form = document.getElementById('createImap2Form');
+  if (createImap2Form && !createImap2Form.querySelector('input[name="server_id"]')) {
+    createImap2Form.addEventListener("submit", function(e) {
+      e.preventDefault();
+      
+      const description = document.getElementById("imap2_description") ? document.getElementById("imap2_description").value.trim() : "";
+      const host = document.getElementById("imap2_host").value.trim();
+      const port = parseInt(document.getElementById("imap2_port").value) || 993;
+      const username = document.getElementById("imap2_username").value.trim();
+      const password = document.getElementById("imap2_password").value.trim();
+      const folders = document.getElementById("imap2_folders").value.trim() || "INBOX";
+      const route_path = document.getElementById("imap2_route_path").value.trim();
+      
+      if (!host || !username) {
+        alert("Host y usuario son obligatorios.");
+        return;
+      }
+      
+      if (!route_path) {
+        alert("La ruta es obligatoria y no puede estar vacía.");
+        return;
+      }
+      
+      if (!route_path.startsWith('/')) {
+        alert("La ruta debe empezar con '/' (ej: /codigos4, /pagina2).");
+        return;
+      }
+
+      const submitButton = createImap2Form.querySelector('button[type="submit"]');
+      const originalText = submitButton.innerHTML;
+      submitButton.disabled = true;
+      submitButton.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Creando...';
+
+      fetch("/admin/create_imap2_ajax", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-CSRFToken": getCsrfToken()
+        },
+        body: JSON.stringify({
+          description: description,
+          host: host,
+          port: port,
+          username: username,
+          password: password,
+          folders: folders,
+          route_path: route_path
+        })
+      })
+      .then(res => res.json())
+      .then(data => {
+        if (data.status === "ok") {
+          // Limpiar el formulario
+          createImap2Form.reset();
+          document.getElementById("imap2_port").value = "993";
+          document.getElementById("imap2_folders").value = "INBOX";
+          if (document.getElementById("imap2_description")) {
+            document.getElementById("imap2_description").value = "";
+          }
+          document.getElementById("imap2_route_path").value = "";
+          
+          // Actualizar la lista
+          renderImap2List(data.servers);
+        } else {
+          alert("Error: " + (data.message || "Error desconocido"));
+        }
+      })
+      .catch(err => {
+        console.error("Error creating IMAP2:", err);
+        alert("Error de red: " + err.message);
+      })
+      .finally(() => {
+        submitButton.disabled = false;
+        submitButton.innerHTML = originalText;
+      });
+    });
+  }
+
+  function escapeHtml(text) {
+    if (text == null) return '';
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+  }
 
   function getCsrfToken() {
     const meta = document.querySelector('meta[name="csrf_token"]');

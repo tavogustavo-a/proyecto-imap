@@ -281,48 +281,66 @@
     </div>
 
     <div class="mt-1">
-    <form action="{{ url_for('admin_bp.manage_imap') }}" method="POST">
+    <form id="createImapForm" action="{{ url_for('admin_bp.manage_imap') }}" method="POST">
       <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
       <h4>Crear Nuevo Servidor IMAP</h4>
-      <label for="imap_host" class="sr-only">Host</label>
-      <input
-        id="imap_host"
-        type="text"
-        name="host"
-        placeholder="Host"
-        required
-        class="d-block mb-05"
-        autocomplete="off"
-      >
-      <label for="imap_port" class="sr-only">Puerto</label>
-      <input
-        id="imap_port"
-        type="number"
-        name="port"
-        placeholder="993"
-        value="993"
-        class="d-block mb-05"
-        autocomplete="off"
-      >
-      <label for="imap_username" class="sr-only">Usuario</label>
-      <input
-        id="imap_username"
-        type="text"
-        name="username"
-        placeholder="Usuario"
-        required
-        class="d-block mb-05"
-        autocomplete="username"
-      >
-      <label for="imap_password" class="sr-only">Password</label>
-      <input
-        id="imap_password"
-        type="password"
-        name="password"
-        placeholder="Password"
-        class="d-block mb-05"
-        autocomplete="current-password"
-      >
+      <!-- Descripción opcional -->
+      <div class="mb-05">
+        <label for="imap2_description">Descripción (opcional):</label>
+        <input
+          id="imap2_description"
+          type="text"
+          name="description"
+          placeholder="Descripción del servidor"
+          class="d-block"
+          autocomplete="off"
+        >
+      </div>
+      <!-- Fila 1: Host y Puerto -->
+      <div class="d-flex gap-05 mb-05 align-items-center">
+        <label for="imap_host" class="sr-only">Host</label>
+        <input
+          id="imap_host"
+          type="text"
+          name="host"
+          placeholder="Host"
+          required
+          class="flex-grow-1"
+          autocomplete="off"
+        >
+        <label for="imap_port" class="sr-only">Puerto</label>
+        <input
+          id="imap_port"
+          type="number"
+          name="port"
+          placeholder="993"
+          value="993"
+          class="imap2-port-input"
+          autocomplete="off"
+        >
+      </div>
+      <!-- Fila 2: Usuario y Contraseña -->
+      <div class="d-flex gap-05 mb-05 align-items-center">
+        <label for="imap_username" class="sr-only">Usuario</label>
+        <input
+          id="imap_username"
+          type="text"
+          name="username"
+          placeholder="Usuario"
+          required
+          class="flex-grow-1"
+          autocomplete="username"
+        >
+        <label for="imap_password" class="sr-only">Password</label>
+        <input
+          id="imap_password"
+          type="password"
+          name="password"
+          placeholder="Password"
+          class="flex-grow-1"
+          autocomplete="current-password"
+        >
+      </div>
       <label for="imap_folders">Carpetas (separadas por comas):</label>
       <input
         id="imap_folders"
@@ -372,7 +390,7 @@
     {% for s in servers2 %}
       <div class="imap-item mb-1">
         <strong>Usuario: {{ s.username }}</strong><br>
-        <em>Carpetas:</em> {{ s.folders }}
+        {% if s.description %}{{ s.description }}{% endif %}{% if s.route_path %} | <em>Ruta:</em> {{ s.route_path }}{% endif %}
         <div class="mt-05">
           <form action="{{ url_for('admin_bp.test_imap2', server_id=s.id) }}"
                 method="POST"
@@ -418,58 +436,81 @@
   </div>
 
   <div class="mt-1">
-  <form action="{{ url_for('admin_bp.manage_imap2') }}" method="POST">
+  <form id="createImap2Form" action="{{ url_for('admin_bp.manage_imap2') }}" method="POST">
     <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
     <h4>Crear Nuevo Servidor IMAP</h4>
-    <label for="imap2_host" class="sr-only">Host</label>
-    <input
-      id="imap2_host"
-      type="text"
-      name="host"
-      placeholder="Host"
-      required
-      class="d-block mb-05"
-      autocomplete="off"
-    >
-    <label for="imap2_port" class="sr-only">Puerto</label>
-    <input
-      id="imap2_port"
-      type="number"
-      name="port"
-      placeholder="993"
-      value="993"
-      class="d-block mb-05"
-      autocomplete="off"
-    >
-    <label for="imap2_username" class="sr-only">Usuario</label>
-    <input
-      id="imap2_username"
-      type="text"
-      name="username"
-      placeholder="Usuario"
-      required
-      class="d-block mb-05"
-      autocomplete="username"
-    >
-    <label for="imap2_password" class="sr-only">Password</label>
-    <input
-      id="imap2_password"
-      type="password"
-      name="password"
-      placeholder="Password"
-      class="d-block mb-05"
-      autocomplete="current-password"
-    >
-    <label for="imap2_folders">Carpetas (separadas por comas):</label>
-    <input
-      id="imap2_folders"
-      type="text"
-      name="folders"
-      placeholder="INBOX,Carpeta2"
-      value="INBOX"
-      class="d-block mb-05"
-      autocomplete="off"
-    >
+    <!-- Fila 1: Host y Puerto -->
+    <div class="d-flex gap-05 mb-05 align-items-center">
+      <label for="imap2_host" class="sr-only">Host</label>
+      <input
+        id="imap2_host"
+        type="text"
+        name="host"
+        placeholder="Host"
+        required
+        class="flex-grow-1"
+        autocomplete="off"
+      >
+      <label for="imap2_port" class="sr-only">Puerto</label>
+      <input
+        id="imap2_port"
+        type="number"
+        name="port"
+        placeholder="993"
+        value="993"
+        class="imap2-port-input"
+        autocomplete="off"
+      >
+    </div>
+    <!-- Fila 2: Usuario y Contraseña -->
+    <div class="d-flex gap-05 mb-05 align-items-center">
+      <label for="imap2_username" class="sr-only">Usuario</label>
+      <input
+        id="imap2_username"
+        type="text"
+        name="username"
+        placeholder="Usuario"
+        required
+        class="flex-grow-1"
+        autocomplete="username"
+      >
+      <label for="imap2_password" class="sr-only">Password</label>
+      <input
+        id="imap2_password"
+        type="password"
+        name="password"
+        placeholder="Password"
+        class="flex-grow-1"
+        autocomplete="current-password"
+      >
+    </div>
+    <!-- Fila 3: Carpetas y Ruta -->
+    <div class="d-flex gap-05 mb-05 align-items-center">
+      <div class="flex-grow-1">
+        <label for="imap2_folders">Carpetas (separadas por comas):</label>
+        <input
+          id="imap2_folders"
+          type="text"
+          name="folders"
+          placeholder="INBOX,Carpeta2"
+          value="INBOX"
+          class="d-block"
+          autocomplete="off"
+        >
+      </div>
+      <div class="flex-grow-1">
+        <label for="imap2_route_path">Ruta:</label>
+        <input
+          id="imap2_route_path"
+          type="text"
+          name="route_path"
+          placeholder="/codigos4"
+          class="d-block"
+          required
+          autocomplete="off"
+        >
+      </div>
+    </div>
     <div class="d-flex gap-1 align-items-center">
       <button type="submit" class="btn-green">Crear</button>
     </div>

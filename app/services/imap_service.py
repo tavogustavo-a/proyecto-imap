@@ -87,7 +87,21 @@ def test_imap_connection(server_id, model_cls=IMAPServer):
         return False, f"Error inesperado durante la conexión: {e}"
 
 def delete_imap_server(server_id, model_cls=IMAPServer):
+    """
+    Elimina un servidor IMAP y todas sus relaciones asociadas.
+    Para IMAPServer2, también limpia las relaciones M2M con filtros y regex.
+    """
     srv = model_cls.query.get_or_404(server_id)
+    
+    # Si es IMAPServer2, limpiar explícitamente las relaciones M2M antes de eliminar
+    # Verificar por el nombre de la tabla para ser más seguro
+    if hasattr(srv, 'filters') and hasattr(srv, 'regexes'):
+        # Limpiar relaciones con filtros y regex (aunque CASCADE debería hacerlo, 
+        # es mejor hacerlo explícitamente para evitar problemas y asegurar limpieza completa)
+        srv.filters.clear()
+        srv.regexes.clear()
+        db.session.flush()  # Aplicar cambios antes de eliminar
+    
     db.session.delete(srv)
     db.session.commit()
 

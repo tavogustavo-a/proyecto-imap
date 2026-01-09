@@ -157,6 +157,40 @@ def toggle_imap_ajax():
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 400
 
+@admin_bp.route("/create_imap_ajax", methods=["POST"])
+@admin_required
+def create_imap_ajax():
+    """Crea un nuevo servidor IMAP vía AJAX"""
+    try:
+        data = request.get_json()
+        host = data.get("host", "").strip()
+        port = data.get("port", 993)
+        username = data.get("username", "").strip()
+        password = data.get("password", "").strip()
+        folders = data.get("folders", "INBOX").strip()
+
+        if not host or not username:
+            return jsonify({"status": "error", "message": "Host y usuario son obligatorios."}), 400
+
+        # Crear el servidor
+        create_imap_server(host, port, username, password, folders)
+
+        # Obtener todos los servidores para devolver la lista actualizada
+        servers = IMAPServer.query.all()
+        servers_data = []
+        for s in servers:
+            servers_data.append({
+                "id": s.id,
+                "host": s.host,
+                "port": s.port,
+                "username": s.username,
+                "folders": s.folders,
+                "enabled": s.enabled
+            })
+        return jsonify({"status": "ok", "servers": servers_data})
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 400
+
 # ADDED: Nueva ruta para redirigir enlaces reescritos en parser.py, 
 #       con verificación de dominios permitidos.
 @admin_bp.route("/redirect_to")
