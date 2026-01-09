@@ -16,7 +16,6 @@ from .security_rules import SecurityRule
 from .trigger_log import TriggerLog
 from .observer_imap import ObserverIMAPServer
 from .email_buzon import EmailBuzonServer, ReceivedEmail, EmailTag, BlockedSender
-from .codigos2_access import codigos2_users, Codigos2Access
 
 # Importar modelos de worksheet desde store.models
 from app.store.models import WorksheetTemplate, WorksheetData

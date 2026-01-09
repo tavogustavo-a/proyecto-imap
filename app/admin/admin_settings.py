@@ -22,7 +22,6 @@ from app.models import (
     ServiceIcon,
     ObserverIMAPServer,
     SecurityRule,
-    codigos2_users
 )
 from app.admin.site_settings import (
     get_site_setting, set_site_setting
@@ -412,14 +411,6 @@ def export_config():
         # --- Fin Añadir Usuarios --- 
 
         # --- Añadir Accesos a Códigos 2 al Export ---
-        # Obtener todos los usuarios principales con acceso a Códigos 2
-        from sqlalchemy import select
-        codigos2_access_result = db.session.execute(
-            select(codigos2_users.c.user_id)
-        ).all()
-        codigos2_user_ids = [row[0] for row in codigos2_access_result]
-        config_data["codigos2_access"] = codigos2_user_ids
-        # --- Fin Añadir Accesos a Códigos 2 ---
 
         # --- Añadir Párrafos al Export ---
         paragraphs_data = {}
@@ -520,9 +511,6 @@ def import_config():
             db.session.execute(user_regex.delete())   # Borrar vínculos User <-> Regex
             db.session.execute(user_filter.delete())  # Borrar vínculos User <-> Filter
             db.session.execute(user_service.delete()) # Borrar vínculos User <-> Service
-            # Borrar accesos a Códigos 2
-            from sqlalchemy import delete
-            db.session.execute(delete(codigos2_users))
             # --- FIN Borrado Asociaciones ---
 
             # --- Borrar Usuarios (Excepto el admin principal) --- AHORA SÍ SE PUEDE
@@ -792,29 +780,9 @@ def import_config():
                         if email_str: # Evitar vacíos
                             db.session.add(AllowedEmail(user_id=new_user_id, email=email_str))
 
-                # Restaurar campo can_access_codigos2 (para sub-usuarios)
-                if 'can_access_codigos2' in u_data:
-                    user_to_update.can_access_codigos2 = bool(u_data.get('can_access_codigos2', False))
 
                 db.session.add(user_to_update)
 
-            # Restaurar accesos a Códigos 2
-            # Nota: Los accesos a Códigos 2 ya se borraron en la fase 1 (línea 468)
-            # Aquí solo se restauran los del archivo importado
-            codigos2_access_data = config_data.get('codigos2_access', [])
-            if codigos2_access_data:
-                from sqlalchemy import insert, select
-                for old_user_id in codigos2_access_data:
-                    new_user_id = old_to_new_user_ids.get(old_user_id)
-                    if new_user_id:
-                        # Verificar que no exista ya
-                        existing = db.session.execute(
-                            select(codigos2_users.c.user_id).where(codigos2_users.c.user_id == new_user_id)
-                        ).first()
-                        if not existing:
-                            db.session.execute(
-                                insert(codigos2_users).values(user_id=new_user_id)
-                            )
 
             db.session.commit()
 

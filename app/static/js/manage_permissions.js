@@ -17,7 +17,6 @@ document.addEventListener("DOMContentLoaded", function() {
     { key: 'can_bulk_delete_emails', label: 'Borrar Masivamente', group: 'emails' },
     { key: 'can_manage_2fa_emails', label: 'Gestionar 2FA', group: 'emails' },
     { key: 'can_create_subusers', label: 'Crear Sub-usuarios', group: 'emails' },
-    { key: 'can_access_codigos2', label: 'Códigos 2', group: 'general' },
     { key: 'can_chat', label: 'Chat', group: 'general' },
     { key: 'can_manage_subusers', label: 'Gestionar Sub-usuarios', group: 'general' },
     { key: 'is_support', label: 'Soporte', group: 'general' }

@@ -319,17 +319,6 @@ def edit_service(service_id):
                 flash(f"❌ Error: Solo puede haber un servicio con modo 'on-no-usuarios-no-visible'. El servicio '{existing_no_visible.name}' ya tiene este modo activo. Cambia primero ese servicio a otro modo.", "danger")
                 return redirect(url_for("admin_bp.edit_service", service_id=srv.id))
         
-        # Validar unicidad para codigos-2
-        if new_vis_mode == "codigos-2":
-            existing_codigos2 = ServiceModel.query.filter(
-                ServiceModel.visibility_mode == "codigos-2",
-                ServiceModel.id != srv.id
-            ).first()
-            
-            if existing_codigos2:
-                flash(f"❌ Error: Solo puede haber un servicio con modo 'codigos-2'. El servicio '{existing_codigos2.name}' ya tiene este modo activo. Cambia primero ese servicio a otro modo.", "danger")
-                return redirect(url_for("admin_bp.edit_service", service_id=srv.id))
-        
         # Validar unicidad para sms
         if new_vis_mode == "sms":
             existing_sms = ServiceModel.query.filter(

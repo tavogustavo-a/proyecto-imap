@@ -10,4 +10,3 @@ from . import admin_users
 from . import admin_security_rules
 from . import admin_observer_imap
 from . import admin_email_buzon
-from . import admin_codigos2_access

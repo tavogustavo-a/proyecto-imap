@@ -86,16 +86,6 @@ def search_users_ajax():
     data = []
     for u in all_users:
         # Los roles ya no se usan, ahora se gestiona directamente con tipo_precio en user_prices
-        # Verificar can_access_codigos2 desde la tabla codigos2_users también
-        from app.models.codigos2_access import codigos2_users
-        from sqlalchemy import select
-        has_codigos2_access_table = db.session.execute(
-            select(codigos2_users.c.user_id).where(codigos2_users.c.user_id == u.id)
-        ).first() is not None
-        
-        # Combinar can_access_codigos2 del modelo con el estado de la tabla
-        can_access_codigos2_value = u.can_access_codigos2 if u.can_access_codigos2 is not None else False
-        can_access_codigos2_final = can_access_codigos2_value or has_codigos2_access_table
         
         # Obtener tipo_precio desde user_prices
         tipo_precio_rol = None
@@ -115,7 +105,6 @@ def search_users_ajax():
             "can_add_own_emails": u.can_add_own_emails if u.can_add_own_emails is not None else False,
             "can_bulk_delete_emails": u.can_bulk_delete_emails if u.can_bulk_delete_emails is not None else False,
             "can_manage_2fa_emails": u.can_manage_2fa_emails if u.can_manage_2fa_emails is not None else False,
-            "can_access_codigos2": can_access_codigos2_final,
             "can_chat": u.can_chat if u.can_chat is not None else False,
             "can_manage_subusers": u.can_manage_subusers if u.can_manage_subusers is not None else False,
             "is_support": u.is_support if u.is_support is not None else False,
@@ -382,7 +371,7 @@ def delete_user_ajax():
         # - RememberDevice (ondelete='CASCADE')
         # - AllowedEmail (cascade="all, delete-orphan")
         # - Sub-usuarios (ya eliminados arriba, pero CASCADE también lo haría)
-        # - Relaciones M2M (user_regex, user_filter, user_service, codigos2_users, role_users, etc.)
+        # - Relaciones M2M (user_regex, user_filter, user_service, role_users, etc.)
         # - ChatSession, ChatMessage (ondelete='CASCADE')
         # - TriggerLog (ondelete='CASCADE')
         # - Sale (ondelete='CASCADE')
@@ -1122,7 +1111,6 @@ def update_permissions_bulk_ajax():
             'can_add_own_emails',
             'can_bulk_delete_emails',
             'can_manage_2fa_emails',
-            'can_access_codigos2',
             'can_chat',
             'can_manage_subusers',
             'is_support'
@@ -1157,29 +1145,6 @@ def update_permissions_bulk_ajax():
                     # Convertir a boolean
                     bool_value = bool(perm_value) if perm_value is not None else False
                     setattr(user, perm_key, bool_value)
-                    
-                    # Sincronizar can_access_codigos2 con la tabla codigos2_users
-                    if perm_key == 'can_access_codigos2':
-                        from app.models.codigos2_access import Codigos2Access, codigos2_users
-                        from sqlalchemy import select, insert, delete
-                        
-                        # Verificar si el usuario está en codigos2_users
-                        existing = db.session.execute(
-                            select(codigos2_users.c.user_id).where(codigos2_users.c.user_id == user.id)
-                        ).first()
-                        
-                        if bool_value:
-                            # Si se otorga permiso y no está en la tabla, agregarlo
-                            if not existing:
-                                db.session.execute(
-                                    insert(codigos2_users).values(user_id=user.id)
-                                )
-                        else:
-                            # Si se revoca permiso y está en la tabla, eliminarlo
-                            if existing:
-                                db.session.execute(
-                                    delete(codigos2_users).where(codigos2_users.c.user_id == user.id)
-                                )
                 else:
                     errors.append(f"Permiso inválido: {perm_key}")
             

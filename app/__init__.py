@@ -242,35 +242,6 @@ def create_app(config_class_passed=None):
                 return False
             return {"user_has_worksheet_access": dummy_worksheet_access}
 
-    @app.context_processor
-    def inject_codigos2_access():
-        """Inyecta función para verificar acceso a Códigos 2 en todas las plantillas."""
-        from flask import session
-        from app.models import Codigos2Access
-        
-        def user_has_codigos2_access():
-            """Verifica si el usuario actual tiene acceso a Códigos 2."""
-            username = session.get('username')
-            user_id = session.get('user_id')
-            
-            if username:
-                user = User.query.filter_by(username=username).first()
-            elif user_id:
-                user = User.query.get(user_id)
-            else:
-                return False
-            
-            if not user:
-                return False
-            
-            # Si es sub-usuario, verificar el permiso específico
-            if user.parent_id:
-                return user.can_access_codigos2
-            
-            # Si es usuario principal, verificar en la tabla de accesos
-            return Codigos2Access.user_has_access(user)
-        
-        return {"user_has_codigos2_access": user_has_codigos2_access}
 
     # Aplicar exenciones de CSRF después de registrar todos los blueprints
     apply_csrf_exemptions()
