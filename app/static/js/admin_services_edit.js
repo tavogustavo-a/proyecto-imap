@@ -412,9 +412,6 @@ document.addEventListener("DOMContentLoaded", function() {
             } else if (selectedValue === "on-no-usuarios") {
                 // Verificar si hay servicios con on-no-usuarios-no-visible activos
                 checkVisibilityConflict("on-no-usuarios-no-visible", "on-no-usuarios");
-            } else if (selectedValue === "codigos-2") {
-                // Verificar unicidad: solo puede haber uno con codigos-2
-                checkVisibilityUniqueness("codigos-2");
             } else if (selectedValue === "sms") {
                 // Verificar unicidad: solo puede haber uno con sms
                 checkVisibilityUniqueness("sms");

@@ -789,14 +789,14 @@ def check_visibility_conflict_ajax():
 @admin_bp.route("/check_visibility_uniqueness_ajax", methods=["POST"])
 @admin_required
 def check_visibility_uniqueness_ajax():
-    """Verifica que solo haya un servicio con modo on-no-usuarios-no-visible o codigos-2"""
+    """Verifica que solo haya un servicio con modo on-no-usuarios-no-visible"""
     try:
         data = request.get_json()
         mode = data.get("mode")
         current_service_id = data.get("current_service_id")
         
-        # Solo verificar unicidad para on-no-usuarios-no-visible, codigos-2 y sms
-        if mode not in ["on-no-usuarios-no-visible", "codigos-2", "sms"]:
+        # Solo verificar unicidad para on-no-usuarios-no-visible y sms
+        if mode not in ["on-no-usuarios-no-visible", "sms"]:
             return jsonify({"status": "ok", "message": "Modo no requiere unicidad"})
         
         # Buscar otros servicios con el mismo modo (excluyendo el servicio actual)

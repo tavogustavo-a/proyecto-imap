@@ -32,7 +32,7 @@ class ServiceModel(db.Model):
     enabled = db.Column(db.Boolean, default=True)
     protected = db.Column(db.Boolean, default=False)
 
-    # Modos: off / on-no-usuarios / on-usuarios / on-no-usuarios-no-visible / codigos-2 / sms
+    # Modos: off / on-no-usuarios / on-usuarios / on-no-usuarios-no-visible / sms
     visibility_mode = db.Column(db.String(30), default="off")
 
     # Relación many-to-many con RegexModel y FilterModel

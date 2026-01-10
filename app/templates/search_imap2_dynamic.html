@@ -49,7 +49,7 @@
       {% for row in services_in_rows %}
         <div class="services-row">
           {% for srv in row %}
-            {% if srv.visibility_mode == "codigos-2" %}
+            {% if False %}
               <!-- Servicio no visible pero consultable automáticamente -->
               <div class="service-btn-container hidden">
                 <button
@@ -85,7 +85,7 @@
 
     <!-- Form de búsqueda IMAP -->
     <div class="search-form-container">
-      <form id="ajax-search-form" class="mb-05" data-search-endpoint="/api/search_imap2_dynamic" data-imap-server-id="{{ imap_server.id }}">
+      <form id="ajax-search-form" class="mb-05" data-search-endpoint="/api/search_imap2_dynamic" data-imap-server-id="{% if imap_server %}{{ imap_server.id }}{% else %}0{% endif %}">
         <input type="hidden" id="selectedServiceId" name="service_id" value="">
         <div class="d-flex gap-05">
           <label for="searchEmail" class="sr-only">Correo electrónico a buscar</label>
@@ -253,94 +253,101 @@
 <script>
 document.addEventListener('DOMContentLoaded', function() {
     const ajaxSearchForm = document.getElementById('ajax-search-form');
-    const imapServerId = ajaxSearchForm.getAttribute("data-imap-server-id");
     
     // Sobrescribir el comportamiento del formulario para usar imap_server_id
-    if (ajaxSearchForm) {
-        const originalSubmit = ajaxSearchForm.onsubmit;
-        ajaxSearchForm.addEventListener('submit', function(e) {
-            e.preventDefault();
-            const searchEmail = document.getElementById('searchEmail');
-            const emailToSearch = searchEmail.value.trim();
-            
-            if (!emailToSearch) {
-                return;
-            }
-            
-            // Usar el mismo código de main.js pero con imap_server_id
-            const spinner = document.getElementById('spinner');
-            const resultsDiv = document.getElementById('search-results');
-            const csrfToken = document.querySelector('meta[name="csrf_token"]').content;
-            
-            if (spinner) {
-                spinner.classList.remove('d-none');
-                spinner.classList.add('d-block');
-            }
-            if (resultsDiv) {
-                resultsDiv.classList.add('d-none');
-                resultsDiv.classList.remove('d-block');
-                resultsDiv.innerHTML = "";
-            }
-            
-            fetch("/api/search_imap2_dynamic", {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                    "X-CSRFToken": csrfToken
-                },
-                credentials: "same-origin",
-                body: JSON.stringify({
-                    email_to_search: emailToSearch,
-                    imap_server_id: parseInt(imapServerId)
-                })
+    if (!ajaxSearchForm) {
+        console.error("Error: No se encontró el formulario ajax-search-form");
+        return;
+    }
+    
+    const imapServerId = ajaxSearchForm.getAttribute("data-imap-server-id");
+    console.log("DEBUG: imap_server_id obtenido del atributo:", imapServerId);
+    
+    // Validar que imapServerId existe y es válido
+    if (!imapServerId || imapServerId === "0" || imapServerId === "" || isNaN(parseInt(imapServerId))) {
+        console.error("Error: imap_server_id no válido o no encontrado. Valor:", imapServerId);
+        console.error("DEBUG: Atributos del formulario:", ajaxSearchForm.attributes);
+        alert("Error: No se pudo identificar el servidor IMAP. Por favor, recarga la página.");
+        return;
+    }
+    
+    const serverId = parseInt(imapServerId);
+    console.log("DEBUG: serverId parseado:", serverId);
+    
+    if (isNaN(serverId) || serverId <= 0) {
+        console.error("Error: serverId no es un número válido:", serverId);
+        alert("Error: ID del servidor IMAP no válido");
+        return;
+    }
+    
+    const originalSubmit = ajaxSearchForm.onsubmit;
+    ajaxSearchForm.addEventListener('submit', function(e) {
+        e.preventDefault();
+        const searchEmail = document.getElementById('searchEmail');
+        const emailToSearch = searchEmail.value.trim();
+        
+        if (!emailToSearch) {
+            return;
+        }
+        
+        // Usar el mismo código de main.js pero con imap_server_id
+        const spinner = document.getElementById('spinner');
+        const resultsDiv = document.getElementById('search-results');
+        const csrfToken = document.querySelector('meta[name="csrf_token"]').content;
+        
+        if (spinner) {
+            spinner.classList.remove('d-none');
+            spinner.classList.add('d-block');
+        }
+        if (resultsDiv) {
+            resultsDiv.classList.add('d-none');
+            resultsDiv.classList.remove('d-block');
+            resultsDiv.innerHTML = "";
+        }
+        
+        fetch("/api/search_imap2_dynamic", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "X-CSRFToken": csrfToken
+            },
+            credentials: "same-origin",
+            body: JSON.stringify({
+                email_to_search: emailToSearch,
+                imap_server_id: serverId
             })
-            .then(response => {
-                if (!response.ok) {
-                    return response.text().then(text => {
-                        let errorMessage = `Error HTTP ${response.status}`;
-                        try {
-                            const errData = JSON.parse(text);
-                            if (errData.error) {
-                                errorMessage = errData.error;
-                            }
-                        } catch (parseError) {
-                            const errorMatch = text.match(/"error"\s*:\s*"([^"]+)"/);
-                            if (errorMatch && errorMatch[1]) {
-                                errorMessage = errorMatch[1];
-                            }
+        })
+        .then(response => {
+            if (!response.ok) {
+                return response.text().then(text => {
+                    let errorMessage = `Error HTTP ${response.status}`;
+                    try {
+                        const errData = JSON.parse(text);
+                        if (errData.error) {
+                            errorMessage = errData.error;
                         }
-                        if (response.status === 403) {
-                            throw new Error("No tienes permiso al consultar este correo");
-                        }
-                        throw new Error(errorMessage);
-                    });
-                }
-                return response.json();
-            })
-            .then(data => {
-                // Usar la misma lógica de renderizado que main.js
-                // El código de main.js manejará el renderizado automáticamente
-                // ya que está cargado en la página
-                if (window.handleSearchResponse) {
-                    window.handleSearchResponse(data, emailToSearch);
-                } else {
-                    // Fallback si main.js no está cargado
-                    if (spinner) {
-                        spinner.classList.add('d-none');
-                        spinner.classList.remove('d-block');
-                    }
-                    if (resultsDiv) {
-                        resultsDiv.classList.remove('d-none');
-                        resultsDiv.classList.add('d-block');
-                        if (data.results && data.results.length > 0) {
-                            resultsDiv.innerHTML = '<pre>' + JSON.stringify(data.results[0], null, 2) + '</pre>';
-                        } else {
-                            resultsDiv.innerHTML = '<p class="text-center">No se encontraron resultados.</p>';
+                    } catch (parseError) {
+                        const errorMatch = text.match(/"error"\s*:\s*"([^"]+)"/);
+                        if (errorMatch && errorMatch[1]) {
+                            errorMessage = errorMatch[1];
                         }
                     }
-                }
-            })
-            .catch(error => {
+                    if (response.status === 403) {
+                        throw new Error("No tienes permiso al consultar este correo");
+                    }
+                    throw new Error(errorMessage);
+                });
+            }
+            return response.json();
+        })
+        .then(data => {
+            // Usar la misma lógica de renderizado que main.js
+            // El código de main.js manejará el renderizado automáticamente
+            // ya que está cargado en la página
+            if (window.handleSearchResponse) {
+                window.handleSearchResponse(data, emailToSearch);
+            } else {
+                // Fallback si main.js no está cargado
                 if (spinner) {
                     spinner.classList.add('d-none');
                     spinner.classList.remove('d-block');
@@ -348,11 +355,26 @@ document.addEventListener('DOMContentLoaded', function() {
                 if (resultsDiv) {
                     resultsDiv.classList.remove('d-none');
                     resultsDiv.classList.add('d-block');
-                    resultsDiv.innerHTML = '<p class="text-center text-danger">Error: ' + error.message + '</p>';
+                    if (data.results && data.results.length > 0) {
+                        resultsDiv.innerHTML = '<pre>' + JSON.stringify(data.results[0], null, 2) + '</pre>';
+                    } else {
+                        resultsDiv.innerHTML = '<p class="text-center">No se encontraron resultados.</p>';
+                    }
                 }
-            });
+            }
+        })
+        .catch(error => {
+            if (spinner) {
+                spinner.classList.add('d-none');
+                spinner.classList.remove('d-block');
+            }
+            if (resultsDiv) {
+                resultsDiv.classList.remove('d-none');
+                resultsDiv.classList.add('d-block');
+                resultsDiv.innerHTML = '<p class="text-center text-danger">Error: ' + error.message + '</p>';
+            }
         });
-    }
+    });
 });
 </script>
 {% endblock %}

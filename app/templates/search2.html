@@ -48,11 +48,10 @@
 
 
     {% if services_in_rows %}
-      {# En search2.html los servicios con visibility_mode = "codigos-2" están activos pero invisibles #}
       {% for row in services_in_rows %}
         <div class="services-row">
           {% for srv in row %}
-            {% if srv.visibility_mode == "codigos-2" %}
+            {% if False %}
               <!-- Servicio no visible pero consultable automáticamente -->
               <div class="service-btn-container hidden">
                 <button

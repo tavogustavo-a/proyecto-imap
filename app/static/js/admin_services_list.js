@@ -703,8 +703,8 @@ document.addEventListener("DOMContentLoaded", function() {
   // ------------------ Funciones: toggleVisibility, renderServiceItems etc. ------------------------
   
   function getNextAvailableState(currentState, serviceId) {
-    // Ciclo base: off -> on-no-usuarios -> on-usuarios -> on-no-usuarios-no-visible -> codigos-2 -> sms -> off
-    const baseCycle = ["off", "on-no-usuarios", "on-usuarios", "on-no-usuarios-no-visible", "codigos-2", "sms"];
+    // Ciclo base: off -> on-no-usuarios -> on-usuarios -> on-no-usuarios-no-visible -> sms -> off
+    const baseCycle = ["off", "on-no-usuarios", "on-usuarios", "on-no-usuarios-no-visible", "sms"];
     
     const currentIndex = baseCycle.indexOf(currentState);
     
@@ -748,19 +748,6 @@ document.addEventListener("DOMContentLoaded", function() {
       }
     }
     
-    // Para codigos-2, verificar que no haya otro servicio con este modo
-    if (state === "codigos-2") {
-      const serviceElements = document.querySelectorAll('.single-visibility-btn');
-      for (let element of serviceElements) {
-        const elementServiceId = element.getAttribute('data-id');
-        const elementState = element.getAttribute('data-current-state');
-        
-        // Si hay otro servicio (no el actual) con codigos-2, no está disponible
-        if (elementServiceId !== serviceId && elementState === 'codigos-2') {
-          return false;
-        }
-      }
-    }
     
     // Para on-no-usuarios, verificar que no haya conflicto con on-no-usuarios-no-visible
     if (state === "on-no-usuarios") {
@@ -848,22 +835,6 @@ document.addEventListener("DOMContentLoaded", function() {
           })
         }).then(r => r.json())
       );
-    } else if (newState === "codigos-2") {
-      // Verificar unicidad para codigos-2
-      validationPromises.push(
-        fetch("/admin/check_visibility_uniqueness_ajax", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "X-CSRFToken": getCsrfToken()
-          },
-          body: JSON.stringify({ 
-            mode: "codigos-2",
-            current_service_id: serviceId
-          })
-        }).then(r => r.json())
-      );
-    }
     
     Promise.all(validationPromises)
       .then(results => {
@@ -938,8 +909,6 @@ document.addEventListener("DOMContentLoaded", function() {
         visibilityBtnClass = 'visibility-btn-on-usuarios';
       } else if (s.visibility_mode === 'on-no-usuarios-no-visible') {
         visibilityBtnClass = 'visibility-btn-on-no-usuarios-no-visible';
-      } else if (s.visibility_mode === 'codigos-2') {
-        visibilityBtnClass = 'visibility-btn-codigos-2';
       } else if (s.visibility_mode === 'sms') {
         visibilityBtnClass = 'visibility-btn-sms';
       }

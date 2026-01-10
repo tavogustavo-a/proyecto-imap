@@ -189,7 +189,6 @@ class User(db.Model):
     )
 
     can_access_store = db.Column(db.Boolean, default=False, nullable=False)
-    can_access_codigos2 = db.Column(db.Boolean, default=False, nullable=False)
     can_chat = db.Column(db.Boolean, default=False, nullable=False)
     can_manage_subusers = db.Column(db.Boolean, default=False, nullable=False)
     is_support = db.Column(db.Boolean, default=False, nullable=False)
@@ -299,7 +298,6 @@ class User(db.Model):
             # Incluir correos permitidos (si can_search_any es False)
             'allowed_emails': [ae.email for ae in self.allowed_email_entries] if not self.can_search_any else [],
             'can_access_store': self.can_access_store,
-            'can_access_codigos2': self.can_access_codigos2
         }
 
 

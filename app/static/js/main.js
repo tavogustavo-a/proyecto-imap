@@ -347,14 +347,8 @@ document.addEventListener("DOMContentLoaded", function () {
       }
     } else {
       // No hay servicios visibles
-      // Buscar servicios ocultos (on-no-usuarios-no-visible o codigos-2)
-      // Primero intentar con selector de estilo inline (on-no-usuarios-no-visible)
+      // Buscar servicios ocultos (on-no-usuarios-no-visible)
       let hiddenContainer = document.querySelector(".service-btn-container[style*='display: none'] .service-btn-hidden");
-      
-      // Si no se encuentra, buscar por clase .hidden (codigos-2)
-      if (!hiddenContainer) {
-        hiddenContainer = document.querySelector(".service-btn-container.hidden .service-btn-hidden");
-      }
       
       if (hiddenContainer) {
         const hiddenId = hiddenContainer.getAttribute("data-service-id");
@@ -379,6 +373,18 @@ document.addEventListener("DOMContentLoaded", function () {
   let isSubmitting = false; // Bandera para controlar envíos duplicados
 
   if (ajaxSearchForm) {
+    // Verificar si es una página dinámica de IMAP2 (tiene data-imap-server-id)
+    const isImap2DynamicPage = ajaxSearchForm.hasAttribute("data-imap-server-id") && 
+                                ajaxSearchForm.getAttribute("data-imap-server-id") !== null &&
+                                ajaxSearchForm.getAttribute("data-imap-server-id") !== "0" &&
+                                ajaxSearchForm.getAttribute("data-imap-server-id") !== "";
+    
+    // Si es una página dinámica de IMAP2, no interceptar el submit aquí
+    // El listener en search_imap2_dynamic.html manejará el submit
+    if (isImap2DynamicPage) {
+      return; // Salir temprano, dejar que search_imap2_dynamic.html maneje el submit
+    }
+    
     ajaxSearchForm.addEventListener("submit", function (e) {
       e.preventDefault(); // Prevenir el envío normal
       e.stopImmediatePropagation(); // Prevenir otros listeners
@@ -389,7 +395,8 @@ document.addEventListener("DOMContentLoaded", function () {
       const email = document.getElementById("searchEmail").value.trim();
       const serviceId = document.getElementById("selectedServiceId").value.trim();
 
-      if (!serviceId) {
+      // En páginas dinámicas de IMAP2, no se requiere serviceId
+      if (!serviceId && !isImap2DynamicPage) {
         if (getIsUserLoggedIn()) {
           alert("No tienes servicios disponibles. Contacta al administrador para que te asigne servicios con modo 'on-usuarios'.");
         } else {
