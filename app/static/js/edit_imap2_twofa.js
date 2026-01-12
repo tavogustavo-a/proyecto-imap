@@ -73,7 +73,10 @@
         if (twofaSaveBtn) twofaSaveBtn.textContent = 'Agregar';
         if (twofaCancelBtn) twofaCancelBtn.classList.add('d-none');
         if (twofaQrPreview) {
-            twofaQrPreview.innerHTML = '';
+            // Limpiar contenido usando removeChild (CSP compliant)
+            while (twofaQrPreview.firstChild) {
+                twofaQrPreview.removeChild(twofaQrPreview.firstChild);
+            }
             twofaQrPreview.classList.add('d-none');
         }
     }
@@ -103,11 +106,14 @@
             const reader = new FileReader();
             reader.onload = function(e) {
                 if (twofaQrPreview) {
+                    // Limpiar contenido usando removeChild (CSP compliant)
+                    while (twofaQrPreview.firstChild) {
+                        twofaQrPreview.removeChild(twofaQrPreview.firstChild);
+                    }
                     const img = document.createElement('img');
                     img.src = e.target.result;
                     img.alt = 'QR Preview';
                     img.className = 'twofa-qr-preview-img';
-                    twofaQrPreview.innerHTML = '';
                     twofaQrPreview.appendChild(img);
                     twofaQrPreview.classList.remove('d-none');
                 }
@@ -235,7 +241,10 @@
         const serverId = getServerId();
         if (!serverId) {
             if (twofaConfigsList) {
-                twofaConfigsList.innerHTML = '';
+                // Limpiar contenido usando removeChild (CSP compliant)
+                while (twofaConfigsList.firstChild) {
+                    twofaConfigsList.removeChild(twofaConfigsList.firstChild);
+                }
                 const errorP = document.createElement('p');
                 errorP.className = 'text-center text-danger';
                 errorP.textContent = 'Error: No se pudo identificar el servidor IMAP2.';
@@ -259,7 +268,10 @@
                 renderConfigsList(data.configs);
             } else {
                 if (twofaConfigsList) {
-                    twofaConfigsList.innerHTML = '';
+                    // Limpiar contenido usando removeChild (CSP compliant)
+                    while (twofaConfigsList.firstChild) {
+                        twofaConfigsList.removeChild(twofaConfigsList.firstChild);
+                    }
                     const noConfigP = document.createElement('p');
                     noConfigP.className = 'text-center text-secondary';
                     noConfigP.textContent = 'No hay configuraciones 2FA.';
@@ -268,7 +280,10 @@
             }
         } catch (error) {
             if (twofaConfigsList) {
-                twofaConfigsList.innerHTML = '';
+                // Limpiar contenido usando removeChild (CSP compliant)
+                while (twofaConfigsList.firstChild) {
+                    twofaConfigsList.removeChild(twofaConfigsList.firstChild);
+                }
                 const errorP = document.createElement('p');
                 errorP.className = 'text-center text-danger';
                 errorP.textContent = 'Error al cargar configuraciones.';
@@ -326,12 +341,16 @@
         renderTwofaPage();
     }
     
-    // Función para renderizar lista de configuraciones
+    // Función para renderizar lista de configuraciones (CSP compliant usando createElement)
     function renderConfigsList(configs) {
         if (!twofaConfigsList) return;
         
+        // Limpiar contenido existente usando removeChild (más seguro que innerHTML)
+        while (twofaConfigsList.firstChild) {
+            twofaConfigsList.removeChild(twofaConfigsList.firstChild);
+        }
+        
         if (!configs || configs.length === 0) {
-            twofaConfigsList.innerHTML = '';
             const noConfigP = document.createElement('p');
             noConfigP.className = 'text-center text-secondary';
             noConfigP.textContent = 'No hay configuraciones 2FA. Agrega una nueva configuración arriba.';
@@ -339,32 +358,62 @@
             return;
         }
         
-        const configsHTML = configs.map(config => {
+        configs.forEach(config => {
             const emailsList = config.emails_list || [];
             const emailsStr = emailsList.join(', ');
             const emailsEscaped = escapeHtml(emailsStr || 'Sin correos');
             const emailsLowerEscaped = escapeHtml(emailsStr.toLowerCase());
             
-            return `
-                <div class="regex-item" data-emails="${emailsLowerEscaped}" data-config-id="${config.id}">
-                    <div class="d-flex justify-content-between align-items-center">
-                        <div class="flex-grow-1">
-                            <div class="regex-description">${emailsEscaped}</div>
-                        </div>
-                        <div class="d-flex gap-05">
-                            <button type="button" class="btn-orange btn-small edit-twofa-config" data-config-id="${config.id}" title="Editar">
-                                <i class="fas fa-edit"></i>
-                            </button>
-                            <button type="button" class="btn-red btn-small delete-twofa-config" data-config-id="${config.id}" title="Eliminar">
-                                <i class="fas fa-trash"></i>
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            `;
-        }).join('');
-        
-        twofaConfigsList.innerHTML = configsHTML;
+            // Crear contenedor principal usando createElement
+            const itemDiv = document.createElement('div');
+            itemDiv.className = 'regex-item';
+            itemDiv.setAttribute('data-emails', emailsLowerEscaped);
+            itemDiv.setAttribute('data-config-id', config.id.toString());
+            
+            // Crear contenedor flex
+            const flexDiv = document.createElement('div');
+            flexDiv.className = 'd-flex justify-content-between align-items-center';
+            
+            // Crear contenedor de texto
+            const textDiv = document.createElement('div');
+            textDiv.className = 'flex-grow-1';
+            
+            const descDiv = document.createElement('div');
+            descDiv.className = 'regex-description';
+            descDiv.textContent = emailsEscaped;
+            textDiv.appendChild(descDiv);
+            flexDiv.appendChild(textDiv);
+            
+            // Crear contenedor de botones
+            const buttonsDiv = document.createElement('div');
+            buttonsDiv.className = 'd-flex gap-05';
+            
+            // Botón Editar
+            const editBtn = document.createElement('button');
+            editBtn.type = 'button';
+            editBtn.className = 'btn-orange btn-small edit-twofa-config';
+            editBtn.setAttribute('data-config-id', config.id.toString());
+            editBtn.title = 'Editar';
+            const editIcon = document.createElement('i');
+            editIcon.className = 'fas fa-edit';
+            editBtn.appendChild(editIcon);
+            buttonsDiv.appendChild(editBtn);
+            
+            // Botón Eliminar
+            const deleteBtn = document.createElement('button');
+            deleteBtn.type = 'button';
+            deleteBtn.className = 'btn-red btn-small delete-twofa-config';
+            deleteBtn.setAttribute('data-config-id', config.id.toString());
+            deleteBtn.title = 'Eliminar';
+            const deleteIcon = document.createElement('i');
+            deleteIcon.className = 'fas fa-trash';
+            deleteBtn.appendChild(deleteIcon);
+            buttonsDiv.appendChild(deleteBtn);
+            
+            flexDiv.appendChild(buttonsDiv);
+            itemDiv.appendChild(flexDiv);
+            twofaConfigsList.appendChild(itemDiv);
+        });
         
         // Agregar listeners para editar y eliminar
         attachEditDeleteListeners();

@@ -5,6 +5,7 @@ from app.extensions import db
 class IMAPServer(db.Model):
     __tablename__ = "imap_servers"
     id = db.Column(db.Integer, primary_key=True)
+    description = db.Column(db.String(500), nullable=True)  # Descripción opcional del servidor
     host = db.Column(db.String(200), nullable=False)
     port = db.Column(db.Integer, default=993)
     username = db.Column(db.String(200), nullable=False)

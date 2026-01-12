@@ -69,6 +69,61 @@ document.addEventListener("DOMContentLoaded", function() {
     });
   }
 
+  // Event listener para probar servidor IMAP Observador (interceptar formulario)
+  document.addEventListener('submit', function(e) {
+    if (e.target.closest('form') && e.target.closest('form').action && e.target.closest('form').action.includes('/admin/observer_test_imap/')) {
+      e.preventDefault();
+      const form = e.target.closest('form');
+      const actionUrl = form.action;
+      const serverIdMatch = actionUrl.match(/\/admin\/observer_test_imap\/(\d+)/);
+      
+      if (!serverIdMatch) {
+        alert('Error: No se pudo identificar el servidor.');
+        return;
+      }
+      
+      const serverId = parseInt(serverIdMatch[1]);
+      const submitBtn = form.querySelector('button[type="submit"]');
+      
+      // Feedback visual
+      if (submitBtn) {
+        submitBtn.disabled = true;
+        const originalText = submitBtn.textContent;
+        submitBtn.textContent = 'Probando...';
+        
+        fetch('/admin/observer_test_imap_ajax', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': getCsrfToken()
+          },
+          body: JSON.stringify({
+            server_id: serverId
+          })
+        })
+        .then(res => res.json())
+        .then(data => {
+          if (data.status === 'ok') {
+            alert('✅ Éxito: ' + (data.message || 'Conexión exitosa'));
+          } else {
+            alert('❌ Error: ' + (data.message || 'Error al probar conexión'));
+          }
+        })
+        .catch(err => {
+          console.error('Error al probar servidor:', err);
+          alert('Error de red: ' + err.message);
+        })
+        .finally(() => {
+          if (submitBtn) {
+            submitBtn.disabled = false;
+            submitBtn.textContent = originalText;
+          }
+        });
+      }
+      return;
+    }
+  });
+
   document.addEventListener("click", function(e) {
     const t = e.target;
     if (t.classList.contains("toggle-observer-imap")) {

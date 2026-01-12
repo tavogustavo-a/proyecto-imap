@@ -302,6 +302,27 @@ def delete_imap2_ajax():
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 400
 
+@admin_bp.route("/test_imap2_ajax", methods=["POST"])
+@admin_required
+@csrf_exempt_route
+def test_imap2_ajax():
+    """Prueba la conexión de un servidor IMAP2 vía AJAX"""
+    try:
+        data = request.get_json()
+        server_id = data.get("server_id")
+        
+        if not server_id:
+            return jsonify({"status": "error", "message": "server_id es requerido"}), 400
+        
+        is_ok, message = test_imap_connection(server_id, model_cls=IMAPServer2)
+        
+        if is_ok:
+            return jsonify({"status": "ok", "message": message}), 200
+        else:
+            return jsonify({"status": "error", "message": message}), 200
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 400
+
 @admin_bp.route("/toggle_imap2_ajax", methods=["POST"])
 @admin_required
 def toggle_imap2_ajax():

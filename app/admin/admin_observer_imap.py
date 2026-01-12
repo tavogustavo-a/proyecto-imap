@@ -162,6 +162,26 @@ def observer_delete_imap_ajax():
             "message": f"Error interno del servidor: {str(e)}"
         }), 500
 
+@admin_bp.route("/observer_test_imap_ajax", methods=["POST"])
+@admin_required
+def observer_test_imap_ajax():
+    """Prueba la conexión de un servidor IMAP Observador vía AJAX"""
+    try:
+        data = request.get_json()
+        server_id = data.get("server_id")
+        
+        if not server_id:
+            return jsonify({"status": "error", "message": "server_id es requerido"}), 400
+        
+        is_ok, message = test_imap_connection(server_id, model_cls=IMAPModel)
+        
+        if is_ok:
+            return jsonify({"status": "ok", "message": message}), 200
+        else:
+            return jsonify({"status": "error", "message": message}), 200
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 400
+
 @admin_bp.route("/observer_toggle_imap_ajax", methods=["POST"])
 @admin_required
 def observer_toggle_imap_ajax():

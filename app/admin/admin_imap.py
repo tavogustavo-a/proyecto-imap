@@ -19,6 +19,7 @@ from urllib.parse import unquote, urlparse
 @admin_required
 def manage_imap():
     server_id = request.form.get("server_id")
+    description = request.form.get("description", "").strip()
     host = request.form.get("host", "")
     port = request.form.get("port", 993)
     username = request.form.get("username", "")
@@ -26,10 +27,10 @@ def manage_imap():
     folders = request.form.get("folders", "INBOX")
 
     if server_id:
-        update_imap_server(server_id, host, port, username, password, folders)
+        update_imap_server(server_id, host, port, username, password, folders, description=description if description else None)
         flash(f"Editado servidor IMAP {host}:{port}", "info")
     else:
-        create_imap_server(host, port, username, password, folders)
+        create_imap_server(host, port, username, password, folders, description=description if description else None)
         flash(f"Creado servidor IMAP {host}:{port}", "success")
 
     return redirect(url_for("admin_bp.dashboard"))
@@ -137,6 +138,26 @@ def delete_imap_ajax():
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 400
 
+@admin_bp.route("/test_imap_ajax", methods=["POST"])
+@admin_required
+def test_imap_ajax():
+    """Prueba la conexión de un servidor IMAP vía AJAX"""
+    try:
+        data = request.get_json()
+        server_id = data.get("server_id")
+        
+        if not server_id:
+            return jsonify({"status": "error", "message": "server_id es requerido"}), 400
+        
+        is_ok, message = test_imap_connection(server_id)
+        
+        if is_ok:
+            return jsonify({"status": "ok", "message": message}), 200
+        else:
+            return jsonify({"status": "error", "message": message}), 200
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 400
+
 @admin_bp.route("/toggle_imap_ajax", methods=["POST"])
 @admin_required
 def toggle_imap_ajax():
@@ -186,6 +207,7 @@ def create_imap_ajax():
     """Crea un nuevo servidor IMAP vía AJAX"""
     try:
         data = request.get_json()
+        description = data.get("description", "").strip()
         host = data.get("host", "").strip()
         port = data.get("port", 993)
         username = data.get("username", "").strip()
@@ -196,7 +218,7 @@ def create_imap_ajax():
             return jsonify({"status": "error", "message": "Host y usuario son obligatorios."}), 400
 
         # Crear el servidor
-        create_imap_server(host, port, username, password, folders)
+        create_imap_server(host, port, username, password, folders, description=description if description else None)
 
         # Obtener todos los servidores para devolver la lista actualizada
         # Excluir servidores IMAP que están vinculados a algún IMAP2 (son exclusivos de edit_imap2)

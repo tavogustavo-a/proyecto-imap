@@ -19,11 +19,12 @@ document.addEventListener("DOMContentLoaded", function() {
         if (data.status === "ok") {
           renderImap2List(data.servers);
         } else {
-          console.error("Error searching IMAP2 servers:", data.message);
           alert("Error: " + data.message);
         }
       })
-      .catch(err => console.error("Error fetch IMAP2 servers:", err));
+      .catch(err => {
+        alert("Error de red: " + err.message);
+      });
     });
   }
 
@@ -44,51 +45,180 @@ document.addEventListener("DOMContentLoaded", function() {
             renderImap2List(data.servers);
           }
         })
-        .catch(err => console.error("Error búsqueda automática IMAP2:", err));
+        .catch(() => {
+          // Error silencioso en búsqueda automática
+        });
       }, 200);
     });
   }
 
   function renderImap2List(servers) {
-    imap2List.innerHTML = "";
+    // Limpiar lista usando removeChild (CSP compliant)
+    while (imap2List.firstChild) {
+      imap2List.removeChild(imap2List.firstChild);
+    }
+    
     servers.forEach(s => {
       const div = document.createElement("div");
-      div.className = "imap-item";
-      div.style.marginBottom = "1rem";
+      div.className = "imap-item mb-1";
 
-      div.innerHTML = `
-        <strong>Usuario: ${escapeHtml(s.username)}</strong><br>
-        ${s.description ? escapeHtml(s.description) : ''}${s.route_path ? ` | <em>Ruta:</em> ${escapeHtml(s.route_path)}` : ''}
-        <div class="mt-05">
-          <form action="/admin/test_imap2/${s.id}" method="POST" class="d-inline">
-            <input type="hidden" name="_csrf_token" value="${getCsrfToken()}">
-            <button type="submit" class="btn-blue btn-imap-action btn-imap-small">Probar</button>
-          </form>
-          ${
-            s.enabled
-              ? `<button type="button" class="btn-red toggle-imap2-btn ml-03 btn-imap-action btn-imap-small" data-id="${s.id}" data-enabled="true">Off</button>`
-              : `<button type="button" class="btn-green toggle-imap2-btn ml-03 btn-imap-action btn-imap-small" data-id="${s.id}" data-enabled="false">On</button>`
+      // Usuario
+      const strongUser = document.createElement("strong");
+      strongUser.textContent = `Usuario: ${escapeHtml(s.username)}`;
+      div.appendChild(strongUser);
+      
+      // Descripción y ruta
+      if (s.description || s.route_path) {
+        const br = document.createElement("br");
+        div.appendChild(br);
+        
+        const infoText = document.createDocumentFragment();
+        if (s.description) {
+          const descSpan = document.createElement("span");
+          descSpan.textContent = escapeHtml(s.description);
+          infoText.appendChild(descSpan);
+        }
+        if (s.route_path) {
+          if (s.description) {
+            infoText.appendChild(document.createTextNode(" | "));
           }
-          <button
-            type="button"
-            class="btn-orange ml-03 edit-imap2-btn btn-imap-action btn-imap-small"
-            data-url="/admin/edit_imap2/${s.id}"
-          >
-            Editar
-          </button>
-          <button
-            type="button"
-            class="btn-red delete-imap2-btn ml-03 btn-imap-action btn-imap-small"
-            data-id="${s.id}"
-            title="Eliminar"
-          >
-            <i class="fas fa-trash"></i>
-          </button>
-        </div>
-      `;
+          const routeEm = document.createElement("em");
+          routeEm.textContent = "Ruta: ";
+          infoText.appendChild(routeEm);
+          const routeSpan = document.createElement("span");
+          routeSpan.textContent = escapeHtml(s.route_path);
+          infoText.appendChild(routeSpan);
+        }
+        div.appendChild(infoText);
+      }
+
+      // Contenedor de acciones
+      const actionsDiv = document.createElement("div");
+      actionsDiv.className = "mt-05";
+
+      // Formulario Probar
+      const testForm = document.createElement("form");
+      testForm.action = `/admin/test_imap2/${s.id}`;
+      testForm.method = "POST";
+      testForm.className = "d-inline";
+      
+      const csrfInput = document.createElement("input");
+      csrfInput.type = "hidden";
+      csrfInput.name = "_csrf_token";
+      csrfInput.value = getCsrfToken();
+      testForm.appendChild(csrfInput);
+      
+      const testBtn = document.createElement("button");
+      testBtn.type = "submit";
+      testBtn.className = "btn-blue btn-imap-action btn-imap-small";
+      testBtn.textContent = "Probar";
+      testForm.appendChild(testBtn);
+      actionsDiv.appendChild(testForm);
+
+      // Botón Toggle
+      const toggleBtn = document.createElement("button");
+      toggleBtn.type = "button";
+      toggleBtn.className = s.enabled ? "btn-red toggle-imap2-btn ml-03 btn-imap-action btn-imap-small" : "btn-green toggle-imap2-btn ml-03 btn-imap-action btn-imap-small";
+      toggleBtn.setAttribute("data-id", s.id);
+      toggleBtn.setAttribute("data-enabled", s.enabled ? "true" : "false");
+      toggleBtn.textContent = s.enabled ? "Off" : "On";
+      actionsDiv.appendChild(toggleBtn);
+
+      // Botón Editar
+      const editBtn = document.createElement("button");
+      editBtn.type = "button";
+      editBtn.className = "btn-orange ml-03 edit-imap2-btn btn-imap-action btn-imap-small";
+      editBtn.setAttribute("data-url", `/admin/edit_imap2/${s.id}`);
+      editBtn.textContent = "Editar";
+      actionsDiv.appendChild(editBtn);
+
+      // Botón Eliminar
+      const deleteBtn = document.createElement("button");
+      deleteBtn.type = "button";
+      deleteBtn.className = "btn-red delete-imap2-btn ml-03 btn-imap-action btn-imap-small";
+      deleteBtn.setAttribute("data-id", s.id);
+      deleteBtn.title = "Eliminar";
+      
+      const trashIcon = document.createElement("i");
+      trashIcon.className = "fas fa-trash";
+      deleteBtn.appendChild(trashIcon);
+      actionsDiv.appendChild(deleteBtn);
+
+      div.appendChild(actionsDiv);
       imap2List.appendChild(div);
     });
   }
+
+  // Event listener para probar servidor IMAP2 (interceptar formulario)
+  document.addEventListener('submit', function(e) {
+    if (e.target.closest('form') && e.target.closest('form').action && e.target.closest('form').action.includes('/admin/test_imap2/')) {
+      e.preventDefault();
+      const form = e.target.closest('form');
+      const actionUrl = form.action;
+      const serverIdMatch = actionUrl.match(/\/admin\/test_imap2\/(\d+)/);
+      
+      if (!serverIdMatch) {
+        alert('Error: No se pudo identificar el servidor.');
+        return;
+      }
+      
+      const serverId = parseInt(serverIdMatch[1]);
+      const submitBtn = form.querySelector('button[type="submit"]');
+      
+      // Feedback visual
+      if (submitBtn) {
+        submitBtn.disabled = true;
+        const originalText = submitBtn.textContent;
+        submitBtn.textContent = 'Probando...';
+        
+        fetch('/admin/test_imap2_ajax', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': getCsrfToken()
+          },
+          body: JSON.stringify({
+            server_id: serverId
+          })
+        })
+        .then(res => {
+          if (!res.ok) {
+            // Si la respuesta no es OK, intentar parsear como JSON primero
+            return res.text().then(text => {
+              try {
+                const jsonData = JSON.parse(text);
+                throw new Error(jsonData.message || `Error ${res.status}: ${res.statusText}`);
+              } catch (e) {
+                if (e instanceof SyntaxError) {
+                  // Si no es JSON, es HTML (página de error)
+                  throw new Error(`Error ${res.status}: ${res.statusText}. El servidor puede necesitar reiniciarse.`);
+                }
+                throw e;
+              }
+            });
+          }
+          return res.json();
+        })
+        .then(data => {
+          if (data.status === 'ok') {
+            alert('✅ Éxito: ' + (data.message || 'Conexión exitosa'));
+          } else {
+            alert('❌ Error: ' + (data.message || 'Error al probar conexión'));
+          }
+        })
+        .catch(err => {
+          alert('Error: ' + err.message);
+        })
+        .finally(() => {
+          if (submitBtn) {
+            submitBtn.disabled = false;
+            submitBtn.textContent = originalText;
+          }
+        });
+      }
+      return;
+    }
+  });
 
   document.addEventListener("click", function(e) {
     const target = e.target;
@@ -100,8 +230,15 @@ document.addEventListener("DOMContentLoaded", function() {
       
       // Feedback visual inmediato
       target.disabled = true;
-      const originalText = target.innerHTML;
-      target.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+      const originalContent = target.cloneNode(true);
+      // Limpiar contenido
+      while (target.firstChild) {
+        target.removeChild(target.firstChild);
+      }
+      // Agregar spinner
+      const spinnerIcon = document.createElement("i");
+      spinnerIcon.className = "fas fa-spinner fa-spin";
+      target.appendChild(spinnerIcon);
       
       const srvId = target.getAttribute("data-id");
       const currentlyEnabled = (target.getAttribute("data-enabled") === "true");
@@ -122,18 +259,27 @@ document.addEventListener("DOMContentLoaded", function() {
         if (data.status === "ok") {
           renderImap2List(data.servers);
         } else {
-          console.error("Error toggling IMAP2:", data.message);
           alert("Error: " + data.message);
         }
       })
       .catch(err => {
-        console.error("Error toggleIMAP2:", err);
         alert("Error de red: " + err.message);
       })
       .finally(() => {
         // Restaurar botón
         target.disabled = false;
-        target.innerHTML = originalText;
+        // Limpiar contenido
+        while (target.firstChild) {
+          target.removeChild(target.firstChild);
+        }
+        // Restaurar contenido original
+        while (originalContent.firstChild) {
+          target.appendChild(originalContent.firstChild.cloneNode(true));
+        }
+        // Restaurar texto si existe
+        if (originalContent.textContent) {
+          target.textContent = originalContent.textContent;
+        }
       });
     }
 
@@ -147,8 +293,15 @@ document.addEventListener("DOMContentLoaded", function() {
 
       // Feedback visual inmediato
       button.disabled = true;
-      const originalText = button.innerHTML;
-      button.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+      const originalContent = button.cloneNode(true);
+      // Limpiar contenido
+      while (button.firstChild) {
+        button.removeChild(button.firstChild);
+      }
+      // Agregar spinner
+      const spinnerIcon = document.createElement("i");
+      spinnerIcon.className = "fas fa-spinner fa-spin";
+      button.appendChild(spinnerIcon);
 
       fetch("/admin/delete_imap2_ajax", {
         method: "POST",
@@ -163,18 +316,27 @@ document.addEventListener("DOMContentLoaded", function() {
         if (data.status === "ok") {
           renderImap2List(data.servers);
         } else {
-          console.error("Error deleting IMAP2:", data.message);
           alert("Error: " + data.message);
         }
       })
       .catch(err => {
-        console.error("Error deleteIMAP2:", err);
         alert("Error de red: " + err.message);
       })
       .finally(() => {
         // Restaurar botón
         button.disabled = false;
-        button.innerHTML = originalText;
+        // Limpiar contenido
+        while (button.firstChild) {
+          button.removeChild(button.firstChild);
+        }
+        // Restaurar contenido original
+        while (originalContent.firstChild) {
+          button.appendChild(originalContent.firstChild.cloneNode(true));
+        }
+        // Restaurar texto si existe
+        if (originalContent.textContent) {
+          button.textContent = originalContent.textContent;
+        }
       });
     }
 
@@ -184,8 +346,6 @@ document.addEventListener("DOMContentLoaded", function() {
       const url = target.dataset.url;
       if (url) {
         window.location.href = url;
-      } else {
-        console.error("No se encontró data-url en botón Editar IMAP2");
       }
     }
   });
@@ -220,9 +380,17 @@ document.addEventListener("DOMContentLoaded", function() {
       }
 
       const submitButton = createImap2Form.querySelector('button[type="submit"]');
-      const originalText = submitButton.innerHTML;
+      const originalContent = submitButton.cloneNode(true);
       submitButton.disabled = true;
-      submitButton.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Creando...';
+      // Limpiar contenido
+      while (submitButton.firstChild) {
+        submitButton.removeChild(submitButton.firstChild);
+      }
+      // Agregar spinner y texto
+      const spinnerIcon = document.createElement("i");
+      spinnerIcon.className = "fas fa-spinner fa-spin";
+      submitButton.appendChild(spinnerIcon);
+      submitButton.appendChild(document.createTextNode(" Creando..."));
 
       fetch("/admin/create_imap2_ajax", {
         method: "POST",
@@ -259,12 +427,22 @@ document.addEventListener("DOMContentLoaded", function() {
         }
       })
       .catch(err => {
-        console.error("Error creating IMAP2:", err);
         alert("Error de red: " + err.message);
       })
       .finally(() => {
         submitButton.disabled = false;
-        submitButton.innerHTML = originalText;
+        // Limpiar contenido
+        while (submitButton.firstChild) {
+          submitButton.removeChild(submitButton.firstChild);
+        }
+        // Restaurar contenido original
+        while (originalContent.firstChild) {
+          submitButton.appendChild(originalContent.firstChild.cloneNode(true));
+        }
+        // Restaurar texto si existe
+        if (originalContent.textContent) {
+          submitButton.textContent = originalContent.textContent;
+        }
       });
     });
   }

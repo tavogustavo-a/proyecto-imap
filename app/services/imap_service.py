@@ -12,7 +12,7 @@ from app.models import IMAPServer
 from app.services.imap_crypto import encrypt_password, decrypt_password
 from app.imap.parser import parse_raw_email
 
-def create_imap_server(host, port, username, password_plain, folders="INBOX", model_cls=IMAPServer):
+def create_imap_server(host, port, username, password_plain, folders="INBOX", description=None, model_cls=IMAPServer):
     """Crea un registro IMAPServer (o subclase) parametrizable."""
     password_enc = encrypt_password(password_plain)
     srv = model_cls(
@@ -22,11 +22,14 @@ def create_imap_server(host, port, username, password_plain, folders="INBOX", mo
         password_enc=password_enc,
         folders=folders or "INBOX"
     )
+    # Agregar description si el modelo lo soporta y se proporciona
+    if hasattr(srv, 'description') and description:
+        srv.description = description
     db.session.add(srv)
     db.session.commit()
     return srv
 
-def update_imap_server(server_id, host, port, username, password_plain, folders="INBOX", model_cls=IMAPServer):
+def update_imap_server(server_id, host, port, username, password_plain, folders="INBOX", description=None, model_cls=IMAPServer):
     srv = model_cls.query.get_or_404(server_id)
     srv.host = host
     srv.port = port
@@ -36,6 +39,11 @@ def update_imap_server(server_id, host, port, username, password_plain, folders=
         srv.password_enc = encrypt_password(password_plain)
 
     srv.folders = folders or "INBOX"
+    
+    # Actualizar description si el modelo lo soporta
+    if hasattr(srv, 'description'):
+        srv.description = description if description else None
+    
     db.session.commit()
     return srv
 
@@ -89,9 +97,19 @@ def test_imap_connection(server_id, model_cls=IMAPServer):
 def delete_imap_server(server_id, model_cls=IMAPServer):
     """
     Elimina un servidor IMAP y todas sus relaciones asociadas.
-    Para IMAPServer2, también limpia las relaciones M2M con filtros y regex.
+    Para IMAPServer2, también limpia las relaciones M2M con filtros y regex,
+    y elimina todos los servidores IMAP vinculados.
     """
     srv = model_cls.query.get_or_404(server_id)
+    
+    # Si es IMAPServer2, eliminar todos los servidores IMAP vinculados primero
+    if hasattr(srv, 'linked_imap_servers'):
+        # Obtener lista de servidores vinculados antes de eliminarlos
+        linked_servers = list(srv.linked_imap_servers.all())
+        # Eliminar cada servidor IMAP vinculado (son exclusivos de este IMAP2)
+        for linked_imap in linked_servers:
+            db.session.delete(linked_imap)
+        db.session.flush()  # Aplicar cambios antes de continuar
     
     # Si es IMAPServer2, limpiar explícitamente las relaciones M2M antes de eliminar
     # Verificar por el nombre de la tabla para ser más seguro

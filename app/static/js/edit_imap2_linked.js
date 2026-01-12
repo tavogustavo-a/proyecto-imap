@@ -1,5 +1,5 @@
 // app/static/js/edit_imap2_linked.js
-// Maneja la funcionalidad de vincular/desvincular servidores IMAP en edit_imap2.html
+// Maneja la funcionalidad de vincular/eliminar servidores IMAP en edit_imap2.html
 
 (function() {
   'use strict';
@@ -97,7 +97,7 @@
       editBtn.textContent = 'Editar';
       actionsDiv.appendChild(editBtn);
 
-      // Botón Desvincular
+      // Botón Eliminar
       const unlinkBtn = document.createElement('button');
       unlinkBtn.type = 'button';
       unlinkBtn.className = 'btn-red unlink-imap-btn ml-03 btn-imap-action btn-imap-small';
@@ -105,10 +105,10 @@
       const imap2Id = createLinkedImapForm ? createLinkedImapForm.querySelector('button[type="submit"]').getAttribute('data-imap2-id') : '';
       unlinkBtn.setAttribute('data-imap2-id', imap2Id);
       unlinkBtn.setAttribute('data-imap-id', s.id);
-      unlinkBtn.title = 'Desvincular';
+      unlinkBtn.title = 'Eliminar';
       
       const icon = document.createElement('i');
-      icon.className = 'fas fa-unlink';
+      icon.className = 'fas fa-trash';
       unlinkBtn.appendChild(icon);
       actionsDiv.appendChild(unlinkBtn);
 
@@ -139,6 +139,8 @@
       // Feedback visual
       submitBtn.disabled = true;
       const originalText = submitBtn.textContent;
+      // Guardar contenido original usando cloneNode (más seguro que innerHTML)
+      const originalContent = submitBtn.cloneNode(true);
       submitBtn.textContent = 'Creando...';
 
       fetch(`/admin/imap2/${imap2Id}/create_and_link_imap`, {
@@ -170,17 +172,71 @@
         }
       })
       .catch(err => {
-        console.error('Error al crear servidor:', err);
         alert('Error de red: ' + err.message);
       })
       .finally(() => {
         submitBtn.disabled = false;
-        submitBtn.textContent = originalText;
+        // Restaurar contenido original desde el nodo clonado
+        submitBtn.textContent = originalContent.textContent;
       });
     });
   }
 
-  // Event listener para desvincular servidor IMAP
+  // Event listener para probar servidor IMAP (interceptar formulario)
+  document.addEventListener('submit', function(e) {
+    if (e.target.closest('form') && e.target.closest('form').action && e.target.closest('form').action.includes('/admin/test_imap/')) {
+      e.preventDefault();
+      const form = e.target.closest('form');
+      const actionUrl = form.action;
+      const serverIdMatch = actionUrl.match(/\/admin\/test_imap\/(\d+)/);
+      
+      if (!serverIdMatch) {
+        alert('Error: No se pudo identificar el servidor.');
+        return;
+      }
+      
+      const serverId = parseInt(serverIdMatch[1]);
+      const submitBtn = form.querySelector('button[type="submit"]');
+      
+      // Feedback visual
+      if (submitBtn) {
+        submitBtn.disabled = true;
+        const originalText = submitBtn.textContent;
+        submitBtn.textContent = 'Probando...';
+        
+        fetch('/admin/test_imap_ajax', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': getCsrfToken()
+          },
+          body: JSON.stringify({
+            server_id: serverId
+          })
+        })
+        .then(res => res.json())
+        .then(data => {
+          if (data.status === 'ok') {
+            alert('✅ Éxito: ' + (data.message || 'Conexión exitosa'));
+          } else {
+            alert('❌ Error: ' + (data.message || 'Error al probar conexión'));
+          }
+        })
+        .catch(err => {
+          alert('Error de red: ' + err.message);
+        })
+        .finally(() => {
+          if (submitBtn) {
+            submitBtn.disabled = false;
+            submitBtn.textContent = originalText;
+          }
+        });
+      }
+      return;
+    }
+  });
+
+  // Event listener para eliminar servidor IMAP
   document.addEventListener('click', function(e) {
     if (e.target.closest('.unlink-imap-btn')) {
       e.preventDefault();
@@ -188,14 +244,21 @@
       const imap2Id = btn.getAttribute('data-imap2-id');
       const imapId = btn.getAttribute('data-imap-id');
       
-      if (!confirm('¿Deseas desvincular este servidor IMAP?')) {
+      if (!confirm('¿Deseas eliminar este servidor IMAP? Esta acción es irreversible.')) {
         return;
       }
 
       // Feedback visual
       btn.disabled = true;
-      const originalHTML = btn.innerHTML;
-      btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+      // Guardar contenido original (puede ser texto o HTML con iconos)
+      const originalContent = btn.cloneNode(true);
+      // Limpiar contenido y agregar spinner usando createElement
+      while (btn.firstChild) {
+        btn.removeChild(btn.firstChild);
+      }
+      const spinnerIcon = document.createElement('i');
+      spinnerIcon.className = 'fas fa-spinner fa-spin';
+      btn.appendChild(spinnerIcon);
 
       fetch(`/admin/imap2/${imap2Id}/unlink_imap/${imapId}`, {
         method: 'POST',
@@ -219,16 +282,22 @@
               });
           }
         } else {
-          alert('Error: ' + (data.message || 'Error al desvincular servidor'));
+          alert('Error: ' + (data.message || 'Error al eliminar servidor'));
         }
       })
       .catch(err => {
-        console.error('Error al desvincular servidor:', err);
         alert('Error de red: ' + err.message);
       })
       .finally(() => {
         btn.disabled = false;
-        btn.innerHTML = originalHTML;
+        // Restaurar contenido original
+        while (btn.firstChild) {
+          btn.removeChild(btn.firstChild);
+        }
+        // Restaurar desde el nodo clonado
+        while (originalContent.firstChild) {
+          btn.appendChild(originalContent.firstChild.cloneNode(true));
+        }
       });
     }
 
@@ -242,7 +311,15 @@
       // Feedback visual
       btn.disabled = true;
       const originalText = btn.textContent;
-      btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+      // Guardar contenido original (puede ser texto o HTML con iconos)
+      const originalContent = btn.cloneNode(true);
+      // Limpiar contenido y agregar spinner usando createElement
+      while (btn.firstChild) {
+        btn.removeChild(btn.firstChild);
+      }
+      const spinnerIcon = document.createElement('i');
+      spinnerIcon.className = 'fas fa-spinner fa-spin';
+      btn.appendChild(spinnerIcon);
 
       fetch('/admin/toggle_imap_ajax', {
         method: 'POST',
@@ -274,12 +351,18 @@
         }
       })
       .catch(err => {
-        console.error('Error al cambiar estado:', err);
         alert('Error de red: ' + err.message);
       })
       .finally(() => {
         btn.disabled = false;
-        btn.textContent = originalText;
+        // Restaurar contenido original
+        while (btn.firstChild) {
+          btn.removeChild(btn.firstChild);
+        }
+        // Restaurar desde el nodo clonado
+        while (originalContent.firstChild) {
+          btn.appendChild(originalContent.firstChild.cloneNode(true));
+        }
       });
     }
 

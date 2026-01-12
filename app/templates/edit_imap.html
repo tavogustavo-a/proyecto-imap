@@ -15,6 +15,18 @@
       <!-- Campo oculto para indicar que se está editando el servidor con ID 'srv.id' -->
       <input type="hidden" name="server_id" value="{{ srv.id }}">
 
+      <!-- Descripción opcional -->
+      <label for="description">Descripción (opcional):</label>
+      <input
+        type="text"
+        id="description"
+        name="description"
+        placeholder="Descripción del servidor"
+        value="{{ srv.description if srv.description else '' }}"
+        class="d-block mb-05"
+        autocomplete="off"
+      >
+
       <!-- Host con label y autocomplete -->
       <label for="host">Host del servidor:</label>
       <input

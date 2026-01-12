@@ -117,18 +117,26 @@
 
   <form action="{{ url_for('admin_bp.observer_manage_imap') }}" method="POST" class="mt-1">
     <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
-    <h4>Crear Nuevo Servidor IMAP Observador</h4>
-    <label for="imapHost" class="sr-only">Host</label>
-    <input type="text" id="imapHost" name="host" placeholder="Host" required class="d-block mb-05" autocomplete="off">
-    <label for="imapPort" class="sr-only">Puerto</label>
-    <input type="number" id="imapPort" name="port" value="993" class="d-block mb-05" autocomplete="off">
-    <label for="imapUsername" class="sr-only">Usuario</label>
-    <input type="text" id="imapUsername" name="username" placeholder="Usuario" required class="d-block mb-05" autocomplete="username">
-    <label for="imapPassword" class="sr-only">Password</label>
-    <input type="password" id="imapPassword" name="password" placeholder="Password" class="d-block mb-05" autocomplete="current-password">
-    <label for="imapFolders">Carpetas (separadas por comas):</label>
-    <input type="text" id="imapFolders" name="folders" value="INBOX" class="d-block mb-05" autocomplete="off">
-    <button type="submit" class="btn-green">Crear</button>
+    <!-- Fila 1: Host y Puerto -->
+    <div class="d-flex gap-05 mb-05 align-items-center">
+      <label for="imapHost" class="sr-only">Host</label>
+      <input type="text" id="imapHost" name="host" placeholder="Host" required class="flex-grow-1" autocomplete="off">
+      <label for="imapPort" class="sr-only">Puerto</label>
+      <input type="number" id="imapPort" name="port" value="993" class="imap2-port-input" autocomplete="off">
+    </div>
+    <!-- Fila 2: Usuario y Contraseña -->
+    <div class="d-flex gap-05 mb-05 align-items-center">
+      <label for="imapUsername" class="sr-only">Usuario</label>
+      <input type="text" id="imapUsername" name="username" placeholder="Usuario" required class="flex-grow-1" autocomplete="username">
+      <label for="imapPassword" class="sr-only">Password</label>
+      <input type="password" id="imapPassword" name="password" placeholder="Password" class="flex-grow-1" autocomplete="current-password">
+    </div>
+    <!-- Fila 3: Carpetas y Botón Crear -->
+    <div class="d-flex gap-05 mb-05 align-items-center">
+      <label for="imapFolders" class="sr-only">Carpetas</label>
+      <input type="text" id="imapFolders" name="folders" placeholder="INBOX" value="INBOX" class="flex-grow-1" autocomplete="off">
+      <button type="submit" class="btn-green">Crear</button>
+    </div>
   </form>
 </div>
 

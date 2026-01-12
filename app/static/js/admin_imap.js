@@ -24,11 +24,12 @@ document.addEventListener("DOMContentLoaded", function() {
         if (data.status === "ok") {
           renderImapList(data.servers);
         } else {
-          console.error("Error searching IMAP servers:", data.message);
           alert("Error: " + data.message);
         }
       })
-      .catch(err => console.error("Error fetch IMAP servers:", err));
+      .catch(err => {
+        alert("Error de red: " + err.message);
+      });
     });
   }
 
@@ -49,7 +50,9 @@ document.addEventListener("DOMContentLoaded", function() {
             renderImapList(data.servers);
           }
         })
-        .catch(err => console.error("Error búsqueda automática IMAP:", err));
+        .catch(() => {
+          // Error silencioso en búsqueda automática
+        });
       }, 200);
     });
   }
@@ -101,6 +104,60 @@ document.addEventListener("DOMContentLoaded", function() {
     return div.innerHTML;
   }
 
+  // Event listener para probar servidor IMAP (interceptar formulario)
+  document.addEventListener('submit', function(e) {
+    if (e.target.closest('form') && e.target.closest('form').action && e.target.closest('form').action.includes('/admin/test_imap/')) {
+      e.preventDefault();
+      const form = e.target.closest('form');
+      const actionUrl = form.action;
+      const serverIdMatch = actionUrl.match(/\/admin\/test_imap\/(\d+)/);
+      
+      if (!serverIdMatch) {
+        alert('Error: No se pudo identificar el servidor.');
+        return;
+      }
+      
+      const serverId = parseInt(serverIdMatch[1]);
+      const submitBtn = form.querySelector('button[type="submit"]');
+      
+      // Feedback visual
+      if (submitBtn) {
+        submitBtn.disabled = true;
+        const originalText = submitBtn.textContent;
+        submitBtn.textContent = 'Probando...';
+        
+        fetch('/admin/test_imap_ajax', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': getCsrfToken()
+          },
+          body: JSON.stringify({
+            server_id: serverId
+          })
+        })
+        .then(res => res.json())
+        .then(data => {
+          if (data.status === 'ok') {
+            alert('✅ Éxito: ' + (data.message || 'Conexión exitosa'));
+          } else {
+            alert('❌ Error: ' + (data.message || 'Error al probar conexión'));
+          }
+        })
+        .catch(err => {
+          alert('Error de red: ' + err.message);
+        })
+        .finally(() => {
+          if (submitBtn) {
+            submitBtn.disabled = false;
+            submitBtn.textContent = originalText;
+          }
+        });
+      }
+      return;
+    }
+  });
+
   document.addEventListener("click", function(e) {
     const target = e.target;
 
@@ -134,12 +191,10 @@ document.addEventListener("DOMContentLoaded", function() {
         if (data.status === "ok") {
           renderImapList(data.servers);
         } else {
-          console.error("Error toggling IMAP:", data.message);
           alert("Error: " + data.message);
         }
       })
       .catch(err => {
-        console.error("Error toggleIMAP:", err);
         alert("Error de red: " + err.message);
       })
       .finally(() => {
@@ -175,12 +230,10 @@ document.addEventListener("DOMContentLoaded", function() {
         if (data.status === "ok") {
           renderImapList(data.servers);
         } else {
-          console.error("Error deleting IMAP:", data.message);
           alert("Error: " + data.message);
         }
       })
       .catch(err => {
-        console.error("Error deleteIMAP:", err);
         alert("Error de red: " + err.message);
       })
       .finally(() => {
@@ -196,8 +249,6 @@ document.addEventListener("DOMContentLoaded", function() {
       const url = target.dataset.url;
       if (url) {
         window.location.href = url;
-      } else {
-        console.error("No se encontró data-url en botón Editar IMAP");
       }
     }
   });
@@ -220,8 +271,6 @@ document.addEventListener("DOMContentLoaded", function() {
           const url = button.dataset.url || targetUrl; // Usar data-url si existe
           if (url) {
               button.addEventListener("click", () => { window.location.href = url; });
-          } else {
-              console.error(`No se encontró URL para el botón #${buttonId}`);
           }
       }
   }
@@ -298,6 +347,7 @@ document.addEventListener("DOMContentLoaded", function() {
     createImapForm.addEventListener("submit", function(e) {
       e.preventDefault();
       
+      const description = document.getElementById("imap2_description") ? document.getElementById("imap2_description").value.trim() : "";
       const host = document.getElementById("imap_host").value.trim();
       const port = parseInt(document.getElementById("imap_port").value) || 993;
       const username = document.getElementById("imap_username").value.trim();
@@ -321,6 +371,7 @@ document.addEventListener("DOMContentLoaded", function() {
           "X-CSRFToken": getCsrfToken()
         },
         body: JSON.stringify({
+          description: description,
           host: host,
           port: port,
           username: username,
@@ -343,7 +394,6 @@ document.addEventListener("DOMContentLoaded", function() {
         }
       })
       .catch(err => {
-        console.error("Error creating IMAP:", err);
         alert("Error de red: " + err.message);
       })
       .finally(() => {

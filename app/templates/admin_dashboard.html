@@ -341,17 +341,20 @@
           autocomplete="current-password"
         >
       </div>
-      <label for="imap_folders">Carpetas (separadas por comas):</label>
-      <input
-        id="imap_folders"
-        type="text"
-        name="folders"
-        placeholder="INBOX,Carpeta2"
-        value="INBOX"
-        class="d-block mb-05"
-        autocomplete="off"
-      >
-      <button type="submit" class="btn-green">Crear</button>
+      <!-- Fila 3: Carpetas y Botón Crear -->
+      <div class="d-flex gap-05 mb-05 align-items-center">
+        <label for="imap_folders" class="sr-only">Carpetas</label>
+        <input
+          id="imap_folders"
+          type="text"
+          name="folders"
+          placeholder="INBOX"
+          value="INBOX"
+          class="flex-grow-1"
+          autocomplete="off"
+        >
+        <button type="submit" class="btn-green">Crear</button>
+      </div>
     </form>
     </div>
 
@@ -438,7 +441,18 @@
   <div class="mt-1">
   <form id="createImap2Form" action="{{ url_for('admin_bp.manage_imap2') }}" method="POST">
     <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
-    <h4>Crear Nuevo Servidor IMAP</h4>
+    <!-- Descripción opcional -->
+    <div class="mb-05">
+      <label for="imap2_description" class="sr-only">Descripción</label>
+      <input
+        id="imap2_description"
+        type="text"
+        name="description"
+        placeholder="Descripción del servidor (opcional)"
+        class="d-block"
+        autocomplete="off"
+      >
+    </div>
     <!-- Fila 1: Host y Puerto -->
     <div class="d-flex gap-05 mb-05 align-items-center">
       <label for="imap2_host" class="sr-only">Host</label>
@@ -484,10 +498,10 @@
         autocomplete="current-password"
       >
     </div>
-    <!-- Fila 3: Carpetas y Ruta -->
+    <!-- Fila 3: Carpetas y Ruta con Botón Crear -->
     <div class="d-flex gap-05 mb-05 align-items-center">
       <div class="flex-grow-1">
-        <label for="imap2_folders">Carpetas (separadas por comas):</label>
+        <label for="imap2_folders">Carpetas separa por comas:</label>
         <input
           id="imap2_folders"
           type="text"
@@ -498,21 +512,21 @@
           autocomplete="off"
         >
       </div>
-      <div class="flex-grow-1">
-        <label for="imap2_route_path">Ruta:</label>
-        <input
-          id="imap2_route_path"
-          type="text"
-          name="route_path"
-          placeholder="/codigos4"
-          class="d-block"
-          required
-          autocomplete="off"
-        >
+      <div class="d-flex gap-05 align-items-end flex-grow-1">
+        <div class="flex-grow-1">
+          <label for="imap2_route_path">Ruta:</label>
+          <input
+            id="imap2_route_path"
+            type="text"
+            name="route_path"
+            placeholder="/codigos4"
+            class="d-block"
+            required
+            autocomplete="off"
+          >
+        </div>
+        <button type="submit" class="btn-green">Crear</button>
       </div>
-    </div>
-    <div class="d-flex gap-1 align-items-center">
-      <button type="submit" class="btn-green">Crear</button>
     </div>
   </form>
   </div>
