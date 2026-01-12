@@ -6,6 +6,7 @@ from app.models import User
 from app.models.user import AllowedEmail
 from app.models.service import ServiceModel
 from app.store.models import SMSConfig, SMSMessage, AllowedSMSNumber, SMSRegex, TwoFAConfig
+from app.models.imap2 import IMAP2TwoFAConfig, IMAPServer2
 from app.extensions import db
 from app.utils.timezone import utc_to_colombia
 from datetime import datetime, timedelta
@@ -552,3 +553,54 @@ def search_imap2_dynamic():
         return jsonify({"results": []}), 200
 
     return jsonify({"results": [mail_result]}), 200
+
+
+@api_bp.route("/imap2/<int:imap_server_id>/2fa/code/<email>", methods=["GET"])
+@csrf_exempt_api
+def get_imap2_2fa_code_for_email(imap_server_id, email):
+    """Obtiene el código 2FA actual para un correo específico en un servidor IMAP2 específico"""
+    try:
+        import pyotp
+        import time
+        
+        # Verificar que el servidor IMAP2 existe
+        server = IMAPServer2.query.get_or_404(imap_server_id)
+        
+        # Normalizar el correo
+        email_normalized = email.lower().strip()
+        
+        # Buscar configuración 2FA específica de este servidor IMAP2
+        configs = IMAP2TwoFAConfig.query.filter(
+            IMAP2TwoFAConfig.imap_server_id == imap_server_id,
+            IMAP2TwoFAConfig.is_enabled == True
+        ).all()
+        
+        matching_config = None
+        for cfg in configs:
+            emails_list = cfg.get_emails_list()
+            if email_normalized in emails_list:
+                matching_config = cfg
+                break
+        
+        # Si no hay configuración 2FA para este correo en este servidor, devolver 404
+        if not matching_config:
+            return jsonify({"error": "No hay configuración 2FA para este correo en este servidor"}), 404
+        
+        # Generar código TOTP (sin validar permisos, ya que es para páginas dinámicas públicas)
+        totp = pyotp.TOTP(matching_config.secret_key)
+        current_code = totp.now()
+        
+        # Calcular tiempo restante hasta el próximo código (30 segundos)
+        current_time = int(time.time())
+        time_remaining = 30 - (current_time % 30)
+        
+        return jsonify({
+            "success": True,
+            "code": current_code,
+            "time_remaining": time_remaining,
+            "email": email_normalized
+        }), 200
+        
+    except Exception as e:
+        current_app.logger.error(f"Error al generar código 2FA de IMAP2: {e}", exc_info=True)
+        return jsonify({"error": f"Error al generar código 2FA: {str(e)}"}), 500

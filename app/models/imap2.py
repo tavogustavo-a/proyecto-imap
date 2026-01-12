@@ -1,6 +1,7 @@
 # app/models/imap2.py
 
 from app.extensions import db
+from datetime import datetime
 
 # Tablas M2M para asociar filtros y regex con IMAPServer2
 # CASCADE en imap2_id: cuando se elimina un IMAPServer2, se eliminan automáticamente sus relaciones M2M
@@ -43,6 +44,38 @@ class IMAPServer2(db.Model):
         backref="imap2_servers"
     )
 
+    # Relación con configuraciones 2FA específicas de este servidor
+    twofa_configs = db.relationship(
+        "IMAP2TwoFAConfig",
+        backref="imap_server",
+        lazy="dynamic",
+        cascade="all, delete-orphan"
+    )
+
     def __repr__(self):
         return f"<IMAPServer2 {self.host}:{self.port} route={self.route_path}>"
+
+
+class IMAP2TwoFAConfig(db.Model):
+    """Modelo para almacenar configuraciones de 2FA por correo específicas para servidores IMAP2"""
+    __tablename__ = "imap2_twofa_configs"
+    
+    id = db.Column(db.Integer, primary_key=True)
+    imap_server_id = db.Column(db.Integer, db.ForeignKey('imap_servers2.id', ondelete='CASCADE'), nullable=False, index=True)
+    secret_key = db.Column(db.String(255), nullable=False)  # Secreto TOTP (ej: LDPUPZLQRGQ5VDD6HORPH44OMXGCDGFP)
+    emails = db.Column(db.Text, nullable=False)  # Correos asociados separados por coma
+    is_enabled = db.Column(db.Boolean, default=True, nullable=False, index=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    def get_emails_list(self):
+        """Retorna una lista de correos normalizados"""
+        if not self.emails:
+            return []
+        # Separar por coma o espacio, normalizar y limpiar
+        emails = self.emails.replace(',', ' ').split()
+        return [email.strip().lower() for email in emails if email.strip()]
+    
+    def __repr__(self):
+        return f'<IMAP2TwoFAConfig id={self.id} server_id={self.imap_server_id} emails={self.emails[:50]}...>'
 

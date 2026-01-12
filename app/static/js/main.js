@@ -379,12 +379,7 @@ document.addEventListener("DOMContentLoaded", function () {
                                 ajaxSearchForm.getAttribute("data-imap-server-id") !== "0" &&
                                 ajaxSearchForm.getAttribute("data-imap-server-id") !== "";
     
-    // Si es una página dinámica de IMAP2, no interceptar el submit aquí
-    // El listener en search_imap2_dynamic.html manejará el submit
-    if (isImap2DynamicPage) {
-      return; // Salir temprano, dejar que search_imap2_dynamic.html maneje el submit
-    }
-    
+    // Manejar el submit para todas las páginas (incluyendo dinámicas de IMAP2)
     ajaxSearchForm.addEventListener("submit", function (e) {
       e.preventDefault(); // Prevenir el envío normal
       e.stopImmediatePropagation(); // Prevenir otros listeners
@@ -419,8 +414,26 @@ document.addEventListener("DOMContentLoaded", function () {
         resultsDiv.innerHTML = "";
       }
 
-      // Detectar si el formulario tiene un endpoint personalizado (para search2.html)
-      const searchEndpoint = ajaxSearchForm.getAttribute("data-search-endpoint") || "/api/search_mails";
+      // Detectar si el formulario tiene un endpoint personalizado (para search2.html o páginas dinámicas)
+      let searchEndpoint = ajaxSearchForm.getAttribute("data-search-endpoint");
+      let requestBody = {};
+      
+      if (isImap2DynamicPage) {
+        // Página dinámica de IMAP2: usar endpoint específico y imap_server_id
+        searchEndpoint = "/api/search_imap2_dynamic";
+        const imapServerId = ajaxSearchForm.getAttribute("data-imap-server-id");
+        requestBody = {
+          email_to_search: email,
+          imap_server_id: parseInt(imapServerId)
+        };
+      } else {
+        // Página normal: usar endpoint por defecto o el especificado
+        searchEndpoint = searchEndpoint || "/api/search_mails";
+        requestBody = {
+          email_to_search: email,
+          service_id: serviceId
+        };
+      }
 
       fetch(searchEndpoint, {
         method: "POST",
@@ -429,10 +442,7 @@ document.addEventListener("DOMContentLoaded", function () {
           "X-CSRFToken": csrfToken
         },
         credentials: "same-origin",
-        body: JSON.stringify({
-          email_to_search: email,
-          service_id: serviceId
-        })
+        body: JSON.stringify(requestBody)
       })
       .then(response => {
         // Incorporamos la comprobación de 403 => "No tienes permiso"
@@ -492,7 +502,8 @@ document.addEventListener("DOMContentLoaded", function () {
         if (results.length === 0) {
           // Si no hay resultados, primero intentar mostrar código 2FA (si existe configuración)
           // Solo mostrar "No se encontraron resultados" si no hay código 2FA o hay error 404
-          if (emailSearched) {
+          // NO hacer esto en páginas dinámicas de IMAP2 (usan su propio sistema de 2FA)
+          if (emailSearched && !isImap2DynamicPage) {
             // NO limpiar el contenedor todavía, mantener el spinner visible mientras se verifica 2FA
             // checkAndDisplay2FACode mostrará el código 2FA si existe, o el error si no hay permisos
             checkAndDisplay2FACode(emailSearched).then((hasContent) => {
@@ -513,7 +524,7 @@ document.addEventListener("DOMContentLoaded", function () {
               }
             });
           } else {
-            // Si no hay email, ocultar spinner y mostrar mensaje de no resultados
+            // Si no hay email o es página dinámica de IMAP2, ocultar spinner y mostrar mensaje de no resultados
             if (spinner) {
               spinner.classList.add('d-none');
               spinner.classList.remove('d-block');
@@ -545,7 +556,8 @@ document.addEventListener("DOMContentLoaded", function () {
           
           // También buscar y mostrar código 2FA si existe (SIEMPRE, incluso si no hay mensajes SMS)
           // Usar setTimeout para asegurar que renderSMSMessages termine primero
-          if (emailToCheck) {
+          // NO hacer esto en páginas dinámicas de IMAP2 (usan su propio sistema de 2FA)
+          if (emailToCheck && !isImap2DynamicPage) {
             setTimeout(() => {
               checkAndDisplay2FACode(emailToCheck);
             }, 200);
@@ -554,7 +566,8 @@ document.addEventListener("DOMContentLoaded", function () {
         }
         
         // Verificar si hay código 2FA para el correo buscado (correos normales)
-        if (emailSearched) {
+        // NO hacer esto en páginas dinámicas de IMAP2 (usan su propio sistema de 2FA)
+        if (emailSearched && !isImap2DynamicPage) {
           checkAndDisplay2FACode(emailSearched);
         }
 
@@ -562,6 +575,7 @@ document.addEventListener("DOMContentLoaded", function () {
         const regexDict = mail.regex_matches;
         const mailDateFormatted = mail.formatted_date || "";
         const filterMatched = mail.filter_matched === true;
+
 
         let mailContentContainer = document.createElement('div');
         let hasMailContent = false;
@@ -588,6 +602,7 @@ document.addEventListener("DOMContentLoaded", function () {
           const regexWillRender = (regexDict && Object.keys(regexDict).length > 0);
           // 2. Determinar si hay contenido de filtro
           const hasFilterContent = hasMailContent;
+
 
           // 3. LÓGICA DE PRIORIDAD: Si hay filtro Y regex, mostrar solo filtro
           if (hasFilterContent && regexWillRender) {
@@ -680,10 +695,17 @@ document.addEventListener("DOMContentLoaded", function () {
     });
   }
 
-  function renderRegexMatches(regexMatches, mailDateFormatted) {
+  // Hacer disponible globalmente para páginas dinámicas
+  window.renderRegexMatches = function(regexMatches, mailDateFormatted) {
+    if (!regexMatches || typeof regexMatches !== 'object') {
+      return null;
+    }
+    
     let allMatches = [];
     for (const rId in regexMatches) {
-      allMatches = allMatches.concat(regexMatches[rId]);
+      if (Array.isArray(regexMatches[rId])) {
+        allMatches = allMatches.concat(regexMatches[rId]);
+      }
     }
     
     // Si no hay matches, no devolver nada (evita cards vacíos)
@@ -765,7 +787,8 @@ document.addEventListener("DOMContentLoaded", function () {
     return divContainer;
   }
 
-  function attachCopyButtonListener() {
+  // Hacer disponible globalmente para páginas dinámicas
+  window.attachCopyButtonListener = function() {
     const copyBtn = document.getElementById("copyRegexBtn");
     if (copyBtn) {
       copyBtn.addEventListener("click", function() {
@@ -1184,7 +1207,7 @@ document.addEventListener("DOMContentLoaded", function () {
   // --- FIN: Listener para Limpiar Log ---
 
   // ✅ NUEVO: Función para verificar y mostrar código 2FA
-  async function checkAndDisplay2FACode(email) {
+    async function checkAndDisplay2FACode(email) {
     if (!email) {
       return Promise.resolve();
     }

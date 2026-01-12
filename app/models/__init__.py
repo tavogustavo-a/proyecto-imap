@@ -3,7 +3,7 @@
 from .user import User, RememberDevice, AllowedEmail
 from .chat import ChatMessage, ChatSession
 from .imap import IMAPServer
-from .imap2 import IMAPServer2
+from .imap2 import IMAPServer2, IMAP2TwoFAConfig
 from .filters import FilterModel, RegexModel
 from .domain import DomainModel
 from .settings import SiteSettings, AppSecrets, get_current_imap_key, get_next_imap_key

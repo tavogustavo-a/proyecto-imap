@@ -6,14 +6,17 @@ from flask import (
 from .admin_bp import admin_bp
 from app.extensions import db
 from app.models import IMAPServer2, FilterModel, RegexModel
+from app.models.imap2 import IMAP2TwoFAConfig
 from app.services.imap_service import (
     create_imap_server,
     update_imap_server,
     test_imap_connection,
     delete_imap_server
 )
+from app.services.imap_crypto import encrypt_password
 from app.admin.decorators import admin_required
 from urllib.parse import unquote, urlparse
+from datetime import datetime
 import re
 
 
@@ -219,10 +222,18 @@ def create_imap2_ajax():
             return jsonify({"status": "error", "message": error_msg}), 400
 
         # Crear el servidor
-        srv = create_imap_server(host, port, username, password, folders, model_cls=IMAPServer2)
-        srv.description = description if description else None
-        srv.route_path = route_path
-        srv.paragraph = None
+        password_enc = encrypt_password(password)
+        srv = IMAPServer2(
+            host=host,
+            port=port,
+            username=username,
+            password_enc=password_enc,
+            folders=folders or "INBOX",
+            description=description if description else None,
+            route_path=route_path,  # Obligatorio
+            paragraph=None
+        )
+        db.session.add(srv)
         db.session.commit()
 
         # Obtener todos los servidores para devolver la lista actualizada
@@ -394,4 +405,272 @@ def update_imap2_regex_association_ajax():
         db.session.rollback()
         current_app.logger.error(f"Error al actualizar asociación regex-IMAP2: {e}", exc_info=True)
         return jsonify({"status": "error", "message": str(e)}), 500
+
+
+# ============================================================================
+# ✅ RUTAS PARA GESTIÓN DE 2FA POR CORREO ESPECÍFICO DE IMAP2
+# ============================================================================
+
+@admin_bp.route("/admin/imap2/<int:server_id>/twofa-configs", methods=["GET"])
+@admin_required
+def list_imap2_twofa_configs(server_id):
+    """Lista todas las configuraciones 2FA de un servidor IMAP2 específico"""
+    try:
+        server = IMAPServer2.query.get_or_404(server_id)
+        configs = IMAP2TwoFAConfig.query.filter_by(imap_server_id=server_id).order_by(IMAP2TwoFAConfig.created_at.desc()).all()
+        configs_data = []
+        for config in configs:
+            configs_data.append({
+                'id': config.id,
+                'secret_key': config.secret_key,
+                'emails': config.emails,
+                'emails_list': config.get_emails_list(),
+                'is_enabled': config.is_enabled,
+                'created_at': config.created_at.isoformat() if config.created_at else None,
+                'updated_at': config.updated_at.isoformat() if config.updated_at else None
+            })
+        return jsonify({'success': True, 'configs': configs_data}), 200
+    except Exception as e:
+        current_app.logger.error(f"Error al listar configuraciones 2FA de IMAP2: {e}", exc_info=True)
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@admin_bp.route("/admin/imap2/<int:server_id>/twofa-configs", methods=["POST"])
+@admin_required
+def create_imap2_twofa_config(server_id):
+    """Crea una nueva configuración 2FA para un servidor IMAP2 específico"""
+    try:
+        import re
+        
+        server = IMAPServer2.query.get_or_404(server_id)
+        data = request.get_json()
+        if not data:
+            return jsonify({'success': False, 'error': 'No se recibieron datos'}), 400
+        
+        secret_key = data.get('secret_key', '').strip()
+        emails_input = data.get('emails', '').strip()
+        
+        if not secret_key:
+            return jsonify({'success': False, 'error': 'El secreto TOTP es obligatorio'}), 400
+        
+        if not emails_input:
+            return jsonify({'success': False, 'error': 'Debes agregar al menos un correo'}), 400
+        
+        # Normalizar correos: separar por coma o espacio, limpiar y validar
+        emails_list = []
+        for email in re.split(r'[,\s]+', emails_input):
+            email = email.strip().lower()
+            if email:
+                # Validar formato básico de email
+                if re.match(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$', email):
+                    emails_list.append(email)
+                else:
+                    return jsonify({'success': False, 'error': f'Correo inválido: {email}'}), 400
+        
+        if not emails_list:
+            return jsonify({'success': False, 'error': 'No se encontraron correos válidos'}), 400
+        
+        # Verificar si algún correo ya está asociado a otra configuración del mismo servidor
+        existing_configs = IMAP2TwoFAConfig.query.filter_by(
+            imap_server_id=server_id,
+            is_enabled=True
+        ).all()
+        for existing_config in existing_configs:
+            existing_emails = existing_config.get_emails_list()
+            duplicates = set(emails_list) & set(existing_emails)
+            if duplicates:
+                return jsonify({
+                    'success': False, 
+                    'error': f'Los correos {", ".join(duplicates)} ya están asociados a otra configuración 2FA de este servidor'
+                }), 400
+        
+        # Crear nueva configuración
+        new_config = IMAP2TwoFAConfig(
+            imap_server_id=server_id,
+            secret_key=secret_key,
+            emails=','.join(emails_list),
+            is_enabled=True
+        )
+        db.session.add(new_config)
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': 'Configuración 2FA creada correctamente',
+            'config': {
+                'id': new_config.id,
+                'secret_key': new_config.secret_key,
+                'emails': new_config.emails,
+                'emails_list': new_config.get_emails_list(),
+                'is_enabled': new_config.is_enabled
+            }
+        }), 201
+        
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Error al crear configuración 2FA de IMAP2: {e}", exc_info=True)
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@admin_bp.route("/admin/imap2/twofa-configs/<int:config_id>", methods=["PUT"])
+@admin_required
+def update_imap2_twofa_config(config_id):
+    """Actualiza una configuración 2FA de IMAP2"""
+    try:
+        import re
+        
+        config = IMAP2TwoFAConfig.query.get_or_404(config_id)
+        data = request.get_json()
+        
+        if not data:
+            return jsonify({'success': False, 'error': 'No se recibieron datos'}), 400
+        
+        # Actualizar secreto si se proporciona
+        if 'secret_key' in data:
+            secret_key = data.get('secret_key', '').strip()
+            if secret_key:
+                config.secret_key = secret_key
+        
+        # Actualizar correos si se proporcionan
+        if 'emails' in data:
+            emails_input = data.get('emails', '').strip()
+            if emails_input:
+                emails_list = []
+                for email in re.split(r'[,\s]+', emails_input):
+                    email = email.strip().lower()
+                    if email:
+                        if re.match(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$', email):
+                            emails_list.append(email)
+                        else:
+                            return jsonify({'success': False, 'error': f'Correo inválido: {email}'}), 400
+                
+                if emails_list:
+                    # Verificar duplicados en otras configuraciones del mismo servidor (excluyendo la actual)
+                    existing_configs = IMAP2TwoFAConfig.query.filter(
+                        IMAP2TwoFAConfig.id != config_id,
+                        IMAP2TwoFAConfig.imap_server_id == config.imap_server_id,
+                        IMAP2TwoFAConfig.is_enabled == True
+                    ).all()
+                    for existing_config in existing_configs:
+                        existing_emails = existing_config.get_emails_list()
+                        duplicates = set(emails_list) & set(existing_emails)
+                        if duplicates:
+                            return jsonify({
+                                'success': False,
+                                'error': f'Los correos {", ".join(duplicates)} ya están asociados a otra configuración 2FA de este servidor'
+                            }), 400
+                    
+                    config.emails = ','.join(emails_list)
+        
+        # Actualizar estado si se proporciona
+        if 'is_enabled' in data:
+            config.is_enabled = bool(data.get('is_enabled'))
+        
+        config.updated_at = datetime.utcnow()
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': 'Configuración 2FA actualizada correctamente',
+            'config': {
+                'id': config.id,
+                'secret_key': config.secret_key,
+                'emails': config.emails,
+                'emails_list': config.get_emails_list(),
+                'is_enabled': config.is_enabled
+            }
+        }), 200
+        
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Error al actualizar configuración 2FA de IMAP2: {e}", exc_info=True)
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@admin_bp.route("/admin/imap2/twofa-configs/<int:config_id>", methods=["DELETE"])
+@admin_required
+def delete_imap2_twofa_config(config_id):
+    """Elimina una configuración 2FA de IMAP2"""
+    try:
+        config = IMAP2TwoFAConfig.query.get_or_404(config_id)
+        db.session.delete(config)
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': 'Configuración 2FA eliminada correctamente'
+        }), 200
+        
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Error al eliminar configuración 2FA de IMAP2: {e}", exc_info=True)
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@admin_bp.route("/admin/imap2/twofa-configs/read-qr", methods=["POST"])
+@admin_required
+def read_imap2_qr_code():
+    """Lee un código QR y extrae el secreto TOTP para configuraciones 2FA de IMAP2"""
+    try:
+        from PIL import Image
+        import io
+        import re
+        
+        if 'qr_file' not in request.files:
+            return jsonify({'success': False, 'error': 'No se recibió archivo QR'}), 400
+        
+        qr_file = request.files['qr_file']
+        if qr_file.filename == '':
+            return jsonify({'success': False, 'error': 'No se seleccionó ningún archivo'}), 400
+        
+        # Leer la imagen
+        image_data = qr_file.read()
+        image = Image.open(io.BytesIO(image_data))
+        
+        # Intentar leer el QR code
+        try:
+            try:
+                from pyzbar import pyzbar
+                decoded_objects = pyzbar.decode(image)
+            except ImportError:
+                # Intentar import alternativo
+                from pyzbar.pyzbar import decode as pyzbar_decode
+                decoded_objects = pyzbar_decode(image)
+            
+            if not decoded_objects:
+                return jsonify({'success': False, 'error': 'No se pudo leer el código QR'}), 400
+            
+            qr_data = decoded_objects[0].data.decode('utf-8')
+            
+            # Extraer el secreto del formato otpauth://totp/...
+            # Formato: otpauth://totp/Label?secret=SECRET&issuer=Issuer
+            secret_match = re.search(r'secret=([A-Z0-9]+)', qr_data, re.IGNORECASE)
+            if secret_match:
+                secret_key = secret_match.group(1).upper()
+                return jsonify({
+                    'success': True,
+                    'secret_key': secret_key,
+                    'qr_data': qr_data
+                }), 200
+            else:
+                # Si no está en formato otpauth, intentar usar el contenido completo como secreto
+                # (algunos QR codes solo contienen el secreto)
+                if re.match(r'^[A-Z0-9]{16,}$', qr_data, re.IGNORECASE):
+                    return jsonify({
+                        'success': True,
+                        'secret_key': qr_data.upper(),
+                        'qr_data': qr_data
+                    }), 200
+                else:
+                    return jsonify({'success': False, 'error': 'El código QR no contiene un secreto TOTP válido'}), 400
+                    
+        except ImportError:
+            return jsonify({'success': False, 'error': 'Biblioteca pyzbar no instalada. Instala con: pip install pyzbar'}), 500
+        except Exception as e:
+            current_app.logger.error(f"Error al leer QR code: {e}", exc_info=True)
+            return jsonify({'success': False, 'error': f'Error al leer el código QR: {str(e)}'}), 500
+            
+    except Exception as e:
+        current_app.logger.error(f"Error al procesar QR code de IMAP2: {e}", exc_info=True)
+        return jsonify({'success': False, 'error': str(e)}), 500
 

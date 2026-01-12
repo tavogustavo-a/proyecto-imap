@@ -285,6 +285,8 @@ def search_imap2_server_dynamic(to_address, imap_server_id, user=None):
         return None
 
     # 2) Obtener filtros y regex asociados directamente al servidor IMAP2
+    # IMPORTANTE: Solo obtener los que están habilitados globalmente
+    # Los filtros/regex asociados al servidor están en imap_server.filters y imap_server.regexes
     server_filters = [f for f in imap_server.filters if f.enabled]
     server_regexes = [r for r in imap_server.regexes if r.enabled]
 
