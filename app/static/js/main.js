@@ -502,29 +502,55 @@ document.addEventListener("DOMContentLoaded", function () {
         if (results.length === 0) {
           // Si no hay resultados, primero intentar mostrar código 2FA (si existe configuración)
           // Solo mostrar "No se encontraron resultados" si no hay código 2FA o hay error 404
-          // NO hacer esto en páginas dinámicas de IMAP2 (usan su propio sistema de 2FA)
-          if (emailSearched && !isImap2DynamicPage) {
-            // NO limpiar el contenedor todavía, mantener el spinner visible mientras se verifica 2FA
-            // checkAndDisplay2FACode mostrará el código 2FA si existe, o el error si no hay permisos
-            checkAndDisplay2FACode(emailSearched).then((hasContent) => {
-              // Ocultar el spinner después de que termine la verificación 2FA
-              if (spinner) {
-                spinner.classList.add('d-none');
-                spinner.classList.remove('d-block');
-              }
-              // Mostrar el contenedor de resultados SOLO después de que termine la verificación
-              if (resultsDiv) {
-                resultsDiv.classList.remove('d-none');
-                resultsDiv.classList.add('d-block');
-                // Si después de intentar mostrar 2FA no hay nada en el contenedor (404 = no hay configuración 2FA),
-                // mostrar mensaje de no resultados
-                if (resultsDiv.children.length === 0 && !hasContent) {
-                  resultsDiv.innerHTML = `<p>No se encontraron resultados.</p>`;
+          if (emailSearched) {
+            if (isImap2DynamicPage) {
+              // Página dinámica de IMAP2: usar función específica de IMAP2
+              const imapServerId = ajaxSearchForm.getAttribute("data-imap-server-id");
+              checkAndDisplayImap2TwoFACode(emailSearched, parseInt(imapServerId)).then((hasContent) => {
+                // Ocultar el spinner después de que termine la verificación 2FA
+                if (spinner) {
+                  spinner.classList.add('d-none');
+                  spinner.classList.remove('d-block');
                 }
-              }
-            });
+                // Mostrar el contenedor de resultados SOLO después de que termine la verificación
+                if (resultsDiv) {
+                  resultsDiv.classList.remove('d-none');
+                  resultsDiv.classList.add('d-block');
+                  // Si después de intentar mostrar 2FA no hay nada en el contenedor (404 = no hay configuración 2FA),
+                  // mostrar mensaje de no resultados (CSP compliant)
+                  if (resultsDiv.children.length === 0 && !hasContent) {
+                    const noResultsP = document.createElement('p');
+                    noResultsP.textContent = 'No se encontraron resultados.';
+                    resultsDiv.appendChild(noResultsP);
+                  }
+                }
+              });
+            } else {
+              // Página normal: usar función general de 2FA
+              // NO limpiar el contenedor todavía, mantener el spinner visible mientras se verifica 2FA
+              // checkAndDisplay2FACode mostrará el código 2FA si existe, o el error si no hay permisos
+              checkAndDisplay2FACode(emailSearched).then((hasContent) => {
+                // Ocultar el spinner después de que termine la verificación 2FA
+                if (spinner) {
+                  spinner.classList.add('d-none');
+                  spinner.classList.remove('d-block');
+                }
+                // Mostrar el contenedor de resultados SOLO después de que termine la verificación
+                if (resultsDiv) {
+                  resultsDiv.classList.remove('d-none');
+                  resultsDiv.classList.add('d-block');
+                  // Si después de intentar mostrar 2FA no hay nada en el contenedor (404 = no hay configuración 2FA),
+                  // mostrar mensaje de no resultados (CSP compliant)
+                  if (resultsDiv.children.length === 0 && !hasContent) {
+                    const noResultsP = document.createElement('p');
+                    noResultsP.textContent = 'No se encontraron resultados.';
+                    resultsDiv.appendChild(noResultsP);
+                  }
+                }
+              });
+            }
           } else {
-            // Si no hay email o es página dinámica de IMAP2, ocultar spinner y mostrar mensaje de no resultados
+            // Si no hay email, ocultar spinner y mostrar mensaje de no resultados
             if (spinner) {
               spinner.classList.add('d-none');
               spinner.classList.remove('d-block');
@@ -532,7 +558,10 @@ document.addEventListener("DOMContentLoaded", function () {
             if (resultsDiv) {
               resultsDiv.classList.remove('d-none');
               resultsDiv.classList.add('d-block');
-              resultsDiv.innerHTML = `<p>No se encontraron resultados.</p>`;
+              resultsDiv.innerHTML = '';
+              const noResultsP = document.createElement('p');
+              noResultsP.textContent = 'No se encontraron resultados.';
+              resultsDiv.appendChild(noResultsP);
             }
           }
           return;
@@ -565,10 +594,21 @@ document.addEventListener("DOMContentLoaded", function () {
           return;
         }
         
-        // Verificar si hay código 2FA para el correo buscado (correos normales)
-        // NO hacer esto en páginas dinámicas de IMAP2 (usan su propio sistema de 2FA)
-        if (emailSearched && !isImap2DynamicPage) {
-          checkAndDisplay2FACode(emailSearched);
+        // Verificar si hay código 2FA para el correo buscado (mostrar junto con los resultados)
+        // Usar setTimeout para asegurar que los resultados se rendericen primero
+        if (emailSearched) {
+          if (isImap2DynamicPage) {
+            // Página dinámica de IMAP2: usar función específica de IMAP2
+            const imapServerId = ajaxSearchForm.getAttribute("data-imap-server-id");
+            setTimeout(() => {
+              checkAndDisplayImap2TwoFACode(emailSearched, parseInt(imapServerId));
+            }, 200);
+          } else {
+            // Página normal: usar función general de 2FA
+            setTimeout(() => {
+              checkAndDisplay2FACode(emailSearched);
+            }, 200);
+          }
         }
 
         // Lógica normal para correos
@@ -1206,6 +1246,39 @@ document.addEventListener("DOMContentLoaded", function () {
   }
   // --- FIN: Listener para Limpiar Log ---
 
+  // ✅ NUEVO: Función para verificar y mostrar código 2FA de IMAP2 (específico para páginas dinámicas)
+  async function checkAndDisplayImap2TwoFACode(email, imapServerId) {
+    if (!email || !imapServerId) {
+      return Promise.resolve(false);
+    }
+    
+    try {
+      const response = await fetch(`/api/imap2/${imapServerId}/2fa/code/${encodeURIComponent(email)}`);
+      
+      // Si la respuesta no es exitosa, manejar el error
+      if (!response.ok) {
+        // Si es 404, significa que no hay configuración 2FA (no es un error)
+        if (response.status === 404) {
+          return Promise.resolve(false); // Retornar false para indicar que no hay contenido 2FA
+        }
+        
+        // Para otros errores, no mostrar nada (es página pública)
+        return Promise.resolve(false);
+      }
+      
+      const data = await response.json();
+      
+      if (data.success && data.code) {
+        display2FACode(data.code, data.time_remaining, email);
+        return Promise.resolve(true); // Retornar true para indicar que se mostró contenido (código 2FA)
+      }
+      return Promise.resolve(false); // No hay contenido
+    } catch (error) {
+      // Si hay un error de red u otro error, retornar false
+      return Promise.resolve(false);
+    }
+  }
+  
   // ✅ NUEVO: Función para verificar y mostrar código 2FA
     async function checkAndDisplay2FACode(email) {
     if (!email) {
@@ -1380,7 +1453,20 @@ document.addEventListener("DOMContentLoaded", function () {
       if (currentTime <= 0) {
         currentTime = 30; // Reiniciar contador
         // Recargar código cuando llegue a 0
-        checkAndDisplay2FACode(email);
+        // Detectar si es página dinámica de IMAP2
+        const ajaxSearchForm = document.getElementById('ajax-search-form');
+        const isImap2DynamicPage = ajaxSearchForm && 
+                                    ajaxSearchForm.hasAttribute("data-imap-server-id") && 
+                                    ajaxSearchForm.getAttribute("data-imap-server-id") !== null &&
+                                    ajaxSearchForm.getAttribute("data-imap-server-id") !== "0" &&
+                                    ajaxSearchForm.getAttribute("data-imap-server-id") !== "";
+        
+        if (isImap2DynamicPage) {
+          const imapServerId = ajaxSearchForm.getAttribute("data-imap-server-id");
+          checkAndDisplayImap2TwoFACode(email, parseInt(imapServerId));
+        } else {
+          checkAndDisplay2FACode(email);
+        }
       }
       if (timer) {
         timer.textContent = currentTime + 's';

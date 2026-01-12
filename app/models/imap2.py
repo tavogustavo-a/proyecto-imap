@@ -19,6 +19,14 @@ imap2_regex = db.Table(
     db.Column("regex_id", db.Integer, db.ForeignKey('regexes.id', ondelete='CASCADE'), primary_key=True)
 )
 
+# Tabla M2M para asociar servidores IMAP adicionales con IMAPServer2
+# Permite vincular múltiples servidores IMAP a un servidor IMAP2 para consultar múltiples al mismo tiempo
+imap2_linked_imap = db.Table(
+    "imap2_linked_imap",
+    db.Column("imap2_id", db.Integer, db.ForeignKey('imap_servers2.id', ondelete='CASCADE'), primary_key=True),
+    db.Column("imap_id", db.Integer, db.ForeignKey('imap_servers.id', ondelete='CASCADE'), primary_key=True)
+)
+
 class IMAPServer2(db.Model):
     __tablename__ = "imap_servers2"
     id = db.Column(db.Integer, primary_key=True)
@@ -50,6 +58,14 @@ class IMAPServer2(db.Model):
         backref="imap_server",
         lazy="dynamic",
         cascade="all, delete-orphan"
+    )
+
+    # Relación M2M con servidores IMAP adicionales vinculados
+    linked_imap_servers = db.relationship(
+        "IMAPServer",
+        secondary=imap2_linked_imap,
+        backref="linked_imap2_servers",
+        lazy="dynamic"
     )
 
     def __repr__(self):

@@ -6,6 +6,7 @@ from flask import (
 from .admin_bp import admin_bp
 from app.extensions import db
 from app.models import IMAPServer2, FilterModel, RegexModel
+from app.models.imap import IMAPServer
 from app.models.imap2 import IMAP2TwoFAConfig
 from app.services.imap_service import (
     create_imap_server,
@@ -18,6 +19,12 @@ from app.admin.decorators import admin_required
 from urllib.parse import unquote, urlparse
 from datetime import datetime
 import re
+
+# Decorator para excluir rutas del CSRF (para AJAX)
+def csrf_exempt_route(func):
+    """Decorator para excluir rutas del CSRF"""
+    func._csrf_exempt = True
+    return func
 
 
 def validate_route_path(route_path, server_id=None):
@@ -159,13 +166,20 @@ def edit_imap2(server_id):
     associated_filter_ids = [f.id for f in srv.filters]
     associated_regex_ids = [r.id for r in srv.regexes]
     
+    # Obtener todos los servidores IMAP disponibles (para vincular)
+    all_imap_servers = IMAPServer.query.order_by(IMAPServer.host.asc(), IMAPServer.username.asc()).all()
+    # Obtener servidores IMAP ya vinculados a este IMAPServer2
+    linked_imap_ids = [imap.id for imap in srv.linked_imap_servers]
+    
     return render_template(
         "edit_imap2.html",
         srv=srv,
         all_filters=all_filters,
         all_regexes=all_regexes,
         associated_filter_ids=associated_filter_ids,
-        associated_regex_ids=associated_regex_ids
+        associated_regex_ids=associated_regex_ids,
+        all_imap_servers=all_imap_servers,
+        linked_imap_ids=linked_imap_ids
     )
 
 # =========== RUTAS AJAX ===========
@@ -411,7 +425,7 @@ def update_imap2_regex_association_ajax():
 # ✅ RUTAS PARA GESTIÓN DE 2FA POR CORREO ESPECÍFICO DE IMAP2
 # ============================================================================
 
-@admin_bp.route("/admin/imap2/<int:server_id>/twofa-configs", methods=["GET"])
+@admin_bp.route("/imap2/<int:server_id>/twofa-configs", methods=["GET"])
 @admin_required
 def list_imap2_twofa_configs(server_id):
     """Lista todas las configuraciones 2FA de un servidor IMAP2 específico"""
@@ -435,7 +449,7 @@ def list_imap2_twofa_configs(server_id):
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
-@admin_bp.route("/admin/imap2/<int:server_id>/twofa-configs", methods=["POST"])
+@admin_bp.route("/imap2/<int:server_id>/twofa-configs", methods=["POST"])
 @admin_required
 def create_imap2_twofa_config(server_id):
     """Crea una nueva configuración 2FA para un servidor IMAP2 específico"""
@@ -512,7 +526,7 @@ def create_imap2_twofa_config(server_id):
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
-@admin_bp.route("/admin/imap2/twofa-configs/<int:config_id>", methods=["PUT"])
+@admin_bp.route("/imap2/twofa-configs/<int:config_id>", methods=["PUT"])
 @admin_required
 def update_imap2_twofa_config(config_id):
     """Actualiza una configuración 2FA de IMAP2"""
@@ -587,7 +601,7 @@ def update_imap2_twofa_config(config_id):
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
-@admin_bp.route("/admin/imap2/twofa-configs/<int:config_id>", methods=["DELETE"])
+@admin_bp.route("/imap2/twofa-configs/<int:config_id>", methods=["DELETE"])
 @admin_required
 def delete_imap2_twofa_config(config_id):
     """Elimina una configuración 2FA de IMAP2"""
@@ -607,7 +621,7 @@ def delete_imap2_twofa_config(config_id):
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
-@admin_bp.route("/admin/imap2/twofa-configs/read-qr", methods=["POST"])
+@admin_bp.route("/imap2/twofa-configs/read-qr", methods=["POST"])
 @admin_required
 def read_imap2_qr_code():
     """Lee un código QR y extrae el secreto TOTP para configuraciones 2FA de IMAP2"""
@@ -629,46 +643,175 @@ def read_imap2_qr_code():
         
         # Intentar leer el QR code
         try:
-            try:
-                from pyzbar import pyzbar
-                decoded_objects = pyzbar.decode(image)
-            except ImportError:
-                # Intentar import alternativo
-                from pyzbar.pyzbar import decode as pyzbar_decode
-                decoded_objects = pyzbar_decode(image)
-            
-            if not decoded_objects:
-                return jsonify({'success': False, 'error': 'No se pudo leer el código QR'}), 400
-            
-            qr_data = decoded_objects[0].data.decode('utf-8')
-            
-            # Extraer el secreto del formato otpauth://totp/...
-            # Formato: otpauth://totp/Label?secret=SECRET&issuer=Issuer
-            secret_match = re.search(r'secret=([A-Z0-9]+)', qr_data, re.IGNORECASE)
-            if secret_match:
-                secret_key = secret_match.group(1).upper()
+            from pyzbar import pyzbar
+            decoded_objects = pyzbar.decode(image)
+        except ImportError:
+            # Intentar import alternativo
+            from pyzbar.pyzbar import decode as pyzbar_decode
+            decoded_objects = pyzbar_decode(image)
+        
+        if not decoded_objects:
+            return jsonify({'success': False, 'error': 'No se pudo leer el código QR'}), 400
+        
+        qr_data = decoded_objects[0].data.decode('utf-8')
+        
+        # Extraer el secreto del formato otpauth://totp/...
+        # Formato: otpauth://totp/Label?secret=SECRET&issuer=Issuer
+        secret_match = re.search(r'secret=([A-Z0-9]+)', qr_data, re.IGNORECASE)
+        if secret_match:
+            secret_key = secret_match.group(1).upper()
+            return jsonify({
+                'success': True,
+                'secret_key': secret_key,
+                'qr_data': qr_data
+            }), 200
+        else:
+            # Si no está en formato otpauth, intentar usar el contenido completo como secreto
+            # (algunos QR codes solo contienen el secreto)
+            if re.match(r'^[A-Z0-9]{16,}$', qr_data, re.IGNORECASE):
                 return jsonify({
                     'success': True,
-                    'secret_key': secret_key,
+                    'secret_key': qr_data.upper(),
                     'qr_data': qr_data
                 }), 200
             else:
-                # Si no está en formato otpauth, intentar usar el contenido completo como secreto
-                # (algunos QR codes solo contienen el secreto)
-                if re.match(r'^[A-Z0-9]{16,}$', qr_data, re.IGNORECASE):
-                    return jsonify({
-                        'success': True,
-                        'secret_key': qr_data.upper(),
-                        'qr_data': qr_data
-                    }), 200
-                else:
-                    return jsonify({'success': False, 'error': 'El código QR no contiene un secreto TOTP válido'}), 400
+                return jsonify({'success': False, 'error': 'El código QR no contiene un secreto TOTP válido'}), 400
                     
-        except ImportError:
-            return jsonify({'success': False, 'error': 'Biblioteca pyzbar no instalada. Instala con: pip install pyzbar'}), 500
-        except Exception as e:
-            current_app.logger.error(f"Error al leer QR code: {e}", exc_info=True)
-            return jsonify({'success': False, 'error': f'Error al leer el código QR: {str(e)}'}), 500
+    except ImportError:
+        return jsonify({'success': False, 'error': 'Biblioteca pyzbar no instalada. Instala con: pip install pyzbar'}), 500
+    except Exception as e:
+        current_app.logger.error(f"Error al leer QR code: {e}", exc_info=True)
+        return jsonify({'success': False, 'error': f'Error al leer el código QR: {str(e)}'}), 500
+
+# =========== RUTAS AJAX PARA VINCULAR SERVIDORES IMAP ===========
+
+@admin_bp.route("/imap2/<int:imap2_id>/create_and_link_imap", methods=["POST"])
+@admin_required
+@csrf_exempt_route
+def create_and_link_imap_to_imap2(imap2_id):
+    """Crea un nuevo servidor IMAP y lo vincula automáticamente a un servidor IMAP2"""
+    try:
+        data = request.get_json()
+        host = data.get("host", "").strip()
+        port = data.get("port", 993)
+        username = data.get("username", "").strip()
+        password = data.get("password", "").strip()
+        folders = data.get("folders", "INBOX").strip()
+
+        if not host or not username:
+            return jsonify({"status": "error", "message": "Host y usuario son obligatorios."}), 400
+
+        # Obtener el servidor IMAP2
+        imap2_server = IMAPServer2.query.get_or_404(imap2_id)
+
+        # Crear el servidor IMAP
+        from app.services.imap_service import create_imap_server
+        new_imap_server = create_imap_server(host, port, username, password, folders or "INBOX")
+        
+        # Vincular automáticamente al IMAP2
+        imap2_server.linked_imap_servers.append(new_imap_server)
+        db.session.commit()
+
+        # Obtener todos los servidores IMAP vinculados para devolver la lista actualizada
+        linked_servers = imap2_server.linked_imap_servers.all()
+        servers_data = []
+        for s in linked_servers:
+            servers_data.append({
+                "id": s.id,
+                "host": s.host,
+                "port": s.port,
+                "username": s.username,
+                "folders": s.folders,
+                "enabled": s.enabled
+            })
+
+        return jsonify({
+            "status": "ok",
+            "message": f"Servidor IMAP {host}:{port} creado y vinculado correctamente.",
+            "servers": servers_data
+        }), 200
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Error al crear y vincular servidor IMAP: {e}", exc_info=True)
+        return jsonify({"status": "error", "message": str(e)}), 400
+
+@admin_bp.route("/imap2/<int:imap2_id>/link_imap/<int:imap_id>", methods=["POST"])
+@admin_required
+@csrf_exempt_route
+def link_imap_to_imap2(imap2_id, imap_id):
+    """Vincula un servidor IMAP existente a un servidor IMAP2"""
+    try:
+        imap2_server = IMAPServer2.query.get_or_404(imap2_id)
+        imap_server = IMAPServer.query.get_or_404(imap_id)
+        
+        # Verificar que no esté ya vinculado
+        if imap_server in imap2_server.linked_imap_servers:
+            return jsonify({"status": "error", "message": "Este servidor IMAP ya está vinculado."}), 400
+        
+        imap2_server.linked_imap_servers.append(imap_server)
+        db.session.commit()
+        
+        return jsonify({
+            "status": "ok",
+            "message": f"Servidor IMAP {imap_server.host}:{imap_server.port} vinculado correctamente."
+        }), 200
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Error al vincular servidor IMAP: {e}", exc_info=True)
+        return jsonify({"status": "error", "message": str(e)}), 400
+
+@admin_bp.route("/imap2/<int:imap2_id>/unlink_imap/<int:imap_id>", methods=["POST"])
+@admin_required
+@csrf_exempt_route
+def unlink_imap_from_imap2(imap2_id, imap_id):
+    """Desvincula y ELIMINA un servidor IMAP de un servidor IMAP2 (elimina completamente de la BD)"""
+    try:
+        imap2_server = IMAPServer2.query.get_or_404(imap2_id)
+        imap_server = IMAPServer.query.get_or_404(imap_id)
+        
+        # Verificar que esté vinculado
+        if imap_server not in imap2_server.linked_imap_servers:
+            return jsonify({"status": "error", "message": "Este servidor IMAP no está vinculado."}), 400
+        
+        # Eliminar la vinculación primero
+        imap2_server.linked_imap_servers.remove(imap_server)
+        
+        # Eliminar el servidor IMAP completamente de la base de datos
+        db.session.delete(imap_server)
+        db.session.commit()
+        
+        return jsonify({
+            "status": "ok",
+            "message": f"Servidor IMAP {imap_server.host}:{imap_server.port} eliminado correctamente."
+        }), 200
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Error al eliminar servidor IMAP: {e}", exc_info=True)
+        return jsonify({"status": "error", "message": str(e)}), 400
+
+@admin_bp.route("/imap2/<int:imap2_id>/linked_imap_servers", methods=["GET"])
+@admin_required
+def get_linked_imap_servers(imap2_id):
+    """Obtiene la lista de servidores IMAP vinculados a un IMAP2"""
+    try:
+        imap2_server = IMAPServer2.query.get_or_404(imap2_id)
+        linked_servers = imap2_server.linked_imap_servers.all()
+        
+        servers_data = []
+        for s in linked_servers:
+            servers_data.append({
+                "id": s.id,
+                "host": s.host,
+                "port": s.port,
+                "username": s.username,
+                "folders": s.folders,
+                "enabled": s.enabled
+            })
+        
+        return jsonify({"status": "ok", "servers": servers_data}), 200
+    except Exception as e:
+        current_app.logger.error(f"Error al obtener servidores IMAP vinculados: {e}", exc_info=True)
+        return jsonify({"status": "error", "message": str(e)}), 400
             
     except Exception as e:
         current_app.logger.error(f"Error al procesar QR code de IMAP2: {e}", exc_info=True)

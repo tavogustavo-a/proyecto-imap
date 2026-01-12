@@ -78,6 +78,15 @@ def edit_imap(server_id):
 def search_imap_ajax():
     query = request.args.get("query", "").strip().lower()
     servers_q = IMAPServer.query
+    
+    # Excluir servidores IMAP que están vinculados a algún IMAP2 (son exclusivos de edit_imap2)
+    from app.models.imap2 import imap2_linked_imap
+    linked_imap_ids = db.session.query(imap2_linked_imap.c.imap_id).distinct().all()
+    linked_imap_ids_list = [row[0] for row in linked_imap_ids]
+    
+    if linked_imap_ids_list:
+        servers_q = servers_q.filter(~IMAPServer.id.in_(linked_imap_ids_list))
+    
     if query:
         servers_q = servers_q.filter(
             (IMAPServer.host.ilike(f"%{query}%"))
@@ -105,8 +114,15 @@ def delete_imap_ajax():
         server_id = data.get("server_id")
         delete_imap_server(server_id)
 
-        # Retornamos todos los servers actualizados
-        servers = IMAPServer.query.all()
+        # Retornamos todos los servers actualizados (excluyendo servidores vinculados a IMAP2)
+        from app.models.imap2 import imap2_linked_imap
+        linked_imap_ids = db.session.query(imap2_linked_imap.c.imap_id).distinct().all()
+        linked_imap_ids_list = [row[0] for row in linked_imap_ids]
+        
+        servers_query = IMAPServer.query
+        if linked_imap_ids_list:
+            servers_query = servers_query.filter(~IMAPServer.id.in_(linked_imap_ids_list))
+        servers = servers_query.all()
         data_out = []
         for s in servers:
             data_out.append({
@@ -141,8 +157,15 @@ def toggle_imap_ajax():
         srv.enabled = not currently_enabled
         db.session.commit()
 
-        # Refrescamos la lista
-        servers = IMAPServer.query.all()
+        # Refrescamos la lista (excluyendo servidores vinculados a IMAP2)
+        from app.models.imap2 import imap2_linked_imap
+        linked_imap_ids = db.session.query(imap2_linked_imap.c.imap_id).distinct().all()
+        linked_imap_ids_list = [row[0] for row in linked_imap_ids]
+        
+        servers_query = IMAPServer.query
+        if linked_imap_ids_list:
+            servers_query = servers_query.filter(~IMAPServer.id.in_(linked_imap_ids_list))
+        servers = servers_query.all()
         data_out = []
         for s in servers:
             data_out.append({
@@ -176,7 +199,15 @@ def create_imap_ajax():
         create_imap_server(host, port, username, password, folders)
 
         # Obtener todos los servidores para devolver la lista actualizada
-        servers = IMAPServer.query.all()
+        # Excluir servidores IMAP que están vinculados a algún IMAP2 (son exclusivos de edit_imap2)
+        from app.models.imap2 import imap2_linked_imap
+        linked_imap_ids = db.session.query(imap2_linked_imap.c.imap_id).distinct().all()
+        linked_imap_ids_list = [row[0] for row in linked_imap_ids]
+        
+        servers_query = IMAPServer.query
+        if linked_imap_ids_list:
+            servers_query = servers_query.filter(~IMAPServer.id.in_(linked_imap_ids_list))
+        servers = servers_query.all()
         servers_data = []
         for s in servers:
             servers_data.append({

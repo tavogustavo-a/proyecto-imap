@@ -4,6 +4,14 @@
 (function() {
     'use strict';
     
+    // Función para escapar HTML (CSP compliant)
+    function escapeHtml(text) {
+        if (!text) return '';
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+    
     // Elementos del DOM
     const twofaForm = document.getElementById('imap2-twofa-config-form');
     const twofaConfigsList = document.getElementById('imap2-twofa-configs-list');
@@ -227,7 +235,11 @@
         const serverId = getServerId();
         if (!serverId) {
             if (twofaConfigsList) {
-                twofaConfigsList.innerHTML = '<p class="text-center text-danger">Error: No se pudo identificar el servidor IMAP2.</p>';
+                twofaConfigsList.innerHTML = '';
+                const errorP = document.createElement('p');
+                errorP.className = 'text-center text-danger';
+                errorP.textContent = 'Error: No se pudo identificar el servidor IMAP2.';
+                twofaConfigsList.appendChild(errorP);
             }
             return;
         }
@@ -247,12 +259,20 @@
                 renderConfigsList(data.configs);
             } else {
                 if (twofaConfigsList) {
-                    twofaConfigsList.innerHTML = '<p class="text-center text-secondary">No hay configuraciones 2FA.</p>';
+                    twofaConfigsList.innerHTML = '';
+                    const noConfigP = document.createElement('p');
+                    noConfigP.className = 'text-center text-secondary';
+                    noConfigP.textContent = 'No hay configuraciones 2FA.';
+                    twofaConfigsList.appendChild(noConfigP);
                 }
             }
         } catch (error) {
             if (twofaConfigsList) {
-                twofaConfigsList.innerHTML = '<p class="text-center text-danger">Error al cargar configuraciones.</p>';
+                twofaConfigsList.innerHTML = '';
+                const errorP = document.createElement('p');
+                errorP.className = 'text-center text-danger';
+                errorP.textContent = 'Error al cargar configuraciones.';
+                twofaConfigsList.appendChild(errorP);
             }
         }
     }
@@ -280,15 +300,15 @@
         let start = showCount === 'all' ? 0 : (currentTwofaPage - 1) * perPage;
         let end = showCount === 'all' ? totalConfigs : start + perPage;
         
-        // Ocultar todas las configuraciones
+        // Ocultar todas las configuraciones (usando clases CSS en lugar de style.display para CSP)
         const allConfigs = Array.from(twofaConfigsList.querySelectorAll('.regex-item[data-emails]'));
         allConfigs.forEach(item => {
-            item.style.display = 'none';
+            item.classList.add('d-none');
         });
         
         // Mostrar solo las configuraciones de la página actual
         filteredConfigs.slice(start, end).forEach(item => {
-            item.style.display = '';
+            item.classList.remove('d-none');
         });
         
         // Actualizar estado de botones de paginación
@@ -311,19 +331,25 @@
         if (!twofaConfigsList) return;
         
         if (!configs || configs.length === 0) {
-            twofaConfigsList.innerHTML = '<p class="text-center text-secondary">No hay configuraciones 2FA. Agrega una nueva configuración arriba.</p>';
+            twofaConfigsList.innerHTML = '';
+            const noConfigP = document.createElement('p');
+            noConfigP.className = 'text-center text-secondary';
+            noConfigP.textContent = 'No hay configuraciones 2FA. Agrega una nueva configuración arriba.';
+            twofaConfigsList.appendChild(noConfigP);
             return;
         }
         
         const configsHTML = configs.map(config => {
             const emailsList = config.emails_list || [];
             const emailsStr = emailsList.join(', ');
+            const emailsEscaped = escapeHtml(emailsStr || 'Sin correos');
+            const emailsLowerEscaped = escapeHtml(emailsStr.toLowerCase());
             
             return `
-                <div class="regex-item" data-emails="${emailsStr.toLowerCase()}" data-config-id="${config.id}">
+                <div class="regex-item" data-emails="${emailsLowerEscaped}" data-config-id="${config.id}">
                     <div class="d-flex justify-content-between align-items-center">
                         <div class="flex-grow-1">
-                            <div class="regex-description">${emailsStr || 'Sin correos'}</div>
+                            <div class="regex-description">${emailsEscaped}</div>
                         </div>
                         <div class="d-flex gap-05">
                             <button type="button" class="btn-orange btn-small edit-twofa-config" data-config-id="${config.id}" title="Editar">

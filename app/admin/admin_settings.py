@@ -46,6 +46,16 @@ def allowed_file(filename):
 def dashboard():
     imap_search = request.args.get("imap_search", "").strip().lower()
     servers_query = IMAPServer.query
+    
+    # Excluir servidores IMAP que están vinculados a algún IMAP2 (son exclusivos de edit_imap2)
+    # Obtener IDs de servidores vinculados a algún IMAP2
+    from app.models.imap2 import imap2_linked_imap
+    linked_imap_ids = db.session.query(imap2_linked_imap.c.imap_id).distinct().all()
+    linked_imap_ids_list = [row[0] for row in linked_imap_ids]
+    
+    if linked_imap_ids_list:
+        servers_query = servers_query.filter(~IMAPServer.id.in_(linked_imap_ids_list))
+    
     if imap_search:
         servers_query = servers_query.filter(
             (IMAPServer.host.ilike(f"%{imap_search}%"))

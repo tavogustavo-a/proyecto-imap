@@ -192,8 +192,122 @@
     </div>
   </div>
 
-  <!-- Card separado para Gestión de 2FA por Correo (específico para este servidor IMAP2) -->
+  <!-- Card separado para Servidores IMAP Vinculados -->
   <div class="card mt-2">
+    <!-- Lista de servidores IMAP vinculados -->
+    <div id="linkedImapList">
+      {% for imap in srv.linked_imap_servers %}
+        <div class="imap-item mb-1" data-imap-id="{{ imap.id }}" data-host="{{ imap.host|lower }}" data-username="{{ imap.username|lower }}">
+          <strong>Host: {{ imap.host }}</strong> | <strong>Usuario: {{ imap.username }}</strong> | <strong>Puerto: {{ imap.port }}</strong>
+          <div class="mt-05">
+            <form action="{{ url_for('admin_bp.test_imap', server_id=imap.id) }}"
+                  method="POST"
+                  class="d-inline">
+              <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+              <button type="submit" class="btn-blue btn-imap-action btn-imap-small">Probar</button>
+            </form>
+            {% if imap.enabled %}
+              <button
+                class="btn-red toggle-linked-imap-btn ml-03 btn-imap-action btn-imap-small"
+                data-id="{{ imap.id }}"
+                data-enabled="true"
+              >
+                Off
+              </button>
+            {% else %}
+              <button
+                class="btn-green toggle-linked-imap-btn ml-03 btn-imap-action btn-imap-small"
+                data-id="{{ imap.id }}"
+                data-enabled="false"
+              >
+                On
+              </button>
+            {% endif %}
+            <button
+              type="button"
+              class="btn-orange ml-03 edit-linked-imap-btn btn-imap-action btn-imap-small"
+              data-url="{{ url_for('admin_bp.edit_imap', server_id=imap.id) }}"
+            >
+              Editar
+            </button>
+            <button
+              type="button"
+              class="btn-red unlink-imap-btn ml-03 btn-imap-action btn-imap-small"
+              data-imap2-id="{{ srv.id }}"
+              data-imap-id="{{ imap.id }}"
+              title="Desvincular"
+            >
+              <i class="fas fa-unlink"></i>
+            </button>
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+
+    <!-- Formulario para crear nuevo servidor IMAP -->
+    <div class="mt-1">
+      <h4 class="text-center mb-05">Crear Nuevo Servidor IMAP</h4>
+      <form id="createLinkedImapForm">
+        <!-- Fila 1: Host y Puerto -->
+        <div class="d-flex gap-05 mb-05 align-items-center">
+          <label for="linked_imap_host" class="sr-only">Host</label>
+          <input
+            id="linked_imap_host"
+            type="text"
+            placeholder="Host"
+            required
+            class="flex-grow-1"
+            autocomplete="off"
+          >
+          <label for="linked_imap_port" class="sr-only">Puerto</label>
+          <input
+            id="linked_imap_port"
+            type="number"
+            placeholder="993"
+            value="993"
+            class="imap2-port-input"
+            autocomplete="off"
+          >
+        </div>
+        <!-- Fila 2: Usuario y Contraseña -->
+        <div class="d-flex gap-05 mb-05 align-items-center">
+          <label for="linked_imap_username" class="sr-only">Usuario</label>
+          <input
+            id="linked_imap_username"
+            type="text"
+            placeholder="Usuario"
+            required
+            class="flex-grow-1"
+            autocomplete="username"
+          >
+          <label for="linked_imap_password" class="sr-only">Password</label>
+          <input
+            id="linked_imap_password"
+            type="password"
+            placeholder="Password"
+            class="flex-grow-1"
+            autocomplete="current-password"
+          >
+        </div>
+        <!-- Fila 3: Carpetas y Botón Crear -->
+        <div class="d-flex gap-05 mb-05 align-items-center">
+          <label for="linked_imap_folders" class="sr-only">Carpetas</label>
+          <input
+            id="linked_imap_folders"
+            type="text"
+            placeholder="INBOX"
+            value="INBOX"
+            class="flex-grow-1"
+            autocomplete="off"
+          >
+          <button type="submit" class="btn-green" data-imap2-id="{{ srv.id }}">Crear</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Card separado para Gestión de 2FA por Correo (específico para este servidor IMAP2) -->
+  <div class="card mt-2 twofa-section-card">
     <h3 class="text-center mb-1">🔐 Gestión de 2FA por Correo</h3>
     
     <!-- Formulario para agregar/editar configuración 2FA -->
@@ -358,5 +472,6 @@
 {{ super() }}
 <script src="{{ url_for('static', filename='js/edit_imap2.js') }}" defer></script>
 <script src="{{ url_for('static', filename='js/edit_imap2_twofa.js') }}" defer></script>
+<script src="{{ url_for('static', filename='js/edit_imap2_linked.js') }}" defer></script>
 {% endblock %}
 
