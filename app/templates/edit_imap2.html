@@ -8,7 +8,8 @@
 
     <!-- Formulario para actualizar un servidor IMAP2 existente -->
     <form method="POST"
-          action="{{ url_for('admin_bp.manage_imap2') }}">
+          action="{{ url_for('admin_bp.manage_imap2') }}"
+          class="imap2-edit-form">
       <!-- Campo oculto con CSRF -->
       <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
       
@@ -16,90 +17,96 @@
       <input type="hidden" name="server_id" value="{{ srv.id }}">
 
       <!-- Descripción opcional -->
-      <label for="description">Descripción (opcional):</label>
-      <input
-        type="text"
-        id="description"
-        name="description"
-        placeholder="Descripción del servidor"
-        value="{{ srv.description if srv.description else '' }}"
-        class="d-block mb-05"
-        autocomplete="off"
-      >
+      <div class="mb-05">
+        <label for="description" class="sr-only">Descripción</label>
+        <input
+          type="text"
+          id="description"
+          name="description"
+          placeholder="Descripción del servidor (opcional)"
+          value="{{ srv.description if srv.description else '' }}"
+          class="d-block"
+          autocomplete="off"
+        >
+      </div>
 
-      <!-- Host con label y autocomplete -->
-      <label for="host">Host del servidor:</label>
-      <input
-        type="text"
-        id="host"
-        name="host"
-        placeholder="Host"
-        value="{{ srv.host }}"
-        required
-        class="d-block mb-05"
-        autocomplete="off"
-      >
+      <!-- Fila 1: Host y Puerto -->
+      <div class="d-flex gap-05 mb-05 align-items-center">
+        <label for="host" class="sr-only">Host</label>
+        <input
+          type="text"
+          id="host"
+          name="host"
+          placeholder="Host"
+          value="{{ srv.host }}"
+          required
+          class="flex-grow-1"
+          autocomplete="off"
+        >
+        <label for="port" class="sr-only">Puerto</label>
+        <input
+          type="number"
+          id="port"
+          name="port"
+          placeholder="993"
+          value="{{ srv.port }}"
+          class="imap2-port-input"
+          autocomplete="off"
+        >
+      </div>
 
-      <!-- Port con label y autocomplete -->
-      <label for="port">Puerto:</label>
-      <input
-        type="number"
-        id="port"
-        name="port"
-        placeholder="993"
-        value="{{ srv.port }}"
-        class="d-block mb-05"
-        autocomplete="off"
-      >
+      <!-- Fila 2: Usuario y Contraseña -->
+      <div class="d-flex gap-05 mb-05 align-items-center">
+        <label for="username" class="sr-only">Usuario</label>
+        <input
+          type="text"
+          id="username"
+          name="username"
+          placeholder="Usuario"
+          value="{{ srv.username }}"
+          required
+          class="flex-grow-1"
+          autocomplete="username"
+        >
+        <label for="password" class="sr-only">Password</label>
+        <input
+          type="password"
+          id="password"
+          name="password"
+          placeholder="Password (dejar vacío si no cambias)"
+          class="flex-grow-1"
+          autocomplete="current-password"
+        >
+      </div>
 
-      <!-- Usuario con label y autocomplete -->
-      <label for="username">Usuario:</label>
-      <input
-        type="text"
-        id="username"
-        name="username"
-        placeholder="Usuario"
-        value="{{ srv.username }}"
-        required
-        class="d-block mb-05"
-        autocomplete="username"
-      >
-
-      <!-- Password con label y autocomplete -->
-      <label for="password">Contraseña:</label>
-      <input
-        type="password"
-        id="password"
-        name="password"
-        placeholder="Password (dejar vacío si no cambias)"
-        class="d-block mb-05"
-        autocomplete="current-password"
-      >
-
-      <!-- Carpetas con label y autocomplete -->
-      <label for="folders">Carpetas (separadas por comas):</label>
-      <input
-        type="text"
-        id="folders"
-        name="folders"
-        value="{{ srv.folders if srv.folders else 'INBOX' }}"
-        class="d-block mb-05"
-        autocomplete="off"
-      >
-
-      <!-- Ruta de acceso (route_path) -->
-      <label for="route_path">Ruta de acceso (ej: /pagina2, /web):</label>
-      <input
-        type="text"
-        id="route_path"
-        name="route_path"
-        placeholder="/pagina2"
-        value="{{ srv.route_path if srv.route_path else '' }}"
-        class="d-block mb-05"
-        required
-        autocomplete="off"
-      >
-      <small class="text-secondary">Esta será la URL para acceder a esta página de códigos (ej: pagina.com{{ srv.route_path if srv.route_path else '/pagina2' }})</small>
+      <!-- Fila 3: Carpetas y Ruta -->
+      <div class="d-flex gap-05 mb-05 align-items-end imap2-create-row">
+        <div class="flex-grow-1 min-width-200">
+          <label for="folders" class="imap2-label-small sr-only">separada por comas:</label>
+          <input
+            type="text"
+            id="folders"
+            name="folders"
+            placeholder="INBOX"
+            value="{{ srv.folders if srv.folders else 'INBOX' }}"
+            class="d-block imap2-input-small"
+            autocomplete="off"
+          >
+        </div>
+        <div class="flex-grow-1 min-width-200">
+          <label for="route_path" class="imap2-label-small sr-only">Ruta</label>
+          <input
+            type="text"
+            id="route_path"
+            name="route_path"
+            placeholder="/pagina2"
+            value="{{ srv.route_path if srv.route_path else '' }}"
+            class="d-block imap2-input-small"
+            required
+            autocomplete="off"
+          >
+        </div>
+      </div>
 
       <div class="text-center mt-1">
         <button type="submit" class="btn-green mr-05">Guardar</button>
@@ -239,6 +246,56 @@
         <button type="submit" class="btn-green">Guardar Párrafo</button>
       </div>
     </form>
+    
+    <!-- Sección para subir fondo personalizado -->
+    <div class="mt-2 pt-2 imap2-background-section">
+      <div class="d-flex align-items-center gap-1 flex-wrap justify-content-center">
+        <label for="imap2-background-upload" class="btn-blue mb-0 imap2-background-upload-label">
+          <i class="fas fa-upload"></i> Subir fondo
+        </label>
+        <input
+          type="file"
+          id="imap2-background-upload"
+          accept="image/*"
+          class="d-none"
+        >
+        <div id="imap2-background-preview-container" class="d-flex align-items-center gap-05">
+          {% if srv.background_image %}
+            <img
+              id="imap2-background-preview"
+              src="{{ url_for('static', filename='uploads/imap2_backgrounds/' + srv.background_image) }}"
+              alt="Vista previa del fondo"
+              class="imap2-background-preview-img"
+            >
+            <button
+              type="button"
+              id="imap2-background-delete"
+              class="btn-red btn-small"
+              data-imap2-id="{{ srv.id }}"
+              title="Eliminar fondo"
+            >
+              <i class="fas fa-trash"></i>
+            </button>
+          {% else %}
+            <img
+              id="imap2-background-preview"
+              src=""
+              alt="Vista previa del fondo"
+              class="d-none imap2-background-preview-img"
+            >
+            <button
+              type="button"
+              id="imap2-background-delete"
+              class="btn-red btn-small d-none"
+              data-imap2-id="{{ srv.id }}"
+              title="Eliminar fondo"
+            >
+              <i class="fas fa-trash"></i>
+            </button>
+          {% endif %}
+        </div>
+      </div>
+    </div>
   </div>
 
   <!-- Card separado para Filtros y Expresiones Regulares -->
@@ -307,8 +364,8 @@
   </div>
 
   <!-- Card separado para Gestión de 2FA por Correo (específico para este servidor IMAP2) -->
-  <div class="card mt-2 twofa-section-card">
-    <h3 class="text-center mb-1">🔐 Gestión de 2FA por Correo</h3>
+  <div class="admin-card twofa-section-card">
+    <h4 class="mb-1 text-center">🔐 Gestión de 2FA por Correo</h4>
     
     <!-- Formulario para agregar/editar configuración 2FA -->
     <form id="imap2-twofa-config-form" class="mb-2">

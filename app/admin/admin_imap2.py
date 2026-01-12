@@ -18,7 +18,9 @@ from app.services.imap_crypto import encrypt_password
 from app.admin.decorators import admin_required
 from urllib.parse import unquote, urlparse
 from datetime import datetime
+from werkzeug.utils import secure_filename
 import re
+import os
 
 # Decorator para excluir rutas del CSRF (para AJAX)
 def csrf_exempt_route(func):
@@ -838,3 +840,95 @@ def get_linked_imap_servers(imap2_id):
         current_app.logger.error(f"Error al procesar QR code de IMAP2: {e}", exc_info=True)
         return jsonify({'success': False, 'error': str(e)}), 500
 
+@admin_bp.route("/imap2/<int:imap2_id>/upload_background", methods=["POST"])
+@admin_required
+@csrf_exempt_route
+def upload_imap2_background(imap2_id):
+    """Sube un fondo personalizado para una página dinámica IMAP2"""
+    try:
+        imap2_server = IMAPServer2.query.get_or_404(imap2_id)
+        
+        if 'background' not in request.files:
+            return jsonify({"status": "error", "message": "No se envió ningún archivo"}), 400
+        
+        file = request.files['background']
+        if not file or not file.filename:
+            return jsonify({"status": "error", "message": "Archivo inválido"}), 400
+        
+        # Validar que sea una imagen
+        allowed_extensions = {'png', 'jpg', 'jpeg', 'gif', 'webp', 'svg'}
+        filename = secure_filename(file.filename)
+        if not ('.' in filename and filename.rsplit('.', 1)[1].lower() in allowed_extensions):
+            return jsonify({"status": "error", "message": "Solo se permiten archivos de imagen"}), 400
+        
+        # Crear directorio de uploads si no existe
+        upload_dir = os.path.join(current_app.root_path, 'static', 'uploads', 'imap2_backgrounds')
+        os.makedirs(upload_dir, exist_ok=True)
+        
+        # Si ya existe un fondo, eliminarlo primero
+        if imap2_server.background_image:
+            old_file_path = os.path.join(upload_dir, imap2_server.background_image)
+            if os.path.exists(old_file_path):
+                try:
+                    os.remove(old_file_path)
+                except Exception as e:
+                    current_app.logger.warning(f"No se pudo eliminar el archivo anterior: {e}")
+        
+        # Generar nombre único para el archivo
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        file_extension = filename.rsplit('.', 1)[1].lower()
+        unique_filename = f"imap2_{imap2_id}_{timestamp}.{file_extension}"
+        
+        # Guardar el archivo
+        file_path = os.path.join(upload_dir, unique_filename)
+        file.save(file_path)
+        
+        # Actualizar el modelo
+        imap2_server.background_image = unique_filename
+        db.session.commit()
+        
+        return jsonify({
+            "status": "ok",
+            "message": "Fondo subido correctamente",
+            "background_url": url_for('static', filename=f'uploads/imap2_backgrounds/{unique_filename}')
+        }), 200
+        
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Error al subir fondo de IMAP2: {e}", exc_info=True)
+        return jsonify({"status": "error", "message": str(e)}), 400
+
+@admin_bp.route("/imap2/<int:imap2_id>/delete_background", methods=["POST"])
+@admin_required
+@csrf_exempt_route
+def delete_imap2_background(imap2_id):
+    """Elimina el fondo personalizado de una página dinámica IMAP2"""
+    try:
+        imap2_server = IMAPServer2.query.get_or_404(imap2_id)
+        
+        if not imap2_server.background_image:
+            return jsonify({"status": "error", "message": "No hay fondo configurado"}), 400
+        
+        # Eliminar archivo del sistema de archivos
+        upload_dir = os.path.join(current_app.root_path, 'static', 'uploads', 'imap2_backgrounds')
+        file_path = os.path.join(upload_dir, imap2_server.background_image)
+        
+        if os.path.exists(file_path):
+            try:
+                os.remove(file_path)
+            except Exception as e:
+                current_app.logger.warning(f"No se pudo eliminar el archivo: {e}")
+        
+        # Limpiar el campo en la base de datos
+        imap2_server.background_image = None
+        db.session.commit()
+        
+        return jsonify({
+            "status": "ok",
+            "message": "Fondo eliminado correctamente"
+        }), 200
+        
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Error al eliminar fondo de IMAP2: {e}", exc_info=True)
+        return jsonify({"status": "error", "message": str(e)}), 400

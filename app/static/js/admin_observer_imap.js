@@ -42,29 +42,83 @@ document.addEventListener("DOMContentLoaded", function() {
   }
 
   function renderList(servers) {
-    listDiv.innerHTML = "";
+    // Limpiar lista usando removeChild (CSP compliant)
+    while (listDiv.firstChild) {
+      listDiv.removeChild(listDiv.firstChild);
+    }
+    
     servers.forEach(s => {
       const div = document.createElement("div");
-      div.className = "imap-item";
-      div.style.marginBottom = "1rem";
-      div.innerHTML = `
-        <strong>Usuario: ${s.username}</strong><br>
-        <em>Carpetas:</em> ${s.folders || "INBOX"}
-        <div class="mt-05">
-          <form action="/admin/observer_test_imap/${s.id}" method="POST" class="d-inline">
-            <input type="hidden" name="_csrf_token" value="${getCsrfToken()}">
-            <button type="submit" class="btn-blue btn-imap-action btn-imap-small">Probar</button>
-          </form>
-          ${
-            s.enabled
-              ? `<button type="button" class="btn-red toggle-observer-imap ml-03 btn-imap-action btn-imap-small" data-id="${s.id}" data-enabled="true">Off</button>`
-              : `<button type="button" class="btn-green toggle-observer-imap ml-03 btn-imap-action btn-imap-small" data-id="${s.id}" data-enabled="false">On</button>`
-          }
-          <button type="button" class="btn-orange ml-03 edit-observer-imap btn-imap-action btn-imap-small" data-url="/admin/observer_edit_imap/${s.id}">Editar</button>
-          <button type="button" class="btn-panel btn-red btn-sm delete-observer-imap ml-03" data-id="${s.id}" title="Eliminar">
-            <i class="fas fa-trash"></i>
-          </button>
-        </div>`;
+      div.className = "imap-item mb-1";
+
+      // Usuario
+      const strongUser = document.createElement("strong");
+      strongUser.textContent = `Usuario: ${escapeHtml(s.username)}`;
+      div.appendChild(strongUser);
+      
+      const br = document.createElement("br");
+      div.appendChild(br);
+      
+      // Carpetas
+      const emFolders = document.createElement("em");
+      emFolders.textContent = "Carpetas: ";
+      const foldersText = document.createTextNode(escapeHtml(s.folders || "INBOX"));
+      emFolders.appendChild(foldersText);
+      div.appendChild(emFolders);
+
+      // Contenedor de acciones
+      const actionsDiv = document.createElement("div");
+      actionsDiv.className = "mt-05";
+
+      // Formulario Probar
+      const testForm = document.createElement("form");
+      testForm.action = `/admin/observer_test_imap/${s.id}`;
+      testForm.method = "POST";
+      testForm.className = "d-inline";
+      
+      const csrfInput = document.createElement("input");
+      csrfInput.type = "hidden";
+      csrfInput.name = "_csrf_token";
+      csrfInput.value = getCsrfToken();
+      testForm.appendChild(csrfInput);
+      
+      const testBtn = document.createElement("button");
+      testBtn.type = "submit";
+      testBtn.className = "btn-blue btn-imap-action btn-imap-small";
+      testBtn.textContent = "Probar";
+      testForm.appendChild(testBtn);
+      actionsDiv.appendChild(testForm);
+
+      // Botón Toggle
+      const toggleBtn = document.createElement("button");
+      toggleBtn.type = "button";
+      toggleBtn.className = s.enabled ? "btn-red toggle-observer-imap ml-03 btn-imap-action btn-imap-small" : "btn-green toggle-observer-imap ml-03 btn-imap-action btn-imap-small";
+      toggleBtn.setAttribute("data-id", s.id);
+      toggleBtn.setAttribute("data-enabled", s.enabled ? "true" : "false");
+      toggleBtn.textContent = s.enabled ? "Off" : "On";
+      actionsDiv.appendChild(toggleBtn);
+
+      // Botón Editar
+      const editBtn = document.createElement("button");
+      editBtn.type = "button";
+      editBtn.className = "btn-orange ml-03 edit-observer-imap btn-imap-action btn-imap-small";
+      editBtn.setAttribute("data-url", `/admin/observer_edit_imap/${s.id}`);
+      editBtn.textContent = "Editar";
+      actionsDiv.appendChild(editBtn);
+
+      // Botón Eliminar
+      const deleteBtn = document.createElement("button");
+      deleteBtn.type = "button";
+      deleteBtn.className = "btn-panel btn-red btn-sm delete-observer-imap ml-03";
+      deleteBtn.setAttribute("data-id", s.id);
+      deleteBtn.title = "Eliminar";
+      
+      const trashIcon = document.createElement("i");
+      trashIcon.className = "fas fa-trash";
+      deleteBtn.appendChild(trashIcon);
+      actionsDiv.appendChild(deleteBtn);
+
+      div.appendChild(actionsDiv);
       listDiv.appendChild(div);
     });
   }
@@ -110,7 +164,6 @@ document.addEventListener("DOMContentLoaded", function() {
           }
         })
         .catch(err => {
-          console.error('Error al probar servidor:', err);
           alert('Error de red: ' + err.message);
         })
         .finally(() => {
@@ -158,7 +211,6 @@ document.addEventListener("DOMContentLoaded", function() {
         }
       })
       .catch(err => {
-        console.error("Error toggleObserverIMAP:", err);
         if (err.message.includes("Unexpected token")) {
           alert("Error: El servidor devolvió una respuesta inesperada. Recarga la página e intenta nuevamente.");
         } else {
@@ -207,7 +259,6 @@ document.addEventListener("DOMContentLoaded", function() {
         }
       })
       .catch(err => {
-        console.error("Error deleteObserverIMAP:", err);
         if (err.message.includes("Unexpected token")) {
           alert("Error: El servidor devolvió una respuesta inesperada. Recarga la página e intenta nuevamente.");
         } else {
@@ -234,6 +285,13 @@ document.addEventListener("DOMContentLoaded", function() {
       }, 100);
     }
   });
+
+  function escapeHtml(text) {
+    if (text == null) return '';
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+  }
 
   function getCsrfToken() {
     const csrfMeta = document.querySelector('meta[name="csrf_token"]');

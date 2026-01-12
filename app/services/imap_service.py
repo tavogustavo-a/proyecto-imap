@@ -2,11 +2,13 @@
 
 import ssl
 import traceback
+import os
 from datetime import datetime, timedelta
 from socket import gaierror, timeout
 from imaplib import IMAP4
 from ssl import SSLError
 from imapclient import IMAPClient, exceptions as imap_exceptions
+from flask import current_app
 from app.extensions import db
 from app.models import IMAPServer
 from app.services.imap_crypto import encrypt_password, decrypt_password
@@ -98,6 +100,7 @@ def delete_imap_server(server_id, model_cls=IMAPServer):
     """
     Elimina un servidor IMAP y todas sus relaciones asociadas.
     Para IMAPServer2, también limpia las relaciones M2M con filtros y regex,
+    y elimina el fondo personalizado si existe.
     y elimina todos los servidores IMAP vinculados.
     """
     srv = model_cls.query.get_or_404(server_id)
@@ -119,6 +122,18 @@ def delete_imap_server(server_id, model_cls=IMAPServer):
         srv.filters.clear()
         srv.regexes.clear()
         db.session.flush()  # Aplicar cambios antes de eliminar
+    
+    # Si es IMAPServer2 y tiene fondo personalizado, eliminarlo del sistema de archivos
+    if hasattr(srv, 'background_image') and srv.background_image:
+        try:
+            upload_dir = os.path.join(current_app.root_path, 'static', 'uploads', 'imap2_backgrounds')
+            file_path = os.path.join(upload_dir, srv.background_image)
+            if os.path.exists(file_path):
+                os.remove(file_path)
+        except Exception as e:
+            # Loggear el error pero no fallar la eliminación del servidor
+            if current_app:
+                current_app.logger.warning(f"No se pudo eliminar el fondo personalizado: {e}")
     
     db.session.delete(srv)
     db.session.commit()

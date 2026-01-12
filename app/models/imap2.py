@@ -39,6 +39,7 @@ class IMAPServer2(db.Model):
     folders = db.Column(db.String(500), nullable=False, server_default="INBOX")
     route_path = db.Column(db.String(100), nullable=False, unique=True)  # Ej: /pagina2, /web - OBLIGATORIO
     paragraph = db.Column(db.Text, nullable=True)  # Párrafo personalizado para esta página
+    background_image = db.Column(db.String(255), nullable=True)  # Ruta del fondo personalizado para esta página dinámica
 
     # Relaciones M2M con FilterModel y RegexModel
     filters = db.relationship(

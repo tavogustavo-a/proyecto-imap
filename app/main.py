@@ -173,6 +173,7 @@ def dynamic_imap2_route(route_path):
         "search_imap2_dynamic.html",
         imap_server=imap_server,
         paragraph=imap_server.paragraph,
+        background_image=imap_server.background_image,
         services_in_rows=services_in_rows,
         default_service_id=default_service_id,
         current_user=current_user,

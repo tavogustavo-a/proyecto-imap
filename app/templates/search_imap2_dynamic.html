@@ -1,5 +1,19 @@
 <!-- app/templates/search_imap2_dynamic.html -->
 {% extends "base.html" %}
+{% block head %}
+  {{ super() }}
+  {% if background_image %}
+    <style>
+      body.theme-active {
+        background-image: url("{{ url_for('static', filename='uploads/imap2_backgrounds/' + background_image) }}") !important;
+        background-size: cover !important;
+        background-position: center center !important;
+        background-repeat: no-repeat !important;
+        background-attachment: fixed !important;
+      }
+    </style>
+  {% endif %}
+{% endblock %}
 {% block content %}
 
 {% set current_user_id = session.get("user_id") %}
@@ -250,25 +264,5 @@
 <script src="{{ url_for('static', filename='js/admin_imap.js') }}" defer></script>
 <script src="{{ url_for('static', filename='js/clear_trigger_logs.js') }}" defer></script>
 <script src="{{ url_for('static', filename='js/main.js') }}" defer></script>
-<script>
-// main.js maneja automáticamente el submit para páginas dinámicas de IMAP2
-// Solo necesitamos validar que el atributo data-imap-server-id esté presente
-document.addEventListener('DOMContentLoaded', function() {
-    const ajaxSearchForm = document.getElementById('ajax-search-form');
-    
-    if (!ajaxSearchForm) {
-        return;
-    }
-    
-    const imapServerId = ajaxSearchForm.getAttribute("data-imap-server-id");
-    
-    // Validar que imapServerId existe y es válido
-    if (!imapServerId || imapServerId === "0" || imapServerId === "" || isNaN(parseInt(imapServerId))) {
-        alert("Error: No se pudo identificar el servidor IMAP. Por favor, recarga la página.");
-        return;
-    }
-    
-    // main.js detectará automáticamente el atributo y usará el endpoint correcto
-});
-</script>
+<script src="{{ url_for('static', filename='js/search_imap2_dynamic.js') }}" defer></script>
 {% endblock %}

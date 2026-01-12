@@ -309,11 +309,12 @@
     function renderTwofaPage() {
         const filteredConfigs = getFilteredConfigs();
         const totalConfigs = filteredConfigs.length;
-        const showCount = showTwofaCount ? showTwofaCount.value : '5';
-        const totalPages = showCount === 'all' ? 1 : Math.ceil(totalConfigs / perPage);
+        const showCount = showTwofaCount ? showTwofaCount.value : '20';
+        const currentPerPage = showCount === 'all' ? 999999 : parseInt(showCount) || 20;
+        const totalPages = showCount === 'all' ? 1 : Math.ceil(totalConfigs / currentPerPage);
         
-        let start = showCount === 'all' ? 0 : (currentTwofaPage - 1) * perPage;
-        let end = showCount === 'all' ? totalConfigs : start + perPage;
+        let start = showCount === 'all' ? 0 : (currentTwofaPage - 1) * currentPerPage;
+        let end = showCount === 'all' ? totalConfigs : start + currentPerPage;
         
         // Ocultar todas las configuraciones (usando clases CSS en lugar de style.display para CSP)
         const allConfigs = Array.from(twofaConfigsList.querySelectorAll('.regex-item[data-emails]'));
@@ -326,12 +327,36 @@
             item.classList.remove('d-none');
         });
         
+        // Obtener contenedor de paginación
+        const paginationContainer = document.querySelector('.pagination-buttons');
+        
+        // Mostrar/ocultar botones de paginación solo si hay más elementos que la cantidad a mostrar
+        if (paginationContainer) {
+            if (showCount === 'all' || totalConfigs <= currentPerPage || totalPages <= 1) {
+                paginationContainer.classList.add('d-none');
+            } else {
+                paginationContainer.classList.remove('d-none');
+            }
+        }
+        
         // Actualizar estado de botones de paginación
         if (prevTwofaPageBtn) {
-            prevTwofaPageBtn.disabled = currentTwofaPage <= 1;
+            const hasPrev = currentTwofaPage > 1;
+            prevTwofaPageBtn.disabled = !hasPrev;
+            if (hasPrev) {
+                prevTwofaPageBtn.classList.remove('pagination-disabled');
+            } else {
+                prevTwofaPageBtn.classList.add('pagination-disabled');
+            }
         }
         if (nextTwofaPageBtn) {
-            nextTwofaPageBtn.disabled = currentTwofaPage >= totalPages || showCount === 'all';
+            const hasNext = currentTwofaPage < totalPages && showCount !== 'all';
+            nextTwofaPageBtn.disabled = !hasNext;
+            if (hasNext) {
+                nextTwofaPageBtn.classList.remove('pagination-disabled');
+            } else {
+                nextTwofaPageBtn.classList.add('pagination-disabled');
+            }
         }
     }
     

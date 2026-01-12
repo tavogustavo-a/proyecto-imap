@@ -114,7 +114,8 @@ body.theme-active.tema3 {
   padding: 0.75rem;
   border-radius: 16px;
   max-width: 750px;
-  overflow-x: visible;
+  overflow-x: hidden;
+  overflow-wrap: break-word;
   box-sizing: border-box;
 }
 
@@ -177,6 +178,109 @@ textarea {
   width: 98%;
   padding: 0.3rem;
   border-radius: 4px;
+  border: 1px solid #ddd;
+}
+
+/* Excepción: inputs dentro de contenedores flex deben usar width: 100% */
+.d-flex input[type="text"],
+.d-flex input[type="password"],
+.d-flex input[type="email"],
+.d-flex input[type="number"] {
+  width: 100%;
+}
+
+/* Estilos específicos para inputs en edit_imap2.html */
+.imap2-edit-form {
+  padding: 0 0.5rem;
+  box-sizing: border-box;
+}
+
+.form-container-medium input[type="text"],
+.form-container-medium input[type="password"],
+.form-container-medium input[type="number"],
+.form-container-medium input[type="email"] {
+  border-radius: 8px;
+  border: 1px solid #ccc;
+  padding: 0.4rem 0.6rem;
+  transition: border-color 0.2s ease;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.form-container-medium input[type="text"]:focus,
+.form-container-medium input[type="password"]:focus,
+.form-container-medium input[type="number"]:focus,
+.form-container-medium input[type="email"]:focus {
+  border-color: #2196f3;
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(33, 150, 243, 0.1);
+}
+
+/* Asegurar que el campo de descripción tenga el mismo estilo que los demás */
+.imap2-edit-form input[type="text"]#description,
+.imap2-edit-form input[type="text"][name="description"] {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0.4rem 0.6rem;
+  border-radius: 8px;
+  border: 1px solid #ccc;
+}
+
+/* Ajustar gap y responsividad para fila de carpetas y ruta */
+.d-flex.imap2-create-row,
+.imap2-create-row.d-flex {
+  gap: 0.5rem !important;
+  flex-wrap: nowrap !important;
+}
+
+.imap2-create-row > div {
+  flex: 1 1 auto;
+  min-width: 0 !important;
+  max-width: none;
+}
+
+/* Sobrescribir min-width-200 en la fila de carpetas/ruta para evitar que se expandan demasiado */
+.imap2-create-row > div.min-width-200 {
+  min-width: 0 !important;
+  max-width: none !important;
+}
+
+/* Ajustar ancho de inputs dentro de imap2-create-row para que no se expandan demasiado */
+.imap2-create-row input[type="text"] {
+  width: 100% !important;
+  max-width: 100% !important;
+  box-sizing: border-box;
+  margin: 0;
+  padding-left: 0.5rem;
+  padding-right: 0.5rem;
+}
+
+/* En pantallas pequeñas: mantener en la misma línea con gap reducido */
+@media (max-width: 600px) {
+  .d-flex.imap2-create-row,
+  .imap2-create-row.d-flex {
+    flex-wrap: nowrap !important;
+    gap: 0.3rem !important;
+  }
+  
+  .imap2-create-row > div {
+    min-width: 0 !important;
+    flex: 1 1 auto !important;
+    max-width: none !important;
+  }
+  
+  .imap2-create-row > div.min-width-200 {
+    min-width: 0 !important;
+  }
+  
+  .imap2-create-row input {
+    font-size: 0.85rem;
+    padding: 0.3rem 0.4rem;
+  }
+  
+  .imap2-edit-form {
+    padding: 0 0.25rem;
+  }
 }
 
 input[type="checkbox"],
@@ -772,6 +876,7 @@ noscript p {
 
 /* Clases adicionales para refactorizar */
 .min-width-120 { min-width: 120px; }
+.min-width-200 { min-width: 200px; }
 
 .label-block {
   display: block;
@@ -4077,4 +4182,117 @@ a.btn-search.btn-rounded:hover {
 .service-btn-selected {
   transform: scale(0.98);
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+}
+
+/* Estilos para labels e inputs pequeños en formulario IMAP2 */
+.imap2-label-small {
+  font-size: 0.85rem;
+}
+
+.imap2-input-small {
+  font-size: 0.9rem;
+}
+
+/* Estilos para botones de paginación deshabilitados */
+.pagination-disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Estilos para botón de creación IMAP2 */
+.imap2-create-btn {
+  flex-shrink: 0;
+}
+
+/* Estilos para sección 2FA (igual que sms.html) */
+.twofa-section-card {
+  background: white;
+  margin-top: 1rem;
+}
+
+/* Estilos para búsqueda y mostrar en sección 2FA (igual que herramientas) */
+.twofa-section-card .productos-buscar-mostrar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.twofa-section-card .productos-buscar-mostrar .search-container {
+  flex: 1;
+  min-width: 200px;
+}
+
+.twofa-section-card .productos-buscar-mostrar .search-container input[type="search"] {
+  height: 32px !important;
+  padding: 6px 10px !important;
+  border: 1.5px solid #111;
+  border-radius: 5px;
+  font-size: 14px;
+  width: 100%;
+  box-sizing: border-box;
+  line-height: 1.5;
+}
+
+.twofa-section-card .productos-buscar-mostrar select {
+  height: 32px !important;
+  padding: 6px 10px !important;
+  border: 1.5px solid #111;
+  border-radius: 5px;
+  font-size: 14px;
+  width: 80px;
+  box-sizing: border-box;
+  line-height: 1.5;
+}
+
+/* Estilos para sección de fondo personalizado en edit_imap2.html */
+.imap2-background-section {
+  border-top: 1px solid #ddd;
+}
+
+.imap2-background-upload-label {
+  cursor: pointer;
+  margin: 0;
+}
+
+.imap2-background-preview-img {
+  max-width: 100px;
+  max-height: 60px;
+  border-radius: 4px;
+  border: 1px solid #ddd;
+  object-fit: cover;
+}
+
+/* En pantallas pequeñas: botón abajo (solo para admin_dashboard) */
+@media (max-width: 600px) {
+  .imap2-create-btn {
+    width: 100%;
+    margin-top: 0.5rem;
+    text-align: center;
+  }
+}
+
+/* Estilos responsivos para formulario de creación IMAP2 */
+@media (max-width: 600px) {
+  #createImap2Form .d-flex.flex-wrap {
+    flex-direction: column;
+  }
+  
+  #createImap2Form .d-flex.flex-wrap > div {
+    width: 100%;
+    min-width: unset;
+  }
+  
+  #createImap2Form .d-flex.flex-wrap button {
+    width: 100%;
+    margin-top: 0.5rem;
+  }
+  
+  .imap2-label-small {
+    font-size: 0.8rem;
+  }
+  
+  .imap2-input-small {
+    font-size: 0.85rem;
+  }
 }

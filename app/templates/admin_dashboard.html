@@ -286,9 +286,9 @@
       <h4>Crear Nuevo Servidor IMAP</h4>
       <!-- Descripción opcional -->
       <div class="mb-05">
-        <label for="imap2_description">Descripción (opcional):</label>
+        <label for="imap_description">Descripción (opcional):</label>
         <input
-          id="imap2_description"
+          id="imap_description"
           type="text"
           name="description"
           placeholder="Descripción del servidor"
@@ -498,35 +498,33 @@
         autocomplete="current-password"
       >
     </div>
-    <!-- Fila 3: Carpetas y Ruta con Botón Crear -->
-    <div class="d-flex gap-05 mb-05 align-items-center">
-      <div class="flex-grow-1">
-        <label for="imap2_folders">Carpetas separa por comas:</label>
+    <!-- Fila 3: Carpetas, Ruta y Botón Crear -->
+    <div class="d-flex gap-05 mb-05 align-items-end imap2-create-row">
+      <div class="flex-grow-1 min-width-200">
+        <label for="imap2_folders" class="imap2-label-small">separada por comas:</label>
         <input
           id="imap2_folders"
           type="text"
           name="folders"
-          placeholder="INBOX,Carpeta2"
+          placeholder="INBOX"
           value="INBOX"
-          class="d-block"
+          class="d-block imap2-input-small"
           autocomplete="off"
         >
       </div>
-      <div class="d-flex gap-05 align-items-end flex-grow-1">
-        <div class="flex-grow-1">
-          <label for="imap2_route_path">Ruta:</label>
-          <input
-            id="imap2_route_path"
-            type="text"
-            name="route_path"
-            placeholder="/codigos4"
-            class="d-block"
-            required
-            autocomplete="off"
-          >
-        </div>
-        <button type="submit" class="btn-green">Crear</button>
+      <div class="flex-grow-1 min-width-200">
+        <label for="imap2_route_path" class="imap2-label-small">Ruta:</label>
+        <input
+          id="imap2_route_path"
+          type="text"
+          name="route_path"
+          placeholder="/codigos4"
+          class="d-block imap2-input-small"
+          required
+          autocomplete="off"
+        >
       </div>
+      <button type="submit" class="btn-green imap2-create-btn">Crear</button>
     </div>
   </form>
   </div>

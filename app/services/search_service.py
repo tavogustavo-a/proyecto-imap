@@ -281,7 +281,7 @@ def search_imap2_server_dynamic(to_address, imap_server_id, user=None):
         return None
 
     imap_server = IMAPServer2.query.get(imap_server_id)
-    if not imap_server or not imap_server.enabled:
+    if not imap_server:
         return None
 
     # 2) Obtener filtros y regex asociados directamente al servidor IMAP2
@@ -344,12 +344,21 @@ def search_imap2_server_dynamic(to_address, imap_server_id, user=None):
             final_regexes = [r for r in server_regexes if r.id in final_regex_ids_to_use]
 
     # 4) Buscar en este servidor IMAP2 específico Y en los servidores IMAP vinculados
-    servers = [imap_server]
+    # IMPORTANTE: Cada servidor funciona independientemente según su estado enabled
+    servers = []
     
-    # Agregar servidores IMAP vinculados que estén habilitados
+    # Agregar el servidor principal IMAP2 solo si está habilitado
+    if imap_server.enabled:
+        servers.append(imap_server)
+    
+    # Agregar servidores IMAP vinculados que estén habilitados (independientemente del estado del principal)
     linked_imap_servers = imap_server.linked_imap_servers.filter_by(enabled=True).all()
     for linked_imap in linked_imap_servers:
         servers.append(linked_imap)
+    
+    # Si no hay ningún servidor habilitado (ni principal ni vinculados), retornar None
+    if not servers:
+        return None
     
     # -- Primer intento: 2 días
     all_mails = search_in_all_servers(to_address, servers, limit_days=2)

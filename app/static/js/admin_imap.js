@@ -58,41 +58,83 @@ document.addEventListener("DOMContentLoaded", function() {
   }
 
   function renderImapList(servers) {
-    imapList.innerHTML = "";
+    // Limpiar lista usando removeChild (CSP compliant)
+    while (imapList.firstChild) {
+      imapList.removeChild(imapList.firstChild);
+    }
+    
     servers.forEach(s => {
       const div = document.createElement("div");
       div.className = "imap-item mb-1";
 
-      div.innerHTML = `
-        <strong>Usuario: ${escapeHtml(s.username)}</strong><br>
-        <em>Carpetas:</em> ${escapeHtml(s.folders || "INBOX")}
-        <div class="mt-05">
-          <form action="/admin/test_imap/${s.id}" method="POST" class="d-inline">
-            <input type="hidden" name="_csrf_token" value="${getCsrfToken()}">
-            <button type="submit" class="btn-blue btn-imap-action btn-imap-small">Probar</button>
-          </form>
-          ${
-            s.enabled
-              ? `<button type="button" class="btn-red toggle-imap-btn ml-03 btn-imap-action btn-imap-small" data-id="${s.id}" data-enabled="true">Off</button>`
-              : `<button type="button" class="btn-green toggle-imap-btn ml-03 btn-imap-action btn-imap-small" data-id="${s.id}" data-enabled="false">On</button>`
-          }
-          <button
-            type="button"
-            class="btn-orange ml-03 edit-imap-btn btn-imap-action btn-imap-small"
-            data-url="/admin/edit_imap/${s.id}"
-          >
-            Editar
-          </button>
-          <button
-            type="button"
-            class="btn-red delete-imap-btn ml-03 btn-imap-action btn-imap-small"
-            data-id="${s.id}"
-            title="Eliminar"
-          >
-            <i class="fas fa-trash"></i>
-          </button>
-        </div>
-      `;
+      // Usuario
+      const strongUser = document.createElement("strong");
+      strongUser.textContent = `Usuario: ${escapeHtml(s.username)}`;
+      div.appendChild(strongUser);
+      
+      const br = document.createElement("br");
+      div.appendChild(br);
+      
+      // Carpetas
+      const emFolders = document.createElement("em");
+      emFolders.textContent = "Carpetas: ";
+      const foldersText = document.createTextNode(escapeHtml(s.folders || "INBOX"));
+      emFolders.appendChild(foldersText);
+      div.appendChild(emFolders);
+
+      // Contenedor de acciones
+      const actionsDiv = document.createElement("div");
+      actionsDiv.className = "mt-05";
+
+      // Formulario Probar
+      const testForm = document.createElement("form");
+      testForm.action = `/admin/test_imap/${s.id}`;
+      testForm.method = "POST";
+      testForm.className = "d-inline";
+      
+      const csrfInput = document.createElement("input");
+      csrfInput.type = "hidden";
+      csrfInput.name = "_csrf_token";
+      csrfInput.value = getCsrfToken();
+      testForm.appendChild(csrfInput);
+      
+      const testBtn = document.createElement("button");
+      testBtn.type = "submit";
+      testBtn.className = "btn-blue btn-imap-action btn-imap-small";
+      testBtn.textContent = "Probar";
+      testForm.appendChild(testBtn);
+      actionsDiv.appendChild(testForm);
+
+      // Botón Toggle
+      const toggleBtn = document.createElement("button");
+      toggleBtn.type = "button";
+      toggleBtn.className = s.enabled ? "btn-red toggle-imap-btn ml-03 btn-imap-action btn-imap-small" : "btn-green toggle-imap-btn ml-03 btn-imap-action btn-imap-small";
+      toggleBtn.setAttribute("data-id", s.id);
+      toggleBtn.setAttribute("data-enabled", s.enabled ? "true" : "false");
+      toggleBtn.textContent = s.enabled ? "Off" : "On";
+      actionsDiv.appendChild(toggleBtn);
+
+      // Botón Editar
+      const editBtn = document.createElement("button");
+      editBtn.type = "button";
+      editBtn.className = "btn-orange ml-03 edit-imap-btn btn-imap-action btn-imap-small";
+      editBtn.setAttribute("data-url", `/admin/edit_imap/${s.id}`);
+      editBtn.textContent = "Editar";
+      actionsDiv.appendChild(editBtn);
+
+      // Botón Eliminar
+      const deleteBtn = document.createElement("button");
+      deleteBtn.type = "button";
+      deleteBtn.className = "btn-red delete-imap-btn ml-03 btn-imap-action btn-imap-small";
+      deleteBtn.setAttribute("data-id", s.id);
+      deleteBtn.title = "Eliminar";
+      
+      const trashIcon = document.createElement("i");
+      trashIcon.className = "fas fa-trash";
+      deleteBtn.appendChild(trashIcon);
+      actionsDiv.appendChild(deleteBtn);
+
+      div.appendChild(actionsDiv);
       imapList.appendChild(div);
     });
   }
@@ -168,8 +210,15 @@ document.addEventListener("DOMContentLoaded", function() {
       
       // Feedback visual inmediato
       target.disabled = true;
-      const originalText = target.innerHTML;
-      target.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+      const originalContent = target.cloneNode(true);
+      // Limpiar contenido
+      while (target.firstChild) {
+        target.removeChild(target.firstChild);
+      }
+      // Agregar spinner
+      const spinnerIcon = document.createElement("i");
+      spinnerIcon.className = "fas fa-spinner fa-spin";
+      target.appendChild(spinnerIcon);
       
       const srvId = target.getAttribute("data-id");
       const currentlyEnabled = (target.getAttribute("data-enabled") === "true");
@@ -200,7 +249,18 @@ document.addEventListener("DOMContentLoaded", function() {
       .finally(() => {
         // Restaurar botón
         target.disabled = false;
-        target.innerHTML = originalText;
+        // Limpiar contenido
+        while (target.firstChild) {
+          target.removeChild(target.firstChild);
+        }
+        // Restaurar contenido original
+        while (originalContent.firstChild) {
+          target.appendChild(originalContent.firstChild.cloneNode(true));
+        }
+        // Restaurar texto si existe
+        if (originalContent.textContent) {
+          target.textContent = originalContent.textContent;
+        }
       });
     }
 
@@ -214,8 +274,15 @@ document.addEventListener("DOMContentLoaded", function() {
 
       // Feedback visual inmediato
       button.disabled = true;
-      const originalText = button.innerHTML;
-      button.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+      const originalContent = button.cloneNode(true);
+      // Limpiar contenido
+      while (button.firstChild) {
+        button.removeChild(button.firstChild);
+      }
+      // Agregar spinner
+      const spinnerIcon = document.createElement("i");
+      spinnerIcon.className = "fas fa-spinner fa-spin";
+      button.appendChild(spinnerIcon);
 
       fetch("/admin/delete_imap_ajax", {
         method: "POST",
@@ -239,7 +306,18 @@ document.addEventListener("DOMContentLoaded", function() {
       .finally(() => {
         // Restaurar botón
         button.disabled = false;
-        button.innerHTML = originalText;
+        // Limpiar contenido
+        while (button.firstChild) {
+          button.removeChild(button.firstChild);
+        }
+        // Restaurar contenido original
+        while (originalContent.firstChild) {
+          button.appendChild(originalContent.firstChild.cloneNode(true));
+        }
+        // Restaurar texto si existe
+        if (originalContent.textContent) {
+          button.textContent = originalContent.textContent;
+        }
       });
     }
 
@@ -360,9 +438,17 @@ document.addEventListener("DOMContentLoaded", function() {
       }
 
       const submitButton = createImapForm.querySelector('button[type="submit"]');
-      const originalText = submitButton.innerHTML;
+      const originalContent = submitButton.cloneNode(true);
       submitButton.disabled = true;
-      submitButton.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Creando...';
+      // Limpiar contenido
+      while (submitButton.firstChild) {
+        submitButton.removeChild(submitButton.firstChild);
+      }
+      // Agregar spinner y texto
+      const spinnerIcon = document.createElement("i");
+      spinnerIcon.className = "fas fa-spinner fa-spin";
+      submitButton.appendChild(spinnerIcon);
+      submitButton.appendChild(document.createTextNode(" Creando..."));
 
       fetch("/admin/create_imap_ajax", {
         method: "POST",
@@ -398,7 +484,18 @@ document.addEventListener("DOMContentLoaded", function() {
       })
       .finally(() => {
         submitButton.disabled = false;
-        submitButton.innerHTML = originalText;
+        // Limpiar contenido
+        while (submitButton.firstChild) {
+          submitButton.removeChild(submitButton.firstChild);
+        }
+        // Restaurar contenido original
+        while (originalContent.firstChild) {
+          submitButton.appendChild(originalContent.firstChild.cloneNode(true));
+        }
+        // Restaurar texto si existe
+        if (originalContent.textContent) {
+          submitButton.textContent = originalContent.textContent;
+        }
       });
     });
   }
