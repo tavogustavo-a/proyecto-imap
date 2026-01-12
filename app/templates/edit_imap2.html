@@ -259,40 +259,60 @@
           accept="image/*"
           class="d-none"
         >
-        <div id="imap2-background-preview-container" class="d-flex align-items-center gap-05">
-          {% if srv.background_image %}
-            <img
-              id="imap2-background-preview"
-              src="{{ url_for('static', filename='uploads/imap2_backgrounds/' + srv.background_image) }}"
-              alt="Vista previa del fondo"
-              class="imap2-background-preview-img"
-            >
-            <button
-              type="button"
-              id="imap2-background-delete"
-              class="btn-red btn-small"
-              data-imap2-id="{{ srv.id }}"
-              title="Eliminar fondo"
-            >
-              <i class="fas fa-trash"></i>
-            </button>
-          {% else %}
-            <img
-              id="imap2-background-preview"
-              src=""
-              alt="Vista previa del fondo"
-              class="d-none imap2-background-preview-img"
-            >
-            <button
-              type="button"
-              id="imap2-background-delete"
-              class="btn-red btn-small d-none"
-              data-imap2-id="{{ srv.id }}"
-              title="Eliminar fondo"
-            >
-              <i class="fas fa-trash"></i>
-            </button>
-          {% endif %}
+        <img
+          id="imap2-background-preview"
+          src=""
+          alt=""
+          class="d-none"
+        >
+        {% if srv.background_image %}
+          <button
+            type="button"
+            id="imap2-background-delete"
+            class="btn-red mb-0 imap2-background-delete-btn"
+            data-imap2-id="{{ srv.id }}"
+            title="Eliminar fondo"
+          >
+            <i class="fas fa-trash"></i> Eliminar fondo
+          </button>
+        {% else %}
+          <button
+            type="button"
+            id="imap2-background-delete"
+            class="btn-red mb-0 imap2-background-delete-btn d-none"
+            data-imap2-id="{{ srv.id }}"
+            title="Eliminar fondo"
+          >
+            <i class="fas fa-trash"></i> Eliminar fondo
+          </button>
+        {% endif %}
+      </div>
+    </div>
+    
+    <!-- Sección para vincular usuarios a esta página dinámica -->
+    <div class="mt-2 pt-2 imap2-background-section">
+      <h4 class="text-center mb-05">Usuarios con acceso a gestionar esta página</h4>
+      <div class="d-flex flex-column gap-05">
+        <div class="search-container position-relative">
+          <label for="imap2-user-search" class="sr-only">Buscar usuario</label>
+          <input
+            type="search"
+            id="imap2-user-search"
+            placeholder="Buscar usuario por nombre..."
+            class="d-block w-100"
+            autocomplete="off"
+          >
+          <div id="imap2-user-search-results" class="user-search-results-dropdown d-none"></div>
+        </div>
+        <div id="imap2-users-list" class="d-flex flex-wrap gap-05 mt-05">
+          {% for user in srv.allowed_users %}
+            <div class="user-tag imap2-user-tag" data-user-id="{{ user.id }}">
+              <span>{{ user.username }}</span>
+              <button type="button" class="remove-user-btn" data-user-id="{{ user.id }}" title="Eliminar">
+                <i class="fas fa-times"></i>
+              </button>
+            </div>
+          {% endfor %}
         </div>
       </div>
     </div>

@@ -46,6 +46,24 @@
         return metaTag ? metaTag.getAttribute('content') : '';
     }
     
+    // Función para obtener la ruta base (admin o usuario)
+    function getBaseRoute() {
+        const path = window.location.pathname;
+        if (path.includes('/manage_my_page/')) {
+            return '/usuario/my_page';
+        }
+        return '/admin/imap2';
+    }
+    
+    // Función para obtener la ruta base de 2FA (admin o usuario)
+    function getTwofaBaseRoute() {
+        const path = window.location.pathname;
+        if (path.includes('/manage_my_page/')) {
+            return '/usuario/my_page';
+        }
+        return '/admin/imap2';
+    }
+    
     // Función para obtener server_id
     function getServerId() {
         return twofaServerId ? parseInt(twofaServerId.value) : null;
@@ -125,7 +143,7 @@
             formData.append('qr_file', file);
             
             try {
-                const response = await fetch('/admin/imap2/twofa-configs/read-qr', {
+                const response = await fetch(`${getTwofaBaseRoute()}/twofa-configs/read-qr`, {
                     method: 'POST',
                     headers: {
                         'X-CSRFToken': getCsrfToken()
@@ -202,7 +220,7 @@
             }
             
             try {
-                const response = await fetch(`/admin/imap2/${serverId}/twofa-configs`, {
+                const response = await fetch(`${getBaseRoute()}/${serverId}/twofa-configs`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -539,7 +557,7 @@
             }
             
             try {
-                const response = await fetch(`/admin/imap2/twofa-configs/${configId}`, {
+                const response = await fetch(`${getBaseRoute()}/twofa-configs/${configId}`, {
                     method: 'PUT',
                     headers: {
                         'Content-Type': 'application/json',

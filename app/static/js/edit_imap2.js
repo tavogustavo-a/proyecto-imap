@@ -6,6 +6,15 @@ document.addEventListener("DOMContentLoaded", function() {
     return meta ? meta.getAttribute('content') : '';
   }
 
+  // Función para obtener la ruta base (admin o usuario)
+  function getBaseRoute() {
+    const path = window.location.pathname;
+    if (path.includes('/manage_my_page/')) {
+      return '/usuario/my_page';
+    }
+    return '/admin/imap2';
+  }
+
   // Manejar cambios en checkboxes de filtros
   const filterCheckboxes = document.querySelectorAll('.filter-checkbox');
   filterCheckboxes.forEach(checkbox => {
@@ -114,14 +123,7 @@ document.addEventListener("DOMContentLoaded", function() {
         return;
       }
 
-      // Mostrar vista previa inmediata
-      const reader = new FileReader();
-      reader.onload = function(e) {
-        backgroundPreview.src = e.target.result;
-        backgroundPreview.classList.remove('d-none');
-        backgroundDeleteBtn.classList.remove('d-none');
-      };
-      reader.readAsDataURL(file);
+      // No mostrar vista previa, solo preparar para subir
 
       // Subir el archivo
       const formData = new FormData();
@@ -141,7 +143,7 @@ document.addEventListener("DOMContentLoaded", function() {
         uploadLabel.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Subiendo...';
       }
 
-      fetch(`/admin/imap2/${imap2Id}/upload_background`, {
+      fetch(`${getBaseRoute()}/${imap2Id}/upload_background`, {
         method: 'POST',
         headers: {
           'X-CSRFToken': getCsrfToken()
@@ -151,22 +153,24 @@ document.addEventListener("DOMContentLoaded", function() {
       .then(response => response.json())
       .then(data => {
         if (data.status === 'ok') {
-          // Actualizar la vista previa con la URL del servidor
-          backgroundPreview.src = data.background_url;
-          backgroundPreview.classList.remove('d-none');
-          backgroundDeleteBtn.classList.remove('d-none');
+          // Mostrar botón de eliminar (sin vista previa de imagen)
+          if (backgroundDeleteBtn) {
+            backgroundDeleteBtn.classList.remove('d-none');
+          }
         } else {
           alert('Error al subir el fondo: ' + (data.message || 'Error desconocido'));
-          // Ocultar vista previa si hay error
-          backgroundPreview.classList.add('d-none');
-          backgroundDeleteBtn.classList.add('d-none');
+          // Ocultar botón de eliminar si hay error
+          if (backgroundDeleteBtn) {
+            backgroundDeleteBtn.classList.add('d-none');
+          }
         }
       })
       .catch(error => {
         alert('Error de red al subir el fondo: ' + error.message);
-        // Ocultar vista previa si hay error
-        backgroundPreview.classList.add('d-none');
-        backgroundDeleteBtn.classList.add('d-none');
+        // Ocultar botón de eliminar si hay error
+        if (backgroundDeleteBtn) {
+          backgroundDeleteBtn.classList.add('d-none');
+        }
       })
       .finally(() => {
         backgroundUploadInput.disabled = false;
@@ -198,7 +202,7 @@ document.addEventListener("DOMContentLoaded", function() {
       const originalContent = this.innerHTML;
       this.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
 
-      fetch(`/admin/imap2/${imap2Id}/delete_background`, {
+      fetch(`${getBaseRoute()}/${imap2Id}/delete_background`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -208,10 +212,10 @@ document.addEventListener("DOMContentLoaded", function() {
       .then(response => response.json())
       .then(data => {
         if (data.status === 'ok') {
-          // Ocultar vista previa y botón de eliminar
-          backgroundPreview.classList.add('d-none');
-          backgroundDeleteBtn.classList.add('d-none');
-          backgroundPreview.src = '';
+          // Ocultar botón de eliminar
+          if (backgroundDeleteBtn) {
+            backgroundDeleteBtn.classList.add('d-none');
+          }
         } else {
           alert('Error al eliminar el fondo: ' + (data.message || 'Error desconocido'));
         }
@@ -225,4 +229,213 @@ document.addEventListener("DOMContentLoaded", function() {
       });
     });
   }
+
+  // Manejar búsqueda y vinculación de usuarios
+  const userSearchInput = document.getElementById('imap2-user-search');
+  const usersList = document.getElementById('imap2-users-list');
+  let searchTimeout = null;
+
+  if (userSearchInput) {
+    const imap2Id = userSearchInput.closest('.imap2-background-section')?.previousElementSibling
+      ?.querySelector('[data-imap2-id]')?.getAttribute('data-imap2-id') 
+      || document.querySelector('[data-imap2-id]')?.getAttribute('data-imap2-id')
+      || window.location.pathname.match(/\/edit_imap2\/(\d+)/)?.[1];
+
+    if (imap2Id) {
+      // Búsqueda con debounce
+      userSearchInput.addEventListener('input', function(e) {
+        const query = e.target.value.trim();
+        const resultsContainer = document.getElementById('imap2-user-search-results');
+        
+        clearTimeout(searchTimeout);
+        
+        // Ocultar dropdown si el campo está vacío
+        if (query.length < 2) {
+          if (resultsContainer) {
+            resultsContainer.classList.add('d-none');
+          }
+          return;
+        }
+        
+        searchTimeout = setTimeout(() => {
+          // Solo buscar usuarios si estamos en la página de admin
+          if (window.location.pathname.includes('/edit_imap2/')) {
+            fetch(`/admin/imap2/${imap2Id}/search_users_ajax?query=${encodeURIComponent(query)}`, {
+              headers: {
+                'X-CSRFToken': getCsrfToken()
+              }
+            })
+            .then(res => res.json())
+            .then(data => {
+              if (data.status === 'ok') {
+                // Obtener IDs de usuarios ya vinculados
+                const linkedIds = Array.from(usersList.querySelectorAll('.imap2-user-tag'))
+                  .map(tag => parseInt(tag.getAttribute('data-user-id')));
+                
+                // Filtrar usuarios ya vinculados
+                const availableUsers = data.users.filter(u => !u.is_linked && !linkedIds.includes(u.id));
+                
+                // Mostrar resultados en dropdown
+                showUserSearchResults(availableUsers, imap2Id);
+              }
+            })
+            .catch(err => {
+              // Silenciar errores de búsqueda
+            });
+          }
+        }, 300);
+      });
+
+      // Manejar selección de usuario al hacer clic fuera o presionar Enter
+      userSearchInput.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          const query = e.target.value.trim();
+          if (query.length >= 2 && window.location.pathname.includes('/edit_imap2/')) {
+            fetch(`/admin/imap2/${imap2Id}/search_users_ajax?query=${encodeURIComponent(query)}`, {
+              headers: {
+                'X-CSRFToken': getCsrfToken()
+              }
+            })
+            .then(res => res.json())
+            .then(data => {
+              if (data.status === 'ok' && data.users.length > 0) {
+                const firstUser = data.users[0];
+                if (!firstUser.is_linked) {
+                  linkUserToImap2(imap2Id, firstUser.id, firstUser.username);
+                  e.target.value = '';
+                }
+              }
+            });
+          }
+        }
+      });
+    }
+  }
+
+  // Función para mostrar resultados de búsqueda con dropdown
+  function showUserSearchResults(users, imap2Id) {
+    const resultsContainer = document.getElementById('imap2-user-search-results');
+    if (!resultsContainer) return;
+    
+    // Limpiar resultados anteriores
+    while (resultsContainer.firstChild) {
+      resultsContainer.removeChild(resultsContainer.firstChild);
+    }
+    
+    if (users.length === 0) {
+      resultsContainer.classList.add('d-none');
+      return;
+    }
+    
+    // Crear elementos de resultados
+    users.forEach(user => {
+      const item = document.createElement('div');
+      item.className = 'user-search-result-item';
+      item.textContent = user.full_name || user.username;
+      item.setAttribute('data-user-id', user.id);
+      item.setAttribute('data-username', user.username);
+      
+      item.addEventListener('click', function() {
+        linkUserToImap2(imap2Id, user.id, user.username);
+        userSearchInput.value = '';
+        resultsContainer.classList.add('d-none');
+      });
+      
+      resultsContainer.appendChild(item);
+    });
+    
+    resultsContainer.classList.remove('d-none');
+  }
+  
+  // Ocultar dropdown al hacer clic fuera
+  document.addEventListener('click', function(e) {
+    const resultsContainer = document.getElementById('imap2-user-search-results');
+    const searchInput = document.getElementById('imap2-user-search');
+    
+    if (resultsContainer && searchInput && 
+        !resultsContainer.contains(e.target) && 
+        e.target !== searchInput) {
+      resultsContainer.classList.add('d-none');
+    }
+  });
+
+  // Función para vincular usuario (solo admin)
+  function linkUserToImap2(imap2Id, userId, username) {
+    if (!window.location.pathname.includes('/edit_imap2/')) return;
+    fetch(`/admin/imap2/${imap2Id}/link_user/${userId}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRFToken': getCsrfToken()
+      }
+    })
+    .then(res => res.json())
+    .then(data => {
+      if (data.status === 'ok') {
+        // Agregar tag de usuario a la lista
+        const tag = document.createElement('div');
+        tag.className = 'user-tag imap2-user-tag';
+        tag.setAttribute('data-user-id', userId);
+        tag.innerHTML = `
+          <span>${escapeHtml(username)}</span>
+          <button type="button" class="remove-user-btn" data-user-id="${userId}" title="Eliminar">
+            <i class="fas fa-times"></i>
+          </button>
+        `;
+        if (usersList) {
+          usersList.appendChild(tag);
+        }
+      } else {
+        alert('Error: ' + (data.message || 'Error al vincular usuario'));
+      }
+    })
+    .catch(err => {
+      alert('Error de red: ' + err.message);
+    });
+  }
+
+  // Función helper para escapar HTML
+  function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+  }
+
+  // Manejar eliminación de usuarios vinculados
+  document.addEventListener('click', function(e) {
+    if (e.target.closest('.remove-user-btn')) {
+      const btn = e.target.closest('.remove-user-btn');
+      const userId = parseInt(btn.getAttribute('data-user-id'));
+      const userTag = btn.closest('.imap2-user-tag');
+      const imap2Id = window.location.pathname.match(/\/edit_imap2\/(\d+)/)?.[1];
+      
+      if (!imap2Id || !userId || !window.location.pathname.includes('/edit_imap2/')) return;
+      
+      if (!confirm('¿Deseas desvincular este usuario?')) {
+        return;
+      }
+      
+      fetch(`/admin/imap2/${imap2Id}/unlink_user/${userId}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRFToken': getCsrfToken()
+        }
+      })
+      .then(res => res.json())
+      .then(data => {
+        if (data.status === 'ok') {
+          if (userTag) {
+            userTag.remove();
+          }
+        } else {
+          alert('Error: ' + (data.message || 'Error al desvincular usuario'));
+        }
+      })
+      .catch(err => {
+        alert('Error de red: ' + err.message);
+      });
+    }
+  });
 });

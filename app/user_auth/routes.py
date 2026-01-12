@@ -1,12 +1,15 @@
 # app/user_auth/routes.py
 
-from flask import render_template, request, flash, redirect, url_for, session, current_app
+from flask import render_template, request, flash, redirect, url_for, session, current_app, jsonify, url_for as flask_url_for
 from werkzeug.security import check_password_hash
+from werkzeug.utils import secure_filename
 from datetime import datetime
-from app.models import User
+from app.models import User, IMAPServer2
+from app.models.imap2 import IMAP2TwoFAConfig
 from app.extensions import db
 from config import Config
 from functools import wraps
+import os
 
 # Importar el blueprint desde el módulo actual
 from . import user_auth_bp
@@ -175,3 +178,200 @@ def logout():
         session.clear()
         flash("Sesión de usuario cerrada.", "info")
     return redirect(url_for("user_auth_bp.login"))
+
+@user_auth_bp.route("/manage_my_page/<int:server_id>", methods=["GET"])
+@login_required
+def manage_my_page(server_id):
+    """Permite a un usuario gestionar su página dinámica asignada"""
+    user_id = session.get("user_id")
+    if not user_id:
+        flash("Debes iniciar sesión para acceder a esta página.", "danger")
+        return redirect(url_for("user_auth_bp.login"))
+    
+    user = User.query.get(user_id)
+    if not user:
+        flash("Usuario no encontrado.", "danger")
+        return redirect(url_for("main_bp.home"))
+    
+    # Obtener el servidor IMAP2
+    imap_server = IMAPServer2.query.get_or_404(server_id)
+    
+    # Verificar que el usuario tenga permiso para gestionar esta página
+    if user not in imap_server.allowed_users.all():
+        flash("No tienes permiso para gestionar esta página.", "danger")
+        return redirect(url_for("main_bp.home"))
+    
+    return render_template(
+        "manage_my_page.html",
+        imap_server=imap_server
+    )
+
+@user_auth_bp.route("/my_pages", methods=["GET"])
+@login_required
+def my_pages_list():
+    """Lista todas las páginas dinámicas que el usuario puede gestionar"""
+    user_id = session.get("user_id")
+    if not user_id:
+        flash("Debes iniciar sesión para acceder a esta página.", "danger")
+        return redirect(url_for("user_auth_bp.login"))
+    
+    user = User.query.get(user_id)
+    if not user:
+        flash("Usuario no encontrado.", "danger")
+        return redirect(url_for("main_bp.home"))
+    
+    # Obtener todas las páginas que el usuario puede gestionar
+    managed_pages = user.managed_imap2_pages.all()
+    
+    return render_template(
+        "my_pages_list.html",
+        managed_pages=managed_pages
+    )
+
+@user_auth_bp.route("/update_my_page_paragraph/<int:server_id>", methods=["POST"])
+@login_required
+@csrf_exempt_route
+def update_my_page_paragraph(server_id):
+    """Actualiza el párrafo personalizado de la página del usuario"""
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"status": "error", "message": "No autenticado"}), 401
+    
+    user = User.query.get(user_id)
+    if not user:
+        return jsonify({"status": "error", "message": "Usuario no encontrado"}), 404
+    
+    imap_server = IMAPServer2.query.get_or_404(server_id)
+    
+    # Verificar permiso
+    if user not in imap_server.allowed_users.all():
+        return jsonify({"status": "error", "message": "No tienes permiso"}), 403
+    
+    paragraph = request.form.get("paragraph", "").strip()
+    imap_server.paragraph = paragraph if paragraph else None
+    db.session.commit()
+    
+    flash("Párrafo actualizado correctamente.", "success")
+    # Redirigir de vuelta a la página de gestión
+    return redirect(url_for("user_auth_bp.manage_my_page", server_id=server_id))
+
+@user_auth_bp.route("/my_page/<int:imap2_id>/upload_background", methods=["POST"])
+@login_required
+@csrf_exempt_route
+def upload_my_page_background(imap2_id):
+    """Sube un fondo personalizado para la página del usuario"""
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"status": "error", "message": "No autenticado"}), 401
+    
+    user = User.query.get(user_id)
+    if not user:
+        return jsonify({"status": "error", "message": "Usuario no encontrado"}), 404
+    
+    imap2_server = IMAPServer2.query.get_or_404(imap2_id)
+    
+    # Verificar permiso
+    if user not in imap2_server.allowed_users.all():
+        return jsonify({"status": "error", "message": "No tienes permiso"}), 403
+    
+    # Reutilizar la lógica del admin
+    from app.admin.admin_imap2 import upload_imap2_background
+    return upload_imap2_background(imap2_id)
+
+@user_auth_bp.route("/my_page/<int:imap2_id>/delete_background", methods=["POST"])
+@login_required
+@csrf_exempt_route
+def delete_my_page_background(imap2_id):
+    """Elimina el fondo personalizado de la página del usuario"""
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"status": "error", "message": "No autenticado"}), 401
+    
+    user = User.query.get(user_id)
+    if not user:
+        return jsonify({"status": "error", "message": "Usuario no encontrado"}), 404
+    
+    imap2_server = IMAPServer2.query.get_or_404(imap2_id)
+    
+    # Verificar permiso
+    if user not in imap2_server.allowed_users.all():
+        return jsonify({"status": "error", "message": "No tienes permiso"}), 403
+    
+    # Reutilizar la lógica del admin
+    from app.admin.admin_imap2 import delete_imap2_background
+    return delete_imap2_background(imap2_id)
+
+@user_auth_bp.route("/my_page/<int:server_id>/twofa-configs", methods=["GET", "POST"])
+@login_required
+def my_page_twofa_configs(server_id):
+    """Gestiona las configuraciones 2FA de la página del usuario"""
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"status": "error", "message": "No autenticado"}), 401
+    
+    user = User.query.get(user_id)
+    if not user:
+        return jsonify({"status": "error", "message": "Usuario no encontrado"}), 404
+    
+    imap_server = IMAPServer2.query.get_or_404(server_id)
+    
+    # Verificar permiso
+    if user not in imap_server.allowed_users.all():
+        return jsonify({"status": "error", "message": "No tienes permiso"}), 403
+    
+    # Reutilizar las rutas del admin pero con verificación de permiso
+    from app.admin.admin_imap2 import (
+        list_imap2_twofa_configs,
+        create_imap2_twofa_config,
+        update_imap2_twofa_config,
+        delete_imap2_twofa_config,
+        read_imap2_qr_code
+    )
+    
+    if request.method == "GET":
+        return list_imap2_twofa_configs(server_id)
+    elif request.method == "POST":
+        return create_imap2_twofa_config(server_id)
+
+@user_auth_bp.route("/my_page/twofa-configs/<int:config_id>", methods=["PUT", "DELETE"])
+@login_required
+@csrf_exempt_route
+def my_page_twofa_config(config_id):
+    """Gestiona una configuración 2FA específica de la página del usuario"""
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"status": "error", "message": "No autenticado"}), 401
+    
+    user = User.query.get(user_id)
+    if not user:
+        return jsonify({"status": "error", "message": "Usuario no encontrado"}), 404
+    
+    config = IMAP2TwoFAConfig.query.get_or_404(config_id)
+    
+    # Verificar permiso
+    if user not in config.imap_server.allowed_users.all():
+        return jsonify({"status": "error", "message": "No tienes permiso"}), 403
+    
+    # Reutilizar las rutas del admin
+    from app.admin.admin_imap2 import (
+        update_imap2_twofa_config,
+        delete_imap2_twofa_config
+    )
+    
+    if request.method == "PUT":
+        return update_imap2_twofa_config(config_id)
+    elif request.method == "DELETE":
+        return delete_imap2_twofa_config(config_id)
+
+@user_auth_bp.route("/my_page/twofa-configs/read-qr", methods=["POST"])
+@login_required
+@csrf_exempt_route
+def my_page_read_qr():
+    """Lee un código QR para 2FA de la página del usuario"""
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"status": "error", "message": "No autenticado"}), 401
+    
+    # Reutilizar la ruta del admin (la verificación de permiso se hace en la creación)
+    from app.admin.admin_imap2 import read_imap2_qr_code
+    return read_imap2_qr_code()

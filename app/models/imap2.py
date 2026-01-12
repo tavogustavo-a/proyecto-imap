@@ -27,6 +27,13 @@ imap2_linked_imap = db.Table(
     db.Column("imap_id", db.Integer, db.ForeignKey('imap_servers.id', ondelete='CASCADE'), primary_key=True)
 )
 
+# Tabla M2M para asociar usuarios con IMAPServer2 (permite que usuarios gestionen páginas dinámicas)
+imap2_users = db.Table(
+    "imap2_users",
+    db.Column("imap2_id", db.Integer, db.ForeignKey('imap_servers2.id', ondelete='CASCADE'), primary_key=True),
+    db.Column("user_id", db.Integer, db.ForeignKey('users.id', ondelete='CASCADE'), primary_key=True)
+)
+
 class IMAPServer2(db.Model):
     __tablename__ = "imap_servers2"
     id = db.Column(db.Integer, primary_key=True)
@@ -66,6 +73,14 @@ class IMAPServer2(db.Model):
         "IMAPServer",
         secondary=imap2_linked_imap,
         backref="linked_imap2_servers",
+        lazy="dynamic"
+    )
+
+    # Relación M2M con usuarios que pueden gestionar esta página dinámica
+    allowed_users = db.relationship(
+        "User",
+        secondary=imap2_users,
+        backref="managed_imap2_pages",
         lazy="dynamic"
     )
 

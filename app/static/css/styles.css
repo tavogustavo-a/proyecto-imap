@@ -4255,12 +4255,76 @@ a.btn-search.btn-rounded:hover {
   margin: 0;
 }
 
-.imap2-background-preview-img {
-  max-width: 100px;
-  max-height: 60px;
+.imap2-background-delete-btn {
+  cursor: pointer;
+  margin: 0;
+}
+
+/* Estilos para tags de usuarios en edit_imap2.html */
+.imap2-user-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  background-color: #2196f3;
+  color: white;
+  padding: 0.3rem 0.6rem;
   border-radius: 4px;
+  font-size: 0.9rem;
+}
+
+.imap2-user-tag .remove-user-btn {
+  background: none;
+  border: none;
+  color: white;
+  cursor: pointer;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  transition: background-color 0.2s;
+}
+
+.imap2-user-tag .remove-user-btn:hover {
+  background-color: rgba(255, 255, 255, 0.2);
+}
+
+/* Estilos para dropdown de búsqueda de usuarios en edit_imap2.html */
+.user-search-results-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  background: white;
   border: 1px solid #ddd;
-  object-fit: cover;
+  border-radius: 4px;
+  max-height: 200px;
+  overflow-y: auto;
+  z-index: 1000;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  margin-top: 2px;
+}
+
+.user-search-result-item {
+  padding: 0.5rem 0.75rem;
+  cursor: pointer;
+  border-bottom: 1px solid #f0f0f0;
+  transition: background-color 0.2s;
+}
+
+.user-search-result-item:last-child {
+  border-bottom: none;
+}
+
+.user-search-result-item:hover {
+  background-color: #f8f9fa;
+}
+
+.search-container.position-relative {
+  position: relative;
 }
 
 /* En pantallas pequeñas: botón abajo (solo para admin_dashboard) */

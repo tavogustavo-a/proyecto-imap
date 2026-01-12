@@ -5,7 +5,7 @@ from flask import (
 )
 from .admin_bp import admin_bp
 from app.extensions import db
-from app.models import IMAPServer2, FilterModel, RegexModel
+from app.models import IMAPServer2, FilterModel, RegexModel, User
 from app.models.imap import IMAPServer
 from app.models.imap2 import IMAP2TwoFAConfig
 from app.services.imap_service import (
@@ -173,6 +173,9 @@ def edit_imap2(server_id):
     # Obtener servidores IMAP ya vinculados a este IMAPServer2
     linked_imap_ids = [imap.id for imap in srv.linked_imap_servers]
     
+    # Obtener usuarios vinculados a este IMAPServer2
+    allowed_users = srv.allowed_users.all()
+    
     return render_template(
         "edit_imap2.html",
         srv=srv,
@@ -181,7 +184,8 @@ def edit_imap2(server_id):
         associated_filter_ids=associated_filter_ids,
         associated_regex_ids=associated_regex_ids,
         all_imap_servers=all_imap_servers,
-        linked_imap_ids=linked_imap_ids
+        linked_imap_ids=linked_imap_ids,
+        allowed_users=allowed_users
     )
 
 # =========== RUTAS AJAX ===========
@@ -931,4 +935,104 @@ def delete_imap2_background(imap2_id):
     except Exception as e:
         db.session.rollback()
         current_app.logger.error(f"Error al eliminar fondo de IMAP2: {e}", exc_info=True)
+        return jsonify({"status": "error", "message": str(e)}), 400
+
+@admin_bp.route("/imap2/<int:imap2_id>/search_users_ajax", methods=["GET"])
+@admin_required
+def search_users_for_imap2_ajax(imap2_id):
+    """Busca usuarios para vincular a una página dinámica IMAP2"""
+    try:
+        query = request.args.get("query", "").strip().lower()
+        imap2_server = IMAPServer2.query.get_or_404(imap2_id)
+        
+        # Obtener usuarios ya vinculados
+        linked_user_ids = [u.id for u in imap2_server.allowed_users.all()]
+        
+        # Buscar usuarios principales (no sub-usuarios)
+        user_q = User.query.filter(User.parent_id.is_(None))
+        
+        # Excluir admin
+        admin_username = current_app.config.get("ADMIN_USER", "admin")
+        user_q = user_q.filter(User.username != admin_username)
+        
+        if query:
+            user_q = user_q.filter(
+                (User.username.ilike(f"%{query}%"))
+                | (User.full_name.ilike(f"%{query}%") if hasattr(User, 'full_name') else False)
+            )
+        
+        users = user_q.limit(20).all()
+        
+        results = []
+        for u in users:
+            results.append({
+                "id": u.id,
+                "username": u.username,
+                "full_name": getattr(u, 'full_name', '') or u.username,
+                "is_linked": u.id in linked_user_ids
+            })
+        
+        return jsonify({"status": "ok", "users": results}), 200
+        
+    except Exception as e:
+        current_app.logger.error(f"Error al buscar usuarios para IMAP2: {e}", exc_info=True)
+        return jsonify({"status": "error", "message": str(e)}), 400
+
+@admin_bp.route("/imap2/<int:imap2_id>/link_user/<int:user_id>", methods=["POST"])
+@admin_required
+@csrf_exempt_route
+def link_user_to_imap2(imap2_id, user_id):
+    """Vincula un usuario a una página dinámica IMAP2"""
+    try:
+        imap2_server = IMAPServer2.query.get_or_404(imap2_id)
+        user = User.query.get_or_404(user_id)
+        
+        # Verificar que no esté ya vinculado
+        if user in imap2_server.allowed_users.all():
+            return jsonify({"status": "error", "message": "El usuario ya está vinculado"}), 400
+        
+        # Vincular usuario
+        imap2_server.allowed_users.append(user)
+        db.session.commit()
+        
+        return jsonify({
+            "status": "ok",
+            "message": f"Usuario {user.username} vinculado correctamente",
+            "user": {
+                "id": user.id,
+                "username": user.username,
+                "full_name": getattr(user, 'full_name', '') or user.username
+            }
+        }), 200
+        
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Error al vincular usuario a IMAP2: {e}", exc_info=True)
+        return jsonify({"status": "error", "message": str(e)}), 400
+
+@admin_bp.route("/imap2/<int:imap2_id>/unlink_user/<int:user_id>", methods=["POST"])
+@admin_required
+@csrf_exempt_route
+def unlink_user_from_imap2(imap2_id, user_id):
+    """Desvincula un usuario de una página dinámica IMAP2"""
+    try:
+        imap2_server = IMAPServer2.query.get_or_404(imap2_id)
+        user = User.query.get_or_404(user_id)
+        
+        # Verificar que esté vinculado
+        if user not in imap2_server.allowed_users.all():
+            return jsonify({"status": "error", "message": "El usuario no está vinculado"}), 400
+        
+        # Desvincular usuario
+        imap2_server.allowed_users.remove(user)
+        db.session.commit()
+        
+        return jsonify({
+            "status": "ok",
+            "message": f"Usuario {user.username} desvinculado correctamente"
+        }), 200
+        
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Error al desvincular usuario de IMAP2: {e}", exc_info=True)
         return jsonify({"status": "error", "message": str(e)}), 400
