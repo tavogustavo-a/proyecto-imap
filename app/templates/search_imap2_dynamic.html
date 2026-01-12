@@ -196,7 +196,7 @@
     {% if is_user and not current_user.parent_id and user_has_worksheet_access(current_user) %}
   <a href="{{ url_for('store_bp.user_work_sheets') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-table"></i> Hojas de Cálculo</a>
 {% endif %}
-    {% if is_user and current_user and current_user.managed_imap2_pages.count() > 0 %}
+    {% if is_user and current_user and current_user.managed_imap2_pages|length > 0 %}
       <a href="{{ url_for('user_auth_bp.my_pages_list') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-file-alt"></i> Gestionar mi página</a>
     {% endif %}
     {% if is_admin %}

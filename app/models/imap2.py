@@ -80,7 +80,7 @@ class IMAPServer2(db.Model):
     allowed_users = db.relationship(
         "User",
         secondary=imap2_users,
-        backref="managed_imap2_pages",
+        backref=db.backref("managed_imap2_pages", lazy="select"),
         lazy="dynamic"
     )
 

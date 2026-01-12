@@ -291,24 +291,30 @@
     
     <!-- Sección para vincular usuarios a esta página dinámica -->
     <div class="mt-2 pt-2 imap2-background-section">
-      <h4 class="text-center mb-05">Usuarios con acceso a gestionar esta página</h4>
-      <div class="d-flex flex-column gap-05">
-        <div class="search-container position-relative">
-          <label for="imap2-user-search" class="sr-only">Buscar usuario</label>
+      <h4 class="text-center mb-1">Usuarios con acceso a gestionar esta página</h4>
+      
+      <!-- Búsqueda de Usuarios -->
+      <div class="mb-1">
+        <label for="imap2-user-search" class="sr-only">Buscar usuarios</label>
+        <div class="search-input-wrapper">
           <input
             type="search"
             id="imap2-user-search"
-            placeholder="Buscar usuario por nombre..."
-            class="d-block w-100"
+            placeholder="Buscar usuario o nombre..."
+            class="d-block w-100 mb-05 search-users-input-flex"
             autocomplete="off"
           >
-          <div id="imap2-user-search-results" class="user-search-results-dropdown d-none"></div>
         </div>
-        <div id="imap2-users-list" class="d-flex flex-wrap gap-05 mt-05">
+        
+        <!-- Lista de resultados de búsqueda -->
+        <div id="imap2-user-search-results" class="mb-05"></div>
+        
+        <!-- Lista de usuarios seleccionados/vinculados -->
+        <div id="imap2-users-list" class="mb-05">
           {% for user in srv.allowed_users %}
-            <div class="user-tag imap2-user-tag" data-user-id="{{ user.id }}">
-              <span>{{ user.username }}</span>
-              <button type="button" class="remove-user-btn" data-user-id="{{ user.id }}" title="Eliminar">
+            <div class="bulk-add-emails-selected-user-tag" data-user-id="{{ user.id }}">
+              <span>{{ user.username }}{% if user.full_name %} ({{ user.full_name }}){% endif %}</span>
+              <button type="button" class="btn-small bg-transparent text-white border-none p-0">
                 <i class="fas fa-times"></i>
               </button>
             </div>
@@ -384,8 +390,8 @@
   </div>
 
   <!-- Card separado para Gestión de 2FA por Correo (específico para este servidor IMAP2) -->
-  <div class="admin-card twofa-section-card">
-    <h4 class="mb-1 text-center">🔐 Gestión de 2FA por Correo</h4>
+  <div class="card mt-2">
+    <h3 class="mb-1 text-center">🔐 Gestión de 2FA por Correo</h3>
     
     <!-- Formulario para agregar/editar configuración 2FA -->
     <form id="imap2-twofa-config-form" class="mb-2">

@@ -4204,26 +4204,20 @@ a.btn-search.btn-rounded:hover {
   flex-shrink: 0;
 }
 
-/* Estilos para sección 2FA (igual que sms.html) */
-.twofa-section-card {
-  background: white;
-  margin-top: 1rem;
-}
-
 /* Estilos para búsqueda y mostrar en sección 2FA (igual que herramientas) */
-.twofa-section-card .productos-buscar-mostrar {
+.card .productos-buscar-mostrar {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 0.5rem;
 }
 
-.twofa-section-card .productos-buscar-mostrar .search-container {
+.card .productos-buscar-mostrar .search-container {
   flex: 1;
   min-width: 200px;
 }
 
-.twofa-section-card .productos-buscar-mostrar .search-container input[type="search"] {
+.card .productos-buscar-mostrar .search-container input[type="search"] {
   height: 32px !important;
   padding: 6px 10px !important;
   border: 1.5px solid #111;
@@ -4234,7 +4228,7 @@ a.btn-search.btn-rounded:hover {
   line-height: 1.5;
 }
 
-.twofa-section-card .productos-buscar-mostrar select {
+.card .productos-buscar-mostrar select {
   height: 32px !important;
   padding: 6px 10px !important;
   border: 1.5px solid #111;

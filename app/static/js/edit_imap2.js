@@ -230,139 +230,168 @@ document.addEventListener("DOMContentLoaded", function() {
     });
   }
 
-  // Manejar búsqueda y vinculación de usuarios
-  const userSearchInput = document.getElementById('imap2-user-search');
-  const usersList = document.getElementById('imap2-users-list');
-  let searchTimeout = null;
+  // ======= VINCULAR USUARIOS A PÁGINA DINÁMICA IMAP2 =======
+  const imap2UserSearch = document.getElementById('imap2-user-search');
+  const imap2UserSearchResults = document.getElementById('imap2-user-search-results');
+  const imap2UsersList = document.getElementById('imap2-users-list');
 
-  if (userSearchInput) {
-    const imap2Id = userSearchInput.closest('.imap2-background-section')?.previousElementSibling
-      ?.querySelector('[data-imap2-id]')?.getAttribute('data-imap2-id') 
-      || document.querySelector('[data-imap2-id]')?.getAttribute('data-imap2-id')
-      || window.location.pathname.match(/\/edit_imap2\/(\d+)/)?.[1];
+  let allUsersForImap2 = [];
+  let linkedUserIds = new Set();
+  let searchTimeoutImap2 = null;
 
-    if (imap2Id) {
-      // Búsqueda con debounce
-      userSearchInput.addEventListener('input', function(e) {
-        const query = e.target.value.trim();
-        const resultsContainer = document.getElementById('imap2-user-search-results');
-        
-        clearTimeout(searchTimeout);
-        
-        // Ocultar dropdown si el campo está vacío
-        if (query.length < 2) {
-          if (resultsContainer) {
-            resultsContainer.classList.add('d-none');
-          }
-          return;
-        }
-        
-        searchTimeout = setTimeout(() => {
-          // Solo buscar usuarios si estamos en la página de admin
-          if (window.location.pathname.includes('/edit_imap2/')) {
-            fetch(`/admin/imap2/${imap2Id}/search_users_ajax?query=${encodeURIComponent(query)}`, {
-              headers: {
-                'X-CSRFToken': getCsrfToken()
-              }
-            })
-            .then(res => res.json())
-            .then(data => {
-              if (data.status === 'ok') {
-                // Obtener IDs de usuarios ya vinculados
-                const linkedIds = Array.from(usersList.querySelectorAll('.imap2-user-tag'))
-                  .map(tag => parseInt(tag.getAttribute('data-user-id')));
-                
-                // Filtrar usuarios ya vinculados
-                const availableUsers = data.users.filter(u => !u.is_linked && !linkedIds.includes(u.id));
-                
-                // Mostrar resultados en dropdown
-                showUserSearchResults(availableUsers, imap2Id);
-              }
-            })
-            .catch(err => {
-              // Silenciar errores de búsqueda
-            });
-          }
-        }, 300);
-      });
+  // Obtener ID del servidor IMAP2
+  const imap2Id = window.location.pathname.match(/\/edit_imap2\/(\d+)/)?.[1];
 
-      // Manejar selección de usuario al hacer clic fuera o presionar Enter
-      userSearchInput.addEventListener('keydown', function(e) {
-        if (e.key === 'Enter') {
-          e.preventDefault();
-          const query = e.target.value.trim();
-          if (query.length >= 2 && window.location.pathname.includes('/edit_imap2/')) {
-            fetch(`/admin/imap2/${imap2Id}/search_users_ajax?query=${encodeURIComponent(query)}`, {
-              headers: {
-                'X-CSRFToken': getCsrfToken()
-              }
-            })
-            .then(res => res.json())
-            .then(data => {
-              if (data.status === 'ok' && data.users.length > 0) {
-                const firstUser = data.users[0];
-                if (!firstUser.is_linked) {
-                  linkUserToImap2(imap2Id, firstUser.id, firstUser.username);
-                  e.target.value = '';
-                }
-              }
-            });
-          }
+  if (imap2UserSearch && imap2Id) {
+    // Cargar usuarios vinculados al inicio
+    function loadLinkedUsers() {
+      // Obtener usuarios vinculados desde el HTML inicial
+      const initialLinkedUsers = imap2UsersList.querySelectorAll('[data-user-id]');
+      initialLinkedUsers.forEach(tag => {
+        const userId = parseInt(tag.getAttribute('data-user-id'));
+        if (userId) {
+          linkedUserIds.add(userId);
         }
       });
+      renderLinkedUsers();
     }
+
+    // Cargar todos los usuarios al iniciar
+    fetch(`/admin/imap2/${imap2Id}/search_users_ajax?query=`, {
+      method: 'GET',
+      headers: { 'X-CSRFToken': getCsrfToken() }
+    })
+    .then(res => res.json())
+    .then(data => {
+      if (data.status === 'ok') {
+        allUsersForImap2 = data.users || [];
+        loadLinkedUsers();
+        renderUserSearchResults([]);
+      }
+    })
+    .catch(err => {
+      // Error silencioso
+    });
+
+    // Búsqueda de usuarios
+    imap2UserSearch.addEventListener('search', function() {
+      if (this.value === '') {
+        renderUserSearchResults([]);
+      }
+    });
+
+    imap2UserSearch.addEventListener('input', function() {
+      const query = this.value.trim().toLowerCase();
+
+      clearTimeout(searchTimeoutImap2);
+      searchTimeoutImap2 = setTimeout(() => {
+        if (query) {
+          fetch(`/admin/imap2/${imap2Id}/search_users_ajax?query=${encodeURIComponent(query)}`, {
+            method: 'GET',
+            headers: { 'X-CSRFToken': getCsrfToken() }
+          })
+          .then(res => res.json())
+          .then(data => {
+            if (data.status === 'ok') {
+              renderUserSearchResults(data.users || []);
+            }
+          })
+          .catch(err => {
+            // Error silencioso
+          });
+        } else {
+          renderUserSearchResults([]);
+        }
+      }, 200);
+    });
   }
 
-  // Función para mostrar resultados de búsqueda con dropdown
-  function showUserSearchResults(users, imap2Id) {
-    const resultsContainer = document.getElementById('imap2-user-search-results');
-    if (!resultsContainer) return;
-    
-    // Limpiar resultados anteriores
-    while (resultsContainer.firstChild) {
-      resultsContainer.removeChild(resultsContainer.firstChild);
-    }
-    
-    if (users.length === 0) {
-      resultsContainer.classList.add('d-none');
+  // Renderizar resultados de búsqueda
+  function renderUserSearchResults(users) {
+    if (!imap2UserSearchResults) return;
+
+    imap2UserSearchResults.textContent = '';
+
+    if (users.length === 0 && imap2UserSearch && imap2UserSearch.value.trim()) {
+      const noResults = document.createElement('p');
+      noResults.className = 'text-secondary text-small';
+      noResults.textContent = 'No se encontraron usuarios.';
+      imap2UserSearchResults.appendChild(noResults);
       return;
     }
-    
-    // Crear elementos de resultados
-    users.forEach(user => {
-      const item = document.createElement('div');
-      item.className = 'user-search-result-item';
-      item.textContent = user.full_name || user.username;
-      item.setAttribute('data-user-id', user.id);
-      item.setAttribute('data-username', user.username);
-      
-      item.addEventListener('click', function() {
-        linkUserToImap2(imap2Id, user.id, user.username);
-        userSearchInput.value = '';
-        resultsContainer.classList.add('d-none');
-      });
-      
-      resultsContainer.appendChild(item);
-    });
-    
-    resultsContainer.classList.remove('d-none');
-  }
-  
-  // Ocultar dropdown al hacer clic fuera
-  document.addEventListener('click', function(e) {
-    const resultsContainer = document.getElementById('imap2-user-search-results');
-    const searchInput = document.getElementById('imap2-user-search');
-    
-    if (resultsContainer && searchInput && 
-        !resultsContainer.contains(e.target) && 
-        e.target !== searchInput) {
-      resultsContainer.classList.add('d-none');
-    }
-  });
 
-  // Función para vincular usuario (solo admin)
-  function linkUserToImap2(imap2Id, userId, username) {
+    users.forEach(user => {
+      if (linkedUserIds.has(user.id)) return; // Ya está vinculado
+
+      const userItem = document.createElement('div');
+      userItem.className = 'bulk-add-emails-user-item';
+
+      const userInfo = document.createElement('span');
+      userInfo.textContent = `${user.username}${user.full_name ? ` (${user.full_name})` : ''}`;
+
+      const addBtn = document.createElement('button');
+      addBtn.type = 'button';
+      addBtn.className = 'btn-blue btn-small';
+      addBtn.textContent = 'Seleccionar';
+      addBtn.addEventListener('click', function() {
+        linkUserToImap2(imap2Id, user.id, user.username, user.full_name);
+        // Mantener el texto de búsqueda y actualizar los resultados
+        if (imap2UserSearch && imap2UserSearch.value.trim()) {
+          imap2UserSearch.dispatchEvent(new Event('input'));
+        }
+      });
+
+      userItem.appendChild(userInfo);
+      userItem.appendChild(addBtn);
+      imap2UserSearchResults.appendChild(userItem);
+    });
+  }
+
+  // Renderizar usuarios vinculados
+  function renderLinkedUsers() {
+    if (!imap2UsersList) return;
+
+    imap2UsersList.textContent = '';
+
+    if (linkedUserIds.size === 0) {
+      const emptyMsg = document.createElement('p');
+      emptyMsg.className = 'text-secondary text-small';
+      emptyMsg.textContent = 'No hay usuarios vinculados.';
+      imap2UsersList.appendChild(emptyMsg);
+      return;
+    }
+
+    const linkedUsersList = Array.from(linkedUserIds).map(id => {
+      return allUsersForImap2.find(u => u.id === id);
+    }).filter(Boolean);
+
+    linkedUsersList.forEach(user => {
+      const userTag = document.createElement('div');
+      userTag.className = 'bulk-add-emails-selected-user-tag';
+
+      const userName = document.createElement('span');
+      userName.textContent = `${user.username}${user.full_name ? ` (${user.full_name})` : ''}`;
+
+      const removeBtn = document.createElement('button');
+      removeBtn.type = 'button';
+      removeBtn.className = 'btn-small bg-transparent text-white border-none p-0';
+      const removeIcon = document.createElement('i');
+      removeIcon.className = 'fas fa-times';
+      removeBtn.appendChild(removeIcon);
+      removeBtn.addEventListener('click', function() {
+        unlinkUserFromImap2(imap2Id, user.id);
+      });
+
+      userTag.appendChild(userName);
+      userTag.appendChild(removeBtn);
+      imap2UsersList.appendChild(userTag);
+    });
+  }
+
+  // Función para vincular usuario
+  function linkUserToImap2(imap2Id, userId, username, fullName) {
     if (!window.location.pathname.includes('/edit_imap2/')) return;
+    
     fetch(`/admin/imap2/${imap2Id}/link_user/${userId}`, {
       method: 'POST',
       headers: {
@@ -373,19 +402,16 @@ document.addEventListener("DOMContentLoaded", function() {
     .then(res => res.json())
     .then(data => {
       if (data.status === 'ok') {
-        // Agregar tag de usuario a la lista
-        const tag = document.createElement('div');
-        tag.className = 'user-tag imap2-user-tag';
-        tag.setAttribute('data-user-id', userId);
-        tag.innerHTML = `
-          <span>${escapeHtml(username)}</span>
-          <button type="button" class="remove-user-btn" data-user-id="${userId}" title="Eliminar">
-            <i class="fas fa-times"></i>
-          </button>
-        `;
-        if (usersList) {
-          usersList.appendChild(tag);
+        linkedUserIds.add(userId);
+        // Actualizar allUsersForImap2 si es necesario
+        if (!allUsersForImap2.find(u => u.id === userId)) {
+          allUsersForImap2.push({
+            id: userId,
+            username: username,
+            full_name: fullName || ''
+          });
         }
+        renderLinkedUsers();
       } else {
         alert('Error: ' + (data.message || 'Error al vincular usuario'));
       }
@@ -395,47 +421,50 @@ document.addEventListener("DOMContentLoaded", function() {
     });
   }
 
-  // Función helper para escapar HTML
-  function escapeHtml(text) {
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
+  // Función para desvincular usuario
+  function unlinkUserFromImap2(imap2Id, userId) {
+    if (!confirm('¿Deseas desvincular este usuario?')) {
+      return;
+    }
+
+    fetch(`/admin/imap2/${imap2Id}/unlink_user/${userId}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRFToken': getCsrfToken()
+      }
+    })
+    .then(res => res.json())
+    .then(data => {
+      if (data.status === 'ok') {
+        linkedUserIds.delete(userId);
+        renderLinkedUsers();
+        // Actualizar resultados de búsqueda si hay una búsqueda activa
+        if (imap2UserSearch && imap2UserSearch.value.trim()) {
+          imap2UserSearch.dispatchEvent(new Event('input'));
+        }
+      } else {
+        alert('Error: ' + (data.message || 'Error al desvincular usuario'));
+      }
+    })
+    .catch(err => {
+      alert('Error de red: ' + err.message);
+    });
   }
 
-  // Manejar eliminación de usuarios vinculados
-  document.addEventListener('click', function(e) {
-    if (e.target.closest('.remove-user-btn')) {
-      const btn = e.target.closest('.remove-user-btn');
-      const userId = parseInt(btn.getAttribute('data-user-id'));
-      const userTag = btn.closest('.imap2-user-tag');
-      const imap2Id = window.location.pathname.match(/\/edit_imap2\/(\d+)/)?.[1];
-      
-      if (!imap2Id || !userId || !window.location.pathname.includes('/edit_imap2/')) return;
-      
-      if (!confirm('¿Deseas desvincular este usuario?')) {
-        return;
-      }
-      
-      fetch(`/admin/imap2/${imap2Id}/unlink_user/${userId}`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-CSRFToken': getCsrfToken()
-        }
-      })
-      .then(res => res.json())
-      .then(data => {
-        if (data.status === 'ok') {
-          if (userTag) {
-            userTag.remove();
+  // Event listener delegado para manejar clics en botones de eliminar (incluye HTML inicial)
+  if (imap2UsersList) {
+    imap2UsersList.addEventListener('click', function(e) {
+      const button = e.target.closest('button');
+      if (button && button.querySelector('.fa-times')) {
+        const userTag = button.closest('[data-user-id]');
+        if (userTag) {
+          const userId = parseInt(userTag.getAttribute('data-user-id'));
+          if (userId && imap2Id) {
+            unlinkUserFromImap2(imap2Id, userId);
           }
-        } else {
-          alert('Error: ' + (data.message || 'Error al desvincular usuario'));
         }
-      })
-      .catch(err => {
-        alert('Error de red: ' + err.message);
-      });
-    }
-  });
+      }
+    });
+  }
 });
