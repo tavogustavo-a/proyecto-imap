@@ -11,12 +11,16 @@ def admin_required(f):
         
         # Detectar si es una petición AJAX/JSON (más preciso)
         # Solo considerar AJAX si realmente es una petición de API o tiene headers específicos
+        content_type = request.headers.get('Content-Type', '')
         is_ajax = (
             request.is_json or 
-            request.headers.get('Content-Type', '').startswith('application/json') or
+            content_type.startswith('application/json') or
             request.headers.get('X-Requested-With') == 'XMLHttpRequest' or
             request.path.startswith('/api/') or
-            request.method == 'POST' and request.path.endswith(('.json', '/ajax'))
+            request.path.endswith('/ajax') or
+            request.path.endswith('.json') or
+            '/ajax' in request.path or
+            (request.method == 'POST' and content_type.startswith('application/json'))
         )
         
         # Función helper para devolver error en formato apropiado

@@ -457,13 +457,25 @@ document.addEventListener("DOMContentLoaded", function() {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "X-CSRFToken": getCsrfToken()
+          "X-CSRFToken": getCsrfToken(),
+          "X-Requested-With": "XMLHttpRequest"
         },
         body: JSON.stringify({
           custom_domain: domain || null
         })
       })
-      .then(res => res.json())
+      .then(res => {
+        // Verificar si la respuesta es JSON
+        const contentType = res.headers.get("content-type");
+        if (!contentType || !contentType.includes("application/json")) {
+          // Si no es JSON, leer como texto para ver qué devolvió
+          return res.text().then(text => {
+            console.error("Respuesta no JSON recibida:", text.substring(0, 200));
+            throw new Error("El servidor devolvió HTML en lugar de JSON. ¿Estás autenticado?");
+          });
+        }
+        return res.json();
+      })
       .then(data => {
         if (data.status === "ok") {
           // Cerrar modal
@@ -492,7 +504,7 @@ document.addEventListener("DOMContentLoaded", function() {
         }
       })
       .catch(err => {
-        alert("Error de red: " + err.message);
+        alert("Error: " + err.message);
         submitBtn.disabled = false;
         submitBtn.textContent = "Guardar";
       });
