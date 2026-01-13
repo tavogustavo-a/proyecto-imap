@@ -6,78 +6,191 @@
 {% block head %}
   {{ super() }}
   <link rel="stylesheet" href="{{ url_for('static', filename='css/store.css') }}">
+  <link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/sms.css') }}">
   <meta name="csrf_token" content="{{ csrf_token() }}">
 {% endblock %}
 
 {% block content %}
 <div class="form-container-medium">
-  <div class="card">
-    <h2 class="text-center mb-1">Gestionar mi página</h2>
-    <p class="text-center text-secondary mb-2">Ruta: <strong>{{ imap_server.route_path }}</strong></p>
-
-    <!-- Card separado para Párrafo Personalizado -->
-    <div class="card mt-2">
-      <h3 class="text-center mb-05">Párrafo Personalizado</h3>
-      <form id="saveParagraphForm" action="{{ url_for('user_auth_bp.update_my_page_paragraph', server_id=imap_server.id) }}" method="POST">
-        <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
-        <label for="paragraph" class="sr-only">Contenido del párrafo:</label>
-        <textarea
-          id="paragraph"
-          name="paragraph"
-          rows="3"
-          class="d-block w-100 resize-vertical mb-05"
-          autocomplete="off"
-        >{{ imap_server.paragraph if imap_server.paragraph else '' }}</textarea>
-        <div class="text-center">
-          <button type="submit" class="btn-green">Guardar Párrafo</button>
-        </div>
-      </form>
-      
-      <!-- Sección para subir fondo personalizado -->
-      <div class="mt-2 pt-2 imap2-background-section">
-        <div class="d-flex align-items-center gap-1 flex-wrap justify-content-center">
-          <label for="imap2-background-upload" class="btn-blue mb-0 imap2-background-upload-label">
-            <i class="fas fa-upload"></i> Subir fondo
-          </label>
-          <input
-            type="file"
-            id="imap2-background-upload"
-            accept="image/*"
-            class="d-none"
+  <div class="admin-card">
+    <h2 class="text-center mb-1">Gestionar mi página {{ imap_server.route_path }}</h2>
+    
+    <h3 class="text-center mb-05">Párrafo Personalizado</h3>
+    <form id="saveParagraphForm" action="{{ url_for('user_auth_bp.update_my_page_paragraph', server_id=imap_server.id) }}" method="POST">
+      <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+      <label for="paragraph" class="sr-only">Contenido del párrafo:</label>
+      <textarea
+        id="paragraph"
+        name="paragraph"
+        rows="3"
+        class="d-block w-100 resize-vertical mb-05"
+        autocomplete="off"
+      >{{ imap_server.paragraph if imap_server.paragraph else '' }}</textarea>
+      <div class="d-flex justify-content-center gap-1 flex-wrap">
+        <button type="submit" class="btn-green">Guardar Párrafo</button>
+        <a href="{{ url_for('main_bp.home') }}" class="btn btn-blue text-decoration-none">Volver</a>
+      </div>
+    </form>
+    
+    <!-- Sección para subir fondo personalizado -->
+    <div class="mt-2 pt-2 imap2-background-section">
+      <div class="d-flex align-items-center gap-1 flex-wrap justify-content-center">
+        <label for="imap2-background-upload" class="btn-blue mb-0 imap2-background-upload-label">
+          <i class="fas fa-upload"></i> Subir fondo
+        </label>
+        <input
+          type="file"
+          id="imap2-background-upload"
+          accept="image/*"
+          class="d-none"
+        >
+        <img
+          id="imap2-background-preview"
+          src=""
+          alt=""
+          class="d-none"
+        >
+        {% if imap_server.background_image %}
+          <button
+            type="button"
+            id="imap2-background-delete"
+            class="btn-red mb-0 imap2-background-delete-btn"
+            data-imap2-id="{{ imap_server.id }}"
+            title="Eliminar fondo"
           >
-          <img
-            id="imap2-background-preview"
-            src=""
-            alt=""
-            class="d-none"
+            <i class="fas fa-trash"></i> Eliminar fondo
+          </button>
+        {% else %}
+          <button
+            type="button"
+            id="imap2-background-delete"
+            class="btn-red mb-0 imap2-background-delete-btn d-none"
+            data-imap2-id="{{ imap_server.id }}"
+            title="Eliminar fondo"
           >
-          {% if imap_server.background_image %}
-            <button
-              type="button"
-              id="imap2-background-delete"
-              class="btn-red mb-0 imap2-background-delete-btn"
-              data-imap2-id="{{ imap_server.id }}"
-              title="Eliminar fondo"
-            >
-              <i class="fas fa-trash"></i> Eliminar fondo
-            </button>
-          {% else %}
-            <button
-              type="button"
-              id="imap2-background-delete"
-              class="btn-red mb-0 imap2-background-delete-btn d-none"
-              data-imap2-id="{{ imap_server.id }}"
-              title="Eliminar fondo"
-            >
-              <i class="fas fa-trash"></i> Eliminar fondo
-            </button>
-          {% endif %}
-        </div>
+            <i class="fas fa-trash"></i> Eliminar fondo
+          </button>
+        {% endif %}
       </div>
     </div>
+  </div>
 
-    <!-- Card separado para Gestión de 2FA por Correo -->
-    <div class="admin-card twofa-section-card mt-2">
+  <!-- Card separado para Servidores IMAP Vinculados -->
+  <div class="admin-card mt-2">
+    <h4 class="text-center mb-1">📧 Servidores IMAP Vinculados</h4>
+    <p class="text-center mb-05 text-small" id="imapLimitInfo">
+      <span id="currentImapCount">{{ linked_imap_count }}</span> / 4 servidores creados
+    </p>
+    
+    <!-- Lista de servidores IMAP vinculados -->
+    <div id="linkedImapList">
+      {% for imap in imap_server.linked_imap_servers %}
+        <div class="imap-item mb-1" data-imap-id="{{ imap.id }}" data-host="{{ imap.host|lower }}" data-username="{{ imap.username|lower }}">
+          <strong>Host: {{ imap.host }}</strong> | <strong>Usuario: {{ imap.username }}</strong> | <strong>Puerto: {{ imap.port }}</strong>
+          <div class="mt-05">
+            <form action="{{ url_for('user_auth_bp.test_my_page_imap', server_id=imap.id) }}"
+                  method="POST"
+                  class="d-inline">
+              <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+              <button type="submit" class="btn-blue btn-imap-action btn-imap-small">Probar</button>
+            </form>
+            {% if imap.enabled %}
+              <button
+                class="btn-red toggle-my-page-imap-btn ml-03 btn-imap-action btn-imap-small"
+                data-id="{{ imap.id }}"
+                data-imap2-id="{{ imap_server.id }}"
+                data-enabled="true"
+              >
+                Off
+              </button>
+            {% else %}
+              <button
+                class="btn-green toggle-my-page-imap-btn ml-03 btn-imap-action btn-imap-small"
+                data-id="{{ imap.id }}"
+                data-imap2-id="{{ imap_server.id }}"
+                data-enabled="false"
+              >
+                On
+              </button>
+            {% endif %}
+            <button
+              type="button"
+              class="btn-red unlink-my-page-imap-btn ml-03 btn-imap-action btn-imap-small"
+              data-imap2-id="{{ imap_server.id }}"
+              data-imap-id="{{ imap.id }}"
+              title="Eliminar"
+            >
+              <i class="fas fa-trash"></i>
+            </button>
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+
+    <!-- Formulario para crear nuevo servidor IMAP -->
+    <div class="mt-1">
+      <h4 class="text-center mb-05">Crear Nuevo Servidor IMAP</h4>
+      <form id="createLinkedImapForm">
+        <!-- Fila 1: Host y Puerto -->
+        <div class="d-flex gap-05 mb-05 align-items-center">
+          <label for="linked_imap_host" class="sr-only">Host</label>
+          <input
+            id="linked_imap_host"
+            type="text"
+            placeholder="Host"
+            required
+            class="flex-grow-1"
+            autocomplete="off"
+          >
+          <label for="linked_imap_port" class="sr-only">Puerto</label>
+          <input
+            id="linked_imap_port"
+            type="number"
+            placeholder="993"
+            value="993"
+            class="imap2-port-input"
+            autocomplete="off"
+          >
+        </div>
+        <!-- Fila 2: Usuario y Contraseña -->
+        <div class="d-flex gap-05 mb-05 align-items-center">
+          <label for="linked_imap_username" class="sr-only">Usuario</label>
+          <input
+            id="linked_imap_username"
+            type="text"
+            placeholder="Usuario"
+            required
+            class="flex-grow-1"
+            autocomplete="username"
+          >
+          <label for="linked_imap_password" class="sr-only">Password</label>
+          <input
+            id="linked_imap_password"
+            type="password"
+            placeholder="Password"
+            class="flex-grow-1"
+            autocomplete="current-password"
+          >
+        </div>
+        <!-- Fila 3: Carpetas y Botón Crear -->
+        <div class="d-flex gap-05 mb-05 align-items-center">
+          <label for="linked_imap_folders" class="sr-only">Carpetas</label>
+          <input
+            id="linked_imap_folders"
+            type="text"
+            placeholder="INBOX"
+            value="INBOX"
+            class="flex-grow-1"
+            autocomplete="off"
+          >
+          <button type="submit" class="btn-green" data-imap2-id="{{ imap_server.id }}">Crear</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Card separado para Gestión de 2FA por Correo -->
+  <div class="admin-card twofa-section-card mt-2">
       <h4 class="mb-1 text-center">🔐 Gestión de 2FA por Correo</h4>
       
       <!-- Formulario para agregar/editar configuración 2FA -->
@@ -164,11 +277,6 @@
         <button id="nextImap2TwofaPageBtn" class="btn-blue btn-panel" type="button">Siguiente &gt;</button>
       </div>
     </div>
-
-    <div class="text-center mt-2">
-      <a href="{{ url_for('main_bp.home') }}" class="btn btn-blue text-decoration-none">Volver</a>
-    </div>
-  </div>
 </div>
 
 <!-- Modal para editar configuración 2FA de IMAP2 -->

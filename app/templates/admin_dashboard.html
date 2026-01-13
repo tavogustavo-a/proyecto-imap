@@ -286,12 +286,12 @@
       <h4>Crear Nuevo Servidor IMAP</h4>
       <!-- Descripción opcional -->
       <div class="mb-05">
-        <label for="imap_description">Descripción (opcional):</label>
+        <label for="imap_description" class="sr-only">Descripción</label>
         <input
           id="imap_description"
           type="text"
           name="description"
-          placeholder="Descripción del servidor"
+          placeholder="Descripción (opcional)"
           class="d-block"
           autocomplete="off"
         >
@@ -501,7 +501,7 @@
     <!-- Fila 3: Carpetas, Ruta y Botón Crear -->
     <div class="d-flex gap-05 mb-05 align-items-end imap2-create-row">
       <div class="flex-grow-1 min-width-200">
-        <label for="imap2_folders" class="imap2-label-small">separada por comas:</label>
+        <label for="imap2_folders" class="sr-only">Carpetas</label>
         <input
           id="imap2_folders"
           type="text"
@@ -513,7 +513,7 @@
         >
       </div>
       <div class="flex-grow-1 min-width-200">
-        <label for="imap2_route_path" class="imap2-label-small">Ruta:</label>
+        <label for="imap2_route_path" class="sr-only">Ruta</label>
         <input
           id="imap2_route_path"
           type="text"
@@ -528,8 +528,6 @@
     </div>
   </form>
   </div>
-
-  <hr class="mt-1 mb-1">
 
   <!-- Buzón de Mensajes y Conexiones (movido dentro de Servidores IMAP Segunda Página) -->
   <!-- TODO: Implementar manage_email_buzon2 cuando se cree la funcionalidad del buzón para IMAP2 -->
@@ -617,8 +615,8 @@
 
 </div> {# Fin contenedor principal .container #}
 
-<script src="{{ url_for('static', filename='js/admin_imap.js') }}"></script>
-<script src="{{ url_for('static', filename='js/admin_imap2.js') }}"></script>
+<script src="{{ url_for('static', filename='js/admin_imap.js') }}" defer></script>
+<script src="{{ url_for('static', filename='js/admin_imap2.js') }}" defer></script>
 <script src="{{ url_for('static', filename='js/menu_busqueda.js') }}" defer></script>
 <script src="{{ url_for('static', filename='js/clear_trigger_logs.js') }}" defer></script>
 <script src="{{ url_for('static', filename='js/admin_dashboard.js') }}" defer></script>

@@ -228,20 +228,17 @@ document.addEventListener("DOMContentLoaded", function() {
       e.preventDefault();
       e.stopPropagation();
       
-      // Feedback visual inmediato
-      target.disabled = true;
-      const originalContent = target.cloneNode(true);
-      // Limpiar contenido
-      while (target.firstChild) {
-        target.removeChild(target.firstChild);
-      }
-      // Agregar spinner
-      const spinnerIcon = document.createElement("i");
-      spinnerIcon.className = "fas fa-spinner fa-spin";
-      target.appendChild(spinnerIcon);
-      
       const srvId = target.getAttribute("data-id");
       const currentlyEnabled = (target.getAttribute("data-enabled") === "true");
+      
+      // Actualización optimista: cambiar el estado del botón inmediatamente
+      const newEnabled = !currentlyEnabled;
+      target.setAttribute("data-enabled", newEnabled.toString());
+      target.className = newEnabled ? "btn-red toggle-imap2-btn" : "btn-green toggle-imap2-btn";
+      target.textContent = newEnabled ? "Off" : "On";
+      
+      // Feedback visual mínimo
+      target.disabled = true;
       
       fetch("/admin/toggle_imap2_ajax", {
         method: "POST",
@@ -259,27 +256,22 @@ document.addEventListener("DOMContentLoaded", function() {
         if (data.status === "ok") {
           renderImap2List(data.servers);
         } else {
+          // Revertir cambio optimista en caso de error
+          target.setAttribute("data-enabled", currentlyEnabled.toString());
+          target.className = currentlyEnabled ? "btn-red toggle-imap2-btn" : "btn-green toggle-imap2-btn";
+          target.textContent = currentlyEnabled ? "Off" : "On";
           alert("Error: " + data.message);
         }
       })
       .catch(err => {
+        // Revertir cambio optimista en caso de error de red
+        target.setAttribute("data-enabled", currentlyEnabled.toString());
+        target.className = currentlyEnabled ? "btn-red toggle-imap2-btn" : "btn-green toggle-imap2-btn";
+        target.textContent = currentlyEnabled ? "Off" : "On";
         alert("Error de red: " + err.message);
       })
       .finally(() => {
-        // Restaurar botón
         target.disabled = false;
-        // Limpiar contenido
-        while (target.firstChild) {
-          target.removeChild(target.firstChild);
-        }
-        // Restaurar contenido original
-        while (originalContent.firstChild) {
-          target.appendChild(originalContent.firstChild.cloneNode(true));
-        }
-        // Restaurar texto si existe
-        if (originalContent.textContent) {
-          target.textContent = originalContent.textContent;
-        }
       });
     }
 
@@ -291,17 +283,20 @@ document.addEventListener("DOMContentLoaded", function() {
       const srvId = button.getAttribute("data-id");
       if (!confirm("¿Deseas eliminar este servidor IMAP2?")) return;
 
-      // Feedback visual inmediato
-      button.disabled = true;
-      const originalContent = button.cloneNode(true);
-      // Limpiar contenido
-      while (button.firstChild) {
-        button.removeChild(button.firstChild);
+      // Actualización optimista: eliminar el elemento de la lista inmediatamente
+      const imapItem = button.closest(".imap-item");
+      if (imapItem) {
+        imapItem.style.transition = "none";
+        imapItem.style.opacity = "0";
+        imapItem.style.height = imapItem.offsetHeight + "px";
+        setTimeout(() => {
+          imapItem.remove();
+        }, 100);
       }
-      // Agregar spinner
-      const spinnerIcon = document.createElement("i");
-      spinnerIcon.className = "fas fa-spinner fa-spin";
-      button.appendChild(spinnerIcon);
+
+      // Feedback visual mínimo
+      button.disabled = true;
+      button.style.transition = "none";
 
       fetch("/admin/delete_imap2_ajax", {
         method: "POST",
@@ -314,29 +309,33 @@ document.addEventListener("DOMContentLoaded", function() {
       .then(res => res.json())
       .then(data => {
         if (data.status === "ok") {
+          // Recargar lista completa para asegurar sincronización
           renderImap2List(data.servers);
         } else {
+          // Revertir eliminación optimista en caso de error
+          if (imapItem && imapItem.parentNode) {
+            imapItem.style.opacity = "1";
+            imapItem.style.height = "auto";
+            if (!imap2List.contains(imapItem)) {
+              imap2List.appendChild(imapItem);
+            }
+          }
           alert("Error: " + data.message);
         }
       })
       .catch(err => {
+        // Revertir eliminación optimista en caso de error de red
+        if (imapItem && imapItem.parentNode) {
+          imapItem.style.opacity = "1";
+          imapItem.style.height = "auto";
+          if (!imap2List.contains(imapItem)) {
+            imap2List.appendChild(imapItem);
+          }
+        }
         alert("Error de red: " + err.message);
       })
       .finally(() => {
-        // Restaurar botón
         button.disabled = false;
-        // Limpiar contenido
-        while (button.firstChild) {
-          button.removeChild(button.firstChild);
-        }
-        // Restaurar contenido original
-        while (originalContent.firstChild) {
-          button.appendChild(originalContent.firstChild.cloneNode(true));
-        }
-        // Restaurar texto si existe
-        if (originalContent.textContent) {
-          button.textContent = originalContent.textContent;
-        }
       });
     }
 
@@ -380,17 +379,30 @@ document.addEventListener("DOMContentLoaded", function() {
       }
 
       const submitButton = createImap2Form.querySelector('button[type="submit"]');
-      const originalContent = submitButton.cloneNode(true);
-      submitButton.disabled = true;
-      // Limpiar contenido
-      while (submitButton.firstChild) {
-        submitButton.removeChild(submitButton.firstChild);
+      
+      // Guardar valores antes de limpiar (por si hay que revertir)
+      const formData = {
+        description: description,
+        host: host,
+        port: port,
+        username: username,
+        password: password,
+        folders: folders,
+        route_path: route_path
+      };
+      
+      // Actualización optimista: limpiar formulario inmediatamente
+      createImap2Form.reset();
+      document.getElementById("imap2_port").value = "993";
+      document.getElementById("imap2_folders").value = "INBOX";
+      if (document.getElementById("imap2_description")) {
+        document.getElementById("imap2_description").value = "";
       }
-      // Agregar spinner y texto
-      const spinnerIcon = document.createElement("i");
-      spinnerIcon.className = "fas fa-spinner fa-spin";
-      submitButton.appendChild(spinnerIcon);
-      submitButton.appendChild(document.createTextNode(" Creando..."));
+      document.getElementById("imap2_route_path").value = "";
+      
+      // Feedback visual mínimo
+      submitButton.disabled = true;
+      submitButton.style.transition = "none";
 
       fetch("/admin/create_imap2_ajax", {
         method: "POST",
@@ -411,38 +423,37 @@ document.addEventListener("DOMContentLoaded", function() {
       .then(res => res.json())
       .then(data => {
         if (data.status === "ok") {
-          // Limpiar el formulario
-          createImap2Form.reset();
-          document.getElementById("imap2_port").value = "993";
-          document.getElementById("imap2_folders").value = "INBOX";
-          if (document.getElementById("imap2_description")) {
-            document.getElementById("imap2_description").value = "";
-          }
-          document.getElementById("imap2_route_path").value = "";
-          
-          // Actualizar la lista
+          // Actualizar la lista con los datos del servidor
           renderImap2List(data.servers);
         } else {
+          // Revertir limpieza del formulario en caso de error
+          document.getElementById("imap2_host").value = formData.host;
+          document.getElementById("imap2_port").value = formData.port.toString();
+          document.getElementById("imap2_username").value = formData.username;
+          document.getElementById("imap2_password").value = formData.password;
+          document.getElementById("imap2_folders").value = formData.folders;
+          document.getElementById("imap2_route_path").value = formData.route_path;
+          if (document.getElementById("imap2_description")) {
+            document.getElementById("imap2_description").value = formData.description;
+          }
           alert("Error: " + (data.message || "Error desconocido"));
         }
       })
       .catch(err => {
+        // Revertir limpieza del formulario en caso de error de red
+        document.getElementById("imap2_host").value = formData.host;
+        document.getElementById("imap2_port").value = formData.port.toString();
+        document.getElementById("imap2_username").value = formData.username;
+        document.getElementById("imap2_password").value = formData.password;
+        document.getElementById("imap2_folders").value = formData.folders;
+        document.getElementById("imap2_route_path").value = formData.route_path;
+        if (document.getElementById("imap2_description")) {
+          document.getElementById("imap2_description").value = formData.description;
+        }
         alert("Error de red: " + err.message);
       })
       .finally(() => {
         submitButton.disabled = false;
-        // Limpiar contenido
-        while (submitButton.firstChild) {
-          submitButton.removeChild(submitButton.firstChild);
-        }
-        // Restaurar contenido original
-        while (originalContent.firstChild) {
-          submitButton.appendChild(originalContent.firstChild.cloneNode(true));
-        }
-        // Restaurar texto si existe
-        if (originalContent.textContent) {
-          submitButton.textContent = originalContent.textContent;
-        }
       });
     });
   }

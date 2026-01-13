@@ -23,11 +23,11 @@ TABLE_NAME = "observer_imap_servers"
 
 # ---------- Helpers internos reutilizando funciones del servicio ----------
 
-def _create_server(host, port, username, password, folders):
-    create_imap_server(host, port, username, password, folders, model_cls=IMAPModel)
+def _create_server(host, port, username, password, folders, description=None):
+    create_imap_server(host, port, username, password, folders, description=description, model_cls=IMAPModel)
 
-def _update_server(server_id, host, port, username, password, folders):
-    update_imap_server(server_id, host, port, username, password, folders, model_cls=IMAPModel)
+def _update_server(server_id, host, port, username, password, folders, description=None):
+    update_imap_server(server_id, host, port, username, password, folders, description=description, model_cls=IMAPModel)
 
 # ---------- Rutas ----------
 
@@ -35,6 +35,7 @@ def _update_server(server_id, host, port, username, password, folders):
 @admin_required
 def observer_manage_imap():
     server_id = request.form.get("server_id")
+    description = request.form.get("description", "").strip() or None
     host = request.form.get("host", "")
     port = request.form.get("port", 993)
     username = request.form.get("username", "")
@@ -43,10 +44,10 @@ def observer_manage_imap():
 
     try:
         if server_id:
-            _update_server(server_id, host, port, username, password, folders)
+            _update_server(server_id, host, port, username, password, folders, description)
             flash(f"Editado servidor Observador {host}:{port}", "info")
         else:
-            _create_server(host, port, username, password, folders)
+            _create_server(host, port, username, password, folders, description)
             flash(f"Creado servidor Observador {host}:{port}", "success")
     except IntegrityError:
         db.session.rollback()
@@ -112,6 +113,7 @@ def observer_search_imap_ajax():
             "username": s.username,
             "folders": s.folders,
             "enabled": s.enabled,
+            "description": s.description if hasattr(s, 'description') else None,
         }
         for s in servers
     ]
@@ -145,18 +147,17 @@ def observer_delete_imap_ajax():
                 "username": s.username,
                 "folders": s.folders,
                 "enabled": s.enabled,
+                "description": s.description if hasattr(s, 'description') else None,
             }
             for s in servers
         ]
         
         return jsonify({
             "status": "ok", 
-            "message": f"Servidor IMAP '{server.host}' eliminado correctamente",
             "servers": data_out
         })
         
     except Exception as e:
-        current_app.logger.error(f"Error al eliminar servidor IMAP: {e}", exc_info=True)
         return jsonify({
             "status": "error", 
             "message": f"Error interno del servidor: {str(e)}"
@@ -204,6 +205,7 @@ def observer_toggle_imap_ajax():
             "username": s.username,
             "folders": s.folders,
             "enabled": s.enabled,
+            "description": s.description if hasattr(s, 'description') else None,
         }
         for s in servers
     ]

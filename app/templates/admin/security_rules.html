@@ -80,8 +80,8 @@
     </form>
 </div>
 
-<script src="{{ url_for('static', filename='js/admin_security_rules.js') }}"></script>
-<script src="{{ url_for('static', filename='js/admin_observer_imap.js') }}"></script>
+<script src="{{ url_for('static', filename='js/admin_security_rules.js') }}" defer></script>
+<script src="{{ url_for('static', filename='js/admin_observer_imap.js') }}" defer></script>
 
 <!-- Sección Servidores IMAP Observador -->
 <div class="admin-card form-container-wide mt-1">
@@ -95,7 +95,7 @@
     {% for s in observer_servers %}
       <div class="imap-item mb-1">
         <strong>Usuario: {{ s.username }}</strong><br>
-        <em>Carpetas:</em> {{ s.folders }}
+        <em>Carpetas:</em> {{ s.folders }}{% if s.description %} | <em>Descripción:</em> {{ s.description }}{% endif %}
         <div class="mt-05">
           <form action="{{ url_for('admin_bp.observer_test_imap', server_id=s.id) }}" method="POST" class="d-inline">
             <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
@@ -117,6 +117,18 @@
 
   <form action="{{ url_for('admin_bp.observer_manage_imap') }}" method="POST" class="mt-1">
     <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+    <!-- Descripción opcional -->
+    <div class="mb-05">
+      <label for="observerImapDescription" class="sr-only">Descripción</label>
+      <input
+        id="observerImapDescription"
+        type="text"
+        name="description"
+        placeholder="Descripción (opcional)"
+        class="d-block"
+        autocomplete="off"
+      >
+    </div>
     <!-- Fila 1: Host y Puerto -->
     <div class="d-flex gap-05 mb-05 align-items-center">
       <label for="imapHost" class="sr-only">Host</label>

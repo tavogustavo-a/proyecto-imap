@@ -533,7 +533,18 @@ def create_imap2_twofa_config(server_id):
             is_enabled=True
         )
         db.session.add(new_config)
+        
+        # Obtener el ID del usuario actual de la sesión antes del commit
+        from flask import session as flask_session
+        current_user_id = flask_session.get("user_id")
+        
         db.session.commit()
+        
+        # Asegurar que la sesión del usuario actual no se haya perdido después del commit
+        if current_user_id:
+            current_user = User.query.get(current_user_id)
+            if current_user:
+                flask_session["user_session_rev_count_local"] = current_user.user_session_rev_count
         
         return jsonify({
             'success': True,
@@ -608,7 +619,18 @@ def update_imap2_twofa_config(config_id):
             config.is_enabled = bool(data.get('is_enabled'))
         
         config.updated_at = datetime.utcnow()
+        
+        # Obtener el ID del usuario actual de la sesión antes del commit
+        from flask import session as flask_session
+        current_user_id = flask_session.get("user_id")
+        
         db.session.commit()
+        
+        # Asegurar que la sesión del usuario actual no se haya perdido después del commit
+        if current_user_id:
+            current_user = User.query.get(current_user_id)
+            if current_user:
+                flask_session["user_session_rev_count_local"] = current_user.user_session_rev_count
         
         return jsonify({
             'success': True,
@@ -635,7 +657,18 @@ def delete_imap2_twofa_config(config_id):
     try:
         config = IMAP2TwoFAConfig.query.get_or_404(config_id)
         db.session.delete(config)
+        
+        # Obtener el ID del usuario actual de la sesión antes del commit
+        from flask import session as flask_session
+        current_user_id = flask_session.get("user_id")
+        
         db.session.commit()
+        
+        # Asegurar que la sesión del usuario actual no se haya perdido después del commit
+        if current_user_id:
+            current_user = User.query.get(current_user_id)
+            if current_user:
+                flask_session["user_session_rev_count_local"] = current_user.user_session_rev_count
         
         return jsonify({
             'success': True,
@@ -889,7 +922,18 @@ def upload_imap2_background(imap2_id):
         
         # Actualizar el modelo
         imap2_server.background_image = unique_filename
+        
+        # Obtener el ID del usuario actual de la sesión antes del commit
+        from flask import session as flask_session
+        current_user_id = flask_session.get("user_id")
+        
         db.session.commit()
+        
+        # Asegurar que la sesión del usuario actual no se haya perdido después del commit
+        if current_user_id:
+            current_user = User.query.get(current_user_id)
+            if current_user:
+                flask_session["user_session_rev_count_local"] = current_user.user_session_rev_count
         
         return jsonify({
             "status": "ok",
@@ -925,7 +969,18 @@ def delete_imap2_background(imap2_id):
         
         # Limpiar el campo en la base de datos
         imap2_server.background_image = None
+        
+        # Obtener el ID del usuario actual de la sesión antes del commit
+        from flask import session as flask_session
+        current_user_id = flask_session.get("user_id")
+        
         db.session.commit()
+        
+        # Asegurar que la sesión del usuario actual no se haya perdido después del commit
+        if current_user_id:
+            current_user = User.query.get(current_user_id)
+            if current_user:
+                flask_session["user_session_rev_count_local"] = current_user.user_session_rev_count
         
         return jsonify({
             "status": "ok",
@@ -984,16 +1039,31 @@ def search_users_for_imap2_ajax(imap2_id):
 def link_user_to_imap2(imap2_id, user_id):
     """Vincula un usuario a una página dinámica IMAP2"""
     try:
+        from flask import session as flask_session
+        
+        # Obtener el ID del usuario actual de la sesión antes de cualquier operación
+        current_user_id = flask_session.get("user_id")
+        
         imap2_server = IMAPServer2.query.get_or_404(imap2_id)
         user = User.query.get_or_404(user_id)
         
         # Verificar que no esté ya vinculado
-        if user in imap2_server.allowed_users.all():
+        # allowed_users es lazy="dynamic", así que usamos .all() para obtener la lista
+        linked_users = imap2_server.allowed_users.all()
+        if user in linked_users:
             return jsonify({"status": "error", "message": "El usuario ya está vinculado"}), 400
         
         # Vincular usuario
         imap2_server.allowed_users.append(user)
         db.session.commit()
+        
+        # Asegurar que la sesión del usuario actual no se haya perdido
+        # Si el usuario modificado es el mismo que el de la sesión, refrescar la sesión
+        if current_user_id and current_user_id == user_id:
+            # Si modificamos el usuario actual, asegurar que la sesión siga activa
+            current_user = User.query.get(current_user_id)
+            if current_user:
+                flask_session["user_session_rev_count_local"] = current_user.user_session_rev_count
         
         return jsonify({
             "status": "ok",
@@ -1016,16 +1086,31 @@ def link_user_to_imap2(imap2_id, user_id):
 def unlink_user_from_imap2(imap2_id, user_id):
     """Desvincula un usuario de una página dinámica IMAP2"""
     try:
+        from flask import session as flask_session
+        
+        # Obtener el ID del usuario actual de la sesión antes de cualquier operación
+        current_user_id = flask_session.get("user_id")
+        
         imap2_server = IMAPServer2.query.get_or_404(imap2_id)
         user = User.query.get_or_404(user_id)
         
         # Verificar que esté vinculado
-        if user not in imap2_server.allowed_users.all():
+        # allowed_users es lazy="dynamic", así que usamos .all() para obtener la lista
+        linked_users = imap2_server.allowed_users.all()
+        if user not in linked_users:
             return jsonify({"status": "error", "message": "El usuario no está vinculado"}), 400
         
         # Desvincular usuario
         imap2_server.allowed_users.remove(user)
         db.session.commit()
+        
+        # Asegurar que la sesión del usuario actual no se haya perdido
+        # Si el usuario modificado es el mismo que el de la sesión, refrescar la sesión
+        if current_user_id and current_user_id == user_id:
+            # Si modificamos el usuario actual, asegurar que la sesión siga activa
+            current_user = User.query.get(current_user_id)
+            if current_user:
+                flask_session["user_session_rev_count_local"] = current_user.user_session_rev_count
         
         return jsonify({
             "status": "ok",

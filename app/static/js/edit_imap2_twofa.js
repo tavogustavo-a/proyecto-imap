@@ -272,12 +272,31 @@
         }
         
         try {
-            const response = await fetch(`/admin/imap2/${serverId}/twofa-configs`, {
+            const baseRoute = getTwofaBaseRoute();
+            const response = await fetch(`${baseRoute}/${serverId}/twofa-configs`, {
                 method: 'GET',
                 headers: {
                     'X-CSRFToken': getCsrfToken()
                 }
             });
+            
+            if (!response.ok) {
+                // Manejar errores HTTP (403, 404, etc.)
+                const errorData = await response.json().catch(() => ({}));
+                const errorMessage = errorData.message || errorData.error || `Error ${response.status}: ${response.statusText}`;
+                
+                if (twofaConfigsList) {
+                    // Limpiar contenido usando removeChild (CSP compliant)
+                    while (twofaConfigsList.firstChild) {
+                        twofaConfigsList.removeChild(twofaConfigsList.firstChild);
+                    }
+                    const errorP = document.createElement('p');
+                    errorP.className = 'text-center text-danger';
+                    errorP.textContent = errorMessage;
+                    twofaConfigsList.appendChild(errorP);
+                }
+                return;
+            }
             
             const data = await response.json();
             
@@ -304,7 +323,7 @@
                 }
                 const errorP = document.createElement('p');
                 errorP.className = 'text-center text-danger';
-                errorP.textContent = 'Error al cargar configuraciones.';
+                errorP.textContent = 'Error al cargar configuraciones: ' + error.message;
                 twofaConfigsList.appendChild(errorP);
             }
         }
@@ -591,7 +610,8 @@
         }
         
         try {
-            const response = await fetch(`/admin/imap2/twofa-configs/${configId}`, {
+            const baseRoute = getBaseRoute();
+            const response = await fetch(`${baseRoute}/twofa-configs/${configId}`, {
                 method: 'DELETE',
                 headers: {
                     'X-CSRFToken': getCsrfToken()

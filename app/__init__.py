@@ -250,6 +250,17 @@ def create_app(config_class_passed=None):
         Si cambió, fuerza cierre de sesión para TODOS los usuarios (admin, usuarios normales y sub-usuarios).
         Esto se activa cuando el admin usa "Cerrar sesión de todos".
         """
+        # Detectar si es una petición AJAX/JSON
+        from flask import request, jsonify
+        is_ajax = (
+            request.is_json or 
+            request.headers.get('Content-Type', '').startswith('application/json') or
+            request.headers.get('X-Requested-With') == 'XMLHttpRequest' or
+            request.path.startswith('/api/') or
+            request.path.startswith('/usuario/my_page/') or
+            request.method in ['GET', 'POST', 'PUT', 'DELETE'] and 'twofa-configs' in request.path
+        )
+        
         # Solo verificar si hay una sesión activa
         if "logged_in" in session or "is_user" in session:
             from app.admin.site_settings import get_site_setting
@@ -268,6 +279,10 @@ def create_app(config_class_passed=None):
                 is_user_normal = "is_user" in session
                 
                 session.clear()
+                
+                if is_ajax:
+                    return jsonify({"status": "error", "message": "Tu sesión ha sido cerrada por el administrador."}), 401
+                
                 flash("Tu sesión ha sido cerrada por el administrador.", "info")
                 
                 # Redirigir según el tipo de usuario

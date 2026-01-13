@@ -303,6 +303,9 @@ input[type="submit"],
   border: none;
   cursor: pointer;
   margin: 0.2rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 /* ========== Flash messages ========== */
@@ -3885,6 +3888,7 @@ a.btn-search.btn-rounded:hover {
     font-size: 12px !important;
     height: 36px !important;
   }
+}
 
 /* Para pantallas muy pequeñas */
 @media (max-width: 480px) {
@@ -4199,11 +4203,6 @@ a.btn-search.btn-rounded:hover {
   cursor: not-allowed;
 }
 
-/* Estilos para botón de creación IMAP2 */
-.imap2-create-btn {
-  flex-shrink: 0;
-}
-
 /* Estilos para búsqueda y mostrar en sección 2FA (igual que herramientas) */
 .card .productos-buscar-mostrar {
   display: flex;
@@ -4214,18 +4213,78 @@ a.btn-search.btn-rounded:hover {
 
 .card .productos-buscar-mostrar .search-container {
   flex: 1;
-  min-width: 200px;
+  min-width: 250px;
 }
 
 .card .productos-buscar-mostrar .search-container input[type="search"] {
-  height: 32px !important;
-  padding: 6px 10px !important;
+  height: 38px !important;
+  padding: 8px 12px !important;
   border: 1.5px solid #111;
   border-radius: 5px;
-  font-size: 14px;
+  font-size: 15px;
   width: 100%;
   box-sizing: border-box;
   line-height: 1.5;
+}
+
+/* Estilos para sección 2FA en edit_imap2.html y manage_my_page.html - igual que sms.html */
+.twofa-section-card {
+  margin-top: 1rem;
+}
+
+/* Asegurar espaciado adecuado después de tablas en edit_imap2 */
+.card.mt-2 + .twofa-section-card,
+.card.mt-2 + .admin-card.twofa-section-card {
+  margin-top: 1rem !important;
+}
+
+/* Asegurar que el div de 2FA tenga el mismo espaciado que otros cards con mt-2 */
+.twofa-section-card.mt-2 {
+  margin-top: 1rem !important;
+}
+
+/* Asegurar padding-bottom en cards que contienen tablas para mejor espaciado */
+.card .table-responsive {
+  margin-bottom: 0;
+}
+
+/* Espaciado específico: cuando un card con tabla está seguido por el div de 2FA */
+.card.mt-2 + .admin-card.twofa-section-card.mt-2 {
+  margin-top: 1rem !important;
+}
+
+.twofa-section-card .productos-buscar-mostrar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.twofa-section-card .productos-buscar-mostrar .search-container {
+  flex: 1;
+  min-width: 200px;
+}
+
+.twofa-section-card .productos-buscar-mostrar .search-container input[type="search"] {
+  height: 32px !important;
+  padding: 6px 10px !important;
+  border: 1.5px solid #111 !important;
+  border-radius: 5px !important;
+  font-size: 14px !important;
+  width: 100% !important;
+  box-sizing: border-box !important;
+  line-height: 1.5 !important;
+}
+
+.twofa-section-card .productos-buscar-mostrar select {
+  height: 32px !important;
+  padding: 6px 10px !important;
+  border: 1.5px solid #111 !important;
+  border-radius: 5px !important;
+  font-size: 14px !important;
+  width: 80px !important;
+  box-sizing: border-box !important;
+  line-height: 1.5 !important;
 }
 
 .card .productos-buscar-mostrar select {
@@ -4242,6 +4301,40 @@ a.btn-search.btn-rounded:hover {
 /* Estilos para sección de fondo personalizado en edit_imap2.html */
 .imap2-background-section {
   border-top: 1px solid #ddd;
+}
+
+/* Estilos para items de páginas en my_pages_list.html */
+.my-pages-item {
+  background-color: #ffffff !important;
+  border: none !important;
+  border-radius: 8px !important;
+  margin-bottom: 0.5rem !important;
+  padding: 0.5rem 0.75rem !important;
+}
+
+/* Estilos para pantallas pequeñas (max-width: 768px) - mantener contorno visible */
+@media (max-width: 768px) {
+  .my-pages-item {
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1),
+                0 0 0 2px rgba(255, 255, 255, 1) !important;
+    outline: 2px solid rgba(255, 255, 255, 1) !important;
+    outline-offset: 0 !important;
+  }
+}
+
+/* Asegurar que el contorno blanco sea visible en pantallas grandes (más de 720px) */
+@media (min-width: 721px) {
+  .my-pages-item {
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1),
+                0 0 0 3px rgba(255, 255, 255, 1) !important;
+    outline: 3px solid rgba(255, 255, 255, 1) !important;
+    outline-offset: 0 !important;
+  }
+}
+
+/* Asegurar que el card padre no corte el outline */
+.form-container-medium .card {
+  overflow: visible !important;
 }
 
 .imap2-background-upload-label {
@@ -4324,7 +4417,6 @@ a.btn-search.btn-rounded:hover {
 /* En pantallas pequeñas: botón abajo (solo para admin_dashboard) */
 @media (max-width: 600px) {
   .imap2-create-btn {
-    width: 100%;
     margin-top: 0.5rem;
     text-align: center;
   }

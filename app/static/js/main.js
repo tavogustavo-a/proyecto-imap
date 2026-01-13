@@ -67,22 +67,41 @@ document.addEventListener("DOMContentLoaded", function () {
   if (savedTheme) {
     document.body.classList.add("dark-mode");
   }
+  
   const toggleThemeBtn = document.getElementById("toggleThemeBtn");
   if (toggleThemeBtn) {
     const icon = toggleThemeBtn.querySelector("i");
     function updateThemeIcon() {
-      if (document.body.classList.contains("dark-mode")) {
-        icon.className = "fas fa-sun"; // Sol para modo claro
-      } else {
-        icon.className = "fas fa-moon"; // Luna para modo oscuro
+      if (icon) {
+        if (document.body.classList.contains("dark-mode")) {
+          icon.className = "fas fa-sun"; // Sol para modo claro
+        } else {
+          icon.className = "fas fa-moon"; // Luna para modo oscuro
+        }
       }
     }
-    toggleThemeBtn.addEventListener("click", function() {
+    
+    // Usar onclick para asegurar que funcione
+    toggleThemeBtn.onclick = function(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      document.body.classList.toggle("dark-mode");
+      const isDark = document.body.classList.contains("dark-mode");
+      localStorage.setItem("darkMode", isDark.toString());
+      updateThemeIcon();
+      return false;
+    };
+    
+    // También agregar addEventListener como respaldo
+    toggleThemeBtn.addEventListener("click", function(e) {
+      e.preventDefault();
+      e.stopPropagation();
       document.body.classList.toggle("dark-mode");
       const isDark = document.body.classList.contains("dark-mode");
       localStorage.setItem("darkMode", isDark.toString());
       updateThemeIcon();
     });
+    
     // Establecer icono inicial del botón
     updateThemeIcon();
   }

@@ -82,7 +82,7 @@
       <!-- Fila 3: Carpetas y Ruta -->
       <div class="d-flex gap-05 mb-05 align-items-end imap2-create-row">
         <div class="flex-grow-1 min-width-200">
-          <label for="folders" class="imap2-label-small sr-only">separada por comas:</label>
+          <label for="folders" class="sr-only">Carpetas</label>
           <input
             type="text"
             id="folders"
@@ -94,7 +94,7 @@
           >
         </div>
         <div class="flex-grow-1 min-width-200">
-          <label for="route_path" class="imap2-label-small sr-only">Ruta</label>
+          <label for="route_path" class="sr-only">Ruta</label>
           <input
             type="text"
             id="route_path"
@@ -390,8 +390,8 @@
   </div>
 
   <!-- Card separado para Gestión de 2FA por Correo (específico para este servidor IMAP2) -->
-  <div class="card mt-2">
-    <h3 class="mb-1 text-center">🔐 Gestión de 2FA por Correo</h3>
+  <div class="admin-card twofa-section-card mt-2">
+    <h4 class="mb-1 text-center">🔐 Gestión de 2FA por Correo</h4>
     
     <!-- Formulario para agregar/editar configuración 2FA -->
     <form id="imap2-twofa-config-form" class="mb-2">

@@ -248,17 +248,20 @@
         return;
       }
 
-      // Feedback visual
-      btn.disabled = true;
-      // Guardar contenido original (puede ser texto o HTML con iconos)
-      const originalContent = btn.cloneNode(true);
-      // Limpiar contenido y agregar spinner usando createElement
-      while (btn.firstChild) {
-        btn.removeChild(btn.firstChild);
+      // Actualización optimista: eliminar el elemento de la lista inmediatamente
+      const imapItem = btn.closest('.imap-item');
+      if (imapItem) {
+        imapItem.style.transition = 'none';
+        imapItem.style.opacity = '0';
+        imapItem.style.height = imapItem.offsetHeight + 'px';
+        setTimeout(() => {
+          imapItem.remove();
+        }, 100);
       }
-      const spinnerIcon = document.createElement('i');
-      spinnerIcon.className = 'fas fa-spinner fa-spin';
-      btn.appendChild(spinnerIcon);
+
+      // Feedback visual mínimo
+      btn.disabled = true;
+      btn.style.transition = 'none';
 
       fetch(`/admin/imap2/${imap2Id}/unlink_imap/${imapId}`, {
         method: 'POST',
@@ -270,7 +273,7 @@
       .then(res => res.json())
       .then(data => {
         if (data.status === 'ok') {
-          // Recargar lista de servidores vinculados
+          // Recargar lista de servidores vinculados para asegurar sincronización
           const imap2Id = createLinkedImapForm ? createLinkedImapForm.querySelector('button[type="submit"]').getAttribute('data-imap2-id') : '';
           if (imap2Id) {
             fetch(`/admin/imap2/${imap2Id}/linked_imap_servers`)
@@ -279,25 +282,36 @@
                 if (data.status === 'ok') {
                   renderLinkedImapList(data.servers);
                 }
+              })
+              .catch(() => {
+                // Si falla, el elemento ya fue eliminado optimistamente
               });
           }
         } else {
+          // Revertir eliminación optimista en caso de error
+          if (imapItem && imapItem.parentNode) {
+            imapItem.style.opacity = '1';
+            imapItem.style.height = 'auto';
+            if (linkedImapList && !linkedImapList.contains(imapItem)) {
+              linkedImapList.appendChild(imapItem);
+            }
+          }
           alert('Error: ' + (data.message || 'Error al eliminar servidor'));
         }
       })
       .catch(err => {
+        // Revertir eliminación optimista en caso de error de red
+        if (imapItem && imapItem.parentNode) {
+          imapItem.style.opacity = '1';
+          imapItem.style.height = 'auto';
+          if (linkedImapList && !linkedImapList.contains(imapItem)) {
+            linkedImapList.appendChild(imapItem);
+          }
+        }
         alert('Error de red: ' + err.message);
       })
       .finally(() => {
         btn.disabled = false;
-        // Restaurar contenido original
-        while (btn.firstChild) {
-          btn.removeChild(btn.firstChild);
-        }
-        // Restaurar desde el nodo clonado
-        while (originalContent.firstChild) {
-          btn.appendChild(originalContent.firstChild.cloneNode(true));
-        }
       });
     }
 
@@ -307,19 +321,16 @@
       const btn = e.target.closest('.toggle-linked-imap-btn');
       const imapId = btn.getAttribute('data-id');
       const currentlyEnabled = btn.getAttribute('data-enabled') === 'true';
+      const imap2Id = createLinkedImapForm ? createLinkedImapForm.querySelector('button[type="submit"]').getAttribute('data-imap2-id') : '';
 
-      // Feedback visual
+      // Actualización optimista: cambiar el estado del botón inmediatamente
+      const newEnabled = !currentlyEnabled;
+      btn.setAttribute('data-enabled', newEnabled.toString());
+      btn.className = newEnabled ? 'btn-red toggle-linked-imap-btn ml-03 btn-imap-action btn-imap-small' : 'btn-green toggle-linked-imap-btn ml-03 btn-imap-action btn-imap-small';
+      btn.textContent = newEnabled ? 'Off' : 'On';
+
+      // Feedback visual mínimo
       btn.disabled = true;
-      const originalText = btn.textContent;
-      // Guardar contenido original (puede ser texto o HTML con iconos)
-      const originalContent = btn.cloneNode(true);
-      // Limpiar contenido y agregar spinner usando createElement
-      while (btn.firstChild) {
-        btn.removeChild(btn.firstChild);
-      }
-      const spinnerIcon = document.createElement('i');
-      spinnerIcon.className = 'fas fa-spinner fa-spin';
-      btn.appendChild(spinnerIcon);
 
       fetch('/admin/toggle_imap_ajax', {
         method: 'POST',
@@ -336,7 +347,6 @@
       .then(data => {
         if (data.status === 'ok') {
           // Recargar lista
-          const imap2Id = createLinkedImapForm ? createLinkedImapForm.querySelector('button[type="submit"]').getAttribute('data-imap2-id') : '';
           if (imap2Id) {
             fetch(`/admin/imap2/${imap2Id}/linked_imap_servers`)
               .then(res => res.json())
@@ -344,25 +354,28 @@
                 if (data.status === 'ok') {
                   renderLinkedImapList(data.servers);
                 }
+              })
+              .catch(() => {
+                // Si falla, no hacer nada, el estado ya está actualizado
               });
           }
         } else {
+          // Revertir cambio optimista en caso de error
+          btn.setAttribute('data-enabled', currentlyEnabled.toString());
+          btn.className = currentlyEnabled ? 'btn-red toggle-linked-imap-btn ml-03 btn-imap-action btn-imap-small' : 'btn-green toggle-linked-imap-btn ml-03 btn-imap-action btn-imap-small';
+          btn.textContent = currentlyEnabled ? 'Off' : 'On';
           alert('Error: ' + (data.message || 'Error al cambiar estado'));
         }
       })
       .catch(err => {
+        // Revertir cambio optimista en caso de error de red
+        btn.setAttribute('data-enabled', currentlyEnabled.toString());
+        btn.className = currentlyEnabled ? 'btn-red toggle-linked-imap-btn ml-03 btn-imap-action btn-imap-small' : 'btn-green toggle-linked-imap-btn ml-03 btn-imap-action btn-imap-small';
+        btn.textContent = currentlyEnabled ? 'Off' : 'On';
         alert('Error de red: ' + err.message);
       })
       .finally(() => {
         btn.disabled = false;
-        // Restaurar contenido original
-        while (btn.firstChild) {
-          btn.removeChild(btn.firstChild);
-        }
-        // Restaurar desde el nodo clonado
-        while (originalContent.firstChild) {
-          btn.appendChild(originalContent.firstChild.cloneNode(true));
-        }
       });
     }
 

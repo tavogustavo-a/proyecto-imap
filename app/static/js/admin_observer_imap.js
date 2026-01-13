@@ -65,6 +65,15 @@ document.addEventListener("DOMContentLoaded", function() {
       const foldersText = document.createTextNode(escapeHtml(s.folders || "INBOX"));
       emFolders.appendChild(foldersText);
       div.appendChild(emFolders);
+      
+      // Descripción (si existe) al lado de Carpetas
+      if (s.description) {
+        div.appendChild(document.createTextNode(" | "));
+        const emDesc = document.createElement("em");
+        emDesc.textContent = "Descripción: ";
+        div.appendChild(emDesc);
+        div.appendChild(document.createTextNode(escapeHtml(s.description)));
+      }
 
       // Contenedor de acciones
       const actionsDiv = document.createElement("div");
@@ -185,10 +194,19 @@ document.addEventListener("DOMContentLoaded", function() {
       
       // Prevenir múltiples clicks rápidos
       if (t.disabled) return;
-      t.disabled = true;
       
       const id = t.dataset.id;
       const enabled = t.dataset.enabled === "true";
+      
+      // Actualización optimista: cambiar el estado del botón inmediatamente
+      const newEnabled = !enabled;
+      t.dataset.enabled = newEnabled.toString();
+      t.className = newEnabled ? "btn-red toggle-observer-imap" : "btn-green toggle-observer-imap";
+      t.textContent = newEnabled ? "Off" : "On";
+      
+      // Feedback visual mínimo
+      t.disabled = true;
+      
       fetch("/admin/observer_toggle_imap_ajax", {
         method: "POST",
         headers: {
@@ -207,10 +225,18 @@ document.addEventListener("DOMContentLoaded", function() {
         if (d.status === "ok") {
           renderList(d.servers);
         } else {
+          // Revertir cambio optimista en caso de error
+          t.dataset.enabled = enabled.toString();
+          t.className = enabled ? "btn-red toggle-observer-imap" : "btn-green toggle-observer-imap";
+          t.textContent = enabled ? "Off" : "On";
           alert("Error: " + (d.message || "Error desconocido"));
         }
       })
       .catch(err => {
+        // Revertir cambio optimista en caso de error
+        t.dataset.enabled = enabled.toString();
+        t.className = enabled ? "btn-red toggle-observer-imap" : "btn-green toggle-observer-imap";
+        t.textContent = enabled ? "Off" : "On";
         if (err.message.includes("Unexpected token")) {
           alert("Error: El servidor devolvió una respuesta inesperada. Recarga la página e intenta nuevamente.");
         } else {
@@ -227,12 +253,25 @@ document.addEventListener("DOMContentLoaded", function() {
       
       // Prevenir múltiples clicks rápidos
       if (t.disabled) return;
-      t.disabled = true;
       
       if (!confirm("¿Eliminar servidor Observador?")) {
-        t.disabled = false;
         return;
       }
+      
+      // Actualización optimista: eliminar el elemento de la lista inmediatamente
+      const imapItem = t.closest(".imap-item");
+      if (imapItem) {
+        imapItem.style.transition = "none";
+        imapItem.style.opacity = "0";
+        imapItem.style.height = imapItem.offsetHeight + "px";
+        setTimeout(() => {
+          imapItem.remove();
+        }, 100);
+      }
+
+      // Feedback visual mínimo
+      t.disabled = true;
+      t.style.transition = "none";
       
       const id = t.dataset.id;
       fetch("/admin/observer_delete_imap_ajax", {
@@ -251,14 +290,29 @@ document.addEventListener("DOMContentLoaded", function() {
       })
       .then(d => {
         if (d.status === "ok") {
-          // Mostrar mensaje de éxito
-          alert('✅ ' + (d.message || 'Servidor eliminado correctamente'));
+          // Recargar lista completa para asegurar sincronización
           renderList(d.servers);
         } else {
+          // Revertir eliminación optimista en caso de error
+          if (imapItem && imapItem.parentNode) {
+            imapItem.style.opacity = "1";
+            imapItem.style.height = "auto";
+            if (!listDiv.contains(imapItem)) {
+              listDiv.appendChild(imapItem);
+            }
+          }
           alert("❌ Error: " + (d.message || "Error desconocido"));
         }
       })
       .catch(err => {
+        // Revertir eliminación optimista en caso de error
+        if (imapItem && imapItem.parentNode) {
+          imapItem.style.opacity = "1";
+          imapItem.style.height = "auto";
+          if (!listDiv.contains(imapItem)) {
+            listDiv.appendChild(imapItem);
+          }
+        }
         if (err.message.includes("Unexpected token")) {
           alert("Error: El servidor devolvió una respuesta inesperada. Recarga la página e intenta nuevamente.");
         } else {
