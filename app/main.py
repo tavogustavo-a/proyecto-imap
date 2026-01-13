@@ -19,6 +19,27 @@ def inject_worksheet_access():
             return False
         return {"user_has_worksheet_access": dummy_worksheet_access}
 
+
+def get_imap2_by_custom_domain(request):
+    """
+    Busca un servidor IMAP2 por dominio personalizado.
+    Retorna el servidor si existe, None si no.
+    """
+    # Obtener el dominio desde el header Host o X-Forwarded-Host (para proxies reversos)
+    host_header = request.headers.get('X-Forwarded-Host') or request.headers.get('Host', '')
+    if not host_header:
+        return None
+    
+    # Normalizar: convertir a minúsculas, remover espacios, remover puerto
+    host_domain = host_header.lower().strip().split(':')[0]
+    
+    # Buscar servidor IMAP2 con este dominio personalizado (comparación case-insensitive)
+    imap_server_by_domain = IMAPServer2.query.filter(
+        db.func.lower(IMAPServer2.custom_domain) == host_domain
+    ).filter_by(enabled=True).first()
+    
+    return imap_server_by_domain
+
 # ✅ NUEVO: Ruta para favicon.ico para evitar error 404
 @main_bp.route('/favicon.ico')
 def favicon():
@@ -36,9 +57,15 @@ def favicon():
 
 @main_bp.route("/", methods=["GET"])
 def home():
-    from flask import session
+    from flask import session, request
     from app.models.user import User
     from app.admin.site_settings import get_site_setting
+    
+    # Verificar si hay un dominio personalizado configurado para la raíz
+    imap_server_by_domain = get_imap2_by_custom_domain(request)
+    if imap_server_by_domain:
+        # Si hay un dominio personalizado configurado, servir esa página
+        return render_imap2_page(imap_server_by_domain, session)
     
     # Verificar si el acceso libre está habilitado
     public_access_enabled = get_site_setting('public_access_enabled', 'true')
@@ -87,6 +114,47 @@ def home():
         current_user=current_user
     )
 
+def render_imap2_page(imap_server, session):
+    """Función auxiliar para renderizar una página IMAP2"""
+    from app.models.user import User
+    
+    # Obtener usuario actual
+    current_user = None
+    username = session.get('username')
+    user_id = session.get('user_id')
+    
+    if username:
+        current_user = User.query.filter_by(username=username).first()
+    elif user_id:
+        current_user = User.query.get(user_id)
+    
+    # Obtener servicios con visibility_mode != 'off' (igual que en home)
+    all_visible = ServiceModel.query.filter(ServiceModel.visibility_mode != "off").all()
+    
+    def priority_key(s):
+        return abs(s.position)*2 + (1 if s.position > 0 else 0)
+    
+    services_sorted = sorted(all_visible, key=priority_key)
+    default_service_id = services_sorted[0].id if services_sorted else None
+    services_in_rows = [services_sorted[i:i+2] for i in range(0, len(services_sorted), 2)]
+    
+    # Obtener filtros y regex asociados a este servidor
+    associated_filter_ids = [f.id for f in imap_server.filters]
+    associated_regex_ids = [r.id for r in imap_server.regexes]
+    
+    return render_template(
+        "search_imap2_dynamic.html",
+        imap_server=imap_server,
+        paragraph=imap_server.paragraph,
+        background_image=imap_server.background_image,
+        services_in_rows=services_in_rows,
+        default_service_id=default_service_id,
+        current_user=current_user,
+        associated_filter_ids=associated_filter_ids,
+        associated_regex_ids=associated_regex_ids
+    )
+
+
 @main_bp.route("/<path:route_path>", methods=["GET"])
 def dynamic_imap2_route(route_path):
     """
@@ -103,6 +171,16 @@ def dynamic_imap2_route(route_path):
     from flask import session, request, current_app
     from app.models.user import User
     
+    # PRIMERO: Verificar si hay un dominio personalizado configurado
+    # Si hay un dominio personalizado, tiene prioridad absoluta sobre la ruta
+    # Esto permite que funcione tanto tupremiumm.com como tupremiumm.com/codigos4
+    imap_server_by_domain = get_imap2_by_custom_domain(request)
+    if imap_server_by_domain:
+        # Si hay un dominio personalizado configurado, servir esa página
+        # (ignorar la ruta, el dominio personalizado tiene prioridad)
+        return render_imap2_page(imap_server_by_domain, session)
+    
+    # SEGUNDO: Si no hay dominio personalizado, buscar por route_path (comportamiento normal)
     # Lista de prefijos de rutas existentes que NO deben ser capturadas por esta ruta dinámica
     # Estos son los prefijos de los blueprints registrados en app/__init__.py
     EXCLUDED_PREFIXES = [
@@ -156,38 +234,4 @@ def dynamic_imap2_route(route_path):
         # Si no existe, devolver 404
         abort(404)
     
-    # Obtener usuario actual
-    current_user = None
-    username = session.get('username')
-    user_id = session.get('user_id')
-    
-    if username:
-        current_user = User.query.filter_by(username=username).first()
-    elif user_id:
-        current_user = User.query.get(user_id)
-    
-    # Obtener servicios con visibility_mode != 'off' (igual que en home)
-    all_visible = ServiceModel.query.filter(ServiceModel.visibility_mode != "off").all()
-    
-    def priority_key(s):
-        return abs(s.position)*2 + (1 if s.position > 0 else 0)
-    
-    services_sorted = sorted(all_visible, key=priority_key)
-    default_service_id = services_sorted[0].id if services_sorted else None
-    services_in_rows = [services_sorted[i:i+2] for i in range(0, len(services_sorted), 2)]
-    
-    # Obtener filtros y regex asociados a este servidor
-    associated_filter_ids = [f.id for f in imap_server.filters]
-    associated_regex_ids = [r.id for r in imap_server.regexes]
-    
-    return render_template(
-        "search_imap2_dynamic.html",
-        imap_server=imap_server,
-        paragraph=imap_server.paragraph,
-        background_image=imap_server.background_image,
-        services_in_rows=services_in_rows,
-        default_service_id=default_service_id,
-        current_user=current_user,
-        associated_filter_ids=associated_filter_ids,
-        associated_regex_ids=associated_regex_ids
-    )
+    return render_imap2_page(imap_server, session)

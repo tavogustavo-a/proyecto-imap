@@ -89,6 +89,19 @@ document.addEventListener("DOMContentLoaded", function() {
           routeSpan.textContent = escapeHtml(s.route_path);
           infoText.appendChild(routeSpan);
         }
+        if (s.custom_domain) {
+          if (s.description || s.route_path) {
+            infoText.appendChild(document.createTextNode(" | "));
+          }
+          const domainEm = document.createElement("em");
+          domainEm.textContent = "Dominio: ";
+          domainEm.className = "imap-domain-label";
+          infoText.appendChild(domainEm);
+          const domainSpan = document.createElement("span");
+          domainSpan.textContent = escapeHtml(s.custom_domain);
+          domainSpan.className = "imap-domain-value";
+          infoText.appendChild(domainSpan);
+        }
         div.appendChild(infoText);
       }
 
@@ -131,6 +144,16 @@ document.addEventListener("DOMContentLoaded", function() {
       editBtn.setAttribute("data-url", `/admin/edit_imap2/${s.id}`);
       editBtn.textContent = "Editar";
       actionsDiv.appendChild(editBtn);
+
+      // Botón URL (Dominio personalizado)
+      const urlBtn = document.createElement("button");
+      urlBtn.type = "button";
+      urlBtn.className = "btn-blue ml-03 url-imap2-btn btn-imap-action btn-imap-small";
+      urlBtn.setAttribute("data-id", s.id);
+      urlBtn.setAttribute("data-domain", s.custom_domain || "");
+      urlBtn.textContent = "URL";
+      urlBtn.title = s.custom_domain ? `Dominio: ${s.custom_domain}` : "Configurar dominio personalizado";
+      actionsDiv.appendChild(urlBtn);
 
       // Botón Eliminar
       const deleteBtn = document.createElement("button");
@@ -286,9 +309,7 @@ document.addEventListener("DOMContentLoaded", function() {
       // Actualización optimista: eliminar el elemento de la lista inmediatamente
       const imapItem = button.closest(".imap-item");
       if (imapItem) {
-        imapItem.style.transition = "none";
-        imapItem.style.opacity = "0";
-        imapItem.style.height = imapItem.offsetHeight + "px";
+        imapItem.className = imapItem.className + " imap-item-removing";
         setTimeout(() => {
           imapItem.remove();
         }, 100);
@@ -296,7 +317,7 @@ document.addEventListener("DOMContentLoaded", function() {
 
       // Feedback visual mínimo
       button.disabled = true;
-      button.style.transition = "none";
+      button.className = button.className + " btn-no-transition";
 
       fetch("/admin/delete_imap2_ajax", {
         method: "POST",
@@ -306,7 +327,17 @@ document.addEventListener("DOMContentLoaded", function() {
         },
         body: JSON.stringify({ server_id: parseInt(srvId) })
       })
-      .then(res => res.json())
+      .then(res => {
+        if (!res.ok) {
+          // Si la respuesta no es OK, intentar parsear como JSON primero
+          return res.json().then(data => {
+            throw new Error(data.message || `Error ${res.status}: ${res.statusText}`);
+          }).catch(() => {
+            throw new Error(`Error ${res.status}: ${res.statusText}`);
+          });
+        }
+        return res.json();
+      })
       .then(data => {
         if (data.status === "ok") {
           // Recargar lista completa para asegurar sincronización
@@ -314,25 +345,23 @@ document.addEventListener("DOMContentLoaded", function() {
         } else {
           // Revertir eliminación optimista en caso de error
           if (imapItem && imapItem.parentNode) {
-            imapItem.style.opacity = "1";
-            imapItem.style.height = "auto";
+            imapItem.className = imapItem.className.replace(" imap-item-removing", "") + " imap-item-restoring";
             if (!imap2List.contains(imapItem)) {
               imap2List.appendChild(imapItem);
             }
           }
-          alert("Error: " + data.message);
+          alert("Error: " + (data.message || "Error desconocido"));
         }
       })
       .catch(err => {
         // Revertir eliminación optimista en caso de error de red
         if (imapItem && imapItem.parentNode) {
-          imapItem.style.opacity = "1";
-          imapItem.style.height = "auto";
+          imapItem.className = imapItem.className.replace(" imap-item-removing", "") + " imap-item-restoring";
           if (!imap2List.contains(imapItem)) {
             imap2List.appendChild(imapItem);
           }
         }
-        alert("Error de red: " + err.message);
+        alert("Error: " + err.message);
       })
       .finally(() => {
         button.disabled = false;
@@ -347,7 +376,128 @@ document.addEventListener("DOMContentLoaded", function() {
         window.location.href = url;
       }
     }
+
+    // Botón URL (Dominio personalizado)
+    if (target.classList.contains("url-imap2-btn")) {
+      e.preventDefault();
+      e.stopPropagation();
+      
+      const serverId = target.getAttribute("data-id");
+      const currentDomain = target.getAttribute("data-domain") || "";
+      
+      // Crear modal para editar dominio
+      showUrlModal(serverId, currentDomain);
+    }
   });
+
+  // Función para mostrar modal de dominio personalizado
+  function showUrlModal(serverId, currentDomain) {
+    // Crear overlay
+    const overlay = document.createElement("div");
+    overlay.className = "modal-overlay";
+    
+    // Crear modal
+    const modal = document.createElement("div");
+    modal.className = "admin-card";
+    
+    modal.innerHTML = `
+      <h3 class="text-center mb-1">Configurar Dominio Personalizado</h3>
+      <p class="text-center text-small mb-1">
+        Ingresa el dominio personalizado para esta página (ej: tudominio.com).<br>
+        Deja en blanco para eliminar el dominio configurado.
+      </p>
+      <form id="urlImap2Form" class="d-flex flex-column gap-1">
+        <div>
+          <label for="customDomainInput" class="sr-only">Dominio personalizado</label>
+          <input
+            type="text"
+            id="customDomainInput"
+            placeholder="tudominio.com"
+            value="${escapeHtml(currentDomain)}"
+            class="form-input-block w-100"
+            autocomplete="off"
+          >
+        </div>
+        <div class="d-flex gap-1 justify-content-center">
+          <button type="submit" class="btn-green">Guardar</button>
+          <button type="button" class="btn-red" id="cancelUrlModal">Cancelar</button>
+        </div>
+      </form>
+    `;
+    
+    overlay.appendChild(modal);
+    document.body.appendChild(overlay);
+    
+    // Event listener para cerrar modal
+    overlay.addEventListener("click", function(e) {
+      if (e.target === overlay) {
+        document.body.removeChild(overlay);
+      }
+    });
+    
+    const cancelBtn = modal.querySelector("#cancelUrlModal");
+    cancelBtn.addEventListener("click", function() {
+      document.body.removeChild(overlay);
+    });
+    
+    // Event listener para enviar formulario
+    const form = modal.querySelector("#urlImap2Form");
+    form.addEventListener("submit", function(e) {
+      e.preventDefault();
+      
+      const domainInput = modal.querySelector("#customDomainInput");
+      const domain = domainInput.value.trim();
+      
+      const submitBtn = form.querySelector("button[type='submit']");
+      submitBtn.disabled = true;
+      submitBtn.className = submitBtn.className + " btn-no-transition";
+      submitBtn.textContent = "Guardando...";
+      
+      fetch(`/admin/imap2/${serverId}/update_custom_domain`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-CSRFToken": getCsrfToken()
+        },
+        body: JSON.stringify({
+          custom_domain: domain || null
+        })
+      })
+      .then(res => res.json())
+      .then(data => {
+        if (data.status === "ok") {
+          // Cerrar modal
+          document.body.removeChild(overlay);
+          
+          // Recargar lista de servidores
+          fetch("/admin/search_imap2_ajax?query=", {
+            method: "GET",
+            headers: { "X-CSRFToken": getCsrfToken() }
+          })
+          .then(res => res.json())
+          .then(data => {
+            if (data.status === "ok") {
+              renderImap2List(data.servers);
+            }
+          })
+          .catch(() => {
+            // Error silencioso
+          });
+          
+          alert(data.message || "Dominio actualizado correctamente");
+        } else {
+          alert("Error: " + (data.message || "Error desconocido"));
+          submitBtn.disabled = false;
+          submitBtn.textContent = "Guardar";
+        }
+      })
+      .catch(err => {
+        alert("Error de red: " + err.message);
+        submitBtn.disabled = false;
+        submitBtn.textContent = "Guardar";
+      });
+    });
+  }
 
   // Manejar creación de servidor IMAP2 vía AJAX
   const createImap2Form = document.getElementById('createImap2Form');
@@ -402,7 +552,7 @@ document.addEventListener("DOMContentLoaded", function() {
       
       // Feedback visual mínimo
       submitButton.disabled = true;
-      submitButton.style.transition = "none";
+      submitButton.className = submitButton.className + " btn-no-transition";
 
       fetch("/admin/create_imap2_ajax", {
         method: "POST",

@@ -4457,3 +4457,49 @@ a.btn-search.btn-rounded:hover {
     font-size: 0.85rem;
   }
 }
+
+/* Estilos para modal de dominio personalizado (CSP compliant) */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.modal-overlay .admin-card {
+  max-width: 500px;
+  width: 90%;
+  position: relative;
+  z-index: 10000;
+}
+
+/* Estilos para dominio personalizado en lista */
+.imap-domain-label {
+  color: #4CAF50;
+}
+
+.imap-domain-value {
+  color: #4CAF50;
+  font-weight: bold;
+}
+
+/* Clases para animaciones optimistas (sin transiciones) */
+.imap-item-removing {
+  transition: none !important;
+  opacity: 0;
+}
+
+.imap-item-restoring {
+  transition: none !important;
+  opacity: 1;
+}
+
+.btn-no-transition {
+  transition: none !important;
+}

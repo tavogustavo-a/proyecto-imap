@@ -427,6 +427,15 @@
             Editar
           </button>
           <button
+            type="button"
+            class="btn-blue ml-03 url-imap2-btn btn-imap-action btn-imap-small"
+            data-id="{{ s.id }}"
+            data-domain="{{ s.custom_domain if s.custom_domain else '' }}"
+            title="{% if s.custom_domain %}Dominio: {{ s.custom_domain }}{% else %}Configurar dominio personalizado{% endif %}"
+          >
+            URL
+          </button>
+          <button
             class="btn-red delete-imap2-btn ml-03 btn-imap-action btn-imap-small"
             data-id="{{ s.id }}"
             title="Eliminar"

@@ -93,6 +93,36 @@ def validate_route_path(route_path, server_id=None):
     return True, None
 
 
+def validate_custom_domain(domain, server_id=None):
+    """
+    Valida que un dominio personalizado sea válido y no esté duplicado.
+    El dominio es OPCIONAL.
+    Retorna (is_valid, error_message)
+    """
+    if not domain or not domain.strip():
+        # Dominio vacío es válido (opcional)
+        return True, None
+    
+    domain = domain.strip().lower()
+    
+    # Validar formato básico de dominio
+    # Permitir dominios como: tudominio.com, www.tudominio.com, subdomain.tudominio.com
+    domain_pattern = r'^([a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}$'
+    
+    if not re.match(domain_pattern, domain):
+        return False, "Formato de dominio inválido. Ejemplo válido: tudominio.com"
+    
+    # Validar que no haya otro servidor con el mismo dominio
+    query = IMAPServer2.query.filter(IMAPServer2.custom_domain == domain)
+    if server_id:
+        query = query.filter(IMAPServer2.id != server_id)
+    existing = query.first()
+    if existing:
+        return False, f"Ya existe otro servidor con el dominio '{domain}'"
+    
+    return True, None
+
+
 @admin_bp.route("/manage_imap2", methods=["POST"])
 @admin_required
 def manage_imap2():
@@ -212,7 +242,8 @@ def search_imap2_ajax():
             "folders": s.folders,
             "enabled": s.enabled,
             "route_path": s.route_path if s.route_path else None,
-            "description": s.description if s.description else None
+            "description": s.description if s.description else None,
+            "custom_domain": s.custom_domain if s.custom_domain else None
         })
     return jsonify({"status": "ok", "servers": data})
 
@@ -268,7 +299,8 @@ def create_imap2_ajax():
                 "folders": s.folders,
                 "enabled": s.enabled,
                 "route_path": s.route_path if s.route_path else None,
-                "description": s.description if s.description else None
+                "description": s.description if s.description else None,
+                "custom_domain": s.custom_domain if s.custom_domain else None
             })
 
         return jsonify({
@@ -283,11 +315,24 @@ def create_imap2_ajax():
         return jsonify({"status": "error", "message": str(e)}), 500
 
 @admin_bp.route("/delete_imap2_ajax", methods=["POST"])
+@csrf_exempt_route
 @admin_required
 def delete_imap2_ajax():
     try:
         data = request.get_json()
+        if not data:
+            return jsonify({"status": "error", "message": "No se recibieron datos"}), 400
+        
         server_id = data.get("server_id")
+        if not server_id:
+            return jsonify({"status": "error", "message": "server_id es requerido"}), 400
+        
+        # Validar que el servidor existe antes de intentar eliminarlo
+        server = IMAPServer2.query.get(server_id)
+        if not server:
+            return jsonify({"status": "error", "message": f"Servidor con ID {server_id} no encontrado"}), 404
+        
+        # Eliminar el servidor
         delete_imap_server(server_id, model_cls=IMAPServer2)
 
         # Retornamos todos los servers actualizados
@@ -302,11 +347,17 @@ def delete_imap2_ajax():
                 "folders": s.folders,
                 "enabled": s.enabled,
                 "route_path": s.route_path if s.route_path else None,
-                "description": s.description if s.description else None
+                "description": s.description if s.description else None,
+                "custom_domain": s.custom_domain if s.custom_domain else None
             })
         return jsonify({"status": "ok", "servers": data_out})
     except Exception as e:
-        return jsonify({"status": "error", "message": str(e)}), 400
+        db.session.rollback()
+        current_app.logger.error(f"Error al eliminar servidor IMAP2: {e}", exc_info=True)
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+# Marcar la función como exenta de CSRF
+delete_imap2_ajax._csrf_exempt = True
 
 @admin_bp.route("/test_imap2_ajax", methods=["POST"])
 @admin_required
@@ -1121,3 +1172,44 @@ def unlink_user_from_imap2(imap2_id, user_id):
         db.session.rollback()
         current_app.logger.error(f"Error al desvincular usuario de IMAP2: {e}", exc_info=True)
         return jsonify({"status": "error", "message": str(e)}), 400
+
+
+@admin_bp.route("/imap2/<int:imap2_id>/update_custom_domain", methods=["POST"])
+@csrf_exempt_route
+@admin_required
+def update_imap2_custom_domain(imap2_id):
+    """Actualiza el dominio personalizado de un servidor IMAP2"""
+    try:
+        data = request.get_json()
+        custom_domain = data.get("custom_domain", "").strip() if data.get("custom_domain") else None
+        
+        # Si está vacío, establecer como None
+        if not custom_domain:
+            custom_domain = None
+        
+        # Validar dominio si se proporciona
+        if custom_domain:
+            is_valid, error_msg = validate_custom_domain(custom_domain, server_id=imap2_id)
+            if not is_valid:
+                return jsonify({"status": "error", "message": error_msg}), 400
+        
+        # Obtener servidor
+        imap2_server = IMAPServer2.query.get_or_404(imap2_id)
+        
+        # Actualizar dominio
+        imap2_server.custom_domain = custom_domain
+        db.session.commit()
+        
+        return jsonify({
+            "status": "ok",
+            "message": "Dominio personalizado actualizado correctamente" if custom_domain else "Dominio personalizado eliminado correctamente",
+            "custom_domain": custom_domain
+        }), 200
+        
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Error al actualizar dominio personalizado: {e}", exc_info=True)
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+# Marcar la función como exenta de CSRF
+update_imap2_custom_domain._csrf_exempt = True
