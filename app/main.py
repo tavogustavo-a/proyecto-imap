@@ -1,6 +1,6 @@
 # app/main.py
 
-from flask import Blueprint, render_template, abort
+from flask import Blueprint, render_template, abort, redirect, url_for
 from app.models.service import ServiceModel
 from app.models.settings import SiteSettings
 from app.models import IMAPServer2
@@ -38,6 +38,17 @@ def favicon():
 def home():
     from flask import session
     from app.models.user import User
+    from app.admin.site_settings import get_site_setting
+    
+    # Verificar si el acceso libre está habilitado
+    public_access_enabled = get_site_setting('public_access_enabled', 'true')
+    
+    # Si el acceso libre está deshabilitado, verificar si el usuario está logueado
+    if public_access_enabled != 'true':
+        # Verificar si hay sesión activa (admin o usuario)
+        if not session.get('logged_in'):
+            # Redirigir a la página de login de usuarios
+            return redirect(url_for('user_auth_bp.login'))
     
     # logo_enabled = SiteSettings.query.filter_by(key="logo_enabled").first()
     search_message = SiteSettings.query.filter_by(key="search_message").first()

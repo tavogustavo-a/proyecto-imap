@@ -147,13 +147,13 @@ def create_app(config_class_passed=None):
         # Intentamos obtener las settings, pero sin crear/modificar si no existen aquí.
         settings_dict = {
             "search_message": "",
-            "logo_enabled": "true",
             "card_opacity": "0.8",
             "current_theme": "tema1",
             "dark_mode": "false",
             "search_message_mode": "off",
             "search_message2": "",
             "search_message2_mode": "off",
+            "public_access_enabled": "true",
         }
         try:
             inspector2 = insp2(db.engine)
@@ -162,13 +162,13 @@ def create_app(config_class_passed=None):
                 from app.admin.site_settings import get_site_setting
                 # Sobrescribimos los defaults si la tabla existe y las keys están
                 settings_dict["search_message"] = get_site_setting("search_message", settings_dict["search_message"])
-                settings_dict["logo_enabled"] = get_site_setting("logo_enabled", settings_dict["logo_enabled"])
                 settings_dict["card_opacity"] = get_site_setting("card_opacity", settings_dict["card_opacity"])
                 settings_dict["current_theme"] = get_site_setting("current_theme", settings_dict["current_theme"])
                 settings_dict["dark_mode"] = get_site_setting("dark_mode", settings_dict["dark_mode"])
                 settings_dict["search_message_mode"] = get_site_setting("search_message_mode", settings_dict["search_message_mode"])
                 settings_dict["search_message2"] = get_site_setting("search_message2", settings_dict["search_message2"])
                 settings_dict["search_message2_mode"] = get_site_setting("search_message2_mode", settings_dict["search_message2_mode"])
+                settings_dict["public_access_enabled"] = get_site_setting("public_access_enabled", settings_dict["public_access_enabled"])
         except Exception as e:
             # Usa logging.warning en lugar de print si deseas registrar este error
             pass

@@ -22,6 +22,7 @@ from app.models import (
     ServiceIcon,
     ObserverIMAPServer,
     SecurityRule,
+    IMAPServer2,
 )
 from app.admin.site_settings import (
     get_site_setting, set_site_setting
@@ -374,7 +375,11 @@ def export_config():
                     'enabled': d.enabled
                 } for d in DomainModel.query.all()
             ],
-            "security_rules": [r.to_dict() for r in SecurityRule.query.all()]
+            "security_rules": [r.to_dict() for r in SecurityRule.query.all()],
+            # --- Añadir Observer IMAP Servers al Export ---
+            "observer_imap_servers": [s.to_dict() for s in ObserverIMAPServer.query.all()],
+            # --- Añadir IMAP2 Servers al Export ---
+            "imap2_servers": [s.to_dict(include_relations=True) for s in IMAPServer2.query.all()]
         }
 
         # --- Añadir Usuarios al Export --- 
@@ -514,6 +519,18 @@ def import_config():
             Filter.query.delete()
             # Borrar reglas de seguridad existentes
             SecurityRule.query.delete()
+            # --- Borrar Observer IMAP y IMAP2 Servers ---
+            from app.models.imap2 import IMAP2TwoFAConfig, imap2_filter, imap2_regex, imap2_linked_imap, imap2_users
+            # Borrar relaciones M2M de IMAP2 primero
+            db.session.execute(imap2_filter.delete())
+            db.session.execute(imap2_regex.delete())
+            db.session.execute(imap2_linked_imap.delete())
+            db.session.execute(imap2_users.delete())
+            # Borrar configuraciones 2FA de IMAP2
+            IMAP2TwoFAConfig.query.delete()
+            # Borrar servidores IMAP2 y Observer IMAP
+            IMAPServer2.query.delete()
+            ObserverIMAPServer.query.delete()
             db.session.flush() # Aplicar borrados antes de recrear
 
             # 6. Crear nuevos objetos base y mapear IDs viejos a NUEVOS
@@ -623,6 +640,31 @@ def import_config():
                     rule_data_cleaned = {k: v for k, v in rule_data.items() if k != 'id'}
                     new_rule = SecurityRule(**rule_data_cleaned)
                     db.session.add(new_rule)
+            
+            # --- Crear Observer IMAP Servers ---
+            if observer_imap_data:
+                for obs_data in observer_imap_data:
+                    obs_data_cleaned = {k: v for k, v in obs_data.items() if k not in ['id', 'original_id']}
+                    new_observer = ObserverIMAPServer(**obs_data_cleaned)
+                    db.session.add(new_observer)
+            
+            # --- Crear IMAP2 Servers (sin relaciones M2M todavía) ---
+            imap2_to_create_phase2 = []
+            old_to_new_imap2_ids = {}
+            if imap2_data:
+                for imap2_data_item in imap2_data:
+                    old_imap2_id = imap2_data_item.get('original_id')
+                    # Limpiar datos: excluir IDs y relaciones M2M (se harán en fase 2)
+                    imap2_data_cleaned = {
+                        k: v for k, v in imap2_data_item.items()
+                        if k not in ['original_id', 'filter_ids', 'regex_ids', 'linked_imap_ids', 'allowed_user_ids', 'twofa_configs']
+                    }
+                    new_imap2 = IMAPServer2(**imap2_data_cleaned)
+                    db.session.add(new_imap2)
+                    db.session.flush()
+                    if old_imap2_id is not None and new_imap2.id is not None:
+                        old_to_new_imap2_ids[old_imap2_id] = new_imap2.id
+                        imap2_to_create_phase2.append({'new_obj': new_imap2, 'old_data': imap2_data_item})
             
             db.session.flush() 
             # Llenar mapeo de IDs de servicio
@@ -770,6 +812,73 @@ def import_config():
 
                 db.session.add(user_to_update)
 
+            # --- Vincular Relaciones M2M de IMAP2 Servers ---
+            from app.models.imap2 import IMAP2TwoFAConfig, imap2_filter, imap2_regex, imap2_linked_imap, imap2_users
+            from app.models.imap import IMAPServer
+            for item in imap2_to_create_phase2:
+                imap2_data_item = item['old_data']
+                new_imap2_id = item['new_obj'].id
+                imap2_to_update = db.session.get(IMAPServer2, new_imap2_id)
+                if not imap2_to_update:
+                    continue
+                
+                # Vincular Filtros
+                old_filter_ids = imap2_data_item.get('filter_ids', [])
+                filters_to_link = []
+                for old_f_id in old_filter_ids:
+                    new_f_id = old_to_new_filter_ids.get(old_f_id)
+                    if new_f_id:
+                        filter_obj = db.session.get(Filter, new_f_id)
+                        if filter_obj:
+                            filters_to_link.append(filter_obj)
+                imap2_to_update.filters = filters_to_link
+                
+                # Vincular Regex
+                old_regex_ids = imap2_data_item.get('regex_ids', [])
+                regexes_to_link = []
+                for old_r_id in old_regex_ids:
+                    new_r_id = old_to_new_regex_ids.get(old_r_id)
+                    if new_r_id:
+                        regex_obj = db.session.get(RegexPattern, new_r_id)
+                        if regex_obj:
+                            regexes_to_link.append(regex_obj)
+                imap2_to_update.regexes = regexes_to_link
+                
+                # Vincular IMAP Servers vinculados (linked_imap_servers)
+                # Nota: Los IMAP servers vinculados deben existir en la base de datos
+                # Si no existen, se saltan (no se crean automáticamente)
+                old_linked_imap_ids = imap2_data_item.get('linked_imap_ids', [])
+                linked_imaps_to_link = []
+                for old_imap_id in old_linked_imap_ids:
+                    # Los IMAP servers vinculados no se recrean, solo se vinculan si existen
+                    imap_obj = db.session.get(IMAPServer, old_imap_id)
+                    if imap_obj:
+                        linked_imaps_to_link.append(imap_obj)
+                imap2_to_update.linked_imap_servers = linked_imaps_to_link
+                
+                # Vincular Usuarios permitidos
+                old_allowed_user_ids = imap2_data_item.get('allowed_user_ids', [])
+                users_to_link = []
+                for old_u_id in old_allowed_user_ids:
+                    new_u_id = old_to_new_user_ids.get(old_u_id)
+                    if new_u_id:
+                        user_obj = db.session.get(User, new_u_id)
+                        if user_obj:
+                            users_to_link.append(user_obj)
+                imap2_to_update.allowed_users = users_to_link
+                
+                # Crear configuraciones 2FA
+                twofa_configs_data = imap2_data_item.get('twofa_configs', [])
+                for twofa_data in twofa_configs_data:
+                    new_twofa = IMAP2TwoFAConfig(
+                        imap_server_id=new_imap2_id,
+                        secret_key=twofa_data.get('secret_key'),
+                        emails=twofa_data.get('emails'),
+                        is_enabled=twofa_data.get('is_enabled', True)
+                    )
+                    db.session.add(new_twofa)
+                
+                db.session.add(imap2_to_update)
 
             db.session.commit()
 

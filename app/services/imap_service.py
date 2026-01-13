@@ -123,6 +123,11 @@ def delete_imap_server(server_id, model_cls=IMAPServer):
         srv.regexes.clear()
         db.session.flush()  # Aplicar cambios antes de eliminar
     
+    # Si es IMAPServer2, limpiar también relaciones M2M con usuarios (aunque CASCADE debería hacerlo)
+    if hasattr(srv, 'allowed_users'):
+        srv.allowed_users.clear()
+        db.session.flush()  # Aplicar cambios antes de eliminar
+    
     # Si es IMAPServer2 y tiene fondo personalizado, eliminarlo del sistema de archivos
     if hasattr(srv, 'background_image') and srv.background_image:
         try:

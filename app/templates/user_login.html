@@ -50,7 +50,8 @@
         >
           Ingresar
         </button>
-        <!-- Botón Volver a la Búsqueda, también redondeado -->
+        <!-- Botón Volver a la Búsqueda, solo visible si el acceso libre está habilitado -->
+        {% if public_access_enabled == 'true' %}
         <button
           id="btnVolverBusquedaUserLogin"
           type="button"
@@ -59,6 +60,7 @@
         >
           Volver a la Búsqueda
         </button>
+        {% endif %}
       </div>
     </form>
   </div>

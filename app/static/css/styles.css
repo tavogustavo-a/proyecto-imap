@@ -743,10 +743,21 @@ noscript p {
   margin: 2rem auto;
 }
 
+/* Sobrescribir estilos para la página de cambiar credenciales */
+.change-creds-card {
+  max-width: 750px !important;
+  margin: 0.001rem auto !important;
+}
+
+@media (max-width: 768px) {
+  .change-creds-card {
+    margin: 0.001rem auto !important;
+  }
+}
+
 .form-input-block {
   display: block;
   width: 100%; /* Ocupa todo el ancho */
-  margin-bottom: 1rem;
   /* Hereda padding, border, etc. de reglas generales de input */
 }
 

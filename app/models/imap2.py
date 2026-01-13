@@ -84,6 +84,38 @@ class IMAPServer2(db.Model):
         lazy="dynamic"
     )
 
+    def to_dict(self, include_relations=False):
+        """Serializa el objeto IMAPServer2 a un diccionario para exportación."""
+        data = {
+            'original_id': self.id,
+            'description': self.description,
+            'host': self.host,
+            'port': self.port,
+            'username': self.username,
+            'password_enc': self.password_enc,
+            'enabled': self.enabled,
+            'folders': self.folders,
+            'route_path': self.route_path,
+            'paragraph': self.paragraph,
+            'background_image': self.background_image
+        }
+        if include_relations:
+            # Exportar IDs de relaciones Many-to-Many
+            data['filter_ids'] = [f.id for f in self.filters]
+            data['regex_ids'] = [r.id for r in self.regexes]
+            data['linked_imap_ids'] = [imap.id for imap in self.linked_imap_servers]
+            data['allowed_user_ids'] = [u.id for u in self.allowed_users]
+            # Exportar configuraciones 2FA
+            data['twofa_configs'] = [
+                {
+                    'secret_key': config.secret_key,
+                    'emails': config.emails,
+                    'is_enabled': config.is_enabled
+                }
+                for config in self.twofa_configs
+            ]
+        return data
+
     def __repr__(self):
         return f"<IMAPServer2 {self.host}:{self.port} route={self.route_path}>"
 

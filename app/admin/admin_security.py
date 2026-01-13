@@ -290,10 +290,25 @@ def change_creds_form():
         return redirect(url_for("admin_bp.dashboard"))
 
     if request.method == "GET":
-        return render_template("change_creds_form.html", admin_user=admin_user)
+        from app.admin.site_settings import get_site_setting
+        # Inicializar acceso libre por defecto si no existe
+        if get_site_setting('public_access_enabled') is None:
+            from app.admin.site_settings import set_site_setting
+            set_site_setting('public_access_enabled', 'true')
+        # Obtener el valor actual para pasarlo a la plantilla
+        public_access_enabled = get_site_setting('public_access_enabled', 'true')
+        return render_template("change_creds_form.html", admin_user=admin_user, public_access_enabled=public_access_enabled)
 
     new_password = request.form.get("new_password", "").strip()
     new_email = request.form.get("new_email", "").strip()
+
+    # Inicializar acceso libre por defecto si no existe
+    from app.admin.site_settings import get_site_setting, set_site_setting
+    if get_site_setting('public_access_enabled') is None:
+        set_site_setting('public_access_enabled', 'true')
+
+    # Inicializar acceso libre por defecto si no existe (ya movido arriba en GET)
+    # No es necesario aquí porque ya se hace en GET
 
     if new_password:
         admin_user.password = generate_password_hash(new_password)
@@ -519,3 +534,34 @@ def resend_2fa_code_for_creds():
     except Exception as e:
         current_app.logger.error(f"Error general en resend_2fa_code_for_creds: {e}", exc_info=True)
         return jsonify({"status": "error", "message": "Error interno del servidor"}), 500
+
+# Decorator para excluir rutas del CSRF (para AJAX)
+def csrf_exempt_route(func):
+    """Decorator para excluir rutas del CSRF"""
+    func._csrf_exempt = True
+    return func
+
+@admin_bp.route("/toggle_public_access", methods=["POST"])
+@csrf_exempt_route
+@admin_required
+def toggle_public_access():
+    """Toggle el acceso público a la página principal"""
+    from app.admin.site_settings import get_site_setting, set_site_setting
+    
+    try:
+        data = request.get_json()
+        enabled = data.get('enabled', 'true')
+        
+        # Validar que sea 'true' o 'false'
+        if enabled not in ['true', 'false']:
+            return jsonify({"status": "error", "message": "Valor inválido"}), 400
+        
+        set_site_setting('public_access_enabled', enabled)
+        
+        return jsonify({
+            "status": "ok",
+            "message": f"Acceso libre {'habilitado' if enabled == 'true' else 'deshabilitado'} correctamente",
+            "enabled": enabled
+        }), 200
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500

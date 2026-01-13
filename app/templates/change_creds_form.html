@@ -1,23 +1,23 @@
 <!-- app/templates/change_creds_form.html -->
 {% extends "base.html" %}
 {% block content %}
-<div class="admin-card form-container-narrow text-center">
+<div class="admin-card change-creds-card text-center">
   <h2 class="text-center">Cambiar Credenciales del Admin</h2>
-  <p class="text-center">Has verificado 2FA correctamente. Ingresa los campos que quieras cambiar (contraseña o correo). 
+  <p class="text-center">Ingresa los campos que quieras cambiar (contraseña o correo). 
   El correo será usado para recuperación y OTP.</p>
 
   <form method="POST" class="d-flex flex-column align-items-center gap-1">
     <!-- Campo oculto para el CSRF Token (SeaSurf) -->
     <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
 
-    <!-- Campo para la nueva contraseña (opcional) -->
+    <!-- Campo para la nueva contraseña -->
     <div class="d-flex flex-column align-items-center w-100 otp-input-container">
-      <label for="new_password">Nueva Contraseña (opcional):</label>
+      <label for="new_password" class="sr-only">Nueva Contraseña</label>
       <input 
         type="password" 
         id="new_password"
         name="new_password" 
-        placeholder="Deja vacío para no cambiar"
+        placeholder="Nueva Contraseña (opcional)"
         class="form-input-block w-100"
         autocomplete="new-password"
       >
@@ -25,12 +25,12 @@
 
     <!-- Campo unificado para correo (recuperación + OTP) -->
     <div class="d-flex flex-column align-items-center w-100 otp-input-container">
-      <label for="new_email">Nuevo Correo (opcional):</label>
+      <label for="new_email" class="sr-only">Nuevo Correo</label>
       <input 
         type="email" 
         id="new_email"
         name="new_email" 
-        placeholder="correo@dominio.com"
+        placeholder="Nuevo Correo (opcional)"
         class="form-input-block w-100"
         autocomplete="email"
       >
@@ -47,5 +47,40 @@
       </a>
     </div>
   </form>
+
+  <!-- Sección para controlar acceso libre a la página principal -->
+  <hr class="mt-2 mb-1">
+  <div class="d-flex flex-column align-items-center gap-1">
+    <p class="text-center text-small mb-1">
+      Controla si los usuarios deben iniciar sesión para acceder a la página principal de códigos.
+    </p>
+    <div class="d-flex align-items-center gap-1">
+      <span id="accessControlStatus" class="text-center">
+        {% if public_access_enabled == 'true' %}
+          Acceso libre habilitado
+        {% else %}
+          Acceso libre deshabilitado (requiere login)
+        {% endif %}
+      </span>
+      <button 
+        type="button" 
+        id="togglePublicAccessBtn"
+        class="{% if public_access_enabled == 'true' %}btn-green{% else %}btn-red{% endif %}"
+        data-current-state="{{ public_access_enabled }}"
+        data-toggle-url="{{ url_for('admin_bp.toggle_public_access') }}"
+      >
+        {% if public_access_enabled == 'true' %}
+          Desactivar Acceso Libre
+        {% else %}
+          Activar Acceso Libre
+        {% endif %}
+      </button>
+    </div>
+  </div>
 </div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script src="{{ url_for('static', filename='js/admin_security.js') }}" defer></script>
 {% endblock %}

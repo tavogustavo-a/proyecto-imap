@@ -118,7 +118,9 @@ def login():
         return redirect(url_for("main_bp.home"))
 
     if request.method == "GET":
-        return render_template("user_login.html")
+        from app.admin.site_settings import get_site_setting
+        public_access_enabled = get_site_setting('public_access_enabled', 'true')
+        return render_template("user_login.html", public_access_enabled=public_access_enabled)
 
     # --- INICIO PROCESO POST --- 
     username = request.form.get("username", "").strip()
