@@ -493,6 +493,8 @@ def import_config():
         users_data = config_data.get('users', []) # Obtener datos de usuarios
         security_rules_data = config_data.get('security_rules', [])
         app_secrets_data = config_data.get('app_secrets', [])  # CRÍTICO: Claves de cifrado IMAP
+        observer_imap_data = config_data.get('observer_imap_servers', [])  # Observer IMAP Servers
+        imap2_data = config_data.get('imap2_servers', [])  # IMAP2 Servers
 
         # --- INICIO TRANSACCIÓN 1: Borrar y Crear Objetos Base --- 
         try:
