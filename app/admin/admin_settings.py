@@ -24,6 +24,7 @@ from app.models import (
     SecurityRule,
     IMAPServer2,
 )
+from app.models.settings import AppSecrets
 from app.admin.site_settings import (
     get_site_setting, set_site_setting
 )
@@ -379,7 +380,14 @@ def export_config():
             # --- Añadir Observer IMAP Servers al Export ---
             "observer_imap_servers": [s.to_dict() for s in ObserverIMAPServer.query.all()],
             # --- Añadir IMAP2 Servers al Export ---
-            "imap2_servers": [s.to_dict(include_relations=True) for s in IMAPServer2.query.all()]
+            "imap2_servers": [s.to_dict(include_relations=True) for s in IMAPServer2.query.all()],
+            # --- Añadir AppSecrets (CRÍTICO para descifrar contraseñas IMAP) ---
+            "app_secrets": [
+                {
+                    'key_name': s.key_name,
+                    'key_value': s.key_value
+                } for s in AppSecrets.query.all()
+            ]
         }
 
         # --- Añadir Usuarios al Export --- 
@@ -484,10 +492,30 @@ def import_config():
         regexes_data = config_data.get('regexes', [])
         users_data = config_data.get('users', []) # Obtener datos de usuarios
         security_rules_data = config_data.get('security_rules', [])
+        app_secrets_data = config_data.get('app_secrets', [])  # CRÍTICO: Claves de cifrado IMAP
 
         # --- INICIO TRANSACCIÓN 1: Borrar y Crear Objetos Base --- 
         try:
             admin_username = current_app.config.get("ADMIN_USER")
+            
+            # --- CRÍTICO: Importar AppSecrets PRIMERO (antes de servidores IMAP) ---
+            # Esto es necesario para que las contraseñas encriptadas puedan descifrarse
+            if app_secrets_data:
+                # Borrar app_secrets existentes
+                AppSecrets.query.delete()
+                db.session.flush()
+                
+                # Crear nuevos app_secrets desde el backup
+                for secret_data in app_secrets_data:
+                    new_secret = AppSecrets(
+                        key_name=secret_data.get('key_name'),
+                        key_value=secret_data.get('key_value')
+                    )
+                    db.session.add(new_secret)
+                db.session.flush()
+                current_app.logger.info(f"✅ AppSecrets importados: {len(app_secrets_data)} claves")
+            else:
+                current_app.logger.warning("⚠️  No se encontraron AppSecrets en el archivo de importación. Las contraseñas IMAP pueden no funcionar.")
             # 5. BORRAR CONFIGURACIÓN ACTUAL (Incluyendo Usuarios, EXCEPTO admin)
             # Borrar dependencias primero (como AllowedEmail si tiene FK a User)
             AllowedEmail.query.delete()

@@ -470,7 +470,6 @@ document.addEventListener("DOMContentLoaded", function() {
         if (!contentType || !contentType.includes("application/json")) {
           // Si no es JSON, leer como texto para ver qué devolvió
           return res.text().then(text => {
-            console.error("Respuesta no JSON recibida:", text.substring(0, 200));
             throw new Error("El servidor devolvió HTML en lugar de JSON. ¿Estás autenticado?");
           });
         }
