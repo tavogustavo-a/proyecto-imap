@@ -184,7 +184,7 @@
   </div>
 </div>
 
-<div id="popupRegex" class="popup-base popup-small">
+<div id="popupRegex" class="popup-base popup-small modal-hidden">
   <h4>Vincular Regex</h4>
   <select id="regexSelect" class="select-min-width-200"></select>
   <br><br>
@@ -192,7 +192,7 @@
   <button id="regexLinkCancelBtn" class="popup-button-cancel">Cancelar</button>
 </div>
 
-<div id="popupFilter" class="popup-base popup-small">
+<div id="popupFilter" class="popup-base popup-small modal-hidden">
   <h4>Vincular Filtro</h4>
   <select id="filterSelect" class="select-min-width-200"></select>
   <br><br>
@@ -200,8 +200,8 @@
   <button id="filterLinkCancelBtn" class="popup-button-cancel">Cancelar</button>
 </div>
 
-<div id="iconGridOverlay" class="popup-overlay">
-  <div id="iconGridContainer" class="popup-base popup-medium">
+<div id="iconGridOverlay" class="popup-overlay modal-hidden">
+  <div id="iconGridContainer" class="popup-base popup-medium modal-hidden">
     <h4 class="mt-0">Selecciona un ícono para el servicio</h4>
     <div id="iconGrid" class="popup-grid"></div>
     <button id="closeIconGridBtn" class="popup-button-cancel">
@@ -210,5 +210,5 @@
   </div>
 </div>
 
-    <script src="{{ url_for('static', filename='js/admin_services_list.js') }}?v=20241220-remove-netflix-logs"></script>
+    <script src="{{ url_for('static', filename='js/admin_services_list.js') }}?v=20241220-remove-netflix-logs" defer></script>
 {% endblock %}

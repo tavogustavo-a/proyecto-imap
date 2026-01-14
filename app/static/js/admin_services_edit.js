@@ -46,7 +46,10 @@ document.addEventListener("DOMContentLoaded", function() {
           .then(r=>r.json())
           .then(data=>{
             if(data.status==="ok"){
-              if (aliasPopup) aliasPopup.style.display = 'none'; 
+              if (aliasPopup) {
+                aliasPopup.classList.remove("modal-visible");
+                aliasPopup.classList.add("modal-hidden");
+              } 
               currentServiceIdForAlias=null;
               location.reload();
             } else {
@@ -151,20 +154,10 @@ document.addEventListener("DOMContentLoaded", function() {
       for(let i=1;i<=37;i++){
         const fileName=`stream${i}.png`;
         const div=document.createElement("div");
-        div.style.width="70px";
-        div.style.height="70px";
-        div.style.border="2px solid #ccc";
-        div.style.borderRadius="4px";
-        div.style.background="#f9f9f9";
-        div.style.display="flex";
-        div.style.alignItems="center";
-        div.style.justifyContent="center";
-        div.style.cursor="pointer";
+        div.className = "icon-grid-item";
   
         const img=document.createElement("img");
         img.src=decideIconPath(fileName);
-        img.style.maxWidth="60px";
-        img.style.maxHeight="60px";
         div.appendChild(img);
   
         div.addEventListener("click",()=>{
@@ -268,9 +261,10 @@ document.addEventListener("DOMContentLoaded", function() {
         currentServiceIdForAlias = e.target.getAttribute("data-service-id");
         if(aliasNameInput) aliasNameInput.value="";
 
-        // Mostrar con style.display = 'block'
+        // Mostrar con clases CSS
         if(aliasPopup) { 
-            aliasPopup.style.display = 'block'; 
+            aliasPopup.classList.remove("modal-hidden");
+            aliasPopup.classList.add("modal-visible");
         }
       }
   
@@ -365,15 +359,19 @@ document.addEventListener("DOMContentLoaded", function() {
         if (color) {
             try {
                 if (/^#[0-9A-Fa-f]{3,6}$/.test(color) || /^(rgb|rgba|hsl|hsla)\(/.test(color)) {
-                   item.style.borderLeft = `4px solid ${color}`;
+                   item.style.setProperty('--alias-border-color', color);
+                   item.classList.add('alias-item-border');
                 } else {
-                   item.style.borderLeft = `4px solid #ccc`; // Fallback
+                   item.style.setProperty('--alias-border-color', '#ccc');
+                   item.classList.add('alias-item-border');
                 }
             } catch (e) {
-                item.style.borderLeft = `4px solid #ccc`; // Fallback
+                item.style.setProperty('--alias-border-color', '#ccc');
+                item.classList.add('alias-item-border');
             }
         } else {
-            item.style.borderLeft = `4px solid #ccc`; // Fallback si no hay data
+            item.style.setProperty('--alias-border-color', '#ccc');
+            item.classList.add('alias-item-border');
         }
     });
     // --- Fin aplicar borde --- 
@@ -392,8 +390,9 @@ document.addEventListener("DOMContentLoaded", function() {
         editAliasPopup.classList.remove('popup-visible');
       }
       // Alias Popup
-      if (aliasPopup && aliasPopup.style.display === 'block' && !aliasPopup.contains(event.target) && !event.target.classList.contains('open-alias-popup')) {
-        aliasPopup.style.display = 'none';
+      if (aliasPopup && aliasPopup.classList.contains('modal-visible') && !aliasPopup.contains(event.target) && !event.target.classList.contains('open-alias-popup')) {
+        aliasPopup.classList.remove("modal-visible");
+        aliasPopup.classList.add("modal-hidden");
         currentServiceIdForAlias = null;
       }
     });

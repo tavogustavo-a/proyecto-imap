@@ -4503,3 +4503,67 @@ a.btn-search.btn-rounded:hover {
 .btn-no-transition {
   transition: none !important;
 }
+
+/* Clases para servicios - CSP compliant */
+.service-item-container {
+  margin-bottom: 1rem;
+  position: relative;
+}
+
+.service-item-content {
+  margin: 0.5rem 0;
+}
+
+.service-position-label {
+  color: #666;
+  margin-right: 0.6rem;
+}
+
+.service-icon-wrapper {
+  display: inline-block;
+  margin-right: 0.4rem;
+  vertical-align: middle;
+}
+
+/* Clases para icon grid - CSP compliant */
+.icon-grid-item {
+  width: 70px;
+  height: 70px;
+  border: 2px solid #ccc;
+  border-radius: 4px;
+  background: #f9f9f9;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.icon-grid-item img {
+  max-width: 60px;
+  max-height: 60px;
+}
+
+/* Clases para mostrar/ocultar modales - CSP compliant */
+.modal-hidden {
+  display: none !important;
+}
+
+.modal-visible {
+  display: block !important;
+}
+
+/* Asegurar que popup-base y popup-overlay funcionen con las clases */
+.popup-base.modal-hidden,
+.popup-overlay.modal-hidden {
+  display: none !important;
+}
+
+.popup-base.modal-visible,
+.popup-overlay.modal-visible {
+  display: block !important;
+}
+
+/* Clase para bordes de colores dinámicos usando CSS variables */
+.alias-item-border {
+  border-left: 4px solid var(--alias-border-color, #ccc);
+}

@@ -73,8 +73,10 @@ document.addEventListener("DOMContentLoaded", function() {
       const color2 = newClickColor2.value || "#031faa";
       clickGradientPreview.style.background = `linear-gradient(135deg, ${color1} 0%, ${color2} 100%)`;
       
-      // Sincronizar automáticamente con Pais Netflix
-      syncNetflixColors();
+      // Sincronizar automáticamente con Pais Netflix (solo si existe)
+      if (typeof syncNetflixColors === 'function') {
+        syncNetflixColors();
+      }
     }
   }
 
@@ -85,8 +87,10 @@ document.addEventListener("DOMContentLoaded", function() {
       const color2 = newNormalColor2.value || "#667eea";
       normalGradientPreview.style.background = `linear-gradient(135deg, ${color1} 0%, ${color2} 100%)`;
       
-      // Sincronizar automáticamente con Pais Netflix
-      syncNetflixColors();
+      // Sincronizar automáticamente con Pais Netflix (solo si existe)
+      if (typeof syncNetflixColors === 'function') {
+        syncNetflixColors();
+      }
     }
   }
 
@@ -347,17 +351,28 @@ document.addEventListener("DOMContentLoaded", function() {
 
   // Listener para botón Volver al Panel
   if (btnVolverPanel) {
-    const dashboardUrl = btnVolverPanel.dataset.dashboardUrl;
+    const dashboardUrl = btnVolverPanel.getAttribute("data-dashboard-url");
     if (dashboardUrl) {
       btnVolverPanel.addEventListener("click", () => {
         window.location.href = dashboardUrl;
       });
+    } else {
+      console.error("No se encontró data-dashboard-url en btnVolverPanel");
     }
+  } else {
+    console.error("btnVolverPanel no encontrado");
   }
 
   if (closeIconGridBtn) {
     closeIconGridBtn.addEventListener("click", () => {
-      if (iconGridOverlay) iconGridOverlay.style.display = "none";
+      if (iconGridOverlay) {
+        iconGridOverlay.classList.remove("modal-visible");
+        iconGridOverlay.classList.add("modal-hidden");
+      }
+      if (iconGridContainer) {
+        iconGridContainer.classList.remove("modal-visible");
+        iconGridContainer.classList.add("modal-hidden");
+      }
       currentServiceIdForIcons = null;
     });
   }
@@ -373,27 +388,19 @@ document.addEventListener("DOMContentLoaded", function() {
       return;
     } 
 
-    overlay.style.display = "block";
-    container.style.display = "block";
+    overlay.classList.remove("modal-hidden");
+    overlay.classList.add("modal-visible");
+    container.classList.remove("modal-hidden");
+    container.classList.add("modal-visible");
     grid.innerHTML = "";
 
     for (let i=1; i<=37; i++){
       const fileName = `stream${i}.png`;
       const div = document.createElement("div");
-      div.style.width = "70px";
-      div.style.height = "70px";
-      div.style.border = "2px solid #ccc";
-      div.style.borderRadius = "4px";
-      div.style.background = "#f9f9f9";
-      div.style.display = "flex";
-      div.style.alignItems = "center";
-      div.style.justifyContent = "center";
-      div.style.cursor = "pointer";
+      div.className = "icon-grid-item";
 
       const img = document.createElement("img");
       img.src = decideIconPath(fileName);
-      img.style.maxWidth = "60px";
-      img.style.maxHeight = "60px";
       div.appendChild(img);
 
       div.addEventListener("click", () => {
@@ -417,7 +424,12 @@ document.addEventListener("DOMContentLoaded", function() {
     .then(r=>r.json())
     .then(data=>{
       if (data.status==="ok"){
-        iconGridOverlay.style.display = "none";
+        iconGridOverlay.classList.remove("modal-visible");
+        iconGridOverlay.classList.add("modal-hidden");
+        if (iconGridContainer) {
+          iconGridContainer.classList.remove("modal-visible");
+          iconGridContainer.classList.add("modal-hidden");
+        }
         initServicesList();
       } else {
         alert("Error: " + data.message);
@@ -467,15 +479,22 @@ document.addEventListener("DOMContentLoaded", function() {
   // ------------------ Crear servicio ------------------------
   if (createServiceBtn){
     createServiceBtn.addEventListener("click",()=>{
+      if (!newServiceName) {
+        alert("Error: Campo de nombre no encontrado.");
+        return;
+      }
+      
       const n = newServiceName.value.trim();
-      const c1 = newNormalColor1.value.trim() || "#764ba2";
-      const c2 = newNormalColor2.value.trim() || "#667eea";
-      const click1 = newClickColor1.value.trim() || "#031faa";
-      const click2 = newClickColor2.value.trim() || "#031faa";
+      const c1 = (newNormalColor1 && newNormalColor1.value.trim()) || "#764ba2";
+      const c2 = (newNormalColor2 && newNormalColor2.value.trim()) || "#667eea";
+      const click1 = (newClickColor1 && newClickColor1.value.trim()) || "#031faa";
+      const click2 = (newClickColor2 && newClickColor2.value.trim()) || "#031faa";
+      
       if(!n){
         alert("Ingresa un nombre para el servicio.");
         return;
       }
+      
       const payload = { 
         name: n, 
         border_color: c1,
@@ -483,6 +502,7 @@ document.addEventListener("DOMContentLoaded", function() {
         click_color1: click1,
         click_color2: click2
       };
+      
       fetch("/admin/create_service_ajax",{
         method:"POST",
         headers:{
@@ -501,8 +521,14 @@ document.addEventListener("DOMContentLoaded", function() {
         } else {
           alert("Error: "+data.message);
         }
+      })
+      .catch(err => {
+        console.error("Error al crear servicio:", err);
+        alert("Error de red al crear servicio.");
       });
     });
+  } else {
+    console.error("createServiceBtn no encontrado");
   }
 
   // ------------------ Vincular REGEX (botones "re") ------------------------
@@ -513,7 +539,8 @@ document.addEventListener("DOMContentLoaded", function() {
 
       if(!lastSelectedRegexId){
         alert("No seleccionaste Regex.");
-        popupRegex.style.display="none";
+        popupRegex.classList.remove("modal-visible");
+        popupRegex.classList.add("modal-hidden");
         currentServiceIdForRegex=null;
         return;
       }
@@ -532,7 +559,8 @@ document.addEventListener("DOMContentLoaded", function() {
       .then(r=>r.json())
       .then(data=>{
         if(data.status==="ok"){
-          popupRegex.style.display="none";
+          popupRegex.classList.remove("modal-visible");
+        popupRegex.classList.add("modal-hidden");
           currentServiceIdForRegex=null;
           initServicesList();
         } else {
@@ -542,7 +570,8 @@ document.addEventListener("DOMContentLoaded", function() {
     });
 
     regexLinkCancelBtn.addEventListener("click", ()=>{
-      popupRegex.style.display="none";
+      popupRegex.classList.remove("modal-visible");
+      popupRegex.classList.add("modal-hidden");
       currentServiceIdForRegex=null;
     });
   }
@@ -555,7 +584,8 @@ document.addEventListener("DOMContentLoaded", function() {
 
       if(!lastSelectedFilterId){
         alert("No seleccionaste Filtro.");
-        popupFilter.style.display="none";
+        popupFilter.classList.remove("modal-visible");
+        popupFilter.classList.add("modal-hidden");
         currentServiceIdForFilter=null;
         return;
       }
@@ -574,7 +604,8 @@ document.addEventListener("DOMContentLoaded", function() {
       .then(r=>r.json())
       .then(data=>{
         if(data.status==="ok"){
-          popupFilter.style.display="none";
+          popupFilter.classList.remove("modal-visible");
+        popupFilter.classList.add("modal-hidden");
           currentServiceIdForFilter=null;
           initServicesList();
         } else {
@@ -584,7 +615,8 @@ document.addEventListener("DOMContentLoaded", function() {
     });
 
     filterLinkCancelBtn.addEventListener("click", ()=>{
-      popupFilter.style.display="none";
+      popupFilter.classList.remove("modal-visible");
+      popupFilter.classList.add("modal-hidden");
       currentServiceIdForFilter=null;
     });
   }
@@ -638,7 +670,8 @@ document.addEventListener("DOMContentLoaded", function() {
       if (lastSelectedRegexId) {
         regexSelect.value = lastSelectedRegexId;
       }
-      popupRegex.style.display="block";
+      popupRegex.classList.remove("modal-hidden");
+      popupRegex.classList.add("modal-visible");
     }
     if(target.classList.contains("link-filter-service")){
       e.preventDefault();
@@ -646,7 +679,8 @@ document.addEventListener("DOMContentLoaded", function() {
       if (lastSelectedFilterId) {
         filterSelect.value = lastSelectedFilterId;
       }
-      popupFilter.style.display="block";
+      popupFilter.classList.remove("modal-hidden");
+      popupFilter.classList.add("modal-visible");
     }
     if(target.classList.contains("add-service-icon-btn")){
       e.preventDefault();
@@ -679,20 +713,24 @@ document.addEventListener("DOMContentLoaded", function() {
   // --- Cerrar popups al hacer clic fuera ---
   document.addEventListener('mousedown', function(event) {
     // Regex
-    if (popupRegex && popupRegex.style.display === 'block' && !popupRegex.contains(event.target) && !event.target.classList.contains('link-regex-service')) {
-      popupRegex.style.display = 'none';
+    if (popupRegex && popupRegex.classList.contains('modal-visible') && !popupRegex.contains(event.target) && !event.target.classList.contains('link-regex-service')) {
+      popupRegex.classList.remove("modal-visible");
+      popupRegex.classList.add("modal-hidden");
       currentServiceIdForRegex = null;
     }
     // Filtro
-    if (popupFilter && popupFilter.style.display === 'block' && !popupFilter.contains(event.target) && !event.target.classList.contains('link-filter-service')) {
-      popupFilter.style.display = 'none';
+    if (popupFilter && popupFilter.classList.contains('modal-visible') && !popupFilter.contains(event.target) && !event.target.classList.contains('link-filter-service')) {
+      popupFilter.classList.remove("modal-visible");
+      popupFilter.classList.add("modal-hidden");
       currentServiceIdForFilter = null;
     }
     // Iconos
     const iconGridContainer = document.getElementById('iconGridContainer');
-    if (iconGridOverlay && iconGridOverlay.style.display === 'block' && iconGridContainer && iconGridContainer.style.display === 'block' && !iconGridContainer.contains(event.target) && !event.target.classList.contains('add-service-icon-btn')) {
-      iconGridOverlay.style.display = 'none';
-      iconGridContainer.style.display = 'none';
+    if (iconGridOverlay && iconGridOverlay.classList.contains('modal-visible') && iconGridContainer && iconGridContainer.classList.contains('modal-visible') && !iconGridContainer.contains(event.target) && !event.target.classList.contains('add-service-icon-btn')) {
+      iconGridOverlay.classList.remove("modal-visible");
+      iconGridOverlay.classList.add("modal-hidden");
+      iconGridContainer.classList.remove("modal-visible");
+      iconGridContainer.classList.add("modal-hidden");
       currentServiceIdForIcons = null;
     }
   });
@@ -835,6 +873,7 @@ document.addEventListener("DOMContentLoaded", function() {
           })
         }).then(r => r.json())
       );
+    }
     
     Promise.all(validationPromises)
       .then(results => {
@@ -920,12 +959,12 @@ document.addEventListener("DOMContentLoaded", function() {
         `background-color: ${s.border_color || '#333333'};`;
       
         html += `
-          <div class="admin-card service-item-container" style="margin-bottom:1rem; position: relative;">
+          <div class="admin-card service-item-container">
             <strong>${s.name}</strong>
             <br>
-          <div style="margin:0.5rem 0;">
+          <div class="service-item-content">
             <!-- Posición -->
-            <span style="color:#666; margin-right:0.6rem;">
+            <span class="service-position-label">
               Pos: ${s.position}
             </span>
             <!-- Botón Visibilidad (AHORA CON CLASES) -->
@@ -934,7 +973,7 @@ document.addEventListener("DOMContentLoaded", function() {
             </button>
             <!-- Iconos del servicio (AHORA CON CLASES) -->
             ${s.service_icons && s.service_icons.length>0 ? s.service_icons.map(iconObj => `
-              <span style="display:inline-block; margin-right:0.4rem; vertical-align:middle;">
+              <span class="service-icon-wrapper">
                 <img src="${decideIconPath(iconObj.icon_name)}" class="service-icon-img">
                 <button class="delete-service-icon delete-service-icon-btn" data-icon-id="${iconObj.id}">X</button>
               </span>
@@ -1012,6 +1051,9 @@ document.addEventListener("DOMContentLoaded", function() {
             regexSelect.appendChild(opt);
           });
         }
+      })
+      .catch(err => {
+        console.error("Error al cargar regexes:", err);
       });
 
     }
@@ -1040,6 +1082,9 @@ document.addEventListener("DOMContentLoaded", function() {
             filterSelect.appendChild(opt);
           });
         }
+      })
+      .catch(err => {
+        console.error("Error al cargar filtros:", err);
       });
 
     }
@@ -1060,6 +1105,11 @@ document.addEventListener("DOMContentLoaded", function() {
   }
 
   function initServicesList(){
+    if (!serviceListContainer) {
+      console.error("serviceListContainer no encontrado");
+      return;
+    }
+    
     fetch("/admin/search_services_ajax?query=", {
       method:"GET",
       headers:{ "X-CSRFToken": getCsrfToken() }
@@ -1068,11 +1118,18 @@ document.addEventListener("DOMContentLoaded", function() {
     .then(data=>{
       if(data.status==="ok"){
         serviceListContainer.innerHTML = renderServiceItems(data.services);
+      } else {
+        console.error("Error al cargar servicios:", data.message || "Error desconocido");
       }
+    })
+    .catch(err => {
+      console.error("Error de red al cargar servicios:", err);
     });
 
     // Cargamos regex y filtros para que los selects "re" y "fi" funcionen.
-    loadRegexesAndFilters();
+    if (typeof loadRegexesAndFilters === 'function') {
+      loadRegexesAndFilters();
+    }
   }
 
   // --- Función para actualizar color (Sin cambios) --- 
@@ -1110,10 +1167,15 @@ document.addEventListener("DOMContentLoaded", function() {
     }
     
     syncNetflixColors.timeout = setTimeout(() => {
-      const normalColor1 = newNormalColor1 ? newNormalColor1.value || "#764ba2" : "#764ba2";
-      const normalColor2 = newNormalColor2 ? newNormalColor2.value || "#667eea" : "#667eea";
-      const clickColor1 = newClickColor1 ? newClickColor1.value || "#031faa" : "#031faa";
-      const clickColor2 = newClickColor2 ? newClickColor2.value || "#031faa" : "#031faa";
+      // Verificar que los elementos existan antes de usarlos
+      if (!newNormalColor1 || !newNormalColor2 || !newClickColor1 || !newClickColor2) {
+        return; // Salir silenciosamente si los elementos no existen
+      }
+      
+      const normalColor1 = newNormalColor1.value || "#764ba2";
+      const normalColor2 = newNormalColor2.value || "#667eea";
+      const clickColor1 = newClickColor1.value || "#031faa";
+      const clickColor2 = newClickColor2.value || "#031faa";
 
       const payload = {
         normal_color1: normalColor1,
@@ -1132,14 +1194,14 @@ document.addEventListener("DOMContentLoaded", function() {
       })
       .then(r => r.json())
       .then(data => {
-        if (data.status === "ok") {
-          // Sincronización exitosa
-        } else {
-          // Error en sincronización
+        if (data.status !== "ok") {
+          // Solo loggear errores, no mostrar alertas molestas
+          console.warn("Error sincronizando colores de Netflix:", data.message);
         }
       })
       .catch(err => {
-        // Error de red en sincronización
+        // Error de red en sincronización - ignorar silenciosamente
+        console.warn("Error de red al sincronizar colores de Netflix:", err);
       });
     }, 500); // Debounce de 500ms
   }
@@ -1148,3 +1210,4 @@ document.addEventListener("DOMContentLoaded", function() {
   // Iniciar
   initServicesList();
 }); // Fin DOMContentLoaded
+
