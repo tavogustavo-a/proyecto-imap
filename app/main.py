@@ -20,10 +20,24 @@ def inject_worksheet_access():
         return {"user_has_worksheet_access": dummy_worksheet_access}
 
 
+def is_imap2_accessible(imap_server):
+    """
+    Verifica si un servidor IMAP2 es accesible.
+    Un servidor es accesible si:
+    1. Está habilitado (enabled=True), O
+    2. Tiene al menos un servidor IMAP vinculado habilitado
+    """
+    if imap_server.enabled:
+        return True
+    
+    # Si el servidor principal está deshabilitado, verificar si hay servidores vinculados activos
+    linked_servers = imap_server.linked_imap_servers.filter_by(enabled=True).all()
+    return len(linked_servers) > 0
+
 def get_imap2_by_custom_domain(request):
     """
     Busca un servidor IMAP2 por dominio personalizado.
-    Retorna el servidor si existe, None si no.
+    Retorna el servidor si existe y es accesible, None si no.
     """
     # Obtener el dominio desde el header Host o X-Forwarded-Host (para proxies reversos)
     host_header = request.headers.get('X-Forwarded-Host') or request.headers.get('Host', '')
@@ -34,11 +48,16 @@ def get_imap2_by_custom_domain(request):
     host_domain = host_header.lower().strip().split(':')[0]
     
     # Buscar servidor IMAP2 con este dominio personalizado (comparación case-insensitive)
+    # NO filtrar por enabled aquí, lo verificaremos después
     imap_server_by_domain = IMAPServer2.query.filter(
         db.func.lower(IMAPServer2.custom_domain) == host_domain
-    ).filter_by(enabled=True).first()
+    ).first()
     
-    return imap_server_by_domain
+    # Verificar si es accesible (habilitado o tiene servidores vinculados activos)
+    if imap_server_by_domain and is_imap2_accessible(imap_server_by_domain):
+        return imap_server_by_domain
+    
+    return None
 
 # ✅ NUEVO: Ruta para favicon.ico para evitar error 404
 @main_bp.route('/favicon.ico')
@@ -225,13 +244,19 @@ def dynamic_imap2_route(route_path):
     route_path_with_slash = '/' + route_path if not route_path.startswith('/') else route_path
     
     # Buscar con y sin slash por si acaso
+    # NO filtrar por enabled aquí, lo verificaremos después
     imap_server = IMAPServer2.query.filter(
         (IMAPServer2.route_path == route_path_with_slash) | 
         (IMAPServer2.route_path == route_path)
-    ).filter_by(enabled=True).first()
+    ).first()
     
     if not imap_server:
         # Si no existe, devolver 404
+        abort(404)
+    
+    # Verificar si es accesible (habilitado o tiene servidores vinculados activos)
+    if not is_imap2_accessible(imap_server):
+        # Si no es accesible, devolver 404
         abort(404)
     
     return render_imap2_page(imap_server, session)

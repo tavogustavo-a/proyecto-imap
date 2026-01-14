@@ -134,12 +134,14 @@ def manage_imap2():
     password = request.form.get("password", "")
     folders = request.form.get("folders", "INBOX")
     route_path = request.form.get("route_path", "").strip()
-    paragraph = request.form.get("paragraph", "").strip()
+    # paragraph solo se obtiene al crear nuevos servidores (no se usa al editar)
+    paragraph = request.form.get("paragraph", "").strip() if not server_id else ""
 
     if server_id:
         srv = IMAPServer2.query.get_or_404(server_id)
         update_imap_server(server_id, host, port, username, password, folders, model_cls=IMAPServer2)
-        # Actualizar description, route_path y paragraph
+        # Actualizar description y route_path
+        # NOTA: paragraph NO se actualiza aquí porque tiene su propio formulario separado
         srv.description = description if description else None
         # IMPORTANTE: route_path es ahora obligatorio
         if not route_path:
@@ -151,7 +153,8 @@ def manage_imap2():
             flash(error_msg, "danger")
             return redirect(url_for("admin_bp.edit_imap2", server_id=server_id))
         srv.route_path = route_path
-        srv.paragraph = paragraph if paragraph else None
+        # Preservar el paragraph existente - NO sobrescribirlo
+        # El paragraph se actualiza mediante el endpoint update_imap2_paragraph
         db.session.commit()
         flash(f"Editado servidor IMAP2 {host}:{port}", "info")
     else:

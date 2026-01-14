@@ -1873,6 +1873,62 @@ noscript p {
   word-wrap: break-word;
   text-align: center;
   margin-bottom: 0;
+  /* Asegurar que el contenido nunca se salga del contenedor */
+  overflow: hidden;
+  overflow-wrap: break-word;
+  box-sizing: border-box;
+}
+
+/* Estilos para elementos dentro del párrafo personalizado */
+.main-message-wrapper img {
+  max-width: 100% !important;
+  height: auto !important;
+  object-fit: contain;
+  display: block;
+  margin: 0.5rem auto;
+}
+
+.main-message-wrapper video,
+.main-message-wrapper iframe,
+.main-message-wrapper embed,
+.main-message-wrapper object {
+  max-width: 100% !important;
+  height: auto !important;
+  display: block;
+  margin: 0.5rem auto;
+}
+
+.main-message-wrapper table {
+  max-width: 100% !important;
+  display: block;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  margin: 0.5rem auto;
+}
+
+.main-message-wrapper pre,
+.main-message-wrapper code {
+  max-width: 100% !important;
+  overflow-x: auto;
+  word-wrap: break-word;
+  white-space: pre-wrap;
+  display: block;
+}
+
+.main-message-wrapper div,
+.main-message-wrapper p,
+.main-message-wrapper span,
+.main-message-wrapper a,
+.main-message-wrapper h1,
+.main-message-wrapper h2,
+.main-message-wrapper h3,
+.main-message-wrapper h4,
+.main-message-wrapper h5,
+.main-message-wrapper h6 {
+  max-width: 100% !important;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+  box-sizing: border-box;
 }
 
 /* Overlay opaco para el modal de alias */
