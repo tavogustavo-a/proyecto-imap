@@ -35,9 +35,135 @@ from config import Config
 # Crear la app fuera de main para que los decoradores de comandos la usen
 app = create_app(Config)
 
+def start_scheduler_if_needed():
+    """Inicia el scheduler solo si no está ya iniciado"""
+    global _scheduler, _scheduler_started
+    
+    if _scheduler_started:
+        return
+    
+    # Con Gunicorn y gevent, usar un archivo de bloqueo para asegurar que solo un proceso inicie el scheduler
+    lock_file = '/tmp/scheduler_lock.pid'
+    
+    try:
+        # Intentar crear el archivo de bloqueo
+        import fcntl
+        lock_fd = os.open(lock_file, os.O_CREAT | os.O_WRONLY | os.O_TRUNC)
+        try:
+            fcntl.flock(lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            # Si llegamos aquí, tenemos el bloqueo
+            should_start = True
+        except (IOError, OSError):
+            # Otro proceso ya tiene el bloqueo
+            os.close(lock_fd)
+            should_start = False
+    except (ImportError, AttributeError, OSError):
+        # En Windows o si no hay fcntl, iniciar siempre (para desarrollo)
+        should_start = True
+        lock_fd = None
+    
+    if should_start:
+        try:
+            _scheduler = BackgroundScheduler(executors={"default": ThreadPoolExecutor(max_workers=5)})
+            
+            with app.app_context():
+                # Configurar los mismos jobs que en main()
+                def rotate_imap_keys_job():
+                    pass  # Placeholder
+                
+                _scheduler.add_job(
+                    func=rotate_imap_keys_job,
+                    trigger='cron',
+                    day='1', hour='2', minute='0',
+                    id='auto_rotate_imap_keys',
+                    replace_existing=True
+                )
+                
+                _scheduler.add_job(
+                    func=check_observer_patterns_job,
+                    trigger='interval',
+                    minutes=1,
+                    id='check_observer_patterns',
+                    replace_existing=True,
+                    next_run_time=datetime.now(timezone.utc) + timedelta(seconds=30)
+                )
+                
+                _scheduler.add_job(
+                    func=cleanup_trigger_logs_job,
+                    trigger='interval',
+                    minutes=10,
+                    id='cleanup_trigger_logs',
+                    replace_existing=True,
+                    next_run_time=datetime.now(timezone.utc) + timedelta(minutes=1, seconds=30)
+                )
+                
+                def cleanup_old_sms_messages_job():
+                    with app.app_context():
+                        try:
+                            from app.store.models import SMSMessage, SMSConfig
+                            time_limit = datetime.utcnow() - timedelta(minutes=15)
+                            old_messages = SMSMessage.query.filter(SMSMessage.created_at < time_limit).all()
+                            orphan_messages = db.session.query(SMSMessage).outerjoin(
+                                SMSConfig, SMSMessage.sms_config_id == SMSConfig.id
+                            ).filter(SMSConfig.id.is_(None)).all()
+                            messages_to_delete = list(set(old_messages + orphan_messages))
+                            if messages_to_delete:
+                                for msg in messages_to_delete:
+                                    db.session.delete(msg)
+                                db.session.commit()
+                        except Exception:
+                            db.session.rollback()
+                
+                _scheduler.add_job(
+                    func=cleanup_old_sms_messages_job,
+                    trigger='interval',
+                    minutes=5,
+                    id='cleanup_old_sms_messages',
+                    replace_existing=True,
+                    next_run_time=datetime.now(timezone.utc) + timedelta(minutes=1)
+                )
+            
+            import atexit
+            _scheduler.start()
+            atexit.register(lambda: _scheduler.shutdown() if _scheduler else None)
+            _scheduler_started = True
+            
+            # Escribir PID en el archivo de bloqueo
+            if lock_fd:
+                os.write(lock_fd, str(os.getpid()).encode())
+                os.fsync(lock_fd)
+            
+            # Iniciar Drive Transfer Scheduler
+            from app.store.drive_manager import start_simple_drive_loop
+            start_simple_drive_loop()
+            
+        except Exception as e:
+            # Si hay error, cerrar el archivo de bloqueo si existe
+            if 'lock_fd' in locals() and lock_fd:
+                try:
+                    os.close(lock_fd)
+                    os.unlink(lock_file)
+                except:
+                    pass
+            # Si hay error, no fallar silenciosamente pero continuar
+            import traceback
+            traceback.print_exc()
+    else:
+        # Otro proceso ya tiene el scheduler corriendo
+        if lock_fd:
+            os.close(lock_fd)
+
+# Iniciar scheduler automáticamente al importar el módulo (para Gunicorn)
+start_scheduler_if_needed()
+
 # Restaurar imports de scheduler si se mantiene la rotación de claves
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.executors.pool import ThreadPoolExecutor
+import os
+
+# Variable global para el scheduler
+_scheduler = None
+_scheduler_started = False
 
 warnings.filterwarnings("ignore", category=sqlalchemy.exc.SAWarning)
 

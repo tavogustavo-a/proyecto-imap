@@ -1001,6 +1001,7 @@ def list_filters_ajax():
                 "id": f.id,
                 "sender": f.sender or "",
                 "keyword": f.keyword or "",
+                "description": f.description or "",
                 "allowed": is_allowed
             })
         return jsonify({"status":"ok","filters":ft_data}),200

@@ -344,7 +344,9 @@
               <!-- Columna Filtros -->
               <td>
                 {% if i < all_filters|length %}
-                  <span class="filter-keyword">{{ all_filters[i].keyword }}</span>
+                  <div class="filter-info">
+                    <div class="filter-description"><strong>{{ all_filters[i].description if all_filters[i].description else 'Sin descripción' }}</strong></div>
+                  </div>
                 {% endif %}
               </td>
               <!-- Columna Checkbox Filtros -->

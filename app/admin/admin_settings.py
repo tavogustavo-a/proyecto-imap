@@ -569,6 +569,9 @@ def import_config():
                 for f_data in filters_data:
                     old_id = f_data.get('id') or f_data.get('original_id') # Compatibilidad
                     f_data_cleaned = {k: v for k, v in f_data.items() if k not in ['id', 'original_id']}
+                    # Si no tiene description (filtros antiguos), asignar valor por defecto
+                    if 'description' not in f_data_cleaned or not f_data_cleaned.get('description'):
+                        f_data_cleaned['description'] = 'Sin descripción'
                     new_filter = Filter(**f_data_cleaned) 
                     db.session.add(new_filter)
                     db.session.flush() 

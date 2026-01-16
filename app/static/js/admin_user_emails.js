@@ -690,7 +690,7 @@ document.addEventListener("DOMContentLoaded", function() {
       if (f.allowed) checkbox.checked = true;
       
       const strong = document.createElement('strong');
-      strong.textContent = `(${escapeHtml(f.sender||"?")}) - ${escapeHtml(f.keyword||"?")}`;
+      strong.textContent = escapeHtml(f.description || "Sin descripción");
       
       label.appendChild(checkbox);
       label.appendChild(strong);

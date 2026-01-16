@@ -29,7 +29,6 @@ def create_filter():
     # Obtener el valor de cut_after_html
     cut_after_html = request.form.get("cut_after_html", "").strip() # Obtener valor
     cut_before_html = request.form.get("cut_before_html", "").strip() # Obtener valor
-    description = request.form.get("description", "").strip()
 
     # Verificamos si es el admin => para saltarse el forced logout
     admin_username = current_app.config["ADMIN_USER"]
@@ -37,10 +36,6 @@ def create_filter():
 
     if not sender and not keyword:
         flash("Se requiere al menos un remitente o una palabra clave.", "danger")
-        return redirect(url_for("admin_bp.filters_page"))
-    
-    if not description:
-        flash("La descripción es obligatoria.", "danger")
         return redirect(url_for("admin_bp.filters_page"))
 
     new_filter = FilterModel(
@@ -50,7 +45,6 @@ def create_filter():
         # Asignar el valor obtenido (será None si está vacío gracias a or None en el servicio)
         cut_after_html=cut_after_html,
         cut_before_html=cut_before_html,
-        description=description,
         is_default=True
     )
     db.session.add(new_filter)
@@ -129,13 +123,8 @@ def edit_filter(filter_id):
         enabled = True if request.form.get("enabled") == "on" else False
         cut_after_html = request.form.get("cut_after_html", "").strip()
         cut_before_html = request.form.get("cut_before_html", "").strip()
-        description = request.form.get("description", "").strip()
 
-        if not description:
-            flash("La descripción es obligatoria.", "danger")
-            return render_template("edit_filter.html", filter=f)
-
-        update_filter_service(f, sender, keyword, enabled, cut_after_html, cut_before_html, description)
+        update_filter_service(f, sender, keyword, enabled, cut_after_html, cut_before_html)
         flash("Filtro actualizado.", "success")
         return redirect(url_for("admin_bp.filters_page"))
 
@@ -174,7 +163,6 @@ def search_filters_ajax():
         filters_q = filters_q.filter(
             (FilterModel.sender.ilike(f"%{query}%"))
             | (FilterModel.keyword.ilike(f"%{query}%"))
-            | (FilterModel.description.ilike(f"%{query}%"))
         )
     filters_list = filters_q.all()
 
@@ -186,7 +174,6 @@ def search_filters_ajax():
             "keyword": f.keyword or "",
             "cut_after_html": f.cut_after_html or "",
             "cut_before_html": f.cut_before_html or "",
-            "description": f.description or "",
             "enabled": f.enabled
         })
 
@@ -214,7 +201,6 @@ def toggle_filter_ajax():
                 "keyword": fil.keyword or "",
                 "cut_after_html": fil.cut_after_html or "",
                 "cut_before_html": fil.cut_before_html or "",
-                "description": fil.description or "",
                 "enabled": fil.enabled
             })
         return jsonify({"status": "ok", "filters": data_resp})
@@ -245,7 +231,6 @@ def delete_filter_ajax():
                 "keyword": fil.keyword or "",
                 "cut_after_html": fil.cut_after_html or "",
                 "cut_before_html": fil.cut_before_html or "",
-                "description": fil.description or "",
                 "enabled": fil.enabled
             })
         return jsonify({"status": "ok", "filters": data_resp})

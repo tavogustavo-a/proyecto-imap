@@ -5,14 +5,13 @@ from app.models import FilterModel, User
 # from app.helpers import increment_global_session_revocation_count # Comentar o eliminar import
 from flask import current_app
 
-def create_filter_service(sender, keyword, cut_after_html, cut_before_html, description, skip_revocation=False):
+def create_filter_service(sender, keyword, cut_after_html, cut_before_html, skip_revocation=False):
     new_filter = FilterModel(
         sender=sender,
         keyword=keyword,
         enabled=True,
         cut_after_html=cut_after_html or None,
-        cut_before_html=cut_before_html or None,
-        description=description
+        cut_before_html=cut_before_html or None
     )
     db.session.add(new_filter)
     db.session.commit()
@@ -37,13 +36,12 @@ def create_filter_service(sender, keyword, cut_after_html, cut_before_html, desc
     # Forzar logout global solo si NO es el admin (Lógica eliminada)
 
 
-def update_filter_service(f: FilterModel, sender, keyword, enabled, cut_after_html, cut_before_html, description):
+def update_filter_service(f: FilterModel, sender, keyword, enabled, cut_after_html, cut_before_html):
     f.sender = sender
     f.keyword = keyword
     f.enabled = enabled
     f.cut_after_html = cut_after_html or None
     f.cut_before_html = cut_before_html or None
-    f.description = description
     db.session.commit()
 
     # Forzar logout global solo si NO es el admin (Lógica eliminada)
