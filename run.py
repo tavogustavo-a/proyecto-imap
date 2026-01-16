@@ -32,8 +32,17 @@ load_dotenv()
 from app import create_app, db # Importar db también
 from config import Config
 
+# Restaurar imports de scheduler si se mantiene la rotación de claves
+from apscheduler.schedulers.background import BackgroundScheduler
+from apscheduler.executors.pool import ThreadPoolExecutor
+import os
+
 # Crear la app fuera de main para que los decoradores de comandos la usen
 app = create_app(Config)
+
+# Variables globales para el scheduler
+_scheduler = None
+_scheduler_started = False
 
 def start_scheduler_if_needed():
     """Inicia el scheduler solo si no está ya iniciado"""
@@ -153,17 +162,8 @@ def start_scheduler_if_needed():
         if lock_fd:
             os.close(lock_fd)
 
-# Iniciar scheduler automáticamente al importar el módulo (para Gunicorn)
-start_scheduler_if_needed()
-
-# Restaurar imports de scheduler si se mantiene la rotación de claves
-from apscheduler.schedulers.background import BackgroundScheduler
-from apscheduler.executors.pool import ThreadPoolExecutor
-import os
-
-# Variable global para el scheduler
-_scheduler = None
-_scheduler_started = False
+# NO iniciar scheduler aquí - se iniciará después de que todas las funciones estén definidas
+# Ver línea ~800 donde se llama start_scheduler_if_needed() después de definir todas las funciones
 
 warnings.filterwarnings("ignore", category=sqlalchemy.exc.SAWarning)
 
@@ -794,6 +794,17 @@ def test_alert_email_command(recipient_email, subject, body):
         print(f"Error ejecutando el comando test-alert-email: {e}")
         import traceback
         traceback.print_exc()
+
+# Iniciar scheduler automáticamente después de que todas las funciones estén definidas
+# Esto funciona tanto para ejecución directa como para Gunicorn
+# Usar un enfoque muy seguro: si hay cualquier error, ignorarlo completamente
+try:
+    # Solo intentar iniciar si las funciones necesarias están definidas
+    if 'check_observer_patterns_job' in globals() and 'cleanup_trigger_logs_job' in globals():
+        start_scheduler_if_needed()
+except Exception:
+    # Ignorar completamente cualquier error - la aplicación debe funcionar sin scheduler
+    pass
 
 if __name__ == "__main__":
     main()
