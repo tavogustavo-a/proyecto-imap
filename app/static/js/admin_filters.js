@@ -287,6 +287,7 @@ document.addEventListener("DOMContentLoaded", function() {
         <div class="filter-item">
           <strong>Remitente:</strong> ${f.sender || "(vacío)"}<br>
           <strong>Palabra Clave:</strong> ${f.keyword || "(vacío)"}<br>
+          <strong>Descripción:</strong> ${f.description || "(vacío)"}<br>
           <strong>Cortar DESDE ARRIBA:</strong> ${f.cut_after_html || "(N/A)"}<br>
           <strong>Cortar DESDE ABAJO:</strong> ${f.cut_before_html || "(N/A)"}<br>
           <div class="mt-05"> 

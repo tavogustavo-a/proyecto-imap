@@ -52,6 +52,19 @@
       >
     </div>
 
+    <div class="form-group">
+      <label for="editFilterDescription">Descripción (obligatorio):</label>
+      <input
+        type="text"
+        id="editFilterDescription"
+        name="description"
+        value="{{ filter.description if filter.description else '' }}"
+        class="mb-1"
+        required
+        autocomplete="off"
+      >
+    </div>
+
     <div class="text-center">
       <button type="submit" class="btn-green">Guardar</button>
       <!-- Botón para volver a la lista de Filtros (Refactorizado) -->

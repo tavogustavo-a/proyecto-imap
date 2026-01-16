@@ -1,106 +1,158 @@
 import smtplib
 import random
 from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 from email.header import Header
 import os
 from app.extensions import db
-from flask import current_app
+from flask import current_app, render_template
 
 def send_otp_email(to_email, code):
     """
     Envía un OTP por correo usando las variables de entorno:
     SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASSWORD
-    Asegúrate de que la configuración sea correcta y que
-    el servidor permita conexiones en el puerto indicado.
+    Utiliza una plantilla HTML y una versión de texto plano para mejor entregabilidad.
+    
+    NOTA IMPORTANTE: Los estilos CSS en bloques <style> dentro del HTML del correo
+    son completamente normales y estándar en la industria. NO afectan el SSL/TLS
+    estricto de la conexión SMTP, ya que:
+    - SSL/TLS cifra la CONEXIÓN entre servidores (transporte)
+    - CSS es parte del CONTENIDO del mensaje (no relacionado con SSL)
+    - El CSP estricto aplica solo a páginas web, NO a correos electrónicos
+    Los correos HTML con CSS son la práctica estándar y segura para envío de OTP.
     """
     smtp_host = os.getenv("SMTP_HOST", "smtp.gmail.com")
     smtp_port = int(os.getenv("SMTP_PORT", "465"))
     smtp_user = os.getenv("SMTP_USER", "")
     smtp_password = os.getenv("SMTP_PASSWORD", "")
 
-    subject = "Código OTP"
-    body_text = f"Tu código OTP es: {code}\nPor favor introdúcelo para continuar."
+    if not smtp_user or not smtp_password:
+        current_app.logger.error("SMTP_USER o SMTP_PASSWORD no configurados. No se puede enviar OTP.")
+        return
 
-    msg = MIMEText(body_text, "plain", "utf-8")
+    subject = "Código de verificación - Tu Premium"
+    
+    # Cuerpo en texto plano (fallback)
+    body_text = f"Tu código de verificación es: {code}\n\nPor favor, introdúcelo para continuar. Si no has solicitado este código, ignora este mensaje."
+    
+    # Cuerpo en HTML usando plantilla (estilos definidos en bloque <style>)
+    try:
+        body_html = render_template('email_otp_template.html', code=code)
+    except Exception as e:
+        current_app.logger.error(f"Error renderizando plantilla de email: {e}")
+        body_html = f"<html><body><h2>Código OTP: {code}</h2></body></html>"
+
+    # Crear mensaje multipart
+    msg = MIMEMultipart('alternative')
     msg["Subject"] = str(Header(subject, "utf-8"))
-    msg["From"] = smtp_user
+    msg["From"] = f"Tu Premium <{smtp_user}>"
     msg["To"] = to_email
 
+    # Adjuntar partes
+    msg.attach(MIMEText(body_text, "plain", "utf-8"))
+    msg.attach(MIMEText(body_html, "html", "utf-8"))
+
     try:
-        # Conexión SSL (normal para puerto 465)
         with smtplib.SMTP_SSL(smtp_host, smtp_port) as server:
             server.login(smtp_user, smtp_password)
             server.sendmail(smtp_user, [to_email], msg.as_string())
-
     except Exception as e:
-        # Maneja el error para que se vea en logs y sepas si es credencial o puerto
-        # print(f"No se pudo enviar OTP a {to_email}. Error: {e}")
+        current_app.logger.error(f"No se pudo enviar OTP a {to_email}. Error: {e}")
         raise
 
-# --- FUNCIÓN IMPLEMENTADA usando smtplib --- 
 def send_security_alert_email(to_email, subject, body):
     """
-    Envía un correo electrónico de alerta de seguridad usando smtplib,
-    similar a send_otp_email, con las credenciales SMTP del .env.
+    Envía un correo electrónico de alerta de seguridad usando smtplib.
+    Siempre usa el email de respaldo e ignora el parámetro to_email.
     
-    NOTA: Siempre usa el email de respaldo, ignorando el parámetro to_email.
+    NOTA: Los estilos CSS en bloques <style> son normales en correos HTML
+    y NO afectan el SSL/TLS estricto de la conexión SMTP.
     """
     smtp_host = os.getenv("SMTP_HOST", "smtp.gmail.com")
     smtp_port = int(os.getenv("SMTP_PORT", "465"))
-    smtp_user = os.getenv("SMTP_USER", "")  # Remitente
+    smtp_user = os.getenv("SMTP_USER", "")
     smtp_password = os.getenv("SMTP_PASSWORD", "")
 
     if not smtp_user or not smtp_password:
-        current_app.logger.error("SMTP_USER o SMTP_PASSWORD no configurados en .env. No se puede enviar alerta.")
+        current_app.logger.error("SMTP_USER o SMTP_PASSWORD no configurados. No se puede enviar alerta.")
         return
 
-    # --- SIEMPRE usar email de respaldo, ignorar to_email ---
-    # 1) Intentar SiteSetting 'ADMIN_EMAIL_ALERT' si se está ejecutando dentro de app context
+    # --- Lógica para email de respaldo ---
     fallback_email = None
     try:
         from app.admin.site_settings import get_site_setting
         fallback_email = get_site_setting("ADMIN_EMAIL_ALERT")
     except Exception:
-        # Puede no haber contexto o tabla, ignorar
         fallback_email = None
 
-    # 2) Intentar variable de configuración 'ADMIN_EMAIL'
     if not fallback_email:
-        from flask import current_app as _ca
-        fallback_email = _ca.config.get("ADMIN_EMAIL") if _ca else None
+        fallback_email = current_app.config.get("ADMIN_EMAIL")
 
-    # 3) Intentar correo del usuario administrador definido en ADMIN_USER
     if not fallback_email:
         try:
-            from app.models import User  # Importar aquí para evitar ciclos al inicio
+            from app.models import User
             admin_username_env = os.getenv("ADMIN_USER", "admin")
             admin_user = User.query.filter_by(username=admin_username_env).first()
-            if admin_user and admin_user.email:
+            if admin_user:
                 fallback_email = admin_user.email
         except Exception:
-            # Evitar fallar si no existe contexto o la tabla todavía
             fallback_email = None
 
-    # Usar siempre el email de respaldo, ignorando to_email
     to_email = fallback_email
 
     if not to_email:
-        current_app.logger.error("No se encontró un correo destinatario (ADMIN_EMAIL_ALERT/ADMIN_EMAIL). Alerta no enviada.")
+        current_app.logger.error("No se encontró destinatario para la alerta.")
         return
-    # --- FIN: Siempre usar email de respaldo ---
 
-    msg = MIMEText(body, "plain", "utf-8") # Usar el cuerpo de la alerta
-    msg["Subject"] = str(Header(subject, "utf-8")) # Usar el asunto de la alerta
-    msg["From"] = smtp_user
+    # Crear mensaje multipart para la alerta
+    msg = MIMEMultipart('alternative')
+    msg["Subject"] = str(Header(subject, "utf-8"))
+    msg["From"] = f"Seguridad Tu Premium <{smtp_user}>"
     msg["To"] = to_email
+
+    # Versión texto plano
+    msg.attach(MIMEText(body, "plain", "utf-8"))
+
+    # Versión HTML simple para la alerta (estilos en bloque <style>)
+    alert_html = f"""
+    <html>
+    <head>
+        <style>
+            .alert-box {{
+                font-family: Arial, sans-serif;
+                border: 1px solid #ffcccc;
+                background-color: #fff5f5;
+                padding: 20px;
+                border-radius: 5px;
+            }}
+            .alert-header {{
+                color: #cc0000;
+                font-weight: bold;
+                font-size: 18px;
+                margin-bottom: 10px;
+            }}
+            .alert-footer {{
+                font-size: 11px;
+                color: #777;
+                margin-top: 20px;
+            }}
+        </style>
+    </head>
+    <body>
+        <div class="alert-box">
+            <div class="alert-header">ALERTA DE SEGURIDAD</div>
+            <p>{body.replace('\n', '<br>')}</p>
+            <div class="alert-footer">Este es un mensaje automático del sistema de seguridad.</div>
+        </div>
+    </body>
+    </html>
+    """
+    msg.attach(MIMEText(alert_html, "html", "utf-8"))
 
     try:
         with smtplib.SMTP_SSL(smtp_host, smtp_port) as server:
             server.login(smtp_user, smtp_password)
             server.sendmail(smtp_user, [to_email], msg.as_string())
-
     except Exception as e:
-        current_app.logger.error(f"Error enviando alerta de seguridad a {to_email} vía smtplib: {e}", exc_info=True)
-        # Considerar si se debe lanzar la excepción o solo loguear
-        # raise # Descomentar si quieres que el error se propague
+        current_app.logger.error(f"Error enviando alerta a {to_email}: {e}")
 # --- Fin Función Implementada ---

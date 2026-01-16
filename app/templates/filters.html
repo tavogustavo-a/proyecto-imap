@@ -125,6 +125,7 @@
           <div class="filter-item">
             <strong>Remitente:</strong> {{ f.sender or "(vacío)" }}<br>
             <strong>Palabra:</strong> {{ f.keyword or "(vacío)" }}<br>
+            <strong>Descripción:</strong> {{ f.description if f.description else "(vacío)" }}<br>
             <strong>Cortar DESDE ARRIBA:</strong> {{ f.cut_after_html or "(N/A)" }}<br>
             <strong>Cortar DESDE ABAJO:</strong> {{ f.cut_before_html or "(N/A)" }}
             <div class="mt-05">
@@ -207,6 +208,16 @@
           id="newFilterCutHtmlBefore"
           name="cut_before_html"
           placeholder="Cortar DESDE ABAJO (opcional)"
+          class="d-block mb-05"
+          autocomplete="off"
+        >
+        <label for="newFilterDescription" class="sr-only">Descripción</label>
+        <input
+          type="text"
+          id="newFilterDescription"
+          name="description"
+          placeholder="Descripción (obligatorio)"
+          required
           class="d-block mb-05"
           autocomplete="off"
         >

@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <!-- 
+    NOTA: Los estilos CSS aquí son completamente normales y estándar en correos HTML.
+    NO afectan el SSL/TLS estricto de la conexión SMTP. Los estilos en bloques <style>
+    son la práctica estándar de la industria para correos electrónicos profesionales.
+    -->
+    <style>
+        .email-body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f9f9f9;
+            margin: 0;
+            padding: 40px 0;
+        }
+        .email-wrapper {
+            max-width: 600px;
+            margin: 0 auto;
+            background-color: #ffffff;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.05);
+            border: 1px solid #e1e1e1;
+        }
+        .email-header {
+            background-color: #007bff;
+            color: #ffffff;
+            padding: 20px;
+            text-align: center;
+        }
+        .email-header h2 {
+            margin: 0;
+            font-size: 22px;
+            font-weight: 600;
+        }
+        .email-content {
+            padding: 30px;
+            color: #444444;
+            line-height: 1.6;
+        }
+        .otp-container {
+            background-color: #f8f9fa;
+            border: 2px dashed #007bff;
+            border-radius: 6px;
+            padding: 25px;
+            margin: 25px 0;
+            text-align: center;
+        }
+        .otp-code {
+            font-size: 36px;
+            font-weight: bold;
+            color: #007bff;
+            letter-spacing: 8px;
+            margin: 0;
+        }
+        .email-footer {
+            padding: 20px;
+            background-color: #f1f1f1;
+            color: #888888;
+            font-size: 12px;
+            text-align: center;
+        }
+        .text-center {
+            text-align: center;
+        }
+        .mt-2 {
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body class="email-body">
+    <div class="email-wrapper">
+        <div class="email-header">
+            <h2>Verificación de Identidad</h2>
+        </div>
+        <div class="email-content">
+            <p>Hola,</p>
+            <p>Para completar tu inicio de sesión o confirmar tu acción, utiliza el siguiente código de seguridad de un solo uso (OTP):</p>
+            
+            <div class="otp-container">
+                <p class="otp-code">{{ code }}</p>
+            </div>
+            
+            <p>Este código caducará pronto. Por motivos de seguridad, <strong>no compartas este código con nadie</strong>.</p>
+            
+            <p class="mt-2 text-center">Si no has solicitado este código, puedes ignorar este correo de forma segura.</p>
+        </div>
+        <div class="email-footer">
+            <p>Este es un correo automático, por favor no respondas a este mensaje.</p>
+            <p>&copy; 2026 Tu Premium. Todos los derechos reservados.</p>
+        </div>
+    </div>
+</body>
+</html>

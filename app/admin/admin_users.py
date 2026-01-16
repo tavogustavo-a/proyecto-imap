@@ -1139,6 +1139,9 @@ def update_permissions_bulk_ajax():
                 errors.append(f"No se pueden modificar permisos del usuario admin")
                 continue
             
+            # Guardar el estado anterior de can_create_subusers antes de actualizar
+            old_can_create_subusers = user.can_create_subusers
+            
             # Actualizar cada permiso válido
             for perm_key, perm_value in permissions.items():
                 if perm_key in valid_permissions:
@@ -1152,6 +1155,23 @@ def update_permissions_bulk_ajax():
             if user.is_support:
                 user.can_chat = False
                 user.can_manage_subusers = False
+            
+            # ✅ INICIALIZAR DEFAULTS: Si se activa can_create_subusers por primera vez,
+            # copiar todos los regex y filtros permitidos a los defaults
+            if not old_can_create_subusers and user.can_create_subusers:
+                # Cargar relaciones necesarias con selectinload
+                from sqlalchemy.orm import selectinload
+                user_with_relations = User.query.options(
+                    selectinload(User.regexes_allowed),
+                    selectinload(User.filters_allowed)
+                ).get(user_id)
+                
+                if user_with_relations:
+                    # Copiar regex y filtros permitidos a los defaults
+                    user_with_relations.default_regexes_for_subusers = list(user_with_relations.regexes_allowed)
+                    user_with_relations.default_filters_for_subusers = list(user_with_relations.filters_allowed)
+                    # Actualizar la referencia del usuario en el loop
+                    user = user_with_relations
             
             updated_count += 1
         

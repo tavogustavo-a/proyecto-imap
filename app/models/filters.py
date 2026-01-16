@@ -10,6 +10,7 @@ class FilterModel(db.Model):
     enabled = db.Column(db.Boolean, default=True)
     cut_after_html = db.Column(db.String(255), nullable=True)
     cut_before_html = db.Column(db.String(255), nullable=True)
+    description = db.Column(db.String(255), nullable=False)
     is_default = db.Column(db.Boolean, nullable=False, server_default='0')
 
     def __repr__(self):
@@ -22,7 +23,8 @@ class FilterModel(db.Model):
             'keyword': self.keyword,
             'enabled': self.enabled,
             'cut_after_html': self.cut_after_html,
-            'cut_before_html': self.cut_before_html
+            'cut_before_html': self.cut_before_html,
+            'description': self.description
         }
 
 class RegexModel(db.Model):

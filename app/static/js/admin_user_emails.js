@@ -561,14 +561,10 @@ document.addEventListener("DOMContentLoaded", function() {
       if (rx.allowed) checkbox.checked = true;
       
       const strong = document.createElement('strong');
-      strong.textContent = escapeHtml(truncateRegexDisplay(rx.pattern));
-      
-      const small = document.createElement('small');
-      small.textContent = `(${escapeHtml(rx.description||"")})`;
+      strong.textContent = escapeHtml(rx.description || 'Sin descripción');
       
       label.appendChild(checkbox);
       label.appendChild(strong);
-      label.appendChild(small);
       itemDiv.appendChild(label);
       regexListContainer.appendChild(itemDiv);
     });
@@ -1066,14 +1062,10 @@ document.addEventListener("DOMContentLoaded", function() {
       if (rx.locked) checkbox.disabled = true;
       
       const strong = document.createElement('strong');
-      strong.textContent = escapeHtml(truncateRegexDisplay(rx.pattern));
-      
-      const small = document.createElement('small');
-      small.textContent = `(${escapeHtml(rx.description||"")})`;
+      strong.textContent = escapeHtml(rx.description || 'Sin descripción');
       
       label.appendChild(checkbox);
       label.appendChild(strong);
-      label.appendChild(small);
       
       if (rx.locked) {
         const em = document.createElement('em');

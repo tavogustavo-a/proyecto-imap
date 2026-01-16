@@ -29,11 +29,15 @@ def create_regex():
     if not pattern:
         flash("El patrón Regex es obligatorio.", "danger")
         return redirect(url_for("admin_bp.regex_page"))
+    
+    if not description:
+        flash("La descripción es obligatoria.", "danger")
+        return redirect(url_for("admin_bp.regex_page"))
 
     new_regex = RegexModel(
         sender=sender if sender else None,
         pattern=pattern,
-        description=description if description else None,
+        description=description,  # Descripción es obligatoria, no puede ser None
         enabled=enabled,
         protected=False, # Los creados por admin no son protegidos por defecto
         is_default=True  # Marcar como predeterminado
@@ -112,6 +116,14 @@ def edit_regex(regex_id):
         pattern = request.form.get("pattern", "").strip()
         description = request.form.get("description", "").strip()
         enabled = True if request.form.get("enabled") == "on" else False
+
+        if not pattern:
+            flash("El patrón Regex es obligatorio.", "danger")
+            return render_template("edit_regex.html", regex=r)
+        
+        if not description:
+            flash("La descripción es obligatoria.", "danger")
+            return render_template("edit_regex.html", regex=r)
 
         update_regex_service(r, sender, pattern, description, enabled)
         flash("Regex actualizado.", "success")

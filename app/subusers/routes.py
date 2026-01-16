@@ -751,6 +751,14 @@ def list_subusers_regex_global():
     parent_allowed_ids = {rx.id for rx in parent_user.regexes_allowed}
     subuser_default_ids = {rx.id for rx in parent_user.default_regexes_for_subusers.all()}
     
+    # Si el usuario tiene can_create_subusers pero los defaults están vacíos,
+    # inicializar automáticamente con todos los regex permitidos
+    if parent_user.can_create_subusers and len(subuser_default_ids) == 0 and len(parent_allowed_ids) > 0:
+        parent_user.default_regexes_for_subusers = list(parent_user.regexes_allowed)
+        db.session.commit()
+        # Recargar los defaults después del commit
+        subuser_default_ids = {rx.id for rx in parent_user.default_regexes_for_subusers.all()}
+    
     items = []
     for rx in all_regexes:
         is_locked = rx.id not in parent_allowed_ids
@@ -862,6 +870,14 @@ def list_subusers_filters_global():
     all_filters = FilterModel.query.order_by(FilterModel.id.asc()).all()
     parent_allowed_ids = {f.id for f in parent_user.filters_allowed}
     subuser_default_ids = {f.id for f in parent_user.default_filters_for_subusers.all()}
+    
+    # Si el usuario tiene can_create_subusers pero los defaults están vacíos,
+    # inicializar automáticamente con todos los filtros permitidos
+    if parent_user.can_create_subusers and len(subuser_default_ids) == 0 and len(parent_allowed_ids) > 0:
+        parent_user.default_filters_for_subusers = list(parent_user.filters_allowed)
+        db.session.commit()
+        # Recargar los defaults después del commit
+        subuser_default_ids = {f.id for f in parent_user.default_filters_for_subusers.all()}
     
     items = []
     for ft in all_filters:
