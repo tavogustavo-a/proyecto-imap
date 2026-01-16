@@ -956,21 +956,15 @@ def upload_imap2_background(imap2_id):
         upload_dir = os.path.join(current_app.root_path, 'static', 'uploads', 'imap2_backgrounds')
         os.makedirs(upload_dir, exist_ok=True)
         
-        # Si ya existe un fondo, eliminarlo primero
-        if imap2_server.background_image:
-            old_file_path = os.path.join(upload_dir, imap2_server.background_image)
-            if os.path.exists(old_file_path):
-                try:
-                    os.remove(old_file_path)
-                except Exception as e:
-                    current_app.logger.warning(f"No se pudo eliminar el archivo anterior: {e}")
+        # Guardar referencia al archivo anterior ANTES de hacer cambios
+        old_background_filename = imap2_server.background_image
         
         # Generar nombre único para el archivo
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
         file_extension = filename.rsplit('.', 1)[1].lower()
         unique_filename = f"imap2_{imap2_id}_{timestamp}.{file_extension}"
         
-        # Guardar el archivo
+        # Guardar el archivo NUEVO primero
         file_path = os.path.join(upload_dir, unique_filename)
         file.save(file_path)
         
@@ -981,7 +975,18 @@ def upload_imap2_background(imap2_id):
         from flask import session as flask_session
         current_user_id = flask_session.get("user_id")
         
+        # Hacer commit PRIMERO para asegurar que la nueva imagen está guardada
         db.session.commit()
+        
+        # DESPUÉS del commit exitoso, eliminar el archivo anterior si existe
+        if old_background_filename and old_background_filename != unique_filename:
+            old_file_path = os.path.join(upload_dir, old_background_filename)
+            if os.path.exists(old_file_path):
+                try:
+                    os.remove(old_file_path)
+                    current_app.logger.info(f"Archivo anterior eliminado: {old_background_filename}")
+                except Exception as e:
+                    current_app.logger.warning(f"No se pudo eliminar el archivo anterior {old_background_filename}: {e}")
         
         # Asegurar que la sesión del usuario actual no se haya perdido después del commit
         if current_user_id:
@@ -999,6 +1004,44 @@ def upload_imap2_background(imap2_id):
         db.session.rollback()
         current_app.logger.error(f"Error al subir fondo de IMAP2: {e}", exc_info=True)
         return jsonify({"status": "error", "message": str(e)}), 400
+
+def cleanup_orphaned_imap2_backgrounds():
+    """Limpia archivos de fondo huérfanos (archivos que no están asociados a ningún servidor IMAP2)"""
+    try:
+        import os
+        from app.models.imap2 import IMAPServer2
+        
+        upload_dir = os.path.join(current_app.root_path, 'static', 'uploads', 'imap2_backgrounds')
+        if not os.path.exists(upload_dir):
+            return 0
+        
+        # Obtener todos los nombres de archivos de fondo que están en uso
+        used_backgrounds = set()
+        for server in IMAPServer2.query.all():
+            if server.background_image:
+                used_backgrounds.add(server.background_image)
+        
+        # Buscar archivos huérfanos
+        orphaned_count = 0
+        for filename in os.listdir(upload_dir):
+            file_path = os.path.join(upload_dir, filename)
+            
+            if not os.path.isfile(file_path):
+                continue
+            
+            # Si el archivo no está en la lista de usados, es huérfano
+            if filename not in used_backgrounds:
+                try:
+                    os.remove(file_path)
+                    orphaned_count += 1
+                    current_app.logger.info(f"Archivo huérfano eliminado: {filename}")
+                except Exception as e:
+                    current_app.logger.warning(f"No se pudo eliminar archivo huérfano {filename}: {e}")
+        
+        return orphaned_count
+    except Exception as e:
+        current_app.logger.error(f"Error al limpiar fondos huérfanos: {e}", exc_info=True)
+        return 0
 
 @admin_bp.route("/imap2/<int:imap2_id>/delete_background", methods=["POST"])
 @admin_required
@@ -1045,6 +1088,22 @@ def delete_imap2_background(imap2_id):
         db.session.rollback()
         current_app.logger.error(f"Error al eliminar fondo de IMAP2: {e}", exc_info=True)
         return jsonify({"status": "error", "message": str(e)}), 400
+
+@admin_bp.route("/imap2/cleanup_orphaned_backgrounds", methods=["POST"])
+@admin_required
+@csrf_exempt_route
+def cleanup_orphaned_imap2_backgrounds_route():
+    """Ruta para limpiar archivos de fondo huérfanos de IMAP2"""
+    try:
+        orphaned_count = cleanup_orphaned_imap2_backgrounds()
+        return jsonify({
+            "status": "ok",
+            "message": f"Limpieza completada. Se eliminaron {orphaned_count} archivo(s) huérfano(s).",
+            "orphaned_count": orphaned_count
+        }), 200
+    except Exception as e:
+        current_app.logger.error(f"Error al limpiar fondos huérfanos: {e}", exc_info=True)
+        return jsonify({"status": "error", "message": str(e)}), 500
 
 @admin_bp.route("/imap2/<int:imap2_id>/search_users_ajax", methods=["GET"])
 @admin_required

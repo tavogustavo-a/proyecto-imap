@@ -58,3 +58,9 @@ migrations/script.py.mako
 # Backups
 backups/
 *.backup
+
+# Uploads de usuarios (imágenes, archivos subidos)
+app/static/uploads/
+!app/static/uploads/.gitkeep
+app/store/static/uploads/
+!app/store/static/uploads/.gitkeep

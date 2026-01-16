@@ -59,7 +59,21 @@ document.addEventListener("DOMContentLoaded", function() {
       const br = document.createElement("br");
       div.appendChild(br);
       
+      // Host
+      const emHost = document.createElement("em");
+      emHost.textContent = "Host: ";
+      div.appendChild(emHost);
+      div.appendChild(document.createTextNode(escapeHtml(s.host || "")));
+      
+      // Puerto
+      div.appendChild(document.createTextNode(" | "));
+      const emPort = document.createElement("em");
+      emPort.textContent = "Puerto: ";
+      div.appendChild(emPort);
+      div.appendChild(document.createTextNode(escapeHtml(s.port || "993")));
+      
       // Carpetas
+      div.appendChild(document.createTextNode(" | "));
       const emFolders = document.createElement("em");
       emFolders.textContent = "Carpetas: ";
       const foldersText = document.createTextNode(escapeHtml(s.folders || "INBOX"));
@@ -350,5 +364,56 @@ document.addEventListener("DOMContentLoaded", function() {
   function getCsrfToken() {
     const csrfMeta = document.querySelector('meta[name="csrf_token"]');
     return csrfMeta ? csrfMeta.getAttribute("content") : "";
+  }
+
+  // Detección automática de host IMAP basado en el email
+  const usernameInput = document.getElementById("imapUsername");
+  const hostInput = document.getElementById("imapHost");
+  
+  if (usernameInput && hostInput) {
+    function detectImapHostFromEmail(email) {
+      if (!email || !email.includes("@")) {
+        return null;
+      }
+      
+      const emailLower = email.toLowerCase().trim();
+      const domain = emailLower.split("@")[1].split("+")[0].trim();
+      
+      const domainToHost = {
+        "gmail.com": "imap.gmail.com",
+        "outlook.com": "outlook.office365.com",
+        "hotmail.com": "outlook.office365.com",
+        "live.com": "outlook.office365.com",
+        "yahoo.com": "imap.mail.yahoo.com",
+        "yahoo.es": "imap.mail.yahoo.com",
+        "icloud.com": "imap.mail.me.com",
+        "me.com": "imap.mail.me.com",
+        "mac.com": "imap.mail.me.com"
+      };
+      
+      return domainToHost[domain] || null;
+    }
+    
+    usernameInput.addEventListener("blur", function() {
+      const email = this.value.trim();
+      if (email && !hostInput.value.trim()) {
+        const detectedHost = detectImapHostFromEmail(email);
+        if (detectedHost) {
+          hostInput.value = detectedHost;
+          hostInput.placeholder = "Host (detectado automáticamente)";
+        }
+      }
+    });
+    
+    usernameInput.addEventListener("input", function() {
+      const email = this.value.trim();
+      if (email && !hostInput.value.trim()) {
+        const detectedHost = detectImapHostFromEmail(email);
+        if (detectedHost) {
+          hostInput.value = detectedHost;
+          hostInput.placeholder = "Host (detectado automáticamente)";
+        }
+      }
+    });
   }
 }); 

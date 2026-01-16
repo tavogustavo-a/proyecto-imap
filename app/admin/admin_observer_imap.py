@@ -31,16 +31,60 @@ def _update_server(server_id, host, port, username, password, folders, descripti
 
 # ---------- Rutas ----------
 
+def _detect_imap_host_from_email(email_address):
+    """
+    Detecta automáticamente el host IMAP basándose en el dominio del email.
+    Retorna el host IMAP apropiado o None si no se puede detectar.
+    """
+    if not email_address:
+        return None
+    
+    email_lower = email_address.lower().strip()
+    
+    # Mapeo de dominios comunes a sus hosts IMAP
+    domain_to_host = {
+        'gmail.com': 'imap.gmail.com',
+        'outlook.com': 'outlook.office365.com',
+        'hotmail.com': 'outlook.office365.com',
+        'live.com': 'outlook.office365.com',
+        'yahoo.com': 'imap.mail.yahoo.com',
+        'yahoo.es': 'imap.mail.yahoo.com',
+        'icloud.com': 'imap.mail.me.com',
+        'me.com': 'imap.mail.me.com',
+        'mac.com': 'imap.mail.me.com',
+    }
+    
+    # Extraer dominio del email
+    if '@' in email_lower:
+        domain = email_lower.split('@')[1].split('+')[0].strip()  # Manejar alias como user+alias@gmail.com
+        return domain_to_host.get(domain)
+    
+    return None
+
 @admin_bp.route("/observer_manage_imap", methods=["POST"])
 @admin_required
 def observer_manage_imap():
     server_id = request.form.get("server_id")
     description = request.form.get("description", "").strip() or None
-    host = request.form.get("host", "")
+    host = request.form.get("host", "").strip()
     port = request.form.get("port", 993)
-    username = request.form.get("username", "")
+    username = request.form.get("username", "").strip()
     password = request.form.get("password", "")
     folders = request.form.get("folders", "INBOX")
+
+    # Si el host está vacío pero hay username, intentar detectar automáticamente
+    if not host and username:
+        detected_host = _detect_imap_host_from_email(username)
+        if detected_host:
+            host = detected_host
+        else:
+            flash("No se pudo detectar automáticamente el host IMAP. Por favor, ingresa el host manualmente (ej: imap.gmail.com).", "warning")
+            return redirect(url_for("admin_bp.security_rules_page"))
+    
+    # Validar que el host no esté vacío
+    if not host:
+        flash("El host del servidor IMAP es obligatorio.", "danger")
+        return redirect(url_for("admin_bp.security_rules_page"))
 
     try:
         if server_id:

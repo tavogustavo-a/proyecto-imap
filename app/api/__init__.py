@@ -280,9 +280,9 @@ def get_2fa_code_for_email(email):
                 matching_config = cfg
                 break
         
-        # Si no hay configuración 2FA para este correo, devolver error
+        # Si no hay configuración 2FA para este correo, devolver 204 (No Content) en lugar de 404
         if not matching_config:
-            return jsonify({"error": "No hay configuración 2FA para este correo"}), 404
+            return "", 204
         
         # SEGUNDO: Validar permisos del usuario (MISMA LÓGICA QUE SMS Y CORREOS NORMALES)
         user_id = session.get("user_id")
@@ -582,9 +582,9 @@ def get_imap2_2fa_code_for_email(imap_server_id, email):
                 matching_config = cfg
                 break
         
-        # Si no hay configuración 2FA para este correo en este servidor, devolver 404
+        # Si no hay configuración 2FA para este correo en este servidor, devolver 204 (No Content) en lugar de 404
         if not matching_config:
-            return jsonify({"error": "No hay configuración 2FA para este correo en este servidor"}), 404
+            return "", 204
         
         # Generar código TOTP (sin validar permisos, ya que es para páginas dinámicas públicas)
         totp = pyotp.TOTP(matching_config.secret_key)

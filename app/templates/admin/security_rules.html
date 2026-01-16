@@ -95,7 +95,7 @@
     {% for s in observer_servers %}
       <div class="imap-item mb-1">
         <strong>Usuario: {{ s.username }}</strong><br>
-        <em>Carpetas:</em> {{ s.folders }}{% if s.description %} | <em>Descripción:</em> {{ s.description }}{% endif %}
+        <em>Host:</em> {{ s.host }} | <em>Puerto:</em> {{ s.port }} | <em>Carpetas:</em> {{ s.folders }}{% if s.description %} | <em>Descripción:</em> {{ s.description }}{% endif %}
         <div class="mt-05">
           <form action="{{ url_for('admin_bp.observer_test_imap', server_id=s.id) }}" method="POST" class="d-inline">
             <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
@@ -132,14 +132,14 @@
     <!-- Fila 1: Host y Puerto -->
     <div class="d-flex gap-05 mb-05 align-items-center">
       <label for="imapHost" class="sr-only">Host</label>
-      <input type="text" id="imapHost" name="host" placeholder="Host" required class="flex-grow-1" autocomplete="off">
+      <input type="text" id="imapHost" name="host" placeholder="Host (se detecta automáticamente)" class="flex-grow-1" autocomplete="off">
       <label for="imapPort" class="sr-only">Puerto</label>
       <input type="number" id="imapPort" name="port" value="993" class="imap2-port-input" autocomplete="off">
     </div>
     <!-- Fila 2: Usuario y Contraseña -->
     <div class="d-flex gap-05 mb-05 align-items-center">
       <label for="imapUsername" class="sr-only">Usuario</label>
-      <input type="text" id="imapUsername" name="username" placeholder="Usuario" required class="flex-grow-1" autocomplete="username">
+      <input type="text" id="imapUsername" name="username" placeholder="Usuario (ej: usuario@gmail.com)" required class="flex-grow-1" autocomplete="username">
       <label for="imapPassword" class="sr-only">Password</label>
       <input type="password" id="imapPassword" name="password" placeholder="Password" class="flex-grow-1" autocomplete="current-password">
     </div>

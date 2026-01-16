@@ -1,7 +1,6 @@
 # app/services/imap_service.py
 
 import ssl
-import traceback
 import os
 from datetime import datetime, timedelta
 from socket import gaierror, timeout
@@ -93,7 +92,7 @@ def test_imap_connection(server_id, model_cls=IMAPServer):
         # traceback.print_exc()
         return False, f"Error de IMAP: {e}"
     except Exception as e: # Captura genérica para otros errores
-        traceback.print_exc() # Loggear este porque es inesperado
+        # No mostrar traceback completo, solo devolver el mensaje de error
         return False, f"Error inesperado durante la conexión: {e}"
 
 def delete_imap_server(server_id, model_cls=IMAPServer):
@@ -156,7 +155,7 @@ def search_imap_with_days(server, to_address, limit_days=2):
     folder_list = server.folders.split(",")
 
     try:
-        with IMAPClient(host=server.host, port=server.port, ssl=True, ssl_context=context) as client:
+        with IMAPClient(host=server.host, port=server.port, ssl=True, ssl_context=context, timeout=30) as client:
             client.login(server.username, password)
 
             for folder_name in folder_list:
@@ -201,7 +200,32 @@ def search_imap_with_days(server, to_address, limit_days=2):
                                 parsed_mail["internal_date"] = internal_date
                             results.append(parsed_mail)
 
-    except Exception as e:
-        traceback.print_exc()
+    except gaierror:
+        # Error de DNS: no se pudo resolver el hostname
+        # Silenciar el error completamente (no loguear)
+        return results
+    except timeout:
+        # Timeout de conexión
+        # Silenciar el error completamente (no loguear)
+        return results
+    except ConnectionRefusedError:
+        # Conexión rechazada
+        # Silenciar el error completamente (no loguear)
+        return results
+    except imap_exceptions.LoginError:
+        # Error de login
+        # Silenciar el error completamente (no loguear)
+        return results
+    except SSLError:
+        # Error de SSL
+        # Silenciar el error completamente (no loguear)
+        return results
+    except imap_exceptions.IMAPClientError:
+        # Otros errores de IMAPClient
+        # Silenciar el error completamente (no loguear)
+        return results
+    except Exception:
+        # Otros errores no esperados - silenciar completamente
+        return results
 
     return results

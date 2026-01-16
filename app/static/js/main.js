@@ -1274,9 +1274,14 @@ document.addEventListener("DOMContentLoaded", function () {
     try {
       const response = await fetch(`/api/imap2/${imapServerId}/2fa/code/${encodeURIComponent(email)}`);
       
+      // Si es 204 (No Content), significa que no hay configuración 2FA (no es un error)
+      if (response.status === 204) {
+        return Promise.resolve(false); // Retornar false para indicar que no hay contenido 2FA
+      }
+      
       // Si la respuesta no es exitosa, manejar el error
       if (!response.ok) {
-        // Si es 404, significa que no hay configuración 2FA (no es un error)
+        // Si es 404, también significa que no hay configuración 2FA (compatibilidad con versiones anteriores)
         if (response.status === 404) {
           return Promise.resolve(false); // Retornar false para indicar que no hay contenido 2FA
         }
@@ -1307,9 +1312,14 @@ document.addEventListener("DOMContentLoaded", function () {
     try {
       const response = await fetch(`/api/2fa/code/${encodeURIComponent(email)}`);
       
+      // Si es 204 (No Content), significa que no hay configuración 2FA (no es un error)
+      if (response.status === 204) {
+        return Promise.resolve(false); // Retornar false para indicar que no hay contenido 2FA
+      }
+      
       // Si la respuesta no es exitosa, manejar el error
       if (!response.ok) {
-        // Si es 404, significa que no hay configuración 2FA (no es un error de permisos)
+        // Si es 404, también significa que no hay configuración 2FA (compatibilidad con versiones anteriores)
         if (response.status === 404) {
           return Promise.resolve(false); // Retornar false para indicar que no hay contenido 2FA
         }

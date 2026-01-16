@@ -42,6 +42,8 @@ def send_security_alert_email(to_email, subject, body):
     """
     Envía un correo electrónico de alerta de seguridad usando smtplib,
     similar a send_otp_email, con las credenciales SMTP del .env.
+    
+    NOTA: Siempre usa el email de respaldo, ignorando el parámetro to_email.
     """
     smtp_host = os.getenv("SMTP_HOST", "smtp.gmail.com")
     smtp_port = int(os.getenv("SMTP_PORT", "465"))
@@ -52,42 +54,40 @@ def send_security_alert_email(to_email, subject, body):
         current_app.logger.error("SMTP_USER o SMTP_PASSWORD no configurados en .env. No se puede enviar alerta.")
         return
 
-    # --- NUEVO: lógica de respaldo para 'to_email' ---
-    if not to_email:
-        # 1) Intentar SiteSetting 'ADMIN_EMAIL_ALERT' si se está ejecutando dentro de app context
+    # --- SIEMPRE usar email de respaldo, ignorar to_email ---
+    # 1) Intentar SiteSetting 'ADMIN_EMAIL_ALERT' si se está ejecutando dentro de app context
+    fallback_email = None
+    try:
+        from app.admin.site_settings import get_site_setting
+        fallback_email = get_site_setting("ADMIN_EMAIL_ALERT")
+    except Exception:
+        # Puede no haber contexto o tabla, ignorar
         fallback_email = None
+
+    # 2) Intentar variable de configuración 'ADMIN_EMAIL'
+    if not fallback_email:
+        from flask import current_app as _ca
+        fallback_email = _ca.config.get("ADMIN_EMAIL") if _ca else None
+
+    # 3) Intentar correo del usuario administrador definido en ADMIN_USER
+    if not fallback_email:
         try:
-            from app.admin.site_settings import get_site_setting
-            fallback_email = get_site_setting("ADMIN_EMAIL_ALERT")
+            from app.models import User  # Importar aquí para evitar ciclos al inicio
+            admin_username_env = os.getenv("ADMIN_USER", "admin")
+            admin_user = User.query.filter_by(username=admin_username_env).first()
+            if admin_user and admin_user.email:
+                fallback_email = admin_user.email
         except Exception:
-            # Puede no haber contexto o tabla, ignorar
+            # Evitar fallar si no existe contexto o la tabla todavía
             fallback_email = None
 
-        # 2) Intentar variable de configuración 'ADMIN_EMAIL'
-        if not fallback_email:
-            from flask import current_app as _ca
-            fallback_email = _ca.config.get("ADMIN_EMAIL") if _ca else None
+    # Usar siempre el email de respaldo, ignorando to_email
+    to_email = fallback_email
 
-        # 3) Intentar correo del usuario administrador definido en ADMIN_USER
-        if not fallback_email:
-            try:
-                from app.models import User  # Importar aquí para evitar ciclos al inicio
-                admin_username_env = os.getenv("ADMIN_USER", "admin")
-                admin_user = User.query.filter_by(username=admin_username_env).first()
-                if admin_user and admin_user.email:
-                    fallback_email = admin_user.email
-            except Exception:
-                # Evitar fallar si no existe contexto o la tabla todavía
-                fallback_email = None
-
-        to_email = fallback_email
-
-        if not to_email:
-            current_app.logger.error("No se encontró un correo destinatario (ADMIN_EMAIL_ALERT/ADMIN_EMAIL). Alerta no enviada.")
-            return
-        else:
-            current_app.logger.warning(f"'to_email' vacío. Usando email de respaldo: {to_email}")
-    # --- FIN NUEVO ---
+    if not to_email:
+        current_app.logger.error("No se encontró un correo destinatario (ADMIN_EMAIL_ALERT/ADMIN_EMAIL). Alerta no enviada.")
+        return
+    # --- FIN: Siempre usar email de respaldo ---
 
     msg = MIMEText(body, "plain", "utf-8") # Usar el cuerpo de la alerta
     msg["Subject"] = str(Header(subject, "utf-8")) # Usar el asunto de la alerta
