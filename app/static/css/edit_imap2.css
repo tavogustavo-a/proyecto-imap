@@ -58,6 +58,17 @@
   color: #111;
 }
 
+.filter-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.filter-description {
+  font-weight: 500;
+  color: #111;
+}
+
 .regex-info {
   display: flex;
   flex-direction: column;

@@ -26,7 +26,13 @@ document.addEventListener("DOMContentLoaded", function() {
       // Deshabilitar el checkbox mientras se procesa
       this.disabled = true;
 
-      fetch('/admin/update_imap2_filter_association_ajax', {
+      // Determinar la ruta según si es admin o usuario
+      const currentPath = window.location.pathname;
+      const filterRoute = currentPath.includes('/manage_my_page/') 
+        ? '/usuario/my_page/update_imap2_filter_association_ajax'
+        : '/admin/update_imap2_filter_association_ajax';
+      
+      fetch(filterRoute, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -71,7 +77,13 @@ document.addEventListener("DOMContentLoaded", function() {
       // Deshabilitar el checkbox mientras se procesa
       this.disabled = true;
 
-      fetch('/admin/update_imap2_regex_association_ajax', {
+      // Determinar la ruta según si es admin o usuario
+      const currentPath = window.location.pathname;
+      const regexRoute = currentPath.includes('/manage_my_page/') 
+        ? '/usuario/my_page/update_imap2_regex_association_ajax'
+        : '/admin/update_imap2_regex_association_ajax';
+      
+      fetch(regexRoute, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

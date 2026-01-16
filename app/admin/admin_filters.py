@@ -29,6 +29,7 @@ def create_filter():
     # Obtener el valor de cut_after_html
     cut_after_html = request.form.get("cut_after_html", "").strip() # Obtener valor
     cut_before_html = request.form.get("cut_before_html", "").strip() # Obtener valor
+    description = request.form.get("description", "").strip() # Obtener descripción
 
     # Verificamos si es el admin => para saltarse el forced logout
     admin_username = current_app.config["ADMIN_USER"]
@@ -38,13 +39,18 @@ def create_filter():
         flash("Se requiere al menos un remitente o una palabra clave.", "danger")
         return redirect(url_for("admin_bp.filters_page"))
 
+    # Validar que description no esté vacío
+    if not description:
+        flash("La descripción del Filtro es obligatoria.", "danger")
+        return redirect(url_for("admin_bp.filters_page"))
+
     new_filter = FilterModel(
         sender=sender if sender else None,
         keyword=keyword if keyword else None,
         enabled=enabled,
-        # Asignar el valor obtenido (será None si está vacío gracias a or None en el servicio)
-        cut_after_html=cut_after_html,
-        cut_before_html=cut_before_html,
+        cut_after_html=cut_after_html if cut_after_html else None,
+        cut_before_html=cut_before_html if cut_before_html else None,
+        description=description,
         is_default=True
     )
     db.session.add(new_filter)
@@ -123,8 +129,14 @@ def edit_filter(filter_id):
         enabled = True if request.form.get("enabled") == "on" else False
         cut_after_html = request.form.get("cut_after_html", "").strip()
         cut_before_html = request.form.get("cut_before_html", "").strip()
+        description = request.form.get("description", "").strip()
 
-        update_filter_service(f, sender, keyword, enabled, cut_after_html, cut_before_html)
+        # Validar que description no esté vacío
+        if not description:
+            flash("La descripción del Filtro es obligatoria.", "danger")
+            return render_template("edit_filter.html", filter=f)
+
+        update_filter_service(f, sender, keyword, enabled, cut_after_html, cut_before_html, description)
         flash("Filtro actualizado.", "success")
         return redirect(url_for("admin_bp.filters_page"))
 

@@ -4,7 +4,7 @@ from flask import render_template, request, flash, redirect, url_for, session, c
 from werkzeug.security import check_password_hash
 from werkzeug.utils import secure_filename
 from datetime import datetime
-from app.models import User, IMAPServer2, IMAPServer
+from app.models import User, IMAPServer2, IMAPServer, FilterModel, RegexModel
 from app.models.imap2 import IMAP2TwoFAConfig
 from app.services.imap_service import create_imap_server, test_imap_connection
 from app.extensions import db
@@ -254,10 +254,27 @@ def manage_my_page(server_id):
     # Obtener el conteo de servidores IMAP vinculados para el template
     linked_imap_count = imap_server.linked_imap_servers.count()
     
+    # Obtener filtros y regexes permitidos para este usuario
+    # Solo los que el usuario tiene permitidos (filters_allowed y regexes_allowed)
+    allowed_filters = [f for f in user.filters_allowed if f.enabled]
+    allowed_regexes = [r for r in user.regexes_allowed if r.enabled]
+    
+    # Ordenar por descripción
+    allowed_filters.sort(key=lambda x: (x.description or '').lower())
+    allowed_regexes.sort(key=lambda x: (x.description or '').lower())
+    
+    # Obtener IDs de filtros y regex asociados a este servidor IMAP2
+    associated_filter_ids = [f.id for f in imap_server.filters]
+    associated_regex_ids = [r.id for r in imap_server.regexes]
+    
     return render_template(
         "manage_my_page.html",
         imap_server=imap_server,
-        linked_imap_count=linked_imap_count
+        linked_imap_count=linked_imap_count,
+        all_filters=allowed_filters,
+        all_regexes=allowed_regexes,
+        associated_filter_ids=associated_filter_ids,
+        associated_regex_ids=associated_regex_ids
     )
 
 @user_auth_bp.route("/my_pages", methods=["GET"])
@@ -1022,3 +1039,115 @@ def toggle_my_page_imap():
     except Exception as e:
         db.session.rollback()
         return jsonify({"status": "error", "message": str(e)}), 400
+
+@user_auth_bp.route("/my_page/update_imap2_filter_association_ajax", methods=["POST"])
+@login_required
+@csrf_exempt_route
+def update_my_page_imap2_filter_association_ajax():
+    """Actualiza la asociación de un filtro con un servidor IMAP2 (para usuarios)"""
+    try:
+        # Verificar sesión
+        if 'logged_in' not in session or 'is_user' not in session:
+            return jsonify({"status": "error", "message": "Debes iniciar sesión"}), 401
+        
+        user_id = session.get("user_id")
+        if not user_id:
+            return jsonify({"status": "error", "message": "Debes iniciar sesión"}), 401
+        
+        user = User.query.get(user_id)
+        if not user:
+            return jsonify({"status": "error", "message": "Usuario no encontrado"}), 404
+        
+        data = request.get_json()
+        server_id = data.get("server_id")
+        filter_id = data.get("filter_id")
+        is_checked = data.get("checked", False)
+
+        if not server_id or not filter_id:
+            return jsonify({"status": "error", "message": "Faltan parámetros requeridos"}), 400
+
+        # Obtener el servidor IMAP2
+        imap_server = IMAPServer2.query.get_or_404(server_id)
+        
+        # Verificar que el usuario tenga permiso para gestionar esta página
+        if user not in imap_server.allowed_users.all():
+            return jsonify({"status": "error", "message": "No tienes permiso para gestionar esta página"}), 403
+        
+        # Obtener el filtro
+        filter_obj = FilterModel.query.get_or_404(filter_id)
+        
+        # Verificar que el usuario tenga permiso para usar este filtro
+        if filter_obj not in user.filters_allowed:
+            return jsonify({"status": "error", "message": "No tienes permiso para usar este filtro"}), 403
+
+        if is_checked:
+            # Añadir asociación si no existe
+            if filter_obj not in imap_server.filters:
+                imap_server.filters.append(filter_obj)
+        else:
+            # Remover asociación si existe
+            if filter_obj in imap_server.filters:
+                imap_server.filters.remove(filter_obj)
+
+        db.session.commit()
+        return jsonify({"status": "ok", "message": "Asociación actualizada correctamente"})
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Error al actualizar asociación filtro-IMAP2: {e}", exc_info=True)
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+@user_auth_bp.route("/my_page/update_imap2_regex_association_ajax", methods=["POST"])
+@login_required
+@csrf_exempt_route
+def update_my_page_imap2_regex_association_ajax():
+    """Actualiza la asociación de un regex con un servidor IMAP2 (para usuarios)"""
+    try:
+        # Verificar sesión
+        if 'logged_in' not in session or 'is_user' not in session:
+            return jsonify({"status": "error", "message": "Debes iniciar sesión"}), 401
+        
+        user_id = session.get("user_id")
+        if not user_id:
+            return jsonify({"status": "error", "message": "Debes iniciar sesión"}), 401
+        
+        user = User.query.get(user_id)
+        if not user:
+            return jsonify({"status": "error", "message": "Usuario no encontrado"}), 404
+        
+        data = request.get_json()
+        server_id = data.get("server_id")
+        regex_id = data.get("regex_id")
+        is_checked = data.get("checked", False)
+
+        if not server_id or not regex_id:
+            return jsonify({"status": "error", "message": "Faltan parámetros requeridos"}), 400
+
+        # Obtener el servidor IMAP2
+        imap_server = IMAPServer2.query.get_or_404(server_id)
+        
+        # Verificar que el usuario tenga permiso para gestionar esta página
+        if user not in imap_server.allowed_users.all():
+            return jsonify({"status": "error", "message": "No tienes permiso para gestionar esta página"}), 403
+        
+        # Obtener el regex
+        regex_obj = RegexModel.query.get_or_404(regex_id)
+        
+        # Verificar que el usuario tenga permiso para usar este regex
+        if regex_obj not in user.regexes_allowed:
+            return jsonify({"status": "error", "message": "No tienes permiso para usar este regex"}), 403
+
+        if is_checked:
+            # Añadir asociación si no existe
+            if regex_obj not in imap_server.regexes:
+                imap_server.regexes.append(regex_obj)
+        else:
+            # Remover asociación si existe
+            if regex_obj in imap_server.regexes:
+                imap_server.regexes.remove(regex_obj)
+
+        db.session.commit()
+        return jsonify({"status": "ok", "message": "Asociación actualizada correctamente"})
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Error al actualizar asociación regex-IMAP2: {e}", exc_info=True)
+        return jsonify({"status": "error", "message": str(e)}), 500

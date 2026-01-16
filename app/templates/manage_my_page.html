@@ -7,6 +7,7 @@
   {{ super() }}
   <link rel="stylesheet" href="{{ url_for('static', filename='css/store.css') }}">
   <link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/sms.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/edit_imap2.css') }}">
   <meta name="csrf_token" content="{{ csrf_token() }}">
 {% endblock %}
 
@@ -186,6 +187,72 @@
           <button type="submit" class="btn-green" data-imap2-id="{{ imap_server.id }}">Crear</button>
         </div>
       </form>
+    </div>
+  </div>
+
+  <!-- Card separado para Filtros y Expresiones Regulares -->
+  <div class="card mt-2">
+    <h3 class="text-center mb-05">Filtros y Expresiones Regulares</h3>
+    <div class="table-responsive">
+      <table class="imap2-filters-regex-table">
+        <thead>
+          <tr>
+            <th>Filtros</th>
+            <th>Activar</th>
+            <th>Regex</th>
+            <th>Activar</th>
+          </tr>
+        </thead>
+        <tbody id="filtersRegexTableBody">
+          {% set max_rows = [all_filters|length, all_regexes|length]|max %}
+          {% for i in range(max_rows) %}
+            <tr>
+              <!-- Columna Filtros -->
+              <td>
+                {% if i < all_filters|length %}
+                  <div class="filter-info">
+                    <div class="filter-description"><strong>{{ all_filters[i].description if all_filters[i].description else 'Sin descripción' }}</strong></div>
+                  </div>
+                {% endif %}
+              </td>
+              <!-- Columna Checkbox Filtros -->
+              <td class="text-center">
+                {% if i < all_filters|length %}
+                  <input
+                    type="checkbox"
+                    class="filter-checkbox"
+                    data-filter-id="{{ all_filters[i].id }}"
+                    data-server-id="{{ imap_server.id }}"
+                    {% if all_filters[i].id in associated_filter_ids %}checked{% endif %}
+                    autocomplete="off"
+                  >
+                {% endif %}
+              </td>
+              <!-- Columna Regex -->
+              <td>
+                {% if i < all_regexes|length %}
+                  <div class="regex-info">
+                    <div class="regex-description"><strong>{{ all_regexes[i].description if all_regexes[i].description else 'Sin descripción' }}</strong></div>
+                  </div>
+                {% endif %}
+              </td>
+              <!-- Columna Checkbox Regex -->
+              <td class="text-center">
+                {% if i < all_regexes|length %}
+                  <input
+                    type="checkbox"
+                    class="regex-checkbox"
+                    data-regex-id="{{ all_regexes[i].id }}"
+                    data-server-id="{{ imap_server.id }}"
+                    {% if all_regexes[i].id in associated_regex_ids %}checked{% endif %}
+                    autocomplete="off"
+                  >
+                {% endif %}
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
     </div>
   </div>
 

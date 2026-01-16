@@ -50,7 +50,51 @@ def update_regex_service(r: RegexModel, sender, pattern, description, enabled, s
 
 
 def delete_regex_service(regex_id, skip_revocation=False):
+    """
+    Elimina un regex y todas sus relaciones en cascada.
+    Las relaciones M2M se eliminan automáticamente por CASCADE configurado en las Foreign Keys,
+    pero se limpian explícitamente para asegurar que no queden registros huérfanos.
+    """
     r = RegexModel.query.get_or_404(regex_id)
+    
+    # Limpiar explícitamente todas las relaciones M2M antes de eliminar
+    # Aunque CASCADE debería hacerlo automáticamente, esto asegura limpieza completa
+    
+    # Limpiar relaciones con usuarios (regexes_allowed)
+    if hasattr(r, 'users_who_allow'):
+        r.users_who_allow.clear()
+    
+    # Limpiar relaciones con usuarios padres (default_regexes_for_subusers)
+    from app.models import User
+    from app.models.user import parent_default_regex
+    # Buscar usuarios que tienen este regex en sus defaults y removerlo
+    users_with_default = User.query.join(parent_default_regex).filter(
+        parent_default_regex.c.regex_id == regex_id
+    ).all()
+    for user in users_with_default:
+        if r in user.default_regexes_for_subusers:
+            user.default_regexes_for_subusers.remove(r)
+    
+    # Limpiar relaciones con servicios
+    if hasattr(r, 'services'):
+        r.services.clear()
+    
+    # Limpiar relaciones con IMAP2
+    if hasattr(r, 'imap2_servers'):
+        # Obtener la lista antes de limpiar para evitar problemas de iteración
+        imap2_list = list(r.imap2_servers)
+        for imap2 in imap2_list:
+            if r in imap2.regexes:
+                imap2.regexes.remove(r)
+    
+    db.session.flush()  # Aplicar cambios antes de eliminar
+    
+    # Eliminar el regex
+    # CASCADE eliminará automáticamente las relaciones M2M restantes en las tablas:
+    # - user_regex
+    # - parent_default_regex
+    # - service_regex
+    # - imap2_regex
     db.session.delete(r)
     db.session.commit()
 
