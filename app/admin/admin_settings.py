@@ -566,12 +566,29 @@ def import_config():
             # 6. Crear nuevos objetos base y mapear IDs viejos a NUEVOS
             # Crear Filtros y Regex (como antes)
             if filters_data:
+                # Verificar una sola vez si el modelo tiene el campo description
+                from sqlalchemy import inspect
+                try:
+                    mapper = inspect(Filter)
+                    filter_columns = [col.key for col in mapper.columns]
+                    has_description_column = 'description' in filter_columns
+                except:
+                    # Fallback: verificar con hasattr
+                    has_description_column = hasattr(Filter, 'description')
+                
                 for f_data in filters_data:
                     old_id = f_data.get('id') or f_data.get('original_id') # Compatibilidad
                     f_data_cleaned = {k: v for k, v in f_data.items() if k not in ['id', 'original_id']}
-                    # Si no tiene description (filtros antiguos), asignar valor por defecto
-                    if 'description' not in f_data_cleaned or not f_data_cleaned.get('description'):
-                        f_data_cleaned['description'] = 'Sin descripción'
+                    
+                    # Manejar description según si el modelo lo soporta
+                    if has_description_column:
+                        # Si el modelo tiene description, asegurar que esté presente
+                        if 'description' not in f_data_cleaned or not f_data_cleaned.get('description'):
+                            f_data_cleaned['description'] = 'Sin descripción'
+                    else:
+                        # Si el modelo NO tiene description, removerlo de los datos
+                        f_data_cleaned.pop('description', None)
+                    
                     new_filter = Filter(**f_data_cleaned) 
                     db.session.add(new_filter)
                     db.session.flush() 

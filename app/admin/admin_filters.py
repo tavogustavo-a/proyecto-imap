@@ -163,6 +163,7 @@ def search_filters_ajax():
         filters_q = filters_q.filter(
             (FilterModel.sender.ilike(f"%{query}%"))
             | (FilterModel.keyword.ilike(f"%{query}%"))
+            | (FilterModel.description.ilike(f"%{query}%"))
         )
     filters_list = filters_q.all()
 
@@ -174,7 +175,8 @@ def search_filters_ajax():
             "keyword": f.keyword or "",
             "cut_after_html": f.cut_after_html or "",
             "cut_before_html": f.cut_before_html or "",
-            "enabled": f.enabled
+            "enabled": f.enabled,
+            "description": f.description or ""
         })
 
     return jsonify({"status": "ok", "filters": data})
@@ -201,7 +203,8 @@ def toggle_filter_ajax():
                 "keyword": fil.keyword or "",
                 "cut_after_html": fil.cut_after_html or "",
                 "cut_before_html": fil.cut_before_html or "",
-                "enabled": fil.enabled
+                "enabled": fil.enabled,
+                "description": fil.description or ""
             })
         return jsonify({"status": "ok", "filters": data_resp})
 
@@ -231,7 +234,8 @@ def delete_filter_ajax():
                 "keyword": fil.keyword or "",
                 "cut_after_html": fil.cut_after_html or "",
                 "cut_before_html": fil.cut_before_html or "",
-                "enabled": fil.enabled
+                "enabled": fil.enabled,
+                "description": fil.description or ""
             })
         return jsonify({"status": "ok", "filters": data_resp})
     except Exception as e:
