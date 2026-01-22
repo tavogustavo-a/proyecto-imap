@@ -501,13 +501,13 @@ def my_page_twofa_configs(server_id):
         try:
             data = request.get_json()
             emails = data.get('emails', '').strip()
-            secret_key = data.get('secret_key', '').strip().upper()
+            secret_key = data.get('secret_key', '').strip().upper().replace(' ', '').replace('-', '')
             
             if not emails:
                 return jsonify({'success': False, 'error': 'Debes proporcionar al menos un correo'}), 400
             
-            if not secret_key or not re.match(r'^[A-Z0-9]{16,}$', secret_key):
-                return jsonify({'success': False, 'error': 'Debes proporcionar un secreto TOTP válido'}), 400
+            if not secret_key or not re.match(r'^[A-Z0-9]{8,}$', secret_key):
+                return jsonify({'success': False, 'error': 'Debes proporcionar un secreto TOTP válido (mínimo 8 caracteres)'}), 400
             
             new_config = IMAP2TwoFAConfig(
                 imap_server_id=server_id,
@@ -556,13 +556,13 @@ def my_page_twofa_config(config_id):
         try:
             data = request.get_json()
             emails = data.get('emails', '').strip()
-            secret_key = data.get('secret_key', '').strip().upper()
+            secret_key = data.get('secret_key', '').strip().upper().replace(' ', '').replace('-', '')
             
             if not emails:
                 return jsonify({'success': False, 'error': 'Debes proporcionar al menos un correo'}), 400
             
-            if not secret_key or not re.match(r'^[A-Z0-9]{16,}$', secret_key):
-                return jsonify({'success': False, 'error': 'Debes proporcionar un secreto TOTP válido'}), 400
+            if not secret_key or not re.match(r'^[A-Z0-9]{8,}$', secret_key):
+                return jsonify({'success': False, 'error': 'Debes proporcionar un secreto TOTP válido (mínimo 8 caracteres)'}), 400
             
             config.emails = emails
             config.secret_key = secret_key
@@ -633,23 +633,24 @@ def my_page_read_qr():
         
         # Extraer el secreto del formato otpauth://totp/...
         # Formato: otpauth://totp/Label?secret=SECRET&issuer=Issuer
-        secret_match = re.search(r'secret=([A-Z0-9]+)', qr_data, re.IGNORECASE)
+        # El secreto puede tener padding Base32 (=) y puede terminar con & o al final de la cadena
+        secret_match = re.search(r'secret=([A-Z0-9=]+?)(?:&|$)', qr_data, re.IGNORECASE)
         if secret_match:
-            secret_key = secret_match.group(1).upper()
+            secret_key = secret_match.group(1).upper().replace(' ', '').replace('-', '')
             return jsonify({
                 'success': True,
                 'secret_key': secret_key,
                 'qr_data': qr_data
             }), 200
-        else:
-            # Si no está en formato otpauth, intentar usar el contenido completo como secreto
-            # (algunos QR codes solo contienen el secreto)
-            if re.match(r'^[A-Z0-9]{16,}$', qr_data, re.IGNORECASE):
-                return jsonify({
-                    'success': True,
-                    'secret_key': qr_data.upper(),
-                    'qr_data': qr_data
-                }), 200
+            else:
+                # Si no está en formato otpauth, intentar usar el contenido completo como secreto
+                # (algunos QR codes solo contienen el secreto)
+                if re.match(r'^[A-Z0-9]{8,}$', qr_data, re.IGNORECASE):
+                    return jsonify({
+                        'success': True,
+                        'secret_key': qr_data.upper(),
+                        'qr_data': qr_data
+                    }), 200
             else:
                 return jsonify({'success': False, 'error': 'El código QR no contiene un secreto TOTP válido'}), 400
     except Exception as e:

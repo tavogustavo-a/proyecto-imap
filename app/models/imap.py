@@ -13,5 +13,18 @@ class IMAPServer(db.Model):
     enabled = db.Column(db.Boolean, default=True)
     folders = db.Column(db.String(500), nullable=False, server_default="INBOX")
 
+    def to_dict(self):
+        """Serializa el objeto IMAPServer a un diccionario para exportación."""
+        return {
+            'original_id': self.id,
+            'description': self.description,
+            'host': self.host,
+            'port': self.port,
+            'username': self.username,
+            'password_enc': self.password_enc,
+            'enabled': self.enabled,
+            'folders': self.folders
+        }
+
     def __repr__(self):
         return f"<IMAPServer {self.host}:{self.port}>"

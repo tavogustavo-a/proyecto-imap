@@ -1379,7 +1379,7 @@ document.addEventListener("DOMContentLoaded", function () {
   }
   
   // ✅ NUEVO: Función para mostrar código 2FA con contador
-  function display2FACode(code, timeRemaining, email) {
+  function display2FACode(code, timeRemaining, email, allCodes = null) {
     // Buscar el contenedor de resultados (puede ser 'search-results' o 'results')
     let resultsDiv = document.getElementById('search-results');
     if (!resultsDiv) {
@@ -1450,6 +1450,7 @@ document.addEventListener("DOMContentLoaded", function () {
     
     wrapper.appendChild(topRow);
     wrapper.appendChild(timer);
+
     twofaContainer.appendChild(wrapper);
     
     // Agregar listener para copiar

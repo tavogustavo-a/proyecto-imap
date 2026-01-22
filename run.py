@@ -16,10 +16,12 @@ os.environ['PYTHONWARNINGS'] = 'ignore'
 import click # Importar click para los comandos
 from dotenv import load_dotenv
 from cryptography.fernet import Fernet, InvalidToken
+from app.services.imap_crypto import decrypt_password_with_key, encrypt_password_with_key
 from werkzeug.security import generate_password_hash
 from datetime import datetime, timedelta, timezone 
 import re 
 from app.models import User, RegexModel, ServiceModel, AppSecrets, SecurityRule, TriggerLog, RememberDevice, IMAPServer, ObserverIMAPServer
+from app.models.imap2 import IMAPServer2
 from app.admin.site_settings import get_site_setting, set_site_setting
 from app.imap.advanced_imap import search_emails_for_observer, delete_emails_by_message_id
 from app.services.email_service import send_security_alert_email 
@@ -77,9 +79,6 @@ def start_scheduler_if_needed():
             
             with app.app_context():
                 # Configurar los mismos jobs que en main()
-                def rotate_imap_keys_job():
-                    pass  # Placeholder
-                
                 _scheduler.add_job(
                     func=rotate_imap_keys_job,
                     trigger='cron',
@@ -328,225 +327,415 @@ def init_imap_keys_command():
             db.session.rollback()
             print(f"ERROR FATAL durante inicialización de claves IMAP: {e}")
 
+def rotate_imap_keys_job():
+    """Rota las claves de cifrado IMAP automáticamente.
+    Re-encripta todas las contraseñas con la nueva clave y actualiza las claves en AppSecrets."""
+    with app.app_context():
+        try:
+            from app.models.settings import get_current_imap_key, get_next_imap_key
+            
+            app.logger.info("🔄 Iniciando rotación automática de claves IMAP...")
+            
+            # 1. Obtener claves actuales
+            current_key = get_current_imap_key()
+            next_key = get_next_imap_key()
+            
+            # 2. Si NEXT_IMAP_KEY no existe, generarla
+            if not next_key:
+                app.logger.warning("⚠️  NEXT_IMAP_KEY no existe. Generando nueva clave...")
+                next_key = Fernet.generate_key().decode()
+                next_key_secret = AppSecrets.query.filter_by(key_name="NEXT_IMAP_KEY").first()
+                if not next_key_secret:
+                    next_key_secret = AppSecrets(key_name="NEXT_IMAP_KEY", key_value=next_key)
+                    db.session.add(next_key_secret)
+                    db.session.commit()
+                else:
+                    next_key_secret.key_value = next_key
+                    db.session.commit()
+                app.logger.info("✅ NEXT_IMAP_KEY generada y guardada.")
+            
+            # 3. Re-encriptar todas las contraseñas IMAP
+            reencrypted_count = 0
+            failed_count = 0
+            
+            # IMAP Servers regulares
+            imap_servers = IMAPServer.query.all()
+            for server in imap_servers:
+                try:
+                    # Intentar descifrar con la clave actual
+                    try:
+                        plain_password = decrypt_password_with_key(server.password_enc, current_key)
+                    except InvalidToken:
+                        # Si falla, puede estar encriptada con otra clave, intentar con next_key
+                        try:
+                            plain_password = decrypt_password_with_key(server.password_enc, next_key)
+                            # Ya está encriptada con la nueva clave, saltar
+                            continue
+                        except InvalidToken:
+                            app.logger.error(f"❌ No se pudo descifrar contraseña para IMAP Server {server.id} ({server.host})")
+                            failed_count += 1
+                            continue
+                    
+                    # Re-encriptar con la nueva clave
+                    server.password_enc = encrypt_password_with_key(plain_password, next_key)
+                    reencrypted_count += 1
+                except Exception as e:
+                    app.logger.error(f"❌ Error re-encriptando IMAP Server {server.id}: {e}")
+                    failed_count += 1
+            
+            # Observer IMAP Servers
+            observer_servers = ObserverIMAPServer.query.all()
+            for server in observer_servers:
+                try:
+                    try:
+                        plain_password = decrypt_password_with_key(server.password_enc, current_key)
+                    except InvalidToken:
+                        try:
+                            plain_password = decrypt_password_with_key(server.password_enc, next_key)
+                            continue
+                        except InvalidToken:
+                            app.logger.error(f"❌ No se pudo descifrar contraseña para Observer IMAP Server {server.id} ({server.host})")
+                            failed_count += 1
+                            continue
+                    
+                    server.password_enc = encrypt_password_with_key(plain_password, next_key)
+                    reencrypted_count += 1
+                except Exception as e:
+                    app.logger.error(f"❌ Error re-encriptando Observer IMAP Server {server.id}: {e}")
+                    failed_count += 1
+            
+            # IMAP2 Servers
+            imap2_servers = IMAPServer2.query.all()
+            for server in imap2_servers:
+                try:
+                    try:
+                        plain_password = decrypt_password_with_key(server.password_enc, current_key)
+                    except InvalidToken:
+                        try:
+                            plain_password = decrypt_password_with_key(server.password_enc, next_key)
+                            continue
+                        except InvalidToken:
+                            app.logger.error(f"❌ No se pudo descifrar contraseña para IMAP2 Server {server.id} ({server.host})")
+                            failed_count += 1
+                            continue
+                    
+                    server.password_enc = encrypt_password_with_key(plain_password, next_key)
+                    reencrypted_count += 1
+                except Exception as e:
+                    app.logger.error(f"❌ Error re-encriptando IMAP2 Server {server.id}: {e}")
+                    failed_count += 1
+            
+            # 4. Actualizar CURRENT_IMAP_KEY con NEXT_IMAP_KEY
+            current_key_secret = AppSecrets.query.filter_by(key_name="CURRENT_IMAP_KEY").first()
+            if current_key_secret:
+                current_key_secret.key_value = next_key
+            else:
+                app.logger.error("❌ CURRENT_IMAP_KEY no encontrada en AppSecrets!")
+                return
+            
+            # 5. Generar nueva NEXT_IMAP_KEY
+            new_next_key = Fernet.generate_key().decode()
+            next_key_secret = AppSecrets.query.filter_by(key_name="NEXT_IMAP_KEY").first()
+            if next_key_secret:
+                next_key_secret.key_value = new_next_key
+            else:
+                next_key_secret = AppSecrets(key_name="NEXT_IMAP_KEY", key_value=new_next_key)
+                db.session.add(next_key_secret)
+            
+            # 6. Commit de todos los cambios
+            db.session.commit()
+            
+            app.logger.info(f"✅ Rotación de claves IMAP completada:")
+            app.logger.info(f"   - Contraseñas re-encriptadas: {reencrypted_count}")
+            if failed_count > 0:
+                app.logger.warning(f"   - Contraseñas con errores: {failed_count}")
+            app.logger.info(f"   - CURRENT_IMAP_KEY actualizada")
+            app.logger.info(f"   - Nueva NEXT_IMAP_KEY generada")
+            
+        except Exception as e:
+            db.session.rollback()
+            app.logger.error(f"❌ Error fatal durante rotación de claves IMAP: {e}", exc_info=True)
+
 def check_observer_patterns_job():
     with app.app_context():
-        # <<< --- NUEVA VERIFICACIÓN AL INICIO --- >>>
-        observer_enabled = get_site_setting("observer_enabled", "1")
-        if observer_enabled != "1":
-            # Solo imprimir si se quiere un log de que fue llamado pero no ejecutó
-            # print(f"[{datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")}] [JOB_OBSERVER] Tarea llamada, pero observador está OFF. Saliendo.")
-            return # Salir si el observador está deshabilitado
-        # <<< --- FIN NUEVA VERIFICACIÓN --- >>>
-
-        current_time_str = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
-
-
         try:
-            run_frequency_minutes = int(get_site_setting("observer_check_frequency", "5"))
-            if run_frequency_minutes <= 0: run_frequency_minutes = 5
-        except ValueError:
-            run_frequency_minutes = 5
+            # <<< --- NUEVA VERIFICACIÓN AL INICIO --- >>>
+            observer_enabled = get_site_setting("observer_enabled", "1")
+            if observer_enabled != "1":
+                # Solo imprimir si se quiere un log de que fue llamado pero no ejecutó
+                # print(f"[{datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")}] [JOB_OBSERVER] Tarea llamada, pero observador está OFF. Saliendo.")
+                return # Salir si el observador está deshabilitado
+            # <<< --- FIN NUEVA VERIFICACIÓN --- >>>
 
-        last_run_setting_key = "observer_job_last_actual_run_utc"
-        last_run_iso = get_site_setting(last_run_setting_key)
-        now_utc = datetime.now(timezone.utc)
+            current_time_str = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
 
-        if last_run_iso:
+
             try:
-                last_run_utc_dt = datetime.fromisoformat(last_run_iso)
-                if now_utc < last_run_utc_dt + timedelta(minutes=run_frequency_minutes):
-            
-                    return
+                run_frequency_minutes = int(get_site_setting("observer_check_frequency", "5"))
+                if run_frequency_minutes <= 0: run_frequency_minutes = 5
             except ValueError:
-                pass
-        
-        active_rules = SecurityRule.query.filter_by(enabled=True).all()
-        if not active_rules:
-            set_site_setting(last_run_setting_key, now_utc.isoformat())
-            try: 
-                db.session.commit()
-            except Exception as e_commit: 
-                pass
-            return
+                run_frequency_minutes = 5
 
-        servers = ObserverIMAPServer.query.filter_by(enabled=True).all()
-        if not servers:
-            set_site_setting(last_run_setting_key, now_utc.isoformat())
-            try: 
-                db.session.commit()
-            except Exception as e_commit: 
-                pass
-            return
-            
-        # Prioridad 1: ventana en minutos (imap_observer_scan_window_minutes)
-        scan_window_minutes = None
-        try:
-            scan_window_minutes = int(get_site_setting("imap_observer_scan_window_minutes", "0"))
-        except ValueError:
-            scan_window_minutes = None
+            last_run_setting_key = "observer_job_last_actual_run_utc"
+            last_run_iso = get_site_setting(last_run_setting_key)
+            now_utc = datetime.now(timezone.utc)
 
-        if scan_window_minutes and scan_window_minutes > 0:
-            since_date_for_imap_scan = now_utc - timedelta(minutes=scan_window_minutes)
-        else:
-            # Fallback: configuración en días
-            try:
-                days_back = int(get_site_setting("observer_scan_days_back", "2"))
-                if days_back < 0:
-                    days_back = 1
-            except ValueError:
-                days_back = 1
-            since_date_for_imap_scan = (now_utc - timedelta(days=days_back)).replace(hour=0, minute=0, second=0, microsecond=0)
-
-        for rule in active_rules:
-            # print(f"[{current_time_str}] [JOB_OBSERVER] Procesando Regla ID {rule.id}: '{rule.description or 'N/A'}' (Sender filter: '{rule.sender or "Cualquiera"}')")
-            try:
-                servers_for_rule = servers
-                if getattr(rule, 'imap_server_id', None):
-                    servers_for_rule = [s for s in servers if s.id == rule.imap_server_id]
-                    if not servers_for_rule:
-                        # print(f"[{current_time_str}] [JOB_OBSERVER] Regla {rule.id}: servidor IMAP específico no encontrado o deshabilitado. Omitiendo.")
-                        continue
-
-                found_emails_in_scan = search_emails_for_observer(servers_for_rule, since_date_for_imap_scan, rule.sender)
-            except Exception as imap_e:
-                # print(f"[{current_time_str}] [JOB_OBSERVER] Error buscando correos para Regla {rule.id}: {imap_e}")
-                continue 
-
-            for scanned_email_data in found_emails_in_scan:
-                scanned_email_content = scanned_email_data.get('body_raw', "")
-                import html
-                cleaned_content = re.sub(r'<[^>]+>', ' ', scanned_email_content)
-                cleaned_content = html.unescape(cleaned_content)
-                scanned_email_message_id = scanned_email_data.get('message_id')
-                scanned_email_to_list = scanned_email_data.get('to', [])
-
-                if not scanned_email_message_id:
-                    scanned_email_message_id = f"obs_no_id_{rule.id}_{now_utc.timestamp()}_{scanned_email_data.get('subject', '')[:20]}"
-                    # print(f"[{current_time_str}] [JOB_OBSERVER] WARN: No se encontró Message-ID para un correo. Usando ID generado: {scanned_email_message_id}")
-
+            if last_run_iso:
                 try:
-                    if safe_regex_search(rule.observer_pattern, cleaned_content):
-                        # print(f"[{current_time_str}] [ALERTA-OBSERVER] Coincidencia Patrón Observador! Regla ID: {rule.id}, Correo ID: {scanned_email_message_id}")
-                        log_retention_minutes = int(get_site_setting("log_retention_minutes", "60"))
-                        log_cutoff_time = now_utc - timedelta(minutes=log_retention_minutes)
-                        
-                        from sqlalchemy import func, or_
+                    last_run_utc_dt = datetime.fromisoformat(last_run_iso)
+                    if now_utc < last_run_utc_dt + timedelta(minutes=run_frequency_minutes):
+                
+                        return
+                except ValueError:
+                    pass
+            
+            active_rules = SecurityRule.query.filter_by(enabled=True).all()
+            if not active_rules:
+                try:
+                    set_site_setting(last_run_setting_key, now_utc.isoformat())
+                    db.session.commit()
+                except Exception:
+                    db.session.rollback()
+                return
 
-                        dest_emails_lower = [addr.lower() for addr in scanned_email_to_list if addr]
+            servers = ObserverIMAPServer.query.filter_by(enabled=True).all()
+            if not servers:
+                try:
+                    set_site_setting(last_run_setting_key, now_utc.isoformat())
+                    db.session.commit()
+                except Exception:
+                    db.session.rollback()
+                return
+                
+            # Prioridad 1: ventana en minutos (imap_observer_scan_window_minutes)
+            scan_window_minutes = None
+            try:
+                scan_window_minutes = int(get_site_setting("imap_observer_scan_window_minutes", "0"))
+            except ValueError:
+                scan_window_minutes = None
 
-                        access_logs = TriggerLog.query.filter(
-                            TriggerLog.rule_id == rule.id,
-                            TriggerLog.timestamp >= log_cutoff_time,
-                            or_(
-                                TriggerLog.email_identifier == scanned_email_message_id,
-                                func.lower(TriggerLog.searched_email).in_(dest_emails_lower)
-                            )
-                        ).order_by(TriggerLog.user_id, TriggerLog.timestamp.desc()).all()
+            if scan_window_minutes and scan_window_minutes > 0:
+                since_date_for_imap_scan = now_utc - timedelta(minutes=scan_window_minutes)
+            else:
+                # Fallback: configuración en días
+                try:
+                    days_back = int(get_site_setting("observer_scan_days_back", "2"))
+                    if days_back < 0:
+                        days_back = 1
+                except ValueError:
+                    days_back = 1
+                since_date_for_imap_scan = (now_utc - timedelta(days=days_back)).replace(hour=0, minute=0, second=0, microsecond=0)
 
-                        email_destinatarios_str = ", ".join(scanned_email_to_list) if scanned_email_to_list else "(desconocido)"
-
-                        if not access_logs:
-                            # print(f"[{current_time_str}] [INFO] Tarea Observador: Regla {rule.id} detectó correo {scanned_email_message_id} (para: {email_destinatarios_str}), pero ningún usuario lo ha consultado. Eliminando correo para evitar detecciones futuras.")
-                            try:
-                                delete_emails_by_message_id(servers_for_rule, scanned_email_message_id)
-                                # print(f"[{current_time_str}] [INFO] Correo {scanned_email_message_id} eliminado exitosamente por falta de logs activadores.")
-                            except Exception as del_mail_err:
-                                # print(f"[JOB_OBSERVER] Error al eliminar correo {scanned_email_message_id}: {del_mail_err}")
-                                pass
+            for rule in active_rules:
+                # print(f"[{current_time_str}] [JOB_OBSERVER] Procesando Regla ID {rule.id}: '{rule.description or 'N/A'}' (Sender filter: '{rule.sender or "Cualquiera"}')")
+                try:
+                    servers_for_rule = servers
+                    if getattr(rule, 'imap_server_id', None):
+                        servers_for_rule = [s for s in servers if s.id == rule.imap_server_id]
+                        if not servers_for_rule:
+                            # print(f"[{current_time_str}] [JOB_OBSERVER] Regla {rule.id}: servidor IMAP específico no encontrado o deshabilitado. Omitiendo.")
                             continue
-                        
-                        processed_users_for_this_email = set()
-                        unique_latest_logs_for_processing = []
-                        for log in access_logs:
-                            if log.user_id not in processed_users_for_this_email:
-                                unique_latest_logs_for_processing.append(log)
-                                processed_users_for_this_email.add(log.user_id)
 
-                        for log_entry in unique_latest_logs_for_processing:
-                            user = User.query.get(log_entry.user_id)
-                            if not user: continue
+                    found_emails_in_scan = search_emails_for_observer(servers_for_rule, since_date_for_imap_scan, rule.sender)
+                except Exception as imap_e:
+                    # print(f"[{current_time_str}] [JOB_OBSERVER] Error buscando correos para Regla {rule.id}: {imap_e}")
+                    continue 
 
-                            admin_username_cfg = app.config.get("ADMIN_USER", "admin")
-                            parent_user = user 
-                            is_sub = user.parent_id is not None
-                            if is_sub:
-                                parent_user = User.query.get(user.parent_id)
-                                if not parent_user: continue
+                for scanned_email_data in found_emails_in_scan:
+                    scanned_email_content = scanned_email_data.get('body_raw', "")
+                    import html
+                    cleaned_content = re.sub(r'<[^>]+>', ' ', scanned_email_content)
+                    cleaned_content = html.unescape(cleaned_content)
+                    scanned_email_message_id = scanned_email_data.get('message_id')
+                    scanned_email_to_list = scanned_email_data.get('to', [])
 
-                            privileged_support = {"soporte", "soporte1", "soporte2", "soporte3"}
-                            is_privileged = (
-                                user.username == admin_username_cfg
-                                or user.username.lower() in privileged_support
-                                or (
-                                    parent_user
-                                    and (
-                                        parent_user.username == admin_username_cfg
-                                        or parent_user.username.lower() in privileged_support
+                    if not scanned_email_message_id:
+                        scanned_email_message_id = f"obs_no_id_{rule.id}_{now_utc.timestamp()}_{scanned_email_data.get('subject', '')[:20]}"
+                        # print(f"[{current_time_str}] [JOB_OBSERVER] WARN: No se encontró Message-ID para un correo. Usando ID generado: {scanned_email_message_id}")
+
+                    try:
+                        if safe_regex_search(rule.observer_pattern, cleaned_content):
+                            # print(f"[{current_time_str}] [ALERTA-OBSERVER] Coincidencia Patrón Observador! Regla ID: {rule.id}, Correo ID: {scanned_email_message_id}")
+                            log_retention_minutes = int(get_site_setting("log_retention_minutes", "60"))
+                            log_cutoff_time = now_utc - timedelta(minutes=log_retention_minutes)
+                            
+                            from sqlalchemy import func, or_
+
+                            dest_emails_lower = [addr.lower() for addr in scanned_email_to_list if addr]
+
+                            access_logs = TriggerLog.query.filter(
+                                TriggerLog.rule_id == rule.id,
+                                TriggerLog.timestamp >= log_cutoff_time,
+                                or_(
+                                    TriggerLog.email_identifier == scanned_email_message_id,
+                                    func.lower(TriggerLog.searched_email).in_(dest_emails_lower)
+                                )
+                            ).order_by(TriggerLog.user_id, TriggerLog.timestamp.desc()).all()
+
+                            email_destinatarios_str = ", ".join(scanned_email_to_list) if scanned_email_to_list else "(desconocido)"
+
+                            if not access_logs:
+                                # print(f"[{current_time_str}] [INFO] Tarea Observador: Regla {rule.id} detectó correo {scanned_email_message_id} (para: {email_destinatarios_str}), pero ningún usuario lo ha consultado. Eliminando correo para evitar detecciones futuras.")
+                                try:
+                                    delete_emails_by_message_id(servers_for_rule, scanned_email_message_id)
+                                    # print(f"[{current_time_str}] [INFO] Correo {scanned_email_message_id} eliminado exitosamente por falta de logs activadores.")
+                                except Exception as del_mail_err:
+                                    # print(f"[JOB_OBSERVER] Error al eliminar correo {scanned_email_message_id}: {del_mail_err}")
+                                    pass
+                                continue
+                            
+                            processed_users_for_this_email = set()
+                            unique_latest_logs_for_processing = []
+                            for log in access_logs:
+                                if log.user_id not in processed_users_for_this_email:
+                                    unique_latest_logs_for_processing.append(log)
+                                    processed_users_for_this_email.add(log.user_id)
+
+                            for log_entry in unique_latest_logs_for_processing:
+                                user = User.query.get(log_entry.user_id)
+                                if not user: continue
+
+                                admin_username_cfg = app.config.get("ADMIN_USER", "admin")
+                                parent_user = user 
+                                is_sub = user.parent_id is not None
+                                
+                                if is_sub:
+                                    parent_user = User.query.get(user.parent_id)
+                                    if not parent_user: parent_user = user 
+
+                                privileged_support = {"soporte", "soporte1", "soporte2", "soporte3"}
+                                is_privileged = (
+                                    user.username == admin_username_cfg
+                                    or user.username.lower() in privileged_support
+                                    or (
+                                        parent_user
+                                        and (
+                                            parent_user.username == admin_username_cfg
+                                            or parent_user.username.lower() in privileged_support
+                                        )
                                     )
                                 )
-                            )
 
-                            dest_email_for_msg = (log_entry.searched_email or (scanned_email_to_list[0] if scanned_email_to_list else '(desconocido)'))
-                            alert_subject = "ALERTA SEGURIDAD correo cambiado"
-                            alert_body_lines = [f"El correo {dest_email_for_msg} fue cambiado"]
+                                dest_email_for_msg = (log_entry.searched_email or (scanned_email_to_list[0] if scanned_email_to_list else '(desconocido)'))
+                                alert_subject = "ALERTA SEGURIDAD correo cambiado"
+                                alert_body_lines = [f"El correo {dest_email_for_msg} fue cambiado"]
 
-                            if is_sub:
-                                alert_body_lines.append(f"Sub-usuario que realizó la acción: '{user.username}'.")
-                            else:
-                                alert_body_lines.append(f"Usuario que realizó la acción: '{user.username}'.")
+                                if is_sub:
+                                    alert_body_lines.append(f"Sub-usuario que realizó la acción: '{user.username}'.")
+                                else:
+                                    alert_body_lines.append(f"Usuario que realizó la acción: '{user.username}'.")
 
-                            if not is_privileged:
-                                alert_body_lines.append(f"ACCIÓN: Usuario principal '{parent_user.username}' DESHABILITADO.")
-                                if parent_user:
-                                    parent_user.enabled = False
-                                    parent_user.user_session_rev_count += 1
-                                    RememberDevice.query.filter_by(user_id=parent_user.id).delete()
-                                    db.session.add(parent_user)
+                                if not is_privileged:
+                                    alert_body_lines.append(f"ACCIÓN: Usuario principal '{parent_user.username}' DESHABILITADO.")
+                                    if parent_user:
+                                        try:
+                                            parent_user.enabled = False
+                                            parent_user.user_session_rev_count += 1
+                                            RememberDevice.query.filter_by(user_id=parent_user.id).delete()
+                                            db.session.add(parent_user)
 
-                                    sub_users = User.query.filter_by(parent_id=parent_user.id).all()
-                                    for su in sub_users:
-                                        su.enabled = False
-                                        su.user_session_rev_count += 1
-                                        RememberDevice.query.filter_by(user_id=su.id).delete()
-                                        db.session.add(su)
+                                            sub_users = User.query.filter_by(parent_id=parent_user.id).all()
+                                            for su in sub_users:
+                                                su.enabled = False
+                                                su.user_session_rev_count += 1
+                                                RememberDevice.query.filter_by(user_id=su.id).delete()
+                                                db.session.add(su)
 
-                                    key_last_disable = f"observer_last_disable_{parent_user.id}"
-                                    set_site_setting(key_last_disable, now_utc.isoformat())
-                                    # print(f"[{current_time_str}] [ACCIÓN-OBSERVADOR] Usuario {parent_user.username} deshabilitado.")
-                                db.session.delete(log_entry)
-                            else:
-                                alert_body_lines.append("ACCIÓN: Ninguna.")
-                                # print(f"[{current_time_str}] [INFO] Tarea Observador: Alerta para privilegiado {user.username}.")
-                                db.session.delete(log_entry)
+                                            key_last_disable = f"observer_last_disable_{parent_user.id}"
+                                            set_site_setting(key_last_disable, now_utc.isoformat())
+                                            # print(f"[{current_time_str}] [ACCIÓN-OBSERVADOR] Usuario {parent_user.username} deshabilitado.")
+                                        except sqlalchemy.exc.OperationalError as db_lock_err:
+                                            if "database is locked" in str(db_lock_err):
+                                                db.session.rollback()
+                                                # En local: silencioso, en servidor: registrar
+                                                if not app.config.get('DEBUG', False):
+                                                    app.logger.warning(f"DB bloqueada al deshabilitar usuario {parent_user.username}, reintentará en próximo ciclo")
+                                                continue  # Saltar este usuario, se procesará en el próximo ciclo
+                                            else:
+                                                db.session.rollback()
+                                                app.logger.error(f"Error DB al deshabilitar usuario {parent_user.username}: {db_lock_err}")
+                                                continue
+                                        except Exception as disable_err:
+                                            db.session.rollback()
+                                            app.logger.error(f"Error al deshabilitar usuario {parent_user.username}: {disable_err}")
+                                            continue
+                                    try:
+                                        db.session.delete(log_entry)
+                                    except Exception:
+                                        db.session.rollback()
+                                else:
+                                    alert_body_lines.append("ACCIÓN: Ninguna.")
+                                    # print(f"[{current_time_str}] [INFO] Tarea Observador: Alerta para privilegiado {user.username}.")
+                                    try:
+                                        db.session.delete(log_entry)
+                                    except Exception:
+                                        db.session.rollback()
 
-                            alert_body = "\n".join(alert_body_lines)
-                            try:
-                                send_security_alert_email(None, alert_subject, alert_body)
-                                app.logger.info(f"Alerta enviada (Message-ID {scanned_email_message_id}).")
-                            except Exception as email_err:
-                                # print(f"[{current_time_str}] [ERROR] Envío alerta: {email_err}")
-                                pass
-                            
-                            try:
-                                delete_emails_by_message_id(servers_for_rule, scanned_email_message_id)
-                            except Exception as del_mail_err:
-                                # print(f"[{current_time_str}] [WARN] No se pudo eliminar correo {scanned_email_message_id}: {del_mail_err}")
-                                pass
-                except re.error as re_err:
-                    # print(f"[{current_time_str}] [JOB_OBSERVER] Regex error en Regla {rule.id} (observer): {re_err}")
-                    pass
-                except Exception as observer_err:
-                    # print(f"[{current_time_str}] [JOB_OBSERVER] Procesando Regla {rule.id}, correo {scanned_email_message_id}: {observer_err}")
-                    pass
-        
-        set_site_setting(last_run_setting_key, now_utc.isoformat())
-        try: 
-            db.session.commit()
-            # print(f"[{current_time_str}] [JOB_OBSERVER] Tarea finalizada. Cambios (usuarios/settings) guardados.")
-        except Exception as final_commit_e:
+                                alert_body = "\n".join(alert_body_lines)
+                                try:
+                                    send_security_alert_email(None, alert_subject, alert_body)
+                                    app.logger.info(f"Alerta enviada (Message-ID {scanned_email_message_id}).")
+                                except Exception as email_err:
+                                    # print(f"[{current_time_str}] [ERROR] Envío alerta: {email_err}")
+                                    pass
+                                
+                                try:
+                                    delete_emails_by_message_id(servers_for_rule, scanned_email_message_id)
+                                except Exception as del_mail_err:
+                                    # print(f"[JOB_OBSERVER] Error al eliminar correo {scanned_email_message_id} tras alertas: {del_mail_err}")
+                                    pass
+
+                    except sqlalchemy.exc.OperationalError as db_err:
+                        if "database is locked" in str(db_err):
+                            # SQLite lock en local: rollback silencioso
+                            db.session.rollback()
+                            # En local (DEBUG=True) no registrar, en servidor sí
+                            if not app.config.get('DEBUG', False):
+                                app.logger.error(f"Error DB bloqueada en regla {rule.id}: {db_err}")
+                        else:
+                            # Otro error de DB: registrar siempre
+                            db.session.rollback()
+                            app.logger.error(f"Error de base de datos en regla {rule.id}: {db_err}")
+                        continue
+                    except sqlalchemy.exc.PendingRollbackError as pending_err:
+                        # Sesión en estado de rollback: limpiar y continuar
+                        db.session.rollback()
+                        # Solo registrar en servidor
+                        if not app.config.get('DEBUG', False):
+                            app.logger.warning(f"Sesión en rollback en regla {rule.id}, limpiada")
+                        continue
+                    except Exception as rule_e:
+                        # Otros errores: registrar siempre
+                        db.session.rollback()
+                        app.logger.error(f"Error procesando regla {rule.id} para correo {scanned_email_message_id}: {rule_e}")
+                        continue
+
+            # Marcar última ejecución exitosa
+            try:
+                set_site_setting(last_run_setting_key, now_utc.isoformat())
+                db.session.commit()
+            except Exception:
+                db.session.rollback()
+
+        except sqlalchemy.exc.OperationalError as e:
+            if "database is locked" in str(e):
+                # SQLite lock es normal en concurrencia local, simplemente hacer rollback y salir silenciosamente
+                db.session.rollback()
+                # Solo registrar en servidor (no en local con DEBUG=True)
+                if not app.config.get('DEBUG', False):
+                    app.logger.warning("Observer job: Base de datos bloqueada temporalmente, reintentará en próximo ciclo")
+            else:
+                app.logger.error(f"Error de base de datos en observer job: {e}")
+                db.session.rollback()
+        except sqlalchemy.exc.PendingRollbackError as pending_e:
+            # Sesión en estado de rollback: limpiar silenciosamente en local
             db.session.rollback()
-            # print(f"[{current_time_str}] [JOB_OBSERVER] Commit final falló: {final_commit_e}")
-            pass
+            if not app.config.get('DEBUG', False):
+                app.logger.warning("Observer job: Sesión en rollback, limpiada")
+        except Exception as e:
+            # Otros errores: siempre registrar
+            app.logger.error(f"Error general en observer job: {e}", exc_info=True)
+            db.session.rollback()
 
 def cleanup_trigger_logs_job():
     with app.app_context():
@@ -601,10 +790,6 @@ def main():
     start_simple_drive_loop()
 
     with app.app_context(): 
-        def rotate_imap_keys_job():
-            # ... (código de la función)
-            pass # Placeholder para brevedad
-
         job_id = 'auto_rotate_imap_keys'
         scheduler.add_job(
             func=rotate_imap_keys_job,

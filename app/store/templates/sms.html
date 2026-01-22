@@ -312,8 +312,8 @@
           placeholder="Código secreto"
           class="flex-grow-1"
           autocomplete="off"
-          pattern="[A-Z0-9]{16,}"
-          title="Código secreto TOTP (solo letras mayúsculas y números)"
+          pattern="[a-zA-Z0-9]{8,}"
+          title="Código secreto TOTP (al menos 8 letras y números)"
         >
         <label for="twofa-qr-file" class="sr-only">Archivo QR</label>
         <input
@@ -406,8 +406,8 @@
           placeholder="Código secreto"
           class="flex-grow-1"
           autocomplete="off"
-          pattern="[A-Z0-9]{16,}"
-          title="Código secreto TOTP (solo letras mayúsculas y números)"
+          pattern="[a-zA-Z0-9]{8,}"
+          title="Código secreto TOTP (al menos 8 letras y números)"
         >
         <label for="edit-twofa-qr-file" class="sr-only">Archivo QR</label>
         <input

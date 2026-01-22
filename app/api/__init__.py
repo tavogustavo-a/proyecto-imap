@@ -314,12 +314,18 @@ def get_2fa_code_for_email(email):
         
         # Si llegamos aquí, el usuario tiene permisos (o es admin) y hay configuración 2FA
         # Generar código TOTP
-        totp = pyotp.TOTP(matching_config.secret_key)
+        import time
+        # Obtener el secreto original de la base de datos
+        secret_key_raw = matching_config.secret_key
+        # Normalizar el secreto antes de usarlo (mayúsculas, sin espacios)
+        secret_key_normalized = secret_key_raw.strip().upper().replace(' ', '').replace('-', '')
+        totp = pyotp.TOTP(secret_key_normalized)
+        current_time = int(time.time())
+        
+        # Generar código actual
         current_code = totp.now()
         
         # Calcular tiempo restante hasta el próximo código (30 segundos)
-        import time
-        current_time = int(time.time())
         time_remaining = 30 - (current_time % 30)
         
         return jsonify({
@@ -586,12 +592,30 @@ def get_imap2_2fa_code_for_email(imap_server_id, email):
         if not matching_config:
             return "", 204
         
-        # Generar código TOTP (sin validar permisos, ya que es para páginas dinámicas públicas)
-        totp = pyotp.TOTP(matching_config.secret_key)
-        current_code = totp.now()
+        # Generar código TOTP
+        import base64
+        import hashlib
         
-        # Calcular tiempo restante hasta el próximo código (30 segundos)
+        secret_key_raw = matching_config.secret_key
+        # Limpieza absoluta del secreto
+        secret_key_normalized = secret_key_raw.strip().upper().replace(' ', '').replace('-', '')
+        
+        def get_code(s, t_val, digits=6):
+            try:
+                # Caso 1: Secreto es Base32 estándar (lo más común)
+                return pyotp.TOTP(s, digits=digits).at(t_val)
+            except:
+                try:
+                    # Caso 2: El secreto fue enviado como texto plano y necesita ser convertido a Base32
+                    # (A veces pasa con ciertos generadores)
+                    s_b32 = base64.b32encode(s.encode()).decode().replace('=', '')
+                    return pyotp.TOTP(s_b32, digits=digits).at(t_val)
+                except:
+                    return "000000"
+
         current_time = int(time.time())
+        current_code = get_code(secret_key_normalized, current_time)
+        
         time_remaining = 30 - (current_time % 30)
         
         return jsonify({

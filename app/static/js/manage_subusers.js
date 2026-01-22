@@ -1020,7 +1020,7 @@ document.addEventListener("DOMContentLoaded", function() {
   if (subuserTwofaSecretInput) {
     subuserTwofaSecretInput.addEventListener('input', function(e) {
       const secret = e.target.value.trim().toUpperCase();
-      if (secret && /^[A-Z0-9]{16,}$/.test(secret)) {
+      if (secret && /^[A-Z0-9]{8,}$/.test(secret)) {
         subuserCurrentSecret = secret;
         if (subuserTwofaSecretDisplay && subuserTwofaSecretDisplayValue) {
           subuserTwofaSecretDisplayValue.textContent = subuserCurrentSecret;
@@ -1046,7 +1046,7 @@ document.addEventListener("DOMContentLoaded", function() {
       }
       
       const secretFromInput = subuserTwofaSecretInput ? subuserTwofaSecretInput.value.trim().toUpperCase() : '';
-      if (secretFromInput && /^[A-Z0-9]{16,}$/.test(secretFromInput)) {
+      if (secretFromInput && /^[A-Z0-9]{8,}$/.test(secretFromInput)) {
         subuserCurrentSecret = secretFromInput;
       }
       
@@ -1417,7 +1417,7 @@ document.addEventListener("DOMContentLoaded", function() {
   if (subuserEditTwofaSecretInput) {
     subuserEditTwofaSecretInput.addEventListener('input', function(e) {
       const secret = e.target.value.trim().toUpperCase();
-      if (secret && /^[A-Z0-9]{16,}$/.test(secret)) {
+      if (secret && /^[A-Z0-9]{8,}$/.test(secret)) {
         subuserCurrentEditSecret = secret;
         if (subuserEditTwofaSecretDisplay && subuserEditTwofaSecretDisplayValue) {
           subuserEditTwofaSecretDisplayValue.textContent = subuserCurrentEditSecret;
@@ -1452,7 +1452,7 @@ document.addEventListener("DOMContentLoaded", function() {
       const secretFromInput = subuserEditTwofaSecretInput ? subuserEditTwofaSecretInput.value.trim().toUpperCase() : '';
       let secretToUse = subuserCurrentEditSecret;
       
-      if (secretFromInput && /^[A-Z0-9]{16,}$/.test(secretFromInput)) {
+      if (secretFromInput && /^[A-Z0-9]{8,}$/.test(secretFromInput)) {
         secretToUse = secretFromInput;
       }
       

@@ -180,15 +180,6 @@ textarea {
   border-radius: 4px;
   border: 1px solid #ddd;
 }
-
-/* Excepción: inputs dentro de contenedores flex deben usar width: 100% */
-.d-flex input[type="text"],
-.d-flex input[type="password"],
-.d-flex input[type="email"],
-.d-flex input[type="number"] {
-  width: 100%;
-}
-
 /* Estilos específicos para inputs en edit_imap2.html */
 .imap2-edit-form {
   padding: 0 0.5rem;
@@ -1229,6 +1220,42 @@ noscript p {
   box-shadow: 0 4px 24px rgba(0,0,0,0.13);
 }
 
+/* Estilos para header de modales popup */
+.popup-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+  border-bottom: 1px solid #e5e7eb;
+  padding-bottom: 0.5rem;
+}
+
+/* Estilos para botón de cerrar (X) en modales */
+.btn-close {
+  background: none;
+  border: none;
+  font-size: 18px;
+  color: #666;
+  cursor: pointer;
+  padding: 5px;
+  border-radius: 50%;
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+.btn-close:hover {
+  background-color: #f0f0f0;
+  color: #333;
+}
+
+.btn-close:active {
+  background-color: #e0e0e0;
+}
+
 /* LOG: Estas clases pueden eliminar bordes y fondos de popups. Si ves popups transparentes o sin borde, revisa aquí. */
 .popup-small {
   max-width: 400px;
@@ -1472,11 +1499,58 @@ noscript p {
   outline: none !important;
 }
 
+/* Estilos unificados para rejillas de iconos en popups */
 .popup-grid {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
+  display: grid !important;
+  grid-template-columns: repeat(auto-fill, minmax(50px, 1fr)) !important;
+  gap: 0.5rem !important;
+  justify-items: center;
+  align-items: center;
+  width: 100%;
 }
+
+.popup-grid > div {
+  width: 50px !important;
+  height: 50px !important;
+  min-width: 50px !important;
+  min-height: 50px !important;
+  max-width: 50px !important;
+  max-height: 50px !important;
+  padding: 0 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  background: #f9f9f9;
+  cursor: pointer;
+}
+
+.popup-grid img {
+  max-width: 40px !important;
+  max-height: 40px !important;
+}
+
+/* Ajustes específicos para móviles */
+@media (max-width: 400px) {
+  .popup-grid {
+    grid-template-columns: repeat(5, 1fr) !important;
+    gap: 0.25rem !important;
+  }
+  
+  .popup-grid > div {
+    width: 46px !important;
+    height: 46px !important;
+    min-width: 46px !important;
+    min-height: 46px !important;
+  }
+  
+  .popup-grid img {
+    max-width: 36px !important;
+    max-height: 36px !important;
+  }
+}
+
 
 .popup-button-confirm {
   background: #4caf50;
@@ -3534,69 +3608,6 @@ a.btn-search.btn-rounded:hover {
   gap: 0.5rem;
   align-items: center;
 }
-
-@media (max-width: 400px) {
-  #aliasIconGridContainer .popup-grid {
-    display: grid !important;
-    grid-template-columns: repeat(5, 1fr) !important;
-    gap: 0.22rem !important;
-    justify-items: center;
-    align-items: center;
-  }
-  #aliasIconGridContainer .popup-grid > div {
-    width: 46px !important;
-    height: 46px !important;
-    min-width: 46px !important;
-    min-height: 46px !important;
-    max-width: 46px !important;
-    max-height: 46px !important;
-    padding: 0 !important;
-    display: flex !important;
-    align-items: center !important;
-    justify-content: center !important;
-  }
-  #aliasIconGridContainer .popup-grid img {
-    max-width: 36px !important;
-    max-height: 36px !important;
-  }
-  #aliasIconGridContainer.popup-base {
-    max-width: 99vw !important;
-    min-width: 0 !important;
-    padding: 0.5rem !important;
-  }
-}
-
-@media (max-width: 900px) {
-  #iconGridContainer .popup-grid {
-    display: grid !important;
-    grid-template-columns: repeat(5, 1fr) !important;
-    gap: 0.22rem !important;
-    justify-items: center;
-    align-items: center;
-  }
-  #iconGridContainer .popup-grid > div {
-    width: 46px !important;
-    height: 46px !important;
-    min-width: 46px !important;
-    min-height: 46px !important;
-    max-width: 46px !important;
-    max-height: 46px !important;
-    padding: 0 !important;
-    display: flex !important;
-    align-items: center !important;
-    justify-content: center !important;
-  }
-  #iconGridContainer .popup-grid img {
-    max-width: 36px !important;
-    max-height: 36px !important;
-  }
-  #iconGridContainer.popup-base {
-    max-width: 99vw !important;
-    min-width: 0 !important;
-    padding: 0.5rem !important;
-  }
-}
-
 @media (max-width: 500px) {
   .admin-card h3,
   .admin-card form#securitySettingsForm,

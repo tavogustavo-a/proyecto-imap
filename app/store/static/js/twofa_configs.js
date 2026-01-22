@@ -139,7 +139,7 @@
     if (twofaSecretInput) {
         twofaSecretInput.addEventListener('input', function(e) {
             const secret = e.target.value.trim().toUpperCase();
-            if (secret && /^[A-Z0-9]{16,}$/.test(secret)) {
+            if (secret && /^[A-Z0-9]{8,}$/.test(secret)) {
                 currentSecret = secret;
                 if (twofaSecretDisplay) {
                     twofaSecretDisplayValue.textContent = currentSecret;
@@ -166,7 +166,7 @@
             
             // Obtener secreto del campo de código manual o del secreto actual
             const secretFromInput = twofaSecretInput ? twofaSecretInput.value.trim().toUpperCase() : '';
-            if (secretFromInput && /^[A-Z0-9]{16,}$/.test(secretFromInput)) {
+            if (secretFromInput && /^[A-Z0-9]{8,}$/.test(secretFromInput)) {
                 currentSecret = secretFromInput;
             }
             
@@ -519,7 +519,7 @@
     if (editTwofaSecretInput) {
         editTwofaSecretInput.addEventListener('input', function(e) {
             const secret = e.target.value.trim().toUpperCase();
-            if (secret && /^[A-Z0-9]{16,}$/.test(secret)) {
+            if (secret && /^[A-Z0-9]{8,}$/.test(secret)) {
                 currentEditSecret = secret;
                 if (editTwofaSecretDisplay && editTwofaSecretDisplayValue) {
                     editTwofaSecretDisplayValue.textContent = currentEditSecret;
@@ -556,7 +556,7 @@
             const secretFromInput = editTwofaSecretInput ? editTwofaSecretInput.value.trim().toUpperCase() : '';
             let secretToUse = currentEditSecret; // Por defecto usar el secreto actual
             
-            if (secretFromInput && /^[A-Z0-9]{16,}$/.test(secretFromInput)) {
+            if (secretFromInput && /^[A-Z0-9]{8,}$/.test(secretFromInput)) {
                 secretToUse = secretFromInput;
             }
             

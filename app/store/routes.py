@@ -8809,11 +8809,16 @@ def create_twofa_config():
         if not data:
             return jsonify({'success': False, 'error': 'No se recibieron datos'}), 400
         
-        secret_key = data.get('secret_key', '').strip()
+        secret_key = data.get('secret_key', '').strip().upper().replace(' ', '').replace('-', '')
         emails_input = data.get('emails', '').strip()
         
         if not secret_key:
             return jsonify({'success': False, 'error': 'El secreto TOTP es obligatorio'}), 400
+        
+        # Validar formato (aceptar A-Z, 0-9 para compatibilidad con Microsoft y otras apps)
+        # Bajamos el mínimo a 8 caracteres porque Microsoft a veces usa secretos cortos (ej: 15 chars)
+        if not re.match(r'^[A-Z0-9]{8,}$', secret_key):
+            return jsonify({'success': False, 'error': 'El secreto TOTP debe tener al menos 8 caracteres alfanuméricos'}), 400
         
         if not emails_input:
             return jsonify({'success': False, 'error': 'Debes agregar al menos un correo'}), 400
@@ -8883,8 +8888,11 @@ def update_twofa_config(config_id):
         
         # Actualizar secreto si se proporciona
         if 'secret_key' in data:
-            secret_key = data.get('secret_key', '').strip()
+            secret_key = data.get('secret_key', '').strip().upper().replace(' ', '').replace('-', '')
             if secret_key:
+                # Validar formato (aceptar A-Z, 0-9 para compatibilidad)
+                if not re.match(r'^[A-Z0-9]{8,}$', secret_key):
+                    return jsonify({'success': False, 'error': 'El secreto TOTP debe tener al menos 8 caracteres alfanuméricos'}), 400
                 config.secret_key = secret_key
         
         # Actualizar correos si se proporcionan
@@ -8993,29 +9001,27 @@ def read_qr_code():
             
             qr_data = decoded_objects[0].data.decode('utf-8')
             
-            # Extraer el secreto del formato otpauth://totp/...
-            # Formato: otpauth://totp/Label?secret=SECRET&issuer=Issuer
-            secret_match = re.search(r'secret=([A-Z0-9]+)', qr_data, re.IGNORECASE)
+            # Buscar el secreto de forma más robusta (capturar todo hasta el final o hasta el siguiente parámetro)
+            secret_match = re.search(r'secret=([A-Z0-9=]+)', qr_data, re.IGNORECASE)
             if secret_match:
-                secret_key = secret_match.group(1).upper()
+                secret_key = secret_match.group(1).upper().strip().replace(' ', '').replace('-', '')
                 return jsonify({
                     'success': True,
                     'secret_key': secret_key,
                     'qr_data': qr_data
                 }), 200
             else:
-                # Si no está en formato otpauth, intentar usar el contenido completo como secreto
-                # (algunos QR codes solo contienen el secreto)
-                if re.match(r'^[A-Z0-9]{16,}$', qr_data, re.IGNORECASE):
+                # Buscar cualquier cadena alfanumérica larga (secreto puro)
+                potential_secret = re.search(r'([A-Z0-9]{8,})', qr_data, re.IGNORECASE)
+                if potential_secret:
+                    secret_key = potential_secret.group(1).upper().strip().replace(' ', '').replace('-', '')
                     return jsonify({
                         'success': True,
-                        'secret_key': qr_data.upper()
+                        'secret_key': secret_key,
+                        'qr_data': qr_data
                     }), 200
                 else:
-                    return jsonify({
-                        'success': False,
-                        'error': 'El QR code no contiene un secreto TOTP válido'
-                    }), 400
+                    return jsonify({'success': False, 'error': 'El código QR no contiene un secreto TOTP válido'}), 400
                     
         except ImportError:
             # Si pyzbar no está instalado, intentar con qrcode (solo lectura básica)

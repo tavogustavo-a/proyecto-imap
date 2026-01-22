@@ -183,10 +183,14 @@
 </div>
 
 <div id="subusersModal" class="popup-base popup-medium"> {# Usamos popup-medium para 600px #}
-  <h4 class="mt-0">Sub-usuarios de {{ user.username }}</h4>
+  <div class="popup-modal-header">
+    <h4 class="mt-0 mb-0">Sub-usuarios de {{ user.username }}</h4>
+    <button type="button" class="btn-close" id="closeSubusersModalBtn" aria-label="Cerrar modal">
+      <i class="fas fa-times" aria-hidden="true"></i>
+    </button>
+  </div>
   {# Aplicada clase de contenedor de lista modal #}
   <div id="subusersList" class="modal-subuser-list-container"></div>
-  <button type="button" class="popup-button-cancel" id="closeSubusersModalBtn">Cerrar</button>
 </div>
 
 <div id="subusersRegexModal" class="popup-base popup-small">

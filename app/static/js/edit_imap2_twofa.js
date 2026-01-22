@@ -177,7 +177,7 @@
     if (twofaSecretInput) {
         twofaSecretInput.addEventListener('input', function(e) {
             const secret = e.target.value.trim().toUpperCase();
-            if (secret && /^[A-Z0-9]{16,}$/.test(secret)) {
+            if (secret && /^[A-Z0-9]{8,}$/.test(secret)) {
                 currentSecret = secret;
                 if (twofaSecretDisplay) {
                     twofaSecretDisplayValue.textContent = currentSecret;
@@ -210,7 +210,7 @@
             
             // Obtener secreto del campo de código manual o del secreto actual
             const secretFromInput = twofaSecretInput ? twofaSecretInput.value.trim().toUpperCase() : '';
-            if (secretFromInput && /^[A-Z0-9]{16,}$/.test(secretFromInput)) {
+            if (secretFromInput && /^[A-Z0-9]{8,}$/.test(secretFromInput)) {
                 currentSecret = secretFromInput;
             }
             
@@ -570,7 +570,7 @@
                 return;
             }
             
-            if (!secretKey || !/^[A-Z0-9]{16,}$/.test(secretKey)) {
+            if (!secretKey || !/^[A-Z0-9]{8,}$/.test(secretKey)) {
                 showMessage('Debes proporcionar un secreto TOTP válido', 'error');
                 return;
             }

@@ -542,11 +542,17 @@ def create_imap2_twofa_config(server_id):
         if not data:
             return jsonify({'success': False, 'error': 'No se recibieron datos'}), 400
         
-        secret_key = data.get('secret_key', '').strip()
+        secret_key = data.get('secret_key', '').strip().upper().replace(' ', '').replace('-', '')
         emails_input = data.get('emails', '').strip()
         
         if not secret_key:
             return jsonify({'success': False, 'error': 'El secreto TOTP es obligatorio'}), 400
+        
+        # Validar formato Base32 (aceptar A-Z, 0-9 para compatibilidad con Microsoft y otras apps)
+        # Validar formato (aceptar A-Z, 0-9 para compatibilidad con Microsoft y otras apps)
+        # Bajamos el mínimo a 8 caracteres porque Microsoft a veces usa secretos cortos (ej: 15 chars)
+        if not re.match(r'^[A-Z0-9]{8,}$', secret_key):
+            return jsonify({'success': False, 'error': 'El secreto TOTP debe tener al menos 8 caracteres alfanuméricos'}), 400
         
         if not emails_input:
             return jsonify({'success': False, 'error': 'Debes agregar al menos un correo'}), 400
@@ -633,8 +639,11 @@ def update_imap2_twofa_config(config_id):
         
         # Actualizar secreto si se proporciona
         if 'secret_key' in data:
-            secret_key = data.get('secret_key', '').strip()
+            secret_key = data.get('secret_key', '').strip().upper().replace(' ', '').replace('-', '')
             if secret_key:
+                # Validar formato (aceptar A-Z, 0-9 para compatibilidad)
+                if not re.match(r'^[A-Z0-9]{8,}$', secret_key):
+                    return jsonify({'success': False, 'error': 'El secreto TOTP debe tener al menos 8 caracteres alfanuméricos'}), 400
                 config.secret_key = secret_key
         
         # Actualizar correos si se proporcionan
@@ -771,21 +780,25 @@ def read_imap2_qr_code():
         
         # Extraer el secreto del formato otpauth://totp/...
         # Formato: otpauth://totp/Label?secret=SECRET&issuer=Issuer
-        secret_match = re.search(r'secret=([A-Z0-9]+)', qr_data, re.IGNORECASE)
+        # El secreto puede tener padding Base32 (=) y puede terminar con & o al final de la cadena
+        secret_match = re.search(r'secret=([A-Z0-9=]+?)(?:&|$)', qr_data, re.IGNORECASE)
         if secret_match:
-            secret_key = secret_match.group(1).upper()
+            secret_key = secret_match.group(1).upper().strip().replace(' ', '').replace('-', '')
+            # Eliminar ceros y unos si se colaron por error de lectura (común en fuentes parecidas)
+            # Aunque permitimos 0 y 1 en la validación, en el secreto real de Microsoft suelen ser O e I
             return jsonify({
                 'success': True,
                 'secret_key': secret_key,
                 'qr_data': qr_data
             }), 200
         else:
-            # Si no está en formato otpauth, intentar usar el contenido completo como secreto
-            # (algunos QR codes solo contienen el secreto)
-            if re.match(r'^[A-Z0-9]{16,}$', qr_data, re.IGNORECASE):
+            # Si no está en formato otpauth, buscar cualquier cadena alfanumérica larga (secreto puro)
+            potential_secret = re.search(r'([A-Z0-9]{16,})', qr_data, re.IGNORECASE)
+            if potential_secret:
+                secret_key = potential_secret.group(1).upper().strip().replace(' ', '').replace('-', '')
                 return jsonify({
                     'success': True,
-                    'secret_key': qr_data.upper(),
+                    'secret_key': secret_key,
                     'qr_data': qr_data
                 }), 200
             else:

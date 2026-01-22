@@ -377,6 +377,8 @@ def export_config():
                 } for d in DomainModel.query.all()
             ],
             "security_rules": [r.to_dict() for r in SecurityRule.query.all()],
+            # --- Añadir IMAP Servers al Export ---
+            "imap_servers": [s.to_dict() for s in IMAPServer.query.all()],
             # --- Añadir Observer IMAP Servers al Export ---
             "observer_imap_servers": [s.to_dict() for s in ObserverIMAPServer.query.all()],
             # --- Añadir IMAP2 Servers al Export ---
@@ -493,6 +495,7 @@ def import_config():
         users_data = config_data.get('users', []) # Obtener datos de usuarios
         security_rules_data = config_data.get('security_rules', [])
         app_secrets_data = config_data.get('app_secrets', [])  # CRÍTICO: Claves de cifrado IMAP
+        imap_servers_data = config_data.get('imap_servers', [])  # IMAP Servers
         observer_imap_data = config_data.get('observer_imap_servers', [])  # Observer IMAP Servers
         imap2_data = config_data.get('imap2_servers', [])  # IMAP2 Servers
 
@@ -558,9 +561,10 @@ def import_config():
             db.session.execute(imap2_users.delete())
             # Borrar configuraciones 2FA de IMAP2
             IMAP2TwoFAConfig.query.delete()
-            # Borrar servidores IMAP2 y Observer IMAP
+            # Borrar servidores IMAP2, Observer IMAP e IMAP regulares
             IMAPServer2.query.delete()
             ObserverIMAPServer.query.delete()
+            IMAPServer.query.delete()
             db.session.flush() # Aplicar borrados antes de recrear
 
             # 6. Crear nuevos objetos base y mapear IDs viejos a NUEVOS
@@ -690,6 +694,13 @@ def import_config():
                     rule_data_cleaned = {k: v for k, v in rule_data.items() if k != 'id'}
                     new_rule = SecurityRule(**rule_data_cleaned)
                     db.session.add(new_rule)
+            
+            # --- Crear IMAP Servers ---
+            if imap_servers_data:
+                for imap_data in imap_servers_data:
+                    imap_data_cleaned = {k: v for k, v in imap_data.items() if k not in ['id', 'original_id']}
+                    new_imap = IMAPServer(**imap_data_cleaned)
+                    db.session.add(new_imap)
             
             # --- Crear Observer IMAP Servers ---
             if observer_imap_data:

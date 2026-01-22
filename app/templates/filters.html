@@ -87,7 +87,7 @@
 
     <div class="mt-1">
       <h4>Agregar Nuevo Dominio</h4>
-      <form action="{{ url_for('admin_bp.create_domain') }}" method="POST">
+      <form action="{{ url_for('admin_bp.create_domain') }}" method="POST" class="d-flex gap-05 align-items-center">
         <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
         <label for="newDomain" class="sr-only">Dominio</label>
         <input
@@ -95,7 +95,7 @@
           id="newDomain"
           name="domain"
           placeholder="Dominio"
-          class="d-block mb-05"
+          class="flex-grow-1"
           autocomplete="off"
         >
         <button type="submit" class="btn-green">Crear</button>
