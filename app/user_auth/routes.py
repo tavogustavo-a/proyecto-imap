@@ -642,15 +642,15 @@ def my_page_read_qr():
                 'secret_key': secret_key,
                 'qr_data': qr_data
             }), 200
-            else:
-                # Si no está en formato otpauth, intentar usar el contenido completo como secreto
-                # (algunos QR codes solo contienen el secreto)
-                if re.match(r'^[A-Z0-9]{8,}$', qr_data, re.IGNORECASE):
-                    return jsonify({
-                        'success': True,
-                        'secret_key': qr_data.upper(),
-                        'qr_data': qr_data
-                    }), 200
+        else:
+            # Si no está en formato otpauth, intentar usar el contenido completo como secreto
+            # (algunos QR codes solo contienen el secreto)
+            if re.match(r'^[A-Z0-9]{8,}$', qr_data, re.IGNORECASE):
+                return jsonify({
+                    'success': True,
+                    'secret_key': qr_data.upper(),
+                    'qr_data': qr_data
+                }), 200
             else:
                 return jsonify({'success': False, 'error': 'El código QR no contiene un secreto TOTP válido'}), 400
     except Exception as e:
