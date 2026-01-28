@@ -1019,7 +1019,8 @@ document.addEventListener("DOMContentLoaded", function() {
   // Manejar entrada manual de secreto
   if (subuserTwofaSecretInput) {
     subuserTwofaSecretInput.addEventListener('input', function(e) {
-      const secret = e.target.value.trim().toUpperCase();
+      // Normalizar: eliminar espacios, convertir a mayúsculas
+      const secret = e.target.value.replace(/\s+/g, '').toUpperCase();
       if (secret && /^[A-Z0-9]{8,}$/.test(secret)) {
         subuserCurrentSecret = secret;
         if (subuserTwofaSecretDisplay && subuserTwofaSecretDisplayValue) {
@@ -1045,7 +1046,8 @@ document.addEventListener("DOMContentLoaded", function() {
         return;
       }
       
-      const secretFromInput = subuserTwofaSecretInput ? subuserTwofaSecretInput.value.trim().toUpperCase() : '';
+      // Normalizar: eliminar espacios, convertir a mayúsculas
+      const secretFromInput = subuserTwofaSecretInput ? subuserTwofaSecretInput.value.replace(/\s+/g, '').toUpperCase() : '';
       if (secretFromInput && /^[A-Z0-9]{8,}$/.test(secretFromInput)) {
         subuserCurrentSecret = secretFromInput;
       }
@@ -1416,7 +1418,8 @@ document.addEventListener("DOMContentLoaded", function() {
   // Manejar entrada manual de secreto en el modal de edición
   if (subuserEditTwofaSecretInput) {
     subuserEditTwofaSecretInput.addEventListener('input', function(e) {
-      const secret = e.target.value.trim().toUpperCase();
+      // Normalizar: eliminar espacios, convertir a mayúsculas
+      const secret = e.target.value.replace(/\s+/g, '').toUpperCase();
       if (secret && /^[A-Z0-9]{8,}$/.test(secret)) {
         subuserCurrentEditSecret = secret;
         if (subuserEditTwofaSecretDisplay && subuserEditTwofaSecretDisplayValue) {
@@ -1449,7 +1452,8 @@ document.addEventListener("DOMContentLoaded", function() {
         return;
       }
       
-      const secretFromInput = subuserEditTwofaSecretInput ? subuserEditTwofaSecretInput.value.trim().toUpperCase() : '';
+      // Normalizar: eliminar espacios, convertir a mayúsculas
+      const secretFromInput = subuserEditTwofaSecretInput ? subuserEditTwofaSecretInput.value.replace(/\s+/g, '').toUpperCase() : '';
       let secretToUse = subuserCurrentEditSecret;
       
       if (secretFromInput && /^[A-Z0-9]{8,}$/.test(secretFromInput)) {

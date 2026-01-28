@@ -71,38 +71,36 @@ document.addEventListener("DOMContentLoaded", function () {
   const toggleThemeBtn = document.getElementById("toggleThemeBtn");
   if (toggleThemeBtn) {
     const icon = toggleThemeBtn.querySelector("i");
+    
     function updateThemeIcon() {
       if (icon) {
+        // Si está en modo oscuro, mostrar sol (porque al hacer clic cambiará a modo claro)
+        // Si está en modo claro, mostrar luna (porque al hacer clic cambiará a modo oscuro)
         if (document.body.classList.contains("dark-mode")) {
-          icon.className = "fas fa-sun"; // Sol para modo claro
+          icon.className = "fas fa-sun"; // Sol = cambiará a modo claro
         } else {
-          icon.className = "fas fa-moon"; // Luna para modo oscuro
+          icon.className = "fas fa-moon"; // Luna = cambiará a modo oscuro
         }
       }
     }
     
-    // Usar onclick para asegurar que funcione
-    toggleThemeBtn.onclick = function(e) {
-      e.preventDefault();
-      e.stopPropagation();
+    // Función para alternar el tema
+    function toggleTheme(e) {
+      if (e) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
       document.body.classList.toggle("dark-mode");
       const isDark = document.body.classList.contains("dark-mode");
       localStorage.setItem("darkMode", isDark.toString());
       updateThemeIcon();
       return false;
-    };
+    }
     
-    // También agregar addEventListener como respaldo
-    toggleThemeBtn.addEventListener("click", function(e) {
-      e.preventDefault();
-      e.stopPropagation();
-      document.body.classList.toggle("dark-mode");
-      const isDark = document.body.classList.contains("dark-mode");
-      localStorage.setItem("darkMode", isDark.toString());
-      updateThemeIcon();
-    });
+    // Usar addEventListener (más moderno y permite múltiples listeners si es necesario)
+    toggleThemeBtn.addEventListener("click", toggleTheme);
     
-    // Establecer icono inicial del botón
+    // Establecer icono inicial del botón según el estado actual
     updateThemeIcon();
   }
 

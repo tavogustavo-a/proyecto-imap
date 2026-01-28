@@ -138,7 +138,8 @@
     // Manejar entrada manual de secreto
     if (twofaSecretInput) {
         twofaSecretInput.addEventListener('input', function(e) {
-            const secret = e.target.value.trim().toUpperCase();
+            // Normalizar: eliminar espacios, convertir a mayúsculas
+            const secret = e.target.value.replace(/\s+/g, '').toUpperCase();
             if (secret && /^[A-Z0-9]{8,}$/.test(secret)) {
                 currentSecret = secret;
                 if (twofaSecretDisplay) {
@@ -165,7 +166,8 @@
             }
             
             // Obtener secreto del campo de código manual o del secreto actual
-            const secretFromInput = twofaSecretInput ? twofaSecretInput.value.trim().toUpperCase() : '';
+            // Normalizar: eliminar espacios, convertir a mayúsculas
+            const secretFromInput = twofaSecretInput ? twofaSecretInput.value.replace(/\s+/g, '').toUpperCase() : '';
             if (secretFromInput && /^[A-Z0-9]{8,}$/.test(secretFromInput)) {
                 currentSecret = secretFromInput;
             }
@@ -518,7 +520,8 @@
     // Manejar entrada manual de secreto en el modal de edición
     if (editTwofaSecretInput) {
         editTwofaSecretInput.addEventListener('input', function(e) {
-            const secret = e.target.value.trim().toUpperCase();
+            // Normalizar: eliminar espacios, convertir a mayúsculas
+            const secret = e.target.value.replace(/\s+/g, '').toUpperCase();
             if (secret && /^[A-Z0-9]{8,}$/.test(secret)) {
                 currentEditSecret = secret;
                 if (editTwofaSecretDisplay && editTwofaSecretDisplayValue) {
@@ -553,7 +556,8 @@
             }
             
             // Obtener secreto del campo de código manual o del secreto actual
-            const secretFromInput = editTwofaSecretInput ? editTwofaSecretInput.value.trim().toUpperCase() : '';
+            // Normalizar: eliminar espacios, convertir a mayúsculas
+            const secretFromInput = editTwofaSecretInput ? editTwofaSecretInput.value.replace(/\s+/g, '').toUpperCase() : '';
             let secretToUse = currentEditSecret; // Por defecto usar el secreto actual
             
             if (secretFromInput && /^[A-Z0-9]{8,}$/.test(secretFromInput)) {

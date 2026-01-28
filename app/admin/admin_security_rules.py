@@ -162,11 +162,11 @@ def save_security_settings():
              flash("Faltan valores de tiempo.", "danger")
         else:
             try:
-                # Validar que sean enteros positivos
-                ret_minutes = int(retention)
-                freq_minutes = int(frequency)
+                # Validar que sean números positivos (ahora acepta decimales)
+                ret_minutes = float(retention)
+                freq_minutes = int(frequency) # La frecuencia de chequeo se mantiene en enteros por el scheduler
                 if ret_minutes <= 0 or freq_minutes <= 0:
-                    raise ValueError("Los minutos deben ser mayores a cero.")
+                    raise ValueError("Los valores deben ser mayores a cero.")
                 
                 set_site_setting("log_retention_minutes", str(ret_minutes))
                 set_site_setting("observer_check_frequency", str(freq_minutes))

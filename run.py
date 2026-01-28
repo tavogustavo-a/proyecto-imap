@@ -556,7 +556,7 @@ def check_observer_patterns_job():
                     try:
                         if safe_regex_search(rule.observer_pattern, cleaned_content):
                             # print(f"[{current_time_str}] [ALERTA-OBSERVER] Coincidencia Patrón Observador! Regla ID: {rule.id}, Correo ID: {scanned_email_message_id}")
-                            log_retention_minutes = int(get_site_setting("log_retention_minutes", "60"))
+                            log_retention_minutes = float(get_site_setting("log_retention_minutes", "60"))
                             log_cutoff_time = now_utc - timedelta(minutes=log_retention_minutes)
                             
                             from sqlalchemy import func, or_
@@ -742,10 +742,10 @@ def cleanup_trigger_logs_job():
         current_time_str = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
 
         try:
-            retention_minutes = int(get_site_setting("log_retention_minutes", "60")) 
-            if retention_minutes <= 0: retention_minutes = 60
+            retention_minutes = float(get_site_setting("log_retention_minutes", "60")) 
+            if retention_minutes <= 0: retention_minutes = 60.0
         except ValueError:
-             retention_minutes = 60
+             retention_minutes = 60.0
 
         last_cleanup_setting_key = "cleanup_job_last_actual_run_utc"
         last_cleanup_iso = get_site_setting(last_cleanup_setting_key)

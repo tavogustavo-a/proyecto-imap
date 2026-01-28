@@ -176,7 +176,8 @@
     // Manejar entrada manual de secreto
     if (twofaSecretInput) {
         twofaSecretInput.addEventListener('input', function(e) {
-            const secret = e.target.value.trim().toUpperCase();
+            // Normalizar: eliminar espacios, convertir a mayúsculas
+            const secret = e.target.value.replace(/\s+/g, '').toUpperCase();
             if (secret && /^[A-Z0-9]{8,}$/.test(secret)) {
                 currentSecret = secret;
                 if (twofaSecretDisplay) {
@@ -209,7 +210,8 @@
             }
             
             // Obtener secreto del campo de código manual o del secreto actual
-            const secretFromInput = twofaSecretInput ? twofaSecretInput.value.trim().toUpperCase() : '';
+            // Normalizar: eliminar espacios, convertir a mayúsculas
+            const secretFromInput = twofaSecretInput ? twofaSecretInput.value.replace(/\s+/g, '').toUpperCase() : '';
             if (secretFromInput && /^[A-Z0-9]{8,}$/.test(secretFromInput)) {
                 currentSecret = secretFromInput;
             }
@@ -563,7 +565,8 @@
             
             const configId = parseInt(editConfigId.value);
             const emails = editEmailsInput.value.trim();
-            const secretKey = editSecretInput.value.trim().toUpperCase();
+            // Normalizar: eliminar espacios, convertir a mayúsculas
+            const secretKey = editSecretInput.value.replace(/\s+/g, '').toUpperCase();
             
             if (!emails) {
                 showMessage('Debes ingresar al menos un correo', 'error');
