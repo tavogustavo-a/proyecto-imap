@@ -15,8 +15,9 @@ from .admin_bp import admin_bp
 from app.models import RememberDevice
 from app.helpers import increment_global_session_revocation_count
 import logging
+import secrets
 from werkzeug.exceptions import BadRequest
-from app.models.user import AllowedEmail
+from app.models.user import AllowedEmail, LinkedProject
 from sqlalchemy.exc import IntegrityError # Para capturar errores de unicidad
 from sqlalchemy import or_ # Importar 'or_'
 
@@ -1643,3 +1644,124 @@ def edit_user_products(user_id):
                           productos=productos, 
                           productos_ids=productos_ids,
                           tipo_precio=tipo_precio)
+
+
+# --- NUEVAS RUTAS PARA APIs VINCULADAS (PROYECTOS) ---
+
+@admin_bp.route("/user/<int:user_id>/linked_projects", methods=["GET"])
+@admin_required
+def get_linked_projects(user_id):
+    """Obtiene la lista de APIs vinculadas de un usuario."""
+    user = User.query.get_or_404(user_id)
+    projects = user.linked_projects.order_by(LinkedProject.created_at.desc()).all()
+    return jsonify({
+        "status": "ok",
+        "projects": [{
+            "id": p.id,
+            "name": p.name,
+            "url": p.url,
+            "token": p.token,
+            "enabled": p.enabled
+        } for p in projects]
+    })
+
+@admin_bp.route("/user/<int:user_id>/linked_projects", methods=["POST"])
+@admin_required
+def add_linked_project(user_id):
+    """Agrega una nueva API vinculada para un usuario."""
+    user = User.query.get_or_404(user_id)
+    data = request.get_json()
+    
+    name = data.get("name", "").strip()
+    url = data.get("url", "").strip()
+    token = data.get("token", "").strip()
+    
+    if not name or not url or not token:
+        return jsonify({"status": "error", "message": "Faltan datos obligatorios (nombre, url o token)."}), 400
+        
+    new_project = LinkedProject(
+        user_id=user.id,
+        name=name,
+        url=url,
+        token=token
+    )
+    db.session.add(new_project)
+    
+    try:
+        db.session.commit()
+        return jsonify({"status": "ok", "project": {
+            "id": new_project.id,
+            "name": new_project.name,
+            "url": new_project.url,
+            "token": new_project.token,
+            "enabled": new_project.enabled
+        }})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+@admin_bp.route("/user/linked_projects/<int:project_id>", methods=["PUT"])
+@admin_required
+def update_linked_project(project_id):
+    """Actualiza una API vinculada."""
+    project = LinkedProject.query.get_or_404(project_id)
+    data = request.get_json()
+    
+    project.name = data.get("name", project.name).strip()
+    project.url = data.get("url", project.url).strip()
+    project.token = data.get("token", project.token).strip()
+    
+    if "enabled" in data:
+        project.enabled = bool(data.get("enabled"))
+        
+    try:
+        db.session.commit()
+        return jsonify({"status": "ok"})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+@admin_bp.route("/user/linked_projects/<int:project_id>", methods=["DELETE"])
+@admin_required
+def delete_linked_project(project_id):
+    """Elimina una API vinculada."""
+    project = LinkedProject.query.get_or_404(project_id)
+    db.session.delete(project)
+    try:
+        db.session.commit()
+        return jsonify({"status": "ok"})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+@admin_bp.route("/user/<int:user_id>/master_token", methods=["GET"])
+@admin_required
+def get_master_token(user_id):
+    """Obtiene el token maestro del usuario, generándolo si no existe."""
+    user = User.query.get_or_404(user_id)
+    if not user.master_token:
+        user.master_token = secrets.token_hex(32)
+        db.session.commit()
+    
+    # Construir la URL base de este proyecto
+    base_url = request.url_root.rstrip('/')
+    api_url = f"{base_url}/api/external/search"
+    
+    return jsonify({
+        "status": "ok",
+        "token": user.master_token,
+        "api_url": api_url
+    })
+
+@admin_bp.route("/user/<int:user_id>/regen_master_token", methods=["POST"])
+@admin_required
+def regen_master_token(user_id):
+    """Regenera el token maestro del usuario."""
+    user = User.query.get_or_404(user_id)
+    user.master_token = secrets.token_hex(32)
+    try:
+        db.session.commit()
+        return jsonify({"status": "ok", "token": user.master_token})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"status": "error", "message": str(e)}), 500

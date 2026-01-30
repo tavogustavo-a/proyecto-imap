@@ -103,6 +103,36 @@
           <span id="addEmailsMsg" class="text-italic text-success"></span>
         </div>
       </div>
+
+      {# --- NUEVA SECCIÓN: APIs Vinculadas --- #}
+      <hr class="hr-margin-15">
+      <div id="linkedApisSection" class="mb-0">
+        <div class="d-flex justify-content-between align-items-center mb-05">
+          <strong>APIs Vinculadas (Otros Proyectos):</strong>
+          <div class="d-flex align-items-center gap-05">
+            <button type="button" id="showMyApiBtn" class="btn-panel btn-blue btn-sm" title="Ver mi API para este proyecto">
+              <i class="fas fa-key"></i> Mi API
+            </button>
+          </div>
+        </div>
+
+        <div id="linkedApisList" class="mb-1">
+          <p class="text-muted text-center">Cargando APIs vinculadas...</p>
+        </div>
+
+        <div class="d-flex gap-05 align-items-center">
+          <input type="text" id="newApiNameInput" class="flex-grow-1 api-input" placeholder="Nombre del proyecto (ej: Proyecto B)" autocomplete="off">
+          <input type="text" id="newApiUrlInput" class="flex-grow-1 api-input" placeholder="URL de la API (ej: https://proyecto-b.com/api)" autocomplete="off">
+          <input type="text" id="newApiTokenInput" class="flex-grow-1 api-input" placeholder="Token de acceso" autocomplete="off">
+          <button type="button" id="addLinkedApiBtn" class="btn-blue" title="Agregar otra API">
+            <i class="fas fa-plus"></i>
+          </button>
+        </div>
+        <div class="text-center mt-05">
+          <span id="linkedApiMsg" class="text-italic"></span>
+        </div>
+      </div>
+      {# --- FIN NUEVA SECCIÓN --- #}
     </div>
   </div>
 
@@ -208,6 +238,62 @@
   <button type="button" class="popup-button-confirm" id="saveSubusersFiltersBtn">Guardar</button>
   <button type="button" class="popup-button-cancel" id="closeSubusersFiltersModalBtn">Cerrar</button>
 </div>
+
+{# --- MODALES PARA APIs VINCULADAS --- #}
+<div id="myApiModal" class="popup-base popup-small popup-hide">
+  <div class="popup-modal-header">
+    <h4 class="mt-0 mb-0 flex-grow-1 text-center">Mi API de Acceso</h4>
+    <button type="button" class="btn-close" id="closeMyApiModalBtn" aria-label="Cerrar modal">
+      <i class="fas fa-times" aria-hidden="true"></i>
+    </button>
+  </div>
+  <p class="text-small mb-1 text-center">Usa estos datos para vincular este usuario en otros proyectos.</p>
+  <div class="mb-1 text-center">
+    <label for="myApiUrlDisplay" class="d-block mb-03"><strong>URL de la API:</strong></label>
+    <div class="d-flex gap-05 mb-05">
+      <input type="text" id="myApiUrlDisplay" class="flex-grow-1 text-center api-input" readonly>
+      <button type="button" class="btn-panel btn-blue btn-sm copy-api-btn" data-target="myApiUrlDisplay" title="Copiar URL">
+        <i class="fas fa-copy"></i>
+      </button>
+    </div>
+    
+    <label for="myApiTokenDisplay" class="d-block mb-03"><strong>Tu Token Maestro:</strong></label>
+    <div class="d-flex gap-05">
+      <input type="text" id="myApiTokenDisplay" class="flex-grow-1 text-center api-input" readonly>
+      <button type="button" class="btn-panel btn-blue btn-sm copy-api-btn" data-target="myApiTokenDisplay" title="Copiar Token">
+        <i class="fas fa-copy"></i>
+      </button>
+      <button type="button" id="regenMasterTokenBtn" class="btn-panel btn-orange btn-sm" title="Regenerar Token">
+        <i class="fas fa-sync-alt"></i>
+      </button>
+    </div>
+  </div>
+  <div class="alert-info p-05 text-smaller text-center mt-1">
+    <strong>Nota:</strong> Cada usuario tiene un token único. No compartas este token con nadie.
+  </div>
+</div>
+
+<div id="editLinkedApiModal" class="popup-base popup-small popup-hide">
+  <div class="popup-modal-header">
+    <h4 class="mt-0 mb-0 flex-grow-1 text-center">Editar API Vinculada</h4>
+    <button type="button" class="btn-close" id="closeEditApiModalBtn" aria-label="Cerrar modal">
+      <i class="fas fa-times" aria-hidden="true"></i>
+    </button>
+  </div>
+  <input type="hidden" id="editApiId">
+  <div class="mb-1 text-center">
+    <label for="editApiName" class="d-block mb-03">Nombre del Proyecto:</label>
+    <input type="text" id="editApiName" class="w-100 mb-05 text-center api-input">
+    <label for="editApiUrl" class="d-block mb-03">URL de la API:</label>
+    <input type="text" id="editApiUrl" class="w-100 mb-05 text-center api-input">
+    <label for="editApiToken" class="d-block mb-03">Token de Acceso:</label>
+    <input type="text" id="editApiToken" class="w-100 text-center api-input">
+  </div>
+  <div class="d-flex justify-content-center">
+    <button type="button" class="popup-button-confirm" id="saveEditApiBtn">Guardar</button>
+  </div>
+</div>
+{# --- FIN MODALES APIs --- #}
 
 {% endblock content %}
 

@@ -628,3 +628,46 @@ def get_imap2_2fa_code_for_email(imap_server_id, email):
     except Exception as e:
         current_app.logger.error(f"Error al generar código 2FA de IMAP2: {e}", exc_info=True)
         return jsonify({"error": f"Error al generar código 2FA: {str(e)}"}), 500
+
+
+@api_bp.route("/external/search", methods=["POST"])
+@csrf_exempt_api
+def external_search():
+    """
+    API externa para búsqueda de correos desde otros proyectos.
+    Requiere un token maestro de usuario válido.
+    """
+    data = request.get_json()
+    if not data:
+        return jsonify({"error": "No data received"}), 400
+        
+    token = data.get("token")
+    email_to_search = data.get("email_to_search")
+    
+    if not token or not email_to_search:
+        return jsonify({"error": "Missing token or email_to_search"}), 400
+        
+    # Buscar usuario por token maestro
+    user = User.query.filter_by(master_token=token).first()
+    if not user:
+        return jsonify({"error": "Invalid token"}), 401
+        
+    if not user.enabled:
+        return jsonify({"error": "User is disabled"}), 403
+        
+    # 1. Intentar búsqueda en correos (IMAP) usando las reglas del usuario
+    mail_result = search_and_apply_filters(email_to_search, user=user)
+    
+    if mail_result:
+        return jsonify({"results": [mail_result]}), 200
+        
+    # 2. Si no hay correos, intentar búsqueda en SMS
+    # search_sms_messages devuelve una respuesta jsonify directamente
+    sms_response = search_sms_messages(email_to_search, user=user)
+    
+    # Si search_sms_messages devolvió resultados (status 200)
+    if sms_response.status_code == 200:
+        return sms_response
+        
+    # Si no se encontró nada en ninguna parte
+    return jsonify({"results": []}), 200

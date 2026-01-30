@@ -152,10 +152,12 @@
   <h4 class="mt-0">Crear Alias</h4>
   <div class="mb-05">
     <label for="aliasNameInput">Nombre del alias:</label>
-    <input type="text" id="aliasNameInput" class="popup-input">
+    <input type="text" id="aliasNameInput" class="popup-input alias-name-input">
   </div>
-  <button id="aliasCreateBtn" class="popup-button-confirm">Crear</button>
-  <button id="aliasCancelBtn" class="popup-button-cancel">Cancelar</button>
+  <div class="d-flex justify-content-center gap-05 mt-1">
+    <button id="aliasCreateBtn" class="popup-button-confirm">Crear</button>
+    <button id="aliasCancelBtn" class="popup-button-cancel">Cancelar</button>
+  </div>
 </div>
 
 <div id="editAliasPopup" class="popup-base popup-small">
@@ -165,8 +167,10 @@
     <label for="editAliasName">Nombre del alias:</label>
     <input type="text" id="editAliasName" class="popup-input">
   </div>
-  <button id="editAliasSaveBtn" class="popup-button-confirm">Guardar</button>
-  <button id="editAliasCancelBtn" class="popup-button-cancel">Cancelar</button>
+  <div class="d-flex justify-content-center gap-05 mt-1">
+    <button id="editAliasSaveBtn" class="popup-button-confirm">Guardar</button>
+    <button id="editAliasCancelBtn" class="popup-button-cancel">Cancelar</button>
+  </div>
 </div>
 
 <div id="aliasIconGridOverlay" class="popup-overlay">

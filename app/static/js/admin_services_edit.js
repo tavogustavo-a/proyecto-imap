@@ -59,7 +59,11 @@ document.addEventListener("DOMContentLoaded", function() {
           .catch(err=>{});
       });
       aliasCancelBtn.addEventListener("click",()=>{
-        if (aliasPopup) aliasPopup.style.display = 'none'; 
+        if (aliasPopup) {
+          aliasPopup.classList.remove("modal-visible");
+          aliasPopup.classList.add("modal-hidden");
+        }
+        if (aliasNameInput) aliasNameInput.value = ''; // Limpiar el campo
         currentServiceIdForAlias=null;
       });
     }
@@ -97,7 +101,11 @@ document.addEventListener("DOMContentLoaded", function() {
           .catch(err=>{});
       });
       editAliasCancelBtn.addEventListener("click",()=>{
-        if (editAliasPopup) editAliasPopup.classList.remove('popup-visible'); 
+        if (editAliasPopup) {
+          editAliasPopup.classList.remove('popup-visible');
+          editAliasPopup.classList.add('modal-hidden');
+        }
+        if (editAliasName) editAliasName.value = ''; // Limpiar el campo 
       });
     }
   

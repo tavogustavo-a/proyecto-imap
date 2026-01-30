@@ -194,6 +194,16 @@ class User(db.Model):
     is_support = db.Column(db.Boolean, default=False, nullable=False)
     can_use_coupons = db.Column(db.Boolean, default=False, nullable=False)
     
+    # --- NUEVOS CAMPOS para Proyectos Vinculados ---
+    master_token = db.Column(db.String(100), unique=True, nullable=True, index=True)
+    # --- FIN NUEVOS CAMPOS ---
+
+    def __init__(self, *args, **kwargs):
+        super(User, self).__init__(*args, **kwargs)
+        if not self.master_token:
+            import secrets
+            self.master_token = secrets.token_hex(32)
+    
     # Campo para guardar el último número SMS seleccionado (persiste entre sesiones)
     last_selected_sms_config_id = db.Column(db.Integer, db.ForeignKey('sms_configs.id', ondelete='SET NULL'), nullable=True)
 
@@ -320,3 +330,25 @@ class RememberDevice(db.Model):
         back_populates="devices",  # <-- se enlaza con devices en la clase User
         lazy=True
     )
+
+
+class LinkedProject(db.Model):
+    """
+    Almacena URLs y tokens de otros proyectos vinculados a un usuario.
+    Permite realizar búsquedas cruzadas entre diferentes plataformas.
+    """
+    __tablename__ = "linked_projects"
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
+    name = db.Column(db.String(100), nullable=False)
+    url = db.Column(db.String(255), nullable=False)
+    token = db.Column(db.String(255), nullable=False)
+    enabled = db.Column(db.Boolean, default=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    # Relación con User
+    user = db.relationship("User", backref=db.backref("linked_projects", lazy='dynamic', cascade="all, delete-orphan"))
+
+    def __repr__(self):
+        return f'<LinkedProject id={self.id} name="{self.name}" user_id={self.user_id}>'

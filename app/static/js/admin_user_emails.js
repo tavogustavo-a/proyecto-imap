@@ -260,11 +260,11 @@ document.addEventListener("DOMContentLoaded", function() {
         errorP.textContent = `Error al buscar: ${err.message}`;
         emailsSearchResults.innerHTML = '';
         emailsSearchResults.appendChild(errorP);
-         if(searchStatusDiv) searchStatusDiv.textContent = '';
-         if(deleteDisplayedBtn) {
-           deleteDisplayedBtn.classList.remove('btn-inline-block');
-           deleteDisplayedBtn.classList.add('hide-element');
-         }
+        if(searchStatusDiv) searchStatusDiv.textContent = '';
+        if(deleteDisplayedBtn) {
+          deleteDisplayedBtn.classList.remove('btn-inline-block');
+          deleteDisplayedBtn.classList.add('hide-element');
+        }
       });
     });
   }
@@ -690,7 +690,7 @@ document.addEventListener("DOMContentLoaded", function() {
       if (f.allowed) checkbox.checked = true;
       
       const strong = document.createElement('strong');
-      strong.textContent = escapeHtml(f.description || "Sin descripción");
+      strong.textContent = `(${escapeHtml(f.sender||"?")}) - ${escapeHtml(f.keyword||"?")}`;
       
       label.appendChild(checkbox);
       label.appendChild(strong);
@@ -744,14 +744,10 @@ document.addEventListener("DOMContentLoaded", function() {
       const newVal = toggleCanCreateSubusers.checked;
       
       // Obtenemos los valores actuales del usuario desde el DOM (asumiendo que existen)
-      // OJO: Si no existen estos campos en el HTML, esto dará error. Necesitaríamos pasarlos 
-      // de otra forma (ej. data attributes en el botón o contenedor)
-      // Por simplicidad, dejaremos los valores hardcodeados de la plantilla original por ahora.
-      // Si da problemas, habrá que refactorizar para obtenerlos del DOM o data attributes.
-      const currentUsername = mainContainer.dataset.username; // Necesita data-username
+      const currentUsername = mainContainer.dataset.username;
       const currentColor = mainContainer.dataset.color || "#ffffff";
-      const currentPosition = mainContainer.dataset.position; // Necesita data-position
-      const currentCanSearchAny = mainContainer.dataset.canSearchAny === 'true'; // Necesita data-can-search-any
+      const currentPosition = mainContainer.dataset.position;
+      const currentCanSearchAny = mainContainer.dataset.canSearchAny === 'true';
       const currentEmail = mainContainer.dataset.email || "";
       const currentFullName = mainContainer.dataset.fullName || "";
       const currentPhone = mainContainer.dataset.phone || "";
@@ -790,7 +786,7 @@ document.addEventListener("DOMContentLoaded", function() {
       .then(data=>{
         if(data.status==="ok"){
           alert("Permiso de sub-usuarios guardado.");
-          location.reload(); // Recargar para ver cambios (ej. aparición/desaparición sección subusuarios)
+          location.reload(); // Recargar para ver cambios
         } else {
           alert("Error: " + data.message);
         }
@@ -812,7 +808,7 @@ document.addEventListener("DOMContentLoaded", function() {
         subusersModal.classList.remove('popup-hide');
         subusersModal.classList.add('popup-show');
       }
-      loadSubusersForModal(); // Renombrada para claridad
+      loadSubusersForModal();
     });
   }
   if(closeSubusersModalBtn){
@@ -826,10 +822,9 @@ document.addEventListener("DOMContentLoaded", function() {
 
   function loadSubusersForModal(){
     if(!subusersList) return;
-    // La ruta ahora debe ser la de listar subusuarios de un padre específico
     fetch(`/subusers/list_subusers_ajax?parent_id=${userId}`, { 
       method:"GET",
-      headers:{ "X-CSRFToken": getCsrfToken() } // Probablemente innecesario para GET, pero mantenido
+      headers:{ "X-CSRFToken": getCsrfToken() }
     })
     .then(handleFetchResponse)
     .then(data=>{
@@ -856,7 +851,6 @@ document.addEventListener("DOMContentLoaded", function() {
   function renderSubusersForModal(arr){
     if(!subusersList) return;
     
-    // Limpiar contenedor usando textContent (más seguro que innerHTML)
     while(subusersList.firstChild) {
       subusersList.removeChild(subusersList.firstChild);
     }
@@ -909,17 +903,14 @@ document.addEventListener("DOMContentLoaded", function() {
     subusersList.appendChild(ul);
   }
 
-  // Delegación de eventos DENTRO del modal de subusuarios
   if(subusersModal && subusersList) {
       subusersList.addEventListener("click", function(e) {
           const target = e.target;
-          
-          // Toggle dentro del modal
           if (target.classList.contains("modal-toggle-subuser")) {
               e.preventDefault();
               const subId = target.dataset.id;
               const currentState = target.dataset.enabled === 'true';
-              target.disabled = true; // Deshabilitar botón temporalmente
+              target.disabled = true;
               target.textContent = '...';
               
               fetch("/subusers/toggle_subuser_ajax", {
@@ -930,27 +921,26 @@ document.addEventListener("DOMContentLoaded", function() {
               .then(handleFetchResponse)
               .then(data => {
                   if(data.status === "ok"){
-                      renderSubusersForModal(data.subusers); // Re-renderizar la lista del modal
+                      renderSubusersForModal(data.subusers);
                   } else {
                       alert("Error: " + data.message);
-                      target.disabled = false; // Rehabilitar si falla
+                      target.disabled = false;
                       target.textContent = currentState ? 'OFF' : 'ON'; 
                   }
               })
               .catch(err => {
                   console.error("Modal toggle error:", err);
                   alert("Error de red: " + err.message);
-                  target.disabled = false; // Rehabilitar si falla
+                  target.disabled = false;
                   target.textContent = currentState ? 'OFF' : 'ON'; 
               });
           }
           
-          // Delete dentro del modal
           if (target.classList.contains("modal-delete-subuser")) {
               e.preventDefault();
               const subId = target.dataset.id;
               if(!confirm("¿Eliminar este sub-usuario?")) return;
-              target.disabled = true; // Deshabilitar botón temporalmente
+              target.disabled = true;
               target.textContent = '...';
               
               fetch("/subusers/delete_subuser_ajax", {
@@ -961,17 +951,17 @@ document.addEventListener("DOMContentLoaded", function() {
               .then(handleFetchResponse)
               .then(data => {
                   if(data.status === "ok"){
-                     renderSubusersForModal(data.subusers); // Re-renderizar la lista del modal
+                     renderSubusersForModal(data.subusers);
                   } else {
                      alert("Error: " + data.message);
-                     target.disabled = false; // Rehabilitar si falla
+                     target.disabled = false;
                      target.textContent = 'Eliminar';
                   }
               })
               .catch(err => {
                   console.error("Modal delete error:", err);
                   alert("Error de red: " + err.message);
-                  target.disabled = false; // Rehabilitar si falla
+                  target.disabled = false;
                   target.textContent = 'Eliminar';
               });
           }
@@ -1032,26 +1022,20 @@ document.addEventListener("DOMContentLoaded", function() {
 
   function renderGlobalSubusersRegex(arr){
     if (!subusersRegexList) return;
-    
-    // Limpiar contenedor
     while(subusersRegexList.firstChild) {
       subusersRegexList.removeChild(subusersRegexList.firstChild);
     }
-    
     if (!arr || arr.length === 0) {
       const p = document.createElement('p');
       p.textContent = "No hay Regex definidos en el sistema.";
       subusersRegexList.appendChild(p);
       return;
     }
-    
     arr.forEach((rx,i)=>{
       const itemDiv = document.createElement('div');
       itemDiv.className = i%2===0 ? 'modal-regex-item modal-regex-item-even' : 'modal-regex-item modal-regex-item-odd';
-      
       const label = document.createElement('label');
       label.className = 'modal-regex-item-label';
-      
       const checkbox = document.createElement('input');
       checkbox.type = 'checkbox';
       checkbox.className = 'subusers-regex-global-cb';
@@ -1060,20 +1044,16 @@ document.addEventListener("DOMContentLoaded", function() {
       checkbox.setAttribute('data-id', rx.id);
       if (rx.enabled) checkbox.checked = true;
       if (rx.locked) checkbox.disabled = true;
-      
       const strong = document.createElement('strong');
       strong.textContent = escapeHtml(rx.description || 'Sin descripción');
-      
       label.appendChild(checkbox);
       label.appendChild(strong);
-      
       if (rx.locked) {
         const em = document.createElement('em');
         em.className = 'locked-indicator';
         em.textContent = '(Bloqueado: Padre inactivo)';
         label.appendChild(em);
       }
-      
       itemDiv.appendChild(label);
       subusersRegexList.appendChild(itemDiv);
     });
@@ -1088,17 +1068,10 @@ document.addEventListener("DOMContentLoaded", function() {
           allowedIds.push(parseInt(cb.getAttribute("data-id")));
         }
       });
-      
       fetch("/subusers/save_subusers_regex_global", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-CSRFToken": getCsrfToken()
-        },
-        body: JSON.stringify({
-          parent_id: parseInt(userId, 10), 
-          allowed_ids: allowedIds
-        })
+        headers: { "Content-Type": "application/json", "X-CSRFToken": getCsrfToken() },
+        body: JSON.stringify({ parent_id: parseInt(userId, 10), allowed_ids: allowedIds })
       })
       .then(handleFetchResponse)
       .then(data => {
@@ -1115,7 +1088,6 @@ document.addEventListener("DOMContentLoaded", function() {
       .catch(err => alert("Error de red al guardar Regex para sub-usuarios: " + err.message));
     });
   }
-  // ======= FIN REGEX SUB-USUARIO GLOBAL =======
 
   // ======= Filtros Sub-usuario (Global) =======
   const btnSubusersFilterGlobal = document.getElementById("btnSubusersFilterGlobal");
@@ -1144,9 +1116,7 @@ document.addEventListener("DOMContentLoaded", function() {
 
   function loadGlobalSubusersFilters(){
     if(!subusersFiltersList) return;
-    fetch(`/subusers/list_subusers_filters_global?parent_id=${userId}`, {
-      method:"GET"
-    })
+    fetch(`/subusers/list_subusers_filters_global?parent_id=${userId}`, { method:"GET" })
     .then(handleFetchResponse)
     .then(data=>{
       if(data.status==="ok"){
@@ -1171,26 +1141,20 @@ document.addEventListener("DOMContentLoaded", function() {
 
   function renderGlobalSubusersFilters(arr){
     if (!subusersFiltersList) return;
-    
-    // Limpiar contenedor
     while(subusersFiltersList.firstChild) {
       subusersFiltersList.removeChild(subusersFiltersList.firstChild);
     }
-    
     if (!arr || arr.length === 0) {
       const p = document.createElement('p');
       p.textContent = "No hay Filtros definidos en el sistema.";
       subusersFiltersList.appendChild(p);
       return;
     }
-    
     arr.forEach((f,i)=>{
       const itemDiv = document.createElement('div');
       itemDiv.className = i%2===0 ? 'modal-filter-item modal-filter-item-even' : 'modal-filter-item modal-filter-item-odd';
-      
       const label = document.createElement('label');
       label.className = 'modal-filter-item-label';
-      
       const checkbox = document.createElement('input');
       checkbox.type = 'checkbox';
       checkbox.className = 'subusers-filters-global-cb';
@@ -1199,20 +1163,16 @@ document.addEventListener("DOMContentLoaded", function() {
       checkbox.setAttribute('data-id', f.id);
       if (f.enabled) checkbox.checked = true;
       if (f.locked) checkbox.disabled = true;
-      
       const strong = document.createElement('strong');
       strong.textContent = `(${escapeHtml(f.sender||"?")}) - ${escapeHtml(f.keyword||"?")}`;
-      
       label.appendChild(checkbox);
       label.appendChild(strong);
-      
       if (f.locked) {
         const em = document.createElement('em');
         em.className = 'locked-indicator';
         em.textContent = '(Bloqueado: Padre inactivo)';
         label.appendChild(em);
       }
-      
       itemDiv.appendChild(label);
       subusersFiltersList.appendChild(itemDiv);
     });
@@ -1227,17 +1187,10 @@ document.addEventListener("DOMContentLoaded", function() {
           allowedIds.push(parseInt(cb.getAttribute("data-id")));
         }
       });
-      
       fetch("/subusers/save_subusers_filters_global", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-CSRFToken": getCsrfToken()
-        },
-        body: JSON.stringify({
-          parent_id: parseInt(userId, 10), 
-          allowed_ids: allowedIds
-        })
+        headers: { "Content-Type": "application/json", "X-CSRFToken": getCsrfToken() },
+        body: JSON.stringify({ parent_id: parseInt(userId, 10), allowed_ids: allowedIds })
       })
       .then(handleFetchResponse)
       .then(data => {
@@ -1254,115 +1207,46 @@ document.addEventListener("DOMContentLoaded", function() {
       .catch(err => alert("Error de red al guardar Filtros para sub-usuarios: " + err.message));
     });
   }
-  // ======= FIN FILTROS SUB-USUARIO GLOBAL =======
 
   // ======= BOTONES DE NAVEGACIÓN 'VOLVER' ========
   const btnVolverUsuarios = document.getElementById("btnVolverUsuarios");
   const btnVolverPanel = document.getElementById("btnVolverPanel");
-
   if (btnVolverUsuarios) {
     btnVolverUsuarios.addEventListener("click", function() {
       const url = this.getAttribute("data-url");
-      if (url) {
-        window.location.href = url;
-      }
+      if (url) window.location.href = url;
     });
   }
-
   if (btnVolverPanel) {
     btnVolverPanel.addEventListener("click", function() {
       const url = this.getAttribute("data-url");
-      if (url) {
-        window.location.href = url;
-      }
+      if (url) window.location.href = url;
     });
   }
-  // ======= FIN BOTONES 'VOLVER' =======
-
-  // === TRUNCAR VISUALIZACIÓN DE REGEX EN POPUPS ===
-  function truncateRegexDisplay(pattern, maxLen = 22) {
-    if (typeof pattern !== 'string') return pattern;
-    if (pattern.length <= maxLen) return pattern;
-    const start = pattern.slice(0, 10);
-    const end = pattern.slice(-8);
-    return `${start}....${end}`;
-  }
-
-  // Hook para popups de Regex (principal y sub-usuario)
-  function patchRegexPopupDisplay() {
-    // Para el popup principal
-    const regexList = document.getElementById('regexListContainer');
-    if (regexList) {
-      regexList.querySelectorAll('.regex-item').forEach(function(item) {
-        const strongs = item.querySelectorAll('strong');
-        strongs.forEach(function(strong) {
-          if (strong.textContent.trim().toLowerCase().startsWith('patrón:')) {
-            const next = strong.nextSibling;
-            if (next && next.nodeType === 3) {
-              const original = next.textContent.trim();
-              next.textContent = ' ' + truncateRegexDisplay(original);
-            }
-          }
-        });
-      });
-    }
-    // Para el popup de sub-usuario
-    const subusersRegexList = document.getElementById('subusersRegexList');
-    if (subusersRegexList) {
-      subusersRegexList.querySelectorAll('.regex-item').forEach(function(item) {
-        const strongs = item.querySelectorAll('strong');
-        strongs.forEach(function(strong) {
-          if (strong.textContent.trim().toLowerCase().startsWith('patrón:')) {
-            const next = strong.nextSibling;
-            if (next && next.nodeType === 3) {
-              const original = next.textContent.trim();
-              next.textContent = ' ' + truncateRegexDisplay(original);
-            }
-          }
-        });
-      });
-    }
-  }
-
-  // Llamar al hook cada vez que se abre el popup
-  ['openRegexModalBtn', 'btnSubusersRegexGlobal'].forEach(function(btnId) {
-    const btn = document.getElementById(btnId);
-    if (btn) {
-      btn.addEventListener('click', function() {
-        setTimeout(patchRegexPopupDisplay, 200);
-      });
-    }
-  });
 
   // ======= FUNCIONES DEL JAVASCRIPT INLINE =======
-  
-  // Búsqueda instantánea
   const searchForm = document.getElementById('searchEmailsForm');
   const searchInput = document.getElementById('searchEmailsInput');
   if (searchForm && searchInput) {
     let searchTimeout = null;
     searchInput.addEventListener('input', function() {
       clearTimeout(searchTimeout);
-      searchTimeout = setTimeout(() => {
-        searchForm.requestSubmit();
-      }, 250);
+      searchTimeout = setTimeout(() => { searchForm.requestSubmit(); }, 250);
     });
   }
 
   // Cierre automático de popups al hacer clic fuera
   const popups = [
-    'regexModal',
-    'filtersModal',
-    'subusersModal',
-    'subusersRegexModal',
-    'subusersFiltersModal'
+    'regexModal', 'filtersModal', 'subusersModal', 
+    'subusersRegexModal', 'subusersFiltersModal',
+    'myApiModal', 'editLinkedApiModal'
   ];
   popups.forEach(function(popupId) {
     const popup = document.getElementById(popupId);
     if (popup) {
       document.addEventListener('mousedown', function(e) {
         if (popup.classList.contains('popup-show') || popup.classList.contains('popup-visible')) {
-          if (!popup.contains(e.target)) {
+          if (!popup.contains(e.target) && !e.target.closest('.open-alias-popup') && !e.target.closest('#showMyApiBtn') && !e.target.closest('.edit-project-btn')) {
             popup.classList.remove('popup-show', 'popup-visible');
             popup.classList.add('popup-hide');
           }
@@ -1370,5 +1254,252 @@ document.addEventListener("DOMContentLoaded", function() {
       });
     }
   });
+
+  // ======= LÓGICA PARA APIs VINCULADAS =======
+  const linkedApisList = document.getElementById("linkedApisList");
+  const addLinkedApiBtn = document.getElementById("addLinkedApiBtn");
+  const newApiNameInput = document.getElementById("newApiNameInput");
+  const newApiUrlInput = document.getElementById("newApiUrlInput");
+  const newApiTokenInput = document.getElementById("newApiTokenInput");
+  const linkedApiMsg = document.getElementById("linkedApiMsg");
+
+  const myApiModal = document.getElementById("myApiModal");
+  const showMyApiBtn = document.getElementById("showMyApiBtn");
+  const closeMyApiModalBtn = document.getElementById("closeMyApiModalBtn");
+  const myApiUrlDisplay = document.getElementById("myApiUrlDisplay");
+  const myApiTokenDisplay = document.getElementById("myApiTokenDisplay");
+  const regenMasterTokenBtn = document.getElementById("regenMasterTokenBtn");
+
+  const editLinkedApiModal = document.getElementById("editLinkedApiModal");
+  const closeEditApiModalBtn = document.getElementById("closeEditApiModalBtn");
+  const editApiId = document.getElementById("editApiId");
+  const editApiName = document.getElementById("editApiName");
+  const editApiUrl = document.getElementById("editApiUrl");
+  const editApiToken = document.getElementById("editApiToken");
+  const saveEditApiBtn = document.getElementById("saveEditApiBtn");
+
+  function fetchLinkedProjects() {
+    if (!linkedApisList) return;
+    fetch(`/admin/user/${userId}/linked_projects`, {
+      method: "GET",
+      headers: { "X-CSRFToken": getCsrfToken() }
+    })
+    .then(handleFetchResponse)
+    .then(data => {
+      if (data.status === "ok") {
+        renderLinkedProjects(data.projects);
+      } else {
+        linkedApisList.innerHTML = `<p class="text-danger text-center">Error: ${data.message}</p>`;
+      }
+    })
+    .catch(err => {
+      console.error("Error fetching linked projects:", err);
+      linkedApisList.innerHTML = `<p class="text-danger text-center">Error de red: ${err.message}</p>`;
+    });
+  }
+
+  function renderLinkedProjects(projects) {
+    if (!linkedApisList) return;
+    linkedApisList.innerHTML = "";
+    if (!projects || projects.length === 0) {
+      linkedApisList.innerHTML = '<p class="text-muted text-center">No hay APIs vinculadas.</p>';
+      return;
+    }
+
+    projects.forEach(p => {
+      const div = document.createElement("div");
+      div.className = "linked-api-item d-flex justify-content-between align-items-center mb-05 p-05";
+      div.innerHTML = `
+        <div class="flex-grow-1 ml-05 text-left">
+          <strong>${escapeHtml(p.name)}</strong><br>
+          <small class="text-muted">${escapeHtml(p.url)}</small>
+        </div>
+        <div class="d-flex gap-05 mr-05">
+          <button type="button" class="btn-panel btn-orange btn-sm edit-project-btn" data-id="${p.id}" data-name="${escapeHtml(p.name)}" data-api-url="${escapeHtml(p.url)}" data-token="${escapeHtml(p.token)}">
+            <i class="fas fa-edit"></i>
+          </button>
+          <button type="button" class="btn-panel btn-red btn-sm delete-project-btn" data-id="${p.id}">
+            <i class="fas fa-trash"></i>
+          </button>
+        </div>
+      `;
+      linkedApisList.appendChild(div);
+    });
+
+    linkedApisList.querySelectorAll(".edit-project-btn").forEach(btn => {
+      btn.addEventListener("click", () => {
+        editApiId.value = btn.dataset.id;
+        editApiName.value = btn.dataset.name;
+        editApiUrl.value = btn.dataset.apiUrl;
+        editApiToken.value = btn.dataset.token;
+        editLinkedApiModal.classList.remove("popup-hide");
+        editLinkedApiModal.classList.add("popup-show");
+      });
+    });
+
+    linkedApisList.querySelectorAll(".delete-project-btn").forEach(btn => {
+      btn.addEventListener("click", () => {
+        if (!confirm("¿Seguro que quieres eliminar esta API vinculada?")) return;
+        const projectId = btn.dataset.id;
+        fetch(`/admin/user/linked_projects/${projectId}`, {
+          method: "DELETE",
+          headers: { "X-CSRFToken": getCsrfToken() }
+        })
+        .then(handleFetchResponse)
+        .then(data => {
+          if (data.status === "ok") {
+            fetchLinkedProjects();
+          } else {
+            alert("Error al eliminar: " + data.message);
+          }
+        })
+        .catch(err => alert("Error de red: " + err.message));
+      });
+    });
+  }
+
+  if (addLinkedApiBtn) {
+    addLinkedApiBtn.addEventListener("click", () => {
+      const name = newApiNameInput.value.trim();
+      const url = newApiUrlInput.value.trim();
+      const token = newApiTokenInput.value.trim();
+      if (!name || !url || !token) {
+        linkedApiMsg.textContent = "Faltan datos obligatorios.";
+        linkedApiMsg.className = "text-italic text-danger";
+        return;
+      }
+      addLinkedApiBtn.disabled = true;
+      linkedApiMsg.textContent = "Agregando...";
+      linkedApiMsg.className = "text-italic text-orange";
+      fetch(`/admin/user/${userId}/linked_projects`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-CSRFToken": getCsrfToken() },
+        body: JSON.stringify({ name, url, token })
+      })
+      .then(handleFetchResponse)
+      .then(data => {
+        if (data.status === "ok") {
+          linkedApiMsg.textContent = "API agregada correctamente.";
+          linkedApiMsg.className = "text-italic text-success";
+          newApiNameInput.value = "";
+          newApiUrlInput.value = "";
+          newApiTokenInput.value = "";
+          fetchLinkedProjects();
+        } else {
+          linkedApiMsg.textContent = "Error: " + data.message;
+          linkedApiMsg.className = "text-italic text-danger";
+        }
+      })
+      .catch(err => {
+        linkedApiMsg.textContent = "Error de red: " + err.message;
+        linkedApiMsg.className = "text-italic text-danger";
+      })
+      .finally(() => addLinkedApiBtn.disabled = false);
+    });
+  }
+
+  if (showMyApiBtn) {
+    showMyApiBtn.addEventListener("click", () => {
+      fetch(`/admin/user/${userId}/master_token`, {
+        method: "GET",
+        headers: { "X-CSRFToken": getCsrfToken() }
+      })
+      .then(handleFetchResponse)
+      .then(data => {
+        if (data.status === "ok") {
+          myApiUrlDisplay.value = data.api_url;
+          myApiTokenDisplay.value = data.token;
+          myApiModal.classList.remove("popup-hide");
+          myApiModal.classList.add("popup-show");
+        } else {
+          alert("Error al obtener token: " + data.message);
+        }
+      })
+      .catch(err => alert("Error de red: " + err.message));
+    });
+  }
+
+  if (closeMyApiModalBtn) {
+    closeMyApiModalBtn.addEventListener("click", () => {
+      myApiModal.classList.remove("popup-show");
+      myApiModal.classList.add("popup-hide");
+    });
+  }
+
+  // Botones de copiar API
+  document.querySelectorAll(".copy-api-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const targetId = btn.dataset.target;
+      const input = document.getElementById(targetId);
+      if (input) {
+        input.select();
+        document.execCommand("copy");
+        const originalIcon = btn.innerHTML;
+        btn.innerHTML = '<i class="fas fa-check"></i>';
+        setTimeout(() => { btn.innerHTML = originalIcon; }, 2000);
+      }
+    });
+  });
+
+  if (regenMasterTokenBtn) {
+    regenMasterTokenBtn.addEventListener("click", () => {
+      if (!confirm("¿Seguro que quieres regenerar tu token maestro? Las vinculaciones en otros proyectos dejarán de funcionar hasta que las actualices con el nuevo token.")) return;
+      fetch(`/admin/user/${userId}/regen_master_token`, {
+        method: "POST",
+        headers: { "X-CSRFToken": getCsrfToken() }
+      })
+      .then(handleFetchResponse)
+      .then(data => {
+        if (data.status === "ok") {
+          myApiTokenDisplay.value = data.token;
+          alert("Nuevo token generado.");
+        } else {
+          alert("Error: " + data.message);
+        }
+      })
+      .catch(err => alert("Error de red: " + err.message));
+    });
+  }
+
+  if (closeEditApiModalBtn) {
+    closeEditApiModalBtn.addEventListener("click", () => {
+      editLinkedApiModal.classList.remove("popup-show");
+      editLinkedApiModal.classList.add("popup-hide");
+    });
+  }
+
+  if (saveEditApiBtn) {
+    saveEditApiBtn.addEventListener("click", () => {
+      const projectId = editApiId.value;
+      const name = editApiName.value.trim();
+      const url = editApiUrl.value.trim();
+      const token = editApiToken.value.trim();
+      if (!name || !url || !token) {
+        alert("Faltan datos obligatorios.");
+        return;
+      }
+      saveEditApiBtn.disabled = true;
+      fetch(`/admin/user/linked_projects/${projectId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json", "X-CSRFToken": getCsrfToken() },
+        body: JSON.stringify({ name, url, token })
+      })
+      .then(handleFetchResponse)
+      .then(data => {
+        if (data.status === "ok") {
+          editLinkedApiModal.classList.remove("popup-show");
+          editLinkedApiModal.classList.add("popup-hide");
+          fetchLinkedProjects();
+        } else {
+          alert("Error al actualizar: " + data.message);
+        }
+      })
+      .catch(err => alert("Error de red: " + err.message))
+      .finally(() => saveEditApiBtn.disabled = false);
+    });
+  }
+
+  fetchLinkedProjects();
+  // ======= FIN LÓGICA APIs VINCULADAS =======
 
 }); // Fin DOMContentLoaded 

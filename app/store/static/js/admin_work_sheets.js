@@ -1989,21 +1989,21 @@ function splitTextAcrossColumns() {
     modal.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:2000;display:flex;align-items:center;justify-content:center;';
     
     modal.innerHTML = `
-        <div style='background:#fff;padding:24px 32px;border-radius:10px;max-width:600px;box-shadow:0 4px 20px rgba(0,0,0,0.15);position:relative;'>
-            <button id='btnCerrarDivision' style='position:absolute;top:10px;right:10px;background:none;border:none;font-size:24px;color:#666;cursor:pointer;padding:5px 10px;line-height:1;border-radius:4px;transition:all 0.2s;' 
+        <div style='background:#fff;padding:15px 20px;border-radius:10px;max-width:600px;box-shadow:0 4px 20px rgba(0,0,0,0.15);position:relative;'>
+            <button id='btnCerrarDivision' style='position:absolute;top:8px;right:8px;background:none;border:none;font-size:20px;color:#666;cursor:pointer;padding:4px 8px;line-height:1;border-radius:4px;transition:all 0.2s;' 
                     class='worksheet-action-btn' 
                     title='Cerrar'>
                 <i class='fas fa-times'></i>
             </button>
-            <h4 style='margin-bottom:20px;color:#333;text-align:center;'>🔀 Dividir texto</h4>
+            <h4 style='margin-bottom:15px;color:#333;text-align:center;font-size:18px;'>🔀 Dividir texto</h4>
             
-            <div style='margin-bottom:20px;'>
-                <div style='display:block;margin-bottom:8px;font-weight:bold;'>Tipo de división:</div>
-                <div style='display:flex;gap:10px;flex-wrap:wrap;margin-bottom:15px;'>
-                    <button class='mode-btn' data-mode='personalizado' style='padding:8px 15px;border:1px solid #ddd;border-radius:4px;background:#f8f9fa;cursor:pointer;color:#333;'>Personalizado</button>
-                    <button class='mode-btn' data-mode='separador' style='padding:8px 15px;border:1px solid #ddd;border-radius:4px;background:#f8f9fa;cursor:pointer;color:#333;'>Separador</button>
-                    <button class='mode-btn' data-mode='gmail' style='padding:8px 15px;border:1px solid #ddd;border-radius:4px;background:#f8f9fa;cursor:pointer;color:#333;'>Gmail</button>
-                    <button class='mode-btn' data-mode='herramientas' style='padding:8px 15px;border:1px solid #ddd;border-radius:4px;background:#f8f9fa;cursor:pointer;color:#333;'>Herramientas</button>
+            <div style='margin-bottom:15px;'>
+                <div style='display:block;margin-bottom:6px;font-weight:bold;font-size:14px;'>Tipo de división:</div>
+                <div style='display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;'>
+                    <button class='mode-btn' data-mode='personalizado' style='padding:5px 12px;border:1px solid #ddd;border-radius:4px;background:#f8f9fa;cursor:pointer;color:#333;font-size:13px;'>Personalizado</button>
+                    <button class='mode-btn' data-mode='separador' style='padding:5px 12px;border:1px solid #ddd;border-radius:4px;background:#f8f9fa;cursor:pointer;color:#333;font-size:13px;'>Separador</button>
+                    <button class='mode-btn' data-mode='gmail' style='padding:5px 12px;border:1px solid #ddd;border-radius:4px;background:#f8f9fa;cursor:pointer;color:#333;font-size:13px;'>Gmail</button>
+                    <button class='mode-btn' data-mode='herramientas' style='padding:5px 12px;border:1px solid #ddd;border-radius:4px;background:#f8f9fa;cursor:pointer;color:#333;font-size:13px;'>Herramientas</button>
                 </div>
                 
                 <div id='separadorSection' style='display:none;'>
@@ -2080,88 +2080,90 @@ function splitTextAcrossColumns() {
                 </div>
                 
                 <div id='herramientasSection' style='display:none;'>
-                    <div style='margin-bottom:20px;'>
-                        <div style='display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px;'>
-                            <button id='btnGeneradorCodigos' class='herramienta-btn' style='padding:12px 20px;border:1px solid #ddd;border-radius:4px;background:#f8f9fa;cursor:pointer;color:#333;display:flex;align-items:center;gap:8px;transition:all 0.2s;' title='Generador de códigos'>
-                                Generador de <i class='fas fa-code' style='font-size:18px;'></i>
+                    <div style='margin-bottom:15px;'>
+                        <div style='display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;'>
+                            <button id='btnGeneradorCodigos' class='herramienta-btn' style='padding:6px 12px;border:1px solid #ddd;border-radius:4px;background:#f8f9fa;cursor:pointer;color:#333;display:flex;align-items:center;gap:6px;transition:all 0.2s;font-size:12px;' title='Generador de códigos'>
+                                Generador de <i class='fas fa-code' style='font-size:14px;'></i>
                             </button>
                             
-                            <button id='btnDuplicados' class='herramienta-btn' style='padding:12px 20px;border:1px solid #ddd;border-radius:4px;background:#f8f9fa;cursor:pointer;color:#333;display:flex;align-items:center;gap:8px;transition:all 0.2s;' title='Duplicados'>
-                                Duplicados <i class='fas fa-copy' style='font-size:18px;'></i>
+                            <button id='btnDuplicados' class='herramienta-btn' style='padding:6px 12px;border:1px solid #ddd;border-radius:4px;background:#f8f9fa;cursor:pointer;color:#333;display:flex;align-items:center;gap:6px;transition:all 0.2s;font-size:12px;' title='Duplicados'>
+                                Duplicados <i class='fas fa-copy' style='font-size:14px;'></i>
                             </button>
                         </div>
                         
                         <!-- Panel del generador de códigos -->
-                        <div id='generadorCodigosPanel' style='display:none;margin-top:15px;padding:15px;background:#f8f9fa;border-radius:8px;border:1px solid #ddd;max-height:70vh;overflow-y:auto;'>
-                            <h5 style='margin-top:0;margin-bottom:12px;color:#333;font-size:16px;'>Generador de Códigos</h5>
+                        <div id='generadorCodigosPanel' style='display:none;margin-top:10px;padding:12px;background:#f8f9fa;border-radius:8px;border:1px solid #ddd;max-height:60vh;overflow-y:auto;'>
+                            <h5 style='margin-top:0;margin-bottom:10px;color:#333;font-size:15px;'>Generador de Códigos</h5>
                             
-                            <div style='margin-bottom:12px;'>
-                                <label for='letrasUsar' style='display:block;margin-bottom:4px;font-weight:bold;color:#333;font-size:13px;'>Letras y números a usar:</label>
+                            <div style='margin-bottom:10px;'>
+                                <label for='letrasUsar' style='display:block;margin-bottom:4px;font-weight:bold;color:#333;font-size:12px;'>Letras y números a usar:</label>
                                 <input type='text' id='letrasUsar' name='letrasUsar' value='qwertyuopasdfghjkzxcvbnm1234567890' 
-                                       style='width:100%;padding:6px;border:1px solid #ddd;border-radius:4px;font-family:monospace;font-size:11px;box-sizing:border-box;' 
+                                       style='width:100%;padding:5px;border:1px solid #ddd;border-radius:4px;font-family:monospace;font-size:11px;box-sizing:border-box;' 
                                        placeholder='qwertyuopasdfghjkzxcvbnm1234567890' aria-label='Letras y números a usar para generar códigos'>
                             </div>
                             
-                            <div style='margin-bottom:12px;'>
-                                <label for='ponerAntes' style='display:block;margin-bottom:4px;font-weight:bold;color:#333;font-size:13px;'>Poner antes:</label>
+                            <div style='margin-bottom:10px;'>
+                                <label for='ponerAntes' style='display:block;margin-bottom:4px;font-weight:bold;color:#333;font-size:12px;'>Poner antes:</label>
                                 <input type='text' id='ponerAntes' name='ponerAntes' value='netflix+' 
-                                       style='width:100%;padding:6px;border:1px solid #ddd;border-radius:4px;font-size:11px;box-sizing:border-box;' 
+                                       style='width:100%;padding:5px;border:1px solid #ddd;border-radius:4px;font-size:11px;box-sizing:border-box;' 
                                        placeholder='netflix+' aria-label='Texto a poner antes del código generado'>
                             </div>
                             
-                            <div style='margin-bottom:12px;'>
-                                <label for='ponerDespues' style='display:block;margin-bottom:4px;font-weight:bold;color:#333;font-size:13px;'>Poner después:</label>
+                            <div style='margin-bottom:10px;'>
+                                <label for='ponerDespues' style='display:block;margin-bottom:4px;font-weight:bold;color:#333;font-size:12px;'>Poner después:</label>
                                 <input type='text' id='ponerDespues' name='ponerDespues' value='@gmail.com' 
-                                       style='width:100%;padding:6px;border:1px solid #ddd;border-radius:4px;font-size:11px;box-sizing:border-box;' 
+                                       style='width:100%;padding:5px;border:1px solid #ddd;border-radius:4px;font-size:11px;box-sizing:border-box;' 
                                        placeholder='@gmail.com' aria-label='Texto a poner después del código generado'>
                             </div>
                             
-                            <div style='margin-bottom:12px;'>
-                                <label for='cantidadCodigosIntermedio' style='display:block;margin-bottom:4px;font-weight:bold;color:#333;font-size:13px;'>Cuántos códigos agregar (intermedio):</label>
+                            <div style='margin-bottom:10px;'>
+                                <label for='cantidadCodigosIntermedio' style='display:block;margin-bottom:4px;font-weight:bold;color:#333;font-size:12px;'>Cuántos códigos agregar (intermedio):</label>
                                 <input type='number' id='cantidadCodigosIntermedio' name='cantidadCodigosIntermedio' value='4' min='1' 
-                                       style='width:100%;padding:6px;border:1px solid #ddd;border-radius:4px;font-size:11px;box-sizing:border-box;' 
+                                       style='width:100%;padding:5px;border:1px solid #ddd;border-radius:4px;font-size:11px;box-sizing:border-box;' 
                                        placeholder='4' aria-label='Cantidad de caracteres intermedios aleatorios'>
                             </div>
                             
-                            <div style='margin-bottom:15px;'>
-                                <label for='cantidadGenerar' style='display:block;margin-bottom:4px;font-weight:bold;color:#333;font-size:13px;'>Cuántos códigos generar:</label>
+                            <div style='margin-bottom:12px;'>
+                                <label for='cantidadGenerar' style='display:block;margin-bottom:4px;font-weight:bold;color:#333;font-size:12px;'>Cuántos códigos generar:</label>
                                 <input type='number' id='cantidadGenerar' name='cantidadGenerar' value='4' min='1' 
-                                       style='width:100%;padding:6px;border:1px solid #ddd;border-radius:4px;font-size:11px;box-sizing:border-box;' 
+                                       style='width:100%;padding:5px;border:1px solid #ddd;border-radius:4px;font-size:11px;box-sizing:border-box;' 
                                        placeholder='4' aria-label='Cantidad total de códigos a generar'>
                             </div>
                             
-                            <button id='btnGenerarCodigos' type='button' aria-label='Generar códigos aleatorios' style='width:100%;padding:10px;background:#007bff;color:#fff;border:none;border-radius:4px;cursor:pointer;font-weight:bold;font-size:14px;margin-bottom:15px;'>
+                            <button id='btnGenerarCodigos' type='button' aria-label='Generar códigos aleatorios' style='width:100%;padding:8px;background:#007bff;color:#fff;border:none;border-radius:4px;cursor:pointer;font-weight:bold;font-size:13px;margin-bottom:12px;'>
                                 <i class='fas fa-magic' aria-hidden='true'></i> Generar Códigos
                             </button>
                             
-                            <div id='resultadoCodigos' style='margin-top:15px;display:none;' role='region' aria-live='polite' aria-label='Resultados de códigos generados'>
-                                <div style='display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;'>
-                                    <label for='codigosGenerados' style='font-weight:bold;color:#333;font-size:13px;'>Resultado:</label>
-                                    <button id='btnCopiarTodosCodigos' type='button' aria-label='Copiar todos los códigos al portapapeles' style='padding:6px 10px;background:#28a745;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:11px;display:none;'>
+                            <div id='resultadoCodigos' style='margin-top:12px;display:none;' role='region' aria-live='polite' aria-label='Resultados de códigos generados'>
+                                <div style='display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;'>
+                                    <label for='codigosGenerados' style='font-weight:bold;color:#333;font-size:12px;'>Resultado:</label>
+                                    <button id='btnCopiarTodosCodigos' type='button' aria-label='Copiar todos los códigos al portapapeles' style='padding:5px 8px;background:#28a745;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:10px;display:none;'>
                                         <i class='fas fa-copy' aria-hidden='true'></i> Copiar todos
                                     </button>
                                 </div>
                                 <textarea id='codigosGenerados' name='codigosGenerados' readonly 
-                                          style='width:100%;min-height:120px;max-height:200px;padding:8px;border:2px solid #000;border-radius:4px;font-family:monospace;font-size:11px;box-sizing:border-box;resize:vertical;overflow-y:auto;' 
+                                          style='width:100%;min-height:80px;max-height:150px;padding:6px;border:2px solid #000;border-radius:4px;font-family:monospace;font-size:11px;box-sizing:border-box;resize:vertical;overflow-y:auto;' 
                                           aria-label='Códigos generados'></textarea>
                             </div>
                         </div>
                         
                         <!-- Panel de duplicados -->
-                        <div id='duplicadosPanel' style='display:none;margin-top:15px;padding:15px;background:#f8f9fa;border-radius:8px;border:1px solid #ddd;max-height:70vh;overflow-y:auto;'>
-                            <h5 style='margin-top:0;margin-bottom:12px;color:#333;font-size:16px;'>Duplicados</h5>
+                        <div id='duplicadosPanel' style='display:none;margin-top:10px;padding:12px;background:#f8f9fa;border-radius:8px;border:1px solid #ddd;max-height:65vh;overflow-y:auto;'>
+                            <div style='display:flex;align-items:center;gap:10px;margin-bottom:8px;'>
+                                <h5 style='margin:0;color:#333;font-size:15px;'>Duplicados</h5>
+                                <label for='duplicadosInput' style='font-weight:bold;color:#333;font-size:13px;'>Datos a analizar:</label>
+                            </div>
                             
-                            <div style='margin-bottom:12px;'>
-                                <label for='duplicadosInput' style='display:block;margin-bottom:4px;font-weight:bold;color:#333;font-size:13px;'>Datos a analizar:</label>
+                            <div style='margin-bottom:10px;'>
                                 <textarea id='duplicadosInput' name='duplicadosInput' 
-                                          style='width:100%;min-height:80px;max-height:120px;padding:8px;border:1px solid #ddd;border-radius:4px;font-family:monospace;font-size:11px;box-sizing:border-box;resize:vertical;overflow-y:auto;' 
+                                          style='width:100%;min-height:60px;max-height:100px;padding:8px;border:1px solid #ddd;border-radius:4px;font-family:monospace;font-size:11px;box-sizing:border-box;resize:vertical;overflow-y:auto;' 
                                           placeholder='Pega aquí los datos a analizar... Ejemplo:&#10;netl2993@gmail.com:saddds&#10;netl2993@gmail.com:saddds&#10;netl2993@gmail.com:saddd'
                                           aria-label='Datos a analizar para encontrar duplicados'></textarea>
                             </div>
                             
-                            <div style='margin-bottom:12px;'>
-                                <div style='display:block;margin-bottom:4px;font-weight:bold;color:#333;font-size:13px;'>Tipo de separador:</div>
-                                <div style='display:flex;gap:15px;margin-bottom:8px;' role='radiogroup' aria-label='Tipo de separador para analizar duplicados'>
+                            <div style='display:flex;align-items:center;gap:15px;margin-bottom:10px;flex-wrap:wrap;'>
+                                <div style='font-weight:bold;color:#333;font-size:13px;'>Tipo de separador:</div>
+                                <div style='display:flex;gap:10px;' role='radiogroup' aria-label='Tipo de separador para analizar duplicados'>
                                     <label for='duplicadosEspacio' style='display:flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;'>
                                         <input type='radio' name='duplicadosSeparador' id='duplicadosEspacio' value='espacio' checked style='margin:0;' aria-label='Usar espacio como separador'>
                                         Espacio
@@ -2171,21 +2173,20 @@ function splitTextAcrossColumns() {
                                         Dos puntos (:)
                                     </label>
                                 </div>
+                                <button id='btnAnalizarDuplicados' type='button' aria-label='Analizar duplicados' style='flex-grow:1;padding:6px 12px;background:#007bff;color:#fff;border:none;border-radius:4px;cursor:pointer;font-weight:bold;font-size:13px;'>
+                                    <i class='fas fa-search' aria-hidden='true'></i> Analizar
+                                </button>
                             </div>
                             
-                            <button id='btnAnalizarDuplicados' type='button' aria-label='Analizar duplicados' style='width:100%;padding:10px;background:#007bff;color:#fff;border:none;border-radius:4px;cursor:pointer;font-weight:bold;font-size:14px;margin-bottom:15px;'>
-                                <i class='fas fa-search' aria-hidden='true'></i> Analizar Duplicados
-                            </button>
-                            
                             <div style='margin-bottom:10px;'>
-                                <div style='display:block;margin-bottom:4px;font-weight:bold;color:#333;font-size:13px;'>Resultado (sin color: únicos, azul: repetido 1 vez, amarillo: más repetido):</div>
+                                <div style='display:block;margin-bottom:4px;font-weight:bold;color:#333;font-size:12px;'>Resultado (sin color: únicos, azul: repetido 1 vez, amarillo: más repetido):</div>
                                 <div id='duplicadosResultado' 
-                                     style='width:100%;min-height:120px;max-height:200px;padding:8px;border:2px solid #000;border-radius:4px;font-family:monospace;font-size:11px;box-sizing:border-box;overflow-y:auto;background:#fff;white-space:pre-wrap;word-wrap:break-word;'
+                                     style='width:100%;min-height:80px;max-height:150px;padding:8px;border:2px solid #000;border-radius:4px;font-family:monospace;font-size:11px;box-sizing:border-box;overflow-y:auto;background:#fff;white-space:pre-wrap;word-wrap:break-word;'
                                      role='region' aria-live='polite' aria-label='Resultados de análisis de duplicados. Sin color: únicos, azul: repetido 1 vez, amarillo: más repetido'></div>
-                                <div id='duplicadosEstadisticas' style='margin-top:10px;padding:10px;background:#fff3cd;border:2px solid #ffc107;border-radius:6px;font-size:12px;display:block;min-height:40px;'>
-                                    <div style='display:flex;align-items:center;gap:6px;margin-bottom:6px;'>
-                                        <i class='fas fa-chart-bar' style='color:#856404;font-size:14px;'></i>
-                                        <strong style='color:#856404;font-size:13px;'>Estadísticas:</strong>
+                                <div id='duplicadosEstadisticas' style='margin-top:10px;padding:8px;background:#fff3cd;border:2px solid #ffc107;border-radius:6px;font-size:11px;display:block;min-height:30px;'>
+                                    <div style='display:flex;align-items:center;gap:6px;margin-bottom:4px;'>
+                                        <i class='fas fa-chart-bar' style='color:#856404;font-size:13px;'></i>
+                                        <strong style='color:#856404;font-size:12px;'>Estadísticas:</strong>
                                     </div>
                                     <div style='color:#856404;font-weight:500;line-height:1.4;font-size:12px;'>
                                         <span id='contadorAmarillos'>Esperando análisis...</span>

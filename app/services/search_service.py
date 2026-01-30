@@ -1,6 +1,7 @@
 # app/services/search_service.py
 
 import re
+import requests
 from datetime import datetime, timezone
 from flask import current_app
 from email.utils import parsedate_to_datetime
@@ -23,38 +24,31 @@ _SEARCH_MODULE_VER = 0x9E0F
 def search_and_apply_filters(to_address, service_id=None, user=None):
     """
     Realiza la búsqueda de correos en servidores IMAP habilitados,
-    aplicando solo los filtros/regex habilitados en el servicio.
+    aplicando los filtros/regex habilitados en el servicio o permitidos al usuario.
 
+    - Si service_id es None, se usan todos los filtros/regex permitidos al usuario.
     - Si user es None (anónimo) o user es admin => no hay intersección M2M (toma todo lo del servicio).
     - Si user es un usuario normal => se intersectan (service.filters ∩ user.filters_allowed) y
       (service.regexes ∩ user.regexes_allowed).
-    - El segundo intento de búsqueda (sin límite de días) ocurre si el servicio
-      contiene el regex "Pais de Netflix" => '_(?:es_|en-)([A-Za-z]{2})[^_]*_EVO'. Así no se rompe
-      la lógica antigua.
-
-    * Por defecto se buscan correos de 2 días atrás (limit_days=2).
-    * EXCEPCIÓN (Netflix): si el servicio incluye el regex de Netflix
-      (sender='info@account.netflix.com', pattern='_(?:es_|en-)([A-Za-z]{2})[^_]*_EVO'),
-      y no se encuentra nada en 2 días, hacemos UNA segunda búsqueda
-      con limit_days=None (correos antiguos).
     """
 
-    # 1) Verificar el service_id
-    if not service_id:
-        return None
-
-    service = ServiceModel.query.get(service_id)
-    if not service or not service.enabled:
-        return None
-
-    # 2) Filtros y Regex habilitados del servicio
-    service_filters = [f for f in service.filters if f.enabled]
-    service_regexes = [r for r in service.regexes if r.enabled]
+    # 1) Obtener filtros y regex base
+    if service_id:
+        service = ServiceModel.query.get(service_id)
+        if not service or not service.enabled:
+            return None
+        service_filters = [f for f in service.filters if f.enabled]
+        service_regexes = [r for r in service.regexes if r.enabled]
+    else:
+        # Si no hay service_id, tomamos todos los habilitados globalmente
+        # que el usuario tenga permitidos
+        service_filters = FilterModel.query.filter_by(enabled=True).all()
+        service_regexes = RegexModel.query.filter_by(enabled=True).all()
 
     if not service_filters and not service_regexes:
         return None
 
-    # 3) Definir filters/regex finales, según si el user es admin, None, o normal
+    # 2) Definir filters/regex finales, según si el user es admin, None, o normal
     final_filters = service_filters
     final_regexes = service_regexes
 
@@ -145,8 +139,17 @@ def search_and_apply_filters(to_address, service_id=None, user=None):
         pass
     # --- FIN: Logging para Depuración ---
 
-    # 4) Buscamos en servidores IMAP habilitados
-    servers = IMAPServer.query.filter_by(enabled=True).all()
+    # 4) Buscamos en servidores IMAP y IMAP2 habilitados
+    servers = []
+    
+    # Obtener servidores IMAP normales
+    imap_servers = IMAPServer.query.filter_by(enabled=True).all()
+    servers.extend(imap_servers)
+    
+    # Obtener servidores IMAP2
+    imap2_servers = IMAPServer2.query.filter_by(enabled=True).all()
+    servers.extend(imap2_servers)
+    
     if not servers:
         return None
 
@@ -169,6 +172,37 @@ def search_and_apply_filters(to_address, service_id=None, user=None):
         found_mail_older = _process_mails(older_mails, final_filters, final_regexes, user, to_address)
         if found_mail_older:
             return found_mail_older
+
+    # --- NUEVA LÓGICA: Búsqueda en Proyectos Vinculados ---
+    if user and user.enabled:
+        # Obtener proyectos vinculados habilitados
+        linked_projects = user.linked_projects.filter_by(enabled=True).all()
+        if linked_projects:
+            for project in linked_projects:
+                try:
+                    # Preparar la petición a la API externa
+                    payload = {
+                        "token": project.token,
+                        "email_to_search": to_address
+                    }
+                    
+                    response = requests.post(
+                        project.url,
+                        json=payload,
+                        timeout=10 # Timeout de 10 segundos
+                    )
+                    
+                    if response.status_code == 200:
+                        data = response.json()
+                        results = data.get("results", [])
+                        if results:
+                            external_result = results[0]
+                            external_result["external_project_name"] = project.name
+                            return external_result
+                except Exception as e:
+                    current_app.logger.error(f"Error buscando en proyecto vinculado '{project.name}': {e}")
+                    continue
+    # --- FIN LÓGICA PROYECTOS VINCULADOS ---
 
     return None
 
@@ -266,6 +300,37 @@ def search_and_apply_filters2(to_address, service_id=None, user=None):
         found_mail_older = _process_mails(older_mails, final_filters, final_regexes, user, to_address)
         if found_mail_older:
             return found_mail_older
+
+    # --- NUEVA LÓGICA: Búsqueda en Proyectos Vinculados ---
+    if user and user.enabled:
+        # Obtener proyectos vinculados habilitados
+        linked_projects = user.linked_projects.filter_by(enabled=True).all()
+        if linked_projects:
+            for project in linked_projects:
+                try:
+                    # Preparar la petición a la API externa
+                    payload = {
+                        "token": project.token,
+                        "email_to_search": to_address
+                    }
+                    
+                    response = requests.post(
+                        project.url,
+                        json=payload,
+                        timeout=10 # Timeout de 10 segundos
+                    )
+                    
+                    if response.status_code == 200:
+                        data = response.json()
+                        results = data.get("results", [])
+                        if results:
+                            external_result = results[0]
+                            external_result["external_project_name"] = project.name
+                            return external_result
+                except Exception as e:
+                    current_app.logger.error(f"Error buscando en proyecto vinculado '{project.name}': {e}")
+                    continue
+    # --- FIN LÓGICA PROYECTOS VINCULADOS ---
 
     return None
 
@@ -377,6 +442,37 @@ def search_imap2_server_dynamic(to_address, imap_server_id, user=None):
         found_mail_older = _process_mails(older_mails, final_filters, final_regexes, user, to_address)
         if found_mail_older:
             return found_mail_older
+
+    # --- NUEVA LÓGICA: Búsqueda en Proyectos Vinculados ---
+    if user and user.enabled:
+        # Obtener proyectos vinculados habilitados
+        linked_projects = user.linked_projects.filter_by(enabled=True).all()
+        if linked_projects:
+            for project in linked_projects:
+                try:
+                    # Preparar la petición a la API externa
+                    payload = {
+                        "token": project.token,
+                        "email_to_search": to_address
+                    }
+                    
+                    response = requests.post(
+                        project.url,
+                        json=payload,
+                        timeout=10 # Timeout de 10 segundos
+                    )
+                    
+                    if response.status_code == 200:
+                        data = response.json()
+                        results = data.get("results", [])
+                        if results:
+                            external_result = results[0]
+                            external_result["external_project_name"] = project.name
+                            return external_result
+                except Exception as e:
+                    current_app.logger.error(f"Error buscando en proyecto vinculado '{project.name}': {e}")
+                    continue
+    # --- FIN LÓGICA PROYECTOS VINCULADOS ---
 
     return None
 

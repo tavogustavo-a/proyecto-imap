@@ -123,7 +123,8 @@ body.theme-active.tema3 {
 .domain-item,
 .regex-item,
 .user-item,
-.filter-item {
+.filter-item,
+.linked-api-item {
   background-color: var(--card-bg) !important;
   color: var(--text-color) !important;
   border: 1.5px solid var(--card-border) !important;
@@ -180,6 +181,20 @@ textarea {
   border-radius: 4px;
   border: 1px solid #ddd;
 }
+
+/* Estilo para inputs de API vinculada con borde más grueso */
+.api-input {
+  border: 2px solid #111 !important;
+  border-radius: 6px !important;
+  transition: all 0.2s ease;
+}
+
+.api-input:focus {
+  border-color: #2196f3 !important;
+  box-shadow: 0 0 0 2px rgba(33, 150, 243, 0.1) !important;
+  outline: none;
+}
+
 /* Estilos específicos para inputs en edit_imap2.html */
 .imap2-edit-form {
   padding: 0 0.5rem;
@@ -694,21 +709,10 @@ input[type="submit"],
     padding: 0 !important;
     margin: 0 !important;
     max-width: none !important;
-    color: #000 !important; /* Texto oscuro para buen contraste */
     
     /* Remover transformaciones */
     transform: none !important;
     transform-origin: initial !important;
-  }
-  
-  /* Asegurar que el texto dentro de filter-match sea oscuro siempre */
-  .filter-match p,
-  .filter-match div,
-  .filter-match span,
-  .filter-match td,
-  .filter-match th,
-  .filter-match li {
-    color: #000 !important; /* Texto oscuro para buen contraste */
   }
   /* -- FIN MANTENER -- */
 }
@@ -1426,6 +1430,13 @@ noscript p {
   padding: 0.3rem;
   box-sizing: border-box; /* Incluir padding en width */
   max-width: 300px; /* Añadido max-width para limitar inputs en popups */
+}
+
+/* Input más ancho específicamente para el campo de nombre de alias */
+#aliasPopup .alias-name-input,
+#editAliasPopup input.popup-input {
+  max-width: 100% !important; /* Usar todo el ancho disponible del contenedor */
+  width: 100% !important;
 }
 
 .popup-color-input {
@@ -2768,30 +2779,6 @@ body .edit-service-page #aliasPopup {
 
 /* --- FIN Estilos específicos para admin_dashboard.html --- */
 
-/* Regla general para filter-match: siempre fondo blanco y texto oscuro */
-.filter-match {
-  background: #ffffff !important; /* Fondo blanco siempre */
-  color: #000 !important; /* Texto oscuro siempre para buen contraste */
-}
-
-.filter-match p,
-.filter-match div,
-.filter-match span,
-.filter-match td,
-.filter-match th,
-.filter-match li,
-.filter-match pre {
-  color: #000 !important; /* Texto oscuro siempre */
-}
-
-.filter-match a {
-  color: #0066cc !important; /* Azul para enlaces */
-}
-
-.filter-match a:hover {
-  color: #0052a3 !important; /* Azul más oscuro al hover */
-}
-
 /* Solo contenido puro para filtros en modo oscuro - sin estilos visuales */
 body.dark-mode .filter-match {
   background: #ffffff !important; /* Fondo blanco para consistencia */
@@ -2802,34 +2789,12 @@ body.dark-mode .filter-match {
   padding: 0 !important;
   margin: 0 !important;
   max-width: none !important;
-  color: #000 !important; /* Texto oscuro para buen contraste */
 }
 
 /* Anular cualquier padding inline en modo oscuro */
 body.dark-mode .filter-match * {
   padding-left: 0 !important;
   padding-right: 0 !important;
-  color: inherit !important; /* Heredar color oscuro del contenedor */
-}
-
-/* Asegurar que el texto dentro de filter-match sea oscuro siempre */
-body.dark-mode .filter-match p,
-body.dark-mode .filter-match div,
-body.dark-mode .filter-match span,
-body.dark-mode .filter-match td,
-body.dark-mode .filter-match th,
-body.dark-mode .filter-match li,
-body.dark-mode .filter-match a:not(:hover) {
-  color: #000 !important; /* Texto oscuro para buen contraste */
-}
-
-/* Asegurar que los enlaces sean visibles pero mantengan estilo de enlace */
-body.dark-mode .filter-match a {
-  color: #0066cc !important; /* Azul para enlaces */
-}
-
-body.dark-mode .filter-match a:hover {
-  color: #0052a3 !important; /* Azul más oscuro al hover */
 }
 
 /* Forzar fondo blanco en elementos con estilo inline gris */
@@ -4046,17 +4011,6 @@ a.btn-search.btn-rounded:hover {
     padding: 0 !important;
     margin: 0 !important;
     max-width: none !important;
-    color: #000 !important; /* Texto oscuro para buen contraste */
-  }
-  
-  /* Asegurar que el texto dentro de filter-match sea oscuro siempre */
-  .filter-match p,
-  .filter-match div,
-  .filter-match span,
-  .filter-match td,
-  .filter-match th,
-  .filter-match li {
-    color: #000 !important; /* Texto oscuro para buen contraste */
   }
   
   .search-input {
@@ -4211,7 +4165,15 @@ a.btn-search.btn-rounded:hover {
     gap: 0.3rem !important;
   }
   
-  /* .position-input-narrow - ELIMINADO: duplicado */
+  .position-input-narrow {
+    width: 100px !important;
+    min-width: 80px !important;
+    max-width: 120px !important;
+    padding: 0.3rem !important;
+    border-radius: 4px !important;
+    border: 1px solid #ccc !important;
+    text-align: center !important;
+  }
   
   .visibility-select {
     min-width: 85px !important;
