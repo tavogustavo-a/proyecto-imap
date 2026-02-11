@@ -543,28 +543,44 @@ document.addEventListener("DOMContentLoaded", function () {
                 }
               });
             } else {
-              // Página normal: usar función general de 2FA
+              // Página normal: SOLO usar función general de 2FA si el servicio seleccionado es SMS
               // NO limpiar el contenedor todavía, mantener el spinner visible mientras se verifica 2FA
               // checkAndDisplay2FACode mostrará el código 2FA si existe, o el error si no hay permisos
-              checkAndDisplay2FACode(emailSearched).then((hasContent) => {
-                // Ocultar el spinner después de que termine la verificación 2FA
+              // SOLO buscar 2FA si el servicio es SMS
+              if (isSelectedServiceSMS()) {
+                checkAndDisplay2FACode(emailSearched).then((hasContent) => {
+                  // Ocultar el spinner después de que termine la verificación 2FA
+                  if (spinner) {
+                    spinner.classList.add('d-none');
+                    spinner.classList.remove('d-block');
+                  }
+                  // Mostrar el contenedor de resultados SOLO después de que termine la verificación
+                  if (resultsDiv) {
+                    resultsDiv.classList.remove('d-none');
+                    resultsDiv.classList.add('d-block');
+                    // Si después de intentar mostrar 2FA no hay nada en el contenedor (404 = no hay configuración 2FA),
+                    // mostrar mensaje de no resultados (CSP compliant)
+                    if (resultsDiv.children.length === 0 && !hasContent) {
+                      const noResultsP = document.createElement('p');
+                      noResultsP.textContent = 'No se encontraron resultados.';
+                      resultsDiv.appendChild(noResultsP);
+                    }
+                  }
+                });
+              } else {
+                // Si NO es servicio SMS, solo ocultar spinner y mostrar "No se encontraron resultados"
                 if (spinner) {
                   spinner.classList.add('d-none');
                   spinner.classList.remove('d-block');
                 }
-                // Mostrar el contenedor de resultados SOLO después de que termine la verificación
                 if (resultsDiv) {
                   resultsDiv.classList.remove('d-none');
                   resultsDiv.classList.add('d-block');
-                  // Si después de intentar mostrar 2FA no hay nada en el contenedor (404 = no hay configuración 2FA),
-                  // mostrar mensaje de no resultados (CSP compliant)
-                  if (resultsDiv.children.length === 0 && !hasContent) {
-                    const noResultsP = document.createElement('p');
-                    noResultsP.textContent = 'No se encontraron resultados.';
-                    resultsDiv.appendChild(noResultsP);
-                  }
+                  const noResultsP = document.createElement('p');
+                  noResultsP.textContent = 'No se encontraron resultados.';
+                  resultsDiv.appendChild(noResultsP);
                 }
-              });
+              }
             }
           } else {
             // Si no hay email, ocultar spinner y mostrar mensaje de no resultados
@@ -600,10 +616,10 @@ document.addEventListener("DOMContentLoaded", function () {
           // Renderizar mensajes SMS primero
           renderSMSMessages(smsMessages, mail.sms_config_phone, mail.email_searched);
           
-          // También buscar y mostrar código 2FA si existe (SIEMPRE, incluso si no hay mensajes SMS)
+          // También buscar y mostrar código 2FA si existe (SOLO si el servicio seleccionado es SMS)
           // Usar setTimeout para asegurar que renderSMSMessages termine primero
           // NO hacer esto en páginas dinámicas de IMAP2 (usan su propio sistema de 2FA)
-          if (emailToCheck && !isImap2DynamicPage) {
+          if (emailToCheck && !isImap2DynamicPage && isSelectedServiceSMS()) {
             setTimeout(() => {
               checkAndDisplay2FACode(emailToCheck);
             }, 200);
@@ -611,7 +627,7 @@ document.addEventListener("DOMContentLoaded", function () {
           return;
         }
         
-        // Verificar si hay código 2FA para el correo buscado (mostrar junto con los resultados)
+        // Verificar si hay código 2FA para el correo buscado (SOLO si es servicio SMS)
         // Usar setTimeout para asegurar que los resultados se rendericen primero
         if (emailSearched) {
           if (isImap2DynamicPage) {
@@ -621,10 +637,13 @@ document.addEventListener("DOMContentLoaded", function () {
               checkAndDisplayImap2TwoFACode(emailSearched, parseInt(imapServerId));
             }, 200);
           } else {
-            // Página normal: usar función general de 2FA
-            setTimeout(() => {
-              checkAndDisplay2FACode(emailSearched);
-            }, 200);
+            // Página normal: SOLO buscar 2FA si el servicio seleccionado es SMS
+            // Los servicios normales NO deben buscar código 2FA aquí
+            if (isSelectedServiceSMS()) {
+              setTimeout(() => {
+                checkAndDisplay2FACode(emailSearched);
+              }, 200);
+            }
           }
         }
 
@@ -1301,10 +1320,31 @@ document.addEventListener("DOMContentLoaded", function () {
     }
   }
   
-  // ✅ NUEVO: Función para verificar y mostrar código 2FA
-    async function checkAndDisplay2FACode(email) {
+  // Función helper para verificar si el servicio seleccionado es SMS
+  function isSelectedServiceSMS() {
+    const serviceId = document.getElementById("selectedServiceId");
+    if (!serviceId || !serviceId.value) {
+      return false;
+    }
+    const selectedServiceId = serviceId.value;
+    // Buscar el botón del servicio seleccionado
+    const selectedButton = document.querySelector(`.service-btn[data-service-id="${selectedServiceId}"]`);
+    if (!selectedButton) {
+      return false;
+    }
+    // Verificar si tiene data-visibility-mode="sms"
+    return selectedButton.getAttribute("data-visibility-mode") === "sms";
+  }
+
+  // ✅ Función para verificar y mostrar código 2FA (SOLO para servicios SMS)
+  async function checkAndDisplay2FACode(email) {
     if (!email) {
       return Promise.resolve();
+    }
+    
+    // SOLO buscar código 2FA si el servicio seleccionado es SMS
+    if (!isSelectedServiceSMS()) {
+      return Promise.resolve(false);
     }
     
     try {
@@ -1493,7 +1533,10 @@ document.addEventListener("DOMContentLoaded", function () {
           const imapServerId = ajaxSearchForm.getAttribute("data-imap-server-id");
           checkAndDisplayImap2TwoFACode(email, parseInt(imapServerId));
         } else {
-          checkAndDisplay2FACode(email);
+          // SOLO actualizar código 2FA si el servicio seleccionado es SMS
+          if (isSelectedServiceSMS()) {
+            checkAndDisplay2FACode(email);
+          }
         }
       }
       if (timer) {

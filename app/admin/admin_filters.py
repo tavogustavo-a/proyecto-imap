@@ -11,13 +11,6 @@ from app.services.filter_service import (
     update_filter_service,
     delete_filter_service
 )
-from app.services.domain_service import (
-    create_domain_service,
-    update_domain_service,
-    toggle_domain_service,
-    delete_domain_service,
-    get_all_domains
-)
 from app.admin.decorators import admin_required
 
 @admin_bp.route("/create_filter", methods=["POST"])
@@ -250,97 +243,5 @@ def delete_filter_ajax():
                 "description": fil.description or ""
             })
         return jsonify({"status": "ok", "filters": data_resp})
-    except Exception as e:
-        return jsonify({"status": "error", "message": str(e)}), 400
-
-
-# =========== DOMINIOS (misma sección) ===========
-
-@admin_bp.route("/create_domain", methods=["POST"])
-@admin_required
-def create_domain():
-    domain_str = request.form.get("domain", "").strip()
-    new_dom = create_domain_service(domain_str)
-    if new_dom:
-        flash(f"Dominio '{domain_str}' creado correctamente.", "success")
-    else:
-        flash(f"El dominio '{domain_str}' ya existía o no es válido.", "warning")
-    return redirect(url_for("admin_bp.filters_page"))
-
-
-@admin_bp.route("/edit_domain/<int:dom_id>", methods=["GET", "POST"])
-@admin_required
-def edit_domain(dom_id):
-    from app.models.domain import DomainModel
-    dom = DomainModel.query.get_or_404(dom_id)
-
-    if request.method == "POST":
-        new_domain_str = request.form.get("domain", "").strip().lower()
-        update_domain_service(dom, new_domain_str)
-        flash("Dominio actualizado.", "success")
-        return redirect(url_for("admin_bp.filters_page"))
-
-    return render_template("edit_domain.html", dom=dom)
-
-
-@admin_bp.route("/search_domains_ajax", methods=["GET"])
-@admin_required
-def search_domains_ajax():
-    from app.services.domain_service import get_all_domains
-    query = request.args.get("query", "").strip().lower()
-    domains_q = get_all_domains()
-    if query:
-        domains_q = [d for d in domains_q if query in d.domain.lower()]
-
-    data = []
-    for d in domains_q:
-        data.append({
-            "id": d.id,
-            "domain": d.domain,
-            "enabled": d.enabled
-        })
-    return jsonify({"status": "ok", "domains": data})
-
-
-@admin_bp.route("/toggle_domain_ajax", methods=["POST"])
-@admin_required
-def toggle_domain_ajax():
-    try:
-        data = request.get_json()
-        dom_id = data.get("dom_id")
-        currently_enabled = data.get("currently_enabled", True)
-        from app.services.domain_service import toggle_domain_service, get_all_domains
-        new_status = toggle_domain_service(dom_id)
-        domains = get_all_domains()
-
-        data_resp = []
-        for d in domains:
-            data_resp.append({
-                "id": d.id,
-                "domain": d.domain,
-                "enabled": d.enabled
-            })
-        return jsonify({"status": "ok", "domains": data_resp})
-    except Exception as e:
-        return jsonify({"status": "error", "message": str(e)}), 400
-
-
-@admin_bp.route("/delete_domain_ajax", methods=["POST"])
-@admin_required
-def delete_domain_ajax():
-    try:
-        data = request.get_json()
-        dom_id = data.get("dom_id")
-        from app.services.domain_service import delete_domain_service, get_all_domains
-        delete_domain_service(dom_id)
-        domains = get_all_domains()
-        data_resp = []
-        for d in domains:
-            data_resp.append({
-                "id": d.id,
-                "domain": d.domain,
-                "enabled": d.enabled
-            })
-        return jsonify({"status": "ok", "domains": data_resp})
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 400

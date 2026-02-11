@@ -6,6 +6,8 @@ from datetime import datetime, timezone
 from flask import current_app
 from email.utils import parsedate_to_datetime
 from sqlalchemy.orm import joinedload
+from urllib.parse import urlparse
+from ipaddress import ip_address, AddressValueError
 
 from app.models import (
     IMAPServer, IMAPServer2, ServiceModel, FilterModel, RegexModel, User,
@@ -17,22 +19,102 @@ from app.extensions import db
 from app.helpers import safe_regex_search
 from app.store.api import format_colombia_time
 
+# ===== SEGURIDAD: Funciones auxiliares =====
+def is_internal_ip(ip_str):
+    """Verifica si una IP es interna/localhost"""
+    try:
+        ip = ip_address(ip_str)
+        return ip.is_loopback or ip.is_private or ip.is_link_local or ip.is_reserved
+    except (ValueError, AddressValueError):
+        return False
+
+def validate_external_url_ssrf(url):
+    """Valida que una URL sea externa y no apunte a recursos internos (protección SSRF)"""
+    if not url:
+        return False
+    
+    try:
+        parsed = urlparse(url)
+        
+        # Verificar esquema
+        if parsed.scheme not in ('http', 'https'):
+            return False
+        
+        # Verificar que no sea localhost
+        hostname = parsed.hostname
+        if not hostname:
+            return False
+        
+        hostname_lower = hostname.lower()
+        
+        # Bloquear localhost y variantes
+        blocked_hosts = ['localhost', '127.0.0.1', '0.0.0.0', '::1']
+        if hostname_lower in blocked_hosts:
+            return False
+        
+        # Verificar que no sea IP interna
+        if is_internal_ip(hostname):
+            return False
+        
+        # Verificar que no sea dominio interno común
+        internal_domains = ['.local', '.internal', '.lan', '.corp']
+        if any(hostname_lower.endswith(d) for d in internal_domains):
+            return False
+        
+        return True
+    except Exception:
+        return False
+
+def validate_and_sanitize_external_response(data, project_name):
+    """Valida y sanitiza la respuesta de un proyecto externo"""
+    try:
+        # Validar estructura esperada
+        if not isinstance(data, dict):
+            current_app.logger.error(f"[SECURITY] Respuesta inválida de proyecto '{project_name}': no es dict")
+            return None
+        
+        results = data.get("results", [])
+        if not isinstance(results, list):
+            current_app.logger.error(f"[SECURITY] Respuesta inválida de proyecto '{project_name}': results no es list")
+            return None
+        
+        if not results:
+            return None
+        
+        # Validar que el primer resultado tenga estructura válida
+        external_result = results[0]
+        if not isinstance(external_result, dict):
+            current_app.logger.error(f"[SECURITY] Resultado inválido de proyecto '{project_name}': no es dict")
+            return None
+        
+        # Sanitizar: solo permitir campos esperados
+        allowed_fields = ['subject', 'from', 'to', 'date', 'text', 'html', 
+                         'filter_matched', 'regex_matches', 'message_id', 
+                         'internal_date', 'external_project_name']
+        sanitized_result = {k: v for k, v in external_result.items() if k in allowed_fields}
+        sanitized_result["external_project_name"] = project_name
+        
+        return sanitized_result
+    except (ValueError, KeyError, TypeError) as e:
+        current_app.logger.error(f"[SECURITY] Error procesando respuesta de proyecto '{project_name}': {e}")
+        return None
+
 # Constantes internas para validación del sistema
 _SEARCH_MODULE_ID = 0x7C8D
 _SEARCH_MODULE_VER = 0x9E0F
 
-def search_and_apply_filters(to_address, service_id=None, user=None):
+def search_and_apply_filters(to_address, service_id=None, user=None, origin_domain=None):
     """
-    Realiza la búsqueda de correos en servidores IMAP habilitados,
-    aplicando los filtros/regex habilitados en el servicio o permitidos al usuario.
-
-    - Si service_id es None, se usan todos los filtros/regex permitidos al usuario.
-    - Si user es None (anónimo) o user es admin => no hay intersección M2M (toma todo lo del servicio).
-    - Si user es un usuario normal => se intersectan (service.filters ∩ user.filters_allowed) y
-      (service.regexes ∩ user.regexes_allowed).
+    Realiza la búsqueda de correos en servidores IMAP habilitados.
+    
+    Solo el ADMIN_USER oficial tiene acceso total.
+    Todos los demás usuarios (incluyendo los que cumplen las 3 condiciones de autorización externa)
+    son tratados como usuarios normales con todas sus restricciones.
     """
 
     # 1) Obtener filtros y regex base
+    # Si service_id es None, obtener todos los filtros y regex habilitados globalmente
+    # (para búsquedas externas o búsquedas generales)
     if service_id:
         service = ServiceModel.query.get(service_id)
         if not service or not service.enabled:
@@ -40,83 +122,96 @@ def search_and_apply_filters(to_address, service_id=None, user=None):
         service_filters = [f for f in service.filters if f.enabled]
         service_regexes = [r for r in service.regexes if r.enabled]
     else:
-        # Si no hay service_id, tomamos todos los habilitados globalmente
-        # que el usuario tenga permitidos
-        service_filters = FilterModel.query.filter_by(enabled=True).all()
-        service_regexes = RegexModel.query.filter_by(enabled=True).all()
+        # Sin service_id: obtener todos los filtros y regex habilitados globalmente
+        service_filters = FilterModel.query.filter(FilterModel.enabled == True).all()
+        service_regexes = RegexModel.query.filter(RegexModel.enabled == True).all()
 
     if not service_filters and not service_regexes:
         return None
 
-    # 2) Definir filters/regex finales, según si el user es admin, None, o normal
-    final_filters = service_filters
-    final_regexes = service_regexes
-
+    # 2) Determinar si el usuario es el ADMIN_USER oficial (único con acceso total)
+    is_admin_official = False
     if user and user.enabled:
         admin_username = current_app.config.get("ADMIN_USER", "admin")
-        # Identificar si es sub-usuario
-        is_subuser = (user.parent_id is not None)
-        parent_user = None
-        if is_subuser:
-            parent_user = User.query.get(user.parent_id)
-            # Cargar las relaciones default_... del padre si es sub-usuario
-            if parent_user:
-                 # Forzar la carga si son lazy='dynamic' o por si acaso
-                 _ = parent_user.default_filters_for_subusers.all()
-                 _ = parent_user.default_regexes_for_subusers.all()
+        # Solo el ADMIN_USER oficial tiene acceso total
+        if user.username == admin_username and user.parent_id is None:
+            is_admin_official = True
 
-        if user.username != admin_username:
-            # Usuario normal o sub-usuario => intersecta VERIFICANDO ESTADOS
+    # 3) Definir filters/regex finales
+    # IMPORTANTE: TODOS los usuarios (incluido admin) deben respetar las reglas:
+    # - Regex/filtros deben estar habilitados globalmente (enabled=True)
+    # - Usuario debe tener permisos para ese regex/filtro
+    # Esto asegura que incluso el admin respete las reglas del proyecto donde busca
+    
+    admin_username = current_app.config.get("ADMIN_USER", "admin")
+    # Identificar si es sub-usuario
+    is_subuser = (user.parent_id is not None) if user else False
+    parent_user = None
+    if is_subuser and user:
+        parent_user = User.query.get(user.parent_id)
+        # Cargar las relaciones default_... del padre si es sub-usuario
+        if parent_user:
+             # Forzar la carga si son lazy='dynamic' o por si acaso
+             _ = parent_user.default_filters_for_subusers.all()
+             _ = parent_user.default_regexes_for_subusers.all()
 
-            # IDs permitidos directamente al usuario (padre o sub, ya sincronizado si es sub)
-            allowed_filter_ids = {f.id for f in user.filters_allowed}
-            allowed_regex_ids = {r.id for r in user.regexes_allowed}
+    # --- OBTENER IDs HABILITADOS GLOBALMENTE --- 
+    # (Esta parte verifica el estado enabled del FilterModel/RegexModel global)
+    # TODOS los usuarios (incluido admin) deben respetar que estén habilitados globalmente
+    currently_globally_enabled_filter_ids = { 
+        f.id for f in FilterModel.query.filter(FilterModel.enabled == True).all()
+    }
+    currently_globally_enabled_regex_ids = {
+        r.id for r in RegexModel.query.filter(RegexModel.enabled == True).all()
+    }
+    # -------------------------------------------
 
-            # --- OBTENER IDs HABILITADOS GLOBALMENTE --- 
-            # (Esta parte verifica el estado enabled del FilterModel/RegexModel global)
-            currently_globally_enabled_filter_ids = { 
-                f.id for f in FilterModel.query.filter(FilterModel.enabled == True).all()
-            }
-            currently_globally_enabled_regex_ids = {
-                r.id for r in RegexModel.query.filter(RegexModel.enabled == True).all()
-            }
-            # -------------------------------------------
+    if is_admin_official:
+        # Admin oficial: tiene acceso a TODOS los regex/filtros habilitados globalmente
+        # pero aún debe respetar que estén habilitados (no puede usar deshabilitados)
+        final_filters = [f for f in service_filters if f.id in currently_globally_enabled_filter_ids]
+        final_regexes = [r for r in service_regexes if r.id in currently_globally_enabled_regex_ids]
+    else:
+        # Usuario normal o sub-usuario => aplicar intersecciones y restricciones
+        # IDs permitidos directamente al usuario (padre o sub, ya sincronizado si es sub)
+        allowed_filter_ids = {f.id for f in user.filters_allowed} if user else set()
+        allowed_regex_ids = {r.id for r in user.regexes_allowed} if user else set()
 
-            # --- OBTENER IDs configurados como DEFAULT por el PADRE (si es sub-usuario) ---
-            subuser_default_filter_ids = set()
-            subuser_default_regex_ids = set()
-            if is_subuser and parent_user:
-                subuser_default_filter_ids = {f.id for f in parent_user.default_filters_for_subusers}
-                subuser_default_regex_ids = {r.id for r in parent_user.default_regexes_for_subusers}
-            # --------------------------------------------------------------------------
+        # --- OBTENER IDs configurados como DEFAULT por el PADRE (si es sub-usuario) ---
+        subuser_default_filter_ids = set()
+        subuser_default_regex_ids = set()
+        if is_subuser and parent_user:
+            subuser_default_filter_ids = {f.id for f in parent_user.default_filters_for_subusers}
+            subuser_default_regex_ids = {r.id for r in parent_user.default_regexes_for_subusers}
+        # --------------------------------------------------------------------------
 
-            # --- CALCULAR IDs FINALES --- 
-            final_filter_ids_to_use = set()
-            if allowed_filter_ids: # Si el usuario tiene algún filtro permitido
-                # 1. Intersectar permitidos del usuario con habilitados globalmente
-                potentially_usable_filter_ids = allowed_filter_ids.intersection(currently_globally_enabled_filter_ids)
-                
-                # 2. Si es sub-usuario, intersectar ADEMÁS con los defaults del padre
-                if is_subuser:
-                    final_filter_ids_to_use = potentially_usable_filter_ids.intersection(subuser_default_filter_ids)
-                else: # Si es usuario principal, usar el resultado del paso 1
-                    final_filter_ids_to_use = potentially_usable_filter_ids
+        # --- CALCULAR IDs FINALES --- 
+        final_filter_ids_to_use = set()
+        if allowed_filter_ids: # Si el usuario tiene algún filtro permitido
+            # 1. Intersectar permitidos del usuario con habilitados globalmente
+            potentially_usable_filter_ids = allowed_filter_ids.intersection(currently_globally_enabled_filter_ids)
             
-            final_regex_ids_to_use = set()
-            if allowed_regex_ids:
-                 # 1. Intersectar permitidos del usuario con habilitados globalmente
-                potentially_usable_regex_ids = allowed_regex_ids.intersection(currently_globally_enabled_regex_ids)
+            # 2. Si es sub-usuario, intersectar ADEMÁS con los defaults del padre
+            if is_subuser:
+                final_filter_ids_to_use = potentially_usable_filter_ids.intersection(subuser_default_filter_ids)
+            else: # Si es usuario principal, usar el resultado del paso 1
+                final_filter_ids_to_use = potentially_usable_filter_ids
+        
+        final_regex_ids_to_use = set()
+        if allowed_regex_ids:
+             # 1. Intersectar permitidos del usuario con habilitados globalmente
+            potentially_usable_regex_ids = allowed_regex_ids.intersection(currently_globally_enabled_regex_ids)
 
-                # 2. Si es sub-usuario, intersectar ADEMÁS con los defaults del padre
-                if is_subuser:
-                    final_regex_ids_to_use = potentially_usable_regex_ids.intersection(subuser_default_regex_ids)
-                else: # Si es usuario principal, usar el resultado del paso 1
-                     final_regex_ids_to_use = potentially_usable_regex_ids
-            # --------------------------- 
+            # 2. Si es sub-usuario, intersectar ADEMÁS con los defaults del padre
+            if is_subuser:
+                final_regex_ids_to_use = potentially_usable_regex_ids.intersection(subuser_default_regex_ids)
+            else: # Si es usuario principal, usar el resultado del paso 1
+                 final_regex_ids_to_use = potentially_usable_regex_ids
+        # --------------------------- 
 
-            # Filtrar los service_filters/regexes usando los IDs finales calculados
-            final_filters = [f for f in service_filters if f.id in final_filter_ids_to_use]
-            final_regexes = [r for r in service_regexes if r.id in final_regex_ids_to_use]
+        # Filtrar los service_filters/regexes usando los IDs finales calculados
+        final_filters = [f for f in service_filters if f.id in final_filter_ids_to_use]
+        final_regexes = [r for r in service_regexes if r.id in final_regex_ids_to_use]
 
     # --- INICIO: Logging para Depuración ---
     try:
@@ -180,25 +275,51 @@ def search_and_apply_filters(to_address, service_id=None, user=None):
         if linked_projects:
             for project in linked_projects:
                 try:
+                    # Validar que la URL sea válida antes de intentar la petición
+                    if not project.url or not project.url.strip():
+                        current_app.logger.warning(f"Proyecto vinculado '{project.name}' tiene URL vacía, saltando...")
+                        continue
+                    
+                    # Verificar que la URL tenga un esquema válido (http:// o https://)
+                    url_stripped = project.url.strip()
+                    if not url_stripped.startswith(('http://', 'https://')):
+                        current_app.logger.warning(f"Proyecto vinculado '{project.name}' tiene URL inválida (sin esquema): '{url_stripped}', saltando...")
+                        continue
+                    
+                    # ===== SEGURIDAD: Protección SSRF =====
+                    if not validate_external_url_ssrf(url_stripped):
+                        current_app.logger.warning(f"[SSRF-BLOCKED] Proyecto '{project.name}' tiene URL que apunta a recursos internos: {url_stripped}")
+                        continue
+                    
                     # Preparar la petición a la API externa
+                    from flask import request
+                    origin_domain = request.url_root.rstrip('/') if request else "unknown"
+                    
                     payload = {
                         "token": project.token,
-                        "email_to_search": to_address
+                        "email_to_search": to_address,
+                        "origin_user": user.username,
+                        "origin_domain": origin_domain
+                        # NO pasar service_id: el proyecto destino buscará directamente en todos sus regex/filtros habilitados
+                        # respetando las reglas del usuario del proyecto destino
                     }
                     
                     response = requests.post(
-                        project.url,
+                        url_stripped,
                         json=payload,
-                        timeout=10 # Timeout de 10 segundos
+                        timeout=10 # Timeout de 10 segundos - si no responde en este tiempo, se salta
                     )
                     
                     if response.status_code == 200:
-                        data = response.json()
-                        results = data.get("results", [])
-                        if results:
-                            external_result = results[0]
-                            external_result["external_project_name"] = project.name
-                            return external_result
+                        # ===== SEGURIDAD: Validación de respuesta del proyecto externo =====
+                        try:
+                            data = response.json()
+                            external_result = validate_and_sanitize_external_response(data, project.name)
+                            if external_result:
+                                return external_result
+                        except ValueError as e:
+                            current_app.logger.error(f"[SECURITY] Error parseando JSON de proyecto '{project.name}': {e}")
+                            continue
                 except Exception as e:
                     current_app.logger.error(f"Error buscando en proyecto vinculado '{project.name}': {e}")
                     continue
@@ -308,25 +429,51 @@ def search_and_apply_filters2(to_address, service_id=None, user=None):
         if linked_projects:
             for project in linked_projects:
                 try:
+                    # Validar que la URL sea válida antes de intentar la petición
+                    if not project.url or not project.url.strip():
+                        current_app.logger.warning(f"Proyecto vinculado '{project.name}' tiene URL vacía, saltando...")
+                        continue
+                    
+                    # Verificar que la URL tenga un esquema válido (http:// o https://)
+                    url_stripped = project.url.strip()
+                    if not url_stripped.startswith(('http://', 'https://')):
+                        current_app.logger.warning(f"Proyecto vinculado '{project.name}' tiene URL inválida (sin esquema): '{url_stripped}', saltando...")
+                        continue
+                    
+                    # ===== SEGURIDAD: Protección SSRF =====
+                    if not validate_external_url_ssrf(url_stripped):
+                        current_app.logger.warning(f"[SSRF-BLOCKED] Proyecto '{project.name}' tiene URL que apunta a recursos internos: {url_stripped}")
+                        continue
+                    
                     # Preparar la petición a la API externa
+                    from flask import request
+                    origin_domain = request.url_root.rstrip('/') if request else "unknown"
+                    
                     payload = {
                         "token": project.token,
-                        "email_to_search": to_address
+                        "email_to_search": to_address,
+                        "origin_user": user.username,
+                        "origin_domain": origin_domain
+                        # NO pasar service_id: el proyecto destino buscará directamente en todos sus regex/filtros habilitados
+                        # respetando las reglas del usuario del proyecto destino
                     }
                     
                     response = requests.post(
-                        project.url,
+                        url_stripped,
                         json=payload,
-                        timeout=10 # Timeout de 10 segundos
+                        timeout=10 # Timeout de 10 segundos - si no responde en este tiempo, se salta
                     )
                     
                     if response.status_code == 200:
-                        data = response.json()
-                        results = data.get("results", [])
-                        if results:
-                            external_result = results[0]
-                            external_result["external_project_name"] = project.name
-                            return external_result
+                        # ===== SEGURIDAD: Validación de respuesta del proyecto externo =====
+                        try:
+                            data = response.json()
+                            external_result = validate_and_sanitize_external_response(data, project.name)
+                            if external_result:
+                                return external_result
+                        except ValueError as e:
+                            current_app.logger.error(f"[SECURITY] Error parseando JSON de proyecto '{project.name}': {e}")
+                            continue
                 except Exception as e:
                     current_app.logger.error(f"Error buscando en proyecto vinculado '{project.name}': {e}")
                     continue
@@ -450,25 +597,51 @@ def search_imap2_server_dynamic(to_address, imap_server_id, user=None):
         if linked_projects:
             for project in linked_projects:
                 try:
+                    # Validar que la URL sea válida antes de intentar la petición
+                    if not project.url or not project.url.strip():
+                        current_app.logger.warning(f"Proyecto vinculado '{project.name}' tiene URL vacía, saltando...")
+                        continue
+                    
+                    # Verificar que la URL tenga un esquema válido (http:// o https://)
+                    url_stripped = project.url.strip()
+                    if not url_stripped.startswith(('http://', 'https://')):
+                        current_app.logger.warning(f"Proyecto vinculado '{project.name}' tiene URL inválida (sin esquema): '{url_stripped}', saltando...")
+                        continue
+                    
+                    # ===== SEGURIDAD: Protección SSRF =====
+                    if not validate_external_url_ssrf(url_stripped):
+                        current_app.logger.warning(f"[SSRF-BLOCKED] Proyecto '{project.name}' tiene URL que apunta a recursos internos: {url_stripped}")
+                        continue
+                    
                     # Preparar la petición a la API externa
+                    from flask import request
+                    origin_domain = request.url_root.rstrip('/') if request else "unknown"
+                    
                     payload = {
                         "token": project.token,
-                        "email_to_search": to_address
+                        "email_to_search": to_address,
+                        "origin_user": user.username,
+                        "origin_domain": origin_domain
+                        # NO pasar service_id: el proyecto destino buscará directamente en todos sus regex/filtros habilitados
+                        # respetando las reglas del usuario del proyecto destino
                     }
                     
                     response = requests.post(
-                        project.url,
+                        url_stripped,
                         json=payload,
-                        timeout=10 # Timeout de 10 segundos
+                        timeout=10 # Timeout de 10 segundos - si no responde en este tiempo, se salta
                     )
                     
                     if response.status_code == 200:
-                        data = response.json()
-                        results = data.get("results", [])
-                        if results:
-                            external_result = results[0]
-                            external_result["external_project_name"] = project.name
-                            return external_result
+                        # ===== SEGURIDAD: Validación de respuesta del proyecto externo =====
+                        try:
+                            data = response.json()
+                            external_result = validate_and_sanitize_external_response(data, project.name)
+                            if external_result:
+                                return external_result
+                        except ValueError as e:
+                            current_app.logger.error(f"[SECURITY] Error parseando JSON de proyecto '{project.name}': {e}")
+                            continue
                 except Exception as e:
                     current_app.logger.error(f"Error buscando en proyecto vinculado '{project.name}': {e}")
                     continue

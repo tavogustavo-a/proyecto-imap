@@ -11,8 +11,183 @@ from app.extensions import db
 from app.utils.timezone import utc_to_colombia
 from datetime import datetime, timedelta
 import re
+import secrets
+import threading
+from urllib.parse import urlparse
+from ipaddress import ip_address, AddressValueError
 
 api_bp = Blueprint("api_bp", __name__)
+
+# ===== SEGURIDAD: Rate Limiting =====
+# Almacenar requests por IP con timestamps
+_rate_limit_store = {}
+_rate_limit_lock = threading.Lock()
+RATE_LIMIT_REQUESTS = 20  # 20 requests por minuto
+RATE_LIMIT_WINDOW = 60  # Ventana de 60 segundos
+
+def check_rate_limit(ip_address):
+    """Verifica si una IP ha excedido el límite de requests"""
+    current_time = datetime.utcnow()
+    
+    with _rate_limit_lock:
+        # Limpiar entradas antiguas (más de 1 minuto)
+        if ip_address in _rate_limit_store:
+            _rate_limit_store[ip_address] = [
+                ts for ts in _rate_limit_store[ip_address]
+                if (current_time - ts).total_seconds() < RATE_LIMIT_WINDOW
+            ]
+        else:
+            _rate_limit_store[ip_address] = []
+        
+        # Verificar límite
+        if len(_rate_limit_store[ip_address]) >= RATE_LIMIT_REQUESTS:
+            return False
+        
+        # Agregar timestamp actual
+        _rate_limit_store[ip_address].append(current_time)
+        return True
+
+def get_client_ip():
+    """Obtiene la IP real del cliente, considerando proxies"""
+    if request.headers.get('X-Forwarded-For'):
+        # Tomar la primera IP de la cadena (IP real del cliente)
+        return request.headers.get('X-Forwarded-For').split(',')[0].strip()
+    elif request.headers.get('X-Real-IP'):
+        return request.headers.get('X-Real-IP')
+    else:
+        return request.remote_addr or 'unknown'
+
+# ===== SEGURIDAD: Validación de Email =====
+EMAIL_REGEX = re.compile(
+    r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+)
+
+def validate_email_format(email):
+    """Valida el formato de un email"""
+    if not email or not isinstance(email, str):
+        return False
+    email = email.strip()
+    if len(email) > 254:  # RFC 5321 límite
+        return False
+    return bool(EMAIL_REGEX.match(email))
+
+# ===== SEGURIDAD: Validación de Dominios Permitidos =====
+def get_allowed_domains():
+    """Obtiene lista de dominios permitidos desde configuración o BD"""
+    # Por ahora retornar lista vacía, se puede expandir con configuración
+    # Se puede obtener de site_settings o configuración
+    allowed = current_app.config.get('ALLOWED_EXTERNAL_DOMAINS', [])
+    if isinstance(allowed, str):
+        allowed = [d.strip() for d in allowed.split(',') if d.strip()]
+    return allowed
+
+def validate_origin_domain(origin_domain):
+    """Valida que el dominio de origen esté en la lista permitida"""
+    if not origin_domain:
+        return False
+    
+    try:
+        parsed = urlparse(origin_domain if origin_domain.startswith('http') else f'https://{origin_domain}')
+        domain = parsed.netloc or parsed.path.split('/')[0]
+        domain = domain.lower().strip()
+        
+        allowed_domains = get_allowed_domains()
+        if allowed_domains:
+            return domain in allowed_domains or any(domain.endswith(f'.{ad}') for ad in allowed_domains)
+        
+        # Si no hay lista configurada, permitir cualquier dominio válido
+        return bool(domain and '.' in domain)
+    except Exception:
+        return False
+
+def validate_request_host():
+    """Valida que el host de la request sea un dominio permitido"""
+    try:
+        host = request.host.lower().split(':')[0]
+        allowed_domains = get_allowed_domains()
+        
+        if allowed_domains:
+            return host in allowed_domains or any(host.endswith(f'.{ad}') for ad in allowed_domains)
+        
+        # Si no hay lista configurada, permitir cualquier host válido
+        return bool(host and '.' in host)
+    except Exception:
+        return False
+
+# ===== SEGURIDAD: Protección SSRF =====
+def is_internal_ip(ip_str):
+    """Verifica si una IP es interna/localhost"""
+    try:
+        ip = ip_address(ip_str)
+        return ip.is_loopback or ip.is_private or ip.is_link_local or ip.is_reserved
+    except (ValueError, AddressValueError):
+        return False
+
+def validate_external_url(url):
+    """Valida que una URL sea externa y no apunte a recursos internos"""
+    if not url:
+        return False
+    
+    try:
+        parsed = urlparse(url)
+        
+        # Verificar esquema
+        if parsed.scheme not in ('http', 'https'):
+            return False
+        
+        # Verificar que no sea localhost
+        hostname = parsed.hostname
+        if not hostname:
+            return False
+        
+        hostname_lower = hostname.lower()
+        
+        # Bloquear localhost y variantes
+        blocked_hosts = ['localhost', '127.0.0.1', '0.0.0.0', '::1']
+        if hostname_lower in blocked_hosts:
+            return False
+        
+        # Verificar que no sea IP interna
+        if is_internal_ip(hostname):
+            return False
+        
+        # Verificar que no sea dominio interno común
+        internal_domains = ['.local', '.internal', '.lan', '.corp']
+        if any(hostname_lower.endswith(d) for d in internal_domains):
+            return False
+        
+        return True
+    except Exception:
+        return False
+
+# ===== SEGURIDAD: Validación de origin_user =====
+def validate_origin_user(origin_user):
+    """Valida que origin_user tenga formato válido (solo alfanuméricos y guiones bajos)"""
+    if not origin_user or not isinstance(origin_user, str):
+        return False
+    # Solo permitir alfanuméricos, guiones bajos y guiones, máximo 80 caracteres
+    return bool(re.match(r'^[a-zA-Z0-9_-]{1,80}$', origin_user))
+
+# ===== SEGURIDAD: Logging Seguro =====
+def safe_log_email(email):
+    """Retorna versión segura del email para logging (oculta parte)"""
+    if not email or len(email) < 5:
+        return "***"
+    parts = email.split('@')
+    if len(parts) != 2:
+        return "***"
+    local, domain = parts
+    if len(local) <= 2:
+        masked_local = "**"
+    else:
+        masked_local = local[0] + "*" * (len(local) - 2) + local[-1]
+    return f"{masked_local}@{domain}"
+
+def safe_log_token(token):
+    """Retorna versión segura del token para logging (solo primeros y últimos caracteres)"""
+    if not token or len(token) < 8:
+        return "***"
+    return f"{token[:4]}...{token[-4:]}"
 
 # Decorator para excluir rutas del CSRF (para APIs externas)
 def csrf_exempt_api(func):
@@ -55,45 +230,51 @@ def search_mails():
             has_2fa_config = True
             break
 
+    # SEGURIDAD: Requerir login obligatorio para todas las búsquedas
+    if not user:
+        return jsonify({"error": "Debes iniciar sesión para realizar búsquedas."}), 401
+    
     # Validar usuario (para búsquedas normales de correos)
     # El admin puede consultar sin restricciones
     # Si existe configuración 2FA, el correo ya está vinculado (no necesita AllowedEmail)
-    if user:
-        admin_username = current_app.config.get("ADMIN_USER", "admin")
-        # Verificar si es admin basándose SOLO en la base de datos (más confiable)
-        # Admin: username == admin_username Y parent_id is None
-        is_admin = (user.username == admin_username and user.parent_id is None)
-        
-        # Si es admin, puede consultar sin restricciones (saltar todas las validaciones)
-        if is_admin:
-            # Admin puede consultar cualquier correo sin restricciones
-            pass
-        elif has_2fa_config:
-            # Si existe configuración 2FA, validar permisos ANTES de permitir búsqueda
-            # Esto evita mostrar el spinner cuando el usuario no tiene permisos
-            if not user.enabled:
-                return jsonify({"error": "No tienes permiso al consultar este correo."}), 403
-            
-            # Si el usuario NO puede buscar cualquiera, verificar AllowedEmail (igual que SMS)
-            if not user.can_search_any:
-                is_allowed = user.allowed_email_entries.filter_by(email=email_normalized).first() is not None
-                if not is_allowed:
-                    return jsonify({"error": "No tienes permiso al consultar este correo."}), 403
-            # Si tiene configuración 2FA y pasa las validaciones, permitir acceso
-        else:
-            # Si no es admin y NO tiene configuración 2FA, validar permisos normalmente
-            if not user.enabled:
-                return jsonify({"error": "No tienes permiso al consultar este correo."}), 403
-            
-            # Si el usuario NO puede buscar cualquiera, verificamos si el email está permitido
-            if not user.can_search_any:
-                # Verificar AllowedEmail (solo si NO tiene configuración 2FA)
-                is_allowed = user.allowed_email_entries.filter_by(email=email_normalized).first() is not None
-                if not is_allowed:
-                    return jsonify({"error": "No tienes permiso para consultar este correo específico."}), 403
-    else:
-        # Usuario anónimo => se permite o no (tu lógica actual)
+    admin_username = current_app.config.get("ADMIN_USER", "admin")
+    # Verificar si es admin basándose SOLO en la base de datos (más confiable)
+    # Admin: username == admin_username Y parent_id is None
+    is_admin = (user.username == admin_username and user.parent_id is None)
+    
+    # IMPORTANTE: El admin en su propio proyecto NUNCA se bloquea
+    # Solo los usuarios normales deben estar habilitados para hacer búsquedas
+    # Si un usuario está inhabilitado, no puede hacer búsquedas locales ni consultar proyectos vinculados
+    if not is_admin and not user.enabled:
+        return jsonify({"error": "Tu cuenta está inhabilitada. No puedes realizar búsquedas."}), 403
+    
+    # Si es admin, puede consultar sin restricciones de correo específico
+    if is_admin:
+        # Admin puede consultar cualquier correo sin restricciones de AllowedEmail
         pass
+    elif has_2fa_config:
+        # Si existe configuración 2FA, validar permisos ANTES de permitir búsqueda
+        # Esto evita mostrar el spinner cuando el usuario no tiene permisos
+        if not user.enabled:
+            return jsonify({"error": "No tienes permiso al consultar este correo."}), 403
+        
+        # Si el usuario NO puede buscar cualquiera, verificar AllowedEmail (igual que SMS)
+        if not user.can_search_any:
+            is_allowed = user.allowed_email_entries.filter_by(email=email_normalized).first() is not None
+            if not is_allowed:
+                return jsonify({"error": "No tienes permiso al consultar este correo."}), 403
+        # Si tiene configuración 2FA y pasa las validaciones, permitir acceso
+    else:
+        # Si no es admin y NO tiene configuración 2FA, validar permisos normalmente
+        if not user.enabled:
+            return jsonify({"error": "No tienes permiso al consultar este correo."}), 403
+        
+        # Si el usuario NO puede buscar cualquiera, verificamos si el email está permitido
+        if not user.can_search_any:
+            # Verificar AllowedEmail (solo si NO tiene configuración 2FA)
+            is_allowed = user.allowed_email_entries.filter_by(email=email_normalized).first() is not None
+            if not is_allowed:
+                return jsonify({"error": "No tienes permiso para consultar este correo específico."}), 403
 
     # Llamada con user
     mail_result = search_and_apply_filters(email_to_search, service_id, user=user)
@@ -102,7 +283,7 @@ def search_mails():
 
     return jsonify({"results": [mail_result]}), 200
 
-def search_sms_messages(email_to_search, user=None):
+def search_sms_messages(email_to_search, user=None, origin_domain=None):
     """Busca mensajes SMS para un correo específico en TODOS los números donde esté agregado"""
     # Normalizar el correo a minúsculas
     email_normalized = email_to_search.lower().strip()
@@ -117,21 +298,30 @@ def search_sms_messages(email_to_search, user=None):
             break
     
     # SEGUNDO: Validar permisos del usuario y determinar si es admin
+    # IMPORTANTE: Solo el ADMIN_USER oficial tiene acceso total
+    # Las 2 condiciones de autorización externa NO otorgan privilegios especiales aquí
     is_admin_user = False
-    if user:
+    if user and user.enabled:
         admin_username = current_app.config.get("ADMIN_USER", "admin")
-        # Verificar si es admin basándose SOLO en la base de datos
-        is_admin_user = (user.username == admin_username and user.parent_id is None)
+        # Solo el ADMIN_USER oficial tiene acceso total
+        if user.username == admin_username and user.parent_id is None:
+            is_admin_user = True
         
         # Si es admin, puede consultar sin restricciones
         if is_admin_user:
             pass  # Admin puede consultar cualquier correo sin restricciones
         elif has_2fa_config:
-            # Si existe configuración 2FA, el correo ya está vinculado (no necesita AllowedEmail)
-            # Validar solo que el usuario esté habilitado
+            # Si existe configuración 2FA, validar permisos ANTES de permitir búsqueda
+            # Esto evita mostrar el spinner cuando el usuario no tiene permisos
             if not user.enabled:
                 return jsonify({"error": "No tienes permiso al consultar este correo."}), 403
-            # Si tiene configuración 2FA, permitir acceso (no verificar can_search_any ni AllowedEmail)
+            
+            # Si el usuario NO puede buscar cualquiera, verificar AllowedEmail (igual que correos normales)
+            if not user.can_search_any:
+                is_allowed = user.allowed_email_entries.filter_by(email=email_normalized).first() is not None
+                if not is_allowed:
+                    return jsonify({"error": "No tienes permiso al consultar este correo."}), 403
+            # Si tiene configuración 2FA y pasa las validaciones, permitir acceso
         else:
             # Si no es admin y NO tiene configuración 2FA, validar permisos normalmente
             if not user.enabled:
@@ -544,15 +734,15 @@ def search_imap2_dynamic():
     if not imap_server_id:
         return jsonify({"error": "Missing imap_server_id"}), 400
 
-    # Obtener usuario actual si está logueado
-    current_user = None
-    username = session.get('username')
-    user_id = session.get('user_id')
-    
-    if username:
-        current_user = User.query.filter_by(username=username).first()
-    elif user_id:
+    # SEGURIDAD: Requerir login obligatorio
+    user_id = session.get("user_id")
+    if user_id:
         current_user = User.query.get(user_id)
+    else:
+        current_user = None
+    
+    if not current_user:
+        return jsonify({"error": "Debes iniciar sesión para realizar búsquedas."}), 401
 
     mail_result = search_imap2_server_dynamic(email_to_search, imap_server_id, user=current_user)
     if not mail_result:
@@ -635,39 +825,179 @@ def get_imap2_2fa_code_for_email(imap_server_id, email):
 def external_search():
     """
     API externa para búsqueda de correos desde otros proyectos.
-    Requiere un token maestro de usuario válido.
+    
+    Las 2 condiciones solo AUTORIZAN el uso de la API externa (no otorgan acceso total):
+    1. Mismo usuario en ambos proyectos
+    2. Usuario que coincide con el nombre del dominio del proyecto B (sin extensión)
+       Ejemplo: dominio "tupremiumm.com" -> usuario "tupremiumm"
+    
+    Una vez autorizado, el usuario se trata como NORMAL con todas sus restricciones
+    (filtros, regex, SMS, reglas de seguridad). Solo el ADMIN_USER oficial tiene acceso total.
     """
+    # ===== SEGURIDAD: Rate Limiting =====
+    client_ip = get_client_ip()
+    if not check_rate_limit(client_ip):
+        current_app.logger.warning(f"[RATE-LIMIT] IP {client_ip} excedió límite de {RATE_LIMIT_REQUESTS} requests/minuto")
+        return jsonify({"error": "Rate limit exceeded. Please try again later."}), 429
+    
+    # ===== SEGURIDAD: Validación de request.host =====
+    if not validate_request_host():
+        current_app.logger.warning(f"[SECURITY] Request host inválido: {request.host}")
+        return jsonify({"error": "Invalid request host"}), 403
+    
+    # ===== SEGURIDAD: Límite de tamaño de payload JSON =====
+    MAX_JSON_SIZE = 10 * 1024  # 10KB máximo (suficiente para peticiones pequeñas)
+    if request.content_length and request.content_length > MAX_JSON_SIZE:
+        current_app.logger.warning(f"[SECURITY] Payload demasiado grande: {request.content_length} bytes")
+        return jsonify({"error": "Payload too large"}), 413
+    
     data = request.get_json()
     if not data:
         return jsonify({"error": "No data received"}), 400
         
     token = data.get("token")
     email_to_search = data.get("email_to_search")
+    origin_user = data.get("origin_user") # Usuario que envía desde Proyecto A
+    origin_domain = data.get("origin_domain") # Dominio del proyecto A (opcional, para logging)
+    # NO usar service_id: buscar directamente en todos los regex/filtros habilitados del proyecto B
+    # respetando las reglas del usuario del proyecto B
     
     if not token or not email_to_search:
         return jsonify({"error": "Missing token or email_to_search"}), 400
+    
+    # ===== SEGURIDAD: Validación de formato de email =====
+    if not validate_email_format(email_to_search):
+        current_app.logger.warning(f"[SECURITY] Email inválido recibido: {safe_log_email(email_to_search)}")
+        return jsonify({"error": "Invalid email format"}), 400
+    
+    # ===== SEGURIDAD: Validación de origin_user =====
+    if origin_user and not validate_origin_user(origin_user):
+        current_app.logger.warning(f"[SECURITY] origin_user inválido recibido")
+        return jsonify({"error": "Invalid origin_user format"}), 400
+    
+    # ===== SEGURIDAD: Validación de origin_domain =====
+    if origin_domain and not validate_origin_domain(origin_domain):
+        current_app.logger.warning(f"[SECURITY] origin_domain no permitido: {origin_domain}")
+        return jsonify({"error": "Origin domain not allowed"}), 403
         
-    # Buscar usuario por token maestro
-    user = User.query.filter_by(master_token=token).first()
+    # ===== SEGURIDAD: Protección timing attack en comparación de tokens =====
+    # Usar comparación constante en tiempo para prevenir timing attacks
+    user = None
+    if token:
+        # Buscar todos los usuarios con tokens (para evitar timing attack)
+        all_users = User.query.filter(User.master_token.isnot(None)).all()
+        for u in all_users:
+            if u.master_token and secrets.compare_digest(u.master_token, token):
+                user = u
+                break
+    
     if not user:
+        # Usar mismo tiempo de respuesta aunque el token sea inválido
+        secrets.compare_digest("dummy", "dummy")
         return jsonify({"error": "Invalid token"}), 401
-        
-    if not user.enabled:
+    
+    # Verificar si es admin oficial del proyecto B ANTES de validar enabled
+    admin_username = current_app.config.get("ADMIN_USER", "admin")
+    is_admin_project_b = (user.username == admin_username and user.parent_id is None)
+    
+    # IMPORTANTE: El admin del proyecto B NO tiene restricciones, incluso si está inhabilitado
+    # Solo los usuarios normales del proyecto B deben estar habilitados para recibir consultas externas
+    if not is_admin_project_b and not user.enabled:
         return jsonify({"error": "User is disabled"}), 403
+
+    # --- VALIDACIÓN DE LAS 2 CONDICIONES (PROYECTO B) ---
+    authorized = False
+    
+    # Condición 1: Mismo usuario en ambos proyectos (Confianza total)
+    if origin_user and origin_user.lower() == user.username.lower():
+        authorized = True
         
-    # 1. Intentar búsqueda en correos (IMAP) usando las reglas del usuario
-    mail_result = search_and_apply_filters(email_to_search, user=user)
+    # Condición 2: El usuario en este proyecto se llama como el nombre del dominio (sin extensión)
+    # Ejemplo: dominio "tupremiumm.com" -> usuario "tupremiumm"
+    # Esto protege la identidad del admin y no revela si es admin o usuario normal
+    else:
+        # Obtener nombre del dominio de este proyecto (B) sin extensión
+        my_host = request.host.lower().split(':')[0] # e.g. "tupremiumm.com"
+        my_domain_name = my_host.split('.')[0] # e.g. "tupremiumm"
+        
+        # Solo aceptar el nombre del dominio sin extensión
+        if user.username.lower() == my_domain_name:
+            authorized = True
+
+    if not authorized:
+        # ===== SEGURIDAD: Logging seguro (no exponer datos sensibles) =====
+        current_app.logger.warning(
+            f"[AUTH-FAILED] External search denied for user: {user.username}. "
+            f"Origin user '{origin_user or 'unknown'}' does not match security conditions."
+        )
+        return jsonify({"error": "Unauthorized: Security conditions not met"}), 403
+
+    # ===== SEGURIDAD: Logging seguro (no exponer datos sensibles) =====
+    current_app.logger.info(
+        f"[EXTERNAL-SEARCH] Authorized! User: {user.username} | "
+        f"Search: {safe_log_email(email_to_search)} | "
+        f"From: {origin_user or 'unknown'} | "
+        f"Domain: {origin_domain or 'unknown'}"
+    )
+
+    # --- VALIDACIONES DE SEGURIDAD DE CORREOS (IGUAL QUE search_mails) ---
+    # Normalizar el correo
+    email_normalized = email_to_search.lower().strip()
+    
+    # Verificar si existe configuración 2FA para este correo
+    has_2fa_config = False
+    configs_2fa = TwoFAConfig.query.filter(TwoFAConfig.is_enabled == True).all()
+    for cfg in configs_2fa:
+        emails_list = cfg.get_emails_list()
+        if email_normalized in emails_list:
+            has_2fa_config = True
+            break
+    
+    # is_admin_project_b ya está definido arriba
+    
+    # Aplicar las mismas validaciones que search_mails
+    # IMPORTANTE: El admin del proyecto B NO tiene restricciones (incluso si está inhabilitado)
+    if is_admin_project_b:
+        # Admin del proyecto B puede consultar cualquier correo sin restricciones
+        # No necesita estar habilitado para recibir consultas externas
+        pass
+    elif has_2fa_config:
+        # Si existe configuración 2FA, validar permisos
+        if not user.enabled:
+            return jsonify({"error": "No tienes permiso al consultar este correo."}), 403
+        
+        # Si el usuario NO puede buscar cualquiera, verificar AllowedEmail
+        if not user.can_search_any:
+            is_allowed = user.allowed_email_entries.filter_by(email=email_normalized).first() is not None
+            if not is_allowed:
+                return jsonify({"error": "No tienes permiso al consultar este correo."}), 403
+    else:
+        # Si no es admin y NO tiene configuración 2FA, validar permisos normalmente
+        if not user.enabled:
+            return jsonify({"error": "No tienes permiso al consultar este correo."}), 403
+        
+        # Si el usuario NO puede buscar cualquiera, verificar AllowedEmail
+        if not user.can_search_any:
+            is_allowed = user.allowed_email_entries.filter_by(email=email_normalized).first() is not None
+            if not is_allowed:
+                return jsonify({"error": "No tienes permiso para consultar este correo específico."}), 403
+
+    # IMPORTANTE: Pasamos el usuario REAL del proyecto B para que se respeten TODAS sus reglas
+    # El usuario será tratado como NORMAL (con todas sus restricciones) incluso si es admin en proyecto A
+    # Las 2 condiciones anteriores solo autorizan el uso de la API, NO otorgan acceso total
+    # Las validaciones de seguridad de correos se aplican ANTES de buscar
+    # NO usar service_id: buscar directamente en todos los regex/filtros habilitados del proyecto B
+    # respetando las reglas del usuario del proyecto B (regex habilitado globalmente + permisos del usuario)
+    mail_result = search_and_apply_filters(email_to_search, service_id=None, user=user)
     
     if mail_result:
         return jsonify({"results": [mail_result]}), 200
         
-    # 2. Si no hay correos, intentar búsqueda en SMS
-    # search_sms_messages devuelve una respuesta jsonify directamente
-    sms_response = search_sms_messages(email_to_search, user=user)
+    # Intentar búsqueda en SMS (también con el usuario real para respetar sus reglas)
+    # Pasar origin_domain para logging y trazabilidad
+    sms_response = search_sms_messages(email_to_search, user=user, origin_domain=origin_domain)
     
-    # Si search_sms_messages devolvió resultados (status 200)
     if sms_response.status_code == 200:
         return sms_response
         
-    # Si no se encontró nada en ninguna parte
     return jsonify({"results": []}), 200

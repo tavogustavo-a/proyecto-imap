@@ -1047,7 +1047,7 @@ document.addEventListener("DOMContentLoaded", function() {
           data.regex.forEach(rx=>{
             const opt = document.createElement("option");
             opt.value = rx.id;
-            opt.textContent = rx.description || rx.pattern;
+            opt.textContent = rx.description || "(sin descripción)";
             regexSelect.appendChild(opt);
           });
         }
@@ -1074,8 +1074,7 @@ document.addEventListener("DOMContentLoaded", function() {
       .then(data=>{
         if(data.status==="ok"){
           data.filters.forEach(ft=>{
-            let label = ft.keyword || "(sin keyword)";
-            if(ft.sender) label += ` / ${ft.sender}`;
+            let label = (ft.description && ft.description.trim && ft.description.trim()) ? ft.description : "(sin descripción)";
             const opt = document.createElement("option");
             opt.value = ft.id;
             opt.textContent = label;

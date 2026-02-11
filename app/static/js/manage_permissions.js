@@ -1108,6 +1108,49 @@ document.addEventListener("DOMContentLoaded", function() {
     }
   }
   
+  // Búsqueda automática para precios por usuario
+  if (searchUserPricesInput) {
+    let searchUserPricesTimeout = null;
+    
+    // Función para mostrar/ocultar botón de limpiar
+    function updateClearUserPricesButton() {
+      if (clearUserPricesSearchBtn) {
+        if (searchUserPricesInput.value.trim().length > 0) {
+          clearUserPricesSearchBtn.classList.add('show');
+        } else {
+          clearUserPricesSearchBtn.classList.remove('show');
+        }
+      }
+    }
+    
+    // Función para limpiar búsqueda
+    function clearUserPricesSearch() {
+      searchUserPricesInput.value = '';
+      filterUsersForPrices();
+      updateClearUserPricesButton();
+    }
+    
+    // Event listener para búsqueda automática
+    searchUserPricesInput.addEventListener('input', function() {
+      updateClearUserPricesButton();
+      clearTimeout(searchUserPricesTimeout);
+      searchUserPricesTimeout = setTimeout(() => {
+        filterUsersForPrices();
+      }, 200);
+    });
+    
+    // Click en el botón X para limpiar
+    if (clearUserPricesSearchBtn) {
+      clearUserPricesSearchBtn.addEventListener('click', function(e) {
+        e.preventDefault();
+        clearUserPricesSearch();
+      });
+    }
+    
+    // Inicializar estado del botón
+    updateClearUserPricesButton();
+  }
+  
   // Inicializar tabla de precios por usuario
   if (userPricesTableBody) {
     loadUsersForPrices();

@@ -113,7 +113,7 @@
         {% for r in srv.regexes %}
           <li>
             <div class="d-flex justify-content-between align-items-center flex-wrap gap-05">
-                <span class="word-break-all"><code>{{ r.pattern }}</code>{% if r.description %} <small>({{ r.description }})</small>{% endif %}</span>
+                <span class="word-break-all">{{ r.description if r.description else '(sin descripción)' }}</span>
                 {% if srv.name == "Pais Netflix" and r.pattern == "(?i)_([A-Z]{2})_EVO" %}
                   <small class="protected-text">(protegido)</small>
                 {% else %}
@@ -133,7 +133,7 @@
         {% for f in srv.filters %}
            <li>
                <div class="d-flex justify-content-between align-items-center flex-wrap gap-05">
-                  <span class="word-break-all">{{ f.sender if f.sender else 'Cualquiera' }} / {{ f.keyword if f.keyword else 'Cualquiera' }}</span>
+                  <span class="word-break-all">{{ f.description if f.description else '(sin descripción)' }}</span>
                   <button class="unlink-filter-btn btn-red btn-small" data-service-id="{{ srv.id }}" data-filter-id="{{ f.id }}">Quitar</button>
                </div>
            </li>

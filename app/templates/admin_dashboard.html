@@ -591,6 +591,27 @@
 </div>
 
 <div class="admin-card mt-1">
+  <h3 class="text-center">Proyectos Vinculados Globales (API)</h3>
+  <p class="text-small text-center mb-1">Configura conexiones con otros proyectos para realizar consultas centralizadas desde este panel.</p>
+  
+  <div id="globalLinkedApisList" class="mb-1">
+    <p class="text-muted text-center">Cargando APIs globales...</p>
+  </div>
+
+  <div class="d-flex gap-05 align-items-center justify-content-center flex-wrap">
+    <input type="text" id="newGlobalApiName" class="flex-grow-1 api-input text-center" placeholder="Nombre del Proyecto" style="max-width: 200px;" autocomplete="off">
+    <input type="text" id="newGlobalApiUrl" class="flex-grow-1 api-input text-center" placeholder="URL de la API" style="max-width: 250px;" autocomplete="off">
+    <input type="text" id="newGlobalApiToken" class="flex-grow-1 api-input text-center" placeholder="Token de Acceso" style="max-width: 250px;" autocomplete="off">
+    <button type="button" id="addGlobalApiBtn" class="btn-blue" title="Agregar API Global">
+      <i class="fas fa-plus"></i>
+    </button>
+  </div>
+  <div class="text-center mt-05">
+    <span id="globalApiMsg" class="text-italic"></span>
+  </div>
+</div>
+
+<div class="admin-card mt-1">
   <h3>Capa de Seguridad</h3>
 
   <form id="securitySettingsForm" method="POST" action="{{ url_for('admin_bp.save_security_settings') }}" class="mb-1">
@@ -623,6 +644,29 @@
 </div>
 
 </div> {# Fin contenedor principal .container #}
+
+{# --- MODALES PARA APIs GLOBALES --- #}
+<div id="editGlobalApiModal" class="popup-base popup-small popup-hide">
+  <div class="popup-modal-header">
+    <h4 class="mt-0 mb-0 flex-grow-1 text-center">Editar API Global</h4>
+    <button type="button" class="btn-close" id="closeEditGlobalApiModalBtn" aria-label="Cerrar modal">
+      <i class="fas fa-times" aria-hidden="true"></i>
+    </button>
+  </div>
+  <input type="hidden" id="editGlobalApiId">
+  <div class="mb-1 text-center">
+    <label for="editGlobalApiName" class="d-block mb-03">Nombre del Proyecto:</label>
+    <input type="text" id="editGlobalApiName" class="w-100 mb-05 text-center api-input">
+    <label for="editGlobalApiUrl" class="d-block mb-03">URL de la API:</label>
+    <input type="text" id="editGlobalApiUrl" class="w-100 mb-05 text-center api-input">
+    <label for="editGlobalApiToken" class="d-block mb-03">Token de Acceso:</label>
+    <input type="text" id="editGlobalApiToken" class="w-100 text-center api-input">
+  </div>
+  <div class="d-flex justify-content-center">
+    <button type="button" class="popup-button-confirm" id="saveEditGlobalApiBtn">Guardar</button>
+  </div>
+</div>
+{# --- FIN MODALES --- #}
 
 <script src="{{ url_for('static', filename='js/admin_imap.js') }}" defer></script>
 <script src="{{ url_for('static', filename='js/admin_imap2.js') }}" defer></script>

@@ -244,28 +244,9 @@ def create_imap_ajax():
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 400
 
-# ADDED: Nueva ruta para redirigir enlaces reescritos en parser.py, 
-#       con verificación de dominios permitidos.
+# ADDED: Nueva ruta para redirigir enlaces reescritos en parser.py
 @admin_bp.route("/redirect_to")
 def redirect_to():
     encoded_url = request.args.get("url", "")
     real_url = unquote(encoded_url)
-
-    # Extraer dominio (host) de la URL
-    parsed = urlparse(real_url)
-    netloc = parsed.netloc.lower()
-
-    # Quitar "www." si quieres unificar
-    if netloc.startswith("www."):
-        netloc = netloc[4:]
-
-    # Buscar si el dominio está en la tabla 'domains' con enabled=True
-    from app.models.domain import DomainModel
-    domain_obj = DomainModel.query.filter_by(domain=netloc).first()
-
-    if not domain_obj or not domain_obj.enabled:
-        # Si el dominio no existe o está deshabilitado => 403
-        flash("El dominio no está permitido.", "warning")
-        return abort(403, "Dominio no permitido")
-
     return redirect(real_url)

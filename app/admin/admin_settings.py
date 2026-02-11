@@ -13,7 +13,7 @@ from . import admin_bp
 from app.extensions import db
 from app.models import (
     SiteSettings, IMAPServer, FilterModel as Filter,
-    RegexModel as RegexPattern, User, DomainModel,
+    RegexModel as RegexPattern, User,
     ServiceModel,
     ServiceAlias as Alias,
     AliasIcon,
@@ -27,9 +27,6 @@ from app.models import (
 from app.models.settings import AppSecrets
 from app.admin.site_settings import (
     get_site_setting, set_site_setting
-)
-from app.services.domain_service import (
-    get_all_domains
 )
 from app.admin.decorators import admin_required
 
@@ -114,7 +111,6 @@ def dashboard():
 @admin_required
 def filters_page():
     filter_search = request.args.get("filter_search", "").strip().lower()
-    domains = get_all_domains()
 
     filters_query = Filter.query
     if filter_search:
@@ -126,7 +122,6 @@ def filters_page():
 
     return render_template(
         "filters.html",
-        domains=domains,
         filters=filters_list,
         filter_search=filter_search
     )
@@ -370,12 +365,6 @@ def export_config():
             "filters": [f.to_dict() for f in filters],
             "regexes": [r.to_dict() for r in RegexPattern.query.all()],
             "services": [s.to_dict(include_relations=True) for s in services_query],
-            "allowed_domains": [
-                {
-                    'domain': d.domain,
-                    'enabled': d.enabled
-                } for d in DomainModel.query.all()
-            ],
             "security_rules": [r.to_dict() for r in SecurityRule.query.all()],
             # --- Añadir IMAP Servers al Export ---
             "imap_servers": [s.to_dict() for s in IMAPServer.query.all()],
@@ -875,7 +864,6 @@ def import_config():
 
             # --- Vincular Relaciones M2M de IMAP2 Servers ---
             from app.models.imap2 import IMAP2TwoFAConfig, imap2_filter, imap2_regex, imap2_linked_imap, imap2_users
-            from app.models.imap import IMAPServer
             for item in imap2_to_create_phase2:
                 imap2_data_item = item['old_data']
                 new_imap2_id = item['new_obj'].id
@@ -950,33 +938,7 @@ def import_config():
             return redirect(url_for('admin_bp.dashboard'))
         # --- FIN TRANSACCIÓN 2 ---
 
-        # --- INICIO TRANSACCIÓN 3: Importar Dominios ---
-        try:
-            from app.models.domain import DomainModel
-            allowed_domains = config_data.get('allowed_domains', [])
-            # Siempre procesar dominios, incluso si la lista está vacía
-            # Borra todos los dominios existentes antes de importar
-            DomainModel.query.delete()
-            db.session.flush()
-            
-            # Crear/restaurar dominios del archivo importado
-            if allowed_domains:
-                for dom in allowed_domains:
-                    domain_str = dom.get('domain')
-                    enabled = dom.get('enabled', True)
-                    if domain_str:
-                        db.session.add(DomainModel(domain=domain_str, enabled=enabled))
-            
-            db.session.commit()
-
-        except Exception as e:
-            db.session.rollback()
-            current_app.logger.error(f"Error FASE 3 importación (importación de dominios): {e}", exc_info=True)
-            flash(f'Error en la fase 3 de importación (importación de dominios): {e}', 'danger')
-            return redirect(url_for('admin_bp.dashboard'))
-        # --- FIN TRANSACCIÓN 3 ---
-
-        # --- INICIO TRANSACCIÓN 4: Importar Párrafos ---
+        # --- INICIO TRANSACCIÓN 3: Importar Párrafos ---
         try:
             paragraphs_data = config_data.get('paragraphs', {})
             
@@ -1010,10 +972,10 @@ def import_config():
 
         except Exception as e:
             db.session.rollback()
-            current_app.logger.error(f"Error FASE 4 importación (importación de párrafos): {e}", exc_info=True)
-            flash(f'Error en la fase 4 de importación (importación de párrafos): {e}', 'danger')
+            current_app.logger.error(f"Error FASE 3 importación (importación de párrafos): {e}", exc_info=True)
+            flash(f'Error en la fase 3 de importación (importación de párrafos): {e}', 'danger')
             return redirect(url_for('admin_bp.dashboard'))
-        # --- FIN TRANSACCIÓN 4 ---
+        # --- FIN TRANSACCIÓN 3 ---
 
         flash('Configuración (incl. usuarios y vínculos) importada correctamente.', 'success')
 

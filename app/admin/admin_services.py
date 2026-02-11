@@ -214,10 +214,12 @@ def list_filter_names():
     all_ft = FilterModel.query.all()
     data = []
     for f in all_ft:
+        description = f.description if f.description else ""
         data.append({
             "id": f.id,
             "keyword": f.keyword or "",
-            "sender": f.sender or ""
+            "sender": f.sender or "",
+            "description": description
         })
     return jsonify({"status": "ok", "filters": data})
 

@@ -1765,3 +1765,79 @@ def regen_master_token(user_id):
     except Exception as e:
         db.session.rollback()
         return jsonify({"status": "error", "message": str(e)}), 500
+
+
+# --- RUTAS PARA APIs GLOBALES DEL ADMINISTRADOR ---
+
+@admin_bp.route("/global_linked_projects", methods=["GET"])
+@admin_required
+def get_global_linked_projects():
+    """Obtiene la lista de APIs globales del administrador."""
+    admin_username = current_app.config.get("ADMIN_USER", "admin")
+    admin = User.query.filter_by(username=admin_username).first()
+    if not admin:
+        return jsonify({"status": "error", "message": "Admin no encontrado"}), 404
+        
+    projects = admin.linked_projects.order_by(LinkedProject.created_at.desc()).all()
+    return jsonify({
+        "status": "ok",
+        "projects": [{
+            "id": p.id,
+            "name": p.name,
+            "url": p.url,
+            "token": p.token,
+            "enabled": p.enabled
+        } for p in projects]
+    })
+
+@admin_bp.route("/global_linked_projects", methods=["POST"])
+@admin_required
+def add_global_linked_project():
+    """Agrega una nueva API global para el administrador."""
+    admin_username = current_app.config.get("ADMIN_USER", "admin")
+    admin = User.query.filter_by(username=admin_username).first()
+    if not admin:
+        return jsonify({"status": "error", "message": "Admin no encontrado"}), 404
+        
+    data = request.get_json()
+    name = data.get("name", "").strip()
+    url = data.get("url", "").strip()
+    token = data.get("token", "").strip()
+    
+    if not name or not url or not token:
+        return jsonify({"status": "error", "message": "Faltan datos"}), 400
+        
+    new_project = LinkedProject(
+        user_id=admin.id,
+        name=name,
+        url=url,
+        token=token
+    )
+    db.session.add(new_project)
+    try:
+        db.session.commit()
+        return jsonify({"status": "ok"})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+@admin_bp.route("/global_linked_projects/<int:project_id>", methods=["PUT", "DELETE"])
+@admin_required
+def manage_global_linked_project(project_id):
+    """Actualiza o elimina una API global."""
+    project = LinkedProject.query.get_or_404(project_id)
+    
+    if request.method == "DELETE":
+        db.session.delete(project)
+    else:
+        data = request.get_json()
+        project.name = data.get("name", project.name).strip()
+        project.url = data.get("url", project.url).strip()
+        project.token = data.get("token", project.token).strip()
+        
+    try:
+        db.session.commit()
+        return jsonify({"status": "ok"})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"status": "error", "message": str(e)}), 500

@@ -12,8 +12,8 @@
 <div class="container container-max-width-900">
 
   <div class="admin-card">
-    <div class="d-flex justify-content-between align-items-center">
-      <h3 class="m-0">Dominios Permitidos</h3>
+    <div class="d-flex justify-content-between align-items-center mb-1">
+      <h3 class="m-0">Filtros</h3>
       <button 
         id="btnVolverPanelTopFilter"
         type="button"
@@ -23,88 +23,6 @@
         Volver
       </button>
     </div>
-
-    <form 
-      id="domainSearchForm"
-      class="mb-1 d-flex gap-05"
-    >
-      <label for="domainSearchInput" class="sr-only">Buscar dominio</label>
-      <input 
-        type="search"
-        id="domainSearchInput"
-        placeholder="Buscar Dominio..."
-        class="flex-grow-1"
-        autocomplete="off"
-      >
-    </form>
-
-    <div id="domain-list">
-      {% if domains %}
-        {% for dom in domains %}
-          <div class="domain-item">
-            <strong>{{ dom.domain }}</strong>
-            <div class="mt-05">
-              <button
-                type="button"
-                class="btn-orange mr-05 edit-domain-btn"
-                data-url="{{ url_for('admin_bp.edit_domain', dom_id=dom.id) }}"
-              >
-                Editar
-              </button>
-
-              {% if dom.enabled %}
-                <button
-                  class="btn-red toggle-domain mr-05"
-                  data-id="{{ dom.id }}"
-                  data-enabled="true"
-                >
-                  Off
-                </button>
-              {% else %}
-                <button
-                  class="btn-green toggle-domain mr-05"
-                  data-id="{{ dom.id }}"
-                  data-enabled="false"
-                >
-                  On
-                </button>
-              {% endif %}
-
-              <button
-                class="btn-panel btn-red btn-sm delete-domain"
-                data-id="{{ dom.id }}"
-                title="Eliminar"
-              >
-                <i class="fas fa-trash"></i>
-              </button>
-            </div>
-          </div>
-        {% endfor %}
-      {% else %}
-        <p>No hay dominios registrados.</p>
-      {% endif %}
-    </div>
-
-    <div class="mt-1">
-      <h4>Agregar Nuevo Dominio</h4>
-      <form action="{{ url_for('admin_bp.create_domain') }}" method="POST" class="d-flex gap-05 align-items-center">
-        <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
-        <label for="newDomain" class="sr-only">Dominio</label>
-        <input
-          type="text"
-          id="newDomain"
-          name="domain"
-          placeholder="Dominio"
-          class="flex-grow-1"
-          autocomplete="off"
-        >
-        <button type="submit" class="btn-green">Crear</button>
-      </form>
-    </div>
-  </div>
-
-  <div class="admin-card">
-    <h3>Filtros</h3>
     <form 
       id="filterSearchForm"
       class="mb-1 d-flex gap-05"
