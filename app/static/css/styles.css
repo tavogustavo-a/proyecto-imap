@@ -2043,10 +2043,10 @@ noscript p {
 /* Estilos específicos para el popup de alias en search.html */
 #aliasPopup {
   display: none;
-  position: fixed;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
+  position: fixed !important;
+  top: 50% !important;
+  left: 50% !important;
+  transform: translate(-50%, -50%) !important;
   background: #fff;
   border: none; /* Sin borde negro */
   border-radius: 12px;
@@ -2058,7 +2058,6 @@ noscript p {
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
   max-height: 80vh;
   overflow-y: auto;
-  position: relative; /* Para posicionar la X correctamente */
   color: #111; /* Color por defecto para el texto del popup */
 }
 
@@ -3043,6 +3042,10 @@ body #popupFilter.popup-base.popup-small {
 }
 
 #iconGridContainer {
+  position: fixed !important;
+  top: 50% !important;
+  left: 50% !important;
+  transform: translate(-50%, -50%) !important;
   background: #fff !important;
   border: 2px solid #111 !important;
   border-radius: 12px !important;

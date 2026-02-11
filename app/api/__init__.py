@@ -723,6 +723,10 @@ def search_imap2_dynamic():
     """
     Ruta para búsqueda usando un servidor IMAP2 específico basado en route_path.
     Usa los filtros y regex asociados directamente al servidor IMAP2.
+    
+    ACCESO LIBRE: Las plantillas dinámicas de IMAP2 (dominios personalizados, /consulta, etc.)
+    están diseñadas para acceso público. No se requiere login para realizar búsquedas.
+    Similar a search_mails2.
     """
     data = request.get_json()
     if not data or "email_to_search" not in data:
@@ -734,15 +738,9 @@ def search_imap2_dynamic():
     if not imap_server_id:
         return jsonify({"error": "Missing imap_server_id"}), 400
 
-    # SEGURIDAD: Requerir login obligatorio
+    # Acceso libre: no requerir login (plantillas dinámicas IMAP2 son de uso público)
     user_id = session.get("user_id")
-    if user_id:
-        current_user = User.query.get(user_id)
-    else:
-        current_user = None
-    
-    if not current_user:
-        return jsonify({"error": "Debes iniciar sesión para realizar búsquedas."}), 401
+    current_user = User.query.get(user_id) if user_id else None
 
     mail_result = search_imap2_server_dynamic(email_to_search, imap_server_id, user=current_user)
     if not mail_result:
