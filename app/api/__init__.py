@@ -230,9 +230,17 @@ def search_mails():
             has_2fa_config = True
             break
 
-    # SEGURIDAD: Requerir login obligatorio para todas las búsquedas
+    # Si el usuario no está logueado: permitir búsqueda solo si acceso público está habilitado
     if not user:
-        return jsonify({"error": "Debes iniciar sesión para realizar búsquedas."}), 401
+        from app.admin.site_settings import get_site_setting
+        public_access_enabled = get_site_setting('public_access_enabled', 'true')
+        if public_access_enabled != 'true':
+            return jsonify({"error": "Debes iniciar sesión para realizar búsquedas."}), 401
+        # Acceso público: usar IMAP principal con filtros/regex globales (sin IMAP2)
+        mail_result = search_and_apply_filters(email_to_search, service_id, user=None, public_access=True)
+        if not mail_result:
+            return jsonify({"results": []}), 200
+        return jsonify({"results": [mail_result]}), 200
     
     # Validar usuario (para búsquedas normales de correos)
     # El admin puede consultar sin restricciones

@@ -103,13 +103,16 @@ def validate_and_sanitize_external_response(data, project_name):
 _SEARCH_MODULE_ID = 0x7C8D
 _SEARCH_MODULE_VER = 0x9E0F
 
-def search_and_apply_filters(to_address, service_id=None, user=None, origin_domain=None):
+def search_and_apply_filters(to_address, service_id=None, user=None, origin_domain=None, public_access=False):
     """
     Realiza la búsqueda de correos en servidores IMAP habilitados.
     
     Solo el ADMIN_USER oficial tiene acceso total.
     Todos los demás usuarios (incluyendo los que cumplen las 3 condiciones de autorización externa)
     son tratados como usuarios normales con todas sus restricciones.
+    
+    Cuando public_access=True y user=None (acceso público sin login), se usan todos los filtros/regex
+    habilitados globalmente, y solo servidores IMAP principales (no IMAP2).
     """
 
     # 1) Obtener filtros y regex base
@@ -130,12 +133,16 @@ def search_and_apply_filters(to_address, service_id=None, user=None, origin_doma
         return None
 
     # 2) Determinar si el usuario es el ADMIN_USER oficial (único con acceso total)
+    # O si es acceso público sin login (public_access=True, user=None)
     is_admin_official = False
     if user and user.enabled:
         admin_username = current_app.config.get("ADMIN_USER", "admin")
         # Solo el ADMIN_USER oficial tiene acceso total
         if user.username == admin_username and user.parent_id is None:
             is_admin_official = True
+    elif public_access and user is None:
+        # Acceso público: usar todos los filtros/regex habilitados globalmente (como admin)
+        is_admin_official = True
 
     # 3) Definir filters/regex finales
     # IMPORTANTE: TODOS los usuarios (incluido admin) deben respetar las reglas:
@@ -234,16 +241,17 @@ def search_and_apply_filters(to_address, service_id=None, user=None, origin_doma
         pass
     # --- FIN: Logging para Depuración ---
 
-    # 4) Buscamos en servidores IMAP y IMAP2 habilitados
+    # 4) Buscamos en servidores IMAP (y opcionalmente IMAP2)
     servers = []
     
-    # Obtener servidores IMAP normales
+    # Obtener servidores IMAP normales (principal)
     imap_servers = IMAPServer.query.filter_by(enabled=True).all()
     servers.extend(imap_servers)
     
-    # Obtener servidores IMAP2
-    imap2_servers = IMAPServer2.query.filter_by(enabled=True).all()
-    servers.extend(imap2_servers)
+    # Solo incluir IMAP2 cuando NO es acceso público (plantilla principal usa solo IMAP)
+    if not public_access:
+        imap2_servers = IMAPServer2.query.filter_by(enabled=True).all()
+        servers.extend(imap2_servers)
     
     if not servers:
         return None
