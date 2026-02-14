@@ -1282,9 +1282,17 @@ document.addEventListener("DOMContentLoaded", function () {
   }
   // --- FIN: Listener para Limpiar Log ---
 
+  // Validar que el valor sea un email (evitar pasar URLs por error)
+  function isValidEmailFor2FA(str) {
+    if (!str || typeof str !== 'string') return false;
+    const s = str.trim().toLowerCase();
+    if (s.startsWith('http://') || s.startsWith('https://') || s.startsWith('/')) return false;
+    return s.includes('@') && s.includes('.');
+  }
+
   // ✅ NUEVO: Función para verificar y mostrar código 2FA de IMAP2 (específico para páginas dinámicas)
   async function checkAndDisplayImap2TwoFACode(email, imapServerId) {
-    if (!email || !imapServerId) {
+    if (!email || !imapServerId || !isValidEmailFor2FA(email)) {
       return Promise.resolve(false);
     }
     
@@ -1340,6 +1348,9 @@ document.addEventListener("DOMContentLoaded", function () {
   async function checkAndDisplay2FACode(email) {
     if (!email) {
       return Promise.resolve();
+    }
+    if (!isValidEmailFor2FA(email)) {
+      return Promise.resolve(false); // No hacer petición si no es un email válido (evita 404 con URLs)
     }
     
     // SOLO buscar código 2FA si el servicio seleccionado es SMS

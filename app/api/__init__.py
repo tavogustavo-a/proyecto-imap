@@ -448,15 +448,19 @@ def search_sms_messages(email_to_search, user=None, origin_domain=None):
         }]
     }), 200
 
-@api_bp.route("/2fa/code/<email>", methods=["GET"])
+@api_bp.route("/2fa/code/<path:email>", methods=["GET"])
 def get_2fa_code_for_email(email):
     """Obtiene el código 2FA actual para un correo específico"""
     try:
         import pyotp
         from flask import session
         
-        # Normalizar el correo
-        email_normalized = email.lower().strip()
+        # Validar: no aceptar URLs (evitar peticiones malformadas que usan href en lugar de email)
+        email_str = (email or "").strip().lower()
+        if email_str.startswith("http://") or email_str.startswith("https://") or "@" not in email_str:
+            return jsonify({"error": "Invalid email parameter"}), 400
+        
+        email_normalized = email_str
         
         # PRIMERO: Buscar configuración 2FA para este correo (igual que SMS busca en AllowedSMSNumber)
         configs = TwoFAConfig.query.filter(
