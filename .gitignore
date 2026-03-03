@@ -5,9 +5,15 @@
 
 # Base de datos
 *.db
+*.db-journal
+*.db-wal
+*.db-shm
 *.sqlite
 *.sqlite3
+*.sql
+*.sql.gz
 instance/
+data/
 
 # Python
 __pycache__/
