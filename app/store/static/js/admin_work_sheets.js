@@ -2089,6 +2089,9 @@ function splitTextAcrossColumns() {
                             <button id='btnDuplicados' class='herramienta-btn' style='padding:6px 12px;border:1px solid #ddd;border-radius:4px;background:#f8f9fa;cursor:pointer;color:#333;display:flex;align-items:center;gap:6px;transition:all 0.2s;font-size:12px;' title='Duplicados'>
                                 Duplicados <i class='fas fa-copy' style='font-size:14px;'></i>
                             </button>
+                            <button id='btnGeneradorTarjetas' class='herramienta-btn' style='padding:6px 12px;border:1px solid #ddd;border-radius:4px;background:#f8f9fa;cursor:pointer;color:#333;display:flex;align-items:center;gap:6px;transition:all 0.2s;font-size:12px;' title='Generador de Tarjetas'>
+                                <i class='fas fa-credit-card' style='font-size:14px;'></i>
+                            </button>
                         </div>
                         
                         <!-- Panel del generador de códigos -->
@@ -2194,11 +2197,117 @@ function splitTextAcrossColumns() {
                                 </div>
                             </div>
                         </div>
+                        
+                        <!-- Panel generador de tarjetas -->
+                        <div id='tarjetasPanel' style='display:none;margin-top:10px;padding:12px;background:#f8f9fa;border-radius:8px;border:1px solid #ddd;max-height:60vh;overflow-y:auto;'>
+                            <h5 style='margin-top:0;margin-bottom:10px;color:#333;font-size:15px;'>Generador de Tarjetas</h5>
+                            
+                            <div style='margin-bottom:10px;'>
+                                <label for='tarjetasBinInput' style='display:block;margin-bottom:4px;font-weight:bold;color:#333;font-size:12px;'>Inserte su BIN:</label>
+                                <input type='text' id='tarjetasBinInput' name='tarjetasBinInput' value='5491 0064 xxxx xxxx'
+                                       style='width:100%;padding:5px;border:1px solid #ddd;border-radius:4px;font-family:monospace;font-size:11px;box-sizing:border-box;'
+                                       placeholder='5491 0064 xxxx xxxx' aria-label='BIN para generar tarjetas'>
+                            </div>
+                            
+                            <div style='margin-bottom:10px;'>
+                                <div style='display:flex;flex-wrap:wrap;gap:20px;align-items:center;margin-bottom:8px;'>
+                                    <label style='display:flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;'>
+                                        <input type='checkbox' id='tarjetasFechaCheck' name='tarjetasFecha' checked style='margin:0;'
+                                               aria-label='Incluir fecha de vencimiento'> Fecha
+                                    </label>
+                                    <label style='display:flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;'>
+                                        <input type='checkbox' id='tarjetasCcvCheck' name='tarjetasCcv' checked style='margin:0;'
+                                               aria-label='Incluir CCV2'> CCV2
+                                    </label>
+                                </div>
+                                <div id='tarjetasFechaOpts' style='display:flex;gap:15px;align-items:center;flex-wrap:nowrap;'>
+                                    <span style='display:flex;align-items:center;gap:6px;'><label for='tarjetasMes' style='font-size:12px;margin:0;'>Mes:</label>
+                                    <select id='tarjetasMes' style='padding:4px 8px;border:1px solid #ddd;border-radius:4px;font-size:11px;'>
+                                        <option value='Rnd' selected>Rnd</option>
+                                        <option value='01'>01</option>
+                                        <option value='02'>02</option>
+                                        <option value='03'>03</option>
+                                        <option value='04'>04</option>
+                                        <option value='05'>05</option>
+                                        <option value='06'>06</option>
+                                        <option value='07'>07</option>
+                                        <option value='08'>08</option>
+                                        <option value='09'>09</option>
+                                        <option value='10'>10</option>
+                                        <option value='11'>11</option>
+                                        <option value='12'>12</option>
+                                    </select></span>
+                                    <span style='display:flex;align-items:center;gap:6px;'><label for='tarjetasAnio' style='font-size:12px;margin:0;'>Año:</label>
+                                    <select id='tarjetasAnio' style='padding:4px 8px;border:1px solid #ddd;border-radius:4px;font-size:11px;'>
+                                        <option value='Rnd' selected>Rnd</option>
+                                        <option value='25'>25</option>
+                                        <option value='26'>26</option>
+                                        <option value='27'>27</option>
+                                        <option value='28'>28</option>
+                                        <option value='29'>29</option>
+                                        <option value='30'>30</option>
+                                        <option value='31'>31</option>
+                                        <option value='32'>32</option>
+                                        <option value='33'>33</option>
+                                        <option value='34'>34</option>
+                                        <option value='35'>35</option>
+                                        <option value='36'>36</option>
+                                        <option value='37'>37</option>
+                                        <option value='38'>38</option>
+                                        <option value='39'>39</option>
+                                        <option value='40'>40</option>
+                                        <option value='41'>41</option>
+                                        <option value='42'>42</option>
+                                        <option value='43'>43</option>
+                                        <option value='44'>44</option>
+                                        <option value='45'>45</option>
+                                        <option value='46'>46</option>
+                                        <option value='47'>47</option>
+                                        <option value='48'>48</option>
+                                        <option value='49'>49</option>
+                                        <option value='50'>50</option>
+                                        <option value='51'>51</option>
+                                        <option value='52'>52</option>
+                                        <option value='53'>53</option>
+                                        <option value='54'>54</option>
+                                        <option value='55'>55</option>
+                                        <option value='56'>56</option>
+                                        <option value='57'>57</option>
+                                        <option value='58'>58</option>
+                                        <option value='59'>59</option>
+                                        <option value='60'>60</option>
+                                    </select></span>
+                                </div>
+                            </div>
+                            
+                            <div style='margin-bottom:12px;'>
+                                <label for='tarjetasCantidad' style='display:block;margin-bottom:4px;font-weight:bold;color:#333;font-size:12px;'>Cantidad a Crear:</label>
+                                <input type='number' id='tarjetasCantidad' name='tarjetasCantidad' value='10' min='1'
+                                       style='width:100%;padding:5px;border:1px solid #ddd;border-radius:4px;font-size:11px;box-sizing:border-box;'
+                                       placeholder='10' aria-label='Cantidad de tarjetas a generar'>
+                            </div>
+                            
+                            <button id='btnGenerarTarjetas' type='button' aria-label='Generar tarjetas' style='width:100%;padding:8px;background:#007bff;color:#fff;border:none;border-radius:4px;cursor:pointer;font-weight:bold;font-size:13px;margin-bottom:12px;'>
+                                <i class='fas fa-credit-card' aria-hidden='true'></i> GENERAR TARJETAS
+                            </button>
+                            
+                            <div id='resultadoTarjetas' style='margin-top:12px;display:none;' role='region' aria-live='polite' aria-label='Resultados de tarjetas generadas'>
+                                <div style='display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;'>
+                                    <label for='tarjetasGeneradas' style='font-weight:bold;color:#333;font-size:12px;'>Resultado:</label>
+                                    <button id='btnCopiarTarjetas' type='button' aria-label='Copiar tarjetas al portapapeles' style='padding:5px 8px;background:#28a745;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:10px;display:none;'>
+                                        <i class='fas fa-copy' aria-hidden='true'></i> Copiar todo
+                                    </button>
+                                </div>
+                                <textarea id='tarjetasGeneradas' name='tarjetasGeneradas' readonly
+                                          style='width:100%;min-height:80px;max-height:150px;padding:6px;border:2px solid #000;border-radius:4px;font-family:monospace;font-size:11px;box-sizing:border-box;resize:vertical;overflow-y:auto;'
+                                          aria-label='Tarjetas generadas'></textarea>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
             
-            <div style='display:flex;gap:10px;justify-content:center;'>
+            <div id='btnAplicarDivisionContainer' style='display:flex;gap:10px;justify-content:center;'>
                 <button id='btnAplicarDivision' class='btn-panel btn-blue'>
                     <i class='fas fa-check'></i> Aplicar división
                 </button>
@@ -2260,6 +2369,12 @@ function splitTextAcrossColumns() {
             } else if (selectedMode === 'herramientas') {
                 herramientasSection.style.display = 'block';
             }
+            
+            // Ocultar "Aplicar división" en modo Herramientas (no aplica)
+            const btnAplicarDiv = modal.querySelector('#btnAplicarDivisionContainer');
+            if (btnAplicarDiv) {
+                btnAplicarDiv.style.display = selectedMode === 'herramientas' ? 'none' : 'flex';
+            }
         });
     });
     
@@ -2270,14 +2385,15 @@ function splitTextAcrossColumns() {
         btnGeneradorCodigos.addEventListener('click', function() {
             // Ocultar otros paneles
             const duplicadosPanel = modal.querySelector('#duplicadosPanel');
+            const tarjetasPanel = modal.querySelector('#tarjetasPanel');
             if (duplicadosPanel) duplicadosPanel.style.display = 'none';
+            if (tarjetasPanel) tarjetasPanel.style.display = 'none';
             
             // Deseleccionar otros botones
             const btnDuplicados = modal.querySelector('#btnDuplicados');
-            if (btnDuplicados) {
-                btnDuplicados.style.background = '#f8f9fa';
-                btnDuplicados.style.color = '#333';
-            }
+            const btnGeneradorTarjetas = modal.querySelector('#btnGeneradorTarjetas');
+            if (btnDuplicados) { btnDuplicados.style.background = '#f8f9fa'; btnDuplicados.style.color = '#333'; }
+            if (btnGeneradorTarjetas) { btnGeneradorTarjetas.style.background = '#f8f9fa'; btnGeneradorTarjetas.style.color = '#333'; }
             
             // Toggle selección
             if (this.style.background === 'rgb(0, 123, 255)' || this.style.background === '#007bff') {
@@ -2301,12 +2417,13 @@ function splitTextAcrossColumns() {
         btnDuplicados.addEventListener('click', function() {
             // Ocultar otros paneles
             if (generadorPanel) generadorPanel.style.display = 'none';
+            const tarjetasPanel = modal.querySelector('#tarjetasPanel');
+            if (tarjetasPanel) tarjetasPanel.style.display = 'none';
             
             // Deseleccionar otros botones
-            if (btnGeneradorCodigos) {
-                btnGeneradorCodigos.style.background = '#f8f9fa';
-                btnGeneradorCodigos.style.color = '#333';
-            }
+            if (btnGeneradorCodigos) { btnGeneradorCodigos.style.background = '#f8f9fa'; btnGeneradorCodigos.style.color = '#333'; }
+            const btnGeneradorTarjetas = modal.querySelector('#btnGeneradorTarjetas');
+            if (btnGeneradorTarjetas) { btnGeneradorTarjetas.style.background = '#f8f9fa'; btnGeneradorTarjetas.style.color = '#333'; }
             
             // Toggle selección
             if (this.style.background === 'rgb(0, 123, 255)' || this.style.background === '#007bff') {
@@ -2319,6 +2436,27 @@ function splitTextAcrossColumns() {
                 this.style.background = '#007bff';
                 this.style.color = '#fff';
                 if (duplicadosPanel) duplicadosPanel.style.display = 'block';
+            }
+        });
+    }
+    
+    // Event listener para botón Generador de Tarjetas
+    const btnGeneradorTarjetas = modal.querySelector('#btnGeneradorTarjetas');
+    const tarjetasPanel = modal.querySelector('#tarjetasPanel');
+    if (btnGeneradorTarjetas) {
+        btnGeneradorTarjetas.addEventListener('click', function() {
+            if (generadorPanel) generadorPanel.style.display = 'none';
+            if (duplicadosPanel) duplicadosPanel.style.display = 'none';
+            if (btnGeneradorCodigos) { btnGeneradorCodigos.style.background = '#f8f9fa'; btnGeneradorCodigos.style.color = '#333'; }
+            if (btnDuplicados) { btnDuplicados.style.background = '#f8f9fa'; btnDuplicados.style.color = '#333'; }
+            if (this.style.background === 'rgb(0, 123, 255)' || this.style.background === '#007bff') {
+                this.style.background = '#f8f9fa';
+                this.style.color = '#333';
+                if (tarjetasPanel) tarjetasPanel.style.display = 'none';
+            } else {
+                this.style.background = '#007bff';
+                this.style.color = '#fff';
+                if (tarjetasPanel) tarjetasPanel.style.display = 'block';
             }
         });
     }
@@ -2394,6 +2532,103 @@ function splitTextAcrossColumns() {
             }
             
             showClipboardIndicator(`✅ ${codigosGenerados.size} códigos generados exitosamente`);
+        });
+    }
+    
+    // Event listener para generar tarjetas
+    const btnGenerarTarjetas = modal.querySelector('#btnGenerarTarjetas');
+    const btnCopiarTarjetas = modal.querySelector('#btnCopiarTarjetas');
+    if (btnGenerarTarjetas) {
+        btnGenerarTarjetas.addEventListener('click', function() {
+            const binInput = modal.querySelector('#tarjetasBinInput').value.trim();
+            const incluirFecha = modal.querySelector('#tarjetasFechaCheck').checked;
+            const incluirCcv = modal.querySelector('#tarjetasCcvCheck').checked;
+            const mes = modal.querySelector('#tarjetasMes').value;
+            const anio = modal.querySelector('#tarjetasAnio').value;
+            const cantidad = parseInt(modal.querySelector('#tarjetasCantidad').value) || 10;
+            
+            if (!binInput) {
+                showClipboardIndicator('⚠️ Debes ingresar un BIN');
+                return;
+            }
+            if (cantidad < 1 || cantidad > 1000) {
+                showClipboardIndicator('⚠️ La cantidad debe estar entre 1 y 1000');
+                return;
+            }
+            
+            const binLimpio = binInput.replace(/\s/g, '');
+            const numX = (binLimpio.match(/x/gi) || []).length;
+            if (numX === 0) {
+                showClipboardIndicator('⚠️ El BIN debe contener x para los dígitos a generar (ej: 5491 0064 xxxx xxxx)');
+                return;
+            }
+            
+            function randomDig() { return Math.floor(Math.random() * 10); }
+            function luhnCheckDigit(numStr) {
+                const digits = String(numStr).split('').map(Number);
+                let sum = 0; let alt = false;
+                for (let i = digits.length - 1; i >= 0; i--) {
+                    let d = digits[i]; if (alt) { d *= 2; if (d > 9) d -= 9; }
+                    sum += d; alt = !alt;
+                }
+                return (10 - (sum % 10)) % 10;
+            }
+            
+            const tarjetas = [];
+            const generados = new Set();
+            const maxIntentos = Math.min(cantidad * 100, Math.pow(10, numX) * 2);
+            let intentos = 0;
+            
+            while (tarjetas.length < cantidad && intentos < maxIntentos) {
+                intentos++;
+                let cardNum = '';
+                let xRestantes = numX;
+                for (let i = 0; i < binLimpio.length; i++) {
+                    if (/x/i.test(binLimpio[i])) {
+                        if (xRestantes === 1) {
+                            const base = cardNum + '0';
+                            cardNum += luhnCheckDigit(base);
+                        } else {
+                            cardNum += randomDig();
+                        }
+                        xRestantes--;
+                    } else {
+                        cardNum += binLimpio[i];
+                    }
+                }
+                let line = cardNum;
+                if (incluirFecha) {
+                    const m = mes === 'Rnd' ? String(Math.floor(Math.random() * 12) + 1).padStart(2, '0') : mes;
+                    const a = anio === 'Rnd' ? String(Math.floor(Math.random() * 36) + 25) : anio;
+                    line += '|' + m + '|' + a;
+                }
+                if (incluirCcv) line += '|' + randomDig() + '' + randomDig() + '' + randomDig();
+                if (!generados.has(line)) {
+                    generados.add(line);
+                    tarjetas.push(line);
+                }
+            }
+            
+            const resultadoDiv = modal.querySelector('#resultadoTarjetas');
+            const tarjetasTextarea = modal.querySelector('#tarjetasGeneradas');
+            if (resultadoDiv && tarjetasTextarea) {
+                tarjetasTextarea.value = tarjetas.join('\n');
+                resultadoDiv.style.display = 'block';
+                if (btnCopiarTarjetas) btnCopiarTarjetas.style.display = 'inline-block';
+            }
+            showClipboardIndicator('✅ ' + tarjetas.length + ' tarjetas generadas');
+        });
+    }
+    
+    // Copiar tarjetas generadas
+    if (btnCopiarTarjetas) {
+        btnCopiarTarjetas.addEventListener('click', function() {
+            const txt = modal.querySelector('#tarjetasGeneradas');
+            if (txt && txt.value) {
+                navigator.clipboard.writeText(txt.value).then(function() {
+                    showClipboardIndicator('✅ Tarjetas copiadas al portapapeles');
+                }).catch(function() { showClipboardIndicator('⚠️ No se pudo copiar'); });
+            }
         });
     }
     

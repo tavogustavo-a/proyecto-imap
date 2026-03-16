@@ -3082,6 +3082,57 @@ div.message.own-message .message-content,
     box-shadow: 0 4px 12px rgba(52, 152, 219, 0.3) !important;
 }
 
+/* Toast dashboard (CSP, sin cssText) */
+.dashboard-toast {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    padding: 15px 20px;
+    border-radius: 8px;
+    z-index: 10000;
+    max-width: 300px;
+    word-wrap: break-word;
+    color: white;
+}
+
+/* Indicador typing en lista de usuarios - visible (CSP) */
+.user-list-typing-visible {
+    display: flex !important;
+    visibility: visible;
+    opacity: 1;
+    color: #FFFFFF;
+    font-size: 9px;
+    font-style: italic;
+    font-weight: bold;
+    margin-top: 2px;
+    margin-left: 8px;
+    align-items: center;
+    gap: 2px;
+    max-width: 100%;
+    overflow: hidden;
+    position: static;
+    z-index: 1;
+    height: auto;
+    min-height: 10px;
+    background: #2196F3;
+    border: 1px solid #2196F3;
+    border-radius: 3px;
+    padding: 1px 4px;
+    box-shadow: 0 1px 3px rgba(33, 150, 243, 0.5);
+    text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.8);
+}
+
+.user-list-typing-visible .typing-text {
+    font-size: 8px;
+    color: #FFFFFF;
+    white-space: nowrap;
+    display: inline;
+    visibility: visible;
+    opacity: 1;
+    font-weight: bold;
+    text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.8);
+}
+
 /* Estilos para archivos con error */
 .error-attachment {
     background: #e74c3c;
@@ -4415,4 +4466,109 @@ div.message.own-message .message-content,
 /* ================== ESPACIADOR PARA CENTRAR TÍTULO ================== */
 .chat-spacer {
     width: 80px;
+}
+
+/* ================== CHAT - Sin estilos inline (CSP) ================== */
+
+/* Barra de progreso de audio - valor inicial 0 */
+.audio-progress-bar {
+    width: 0;
+}
+
+/* Mensaje de error al cargar audio */
+.audio-load-error-text {
+    color: #ff6b6b;
+    font-size: 12px;
+    margin: 5px 0 0 0;
+}
+
+/* Notificación push "Nuevo mensaje" - móvil */
+.push-notification.push-notification-mobile .push-notification-title {
+    font-weight: bold;
+    margin-bottom: 8px;
+    font-size: 18px;
+}
+
+.push-notification.push-notification-mobile .push-notification-body {
+    opacity: 0.9;
+    font-size: 16px;
+}
+
+.push-notification.push-notification-mobile .push-notification-hint {
+    margin-top: 10px;
+    font-size: 12px;
+    opacity: 0.7;
+}
+
+/* Notificación push "Nuevo mensaje" - escritorio */
+.push-notification.push-notification-desktop .push-notification-title {
+    font-weight: bold;
+    margin-bottom: 8px;
+    font-size: 16px;
+}
+
+.push-notification.push-notification-desktop .push-notification-body {
+    opacity: 0.9;
+    font-size: 14px;
+}
+
+.push-notification.push-notification-desktop .push-notification-hint {
+    margin-top: 10px;
+    font-size: 12px;
+    opacity: 0.7;
+}
+
+/* Contenedor notificación in-page - móvil (CSP, sin cssText) */
+@keyframes pushSlideIn {
+    from { transform: translateX(100%); opacity: 0; }
+    to { transform: translateX(0); opacity: 1; }
+}
+
+@keyframes pushSlideInMobile {
+    from { transform: translateY(-100%); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
+}
+
+.in-page-notification.push-notification-mobile {
+    position: fixed;
+    top: 10px;
+    left: 10px;
+    right: 10px;
+    background: #4CAF50;
+    color: white;
+    padding: 20px;
+    border-radius: 12px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+    z-index: 10000;
+    font-family: Arial, sans-serif;
+    font-size: 16px;
+    cursor: pointer;
+    animation: pushSlideInMobile 0.4s ease-out;
+    border: 2px solid #45a049;
+}
+
+/* Contenedor notificación in-page - escritorio */
+.in-page-notification.push-notification-desktop {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    background: #4CAF50;
+    color: white;
+    padding: 15px 20px;
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+    z-index: 10000;
+    max-width: 300px;
+    font-family: Arial, sans-serif;
+    font-size: 14px;
+    cursor: pointer;
+    animation: pushSlideIn 0.3s ease-out;
+}
+
+.in-page-notification.push-notification-mobile.push-notification-closing {
+    animation: pushSlideInMobile 0.4s ease-out reverse;
+}
+
+.in-page-notification.push-notification-desktop.push-notification-closing {
+    animation: pushSlideIn 0.3s ease-out reverse;
 }

@@ -1,6 +1,7 @@
-from flask import Blueprint
+from flask import Blueprint, url_for, request
 from decimal import Decimal, InvalidOperation
 import os
+import re
 from .models import Product, Sale
 from app.store.models import WorksheetTemplate, WorksheetData
 from app.store.api import api_bp
@@ -12,6 +13,28 @@ store_bp = Blueprint(
     static_folder=os.path.join(os.path.dirname(__file__), 'static'),
     static_url_path='/store/static'
 )
+
+@store_bp.app_template_filter('rewrite_external_images')
+def rewrite_external_images_filter(html):
+    """Reescribe img src externos para usar proxy local y evitar CORB/CORS."""
+    if not html or not isinstance(html, str):
+        return html
+    try:
+        host = request.host if request else ''
+        def replace_src(m):
+            full_url = m.group(1)
+            if not full_url.startswith(('http://', 'https://')):
+                return m.group(0)
+            from urllib.parse import urlparse
+            parsed = urlparse(full_url)
+            if parsed.netloc and host and (parsed.netloc in host or host in parsed.netloc):
+                return m.group(0)
+            proxy_url = url_for('store_bp.proxy_image', url=full_url, _external=True)
+            return f'src="{proxy_url}"'
+        return re.sub(r'src="([^"]+)"', replace_src, html)
+    except Exception:
+        return html
+
 
 @store_bp.app_template_filter('decimal')
 def decimal_filter(value):

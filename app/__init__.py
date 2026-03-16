@@ -132,14 +132,6 @@ def create_app(config_class_passed=None):
     from app.subusers import subuser_bp
     app.register_blueprint(subuser_bp, url_prefix="/subusers")
 
-    # Registrar comandos CLI personalizados
-    try:
-        from app.cli_commands import register_cli_commands
-        register_cli_commands(app)
-    except Exception as cli_err:
-        # print de advertencia eliminado para producción; usa logging si es necesario
-        pass
-
     from sqlalchemy import inspect as insp2
 
     @app.context_processor

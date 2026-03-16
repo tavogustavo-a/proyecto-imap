@@ -389,33 +389,7 @@ document.addEventListener("DOMContentLoaded", function() {
     }
   }
 
-  // --- Limpiar logs desde el menú lateral ---
-  const btnClearTriggerLogMenu = document.getElementById('btnClearTriggerLogMenu');
-  if (btnClearTriggerLogMenu) {
-    btnClearTriggerLogMenu.addEventListener('click', function() {
-      if (!confirm('¿Seguro que deseas limpiar todos los logs de activadores?')) return;
-      fetch('/admin/clear_trigger_log', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-CSRFToken': getCsrfToken()
-        }
-      })
-      .then(res => res.json())
-      .then(data => {
-        if (data.status === 'ok') {
-          alert('Logs limpiados correctamente.');
-          // Si estamos en la vista de logs, recargar para ver el cambio
-          if (window.location.pathname.includes('view_trigger_logs')) {
-            window.location.reload();
-          }
-        } else {
-          alert('Error al limpiar logs: ' + (data.message || 'Error desconocido'));
-        }
-      })
-      .catch(err => alert('Error de red al limpiar logs: ' + err));
-    });
-  }
+  // Limpiar logs: manejado únicamente por clear_trigger_logs.js para evitar confirm duplicado
 
   // Manejar creación de servidor IMAP vía AJAX
   const createImapForm = document.getElementById('createImapForm');
@@ -423,7 +397,7 @@ document.addEventListener("DOMContentLoaded", function() {
     createImapForm.addEventListener("submit", function(e) {
       e.preventDefault();
       
-      const description = document.getElementById("imap2_description") ? document.getElementById("imap2_description").value.trim() : "";
+      const description = document.getElementById("imap_description") ? document.getElementById("imap_description").value.trim() : "";
       const host = document.getElementById("imap_host").value.trim();
       const port = parseInt(document.getElementById("imap_port").value) || 993;
       const username = document.getElementById("imap_username").value.trim();
@@ -483,8 +457,8 @@ document.addEventListener("DOMContentLoaded", function() {
           document.getElementById("imap_username").value = formData.username;
           document.getElementById("imap_password").value = formData.password;
           document.getElementById("imap_folders").value = formData.folders;
-          if (document.getElementById("imap2_description")) {
-            document.getElementById("imap2_description").value = formData.description;
+          if (document.getElementById("imap_description")) {
+            document.getElementById("imap_description").value = formData.description;
           }
           alert("Error: " + (data.message || "Error desconocido"));
         }

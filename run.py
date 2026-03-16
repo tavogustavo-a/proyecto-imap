@@ -20,7 +20,7 @@ from app.services.imap_crypto import decrypt_password_with_key, encrypt_password
 from werkzeug.security import generate_password_hash
 from datetime import datetime, timedelta, timezone 
 import re 
-from app.models import User, RegexModel, ServiceModel, AppSecrets, SecurityRule, TriggerLog, RememberDevice, IMAPServer, ObserverIMAPServer
+from app.models import User, AppSecrets, SecurityRule, TriggerLog, RememberDevice, IMAPServer, ObserverIMAPServer
 from app.models.imap2 import IMAPServer2
 from app.admin.site_settings import get_site_setting, set_site_setting
 from app.imap.advanced_imap import search_emails_for_observer, delete_emails_by_message_id
@@ -169,10 +169,14 @@ warnings.filterwarnings("ignore", category=sqlalchemy.exc.SAWarning)
 @app.cli.command("create-admin")
 def create_admin_command():
     """Crea o actualiza el usuario administrador definido en .env."""
+    # Cargar .env desde la raíz del proyecto (independiente del directorio actual)
+    project_root = os.path.dirname(os.path.abspath(__file__))
+    load_dotenv(os.path.join(project_root, ".env"))
     admin_username = os.getenv("ADMIN_USER")
     admin_pass = os.getenv("ADMIN_PASS")
 
     if not admin_username or not admin_pass:
+        print("ERROR: ADMIN_USER y/o ADMIN_PASS no están definidos en .env. No se puede crear el admin.")
         return
 
     with app.app_context(): # Necesario para acceder a db.session
@@ -205,86 +209,6 @@ def create_admin_command():
         except Exception as e:
             db.session.rollback()
             print(f"Error al guardar el usuario admin: {e}")
-
-@app.cli.command("seed-netflix-defaults")
-def seed_netflix_defaults_command():
-    """Crea/actualiza el Regex y Servicio 'Pais Netflix' predeterminados."""
-    print("=== Iniciando seed para Regex y Servicio Netflix... ===")
-    with app.app_context():
-        try:
-            pattern_netflix = r'(?i)_([A-Z]{2})_EVO'
-            existing_nf = RegexModel.query.filter_by(
-                sender='info@account.netflix.com',
-                pattern=pattern_netflix
-            ).first()
-            netflix_regex_to_link = None
-
-            if not existing_nf:
-                print("Creando Regex Netflix...")
-                new_nf = RegexModel(
-                    sender='info@account.netflix.com',
-                    pattern=pattern_netflix,
-                    description="pais de netflix",
-                    enabled=True,
-                    protected=True
-                )
-                db.session.add(new_nf)
-                db.session.flush()
-                netflix_regex_to_link = new_nf
-                print("Regex Netflix creado.")
-            else:
-                print("Regex Netflix ya existía. Asegurando estado...")
-                existing_nf.enabled = True
-                existing_nf.protected = True
-                netflix_regex_to_link = existing_nf
-                print("Regex Netflix asegurado.")
-
-            existing_srv = ServiceModel.query.filter_by(name="Servicio Netflix").first()
-            alt_srv = ServiceModel.query.filter_by(name="Pais Netflix").first()
-            netflix_srv = None
-
-            if alt_srv:
-                print("'Pais Netflix' ya existía. Asegurando estado...")
-                alt_srv.protected = True
-                netflix_srv = alt_srv
-                print("'Pais Netflix' asegurado.")
-            elif existing_srv:
-                print("Renombrando 'Servicio Netflix' a 'Pais Netflix'...")
-                existing_srv.name = "Pais Netflix"
-                existing_srv.protected = True
-                netflix_srv = existing_srv
-                print("'Pais Netflix' renombrado.")
-            else:
-                print("Creando servicio 'Pais Netflix'...")
-                new_srv = ServiceModel(
-                    name="Pais Netflix",
-                    color="black",
-                    border_color="#cc0000",
-                    position=1,
-                    enabled=True,
-                    protected=True,
-                    visibility_mode="on-todos"
-                )
-                db.session.add(new_srv)
-                netflix_srv = new_srv
-                print("Servicio 'Pais Netflix' creado.")
-
-            if netflix_regex_to_link and netflix_srv:
-                if netflix_regex_to_link not in netflix_srv.regexes:
-                    print("Vinculando Regex Netflix => Pais Netflix...")
-                    netflix_srv.regexes.append(netflix_regex_to_link)
-                    print("Vinculación completada.")
-                else:
-                    print("Regex Netflix ya estaba vinculado a Pais Netflix.")
-            else:
-                print("ADVERTENCIA: No se pudo realizar la vinculación (Regex o Servicio no encontrados).")
-
-            db.session.commit()
-            print("=== Seed para Netflix completado exitosamente. ===")
-
-        except Exception as e:
-            db.session.rollback()
-            print(f"ERROR FATAL durante el seed de Netflix: {e}")
 
 @app.cli.command("init-imap-keys")
 def init_imap_keys_command():
@@ -326,6 +250,17 @@ def init_imap_keys_command():
         except Exception as e:
             db.session.rollback()
             print(f"ERROR FATAL durante inicialización de claves IMAP: {e}")
+
+@app.cli.command("initial-seed")
+def initial_seed_command():
+    """Ejecuta create-admin e init-imap-keys."""
+    # Cargar .env desde la raíz del proyecto
+    project_root = os.path.dirname(os.path.abspath(__file__))
+    load_dotenv(os.path.join(project_root, ".env"))
+    print("=== Ejecutando initial-seed ===")
+    create_admin_command()
+    init_imap_keys_command()
+    print("=== initial-seed terminado ===")
 
 def rotate_imap_keys_job():
     """Rota las claves de cifrado IMAP automáticamente.

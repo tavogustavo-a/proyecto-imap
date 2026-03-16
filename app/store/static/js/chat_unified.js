@@ -1219,7 +1219,7 @@ function setupEventListeners() {
     if (chatInputForm) {
         // ✅ NUEVO: Prevenir envío tradicional del formulario
         chatInputForm.setAttribute('novalidate', 'true');
-        chatInputForm.setAttribute('action', 'javascript:void(0);');
+        chatInputForm.setAttribute('action', '#');
         chatInputForm.setAttribute('method', 'post');
         
         chatInputForm.addEventListener('submit', function(e) {
@@ -2243,11 +2243,11 @@ function createAudioMessageElement(audioMessage) {
                                 <i class="fas fa-exclamation-triangle"></i>
                             </button>
                             <div class="audio-progress">
-                                <div class="audio-progress-bar" style="width: 0%"></div>
+                                <div class="audio-progress-bar"></div>
                             </div>
                             <span class="audio-duration">Error</span>
                         </div>
-                        <p style="color: #ff6b6b; font-size: 12px; margin: 5px 0 0 0;">Error al cargar audio</p>
+                        <p class="audio-load-error-text">Error al cargar audio</p>
                     </div>
                 </div>
             </div>
@@ -2579,64 +2579,14 @@ function showBrowserNotification(senderName, message) {
 function showInPageNotification(senderName, message) {
     // Crear notificación en la página
     const notification = document.createElement('div');
-    notification.className = 'in-page-notification';
-    
-    // ✅ NUEVO: Estilos adaptativos para móviles
     const isMobile = isMobileDevice();
-    const notificationStyle = isMobile ? `
-        position: fixed;
-        top: 10px;
-        left: 10px;
-        right: 10px;
-        background: #4CAF50;
-        color: white;
-        padding: 20px;
-        border-radius: 12px;
-        box-shadow: 0 8px 24px rgba(0,0,0,0.4);
-        z-index: 10000;
-        font-family: Arial, sans-serif;
-        font-size: 16px;
-        cursor: pointer;
-        animation: slideInMobile 0.4s ease-out;
-        border: 2px solid #45a049;
-    ` : `
-        position: fixed;
-        top: 20px;
-        right: 20px;
-        background: #4CAF50;
-        color: white;
-        padding: 15px 20px;
-        border-radius: 8px;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-        z-index: 10000;
-        max-width: 300px;
-        font-family: Arial, sans-serif;
-        font-size: 14px;
-        cursor: pointer;
-        animation: slideIn 0.3s ease-out;
-    `;
-    
-    notification.style.cssText = notificationStyle;
+    notification.className = `in-page-notification push-notification ${isMobile ? 'push-notification-mobile' : 'push-notification-desktop'}`;
     
     notification.innerHTML = `
-        <div style="font-weight: bold; margin-bottom: 8px; font-size: ${isMobile ? '18px' : '16px'};">📱 Nuevo mensaje de ${senderName}</div>
-        <div style="opacity: 0.9; font-size: ${isMobile ? '16px' : '14px'};">${message.length > 50 ? message.substring(0, 50) + "..." : message}</div>
-        ${isMobile ? '<div style="margin-top: 10px; font-size: 12px; opacity: 0.7;">Toca para cerrar</div>' : ''}
+        <div class="push-notification-title">📱 Nuevo mensaje de ${senderName}</div>
+        <div class="push-notification-body">${message.length > 50 ? message.substring(0, 50) + "..." : message}</div>
+        ${isMobile ? '<div class="push-notification-hint">Toca para cerrar</div>' : ''}
     `;
-    
-    // Agregar estilos de animación
-    const style = document.createElement('style');
-    style.textContent = `
-        @keyframes slideIn {
-            from { transform: translateX(100%); opacity: 0; }
-            to { transform: translateX(0); opacity: 1; }
-        }
-        @keyframes slideInMobile {
-            from { transform: translateY(-100%); opacity: 0; }
-            to { transform: translateY(0); opacity: 1; }
-        }
-    `;
-    document.head.appendChild(style);
     
     document.body.appendChild(notification);
     
@@ -2649,8 +2599,7 @@ function showInPageNotification(senderName, message) {
     const timeout = isMobile ? 7000 : 5000;
     setTimeout(() => {
         if (notification && notification.parentNode) {
-            const animation = isMobile ? 'slideInMobile 0.4s ease-out reverse' : 'slideIn 0.3s ease-out reverse';
-            notification.style.animation = animation;
+            notification.classList.add('push-notification-closing');
             setTimeout(() => {
                 notification.remove();
             }, 400);

@@ -8,11 +8,11 @@ document.addEventListener('DOMContentLoaded', function() {
   var menu2Btn = document.getElementById('menu2ToggleBtn');
   var mobileMenu2 = document.getElementById('mobileMenu2');
 
-  // Menú 3
+  // Menú 3 (work_sheets: Licencias)
   var menu3Btn = document.getElementById('menu3ToggleBtn');
   var mobileMenu3 = document.getElementById('mobileMenu3');
 
-  // Menú 4
+  // Menú 4 (admin_store: Herramientas)
   var menu4Btn = document.getElementById('menu4ToggleBtn');
   var mobileMenu4 = document.getElementById('mobileMenu4');
 
@@ -72,7 +72,7 @@ document.addEventListener('DOMContentLoaded', function() {
   document.addEventListener('mousedown', function(e) {
     const isMenuBtn = e.target === menuBtn || e.target === menu2Btn || e.target === menu3Btn || e.target === menu4Btn;
     const isInAnyMenu = (mobileMenu && mobileMenu.contains(e.target)) || 
-                       (mobileMenu2 && mobileMenu2.contains(e.target)) || 
+                       (mobileMenu2 && mobileMenu2.contains(e.target)) ||
                        (mobileMenu3 && mobileMenu3.contains(e.target)) ||
                        (mobileMenu4 && mobileMenu4.contains(e.target));
     

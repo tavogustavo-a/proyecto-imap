@@ -25,15 +25,11 @@
 
     <form method="POST" action="{{ url_for('admin_bp.edit_service', service_id=srv.id) }}" class="mb-0">
       <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
-      {% if srv.protected and srv.name == "Pais Netflix" %}
-        <p><strong>Nombre (protegido):</strong> {{ srv.name }}</p>
-      {% else %}
-        <div class="mb-1">
-          <label for="service_name_input">Nombre del Servicio:</label><br>
-          {# Aplicada clase específica #}
-          <input id="service_name_input" type="text" name="service_name" value="{{ srv.name }}" class="service-name-input">
-        </div>
-      {% endif %}
+      <div class="mb-1">
+        <label for="service_name_input">Nombre del Servicio:</label><br>
+        {# Aplicada clase específica #}
+        <input id="service_name_input" type="text" name="service_name" value="{{ srv.name }}" class="service-name-input">
+      </div>
       <div class="position-visibility-container mb-1-5">
         <div>
           <label for="position_input" class="m-0">Posición:</label>
@@ -114,11 +110,7 @@
           <li>
             <div class="d-flex justify-content-between align-items-center flex-wrap gap-05">
                 <span class="word-break-all">{{ r.description if r.description else '(sin descripción)' }}</span>
-                {% if srv.name == "Pais Netflix" and r.pattern == "(?i)_([A-Z]{2})_EVO" %}
-                  <small class="protected-text">(protegido)</small>
-                {% else %}
-                  <button class="unlink-regex-btn btn-red btn-small" data-service-id="{{ srv.id }}" data-regex-id="{{ r.id }}">Quitar</button>
-                {% endif %}
+                <button class="unlink-regex-btn btn-red btn-small" data-service-id="{{ srv.id }}" data-regex-id="{{ r.id }}">Quitar</button>
             </div>
           </li>
         {% endfor %}

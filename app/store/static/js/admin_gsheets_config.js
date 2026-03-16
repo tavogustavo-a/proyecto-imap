@@ -10,11 +10,12 @@ document.addEventListener('DOMContentLoaded', function() {
   const closeEditModalBtn = document.getElementById('close-edit-modal');
 
   function showStatus(msg, success=true) {
-    statusDiv.innerHTML = `<div style="padding:10px;border-radius:6px;${success ? 'background:#e8f5e9;color:#256029;border:1.5px solid #43b843;' : 'background:#ffebee;color:#b71c1c;border:1.5px solid #e53935;'}">${msg}</div>`;
+    const cls = success ? 'gsheets-status-msg gsheets-status-success' : 'gsheets-status-msg gsheets-status-error';
+    statusDiv.innerHTML = `<div class="${cls}">${msg}</div>`;
   }
 
   function showLoadingStatus(msg) {
-    statusDiv.innerHTML = `<div style="padding:10px;border-radius:6px;background:#e3f2fd;color:#1565c0;border:1.5px solid #2196f3;"><i class="fas fa-spinner fa-spin"></i> ${msg}</div>`;
+    statusDiv.innerHTML = `<div class="gsheets-status-msg gsheets-status-loading"><i class="fas fa-spinner fa-spin"></i> ${msg}</div>`;
   }
 
   function getCsrfToken() {
@@ -64,14 +65,14 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     let tableHTML = `
-      <div class="table-responsive gsheets-table-container" style="border: 1px solid #dee2e6; border-radius: 8px; overflow-x: auto; margin-bottom: 20px; max-width: 100%;">
-        <table class="table table-striped table-hover mb-0" style="margin-bottom: 0; min-width: 600px;">
+      <div class="table-responsive gsheets-table-container">
+        <table class="table table-striped table-hover mb-0">
           <thead class="table-light">
             <tr>
-              <th style="padding: 12px 15px; border-bottom: 2px solid #dee2e6;">Plantilla</th>
-              <th style="padding: 12px 15px; border-bottom: 2px solid #dee2e6;">ID de Hoja</th>
-              <th style="padding: 12px 15px; border-bottom: 2px solid #dee2e6;">Pestaña</th>
-              <th style="padding: 12px 15px; border-bottom: 2px solid #dee2e6;">Acciones</th>
+              <th>Plantilla</th>
+              <th>ID de Hoja</th>
+              <th>Pestaña</th>
+              <th>Acciones</th>
             </tr>
           </thead>
           <tbody>
@@ -80,11 +81,11 @@ document.addEventListener('DOMContentLoaded', function() {
     links.forEach(link => {
       tableHTML += `
         <tr data-link-id="${link.id}">
-          <td style="padding: 12px 15px; vertical-align: middle;">${getTemplateDisplayName(link.template_type)}</td>
-          <td style="padding: 12px 15px; vertical-align: middle;"><code style="background: #f8f9fa; padding: 4px 8px; border-radius: 4px; font-size: 0.9em;" title="${link.sheet_id}">${truncateId(link.sheet_id)}</code></td>
-          <td style="padding: 12px 15px; vertical-align: middle;">${link.tab_name}</td>
-          <td style="padding: 12px 15px; vertical-align: middle;">
-            <div style="display: flex; gap: 8px; align-items: center;">
+          <td>${getTemplateDisplayName(link.template_type)}</td>
+          <td><code class="gsheets-sheet-id-code" title="${link.sheet_id}">${truncateId(link.sheet_id)}</code></td>
+          <td>${link.tab_name}</td>
+          <td>
+            <div class="gsheets-td-actions">
               <button class="btn-panel btn-blue btn-sm" data-action="test-link-connection" data-link-id="${link.id}" title="Probar conexión">
                 <i class="fas fa-plug"></i>
               </button>

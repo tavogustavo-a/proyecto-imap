@@ -1267,10 +1267,12 @@ document.addEventListener("DOMContentLoaded", function () {
               }
           })
           .then(data => {
-              if (data.status === 'ok') {
-                  alert(data.message || 'Log limpiado exitosamente.'); 
-                  // Opcional: redirigir para ver el flash del backend si clear_trigger_log redirige
-                  // window.location.href = '{{ url_for("admin_bp.dashboard") }}'; // NO USAR JINJA AQUÍ
+              if (data.success) {
+                  if (data.deleted_count > 0) {
+                      alert('Logs de activadores limpiados correctamente. Se eliminaron ' + data.deleted_count + ' registros.');
+                  } else {
+                      alert('Logs de activadores limpiados correctamente. No había registros para eliminar.');
+                  }
               } else {
                   alert('Error al limpiar log: ' + (data.message || 'Error desconocido'));
               }

@@ -72,11 +72,6 @@ document.addEventListener("DOMContentLoaded", function() {
       const color1 = newClickColor1.value || "#031faa";
       const color2 = newClickColor2.value || "#031faa";
       clickGradientPreview.style.background = `linear-gradient(135deg, ${color1} 0%, ${color2} 100%)`;
-      
-      // Sincronizar automáticamente con Pais Netflix (solo si existe)
-      if (typeof syncNetflixColors === 'function') {
-        syncNetflixColors();
-      }
     }
   }
 
@@ -86,11 +81,6 @@ document.addEventListener("DOMContentLoaded", function() {
       const color1 = newNormalColor1.value || "#764ba2";
       const color2 = newNormalColor2.value || "#667eea";
       normalGradientPreview.style.background = `linear-gradient(135deg, ${color1} 0%, ${color2} 100%)`;
-      
-      // Sincronizar automáticamente con Pais Netflix (solo si existe)
-      if (typeof syncNetflixColors === 'function') {
-        syncNetflixColors();
-      }
     }
   }
 
@@ -982,8 +972,8 @@ document.addEventListener("DOMContentLoaded", function() {
           <!-- Bloque final de botones -->
           <div class="mt-05">
       `;
-        // Restaurar botones para servicios NO protegidos
-        if (!(s.protected && s.name === "Pais Netflix")) {
+        // Botones para servicios no protegidos
+        if (!s.protected) {
             // Si es SMS, no mostrar botones "re" y "fi"
             if (s.visibility_mode === 'sms') {
                 html += `
@@ -1004,7 +994,7 @@ document.addEventListener("DOMContentLoaded", function() {
                     </button>
                 `;
             }
-        } else { // Para servicio protegido, solo Editar e Icono
+        } else {
              html += `
                 <button class="edit-service btn-orange" data-id="${s.id}">Editar</button>
                 <button class="add-service-icon-btn btn-blue" data-id="${s.id}">+Icon</button>
@@ -1157,54 +1147,6 @@ document.addEventListener("DOMContentLoaded", function() {
         alert("Error de red al intentar actualizar el color.");
     });
   }
-
-  // Función para sincronizar colores globales con Pais Netflix
-  function syncNetflixColors() {
-    // Usar debounce para evitar múltiples llamadas
-    if (syncNetflixColors.timeout) {
-      clearTimeout(syncNetflixColors.timeout);
-    }
-    
-    syncNetflixColors.timeout = setTimeout(() => {
-      // Verificar que los elementos existan antes de usarlos
-      if (!newNormalColor1 || !newNormalColor2 || !newClickColor1 || !newClickColor2) {
-        return; // Salir silenciosamente si los elementos no existen
-      }
-      
-      const normalColor1 = newNormalColor1.value || "#764ba2";
-      const normalColor2 = newNormalColor2.value || "#667eea";
-      const clickColor1 = newClickColor1.value || "#031faa";
-      const clickColor2 = newClickColor2.value || "#031faa";
-
-      const payload = {
-        normal_color1: normalColor1,
-        normal_color2: normalColor2,
-        click_color1: clickColor1,
-        click_color2: clickColor2
-      };
-
-      fetch("/admin/sync_netflix_colors_ajax", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-CSRFToken": getCsrfToken()
-        },
-        body: JSON.stringify(payload)
-      })
-      .then(r => r.json())
-      .then(data => {
-        if (data.status !== "ok") {
-          // Solo loggear errores, no mostrar alertas molestas
-          console.warn("Error sincronizando colores de Netflix:", data.message);
-        }
-      })
-      .catch(err => {
-        // Error de red en sincronización - ignorar silenciosamente
-        console.warn("Error de red al sincronizar colores de Netflix:", err);
-      });
-    }, 500); // Debounce de 500ms
-  }
-
 
   // Iniciar
   initServicesList();

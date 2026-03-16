@@ -30,9 +30,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 </div>
                 <div>
                     <strong>Correo:</strong>
-                    <span title="${searchedEmailText}" style="display: inline-block; max-width: 90%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom;">
-                        ${escapeHTML(searchedEmailText)}
-                    </span>
+                    <span class="log-email-truncate" title="${searchedEmailText}">${escapeHTML(searchedEmailText)}</span>
                 </div>
             </div>
             `;
@@ -90,11 +88,11 @@ document.addEventListener('DOMContentLoaded', function () {
                 renderLogs(data.logs);
                 renderPagination(data.pagination);
             } else {
-                logListContainer.innerHTML = `<p style="color:red;">Error: ${data.message || 'No se pudieron cargar los logs.'}</p>`;
+                logListContainer.innerHTML = `<p class="log-error-text">Error: ${data.message || 'No se pudieron cargar los logs.'}</p>`;
             }
         })
         .catch(error => {
-            logListContainer.innerHTML = `<p style="color:red;">Error de red al cargar los logs.</p>`;
+            logListContainer.innerHTML = `<p class="log-error-text">Error de red al cargar los logs.</p>`;
         });
     }
 

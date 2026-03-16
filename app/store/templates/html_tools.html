@@ -1,0 +1,165 @@
+{% extends "base.html" %}
+
+{% block title %}Herramienta HTML{% endblock %}
+
+{% block head %}
+  {{ super() }}
+  <link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}">
+  <link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/html_tools.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='fontawesome/css/all.css') }}">
+  <script>window.HTML_TOOLS_STATIC_IMAGES = "{{ url_for('static', filename='images/') }}";</script>
+{% endblock %}
+
+{% block content %}
+<div class="container store-light html-tools-container">
+  <div class="html-tools-header">
+    <h2><i class="fas fa-code"></i> Herramienta HTML</h2>
+    <a href="{{ url_for('store_bp.admin_work_sheets') }}" class="html-tools-btn-back"><i class="fas fa-arrow-left"></i> Volver</a>
+  </div>
+
+  <p class="mb-3 text-muted html-tools-instructions">
+    Escribe en el editor visual y el código HTML se genera en tiempo real. También puedes editar el HTML directamente y se aplica al editor automáticamente.
+    <span class="html-tools-img-info" title="Formatos: GitHub (blob→raw), Google Drive, Imgur, Dropbox, data:base64, cualquier https:">Imágenes: se normalizan URLs de GitHub, Drive, Dropbox, etc.</span>
+  </p>
+
+  <div class="html-tools-panels">
+  <div class="html-tools-panel">
+    <span id="editorLabel" class="d-block mb-2 font-weight-bold">Editor visual</span>
+    <div class="html-toolbar">
+      <button type="button" id="btnBold" title="Negrita"><i class="fas fa-bold"></i></button>
+      <button type="button" id="btnItalic" title="Cursiva"><i class="fas fa-italic"></i></button>
+      <button type="button" id="btnUnderline" title="Subrayado"><i class="fas fa-underline"></i></button>
+      <span class="html-toolbar-sep"></span>
+      <button type="button" id="btnAlignLeft" title="Alinear a la izquierda"><i class="fas fa-align-left"></i></button>
+      <button type="button" id="btnAlignCenter" title="Centrar"><i class="fas fa-align-center"></i></button>
+      <button type="button" id="btnAlignRight" title="Alinear a la derecha"><i class="fas fa-align-right"></i></button>
+      <button type="button" id="btnAlignJustify" title="Justificar"><i class="fas fa-align-justify"></i></button>
+      <span class="html-toolbar-sep"></span>
+      <span class="html-toolbar-icon-wrap">
+        <button type="button" id="btnFontSize" class="html-toolbar-icon-btn" title="Tamaño de letra"><i class="fas fa-text-height"></i></button>
+        <div id="sizeDropdown" class="html-toolbar-dropdown hidden">
+          <div class="html-toolbar-size-buttons">
+            <button type="button" class="html-size-btn" data-size="12px">12px</button>
+            <button type="button" class="html-size-btn" data-size="14px">14px</button>
+            <button type="button" class="html-size-btn" data-size="16px">16px</button>
+            <button type="button" class="html-size-btn" data-size="18px">18px</button>
+            <button type="button" class="html-size-btn" data-size="20px">20px</button>
+            <button type="button" class="html-size-btn" data-size="24px">24px</button>
+          </div>
+          <div class="html-toolbar-size-custom">
+            <input type="text" id="customFontSizeInput" class="html-toolbar-custom-size" placeholder="ej: 22px" maxlength="8">
+          </div>
+        </div>
+      </span>
+      <span class="html-toolbar-icon-wrap">
+        <button type="button" id="btnFontColor" class="html-toolbar-icon-btn" title="Color de texto"><i class="fas fa-palette"></i></button>
+        <input type="color" id="inputFontColor" name="inputFontColor" value="#000000" class="html-toolbar-color-hidden">
+      </span>
+      <span class="html-toolbar-icon-wrap">
+        <button type="button" id="btnHighlight" class="html-toolbar-icon-btn" title="Resaltar"><i class="fas fa-highlighter"></i></button>
+        <input type="color" id="inputHighlight" name="inputHighlight" value="#ffff00" class="html-toolbar-color-hidden">
+      </span>
+      <span class="html-toolbar-sep"></span>
+      <button type="button" id="btnParagraph" title="Párrafo"><i class="fas fa-paragraph"></i> Párrafo</button>
+      <button type="button" id="btnList" title="Lista"><i class="fas fa-list"></i> Lista</button>
+      <button type="button" id="btnLink" title="Enlace"><i class="fas fa-link"></i> Enlace</button>
+      <button type="button" id="btnImage" title="Imagen por URL"><i class="fas fa-image"></i> Imagen</button>
+      <span class="html-toolbar-icon-wrap">
+        <button type="button" id="btnIcons" class="html-toolbar-icon-btn" title="Insertar icono"><i class="fas fa-icons"></i> Iconos</button>
+        <div id="iconsDropdown" class="html-toolbar-dropdown html-icons-dropdown hidden">
+          <input type="search" id="iconsSearch" class="form-control mb-2" placeholder="Buscar icono..." autocomplete="off">
+          <div id="iconsGrid" class="html-icons-container"></div>
+          <div id="iconsTabs" class="html-icons-tabs">
+            <button type="button" class="html-icons-tab active" data-tab="general" title="General"><i class="fas fa-icons"></i></button>
+            <button type="button" class="html-icons-tab" data-tab="heroicons" title="Heroicons"><svg class="html-icons-tab-svg" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 00-2.456 2.456z" /></svg></button>
+            <button type="button" class="html-icons-tab" data-tab="streaming" title="Streaming"><i class="fas fa-tv"></i></button>
+            <button type="button" class="html-icons-tab" data-tab="ccn" title="CCN"><i class="fas fa-search"></i></button>
+            <button type="button" class="html-icons-tab" data-tab="whatsapp" title="WhatsApp"><i class="fab fa-whatsapp"></i></button>
+          </div>
+        </div>
+      </span>
+    </div>
+    <div class="html-editor-wrap" id="htmlEditorWrap">
+      <div id="htmlEditor" contenteditable="true" role="textbox" aria-labelledby="editorLabel"></div>
+      <div id="htmlImageResizeOverlay" class="html-resize-overlay hidden">
+        <span class="html-resize-handle" data-handle="nw" title="Redimensionar"></span>
+        <span class="html-resize-handle" data-handle="n" title="Recortar"></span>
+        <span class="html-resize-handle" data-handle="ne" title="Redimensionar"></span>
+        <span class="html-resize-handle" data-handle="e" title="Recortar"></span>
+        <span class="html-resize-handle" data-handle="se" title="Redimensionar"></span>
+        <span class="html-resize-handle" data-handle="s" title="Recortar"></span>
+        <span class="html-resize-handle" data-handle="sw" title="Redimensionar"></span>
+        <span class="html-resize-handle" data-handle="w" title="Recortar"></span>
+      </div>
+    </div>
+  </div>
+
+  <div class="html-tools-panel html-output-wrap">
+    <label for="htmlOutput">Código fuente HTML</label>
+    <textarea id="htmlOutput" placeholder="El HTML aparecerá aquí en tiempo real..."></textarea>
+    <div class="html-output-actions">
+      <button type="button" id="btnCleanHtml" class="btn-panel html-modal-btn-gray"><i class="fas fa-broom"></i> Limpiar</button>
+      <button type="button" id="btnCopyHtml" class="btn-copy-html"><i class="fas fa-copy"></i> Copiar</button>
+    </div>
+  </div>
+  </div>
+</div>
+
+<div id="toastCopy" class="toast-copy">¡Copiado!</div>
+
+<div id="modalImageResize" class="html-modal-overlay hidden">
+  <div class="html-modal-box">
+    <div class="html-modal-header">
+      <h4>Redimensionar imagen</h4>
+      <button type="button" id="modalImageResizeClose" class="html-modal-close" aria-label="Cerrar">&times;</button>
+    </div>
+    <div class="html-modal-body">
+      <div class="mb-2">
+        <label for="modalResizeWidth" class="d-block mb-1">Ancho (px):</label>
+        <input type="number" id="modalResizeWidth" class="form-control" min="1" max="2000" placeholder="Ancho" autocomplete="off">
+      </div>
+      <div class="mb-2">
+        <label for="modalResizeHeight" class="d-block mb-1">Alto (px):</label>
+        <input type="number" id="modalResizeHeight" class="form-control" min="1" max="2000" placeholder="Alto" autocomplete="off">
+      </div>
+      <div class="form-check mb-2">
+        <input type="checkbox" id="modalResizeConstrain" class="form-check-input" checked>
+        <label for="modalResizeConstrain" class="form-check-label">Mantener proporciones</label>
+      </div>
+      <p class="text-muted small mb-0">Clic derecho: redimensionar por números. Clic izquierdo en imagen: asas para arrastrar y cambiar tamaño como en Word.</p>
+    </div>
+    <div class="html-modal-footer">
+      <button type="button" id="modalResizeCancel" class="btn-panel html-modal-btn-gray">Cancelar</button>
+      <button type="button" id="modalResizeApply" class="btn-panel btn-blue">Aplicar</button>
+    </div>
+  </div>
+</div>
+
+<div id="modalUrlInput" class="html-modal-overlay hidden">
+  <div id="modalUrlBox" class="html-modal-box">
+    <div class="html-modal-header">
+      <h4 id="modalUrlTitle">URL</h4>
+      <button type="button" id="modalUrlClose" class="html-modal-close" aria-label="Cerrar">&times;</button>
+    </div>
+    <div class="html-modal-body">
+      <label for="modalUrlInputField" class="d-block mb-2">URL:</label>
+      <input type="text" id="modalUrlInputField" name="modalUrlInputField" class="form-control" placeholder="https://" autocomplete="off">
+      <div id="modalImageSizeWrap" class="html-modal-image-size hidden">
+        <label for="modalImageWidth" class="d-block mb-1 mt-2">Ancho (px):</label>
+        <input type="number" id="modalImageWidth" class="form-control mb-2" placeholder="ej: 200" min="1" max="2000" autocomplete="off">
+        <label for="modalImageHeight" class="d-block mb-1">Alto (px):</label>
+        <input type="number" id="modalImageHeight" class="form-control" placeholder="ej: 150" min="1" max="2000" autocomplete="off">
+      </div>
+    </div>
+    <div class="html-modal-footer">
+      <button type="button" id="modalUrlCancel" class="btn-panel html-modal-btn-gray">Cancelar</button>
+      <button type="button" id="modalUrlOk" class="btn-panel btn-blue">Aceptar</button>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+  {{ super() }}
+  <script src="{{ url_for('store_bp.static', filename='js/admin_html_tools.js') }}" defer></script>
+{% endblock %}

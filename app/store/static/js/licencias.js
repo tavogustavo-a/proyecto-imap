@@ -181,8 +181,8 @@ function renderLicensesGrid() {
     
     if (licenses.length === 0) {
         grid.innerHTML = `
-            <div style="grid-column: 1 / -1; text-align: center; padding: 2rem; color: #7f8c8d;">
-                <i class="fas fa-spinner fa-spin" style="font-size: 2rem; margin-bottom: 1rem;"></i>
+            <div class="licenses-loading-state">
+                <i class="fas fa-spinner fa-spin licenses-loading-spinner"></i>
                 <p>Inicializando licencias desde productos...</p>
             </div>
         `;
@@ -213,11 +213,11 @@ function renderLicensesGrid() {
     
     // Agregar el campo de entrada al final de todas las tarjetas
     licensesHtml += `
-        <div class="license-accounts-input-container" id="licenseAccountsInputContainer" style="display: none;">
-            <div class="license-saved-accounts" id="licenseSavedAccountsContainer" style="display: none;">
+        <div class="license-accounts-input-container d-none" id="licenseAccountsInputContainer">
+            <div class="license-saved-accounts d-none" id="licenseSavedAccountsContainer">
                 <div class="saved-accounts-list" id="licenseSavedAccountsList"></div>
             </div>
-            <div class="license-all-days-container" id="licenseAllDaysContainer" style="display: none;">
+            <div class="license-all-days-container d-none" id="licenseAllDaysContainer">
                 <!-- Aquí se cargarán todos los días del 1 al 31 con sus correos vendidos -->
             </div>
         </div>
@@ -359,7 +359,7 @@ function addLicenseCardListeners() {
                 // Si estaba activa, ocultar el contenedor
                 localStorage.removeItem('selectedLicenseId');
                 if (inputContainer) {
-                    inputContainer.style.display = 'none';
+                    inputContainer.classList.add('d-none');
                 }
             }
         });
@@ -382,7 +382,7 @@ function activateLicenseCard(card, licenseId, skipScroll = false) {
     localStorage.setItem('selectedLicenseId', licenseId.toString());
     
     if (inputContainer) {
-        inputContainer.style.display = 'block';
+        inputContainer.classList.remove('d-none');
         
         // Cargar y mostrar las cuentas guardadas (editables)
         loadAndDisplaySavedAccounts(licenseId);
@@ -1085,7 +1085,7 @@ async function loadAndDisplaySavedAccounts(licenseId) {
     const license = licenses.find(l => l.id === licenseId);
     
     // Siempre mostrar el contenedor, incluso si no hay cuentas
-    savedAccountsContainer.style.display = 'block';
+    savedAccountsContainer.classList.remove('d-none');
     
     // Filtrar solo cuentas disponibles y asignadas (no vendidas)
     const availableAccounts = license && license.accounts 
@@ -1580,7 +1580,7 @@ async function loadAllDaysSoldAccounts(licenseId) {
     const license = licenses.find(l => l.id === licenseId);
     
     if (!license || !license.accounts) {
-        allDaysContainer.style.display = 'none';
+        allDaysContainer.classList.add('d-none');
         return;
     }
     
@@ -1588,7 +1588,7 @@ async function loadAllDaysSoldAccounts(licenseId) {
     const soldAccounts = license.accounts.filter(account => account.status === 'sold' && account.assigned_at);
     
     // Siempre mostrar el contenedor, incluso si no hay correos vendidos
-    allDaysContainer.style.display = 'block';
+    allDaysContainer.classList.remove('d-none');
     
     // Obtener todas las cuentas (guardadas y vendidas) para detectar duplicados
     const allAccounts = license && license.accounts ? license.accounts : [];
@@ -2655,22 +2655,22 @@ function showGestionarProductosModal() {
     // Crear HTML del modal
     const modalHtml = `
         <div class="modal-overlay" id="gestionarProductosModal">
-            <div class="modal" style="max-width: 600px; width: 70%; max-height: 65vh; overflow-y: auto;">
-                <div style="padding: 1rem 0.75rem 0.75rem 0.75rem;">
-                    <div style="text-align: center; margin-bottom: 0.75rem;">
-                        <h3 style="margin: 0; font-size: 0.85rem;"><i class="fas fa-list"></i> Gestionar Productos</h3>
+            <div class="modal gestion-productos-modal-inner">
+                <div class="gestion-productos-modal-content">
+                    <div class="gestion-productos-modal-header">
+                        <h3><i class="fas fa-list"></i> Gestionar Productos</h3>
                     </div>
-                    <div id="productosList" style="display: flex; flex-direction: column; gap: 0.1rem; font-size: 0.8rem;">
-                        ${sortedLicenses.map((license, index) => `
-                            <div class="producto-item" data-license-id="${license.id}" style="display: flex; align-items: center; justify-content: space-between; padding: 0rem 0.5rem;">
-                                <div style="display: flex; align-items: center; flex: 1; min-width: 0;">
-                                    <strong style="font-size: 0.8rem; font-weight: 600;">${license.product_name}</strong>
+                    <div class="gestion-productos-list" id="productosList">
+                        ${sortedLicenses.map((license) => `
+                            <div class="producto-item gestion-productos-item" data-license-id="${license.id}">
+                                <div class="gestion-productos-item-name">
+                                    <strong>${license.product_name}</strong>
                                 </div>
-                                <div style="display: flex; gap: 0.4rem; align-items: center;">
-                                    <button class="btn btn-sm" style="padding: 4px 8px; font-size: 0.7rem;" data-action="change-product-position" data-license-id="${license.id}">
-                                        C. P. <span style="color: #666; font-size: 0.7rem;">${license.position}</span>
+                                <div class="gestion-productos-item-actions">
+                                    <button class="btn btn-sm gestion-productos-btn" data-action="change-product-position" data-license-id="${license.id}">
+                                        C. P. <span class="gestion-productos-position-span">${license.position}</span>
                                     </button>
-                                    <button class="btn btn-sm btn-danger" style="padding: 4px 8px; font-size: 0.85rem;" data-action="archive-product-from-modal" data-license-id="${license.id}" title="Archivar">
+                                    <button class="btn btn-sm btn-danger gestion-productos-btn-archive" data-action="archive-product-from-modal" data-license-id="${license.id}" title="Archivar">
                                         <i class="fas fa-archive"></i>
                                     </button>
                                 </div>

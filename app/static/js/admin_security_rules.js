@@ -54,11 +54,11 @@ document.addEventListener('DOMContentLoaded', function () {
             if (data.status === 'ok') {
                 renderSecurityRules(data.rules);
             } else {
-                rulesListContainer.innerHTML = `<p style="color:red;">Error: ${data.message || 'No se pudieron cargar las reglas.'}</p>`;
+                rulesListContainer.innerHTML = `<p class="log-error-text">Error: ${data.message || 'No se pudieron cargar las reglas.'}</p>`;
             }
         })
         .catch(error => {
-            rulesListContainer.innerHTML = `<p style="color:red;">Error de red al cargar las reglas.</p>`;
+            rulesListContainer.innerHTML = `<p class="log-error-text">Error de red al cargar las reglas.</p>`;
         });
     }
 

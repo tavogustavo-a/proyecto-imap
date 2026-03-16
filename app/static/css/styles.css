@@ -195,6 +195,24 @@ textarea {
   outline: none;
 }
 
+/* Max-width para inputs API (sin estilos inline, CSP) */
+.api-input-max-200 { max-width: 200px; }
+.api-input-max-250 { max-width: 250px; }
+
+/* Trigger logs - truncar correo y mensajes error (CSP, sin inline) */
+.log-email-truncate {
+  display: inline-block;
+  max-width: 90%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: bottom;
+}
+
+.log-error-text {
+  color: #dc3545;
+}
+
 /* Estilos específicos para inputs en edit_imap2.html */
 .imap2-edit-form {
   padding: 0 0.5rem;

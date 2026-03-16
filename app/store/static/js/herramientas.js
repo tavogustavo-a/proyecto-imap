@@ -238,7 +238,7 @@ document.addEventListener('DOMContentLoaded', function() {
         if(data.success) {
           row.remove();
           if(htmlTableBody.querySelectorAll('tr').length === 0) {
-            htmlTableBody.innerHTML = '<tr><td colspan="3" style="text-align:center;">No hay HTML añadido aún.</td></tr>';
+            htmlTableBody.innerHTML = '<tr><td colspan="3" class="text-center">No hay HTML añadido aún.</td></tr>';
           }
         } else {
           alert(data.error || 'Error al eliminar el HTML.');

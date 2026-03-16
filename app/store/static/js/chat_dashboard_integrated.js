@@ -117,7 +117,7 @@ async function loadUsersList(response = null) {
             existingUsers.forEach(userItem => {
                 const userId = userItem.getAttribute('data-user-id');
                 const typingIndicator = userItem.querySelector('.user-typing-indicator');
-                if (typingIndicator && typingIndicator.style.display === 'flex') {
+                if (typingIndicator && typingIndicator.classList.contains('user-list-typing-visible')) {
                     typingStates[userId] = true;
                 }
             });
@@ -153,7 +153,7 @@ async function loadUsersList(response = null) {
                         <div class="user-info">
                             <div class="user-name">${user.username}</div>
                             <div class="user-last-message">${user.last_message || 'Sin mensajes'}</div>
-                <div class="user-typing-indicator" style="display: none;">
+                <div class="user-typing-indicator d-none">
                     <span class="typing-text">escribiendo</span>
                 </div>
                         </div>
@@ -1617,7 +1617,7 @@ function setupEventListeners() {
     if (chatInputForm) {
         // ✅ NUEVO: Prevenir envío tradicional del formulario
         chatInputForm.setAttribute('novalidate', 'true');
-        chatInputForm.setAttribute('action', 'javascript:void(0);');
+        chatInputForm.setAttribute('action', '#');
         chatInputForm.setAttribute('method', 'post');
         
         chatInputForm.addEventListener('submit', function(e) {
@@ -2802,20 +2802,7 @@ async function checkFileExists(fileUrl) {
 // ✅ NUEVA FUNCIÓN: Mostrar mensaje de error
 function showErrorMessage(message) {
     const errorDiv = document.createElement('div');
-    errorDiv.className = 'error-message';
-    errorDiv.style.cssText = `
-        position: fixed;
-        top: 20px;
-        right: 20px;
-        background: #e74c3c;
-        color: white;
-        padding: 15px 20px;
-        border-radius: 8px;
-        box-shadow: 0 4px 12px rgba(231, 76, 60, 0.3);
-        z-index: 10000;
-        max-width: 300px;
-        word-wrap: break-word;
-    `;
+    errorDiv.className = 'error-message dashboard-toast';
     errorDiv.textContent = message;
     
     document.body.appendChild(errorDiv);
@@ -2957,20 +2944,7 @@ function checkForRealChatProblems() {
 // ✅ NUEVA FUNCIÓN: Mostrar mensaje de éxito
 function showSuccessMessage(message) {
     const successDiv = document.createElement('div');
-    successDiv.className = 'success-message';
-    successDiv.style.cssText = `
-        position: fixed;
-        top: 20px;
-        right: 20px;
-        background: #27ae60;
-        color: white;
-        padding: 15px 20px;
-        border-radius: 8px;
-        box-shadow: 0 4px 12px rgba(39, 174, 96, 0.3);
-        z-index: 10000;
-        max-width: 300px;
-        word-wrap: break-word;
-    `;
+    successDiv.className = 'success-message dashboard-toast';
     successDiv.textContent = message;
     
     document.body.appendChild(successDiv);
@@ -2986,20 +2960,7 @@ function showSuccessMessage(message) {
 // ✅ NUEVA FUNCIÓN: Mostrar mensaje informativo
 function showInfoMessage(message) {
     const infoDiv = document.createElement('div');
-    infoDiv.className = 'info-message';
-    infoDiv.style.cssText = `
-        position: fixed;
-        top: 20px;
-        right: 20px;
-        background: #3498db;
-        color: white;
-        padding: 15px 20px;
-        border-radius: 8px;
-        box-shadow: 0 4px 12px rgba(52, 152, 219, 0.3);
-        z-index: 10000;
-        max-width: 300px;
-        word-wrap: break-word;
-    `;
+    infoDiv.className = 'info-message dashboard-toast';
     infoDiv.textContent = message;
     
     document.body.appendChild(infoDiv);
@@ -4645,47 +4606,8 @@ function showUserListTypingIndicator(userId) {
     
     const typingIndicator = userItem.querySelector('.user-typing-indicator');
     if (typingIndicator) {
-        // Aplicar estilos para posicionar correctamente el indicador en la lista de chats
-        typingIndicator.style.cssText = `
-            display: flex;
-            visibility: visible;
-            opacity: 1;
-            color: #FFFFFF;
-            font-size: 9px;
-            font-style: italic;
-            font-weight: bold;
-            margin-top: 2px;
-            margin-left: 8px;
-            align-items: center;
-            gap: 2px;
-            max-width: 100%;
-            overflow: hidden;
-            position: static;
-            z-index: 1;
-            height: auto;
-            min-height: 10px;
-            background: #2196F3;
-            border: 1px solid #2196F3;
-            border-radius: 3px;
-            padding: 1px 4px;
-            box-shadow: 0 1px 3px rgba(33, 150, 243, 0.5);
-            text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.8);
-        `;
-        
-        // Asegurar que el texto interno también sea visible
-        const typingText = typingIndicator.querySelector('.typing-text');
-        if (typingText) {
-            typingText.style.cssText = `
-                font-size: 8px;
-                color: #FFFFFF;
-                white-space: nowrap;
-                display: inline;
-                visibility: visible;
-                opacity: 1;
-                font-weight: bold;
-                text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.8);
-            `;
-        }
+        typingIndicator.classList.remove('d-none');
+        typingIndicator.classList.add('user-list-typing-visible');
     }
 }
 
@@ -4710,7 +4632,8 @@ function hideUserListTypingIndicator(userId) {
     if (userItem) {
         const typingIndicator = userItem.querySelector('.user-typing-indicator');
         if (typingIndicator) {
-            typingIndicator.style.display = 'none';
+            typingIndicator.classList.add('d-none');
+            typingIndicator.classList.remove('user-list-typing-visible');
         }
     }
 }
@@ -4887,66 +4810,15 @@ function showBrowserNotification(senderName, message) {
 
 // ✅ NUEVO: Función para mostrar notificación alternativa en la página
 function showInPageNotification(senderName, message) {
-    // Crear notificación en la página
     const notification = document.createElement('div');
-    notification.className = 'in-page-notification';
-    
-    // ✅ NUEVO: Estilos adaptativos para móviles
     const isMobile = isMobileDevice();
-    const notificationStyle = isMobile ? `
-        position: fixed;
-        top: 10px;
-        left: 10px;
-        right: 10px;
-        background: #4CAF50;
-        color: white;
-        padding: 20px;
-        border-radius: 12px;
-        box-shadow: 0 8px 24px rgba(0,0,0,0.4);
-        z-index: 10000;
-        font-family: Arial, sans-serif;
-        font-size: 16px;
-        cursor: pointer;
-        animation: slideInMobile 0.4s ease-out;
-        border: 2px solid #45a049;
-    ` : `
-        position: fixed;
-        top: 20px;
-        right: 20px;
-        background: #4CAF50;
-        color: white;
-        padding: 15px 20px;
-        border-radius: 8px;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-        z-index: 10000;
-        max-width: 300px;
-        font-family: Arial, sans-serif;
-        font-size: 14px;
-        cursor: pointer;
-        animation: slideIn 0.3s ease-out;
-    `;
-    
-    notification.style.cssText = notificationStyle;
+    notification.className = `in-page-notification push-notification ${isMobile ? 'push-notification-mobile' : 'push-notification-desktop'}`;
     
     notification.innerHTML = `
-        <div style="font-weight: bold; margin-bottom: 8px; font-size: ${isMobile ? '18px' : '16px'};">📱 Nuevo mensaje de ${senderName}</div>
-        <div style="opacity: 0.9; font-size: ${isMobile ? '16px' : '14px'};">${message.length > 50 ? message.substring(0, 50) + "..." : message}</div>
-        ${isMobile ? '<div style="margin-top: 10px; font-size: 12px; opacity: 0.7;">Toca para cerrar</div>' : ''}
+        <div class="push-notification-title">📱 Nuevo mensaje de ${senderName}</div>
+        <div class="push-notification-body">${message.length > 50 ? message.substring(0, 50) + "..." : message}</div>
+        ${isMobile ? '<div class="push-notification-hint">Toca para cerrar</div>' : ''}
     `;
-    
-    // Agregar estilos de animación
-    const style = document.createElement('style');
-    style.textContent = `
-        @keyframes slideIn {
-            from { transform: translateX(100%); opacity: 0; }
-            to { transform: translateX(0); opacity: 1; }
-        }
-        @keyframes slideInMobile {
-            from { transform: translateY(-100%); opacity: 0; }
-            to { transform: translateY(0); opacity: 1; }
-        }
-    `;
-    document.head.appendChild(style);
     
     document.body.appendChild(notification);
     
@@ -4959,8 +4831,7 @@ function showInPageNotification(senderName, message) {
     const timeout = isMobile ? 7000 : 5000;
     setTimeout(() => {
         if (notification && notification.parentNode) {
-            const animation = isMobile ? 'slideInMobile 0.4s ease-out reverse' : 'slideIn 0.3s ease-out reverse';
-            notification.style.animation = animation;
+            notification.classList.add('push-notification-closing');
             setTimeout(() => {
                 notification.remove();
             }, 400);

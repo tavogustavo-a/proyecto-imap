@@ -149,7 +149,6 @@ document.addEventListener('DOMContentLoaded', function() {
       if (producto.descuento_aplicado && (producto.descuento_cop > 0 || producto.descuento_usd > 0)) {
         const descuentoDiv = document.createElement('div');
         descuentoDiv.className = 'carrito-descuento-individual';
-        descuentoDiv.style.cssText = 'font-size: 0.8rem; color: #28a745; font-weight: 600; margin-top: 0.5rem; text-align: center; background: rgba(40, 167, 69, 0.1); padding: 0.3rem 0.5rem; border-radius: 6px; border: 1px solid rgba(40, 167, 69, 0.3);';
         
         let descuentoTexto = '';
         if (producto.descuento_cop > 0) {
@@ -169,11 +168,6 @@ document.addEventListener('DOMContentLoaded', function() {
     // Insertar campo de cupón antes del total
     const cuponDiv = document.createElement('div');
     cuponDiv.className = 'carrito-cupon-dinamico mt-2';
-    cuponDiv.style.background = '#f8f9fa';
-    cuponDiv.style.padding = '12px 16px';
-    cuponDiv.style.borderRadius = '8px';
-    cuponDiv.style.border = '1px solid #dee2e6';
-    cuponDiv.style.marginBottom = '16px';
     
     // Determinar si hay cupón aplicado
     const tieneCupon = cuponAplicado !== null;
@@ -187,7 +181,7 @@ document.addEventListener('DOMContentLoaded', function() {
         <input type="text" id="cuponInputCarritoDinamico" class="cupon-input-carrito" placeholder="Código cupón" autocomplete="off" value="${inputValue}" ${inputDisabled}>
         <button type="button" id="btnAplicarCuponCarritoDinamico" class="${botonClase}">${botonTexto}</button>
       </div>
-      <div id="cuponInfoCarritoDinamico" class="cupon-info-carrito mt-1" style="display: ${tieneCupon ? 'block' : 'none'};">
+      <div id="cuponInfoCarritoDinamico" class="cupon-info-carrito mt-1 ${tieneCupon ? '' : 'd-none'}">
         <span class="cupon-aplicado-carrito">Cupón aplicado: ${tieneCupon ? cuponAplicado.nombre : ''} - $${tieneCupon ? descuentoCupon : 0} ${tieneCupon ? (cuponAplicado.descuento_cop ? 'COP' : 'USD') : ''}</span>
       </div>
     `;
@@ -196,24 +190,19 @@ document.addEventListener('DOMContentLoaded', function() {
     // Insertar sección de saldo disponible después del cupón
     const saldoDiv = document.createElement('div');
     saldoDiv.className = 'carrito-saldo-dinamico mt-2';
-    saldoDiv.style.background = '#f8f9fa';
-    saldoDiv.style.padding = '12px 16px';
-    saldoDiv.style.borderRadius = '8px';
-    saldoDiv.style.border = '1px solid #dee2e6';
-    saldoDiv.style.marginBottom = '16px';
     
     let saldoHtml = '<div class="saldo-info-carrito">';
-    saldoHtml += '<span class="saldo-label-carrito" style="font-weight: 600; color: #2c3e50;">Saldo disponible:</span>';
-    saldoHtml += '<div class="saldo-amounts-carrito" style="margin-top: 0.5rem;">';
+    saldoHtml += '<span class="saldo-label-carrito">Saldo disponible:</span>';
+    saldoHtml += '<div class="saldo-amounts-carrito">';
     
     if (SALDO_COP && SALDO_COP > 0) {
-      saldoHtml += `<span class="saldo-cop-carrito" style="color: #28a745; font-weight: 600;">$${SALDO_COP.toLocaleString()} COP</span>`;
+      saldoHtml += `<span class="saldo-cop-carrito">$${SALDO_COP.toLocaleString()} COP</span>`;
     }
     if (SALDO_USD && SALDO_USD > 0) {
       if (SALDO_COP && SALDO_COP > 0) {
-        saldoHtml += '<span class="saldo-separator-carrito" style="margin: 0 0.5rem; color: #6c757d;">|</span>';
+        saldoHtml += '<span class="saldo-separator-carrito">|</span>';
       }
-      saldoHtml += `<span class="saldo-usd-carrito" style="color: #28a745; font-weight: 600;">$${SALDO_USD.toLocaleString()} USD</span>`;
+      saldoHtml += `<span class="saldo-usd-carrito">$${SALDO_USD.toLocaleString()} USD</span>`;
     }
     
     saldoHtml += '</div></div>';
@@ -254,16 +243,14 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     const totalDiv = document.createElement('div');
-    totalDiv.style = 'margin-top:1.2em; text-align:center; font-weight:bold; color:#1976d2; font-size:1.13em;';
+    totalDiv.className = 'carrito-total-div';
     totalDiv.innerHTML = `Total: $${Math.max(0, total)}`;
     lista.appendChild(totalDiv);
     // Botón procesar pago
     const btnPago = document.createElement('button');
     btnPago.id = 'btnProcesarPagoCarrito';
-    btnPago.className = 'btn-panel btn-green mt-2';
+    btnPago.className = 'btn-panel btn-green mt-2 carrito-btn-pago';
     btnPago.textContent = 'Procesar pago';
-    btnPago.style.margin = '16px auto 0 auto';
-    btnPago.style.display = 'block';
     lista.appendChild(btnPago);
     // Fin
     const saldoDataDiv = document.getElementById('userSaldoData');
@@ -271,9 +258,7 @@ document.addEventListener('DOMContentLoaded', function() {
     let saldoUsd = saldoDataDiv ? parseInt(saldoDataDiv.getAttribute('data-saldo-usd')) : 0;
     if (saldoCop || saldoUsd) {
       const saldoDiv = document.createElement('div');
-      saldoDiv.className = 'user-saldo-info mt-2';
-      saldoDiv.style.textAlign = 'center';
-      saldoDiv.style.fontWeight = 'bold';
+      saldoDiv.className = 'user-saldo-info mt-2 user-saldo-info-center';
       let saldoHtml = 'Saldo: ';
       if (saldoCop) {
         saldoHtml += `<span class="user-saldo-cop">$${saldoCop} COP</span>`;
@@ -587,7 +572,6 @@ document.addEventListener('DOMContentLoaded', function() {
       if (producto.descuento_aplicado && (producto.descuento_cop > 0 || producto.descuento_usd > 0)) {
         const descuentoDiv = document.createElement('div');
         descuentoDiv.className = 'resumen-descuento-individual';
-        descuentoDiv.style.cssText = 'font-size: 0.7rem; color: #28a745; font-weight: 600; margin-bottom: 0.2rem; text-align: center; background: rgba(40, 167, 69, 0.1); padding: 0.15rem 0.3rem; border-radius: 3px; border: 1px solid rgba(40, 167, 69, 0.3);';
         
         let descuentoTexto = '';
         if (producto.descuento_cop > 0) {
@@ -903,7 +887,7 @@ document.addEventListener('DOMContentLoaded', function() {
         cuponAplicadoCarritoDinamico.textContent = `Cupón aplicado: ${cuponAplicado.nombre} - ${descuentoTextCarrito}`;
       }
       
-      cuponInfoCarritoDinamico.style.display = 'flex';
+      cuponInfoCarritoDinamico.classList.remove('d-none');
       if (btnAplicarCarritoDinamico) btnAplicarCarritoDinamico.style.display = 'none';
       if (btnQuitarCarritoDinamico) btnQuitarCarritoDinamico.style.display = 'inline-block';
       if (cuponInputCarritoDinamico) {
@@ -931,7 +915,7 @@ document.addEventListener('DOMContentLoaded', function() {
       const btnQuitarCarritoDinamico = document.getElementById('btnQuitarCuponCarritoDinamico');
       const cuponInputCarritoDinamico = document.getElementById('cuponInputCarritoDinamico');
 
-      cuponInfoCarritoDinamico.style.display = 'none';
+      cuponInfoCarritoDinamico.classList.add('d-none');
       if (btnAplicarCarritoDinamico) btnAplicarCarritoDinamico.style.display = 'inline-block';
       if (btnQuitarCarritoDinamico) btnQuitarCarritoDinamico.style.display = 'none';
       if (cuponInputCarritoDinamico) cuponInputCarritoDinamico.disabled = false;

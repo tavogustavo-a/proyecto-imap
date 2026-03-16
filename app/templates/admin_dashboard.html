@@ -30,6 +30,8 @@
     <a href="{{ url_for('admin_bp.view_trigger_logs_page') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-clipboard-list"></i> Consultar logs</a>
     <a href="{{ url_for('store_bp.admin_sms') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-sms"></i> Consulta SMS</a>
     <a href="{{ url_for('admin_bp.manage_permissions_page') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-key"></i> Gestión de Permisos</a>
+    <a href="{{ url_for('store_bp.admin_work_sheets') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-table"></i> Hojas de Cálculo</a>
+    <a href="{{ url_for('store_bp.admin_support') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-headset"></i> Chat Soporte</a>
     <button id="btnClearTriggerLogMenu" type="button" class="btn-panel btn-red mobile-menu-btn mb-04"><i class="fas fa-trash"></i> Limpiar Logs</button>
     <a href="{{ url_for('auth_bp.logout') }}" class="btn-panel btn-red mobile-menu-btn mb-04"><i class="fas fa-sign-out-alt"></i> Cerrar Sesión</a>
     <button id="btnLogoutAllAndClearCookies" type="button" class="btn-panel btn-red mobile-menu-btn mb-04"><i class="fas fa-cookie-bite"></i> Cerrar sesión y limpiar cookies</button>
@@ -45,18 +47,7 @@
     <a href="{{ url_for('store_bp.admin_productos') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-box"></i> Productos</a>
     <a href="{{ url_for('store_bp.admin_productos') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-ticket-alt"></i> Cupones</a>
     <a href="{{ url_for('store_bp.admin_tools') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-tools"></i> Herramientas Admin</a>
-    <a href="{{ url_for('store_bp.admin_work_sheets') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-table"></i> Hojas de Cálculo</a>
     <a href="{{ url_for('store_bp.admin_configurations') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-cog"></i> Configuraciones</a>
-          <a href="{{ url_for('store_bp.admin_support') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-headset"></i> Chat Soporte</a>
-    <a href="{{ url_for('auth_bp.logout') }}" class="btn-panel btn-red mobile-menu-btn mb-04"><i class="fas fa-sign-out-alt"></i> Cerrar Sesión</a>
-  </div>
-
-  <!-- MENÚ3 LATERAL MÓVIL -->
-  <div id="mobileMenu3" class="mobile-menu-store hidden">
-    <div class="menu-title-row">
-      <i class="fas fa-bars"></i>
-      <h3>Menú3</h3>
-    </div>
     <a href="{{ url_for('store_bp.store_front') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-store"></i> Tienda Pública</a>
     <a href="{{ url_for('store_bp.tools_public') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-tools"></i> Herramientas Pública</a>
     <a href="{{ url_for('store_bp.historial_compras_usuario') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-history"></i> Mi Historial de Compras</a>
@@ -69,7 +60,6 @@
       <div class="d-flex gap-05">
         <button id="menuToggleBtn" class="btn-panel btn-blue ml-2 menu-toggle-btn">&#9776; Menú</button>
         <button id="menu2ToggleBtn" class="btn-panel btn-blue menu-toggle-btn">&#9776; Menú2</button>
-        <button id="menu3ToggleBtn" class="btn-panel btn-blue menu-toggle-btn">&#9776; Menú3</button>
       </div>
     </div>
 
@@ -599,9 +589,9 @@
   </div>
 
   <div class="d-flex gap-05 align-items-center justify-content-center flex-wrap">
-    <input type="text" id="newGlobalApiName" class="flex-grow-1 api-input text-center" placeholder="Nombre del Proyecto" style="max-width: 200px;" autocomplete="off">
-    <input type="text" id="newGlobalApiUrl" class="flex-grow-1 api-input text-center" placeholder="URL de la API" style="max-width: 250px;" autocomplete="off">
-    <input type="text" id="newGlobalApiToken" class="flex-grow-1 api-input text-center" placeholder="Token de Acceso" style="max-width: 250px;" autocomplete="off">
+    <input type="text" id="newGlobalApiName" class="flex-grow-1 api-input api-input-max-200 text-center" placeholder="Nombre del Proyecto" autocomplete="off">
+    <input type="text" id="newGlobalApiUrl" class="flex-grow-1 api-input api-input-max-250 text-center" placeholder="URL de la API" autocomplete="off">
+    <input type="text" id="newGlobalApiToken" class="flex-grow-1 api-input api-input-max-250 text-center" placeholder="Token de Acceso" autocomplete="off">
     <button type="button" id="addGlobalApiBtn" class="btn-blue" title="Agregar API Global">
       <i class="fas fa-plus"></i>
     </button>

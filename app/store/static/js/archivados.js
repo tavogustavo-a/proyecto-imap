@@ -91,8 +91,8 @@ function renderArchivedLicensesGrid() {
 
     if (archivedLicenses.length === 0) {
         grid.innerHTML = `
-            <div style="grid-column: 1 / -1; text-align: center; padding: 3rem; color: rgba(255,255,255,0.7);">
-                <i class="fas fa-archive" style="font-size: 3rem; margin-bottom: 1rem; color: #f39c12;"></i>
+            <div class="archived-empty-state">
+                <i class="fas fa-archive archived-empty-state-icon"></i>
                 <h3>No hay licencias archivadas</h3>
                 <p>Las licencias archivadas aparecerán aquí</p>
             </div>
@@ -138,9 +138,9 @@ function filterArchivedLicenses() {
     cards.forEach(card => {
         const licenseName = card.querySelector('.license-name .full-text').textContent.toLowerCase();
         if (licenseName.includes(searchTerm)) {
-            card.style.display = 'flex';
+            card.classList.remove('hidden-by-search');
         } else {
-            card.style.display = 'none';
+            card.classList.add('hidden-by-search');
         }
     });
 }

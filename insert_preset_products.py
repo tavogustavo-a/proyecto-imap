@@ -1,6 +1,6 @@
 from app import create_app
 from app.extensions import db
-from app.store.models import Product
+from app.store.models import Product, License
 
 PRESET_PRODUCTS = [
     # (id, image, name, price_cop, price_usd)
@@ -37,11 +37,14 @@ def main():
     with app.app_context():
         for prod in PRESET_PRODUCTS:
             prod_id, image, name, price_cop, price_usd = prod
+            # Eliminar licencias que referencian este producto ANTES de borrar el producto
+            # (evita IntegrityError: NOT NULL constraint failed en store_licenses.product_id)
+            License.query.filter_by(product_id=prod_id).delete()
             # Eliminar si existe un producto con ese ID
             existing = Product.query.get(prod_id)
             if existing:
                 db.session.delete(existing)
-                db.session.commit()
+            db.session.commit()  # Aplicar borrado de licencias y producto en cada iteración
             # Insertar solo si no existe uno con ese nombre
             if not Product.query.filter_by(name=name).first():
                 p = Product(id=prod_id, name=name, price_cop=price_cop, price_usd=price_usd, image_filename=image, enabled=True, is_preset=True)

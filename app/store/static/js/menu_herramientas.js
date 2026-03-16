@@ -195,14 +195,11 @@ function initMenuTienda() {
   var mobileMenu = document.getElementById('mobileMenu');
   var menu2Btn = document.getElementById('menu2ToggleBtn');
   var mobileMenu2 = document.getElementById('mobileMenu2');
-  var menu3Btn = document.getElementById('menu3ToggleBtn');
-  var mobileMenu3 = document.getElementById('mobileMenu3');
   var menuOverlay = document.getElementById('menuOverlay');
 
   function closeAllMenus() {
     if (mobileMenu) mobileMenu.classList.add('hidden');
     if (mobileMenu2) mobileMenu2.classList.add('hidden');
-    if (mobileMenu3) mobileMenu3.classList.add('hidden');
     if (menuOverlay) menuOverlay.classList.remove('active');
   }
 
@@ -222,14 +219,6 @@ function initMenuTienda() {
     });
   }
 
-  if (menu3Btn && mobileMenu3) {
-    menu3Btn.addEventListener('click', function() {
-      closeAllMenus();
-      mobileMenu3.classList.toggle('hidden');
-      if (menuOverlay) menuOverlay.classList.toggle('active');
-    });
-  }
-
   if (menuOverlay) {
     menuOverlay.addEventListener('click', function() {
       closeAllMenus();
@@ -238,8 +227,8 @@ function initMenuTienda() {
 
   // Event listeners optimizados para mejor rendimiento
   document.addEventListener('mousedown', function(e) {
-    if (!menuBtn?.contains(e.target) && !menu2Btn?.contains(e.target) && !menu3Btn?.contains(e.target) &&
-        !mobileMenu?.contains(e.target) && !mobileMenu2?.contains(e.target) && !mobileMenu3?.contains(e.target)) {
+    if (!menuBtn?.contains(e.target) && !menu2Btn?.contains(e.target) &&
+        !mobileMenu?.contains(e.target) && !mobileMenu2?.contains(e.target)) {
       closeAllMenus();
     }
   }, { passive: true });
@@ -252,8 +241,8 @@ function initMenuTienda() {
 
   // Event listeners para touchstart (móviles) - pasivos para mejor rendimiento
   document.addEventListener('touchstart', function(e) {
-    if (!menuBtn?.contains(e.target) && !menu2Btn?.contains(e.target) && !menu3Btn?.contains(e.target) &&
-        !mobileMenu?.contains(e.target) && !mobileMenu2?.contains(e.target) && !mobileMenu3?.contains(e.target)) {
+    if (!menuBtn?.contains(e.target) && !menu2Btn?.contains(e.target) &&
+        !mobileMenu?.contains(e.target) && !mobileMenu2?.contains(e.target)) {
       closeAllMenus();
     }
   }, { passive: true });
@@ -551,20 +540,19 @@ function initMediaSearch() {
         results.forEach(result => {
             const poster = result.poster_path || null;
             const posterHtml = poster 
-                ? `<img src="${poster}" alt="Poster" class="media-poster" style="width: 150px; height: 225px; object-fit: cover; border-radius: 8px;" data-action-error="hide-on-error">`
-                : '<div class="no-image-placeholder" style="width: 150px; height: 225px; background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 8px; display: flex; align-items: center; justify-content: center; text-align: center; font-size: 12px; color: #6c757d;">No se encontró imagen para este resultado</div>';
+                ? `<img src="${poster}" alt="Poster" class="media-poster" data-action-error="hide-on-error">`
+                : '<div class="no-image-placeholder">No se encontró imagen para este resultado</div>';
             
-            // Restaurar estado del botón
             const providersHtml = result.providers && result.providers.length > 0
-                ? `<div class="providers-list" style="display: flex; flex-wrap: wrap; gap: 4px; align-items: flex-end; margin-top: 6px;">
+                ? `<div class="providers-list">
                     ${result.providers.map(provider => {
                     if (provider.logo_path) {
-                            return `<div style="display: flex; flex-direction: column; align-items: center; width: 40px;">
-                                <img src="${provider.logo_path}" alt="${provider.name}" title="${provider.name}" style="height:16px; max-width:35px; object-fit:contain; background:#fff; border-radius:2px; border:1px solid #eee; margin-bottom:1px;">
-                                <small style="font-size:8px; color:#444; text-align:center; line-height:1.1;">${provider.name}</small>
+                            return `<div class="provider-item-inline">
+                                <img src="${provider.logo_path}" alt="${provider.name}" title="${provider.name}">
+                                <small>${provider.name}</small>
                             </div>`;
                     } else {
-                        return `<span class="provider-badge" style="display:inline-block; margin-right:3px; vertical-align:middle; background:#f1f1f1; border-radius:2px; padding:1px 3px; font-size:9px; color:#333;">${provider.name}</span>`;
+                        return `<span class="provider-badge">${provider.name}</span>`;
                     }
                     }).join('')}
                 </div>`
@@ -573,13 +561,13 @@ function initMediaSearch() {
             const sourceBadge = result.source ? `<span class="badge bg-secondary ms-2">${result.source}</span>` : '';
 
             html += `
-                <div class="media-result-card" style="display: flex; gap: 15px; margin-bottom: 20px; padding: 15px; border: 1px solid #dee2e6; border-radius: 8px; background: white;">
+                <div class="media-result-card">
                     <div class="media-poster-container">
                         ${posterHtml}
                     </div>
-                    <div class="media-info" style="flex: 1;">
-                        <h5 class="media-title" style="margin-bottom: 10px;">${result.title}${sourceBadge}</h5>
-                        <p class="media-overview" style="margin-bottom: 15px; color: #6c757d;">${result.overview || 'Sin descripción disponible'}</p>
+                    <div class="media-info">
+                        <h5 class="media-title">${result.title}${sourceBadge}</h5>
+                        <p class="media-overview">${result.overview || 'Sin descripción disponible'}</p>
                         <div class="media-providers">
                             <strong>Proveedores:</strong> ${providersHtml}
                         </div>
@@ -632,7 +620,7 @@ function initClimaForm() {
                 resultado.innerHTML = `
                     <div class='alert alert-info'>
                         <div class="d-flex align-items-center mb-3">
-                            <img src="${iconUrl}" alt="Clima" style="width: 50px; height: 50px;">
+                            <img src="${iconUrl}" alt="Clima" class="clima-icon-img">
                             <div class="ms-3">
                                 <h5 class="mb-1">${weather.city}, ${weather.country}</h5>
                                 <p class="mb-0 text-capitalize">${weather.description}</p>
@@ -740,7 +728,7 @@ function initMonedaForm() {
                 resultado.innerHTML = `
                     <div class='alert alert-success'>
                         <div class="d-flex align-items-center mb-3">
-                            <i class="fas fa-exchange-alt text-success me-2" style="font-size: 1.5rem;"></i>
+                            <i class="fas fa-exchange-alt text-success me-2 tool-icon-lg"></i>
                             <h5 class="mb-0">Conversión de Moneda</h5>
                         </div>
                         <div class="card border-success bg-light">
@@ -753,7 +741,7 @@ function initMonedaForm() {
                                         <div class="badge bg-primary">${currency.from_currency}</div>
                                     </div>
                                     <div class="col-md-4 d-flex align-items-center justify-content-center">
-                                        <i class="fas fa-arrow-right text-success" style="font-size: 1.5rem;"></i>
+                                        <i class="fas fa-arrow-right text-success tool-icon-lg"></i>
                                     </div>
                                     <div class="col-md-4">
                                         <div class="mb-2">
@@ -837,7 +825,7 @@ function initTraduccionForm() {
                 resultado.innerHTML = `
                     <div class='alert alert-info'>
                         <div class="d-flex align-items-center mb-3">
-                            <i class="fas fa-language text-info me-2" style="font-size: 1.5rem;"></i>
+                            <i class="fas fa-language text-info me-2 tool-icon-lg"></i>
                             <h5 class="mb-0">Traducción Completada</h5>
                         </div>
                         <div class="card border-info bg-light">
@@ -926,7 +914,7 @@ function initGeolocalizacionForm() {
                 resultado.innerHTML = `
                     <div class='alert alert-success'>
                         <div class="d-flex align-items-center mb-3">
-                            <i class="fas fa-map-marker-alt text-danger me-2" style="font-size: 1.5rem;"></i>
+                            <i class="fas fa-map-marker-alt text-danger me-2 tool-icon-lg"></i>
                             <h5 class="mb-0">¡Ubicación encontrada! 🎯</h5>
                         </div>
                         <div class="card border-success bg-light">
@@ -1043,7 +1031,7 @@ function initNoticiasForm() {
                         <div class="row g-0">
                             ${article.image_url ? `
                                 <div class="col-md-3">
-                                    <img src="${article.image_url}" class="img-fluid rounded-start h-100" style="object-fit: cover;" alt="Imagen de noticia" data-action-error="hide-on-error">
+                                    <img src="${article.image_url}" class="img-fluid rounded-start h-100 img-object-cover" alt="Imagen de noticia" data-action-error="hide-on-error">
                                 </div>
                             ` : ''}
                             <div class="col-md-${article.image_url ? '9' : '12'}">
@@ -1071,7 +1059,7 @@ function initNoticiasForm() {
                 resultado.innerHTML = `
                     <div class='alert alert-info'>
                         <div class="d-flex align-items-center mb-3">
-                            <i class="fas fa-newspaper text-primary me-2" style="font-size: 1.5rem;"></i>
+                            <i class="fas fa-newspaper text-primary me-2 tool-icon-lg"></i>
                             <h5 class="mb-0">📰 Noticias de ${categoria.options[categoria.selectedIndex].text}</h5>
                         </div>
                         <div class="mb-2">
@@ -1144,7 +1132,7 @@ function initCorreoForm() {
                 resultado.innerHTML = `
                     <div class='alert alert-success'>
                         <div class="d-flex align-items-center mb-3">
-                            <i class="fas fa-paper-plane text-success me-2" style="font-size: 1.5rem;"></i>
+                            <i class="fas fa-paper-plane text-success me-2 tool-icon-lg"></i>
                             <h5 class="mb-0">✉️ ¡Mensaje enviado con éxito!</h5>
                         </div>
                         <div class="card border-success bg-light">
@@ -1258,7 +1246,7 @@ function initRedesSocialesForm() {
                 
                 resultado.innerHTML = `                    <div class='alert alert-primary'>
                         <div class="d-flex align-items-center mb-3">
-                            <i class="fas fa-share-alt text-primary me-2" style="font-size: 1.5rem;"></i>
+                            <i class="fas fa-share-alt text-primary me-2 tool-icon-lg"></i>
                             <h5 class="mb-0">${icono} ¡Publicado en ${plat}!</h5>
                         </div>
                         <div class="card border-primary bg-light">
@@ -1364,7 +1352,7 @@ function initReconocimientoImagenesForm() {
                 
                 resultado.innerHTML = `                    <div class='alert alert-warning'>
                         <div class="d-flex align-items-center mb-3">
-                            <i class="fas fa-eye text-warning me-2" style="font-size: 1.5rem;"></i>
+                            <i class="fas fa-eye text-warning me-2 tool-icon-lg"></i>
                             <h5 class="mb-0">🔍 ¡Análisis de imagen completado!</h5>
                         </div>
                         <div class="card border-warning bg-light">
@@ -1374,7 +1362,7 @@ function initReconocimientoImagenesForm() {
                                         <h6 class="text-warning">
                                             <i class="fas fa-image"></i> Vista Previa
                                         </h6>
-                                        <img src="${analysis.image_url}" alt="Imagen analizada" class="img-fluid rounded" style="max-height: 200px; object-fit: cover;" data-action-error="hide-on-error">
+                                        <img src="${analysis.image_url}" alt="Imagen analizada" class="img-fluid rounded img-analysis" data-action-error="hide-on-error">
                                     </div>
                                     <div class="col-md-6">
                                         <h6 class="text-info">
@@ -1481,7 +1469,7 @@ function initChatbotIAForm() {
                 
                 resultado.innerHTML = `                    <div class='alert alert-info'>
                         <div class="d-flex align-items-center mb-3">
-                            <i class="fas fa-robot text-info me-2" style="font-size: 1.5rem;"></i>
+                            <i class="fas fa-robot text-info me-2 tool-icon-lg"></i>
                             <h5 class="mb-0">🤖 Respuesta de la IA</h5>
                         </div>
                         <div class="card border-info bg-light">
@@ -1655,7 +1643,7 @@ function initHttpApiForm() {
                             <pre class="bg-light p-2 small border rounded">${Object.entries(res.headers).map(([k,v]) => k+': '+v).join('\n')}</pre>
                         </div>
                         <div><strong>Body:</strong>
-                            <pre class="bg-dark text-light p-2 rounded small" style="max-height:300px;overflow:auto;">${res.body ? res.body.replace(/</g, '&lt;').replace(/>/g, '&gt;') : ''}</pre>
+                            <pre class="bg-dark text-light p-2 rounded small pre-scrollable">${res.body ? res.body.replace(/</g, '&lt;').replace(/>/g, '&gt;') : ''}</pre>
                         </div>
                     </div>`;
             } catch (error) {

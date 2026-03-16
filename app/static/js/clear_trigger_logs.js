@@ -40,6 +40,9 @@ document.addEventListener('DOMContentLoaded', function() {
             } else {
               alert('Logs de activadores limpiados correctamente. No había registros para eliminar.');
             }
+            if (window.location.pathname.includes('view_trigger_logs')) {
+              window.location.reload();
+            }
           } else {
             alert('Error al limpiar logs: ' + (data.message || 'Error desconocido'));
           }

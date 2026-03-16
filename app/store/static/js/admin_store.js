@@ -222,7 +222,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!tbody) return;
         tbody.innerHTML = '';
         if (!coupons.length) {
-            tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;">No hay cupones aún.</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="7" class="text-center">No hay cupones aún.</td></tr>';
             return;
         }
         for (const c of coupons) {

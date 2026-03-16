@@ -378,6 +378,38 @@ html, body {
   background: linear-gradient(176deg, #fe0c0c, #b40c0c) !important;
 }
 
+/* Cupón y saldo carrito (CSP, sin inline) */
+.carrito-cupon-dinamico {
+  background: #f8f9fa !important;
+  padding: 12px 16px !important;
+  border-radius: 8px !important;
+  border: 1px solid #dee2e6 !important;
+  margin-bottom: 16px !important;
+}
+
+.carrito-total-div {
+  margin-top: 1.2em;
+  text-align: center;
+  font-weight: bold;
+  color: #1976d2;
+  font-size: 1.13em;
+}
+
+.carrito-btn-pago {
+  margin: 16px auto 0 auto;
+  display: block;
+}
+
+.user-saldo-info-center {
+  text-align: center;
+  font-weight: bold;
+}
+
+.saldo-separator-carrito {
+  margin: 0 0.5rem;
+  color: #6c757d;
+}
+
 /* Estilos para la sección de saldo en el modal del carrito */
 .carrito-saldo-dinamico {
   background: #f8f9fa !important;
@@ -3218,18 +3250,106 @@ html, body {
   
   .media-result-card {
       display: flex;
-      gap: 1rem;
-      padding: 1rem;
+      gap: 15px;
+      margin-bottom: 20px;
+      padding: 15px;
       background-color: #ffffff;
       border-radius: 8px;
       border: 1px solid #dee2e6;
   }
   
+  .media-poster,
   .media-poster img {
       width: 150px;
-      height: auto;
-      border-radius: 4px;
+      height: 225px;
+      object-fit: cover;
+      border-radius: 8px;
   }
+  
+  .media-poster img {
+      display: block;
+  }
+  
+  .no-image-placeholder {
+      width: 150px;
+      height: 225px;
+      background: #f8f9fa;
+      border: 1px solid #dee2e6;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      font-size: 12px;
+      color: #6c757d;
+  }
+  
+  .media-info {
+      flex: 1;
+  }
+  
+  .media-title {
+      margin-bottom: 10px;
+  }
+  
+  .media-overview {
+      margin-bottom: 15px;
+      color: #6c757d;
+  }
+  
+  .providers-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+      align-items: flex-end;
+      margin-top: 6px;
+  }
+  
+  .provider-item-inline {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      width: 40px;
+  }
+  
+  .provider-item-inline img {
+      height: 16px;
+      max-width: 35px;
+      object-fit: contain;
+      background: #fff;
+      border-radius: 2px;
+      border: 1px solid #eee;
+      margin-bottom: 1px;
+  }
+  
+  .provider-item-inline small {
+      font-size: 8px;
+      color: #444;
+      text-align: center;
+      line-height: 1.1;
+  }
+  
+  .provider-badge {
+      display: inline-block;
+      margin-right: 3px;
+      vertical-align: middle;
+      background: #f1f1f1;
+      border-radius: 2px;
+      padding: 1px 3px;
+      font-size: 9px;
+      color: #333;
+  }
+  
+  .clima-icon-img {
+      width: 50px;
+      height: 50px;
+  }
+  
+  /* Herramientas - iconos y utilidades (CSP) */
+  .tool-icon-lg { font-size: 1.5rem; }
+  .img-object-cover { object-fit: cover; }
+  .img-analysis { max-height: 200px; object-fit: cover; }
+  .pre-scrollable { max-height: 300px; overflow: auto; }
   
   .media-details {
       display: flex;
@@ -12862,6 +12982,63 @@ body.shared-mode.theme-active.tema1 {
     -webkit-overflow-scrolling: touch; /* Scroll suave en iOS */
     scrollbar-width: thin; /* Scrollbar delgada en Firefox */
     scrollbar-color: #6c757d #f8f9fa; /* Colores del scrollbar en Firefox */
+    border: 1px solid #dee2e6;
+    border-radius: 8px;
+    overflow-x: auto;
+    margin-bottom: 20px;
+    max-width: 100%;
+}
+
+.gsheets-table-container table {
+    margin-bottom: 0;
+    min-width: 600px;
+}
+
+.gsheets-table-container th {
+    padding: 12px 15px;
+    border-bottom: 2px solid #dee2e6;
+}
+
+.gsheets-table-container td {
+    padding: 12px 15px;
+    vertical-align: middle;
+}
+
+.gsheets-table-container .gsheets-td-actions {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+.gsheets-table-container .gsheets-sheet-id-code {
+    background: #f8f9fa;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 0.9em;
+}
+
+/* Mensajes de estado gsheets (CSP, sin inline) */
+.gsheets-status-msg {
+    padding: 10px;
+    border-radius: 6px;
+}
+
+.gsheets-status-success {
+    background: #e8f5e9;
+    color: #256029;
+    border: 1.5px solid #43b843;
+}
+
+.gsheets-status-error {
+    background: #ffebee;
+    color: #b71c1c;
+    border: 1.5px solid #e53935;
+}
+
+.gsheets-status-loading {
+    background: #e3f2fd;
+    color: #1565c0;
+    border: 1.5px solid #2196f3;
 }
 
 /* Estilos para tabla de Drive Transfers (seguridad: sin estilos inline) */
@@ -14308,6 +14485,102 @@ body .card.product-texture-bg::before,
   .archived-page-header p {
     font-size: 0.9rem;
   }
+}
+
+/* Estado vacío archivados - sin estilos inline (CSP) */
+.archived-empty-state {
+  grid-column: 1 / -1;
+  text-align: center;
+  padding: 3rem;
+  color: #000;
+}
+
+.archived-empty-state-icon {
+  font-size: 3rem;
+  margin-bottom: 1rem;
+  color: #f39c12;
+}
+
+/* Estado carga licencias - sin estilos inline (CSP) */
+.licenses-loading-state {
+  grid-column: 1 / -1;
+  text-align: center;
+  padding: 2rem;
+  color: #7f8c8d;
+}
+
+.licenses-loading-spinner {
+  font-size: 2rem;
+  margin-bottom: 1rem;
+}
+
+/* Modal gestionar productos - sin estilos inline (CSP) */
+.gestion-productos-modal-inner {
+  max-width: 600px;
+  width: 70%;
+  max-height: 65vh;
+  overflow-y: auto;
+}
+
+.gestion-productos-modal-content {
+  padding: 1rem 0.75rem 0.75rem 0.75rem;
+}
+
+.gestion-productos-modal-header {
+  text-align: center;
+  margin-bottom: 0.75rem;
+}
+
+.gestion-productos-modal-header h3 {
+  margin: 0;
+  font-size: 0.85rem;
+}
+
+.gestion-productos-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  font-size: 0.8rem;
+}
+
+.gestion-productos-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 0.5rem;
+}
+
+.gestion-productos-item-name {
+  display: flex;
+  align-items: center;
+  flex: 1;
+  min-width: 0;
+}
+
+.gestion-productos-item-name strong {
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.gestion-productos-item-actions {
+  display: flex;
+  gap: 0.4rem;
+  align-items: center;
+}
+
+.gestion-productos-btn {
+  padding: 4px 8px;
+  font-size: 0.7rem;
+}
+
+.gestion-productos-btn-archive {
+  padding: 4px 8px;
+  font-size: 0.85rem;
+}
+
+.gestion-productos-position-span {
+  color: #666;
+  font-size: 0.7rem;
 }
 
 /* ================== ESTILOS PROFESIONALES ADICIONALES ================== */

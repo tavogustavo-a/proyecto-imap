@@ -18,7 +18,6 @@
         <div class="d-flex gap-05">
           <button id="menuToggleBtn" class="btn-blue menu-btn-worksheet">&#9776; Menú</button>
           <button id="menu2ToggleBtn" class="btn-blue menu-btn-worksheet">&#9776; Menú2</button>
-          <button id="menu3ToggleBtn" class="btn-blue menu-btn-worksheet">&#9776; Menú3</button>
         </div>
               {% else %}
           <!-- Botón de menú para usuarios normales -->
@@ -43,6 +42,9 @@
       <a href="{{ url_for('admin_bp.view_trigger_logs_page') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-clipboard-list"></i> Consultar logs</a>
       <a href="{{ url_for('store_bp.admin_sms') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-sms"></i> Consulta SMS</a>
       <a href="{{ url_for('admin_bp.manage_permissions_page') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-key"></i> Gestión de Permisos</a>
+      <a href="{{ url_for('store_bp.admin_work_sheets') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-table"></i> Hojas de Cálculo</a>
+      <a href="{{ url_for('store_bp.html_tools') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-code"></i> HTML</a>
+      <a href="{{ url_for('store_bp.admin_support') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-headset"></i> Chat Soporte</a>
       <button id="btnClearTriggerLogMenu" type="button" class="btn-panel btn-red mobile-menu-btn mb-04"><i class="fas fa-trash"></i> Limpiar Logs</button>
       <a href="{{ url_for('auth_bp.logout') }}" class="btn-panel btn-red mobile-menu-btn mb-04"><i class="fas fa-sign-out-alt"></i> Cerrar Sesión</a>
     </div>
@@ -115,18 +117,7 @@
       <a href="{{ url_for('store_bp.admin_productos') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-box"></i> Productos</a>
       <a href="{{ url_for('store_bp.admin_productos') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-ticket-alt"></i> Cupones</a>
       <a href="{{ url_for('store_bp.admin_tools') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-tools"></i> Herramientas Admin</a>
-      <a href="{{ url_for('store_bp.admin_work_sheets') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-table"></i> Hojas de Cálculo</a>
       <a href="{{ url_for('store_bp.admin_configurations') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-cog"></i> Configuraciones</a>
-      <a href="{{ url_for('store_bp.admin_support') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-headset"></i> Chat Soporte</a>
-      <a href="{{ url_for('auth_bp.logout') }}" class="btn-panel btn-red mobile-menu-btn mb-04"><i class="fas fa-sign-out-alt"></i> Cerrar Sesión</a>
-    </div>
-
-    <!-- Modal Menú3 para administradores -->
-    <div id="mobileMenu3" class="mobile-menu-store hidden">
-      <div class="menu-title-row">
-        <i class="fas fa-bars"></i>
-        <h3>Parte Pública</h3>
-      </div>
       <a href="{{ url_for('store_bp.store_front') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-store"></i> Tienda Pública</a>
       <a href="{{ url_for('store_bp.tools_public') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-tools"></i> Herramientas Pública</a>
       <a href="{{ url_for('store_bp.historial_compras_usuario') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-receipt"></i> Mi Historial de Compras</a>
@@ -171,7 +162,7 @@
             <div class="accordion-arrow"></div>
           </div>
           <div class="accordion-body hidden">
-              <div class="tool-calculator-form-container">{{ tool.text | safe }}</div>
+              <div class="tool-calculator-form-container">{{ tool.text | rewrite_external_images | safe }}</div>
               <form class="form-calc-porcentaje" autocomplete="off" name="formCalcPorcentaje">
                 <div class="d-flex align-items-end gap-1 mb-1 tool-calculator-form-row">
                   <div class="flex-2">
@@ -208,7 +199,7 @@
               <div class="accordion-arrow"></div>
             </div>
             <div class="accordion-body hidden">
-              {{ html_content.text | safe }}
+              {{ html_content.text | rewrite_external_images | safe }}
             </div>
           </div>
       {% endfor %}
@@ -233,7 +224,7 @@
             <div class="accordion-arrow"></div>
           </div>
           <div class="accordion-body hidden">
-            {{ listing.content | default('', true) | safe }}
+            {{ listing.content | default('', true) | rewrite_external_images | safe }}
             
             {% if listing.production_links %}
             <div class="production-links-list-container">

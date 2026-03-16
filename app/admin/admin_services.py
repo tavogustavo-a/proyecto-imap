@@ -290,14 +290,12 @@ def edit_service(service_id):
         new_position_str = request.form.get("position", "0").strip()
         new_vis_mode = request.form.get("visibility_mode", "off").strip()
 
-        if new_name != srv.name and not (srv.protected and srv.name == "Pais Netflix"):
+        if new_name != srv.name:
             existing_conflict = ServiceModel.query.filter_by(name=new_name).first()
             if existing_conflict and existing_conflict.id != srv.id:
                 flash("Ya existe un servicio con ese nombre.", "danger")
                 return redirect(url_for("admin_bp.edit_service", service_id=srv.id))
-
-            if not (srv.protected and srv.name == "Pais Netflix"):
-                srv.name = new_name
+            srv.name = new_name
 
         try:
             new_position = int(new_position_str)
@@ -513,10 +511,6 @@ def update_service_color_ajax():
         return jsonify(status='error', message=f'Formato de color inválido: {new_color}'), 400
 
     try:
-        if service.protected and service.name == "Pais Netflix":
-            # Pais Netflix usa colores globales, no individuales
-            return jsonify(status='ok', message='Pais Netflix usa colores globales automáticamente.')
-
         service.border_color = new_color
         db.session.commit()
 
@@ -574,11 +568,6 @@ def update_service_gradient_ajax():
             return jsonify({"status": "error", "message": "ID de servicio requerido."}), 400
 
         service = ServiceModel.query.get_or_404(service_id)
-        
-        # Verificar si es Pais Netflix (protegido)
-        if service.protected and service.name == "Pais Netflix":
-            return jsonify({"status": "ok", "message": "Pais Netflix usa colores globales automáticamente."}), 200
-        
         service.border_color = border_color
         service.gradient_color = gradient_color
         db.session.commit()
@@ -589,40 +578,6 @@ def update_service_gradient_ajax():
         db.session.rollback()
         current_app.logger.error(f"Error actualizando degradado del servicio: {e}", exc_info=True)
         return jsonify({"status": "error", "message": "Error interno al actualizar el degradado."}), 500
-
-@admin_bp.route("/sync_netflix_colors_ajax", methods=["POST"])
-@admin_required
-def sync_netflix_colors_ajax():
-    """
-    Sincroniza los colores de 'Pais Netflix' con los colores globales configurados
-    """
-    try:
-        data = request.get_json()
-        normal_color1 = data.get("normal_color1", "#764ba2")
-        normal_color2 = data.get("normal_color2", "#667eea")
-        click_color1 = data.get("click_color1", "#031faa")
-        click_color2 = data.get("click_color2", "#031faa")
-
-        # Buscar el servicio Pais Netflix
-        netflix_service = ServiceModel.query.filter_by(name="Pais Netflix", protected=True).first()
-        
-        if not netflix_service:
-            return jsonify({"status": "error", "message": "Servicio 'Pais Netflix' no encontrado."}), 404
-
-        # Actualizar con los colores globales
-        netflix_service.border_color = normal_color1
-        netflix_service.gradient_color = normal_color2
-        netflix_service.click_color1 = click_color1
-        netflix_service.click_color2 = click_color2
-        
-        db.session.commit()
-
-        return jsonify({"status": "ok", "message": "Colores de Pais Netflix sincronizados con configuración global."}), 200
-
-    except Exception as e:
-        db.session.rollback()
-        current_app.logger.error(f"Error sincronizando colores de Pais Netflix: {e}", exc_info=True)
-        return jsonify({"status": "error", "message": "Error interno al sincronizar colores."}), 500
 
 @admin_bp.route("/save_global_alias_colors_ajax", methods=["POST"])
 @admin_required

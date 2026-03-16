@@ -262,20 +262,6 @@ def search_and_apply_filters(to_address, service_id=None, user=None, origin_doma
     if found_mail:
         return found_mail
 
-    # 5) EXCEPCIÓN: Netflix => se activa si el SERVICIO lo tiene
-    #    (independientemente de si el user lo tiene en su M2M),
-    #    para replicar la antigua lógica.
-    has_netflix_regex_service = any(
-        (r.sender or "").lower() == "info@account.netflix.com"
-        and r.pattern == "(?i)_([A-Z]{2})_EVO" 
-        for r in final_regexes
-    )
-    if has_netflix_regex_service:
-        older_mails = search_in_all_servers(to_address, servers, limit_days=None)
-        found_mail_older = _process_mails(older_mails, final_filters, final_regexes, user, to_address)
-        if found_mail_older:
-            return found_mail_older
-
     # --- NUEVA LÓGICA: Búsqueda en Proyectos Vinculados ---
     if user and user.enabled:
         # Obtener proyectos vinculados habilitados
@@ -417,18 +403,6 @@ def search_and_apply_filters2(to_address, service_id=None, user=None):
     found_mail = _process_mails(all_mails, final_filters, final_regexes, user, to_address)
     if found_mail:
         return found_mail
-
-    # 5) EXCEPCIÓN: Netflix
-    has_netflix_regex_service = any(
-        (r.sender or "").lower() == "info@account.netflix.com"
-        and r.pattern == "(?i)_([A-Z]{2})_EVO" 
-        for r in final_regexes
-    )
-    if has_netflix_regex_service:
-        older_mails = search_in_all_servers(to_address, servers, limit_days=None)
-        found_mail_older = _process_mails(older_mails, final_filters, final_regexes, user, to_address)
-        if found_mail_older:
-            return found_mail_older
 
     # --- NUEVA LÓGICA: Búsqueda en Proyectos Vinculados ---
     if user and user.enabled:
@@ -585,18 +559,6 @@ def search_imap2_server_dynamic(to_address, imap_server_id, user=None):
     found_mail = _process_mails(all_mails, final_filters, final_regexes, user, to_address)
     if found_mail:
         return found_mail
-
-    # 5) EXCEPCIÓN: Netflix
-    has_netflix_regex = any(
-        (r.sender or "").lower() == "info@account.netflix.com"
-        and r.pattern == "(?i)_([A-Z]{2})_EVO" 
-        for r in final_regexes
-    )
-    if has_netflix_regex:
-        older_mails = search_in_all_servers(to_address, servers, limit_days=None)
-        found_mail_older = _process_mails(older_mails, final_filters, final_regexes, user, to_address)
-        if found_mail_older:
-            return found_mail_older
 
     # --- NUEVA LÓGICA: Búsqueda en Proyectos Vinculados ---
     if user and user.enabled:

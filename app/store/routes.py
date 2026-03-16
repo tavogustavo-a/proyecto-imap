@@ -1248,6 +1248,39 @@ def get_youtube_listing_users(listing_id):
     })
 
 
+def _github_blob_to_raw(url):
+    """Convierte URL GitHub blob (vista web) a URL raw (archivo binario)."""
+    import re
+    # github.com/user/repo/blob/branch/path/to/file -> raw.githubusercontent.com/user/repo/branch/path/to/file
+    m = re.match(r'https?://github\.com/([^/]+)/([^/]+)/blob/([^/]+)/(.+)', url)
+    if m:
+        user, repo, branch, path = m.groups()
+        return f'https://raw.githubusercontent.com/{user}/{repo}/{branch}/{path}'
+    return url
+
+
+@store_bp.route('/proxy-image')
+@csrf_exempt_route
+def proxy_image():
+    """Proxy de imágenes externas para evitar CORB/CORS en contenido HTML (GitHub raw, etc.)."""
+    url = request.args.get('url')
+    if not url or not url.startswith(('http://', 'https://')):
+        return Response('URL inválida', status=400)
+    # Convertir GitHub blob a raw para obtener el archivo binario, no HTML
+    if 'github.com' in url and '/blob/' in url:
+        url = _github_blob_to_raw(url)
+    try:
+        resp = requests.get(url, timeout=10, stream=True)
+        resp.raise_for_status()
+        content_type = resp.headers.get('Content-Type', 'application/octet-stream')
+        if not any(ct in content_type for ct in ('image/', 'octet-stream')):
+            return Response('Solo se permiten imágenes', status=403)
+        return Response(resp.iter_content(chunk_size=8192), content_type=content_type)
+    except Exception as e:
+        current_app.logger.warning(f"Proxy imagen falló para {url[:80]}: {e}")
+        return Response('Error al cargar imagen', status=502)
+
+
 @store_bp.route('/herramientas-public', endpoint='tools_public')
 def tools_public():
     user = None
@@ -2653,6 +2686,12 @@ def api_drive_media():
         current_app.logger.error(f'Error inesperado en proxy: {str(e)}')
         return jsonify({'error': str(e)}), 500
 
+@store_bp.route('/admin/html-tools')
+@admin_required
+def html_tools():
+    """Herramienta para crear párrafos y HTML con facilidad: editor visual + vista/copia del código"""
+    return render_template('html_tools.html')
+
 @store_bp.route('/admin/work_sheets')
 @admin_required
 def admin_work_sheets():
@@ -2735,10 +2774,13 @@ def admin_sms():
 @store_bp.route('/admin/support')
 @admin_required
 def admin_support():
-    # Obtener todos los usuarios para la tabla de gestión
+    # Solo usuarios normales (no admin, no sub-usuarios) para la tabla de gestión
     current_user = get_current_user()
-    users = User.query.order_by(User.username).all()
     admin_user = current_app.config.get("ADMIN_USER", "admin")
+    users = User.query.filter(
+        User.username != admin_user,
+        User.parent_id.is_(None)
+    ).order_by(User.username).all()
     return render_template('chatsoporte.html', title="Chat Soporte", users=users, current_user=current_user, user_has_worksheet_access=user_has_worksheet_access, ADMIN_USER=admin_user, User=User, is_support_user=False)
 
 @store_bp.route('/support/dashboard')
@@ -2751,9 +2793,12 @@ def support_dashboard():
         flash("No tienes permisos de soporte.", "danger")
         return redirect(url_for('store_bp.store_front'))
     
-    # Obtener todos los usuarios para la tabla de gestión (solo para soporte)
-    users = User.query.order_by(User.username).all()
+    # Solo usuarios normales (no admin, no sub-usuarios) para la tabla de gestión
     admin_user = current_app.config.get("ADMIN_USER", "admin")
+    users = User.query.filter(
+        User.username != admin_user,
+        User.parent_id.is_(None)
+    ).order_by(User.username).all()
     return render_template('chatsoporte.html', title="Dashboard de Chat de Soporte", users=users, is_support_user=True, current_user=current_user, user_has_worksheet_access=user_has_worksheet_access, ADMIN_USER=admin_user, User=User)
 
 @store_bp.route('/admin/update_chat_permission', methods=['POST'])
