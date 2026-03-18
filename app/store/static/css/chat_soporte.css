@@ -189,6 +189,73 @@
   overflow: hidden; /* ✅ NUEVO: Evitar desbordamiento durante transición */
 }
 
+/* ✅ Contraer a solo iconos - disponible en TODAS las pantallas (toggle manual) */
+.chat-list-container.collapsed {
+  width: 56px !important;
+  min-width: 56px !important;
+  max-width: 56px !important;
+}
+.chat-list-container.collapsed .chat-item {
+  justify-content: center !important;
+  align-items: center !important;
+  padding: 0.2rem 0.1rem !important;
+  margin-bottom: 0.1rem !important;
+  width: 100% !important;
+  display: flex !important;
+  height: 25px !important;
+  min-height: 25px !important;
+}
+.chat-list-container.collapsed .chat-item-name,
+.chat-list-container.collapsed .user-info,
+.chat-list-container.collapsed .user-actions,
+.chat-list-container.collapsed .user-typing-indicator,
+.chat-list-container.collapsed .chat-list-header h5 {
+  display: none !important;
+}
+.chat-list-container.collapsed .user-avatar {
+  font-size: 0.7rem !important;
+  width: 20px !important;
+  height: 20px !important;
+  margin: 0 auto !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  border-radius: 50% !important;
+  font-weight: bold !important;
+}
+.chat-list-container.collapsed .chat-list-header {
+  padding: 0.1rem 0.2rem !important;
+  justify-content: center !important;
+  min-height: 25px !important;
+  position: relative !important;
+}
+.chat-list-container.collapsed .chat-list-toggle {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  background: rgba(33, 150, 243, 0.9) !important;
+  border: none !important;
+  color: white !important;
+  font-size: 0.6rem !important;
+  width: 20px !important;
+  height: 20px !important;
+  border-radius: 50% !important;
+  position: absolute !important;
+  top: 50% !important;
+  right: -10px !important;
+  transform: translateY(-50%) !important;
+  z-index: 1000 !important;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3) !important;
+}
+.chat-list-container.collapsed .chat-list {
+  padding: 0.2rem 0.1rem !important;
+  overflow: hidden !important;
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  gap: 0.1rem !important;
+}
+
 /* ✅ NUEVO: Diseño responsive para lista de chats - mantener layout horizontal solo en pantallas pequeñas */
 @media (max-width: 768px) {
   .chat-list-container {
@@ -225,6 +292,7 @@
   color: white;
   border-bottom: 2px solid #2a3942;
   box-shadow: 0 2px 8px rgba(33, 150, 243, 0.3);
+  position: relative; /* Para posicionar el botón toggle */
 }
 
 .chat-list {
@@ -268,6 +336,7 @@
   flex: 1;
   display: flex;
   flex-direction: column;
+  gap: 0;
   background: #0c1317;
   min-width: 0; /* ✅ NUEVO: Permite que se encoja */
 }
@@ -645,11 +714,20 @@
 /* ✅ NUEVO: Área de input oculta inicialmente */
 .chat-input-area {
   display: none;
+  padding: 0 !important;
+  margin: 0 !important;
+  border: none !important;
+  border-top: none !important;
 }
 
 /* ✅ NUEVO: Área de input visible cuando hay chat activo */
 .chat-input-area.active {
   display: block;
+}
+
+/* ✅ Quitar barra/separador feo entre mensajes e input */
+.chat-input-form {
+  margin: 0 !important;
 }
 
 /* ✅ NUEVO: Responsive para área de input en pantallas medianas */
@@ -715,8 +793,10 @@
 .chat-messages-area {
   flex: 1;
   overflow-y: auto;
+  overflow-x: hidden; /* ✅ Ocultar barra horizontal que se pone azul al hover */
   padding: 1rem;
   background: #000000;
+  border-bottom: none !important; /* ✅ Sin barra visible entre mensajes e input */
   /* Optimizaciones de scroll para performance */
   -webkit-overflow-scrolling: touch;
   scroll-behavior: smooth;
@@ -753,7 +833,13 @@
 }
 
 .chat-messages-area::-webkit-scrollbar-thumb:hover {
-  background: #1976d2;
+  background: #2a3942; /* Sin azul en hover - evita barra azul molesta */
+}
+
+/* Ocultar scrollbar horizontal si aparece */
+.chat-messages-area::-webkit-scrollbar:horizontal {
+  height: 0 !important;
+  display: none !important;
 }
 
 /* ================== ESTILOS ESPECÍFICOS DE LA PLANTILLA DE SOPORTE ================== */
@@ -949,9 +1035,24 @@
   }
 }
 
-/* Ocultar botón toggle en pantallas grandes */
+/* Botón toggle visible en TODAS las pantallas para poder colapsar a solo iconos */
 .chat-list-toggle {
-  display: none;
+  display: flex !important;
+  position: absolute;
+  top: 50%;
+  right: 10px;
+  transform: translateY(-50%);
+  background: rgba(255, 255, 255, 0.2);
+  color: white;
+  border: none;
+  border-radius: 50%;
+  width: 24px;
+  height: 24px;
+  cursor: pointer;
+  z-index: 1000;
+  transition: all 0.3s ease;
+  align-items: center;
+  justify-content: center;
 }
 
 /* ✅ NUEVO: Botón más visible cuando está colapsado (solo en pantallas pequeñas) */
@@ -999,6 +1100,7 @@
   flex: 1;
   display: flex;
   flex-direction: column;
+  gap: 0;
   background: #0c1317;
 }
 
@@ -1008,9 +1110,11 @@
 .form-container-wide .admin-card .chat-messages-area {
   flex: 1;
   overflow-y: auto;
+  overflow-x: hidden; /* ✅ Sin barra horizontal azul al hover */
   padding: 0.8rem;
   background: linear-gradient(93deg, #EAE1D7 0%, #EAE1D7 100%);
   position: relative;
+  border-bottom: none !important; /* ✅ Sin barra visible entre mensajes e input */
 }
 
 /* ✅ NUEVO: Responsive para área de mensajes unificada - reglas consolidadas */
@@ -1047,53 +1151,28 @@
     padding: 0.4rem 0.6rem !important;
   }
 }
-  /* Expandir el área de mensajes para que las burbujas ocupen más espacio */
-  .form-container-wide .admin-card .chat-messages-area {
-    width: 100% !important;
-    max-width: none !important;
-    margin: 0 !important;
-  }
-  
-  /* Expandir el header de conversación */
-  .form-container-wide .admin-card .chat-conversation-header {
-    width: 100% !important;
-    max-width: none !important;
-    margin: 0 !important;
-  }
-  
-  /* Expandir el área de input */
-  .form-container-wide .admin-card .chat-input-area {
-    width: 100% !important;
-    max-width: none !important;
-    margin: 0 !important;
-  }
+
+/* Expandir áreas en form-container-wide */
+.form-container-wide .admin-card .chat-messages-area {
+  width: 100% !important;
+  max-width: none !important;
+  margin: 0 !important;
+}
+.form-container-wide .admin-card .chat-conversation-header {
+  width: 100% !important;
+  max-width: none !important;
+  margin: 0 !important;
+}
+.form-container-wide .admin-card .chat-input-area {
+  width: 100% !important;
+  max-width: none !important;
+  margin: 0 !important;
 }
 
 /* ✅ NUEVO: Responsive para área de mensajes de usuarios normales en pantallas pequeñas */
 @media (max-width: 480px) {
   .chat-messages-area {
     padding: 0.4rem !important;
-  }
-}
-  /* Expandir el área de mensajes para que las burbujas ocupen más espacio */
-  .form-container-wide .admin-card .chat-messages-area {
-    width: 98% !important;
-    max-width: none !important;
-    margin: 0 !important;
-  }
-  
-  /* Expandir el header de conversación */
-  .form-container-wide .admin-card .chat-conversation-header {
-    width: 100% !important;
-    max-width: none !important;
-    margin: 0 !important;
-  }
-  
-  /* Expandir el área de input */
-  .form-container-wide .admin-card .chat-input-area {
-    width: 100% !important;
-    max-width: none !important;
-    margin: 0 !important;
   }
 }
 
@@ -3243,145 +3322,184 @@ div.message.own-message .message-content,
 
 /* ================== ESTILOS PARA MENSAJES TEMPORALES DE AUDIO ================== */
 
-/* Mensaje temporal de audio - Diseño compacto y distintivo */
+/* Mensaje temporal de audio - fluye con el chat, NO flota encima del input */
 .temp-message.audio-message {
     position: relative;
-    margin: 6px 0;
-    opacity: 0.95;
-    animation: tempMessagePulse 2s ease-in-out infinite;
-    border-left: 3px solid #0d4a1f;
-    padding-left: 6px;
-    background: rgba(13, 74, 31, 0.03);
-    border-radius: 0 6px 6px 0;
+    margin: 12px auto;
+    display: flex;
+    justify-content: center;
+    width: 100%;
+    max-width: 100%;
+    padding: 0 12px;
+    box-sizing: border-box;
+    animation: tempAudioSlideIn 0.3s ease-out;
 }
 
-/* Animación de pulso para mensajes temporales */
-@keyframes tempMessagePulse {
-    0%, 100% {
-        opacity: 0.95;
-        transform: scale(1);
+@keyframes tempAudioSlideIn {
+    from {
+        opacity: 0;
+        transform: translateY(8px);
     }
-    50% {
+    to {
         opacity: 1;
-        transform: scale(1.01);
+        transform: translateY(0);
     }
 }
 
-/* Contenedor del mensaje temporal */
+/* Contenedor del mensaje temporal - estilo mejorado y pulido */
 .temp-message.audio-message .message-content {
-    background: rgba(255, 255, 255, 0.98) !important;
-    border: 1px solid #0d4a1f !important;
-    box-shadow: 0 2px 8px rgba(13, 74, 31, 0.2) !important;
+    background: linear-gradient(145deg, #1e2428 0%, #121619 100%) !important;
+    border: 1px solid rgba(37, 211, 102, 0.25) !important;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4), 
+                0 0 0 1px rgba(255, 255, 255, 0.03) inset,
+                0 1px 0 rgba(37, 211, 102, 0.08) !important;
     position: relative;
     overflow: visible;
-    padding: 8px 10px;
-    border-radius: 8px;
-    margin: 4px 8px;
+    padding: 16px 20px;
+    border-radius: 16px;
+    margin: 0 auto;
+    max-width: 98%;
+    min-width: 420px;
+    box-sizing: border-box;
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: stretch !important;
+    transition: box-shadow 0.2s ease, border-color 0.2s ease;
 }
 
-/* Indicador de "PENDIENTE" en mensajes temporales */
-.temp-message.audio-message .message-content::before {
-    content: "⏳ PENDIENTE";
-    position: absolute;
-    top: -8px;
-    right: -8px;
-    background: linear-gradient(135deg, #0d4a1f, #056830);
-    color: white;
-    font-size: 9px;
-    font-weight: bold;
-    padding: 2px 6px;
-    border-radius: 8px;
-    z-index: 1000;
-    box-shadow: 0 2px 6px rgba(13, 74, 31, 0.5);
-    border: 1px solid #fff;
-    animation: pendingPulse 1.5s ease-in-out infinite;
-    white-space: nowrap;
-    overflow: visible;
-    pointer-events: none;
+/* X de cancelar - elegante en la esquina */
+.temp-message.audio-message .cancel-audio-btn-preview {
+    position: absolute !important;
+    top: 10px !important;
+    right: 10px !important;
+    width: 26px !important;
+    height: 26px !important;
+    min-width: 26px !important;
+    min-height: 26px !important;
+    font-size: 11px !important;
+    border: none !important;
+    padding: 0 !important;
+    z-index: 10;
+    transition: transform 0.2s ease, background 0.2s ease !important;
 }
 
-/* Animación para el indicador PENDIENTE */
-@keyframes pendingPulse {
-    0%, 100% {
-        transform: scale(1);
-        box-shadow: 0 2px 6px rgba(13, 74, 31, 0.5);
-    }
-    50% {
-        transform: scale(1.05);
-        box-shadow: 0 3px 8px rgba(13, 74, 31, 0.7);
-    }
+/* Cabecera con PENDIENTE - badge mejorado */
+.temp-message.audio-message .temp-audio-header {
+    margin-bottom: 12px;
+    order: 1;
 }
 
-/* Audio player para mensajes temporales */
+.temp-message.audio-message .pendiente-badge {
+    background: linear-gradient(135deg, rgba(37, 211, 102, 0.2) 0%, rgba(18, 140, 126, 0.15) 100%);
+    color: #25d366;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 5px 12px;
+    border-radius: 20px;
+    border: 1px solid rgba(37, 211, 102, 0.35);
+    letter-spacing: 0.3px;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
+}
+
+/* Audio player para mensajes temporales - estilo glassmorphism */
 .temp-message.audio-message .audio-player-sent {
-    background: rgba(255, 255, 255, 0.95) !important;
-    border: 1px solid #0d4a1f !important;
-    box-shadow: 0 2px 6px rgba(13, 74, 31, 0.3) !important;
+    order: 2;
+    background: rgba(255, 255, 255, 0.04) !important;
+    border: 1px solid rgba(255, 255, 255, 0.08) !important;
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.2) !important;
     position: relative;
-    backdrop-filter: blur(8px);
-    min-width: 260px !important;
-    padding: 3px 10px !important;
+    backdrop-filter: blur(12px);
+    min-width: 360px !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    padding: 14px 18px !important;
     height: auto !important;
-    border-radius: 6px;
+    border-radius: 12px;
     display: flex !important;
     align-items: center !important;
-    gap: 8px !important;
+    gap: 12px !important;
     flex-wrap: wrap !important;
+    box-sizing: border-box;
+    transition: background 0.2s ease;
 }
 
-/* Controles de audio en mensajes temporales */
+/* Controles de audio - botones con estilo refinado */
 .temp-message.audio-message .play-pause-btn-sent,
 .temp-message.audio-message .speed-toggle-btn-sent {
-    background: rgba(13, 74, 31, 0.15) !important;
-    border: 1px solid #0d4a1f !important;
-    color: #0d4a1f !important;
-    width: 20px !important;
-    height: 20px !important;
-    font-size: 10px !important;
+    background: linear-gradient(135deg, rgba(37, 211, 102, 0.25) 0%, rgba(18, 140, 126, 0.2) 100%) !important;
+    border: 1px solid rgba(37, 211, 102, 0.4) !important;
+    color: #25d366 !important;
+    width: 44px !important;
+    height: 44px !important;
+    font-size: 16px !important;
     border-radius: 50% !important;
     display: flex !important;
     align-items: center !important;
     justify-content: center !important;
     flex-shrink: 0 !important;
+    transition: all 0.2s ease !important;
 }
 
 .temp-message.audio-message .play-pause-btn-sent:hover,
 .temp-message.audio-message .speed-toggle-btn-sent:hover {
-    background: #0d4a1f !important;
-    color: white !important;
+    background: linear-gradient(135deg, rgba(37, 211, 102, 0.4) 0%, rgba(18, 140, 126, 0.35) 100%) !important;
+    color: #34e077 !important;
     transform: scale(1.05);
+    box-shadow: 0 0 12px rgba(37, 211, 102, 0.3);
 }
 
-/* Información de audio en mensajes temporales */
+/* Información de audio - tiempo con tipografía clara */
 .temp-message.audio-message .audio-duration-sent,
 .temp-message.audio-message .audio-speed-sent {
-    color: #0d4a1f !important;
-    font-weight: bold;
-    font-size: 11px;
-    background: rgba(13, 74, 31, 0.08);
-    padding: 1px 4px;
-    border-radius: 4px;
-    border: 1px solid rgba(13, 74, 31, 0.2);
+    color: #25d366 !important;
+    font-weight: 600;
+    font-size: 14px;
+    background: rgba(37, 211, 102, 0.12);
+    padding: 5px 10px;
+    border-radius: 8px;
+    border: 1px solid rgba(37, 211, 102, 0.25);
     flex-shrink: 0 !important;
     white-space: nowrap !important;
+    letter-spacing: 0.5px;
 }
 
-/* Botones de acción para mensajes temporales */
+/* Barra de progreso en mensajes temporales - color verde */
+.temp-message.audio-message .temp-progress-bar {
+    height: 6px !important;
+    background: rgba(37, 211, 102, 0.2) !important;
+    border-radius: 3px !important;
+}
+.temp-message.audio-message .temp-progress-fill {
+    background: #25d366 !important;
+    border-radius: 3px !important;
+}
+.temp-message.audio-message .temp-progress-knob {
+    background: #25d366 !important;
+    box-shadow: 0 0 6px rgba(37, 211, 102, 0.6) !important;
+}
+/* Barra de progreso oculta en preview pendiente - evita indicador molesto debajo */
+.temp-message.audio-message .audio-progress-sent.temp-audio-progress {
+    display: none !important;
+}
+
+/* Separador y acciones */
 .temp-message.audio-message .audio-actions-preview {
     display: flex;
-    gap: 6px;
+    gap: 8px;
     align-items: center;
     margin-left: auto;
-    padding-left: 8px;
-    border-left: 1px solid rgba(13, 74, 31, 0.2);
+    padding-left: 12px;
+    border-left: 1px solid rgba(255, 255, 255, 0.1);
     flex-shrink: 0 !important;
 }
 
-/* Botones de enviar y cancelar */
-.temp-message.audio-message .send-audio-btn-preview,
-.temp-message.audio-message .cancel-audio-btn-preview {
-    width: 20px !important;
-    height: 20px !important;
+/* Botón enviar - estilo destacado */
+.temp-message.audio-message .send-audio-btn-preview {
+    width: 42px !important;
+    height: 42px !important;
+    min-width: 42px !important;
+    min-height: 42px !important;
+    font-size: 17px !important;
     border-radius: 50% !important;
     border: none !important;
     cursor: pointer !important;
@@ -3389,44 +3507,35 @@ div.message.own-message .message-content,
     align-items: center !important;
     justify-content: center !important;
     transition: all 0.2s ease !important;
-    font-size: 10px !important;
     flex-shrink: 0 !important;
-    min-width: 20px !important;
-    min-height: 20px !important;
-}
-
-.temp-message.audio-message .send-audio-btn-preview {
-    background: #2ed573;
-    color: white;
-    box-shadow: 0 1px 4px rgba(46, 213, 115, 0.4);
-    border-radius: 50% !important;
-    display: flex !important;
-    align-items: center !important;
-    justify-content: center !important;
-    flex-shrink: 0 !important;
+    background: linear-gradient(135deg, #25d366 0%, #128c7e 100%) !important;
+    color: white !important;
+    box-shadow: 0 3px 12px rgba(37, 211, 102, 0.4) !important;
 }
 
 .temp-message.audio-message .send-audio-btn-preview:hover {
-    background: #26d0ce;
-    transform: scale(1.05);
-    box-shadow: 0 2px 6px rgba(46, 213, 115, 0.6);
+    background: linear-gradient(135deg, #34e077 0%, #16a085 100%) !important;
+    transform: scale(1.06);
+    box-shadow: 0 4px 16px rgba(37, 211, 102, 0.5);
 }
 
+/* Botón cancelar - refinado */
 .temp-message.audio-message .cancel-audio-btn-preview {
-    background: #ff4757;
-    color: white;
-    box-shadow: 0 1px 4px rgba(255, 71, 87, 0.4);
+    background: rgba(255, 71, 87, 0.9) !important;
+    color: white !important;
+    box-shadow: 0 2px 8px rgba(255, 71, 87, 0.35);
     border-radius: 50% !important;
     display: flex !important;
     align-items: center !important;
     justify-content: center !important;
     flex-shrink: 0 !important;
+    cursor: pointer !important;
 }
 
 .temp-message.audio-message .cancel-audio-btn-preview:hover {
-    background: #ff3742;
-    transform: scale(1.05);
-    box-shadow: 0 2px 6px rgba(255, 71, 87, 0.6);
+    background: #ff4757 !important;
+    transform: scale(1.08);
+    box-shadow: 0 3px 12px rgba(255, 71, 87, 0.5);
 }
 
 /* Tiempo oculto */
@@ -3434,98 +3543,123 @@ div.message.own-message .message-content,
     display: none !important;
 }
 
-/* Responsive */
+/* Responsive - compacto en pantallas pequeñas, mismo tamaño que antes (no más grande) */
 @media (max-width: 768px) {
+    .temp-message.audio-message {
+        width: auto !important;
+        max-width: calc(100% - 16px) !important;
+        padding: 0 8px !important;
+    }
+    .temp-message.audio-message .message-content {
+        min-width: 0 !important;
+        max-width: 320px !important;
+        padding: 10px 12px !important;
+    }
     .temp-message.audio-message .audio-player-sent {
-        min-width: 220px !important;
-        padding: 2px 8px !important;
+        min-width: 0 !important;
+        max-width: 100% !important;
+        padding: 8px 10px !important;
         gap: 6px !important;
     }
     
-    .temp-message.audio-message .send-audio-btn-preview,
+    .temp-message.audio-message .send-audio-btn-preview {
+        width: 32px !important;
+        height: 32px !important;
+        min-width: 32px !important;
+        min-height: 32px !important;
+        font-size: 14px !important;
+    }
+    
     .temp-message.audio-message .cancel-audio-btn-preview {
-        width: 20px !important;
-        height: 20px !important;
+        width: 22px !important;
+        height: 22px !important;
+        min-width: 22px !important;
+        min-height: 22px !important;
         font-size: 10px !important;
     }
     
     .temp-message.audio-message .play-pause-btn-sent,
     .temp-message.audio-message .speed-toggle-btn-sent {
-        width: 20px !important;
-        height: 20px !important;
-        font-size: 10px !important;
+        width: 34px !important;
+        height: 34px !important;
+        font-size: 12px !important;
     }
     
-    /* Asegurar que el indicador PENDIENTE sea visible en pantallas medianas */
-    .temp-message.audio-message .message-content::before {
-        top: -6px;
-        right: -6px;
-        font-size: 8px;
-        padding: 1px 5px;
+    .temp-message.audio-message .audio-duration-sent,
+    .temp-message.audio-message .audio-speed-sent {
+        font-size: 11px !important;
+        padding: 2px 5px !important;
     }
     
-    /* Mejorar distribución de controles en pantallas medianas */
-    .temp-message.audio-message .audio-actions-preview {
-        padding-left: 6px !important;
-        gap: 5px !important;
+    .temp-message.audio-message .pendiente-badge {
+        font-size: 9px;
+        padding: 3px 8px;
     }
 }
 
 @media (max-width: 480px) {
+    .temp-message.audio-message {
+        width: auto !important;
+        max-width: calc(100% - 12px) !important;
+        padding: 0 6px !important;
+    }
+    .temp-message.audio-message .message-content {
+        min-width: 0 !important;
+        max-width: 280px !important;
+        padding: 8px 10px !important;
+    }
     .temp-message.audio-message .audio-player-sent {
-        min-width: 200px !important;
-        padding: 2px 6px !important;
+        min-width: 0 !important;
+        padding: 6px 8px !important;
+        gap: 4px !important;
     }
     
-    .temp-message.audio-message .send-audio-btn-preview,
+    .temp-message.audio-message .send-audio-btn-preview {
+        width: 28px !important;
+        height: 28px !important;
+        min-width: 28px !important;
+        min-height: 28px !important;
+        font-size: 12px !important;
+    }
+    
     .temp-message.audio-message .cancel-audio-btn-preview {
         width: 20px !important;
         height: 20px !important;
-        font-size: 10px !important;
+        min-width: 20px !important;
+        min-height: 20px !important;
+        font-size: 9px !important;
     }
     
     .temp-message.audio-message .play-pause-btn-sent,
     .temp-message.audio-message .speed-toggle-btn-sent {
-        width: 20px !important;
-        height: 20px !important;
+        width: 28px !important;
+        height: 28px !important;
         font-size: 10px !important;
     }
     
-    /* Asegurar que el indicador PENDIENTE sea visible en pantallas pequeñas */
-    .temp-message.audio-message .message-content::before {
-        top: -4px;
-        right: -4px;
-        font-size: 7px;
-        padding: 1px 4px;
+    .temp-message.audio-message .audio-duration-sent,
+    .temp-message.audio-message .audio-speed-sent {
+        font-size: 10px !important;
+        padding: 2px 4px !important;
     }
     
-    /* Mejorar distribución de controles en pantallas pequeñas */
-    .temp-message.audio-message .audio-actions-preview {
-        padding-left: 4px !important;
-        gap: 4px !important;
-    }
-    
-    .temp-message.audio-message .audio-player-sent {
-        gap: 4px !important;
+    .temp-message.audio-message .pendiente-badge {
+        font-size: 8px;
+        padding: 2px 6px;
     }
 }
 
-/* Efecto shimmer sutil */
-.temp-message.audio-message::after {
+/* Overlay sutil - brillo superior para aspecto premium */
+.temp-message.audio-message .message-content::before {
     content: "";
     position: absolute;
     top: 0;
     left: 0;
     right: 0;
-    bottom: 0;
-    background: linear-gradient(45deg, transparent 30%, rgba(13, 74, 31, 0.05) 50%, transparent 70%);
+    height: 40%;
+    background: linear-gradient(180deg, rgba(255,255,255,0.03) 0%, transparent 100%);
     pointer-events: none;
-    animation: shimmer 3s ease-in-out infinite;
-}
-
-@keyframes shimmer {
-    0% { transform: translateX(-100%); }
-    100% { transform: translateX(100%); }
+    border-radius: 16px 16px 0 0;
 }
 
 /* ================== MODAL DE IMAGEN ================== */
@@ -4365,13 +4499,13 @@ div.message.own-message .message-content,
     }
 }
 
-/* Indicador de escritura en chat de usuario */
+/* Indicador de escritura en chat de usuario (flotante - para vista usuario) */
 .user-typing-indicator {
     position: fixed;
     bottom: 80px;
     left: 50%;
     transform: translateX(-10%);
-    background: #004174 !important; /* ✅ NUEVO: Color azul personalizado */
+    background: #004174 !important; /* Color azul personalizado */
     color: white;
     padding: 8px 16px;
     border-radius: 20px;
@@ -4379,6 +4513,27 @@ div.message.own-message .message-content,
     z-index: 1000;
     box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
     animation: typingSlideUp 0.3s ease-out;
+}
+
+/* ✅ Dashboard: "escribiendo" SOLO debajo de cada usuario en la lista, nunca flotante */
+.chat-list-container .chat-item .user-typing-indicator,
+#usersList .chat-item .user-typing-indicator {
+    position: static !important;
+    bottom: auto !important;
+    left: auto !important;
+    transform: none !important;
+    display: none; /* Oculto por defecto, visible con .user-list-typing-visible */
+    margin-top: 2px;
+    margin-left: 8px;
+    padding: 2px 6px;
+    font-size: 10px;
+    border-radius: 4px;
+    z-index: 1;
+}
+.chat-list-container .chat-item .user-typing-indicator.user-list-typing-visible,
+#usersList .chat-item .user-typing-indicator.user-list-typing-visible {
+    display: flex !important;
+    align-items: center;
 }
 
 .user-typing-indicator .typing-content {
@@ -4571,4 +4726,80 @@ div.message.own-message .message-content,
 
 .in-page-notification.push-notification-desktop.push-notification-closing {
     animation: pushSlideIn 0.3s ease-out reverse;
+}
+
+/* Modal de resumen de limpieza del chat - amplio y cómodo sin scroll */
+.cleanup-summary-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.6);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 10050;
+}
+
+.cleanup-summary-modal {
+    background: linear-gradient(135deg, #1a1f2e 0%, #252b3b 100%);
+    border-radius: 12px;
+    min-width: 500px;
+    max-width: 580px;
+    min-height: 380px;
+    max-height: 85vh;
+    box-shadow: 0 15px 40px rgba(0, 0, 0, 0.5);
+    border: 1px solid #3a4556;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+
+.cleanup-summary-modal .cleanup-summary-header {
+    padding: 20px 24px;
+    background: rgba(0, 0, 0, 0.2);
+    border-bottom: 1px solid #3a4556;
+    color: #00d4aa;
+    font-size: 1.15rem;
+    font-weight: 600;
+}
+
+.cleanup-summary-modal .cleanup-summary-body {
+    padding: 24px 28px;
+    color: #e0e0e0;
+    font-size: 15px;
+    line-height: 1.7;
+    white-space: pre-wrap;
+    overflow-y: auto;
+    flex: 1;
+}
+
+.cleanup-summary-modal .cleanup-summary-footer {
+    padding: 16px 24px;
+    background: rgba(0, 0, 0, 0.15);
+    border-top: 1px solid #3a4556;
+}
+
+.cleanup-summary-modal .cleanup-summary-btn {
+    padding: 10px 28px;
+    background: #2196F3;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    font-size: 15px;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.cleanup-summary-modal .cleanup-summary-btn:hover {
+    background: #1976D2;
+}
+
+@media (max-width: 600px) {
+    .cleanup-summary-modal {
+        min-width: 92%;
+        max-width: 96%;
+        min-height: 320px;
+    }
 }

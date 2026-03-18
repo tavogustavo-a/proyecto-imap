@@ -865,11 +865,13 @@ class ChatReconnectionManager {
         return new Promise((resolve, reject) => {
             try {
                 // Detectar si es móvil
-                // Conectar a SocketIO: en producción usa el proxy de Nginx, en local usa puerto directo
-                const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-                const baseUrl = isLocal ? 
-                    `${window.location.protocol}//${window.location.hostname}:5001` : 
-                    window.location.origin;
+                // Conectar a SocketIO: en desarrollo/LAN usa puerto 5001; en producción usa origin
+                const host = window.location.hostname;
+                const isDevOrLan = host === 'localhost' || host === '127.0.0.1' ||
+                    /^192\.168\.\d+\.\d+$/.test(host) || /^10\.\d+\.\d+\.\d+$/.test(host) ||
+                    /^172\.(1[6-9]|2\d|3[0-1])\.\d+\.\d+$/.test(host);
+                const baseUrl = isDevOrLan ?
+                    `${window.location.protocol}//${host}:5001` : window.location.origin;
                 
                 // Crear nuevo socket
                 window.socket = io(baseUrl, {
@@ -1113,6 +1115,14 @@ class ChatReconnectionManager {
         const chatArea = document.querySelector('#chatMessagesArea, #chatMessagesAreaUser');
         if (chatArea) {
             chatArea.scrollTop = chatArea.scrollHeight;
+        }
+        // Actualizar color de la lista según último mensaje sincronizado
+        if (messages.length > 0 && typeof window.updateUserChatStatus === 'function') {
+            const lastMsg = messages[messages.length - 1];
+            const result = typeof window.getTargetUserIdAndStatusFromMessageData === 'function' 
+                ? window.getTargetUserIdAndStatusFromMessageData(lastMsg) 
+                : null;
+            if (result) window.updateUserChatStatus(result.targetUserId, result.status);
         }
     }
     

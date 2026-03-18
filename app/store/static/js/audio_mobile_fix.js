@@ -6,12 +6,13 @@
  * Configuración optimizada para grabación de audio en móviles
  */
 const MOBILE_AUDIO_CONFIG = {
-    // MIME Types priorizados para móviles
     MIME_TYPES_MOBILE: [
-        'audio/mp4',           // Mejor soporte en iOS
-        'audio/wav',           // Universal
-        'audio/webm',          // Android
-        'audio/ogg'            // Fallback
+        'audio/webm;codecs=opus',
+        'audio/webm',
+        'audio/mp4',
+        'audio/ogg;codecs=opus',
+        'audio/ogg',
+        'audio/wav'
     ],
     
     // MIME Types para PC (mantener compatibilidad)
@@ -23,13 +24,11 @@ const MOBILE_AUDIO_CONFIG = {
         'audio/ogg'                // Fallback
     ],
     
-    // Configuración de audio simplificada para móviles
     AUDIO_CONSTRAINTS: {
-        // Configuración básica que funciona en la mayoría de móviles
         audio: {
-            echoCancellation: true,
-            noiseSuppression: true,
-            autoGainControl: true
+            echoCancellation: false,
+            noiseSuppression: false,
+            autoGainControl: false
         }
     },
     
@@ -72,7 +71,7 @@ function getBestMimeType() {
             return mimeType;
         }
     }
-    return 'audio/wav'; // Fallback universal
+    return 'audio/webm';
 }
 
 /**
@@ -110,73 +109,114 @@ async function activateAudioContext() {
 }
 
 /**
- * Función mejorada de grabación de audio (compatible con PC y móviles)
+ * Grabación de audio optimizada para navegadores web (PC y móviles)
+ * Basado en: MDN MediaRecorder, Chrome Developers, prácticas conocidas
  */
 async function startMobileAudioRecording() {
     try {
-        
-        // 1. Para móviles, no activar AudioContext automáticamente
-        // Se activará cuando el usuario interactúe
-        
-        // 2. Obtener la mejor configuración para el dispositivo
+        if (!window.isSecureContext) {
+            const url = window.location.origin;
+            showError('Micrófono bloqueado: esta página no usa HTTPS. Para activarlo en móvil: Chrome → chrome://flags → busca "Insecure origins" → agrega ' + url + ' → reinicia.');
+            throw new Error('Contexto no seguro');
+        }
         const audioConstraints = getBestAudioConstraints();
         
-        // 3. Activar AudioContext si está suspendido (solo cuando el usuario interactúa)
         if (window.audioContext && window.audioContext.state === 'suspended') {
             try {
                 await window.audioContext.resume();
-            } catch (error) {
-                // Si falla, crear uno nuevo
-                const AudioContext = window.AudioContext || window.webkitAudioContext;
-                window.audioContext = new AudioContext();
+            } catch (e) {
+                const AC = window.AudioContext || window.webkitAudioContext;
+                window.audioContext = new AC();
             }
         }
         
-        // 4. Solicitar acceso al micrófono
-        const stream = await navigator.mediaDevices.getUserMedia(audioConstraints);
+        let stream;
+        try {
+            stream = await navigator.mediaDevices.getUserMedia(audioConstraints);
+        } catch (e) {
+            if (e.name === 'OverconstrainedError' && isMobileDevice()) {
+                stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            } else {
+                throw e;
+            }
+        }
         
-        // 5. Obtener el mejor MIME Type
-        const mimeType = getBestMimeType();
+        const audioTracks = stream.getAudioTracks();
+        if (!audioTracks.length) {
+            stream.getTracks().forEach(t => t.stop());
+            showError('No se detectó micrófono. Verifica permisos en ajustes del navegador.');
+            throw new Error('Sin pista de audio');
+        }
+        audioTracks[0].enabled = true;
         
-        // 6. Configurar MediaRecorder
-        const options = {
-            mimeType: mimeType,
-            audioBitsPerSecond: 128000
-        };
+        let mimeType = getBestMimeType();
+        let options = { audioBitsPerSecond: 128000 };
+        
+        if (MediaRecorder.isTypeSupported(mimeType)) {
+            options.mimeType = mimeType;
+        } else {
+            delete options.mimeType;
+        }
 
-        const mediaRecorder = new MediaRecorder(stream, options);
+        let mediaRecorder;
+        try {
+            mediaRecorder = new MediaRecorder(stream, options);
+        } catch (e) {
+            mediaRecorder = new MediaRecorder(stream);
+        }
+        
         const audioChunks = [];
+        const recordingStartTime = Date.now();
+        mimeType = options.mimeType || mediaRecorder.mimeType || 'audio/webm';
 
-        // 7. Configurar eventos
         mediaRecorder.ondataavailable = (event) => {
-            if (event.data.size > 0) {
+            if (event.data && event.data.size > 0) {
                 audioChunks.push(event.data);
             }
         };
         
         mediaRecorder.onstop = () => {
-            const audioBlob = new Blob(audioChunks, { type: mimeType });
-            
-            // Liberar recursos del stream
+            const chunks = [...audioChunks];
+            const durationMs = Date.now() - recordingStartTime;
             stream.getTracks().forEach(track => track.stop());
             
-            // Procesar el audio grabado
-            if (audioBlob.size > 0) {
+            const processChunks = () => {
+                const validChunks = chunks.filter(c => c && c.size > 0);
+                if (validChunks.length === 0) {
+                    showError('No se capturó audio. Graba al menos 1 segundo e intenta de nuevo.');
+                    return;
+                }
+                if (durationMs < 800 && isMobileDevice()) {
+                    showError('Graba al menos 1 segundo.');
+                    return;
+                }
+                const audioBlob = new Blob(validChunks, { type: mimeType });
+                if (audioBlob.size < 50) {
+                    showError('Audio muy corto. Graba al menos 1 segundo.');
+                    return;
+                }
                 processRecordedAudio(audioBlob);
+            };
+            
+            if (isMobileDevice()) {
+                setTimeout(processChunks, 500);
             } else {
-                showError('No se grabó audio. Intenta de nuevo.');
+                processChunks();
             }
         };
         
-        // 8. Iniciar grabación con configuración adaptativa
-        const chunkInterval = isMobileDevice() ? 100 : 1000; // Móviles: 100ms, PC: 1000ms
-        mediaRecorder.start(chunkInterval);
-        
-        return {
-            mediaRecorder,
-            stream,
-            mimeType
+        mediaRecorder.onerror = (e) => {
+            stream.getTracks().forEach(track => track.stop());
+            showError('Error de grabación: ' + (e.error?.message || 'Desconocido'));
         };
+        
+        if (isMobileDevice()) {
+            mediaRecorder.start(250);
+        } else {
+            mediaRecorder.start(1000);
+        }
+        
+        return { mediaRecorder, stream, mimeType, recordingStartTime };
         
     } catch (error) {
         handleAudioError(error);
@@ -214,35 +254,58 @@ function handleAudioError(error) {
 }
 
 /**
- * Procesar audio grabado
+ * Procesar audio grabado - en móvil evita verificación con Audio que falla en Chrome
  */
 function processRecordedAudio(audioBlob) {
-    // Verificar que el audio no esté vacío
     if (audioBlob.size < 100) {
         showError('Audio muy corto. Intenta grabar por más tiempo.');
         return;
     }
     
-    // Crear URL temporal para previsualización
-    const audioUrl = URL.createObjectURL(audioBlob);
-    
-    // Crear elemento de audio para verificación
-    const audio = new Audio(audioUrl);
-    audio.addEventListener('loadedmetadata', () => {
-        if (audio.duration > 0) {
-            // Audio válido, proceder con el envío
-            sendAudioMessage(audioBlob);
+    const showPreview = () => {
+        const tempMessageId = 'temp_audio_' + Date.now();
+        if (typeof window.showAudioPreviewModal === 'function') {
+            const input = document.getElementById('chatInputField') || document.getElementById('chatInputFieldUser');
+            if (input) input.value = '';
+            window.showAudioPreviewModal(audioBlob, tempMessageId);
+            const chatArea = document.querySelector('#chatMessagesArea') || document.querySelector('#chatMessagesAreaUser');
+            if (chatArea) chatArea.scrollTop = chatArea.scrollHeight;
         } else {
-            showError('Audio inválido. Intenta grabar de nuevo.');
+            sendAudioMessage(audioBlob);
         }
-        URL.revokeObjectURL(audioUrl);
-    });
+    };
     
+    if (isMobileDevice()) {
+        showPreview();
+        return;
+    }
+    
+    const audioUrl = URL.createObjectURL(audioBlob);
+    const audio = new Audio();
+    audio.setAttribute('playsinline', 'true');
+    audio.setAttribute('webkit-playsinline', 'true');
+    
+    const onMetadataLoaded = () => {
+        const duration = audio.duration;
+        URL.revokeObjectURL(audioUrl);
+        if (!duration || !isFinite(duration)) {
+            showError('Audio inválido. Intenta grabar de nuevo.');
+            return;
+        }
+        if (duration < 1) {
+            showError('El audio debe ser de al menos 1 segundo.');
+            return;
+        }
+        showPreview();
+    };
+    
+    audio.addEventListener('loadedmetadata', onMetadataLoaded);
     audio.addEventListener('error', () => {
-        showError('Error al procesar audio. Intenta de nuevo.');
         URL.revokeObjectURL(audioUrl);
+        showPreview();
     });
     
+    audio.src = audioUrl;
     audio.load();
 }
 
@@ -279,28 +342,40 @@ function showError(message) {
 /**
  * Función de envío de audio (compatible con el sistema existente)
  */
-function sendAudioMessage(audioBlob) {
-    // Usar la función existente si está disponible
+function sendAudioMessage(audioBlob, tempMessageId = null) {
+    const ext = (audioBlob.type && audioBlob.type.includes('mp4')) ? 'mp4' :
+        (audioBlob.type && audioBlob.type.includes('ogg')) ? 'ogg' : 'webm';
+    const filename = `audio_${Date.now()}.${ext}`;
+    const audioFile = new File([audioBlob], filename, { type: audioBlob.type || 'audio/webm' });
+    
     if (typeof window.sendAudioMessage === 'function') {
-        window.sendAudioMessage(audioBlob);
-    } else {
-        // Fallback: enviar por fetch
-        const formData = new FormData();
-        formData.append('audio', audioBlob, `audio_${Date.now()}.${audioBlob.type.split('/')[1]}`);
-        formData.append('message_type', 'audio');
-        
-        fetch('/tienda/api/chat/send_audio', {
-            method: 'POST',
-            body: formData
-        }).then(response => {
-            if (response.ok) {
-            } else {
-                showError('Error al enviar audio');
-            }
-        }).catch(error => {
-            showError('Error al enviar audio');
-        });
+        return window.sendAudioMessage(audioFile, tempMessageId);
     }
+    
+    const formData = new FormData();
+    formData.append('audio', audioFile, filename);
+    formData.append('recipient_id', (typeof window.getCurrentChatUserId === 'function' && window.getCurrentChatUserId()) || 
+        window.dashboardCurrentUserId || '1');
+    formData.append('message_type', 'audio');
+    
+    const csrfMeta = document.querySelector('meta[name="csrf_token"]');
+    const headers = {};
+    const csrfToken = csrfMeta ? (csrfMeta.content || csrfMeta.getAttribute('content')) : '';
+    if (csrfToken) headers['X-CSRFToken'] = csrfToken;
+    
+    return fetch('/tienda/api/chat/send_audio', {
+        method: 'POST',
+        headers: headers,
+        body: formData
+    }).then(async response => {
+        const data = await response.json().catch(() => ({}));
+        if (response.ok && data.status === 'success') return true;
+        showError(data.message || 'Error al enviar audio');
+        return false;
+    }).catch(() => {
+        showError('Error al enviar audio. Verifica tu conexión.');
+        return false;
+    });
 }
 
 /**
@@ -336,59 +411,62 @@ function enhanceExistingAudioRecording() {
 }
 
 /**
+ * Estado de grabación por botón (para toggle: tap iniciar, tap detener)
+ */
+const mobileRecordingState = new Map(); // buttonId -> { mediaRecorder, stream, mimeType }
+
+/**
  * Interceptar eventos de clic en botones de audio para móviles
+ * Toggle: primer tap = iniciar grabación, segundo tap = detener y enviar
  */
 function interceptAudioButtons() {
     if (!isMobileDevice()) {
         return;
     }
     
-    
-    // Función para interceptar botones de audio
     const interceptButton = (buttonId) => {
         const button = document.getElementById(buttonId);
-        if (button) {
+        if (!button) return;
+        
+        button.replaceWith(button.cloneNode(true));
+        const newButton = document.getElementById(buttonId);
+        
+        newButton.addEventListener('click', async (e) => {
+            e.preventDefault();
+            e.stopPropagation();
             
-            // Remover listeners existentes
-            button.replaceWith(button.cloneNode(true));
-            const newButton = document.getElementById(buttonId);
+            const state = mobileRecordingState.get(buttonId);
             
-            // Agregar listener personalizado para móviles
-            newButton.addEventListener('click', async (e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                
+            if (state && state.mediaRecorder && state.mediaRecorder.state === 'recording') {
                 try {
-                    await startMobileAudioRecording();
+                    state.mediaRecorder.requestData();
+                    state.mediaRecorder.stop();
+                    mobileRecordingState.delete(buttonId);
+                    newButton.innerHTML = '<i class="fas fa-microphone"></i>';
+                    newButton.style.background = '';
+                    newButton.title = 'Toca para grabar audio';
+                } catch (err) {
+                    mobileRecordingState.delete(buttonId);
+                    handleAudioError(err);
+                }
+            } else {
+                // Primer tap: iniciar grabación
+                try {
+                    const result = await startMobileAudioRecording();
+                    mobileRecordingState.set(buttonId, result);
+                    newButton.innerHTML = '<i class="fas fa-stop"></i>';
+                    newButton.style.background = '#dc3545';
+                    newButton.title = 'Toca de nuevo para detener y enviar';
                 } catch (error) {
                     handleAudioError(error);
                 }
-            }, { passive: false });
-            
-            // También interceptar touchstart
-            newButton.addEventListener('touchstart', async (e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                
-                try {
-                    await startMobileAudioRecording();
-                } catch (error) {
-                    handleAudioError(error);
-                }
-            }, { passive: false });
-        } else {
-            // Para audioRecordBtnUser, es opcional (solo existe en chat de usuarios)
-        }
+            }
+        }, { passive: false });
     };
     
-    // Interceptar botones de audio (solo los que existen)
     interceptButton('audioRecordBtn');
-    
-    // Solo interceptar audioRecordBtnUser si existe (es opcional)
     const userButton = document.getElementById('audioRecordBtnUser');
-    if (userButton) {
-        interceptButton('audioRecordBtnUser');
-    }
+    if (userButton) interceptButton('audioRecordBtnUser');
 }
 
 /**
@@ -404,10 +482,9 @@ function interceptAudioButtonsWithRetry() {
     
     const tryIntercept = () => {
         attempts++;
-        
         const audioRecordBtn = document.getElementById('audioRecordBtn');
-        
-        if (audioRecordBtn) {
+        const audioRecordBtnUser = document.getElementById('audioRecordBtnUser');
+        if (audioRecordBtn || audioRecordBtnUser) {
             interceptAudioButtons();
         } else if (attempts < maxAttempts) {
             setTimeout(tryIntercept, 500);
@@ -419,15 +496,12 @@ function interceptAudioButtonsWithRetry() {
 
 /**
  * Inicializar funcionalidad de audio móvil
+ * El permiso de micrófono se solicita al presionar el botón de grabar por primera vez
  */
 function initializeMobileAudio() {
-    // Solo proceder si es móvil
     if (!isMobileDevice()) {
         return;
     }
-    
-    
-    // Interceptar botones de audio con reintentos
     interceptAudioButtonsWithRetry();
     
     // Esperar a que la función startAudioRecording esté disponible

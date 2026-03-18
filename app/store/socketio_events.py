@@ -271,12 +271,14 @@ def handle_new_message(data):
             emit('chat_status_changed', status_data, room=room)
         
         # ✅ NUEVO: Emitir actualización de lista de usuarios para ordenar por recientes
+        target_user_id = recipient_id if message_type in ['admin', 'support'] else sender_id
         user_list_data = {
-            'user_id': recipient_id if message_type in ['admin', 'support'] else sender_id,
+            'user_id': target_user_id,
             'action': 'new_message',
             'username': sender_name,
             'message_preview': message[:50] + '...' if len(message) > 50 else message,
-            'timestamp': datetime.utcnow().isoformat()
+            'timestamp': datetime.utcnow().isoformat(),
+            'status': 'responded' if message_type in ['admin', 'support'] else 'new_message'
         }
         
         # Emitir actualización de lista a salas de admin/soporte
@@ -426,12 +428,14 @@ def handle_send_file_message(data):
             emit('file_message_received', message_data, room=room)
         
         # ✅ NUEVO: Emitir actualización de lista de usuarios para archivos
+        target_user_id = recipient_id if message_type in ['admin', 'support'] else sender_id
         user_list_data = {
-            'user_id': recipient_id if message_type in ['admin', 'support'] else sender_id,
+            'user_id': target_user_id,
             'action': 'new_message',
             'username': sender_name,
             'message_preview': f"[Archivo.{attachment_filename.split('.')[-1] if '.' in attachment_filename else ''}]",
-            'timestamp': datetime.utcnow().isoformat()
+            'timestamp': datetime.utcnow().isoformat(),
+            'status': 'responded' if message_type in ['admin', 'support'] else 'new_message'
         }
         
         # Emitir actualización de lista a salas de admin/soporte
@@ -564,12 +568,14 @@ def handle_send_audio_message(data):
             emit('audio_message_received', message_data, room=admin_sender_room)
         
         # ✅ NUEVO: Emitir actualización de lista de usuarios para audio
+        target_user_id = recipient_id if message_type in ['admin', 'support'] else sender_id
         user_list_data = {
-            'user_id': recipient_id if message_type in ['admin', 'support'] else sender_id,
+            'user_id': target_user_id,
             'action': 'new_message',
             'username': sender_name,
             'message_preview': "[Audio]",
-            'timestamp': datetime.utcnow().isoformat()
+            'timestamp': datetime.utcnow().isoformat(),
+            'status': 'responded' if message_type in ['admin', 'support'] else 'new_message'
         }
         
         # Emitir actualización de lista a salas de admin/soporte
@@ -864,7 +870,7 @@ def handle_update_chat_status(data):
 
 @tienda_socketio.on('finalize_chat')
 def handle_finalize_chat(data):
-    """Finalizar chat y notificar a todos los clientes"""
+    """Finalizar chat y notificar solo al usuario afectado (evitar duplicados padre/sub)"""
     try:
         user_id = data.get('user_id')
         admin_id = data.get('admin_id')
@@ -873,9 +879,11 @@ def handle_finalize_chat(data):
             emit('error', {'message': 'Datos de finalización incompletos'})
             return
         
-        # Crear mensaje del sistema en la base de datos
+        user_id = int(user_id)
+        
+        # Crear UN solo mensaje del sistema para el usuario cuyo chat se finaliza
         system_message = ChatMessage(
-            sender_id='system',
+            sender_id=int(admin_id),
             recipient_id=user_id,
             message='Chat finalizado, gracias por contactarnos',
             message_type='system',
@@ -885,21 +893,25 @@ def handle_finalize_chat(data):
         db.session.add(system_message)
         db.session.commit()
         
-        # Emitir a todos los clientes conectados
-        tienda_socketio.emit('chat_finalized', {
+        event_data = {
             'user_id': user_id,
             'admin_id': admin_id,
             'status': 'finished',
             'message_id': system_message.id
-        })
+        }
         
-        # ✅ NUEVO: Emitir cambio de estado para actualizar colores en tiempo real
-        tienda_socketio.emit('chat_status_changed', {
-            'user_id': user_id,
-            'status': 'finished'
-        })
+        # Emitir SOLO a: el usuario afectado, admin y soporte (no broadcast a todos)
+        tienda_socketio.emit('chat_finalized', event_data, room=f'user_chat_{user_id}')
+        tienda_socketio.emit('chat_finalized', event_data, room='support_room')
+        tienda_socketio.emit('chat_finalized', event_data, room='admin_chat_1')
+        tienda_socketio.emit('chat_finalized', event_data, room=f'admin_chat_{user_id}')
         
-                # Confirmar finalización
+        for room in ['support_room', 'admin_chat_1', f'user_chat_{user_id}']:
+            tienda_socketio.emit('chat_status_changed', {
+                'user_id': user_id,
+                'status': 'finished'
+            }, room=room)
+        
         emit('chat_finalized', {'status': 'success'})
         
     except Exception as e:

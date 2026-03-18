@@ -145,13 +145,16 @@ async function loadUsersList(response = null) {
                     userItem.className = 'chat-item';
                     userItem.setAttribute('data-user-id', user.id);
                     userItem.setAttribute('data-username', user.username);
+                    // Para sub-usuarios: display_name = "padre / subusuario" (chat independiente)
+                    const displayName = user.display_name || user.username;
+                    userItem.setAttribute('data-display-name', displayName);
                     
                     userItem.innerHTML = `
                         <div class="user-avatar">
-                            <span class="user-initial">${user.username.charAt(0).toUpperCase()}</span>
+                            <span class="user-initial">${displayName.charAt(0).toUpperCase()}</span>
                         </div>
                         <div class="user-info">
-                            <div class="user-name">${user.username}</div>
+                            <div class="user-name">${displayName}</div>
                             <div class="user-last-message">${user.last_message || 'Sin mensajes'}</div>
                 <div class="user-typing-indicator d-none">
                     <span class="typing-text">escribiendo</span>
@@ -224,24 +227,6 @@ async function loadUsersList(response = null) {
                     addDeleteButtonListeners();
                 }
                 
-                // ✅ NUEVO: Agregar event listener para limpiar mensajes antiguos y estados
-                // ✅ CORREGIDO: Limpiar event listeners duplicados primero
-                clearDuplicateEventListeners();
-                
-                const btnLimpiarMensajes = document.getElementById('btnLimpiarMensajes');
-                if (btnLimpiarMensajes) {
-                    btnLimpiarMensajes.addEventListener('click', function(e) {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        cleanupOldMessages();
-                    });
-                }
-                
-                // ✅ CRÍTICO: Verificar y corregir estados de chat después de cargar la lista
-                setTimeout(() => {
-                    verifyAndCorrectChatStatuses();
-                }, 100);
-                
             } else {
                 // ✅ CORREGIDO: No hay usuarios con chat - mostrar mensaje simple
                                  // No hay usuarios con chat activo
@@ -305,12 +290,18 @@ async function loadUserMessages(userId, forceUpdate = false) {
             chatInputArea.classList.add('active');
             chatInputField.focus();
             
-            chatTitle.textContent = `Chat con ${data.user_info ? data.user_info.username : userId}`;
+            chatTitle.textContent = `Chat con ${data.user_info ? (data.user_info.display_name || data.user_info.username) : userId}`;
             
             // ✅ ELIMINADO: No actualizar fechas automáticamente para mantener fechas originales
             
             chatMessagesArea.scrollTop = chatMessagesArea.scrollHeight;
             updateUserAvatarStatus(userId);
+            
+            // ✅ Actualizar color según último mensaje al cargar chat (usa helper único)
+            if (messages && messages.length > 0) {
+                const status = getChatStatusFromMessage(messages[messages.length - 1]) || 'pending';
+                updateUserChatStatus(userId, status);
+            }
                 } else {
                          // Error al cargar mensajes
         }
@@ -381,8 +372,10 @@ async function sendMessage(message) {
                     is_support: isSupportUser
                 });
                 
-                // ✅ NUEVO: Esperar confirmación antes de remover mensaje temporal
-                // El mensaje temporal se removerá cuando llegue la confirmación del servidor
+                // ✅ CRÍTICO: Actualizar a azul inmediatamente (admin/soporte escribió)
+                if (currentChatUserId) {
+                    updateUserChatStatus(currentChatUserId, 'responded');
+                }
                 
                 // ✅ NUEVO: Notificar a otras pestañas que se envió un mensaje
                 if (window.ChatReconnectionManager && typeof window.ChatReconnectionManager.broadcastToOtherTabs === 'function') {
@@ -424,20 +417,18 @@ async function sendMessage(message) {
             const data = await response.json();
             
             if (data.status === 'success') {
-            // ✅ CORREGIDO: Remover mensaje temporal y agregar el real
             removeTempMessage(tempId);
             
-            // ✅ NUEVO: Verificar que el mensaje del servidor no sea duplicado
             const existingMessage = chatMessagesArea.querySelector(`[data-message-id="${data.data.id}"]`);
             if (!existingMessage) {
                 addMessageToChat(data.data, true);
                 chatMessagesArea.scrollTop = chatMessagesArea.scrollHeight;
-            } else {
-        
             }
             
-            // ✅ NUEVO: Actualizar estado del chat a "responded" (azul)
-            // ✅ CORREGIDO: No actualizar estado directamente - SocketIO se encarga
+            // ✅ CRÍTICO: Actualizar a azul al enviar (admin/soporte) - no depender de SocketIO
+            if (currentChatUserId) {
+                updateUserChatStatus(currentChatUserId, 'responded');
+            }
             
             // ✅ ELIMINADO: removeFinishedStatus ahora se maneja en addMessageToChat
             // para evitar duplicación y mejorar la lógica
@@ -888,25 +879,29 @@ function removeTempMessage(tempId) {
     if (tempMessage) {
         tempMessage.remove();
     } else {
-        // ✅ NUEVO: Buscar por ID de preview también
+        // ✅ Buscar por ID de preview también
         const previewMessage = document.querySelector(`#preview-${tempId}`);
         if (previewMessage) {
             previewMessage.remove();
         } else {
-            // ✅ NUEVO: Buscar y eliminar TODOS los mensajes temporales restantes
-            const allTempMessages = document.querySelectorAll(`[data-message-id^="temp_"], [id^="preview-"]`);
-            if (allTempMessages.length > 0) {
-                allTempMessages.forEach(msg => {
-                    msg.remove();
-                });
+            // Buscar y eliminar mensajes temporales restantes (audio preview usa id="audio-temp_audio_XXX")
+            const audioPreviewDiv = document.querySelector(`#audio-${tempId}`);
+            if (audioPreviewDiv) {
+                audioPreviewDiv.remove();
+            } else {
+                const allTempMessages = document.querySelectorAll(`[data-message-id^="temp_"], [id^="preview-"], [id^="audio-temp_"]`);
+                if (allTempMessages.length > 0) {
+                    allTempMessages.forEach(msg => msg.remove());
+                }
             }
         }
     }
     
-    // También remover el elemento de audio si existe
-    const audioElement = document.querySelector(`#audio-${tempId}`);
-    if (audioElement) {
-        audioElement.remove();
+    // Remover el elemento <audio> oculto (id="audio-preview-temp_audio_XXX") para evitar fugas de memoria
+    const audioPreviewElement = document.querySelector(`#audio-preview-${tempId}`);
+    if (audioPreviewElement) {
+        if (audioPreviewElement.src) URL.revokeObjectURL(audioPreviewElement.src);
+        audioPreviewElement.remove();
     }
 }
 
@@ -1124,6 +1119,33 @@ function updateUserAvatarStatus(userId) {
     }
 }
 
+// Modal de resumen de limpieza - amplio, sin scroll
+function showCleanupSummaryModal(message, onClose) {
+    const overlay = document.createElement('div');
+    overlay.className = 'cleanup-summary-overlay';
+    overlay.innerHTML = `
+        <div class="cleanup-summary-modal">
+            <div class="cleanup-summary-header">
+                <i class="fas fa-check-circle"></i> Limpieza completada
+            </div>
+            <div class="cleanup-summary-body">${String(message).replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>')}</div>
+            <div class="cleanup-summary-footer">
+                <button type="button" class="cleanup-summary-btn">Aceptar</button>
+            </div>
+        </div>
+    `;
+    const btn = overlay.querySelector('.cleanup-summary-btn');
+    const closeModal = function() {
+        document.body.removeChild(overlay);
+        if (typeof onClose === 'function') onClose();
+    };
+    btn.addEventListener('click', closeModal);
+    overlay.addEventListener('click', function(e) {
+        if (e.target === overlay) closeModal();
+    });
+    document.body.appendChild(overlay);
+}
+
 // Función para eliminar chat de un usuario
 async function deleteUserChat(userId) {
     if (!confirm('¿Estás seguro de que quieres eliminar todo el chat de este usuario? Esta acción no se puede deshacer.')) {
@@ -1176,87 +1198,12 @@ async function deleteUserChat(userId) {
         }
     }
     
-    // Función para limpiar mensajes antiguos, estados obsoletos y usuarios inactivos
+    // Función para limpiar mensajes antiguos - Flujo simplificado: un solo clic + confirmar
     async function cleanupOldMessages() {
-        
-        // ✅ Obtener días seleccionados del selector
         const daysSelect = document.getElementById('cleanupDaysSelect');
         const selectedDays = daysSelect ? parseInt(daysSelect.value) : 5;
         
-        
-        // ✅ RESTAURADO: Preguntar qué tipo de limpieza quiere
-        const cleanupChoice = prompt(`¿Qué tipo de limpieza quieres realizar?\n\n1 = Limpieza COMPLETA (elimina TODO)\n2 = Limpieza parcial (solo mensajes antiguos)\n3 = Solo archivos huérfanos\n\nEscribe el número (1, 2 o 3):`);
-        
-        if (cleanupChoice === '1') {
-            // Limpieza COMPLETA
-            if (!confirm(`⚠️ ADVERTENCIA: LIMPIEZA COMPLETA ⚠️\n\nEsta acción eliminará ABSOLUTAMENTE TODO:\n• TODOS los mensajes del chat\n• TODAS las sesiones\n• TODOS los archivos\n• TODOS los archivos huérfanos\n\nEsta acción NO SE PUEDE DESHACER.\n\n¿Estás SEGURO de continuar?`)) {
-                return;
-            }
-            
-            try {
-                // Llamar a la nueva ruta de limpieza completa
-                const response = await fetch('/tienda/api/chat/cleanup_all_messages', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-CSRFToken': getSupportCsrfToken()
-                    }
-                });
-                
-                const data = await response.json();
-                
-                if (data.status === 'success') {
-                    alert(data.message);
-                    // Recargar lista de usuarios
-                    loadUsersList();
-                } else {
-                    alert(`❌ Error: ${data.message}`);
-                }
-                
-            } catch (error) {
-                alert(`❌ Error durante la limpieza completa: ${error.message}`);
-            }
-            return;
-        }
-        
-        if (cleanupChoice === '3') {
-            // Limpieza solo de archivos huérfanos
-            if (!confirm(`¿Estás seguro de que quieres limpiar solo archivos huérfanos?\n\nEsta acción eliminará:\n• Archivos de audio sin mensaje asociado\n• Archivos de imagen sin mensaje asociado\n• Archivos de video sin mensaje asociado\n• Otros archivos huérfanos\n\n¿Continuar?`)) {
-                return;
-            }
-            
-            try {
-                // Llamar a la ruta de limpieza de archivos huérfanos
-                const response = await fetch('/tienda/api/chat/cleanup_orphaned_files', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-CSRFToken': getSupportCsrfToken()
-                    }
-                });
-                
-                const data = await response.json();
-                
-                if (data.status === 'success') {
-                    alert(data.message);
-                } else {
-                    alert(`❌ Error: ${data.message}`);
-                }
-                
-            } catch (error) {
-                alert(`❌ Error durante la limpieza de archivos huérfanos: ${error.message}`);
-            }
-            return;
-        }
-        
-        if (cleanupChoice !== '2') {
-            // Si no eligió una opción válida
-            alert('Opción no válida. Operación cancelada.');
-            return;
-        }
-        
-        // Limpieza parcial (original)
-        if (!confirm(`¿Estás seguro de que quieres realizar la limpieza parcial?\n\nEsta acción eliminará:\n• Mensajes antiguos (más de ${selectedDays} días)\n• Estados obsoletos\n• Chats de usuarios inactivos (${selectedDays}+ días)\n• Archivos adjuntos y huérfanos\n\n¿Continuar?`)) {
+        if (!confirm(`¿Eliminar mensajes de más de ${selectedDays} días?\n\nEsto eliminará:\n• Mensajes antiguos (${selectedDays}+ días)\n• Estados obsoletos\n• Chats de usuarios inactivos\n• Archivos adjuntos y huérfanos\n\n¿Continuar?`)) {
             return;
         }
         
@@ -1273,6 +1220,10 @@ async function deleteUserChat(userId) {
             });
             
             const messagesData = await messagesResponse.json();
+            if (messagesData.status === 'error') {
+                alert(`❌ Error: ${messagesData.message || 'No se pudieron eliminar los mensajes antiguos'}`);
+                return;
+            }
             
             // 2. Limpiar estados obsoletos
             const statusResponse = await fetch('/tienda/api/chat/cleanup_obsolete_statuses', {
@@ -1301,8 +1252,9 @@ async function deleteUserChat(userId) {
             let summaryMessage = `✅ LIMPIEZA COMPLETA FINALIZADA!\n\n`;
             
             // 📊 Resumen de mensajes antiguos
-            if (messagesData.status === 'success') {
-                summaryMessage += `📊 Mensajes Antiguos (${selectedDays} días):\n• ${messagesData.data.deleted_count} mensajes eliminados\n• ${messagesData.data.sessions_deleted} sesiones eliminadas\n• ${messagesData.data.files_deleted} archivos eliminados\n• ${messagesData.data.orphaned_files_deleted} archivos huérfanos eliminados\n• ${messagesData.data.support_users_cleaned} usuarios de soporte limpiados\n\n`;
+            if (messagesData.status === 'success' && messagesData.data) {
+                const d = messagesData.data;
+                summaryMessage += `📊 Mensajes Antiguos (${selectedDays} días):\n• ${d.deleted_count ?? 0} mensajes eliminados\n• ${d.sessions_deleted ?? 0} sesiones eliminadas\n• ${d.files_deleted ?? 0} archivos eliminados\n• ${d.orphaned_files_deleted ?? 0} archivos huérfanos eliminados\n• ${d.support_users_cleaned ?? 0} usuarios de soporte limpiados\n\n`;
             }
             
             // 🔄 Estados corregidos
@@ -1315,11 +1267,10 @@ async function deleteUserChat(userId) {
                 summaryMessage += `⚠️ Usuarios Inactivos (${selectedDays}+ días):\n• ${inactiveData.data.users_cleaned} usuarios inactivos limpiados\n• ${inactiveData.data.total_files_deleted} archivos eliminados\n• ${inactiveData.data.total_orphaned_files_deleted} archivos huérfanos eliminados`;
             }
             
-            // Limpieza completada
-            alert(summaryMessage);
-            
-            // ✅ Recargar lista de usuarios
-            loadUsersList();
+            // Limpieza completada - mostrar modal amplio en lugar de alert
+            showCleanupSummaryModal(summaryMessage, function() {
+                loadUsersList();
+            });
             
         } catch (error) {
             // Error al realizar la limpieza completa
@@ -1378,22 +1329,19 @@ async function startAudioRecording() {
             return;
         }
         
-        // ✅ MEJORADO: Solicitar permisos de micrófono usando la API estándar
-        const stream = await navigator.mediaDevices.getUserMedia({ 
-            audio: {
-                sampleRate: 44100,
-                channelCount: 1,
-                echoCancellation: true,
-                noiseSuppression: true,
-                autoGainControl: true,
-                // ✅ NUEVO: Opciones específicas para móviles
-                latency: 0.1,
-                googEchoCancellation: true,
-                googAutoGainControl: true,
-                googNoiseSuppression: true,
-                googHighpassFilter: true
-            } 
-        });
+        // ✅ MEJORADO: Solicitar permisos de micrófono (fallback a constraints simples si fallan las avanzadas)
+        let stream;
+        try {
+            stream = await navigator.mediaDevices.getUserMedia({ 
+                audio: {
+                    echoCancellation: true,
+                    noiseSuppression: true,
+                    autoGainControl: true
+                } 
+            });
+        } catch (constraintError) {
+            stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        }
         
         // ✅ MEJORADO: Configurar MediaRecorder con opciones específicas para móviles
         const options = {
@@ -1551,68 +1499,66 @@ function showAudioMessage(audioBlob) {
 // ✅ FUNCIÓN MOVIDA A video-utils.js
 
 // ✅ CORREGIDO: Función para enviar audio al servidor
+// Usar siempre HTTP - evita "Invalid session" cuando Socket.IO corre en servidor separado
 async function sendAudioMessage(audioBlob, tempMessageId = null) {
     if (!window.dashboardCurrentUserId) return;
     
+    const currentChatUserId = getCurrentChatUserId();
+    if (!currentChatUserId) {
+        showNotification('Selecciona un chat antes de enviar audio', 'error');
+        return;
+    }
+    
     try {
-        // ✅ MEJORADO: Usar SocketIO para audio en tiempo real
-        if (checkDashboardConnection()) {
-            
-            // Convertir audio a base64 para SocketIO
-            const reader = new FileReader();
-            reader.onload = function() {
-                const audioData = reader.result.split(',')[1]; // Remover data:audio/...;base64,
-                const extension = audioBlob.type.includes('webm') ? '.webm' : 
-                                 audioBlob.type.includes('mp4') ? '.mp4' : 
-                                 audioBlob.type.includes('ogg') ? '.ogg' : '.wav';
-                
-                // ✅ CORREGIDO: El admin debe enviar audio al usuario del chat actual
-                const currentChatUserId = getCurrentChatUserId();
-                
-                // ✅ NUEVO: Detectar si es usuario soporte para usar el tipo correcto
-                const isSupportUser = document.querySelector('meta[name="is-support"]')?.content === 'true';
-                const messageType = isSupportUser ? 'support' : 'admin';
-                
-                // Enviar por SocketIO
-                
-                
-                // ✅ MEJORADO: Verificar conexión SocketIO
-                if (!checkDashboardConnection()) {
-                    return;
-                }
-                
-                
-                // ✅ CORREGIDO: Enviar audio directamente sin requestAnimationFrame
-                window.socket.emit('send_audio_message', {
-                    sender_id: window.dashboardCurrentUserId,
-                    recipient_id: currentChatUserId || '2',
-                    audio_data: audioData,
-                    audio_filename: `audio_${Date.now()}${extension}`,
-                    message_type: messageType
-                });
-                
-                
-            };
-            reader.readAsDataURL(audioBlob);
-            
-            // Remover mensaje temporal inmediatamente
-            if (tempMessageId) {
-                removeTempMessage(tempMessageId);
-            }
-            
-            // ✅ NUEVO: Actualizar estado del chat a "responded" (azul) para audio
-            // ✅ CORREGIDO: No actualizar estado directamente - SocketIO se encarga
-            
+        const formData = new FormData();
+        const extension = audioBlob.type.includes('webm') ? '.webm' : 
+                         audioBlob.type.includes('mp4') ? '.mp4' : 
+                         audioBlob.type.includes('ogg') ? '.ogg' : '.webm';
+        const filename = `audio_${Date.now()}${extension}`;
+        const audioFile = audioBlob instanceof File ? audioBlob : new File([audioBlob], filename, { type: audioBlob.type });
+        formData.append('audio', audioFile, filename);
+        formData.append('recipient_id', currentChatUserId);
+        formData.append('message_type', document.querySelector('meta[name="is-support"]')?.content === 'true' ? 'support' : 'admin');
+        
+        const response = await fetch('/tienda/api/chat/send_audio', {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': getSupportCsrfToken()
+            },
+            body: formData
+        });
+        
+        const data = await response.json();
+        
+        if (data.status === 'success') {
+            if (tempMessageId) removeTempMessage(tempMessageId);
+            addMessageToChat(data.data, true);
+            if (chatMessagesArea) chatMessagesArea.scrollTop = chatMessagesArea.scrollHeight;
+            return true;
         } else {
-            // ✅ CORREGIDO: Solo usar SocketIO, no HTTP fallback
-            showNotification('Error: No se puede enviar audio. Verifica la conexión.', 'error');
+            showNotification(data.message || 'Error al enviar audio', 'error');
+            return false;
         }
     } catch (error) {
+        showNotification('Error al enviar audio. Intenta de nuevo.', 'error');
+        return false;
     }
 }
 
 // Función para configurar event listeners
 function setupEventListeners() {
+    // Botón Limpiar Mensajes Antiguos - debe estar siempre, aunque no haya usuarios con chat
+    const btnLimpiarMensajes = document.getElementById('btnLimpiarMensajes');
+    if (btnLimpiarMensajes) {
+        btnLimpiarMensajes.addEventListener('click', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            if (typeof window.cleanupOldMessages === 'function') {
+                window.cleanupOldMessages();
+            }
+        });
+    }
+    
     // Envío de formulario de chat
     if (chatInputForm) {
         // ✅ NUEVO: Prevenir envío tradicional del formulario
@@ -1685,14 +1631,12 @@ function setupEventListeners() {
     // ✅ NUEVO: Event listeners para audio (toggle de grabación)
     const audioRecordBtn = document.getElementById('audioRecordBtn');
     if (audioRecordBtn) {
-        // ✅ NUEVO: Solo usar click para toggle de grabación
-        audioRecordBtn.addEventListener('click', startAudioRecording);
-        
-        // ✅ NUEVO: Eventos táctiles para dispositivos móviles (también toggle)
-        audioRecordBtn.addEventListener('touchstart', (e) => {
+        audioRecordBtn.addEventListener('click', function(e) {
             e.preventDefault();
+            e.stopPropagation();
             startAudioRecording();
-        }, { passive: false }); // ✅ CORREGIDO: Cambiar a passive: false para permitir preventDefault
+        }, { passive: false });
+        // No usar touchstart: evita doble disparo en dispositivos táctiles
     }
     
     // ✅ NUEVO: Event listener para input de archivos
@@ -2028,57 +1972,6 @@ window.verifyStatusPersistence = function() {
             }
         }
     });
-};
-
-// ✅ NUEVA FUNCIÓN: Probar mensaje del sistema
-window.testSystemMessage = function() {
-    if (window.dashboardCurrentUserId) {
-        // Crear un mensaje del sistema
-        const systemMessage = {
-            id: 'system_' + Date.now(),
-            message: 'Mensaje del sistema',
-            sender_id: 'system',
-            sender_name: 'Sistema',
-            message_type: 'system',
-            created_at: new Date().toISOString()
-        };
-        
-        // Agregar el mensaje del sistema al chat
-        addMessageToChat(systemMessage, false);
-    }
-};
-
-// ✅ NUEVA FUNCIÓN: Probar color morado
-window.testPurpleColor = function() {
-    if (window.dashboardCurrentUserId) {
-        const userItem = document.querySelector(`.chat-item[data-user-id="${window.dashboardCurrentUserId}"]`);
-        if (userItem) {
-            const userInitial = userItem.querySelector('.user-initial');
-            if (userInitial) {
-                // Remover todas las clases de estado
-                userInitial.classList.remove('status-new-message', 'status-responded', 'status-finished', 'status-pending');
-                
-                // Agregar clase finished (morado)
-                userInitial.classList.add('status-finished');
-                
-                // Actualizar atributo del elemento
-                userItem.setAttribute('data-chat-status', 'finished');
-            }
-        }
-    }
-};
-
-// ✅ NUEVA FUNCIÓN: Verificar estado actual del chat
-window.verifyChatStatus = function() {
-    if (window.dashboardCurrentUserId) {
-        const userItem = document.querySelector(`.chat-item[data-user-id="${window.dashboardCurrentUserId}"]`);
-        if (userItem) {
-            const userInitial = userItem.querySelector('.user-initial');
-            if (userInitial) {
-                // Estado actual del chat verificado
-            }
-        }
-    }
 };
 
 // ✅ NUEVA FUNCIÓN: Forzar estado finished
@@ -3049,14 +2942,16 @@ function setupAutomaticCleanup() {
         }
     }, 1 * 60 * 1000); // 1 minuto
     
-    // ✅ NUEVO: Limpieza automática semanal (cada 7 días)
+    // ✅ NUEVO: Limpieza automática semanal (cada 7 días) - SOLO para administradores
+    const isAdmin = document.querySelector('meta[name="is-admin"]')?.content === 'true' ||
+                    document.querySelector('meta[name="current-user-type"]')?.content === 'admin';
     const WEEKLY_CLEANUP_INTERVAL = 7 * 24 * 60 * 60 * 1000; // 7 días en milisegundos
     
-    // ✅ Verificar si es la primera vez o si ya pasó una semana
+    // ✅ Verificar si es la primera vez o si ya pasó una semana (solo admins pueden ejecutar)
     const lastCleanup = localStorage.getItem('lastWeeklyCleanup');
     const now = Date.now();
     
-    if (!lastCleanup || (now - parseInt(lastCleanup)) >= WEEKLY_CLEANUP_INTERVAL) {
+    if (isAdmin && (!lastCleanup || (now - parseInt(lastCleanup)) >= WEEKLY_CLEANUP_INTERVAL)) {
         executeWeeklyCleanup();
         localStorage.setItem('lastWeeklyCleanup', now.toString());
     }
@@ -3249,237 +3144,6 @@ window.openImageModal = function(imageUrl, fileName) {
     });
 };
 
-// ✅ NUEVA FUNCIÓN: Forzar aplicación de estados de chat
-window.forceChatStatuses = function() {
-    const userItems = document.querySelectorAll('.chat-item');
-    
-    userItems.forEach((userItem, index) => {
-        const userId = userItem.getAttribute('data-user-id');
-        const currentStatus = userItem.getAttribute('data-chat-status');
-        const userInitial = userItem.querySelector('.user-initial');
-        
-        if (userInitial && currentStatus) {
-            // Remover todas las clases de estado existentes
-            userInitial.classList.remove('status-new-message', 'status-responded', 'status-finished', 'status-pending');
-            
-            // Aplicar la clase correcta
-            const statusClass = `status-${currentStatus.replace('_', '-')}`;
-            userInitial.classList.add(statusClass);
-            
-            // Forzar el color correcto con CSS inline
-            let expectedColor = '';
-            let expectedShadow = '';
-            switch(currentStatus) {
-                case 'new_message':
-                case 'pending':
-                    expectedColor = '#28a745'; // VERDE
-                    expectedShadow = '0 0 8px rgba(40, 167, 69, 0.6)';
-                    break;
-                case 'responded':
-                    expectedColor = '#007bff'; // AZUL
-                    expectedShadow = '0 0 8px rgba(0, 123, 255, 0.6)';
-                    break;
-                case 'finished':
-                    expectedColor = '#6f42c1'; // MORADO
-                    expectedShadow = '0 0 8px rgba(111, 66, 193, 0.6)';
-                    break;
-            }
-            
-            userInitial.style.backgroundColor = expectedColor;
-            userInitial.style.boxShadow = expectedShadow;
-            userInitial.style.color = 'white';
-            userInitial.style.fontWeight = 'bold';
-        }
-    });
-};
-
-// ✅ NUEVA FUNCIÓN: Corregir estados incorrectos de responded a new_message
-window.fixRespondedToNewMessage = async function() {
-    const userItems = document.querySelectorAll('.chat-item[data-chat-status="responded"]');
-    
-    for (let userItem of userItems) {
-        const userId = userItem.getAttribute('data-user-id');
-        const userInitial = userItem.querySelector('.user-initial');
-        
-        if (userInitial) {
-            // Verificar el estado real en el backend
-            const realStatus = await checkRealChatStatus(userId);
-            
-            if (realStatus && realStatus !== 'responded') {
-                // Actualizar atributo
-                userItem.setAttribute('data-chat-status', realStatus);
-                
-                // Actualizar clases CSS
-                userInitial.classList.remove('status-new-message', 'status-responded', 'status-finished', 'status-pending');
-                userInitial.classList.add(`status-${realStatus.replace('_', '-')}`);
-                
-                // Forzar color correcto
-                let expectedColor = '';
-                switch(realStatus) {
-                    case 'new_message':
-                    case 'pending':
-                        expectedColor = '#28a745'; // VERDE
-                        break;
-                    case 'finished':
-                        expectedColor = '#6f42c1'; // MORADO
-                        break;
-                }
-                
-                if (expectedColor) {
-                    userInitial.style.backgroundColor = expectedColor;
-                    userInitial.style.boxShadow = `0 0 8px ${expectedColor.replace('#', 'rgba(').replace(')', ', 0.6)')}`;
-                    userInitial.style.color = 'white';
-                    userInitial.style.fontWeight = 'bold';
-                }
-            }
-        }
-    }
-    
-
-};
-
-// ✅ NUEVA FUNCIÓN: Verificar estados de chat
-window.verifyChatStatuses = function() {
-    const userItems = document.querySelectorAll('.chat-item');
-    
-    userItems.forEach((userItem, index) => {
-        const userId = userItem.getAttribute('data-user-id');
-        const username = userItem.querySelector('.username')?.textContent || 'N/A';
-        const currentStatus = userItem.getAttribute('data-chat-status');
-        const userInitial = userItem.querySelector('.user-initial');
-        const lastMessage = userItem.querySelector('.user-last-message')?.textContent || 'N/A';
-        
-        if (userInitial) {
-            const appliedClasses = Array.from(userInitial.classList).filter(cls => cls.startsWith('status-'));
-            const computedStyle = window.getComputedStyle(userInitial);
-            const backgroundColor = computedStyle.backgroundColor;
-            const color = computedStyle.color;
-        }
-    });
-};
-
-// ✅ NUEVA FUNCIÓN: Forzar estado finished (morado) directamente en el frontend
-window.forceFinishedStatusFrontend = function() {
-    if (window.dashboardCurrentUserId) {
-        const userItem = document.querySelector(`.chat-item[data-user-id="${window.dashboardCurrentUserId}"]`);
-        if (userItem) {
-            const userInitial = userItem.querySelector('.user-initial');
-            if (userInitial) {
-                // Remover todas las clases de estado
-                userInitial.classList.remove('status-new-message', 'status-responded', 'status-finished', 'status-pending');
-                
-                // Agregar clase finished (morado)
-                userInitial.classList.add('status-finished');
-                
-                // Actualizar atributo del elemento
-                userItem.setAttribute('data-chat-status', 'finished');
-                
-                // También actualizar el botón
-                const finishButton = userItem.querySelector('.finish-support-btn');
-                if (finishButton) {
-                    finishButton.classList.add('finished');
-                    finishButton.title = 'Soporte finalizado';
-                }
-            }
-        }
-    }
-};
-
-// ✅ NUEVA FUNCIÓN: Verificar el estado real del chat en el backend
-async function checkRealChatStatus(userId) {
-    try {
-        const response = await fetch(`/tienda/api/chat/get_user_conversation/${userId}`, {
-            method: 'GET',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRFToken': getSupportCsrfToken()
-            }
-        });
-        
-        const data = await response.json();
-        
-        if (data.status === 'success' && data.data && data.data.length > 0) {
-            const lastMessage = data.data[data.data.length - 1]; // Último mensaje
-            
-            // ✅ Lógica para determinar el estado real del chat
-            if (lastMessage.message_type === 'system' || 
-                lastMessage.message.includes('Chat finalizado, gracias por contactarnos')) {
-                return 'finished'; // 🟣 MORADO
-            } else if (lastMessage.sender_id == userId) {
-                return 'new_message'; // 🟢 VERDE (usuario normal)
-            } else {
-                return 'responded'; // 🔵 AZUL (admin/soporte)
-            }
-        }
-        
-        return null; // No se pudo determinar
-    } catch (error) {
-        return null;
-    }
-}
-
-// ✅ NUEVA FUNCIÓN: Verificar y corregir automáticamente los estados de chat
-function verifyAndCorrectChatStatuses() {
-    const userItems = document.querySelectorAll('.chat-item');
-    let correctedCount = 0;
-    
-    userItems.forEach(userItem => {
-        const userId = userItem.getAttribute('data-user-id');
-        const lastMessageElement = userItem.querySelector('.user-last-message');
-        const currentStatus = userItem.getAttribute('data-chat-status');
-        const userInitial = userItem.querySelector('.user-initial');
-        
-        if (lastMessageElement && lastMessageElement.textContent.includes('Chat finalizado, gracias por contactarnos')) {
-            // Este chat debería estar en estado FINISHED (morado)
-            if (currentStatus !== 'finished') {
-                // Actualizar atributo
-                userItem.setAttribute('data-chat-status', 'finished');
-                
-                // Actualizar clases CSS del icono
-                if (userInitial) {
-                    userInitial.classList.remove('status-new-message', 'status-responded', 'status-finished', 'status-pending');
-                    userInitial.classList.add('status-finished');
-                }
-                
-                // Actualizar botón
-                const finishButton = userItem.querySelector('.finish-support-btn');
-                if (finishButton) {
-                    finishButton.classList.add('finished');
-                    finishButton.title = 'Soporte finalizado';
-                }
-                
-                correctedCount++;
-            }
-        } else {
-            // Verificar si el estado actual es incorrecto
-            const lastMessageText = lastMessageElement ? lastMessageElement.textContent : '';
-            const isSystemMessage = lastMessageText.includes('Chat finalizado, gracias por contactarnos');
-            
-            if (!isSystemMessage) {
-                // ✅ CORREGIDO: Solo verificar si el estado es 'new_message' cuando debería ser 'responded'
-                // NO verificar 'responded' cuando ya es correcto
-                if (currentStatus === 'new_message') {
-                    // Solo verificar si debería ser 'responded' (azul)
-                    checkRealChatStatus(userId).then(realStatus => {
-                        if (realStatus === 'responded' && realStatus !== currentStatus) {
-                            // Actualizar atributo
-                            userItem.setAttribute('data-chat-status', realStatus);
-                            
-                            // Actualizar clases CSS del icono
-                            if (userInitial) {
-                                userInitial.classList.remove('status-new-message', 'status-responded', 'status-finished', 'status-pending');
-                                userInitial.classList.add(`status-responded`);
-                            }
-                            
-                            correctedCount++;
-                        }
-                    });
-                }
-            }
-        }
-    });
-}
-
 // ============================================================================
 // ✅ NUEVO: FUNCIONES SOCKETIO PARA DASHBOARD
 // ============================================================================
@@ -3495,11 +3159,13 @@ function initializeDashboardSocketIO() {
     }
     
     try {
-        // Conectar a SocketIO: en producción usa el proxy de Nginx, en local usa puerto directo
-        const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-        const baseUrl = isLocal ? 
-            `${window.location.protocol}//${window.location.hostname}:5001` : 
-            window.location.origin;
+        // Conectar a SocketIO: en producción usa el proxy; en desarrollo/LAN usa puerto 5001
+        const host = window.location.hostname;
+        const isDevOrLan = host === 'localhost' || host === '127.0.0.1' ||
+            /^192\.168\.\d+\.\d+$/.test(host) || /^10\.\d+\.\d+\.\d+$/.test(host) ||
+            /^172\.(1[6-9]|2\d|3[0-1])\.\d+\.\d+$/.test(host);
+        const baseUrl = isDevOrLan ?
+            `${window.location.protocol}//${host}:5001` : window.location.origin;
         
         // ✅ CORREGIDO: Conectar a SocketIO con configuración optimizada para estabilidad
         window.socket = io(baseUrl, {
@@ -3660,29 +3326,26 @@ function setupDashboardSocketIOEventListeners() {
         }
     });
     
-    // ✅ NUEVO: Chat finalizado
+    // ✅ Chat finalizado - actualizar color siempre; mensaje solo si es el chat activo
     window.socket.on('chat_finalized', function(data) {
-        if (data.user_id && data.status === 'finished') {
-            // ✅ NUEVO: Actualizar color del icono a morado inmediatamente
-            updateUserChatStatus(data.user_id, 'finished');
-            
-            // Si hay un message_id, crear el mensaje del sistema
-            if (data.message_id) {
-                const systemMessage = {
-                    id: data.message_id,
-                    message: 'Chat finalizado, gracias por contactarnos',
-                    sender_id: 'system',
-                    sender_name: 'Sistema',
-                    message_type: 'system',
-                    has_attachment: false,
-                    created_at: new Date().toISOString(),
-                    timestamp: new Date().toISOString(),
-                    is_temp: false
-                };
-                
-                addMessageToChat(systemMessage, true);
-            }
-        }
+        if (!data.user_id || data.status !== 'finished') return;
+        updateUserChatStatus(data.user_id, 'finished');
+        const activeChatUserId = getActiveChatUserId();
+        if (String(data.user_id) !== String(activeChatUserId)) return; // Solo agregar si estamos viendo ese chat
+        if (!data.message_id) return;
+        if (document.querySelector(`[data-message-id="${data.message_id}"]`)) return; // Evitar duplicado
+        const systemMessage = {
+            id: data.message_id,
+            message: 'Chat finalizado, gracias por contactarnos',
+            sender_id: 'system',
+            sender_name: 'Sistema',
+            message_type: 'system',
+            has_attachment: false,
+            created_at: new Date().toISOString(),
+            timestamp: new Date().toISOString(),
+            is_temp: false
+        };
+        addMessageToChat(systemMessage, true);
     });
     
     // ✅ NUEVO: Chat eliminado - actualizar en tiempo real
@@ -3858,17 +3521,15 @@ function handleDashboardRealTimeMessage(messageData) {
         chatMessagesArea.scrollTop = chatMessagesArea.scrollHeight;
         });
         
-        // ✅ NUEVO: Actualizar last_message en tiempo real
         updateLastMessageInUserList(messageData);
         
-        // ✅ NUEVO: Mostrar notificación del navegador
         const senderName = messageData.message_type === 'admin' ? 'Admin' : 
                           messageData.message_type === 'support' ? 'Soporte' : 
                           messageData.sender_name || 'Usuario';
         showBrowserNotification(senderName, messageData.message);
         
-        // Actualizar estado del chat
-            // ✅ CORREGIDO: No actualizar estado directamente - SocketIO se encarga
+        const result = getTargetUserIdAndStatusFromMessageData(messageData);
+        if (result) updateUserChatStatus(result.targetUserId, result.status);
     }
 }
 
@@ -3988,23 +3649,10 @@ function handleDashboardAudioMessageReceived(audioData) {
         // ✅ NUEVO: Actualizar last_message en tiempo real
         updateLastMessageInUserList(audioMessage);
         
-        // ✅ NUEVO: Mostrar notificación del navegador para audio
         showBrowserNotification(senderName, '[Mensaje de audio]');
         
-        // ✅ NUEVO: Actualizar estado del chat según el tipo de mensaje
-        // Lógica: Si es admin/soporte → actualizar recipient_id, si es usuario normal → actualizar sender_id
-        const targetUserId = (audioData.message_type === 'admin' || audioData.message_type === 'support') 
-            ? audioData.recipient_id 
-            : audioData.sender_id;
-        let chatStatus = 'active'; // Por defecto, mensaje de usuario normal
-        
-        if (audioData.message_type === 'admin' || audioData.message_type === 'support') {
-            chatStatus = 'responded'; // Mensaje de admin/soporte
-        }
-        
-        
-        // Actualizar el estado del chat en la lista de usuarios
-        updateUserChatStatus(targetUserId, chatStatus);
+        const result = getTargetUserIdAndStatusFromMessageData(audioData);
+        if (result) updateUserChatStatus(result.targetUserId, result.status);
     }
 }
 
@@ -4139,23 +3787,10 @@ function handleDashboardFileMessageReceived(fileData) {
         // ✅ NUEVO: Actualizar last_message en tiempo real
         updateLastMessageInUserList(fileMessage);
         
-        // ✅ NUEVO: Mostrar notificación del navegador para archivo
         showBrowserNotification(senderName, `[Archivo: ${fileData.attachment_filename}]`);
         
-        // ✅ NUEVO: Actualizar estado del chat según el tipo de mensaje
-        // Lógica: Si es admin/soporte → actualizar recipient_id, si es usuario normal → actualizar sender_id
-        const targetUserId = (fileData.message_type === 'admin' || fileData.message_type === 'support') 
-            ? fileData.recipient_id 
-            : fileData.sender_id;
-        let chatStatus = 'active'; // Por defecto, mensaje de usuario normal
-        
-        if (fileData.message_type === 'admin' || fileData.message_type === 'support') {
-            chatStatus = 'responded'; // Mensaje de admin/soporte
-        }
-        
-        
-        // Actualizar el estado del chat en la lista de usuarios
-        updateUserChatStatus(targetUserId, chatStatus);
+        const result = getTargetUserIdAndStatusFromMessageData(fileData);
+        if (result) updateUserChatStatus(result.targetUserId, result.status);
     }
 }
 
@@ -4191,9 +3826,10 @@ function handleUserListUpdate(data) {
             break;
             
         case 'new_message':
-            // Nuevo mensaje - actualizar indicador de mensaje nuevo y reordenar lista
+            // Nuevo mensaje - actualizar indicador, reordenar y color (status como respaldo)
             updateUserMessageIndicator(user_id, true);
             updateUserListOrder(user_id, data.message_preview);
+            if (data.status) updateUserChatStatus(user_id, data.status);
             break;
             
         case 'status_change':
@@ -4242,7 +3878,7 @@ function updateUserListOrder(userId, messagePreview) {
     }
     
     // Mover el usuario al principio de la lista
-    const usersList = document.querySelector('.users-list');
+    const usersList = document.querySelector('#usersList, .chat-list');
     if (usersList && userItem.parentNode === usersList) {
         // Remover el elemento de su posición actual
         userItem.remove();
@@ -4284,9 +3920,38 @@ function updateUserMessageIndicator(userId, hasNewMessage) {
     }
 }
 
-// ✅ NUEVO: Función para actualizar estado del chat (colores verde, azul, morado)
-function updateUserChatStatus(userId, status) {
-    const userItem = document.querySelector(`.chat-item[data-user-id="${userId}"]`);
+// ✅ Función única: obtener estado de chat desde un mensaje
+function getChatStatusFromMessage(msg) {
+    if (!msg) return null;
+    const msgType = (msg.message_type || '').toLowerCase();
+    const msgText = msg.message || '';
+    if (msgText.includes('Chat finalizado, gracias por contactarnos')) return 'finished';
+    if (msgType === 'admin' || msgType === 'support') return 'responded';
+    return 'new_message';
+}
+
+// ✅ Función única: obtener targetUserId y status desde datos de mensaje (para mensajes en tiempo real)
+function getTargetUserIdAndStatusFromMessageData(messageData) {
+    if (!messageData) return null;
+    const status = getChatStatusFromMessage(messageData);
+    const msgType = (messageData.message_type || '').toLowerCase();
+    let targetUserId;
+    if (msgType === 'admin' || msgType === 'support') {
+        targetUserId = messageData.recipient_id;
+    } else if (msgType === 'system' && status === 'finished') {
+        targetUserId = messageData.recipient_id;
+    } else {
+        targetUserId = messageData.sender_id;
+    }
+    return targetUserId ? { targetUserId, status } : null;
+}
+window.getTargetUserIdAndStatusFromMessageData = getTargetUserIdAndStatusFromMessageData;
+
+// ✅ Expuesto globalmente para chat_reconnection y otros módulos
+window.updateUserChatStatus = function(userId, status) {
+    if (!userId || !status) return;
+    const id = String(userId);
+    const userItem = document.querySelector(`.chat-item[data-user-id="${id}"]`);
     
     if (userItem) {
         // Actualizar el avatar del usuario según el estado
@@ -4330,7 +3995,8 @@ function updateUserChatStatus(userId, status) {
             }
         }
     }
-}
+};
+const updateUserChatStatus = window.updateUserChatStatus;
 
 // ✅ NUEVO: Función para manejar chat eliminado
 function handleChatDeleted(userId) {

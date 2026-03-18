@@ -156,10 +156,43 @@
 .html-icons-dropdown {
   min-width: 280px;
   max-width: 320px;
-  max-height: 360px;
+  max-height: 400px;
   overflow: hidden;
   display: flex;
   flex-direction: column;
+}
+
+.html-icons-header {
+  flex-shrink: 0;
+  margin-bottom: 8px;
+}
+
+.html-icons-color-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.html-icons-color-label {
+  font-size: 12px;
+  color: #6c757d;
+  margin: 0;
+}
+
+.html-icons-color-row input[type="color"] {
+  width: 32px;
+  height: 28px;
+  padding: 2px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.html-icons-color-hex {
+  width: 70px;
+  font-size: 12px;
+  padding: 4px 8px;
 }
 
 .html-icons-container {
@@ -214,6 +247,12 @@
 .html-icons-tab-svg {
   width: 18px;
   height: 18px;
+}
+
+.html-icons-tab-iconify {
+  width: 18px;
+  height: 18px;
+  font-size: 18px;
 }
 
 .html-icons-section {

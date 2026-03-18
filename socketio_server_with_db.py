@@ -198,7 +198,6 @@ if __name__ == "__main__":
         
         sys.stdout = FilteredStdout(original_stdout)
         
-        # Usar eventlet para producción
         tienda_socketio.run(app, host=host, port=port, debug=debug, use_reloader=False)
     except Exception as e:
         import traceback

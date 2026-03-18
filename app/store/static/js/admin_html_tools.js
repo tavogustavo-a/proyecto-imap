@@ -752,6 +752,8 @@
     { class: 'fas fa-image', label: 'Imagen' },
     { class: 'fas fa-microphone', label: 'Micrófono' }
   ];
+  var ICONIFY_API = 'https://api.iconify.design/';
+  var ICONS_ICONIFY = ['mdi:heart','mdi:heart-outline','mdi:star','mdi:home','mdi:account','mdi:account-circle','mdi:email','mdi:email-outline','mdi:phone','mdi:camera','mdi:image','mdi:file','mdi:folder','mdi:folder-outline','mdi:download','mdi:upload','mdi:share-variant','mdi:link','mdi:lock','mdi:lock-open','mdi:magnify','mdi:menu','mdi:close','mdi:check','mdi:delete','mdi:pencil','mdi:plus','mdi:minus','mdi:cog','mdi:settings','mdi:bell','mdi:calendar','mdi:clock','mdi:eye','mdi:eye-off','mdi:thumb-up','mdi:thumb-down','mdi:comment','mdi:cart','mdi:cart-outline','mdi:credit-card','mdi:wallet','mdi:cash','mdi:gift','mdi:tag','mdi:bookmark','mdi:bookmark-outline','mdi:music','mdi:video','mdi:play','mdi:pause','mdi:stop','mdi:volume-high','mdi:volume-off','mdi:microphone','mdi:camera-video','mdi:image-multiple','mdi:cloud','mdi:weather-sunny','mdi:weather-night','mdi:flash','mdi:battery','mdi:wifi','mdi:bluetooth','mdi:map-marker','mdi:compass','mdi:car','mdi:bus','mdi:airplane','mdi:train','mdi:food','mdi:coffee','mdi:beer','mdi:glass-wine','mdi:shopping','mdi:store','mdi:office-building','mdi:school','mdi:hospital','mdi:bank','mdi:briefcase','mdi:chart-line','mdi:chart-bar','mdi:chart-pie','mdi:calculator','mdi:code-tags','mdi:laptop','mdi:cellphone','mdi:tablet','mdi:monitor','mdi:desktop-mac','mdi:keyboard','mdi:mouse','mdi:gamepad-variant','mdi:controller-classic','mdi:headphones','mdi:television','mdi:radio','mdi:camera-enhance','mdi:palette','mdi:brush','mdi:format-paint','mdi:format-bold','mdi:format-italic','mdi:format-underline','mdi:format-list-bulleted','mdi:format-list-numbered','mdi:format-align-left','mdi:format-align-center','mdi:format-align-right','mdi:message','mdi:message-outline','mdi:send','mdi:inbox','mdi:archive','mdi:trash-can','mdi:content-save','mdi:content-copy','mdi:content-paste','mdi:clipboard','mdi:filter','mdi:sort','mdi:magnify-plus','mdi:magnify-minus','mdi:qrcode','mdi:barcode','mdi:facebook','mdi:twitter','mdi:instagram','mdi:linkedin','mdi:youtube','mdi:github','mdi:google','mdi:apple','mdi:android','mdi:whatsapp','mdi:telegram','mdi:discord','mdi:spotify','mdi:netflix','mdi:amazon','mdi:google-play','mdi:microsoft','mdi:language-javascript','mdi:language-python','mdi:language-html5','mdi:language-css3','mdi:flag','mdi:earth','mdi:shield','mdi:security','mdi:key','mdi:printer','mdi:scanner','mdi:fax','mdi:lightbulb','mdi:lightbulb-outline','mdi:puzzle','mdi:rocket-launch','mdi:crown','mdi:trophy','mdi:medal','mdi:star-circle','mdi:emoticon','mdi:emoticon-happy','mdi:emoticon-sad','mdi:hand-peace','mdi:thumb-up-outline','mdi:thumb-down-outline','mdi:book','mdi:book-open','mdi:newspaper','mdi:movie','mdi:music-note','mdi:piano','mdi:guitar-electric'];
   var HEROICONS_CDN = 'https://cdn.jsdelivr.net/npm/heroicons@2.2.0/24/outline/';
   var ICONS_HEROICONS = ['academic-cap','adjustments-horizontal','adjustments-vertical','archive-box','archive-box-arrow-down','archive-box-x-mark','arrow-down','arrow-down-circle','arrow-down-left','arrow-down-on-square','arrow-down-on-square-stack','arrow-down-right','arrow-down-tray','arrow-left','arrow-left-circle','arrow-left-end-on-rectangle','arrow-left-on-rectangle','arrow-left-start-on-rectangle','arrow-long-down','arrow-long-left','arrow-long-right','arrow-long-up','arrow-path','arrow-path-rounded-square','arrow-right','arrow-right-circle','arrow-right-end-on-rectangle','arrow-right-on-rectangle','arrow-right-start-on-rectangle','arrow-small-down','arrow-small-left','arrow-small-right','arrow-small-up','arrow-top-right-on-square','arrow-trending-down','arrow-trending-up','arrow-turn-down-left','arrow-turn-down-right','arrow-turn-left-down','arrow-turn-left-up','arrow-turn-right-down','arrow-turn-right-up','arrow-turn-up-left','arrow-turn-up-right','arrow-up','arrow-up-circle','arrow-up-left','arrow-up-on-square','arrow-up-on-square-stack','arrow-up-right','arrow-up-tray','arrow-uturn-down','arrow-uturn-left','arrow-uturn-right','arrow-uturn-up','arrows-pointing-in','arrows-pointing-out','arrows-right-left','arrows-up-down','at-symbol','backspace','backward','banknotes','bars-2','bars-3','bars-3-bottom-left','bars-3-bottom-right','bars-3-center-left','bars-4','bars-arrow-down','bars-arrow-up','battery-0','battery-100','battery-50','beaker','bell','bell-alert','bell-slash','bell-snooze','bold','bolt','bolt-slash','book-open','bookmark','bookmark-slash','bookmark-square','briefcase','bug-ant','building-library','building-office','building-office-2','building-storefront','cake','calculator','calendar','calendar-date-range','calendar-days','camera','chart-bar','chart-bar-square','chart-pie','chat-bubble-bottom-center','chat-bubble-bottom-center-text','chat-bubble-left','chat-bubble-left-ellipsis','chat-bubble-left-right','chat-bubble-oval-left','chat-bubble-oval-left-ellipsis','check','check-badge','check-circle','chevron-double-down','chevron-double-left','chevron-double-right','chevron-double-up','chevron-down','chevron-left','chevron-right','chevron-up','chevron-up-down','circle-stack','clipboard','clipboard-document','clipboard-document-check','clipboard-document-list','clock','cloud','cloud-arrow-down','cloud-arrow-up','code-bracket','code-bracket-square','cog','cog-6-tooth','cog-8-tooth','command-line','computer-desktop','cpu-chip','credit-card','cube','cube-transparent','currency-bangladeshi','currency-dollar','currency-euro','currency-pound','currency-rupee','currency-yen','cursor-arrow-rays','cursor-arrow-ripple','device-phone-mobile','device-tablet','divide','document','document-arrow-down','document-arrow-up','document-chart-bar','document-check','document-currency-bangladeshi','document-currency-dollar','document-currency-euro','document-currency-pound','document-currency-rupee','document-currency-yen','document-duplicate','document-magnifying-glass','document-minus','document-plus','document-text','ellipsis-horizontal','ellipsis-horizontal-circle','ellipsis-vertical','envelope','envelope-open','equals','exclamation-circle','exclamation-triangle','eye','eye-dropper','eye-slash','face-frown','face-smile','film','finger-print','fire','flag','folder','folder-arrow-down','folder-minus','folder-open','folder-plus','forward','funnel','gif','gift','gift-top','globe-alt','globe-americas','globe-asia-australia','globe-europe-africa','h1','h2','h3','hand-raised','hand-thumb-down','hand-thumb-up','hashtag','heart','home','home-modern','identification','inbox','inbox-arrow-down','inbox-stack','information-circle','italic','key','language','lifebuoy','light-bulb','link','link-slash','list-bullet','lock-closed','lock-open','magnifying-glass','magnifying-glass-circle','magnifying-glass-minus','magnifying-glass-plus','map','map-pin','megaphone','microphone','minus','minus-circle','minus-small','moon','musical-note','newspaper','no-symbol','numbered-list','paint-brush','paper-airplane','paper-clip','pause','pause-circle','pencil','pencil-square','percent-badge','phone','phone-arrow-down-left','phone-arrow-up-right','phone-x-mark','photo','play','play-circle','play-pause','plus','plus-circle','plus-small','power','presentation-chart-bar','presentation-chart-line','printer','puzzle-piece','qr-code','question-mark-circle','queue-list','radio','receipt-percent','receipt-refund','rectangle-group','rectangle-stack','rocket-launch','rss','scale','scissors','server','server-stack','share','shield-check','shield-exclamation','shopping-bag','shopping-cart','signal','signal-slash','slash','sparkles','speaker-wave','speaker-x-mark','square-2-stack','square-3-stack-3d','squares-2x2','squares-plus','star','stop','stop-circle','strikethrough','sun','swatch','table-cells','tag','ticket','trash','trophy','truck','tv','underline','user','user-circle','user-group','user-minus','user-plus','users','variable','video-camera','video-camera-slash','view-columns','viewfinder-circle','wallet','wifi','window','wrench','wrench-screwdriver','x-circle','x-mark'];
   var ICONS_STREAMING = [
@@ -796,11 +798,31 @@
   var iconsDropdown = document.getElementById('iconsDropdown');
   var iconsGrid = document.getElementById('iconsGrid');
   var iconsSearch = document.getElementById('iconsSearch');
+  var iconsColor = document.getElementById('iconsColor');
+  var iconsColorHex = document.getElementById('iconsColorHex');
   var iconsTabs = document.getElementById('iconsTabs');
   var btnIcons = document.getElementById('btnIcons');
   var staticImagesBase = (typeof window !== 'undefined' && window.HTML_TOOLS_STATIC_IMAGES) ? window.HTML_TOOLS_STATIC_IMAGES : '/static/images/';
   if (staticImagesBase && !/\/$/.test(staticImagesBase)) staticImagesBase += '/';
   var currentIconsTab = 'general';
+
+  function getIconColor() {
+    var hex = (iconsColorHex && iconsColorHex.value.trim()) || (iconsColor && iconsColor.value) || '#333333';
+    hex = hex.replace(/^#/, '');
+    if (/^[0-9A-Fa-f]{6}$/.test(hex)) return '#' + hex;
+    if (/^[0-9A-Fa-f]{3}$/.test(hex)) return '#' + hex[0]+hex[0] + hex[1]+hex[1] + hex[2]+hex[2];
+    return '#333333';
+  }
+
+  if (iconsColor && iconsColorHex) {
+    iconsColor.addEventListener('input', function() { iconsColorHex.value = this.value; });
+    iconsColorHex.addEventListener('input', function() {
+      var v = this.value.trim();
+      if (/^#[0-9A-Fa-f]{6}$/.test(v) || /^[0-9A-Fa-f]{6}$/.test(v)) {
+        iconsColor.value = v.indexOf('#') === 0 ? v : '#' + v;
+      }
+    });
+  }
 
   function buildIconsGrid(filter, tab) {
     if (!iconsGrid) return;
@@ -855,6 +877,28 @@
         btn.appendChild(img);
         btn.onclick = function() {
           insertStreamingIcon(HEROICONS_CDN + name + '.svg', name);
+          if (iconsDropdown) iconsDropdown.classList.add('hidden');
+        };
+        return btn;
+      });
+    }
+
+    if (t === 'iconify') {
+      var iconifyFiltered = term ? ICONS_ICONIFY.filter(function(s){return s.toLowerCase().indexOf(term)>=0;}) : ICONS_ICONIFY;
+      addSection('Iconify (Material Design Icons)', iconifyFiltered, function(iconId) {
+        var parts = iconId.split(':');
+        var prefix = parts[0] || 'mdi';
+        var icon = parts[1] || parts[0] || '';
+        var btn = document.createElement('button');
+        btn.type = 'button';
+        btn.title = iconId;
+        var img = document.createElement('img');
+        img.src = ICONIFY_API + prefix + '/' + icon + '.svg';
+        img.alt = iconId;
+        img.onerror = function() { btn.innerHTML = '<span style="font-size:10px">' + icon.substring(0,2) + '</span>'; };
+        btn.appendChild(img);
+        btn.onclick = function() {
+          insertIconifyIcon(iconId);
           if (iconsDropdown) iconsDropdown.classList.add('hidden');
         };
         return btn;
@@ -921,7 +965,19 @@
     if (!editor) return;
     restoreSelection();
     editor.focus();
-    var html = '<span class="html-editor-icon" contenteditable="false" draggable="true" style="font-size: 24px;"><i class="' + iconClass.replace(/"/g, '&quot;') + '"></i></span>';
+    var color = getIconColor();
+    var style = 'font-size: 24px; color: ' + color.replace(/"/g, '&quot;') + ';';
+    var html = '<span class="html-editor-icon" contenteditable="false" draggable="true" style="' + style + '"><i class="' + iconClass.replace(/"/g, '&quot;') + '"></i></span>';
+    document.execCommand('insertHTML', false, html);
+    updateHtmlOutput();
+  }
+
+  function insertIconifyIcon(iconId) {
+    if (!editor) return;
+    restoreSelection();
+    editor.focus();
+    var color = getIconColor();
+    var html = '<span class="html-editor-icon" contenteditable="false" draggable="true" style="font-size: 24px; color: ' + color.replace(/"/g, '&quot;') + ';"><iconify-icon icon="' + iconId.replace(/"/g, '&quot;') + '"></iconify-icon></span>';
     document.execCommand('insertHTML', false, html);
     updateHtmlOutput();
   }

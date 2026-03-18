@@ -389,6 +389,46 @@ class ChatMessage(db.Model):
         }
     
     @classmethod
+    def delete_attachment_files_for_user(cls, user_id):
+        """
+        Eliminar archivos físicos de adjuntos del chat para mensajes de un usuario.
+        Debe llamarse ANTES de eliminar el usuario (o sus mensajes) para evitar archivos huérfanos.
+        Retorna el número de archivos eliminados.
+        """
+        from flask import current_app
+        import os
+
+        messages_with_files = cls.query.filter(
+            db.or_(
+                cls.sender_id == user_id,
+                cls.recipient_id == user_id
+            ),
+            cls.has_attachment == True
+        ).all()
+
+        upload_dir = os.path.join(current_app.root_path, 'store', 'static', 'uploads', 'chat')
+        files_deleted = 0
+
+        if not os.path.exists(upload_dir) or not os.path.isdir(upload_dir):
+            return files_deleted
+
+        seen_paths = set()
+        for message in messages_with_files:
+            for path_val in (message.attachment_path, message.attachment_filename):
+                if not path_val or path_val in seen_paths:
+                    continue
+                seen_paths.add(path_val)
+                file_path = os.path.join(upload_dir, path_val)
+                try:
+                    if os.path.exists(file_path) and os.path.isfile(file_path):
+                        os.remove(file_path)
+                        files_deleted += 1
+                except Exception:
+                    pass
+
+        return files_deleted
+
+    @classmethod
     def cleanup_orphaned_files(cls):
         """Limpiar solo archivos huérfanos (archivos sin mensaje asociado)"""
         from flask import current_app

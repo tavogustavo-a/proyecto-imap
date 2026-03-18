@@ -356,8 +356,11 @@ def delete_user_ajax():
 
         # 1) Buscamos y eliminamos sub-usuarios primero (se eliminarán en cascada sus RememberDevice, AllowedEmail, etc.)
         # Nota: RememberDevice se elimina automáticamente por CASCADE (ondelete='CASCADE')
+        from app.models.chat import ChatMessage
         subusers = User.query.filter_by(parent_id=user.id).all()
         for subuser in subusers:
+            # Eliminar archivos físicos del chat antes del CASCADE (evita archivos huérfanos)
+            ChatMessage.delete_attachment_files_for_user(subuser.id)
             # Eliminar el registro del sub-usuario (CASCADE eliminará automáticamente):
             # - RememberDevice (ondelete='CASCADE')
             # - AllowedEmail (ondelete='CASCADE')
@@ -367,7 +370,9 @@ def delete_user_ajax():
             # - Y todas las demás relaciones con CASCADE
             db.session.delete(subuser)
         
-        # 2) Eliminamos al usuario principal
+        # 2) Eliminar archivos físicos del chat del usuario principal antes del CASCADE
+        ChatMessage.delete_attachment_files_for_user(user.id)
+        # 3) Eliminamos al usuario principal
         # CASCADE eliminará automáticamente:
         # - RememberDevice (ondelete='CASCADE')
         # - AllowedEmail (cascade="all, delete-orphan")

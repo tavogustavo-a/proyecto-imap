@@ -1115,8 +1115,8 @@ window.showAudioDurationError = function() {
         </div>
     `;
     
-    // Insertar en el chat
-    const chatMessagesArea = document.querySelector('#chatMessagesArea');
+    // Insertar en el chat (soporta dashboard #chatMessagesArea y chat usuario #chatMessagesAreaUser)
+    const chatMessagesArea = document.querySelector('#chatMessagesArea') || document.querySelector('#chatMessagesAreaUser');
     if (chatMessagesArea) {
         chatMessagesArea.appendChild(errorMessage);
         chatMessagesArea.scrollTop = chatMessagesArea.scrollHeight;
@@ -1133,13 +1133,19 @@ window.showAudioDurationError = function() {
 // ✅ FUNCIÓN: Mostrar audio directamente en el chat
 window.showAudioPreviewModal = function(audioBlob, tempMessageId) {
     
-    // Crear mensaje de audio temporal en el chat
+    // Crear mensaje de audio temporal - centrado, flotante y reconocible
     const audioMessage = document.createElement('div');
     audioMessage.className = 'message audio-message temp-message';
     audioMessage.id = `audio-${tempMessageId}`;
     
     audioMessage.innerHTML = `
         <div class="message-content">
+            <button class="cancel-audio-btn-preview" id="cancelAudioBtn-${tempMessageId}" title="Cancelar">
+                <i class="fas fa-times"></i>
+            </button>
+            <div class="temp-audio-header">
+                <span class="pendiente-badge">⏳ PENDIENTE</span>
+            </div>
             <div class="audio-player-sent">
                 <button class="play-pause-btn-sent" id="playPauseBtn-${tempMessageId}">
                     <i class="fas fa-play"></i>
@@ -1147,6 +1153,12 @@ window.showAudioPreviewModal = function(audioBlob, tempMessageId) {
                 <div class="audio-info-sent">
                     <span class="audio-duration-sent">--:--</span>
                     <span class="audio-speed-sent" style="display: none;">1x</span>
+                </div>
+                <div class="audio-progress-sent temp-audio-progress">
+                    <div class="progress-bar-sent temp-progress-bar">
+                        <div class="progress-fill-sent temp-progress-fill" id="progressFill-temp-${tempMessageId}"></div>
+                        <div class="progress-knob-sent temp-progress-knob" id="progressKnob-temp-${tempMessageId}"></div>
+                    </div>
                 </div>
                 <div class="audio-controls-sent">
                     <button class="speed-toggle-btn-sent" id="speedToggleBtn-${tempMessageId}" title="Velocidad: 1x">
@@ -1157,27 +1169,38 @@ window.showAudioPreviewModal = function(audioBlob, tempMessageId) {
                     <button class="send-audio-btn-preview" id="sendAudioBtn-${tempMessageId}" title="Enviar audio">
                         <i class="fas fa-paper-plane"></i>
                     </button>
-                    <button class="cancel-audio-btn-preview" id="cancelAudioBtn-${tempMessageId}" title="Cancelar">
-                        <i class="fas fa-times"></i>
-                    </button>
                 </div>
             </div>
         </div>
     `;
     
-    // ✅ NUEVO: Insertar el mensaje temporal justo antes del área de entrada del chat
-    const chatInputArea = document.querySelector('.chat-input-area');
-    if (chatInputArea && chatInputArea.parentNode) {
-        chatInputArea.parentNode.insertBefore(audioMessage, chatInputArea);
+    // ✅ CORREGIDO: Insertar en área de mensajes (dashboard: #chatMessagesArea, chat usuario: #chatMessagesAreaUser)
+    const chatMessagesArea = document.querySelector('#chatMessagesArea') || document.querySelector('#chatMessagesAreaUser');
+    if (chatMessagesArea) {
+        chatMessagesArea.appendChild(audioMessage);
         chatMessagesArea.scrollTop = chatMessagesArea.scrollHeight;
     }
     
-    // Crear elemento de audio oculto
+    // Crear elemento de audio - compatibilidad móvil (Chrome Android, iOS, etc.)
     const audioElement = document.createElement('audio');
     audioElement.id = `audio-preview-${tempMessageId}`;
-    audioElement.src = URL.createObjectURL(audioBlob);
-    audioElement.preload = 'metadata';
-    document.body.appendChild(audioElement);
+    audioElement.preload = 'auto';
+    audioElement.setAttribute('playsinline', 'true');
+    audioElement.setAttribute('webkit-playsinline', 'true');
+    audioElement.playsInline = true;
+    audioElement.controls = false;
+    // Blob URL - en Chrome móvil debe estar en el DOM antes de asignar src
+    const blobUrl = URL.createObjectURL(audioBlob);
+    audioElement.src = blobUrl;
+    // Insertar DENTRO del preview (algunos móviles requieren que el audio esté en el flujo visual)
+    const msgContent = audioMessage.querySelector('.message-content');
+    if (msgContent) {
+        msgContent.appendChild(audioElement);
+    } else {
+        document.body.appendChild(audioElement);
+    }
+    audioElement.style.cssText = 'position:absolute;width:0;height:0;opacity:0;pointer-events:none;';
+    audioElement.load();
     
     // ✅ NUEVO: Usar requestAnimationFrame para asegurar que el DOM esté listo
     requestAnimationFrame(() => {
@@ -1212,16 +1235,29 @@ function setupAudioControls(audioElement, tempMessageId, audioBlob) {
     const speeds = [1, 1.25, 1.5, 2];
     let currentSpeedIndex = 0;
     
-    // Botón play/pause
-    playPauseBtn.addEventListener('click', function() {
+    // Botón play/pause - compatibilidad Chrome móvil (click + touchend, sin doble disparo)
+    let lastPlayTap = 0;
+    const handlePlayPause = function(e) {
+        const now = Date.now();
+        if (now - lastPlayTap < 350) return;
+        lastPlayTap = now;
+        if (e && e.type === 'touchend') e.preventDefault();
         if (audioElement.paused) {
-            audioElement.play();
             playPauseBtn.innerHTML = '<i class="fas fa-pause"></i>';
+            audioElement.play().then(() => {}).catch(err => {
+                playPauseBtn.innerHTML = '<i class="fas fa-play"></i>';
+                console.warn('Play falló:', err);
+                audioElement.controls = true;
+                audioElement.style.cssText = 'width:100%;max-width:200px;opacity:1;pointer-events:auto;margin-top:8px;border-radius:8px;';
+                if (window.showInfoMessage) window.showInfoMessage('Usa los controles nativos para reproducir');
+            });
         } else {
             audioElement.pause();
             playPauseBtn.innerHTML = '<i class="fas fa-play"></i>';
         }
-    });
+    };
+    playPauseBtn.addEventListener('click', handlePlayPause);
+    playPauseBtn.addEventListener('touchend', handlePlayPause, { passive: false });
     
     // Control de velocidad
     speedToggleBtn.addEventListener('click', function() {
@@ -1235,89 +1271,67 @@ function setupAudioControls(audioElement, tempMessageId, audioBlob) {
     });
     
     // Actualizar duración
+    const durationSpan = document.querySelector(`#audio-${tempMessageId} .audio-duration-sent`);
+    const progressFill = document.getElementById(`progressFill-temp-${tempMessageId}`);
+    const progressKnob = document.getElementById(`progressKnob-temp-${tempMessageId}`);
+    
     audioElement.addEventListener('loadedmetadata', function() {
         const duration = Math.floor(audioElement.duration);
-        if (duration && isFinite(duration)) {
-            const durationSpan = document.querySelector(`#audio-${tempMessageId} .audio-duration-sent`);
-            if (durationSpan) {
-                durationSpan.textContent = formatTime(duration);
-            }
+        if (duration && isFinite(duration) && durationSpan) {
+            durationSpan.textContent = '0:00 / ' + formatTime(duration);
+        }
+    });
+    audioElement.addEventListener('loadstart', function() {
+        if (durationSpan) durationSpan.textContent = '--:--';
+    });
+    
+    // Barra de progreso y tiempo en reproducción
+    audioElement.addEventListener('timeupdate', function() {
+        if (audioElement.duration && isFinite(audioElement.duration)) {
+            const progress = (audioElement.currentTime / audioElement.duration) * 100;
+            if (progressFill) progressFill.style.width = progress + '%';
+            if (progressKnob) progressKnob.style.left = progress + '%';
+            if (durationSpan) durationSpan.textContent = formatTime(Math.floor(audioElement.currentTime)) + ' / ' + formatTime(Math.floor(audioElement.duration));
+        }
+    });
+    audioElement.addEventListener('ended', function() {
+        if (progressFill) progressFill.style.width = '0%';
+        if (progressKnob) progressKnob.style.left = '0%';
+        if (durationSpan && audioElement.duration && isFinite(audioElement.duration)) {
+            durationSpan.textContent = formatTime(Math.floor(audioElement.duration));
         }
     });
     
-    // Botón enviar
-    finalSendBtn.addEventListener('click', function(e) {
-        
-        // Si es usuario normal, usar la función de chat_unified.js
-        if (window.chatCurrentUserId && !window.dashboardCurrentUserId) {
-            if (typeof window.sendAudioMessage === 'function') {
-                window.sendAudioMessage(audioBlob, tempMessageId);
-            } else {
-                alert('Error: Función de envío de audio no disponible');
-            }
+    // Botón enviar - usar HTTP siempre (chat_unified.js o chat_dashboard_integrated.js)
+    let isSending = false; // Evitar envíos múltiples
+    function reenableSendBtn() {
+        isSending = false;
+        finalSendBtn.disabled = false;
+        finalSendBtn.style.opacity = '';
+        finalSendBtn.style.pointerEvents = '';
+    }
+    const handleSendAudio = async function(e) {
+        if (e && e.type === 'touchend') e.preventDefault();
+        if (isSending) return;
+        if (typeof window.sendAudioMessage !== 'function') {
+            alert('Error: Función de envío de audio no disponible');
             return;
         }
-        
-        // Verificar conexión SocketIO
-        const socket = window.socket || window.socket;
-        if (!socket || !socket.connected) {
-            alert('Error: No se puede enviar audio. Verifica la conexión.');
-            return;
-        }
-        
-        // Convertir audio a base64
-        const reader = new FileReader();
-        reader.onload = function(e) {
-            const audioData = e.target.result.split(',')[1]; // Remover el prefijo data:audio/...
-            
-            // Detectar tipo de archivo
-            const extension = audioBlob.type.includes('webm') ? '.webm' : 
-                             audioBlob.type.includes('mp4') ? '.mp4' : 
-                             audioBlob.type.includes('ogg') ? '.ogg' : '.wav';
-            
-            // Detectar tipo de usuario y configurar IDs correctos
-            let senderId, recipientId, messageType;
-            
-            if (window.dashboardCurrentUserId) {
-                // Admin/soporte
-                const isSupportUser = document.querySelector('meta[name="is-support"]')?.content === 'true';
-                senderId = window.dashboardCurrentUserId;
-                recipientId = window.getCurrentChatUserId ? window.getCurrentChatUserId() : '2';
-                messageType = isSupportUser ? 'support' : 'admin';
-            } else if (window.chatCurrentUserId) {
-                // Usuario normal
-                senderId = window.chatCurrentUserId;
-                recipientId = '1'; // Usuario normal siempre envía al admin (ID: 1)
-                messageType = 'user';
-            } else {
-                // Fallback
-                senderId = '2';
-                recipientId = '1';
-                messageType = 'user';
-            }
-            
-            // Enviar por SocketIO
-            socket.emit('send_audio_message', {
-                sender_id: senderId,
-                recipient_id: recipientId,
-                audio_data: audioData,
-                audio_filename: `audio_${Date.now()}${extension}`,
-                message_type: messageType
-            });
-            
-            // Remover mensaje temporal
-            const audioMessage = document.querySelector(`#audio-${tempMessageId}`);
-            if (audioMessage && audioMessage.parentNode) {
-                audioMessage.parentNode.removeChild(audioMessage);
-            }
-        };
-        reader.readAsDataURL(audioBlob);
-    });
+        isSending = true;
+        finalSendBtn.disabled = true;
+        finalSendBtn.style.opacity = '0.5';
+        finalSendBtn.style.pointerEvents = 'none';
+        const success = await window.sendAudioMessage(audioBlob, tempMessageId);
+        if (!success) reenableSendBtn();
+    };
+    finalSendBtn.addEventListener('click', handleSendAudio);
+    finalSendBtn.addEventListener('touchend', handleSendAudio, { passive: false });
     
     // Botón cancelar
     finalCancelBtn.addEventListener('click', function() {
         audioElement.pause();
-        URL.revokeObjectURL(audioElement.src);
+        if (audioElement.src) URL.revokeObjectURL(audioElement.src);
+        audioElement.remove();
         const audioMessage = document.querySelector(`#audio-${tempMessageId}`);
         if (audioMessage && audioMessage.parentNode) {
             audioMessage.parentNode.removeChild(audioMessage);

@@ -14,6 +14,14 @@ store_bp = Blueprint(
     static_url_path='/store/static'
 )
 
+
+@store_bp.after_request
+def add_microphone_permission_header(response):
+    """Permitir permiso de micrófono para grabación de audio en chat"""
+    response.headers['Permissions-Policy'] = 'microphone=(self), camera=()'
+    return response
+
+
 @store_bp.app_template_filter('rewrite_external_images')
 def rewrite_external_images_filter(html):
     """Reescribe img src externos para usar proxy local y evitar CORB/CORS."""

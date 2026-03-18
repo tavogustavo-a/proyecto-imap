@@ -13,31 +13,33 @@ load_dotenv()
 FLASK_ENV = os.getenv("FLASK_ENV", "development")
 cors_origins = os.getenv('SOCKETIO_CORS_ORIGINS')
 
-# ✅ CORREGIDO: En desarrollo, siempre permitir localhost
+# Orígenes para desarrollo (localhost + red local + HTTPS)
+DEV_ORIGINS = [
+    "http://127.0.0.1:5000", "http://127.0.0.1:5001",
+    "http://localhost:5000", "http://localhost:5001",
+    "http://192.168.1.5:5000", "http://192.168.1.5:5001",
+    "https://127.0.0.1:5000", "https://127.0.0.1:5001",
+    "https://localhost:5000", "https://localhost:5001",
+    "https://192.168.1.5:5000", "https://192.168.1.5:5001",
+    "http://0.0.0.0:5000", "http://0.0.0.0:5001",
+]
+
+# ✅ CORREGIDO: En desarrollo permitir localhost + IP local
 if FLASK_ENV == "development":
     if not cors_origins:
-        cors_origins = "*"  # Permitir todos en desarrollo
+        origins_list = list(DEV_ORIGINS)
+        cors_origins = ",".join(origins_list)
     else:
-        # Si ya hay CORS origins configurados, agregar localhost
         if isinstance(cors_origins, str) and "," in cors_origins:
-            origins_list = [origin.strip() for origin in cors_origins.split(",")]
+            origins_list = [o.strip() for o in cors_origins.split(",")]
         elif isinstance(cors_origins, str):
             origins_list = [cors_origins]
         else:
             origins_list = cors_origins if isinstance(cors_origins, list) else []
-        
-        # Agregar localhost si no está ya incluido
-        localhost_origins = [
-            "http://127.0.0.1:5000",
-            "http://127.0.0.1:5001",
-            "http://localhost:5000",
-            "http://localhost:5001"
-        ]
-        for localhost_origin in localhost_origins:
-            if localhost_origin not in origins_list:
-                origins_list.append(localhost_origin)
-        
-        cors_origins = ",".join(origins_list) if origins_list else "*"
+        for o in DEV_ORIGINS:
+            if o not in origins_list:
+                origins_list.append(o)
+        cors_origins = ",".join(origins_list)
 else:
     # En producción, si no está configurado, usar lista vacía (solo mismo origen)
     if not cors_origins:

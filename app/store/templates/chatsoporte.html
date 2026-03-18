@@ -24,7 +24,7 @@
   <link rel="icon" href="{{ url_for('static', filename='images/favicon.svg') }}?v=20241220" type="image/svg+xml">
   
   <!-- ✅ NUEVO: Meta tags para permisos de micrófono en móviles -->
-  <meta name="permissions-policy" content="microphone=*">
+  <meta http-equiv="Permissions-Policy" content="microphone=(self)">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   
@@ -290,7 +290,7 @@
             <i class="fas fa-comments"></i> Chats
           </h5>
           <!-- ✅ NUEVO: Botón de toggle para móvil -->
-          <button class="chat-list-toggle" id="chatListToggle" title="Mostrar/ocultar lista de chats">
+          <button class="chat-list-toggle" id="chatListToggle" title="Colapsar/expandir lista (solo iconos o vista completa)">
             <i class="fas fa-chevron-right"></i>
           </button>
         </div>

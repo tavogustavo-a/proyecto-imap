@@ -516,22 +516,19 @@ async function startAudioRecording() {
             return;
         }
         
-        // ✅ MEJORADO: Solicitar permisos de micrófono usando la API estándar
-        const stream = await navigator.mediaDevices.getUserMedia({ 
-            audio: {
-                sampleRate: 44100,
-                channelCount: 1,
-                echoCancellation: true,
-                noiseSuppression: true,
-                autoGainControl: true,
-                // ✅ NUEVO: Opciones específicas para móviles
-                latency: 0.1,
-                googEchoCancellation: true,
-                googAutoGainControl: true,
-                googNoiseSuppression: true,
-                googHighpassFilter: true
-            } 
-        });
+        // ✅ MEJORADO: Solicitar permisos de micrófono (fallback a constraints simples si fallan las avanzadas)
+        let stream;
+        try {
+            stream = await navigator.mediaDevices.getUserMedia({ 
+                audio: {
+                    echoCancellation: true,
+                    noiseSuppression: true,
+                    autoGainControl: true
+                } 
+            });
+        } catch (constraintError) {
+            stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        }
         
         // ✅ MEJORADO: Configurar MediaRecorder con opciones específicas para móviles
         const options = {
@@ -645,84 +642,51 @@ function showAudioMessage(audioBlob) {
 // ✅ FUNCIONES MOVIDAS A video-utils.js
 
 // ✅ CORREGIDO: Función para enviar audio al servidor
+// Usar siempre HTTP (no Socket.IO) - evita "Invalid session" cuando Socket.IO corre en servidor separado
 async function sendAudioMessage(audioBlob, tempMessageId = null) {
     if (!chatCurrentUserId) return;
     
     try {
-        // ✅ NUEVO: Usar SocketIO para audio en tiempo real
-        if (isSocketIOAvailable()) {
-            
-            // Convertir audio a base64 para SocketIO
-            const reader = new FileReader();
-            reader.onload = function() {
-                const audioData = reader.result.split(',')[1]; // Remover data:audio/...;base64,
-                const extension = audioBlob.type.includes('webm') ? '.webm' : 
-                                 audioBlob.type.includes('mp4') ? '.mp4' : 
-                                 audioBlob.type.includes('ogg') ? '.ogg' : '.wav';
-                
-                // Enviar por SocketIO
-                const audioMessageData = {
-                    sender_id: chatCurrentUserId,
-                    recipient_id: '1', // Usuario normal siempre envía al admin (ID: 1)
-                    audio_data: audioData,
-                    audio_filename: `audio_${Date.now()}${extension}`,
-                    message_type: 'user' // ✅ CORREGIDO: Especificar que es del usuario
-                };
-                
-                
-                socket.emit('send_audio_message', audioMessageData);
-                
-            };
-            reader.readAsDataURL(audioBlob);
-            
-            // Remover mensaje temporal inmediatamente
+        const formData = new FormData();
+        const extension = audioBlob.type.includes('webm') ? '.webm' : 
+                         audioBlob.type.includes('mp4') ? '.mp4' : 
+                         audioBlob.type.includes('ogg') ? '.ogg' : '.webm';
+        const filename = `audio_message${extension}`;
+        const audioFile = audioBlob instanceof File ? audioBlob : new File([audioBlob], filename, { type: audioBlob.type });
+        formData.append('audio', audioFile, filename);
+        formData.append('recipient_id', '1');
+        formData.append('message_type', 'audio');
+        
+        const response = await fetch('/tienda/api/chat/send_audio', {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': getUserCsrfToken()
+            },
+            body: formData
+        });
+        
+        const data = await response.json();
+        
+        if (data.status === 'success') {
             if (tempMessageId) {
                 removeTempMessage(tempMessageId);
             }
-            
-        } else {
-            // Fallback a HTTP
-            const formData = new FormData();
-            
-            // Usar el tipo MIME correcto del Blob
-            const extension = audioBlob.type.includes('webm') ? '.webm' : 
-                             audioBlob.type.includes('mp4') ? '.mp4' : 
-                             audioBlob.type.includes('ogg') ? '.ogg' : '.wav';
-            
-            formData.append('audio', audioBlob, `audio_message${extension}`);
-            formData.append('recipient_id', '1');  // Usuario normal siempre envía al admin (ID: 1)
-            formData.append('message_type', 'audio');
-            
-            const response = await fetch('/tienda/api/chat/send_audio', {
-                method: 'POST',
-                headers: {
-                    'X-CSRFToken': getUserCsrfToken()
-                },
-                body: formData
-            });
-            
-            const data = await response.json();
-            
-            if (data.status === 'success') {
-                // Remover mensaje temporal y agregar el real
-                if (tempMessageId) {
-                    removeTempMessage(tempMessageId);
-                }
-                addUserMessage(data.data, true);
-                chatMessagesArea.scrollTop = chatMessagesArea.scrollHeight;
-            } else {
-                // Error al enviar audio
-            }
+            addUserMessage(data.data, true);
+            if (chatMessagesArea) chatMessagesArea.scrollTop = chatMessagesArea.scrollHeight;
+            return true;
         }
-        
+        return false;
     } catch (error) {
         // Error al enviar audio
+        return false;
     }
 }
 
-// ✅ NUEVO: Hacer funciones accesibles desde video-utils.js
+// ✅ NUEVO: Hacer funciones accesibles desde video-utils.js y audio_mobile_fix.js
 window.sendAudioMessage = sendAudioMessage;
 window.showAudioMessage = showAudioMessage;
+window.startAudioRecording = startAudioRecording;
+window.stopAudioRecording = stopAudioRecording;
 
 // ================== FUNCIONALIDAD DE ARCHIVOS ==================
 
@@ -1095,6 +1059,12 @@ function removeTempMessage(tempId) {
     if (tempMessage) {
         tempMessage.remove();
     }
+    // Remover elemento <audio> oculto (audio-preview) para evitar fugas de memoria
+    const audioPreviewElement = document.querySelector(`#audio-preview-${tempId}`);
+    if (audioPreviewElement) {
+        if (audioPreviewElement.src) URL.revokeObjectURL(audioPreviewElement.src);
+        audioPreviewElement.remove();
+    }
 }
 
 // ✅ CORREGIDO: Función para formatear tiempo
@@ -1259,15 +1229,12 @@ function setupEventListeners() {
     // ✅ NUEVO: Event listeners para audio (toggle de grabación)
     const audioRecordBtn = document.getElementById('audioRecordBtnUser');
     if (audioRecordBtn) {
-        // ✅ NUEVO: Solo usar click para toggle de grabación
-        audioRecordBtn.addEventListener('click', startAudioRecording);
-        
-        // ✅ NUEVO: Eventos táctiles para dispositivos móviles (también toggle)
-        audioRecordBtn.addEventListener('touchstart', (e) => {
+        audioRecordBtn.addEventListener('click', function(e) {
             e.preventDefault();
+            e.stopPropagation();
             startAudioRecording();
-        }, { passive: true });
-        
+        }, { passive: false });
+        // No usar touchstart: en táctiles el tap genera touchstart+click; solo click evita doble disparo
         // Botón de audio configurado correctamente
     } else {
         // No se encontró el botón de audio
@@ -1520,12 +1487,13 @@ function initializeSocketIO() {
     }
     
     try {
-        // ✅ NUEVO: Detectar la URL base para móviles
-        // Conectar a SocketIO: en producción usa el proxy de Nginx, en local usa puerto directo
-        const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-        const baseUrl = isLocal ? 
-            `${window.location.protocol}//${window.location.hostname}:5001` : 
-            window.location.origin;
+        // Detectar URL base: en desarrollo/LAN (localhost, 127.0.0.1, 192.168.x.x) usa puerto 5001
+        const host = window.location.hostname;
+        const isDevOrLan = host === 'localhost' || host === '127.0.0.1' ||
+            /^192\.168\.\d+\.\d+$/.test(host) || /^10\.\d+\.\d+\.\d+$/.test(host) ||
+            /^172\.(1[6-9]|2\d|3[0-1])\.\d+\.\d+$/.test(host);
+        const baseUrl = isDevOrLan ?
+            `${window.location.protocol}//${host}:5001` : window.location.origin;
         
         // ✅ CORREGIDO: Conectar a SocketIO con configuración optimizada para estabilidad
         socket = io(baseUrl, {
@@ -1704,26 +1672,24 @@ function setupSocketIOEventListeners() {
         handleUserOnlineStatus(data);
     });
     
-    // Chat finalizado
+    // Chat finalizado - solo mostrar si es para ESTE usuario (no padre cuando se finaliza sub)
     socket.on('chat_finalized', function(data) {
-        if (data.user_id && data.status === 'finished') {
-            // Si hay un message_id, crear el mensaje del sistema
-            if (data.message_id) {
-                const systemMessage = {
-                    id: data.message_id,
-                    message: 'Chat finalizado, gracias por contactarnos',
-                    sender_id: 'system',
-                    sender_name: 'Sistema',
-                    message_type: 'system',
-                    has_attachment: false,
-                    created_at: new Date().toISOString(),
-                    timestamp: new Date().toISOString(),
-                    is_temp: false
-                };
-                
-                addMessageToChat(systemMessage, true);
-            }
-        }
+        if (!data.user_id || data.status !== 'finished') return;
+        if (String(data.user_id) !== String(chatCurrentUserId)) return; // Solo para el chat actual
+        if (!data.message_id) return;
+        if (document.querySelector(`[data-message-id="${data.message_id}"]`)) return; // Evitar duplicado
+        const systemMessage = {
+            id: data.message_id,
+            message: 'Chat finalizado, gracias por contactarnos',
+            sender_id: 'system',
+            sender_name: 'Sistema',
+            message_type: 'system',
+            has_attachment: false,
+            created_at: new Date().toISOString(),
+            timestamp: new Date().toISOString(),
+            is_temp: false
+        };
+        addMessageToChat(systemMessage, true);
     });
     
     // Estado del chat cambiado (colores en tiempo real)

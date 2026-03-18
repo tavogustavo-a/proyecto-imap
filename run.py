@@ -886,8 +886,22 @@ def main():
     signal.signal(signal.SIGINT, signal_handler)
     signal.signal(signal.SIGTERM, signal_handler)
     
+    use_https = os.getenv("RUN_HTTPS", "").lower() in ("1", "true", "yes")
+    if use_https:
+        print("=" * 60)
+        print("HTTPS activado. Accede desde: https://192.168.1.5:5000")
+        print("O desde este equipo: https://localhost:5000")
+        print("Acepta el aviso del certificado la primera vez.")
+        print("=" * 60)
     try:
-        app.run(host="0.0.0.0", port=5000, debug=Config.DEBUG, threaded=True, use_reloader=False)
+        app.run(
+            host="0.0.0.0",
+            port=5000,
+            debug=Config.DEBUG,
+            threaded=True,
+            use_reloader=False,
+            ssl_context="adhoc" if use_https else None,
+        )
     except OSError as e:
         if "WinError 10038" in str(e):
             print("⚠️  Error de socket detectado, reiniciando servidor...")

@@ -131,6 +131,48 @@ def store_access_required(f):
         return f(*args, **kwargs)
     return decorated_function
 
+# Decorador para chat de soporte: NO requiere tipo_precio (permite acceso al chat sin configurar USD/COP)
+def chat_access_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        user_id = session.get("user_id")
+        user_obj = User.query.get(user_id) if user_id else None
+        admin_username = current_app.config.get("ADMIN_USER", "admin")
+        if not session.get("logged_in"):
+            flash("Debes iniciar sesión para acceder al chat de soporte.", "warning")
+            return redirect(url_for("user_auth_bp.login"))
+        if user_obj and user_obj.username == admin_username:
+            return f(*args, **kwargs)
+        blocked_users = ["soporte", "soporte1", "soporte2", "soporte3"]
+        if user_obj and user_obj.username.lower() in blocked_users:
+            flash("No tienes permiso para acceder al chat de soporte.", "danger")
+            return redirect(url_for("main_bp.home"))
+        if user_obj and user_obj.parent_id is not None:
+            if not user_obj.can_chat:
+                flash("No tienes permiso para acceder al chat de soporte.", "danger")
+                return redirect(url_for("main_bp.home"))
+            return f(*args, **kwargs)
+        return f(*args, **kwargs)
+    return decorated_function
+
+# Decorador para APIs de limpieza del chat: permite admin O usuarios con is_support
+def admin_or_support_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        user_id = session.get("user_id")
+        user_obj = User.query.get(user_id) if user_id else None
+        admin_username = current_app.config.get("ADMIN_USER", "admin")
+        if not session.get("logged_in"):
+            return jsonify({'status': 'error', 'message': 'Debes iniciar sesión'}), 401
+        if not user_obj:
+            return jsonify({'status': 'error', 'message': 'Usuario no encontrado'}), 403
+        if user_obj.username == admin_username:
+            return f(*args, **kwargs)
+        if user_obj.is_support:
+            return f(*args, **kwargs)
+        return jsonify({'status': 'error', 'message': 'Solo admin o usuarios de soporte pueden realizar esta acción'}), 403
+    return decorated_function
+
 # Decorador específico para hojas de cálculo (más restrictivo)
 def worksheet_access_required(f):
     @wraps(f)
@@ -2784,14 +2826,14 @@ def admin_support():
     return render_template('chatsoporte.html', title="Chat Soporte", users=users, current_user=current_user, user_has_worksheet_access=user_has_worksheet_access, ADMIN_USER=admin_user, User=User, is_support_user=False)
 
 @store_bp.route('/support/dashboard')
-@store_access_required
+@chat_access_required
 def support_dashboard():
     """Dashboard de chat de soporte para usuarios con is_support=True"""
     current_user = get_current_user()
     
     if not current_user or not current_user.is_support:
         flash("No tienes permisos de soporte.", "danger")
-        return redirect(url_for('store_bp.store_front'))
+        return redirect(url_for('main_bp.home'))
     
     # Solo usuarios normales (no admin, no sub-usuarios) para la tabla de gestión
     admin_user = current_app.config.get("ADMIN_USER", "admin")
@@ -2925,6 +2967,8 @@ def update_soporte_permission():
                 # Importar modelos
                 from app.models.chat import ChatMessage, ChatSession
                 
+                # Eliminar archivos físicos del chat antes de borrar mensajes
+                ChatMessage.delete_attachment_files_for_user(user_id)
                 # Verificar cuántos mensajes existen antes de eliminar
                 messages_before = ChatMessage.query.filter(
                     db.or_(
@@ -2986,14 +3030,14 @@ def update_soporte_permission():
         return jsonify({'status': 'error', 'message': f'Error al actualizar permiso: {str(e)}'}), 500
 
 @store_bp.route('/chat_soporte')
-@store_access_required
+@chat_access_required
 def user_chat_soporte():
     """Página de chat de soporte para usuarios"""
     current_user = get_current_user()
     
     if not current_user:
         flash("No tienes permiso para acceder al chat de soporte.", "danger")
-        return redirect(url_for('store_bp.store_front'))
+        return redirect(url_for('main_bp.home'))
     
     # Obtener admin_user para la plantilla
     admin_user = current_app.config.get("ADMIN_USER", "admin")
@@ -3005,7 +3049,7 @@ def user_chat_soporte():
     # Si no es soporte, verificar que tenga permiso de chat
     if not current_user.can_chat:
         flash("No tienes permiso para acceder al chat de soporte.", "danger")
-        return redirect(url_for('store_bp.store_front'))
+        return redirect(url_for('main_bp.home'))
     
     return render_template('user_chat_soporte.html', title="Chat de Soporte", current_user=current_user, ADMIN_USER=admin_user)
 
@@ -4596,7 +4640,7 @@ from app.models.chat import ChatMessage, ChatSession
 from app.models.user import User
 
 @store_bp.route('/api/chat/send_message', methods=['POST'])
-@store_access_required
+@chat_access_required
 def send_chat_message():
     """Enviar mensaje de chat con soporte para archivos"""
     
@@ -4920,8 +4964,9 @@ def send_chat_message():
                     }
                     
                     # Llamada interna al endpoint SocketIO
+                    socketio_port = current_app.config.get('SOCKETIO_PORT', 5001)
                     response = requests.post(
-                        'http://127.0.0.1:5002/api/chat/socketio_emit',
+                        f'http://127.0.0.1:{socketio_port}/api/chat/socketio_emit',
                         json=socketio_data,
                         headers={'Content-Type': 'application/json'}
                     )
@@ -5050,7 +5095,7 @@ def send_chat_message():
 
 # Limpiar archivos corruptos
 @store_bp.route('/api/chat/cleanup_corrupted_files', methods=['POST'])
-@store_access_required
+@chat_access_required
 def cleanup_corrupted_files():
     """Limpiar archivos corruptos o vacíos del chat"""
     try:
@@ -5099,7 +5144,7 @@ def cleanup_corrupted_files():
 
 # Regenerar lista de archivos
 @store_bp.route('/api/chat/regenerate_files', methods=['POST'])
-@store_access_required
+@chat_access_required
 def regenerate_files():
     """Regenerar lista de archivos disponibles"""
     try:
@@ -5136,7 +5181,7 @@ def regenerate_files():
 
 # Verificar archivo específico
 @store_bp.route('/api/chat/check_file/<filename>', methods=['GET'])
-@store_access_required
+@chat_access_required
 def check_file(filename):
     """Verificar si un archivo específico existe y es accesible"""
     try:
@@ -5185,7 +5230,7 @@ def check_file(filename):
 
 # Forzar estado finished para testing
 @store_bp.route('/api/chat/force_finished_status', methods=['POST'])
-@store_access_required
+@chat_access_required
 def force_finished_status():
     """Forzar estado finished para testing (solo admin)"""
     try:
@@ -5243,7 +5288,7 @@ def force_finished_status():
 
 # Enviar mensaje del sistema (para chat finalizado)
 @store_bp.route('/api/chat/send_system_message', methods=['POST'])
-@store_access_required
+@chat_access_required
 def send_system_message():
     """Enviar mensaje del sistema (para chat finalizado)"""
     try:
@@ -5309,7 +5354,7 @@ def send_system_message():
 
 # Limpiar estados obsoletos del chat
 @store_bp.route('/api/chat/cleanup_obsolete_statuses', methods=['POST'])
-@store_access_required
+@chat_access_required
 def cleanup_obsolete_chat_statuses():
     """Limpiar estados obsoletos del chat (finished cuando hay mensajes nuevos)"""
     try:
@@ -5385,7 +5430,7 @@ def cleanup_obsolete_chat_statuses():
 
 # Actualizar estado del chat (finalizado, respondido, etc.)
 @store_bp.route('/api/chat/update_chat_status', methods=['POST'])
-@store_access_required
+@chat_access_required
 def update_chat_status():
     """Actualizar estado del chat (finalizado, respondido, etc.)"""
     try:
@@ -5437,7 +5482,7 @@ def update_chat_status():
 
 
 @store_bp.route('/api/chat/get_messages', methods=['GET'])
-@store_access_required
+@chat_access_required
 def get_chat_messages():
     """Obtener mensajes de chat"""
     try:
@@ -5476,14 +5521,14 @@ def get_chat_messages():
         return jsonify({'status': 'error', 'message': f'Error al obtener mensajes: {str(e)}'}), 500
 
 @store_bp.route('/api/chat/get_user_messages', methods=['GET'])
-@store_access_required
+@chat_access_required
 def get_user_chat_messages():
     """Obtener mensajes de chat para usuarios normales (con restricciones de tienda)"""
     try:
         # Importar modelo
         from app.models.chat import ChatMessage
         
-        # El decorador @store_access_required ya verifica la autenticación
+        # El decorador @chat_access_required ya verifica la autenticación
         # Usar get_current_user() que es más robusto
         current_user = get_current_user()
         if not current_user:
@@ -5515,7 +5560,7 @@ def get_user_chat_messages():
         return jsonify({'status': 'error', 'message': f'Error al obtener mensajes: {str(e)}'}), 500
 
 @store_bp.route('/api/chat/get_all_conversations', methods=['GET'])
-@store_access_required
+@chat_access_required
 def get_all_chat_conversations():
     """Obtener todas las conversaciones y estadísticas (solo admin/soporte)"""
     try:
@@ -5591,11 +5636,19 @@ def get_all_chat_conversations():
                         'time': last_message.created_at.isoformat() if last_message.created_at else None
                     }
                     
+                    # Para sub-usuarios: mostrar "padre / subusuario" para chat independiente
+                    display_name = user.username
+                    if user.parent_id:
+                        parent = User.query.get(user.parent_id)
+                        if parent:
+                            display_name = f"{parent.username} / {user.username}"
+                    
                     users_list.append({
                         'id': user.id,
                         'username': user.username,
+                        'display_name': display_name,
                         'parent_id': user.parent_id,
-                        'can_chat': user.can_chat,  # Agregar estado del chat
+                        'can_chat': user.can_chat,
                         'unread_count': unread_count,
                         'last_message': last_message_data['message'],
                         'last_message_time': last_message_data['time']
@@ -5631,7 +5684,7 @@ def get_all_chat_conversations():
         return jsonify({'status': 'error', 'message': f'Error al obtener conversaciones: {str(e)}'}), 500
 
 @store_bp.route('/api/chat/get_users_with_chat', methods=['GET'])
-@store_access_required
+@chat_access_required
 def get_users_with_chat():
     """Obtener lista de usuarios con chat activo (solo admin/soporte)"""
     try:
@@ -5698,28 +5751,41 @@ def get_users_with_chat():
                             'time': last_message.created_at.isoformat() if last_message.created_at else None
                         }
                         
-                        # Lógica simplificada y más robusta para determinar el estado del chat
-                        chat_status = 'pending'  # Estado por defecto
+                        # REGLA: Morado solo si último mensaje es "Chat finalizado..."
+                        # Si no: azul (admin/soporte) o verde (usuario) según message_type
+                        chat_status = 'pending'
                         
                         try:
-                            # Verificar si el chat está finalizado por mensaje del sistema
-                            if last_message and 'Chat finalizado, gracias por contactarnos' in last_message.message:
-                                chat_status = 'finished'
-                            elif last_message.message_type == 'system':
-                                chat_status = 'finished'
-                            elif last_message.sender_id == user.id:
-                                # Si el último mensaje es del usuario normal, es NEW_MESSAGE (verde)
-                                chat_status = 'new_message'
+                            msg_text = last_message.message or ''
+                            msg_type = (last_message.message_type or '').strip().lower()
+                            # Fallback: si message_type vacío, inferir por sender (admin/soporte = responded)
+                            if not msg_type and last_message.sender_id:
+                                sender_user = User.query.get(last_message.sender_id)
+                                if sender_user:
+                                    if sender_user.username == admin_user:
+                                        msg_type = 'admin'
+                                    elif getattr(sender_user, 'is_support', False):
+                                        msg_type = 'support'
+                            if 'Chat finalizado, gracias por contactarnos' in msg_text:
+                                chat_status = 'finished'  # Morado
+                            elif msg_type in ('admin', 'support'):
+                                chat_status = 'responded'  # Azul
                             else:
-                                # Si el último mensaje es de admin/soporte, es RESPONDED (azul)
-                                chat_status = 'responded'
+                                chat_status = 'new_message'  # Verde (usuario)
                         except Exception as e:
-                            # Si hay error, usar pending por defecto
                             chat_status = 'pending'
+                        
+                        # Para sub-usuarios: mostrar "padre / subusuario" para identificar el chat independiente
+                        display_name = user.username
+                        if user.parent_id:
+                            parent = User.query.get(user.parent_id)
+                            if parent:
+                                display_name = f"{parent.username} / {user.username}"
                         
                         users_list.append({
                             'id': user.id,
                             'username': user.username,
+                            'display_name': display_name,
                             'parent_id': user.parent_id,
                             'can_chat': getattr(user, 'can_chat', True),
                             'unread_count': unread_count,
@@ -5758,7 +5824,7 @@ def get_users_with_chat():
 
 
 @store_bp.route('/api/chat/get_user_conversation/<int:user_id>', methods=['GET'])
-@store_access_required
+@chat_access_required
 def get_user_chat_conversation(user_id):
     """Obtener conversación específica de un usuario (solo admin/soporte)"""
     try:
@@ -5786,12 +5852,20 @@ def get_user_chat_conversation(user_id):
         # Marcar mensajes como leídos desde la perspectiva del admin
         ChatMessage.mark_as_read_for_admin(user_id)
         
+        # Para sub-usuarios: display_name = "padre / subusuario" (chat independiente)
+        display_name = user.username
+        if user.parent_id:
+            parent = User.query.get(user.parent_id)
+            if parent:
+                display_name = f"{parent.username} / {user.username}"
+        
         return jsonify({
             'status': 'success',
             'data': messages_data,
             'user_info': {
                 'id': user.id,
                 'username': user.username,
+                'display_name': display_name,
                 'is_support': user.is_support
             }
         })
@@ -5800,7 +5874,7 @@ def get_user_chat_conversation(user_id):
         return jsonify({'status': 'error', 'message': f'Error al obtener conversación: {str(e)}'}), 500
 
 @store_bp.route('/api/chat/get_unread_count', methods=['GET'])
-@store_access_required
+@chat_access_required
 def get_unread_chat_count():
     """Obtener cantidad de mensajes no leídos"""
     try:
@@ -5822,7 +5896,7 @@ def get_unread_chat_count():
         return jsonify({'status': 'error', 'message': f'Error al obtener conteo: {str(e)}'}), 500
 
 @store_bp.route('/api/chat/cleanup_old_messages', methods=['POST'])
-@admin_required
+@admin_or_support_required
 def cleanup_old_chat_messages():
     """Limpiar mensajes antiguos con días personalizables"""
     try:
@@ -5863,7 +5937,7 @@ def cleanup_old_chat_messages():
         return jsonify({'status': 'error', 'message': f'Error al limpiar mensajes: {str(e)}'}), 500
 
 @store_bp.route('/api/chat/cleanup_all_messages', methods=['POST'])
-@admin_required
+@admin_or_support_required
 def cleanup_all_chat_messages():
     """Limpiar TODOS los mensajes del chat (función agresiva)"""
     try:
@@ -5888,7 +5962,7 @@ def cleanup_all_chat_messages():
         return jsonify({'status': 'error', 'message': f'Error al limpiar todos los mensajes: {str(e)}'}), 500
 
 @store_bp.route('/api/chat/cleanup_orphaned_files', methods=['POST'])
-@admin_required
+@admin_or_support_required
 def cleanup_orphaned_files():
     """Limpiar solo archivos huérfanos (archivos sin mensaje asociado)"""
     try:
@@ -5995,7 +6069,7 @@ def serve_chat_file(filename):
         return jsonify({'error': f'Error al servir archivo: {str(e)}'}), 500
 
 @store_bp.route('/api/chat/sync_messages', methods=['GET'])
-@store_access_required
+@chat_access_required
 def sync_messages():
     """Sincronizar mensajes perdidos desde una fecha específica"""
     try:
@@ -6062,7 +6136,7 @@ def sync_messages():
         return jsonify({'status': 'error', 'message': f'Error al sincronizar mensajes: {str(e)}'}), 500
 
 @store_bp.route('/api/chat/send_audio', methods=['POST'])
-@store_access_required
+@chat_access_required
 def send_audio_message():
     """Enviar mensaje de audio grabado"""
     try:
@@ -6165,8 +6239,9 @@ def send_audio_message():
             }
             
             # Llamar al servidor SocketIO para emitir en tiempo real
+            socketio_port = current_app.config.get('SOCKETIO_PORT', 5001)
             socketio_response = requests.post(
-                'http://127.0.0.1:5002/api/chat/socketio_emit',
+                f'http://127.0.0.1:{socketio_port}/api/chat/socketio_emit',
                 json=socketio_data,
                 timeout=5
             )
@@ -6189,7 +6264,7 @@ def send_audio_message():
 
 
 @store_bp.route('/api/chat/audio/<int:message_id>')
-@store_access_required
+@chat_access_required
 def get_audio_file(message_id):
     """Servir archivo de audio por ID de mensaje"""
     try:
@@ -6475,7 +6550,7 @@ def delete_user_chat():
 
 
 @store_bp.route('/api/chat/auto_cleanup_inactive_users', methods=['POST'])
-@admin_required
+@admin_or_support_required
 def auto_cleanup_inactive_users():
     """Limpieza automática: eliminar chats de usuarios inactivos por días personalizables"""
     try:
@@ -6989,7 +7064,7 @@ def get_current_user_api():
 
 # Endpoint para SocketIO emitir mensajes
 @store_bp.route('/api/chat/socketio_emit', methods=['POST'])
-@store_access_required
+@chat_access_required
 def socketio_emit_message():
     """Endpoint para que SocketIO emita mensajes en tiempo real"""
     try:
@@ -7015,8 +7090,9 @@ def socketio_emit_message():
                 'recipient_id': recipient_id
             }
             
+            socketio_port = current_app.config.get('SOCKETIO_PORT', 5001)
             response = requests.post(
-                'http://127.0.0.1:5002/api/chat/socketio_emit',
+                f'http://127.0.0.1:{socketio_port}/api/chat/socketio_emit',
                 json=socketio_data,
                 headers={'Content-Type': 'application/json'}
             )
