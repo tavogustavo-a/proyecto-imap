@@ -112,6 +112,103 @@ function clearSavedActiveCellPosition() {
     localStorage.removeItem('worksheetActiveCell');
 }
 
+// --- Soporte para F5: guardar scroll en sessionStorage para restaurar tras recarga ---
+const WORKSHEET_SCROLL_KEY = 'worksheetF5Scroll';
+
+function saveWorksheetScrollToStorage() {
+    try {
+        const container = document.getElementById('worksheetTableContainer');
+        const tr = container?.querySelector('.table-responsive');
+        const data = {
+            path: window.location.pathname,
+            windowY: window.scrollY ?? document.documentElement.scrollTop ?? 0,
+            windowX: window.scrollX ?? document.documentElement.scrollLeft ?? 0,
+            tableResponsiveScrollLeft: tr ? tr.scrollLeft : 0
+        };
+        sessionStorage.setItem(WORKSHEET_SCROLL_KEY, JSON.stringify(data));
+    } catch (e) { /* ignorar */ }
+}
+
+function getWorksheetScrollFromStorage() {
+    try {
+        const raw = sessionStorage.getItem(WORKSHEET_SCROLL_KEY);
+        if (!raw) return null;
+        const data = JSON.parse(raw);
+        if (data.path !== window.location.pathname) return null;
+        sessionStorage.removeItem(WORKSHEET_SCROLL_KEY); // Usar una vez
+        return data;
+    } catch (e) { return null; }
+}
+
+function setupWorksheetScrollPersistence() {
+    let scrollTimeout;
+    const onScroll = () => {
+        clearTimeout(scrollTimeout);
+        scrollTimeout = setTimeout(saveWorksheetScrollToStorage, 150);
+    };
+    window.addEventListener('scroll', onScroll, { passive: true });
+    window.addEventListener('pagehide', saveWorksheetScrollToStorage);
+    window.addEventListener('beforeunload', saveWorksheetScrollToStorage);
+}
+
+// Guarda posición de scroll (ventana, contenedor, table-responsive y ancestros scrollables)
+function saveWorksheetScrollPosition(container) {
+    const saved = { windowY: 0, windowX: 0, containerScrollTop: 0, containerScrollLeft: 0, tableResponsiveScrollLeft: 0, tableResponsiveScrollTop: 0, ancestors: [] };
+    try {
+        saved.windowY = window.scrollY ?? document.documentElement.scrollTop ?? 0;
+        saved.windowX = window.scrollX ?? document.documentElement.scrollLeft ?? 0;
+        if (container) {
+            saved.containerScrollTop = container.scrollTop || 0;
+            saved.containerScrollLeft = container.scrollLeft || 0;
+            const tr = container.querySelector('.table-responsive');
+            if (tr) {
+                saved.tableResponsiveScrollLeft = tr.scrollLeft || 0;
+                saved.tableResponsiveScrollTop = tr.scrollTop || 0;
+            }
+            // Guardar scroll de ancestros scrollables (p.ej. contenedores con overflow)
+            let el = container.parentElement;
+            while (el && el !== document.body) {
+                if (el.scrollHeight > el.clientHeight || el.scrollWidth > el.clientWidth) {
+                    saved.ancestors.push({ el: el, top: el.scrollTop, left: el.scrollLeft });
+                }
+                el = el.parentElement;
+            }
+        }
+    } catch (e) { /* ignorar */ }
+    return saved;
+}
+
+// Restaura posición de scroll guardada (saved en memoria o desde sessionStorage tras F5)
+function restoreWorksheetScrollPosition(saved, container) {
+    // Prioridad: datos de F5 en sessionStorage (tras recarga) > datos en memoria (re-render en página)
+    let data = saved;
+    const fromStorage = getWorksheetScrollFromStorage();
+    if (fromStorage && (fromStorage.windowY > 0 || fromStorage.windowX > 0)) {
+        data = fromStorage;
+    }
+    if (!data) return;
+    try {
+        const restore = () => {
+            window.scrollTo(data.windowX ?? 0, data.windowY ?? 0);
+            if (container) {
+                if (data.containerScrollTop !== undefined) container.scrollTop = data.containerScrollTop || 0;
+                if (data.containerScrollLeft !== undefined) container.scrollLeft = data.containerScrollLeft || 0;
+                const tr = container.querySelector('.table-responsive');
+                if (tr && (data.tableResponsiveScrollLeft !== undefined || data.tableResponsiveScrollTop !== undefined)) {
+                    if (data.tableResponsiveScrollLeft !== undefined) tr.scrollLeft = data.tableResponsiveScrollLeft || 0;
+                    if (data.tableResponsiveScrollTop !== undefined) tr.scrollTop = data.tableResponsiveScrollTop || 0;
+                }
+                (data.ancestors || []).forEach(({ el, top, left }) => {
+                    if (el && el.isConnected) { el.scrollTop = top; el.scrollLeft = left; }
+                });
+            }
+        };
+        setTimeout(() => requestAnimationFrame(restore), 250);
+        if ((data.windowY || 0) > 100) {
+            setTimeout(() => requestAnimationFrame(restore), 450);
+        }
+    } catch (e) { /* ignorar */ }
+}
 
 function restoreActiveCellFocus() {
     // NO restaurar foco si el usuario está escribiendo en el campo de búsqueda
@@ -6844,6 +6941,9 @@ document.addEventListener('DOMContentLoaded', function() {
         return;
     }
     firstDOMContentLoadedExecuted = true;
+
+    // Guardar scroll al hacer scroll y antes de F5 para restaurar tras recarga
+    setupWorksheetScrollPersistence();
     
     // Configurar eventos de teclado
     setupKeyboardEvents();
@@ -7896,6 +7996,9 @@ function applyRowColorInRealTime(rowIndex, colIndex, numeroValue, plantilla) {
 function renderTablaEditable(plantilla, fieldNames, container, idx) {
     // Operaciones más rápidas
     if (!plantilla || !container) return;
+
+    // Guardar posición de scroll para restaurar después del render (evita que el usuario vuelva al inicio)
+    const savedScrollPosition = saveWorksheetScrollPosition(container);
     
     // Generar nombres de campos dinámicamente según el modo actual
     const dynamicFieldNames = optimizedFunctions.getStandardFieldNames();
@@ -8409,6 +8512,9 @@ function renderTablaEditable(plantilla, fieldNames, container, idx) {
     
     // nderizado
     restoreActiveCellFocus();
+    
+    // Restaurar posición de scroll después del foco (evita que scrollIntoView lleve al usuario al inicio)
+    restoreWorksheetScrollPosition(savedScrollPosition, container);
 }
 // Eventos globales
 window.globalSelectionEventsSetup = false;
@@ -10684,13 +10790,91 @@ function cachedRenderTablaEditable(plantilla, fieldNames, container, idx) {
 }
 
 function undoTabla() {
-    // Con debouncing para evitar múltiples ejecuciones
-    debouncedUndoRedo(() => undoAction(), 100); // Optimizado para hojas de cálculo
+    debouncedUndoRedo(() => {
+        const cell = getCurrentCellForUndoRedo();
+        if (cell) {
+            undoCellFromServer(cell.row, cell.col).then(done => {
+                if (!done) undoAction();
+            });
+        } else {
+            undoAction();
+        }
+    }, 100);
 }
 
 function redoTabla() {
-    // Con debouncing para evitar múltiples ejecuciones
-    debouncedUndoRedo(() => redoAction(), 100); // Optimizado para hojas de cálculo
+    debouncedUndoRedo(() => {
+        const cell = getCurrentCellForUndoRedo();
+        if (cell) {
+            redoCellFromServer(cell.row, cell.col).then(done => {
+                if (!done) redoAction();
+            });
+        } else {
+            redoAction();
+        }
+    }, 100);
+}
+
+function getCurrentCellForUndoRedo() {
+    const activeInput = document.querySelector('#worksheetTableContainer input:focus');
+    if (activeInput && activeInput.id && activeInput.id.startsWith('cell-')) {
+        const m = activeInput.id.match(/cell-(\d+)-(\d+)/);
+        if (m) return { row: parseInt(m[1], 10), col: parseInt(m[2], 10) };
+    }
+    if (lastSelectedCell && Array.isArray(lastSelectedCell) && lastSelectedCell.length >= 2) {
+        return { row: lastSelectedCell[0], col: lastSelectedCell[1] };
+    }
+    return null;
+}
+
+async function undoCellFromServer(row, col) {
+    try {
+        const plantilla = optimizedFunctions.getCurrentPlantilla();
+        if (!plantilla || !plantilla.id || window.isSharedMode) return false;
+        const res = await fetch(`/api/store/worksheet_cell_history/${plantilla.id}/undo`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCSRFToken() },
+            body: JSON.stringify({ row, col })
+        });
+        const data = await res.json();
+        if (!data.success || data.old_value === undefined) return false;
+        if (tablaDatos[row] && tablaDatos[row][col] !== undefined) {
+            tablaDatos[row][col] = data.old_value;
+            plantilla.datos = tablaDatos;
+            const input = getCellElement(row, col);
+            if (input) input.value = data.old_value;
+            saveWorksheetDataUnified(plantilla, { silent: true });
+            showClipboardIndicator(`↶ Deshecho: valor restaurado`);
+            updateDuplicateStyles(plantilla);
+            return true;
+        }
+        return false;
+    } catch (e) { return false; }
+}
+
+async function redoCellFromServer(row, col) {
+    try {
+        const plantilla = optimizedFunctions.getCurrentPlantilla();
+        if (!plantilla || !plantilla.id || window.isSharedMode) return false;
+        const res = await fetch(`/api/store/worksheet_cell_history/${plantilla.id}/redo`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCSRFToken() },
+            body: JSON.stringify({ row, col })
+        });
+        const data = await res.json();
+        if (!data.success || data.new_value === undefined) return false;
+        if (tablaDatos[row] && tablaDatos[row][col] !== undefined) {
+            tablaDatos[row][col] = data.new_value;
+            plantilla.datos = tablaDatos;
+            const input = getCellElement(row, col);
+            if (input) input.value = data.new_value;
+            saveWorksheetDataUnified(plantilla, { silent: true });
+            showClipboardIndicator(`↷ Rehecho: valor restaurado`);
+            updateDuplicateStyles(plantilla);
+            return true;
+        }
+        return false;
+    } catch (e) { return false; }
 }
 
 
@@ -10800,9 +10984,30 @@ function recordDetailedChange(type, cellInfo, oldValue, newValue) {
     
     // NUEVO: Sincronizar historial con el servidor
     syncHistoryToServer(change);
-    
-    // NOTA: Historial en localStorage + servidor (sincronizado)
-    
+
+    // Guardar en BD para Ctrl+Z/Ctrl+Y (20 por celda, estilo Excel)
+    saveCellChangeToUndoHistory(cellInfo.row, cellInfo.col, oldValue, newValue);
+}
+
+// Guardar cambio de celda en BD para undo/redo persistente (Ctrl+Z / Ctrl+Y)
+async function saveCellChangeToUndoHistory(row, col, oldValue, newValue) {
+    try {
+        if (window.isSharedMode) return;
+        const plantilla = optimizedFunctions.getCurrentPlantilla();
+        if (!plantilla || !plantilla.id) return;
+        const res = await fetch('/api/store/worksheet_cell_history', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCSRFToken() },
+            body: JSON.stringify({
+                template_id: plantilla.id,
+                row: row,
+                col: col,
+                old_value: oldValue ?? '',
+                new_value: newValue ?? ''
+            })
+        });
+        if (!res.ok) { /* ignorar errores */ }
+    } catch (e) { /* ignorar */ }
 }
 
 // NUEVO: Función para sincronizar historial con el servidor
@@ -11547,8 +11752,10 @@ const optimizedFunctions = {
         
         
         if (cachedHtml && isValid) {
+            const savedScroll = saveWorksheetScrollPosition(container);
             container.innerHTML = cachedHtml;
             this._attachEventListeners(container, plantilla, fieldNames, idx);
+            restoreWorksheetScrollPosition(savedScroll, container);
             return;
         }
         

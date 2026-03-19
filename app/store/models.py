@@ -250,6 +250,7 @@ class WorksheetTemplate(db.Model):
     worksheet_data = db.relationship('WorksheetData', backref='template', cascade="all, delete-orphan")
     permissions = db.relationship('WorksheetPermission', backref='worksheet', cascade="all, delete-orphan")
     connection_logs = db.relationship('WorksheetConnectionLog', backref='worksheet', cascade="all, delete-orphan")
+    cell_history = db.relationship('WorksheetCellHistory', backref='template', cascade="all, delete-orphan")
 
 class WorksheetData(db.Model):
     __tablename__ = 'worksheet_data'
@@ -263,6 +264,19 @@ class WorksheetData(db.Model):
     last_edit_time = db.Column(db.DateTime, nullable=True)  # Tiempo de última edición
     # Relación definida en WorksheetTemplate
     pass
+
+
+# ⭐ Historial de cambios por celda para Ctrl+Z / Ctrl+Y (estilo Excel, 20 por celda)
+class WorksheetCellHistory(db.Model):
+    __tablename__ = 'worksheet_cell_history'
+    id = db.Column(db.Integer, primary_key=True)
+    template_id = db.Column(db.Integer, db.ForeignKey('worksheet_templates.id', ondelete='CASCADE'), nullable=False)
+    row = db.Column(db.Integer, nullable=False)
+    col = db.Column(db.Integer, nullable=False)
+    old_value = db.Column(db.Text, nullable=True)  # valor anterior (para undo)
+    new_value = db.Column(db.Text, nullable=True)  # valor nuevo (para redo)
+    created_at = db.Column(db.DateTime, server_default=db.func.now())
+    status = db.Column(db.String(20), default='undo')  # 'undo' = disponible para deshacer, 'redo' = disponible para rehacer
 
 # Tabla de asociación para permisos de worksheet y usuarios
 worksheet_permission_users = db.Table('worksheet_permission_users',

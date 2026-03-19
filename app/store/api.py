@@ -1,6 +1,6 @@
 from flask import Blueprint, request, jsonify, current_app, session
 from app.extensions import db
-from app.store.models import WorksheetTemplate, WorksheetData, WorksheetPermission, WorksheetConnectionLog
+from app.store.models import WorksheetTemplate, WorksheetData, WorksheetPermission, WorksheetConnectionLog, WorksheetCellHistory
 from app.models.user import User
 import secrets
 from functools import wraps
@@ -401,7 +401,107 @@ def save_worksheet_data():
     return jsonify({
         'ok': True,
         'editor_info': editor_info
-    }) 
+    })
+
+
+# ============================================
+# HISTORIAL DE CELDA PARA CTRL+Z / CTRL+Y (20 por celda, estilo Excel)
+# ============================================
+MAX_CELL_HISTORY = 20
+
+def _check_worksheet_access(template_id):
+    """Verifica acceso a la plantilla. Retorna (error_response, None) o (None, True)."""
+    admin_username = current_app.config.get('ADMIN_USER', 'admin')
+    username = session.get('username')
+    user_id = session.get('user_id')
+    if username != admin_username:
+        user = User.query.filter_by(username=username).first() if username else (User.query.get(user_id) if user_id else None)
+        if not user:
+            return jsonify({'error': 'Usuario no encontrado'}), 404
+        permission = WorksheetPermission.query.filter_by(worksheet_id=template_id, access_type='users').first()
+        if not permission or user not in permission.users.all():
+            return jsonify({'error': 'Sin acceso a esta plantilla'}), 403
+    return None, True
+
+@api_bp.route('/worksheet_cell_history', methods=['POST'])
+def add_worksheet_cell_history():
+    """Registrar un cambio de celda para undo/redo (máx 20 por celda)."""
+    data = request.get_json()
+    template_id = data.get('template_id')
+    row = data.get('row')
+    col = data.get('col')
+    old_value = data.get('old_value')
+    new_value = data.get('new_value')
+    if template_id is None or row is None or col is None:
+        return jsonify({'error': 'Faltan template_id, row o col'}), 400
+    err, _ = _check_worksheet_access(template_id)
+    if err:
+        return err
+    if old_value == new_value:
+        return jsonify({'ok': True})
+    # Limpiar redo de esta celda (como Excel: nuevo cambio invalida redo)
+    WorksheetCellHistory.query.filter_by(
+        template_id=template_id, row=row, col=col, status='redo'
+    ).delete()
+    # Contar undo actuales para esta celda
+    count = WorksheetCellHistory.query.filter_by(
+        template_id=template_id, row=row, col=col, status='undo'
+    ).count()
+    if count >= MAX_CELL_HISTORY:
+        oldest = WorksheetCellHistory.query.filter_by(
+            template_id=template_id, row=row, col=col, status='undo'
+        ).order_by(WorksheetCellHistory.created_at.asc()).first()
+        if oldest:
+            db.session.delete(oldest)
+    rec = WorksheetCellHistory(
+        template_id=template_id, row=row, col=col,
+        old_value=old_value if old_value is not None else '',
+        new_value=new_value if new_value is not None else '',
+        status='undo'
+    )
+    db.session.add(rec)
+    db.session.commit()
+    return jsonify({'ok': True})
+
+@api_bp.route('/worksheet_cell_history/<int:template_id>/undo', methods=['POST'])
+def undo_worksheet_cell(template_id):
+    """Deshacer último cambio de la celda. Retorna old_value para restaurar."""
+    err, _ = _check_worksheet_access(template_id)
+    if err:
+        return err
+    data = request.get_json() or {}
+    row = data.get('row')
+    col = data.get('col')
+    if row is None or col is None:
+        return jsonify({'error': 'Faltan row o col'}), 400
+    rec = WorksheetCellHistory.query.filter_by(
+        template_id=template_id, row=row, col=col, status='undo'
+    ).order_by(WorksheetCellHistory.created_at.desc()).first()
+    if not rec:
+        return jsonify({'success': False, 'message': 'No hay nada que deshacer'})
+    rec.status = 'redo'
+    db.session.commit()
+    return jsonify({'success': True, 'old_value': rec.old_value})
+
+@api_bp.route('/worksheet_cell_history/<int:template_id>/redo', methods=['POST'])
+def redo_worksheet_cell(template_id):
+    """Rehacer último cambio deshecho. Retorna new_value para restaurar."""
+    err, _ = _check_worksheet_access(template_id)
+    if err:
+        return err
+    data = request.get_json() or {}
+    row = data.get('row')
+    col = data.get('col')
+    if row is None or col is None:
+        return jsonify({'error': 'Faltan row o col'}), 400
+    rec = WorksheetCellHistory.query.filter_by(
+        template_id=template_id, row=row, col=col, status='redo'
+    ).order_by(WorksheetCellHistory.created_at.desc()).first()
+    if not rec:
+        return jsonify({'success': False, 'message': 'No hay nada que rehacer'})
+    rec.status = 'undo'
+    db.session.commit()
+    return jsonify({'success': True, 'new_value': rec.new_value})
 
 # ============================================
 # RUTAS PARA PERMISOS DE WORKSHEET
