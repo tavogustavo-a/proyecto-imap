@@ -313,29 +313,74 @@ def get_worksheet_data(template_id):
         if not permission or user not in permission.users.all():
             return jsonify({'error': 'No tienes acceso a esta plantilla'}), 403
     
+    db.session.expire_all()
     data = WorksheetData.query.filter_by(template_id=template_id).first()
     if not data:
-        return jsonify({
+        resp = jsonify({
             'data': [], 
             'formato': {},
             'last_edit_time': None,
             'last_editor': None
         })
-    return jsonify({
-        'data': data.data,
-        'formato': data.formato or {},
-        'last_edit_time': data.last_edit_time.isoformat() if data.last_edit_time else None,
-        'last_editor': data.last_editor
-    })
+    else:
+        resp = jsonify({
+            'data': data.data,
+            'formato': data.formato or {},
+            'last_edit_time': data.last_edit_time.isoformat() if data.last_edit_time else None,
+            'last_editor': data.last_editor
+        })
+    resp.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+    return resp
 
+def _apply_worksheet_changes(current_data, changes, num_cols):
+    """Aplica cambios [[row, col, value], ...] sobre current_data."""
+    if not changes:
+        return current_data
+    result = list(current_data) if current_data else []
+    for item in changes:
+        if not isinstance(item, (list, tuple)) or len(item) < 3:
+            continue
+        r, c, val = int(item[0]), int(item[1]), item[2]
+        if r < 0 or c < 0 or (num_cols > 0 and c >= num_cols):
+            continue
+        while len(result) <= r:
+            result.append([''] * max(num_cols, 1))
+        row = result[r]
+        if not isinstance(row, list):
+            row = [str(row)] if row else []
+        while len(row) <= c:
+            row.append('')
+        row[c] = val
+        result[r] = row
+    return result
+
+
+@csrf_exempt_api
 @api_bp.route('/worksheet_data', methods=['POST'])
 def save_worksheet_data():
     data = request.get_json()
     template_id = data.get('template_id')
     rows = data.get('data')
+    changes = data.get('changes')
     formato = data.get('formato', {})
     
-    if not template_id or not isinstance(rows, list):
+    if not template_id:
+        return jsonify({'error': 'Datos inválidos'}), 400
+
+    template = WorksheetTemplate.query.get(template_id)
+    if not template:
+        return jsonify({'error': 'Plantilla no encontrada'}), 404
+    template_fields = template.fields if isinstance(template.fields, list) else []
+    template_cols = max(len(template_fields), 1)
+
+    db.session.expire_all()  # Leer datos actuales desde BD, evitar caché entre Admin/Usuario/Compartido
+    if changes is not None and isinstance(changes, list):
+        worksheet_data = WorksheetData.query.filter_by(template_id=template_id).first()
+        current = (worksheet_data.data if worksheet_data and worksheet_data.data else []) or []
+        rows = _apply_worksheet_changes(current, changes, template_cols)
+        if worksheet_data and worksheet_data.formato:
+            formato = worksheet_data.formato
+    elif not isinstance(rows, list):
         return jsonify({'error': 'Datos inválidos'}), 400
     
     # Verificar permisos del usuario
@@ -400,14 +445,15 @@ def save_worksheet_data():
     verified_data = WorksheetData.query.filter_by(template_id=template_id).first()
     return jsonify({
         'ok': True,
-        'editor_info': editor_info
+        'editor_info': editor_info,
+        'timestamp': new_timestamp.isoformat()
     })
 
 
 # ============================================
-# HISTORIAL DE CELDA PARA CTRL+Z / CTRL+Y (20 por celda, estilo Excel)
+# HISTORIAL DE CELDA PARA CTRL+Z / CTRL+Y (15 por celda, estilo Excel)
 # ============================================
-MAX_CELL_HISTORY = 20
+MAX_CELL_HISTORY = 15
 
 def _check_worksheet_access(template_id):
     """Verifica acceso a la plantilla. Retorna (error_response, None) o (None, True)."""
@@ -598,20 +644,13 @@ def save_worksheet_permissions():
                 db.session.add(permission)
             
         elif access_type in ['view', 'edit']:
-            # CORREGIDO: Eliminar el permiso opuesto para evitar conflictos
+            # Eliminar private, el tipo opuesto y users para evitar registros huérfanos.
+            # Al cambiar a "Compartir para todos", los usuarios específicos asignados se revocan.
             opposite_type = 'edit' if access_type == 'view' else 'view'
-            
-            # Verificar permisos existentes antes de eliminar
-            existing_permissions = WorksheetPermission.query.filter_by(worksheet_id=worksheet_id).all()
-            
-            # Eliminar private y el tipo opuesto
-            deleted_count = WorksheetPermission.query.filter(
+            WorksheetPermission.query.filter(
                 WorksheetPermission.worksheet_id == worksheet_id,
-                WorksheetPermission.access_type.in_(['private', opposite_type])
+                WorksheetPermission.access_type.in_(['private', opposite_type, 'users'])
             ).delete(synchronize_session=False)
-            
-            # Verificar después de eliminar
-            remaining_permissions = WorksheetPermission.query.filter_by(worksheet_id=worksheet_id).all()
             
             # Buscar o crear permiso público
             permission = WorksheetPermission.query.filter_by(
@@ -628,8 +667,12 @@ def save_worksheet_permissions():
             permission.public_token = secrets.token_urlsafe(32)
                 
         elif access_type == 'users':
-            # CORREGIDO: No eliminar permisos generales, mantener independencia
-            # Los usuarios específicos son independientes de la configuración general
+            # Eliminar permisos de "Compartir para todos" (view/edit) para evitar registros huérfanos.
+            # Al cambiar a usuarios específicos, los enlaces públicos anteriores dejan de ser válidos.
+            WorksheetPermission.query.filter(
+                WorksheetPermission.worksheet_id == worksheet_id,
+                WorksheetPermission.access_type.in_(['view', 'edit'])
+            ).delete(synchronize_session=False)
             
             # Buscar o crear permiso de usuarios
             permission = WorksheetPermission.query.filter_by(
@@ -905,7 +948,7 @@ def check_admin_worksheet_changes(worksheet_id):
         
         last_known_time = request.args.get('last_time')
         
-        # Obtener datos actuales
+        db.session.expire_all()
         worksheet_data = WorksheetData.query.filter_by(template_id=worksheet_id).first()
         
         if not worksheet_data:

@@ -13,21 +13,29 @@
  ***************************************************/
 
 // CONFIGURACIÓN
+const DEFAULT_ROWS_FOR_NEW_TABLE = 10;
 
 // Variables principales de plantillas y datos
 let selectedFields = [];
 let plantillas = [];
 let tablaDatos = [];
+// Evita que un GET de datos antiguo pise texto ya escrito; el poll no aplica remotos hasta terminar la carga inicial (admin).
+let worksheetDataFetchSeq = 0;
+let worksheetRemotePollAllowed = false;
 let selectedTemplateId = localStorage.getItem('selectedWorksheetTemplateId') || null;
 let searchQuery = '';
-let worksheetMode = localStorage.getItem('worksheetMode') || 'standard';
+let worksheetMode = (() => {
+    const m = localStorage.getItem('worksheetMode') || 'standard';
+    if (m === 'copiar') return 'standard'; // Modo copiar removido
+    if (m === 'filtro') return 'agregar'; // Modo filtro unificado en agregar
+    return m;
+})();
 
 // NOTA: Sistema de campos fijados removido por completo
 
-// Paginación
+// Paginación (siempre mostrar todos los registros)
 let currentPage = Number(localStorage.getItem('worksheetCurrentPage')) || 1;
-let rowsPerPage = 300;
-const rowsPerPageOptions = [300, 500, 1000, 2000, 4000, 6000, 'todos'];
+let rowsPerPage = 'todos';
 
 // Variables para selección múltiple por drag en columna números
 let isDraggingRows = false;
@@ -76,13 +84,9 @@ function debounce(func, wait) {
     };
 }
 
-// Sistema de cache ULTRA-OPTIMIZADO para updateDuplicateStyles
-const duplicateStylesCache = new Map();
 let lastDuplicateCheck = 0;
-const DUPLICATE_CHECK_INTERVAL = 25; // ms - OPTIMIZADO para máxima velocidad
 
-// Versión optimizada de updateDuplicateStyles con cache y debounce
-const debouncedUpdateDuplicateStyles = debounce(updateDuplicateStyles, 50); // Reducido de 150ms a 50ms
+const debouncedUpdateDuplicateStyles = debounce(updateDuplicateStyles, 50);
 
 // Guarda página actual en localStorage con validación
 function saveCurrentPage(page) {
@@ -149,6 +153,35 @@ function setupWorksheetScrollPersistence() {
     window.addEventListener('scroll', onScroll, { passive: true });
     window.addEventListener('pagehide', saveWorksheetScrollToStorage);
     window.addEventListener('beforeunload', saveWorksheetScrollToStorage);
+    // Guardar datos al cerrar/actualizar para no perder cambios sin guardar
+    window.addEventListener('pagehide', saveWorksheetDataOnUnload);
+    window.addEventListener('beforeunload', saveWorksheetDataOnUnload);
+}
+
+// Guardar datos al cerrar/actualizar (keepalive para que la petición sobreviva al cierre)
+// Solo guardar si hay cambios locales; usar "changes" para merge (evitar sobrescribir borrados del admin)
+function saveWorksheetDataOnUnload() {
+    try {
+        const plantilla = typeof optimizedFunctions !== 'undefined' ? optimizedFunctions.getCurrentPlantilla() : null;
+        if (!plantilla || !plantilla.id || window.isSharedMode) return;
+        if (!tablaDatos || !Array.isArray(tablaDatos)) return;
+
+        flushWorksheetInputsToTablaDatos(plantilla);
+        if (!Array.isArray(plantilla.datosOriginales)) return;
+        const changes = typeof computeChanges === 'function' ? computeChanges(plantilla.datosOriginales, tablaDatos) : [];
+        if (changes.length === 0) return;
+
+        const { url, headers } = getSaveConfig(plantilla, false);
+        const payload = {
+            template_id: plantilla.id,
+            campos: plantilla.campos || [],
+            formato: plantilla.formato || {},
+            changes: changes
+        };
+        const body = JSON.stringify(payload);
+        if (body.length > 60000) return;
+        fetch(url, { method: 'POST', headers: headers, body: body, keepalive: true, credentials: 'same-origin' }).catch(() => {});
+    } catch (e) { /* ignorar */ }
 }
 
 // Guarda posición de scroll (ventana, contenedor, table-responsive y ancestros scrollables)
@@ -1305,9 +1338,55 @@ function limpiarTodosFiltros() {
     }
 }
 
+// Restaurar hoja desde servidor (modo compartido y admin) - sin cerrar sesión
+function recoverWorksheetFromServer() {
+    const plantilla = (window.isSharedMode && window.currentPlantilla) ? window.currentPlantilla : (typeof optimizedFunctions !== 'undefined' ? optimizedFunctions.getCurrentPlantilla() : null);
+    if (!plantilla || !plantilla.id) {
+        if (typeof showClipboardIndicator === 'function') showClipboardIndicator('❌ No hay hoja cargada');
+        return;
+    }
+    const isShared = window.isSharedMode || false;
+    const url = isShared
+        ? `/tienda/api/shared/worksheet/${plantilla.id}/data?token=${window.sharedToken || ''}&access=${window.accessType || 'edit'}&_=${Date.now()}`
+        : `/api/store/worksheet_data/${plantilla.id}?_=${Date.now()}`;
+    if (typeof showClipboardIndicator === 'function') showClipboardIndicator('🔄 Recargando datos...');
+    const recoverSeq = ++worksheetDataFetchSeq;
+    worksheetRemotePollAllowed = false;
+    fetch(url, { cache: 'no-store', credentials: 'same-origin' })
+        .then(res => res.json())
+        .then(data => {
+            if (recoverSeq !== worksheetDataFetchSeq) return;
+            const rows = (data && data.data && Array.isArray(data.data)) ? data.data : [];
+            plantilla.datos = JSON.parse(JSON.stringify(rows));
+            plantilla.datosOriginales = JSON.parse(JSON.stringify(rows));
+            plantilla.formato = data.formato || plantilla.formato || {};
+            tablaDatos = plantilla.datos;
+            if (data.last_edit_time && typeof lastKnownEditTime !== 'undefined') lastKnownEditTime = data.last_edit_time;
+            if (window.isSharedMode && window.sharedWorksheetData) {
+                window.sharedWorksheetData.data = plantilla.datos;
+                if (data.formato) window.sharedWorksheetData.formato = data.formato;
+                if (data.last_edit_time) window.sharedWorksheetData.last_edit_time = data.last_edit_time;
+            }
+            const container = document.getElementById('worksheetTableContainer');
+            if (container && typeof optimizedFunctions !== 'undefined') {
+                optimizedFunctions.renderTablaEditable(plantilla, optimizedFunctions.getStandardFieldNames(), container, optimizedFunctions.getPlantillaIndex ? optimizedFunctions.getPlantillaIndex(plantilla) : 0);
+                setTimeout(() => {
+                    if (typeof updateDuplicateStyles === 'function' && !window.isSharedMode) updateDuplicateStyles(plantilla);
+                    if (typeof forceUpdateAllNumberColors === 'function') forceUpdateAllNumberColors();
+                }, 100);
+            }
+            if (typeof showClipboardIndicator === 'function') showClipboardIndicator('✅ Datos restaurados desde el servidor');
+            if (!window.isSharedMode) worksheetRemotePollAllowed = true;
+        })
+        .catch(() => {
+            if (recoverSeq === worksheetDataFetchSeq && !window.isSharedMode) worksheetRemotePollAllowed = true;
+            if (typeof showClipboardIndicator === 'function') showClipboardIndicator('❌ Error al recargar. Intenta de nuevo.');
+        });
+}
+
 // Funciones de emergencia en caso de emergencia
 function restaurarDatosOriginalesEmergencia(plantilla) {
-            fetch(`/api/store/worksheet_data/${plantilla.id}`)
+            fetch(`/api/store/worksheet_data/${plantilla.id}?_=${Date.now()}`, { cache: 'no-store', credentials: 'same-origin' })
         .then(res => res.json())
         .then(data => {
             if (data && data.data && data.data.length) {
@@ -1364,11 +1443,6 @@ function configurarSistemaFiltros(campo, colIndex) {
 
 
 
-
-function editarCriterio(index) {
-    // Funcionalidad para editar criterio (puede expandirse más adelante)
-    
-}
 
 // Función para renderizar criterios ordenados
 function renderizarCriteriosOrden() {
@@ -1678,9 +1752,7 @@ function cumpleCriterio(fila, criterio, plantilla, colIndex) {
             
         case 'color':
             // Buscar en la columna 'numero'
-            const plantilla = optimizedFunctions.getCurrentPlantilla();
-            if (!plantilla) return false;
-            
+            if (!plantilla.campos) return false;
             const numeroColIndex = plantilla.campos.findIndex(campo => campo === 'numero');
             if (numeroColIndex === -1 || numeroColIndex >= fila.length) {
                 return false;
@@ -1718,26 +1790,6 @@ function cumpleCriterio(fila, criterio, plantilla, colIndex) {
     }
 }
 
-
-
-
-// Funciones de ordenamiento simplificadas (solo para compatibilidad)
-function ordenarPorColor(datos, colIndex) {
-    const plantilla = optimizedFunctions.getCurrentPlantilla();
-    const numeroColIndex = plantilla.campos.findIndex(campo => campo === 'numero');
-    
-    return datos.sort((a, b) => {
-        const colorA = (numeroColIndex !== -1 ? a[numeroColIndex] : '') || '';
-        const colorB = (numeroColIndex !== -1 ? b[numeroColIndex] : '') || '';
-        
-        if (!colorA && colorB) return -1;
-        if (colorA && !colorB) return 1;
-        if (!colorA && !colorB) return 0;
-        
-        return parseInt(colorA) - parseInt(colorB);
-    });
-}
-
 function guardarFiltrosAplicados() {
     try {
     const plantilla = optimizedFunctions.getCurrentPlantilla();
@@ -1757,207 +1809,42 @@ function guardarFiltrosAplicados() {
     }
 
     const datosParaGuardar = JSON.parse(JSON.stringify(plantilla.datos));
+    // Restaurar datos filtrados por si el poll los sobrescribió; forceFullSave para persistir el cambio estructural
+    tablaDatos = JSON.parse(JSON.stringify(datosParaGuardar));
+    plantilla.datos = tablaDatos;
 
-    saveWorksheetData(plantilla, 
-        () => {
-                // Actualizar datos originales con el nuevo orden
-            plantilla.datosOriginales = JSON.parse(JSON.stringify(datosParaGuardar));
-                
-                // Resetear filtros
-            FiltersState.reset();
-                filtrosActivos = false;
-                filtrosConfigurados = {};
-                
-                // Re-renderizar tabla después de guardar para evitar que las celdas desaparezcan
-                const container = document.getElementById('worksheetTableContainer');
-                if (container && plantilla.datosOriginales) {
-                    // Usar datos originales actualizados para mostrar todo
-                    const plantillaCompleta = {
-                        ...plantilla,
-                        datos: plantilla.datosOriginales
-                    };
-                    optimizedFunctions.renderTablaEditable(plantillaCompleta, optimizedFunctions.getStandardFieldNames(), container, optimizedFunctions.getPlantillaIndex(plantilla));
-                    
-                    
-                    limpiarColoresDuplicados();
-                }
-                
-                // Actualizar interfaz del botón
-                const { btnGuardar } = getFilterElements();
-                if (btnGuardar) {
-                    const originalText = btnGuardar.innerHTML;
-                    const originalClass = btnGuardar.className;
-                    
-                    btnGuardar.disabled = true;
-                    btnGuardar.innerHTML = '<i class="fas fa-check"></i> Guardado';
-                    btnGuardar.className = 'btn-panel btn-success';
-                
-                setTimeout(() => {
-                        btnGuardar.disabled = false;
-                        btnGuardar.innerHTML = originalText;
-                        btnGuardar.className = originalClass;
-                    }, 2000);
-                }
-                
-                // Cambios guardados permanentemente - tabla restaurada
-            },
-            (error) => {
-            showClipboardIndicator('❌ Error al guardar datos');
+    const onSuccess = () => {
+        plantilla.datosOriginales = JSON.parse(JSON.stringify(datosParaGuardar));
+        FiltersState.reset();
+        filtrosActivos = false;
+        filtrosConfigurados = {};
+        const container = document.getElementById('worksheetTableContainer');
+        if (container && plantilla.datosOriginales) {
+            const plantillaCompleta = { ...plantilla, datos: plantilla.datosOriginales };
+            optimizedFunctions.renderTablaEditable(plantillaCompleta, optimizedFunctions.getStandardFieldNames(), container, optimizedFunctions.getPlantillaIndex(plantilla));
+            limpiarColoresDuplicados();
         }
-    );
+        const { btnGuardar } = getFilterElements();
+        if (btnGuardar) {
+            const originalText = btnGuardar.innerHTML;
+            const originalClass = btnGuardar.className;
+            btnGuardar.disabled = true;
+            btnGuardar.innerHTML = '<i class="fas fa-check"></i> Guardado';
+            btnGuardar.className = 'btn-panel btn-success';
+            setTimeout(() => {
+                btnGuardar.disabled = false;
+                btnGuardar.innerHTML = originalText;
+                btnGuardar.className = originalClass;
+            }, 2000);
+        }
+    };
+    saveWorksheetDataUnified(plantilla, {
+        successCallback: onSuccess,
+        errorCallback: () => showClipboardIndicator('❌ Error al guardar datos')
+    }, true);
     } catch (error) {
         showClipboardIndicator('❌ Error al guardar');
     }
-}
-
-
-// FUNCIONES DE RECOPILACIÓN Y CONFIGURACIÓN
-
-
-// Función de compatibilidad para el sistema antiguo de filtros
-function recopilarConfiguracionFiltro(campo) {
-    return {
-        tipoFiltro: 'ninguno',
-        criteriosSeleccionados: [...FiltersState.selectedCriteria]
-    };
-}
-
-// Funciones de filtrado específicas
-function filtrarCorreo(datos, colIndex, config) {
-    return datos.filter(fila => {
-        const valor = fila[colIndex] || '';
-        let cumple = true;
-        
-        // Dominio
-        if (config.dominio || config.dominioCustom) {
-            const dominioFiltro = config.dominioCustom || config.dominio;
-            cumple = cumple && valor.toLowerCase().includes(dominioFiltro.toLowerCase());
-        }
-        
-        // Filtro por colores (usando número asociado)
-        if (config.colores.length > 0) {
-            const numeroAsociado = obtenerNumeroAsociado(fila, colIndex);
-            cumple = cumple && config.colores.includes(numeroAsociado);
-        }
-        
-        return cumple;
-    }).sort((a, b) => {
-        if (config.orden === 'asc') {
-            return (a[colIndex] || '').localeCompare(b[colIndex] || '');
-        } else if (config.orden === 'desc') {
-            return (b[colIndex] || '').localeCompare(a[colIndex] || '');
-        }
-        return 0;
-    });
-}
-
-function filtrarContraseña(datos, colIndex, config) {
-    return datos.filter(fila => {
-        let cumple = true;
-        
-        // Filtrar por número asociado
-        if (config.colores.length > 0) {
-            const numeroAsociado = obtenerNumeroAsociado(fila, colIndex);
-            cumple = cumple && config.colores.includes(numeroAsociado);
-        }
-        
-        return cumple;
-    }).sort((a, b) => {
-        if (config.orden === 'asc') {
-            return (a[colIndex] || '').localeCompare(b[colIndex] || '');
-        } else if (config.orden === 'desc') {
-            return (b[colIndex] || '').localeCompare(a[colIndex] || '');
-        }
-        return 0;
-    });
-}
-
-function filtrarLinks(datos, colIndex, config) {
-    return datos.filter(fila => {
-        let cumple = true;
-        
-        // Filtrar por número asociado
-        if (config.colores.length > 0) {
-            const numeroAsociado = obtenerNumeroAsociado(fila, colIndex);
-            cumple = cumple && config.colores.includes(numeroAsociado);
-        }
-        
-        return cumple;
-    });
-}
-
-function filtrarLetras(datos, colIndex, config) {
-    return datos.filter(fila => {
-        const valor = fila[colIndex] || '';
-        let cumple = true;
-        
-        
-        if (config.letras) {
-            cumple = cumple && valor.toLowerCase().includes(config.letras.toLowerCase());
-        }
-        
-        // Filtrar por número asociado
-        if (config.colores.length > 0) {
-            const numeroAsociado = obtenerNumeroAsociado(fila, colIndex);
-            cumple = cumple && config.colores.includes(numeroAsociado);
-        }
-        
-        return cumple;
-    });
-}
-
-function filtrarNumero(datos, colIndex, config) {
-    return datos.filter(fila => {
-        const valor = fila[colIndex] || '';
-        let cumple = true;
-        
-        // Filtrar por números específicos
-        if (config.numeros.length > 0) {
-            cumple = cumple && config.numeros.includes(valor);
-        }
-        
-        // Filtrar por número asociado
-        if (config.colores.length > 0) {
-            const numeroAsociado = obtenerNumeroAsociado(fila, colIndex);
-            cumple = cumple && config.colores.includes(numeroAsociado);
-        }
-        
-        return cumple;
-    });
-}
-
-function filtrarOtroCampo(datos, colIndex, config) {
-    return datos.filter(fila => {
-        const valor = fila[colIndex] || '';
-        let cumple = true;
-        
-        
-        if (config.texto) {
-            cumple = cumple && valor.toLowerCase().includes(config.texto.toLowerCase());
-        }
-        
-        // Filtrar por número asociado
-        if (config.colores.length > 0) {
-            const numeroAsociado = obtenerNumeroAsociado(fila, colIndex);
-            cumple = cumple && config.colores.includes(numeroAsociado);
-        }
-        
-        return cumple;
-    });
-}
-
-// Obtener el número asociado a una celda (para filtros de color)
-function obtenerNumeroAsociado(fila, colIndex) {
-    const plantilla = optimizedFunctions.getCurrentPlantilla();
-    if (!plantilla) return '';
-    
-    // Columna de números en la plantilla
-    const numeroColIndex = plantilla.campos.findIndex(campo => campo === 'numero');
-    if (numeroColIndex !== -1 && fila[numeroColIndex]) {
-        return fila[numeroColIndex];
-    }
-    
-    return '';
 }
 
 // Variables para manejo de elementos duplicados
@@ -2045,7 +1932,7 @@ function getStandardFieldNames() {
             'otro-campo': 'Otro campo'
         };
     } else {
-        // En otros modos (standard, copiar), mostrar texto normal
+        // En modo standard, mostrar texto normal
         return {
             'correo': 'Correo',
             'contraseña': 'Contraseña', 
@@ -2072,10 +1959,10 @@ function isEmailOrPasswordField(campo) {
     return isEmailField(campo) || isPasswordField(campo);
 }
 // Helper para dividir texto entre columnas (como Excel)
-function splitTextAcrossColumns() {
-    const selection = getSelectionInfo();
+function splitTextAcrossColumns(preservedSelection) {
+    const selection = preservedSelection || getSelectionInfo();
     
-    if (selection.cells.length === 0) {
+    if (!selection.cells || selection.cells.length === 0) {
         showClipboardIndicator('⚠️ Selecciona celdas con texto para dividir');
         return;
     }
@@ -2109,7 +1996,7 @@ function splitTextAcrossColumns() {
                         <button class='separator-btn' data-sep=',' style='padding:8px 15px;border:1px solid #ddd;border-radius:4px;background:#f8f9fa;cursor:pointer;color:#333;'>Coma (,)</button>
                         <button class='separator-btn' data-sep=';' style='padding:8px 15px;border:1px solid #ddd;border-radius:4px;background:#f8f9fa;cursor:pointer;color:#333;'>Punto y coma (;)</button>
                         <button class='separator-btn' data-sep=' ' style='padding:8px 15px;border:1px solid #ddd;border-radius:4px;background:#f8f9fa;cursor:pointer;color:#333;'>Espacio</button>
-                        <button class='separator-btn' data-sep='	' style='padding:8px 15px;border:1px solid #ddd;border-radius:4px;background:#f8f9fa;cursor:pointer;color:#333;'>Tab</button>
+                        <button class='separator-btn' data-sep=':' style='padding:8px 15px;border:1px solid #ddd;border-radius:4px;background:#f8f9fa;cursor:pointer;color:#333;'>Dos puntos (:)</button>
                 </div>
                 <input type='text' id='customSeparator' placeholder='Separador personalizado...' style='width:100%;padding:8px;border:1px solid #ddd;border-radius:4px;margin-top:5px;'>
             </div>
@@ -2699,7 +2586,7 @@ function splitTextAcrossColumns() {
                     const a = anio === 'Rnd' ? String(Math.floor(Math.random() * 36) + 25) : anio;
                     line += '|' + m + '|' + a;
                 }
-                if (incluirCcv) line += '|' + randomDig() + '' + randomDig() + '' + randomDig();
+                if (incluirCcv) line += '|' + randomDig() + randomDig() + randomDig();
                 if (!generados.has(line)) {
                     generados.add(line);
                     tarjetas.push(line);
@@ -3300,7 +3187,7 @@ function executePersonalizedSplit(selection, options) {
     const plantilla = optimizedFunctions.getCurrentPlantilla();
     if (!plantilla) return;
     
-    
+    syncSelectedCellsToTablaDatos(selection);
     saveUndoState(ACTION_TYPES.TEXT_SPLIT, 'División personalizada de correo y contraseña', selection.cells);
     
     let changesMade = 0;
@@ -3316,46 +3203,37 @@ function executePersonalizedSplit(selection, options) {
         if (cellValue) {
             const result = parseEmailPassword(cellValue, options);
             
-            // Actualizar valores con registro detallado de cambios
-            options.selectedFields.forEach((field, index) => {
-                const colIndex = plantilla.campos.indexOf(field);
-                
-                if (colIndex !== -1) {
-                    let value = '';
-                    switch(field) {
-                        case 'correo':
-                            value = result.email;
-                            break;
-                        case 'contraseña':
-                            value = result.password;
-                            break;
-                        case 'links':
-                            value = result.link;
-                            break;
-                    }
-                    
-                    if (value) {
-                        // Registrar cambio en historial detallado
-                        const oldValue = tablaDatos[row][colIndex] || '';
-                        tablaDatos[row][colIndex] = value;
-                        // Registrar en historial detallado solo si la función existe
-                        if (typeof recordDetailedChange === 'function') {
-                            recordDetailedChange('personalized-split', { row, col: colIndex }, oldValue, value);
-                        }
-                        changesMade++;
-                    }
-                }
-            });
+            // Usar la columna seleccionada y la adyacente (para que el resultado se vea donde el usuario espera)
+            // Así funciona correctamente con columnas duplicadas (Correo, Contraseña, Correo, Contraseña)
+            const colCorreo = col;
+            const colContraseña = col + 1;
+            const maxCol = (tablaDatos[row] && tablaDatos[row].length) ? tablaDatos[row].length - 1 : 0;
             
-            // Limpiar celda original con registro en historial
-            const correoColIndex = plantilla.campos.indexOf('correo');
-            if (col !== correoColIndex) {
-                const oldValue = tablaDatos[row][col];
-                const newValue = '';
-                tablaDatos[row][col] = newValue;
-                // Registrar en historial detallado solo si la función existe
+            if (result.email && colCorreo <= maxCol) {
+                const oldVal = tablaDatos[row][colCorreo] || '';
+                tablaDatos[row][colCorreo] = result.email;
                 if (typeof recordDetailedChange === 'function') {
-                    recordDetailedChange('personalized-split', { row, col }, oldValue, newValue);
+                    recordDetailedChange('personalized-split', { row, col: colCorreo }, oldVal, result.email);
+                }
+                changesMade++;
+            }
+            if (result.password && colContraseña <= maxCol) {
+                const oldVal = tablaDatos[row][colContraseña] || '';
+                tablaDatos[row][colContraseña] = result.password;
+                if (typeof recordDetailedChange === 'function') {
+                    recordDetailedChange('personalized-split', { row, col: colContraseña }, oldVal, result.password);
+                }
+                changesMade++;
+            }
+            if (result.link) {
+                const colLinks = plantilla.campos.indexOf('links');
+                if (colLinks !== -1 && colLinks <= maxCol) {
+                    const oldVal = tablaDatos[row][colLinks] || '';
+                    tablaDatos[row][colLinks] = result.link;
+                    if (typeof recordDetailedChange === 'function') {
+                        recordDetailedChange('personalized-split', { row, col: colLinks }, oldVal, result.link);
+                    }
+                    changesMade++;
                 }
             }
         }
@@ -3369,113 +3247,16 @@ function executePersonalizedSplit(selection, options) {
         saveChangesHistory();
     }
     
-    // Guardar para consistencia
+    // Mostrar cambios en tiempo real (requestAnimationFrame para que el modal se cierre primero)
+    reRenderTableRealtime(plantilla);
     
-    
-    // GUARDADO OPTIMIZADO: Un solo guardado robusto con reintentos automáticos
+    // Guardar en segundo plano
     saveWorksheetDataUnified(plantilla, {
         successCallback: () => {
-            reRenderTable(plantilla);
-            // División personalizada completada y guardada - ${changesMade} cambios aplicados
-            
-            // Optimización aplicada
+            // División personalizada completada y guardada
         },
         errorCallback: (error) => {
             showClipboardIndicator('❌ Error guardando cambios de división personalizada');
-        },
-        silent: false,
-        showIndicator: false // Usamos nuestros propios indicadores
-    });
-}
-
-// Ejecutar división Gmail (correo y número)
-function executeGmailSplit(selection, options) {
-    const plantilla = optimizedFunctions.getCurrentPlantilla();
-    if (!plantilla) return;
-    
-    
-    saveUndoState(ACTION_TYPES.TEXT_SPLIT, 'División Gmail de correo y número', selection.cells);
-    
-    let changesMade = 0;
-    
-    // Procesar
-    selection.cells.forEach(cellKey => {
-        const [row, col] = cellKey.split('-').map(Number);
-        const cellValue = tablaDatos[row] && tablaDatos[row][col] ? tablaDatos[row][col].toString() : '';
-        
-        if (cellValue) {
-            const results = parseGmailDataMultiLine(cellValue, options.selectedFields);
-            
-            // Crear nuevas filas para cada grupo de datos
-            results.forEach((result, index) => {
-                const newRow = row + index;
-                
-                
-                if (!tablaDatos[newRow]) {
-                    tablaDatos[newRow] = [];
-                }
-                
-                // Actualizar valores con registro detallado de cambios
-                options.selectedFields.forEach((field, fieldIndex) => {
-                    const colIndex = plantilla.campos.indexOf(field);
-                    
-                    if (colIndex !== -1) {
-                        let value = '';
-                        switch(field) {
-                            case 'correo':
-                                value = result.email;
-                                break;
-                            case 'numero':
-                                value = result.number;
-                                break;
-                        }
-                        
-                        if (value) {
-                            // Registrar cambio en historial detallado
-                            const oldValue = tablaDatos[newRow][colIndex] || '';
-                            tablaDatos[newRow][colIndex] = value;
-                            // Registrar en historial detallado solo si la función existe
-                            if (typeof recordDetailedChange === 'function') {
-                                recordDetailedChange('gmail-split', { row: newRow, col: colIndex }, oldValue, value);
-                            }
-                            changesMade++;
-                        }
-                    }
-                });
-            });
-            
-            // Limpiar con registro en historial
-            const oldValue = tablaDatos[row][col];
-            const newValue = '';
-            tablaDatos[row][col] = newValue;
-            // Registrar en historial detallado solo si la función existe
-            if (typeof recordDetailedChange === 'function') {
-                recordDetailedChange('gmail-split', { row, col }, oldValue, newValue);
-            }
-        }
-    });
-    
-    // Actualizar plantilla y guardar inmediatamente
-    plantilla.datos = tablaDatos;
-    
-    // Verificar si la función existe
-    if (typeof saveChangesHistory === 'function') {
-        saveChangesHistory();
-    }
-    
-    // Guardar para consistencia
-    
-    
-    // GUARDADO OPTIMIZADO: Un solo guardado robusto con reintentos automáticos
-    saveWorksheetDataUnified(plantilla, {
-        successCallback: () => {
-            reRenderTable(plantilla);
-            // División Gmail completada y guardada - ${changesMade} cambios aplicados
-            
-            // Optimización aplicada
-        },
-        errorCallback: (error) => {
-            showClipboardIndicator('❌ Error guardando cambios de división Gmail');
         },
         silent: false,
         showIndicator: false // Usamos nuestros propios indicadores
@@ -3626,12 +3407,26 @@ function parseEmailPassword(text, options) {
     return result;
 }
 
+// Sincronizar valores de celdas seleccionadas desde el DOM a tablaDatos (inputs pueden tener valor más reciente)
+function syncSelectedCellsToTablaDatos(selection) {
+    if (!selection || !selection.cells || !tablaDatos) return;
+    const plantilla = optimizedFunctions.getCurrentPlantilla();
+    selection.cells.forEach(cellKey => {
+        const [row, col] = cellKey.split('-').map(Number);
+        const input = document.querySelector(`#cell-${row}-${col}`);
+        if (input && tablaDatos[row] && tablaDatos[row][col] !== undefined) {
+            tablaDatos[row][col] = input.value;
+        }
+    });
+    if (plantilla && plantilla.datos) plantilla.datos = tablaDatos;
+}
+
 // Ejecutar división de texto
 function executeSplitText(selection, separator, options) {
     const plantilla = optimizedFunctions.getCurrentPlantilla();
     if (!plantilla) return;
     
-    
+    syncSelectedCellsToTablaDatos(selection);
     saveUndoState(ACTION_TYPES.TEXT_SPLIT, 'División de texto entre columnas', selection.cells);
     
     let changesMade = 0;
@@ -3710,16 +3505,13 @@ function executeSplitText(selection, separator, options) {
         saveChangesHistory();
     }
     
-    // Guardar inmediato con feedback detallado
+    // Mostrar cambios en tiempo real (requestAnimationFrame para que el modal se cierre primero)
+    reRenderTableRealtime(plantilla);
     
-    
-        // GUARDADO OPTIMIZADO: Un solo guardado robusto con reintentos automáticos
-        saveWorksheetDataUnified(plantilla, {
+    // Guardar en segundo plano
+    saveWorksheetDataUnified(plantilla, {
             successCallback: () => {
-                reRenderTable(plantilla);
             // Texto dividido y guardado - ${changesMade} cambios aplicados
-            
-            // Optimización aplicada
         },
             errorCallback: (error) => {
             showClipboardIndicator('❌ Error guardando cambios de división de texto');
@@ -3747,101 +3539,53 @@ function getCellElement(row, col) {
 
 // Código obsoleto eliminado
 
-// Función ULTRA-OPTIMIZADA de updateDuplicateStyles para velocidad máxima
+// Resalta correos/contraseñas repetidos (solo estilos). Sin caché por columnas 0–2: en plantillas con
+// varias columnas "correo"/"contraseña" la clave antigua era incorrecta y dejaba estados visuales incoherentes.
 function updateDuplicateStyles(plantilla, delay = 0) {
-    // OPTIMIZADO: Reducir throttling para mayor velocidad
+    if (window.isSharedMode) return;
     const now = Date.now();
-    if (now - lastDuplicateCheck < 25) { // Reducido de 100ms a 25ms
+    if (now - lastDuplicateCheck < 25) {
         return;
     }
     lastDuplicateCheck = now;
-    
-    // OPTIMIZADO: Cache más agresivo para velocidad
-    const cacheKey = generateDuplicateCacheKey(plantilla);
-    if (duplicateStylesCache.has(cacheKey)) {
-        const cachedData = duplicateStylesCache.get(cacheKey);
-        if (cachedData.timestamp > now - 2000) { // Reducido de 5s a 2s para mayor frescura
-            applyCachedDuplicateStyles(cachedData.duplicates);
-            return;
-        }
-    }
-    
+
     const updateLogic = () => {
         try {
             if (!plantilla) return;
-            
-            // OPTIMIZADO: Detectar duplicados de forma más rápida
             const duplicates = detectDuplicatesOptimized(plantilla);
-            
-            // OPTIMIZADO: Cache más pequeño para velocidad
-            duplicateStylesCache.set(cacheKey, {
-                duplicates: duplicates,
-                timestamp: now
-            });
-            
-            // Limpiar cache más agresivamente
-            if (duplicateStylesCache.size > 5) { // Reducido de 10 a 5
-                const oldestKey = duplicateStylesCache.keys().next().value;
-                duplicateStylesCache.delete(oldestKey);
-            }
-            
-            // OPTIMIZADO: Aplicar estilos inmediatamente sin delay
             applyDuplicateStyles(duplicates);
-            
         } catch (error) {
             console.error('Error en updateDuplicateStyles:', error);
         }
     };
-    
-    // OPTIMIZADO: Ejecutar inmediatamente para máxima velocidad
+
     if (delay > 0) {
-        setTimeout(updateLogic, Math.min(delay, 10)); // Máximo 10ms de delay
+        setTimeout(updateLogic, Math.min(delay, 10));
     } else {
         updateLogic();
     }
 }
 
-// Función helper para generar clave de cache
-function generateDuplicateCacheKey(plantilla) {
-    if (!plantilla || !plantilla.datos) return 'no-data';
-    
-    // Hash simple basado en datos de correo, contraseña y links
-    const emailData = plantilla.datos.map(row => row[0] || '').join('|');
-    const passwordData = plantilla.datos.map(row => row[1] || '').join('|');
-    const linksData = plantilla.datos.map(row => row[2] || '').join('|');
-    
-    return btoa(emailData + passwordData + linksData).substring(0, 16);
-}
-
 // Función ULTRA-OPTIMIZADA para detectar duplicados con máxima velocidad
 function detectDuplicatesOptimized(plantilla) {
-    const duplicates = {
-        correo: new Set(),
-        contraseña: new Set(),
-        links: new Set()
-    };
+    const duplicates = { correo: new Set(), contraseña: new Set(), links: new Set() };
+    
+    // Evitar detectar duplicados en modo compartido, sin importar si es solo lectura o no
+    if (window.isSharedMode) {
+        return duplicates;
+    }
     
     if (!plantilla.datos || !Array.isArray(plantilla.datos)) {
         return duplicates;
     }
     
-    // OPTIMIZADO: Usar Maps más eficientes
-    const valueMap = {
-        correo: new Map(),
-        contraseña: new Map(),
-        links: new Map()
-    };
-    
-    // OPTIMIZADO: Pre-calcular columnas una sola vez
-    const correoCols = [];
-    const contraseñaCols = [];
-    const linksCols = [];
-    
+    const valueMap = { correo: new Map(), contraseña: new Map(), links: new Map() };
+    const correoCols = [], contraseñaCols = [], linksCols = [];
     for (let i = 0; i < plantilla.campos.length; i++) {
-        const campo = plantilla.campos[i];
-        if (campo === 'correo') correoCols.push(i);
-        else if (campo === 'contraseña') contraseñaCols.push(i);
-        else if (campo === 'links') linksCols.push(i);
+        const c = plantilla.campos[i];
+        if (c === 'correo') correoCols.push(i);
+        else if (c === 'contraseña') contraseñaCols.push(i);
+        else if (c === 'links') linksCols.push(i);
     }
     
     // OPTIMIZADO: Procesar datos de forma más eficiente
@@ -3894,30 +3638,28 @@ function detectDuplicatesOptimized(plantilla) {
                 }
             }
         }
+
+        // numero: NO aplicar resaltado amarillo de duplicados (solo correo, contraseña, links)
     }
     
     return duplicates;
 }
 
-// Función para aplicar estilos de duplicados desde cache
-function applyCachedDuplicateStyles(duplicates) {
-    // Limpiar estilos anteriores
-    clearDuplicateStyles();
-    
-    // Aplicar nuevos estilos
-    applyDuplicateStyles(duplicates);
-}
-
-// Función ULTRA-OPTIMIZADA para aplicar estilos de duplicados con máxima velocidad
 function applyDuplicateStyles(duplicates) {
     // OPTIMIZADO: Limpiar estilos de forma más eficiente
     clearDuplicateStyles();
     
-    // OPTIMIZADO: Pre-calcular rangos de página
-    const startRow = (currentPage - 1) * rowsPerPage;
-    const endRow = startRow + rowsPerPage;
+    // CORREGIDO: Cuando rowsPerPage es 'todos' todas las filas están visibles
+    let startRow, endRow;
+    if (rowsPerPage === 'todos') {
+        startRow = 0;
+        endRow = 999999;
+    } else {
+        startRow = (currentPage - 1) * rowsPerPage;
+        endRow = startRow + rowsPerPage;
+    }
     
-    // OPTIMIZADO: Aplicar estilos de forma más eficiente
+    // Solo correo, contraseña y links reciben resaltado amarillo de duplicados (no numero)
     const allDuplicados = new Set([
         ...duplicates.correo,
         ...duplicates.contraseña,
@@ -4019,9 +3761,47 @@ function updateCellValue(row, col, value, campo) {
     return { plantilla, cellElement };
 }
 
+// Sincroniza inputs del DOM → tablaDatos antes de guardar (evita F5 rápido sin blur/debounce).
+function computeChanges(original, current) {
+    const changes = [];
+    if (!original || !current) return changes;
+    const maxRows = Math.max(original.length, current.length);
+    for (let r = 0; r < maxRows; r++) {
+        const origRow = original[r] || [];
+        const curRow = current[r] || [];
+        const maxCols = Math.max(origRow.length, curRow.length);
+        for (let c = 0; c < maxCols; c++) {
+            const ov = (origRow[c] ?? '').toString();
+            const cv = (curRow[c] ?? '').toString();
+            if (ov !== cv) changes.push([r, c, curRow[c] ?? '']);
+        }
+    }
+    return changes;
+}
+
+function flushWorksheetInputsToTablaDatos(plantilla) {
+    if (!plantilla || !Array.isArray(tablaDatos)) return;
+    const container = document.getElementById('worksheetTableContainer');
+    if (!container) return;
+    container.querySelectorAll('input[id^="cell-"], textarea[id^="cell-"]').forEach((el) => {
+        const m = el.id && el.id.match(/^cell-(\d+)-(\d+)$/);
+        if (!m) return;
+        const r = parseInt(m[1], 10);
+        const c = parseInt(m[2], 10);
+        if (!tablaDatos[r] || tablaDatos[r][c] === undefined) return;
+        const campo = plantilla.campos && plantilla.campos[c];
+        let val = el.value;
+        if (campo && typeof formatFieldValue === 'function') {
+            val = formatFieldValue(val, campo);
+            el.value = val;
+        }
+        tablaDatos[r][c] = val;
+    });
+    plantilla.datos = tablaDatos;
+}
 
 // Función de guardado unificada y optimizada
-function saveWorksheetDataUnified(plantilla, options = {}) {
+function saveWorksheetDataUnified(plantilla, options = {}, forceFullSave = false) {
     // Parámetros unificados con valores por defecto
     const {
         successCallback = null,
@@ -4036,12 +3816,13 @@ function saveWorksheetDataUnified(plantilla, options = {}) {
     if (typeof options === 'function') {
         const legacySuccessCallback = options;
         const legacyErrorCallback = arguments[2];
+        const forceFull = arguments[3] || false;
         return saveWorksheetDataUnified(plantilla, {
             successCallback: legacySuccessCallback,
             errorCallback: legacyErrorCallback,
             silent: false,
             showIndicator: true
-        });
+        }, forceFull);
     }
     
     // Validaciones básicas
@@ -4053,7 +3834,7 @@ function saveWorksheetDataUnified(plantilla, options = {}) {
     
     // Pausar sincronización durante el guardado para evitar conflictos
     if (typeof pauseSync === 'function') {
-        pauseSync(5000);
+        pauseSync(1500);
     }
     
     // Detectar modo compartido y usar ruta correspondiente
@@ -4067,30 +3848,69 @@ function saveWorksheetDataUnified(plantilla, options = {}) {
         }
         return Promise.resolve();
     }
+
+    flushWorksheetInputsToTablaDatos(plantilla);
     
-    // Preparar datos para guardar
     const dataToSave = {
         template_id: plantilla.id,
-        data: tablaDatos,
         campos: plantilla.campos,
         formato: plantilla.formato || {}
     };
     
+    if (forceFullSave) {
+        dataToSave.force_empty_overwrite = true;
+        dataToSave.data = tablaDatos;
+    } else if (Array.isArray(plantilla.datosOriginales)) {
+        const changes = computeChanges(plantilla.datosOriginales, tablaDatos);
+        if (changes.length === 0) {
+            if (successCallback) successCallback({});
+            return Promise.resolve({});
+        }
+        dataToSave.changes = changes;
+    } else {
+        dataToSave.data = tablaDatos;
+    }
+    
+    // Capturar una foto exacta de los datos que estamos a punto de enviar al servidor
+    // Si el usuario sigue escribiendo durante el guardado, no perderemos esos nuevos cambios.
+    const snapshotOfSavedData = JSON.parse(JSON.stringify(tablaDatos));
+    
     // Determinar URL y headers según el modo
     const { url, headers } = getSaveConfig(plantilla, isSharedMode);
+    
+    // Convertir a string JSON
+    const bodyString = JSON.stringify(dataToSave);
+    
+    // Usar keepalive de forma dinámica si el payload es menor a 60KB
+    // Esto asegura que borrados, escrituras, y limpiezas sobrevivan un F5 instantáneo
+    const useKeepalive = bodyString.length < 60000;
     
     // Función interna para realizar el guardado con reintentos
     const attemptSave = (attempt = 1) => {
         return fetch(url, {
             method: 'POST',
             headers: headers,
-            body: JSON.stringify(dataToSave)
-        }).then(response => {
-            if (response.ok) {
-                return handleSaveSuccess(response, successCallback, silent, showIndicator);
-            } else {
+            body: bodyString,
+            keepalive: useKeepalive,
+            credentials: 'same-origin'
+        }).then(async (response) => {
+            if (!response.ok) {
                 throw new Error(`Error ${response.status}: ${response.statusText}`);
             }
+            let serverData = {};
+            try {
+                const ct = response.headers.get('content-type');
+                if (ct && ct.includes('application/json')) {
+                    serverData = await response.json();
+                }
+            } catch (e) { /* cuerpo no JSON */ }
+            // El servidor puede responder 200 + skipped (airbag): la BD no cambió. No actualizar datosOriginales
+            // o el cliente quedaría alineado con un guardado que nunca ocurrió y dejaría de reintentar el merge.
+            if (serverData && serverData.skipped === true) {
+                throw new Error('save_skipped');
+            }
+            plantilla.datosOriginales = snapshotOfSavedData;
+            return handleSaveSuccessFromServerData(serverData, successCallback, silent, showIndicator, plantilla?.id);
         }).catch(error => {
             return handleSaveError(error, attempt, maxRetries, retryDelay, errorCallback, silent, showIndicator, attemptSave);
         });
@@ -4114,54 +3934,46 @@ function getSaveConfig(plantilla, isSharedMode) {
     }
 }
 
-// Manejar éxito del guardado
-function handleSaveSuccess(response, successCallback, silent, showIndicator) {
-                return response.json().then(serverData => {
-        // Actualizar timestamp del servidor
-                    if (typeof updateLastKnownTime === 'function') {
-                        if (serverData.timestamp) {
-                            updateLastKnownTime(serverData.timestamp);
-                        } else {
-                            updateLastKnownTime(); 
-                        }
-                    }
-                    
-        // Notificar a otros usuarios sobre los cambios
-                    if (typeof notifyRemoteUsers === 'function') {
-                        notifyRemoteUsers();
-                        
-                        // Sincronización inmediata para propagar cambios
-                        setTimeout(() => {
-                            if (isSyncEnabled && !isCurrentlyUpdating) {
-                                safeCheckForRemoteChanges();
-                            }
-                        }, 50); // Optimizado para hojas de cálculo - reducido de 100ms a 50ms 
-                    }
-                    
-        // Mostrar indicador de éxito
-                    // Guardado silencioso - sin notificación
-        
-                    if (successCallback) successCallback(response);
-                    return response;
-                }).catch(jsonError => {
-                    // Si no se puede parsear JSON pero la respuesta fue exitosa
-                    if (typeof updateLastKnownTime === 'function') {
-                        updateLastKnownTime();
-                    }
-                    
-                    if (typeof notifyRemoteUsers === 'function') {
-                        notifyRemoteUsers();
-                    }
-                    
-                    // Guardado silencioso - sin notificación
-        
-                    if (successCallback) successCallback(response);
-                    return response;
-                });
+// Canal para sincronización entre pestañas (Principal ↔ Ver y Editar)
+const WORKSHEET_SYNC_CHANNEL = 'worksheet-sync';
+
+// Manejar éxito del guardado (cuerpo JSON ya parseado)
+function handleSaveSuccessFromServerData(serverData, successCallback, silent, showIndicator, worksheetId) {
+    if (typeof updateLastKnownTime === 'function' && serverData) {
+        const ts = serverData.timestamp || serverData.last_edit_time;
+        if (ts) {
+            updateLastKnownTime(ts);
+        }
+        // Sin timestamp del servidor: no usar hora del cliente (desincroniza el poll).
+    }
+    if (worksheetId && typeof BroadcastChannel !== 'undefined') {
+        try {
+            const channel = new BroadcastChannel(WORKSHEET_SYNC_CHANNEL);
+            channel.postMessage({ type: 'worksheet-saved', worksheetId: worksheetId });
+            channel.close();
+        } catch (e) { /* BroadcastChannel no soportado */ }
+    }
+    if (typeof notifyRemoteUsers === 'function') {
+        notifyRemoteUsers();
+        setTimeout(() => {
+            if (isSyncEnabled && !isCurrentlyUpdating) {
+                safeCheckForRemoteChanges();
             }
+        }, 50);
+    }
+    if (successCallback) successCallback(serverData);
+    return serverData;
+}
 
 // Manejar errores del guardado
 function handleSaveError(error, attempt, maxRetries, retryDelay, errorCallback, silent, showIndicator, attemptSave) {
+            if (error && error.message === 'save_skipped') {
+                if (!silent && showIndicator) {
+                    showClipboardIndicator('⚠️ El servidor no aplicó el guardado (protección de datos). Recarga o vuelve a editar.');
+                }
+                if (errorCallback) errorCallback(error);
+                return Promise.reject(error);
+            }
             if (attempt < maxRetries) {
                 // Reintentar después del delay
                 if (!silent && showIndicator) {
@@ -4270,7 +4082,7 @@ function getFieldCssClass(campo) {
     switch (campo) {
         case 'numero':
             
-            return worksheetMode === 'copiar' ? 'form-control cell-numero-pequeno' : 'form-control cell-numero';
+            return 'form-control cell-numero';
         case 'let':
             return 'form-control cell-let';
         case 'letras': 
@@ -4434,10 +4246,91 @@ const ModalManager = {
 // HELPER: Función optimizada para re-renderizar tabla con configuración estándar
 function reRenderTable(plantilla) {
     const container = document.getElementById('worksheetTableContainer');
-    const idx = optimizedFunctions.getPlantillaIndex(plantilla);
-    if (container && idx >= 0) {
-        optimizedFunctions.renderTablaEditable(plantilla, optimizedFunctions.getStandardFieldNames(), container, idx);
+    if (!container || !plantilla) return;
+    let idx = optimizedFunctions.getPlantillaIndex(plantilla);
+    if (idx < 0) idx = (typeof plantillas !== 'undefined' && Array.isArray(plantillas)) ? plantillas.findIndex(p => p && p.id === plantilla.id) : 0;
+    if (idx < 0) idx = 0;
+    optimizedFunctions.renderTablaEditable(plantilla, optimizedFunctions.getStandardFieldNames(), container, idx);
+}
+
+// HELPER: Actualización en tiempo real (tras cerrar modal) - invalida caché y re-renderiza
+// BYPASS: Usa render ORIGINAL directamente para evitar caché que impide ver cambios
+function reRenderTableRealtime(plantilla) {
+    if (!plantilla) return;
+    const container = document.getElementById('worksheetTableContainer');
+    if (!container) return;
+    // Invalidar TODAS las cachés
+    if (typeof optimizedFunctions !== 'undefined' && optimizedFunctions.invalidateAll) {
+        optimizedFunctions.invalidateAll();
     }
+    if (typeof renderCache !== 'undefined' && renderCache && renderCache.clear) {
+        renderCache.clear();
+    }
+    // Calcular idx (plantillaCache puede estar vacío tras invalidateAll)
+    let idx = (typeof plantillas !== 'undefined' && Array.isArray(plantillas)) ? plantillas.findIndex(p => p && p.id === plantilla.id) : 0;
+    if (idx < 0) idx = 0;
+    const fieldNames = (typeof optimizedFunctions !== 'undefined' && optimizedFunctions.getStandardFieldNames) 
+        ? optimizedFunctions.getStandardFieldNames() : {};
+    // Llamar al render ORIGINAL directamente (bypass total de caché optimizada)
+    const originalRender = window._originalRenderTablaEditable || (typeof renderTablaEditable === 'function' ? renderTablaEditable : null);
+    if (originalRender) {
+        originalRender(plantilla, fieldNames, container, idx);
+    } else {
+        reRenderTable(plantilla);
+    }
+    if (typeof updateDuplicateStyles === 'function') updateDuplicateStyles(plantilla, 0);
+    requestAnimationFrame(() => {
+        if (originalRender) {
+            originalRender(plantilla, fieldNames, container, idx);
+        } else {
+            reRenderTable(plantilla);
+        }
+        if (typeof updateDuplicateStyles === 'function') updateDuplicateStyles(plantilla, 0);
+    });
+}
+
+// HELPER: Abrir modal Agregar filas (usado desde botón y filtrarFilasTabla)
+function openAgregarFilasModal() {
+    document.querySelectorAll('.modal-agregar-tabla').forEach(el => el.remove());
+    const modal = document.createElement('div');
+    modal.className = 'modal-agregar-tabla';
+    modal.style.cssText = 'position:fixed;top:0;left:0;width:100vw;height:100vh;background:rgba(0,0,0,0.25);z-index:3000;display:flex;align-items:center;justify-content:center;';
+    modal.innerHTML = `
+        <div style='background:#fff;padding:24px 32px;border-radius:10px;min-width:260px;box-shadow:0 2px 16px #0002;text-align:center;position:relative;'>
+            <h4 style='margin-bottom:18px;'>Agregar filas</h4>
+            <input id='inputCantidadColumnas' type='number' min='1' value='10' class='form-control' placeholder='Cantidad de filas' style='margin-bottom:16px;width:90%;'>
+            <div style='display:flex;gap:10px;justify-content:center;'>
+                <button id='btnGuardarTabla' class='btn-panel btn-green'>Guardar</button>
+                <button id='btnCancelarTabla' class='btn-panel btn-gray'>Cancelar</button>
+            </div>
+        </div>
+    `;
+    document.body.appendChild(modal);
+    modal.addEventListener('click', function(e) {
+        if (e.target === modal) modal.remove();
+    });
+    modal.querySelector('#btnCancelarTabla').onclick = () => modal.remove();
+    modal.querySelector('#btnGuardarTabla').onclick = function() {
+        const cantidad = parseInt(document.getElementById('inputCantidadColumnas').value);
+        if (!cantidad || cantidad < 1) {
+            const cantidadInput = document.getElementById('inputCantidadColumnas');
+            if (cantidadInput) cantidadInput.focus();
+            return;
+        }
+        const plantilla = optimizedFunctions.getCurrentPlantilla();
+        if (!plantilla) {
+            showClipboardIndicator('❌ No hay plantilla activa');
+            return;
+        }
+        for (let i = 0; i < cantidad; i++) {
+            const nuevaFila = plantilla.campos.map(() => '');
+            tablaDatos.push(nuevaFila);
+        }
+        plantilla.datos = tablaDatos;
+        saveWorksheetData(plantilla, () => {}, () => showClipboardIndicator('❌ Error al guardar filas'));
+        modal.remove();
+        reRenderTable(plantilla);
+    };
 }
 
 // Paginación de datos (usado en renderTablaEditable)
@@ -4765,7 +4658,7 @@ function detectarDuplicadosEnTiposCampo(plantilla, tipoCampo) {
             return duplicados;
         }
 
-        if (!tipoCampo || (tipoCampo !== 'correo' && tipoCampo !== 'contraseña' && tipoCampo !== 'links')) {
+        if (!tipoCampo || (tipoCampo !== 'correo' && tipoCampo !== 'contraseña' && tipoCampo !== 'links' && tipoCampo !== 'numero')) {
             return duplicados;
         }
     
@@ -4779,6 +4672,8 @@ function detectarDuplicadosEnTiposCampo(plantilla, tipoCampo) {
         } else if (tipoCampo === 'contraseña' && isPasswordField(campo)) {
             columnasRelevantes.push(colIdx);
         } else if (tipoCampo === 'links' && campo === 'links') {
+            columnasRelevantes.push(colIdx);
+        } else if (tipoCampo === 'numero' && campo === 'numero') {
             columnasRelevantes.push(colIdx);
         }
                 } catch (campoError) {
@@ -4941,6 +4836,8 @@ function detectarDuplicados(plantilla, campo) {
         return detectarDuplicadosEnTiposCampo(plantilla, 'contraseña');
     } else if (campo === 'links') {
         return detectarDuplicadosEnTiposCampo(plantilla, 'links');
+    } else if (campo === 'numero') {
+        return detectarDuplicadosEnTiposCampo(plantilla, 'numero');
     }
     return new Set();
 }
@@ -5591,6 +5488,12 @@ function pasteSimpleText(text) {
         
         // Sincronizar y guardar
         plantilla.datos = tablaDatos;
+        
+        // Notificar actividad a otros clientes en tiempo real
+        if (typeof detectUserActivity === 'function') {
+            detectUserActivity('cell_paste');
+        }
+        
         saveWorksheetData(plantilla, 
             () => {}, // Guardado silencioso
             () => showClipboardIndicator('❌ Error al guardar')
@@ -6043,12 +5946,19 @@ function addInputListener(input, plantilla, row, col, campo) {
         // - Cambiar de modo
         // Esto garantiza escritura 100% fluida sin interrupciones visuales
         
-        // Guardar inmediatamente
-        saveWorksheetData(plantilla, 
-            () => {}, // Guardado silencioso
-            () => showClipboardIndicator('❌ Error al guardar')
-        );
+        // Guardar con debounce (600ms) para evitar muchas peticiones y condiciones de carrera
+        scheduleDebouncedSave(plantilla);
     });
+}
+
+let _saveDebounceTimer = null;
+function scheduleDebouncedSave(plantilla) {
+    if (!plantilla) return;
+    clearTimeout(_saveDebounceTimer);
+    _saveDebounceTimer = setTimeout(() => {
+        _saveDebounceTimer = null;
+        saveWorksheetData(plantilla, () => {}, () => showClipboardIndicator('❌ Error al guardar'));
+    }, 250);
 }
 
 // Convertir datos a texto para portapapeles del sistema
@@ -6301,8 +6211,11 @@ function clearSelectionData(selection) {
             
             // Limpiar datos si existe
             if (tablaDatos[row] && tablaDatos[row][col] !== undefined) {
+                const oldVal = tablaDatos[row][col];
                 tablaDatos[row][col] = '';
-                
+                if (typeof saveCellChangeToUndoHistory === 'function') {
+                    saveCellChangeToUndoHistory(row, col, oldVal, '');
+                }
                 // Verificar si es campo de correo/contraseña
                 const campo = plantilla.campos[col];
                 if (isEmailOrPasswordField(campo)) {
@@ -6357,14 +6270,16 @@ function clearSelectionData(selection) {
                         
                         // Limpiar datos si existe
                         if (tablaDatos[r] && tablaDatos[r][c] !== undefined) {
+                            const oldVal = tablaDatos[r][c];
                             tablaDatos[r][c] = '';
-                            
+                            if (typeof saveCellChangeToUndoHistory === 'function') {
+                                saveCellChangeToUndoHistory(r, c, oldVal, '');
+                            }
                             // Verificar si es campo de correo/contraseña
                             const campo = plantilla.campos[c];
                             if (isEmailOrPasswordField(campo)) {
                                 hasEmailOrPassword = true;
                             }
-                            
                             
                             clearedCells.push({row: r, col: c, campo});
                     }
@@ -6412,8 +6327,11 @@ function clearSelectionData(selection) {
                     
                     // Limpiar datos si existe
                     if (tablaDatos[r] && tablaDatos[r][c] !== undefined) {
+                        const oldVal = tablaDatos[r][c];
                         tablaDatos[r][c] = '';
-                        
+                        if (typeof saveCellChangeToUndoHistory === 'function') {
+                            saveCellChangeToUndoHistory(r, c, oldVal, '');
+                        }
                         // Verificar si es campo de correo/contraseña
                         const campo = plantilla.campos[c];
                         if (isEmailOrPasswordField(campo)) {
@@ -6460,18 +6378,14 @@ function clearSelectionData(selection) {
     if (plantilla) {
         plantilla.datos = tablaDatos;
         
-        // Sincronizar eliminaciones con datos originales para que persistan al limpiar filtros
-        if (plantilla.datosOriginales) {
-            // Aplicar eliminaciones a los datos originales
-            clearedCells.forEach(({row, col}) => {
-                if (plantilla.datosOriginales[row] && plantilla.datosOriginales[row][col] !== undefined) {
-                    plantilla.datosOriginales[row][col] = '';
-                }
-            });
-        }
+        // Sincronizar con datos originales ANTES del guardado rompe la detección de cambios (merge).
+        // NO actualizaremos plantilla.datosOriginales aquí. Se actualizará automáticamente en handleSaveSuccess.
         
-        // Guardar en backend
-        saveWorksheetData(plantilla);
+        // forceFullSave: igual que eliminación de filas; asegura que borrados persistan en BD (evita que F5 restaure)
+        saveWorksheetDataUnified(plantilla, {
+            silent: false,
+            showIndicator: true
+        }, true);
         
         // Actualizar estilos si hay datos en campos correo/contraseña
         if (hasEmailOrPassword) {
@@ -6942,6 +6856,16 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     firstDOMContentLoadedExecuted = true;
 
+    // En modo compartido, NO ejecutar inicialización admin (evita interferir con renderSimpleTable)
+    if (window.isSharedMode && window.sharedWorksheetData) {
+        return;
+    }
+
+    // Limpiar caché de render al cargar para evitar HTML corrupto de sesiones anteriores
+    if (typeof renderCache !== 'undefined' && renderCache && renderCache.clear) {
+        renderCache.clear();
+    }
+
     // Guardar scroll al hacer scroll y antes de F5 para restaurar tras recarga
     setupWorksheetScrollPersistence();
     
@@ -7095,19 +7019,26 @@ const comboPlantillaRapida = document.getElementById('comboPlantillaRapida');
 });
 
 // Cargar plantillas para búsqueda global
+// IMPORTANTE: asignar siempre por id en el array actual (tras F5 rápidos los objetos viejos quedan huérfanos)
 function cargarDatosDeTodasLasPlantillas() {
-    plantillas.forEach((plantilla, index) => {
+    plantillas.forEach((plantilla) => {
         if (plantilla.datos === undefined) {
-            fetch(`/api/store/worksheet_data/${plantilla.id}`)
+            const worksheetId = plantilla.id;
+            const numCols = (plantilla.campos && plantilla.campos.length) ? plantilla.campos.length : 1;
+            fetch(`/api/store/worksheet_data/${worksheetId}?_=${Date.now()}`, { cache: 'no-store', credentials: 'same-origin' })
                 .then(res => res.json())
                 .then(data => {
-                    plantilla.datos = (data && data.data && data.data.length) ? data.data : [Array(plantilla.campos.length).fill('')];
-                    // Cargar formato para búsqueda global
-                    plantilla.formato = data.formato || {};
+                    const target = plantillas.find(p => p.id === worksheetId);
+                    if (!target) return;
+                    target.datos = (data && data.data && Array.isArray(data.data) && data.data.length)
+                        ? data.data
+                        : Array(DEFAULT_ROWS_FOR_NEW_TABLE).fill(null).map(() => Array(numCols).fill(''));
+                    target.formato = (data && data.formato) ? data.formato : {};
                 })
-                .catch(error => {
-                    // Error al cargar datos
-                    plantilla.datos = [Array(plantilla.campos.length).fill('')];
+                .catch(() => {
+                    const target = plantillas.find(p => p.id === worksheetId);
+                    if (!target) return;
+                    target.datos = Array(DEFAULT_ROWS_FOR_NEW_TABLE).fill(null).map(() => Array(numCols).fill(''));
                 });
         }
     });
@@ -7116,6 +7047,22 @@ function renderPlantillasMenu() {
     const plantillasMenuList = document.getElementById('plantillasMenuList');
     if (!plantillasMenuList) return;
     plantillasMenuList.innerHTML = '';
+
+    // Botón Reintentar cuando hubo error de carga (plantillas vacías)
+    if (plantillas.length === 0 && typeof loadTemplatesError !== 'undefined' && loadTemplatesError) {
+        const retryBtn = document.createElement('button');
+        retryBtn.className = 'plantilla-menu-item w-100 btn-panel btn-blue';
+        retryBtn.type = 'button';
+        retryBtn.innerHTML = '<i class="fas fa-sync-alt"></i> Reintentar cargar plantillas';
+        retryBtn.addEventListener('click', () => {
+            loadWorksheetTemplates(() => {
+                renderPlantillasMenu();
+                cargarDatosDeTodasLasPlantillas();
+            });
+        });
+        plantillasMenuList.appendChild(retryBtn);
+        return;
+    }
 
     // Obtener query de búsqueda
     const menuSearchInput = document.getElementById('menuSearchInput');
@@ -7225,6 +7172,15 @@ function renderPlantillasMenu() {
                 .then(res => {
                     if (res.ok) {
                         if (selectedTemplateId === plantilla.id) {
+                            // Cascada: limpiar historial local y undo/redo de la plantilla eliminada
+                            try {
+                                detailedChangesHistory = [];
+                                localStorage.removeItem('worksheetDetailedHistory');
+                                undoStack = [];
+                                redoStack = [];
+                                currentState = null;
+                                localStorage.removeItem('worksheetUndoHistory');
+                            } catch (e) {}
                             const next = filteredPlantillas[idx+1] || filteredPlantillas[idx-1] || null;
                             selectedTemplateId = next ? next.id : null;
                             if (selectedTemplateId) {
@@ -7336,6 +7292,11 @@ function renderPlantillasMenu() {
     if (selectedTemplateId && filteredPlantillas.some(p => p.id == selectedTemplateId)) {
         const idxSel = plantillas.findIndex(p => p.id == selectedTemplateId);
         if (idxSel !== -1) mostrarTablaPlantilla(idxSel, false); // Inicial, no limpiar posición
+    } else if (filteredPlantillas.length === 1 && !selectedTemplateId) {
+        // Usuario con una sola plantilla: auto-seleccionar para iniciar sync inmediato
+        selectedTemplateId = filteredPlantillas[0].id;
+        localStorage.setItem('selectedWorksheetTemplateId', selectedTemplateId);
+        mostrarTablaPlantilla(0, false);
     }
 }
 
@@ -7488,6 +7449,9 @@ function mostrarTablaPlantilla(idx, isManualChange = true) {
     const container = document.getElementById('worksheetTableContainer');
     if (!container) return;
     
+    // Permitir polling inmediatamente: si el fetch tarda, el poll traerá los datos.
+    if (!window.isSharedMode) worksheetRemotePollAllowed = true;
+
     // Limpiar celda activa si es un cambio manual de plantilla (no en carga inicial)
     if (isManualChange) {
         clearSavedActiveCellPosition();
@@ -7496,54 +7460,60 @@ function mostrarTablaPlantilla(idx, isManualChange = true) {
     const fieldNames = optimizedFunctions.getStandardFieldNames();
     // Si no hay datos, cargar del backend
     if (plantilla.datos === undefined) {
+        const fetchSeq = ++worksheetDataFetchSeq;
         // Determinar URL según el modo
         const isSharedMode = window.isSharedMode || false;
         let dataUrl;
         if (isSharedMode) {
             // Con token (con prefijo /tienda)
-            dataUrl = `/tienda/api/shared/worksheet/${plantilla.id}/data?token=${window.sharedToken || ''}&access=${window.accessType || 'readonly'}`;
+            dataUrl = `/tienda/api/shared/worksheet/${plantilla.id}/data?token=${window.sharedToken || ''}&access=${window.accessType || 'readonly'}&_=${Date.now()}`;
         } else {
             // Normal: usar ruta normal
-            dataUrl = `/api/store/worksheet_data/${plantilla.id}`;
+            dataUrl = `/api/store/worksheet_data/${plantilla.id}?_=${Date.now()}`;
         }
         
-        fetch(dataUrl)
+        const worksheetId = plantilla.id;
+        const numCols = (plantilla.campos && plantilla.campos.length) ? plantilla.campos.length : 1;
+        fetch(dataUrl, { cache: 'no-store', credentials: 'same-origin' })
             .then(res => res.json())
             .then(data => {
-                plantilla.datos = (data && data.data && data.data.length) ? data.data : [Array(plantilla.campos.length).fill('')];
-                
-                // Cargar formato desde el servidor
-                plantilla.formato = data.formato || {};
-                
-                // Inicializar datos originales si NO existen (primera carga)
-                if (!plantilla.datosOriginales) {
-                    plantilla.datosOriginales = JSON.parse(JSON.stringify(plantilla.datos));
-        
-                } else {
-                    // Ya existen datos originales, no hacer nada
+                if (fetchSeq !== worksheetDataFetchSeq) return;
+                const target = plantillas.find(p => p.id === worksheetId);
+                if (!target) return;
+                target.datos = (data && data.data && Array.isArray(data.data) && data.data.length)
+                    ? data.data
+                    : Array(DEFAULT_ROWS_FOR_NEW_TABLE).fill(null).map(() => Array(numCols).fill(''));
+                target.formato = data.formato || {};
+                if (data.last_edit_time && typeof lastKnownEditTime !== 'undefined') {
+                    lastKnownEditTime = data.last_edit_time;
                 }
-                
-                tablaDatos = plantilla.datos;
-                optimizedFunctions.renderTablaEditable(plantilla, optimizedFunctions.getStandardFieldNames(), container, optimizedFunctions.getPlantillaIndex(plantilla));
-            // CORREGIDO: Aplicar estilos de duplicados después de renderizar la tabla
-            setTimeout(() => updateDuplicateStyles(plantilla), 100);
+                if (!target.datosOriginales) {
+                    target.datosOriginales = JSON.parse(JSON.stringify(target.datos));
+                }
+                tablaDatos = target.datos;
+                optimizedFunctions.renderTablaEditable(target, optimizedFunctions.getStandardFieldNames(), container, optimizedFunctions.getPlantillaIndex(target));
+                setTimeout(() => updateDuplicateStyles(target), 100);
+                worksheetRemotePollAllowed = true;
             })
-            .catch(error => {
-                // En caso de error, solo crear datos vacíos si no existen datos originales
-                if (!plantilla.datosOriginales) {
-                    plantilla.datos = [Array(plantilla.campos.length).fill('')];
-                    plantilla.datosOriginales = JSON.parse(JSON.stringify(plantilla.datos));
-
+            .catch(() => {
+                if (fetchSeq !== worksheetDataFetchSeq) return;
+                const target = plantillas.find(p => p.id === worksheetId);
+                if (!target) return;
+                if (!target.datosOriginales) {
+                    target.datos = Array(DEFAULT_ROWS_FOR_NEW_TABLE).fill(null).map(() => Array(numCols).fill(''));
+                    target.datosOriginales = JSON.parse(JSON.stringify(target.datos));
                 } else {
-                    // Restaurar datos originales
-                    plantilla.datos = JSON.parse(JSON.stringify(plantilla.datosOriginales));
+                    target.datos = JSON.parse(JSON.stringify(target.datosOriginales));
                 }
-                tablaDatos = plantilla.datos;
-                optimizedFunctions.renderTablaEditable(plantilla, optimizedFunctions.getStandardFieldNames(), container, optimizedFunctions.getPlantillaIndex(plantilla));
-            // CORREGIDO: Aplicar estilos de duplicados después de renderizar la tabla
-            setTimeout(() => updateDuplicateStyles(plantilla), 100);
+                tablaDatos = target.datos;
+                optimizedFunctions.renderTablaEditable(target, optimizedFunctions.getStandardFieldNames(), container, optimizedFunctions.getPlantillaIndex(target));
+                setTimeout(() => updateDuplicateStyles(target), 100);
+                worksheetRemotePollAllowed = true;
             });
     } else {
+        worksheetRemotePollAllowed = true;
+        // Datos cacheados: siempre reset lastKnownEditTime para que el poll traiga datos actuales (evitar Admin desincronizado)
+        if (typeof lastKnownEditTime !== 'undefined') lastKnownEditTime = null;
         // Asegurar integridad de datos originales
         if (!plantilla.datosOriginales) {
             // Crear copia de datos originales
@@ -7557,57 +7527,7 @@ function mostrarTablaPlantilla(idx, isManualChange = true) {
 }
 
 function renderEditableCell(campo, valor, filaIdx, colIdx) {
-    // Renderizar celda editable según el modo
-    if (worksheetMode === 'copiar') {
-        if (campo === 'numero') {
-            return generateCellInput(campo, valor, filaIdx, colIdx, 'title="Número del 1 al 6 u 8"');
-        }
-        if (campo === 'informacion-adicional') {
-            // En modo copiar, usar icono compacto con modal (igual que standard y filtro)
-            if (valor && valor.trim() !== '') {
-                const escapedValor = (valor || '').replace(/'/g, "&#39;").replace(/"/g, "&quot;");
-                return `<div class='cell-info-adicional' tabindex="0" data-action="show-info-modal" data-row="${filaIdx}" data-col="${colIdx}" data-value="${escapedValor}" title="Editar información adicional">
-                    <i class="fas fa-info-circle"></i>
-                </div>`;
-            } else {
-                return `<div class='cell-info-adicional' tabindex="0" data-action="show-info-modal" data-row="${filaIdx}" data-col="${colIdx}" data-value="" title="Agregar información adicional">
-                    <i class="fas fa-plus"></i>
-                </div>`;
-            }
-        }
-        if (!valor) {
-            // Si no hay valor, mostrar input editable según el tipo de campo
-            const extraStyles = (campo === 'let' || campo === 'letras') ? 'style="width:48px;"' : '';
-            return generateCellInput(campo, '', filaIdx, colIdx, extraStyles);
-        }
-        // Aplicar formato aplicado
-        const plantilla = optimizedFunctions.getCurrentPlantilla();
-        let styleAttributes = '';
-        
-        // Aplicar formato guardado
-        if (plantilla && plantilla.formato) {
-            const cellId = `${filaIdx}-${colIdx}`;
-            const storedFormat = plantilla.formato[cellId];
-            if (storedFormat) {
-                if (storedFormat.backgroundColor) {
-                    styleAttributes += `background-color:${storedFormat.backgroundColor} !important;`;
-                }
-                if (storedFormat.color) {
-                    styleAttributes += `color:${storedFormat.color} !important;`;
-                }
-                if (storedFormat.fontWeight === 'bold') {
-                    styleAttributes += `font-weight:bold !important;`;
-                }
-                if (storedFormat.textDecoration === 'underline') {
-                    styleAttributes += `text-decoration:underline !important;`;
-                }
-            }
-        }
-        
-        return `<div class='cell-copy-flex cell-copyable' data-valor="${valor}" style='display:flex;align-items:center;gap:2px;justify-content:center;cursor:pointer;${styleAttributes}'>
-            <span class='cell-copy-text' style='font-size:13px;max-width:90px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:inline-block;'>${valor}</span>
-        </div>`;
-    }
+    // Renderizar celda editable según el modo (Standard o Agregar)
     if (campo === 'let' || campo === 'letras') {
         return generateCellInput(campo, valor, filaIdx, colIdx, 'style="width:48px;"');
     }
@@ -7615,8 +7535,8 @@ function renderEditableCell(campo, valor, filaIdx, colIdx) {
         const extraAttrs = campo === 'links' ? `title="${valor || ''}" style="width:85px;"` : '';
         const inputHtml = generateCellInput(campo, valor, filaIdx, colIdx, extraAttrs);
         
-        // No mostrar icono de copiar en modo agregar, filtro ni copiar
-        if (worksheetMode === 'agregar' || worksheetMode === 'filtro' || worksheetMode === 'copiar') {
+        // No mostrar icono de copiar en modo agregar
+        if (worksheetMode === 'agregar') {
             return inputHtml;
         }
         
@@ -7632,7 +7552,7 @@ function renderEditableCell(campo, valor, filaIdx, colIdx) {
         if (worksheetMode === 'agregar') {
             return generateCellInput(campo, valor, filaIdx, colIdx, 'style="width:200px;"');
         }
-        // En TODOS los otros modos (standard, filtro, copiar), mostrar icono de información
+        // En modo standard, mostrar icono de información
         if (valor && valor.trim() !== '') {
             const escapedValor = (valor || '').replace(/'/g, "&#39;").replace(/"/g, "&quot;");
             return `<div class='cell-info-adicional' tabindex="0" data-action="show-info-modal" data-row="${filaIdx}" data-col="${colIdx}" data-value="${escapedValor}" title="Editar información adicional">
@@ -8029,19 +7949,18 @@ function renderTablaEditable(plantilla, fieldNames, container, idx) {
             <button type="button" class="search-clear-btn" id="clearMainSearch" style="display: none;"><i class="fas fa-times"></i></button>
         </div>`;
 
-    // Elementos, centrados y más largos
-    let selectorHtml = `<div class='d-flex justify-content-center align-items-center mb-4 gap-3' style='width:100%'>
-        <select id="rowsPerPageSelect" class="form-select form-select-sm d-inline-block">
-            <option disabled>Mostrar</option>
-            ${rowsPerPageOptions.map(opt => `<option value="${opt}" ${rowsPerPage == opt ? 'selected' : ''}>${opt}</option>`).join('')}
+    // Elementos, centrados y más largos (sin selector Mostrar - siempre todos)
+    // Modo compartido: Standard siempre; Agregar solo si tiene acceso de edición (!isReadonly)
+    const canShowAgregar = !window.isSharedMode || !window.isReadonly;
+    const agregarFilasBtn = (worksheetMode === 'agregar' || worksheetMode === 'standard') && canShowAgregar
+        ? `<button id="btnAbrirAgregarTabla" class="btn-panel btn-blue btn-sm" style="margin-left:1.25rem;min-width:140px;padding:0.5rem 1.25rem" type="button"><i class="fas fa-plus"></i> Agregar filas</button>`
+        : '';
+    let selectorHtml = `<div class='d-flex justify-content-center align-items-center mb-4'>
+        <select id="modeSelect" class="form-select form-select-sm" style="min-width:160px">
+            <option value="standard" ${worksheetMode === 'standard' ? 'selected' : ''}>Modo Standard</option>
+            ${(canShowAgregar && !window.isSharedMode) ? `<option value="agregar" ${worksheetMode === 'agregar' ? 'selected' : ''}>Modo Agregar</option>` : ''}
         </select>
-        <select id="modeSelect" class="form-select form-select-sm d-inline-block">
-            <option disabled>Modo</option>
-            <option value="standard" ${worksheetMode === 'standard' ? 'selected' : ''}>Standard</option>
-            <option value="copiar" ${worksheetMode === 'copiar' ? 'selected' : ''}>Copiar</option>
-            ${(!window.isSharedMode) ? `<option value="agregar" ${worksheetMode === 'agregar' ? 'selected' : ''}>Agregar</option>` : ''}
-            ${(!window.isSharedMode) ? `<option value="filtro" ${worksheetMode === 'filtro' ? 'selected' : ''}>Filtro</option>` : ''}
-        </select>
+        ${agregarFilasBtn}
     </div>`;
 
     // inicializar HTML
@@ -8050,30 +7969,18 @@ function renderTablaEditable(plantilla, fieldNames, container, idx) {
     // Renderizar en el orden correcto: controles generales arriba, herramientas específicas abajo, título al final
     html += crearBtnHtml + searchHtml + selectorHtml;
 
-    // Botón "Agregar campos", con nueva funcionalidad dividir texto
-    if (worksheetMode === 'agregar') {
-        html += `<div id="agregarTablasHeader" class="d-flex align-items-center gap-2 mb-2">
-            <button id="btnAbrirAgregarTabla" class="btn-panel btn-blue" type="button">
-                <i class="fas fa-plus"></i> Agregar filas
-            </button>
-            <button id="btnDividirTexto" class="btn-panel btn-blue" type="button">
-                <i class="fas fa-columns"></i> Dividir texto
-            </button>
-        </div>`;
-    }
-
-    // En modo filtro, mostrar controles de filtro
-    if (worksheetMode === 'filtro') {
-        html += `<div id="filtroTablasHeader" class="d-flex align-items-center gap-2 mb-2">
-            <button id="btnLimpiarFiltros" class="btn-panel btn-blue" type="button"><i class="fas fa-times"></i> Limpiar filtros</button>
-            <button id="btnGuardarFiltros" class="btn-panel btn-blue" type="button"><i class="fas fa-save"></i> Guardar cambios</button>
+    // En modo agregar: filtros y cambios filtros (NO en modo compartido - solo admin)
+    if (worksheetMode === 'agregar' && canShowAgregar && !window.isSharedMode) {
+        html += `<div id="filtroTablasHeader" class="d-flex justify-content-center align-items-center gap-2 mb-2" style='width:100%'>
+            <button id="btnLimpiarFiltros" class="btn-panel btn-blue" type="button"><i class="fas fa-broom"></i> filtros</button>
+            <button id="btnGuardarFiltros" class="btn-panel btn-blue" type="button"><i class="fas fa-save"></i> cambios filtros</button>
         </div>`;
     }
 
     // Plantilla DESPUÉS de las herramientas (solo si existe título)
     if (plantilla.titulo && plantilla.titulo.trim()) {
         // Optimización aplicada
-        const viewersAndLogsIcons = !window.isSharedMode ? 
+        const viewersAndLogsIcons = (window.isAdmin && !window.isSharedMode) ?
             `<button id="connectionLogsBtn" class="connection-logs-btn" title="Registro de conexiones">
                 <i class="fas fa-history"></i>
                 <span id="logsCount">0</span>
@@ -8094,13 +8001,9 @@ function renderTablaEditable(plantilla, fieldNames, container, idx) {
         let thContent = dynamicFieldNames[campo] || campo;
         // NOTA: No cambiar automáticamente 'letras' por 'let'
         // Los nombres se manejan correctamente en optimizedFunctions.getStandardFieldNames()
-        // En modo agregar, muestra el engranaje en todas las columnas
-        if (worksheetMode === 'agregar') {
+        // Engranaje: en modo agregar (admin) o en modo compartido editable (para añadir campo)
+        if (worksheetMode === 'agregar' || (window.isSharedMode && !window.isReadonly)) {
             thContent += ` <span class='th-gear-icon' id='th-gear-${colIdx}' title='Opciones'><i class='fas fa-cog'></i></span>`;
-        }
-        // En modo filtro, muestra el icono de filtro en todas las columnas
-        if (worksheetMode === 'filtro') {
-            thContent += ` <span class='th-filter-icon' id='th-filter-${colIdx}' title='Filtros'><i class='fas fa-filter'></i></span>`;
         }
         
         if (campo === 'numero') {
@@ -8121,10 +8024,12 @@ function renderTablaEditable(plantilla, fieldNames, container, idx) {
     });
     html += `</tr></thead><tbody>`;
     
-    // Contraseña y links
-    const duplicadosCorreo = detectarDuplicados(plantilla, 'correo');
-    const duplicadosContraseña = detectarDuplicados(plantilla, 'contraseña');
-    const duplicadosLinks = detectarDuplicados(plantilla, 'links');
+    // Contraseña, links y numero (en modo compartido no aplicar duplicados)
+    const skipDuplicados = window.isSharedMode;
+    const duplicadosCorreo = skipDuplicados ? new Set() : detectarDuplicados(plantilla, 'correo');
+    const duplicadosContraseña = skipDuplicados ? new Set() : detectarDuplicados(plantilla, 'contraseña');
+    const duplicadosLinks = skipDuplicados ? new Set() : detectarDuplicados(plantilla, 'links');
+    const duplicadosNumero = skipDuplicados ? new Set() : detectarDuplicados(plantilla, 'numero');
     
     paginatedRows.forEach((fila, filaIdx) => {
         // Índices de campos 'numero' en la fila
@@ -8147,7 +8052,7 @@ function renderTablaEditable(plantilla, fieldNames, container, idx) {
         });
         const realRowIdx = (rowsPerPage === 'todos' ? filaIdx : (filaIdx + (currentPage-1)*rowsPerPage));
         html += `<tr data-row-index="${realRowIdx}">`;
-        html += generateTableCells(fila, realRowIdx, plantilla, bloqueColores, duplicadosCorreo, duplicadosContraseña, duplicadosLinks);
+        html += generateTableCells(fila, realRowIdx, plantilla, bloqueColores, duplicadosCorreo, duplicadosContraseña, duplicadosLinks, duplicadosNumero);
         html += `</tr>`;
     });
     html += `</tbody></table></div>`;
@@ -8161,25 +8066,16 @@ function renderTablaEditable(plantilla, fieldNames, container, idx) {
         </div>
     </div>`;
 
-    // CORREGIDO: Preservar elementos del lado derecho al actualizar el contenido
-    const existingScrollbar = container.querySelector('.table-responsive');
-    const existingRightPanel = container.querySelector('.right-panel');
-    
-    // Guardar elementos importantes antes de reemplazar
-    const preservedElements = {
-        scrollbar: existingScrollbar ? existingScrollbar.outerHTML : '',
-        rightPanel: existingRightPanel ? existingRightPanel.outerHTML : ''
-    };
-    
     container.innerHTML = html;
-    
-    // Restaurar elementos importantes si no están presentes
-    if (preservedElements.scrollbar && !container.querySelector('.table-responsive')) {
-        container.innerHTML += preservedElements.scrollbar;
+
+    // Eliminar tablas duplicadas si existen (safeguard)
+    const tableResponsives = container.querySelectorAll('.table-responsive');
+    if (tableResponsives.length > 1) {
+        for (let i = 1; i < tableResponsives.length; i++) {
+            tableResponsives[i].remove();
+        }
     }
-    if (preservedElements.rightPanel && !container.querySelector('.right-panel')) {
-        container.innerHTML += preservedElements.rightPanel;
-    }
+
     // Asignar valor y listener al select de modo después de renderizar el HTML
     const modeSelect = document.getElementById('modeSelect');
     if (modeSelect) {
@@ -8197,21 +8093,10 @@ function renderTablaEditable(plantilla, fieldNames, container, idx) {
             // CORREGIDO: Aplicar estilos de duplicados después de renderizar la tabla
             setTimeout(() => updateDuplicateStyles(plantilla), 100);
             
-            // Aplicar formatos específicamente si se cambia a modo copiar
-            if (worksheetMode === 'copiar') {
-                setTimeout(() => {
-                    const plantilla = optimizedFunctions.getCurrentPlantilla();
-                    if (plantilla && plantilla.formato) {
-                        applyFormatsToCopyMode(plantilla);
-                    }
-                }, 50); // Optimizado para hojas de cálculo - reducido de 100ms a 50ms // Reducido de 600ms a 100ms para mayor rapidez
-            }
         };
     }
     // Body según el modo
     document.body.classList.toggle('worksheet-mode-agregar', worksheetMode === 'agregar');
-            document.body.classList.toggle('worksheet-mode-filtro', worksheetMode === 'filtro');
-    document.body.classList.toggle('worksheet-mode-copiar', worksheetMode === 'copiar');
     // Listeners a los inputs usando funciones helper
     plantilla.campos.forEach((campo, colIdx) => {
         paginatedRows.forEach((fila, filaIdx) => {
@@ -8243,17 +8128,6 @@ function renderTablaEditable(plantilla, fieldNames, container, idx) {
         }
     });
     // ner para selector de filas
-    const rowsSelect = document.getElementById('rowsPerPageSelect');
-    if (rowsSelect) {
-        rowsSelect.addEventListener('change', function() {
-            const val = rowsSelect.value === 'todos' ? 'todos' : parseInt(rowsSelect.value);
-            rowsPerPage = val;
-            saveCurrentPage(1);
-            optimizedFunctions.renderTablaEditable(plantilla, optimizedFunctions.getStandardFieldNames(), container, optimizedFunctions.getPlantillaIndex(plantilla));
-            // CORREGIDO: Aplicar estilos de duplicados después de renderizar la tabla
-            setTimeout(() => updateDuplicateStyles(plantilla), 100);
-        });
-    }
     // ner para búsqueda y limpiar
     const mainSearchInput = document.getElementById('mainSearchInput');
     const clearBtn = document.getElementById('clearMainSearch');
@@ -8360,96 +8234,15 @@ function renderTablaEditable(plantilla, fieldNames, container, idx) {
 
     }
 
-    // nas
-    if (worksheetMode === 'agregar') {
+    // nas (Agregar filas en modo standard y agregar)
+    if (worksheetMode === 'agregar' || worksheetMode === 'standard') {
         const btnAbrirAgregarTabla = document.getElementById('btnAbrirAgregarTabla');
-        if (btnAbrirAgregarTabla) {
-            btnAbrirAgregarTabla.onclick = function() {
-                // nar cualquier modal anterior
-                document.querySelectorAll('.modal-agregar-tabla').forEach(el => el.remove());
-                
-                const modal = document.createElement('div');
-                modal.className = 'modal-agregar-tabla';
-                modal.style.position = 'fixed';
-                modal.style.top = '0';
-                modal.style.left = '0';
-                modal.style.width = '100vw';
-                modal.style.height = '100vh';
-                modal.style.background = 'rgba(0,0,0,0.25)';
-                modal.style.zIndex = 3000;
-                modal.style.display = 'flex';
-                modal.style.alignItems = 'center';
-                modal.style.justifyContent = 'center';
-                modal.innerHTML = `
-                    <div style='background:#fff;padding:24px 32px;border-radius:10px;min-width:260px;box-shadow:0 2px 16px #0002;text-align:center;position:relative;'>
-                        <h4 style='margin-bottom:18px;'>Agregar filas</h4>
-                        <input id='inputCantidadColumnas' type='number' min='1' class='form-control' placeholder='Cantidad de filas' style='margin-bottom:16px;width:90%;'>
-                        <div style='display:flex;gap:10px;justify-content:center;'>
-                            <button id='btnGuardarTabla' class='btn-panel btn-green'>Guardar</button>
-                            <button id='btnCancelarTabla' class='btn-panel btn-gray'>Cancelar</button>
-                        </div>
-                    </div>
-                `;
-                document.body.appendChild(modal);
-                
-                modal.addEventListener('click', function(e) {
-                    if (e.target === modal) {
-                        modal.remove();
-                    }
-                });
-                // ncelar
-                modal.querySelector('#btnCancelarTabla').onclick = function() {
-                    modal.remove();
-                };
-                
-                modal.querySelector('#btnGuardarTabla').onclick = function() {
-                    const cantidad = parseInt(document.getElementById('inputCantidadColumnas').value);
-                    if (!cantidad || cantidad < 1) {
-                        const cantidadInput = document.getElementById('inputCantidadColumnas');
-        if (cantidadInput) cantidadInput.focus();
-                        return;
-                    }
-                    // Nuevas debajo, con la misma estructura de campos
-                    const plantilla = optimizedFunctions.getCurrentPlantilla();
-                    if (!plantilla) {
-                        showClipboardIndicator('❌ No hay plantilla activa');
-                        return;
-                    }
-                    
-                    for (let i = 0; i < cantidad; i++) {
-                        const nuevaFila = plantilla.campos.map(() => '');
-                        tablaDatos.push(nuevaFila);
-                    }
-                    
-                    plantilla.datos = tablaDatos;
-                    
-                    // n backend con logs
-                    saveWorksheetData(plantilla,
-                        () => {}, // Filas agregadas y guardadas silenciosamente
-                        () => {
-            
-                            showClipboardIndicator('❌ Error al guardar filas');
-                        }
-                    );
-                    
-                    modal.remove();
-                    
-                    // nderizar tabla
-                    reRenderTable(plantilla);
-                };
-            };
-        }
-        // NUEVO: Botón Dividir texto entre columnas
-        const btnDividirTexto = document.getElementById('btnDividirTexto');
-        if (btnDividirTexto) {
-            btnDividirTexto.addEventListener('click', splitTextAcrossColumns);
-        }
-        
-        // NOTA: Botón Agregar campos (funcionalidad removida según solicitud del usuario)
+        if (btnAbrirAgregarTabla) btnAbrirAgregarTabla.onclick = openAgregarFilasModal;
+        // NOTA: Dividir texto disponible solo en menú contextual (clic derecho)
     }
 
-    // Event listeners para modo filtro
-    if (worksheetMode === 'filtro') {
+    // Event listeners para filtros (en modo agregar)
+    if (worksheetMode === 'agregar') {
         // Asegurar que los elementos estén en el DOM
         setTimeout(() => {
         // Botón Limpiar filtros
@@ -8503,10 +8296,6 @@ function renderTablaEditable(plantilla, fieldNames, container, idx) {
             // ntilla
             restoreFormats(plantilla);
             
-            // NUEVO: Aplicar formatos específicamente en modo copiar
-            if (worksheetMode === 'copiar') {
-                applyFormatsToCopyMode(plantilla);
-            }
         }
     }, 50); // Optimizado para hojas de cálculo - reducido de 100ms a 50ms // Reducido de 500ms a 100ms para mayor rapidez
     
@@ -8604,7 +8393,7 @@ function setupSelectionEvents() {
             th.setAttribute('data-selection-listener', 'true');
             th.addEventListener('click', function(e) {
                 // Verificar si el clic fue en un icono de engranaje o filtro
-                if (e.target.closest('.th-gear-icon') || e.target.closest('.th-filter-icon')) {
+                if (e.target.closest('.th-gear-icon')) {
                     return; // No hacer nada si fue en un icono
                 }
                 
@@ -8664,7 +8453,7 @@ function setupSelectionEvents() {
                     selectRow(row);
                 }
             } else {
-                // n simple de fila
+                // Selección simple de fila
                 clearAllSelections();
                 selectRow(rowIndex);
                 
@@ -8927,11 +8716,6 @@ function setupSelectionEvents() {
             }
         });
     });
-}
-
-// Función placeholder para mantener compatibilidad
-function setupMobileEvents() {
-    // Funcionalidad de selección múltiple móvil removida
 }
 
 // NUEVO: Configurar eventos de drag selection para filas
@@ -9246,6 +9030,121 @@ function handleRowSelectionAction(action) {
     }
 }
 
+// Desplazar historial de cambios cuando se inserta fila/columna (para que mostrar cambios siga correcto)
+function shiftLocalHistoryOnRowInsert(insertAt, direction) {
+    if (!Array.isArray(detailedChangesHistory)) return;
+    detailedChangesHistory.forEach(change => {
+        const ck = change.cellKey || '';
+        if (ck.includes('-')) {
+            const [r, c] = ck.split('-').map(Number);
+            if (!isNaN(r) && (direction === 'above' && r >= insertAt || direction === 'below' && r > insertAt)) {
+                change.cellKey = `${r + 1}-${c}`;
+            }
+        }
+    });
+    try { localStorage.setItem('worksheetDetailedHistory', JSON.stringify(detailedChangesHistory)); } catch (e) {}
+}
+
+function shiftLocalHistoryOnColInsert(insertAt, direction) {
+    if (!Array.isArray(detailedChangesHistory)) return;
+    detailedChangesHistory.forEach(change => {
+        const ck = change.cellKey || '';
+        if (ck.includes('-')) {
+            const [r, c] = ck.split('-').map(Number);
+            if (!isNaN(c) && (direction === 'before' && c >= insertAt || direction === 'after' && c > insertAt)) {
+                change.cellKey = `${r}-${c + 1}`;
+            }
+        }
+    });
+    try { localStorage.setItem('worksheetDetailedHistory', JSON.stringify(detailedChangesHistory)); } catch (e) {}
+}
+
+function shiftLocalHistoryOnColDelete(colIdx) {
+    if (!Array.isArray(detailedChangesHistory)) return;
+    const toRemove = [];
+    detailedChangesHistory.forEach((change, i) => {
+        const ck = change.cellKey || '';
+        if (ck.includes('-')) {
+            const [r, c] = ck.split('-').map(Number);
+            if (!isNaN(c)) {
+                if (c === colIdx) toRemove.push(i);
+                else if (c > colIdx) change.cellKey = `${r}-${c - 1}`;
+            }
+        }
+    });
+    toRemove.sort((a, b) => b - a).forEach(i => detailedChangesHistory.splice(i, 1));
+    try { localStorage.setItem('worksheetDetailedHistory', JSON.stringify(detailedChangesHistory)); } catch (e) {}
+}
+
+function shiftLocalHistoryOnRowDelete(deletedIndices) {
+    if (!Array.isArray(detailedChangesHistory)) return;
+    const deletedSet = new Set(deletedIndices);
+    const toRemove = [];
+    detailedChangesHistory.forEach((change, i) => {
+        const ck = change.cellKey || '';
+        if (ck.includes('-')) {
+            const [r, c] = ck.split('-').map(Number);
+            if (!isNaN(r)) {
+                if (deletedSet.has(r)) toRemove.push(i);
+                else {
+                    const shift = deletedIndices.filter(d => d < r).length;
+                    if (shift > 0) change.cellKey = `${r - shift}-${c}`;
+                }
+            }
+        }
+    });
+    toRemove.sort((a, b) => b - a).forEach(i => detailedChangesHistory.splice(i, 1));
+    try { localStorage.setItem('worksheetDetailedHistory', JSON.stringify(detailedChangesHistory)); } catch (e) {}
+}
+
+async function shiftHistoryOnRowInsert(plantilla, insertAt, direction) {
+    shiftLocalHistoryOnRowInsert(insertAt, direction);
+    if (!plantilla?.id || window.isSharedMode) return;
+    try {
+        await fetch(`/api/store/worksheet_history/${plantilla.id}/shift_rows`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCSRFToken() },
+            body: JSON.stringify({ insert_at: insertAt, direction })
+        });
+    } catch (e) { /* silencioso */ }
+}
+
+async function shiftHistoryOnColInsert(plantilla, insertAt, direction) {
+    shiftLocalHistoryOnColInsert(insertAt, direction);
+    if (!plantilla?.id || window.isSharedMode) return;
+    try {
+        await fetch(`/api/store/worksheet_history/${plantilla.id}/shift_cols`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCSRFToken() },
+            body: JSON.stringify({ insert_at: insertAt, direction })
+        });
+    } catch (e) { /* silencioso */ }
+}
+
+async function shiftHistoryOnColDelete(plantilla, colIdx) {
+    shiftLocalHistoryOnColDelete(colIdx);
+    if (!plantilla?.id || window.isSharedMode) return;
+    try {
+        await fetch(`/api/store/worksheet_history/${plantilla.id}/shift_cols_delete`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCSRFToken() },
+            body: JSON.stringify({ col_idx: colIdx })
+        });
+    } catch (e) { /* silencioso */ }
+}
+
+async function shiftHistoryOnRowDelete(plantilla, deletedIndices) {
+    shiftLocalHistoryOnRowDelete(deletedIndices);
+    if (!plantilla?.id || window.isSharedMode) return;
+    try {
+        await fetch(`/api/store/worksheet_history/${plantilla.id}/shift_rows_delete`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCSRFToken() },
+            body: JSON.stringify({ deleted_indices: deletedIndices })
+        });
+    } catch (e) { /* silencioso */ }
+}
+
 // NUEVO: Crear fila arriba de la seleccionada
 function addRowAbove(rowIndex) {
     const plantilla = optimizedFunctions.getCurrentPlantilla();
@@ -9253,19 +9152,25 @@ function addRowAbove(rowIndex) {
     
     pushTablaUndo(); 
     
+    // Desplazar historial para que "mostrar cambios" siga apuntando a las celdas correctas
+    shiftHistoryOnRowInsert(plantilla, rowIndex, 'above');
+    
     // Crear nueva fila vacía
     const nuevaFila = plantilla.campos.map(() => '');
     
     // Insertar la fila en la posición especificada
     tablaDatos.splice(rowIndex, 0, nuevaFila);
     
-    // Actualizar plantilla y guardar
+    // Actualizar plantilla
     plantilla.datos = tablaDatos;
+    
+    // Re-renderizar INMEDIATAMENTE en tiempo real (sin esperar al servidor)
+    reRenderTable(plantilla);
+    setTimeout(() => updateDuplicateStyles(plantilla), 100);
+    
+    // Guardar en servidor en segundo plano
     saveWorksheetData(plantilla, 
-        () => {
-            showClipboardIndicator('✅ Fila creada arriba');
-            reRenderTable(plantilla);
-        },
+        () => showClipboardIndicator('✅ Fila creada arriba'),
         () => showClipboardIndicator('❌ Error al crear fila')
     );
 }
@@ -9277,19 +9182,25 @@ function addRowBelow(rowIndex) {
     
     pushTablaUndo(); 
     
+    // Desplazar historial para que "mostrar cambios" siga apuntando a las celdas correctas
+    shiftHistoryOnRowInsert(plantilla, rowIndex, 'below');
+    
     // Crear nueva fila vacía
     const nuevaFila = plantilla.campos.map(() => '');
     
     // Insertar la fila después de la posición especificada
     tablaDatos.splice(rowIndex + 1, 0, nuevaFila);
     
-    // Actualizar plantilla y guardar
+    // Actualizar plantilla
     plantilla.datos = tablaDatos;
+    
+    // Re-renderizar INMEDIATAMENTE en tiempo real (sin esperar al servidor)
+    reRenderTable(plantilla);
+    setTimeout(() => updateDuplicateStyles(plantilla), 100);
+    
+    // Guardar en servidor en segundo plano
     saveWorksheetData(plantilla, 
-        () => {
-            showClipboardIndicator('✅ Fila creada abajo');
-            reRenderTable(plantilla);
-        },
+        () => showClipboardIndicator('✅ Fila creada abajo'),
         () => showClipboardIndicator('❌ Error al crear fila')
     );
 }
@@ -9307,6 +9218,10 @@ function deleteSelectedRowsWithConfirmation(rowIndices) {
         // Ordenar índices de mayor a menor para eliminar desde abajo
         const sortedIndices = rowIndices.sort((a, b) => b - a);
         
+        // Cascada: ajustar historial antes de eliminar
+        let plantilla = optimizedFunctions.getCurrentPlantilla();
+        if (plantilla) shiftHistoryOnRowDelete(plantilla, sortedIndices.slice().sort((a, b) => a - b));
+        
         // Eliminar filas de tablaDatos
         sortedIndices.forEach(rowIndex => {
             if (tablaDatos[rowIndex]) {
@@ -9315,30 +9230,22 @@ function deleteSelectedRowsWithConfirmation(rowIndices) {
         });
         
         // Actualizar plantilla y sincronizar datos originales
-        const plantilla = optimizedFunctions.getCurrentPlantilla();
+        plantilla = optimizedFunctions.getCurrentPlantilla();
         if (plantilla) {
             plantilla.datos = tablaDatos;
             
-            // Sincronizar con datos originales
-            if (plantilla.datosOriginales) {
-                sortedIndices.forEach(rowIndex => {
-                    if (plantilla.datosOriginales[rowIndex]) {
-                        plantilla.datosOriginales.splice(rowIndex, 1);
-                    }
-                });
-            }
+    // Sincronizar con datos originales ANTES del guardado rompe la detección de cambios (merge).
+    // NO actualizaremos plantilla.datosOriginales aquí. Se actualizará automáticamente en handleSaveSuccess.
+    
+    // Tiempo real: mostrar cambios inmediatamente
+            reRenderTableRealtime(plantilla);
+            cancelRowSelection();
             
-            // Guardar en backend y re-renderizar
-            saveWorksheetData(plantilla,
-                () => {
-                    showClipboardIndicator(`✅ ${rowCount} fila${rowCount > 1 ? 's' : ''} eliminada${rowCount > 1 ? 's' : ''}`);
-                    reRenderTable(plantilla);
-                    cancelRowSelection();
-                },
-                () => {
-                    showClipboardIndicator('❌ Error al eliminar filas');
-                }
-            );
+            // Guardar en backend forzando que no se use merge para estos cambios masivos estructurales
+            saveWorksheetDataUnified(plantilla, {
+                successCallback: () => showClipboardIndicator(`✅ ${rowCount} fila${rowCount > 1 ? 's' : ''} eliminada${rowCount > 1 ? 's' : ''}`),
+                errorCallback: () => showClipboardIndicator('❌ Error al eliminar filas')
+            }, true); // El true fuerza guardado completo (ignora merge de cambios individuales)
         }
     }
 }
@@ -9363,28 +9270,19 @@ function clearSelectedRowsContent(rowIndices) {
     // Actualizar plantilla y sincronizar datos originales
     plantilla.datos = tablaDatos;
     
-    // Sincronizar con datos originales
-    if (plantilla.datosOriginales) {
-        rowIndices.forEach(rowIndex => {
-            if (plantilla.datosOriginales[rowIndex]) {
-                for (let col = 0; col < plantilla.datosOriginales[rowIndex].length; col++) {
-                    plantilla.datosOriginales[rowIndex][col] = '';
-                }
-            }
-        });
-    }
+    // Sincronizar con datos originales ANTES del guardado rompe la detección de cambios (merge).
+    // NO actualizaremos plantilla.datosOriginales aquí. Se actualizará automáticamente en handleSaveSuccess.
     
-    // Guardar y re-renderizar
-    saveWorksheetData(plantilla,
-        () => {
-            showClipboardIndicator(`✅ Contenido de ${rowIndices.length} fila${rowIndices.length > 1 ? 's' : ''} limpiado`);
-            reRenderTable(plantilla);
-            cancelRowSelection();
-        },
-        () => {
-            showClipboardIndicator('❌ Error al limpiar filas');
-        }
-    );
+    // Tiempo real: mostrar cambios inmediatamente
+    reRenderTableRealtime(plantilla);
+    cancelRowSelection();
+    
+    // Guardar en backend forzando envío completo (ignorar merge)
+    // Usar { force_empty_overwrite: true } en dataToSave
+    saveWorksheetDataUnified(plantilla, {
+        successCallback: () => showClipboardIndicator(`✅ Contenido de ${rowIndices.length} fila${rowIndices.length > 1 ? 's' : ''} limpiado`),
+        errorCallback: () => showClipboardIndicator('❌ Error al limpiar filas')
+    }, true); // forceFullSave = true para evitar saltarse la limpieza si el backend cree que es un error
 }
 
 // NUEVO: Copiar contenido de filas seleccionadas
@@ -9438,31 +9336,38 @@ function filtrarFilasTabla(query, plantilla, fieldNames, container, idx) {
     
     // Función helper para paginación
     const { totalRows, totalPages, paginatedRows } = calculatePagination(filteredRows);
-    // Mantener los selectores con el mismo estilo que en renderTablaEditable
-    let html = `<div class='d-flex justify-content-center align-items-center mb-4 gap-3' style='width:100%'>
-        <select id="rowsPerPageSelect" class="form-select form-select-sm d-inline-block">
-            <option disabled>Mostrar</option>
-            ${rowsPerPageOptions.map(opt => `<option value="${opt}" ${rowsPerPage == opt ? 'selected' : ''}>${opt}</option>`).join('')}
+    // Mantener los selectores con el mismo estilo que en renderTablaEditable (sin Mostrar - siempre todos)
+    // Modo compartido: Standard siempre; Agregar solo si tiene acceso de edición (!isReadonly)
+    const canShowAgregar = !window.isSharedMode || !window.isReadonly;
+    const agregarFilasBtn = (worksheetMode === 'agregar' || worksheetMode === 'standard') && canShowAgregar
+        ? `<button id="btnAbrirAgregarTabla" class="btn-panel btn-blue btn-sm" style="margin-left:1.25rem;min-width:140px;padding:0.5rem 1.25rem" type="button"><i class="fas fa-plus"></i> Agregar filas</button>`
+        : '';
+    let html = `<div class='d-flex justify-content-center align-items-center mb-4'>
+        <select id="modeSelect" class="form-select form-select-sm" style="min-width:160px">
+            <option value="standard" ${worksheetMode === 'standard' ? 'selected' : ''}>Modo Standard</option>
+            ${(canShowAgregar && !window.isSharedMode) ? `<option value="agregar" ${worksheetMode === 'agregar' ? 'selected' : ''}>Modo Agregar</option>` : ''}
         </select>
-        <select id="modeSelect" class="form-select form-select-sm d-inline-block">
-            <option disabled>Modo</option>
-            <option value="standard" ${worksheetMode === 'standard' ? 'selected' : ''}>Standard</option>
-            <option value="copiar" ${worksheetMode === 'copiar' ? 'selected' : ''}>Copiar</option>
-            ${(!window.isSharedMode) ? `<option value="agregar" ${worksheetMode === 'agregar' ? 'selected' : ''}>Agregar</option>` : ''}
-            ${(!window.isSharedMode) ? `<option value="filtro" ${worksheetMode === 'filtro' ? 'selected' : ''}>Filtro</option>` : ''}
-        </select>
+        ${agregarFilasBtn}
     </div>`;
+    
+    // En modo agregar: filtros y cambios filtros (NO en modo compartido - solo admin)
+    if (worksheetMode === 'agregar' && canShowAgregar && !window.isSharedMode) {
+        html += `<div id="filtroTablasHeader" class="d-flex justify-content-center align-items-center gap-2 mb-2" style='width:100%'>
+            <button id="btnLimpiarFiltros" class="btn-panel btn-blue" type="button"><i class="fas fa-broom"></i> filtros</button>
+            <button id="btnGuardarFiltros" class="btn-panel btn-blue" type="button"><i class="fas fa-save"></i> cambios filtros</button>
+        </div>`;
+    }
     
     // Mostrar plantilla también durante la búsqueda (solo si existe título)
     if (plantilla.titulo && plantilla.titulo.trim()) {
         // Optimización aplicada
-        const viewersAndLogsIcons = !window.isSharedMode ? 
+        const viewersAndLogsIcons = (window.isAdmin && !window.isSharedMode) ?
             `<button id="connectionLogsBtn" class="connection-logs-btn" title="Registro de conexiones">
                 <i class="fas fa-history"></i>
                 <span id="logsCount">0</span>
             </button>` : '';
         
-        html += `<div class="plantilla-titulo-container mb-3 text-center">
+    html += `<div class="plantilla-titulo-container mb-3 text-center">
             <h4 class="plantilla-titulo-header">
                 ${plantilla.titulo}
                 ${viewersAndLogsIcons}
@@ -9478,13 +9383,9 @@ function filtrarFilasTabla(query, plantilla, fieldNames, container, idx) {
         // NOTA: No cambiar automáticamente 'letras' por 'let'
         // Los nombres se manejan correctamente en optimizedFunctions.getStandardFieldNames()
         
-        // En modo agregar, muestra el engranaje en todas las columnas
-        if (worksheetMode === 'agregar') {
+        // Engranaje: en modo agregar (admin) o en modo compartido editable (para añadir campo)
+        if (worksheetMode === 'agregar' || (window.isSharedMode && !window.isReadonly)) {
             thContent += ` <span class='th-gear-icon' id='th-gear-${colIdx}' title='Opciones'><i class='fas fa-cog'></i></span>`;
-        }
-        // En modo filtro, muestra el icono de filtro en todas las columnas
-        if (worksheetMode === 'filtro') {
-            thContent += ` <span class='th-filter-icon' id='th-filter-${colIdx}' title='Filtros'><i class='fas fa-filter'></i></span>`;
         }
         
         if (campo === 'numero') {
@@ -9505,10 +9406,12 @@ function filtrarFilasTabla(query, plantilla, fieldNames, container, idx) {
     });
     html += `</tr></thead><tbody>`;
     
-    // Contraseña y links
-    const duplicadosCorreo = detectarDuplicados(plantilla, 'correo');
-    const duplicadosContraseña = detectarDuplicados(plantilla, 'contraseña');
-    const duplicadosLinks = detectarDuplicados(plantilla, 'links');
+    // Contraseña, links y numero (en modo compartido no aplicar duplicados)
+    const skipDuplicados = window.isSharedMode;
+    const duplicadosCorreo = skipDuplicados ? new Set() : detectarDuplicados(plantilla, 'correo');
+    const duplicadosContraseña = skipDuplicados ? new Set() : detectarDuplicados(plantilla, 'contraseña');
+    const duplicadosLinks = skipDuplicados ? new Set() : detectarDuplicados(plantilla, 'links');
+    const duplicadosNumero = skipDuplicados ? new Set() : detectarDuplicados(plantilla, 'numero');
     
     paginatedRows.forEach((fila, filaIdx) => {
         const realRowIdx = (rowsPerPage === 'todos' ? filaIdx : (filaIdx + (currentPage-1)*rowsPerPage));
@@ -9533,7 +9436,7 @@ function filtrarFilasTabla(query, plantilla, fieldNames, container, idx) {
         });
         
         html += `<tr data-row-index="${realRowIdx}">`;
-        html += generateTableCells(fila, realRowIdx, plantilla, bloqueColores, duplicadosCorreo, duplicadosContraseña, duplicadosLinks);
+        html += generateTableCells(fila, realRowIdx, plantilla, bloqueColores, duplicadosCorreo, duplicadosContraseña, duplicadosLinks, duplicadosNumero);
         html += `</tr>`;
     });
     html += `</tbody></table></div>`;
@@ -9545,6 +9448,15 @@ function filtrarFilasTabla(query, plantilla, fieldNames, container, idx) {
         </div>
     </div>`;
     container.innerHTML = html;
+
+    // Eliminar tablas duplicadas si existen (safeguard)
+    const tableResponsives = container.querySelectorAll('.table-responsive');
+    if (tableResponsives.length > 1) {
+        for (let i = 1; i < tableResponsives.length; i++) {
+            tableResponsives[i].remove();
+        }
+    }
+
     // Configurar listeners usando funciones helper (modo filtro)
     plantilla.campos.forEach((campo, colIdx) => {
         paginatedRows.forEach((fila, filaIdx) => {
@@ -9567,30 +9479,12 @@ function filtrarFilasTabla(query, plantilla, fieldNames, container, idx) {
             filtrarFilasTabla(query, plantilla, fieldNames, container, idx);
         }
     });
-    const rowsSelect = document.getElementById('rowsPerPageSelect');
-    if (rowsSelect) {
-        rowsSelect.addEventListener('change', function() {
-            const val = rowsSelect.value === 'todos' ? 'todos' : parseInt(rowsSelect.value);
-            rowsPerPage = val;
-            saveCurrentPage(1);
-            filtrarFilasTabla(query, plantilla, fieldNames, container, idx);
-        });
-    }
     
     // Listener para el selector de modo
     const modeSelect = document.getElementById('modeSelect');
     if (modeSelect) {
         modeSelect.value = worksheetMode;
         modeSelect.addEventListener('change', function() {
-            // Prevenir cambio a modo filtro en modo compartido
-            if (window.isSharedMode && modeSelect.value === 'filtro') {
-                // Mostrar alerta
-                alert('Solo el administrador puede usar el modo Filtro.');
-                // Restaurar valor anterior
-                modeSelect.value = worksheetMode;
-                return;
-            }
-            
             worksheetMode = modeSelect.value;
             localStorage.setItem('worksheetMode', worksheetMode);
             
@@ -9604,16 +9498,21 @@ function filtrarFilasTabla(query, plantilla, fieldNames, container, idx) {
             // CORREGIDO: Aplicar estilos de duplicados después de renderizar la tabla
             setTimeout(() => updateDuplicateStyles(plantilla), 100);
             
-            // Aplicar formatos específicamente si se cambia a modo copiar
-            if (worksheetMode === 'copiar') {
-                setTimeout(() => {
-                    const plantilla = optimizedFunctions.getCurrentPlantilla();
-                    if (plantilla && plantilla.formato) {
-                        applyFormatsToCopyMode(plantilla);
-                    }
-                }, 50); // Optimizado para hojas de cálculo - reducido de 100ms a 50ms // Reducido de 600ms a 100ms para mayor rapidez
-            }
         });
+    }
+    
+    // Botón Agregar filas (en modo standard y agregar)
+    if (worksheetMode === 'agregar' || worksheetMode === 'standard') {
+        const btnAbrirAgregarTabla = document.getElementById('btnAbrirAgregarTabla');
+        if (btnAbrirAgregarTabla) btnAbrirAgregarTabla.onclick = openAgregarFilasModal;
+    }
+    
+    // Botones de filtros (en modo agregar)
+    if (worksheetMode === 'agregar') {
+        const btnLimpiarFiltros = document.getElementById('btnLimpiarFiltros');
+        if (btnLimpiarFiltros) btnLimpiarFiltros.onclick = limpiarTodosFiltros;
+        const btnGuardarFiltros = document.getElementById('btnGuardarFiltros');
+        if (btnGuardarFiltros) btnGuardarFiltros.onclick = guardarFiltrosAplicados;
     }
     
     // OPTIMIZADO: setupSelectionEvents se llama automáticamente en initializeAllSystems
@@ -9739,87 +9638,6 @@ document.addEventListener('click', function(e) {
         });
         return;
     }
-    // En modo copiar, permitir copiar al hacer clic en toda la celda
-    if (worksheetMode === 'copiar') {
-        // Función segura unificada
-        const copyElem = safeEventTargetClosest(e, '.cell-copyable');
-        if (copyElem && copyElem.getAttribute('data-valor')) {
-            const valor = copyElem.getAttribute('data-valor');
-            copyToClipboardMobile(valor).then(() => {
-                // NUEVO: Efecto visual de copiado exitoso
-                const originalBackground = copyElem.style.backgroundColor;
-                const originalColor = copyElem.style.color;
-                
-                copyElem.style.backgroundColor = '#d4edda';
-                copyElem.style.color = '#155724';
-                copyElem.style.transition = 'all 0.3s ease';
-                
-                const textSpan = copyElem.querySelector('.cell-copy-text');
-                if (textSpan) {
-                    const originalText = textSpan.textContent;
-                    textSpan.textContent = '¡Copiado!';
-                    textSpan.style.fontWeight = 'bold';
-                    
-                    // Restaurar estilos originales
-                    setTimeout(() => {
-                        copyElem.style.backgroundColor = originalBackground;
-                        copyElem.style.color = originalColor;
-                        textSpan.textContent = originalText;
-                        textSpan.style.fontWeight = '';
-                        copyElem.style.transition = '';
-                    }, 1200);
-                }
-            }).catch(() => {
-                // Error al copiar
-            });
-        }
-    }
-}); 
-
-document.addEventListener('dblclick', function(e) {
-    if (worksheetMode === 'copiar') {
-        // Función de validación unificada
-        if (!isValidEventTarget(e)) return;
-        
-        const copyElem = safeEventTargetClosest(e, '.cell-copyable');
-        if (copyElem) {
-            const td = safeClosest(copyElem, 'td');
-            if (!td) return;
-            // Obtener info de fila y columna
-            const idMatch = copyElem.querySelector('.copy-icon')?.id?.match(/copy-(?:text|input)-(\d+)-(\d+)/);
-            if (!idMatch) return;
-            const filaIdx = parseInt(idMatch[1]);
-            const colIdx = parseInt(idMatch[2]);
-            const table = safeClosest(td, 'table');
-            const campo = table ? table.querySelectorAll('th')[colIdx]?.textContent?.toLowerCase() || '' : '';
-            let inputType = 'text';
-            let inputClass = `form-control cell-${campo}`;
-            let maxLength = '';
-            if (campo === 'let') maxLength = 'maxlength="4"';
-            if (campo === 'numero') inputType = 'number';
-            // Crear input editable
-            const input = document.createElement('input');
-            input.type = inputType;
-            input.className = inputClass;
-            input.value = copyElem.getAttribute('data-valor') || '';
-            if (maxLength) input.setAttribute('maxlength', '4');
-            input.style.width = '100%';
-            // Reemplazar con input
-            td.innerHTML = '';
-            td.appendChild(input);
-            if (input) input.focus();
-            // Manejar Enter
-            input.addEventListener('blur', function() {
-                tablaDatos[filaIdx][colIdx] = input.value;
-                td.innerHTML = renderEditableCell(campo, input.value, filaIdx, colIdx);
-            });
-            input.addEventListener('keydown', function(ev) {
-                if (ev.key === 'Enter') {
-                    input.blur();
-                }
-            });
-        }
-    }
 }); 
 
 // Menú contextual para engranaje de columna en modo agregar
@@ -9918,53 +9736,47 @@ function showAddFieldConfirmModal(colIdx, side, tipo) {
         const plantilla = optimizedFunctions.getCurrentPlantilla();
         let insertIdx = side === 'right' ? (parseInt(colIdx) + 1) : parseInt(colIdx);
         
-        // nsertar el tipo de campo en la plantilla
+        // Desplazar historial para que "mostrar cambios" siga apuntando a las celdas correctas
+        shiftHistoryOnColInsert(plantilla, insertIdx, 'before');
+        
+        // Insertar el tipo de campo en la plantilla
         plantilla.campos.splice(insertIdx, 0, tipo);
         // Insertar valor vacío en cada fila de datos
         tablaDatos.forEach(fila => fila.splice(insertIdx, 0, ''));
         plantilla.datos = tablaDatos;
         
-        // GUARDAR EN BACKEND (igual que executeInsertColumn)
-        // Actualizar plantilla
-        fetch('/api/store/worksheet_templates', {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCSRFToken() },
-            body: JSON.stringify({ 
-                id: plantilla.id, 
-                title: plantilla.titulo,
-                fields: plantilla.campos 
-            })
-        })
-        .then(response => {
-            if (!response.ok) {
-                throw new Error(`Error actualizando plantilla: ${response.status}`);
-            }
-            return response.json();
-        })
-        .then(() => {
-            // Guardar datos actualizados
-            return fetch('/api/store/worksheet_data', {
+        // Tiempo real: mostrar cambio inmediatamente
+        reRenderTableRealtime(plantilla);
+        
+        // GUARDAR EN BACKEND (admin o compartido)
+        const saveFields = window.isSharedMode ?
+            fetch(`/tienda/api/shared/worksheet/${plantilla.id}/update_fields?token=${window.sharedToken || ''}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ fields: plantilla.campos })
+            }).then(r => { if (!r.ok) throw new Error('Error actualizando campos'); return r.json(); })
+            .then(() => fetch(`/tienda/api/shared/worksheet/${plantilla.id}/save?token=${window.sharedToken || ''}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ data: tablaDatos, formato: plantilla.formato || {} })
+            }))
+            : fetch('/api/store/worksheet_templates', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCSRFToken() },
+                body: JSON.stringify({ id: plantilla.id, title: plantilla.titulo, fields: plantilla.campos })
+            }).then(r => { if (!r.ok) throw new Error('Error actualizando plantilla'); return r.json(); })
+            .then(() => fetch('/api/store/worksheet_data', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCSRFToken() },
                 body: JSON.stringify({ template_id: plantilla.id, data: tablaDatos })
-            });
-        })
-        .then(response => {
-            if (!response.ok) {
-                throw new Error(`Error guardando datos: ${response.status}`);
-            }
-            return response.json();
-        })
-        .then(() => {
-            // Renderizar tabla actualizada
-            reRenderTable(plantilla);
-            // Campo agregado y guardado silenciosamente
-        })
-        .catch(error => {
-            // Error al guardar
+            }));
+        
+        saveFields.then(response => {
+            if (response && !response.ok) throw new Error('Error guardando');
+            return response && response.json ? response.json() : {};
+        }).then(() => {}).catch(() => {
             showClipboardIndicator('❌ Error al guardar campo');
-            // Renderizar para mostrar el cambio local aunque falle el guardado
-            reRenderTable(plantilla);
+            reRenderTableRealtime(plantilla);
         });
     };
 }
@@ -9993,6 +9805,12 @@ document.addEventListener('mousedown', function(e) {
             showDeleteFieldModal(colIdx);
         } else if (action === 'permissions') {
             showPermissionsModal();
+        } else if (action === 'apply-filter') {
+            const plantilla = optimizedFunctions.getCurrentPlantilla();
+            if (plantilla && plantilla.campos[colIdx]) {
+                const campo = plantilla.campos[colIdx];
+                mostrarModalFiltrosPersonalizado(campo, colIdx);
+            }
         }
         closeAllGearMenus();
         return;
@@ -10064,6 +9882,9 @@ document.addEventListener('click', function(e) {
                     <i class='fas fa-users-cog'></i> Gestionar permisos
                 </button>
             ` : ''}
+            <button class='gear-modal-btn' data-action='apply-filter' data-col='${colIdx}'>
+                <i class='fas fa-filter'></i> Aplicar filtro
+            </button>
         `;
         
         modal.innerHTML = `
@@ -10137,21 +9958,6 @@ document.addEventListener('click', function(e) {
             }
         };
         document.addEventListener('keydown', handleEscape);
-        return;
-    }
-    // En un icono de filtro de columna
-    const filterIcon = safeEventTargetClosest(e, '.th-filter-icon');
-    if (filterIcon) {
-        e.stopPropagation();
-        e.preventDefault();
-        // Función segura unificada
-        const icon = filterIcon;
-        const colIdx = parseInt(icon.id.replace('th-filter-', ''));
-        const plantilla = optimizedFunctions.getCurrentPlantilla();
-        if (plantilla && plantilla.campos[colIdx]) {
-            const campo = plantilla.campos[colIdx];
-            mostrarModalFiltrosPersonalizado(campo, colIdx);
-        }
         return;
     }
     // Cerrar menús solo si no se acaba de abrir uno
@@ -10310,6 +10116,9 @@ function changeFieldType(colIdx, oldFieldType, newFieldType) {
     // Actualizar campo
     plantilla.campos[colIdx] = newFieldType;
     
+    // Tiempo real: mostrar cambio inmediatamente
+    reRenderTableRealtime(plantilla);
+    
     // Actualizar plantilla en el backend
     fetch('/api/store/worksheet_templates', {
         method: 'PUT',
@@ -10335,17 +10144,12 @@ function changeFieldType(colIdx, oldFieldType, newFieldType) {
     })
     .then(() => {
         showClipboardIndicator(`✅ Campo cambiado de ${oldFieldType} a ${newFieldType}`);
-        
-        // Actualizar plantillas
         const currentIdx = plantillas.findIndex(p => p.id === plantilla.id);
-        if (currentIdx !== -1) {
-            plantillas[currentIdx] = plantilla;
-            mostrarTablaPlantilla(currentIdx, false);
-        }
+        if (currentIdx !== -1) plantillas[currentIdx] = plantilla;
     })
     .catch((error) => {
+        reRenderTableRealtime(plantilla);
         showClipboardIndicator('❌ Error al cambiar el campo');
-        // Error al cambiar campo
     });
 }
 
@@ -10394,15 +10198,21 @@ function showDeleteFieldFinalModal(colIdx) {
     // Listener para confirmar eliminación definitiva
     modal.querySelector('#final-delete-field-btn').onclick = function() {
         modal.remove();
+        // Bloquear sincronización remota para que no sobrescriba nuestros cambios locales
+        if (typeof isCurrentlyUpdating !== 'undefined') isCurrentlyUpdating = true;
         // Eliminar el campo de la plantilla y de los datos
         const plantilla = optimizedFunctions.getCurrentPlantilla();
         
         if (!plantilla || colIdx < 0 || colIdx >= plantilla.campos.length) {
+            if (typeof isCurrentlyUpdating !== 'undefined') isCurrentlyUpdating = false;
             showClipboardIndicator('❌ Error: índice de campo inválido');
             return;
         }
         
         const campoEliminado = plantilla.campos[colIdx];
+        
+        // Cascada: ajustar historial antes de eliminar
+        shiftHistoryOnColDelete(plantilla, colIdx);
         
         // Eliminar campo de la plantilla
         plantilla.campos.splice(colIdx, 1);
@@ -10431,6 +10241,9 @@ function showDeleteFieldFinalModal(colIdx) {
             plantillas[plantillaIndex] = plantilla;
         }
         
+        // Tiempo real: mostrar cambios inmediatamente (antes de la API)
+        reRenderTableRealtime(plantilla);
+        
         // Actualizar la estructura en el backend antes de guardar datos
         // Actualizar plantilla en el backend
         fetch('/api/store/worksheet_templates', {
@@ -10449,18 +10262,19 @@ function showDeleteFieldFinalModal(colIdx) {
             return response.json();
         })
         .then(() => {
-            // Guardar datos actualizados
+            // Guardar datos actualizados (tabla ya se actualizó en tiempo real)
             return saveWorksheetData(plantilla);
         })
         .then(() => {
-            // Re-renderizar tabla completamente
-            optimizedFunctions.renderTablaEditable(plantilla, optimizedFunctions.getStandardFieldNames(), document.getElementById('worksheetTableContainer'), plantillas.indexOf(plantilla));
             showClipboardIndicator(`✅ Campo "${campoEliminado}" eliminado completamente`);
         })
         .catch((error) => {
-            // Mostrar mensaje pero re-renderizar de todos modos
-            optimizedFunctions.renderTablaEditable(plantilla, optimizedFunctions.getStandardFieldNames(), document.getElementById('worksheetTableContainer'), plantillas.indexOf(plantilla));
+            // Re-renderizar por si hubo error (para mantener consistencia)
+            reRenderTableRealtime(plantilla);
             showClipboardIndicator(`❌ Error al eliminar campo: ${error?.message || 'Error desconocido'}`);
+        })
+        .finally(() => {
+            if (typeof isCurrentlyUpdating !== 'undefined') isCurrentlyUpdating = false;
         });
     };
 } 
@@ -10472,7 +10286,7 @@ function showDeleteFieldFinalModal(colIdx) {
 // Con mejor gestión de memoria y debouncing
 let undoStack = [];
 let redoStack = [];
-let maxUndoStates = 50;
+let maxUndoStates = Infinity; // Ilimitado: sin tope de acciones deshacer/rehacer
 let currentState = null;
 let undoRedoDebounceTimer = null;
 let lastUndoRedoTime = 0;
@@ -10535,8 +10349,8 @@ function saveUndoState(actionType, description, affectedCells = []) {
     }, 50);
 }
 
-// Función de deshacer optimizada para respuesta instantánea
-function undoAction() {
+// Función de deshacer optimizada - ESPERA a que el guardado termine para persistir
+async function undoAction() {
     if (undoStack.length === 0) {
         showClipboardIndicator('❌ No hay acciones para deshacer');
         return;
@@ -10552,22 +10366,21 @@ function undoAction() {
     if (!previousState) return;
     
     try {
-        // nterior inmediatamente
         tablaDatos = JSON.parse(JSON.stringify(previousState.data));
         const plantilla = optimizedFunctions.getCurrentPlantilla();
         
         if (plantilla) {
             plantilla.datos = tablaDatos;
             
-            // Asegurar que la página sea válida
             const totalRows = tablaDatos.length;
             const totalPages = rowsPerPage === 'todos' ? 1 : Math.ceil(totalRows / rowsPerPage);
             currentPage = Math.min(previousState.page || 1, totalPages);
             
-            // Re-renderizar tabla usando cache para mejor rendimiento
+            // Invalidar cache de render para forzar re-render con datos correctos
+            if (renderCache && renderCache.clear) renderCache.clear();
+            
             const container = document.getElementById('worksheetTableContainer');
             if (container) {
-                // CORREGIDO: Guardar selecciones antes de re-renderizar
                 const savedSelections = {
                     selectedCells: Array.from(selectedCells),
                     selectedRows: Array.from(selectedRows),
@@ -10575,9 +10388,8 @@ function undoAction() {
                     lastSelectedCell: lastSelectedCell
                 };
                 
-                cachedRenderTablaEditable(plantilla, optimizedFunctions.getStandardFieldNames(), container, plantillas.indexOf(plantilla));
+                optimizedFunctions.renderTablaEditable(plantilla, optimizedFunctions.getStandardFieldNames(), container, plantillas.indexOf(plantilla));
                 
-                // CORREGIDO: Restaurar selecciones después de re-renderizar
                 setTimeout(() => {
                     selectedCells = new Set(savedSelections.selectedCells);
                     selectedRows = new Set(savedSelections.selectedRows);
@@ -10587,55 +10399,49 @@ function undoAction() {
                 }, 50);
             }
             
-            // Feedback inmediato con indicador visual
-            showClipboardIndicator(`↶ Deshecho: ${previousState.description} (${undoStack.length} restantes)`);
+            showClipboardIndicator(`↶ Deshecho: ${previousState.description} (guardando...)`);
             updateUndoRedoButtons();
             
-            // Guardar en background sin bloquear la UI
-            setTimeout(() => {
-                saveWorksheetDataUnified(plantilla, { silent: true });
-            }, 50); // Optimizado para hojas de cálculo - reducido de 100ms a 50ms
+            // CRÍTICO: Esperar a que el guardado termine antes de continuar (persiste al actualizar)
+            await saveWorksheetDataUnified(plantilla, { silent: true });
+            showClipboardIndicator(`↶ Deshecho: ${previousState.description} (${undoStack.length} restantes)`);
         }
         
         currentState = undoStack.length > 0 ? undoStack[undoStack.length - 1] : null;
     } catch (error) {
-        showClipboardIndicator('❌ Error al deshacer la acción');
+        showClipboardIndicator('❌ Error al deshacer: ' + (error?.message || 'Error al guardar'));
     }
 }
 
-// Función de rehacer optimizada para respuesta instantánea
-function redoAction() {
+// Función de rehacer optimizada - ESPERA a que el guardado termine para persistir
+async function redoAction() {
     if (redoStack.length === 0) {
         showClipboardIndicator('❌ No hay acciones para rehacer');
         return;
     }
     
-    // Obtener siguiente estado
     const nextState = redoStack.pop();
     if (!nextState) return;
     
     try {
-        // Guardar en undo antes de rehacer
         if (currentState) {
             undoStack.push(currentState);
         }
         
-        // nte inmediatamente
         tablaDatos = JSON.parse(JSON.stringify(nextState.data));
         const plantilla = optimizedFunctions.getCurrentPlantilla();
         
         if (plantilla) {
             plantilla.datos = tablaDatos;
             
-            // Asegurar que la página sea válida
             const totalRows = tablaDatos.length;
             const totalPages = rowsPerPage === 'todos' ? 1 : Math.ceil(totalRows / rowsPerPage);
             currentPage = Math.min(nextState.page || 1, totalPages);
             
-            // Re-renderizar tabla usando cache para mejor rendimiento
+            if (renderCache && renderCache.clear) renderCache.clear();
+            
             const container = document.getElementById('worksheetTableContainer');
             if (container) {
-                // CORREGIDO: Guardar selecciones antes de re-renderizar
                 const savedSelections = {
                     selectedCells: Array.from(selectedCells),
                     selectedRows: Array.from(selectedRows),
@@ -10643,9 +10449,8 @@ function redoAction() {
                     lastSelectedCell: lastSelectedCell
                 };
                 
-                cachedRenderTablaEditable(plantilla, optimizedFunctions.getStandardFieldNames(), container, plantillas.indexOf(plantilla));
+                optimizedFunctions.renderTablaEditable(plantilla, optimizedFunctions.getStandardFieldNames(), container, plantillas.indexOf(plantilla));
                 
-                // CORREGIDO: Restaurar selecciones después de re-renderizar
                 setTimeout(() => {
                     selectedCells = new Set(savedSelections.selectedCells);
                     selectedRows = new Set(savedSelections.selectedRows);
@@ -10655,19 +10460,17 @@ function redoAction() {
                 }, 50);
             }
             
-            // Feedback inmediato con indicador visual
-            showClipboardIndicator(`↷ Rehecho: ${nextState.description} (${redoStack.length} disponibles)`);
+            showClipboardIndicator(`↷ Rehecho: ${nextState.description} (guardando...)`);
             updateUndoRedoButtons();
             
-            // Guardar en background sin bloquear la UI
-            setTimeout(() => {
-                saveWorksheetDataUnified(plantilla, { silent: true });
-            }, 50); // Optimizado para hojas de cálculo - reducido de 100ms a 50ms
+            // CRÍTICO: Esperar a que el guardado termine antes de continuar
+            await saveWorksheetDataUnified(plantilla, { silent: true });
+            showClipboardIndicator(`↷ Rehecho: ${nextState.description} (${redoStack.length} disponibles)`);
         }
         
         currentState = nextState;
     } catch (error) {
-        showClipboardIndicator('❌ Error al rehacer la acción');
+        showClipboardIndicator('❌ Error al rehacer: ' + (error?.message || 'Error al guardar'));
     }
 }
 
@@ -10694,32 +10497,28 @@ function initializeUndoHistory() {
     }, 50); // Optimizado para hojas de cálculo - reducido de 100ms a 50ms
 }
 
-// saveWorksheetDataSilent - ahora se usa saveWorksheetDataUnified con { silent: true }
-
 // Funciones legacy mejoradas para compatibilidad
 function pushTablaUndo() {
     saveUndoState(ACTION_TYPES.BULK_EDIT, 'Cambio múltiple');
 }
 
-// NUEVO: Función de debouncing para undo/redo
+// NUEVO: Función de debouncing para undo/redo (soporta async para esperar guardado)
 function debouncedUndoRedo(action, minInterval = 100) {
     const now = Date.now();
-    if (now - lastUndoRedoTime < minInterval) {
-        // Cancelar timer anterior si existe
-        if (undoRedoDebounceTimer) {
-            clearTimeout(undoRedoDebounceTimer);
-        }
-        // Programar nueva ejecución
-        undoRedoDebounceTimer = setTimeout(() => {
-            action();
+    const run = () => {
+        const p = action();
+        if (p && typeof p.then === 'function') {
+            p.then(() => { lastUndoRedoTime = Date.now(); }).catch(() => {});
+        } else {
             lastUndoRedoTime = Date.now();
-        }, minInterval - (now - lastUndoRedoTime));
+        }
+    };
+    if (now - lastUndoRedoTime < minInterval) {
+        if (undoRedoDebounceTimer) clearTimeout(undoRedoDebounceTimer);
+        undoRedoDebounceTimer = setTimeout(run, minInterval - (now - lastUndoRedoTime));
         return;
     }
-    
-    // Ejecutar inmediatamente si ha pasado suficiente tiempo
-    action();
-    lastUndoRedoTime = now;
+    run();
 }
 
 // NUEVO: Función para actualizar el estado visual de los botones undo/redo
@@ -10750,26 +10549,7 @@ function cachedRenderTablaEditable(plantilla, fieldNames, container, idx) {
     
     // Cache válido por 500ms
     if (renderCache.has(cacheKey) && (now - lastRenderTime) < 500) {
-        const cachedHtml = renderCache.get(cacheKey);
-        
-        // CORREGIDO: Preservar elementos del lado derecho al usar cache
-        const existingScrollbar = container.querySelector('.table-responsive');
-        const existingRightPanel = container.querySelector('.right-panel');
-        
-        const preservedElements = {
-            scrollbar: existingScrollbar ? existingScrollbar.outerHTML : '',
-            rightPanel: existingRightPanel ? existingRightPanel.outerHTML : ''
-        };
-        
-        container.innerHTML = cachedHtml;
-        
-        // Restaurar elementos importantes si no están presentes
-        if (preservedElements.scrollbar && !container.querySelector('.table-responsive')) {
-            container.innerHTML += preservedElements.scrollbar;
-        }
-        if (preservedElements.rightPanel && !container.querySelector('.right-panel')) {
-            container.innerHTML += preservedElements.rightPanel;
-        }
+        container.innerHTML = renderCache.get(cacheKey);
         return;
     }
     
@@ -10789,28 +10569,38 @@ function cachedRenderTablaEditable(plantilla, fieldNames, container, idx) {
     }
 }
 
+function hasBulkSelection() {
+    return (selectedCells && selectedCells.size > 1) ||
+           (selectedRows && selectedRows.size > 0) ||
+           (selectedColumns && selectedColumns.size > 0);
+}
+
 function undoTabla() {
-    debouncedUndoRedo(() => {
+    debouncedUndoRedo(async () => {
+        if (hasBulkSelection()) {
+            return undoAction();
+        }
         const cell = getCurrentCellForUndoRedo();
         if (cell) {
-            undoCellFromServer(cell.row, cell.col).then(done => {
-                if (!done) undoAction();
-            });
+            const done = await undoCellFromServer(cell.row, cell.col);
+            if (!done) return undoAction();
         } else {
-            undoAction();
+            return undoAction();
         }
     }, 100);
 }
 
 function redoTabla() {
-    debouncedUndoRedo(() => {
+    debouncedUndoRedo(async () => {
+        if (hasBulkSelection()) {
+            return redoAction();
+        }
         const cell = getCurrentCellForUndoRedo();
         if (cell) {
-            redoCellFromServer(cell.row, cell.col).then(done => {
-                if (!done) redoAction();
-            });
+            const done = await redoCellFromServer(cell.row, cell.col);
+            if (!done) return redoAction();
         } else {
-            redoAction();
+            return redoAction();
         }
     }, 100);
 }
@@ -10843,7 +10633,8 @@ async function undoCellFromServer(row, col) {
             plantilla.datos = tablaDatos;
             const input = getCellElement(row, col);
             if (input) input.value = data.old_value;
-            saveWorksheetDataUnified(plantilla, { silent: true });
+            showClipboardIndicator(`↶ Deshecho: guardando...`);
+            await saveWorksheetDataUnified(plantilla, { silent: true });
             showClipboardIndicator(`↶ Deshecho: valor restaurado`);
             updateDuplicateStyles(plantilla);
             return true;
@@ -10868,7 +10659,8 @@ async function redoCellFromServer(row, col) {
             plantilla.datos = tablaDatos;
             const input = getCellElement(row, col);
             if (input) input.value = data.new_value;
-            saveWorksheetDataUnified(plantilla, { silent: true });
+            showClipboardIndicator(`↷ Rehecho: guardando...`);
+            await saveWorksheetDataUnified(plantilla, { silent: true });
             showClipboardIndicator(`↷ Rehecho: valor restaurado`);
             updateDuplicateStyles(plantilla);
             return true;
@@ -10985,7 +10777,7 @@ function recordDetailedChange(type, cellInfo, oldValue, newValue) {
     // NUEVO: Sincronizar historial con el servidor
     syncHistoryToServer(change);
 
-    // Guardar en BD para Ctrl+Z/Ctrl+Y (20 por celda, estilo Excel)
+    // Guardar en BD para Ctrl+Z/Ctrl+Y (15 por celda, estilo Excel)
     saveCellChangeToUndoHistory(cellInfo.row, cellInfo.col, oldValue, newValue);
 }
 
@@ -11169,6 +10961,10 @@ let presenceSessionId = null;
 
 // Función para inicializar el sistema de presencia (unificado para admin y compartido)
 function initializePresenceSystem() {
+    // En modo compartido solo lectura no registrar presencia/conexiones.
+    if (window.isSharedMode && window.isReadonly) {
+        return;
+    }
     // Evitar inicialización múltiple
     if (presenceSessionId) {
         return;
@@ -11189,8 +10985,8 @@ function initializePresenceSystem() {
     }
     
     // Configurar endpoint y parámetros según el modo
-    const endpoint = window.isSharedMode ? 
-        `/api/shared/worksheet/${worksheetId}/presence` : 
+    const endpoint = window.isSharedMode ?
+        `/tienda/api/shared/worksheet/${worksheetId}/presence` :
         `/api/store/worksheet_presence/${worksheetId}`;
     
     const token = window.isSharedMode ? 
@@ -11231,7 +11027,10 @@ function updatePresence(worksheetId, endpoint, token, action) {
         return;
     }
     
-    const url = token ? `${endpoint}?token=${token}` : endpoint;
+    let url = token ? `${endpoint}?token=${token}` : endpoint;
+    if (window.isSharedMode && window.accessType) {
+        url += `${url.includes('?') ? '&' : '?'}access=${encodeURIComponent(window.accessType)}`;
+    }
     const headers = { 'Content-Type': 'application/json' };
     
     // Header CSRF para modo admin
@@ -11376,17 +11175,8 @@ function sendUserActivity(worksheetId, activityType) {
         },
         body: JSON.stringify(activityData)
     })
-    .then(response => response.json())
-    .then(data => {
-        if (data.success) {
-
-        } else {
-
-        }
-    })
-    .catch(error => {
-
-    });
+    .then(() => {})
+    .catch(() => {});
 }
 
 // Gestión de recursos (variables movidas al inicio)
@@ -11802,14 +11592,14 @@ const optimizedFunctions = {
         renderFunction();
     },
     
-    // Generar hash de datos para detectar cambios
+    // Generar hash de datos para detectar cambios (incluye campos y estructura para invalidar al eliminar columnas)
     _generateDataHash(plantilla) {
         if (!plantilla || !plantilla.datos) return 'no-data';
-        
-        // Hash simple basado en datos y campos
-        const dataStr = JSON.stringify(plantilla.datos.slice(0, 10)); // Solo primeras 10 filas para performance
-        const fieldsStr = JSON.stringify(plantilla.campos);
-        return btoa(dataStr + fieldsStr).substring(0, 16);
+        const campos = plantilla.campos || [];
+        const fieldsStr = JSON.stringify(campos);
+        // Incluir num columnas + num filas + primeras filas para detectar cambios estructurales
+        const structStr = `${campos.length}_${plantilla.datos.length}_${JSON.stringify(plantilla.datos.slice(0, 15))}`;
+        return btoa(fieldsStr + structStr).substring(0, 24);
     },
     
     // Verificar si el cache es válido
@@ -11867,7 +11657,6 @@ const optimizedFunctions = {
     _attachPaginationListeners(container, plantilla, fieldNames, idx) {
         const btnPrev = container.querySelector('#btnPrevPage');
         const btnNext = container.querySelector('#btnNextPage');
-        const rowsSelect = container.querySelector('#rowsPerPageSelect');
         
         if (btnPrev) {
             btnPrev.addEventListener('click', () => {
@@ -11889,17 +11678,6 @@ const optimizedFunctions = {
             // CORREGIDO: Aplicar estilos de duplicados después de renderizar la tabla
             setTimeout(() => updateDuplicateStyles(plantilla), 100);
                 }
-            });
-        }
-        
-        if (rowsSelect) {
-            rowsSelect.addEventListener('change', () => {
-                const val = rowsSelect.value === 'todos' ? 'todos' : parseInt(rowsSelect.value);
-                rowsPerPage = val;
-                saveCurrentPage(1);
-                optimizedFunctions.renderTablaEditable(plantilla, optimizedFunctions.getStandardFieldNames(), container, optimizedFunctions.getPlantillaIndex(plantilla));
-            // CORREGIDO: Aplicar estilos de duplicados después de renderizar la tabla
-            setTimeout(() => updateDuplicateStyles(plantilla), 100);
             });
         }
     },
@@ -11962,7 +11740,6 @@ const optimizedFunctions = {
         plantillaCache.clearAll();
         domCache.clearAll();
         renderCache.clear();
-        duplicateStylesCache.clear();
     },
     
     // obtener estadísticas
@@ -12867,11 +12644,15 @@ function highlightCell(row, col) {
         }
     }
 }
+// Selección preservada al abrir menú contextual (evita que se pierda al hacer clic)
+let contextMenuPreservedSelection = null;
+
 // PASO 6: Funciones restauradas
 function showContextMenu(x, y) {
     hideContextMenu();
     
     const selection = getSelectionInfo();
+    contextMenuPreservedSelection = selection.hasSelection ? { ...selection, cells: [...(selection.cells || [])], rows: [...(selection.rows || [])], columns: [...(selection.columns || [])] } : null;
     
 
 
@@ -13006,8 +12787,10 @@ function showContextMenu(x, y) {
             menuItem.className = 'context-menu-item';
             menuItem.innerHTML = `<i class="${item.icon}"></i>${item.text}`;
             menuItem.addEventListener('click', () => {
-                executeContextAction(item.action);
+                const preserved = contextMenuPreservedSelection;
+                executeContextAction(item.action, preserved);
                 hideContextMenu();
+                contextMenuPreservedSelection = null;
             });
             menu.appendChild(menuItem);
         }
@@ -13042,6 +12825,7 @@ function hideContextMenu() {
     if (menu) {
         menu.remove();
     }
+    contextMenuPreservedSelection = null;
 }
 
 // NUEVO: Función específica para ocultar el menú de selección de filas
@@ -13052,8 +12836,8 @@ function hideRowSelectionContextMenu() {
     }
 }
 
-function executeContextAction(action) {
-    const selection = getSelectionInfo();
+function executeContextAction(action, preservedSelection) {
+    const selection = preservedSelection || getSelectionInfo();
     
     
     // definir acciones de limpieza en modo compartido
@@ -13080,7 +12864,7 @@ function executeContextAction(action) {
             showSearchReplaceDialog();
             break;
         case 'split-text':
-            splitTextAcrossColumns();
+            splitTextAcrossColumns(selection);
             break;
         case 'undo':
             undoTabla();
@@ -13967,38 +13751,6 @@ function clearFormat(selection) {
     showClipboardIndicator('✅ Formato rápido limpiado');
 }
 
-// NUEVA: Función para aplicar formatos específicamente en modo copiar
-function applyFormatsToCopyMode(plantilla) {
-    if (!plantilla || !plantilla.formato || worksheetMode !== 'copiar') return;
-    
-    // aplicar formato guardado
-    Object.keys(plantilla.formato).forEach(cellId => {
-        const [row, col] = cellId.split('-').map(Number);
-        const format = plantilla.formato[cellId];
-        
-        // Aplicar en modo copiar (div con clase cell-copyable)
-        const cellDiv = document.querySelector(`#copy-text-${row}-${col}`);
-        if (cellDiv) {
-            const parentDiv = safeClosest(cellDiv, '.cell-copyable');
-            if (parentDiv) {
-                
-                if (format.backgroundColor) {
-                    parentDiv.style.setProperty('background-color', format.backgroundColor, 'important');
-                }
-                if (format.color) {
-                    parentDiv.style.setProperty('color', format.color, 'important');
-                }
-                if (format.fontWeight === 'bold') {
-                    parentDiv.style.setProperty('font-weight', 'bold', 'important');
-                }
-                if (format.textDecoration === 'underline') {
-                    parentDiv.style.setProperty('text-decoration', 'underline', 'important');
-                }
-            }
-        }
-    });
-}
-
 // Función para restaurar formato guardado con verificación adicional (función segura)
 function restoreFormats(plantilla) {
     if (!plantilla || !plantilla.formato) return;
@@ -14260,7 +14012,11 @@ function deleteSelectedRows(rowIndices) {
         // ordenar índices de mayor a menor para eliminar desde abajo
         const sortedIndices = rowIndices.sort((a, b) => b - a);
         
-        // nar filas de tablaDatos
+        // Cascada: ajustar historial antes de eliminar
+        let plantilla = optimizedFunctions.getCurrentPlantilla();
+        if (plantilla) shiftHistoryOnRowDelete(plantilla, sortedIndices.slice().sort((a, b) => a - b));
+        
+        // Eliminar filas de tablaDatos
         sortedIndices.forEach(rowIndex => {
             if (tablaDatos[rowIndex]) {
                 tablaDatos.splice(rowIndex, 1);
@@ -14268,19 +14024,19 @@ function deleteSelectedRows(rowIndices) {
         });
         
         // Actualizar plantilla
-        const plantilla = optimizedFunctions.getCurrentPlantilla();
+        plantilla = optimizedFunctions.getCurrentPlantilla();
         if (plantilla) {
             plantilla.datos = tablaDatos;
             
-            // actualizar backend
+            // Tiempo real: mostrar cambios inmediatamente
+            reRenderTableRealtime(plantilla);
+            clearAllSelections();
+            
+            // Guardar en backend
             saveWorksheetData(plantilla,
-                () => {
-                    showClipboardIndicator(`✅ ${rowCount} fila${rowCount > 1 ? 's' : ''} eliminada${rowCount > 1 ? 's' : ''}`);
-                    // renderizar tabla
-                    reRenderTable(plantilla);
-                    clearAllSelections();
-                },
+                () => showClipboardIndicator(`✅ ${rowCount} fila${rowCount > 1 ? 's' : ''} eliminada${rowCount > 1 ? 's' : ''}`),
                 (error) => {
+                    reRenderTableRealtime(plantilla);
                     showClipboardIndicator(`❌ Error al eliminar filas: ${error?.message || 'Error desconocido'}`);
                 }
             );
@@ -15910,24 +15666,25 @@ function hasBlockColor(celda) {
 }
 
 // Generar HTML de celdas de tabla (elimina 30+ líneas duplicadas)
-function generateTableCells(fila, realRowIdx, plantilla, bloqueColores, duplicadosCorreo, duplicadosContraseña, duplicadosLinks) {
+function generateTableCells(fila, realRowIdx, plantilla, bloqueColores, duplicadosCorreo, duplicadosContraseña, duplicadosLinks, duplicadosNumero) {
     let html = '';
     const numeroFila = realRowIdx + 1;
     
     // numeración
     html += `<td class='col-numeracion' data-row-header='true' data-row-index="${realRowIdx}">${numeroFila}</td>`;
     
-    
-    fila.forEach((valor, colIdx) => {
+    const totalCols = Array.isArray(plantilla.campos) ? plantilla.campos.length : 0;
+    for (let colIdx = 0; colIdx < totalCols; colIdx++) {
         const campo = plantilla.campos[colIdx];
+        const valor = (Array.isArray(fila) && colIdx < fila.length) ? fila[colIdx] : '';
         let styleStr = '';
         
         // OPTIMIZADO: Duplicados amarillos tienen PRIORIDAD ABSOLUTA sobre cualquier color
         const cellKey = `${realRowIdx}-${colIdx}`;
         let isDuplicado = false;
         
-        // Verificar duplicados sin importar filtros (los duplicados son más importantes)
-            isDuplicado = duplicadosCorreo.has(cellKey) || duplicadosContraseña.has(cellKey) || duplicadosLinks.has(cellKey);
+        // Solo correo, contraseña y links reciben resaltado amarillo (no numero)
+        isDuplicado = duplicadosCorreo.has(cellKey) || duplicadosContraseña.has(cellKey) || duplicadosLinks.has(cellKey);
         
         if (isDuplicado) {
             // PRIORIDAD ABSOLUTA: Duplicados amarillos SIEMPRE se muestran, incluso sobre colores de bloque
@@ -15937,27 +15694,7 @@ function generateTableCells(fila, realRowIdx, plantilla, bloqueColores, duplicad
             styleStr = `background:${bloqueColores[colIdx].color} !important;color:${bloqueColores[colIdx].textColor} !important;border-color:${bloqueColores[colIdx].borderColor} !important;`;
         }
         
-        // NUEVO: Aplicar formato guardado en modo copiar
-        if (worksheetMode === 'copiar' && plantilla.formato) {
-            const cellId = `${realRowIdx}-${colIdx}`;
-            const storedFormat = plantilla.formato[cellId];
-            if (storedFormat) {
-                if (storedFormat.backgroundColor) {
-                    styleStr += `background-color:${storedFormat.backgroundColor} !important;`;
-                }
-                if (storedFormat.color) {
-                    styleStr += `color:${storedFormat.color} !important;`;
-                }
-                if (storedFormat.fontWeight === 'bold') {
-                    styleStr += `font-weight:bold !important;`;
-                }
-                if (storedFormat.textDecoration === 'underline') {
-                    styleStr += `text-decoration:underline !important;`;
-                }
-            }
-        }
-        
-        // NUEVO: Agregar clase duplicate-cell si es duplicado
+        // Agregar clase duplicate-cell si es duplicado
         const duplicateClass = isDuplicado ? 'duplicate-cell' : '';
         
         if (campo === 'numero') {
@@ -15973,7 +15710,7 @@ function generateTableCells(fila, realRowIdx, plantilla, bloqueColores, duplicad
         } else {
             html += `<td class="${duplicateClass}" style="${styleStr}" data-row-index="${realRowIdx}" data-col-index="${colIdx}">${renderEditableCell(campo, valor, realRowIdx, colIdx)}</td>`;
         }
-    });
+    }
     
     return html;
 }
@@ -16093,9 +15830,30 @@ function handleNumeroFieldInput(input, realFilaIdx, colIdx, plantilla, fieldName
 
 // Manejar event listener estándar de input para cualquier campo (elimina 20+ líneas duplicadas)
 function handleStandardFieldInput(input, realFilaIdx, colIdx, campo, plantilla) {
-    // CORREGIDO: Sistema de guardado robusto para evitar pérdida de datos
+    // CORREGIDO: Sistema de guardado robusto con cola para no perder pulsaciones
     let saveTimeout;
-    let isSaving = false;
+    
+    // Usar el sistema centralizado si existe, o un flag local
+    if (typeof input._isSaving === 'undefined') input._isSaving = false;
+    if (typeof input._pendingSave === 'undefined') input._pendingSave = false;
+    
+    const triggerSave = () => {
+        if (input._isSaving) {
+            input._pendingSave = true;
+            return;
+        }
+        input._isSaving = true;
+        input._pendingSave = false;
+        
+        saveWorksheetDataUnified(plantilla, { silent: true })
+            .finally(() => {
+                input._isSaving = false;
+                // Si hubo cambios mientras guardábamos, lanzar el guardado pendiente
+                if (input._pendingSave) {
+                    triggerSave();
+                }
+            });
+    };
     
     input.addEventListener('input', function() {
         // Guardar posición activa para persistencia cuando escribes en cualquier campo
@@ -16113,41 +15871,14 @@ function handleStandardFieldInput(input, realFilaIdx, colIdx, campo, plantilla) 
             applyRowColorInRealTime(realFilaIdx, colIdx, val, plantilla);
         }
         
-        // OPTIMIZADO: NO actualizar duplicados durante escritura para máxima fluidez
-        // Los duplicados se actualizarán automáticamente al:
-        // - Pegar datos
-        // - Cambiar de celda (blur)
-        // - Guardar la plantilla
-        // - Cambiar de modo
-        // Esto garantiza escritura 100% fluida sin interrupciones visuales
-        
-        // CORREGIDO: Guardado inmediato para datos críticos, debounce para optimización
-        if (isSaving) {
-            // Si ya está guardando, cancelar el timeout anterior y programar uno nuevo
-            clearTimeout(saveTimeout);
-        }
-        
-        saveTimeout = setTimeout(() => {
-            if (!isSaving) {
-                isSaving = true;
-                saveWorksheetDataUnified(plantilla, { silent: true })
-                    .finally(() => {
-                        isSaving = false;
-                    });
-            }
-        }, 200); // Reducido de 500ms a 200ms para mayor responsividad
+        clearTimeout(saveTimeout);
+        saveTimeout = setTimeout(triggerSave, 200); // debounce corto para que F5 no pierda lo último escrito
     });
     
-    // CORREGIDO: Guardar inmediatamente al salir del campo (blur) sin mensaje
+    // Guardar inmediatamente al salir del campo (blur)
     input.addEventListener('blur', function() {
         clearTimeout(saveTimeout);
-        if (!isSaving) {
-            isSaving = true;
-            saveWorksheetDataUnified(plantilla, { silent: true })
-                .finally(() => {
-                    isSaving = false;
-                });
-        }
+        triggerSave();
     });
 }
 
@@ -16239,29 +15970,63 @@ function addSimplePasteListener(input, realFilaIdx, colIdx, campo, plantilla) {
     });
 }
 
-// Plantillas desde API (elimina 3 llamadas duplicadas)
+// AbortController para cancelar fetch anterior (evita race en recargas rápidas)
+let loadTemplatesAbortController = null;
+let loadTemplatesError = false;
+// Id incremental: si una carga antigua termina después de una nueva, no debe pisar plantillas
+let worksheetTemplatesLoadId = 0;
+
+// Plantillas desde API con reintentos (evita pérdida de tablas en recargas frecuentes)
 function loadWorksheetTemplates(successCallback, errorCallback) {
-    fetch('/api/store/worksheet_templates')
-        .then(res => {
-            // Verificar antes de procesar
-            if (!res.ok) {
-                throw new Error(`HTTP ${res.status}: ${res.statusText}`);
-            }
-            return res.json();
-        })
-        .then(plantillasApi => {
-            plantillas = plantillasApi.map(p => ({
-                id: p.id,
-                titulo: p.title,
-                campos: p.fields,
-                datos: undefined // Se cargará al seleccionar
-            }));
-            if (successCallback) successCallback(plantillas);
-        })
-        .catch(error => {
-            // Actualizar plantillas
-            if (errorCallback) errorCallback(error);
-        });
+    if (loadTemplatesAbortController) {
+        loadTemplatesAbortController.abort();
+    }
+    loadTemplatesAbortController = new AbortController();
+    const signal = loadTemplatesAbortController.signal;
+    const thisLoadId = ++worksheetTemplatesLoadId;
+    loadTemplatesError = false;
+
+    function doFetch(attempt) {
+        const maxRetries = 3;
+        const retryDelays = [0, 500, 1500];
+
+        const tryLoad = () => {
+            fetch('/api/store/worksheet_templates', { signal, credentials: 'same-origin' })
+                .then(res => {
+                    if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+                    return res.json();
+                })
+                .then(plantillasApi => {
+                    // Otra recarga (F5) ya inició una carga más nueva: ignorar este resultado
+                    if (thisLoadId !== worksheetTemplatesLoadId) return;
+                    plantillas = plantillasApi.map(p => ({
+                        id: p.id,
+                        titulo: p.title,
+                        campos: p.fields,
+                        datos: undefined
+                    }));
+                    loadTemplatesError = false;
+                    if (successCallback) successCallback(plantillas);
+                })
+                .catch(err => {
+                    if (err.name === 'AbortError') return;
+                    if (attempt < maxRetries) {
+                        setTimeout(() => doFetch(attempt + 1), retryDelays[attempt] || 1500);
+                    } else {
+                        loadTemplatesError = true;
+                        if (errorCallback) errorCallback(err);
+                        renderPlantillasMenu();
+                        if (typeof showClipboardIndicator === 'function') {
+                            showClipboardIndicator('⚠️ Error cargando plantillas. Usa "Reintentar" en el menú.');
+                        }
+                    }
+                });
+        };
+        const delay = retryDelays[Math.min(attempt, retryDelays.length - 1)];
+        if (delay > 0) setTimeout(tryLoad, delay);
+        else tryLoad();
+    }
+    doFetch(0);
 }
 // Nueva plantilla (elimina 2 llamadas duplicadas)
 // NUEVO: Modal de gestión de permisos de acceso a hojas de cálculo
@@ -16311,7 +16076,7 @@ function showPermissionsModal() {
                             <i class='fas fa-globe' style='margin-right: 8px; color: #007bff;'></i>
                             <div>
                                 <strong>Configuración General</strong>
-                                <div style='font-size: 12px; color: #666;'>Privado, público solo lectura o público editable</div>
+                                <div style='font-size: 12px; color: #666;'>Privado o público solo lectura</div>
                             </div>
                         </label>
                         <label style='display: flex; align-items: center; cursor: pointer; padding: 8px; border: 1px solid #ddd; border-radius: 4px; transition: background 0.2s;' class='permission-option' data-type='users'>
@@ -16338,11 +16103,6 @@ function showPermissionsModal() {
                             <input type='radio' name='generalAccessType' value='view' style='margin-right: 8px;'>
                             <i class='fas fa-eye' style='margin-right: 6px; color: #ffc107;'></i>
                             <span>Compartir para todos - Solo ver</span>
-                        </label>
-                        <label style='display: flex; align-items: center; cursor: pointer; padding: 6px;'>
-                            <input type='radio' name='generalAccessType' value='edit' style='margin-right: 8px;'>
-                            <i class='fas fa-edit' style='margin-right: 6px; color: #007bff;'></i>
-                            <span>Compartir para todos - Ver y editar</span>
                         </label>
                     </div>
                 </div>
@@ -16450,7 +16210,7 @@ function showPermissionsModal() {
                 // Verificar si hay una opción de compartir seleccionada
                 setTimeout(() => {
                     const selectedAccessType = document.querySelector('input[name="generalAccessType"]:checked');
-                    if (selectedAccessType && (selectedAccessType.value === 'view' || selectedAccessType.value === 'edit')) {
+                    if (selectedAccessType && selectedAccessType.value === 'view') {
                         linksPanel.style.display = 'block';
                     } else {
                         linksPanel.style.display = 'none';
@@ -16488,7 +16248,7 @@ function showPermissionsModal() {
                 const accessType = this.value;
                 
                 // CORREGIDO: Mostrar panel inmediatamente cuando se selecciona compartir
-                if (accessType === 'view' || accessType === 'edit') {
+                if (accessType === 'view') {
                     const linksPanel = document.getElementById('linksPanel');
                     const linkInput = document.getElementById('generatedLink');
                     
@@ -16602,10 +16362,8 @@ function showPermissionsModal() {
                     
                     // Verificar permisos generales - PRIORIDAD: Solo debe haber uno
                     
-                    // CORREGIDO: Dar prioridad a edit sobre view
-                    if (permissions.edit) {
-                        generalPermission = permissions.edit;
-                    } else if (permissions.view) {
+                    // Solo dejamos permisos generales: view y private
+                    if (permissions.view) {
                         generalPermission = permissions.view;
                     } else if (permissions.private) {
                         generalPermission = permissions.private;
@@ -16631,7 +16389,8 @@ function showPermissionsModal() {
                         // CORREGIDO: Función mejorada para seleccionar el radio correcto
                         function selectSpecificRadio(attempts = 0) {
                             const maxAttempts = 15;
-                            const specificRadio = document.querySelector(`input[name="generalAccessType"][value="${generalPermission.access_type}"]`);
+                            const selectedAccessType = generalPermission.access_type;
+                            const specificRadio = document.querySelector(`input[name="generalAccessType"][value="${selectedAccessType}"]`);
                             
                             
                             if (specificRadio) {
@@ -16646,13 +16405,13 @@ function showPermissionsModal() {
                                 
                                 // Verificar que realmente se seleccionó y se mantuvo
                                 setTimeout(() => {
-                                    const isChecked = document.querySelector(`input[name="generalAccessType"][value="${generalPermission.access_type}"]:checked`);
+                                    const isChecked = document.querySelector(`input[name="generalAccessType"][value="${selectedAccessType}"]:checked`);
                                     if (!isChecked && attempts < maxAttempts) {
                                         selectSpecificRadio(attempts + 1);
                                     } else if (isChecked) {
                                         // NUEVO: Actualizar la UI basada en la selección
-                                        const accessType = generalPermission.access_type;
-                                        if (accessType === 'view' || accessType === 'edit') {
+                                        const accessType = selectedAccessType;
+                                        if (accessType === 'view') {
                                         }
                                     } else {
                                     }
@@ -17072,19 +16831,6 @@ function showPermissionsModal() {
         renderUnifiedUsers(filteredUsers);
     }
     
-    // DESACTIVADA: No generar enlaces automáticamente al seleccionar
-    // function generatePublicLink(type) {
-    //     const plantilla = optimizedFunctions.getCurrentPlantilla();
-    //     if (!plantilla) return;
-    //     
-    //     const baseUrl = window.location.origin;
-    //     const accessType = type === 'view' ? 'readonly' : 'edit';
-    //     // No generar token aquí - esperar el del backend
-    //     const link = `${baseUrl}/store/share/worksheet/${plantilla.id}?access=${accessType}&token=GENERANDO...`;
-    //     document.getElementById('generatedLink').style.color = '#999';
-    //     document.getElementById('generatedLink').style.fontStyle = 'italic';
-    // }
-    
     function generateToken() {
         // Generar un token más largo y seguro
         const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
@@ -17148,13 +16894,11 @@ function showPermissionsModal() {
                 // Permisos guardados exitosamente
                 
                 // Actualizar enlace con el token del backend
-                if (actualType === 'view' || actualType === 'edit') {
+                if (actualType === 'view') {
                     const permission = result.permission;
                     if (permission && permission.public_token) {
                         const baseUrl = window.location.origin;
-                        // ⭐ CORREGIDO: Usar el actualType directamente para mantener consistencia
-                        // 'view' -> 'readonly', 'edit' -> 'edit'
-                        const accessType = actualType === 'view' ? 'readonly' : 'edit';
+                        const accessType = 'readonly';
                         
                         // Construir la URL del enlace - CORREGIDO: con /tienda prefix
                         const link = `${baseUrl}/tienda/share/worksheet/${plantilla.id}?access=${accessType}&token=${permission.public_token}`;
@@ -17323,13 +17067,9 @@ function saveInfoModal() {
                 
                     }
                 } else {
-                    // En modo admin, usar saveWorksheetDataSilent si está disponible
-            
-                if (typeof saveWorksheetDataSilent === 'function') {
-            saveWorksheetDataSilent(plantilla);
-                
-                    } else {
-                
+                    // En modo admin, guardar en silencio
+                    if (typeof saveWorksheetDataUnified === 'function') {
+                        saveWorksheetDataUnified(plantilla, { silent: true });
                     }
                 }
                 
@@ -17364,26 +17104,11 @@ document.addEventListener('keydown', function(event) {
         closeInfoModal();
     }
 });
-// NUEVO: Verificar si el usuario está editando activamente
-function isActivelyEditing() {
-    // Verificar si hay input/textarea enfocado
-    const activeElement = document.activeElement;
-    if (activeElement && (activeElement.tagName === 'INPUT' || activeElement.tagName === 'TEXTAREA')) {
-        return true;
-    }
-    
-    // Verificar modo edición
-    const editingCell = document.querySelector('.editing');
-    return editingCell !== null;
-}
 
-function pauseSync(duration = 5000) {
+function pauseSync(duration = 1500) {
     isSyncEnabled = false;
-    
-    
     setTimeout(() => {
         isSyncEnabled = true;
-
     }, duration);
 }
 
@@ -17424,25 +17149,70 @@ let syncInterval = null;
 let isCurrentlyUpdating = false;
 let fastSyncMode = false; // NUEVO: Modo de sincronización rápida después de cambios
 let fastSyncTimeout = null;
+let syncStats = { totalChecks: 0, changesDetected: 0, lastSyncTime: 'Nunca', fastModeActivations: 0 };
 
 // Inicializar sincronización en AMBOS modos (bidireccional)
 function initializeRealTimeSync() {
-    // También debe escuchar cambios de usuarios compartidos
-    if (window.isSharedMode) {
-
-    } else {
-
-    }
-    
-    
-    
     // Limpiar interval anterior si existe
     if (syncInterval) {
         clearInterval(syncInterval);
+        syncInterval = null;
     }
     
-    // Tiempo inicial
-    lastKnownEditTime = new Date().toISOString();
+    // NO asignar lastKnownEditTime si no existe: dejarlo null para que el primer poll
+    // reciba has_changes=true y obtenga datos frescos del servidor
+    
+    // Polling cada 500ms para sincronización más rápida Admin ↔ Ver y Editar ↔ Ver
+    const pollIntervalMs = 500;
+    syncInterval = setInterval(function() {
+        if (isSyncEnabled && !isCurrentlyUpdating) {
+            safeCheckForRemoteChanges();
+        }
+    }, pollIntervalMs);
+    
+    // Verificación inicial inmediata (no esperar 500ms para detectar cambios)
+    setTimeout(safeCheckForRemoteChanges, 50);
+    
+    // Al volver a la pestaña: forzar sync fresco (resetear lastKnownEditTime para que el poll traiga datos actuales)
+    if (!window._syncVisibilityHandlerAdded) {
+        window._syncVisibilityHandlerAdded = true;
+        document.addEventListener('visibilitychange', function() {
+            if (document.visibilityState === 'visible' && isSyncEnabled && !isCurrentlyUpdating) {
+                if (typeof lastKnownEditTime !== 'undefined') lastKnownEditTime = null;
+                safeCheckForRemoteChanges();
+            }
+        });
+    }
+    
+    // Principal: escuchar BroadcastChannel cuando Ver y Editar guarda (misma hoja)
+    if (!window._syncBroadcastHandlerAdded && typeof BroadcastChannel !== 'undefined') {
+        window._syncBroadcastHandlerAdded = true;
+        try {
+            const syncChannel = new BroadcastChannel(WORKSHEET_SYNC_CHANNEL);
+            syncChannel.onmessage = function(ev) {
+                if (ev.data && ev.data.type === 'worksheet-saved' && ev.data.worksheetId) {
+                    const current = optimizedFunctions.getCurrentPlantilla();
+                    if (current && current.id === ev.data.worksheetId && isSyncEnabled && !isCurrentlyUpdating) {
+                        safeCheckForRemoteChanges();
+                    }
+                }
+            };
+        } catch (e) { /* BroadcastChannel no soportado */ }
+    }
+
+    // Al ocultar la pestaña (cambio de tab, minimizar), guardar en silencio para no perder lo último escrito antes de F5.
+    if (!window._worksheetHiddenSaveAdded) {
+        window._worksheetHiddenSaveAdded = true;
+        document.addEventListener('visibilitychange', function() {
+            if (document.visibilityState !== 'hidden' || window.isSharedMode) return;
+            try {
+                const plantilla = typeof optimizedFunctions !== 'undefined' ? optimizedFunctions.getCurrentPlantilla() : null;
+                if (!plantilla || !plantilla.id) return;
+                flushWorksheetInputsToTablaDatos(plantilla);
+                saveWorksheetDataUnified(plantilla, { silent: true });
+            } catch (e) { /* ignorar */ }
+        });
+    }
 }
 
 // Función segura para llamar checkForRemoteChanges
@@ -17531,10 +17301,6 @@ function initializeUniversalClosestProtection() {
 
     }
     
-    // Estas funciones causan recursión infinita
-    // protectClosest(); // RECURSION INFINITA con safeClosest  
-    // protectTargetClosest(); // protectTargetClosest
-    
     return conversionsCount;
 }
 
@@ -17543,25 +17309,33 @@ async function checkForRemoteChanges() {
     let currentPlantilla;
     
     try {
-        // Función optimizada para evitar recursión
-        currentPlantilla = optimizedFunctions.getCurrentPlantilla();
+        // Función optimizada para evitar recursión (en compartido usar window.currentPlantilla si hace falta)
+        currentPlantilla = (typeof optimizedFunctions !== 'undefined' && optimizedFunctions.getCurrentPlantilla)
+            ? optimizedFunctions.getCurrentPlantilla()
+            : (typeof getCurrentPlantilla === 'function' ? getCurrentPlantilla() : null);
+        if (!currentPlantilla && window.isSharedMode && window.currentPlantilla) {
+            currentPlantilla = window.currentPlantilla;
+        }
         if (!currentPlantilla || !currentPlantilla.id) {
-    
             return;
         }
-        
+
+        if (!window.isSharedMode && !worksheetRemotePollAllowed) {
+            return;
+        }
+
+        // NO bloquear por celda enfocada: applyRemoteChanges ya preserva el valor de la celda activa.
+        // Antes bloqueábamos siempre que hubiera input enfocado → la sync casi nunca corría.
+
         // NUEVO: No verificar cambios si se está guardando localmente
         if (isCurrentlyUpdating) {
             // Evitar conflictos durante actualizaciones
             return;
         }
         
-        // NUEVO: Verificar si el usuario tiene permisos para esta plantilla
-        // Solo verificar si es admin o si tiene permisos específicos
-        if (!window.isAdmin && !window.hasWorksheetAccess) {
-            // Sin permisos para verificar cambios
-            return;
-        }
+        // Permitir sync si hay plantilla cargada: Admin, Shared o Usuario con acceso.
+        // El backend devuelve 403 si no hay permiso; no bloquear por hasWorksheetAccess
+        // (usuarios con permiso por plantilla pueden tener hasWorksheetAccess=false en meta)
         
 
     } catch (initialError) {
@@ -17570,8 +17344,7 @@ async function checkForRemoteChanges() {
     }
     
     try {
-        // NUEVO: Incrementar contador de verificaciones
-        syncStats.totalChecks++;
+        if (syncStats) syncStats.totalChecks++;
         
         // Endpoints diferentes según el modo
         let url, headers = { 'Content-Type': 'application/json' };
@@ -17592,9 +17365,11 @@ async function checkForRemoteChanges() {
 
 
         
-        const response = await fetch(url, {
+        const response = await fetch(url + (url.includes('?') ? '&' : '?') + `_=${Date.now()}`, {
             method: 'GET',
-            headers: headers
+            headers: headers,
+            credentials: 'same-origin',
+            cache: 'no-store'
         });
         
         if (response.ok) {
@@ -17606,25 +17381,25 @@ async function checkForRemoteChanges() {
 
             
             if (processedResult.has_changes && processedResult.data) {
-                // NUEVO: Incrementar contador de cambios detectados
-                syncStats.changesDetected++;
-                syncStats.lastSyncTime = new Date().toLocaleTimeString();
-                
-                // NUEVO: Agregar información de paginación a las estadísticas
-                if (rowsPerPage !== 'todos') {
-                    syncStats.currentPage = currentPage;
-                    syncStats.rowsPerPage = rowsPerPage;
-                    syncStats.totalRows = tablaDatos ? tablaDatos.length : 0;
+                if (syncStats) {
+                    syncStats.changesDetected++;
+                    syncStats.lastSyncTime = new Date().toLocaleTimeString();
+                    if (rowsPerPage !== 'todos') {
+                        syncStats.currentPage = currentPage;
+                        syncStats.rowsPerPage = rowsPerPage;
+                        syncStats.totalRows = tablaDatos ? tablaDatos.length : 0;
+                    }
                 }
                 
 
 
                 
-                await applyRemoteChanges(processedResult);
-                lastKnownEditTime = processedResult.last_edit_time;
-                
-                // NUEVO: Activar modo rápido cuando detectamos cambios remotos
-                activateFastSyncMode();
+                const changesApplied = await applyRemoteChanges(processedResult);
+                if (changesApplied) {
+                    lastKnownEditTime = processedResult.last_edit_time;
+                    // NUEVO: Activar modo rápido cuando detectamos cambios remotos
+                    activateFastSyncMode();
+                }
             } else {
                 // No hay cambios
             }
@@ -17652,12 +17427,13 @@ async function checkForRemoteChanges() {
 // Con soporte completo para paginación
 async function applyRemoteChanges(newData) {
     // Evitar actualizaciones concurrentes
-    
     if (isCurrentlyUpdating) {
-        // Ya hay una actualización en curso
-        return;
+        return false;
     }
-    
+    // No sobrescribir cuando hay filtros aplicados: el usuario va a guardar ese estado
+    if ((typeof FiltersState !== 'undefined' && FiltersState.active) || (typeof filtrosActivos !== 'undefined' && filtrosActivos)) {
+        return false;
+    }
     isCurrentlyUpdating = true;
 
     
@@ -17679,18 +17455,52 @@ async function applyRemoteChanges(newData) {
         const currentValue = activeElement ? activeElement.value : '';
         const currentSelectionStart = activeElement ? activeElement.selectionStart : 0;
         
+        // Identificar si la celda activa está en la tabla
+        const isEditingCell =
+            !!activeElement &&
+            (activeElement.tagName === 'INPUT' || activeElement.tagName === 'TEXTAREA') &&
+            Number.isInteger(currentRowIndex) && currentRowIndex >= 0 &&
+            Number.isInteger(currentColIndex) && currentColIndex >= 0;
+        
         // NUEVO: Detectar si hay búsqueda activa
         const searchInput = document.getElementById('mainSearchInput');
         const hasActiveSearch = searchInput && searchInput.value.trim() !== '';
         const activeSearchValue = hasActiveSearch ? searchInput.value.trim() : '';
         
         
-        // Obtener plantilla actual
-        const currentPlantilla = optimizedFunctions.getCurrentPlantilla();
+        // Obtener plantilla actual (en modo compartido puede ser window.currentPlantilla)
+        let currentPlantilla = optimizedFunctions.getCurrentPlantilla();
+        if (!currentPlantilla && window.isSharedMode && window.currentPlantilla) {
+            currentPlantilla = window.currentPlantilla;
+        }
         if (currentPlantilla) {
             const oldData = [...tablaDatos]; // Datos anteriores
-            tablaDatos = newData.data || newData;
+            const newRows = Array.isArray(newData.data) ? newData.data : (Array.isArray(newData) ? newData : null);
+            if (!newRows) return false; // No aplicar datos inválidos (preservar integridad)
+            // Aplicar siempre lo que envía el servidor: vacío = admin borró todo, no rechazarlo
+            // Si el usuario está escribiendo en una celda, preservar ese valor local
+            // para que un poll remoto no lo pise antes de que termine de guardarse.
+            const isEditingCell =
+                activeElement &&
+                (activeElement.tagName === 'INPUT' || activeElement.tagName === 'TEXTAREA') &&
+                Number.isInteger(currentRowIndex) && currentRowIndex >= 0 &&
+                Number.isInteger(currentColIndex) && currentColIndex >= 0;
+            // datosOriginales = datos del servidor (antes del overlay) para que el guardado detecte
+            // cambios locales y persista lo que el usuario está escribiendo
+            currentPlantilla.datosOriginales = JSON.parse(JSON.stringify(newRows));
+            if (isEditingCell) {
+                while (newRows.length <= currentRowIndex) newRows.push([]);
+                if (!Array.isArray(newRows[currentRowIndex])) newRows[currentRowIndex] = [];
+                while (newRows[currentRowIndex].length <= currentColIndex) newRows[currentRowIndex].push('');
+                newRows[currentRowIndex][currentColIndex] = currentValue ?? '';
+            }
+            tablaDatos = newRows;
             currentPlantilla.datos = tablaDatos;
+            // En modo compartido, mantener window.sharedWorksheetData sincronizado
+            if (window.isSharedMode && window.sharedWorksheetData) {
+                window.sharedWorksheetData.data = tablaDatos;
+                if (newData.formato) window.sharedWorksheetData.formato = newData.formato;
+            }
             
             // NUEVO: Detectar qué páginas fueron afectadas por los cambios
             const changeInfo = detectChangesInPages(oldData, tablaDatos);
@@ -17712,77 +17522,81 @@ async function applyRemoteChanges(newData) {
             // Renderizar tabla preservando estado de búsqueda y paginación
             const container = document.getElementById('worksheetTableContainer');
             const currentPlantillaIndex = plantillas.indexOf(currentPlantilla);
+            
+            // DECIDIR: Soft update (solo inputs) o Hard update (re-render completo)
+            const canSoftUpdate = isEditingCell && oldData.length === newRows.length && !hasActiveSearch;
+            
             if (container && currentPlantillaIndex >= 0) {
-                
-                if (hasActiveSearch) {
-                    // Filtrar datos actualizados
-                    filtrarFilasTabla(activeSearchValue, currentPlantilla, optimizedFunctions.getStandardFieldNames(), container, currentPlantillaIndex);
+                if (canSoftUpdate) {
+                    // ACTUALIZACIÓN SUAVE: Actualizar solo los values sin tocar el DOM
+                    for (let r = 0; r < tablaDatos.length; r++) {
+                        const row = tablaDatos[r] || [];
+                        for (let c = 0; c < row.length; c++) {
+                            // No tocar la celda que el usuario está editando activamente
+                            if (r === currentRowIndex && c === currentColIndex) continue;
+                            
+                            const cellEl = getCellElement(r, c);
+                            if (cellEl) {
+                                const newVal = row[c] !== null && row[c] !== undefined ? row[c] : '';
+                                if (cellEl.value !== newVal) {
+                                    cellEl.value = newVal;
+                                    // Si es número, aplicar formato
+                                    if (currentPlantilla.campos[c] === 'numero' && typeof renderCellFormat === 'function') {
+                                        renderCellFormat(cellEl, 'numero', newVal);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    setTimeout(() => { if (typeof forceUpdateAllNumberColors === 'function') forceUpdateAllNumberColors(); }, 50);
                 } else {
-                    // NORMAL: Re-renderizar con paginación
-                    optimizedFunctions.renderTablaEditable(currentPlantilla, optimizedFunctions.getStandardFieldNames(), container, currentPlantillaIndex);
-                }
-                
-                // IMPORTANTE: Aplicar colores después del re-render
-                setTimeout(() => {
-                    forceUpdateAllNumberColors();
-                }, 50); // Optimizado para hojas de cálculo - reducido de 100ms a 50ms
-                
-                // NUEVO: Mostrar notificación si hay cambios en otras páginas
-                if (!hasActiveSearch && changeInfo.hasChanges) {
-                    setTimeout(() => {
-                        showPageChangeNotification(changeInfo.affectedPages, changeInfo.currentPageAffected);
-                    }, 200);
-                }
+                // ACTUALIZACIÓN DURA: Re-render completo
+            if (hasActiveSearch) {
+                // Filtrar datos actualizados
+                filtrarFilasTabla(activeSearchValue, currentPlantilla, optimizedFunctions.getStandardFieldNames(), container, currentPlantillaIndex);
+            } else {
+                // NORMAL: Re-renderizar con paginación
+                optimizedFunctions.renderTablaEditable(currentPlantilla, optimizedFunctions.getStandardFieldNames(), container, currentPlantillaIndex);
             }
             
-            // Restaurar posición del cursor de forma más robusta
-            if (currentRowIndex >= 0 && currentColIndex >= 0) {
+            // IMPORTANTE: Aplicar colores después del re-render
+            setTimeout(() => {
+                forceUpdateAllNumberColors();
+            }, 50); // Optimizado para hojas de cálculo - reducido de 100ms a 50ms
+            
+            // NUEVO: Mostrar notificación si hay cambios en otras páginas
+            if (!hasActiveSearch && changeInfo.hasChanges) {
                 setTimeout(() => {
-                    // ntentar encontrar la celda en la página actual
+                    showPageChangeNotification(changeInfo.affectedPages, changeInfo.currentPageAffected);
+                }, 200);
+            }
+            
+            // Restaurar posición del cursor de forma más robusta SIN delay destructivo
+            if (isEditingCell) {
+                setTimeout(() => {
                     let restoredElement = getCellElement(currentRowIndex, currentColIndex);
                     
                     if (!restoredElement && rowsPerPage !== 'todos') {
-                        // Está en otra página debido a la paginación
-                        // Verificar si está en la página actual después de los cambios
                         const startIdx = (currentPage - 1) * rowsPerPage;
                         const endIdx = startIdx + rowsPerPage;
-                        
                         if (currentRowIndex >= startIdx && currentRowIndex < endIdx) {
-                            // Intentar nuevamente
                             restoredElement = getCellElement(currentRowIndex, currentColIndex);
-                        } else {
-                            // No está en la página actual
                         }
                     }
                     
                     if (restoredElement) {
-                        // Restaurar valor y posición del cursor
-                        try {
-                            restoredElement.focus();
-                        } catch (focusError) {
-    
-                        }
-                        
-                        // setSelectionRange solo en elementos que lo soporten
+                        try { restoredElement.focus(); } catch (e) {}
                         if (restoredElement.value === currentValue) {
                             try {
-                                // Verificar soporte setSelectionRange
-                                if (typeof restoredElement.setSelectionRange === 'function' && 
-                                    (restoredElement.tagName === 'INPUT' || restoredElement.tagName === 'TEXTAREA') &&
-                                    typeof currentSelectionStart === 'number') {
+                                if (typeof restoredElement.setSelectionRange === 'function' && typeof currentSelectionStart === 'number') {
                                     restoredElement.setSelectionRange(currentSelectionStart, currentSelectionStart);
-                                } else {
-                                    // No soporta setSelectionRange
                                 }
-                            } catch (selectionError) {
-                                // Error al restaurar selección
-                            }
+                            } catch (e) {}
                         }
-
-                    } else {
-                        // No se pudo restaurar el elemento
                     }
-                }, 150);
+                }, 0);
+            }
+            }
             }
             
             // NUEVO: Guardar estado de paginación actualizado
@@ -17793,29 +17607,24 @@ async function applyRemoteChanges(newData) {
         
     } catch (error) {
         // Error al aplicar cambios remotos
+        return false;
     } finally {
         isCurrentlyUpdating = false;
     
         // NUEVO: Ocultar indicador después de completar
         hideSyncIndicator();
     }
+    return true;
 }
 
 // Notificar cambios en AMBOS modos (bidireccional)
 function notifyRemoteUsers() {
     if (!isSyncEnabled) return;
-    
-    // Funciona en AMBOS modos (admin y compartido)
 
-    
-    
-    updateLastKnownTime();
-    
-    // NUEVO: Activar modo de sincronización rápida para otros usuarios
+    // No actualizar lastKnownEditTime aquí: handleSaveSuccessFromServerData ya fija el timestamp del servidor.
+    // Si se ponía la hora del cliente, el poll veía siempre "cambio" y volcaba datos remotos encima de borrados locales.
+
     activateFastSyncMode();
-    
-    // Sincronización SÚPER rápido (100ms + 500ms-1s)
-    
 }
 
 function detectChangesInPages(oldData, newData) {
@@ -17951,11 +17760,7 @@ function showPageChangeNotification(affectedPages, currentPageAffected) {
 function activateFastSyncMode() {
     if (!fastSyncMode) {
         fastSyncMode = true;
-        // NUEVO: Incrementar contador de activaciones de modo rápido
-        syncStats.fastModeActivations++;
-    
-        
-        // DESACTIVADO: Interval rápido - genera demasiados logs
+        if (syncStats) syncStats.fastModeActivations++;
     }
     
     // Limpiar timeout anterior
@@ -18028,13 +17833,14 @@ function hideSyncIndicator() {
 
 
 
-// NUEVO: Inicializar sincronización automáticamente al cargar la página en modo compartido
-if (window.isSharedMode) {
-    // Esperar a que la página esté completamente cargada
+// NUEVO: Inicializar sincronización en modo compartido EDITABLE (readonly usa setupSharedReadonlySync)
+if (window.isSharedMode && !window.isReadonly) {
     document.addEventListener('DOMContentLoaded', () => {
         setTimeout(() => {
-            initializeRealTimeSync();
-        }, 1000);
+            if (window.currentPlantilla && typeof initializeRealTimeSync === 'function') {
+                initializeRealTimeSync();
+            }
+        }, 800);
     });
 }
 
@@ -18518,13 +18324,17 @@ function renderConnectionLogs() {
             cssClass = 'connection-log-anonymous';
         }
         
-        // Conectado o desconectado
+        // Conectado, desconectado o editó
         let actionIcon, actionText, actionClass;
         
         if (session.action === 'connected') {
             actionIcon = '🟢';
             actionText = 'Conectado';
             actionClass = 'connection-log-connected';
+        } else if (session.action === 'edited') {
+            actionIcon = '✏️';
+            actionText = 'Editó';
+            actionClass = 'connection-log-edited';
         } else {
             actionIcon = '🔴';
             actionText = 'Desconectado';
@@ -18614,8 +18424,6 @@ function clearAllConnectionLogs() {
         showClipboardIndicator('❌ Error eliminando registros');
     });
 }
-
-// ELIMINADO: Wrapper de updateAdminViewersCount (código muerto)
 
 // Sistema unificado de inicialización (variable movida al inicio)
 
@@ -18755,8 +18563,6 @@ function cleanupAllResources() {
         clearInterval(adminPresenceInterval);
         adminPresenceInterval = null;
     }
-    
-    // ELIMINADO: adminViewersUpdateInterval (código muerto)
     
     // Variables de sincronización
     if (typeof isCurrentlyUpdating !== 'undefined') {
@@ -19134,6 +18940,7 @@ function forceUpdateAllNumberColors() {
  * Refactorizado desde work_sheets.html
  */
 document.addEventListener('DOMContentLoaded', function() {
+    if ((window.isSharedMode && window.sharedWorksheetData) || window.location.pathname.includes('/share/worksheet')) return; // No en modo compartido
     // Verificar si las plantillas se cargan correctamente
     setTimeout(function() {
         fetch('/api/store/worksheet_templates')
@@ -19202,15 +19009,10 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Variables para modo compartido (inicializadas como false/vacías para modo normal)
     if (typeof window.isSharedMode === 'undefined') {
-        if (isSharedModeMeta && isSharedModeMeta.getAttribute('content') === 'true') {
-            window.isSharedMode = true;
-        } else {
-            // Verificar si estamos en una ruta de worksheet compartida
-            const path = window.location.pathname.toLowerCase();
-            const isSharedWorksheetPath = path.includes('/shared_worksheet') || path.includes('/shared-worksheet') || path.includes('/worksheet/shared');
-            // Solo establecer como true si estamos en una ruta compartida
-            window.isSharedMode = isSharedWorksheetPath;
-        }
+        const path = window.location.pathname.toLowerCase();
+        const isSharedWorksheetPath = (isSharedModeMeta && isSharedModeMeta.getAttribute('content') === 'true') ||
+            path.includes('/share/worksheet') || path.includes('/shared_worksheet') || path.includes('/shared-worksheet') || path.includes('/worksheet/shared');
+        window.isSharedMode = !!isSharedWorksheetPath;
     } else if (window.isSharedMode === false) {
         // Si ya está definido como false (desde work_sheets.html), mantenerlo así
         // No hacer nada, solo asegurarse de que no se sobrescriba
@@ -19219,21 +19021,26 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Inicializar variables de modo compartido si no están definidas
     if (typeof window.isReadonly === 'undefined') {
-        window.isReadonly = isReadonlyMeta && isReadonlyMeta.getAttribute('content') === 'true';
+        const readonlyFromMeta = isReadonlyMeta && isReadonlyMeta.getAttribute('content') === 'true';
+        const urlAccess = (() => { try { return new URLSearchParams(window.location.search).get('access'); } catch(e) { return null; } })();
+        const readonlyFromUrl = (urlAccess === 'readonly' || urlAccess === 'view');
+        window.isReadonly = !!readonlyFromMeta || readonlyFromUrl;
     }
     if (typeof window.sharedToken === 'undefined') {
         window.sharedToken = sharedTokenMeta ? sharedTokenMeta.getAttribute('content') : '';
     }
     if (typeof window.accessType === 'undefined') {
-        window.accessType = accessTypeMeta ? accessTypeMeta.getAttribute('content') : 'readonly';
+        const urlAccess = (() => { try { return new URLSearchParams(window.location.search).get('access'); } catch(e) { return null; } })();
+        window.accessType = accessTypeMeta ? accessTypeMeta.getAttribute('content') : (urlAccess || 'readonly');
     }
     
-    // Inicializar sharedWorksheetData desde data attribute si existe (para datos grandes)
-    const sharedDataElement = document.querySelector('[data-shared-worksheet-data]');
-    if (sharedDataElement && typeof window.sharedWorksheetData === 'undefined') {
+    // Inicializar sharedWorksheetData desde script JSON o data attribute (para datos grandes)
+    if (typeof window.sharedWorksheetData === 'undefined') {
         try {
-            const dataJson = sharedDataElement.getAttribute('data-shared-worksheet-data');
-            if (dataJson) {
+            const scriptEl = document.getElementById('sharedWorksheetDataJson');
+            const dataAttrEl = document.querySelector('[data-shared-worksheet-data]');
+            const dataJson = scriptEl ? scriptEl.textContent : (dataAttrEl ? dataAttrEl.getAttribute('data-shared-worksheet-data') : null);
+            if (dataJson && dataJson.trim()) {
                 window.sharedWorksheetData = JSON.parse(dataJson);
             }
         } catch (e) {
@@ -19243,17 +19050,25 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Inicializar plantilla compartida si estamos en modo compartido y hay datos
     if (window.isSharedMode && window.sharedWorksheetData) {
-        // Esperar a que el DOM esté listo
+        const initFn = window.isReadonly ? initializeSharedWorksheetSimple : initializeSharedWorksheetEditable;
         if (document.readyState === 'loading') {
-            document.addEventListener('DOMContentLoaded', initializeSharedWorksheetSimple);
+            document.addEventListener('DOMContentLoaded', initFn);
         } else {
-            initializeSharedWorksheetSimple();
+            initFn();
         }
+    } else if (window.isSharedMode) {
+        // Fallback: si sharedWorksheetData no se pudo cargar (parse error), mostrar error y quitar ocultación
+        setTimeout(function() {
+            var container = document.getElementById('worksheetTableContainer');
+            if (container) container.innerHTML = '<div class="shared-worksheet-error"><h3>No se pudieron cargar los datos. Verifica que el enlace sea correcto.</h3></div>';
+            document.body.classList.add('loaded');
+        }, 100);
     }
 })();
 
 // Función de renderizado simple para modo compartido (cumple con CSP - sin scripts inline)
-function renderSimpleTable() {
+// dataToShow: opcional. Si se pasa, usa esos datos (ej. filtrados). Si no, usa sharedWorksheetData.data
+function renderSimpleTable(dataToShow) {
     const container = document.getElementById('worksheetTableContainer');
     if (!container) {
         return;
@@ -19264,7 +19079,7 @@ function renderSimpleTable() {
         return;
     }
     
-    const data = window.sharedWorksheetData.data;
+    const data = (dataToShow !== undefined && Array.isArray(dataToShow)) ? dataToShow : window.sharedWorksheetData.data;
     const fields = window.sharedWorksheetData.fields;
     
     if (!data || !Array.isArray(data) || data.length === 0) {
@@ -19278,46 +19093,79 @@ function renderSimpleTable() {
     }
     
     let html = `
-        <div class="shared-worksheet-container">
-            <h3 class="shared-worksheet-title">
+        <div class="plantilla-titulo-container mb-3 text-center">
+            <h4 class="plantilla-titulo-header">
                 📊 ${window.sharedWorksheetData.title}
-            </h3>
-            <p class="shared-worksheet-info">
-                Mostrando ${data.length} filas • ${fields.length} columnas
-            </p>
-            <div class="shared-worksheet-table-container">
-                <table class="shared-worksheet-table">
-                    <thead class="shared-worksheet-thead">
-                        <tr class="shared-worksheet-header-row">
+            </h4>
+        </div>
+        <div class="table-responsive">
+            <table class="table table-bordered table-striped mb-0" id="worksheetTable">
+                <thead>
+                    <tr>
+                        <th class='col-numeracion' data-row-header='true'>#</th>
     `;
     
-    // Encabezados
-    fields.forEach((field) => {
-        html += `<th class="shared-worksheet-header-cell">${field}</th>`;
+    const fieldDisplayNames = { 'correo': 'Correo', 'contraseña': 'Contraseña', 'links': 'Links', 'letras': 'Letras', 'let': 'Let', 'informacion-adicional': 'Información adicional', 'numero': '#', 'otro-campo': 'Otro campo' };
+    fields.forEach((field, colIdx) => {
+        let className = '';
+        if (field === 'numero') className = 'col-numero';
+        else if (field === 'let') className = 'col-let';
+        else if (field === 'letras') className = 'col-letras';
+        else if (field === 'contraseña') className = 'col-contraseña';
+        else if (field === 'links') className = 'col-links';
+        else if (field === 'informacion-adicional') className = 'col-info-adicional';
+        const headerText = fieldDisplayNames[field] || field;
+        html += `<th class="${className}" data-col-index="${colIdx}">${headerText}</th>`;
     });
     
     html += `
-                        </tr>
-                    </thead>
-                    <tbody>
+                    </tr>
+                </thead>
+                <tbody>
     `;
     
-    // Filas de datos
     data.forEach((row, rowIndex) => {
-        if (rowIndex >= 100) return; // Limitar a 100 filas para rendimiento
-        
-        const rowClass = rowIndex % 2 === 0 ? 'shared-worksheet-row-even' : 'shared-worksheet-row-odd';
-        html += `<tr class="${rowClass}">`;
-        
-        // Asegurar que la fila tenga la cantidad correcta de celdas
+        const numIndices = [];
+        fields.forEach((campo, idx) => {
+            if (campo === 'numero') {
+                const val = (row[idx] || '').toString().trim();
+                if (val && typeof getNumberColors === 'function' && getNumberColors(val)) numIndices.push(idx);
+            }
+        });
+        const bloqueColores = Array(fields.length).fill(null);
+        numIndices.forEach((numIdx, bloqueIdx) => {
+            const numVal = (row[numIdx] || '').toString().trim();
+            const colors = typeof getNumberColors === 'function' ? getNumberColors(numVal) : null;
+            if (colors) {
+                const start = numIndices[bloqueIdx - 1] !== undefined ? numIndices[bloqueIdx - 1] + 1 : 0;
+                for (let i = start; i <= numIdx; i++) {
+                    bloqueColores[i] = colors;
+                }
+            }
+        });
+
+        html += `<tr data-row-index="${rowIndex}">`;
+        html += `<td class='col-numeracion' data-row-header='true' data-row-index="${rowIndex}">${rowIndex + 1}</td>`;
+
         for (let i = 0; i < fields.length; i++) {
+            const field = fields[i];
             const cellValue = row[i] || '';
-            const displayValue = cellValue.toString().length > 50 ? 
-                              cellValue.toString().substring(0, 50) + '...' : 
-                              cellValue.toString();
-            html += `<td class="shared-worksheet-cell">${displayValue}</td>`;
+            const displayValue = cellValue.toString().length > 50 ? cellValue.toString().substring(0, 50) + '...' : cellValue.toString();
+
+            let className = '';
+            if (field === 'numero') className = 'col-numero';
+            else if (field === 'let') className = 'col-let';
+            else if (field === 'letras') className = 'col-letras';
+            else if (field === 'contraseña') className = 'col-contraseña';
+            else if (field === 'links') className = 'col-links';
+            else if (field === 'informacion-adicional') className = 'col-info-adicional';
+
+            const colorData = bloqueColores[i];
+            const styleAttr = colorData
+                ? ` style="background-color: ${colorData.color} !important; color: ${colorData.textColor} !important; border-color: ${colorData.borderColor} !important;"`
+                : '';
+            html += `<td class="${className}" data-row-index="${rowIndex}" data-col-index="${i}"${styleAttr}>${displayValue}</td>`;
         }
-        
         html += `</tr>`;
     });
     
@@ -19325,34 +19173,243 @@ function renderSimpleTable() {
                     </tbody>
                 </table>
             </div>
-            <div class="shared-worksheet-status">
-                ✅ <strong>Tabla cargada exitosamente</strong><br>
-                ${fields.length} columnas • ${Math.min(data.length, 100)} filas mostradas de ${data.length} disponibles<br>
-                <small>Modo: ${window.isReadonly ? 'Solo lectura' : 'Editable'}</small>
-            </div>
-        </div>
     `;
     
     container.innerHTML = html;
 }
 
-// Función para inicializar la plantilla compartida
+// Función para inicializar la plantilla compartida (modo solo lectura - tabla estática)
 function initializeSharedWorksheetSimple() {
-    if (typeof window.sharedWorksheetData !== 'undefined' && typeof renderSimpleTable === 'function') {
-        renderSimpleTable();
-        
-        // Mostrar contenido cuando esté completamente cargado
-        setTimeout(function() {
-            document.body.classList.add('loaded');
-        }, 100);
+    if (!window.sharedWorksheetData || !window.sharedWorksheetData.id) {
+        const container = document.getElementById('worksheetTableContainer');
+        if (container) container.innerHTML = '<div class="shared-worksheet-error"><h3>No se pudieron cargar los datos</h3></div>';
+        setTimeout(function() { document.body.classList.add('loaded'); }, 50);
+        return;
     }
-    
-    // Fallback: mostrar contenido después de un tiempo máximo
-    setTimeout(function() {
-        if (!document.body.classList.contains('loaded')) {
-            document.body.classList.add('loaded');
+    // Renderizar inmediatamente con datos del template (evita pantalla en blanco hasta que responda el fetch)
+    if (typeof renderSimpleTable === 'function') renderSimpleTable();
+    setupSharedSearchListeners();
+    setTimeout(function() { document.body.classList.add('loaded'); }, 50);
+
+    var dataUrl = '/tienda/api/shared/worksheet/' + window.sharedWorksheetData.id + '/data?token=' + (window.sharedToken || '') + '&access=readonly&_=' + Date.now();
+    fetch(dataUrl, { cache: 'no-store', credentials: 'same-origin' }).then(function(r) { return r.json(); }).then(function(apiData) {
+        if (apiData && apiData.data && Array.isArray(apiData.data)) {
+            window.sharedWorksheetData.data = apiData.data;
+            window.sharedWorksheetData.formato = apiData.formato || {};
+            window.sharedWorksheetData.last_edit_time = apiData.last_edit_time || window.sharedWorksheetData.last_edit_time;
         }
-    }, 1000);
+        if (typeof renderSimpleTable === 'function') renderSimpleTable();
+        setupSharedReadonlySync();
+    }).catch(function() {
+        setupSharedReadonlySync();
+    });
+}
+
+// Polling para vista solo lectura: mismo intervalo que Admin/Usuario (500ms) para sync uniforme
+var sharedReadonlySyncInterval = null;
+function setupSharedReadonlySync() {
+    if (!window.sharedWorksheetData || !window.sharedToken || sharedReadonlySyncInterval) return;
+    var lastKnownTime = window.sharedWorksheetData.last_edit_time || null;
+    function poll() {
+        if (document.hidden) return;
+        var id = window.sharedWorksheetData.id;
+        if (!id) return;
+        var url = '/tienda/api/shared/worksheet/' + id + '/changes?token=' + (window.sharedToken || '') + '&last_time=' + (lastKnownTime || '') + '&_=' + Date.now();
+        fetch(url, { cache: 'no-store', credentials: 'same-origin' }).then(function(r) { return r.json(); }).then(function(result) {
+            if (result.has_changes && result.data && Array.isArray(result.data)) {
+                window.sharedWorksheetData.data = result.data;
+                var q = document.getElementById('mainSearchInput');
+                var query = (q && q.value) ? q.value.trim().toLowerCase() : '';
+                var dataToShow = result.data;
+                if (query) {
+                    dataToShow = dataToShow.filter(function(row) {
+                        return row.some(function(val) { return (val + '').toLowerCase().includes(query); });
+                    });
+                }
+                renderSimpleTable(dataToShow);
+            }
+            if (result.last_edit_time) lastKnownTime = result.last_edit_time;
+        }).catch(function() {});
+    }
+    sharedReadonlySyncInterval = setInterval(poll, 500);
+    setTimeout(poll, 100);
+    if (!window._sharedReadonlyVisibilityAdded) {
+        window._sharedReadonlyVisibilityAdded = true;
+        document.addEventListener('visibilitychange', function() {
+            if (document.visibilityState === 'visible' && window.sharedWorksheetData && window.sharedToken) poll();
+        });
+    }
+    if (!window._sharedReadonlyBroadcastAdded && typeof BroadcastChannel !== 'undefined') {
+        window._sharedReadonlyBroadcastAdded = true;
+        try {
+            var ch = new BroadcastChannel('worksheet-sync');
+            ch.onmessage = function(ev) {
+                if (ev.data && ev.data.type === 'worksheet-saved' && ev.data.worksheetId === window.sharedWorksheetData.id) poll();
+            };
+        } catch (e) { /* no BroadcastChannel */ }
+    }
+}
+
+// Función para inicializar la plantilla compartida (modo editable - tabla con inputs)
+function initializeSharedWorksheetEditable() {
+    if (!window.sharedWorksheetData || !window.sharedWorksheetData.id) {
+        const container = document.getElementById('worksheetTableContainer');
+        if (container) container.innerHTML = '<div class="shared-worksheet-error"><h3>No se pudieron cargar los datos</h3></div>';
+        setTimeout(function() { document.body.classList.add('loaded'); }, 50);
+        return;
+    }
+    const sw = window.sharedWorksheetData;
+    const dataUrl = '/tienda/api/shared/worksheet/' + sw.id + '/data?token=' + (window.sharedToken || '') + '&access=' + (window.accessType || 'edit') + '&_=' + Date.now();
+    fetch(dataUrl, { cache: 'no-store', credentials: 'same-origin' }).then(function(r) { return r.json(); }).then(function(apiData) {
+        if (apiData && apiData.data && Array.isArray(apiData.data)) {
+            sw.data = apiData.data;
+            sw.formato = apiData.formato || {};
+            sw.last_edit_time = apiData.last_edit_time || sw.last_edit_time;
+        }
+        if (!sw.data || !Array.isArray(sw.data)) {
+            sw.data = sw.data || [];
+        }
+        doInitializeSharedWorksheetEditable(sw);
+        }).catch(function(err) {
+        // No usar datos del template si el fetch falló: pueden estar desactualizados. Reintentar una vez.
+        const retryUrl = '/tienda/api/shared/worksheet/' + sw.id + '/data?token=' + (window.sharedToken || '') + '&access=' + (window.accessType || 'edit') + '&_=' + Date.now();
+        fetch(retryUrl, { cache: 'no-store', credentials: 'same-origin' }).then(function(r2) { return r2.json(); }).then(function(apiData2) {
+            if (apiData2 && apiData2.data && Array.isArray(apiData2.data)) {
+                sw.data = apiData2.data;
+                sw.formato = apiData2.formato || {};
+                sw.last_edit_time = apiData2.last_edit_time || sw.last_edit_time;
+            }
+            doInitializeSharedWorksheetEditable(sw);
+        }).catch(function() {
+            doInitializeSharedWorksheetEditable(sw);
+        });
+    });
+}
+
+function doInitializeSharedWorksheetEditable(sw) {
+    if (sw.last_edit_time && typeof lastKnownEditTime !== 'undefined') {
+        lastKnownEditTime = sw.last_edit_time;
+    }
+    const plantilla = {
+        id: sw.id,
+        titulo: sw.title || 'Hoja compartida',
+        campos: Array.isArray(sw.fields) ? sw.fields : [],
+        datos: Array.isArray(sw.data) ? JSON.parse(JSON.stringify(sw.data)) : [],
+        formato: sw.formato || {}
+    };
+    plantilla.datosOriginales = JSON.parse(JSON.stringify(plantilla.datos));
+    plantillas = [plantilla];
+    tablaDatos = plantilla.datos;
+    selectedTemplateId = plantilla.id;
+    window.currentPlantilla = plantilla; // Para sincronización bidireccional
+    rowsPerPage = 'todos'; // Forzar todas las filas en modo compartido (sin límite de 50)
+    currentPage = 1;
+    worksheetMode = 'standard'; // En compartido solo Standard (sin filtros)
+    if (typeof plantillaCache !== 'undefined' && plantillaCache.clearAll) plantillaCache.clearAll();
+    const container = document.getElementById('worksheetTableContainer');
+    if (!container) {
+        setTimeout(function() { document.body.classList.add('loaded'); }, 50);
+        return;
+    }
+    mostrarTablaPlantilla(0, false);
+    if (typeof setupKeyboardEvents === 'function') setupKeyboardEvents();
+    if (typeof setupWorksheetScrollPersistence === 'function') setupWorksheetScrollPersistence();
+    setTimeout(function() {
+        try {
+            if (typeof setupSelectionEvents === 'function') setupSelectionEvents();
+            if (typeof setupRowDragSelection === 'function') setupRowDragSelection();
+            if (typeof initializeAllSystems === 'function') initializeAllSystems();
+            if (plantilla && plantilla.formato && typeof restoreFormats === 'function') restoreFormats(plantilla);
+            /* updateDuplicateStyles no aplica en modo compartido editable */
+        } catch (e) { console.warn('Shared edit init:', e); }
+    }, 100);
+    // ⭐ CRÍTICO: Iniciar sync explícitamente para Ver y Editar (Admin ↔ Usuario en tiempo real)
+    if (typeof initializeRealTimeSync === 'function') initializeRealTimeSync();
+    if (typeof safeCheckForRemoteChanges === 'function') {
+        setTimeout(safeCheckForRemoteChanges, 100);
+        setTimeout(safeCheckForRemoteChanges, 600);
+        setTimeout(safeCheckForRemoteChanges, 1200);
+    }
+    setTimeout(function() { document.body.classList.add('loaded'); }, 50);
+}
+
+// Búsqueda en vista compartida: filtra la tabla y re-renderiza
+function setupSharedSearchListeners() {
+    const mainSearchInput = document.getElementById('mainSearchInput');
+    const clearBtn = document.getElementById('clearMainSearch');
+    if (!mainSearchInput || !window.sharedWorksheetData || !window.sharedWorksheetData.data) return;
+
+    function filterAndRender() {
+        const query = (mainSearchInput.value || '').trim().toLowerCase();
+        let dataToShow = window.sharedWorksheetData.data;
+        if (query) {
+            dataToShow = dataToShow.filter(function(row) {
+                return row.some(function(val) { return (val + '').toLowerCase().includes(query); });
+            });
+        }
+        renderSimpleTable(dataToShow);
+        // Mostrar/ocultar botón limpiar
+        if (clearBtn) clearBtn.classList.toggle('hidden', !query);
+        // Scroll a la primera fila de resultados
+        if (query && dataToShow.length > 0) {
+            const container = document.getElementById('worksheetTableContainer');
+            const firstRow = container && container.querySelector('.shared-worksheet-table tbody tr');
+            if (firstRow) firstRow.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+    }
+
+    mainSearchInput.addEventListener('input', filterAndRender);
+    mainSearchInput.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            filterAndRender();
+        }
+    });
+
+    if (clearBtn) {
+        clearBtn.addEventListener('click', function() {
+            mainSearchInput.value = '';
+            mainSearchInput.focus();
+            filterAndRender();
+        });
+    }
+
+    // Aplicar búsqueda inicial si el campo ya tiene valor (ej. al recargar)
+    if (mainSearchInput.value.trim()) filterAndRender();
+
+    if (document.body.classList.contains('readonly')) setupReadonlySelectionRestriction();
+}
+
+// En modo lectura: restringir selección a una sola columna usando CSS (user-select: none en las demás)
+var readonlySelectionRestrictionSetup = false;
+function setupReadonlySelectionRestriction() {
+    if (!document.body.classList.contains('readonly') || !document.body.classList.contains('shared-mode')) return;
+    var container = document.getElementById('worksheetTableContainer');
+    if (!container || readonlySelectionRestrictionSetup) return;
+    readonlySelectionRestrictionSetup = true;
+
+    container.addEventListener('mousedown', function(e) {
+        var td = e.target && e.target.closest ? e.target.closest('td') : null;
+        if (!td || td.classList.contains('col-numeracion') || !container.contains(td)) {
+            container.classList.remove('column-selection-active');
+            var targets = container.querySelectorAll('.selection-target');
+            for(var i=0; i<targets.length; i++) targets[i].classList.remove('selection-target');
+            return;
+        }
+
+        var colIdx = td.getAttribute('data-col-index');
+        if (colIdx === null) return;
+
+        // Limpiar targets anteriores
+        var oldTargets = container.querySelectorAll('.selection-target');
+        for(var i=0; i<oldTargets.length; i++) oldTargets[i].classList.remove('selection-target');
+
+        // Añadir target a la columna actual
+        var newTargets = container.querySelectorAll('tbody td[data-col-index="' + colIdx + '"]');
+        for(var i=0; i<newTargets.length; i++) newTargets[i].classList.add('selection-target');
+
+        container.classList.add('column-selection-active');
+    });
 }
 
 // Inicializar sistema de presencia cuando el DOM esté listo

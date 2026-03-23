@@ -56,6 +56,61 @@ def is_user_recently_active(worksheet_id, user_identifier, max_inactive_seconds=
     
     return is_active
 
+def log_edit_activity(worksheet_id, user_identifier, ip_address=None):
+    """Registrar una edición en el log de conexiones. Actualiza registro reciente si existe (para rango hora inicio - hora fin correcto)."""
+    try:
+        from app.store.models import WorksheetConnectionLog
+        ip_address = ip_address or request.environ.get('HTTP_X_FORWARDED_FOR', request.environ.get('REMOTE_ADDR', 'Unknown'))
+        if ',' in ip_address:
+            ip_address = ip_address.split(',')[0].strip()
+        user_type = 'admin' if 'admin' in (user_identifier or '').lower() else ('user' if user_identifier and user_identifier != 'Unknown' else 'anonymous')
+        uid = user_identifier or 'Unknown'
+        current_time = datetime.utcnow()
+        
+        # Buscar registro "edited" reciente del mismo usuario (últimos 15 min) para actualizar end_time
+        cutoff = current_time - timedelta(minutes=15)
+        q = WorksheetConnectionLog.query.filter(
+            WorksheetConnectionLog.worksheet_id == worksheet_id,
+            WorksheetConnectionLog.action == 'edited',
+            WorksheetConnectionLog.connection_time >= cutoff
+        )
+        if '(' in uid:
+            base_uid = uid.split(' (')[0]
+            from sqlalchemy import or_
+            q = q.filter(or_(WorksheetConnectionLog.user_identifier == uid, WorksheetConnectionLog.user_identifier == base_uid))
+        else:
+            q = q.filter(WorksheetConnectionLog.user_identifier == uid)
+        recent_log = q.order_by(WorksheetConnectionLog.connection_time.desc()).first()
+        
+        if recent_log and recent_log.user_identifier == uid:
+            # Actualizar end_time para mostrar rango real (ej: 01:18 AM - 01:25 AM)
+            recent_log.end_time = current_time
+            recent_log.ip_address = ip_address
+            recent_log.user_agent = request.headers.get('User-Agent', 'Unknown')[:500]
+        elif recent_log and '(' in uid and recent_log.user_identifier == uid.split(' (')[0]:
+            # Admin con formato antiguo
+            recent_log.user_identifier = uid
+            recent_log.end_time = current_time
+            recent_log.ip_address = ip_address
+            recent_log.user_agent = request.headers.get('User-Agent', 'Unknown')[:500]
+        else:
+            # Nuevo registro (primera edición o pasaron >15 min)
+            new_log = WorksheetConnectionLog(
+                worksheet_id=worksheet_id,
+                user_type=user_type,
+                user_identifier=uid,
+                session_id=None,
+                action='edited',
+                ip_address=ip_address,
+                user_agent=request.headers.get('User-Agent', 'Unknown')[:500],
+                connection_time=current_time,
+                end_time=current_time
+            )
+            db.session.add(new_log)
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+
 def log_or_update_connection(worksheet_id, session_id, user_info, action='connected'):
     """Registrar o actualizar conexión en la base de datos con rangos de tiempo mejorados"""
     try:
@@ -360,12 +415,28 @@ def clear_all_logs(worksheet_id):
         return 0
 
 def fix_anonymous_logs(worksheet_id):
-    """Corregir registros anónimos con nombres reales de usuarios"""
+    """Corregir registros anónimos y placeholder 'Usuario' con nombres reales o Anónimo [IP]"""
     try:
         from app.store.models import WorksheetConnectionLog, User
         from flask import session
         
-        # Obtener registros anónimos recientes
+        fixed_count = 0
+        
+        # 1. Corregir registros con user_identifier="Usuario" (placeholder) -> Anónimo [IP]
+        placeholder_logs = WorksheetConnectionLog.query.filter_by(
+            worksheet_id=worksheet_id,
+            user_identifier='Usuario'
+        ).all()
+        for log in placeholder_logs:
+            ip = log.ip_address or 'IP desconocida'
+            if isinstance(ip, str) and ',' in ip:
+                ip = ip.split(',')[0].strip()
+            log.ip_address = ip if isinstance(ip, str) else 'IP desconocida'
+            log.user_identifier = f'Anónimo [{log.ip_address}]'
+            log.user_type = 'anonymous'
+            fixed_count += 1
+        
+        # 2. Corregir registros anónimos recientes con usuario de sesión
         anonymous_logs = WorksheetConnectionLog.query.filter_by(
             worksheet_id=worksheet_id,
             user_type='anonymous'
@@ -373,15 +444,8 @@ def fix_anonymous_logs(worksheet_id):
             WorksheetConnectionLog.connection_time >= datetime.utcnow() - timedelta(hours=1)
         ).all()
         
-        fixed_count = 0
+        current_username = session.get('username')
         for log in anonymous_logs:
-            # Intentar identificar al usuario por IP y tiempo
-            ip_address = log.ip_address
-            connection_time = log.connection_time
-            
-            # Buscar usuario que se conectó en ese momento
-            # Por ahora, usar el usuario actual de la sesión si está disponible
-            current_username = session.get('username')
             if current_username and current_username != 'admin':
                 log.user_identifier = current_username
                 log.user_type = 'user'
@@ -392,7 +456,7 @@ def fix_anonymous_logs(worksheet_id):
         
         return fixed_count
         
-    except Exception as e:
+    except Exception:
         db.session.rollback()
         return 0 
 

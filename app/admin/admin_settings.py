@@ -30,6 +30,10 @@ from app.admin.site_settings import (
 )
 from app.admin.decorators import admin_required
 
+def csrf_exempt_route(func):
+    func._csrf_exempt = True
+    return func
+
 # Constantes de configuración interna
 _ADMIN_MODULE_SIG = 0x1B3E
 _ADMIN_MODULE_HASH = 0x4A2F
@@ -106,6 +110,19 @@ def dashboard():
         site_settings=site_settings_dict, # <-- PASAR EL DICCIONARIO A LA PLANTILLA
         admin_user=admin_user
     )
+
+@admin_bp.route("/toggle_imap_management_ajax", methods=["POST"])
+@csrf_exempt_route
+@admin_required
+def toggle_imap_management_ajax():
+    """Activa/desactiva el Observador IMAP (observer_enabled) usado por el job de Buzón/Conexiones."""
+    try:
+        current = get_site_setting("observer_enabled", "1")
+        new_val = "0" if current == "1" else "1"
+        set_site_setting("observer_enabled", new_val)
+        return jsonify({"success": True, "enabled": new_val == "1"})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
 
 @admin_bp.route("/filters")
 @admin_required

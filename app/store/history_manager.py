@@ -197,4 +197,149 @@ def validate_change(change: Dict[str, Any]) -> bool:
     
     return True
 
- 
+
+def shift_history_on_row_insert(worksheet_id: int, insert_at: int, direction: str = 'above') -> int:
+    """
+    Desplaza las posiciones del historial cuando se inserta una fila.
+    above: filas con row >= insert_at se desplazan +1
+    below: filas con row > insert_at se desplazan +1
+    
+    Returns:
+        int: Número de cambios actualizados
+    """
+    try:
+        if worksheet_id not in _global_history_storage:
+            return 0
+        count = 0
+        for change in _global_history_storage[worksheet_id]:
+            cell_key = change.get('cellKey', '')
+            if '-' in cell_key:
+                parts = cell_key.split('-')
+                if len(parts) >= 2:
+                    try:
+                        row = int(parts[0])
+                        col = int(parts[1])
+                        if direction == 'above' and row >= insert_at:
+                            change['cellKey'] = f"{row + 1}-{col}"
+                            count += 1
+                        elif direction == 'below' and row > insert_at:
+                            change['cellKey'] = f"{row + 1}-{col}"
+                            count += 1
+                    except (ValueError, IndexError):
+                        pass
+        return count
+    except Exception:
+        return 0
+
+
+def shift_history_on_col_insert(worksheet_id: int, insert_at: int, direction: str = 'before') -> int:
+    """
+    Desplaza las posiciones del historial cuando se inserta una columna.
+    before: columnas con col >= insert_at se desplazan +1
+    after: columnas con col > insert_at se desplazan +1
+    
+    Returns:
+        int: Número de cambios actualizados
+    """
+    try:
+        if worksheet_id not in _global_history_storage:
+            return 0
+        count = 0
+        for change in _global_history_storage[worksheet_id]:
+            cell_key = change.get('cellKey', '')
+            if '-' in cell_key:
+                parts = cell_key.split('-')
+                if len(parts) >= 2:
+                    try:
+                        row = int(parts[0])
+                        col = int(parts[1])
+                        if direction == 'before' and col >= insert_at:
+                            change['cellKey'] = f"{row}-{col + 1}"
+                            count += 1
+                        elif direction == 'after' and col > insert_at:
+                            change['cellKey'] = f"{row}-{col + 1}"
+                            count += 1
+                    except (ValueError, IndexError):
+                        pass
+        return count
+    except Exception:
+        return 0
+
+
+def shift_history_on_col_delete(worksheet_id: int, col_idx: int) -> int:
+    """
+    Ajusta el historial cuando se elimina una columna.
+    - Elimina entradas donde col == col_idx (celda ya no existe)
+    - Desplaza -1 las entradas donde col > col_idx
+
+    Returns:
+        int: Número de cambios actualizados/eliminados
+    """
+    try:
+        if worksheet_id not in _global_history_storage:
+            return 0
+        count = 0
+        to_remove = []
+        for i, change in enumerate(_global_history_storage[worksheet_id]):
+            cell_key = change.get('cellKey', '')
+            if '-' in cell_key:
+                parts = cell_key.split('-')
+                if len(parts) >= 2:
+                    try:
+                        row = int(parts[0])
+                        col = int(parts[1])
+                        if col == col_idx:
+                            to_remove.append(i)
+                            count += 1
+                        elif col > col_idx:
+                            change['cellKey'] = f"{row}-{col - 1}"
+                            count += 1
+                    except (ValueError, IndexError):
+                        pass
+        for i in reversed(to_remove):
+            _global_history_storage[worksheet_id].pop(i)
+        return count
+    except Exception:
+        return 0
+
+
+def shift_history_on_row_delete(worksheet_id: int, deleted_row_indices: list) -> int:
+    """
+    Ajusta el historial cuando se eliminan filas.
+    - Elimina entradas donde row está en deleted_row_indices
+    - Para entradas con row > cada índice eliminado, desplaza row hacia abajo
+    deleted_row_indices debe estar ordenado de mayor a menor (ej: [7, 5, 2])
+
+    Returns:
+        int: Número de cambios actualizados/eliminados
+    """
+    try:
+        if worksheet_id not in _global_history_storage:
+            return 0
+        deleted_set = set(deleted_row_indices)
+        count = 0
+        to_remove = []
+        for i, change in enumerate(_global_history_storage[worksheet_id]):
+            cell_key = change.get('cellKey', '')
+            if '-' in cell_key:
+                parts = cell_key.split('-')
+                if len(parts) >= 2:
+                    try:
+                        row = int(parts[0])
+                        col = int(parts[1])
+                        if row in deleted_set:
+                            to_remove.append(i)
+                            count += 1
+                        else:
+                            # Cuántos índices eliminados son menores que row
+                            shift = sum(1 for d in deleted_row_indices if d < row)
+                            if shift > 0:
+                                change['cellKey'] = f"{row - shift}-{col}"
+                                count += 1
+                    except (ValueError, IndexError):
+                        pass
+        for i in reversed(to_remove):
+            _global_history_storage[worksheet_id].pop(i)
+        return count
+    except Exception:
+        return 0

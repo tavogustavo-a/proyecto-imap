@@ -170,12 +170,10 @@
         </div>
     </div>
     
-    <!-- Datos de la plantilla compartida (usando data attribute para JSON grande - cumple con CSP) -->
-    <div id="sharedWorksheetDataContainer" 
-         data-shared-worksheet-data='{"id":{{ worksheet.id }},"title":"{{ worksheet.title|e }}","fields":{{ worksheet.fields | tojson }},"data":{{ data | tojson }},"dataTotal":{{ data | length }},"formato":{{ formato | tojson }}}}'
-         class="sr-only"></div>
+    <!-- Datos de la plantilla compartida (script JSON evita problemas con comillas/apóstrofes en data attribute) -->
+    <script type="application/json" id="sharedWorksheetDataJson">{{ {"id": worksheet.id, "title": worksheet.title, "fields": worksheet.fields, "data": data, "dataTotal": data|length, "formato": formato, "last_edit_time": last_edit_time|default(none)} | tojson }}</script>
     
     <!-- Scripts necesarios -->
-    <script src="{{ url_for('store_bp.static', filename='js/admin_work_sheets.js') }}" defer></script>
+    <script src="{{ url_for('store_bp.static', filename='js/admin_work_sheets.js') }}?v=sync-minimal" defer></script>
 </body>
 </html> 

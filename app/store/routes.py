@@ -4127,22 +4127,29 @@ def shared_worksheet_access(worksheet_id):
         elif access_type == 'edit' and permission.access_type not in ['edit', 'users']:
             return "Tipo de acceso no válido", 400
         
-        # Obtener datos de la worksheet
+        # Obtener datos de la worksheet (expire_all evita caché de SQLAlchemy entre vistas)
+        db.session.expire_all()
         worksheet_data = WorksheetData.query.filter_by(template_id=worksheet_id).first()
-        data = worksheet_data.data if worksheet_data else []
-        formato = worksheet_data.formato if worksheet_data else {}
+        raw_data = worksheet_data.data if worksheet_data else []
+        raw_formato = worksheet_data.formato if worksheet_data else {}
+        last_edit_time = worksheet_data.last_edit_time.isoformat() if (worksheet_data and worksheet_data.last_edit_time) else None
         
-        # Limitar datos para evitar bloqueos del navegador
-        original_data_length = len(data)
-        if len(data) > 50:
-            data = data[:50]  # Solo primeras 50 filas
-        
-        # Pasar información del total para mostrar al usuario
-        data_info = {
-            'shown': len(data),
-            'total': original_data_length,
-            'limited': original_data_length > 50
-        }
+        # Normalizar a tipos JSON-serializables (evita 500 en tojson del template)
+        def _to_json_safe(obj):
+            if obj is None: return None
+            if isinstance(obj, (str, int, float, bool)): return obj
+            if isinstance(obj, (datetime,)):
+                return obj.isoformat() if hasattr(obj, 'isoformat') else str(obj)
+            if hasattr(obj, '__float__') and callable(getattr(obj, '__float__', None)):
+                try: return float(obj)
+                except (TypeError, ValueError): return str(obj)
+            if hasattr(obj, '__iter__') and not isinstance(obj, (str, dict)):
+                return [_to_json_safe(x) for x in obj]
+            if isinstance(obj, dict):
+                return {str(k): _to_json_safe(v) for k, v in obj.items()}
+            return str(obj)
+        data = _to_json_safe(raw_data) if raw_data else []
+        formato = _to_json_safe(raw_formato) if raw_formato else {}
         
         # Determinar si es solo lectura
         is_readonly = access_type == 'readonly'
@@ -4165,6 +4172,7 @@ def shared_worksheet_access(worksheet_id):
                 worksheet=worksheet,
                 data=data,
                 formato=formato,
+                last_edit_time=last_edit_time,
                 is_readonly=is_readonly,
                 access_type=access_type,
                 token=token,
@@ -4176,9 +4184,13 @@ def shared_worksheet_access(worksheet_id):
             )
             return result
         except Exception as template_error:
-            return f"Error renderizando template: {str(template_error)}", 500
+            import traceback
+            current_app.logger.error(f"shared_worksheet template error: {traceback.format_exc()}")
+            return f"Error renderizando: {str(template_error)}", 500
         
     except Exception as e:
+        import traceback
+        current_app.logger.error(f"shared_worksheet_access error: {traceback.format_exc()}")
         return f"Error: {str(e)}", 500
 
 @csrf_exempt_route
@@ -4218,19 +4230,45 @@ def get_shared_worksheet_data(worksheet_id):
         elif access_type == 'edit' and permission.access_type not in ['edit', 'users']:
             return jsonify({'error': 'Acceso no autorizado'}), 403
         
-        
-        # Obtener datos
+        # Evitar caché de SQLAlchemy para devolver datos actuales
+        db.session.expire_all()
         worksheet_data = WorksheetData.query.filter_by(template_id=worksheet_id).first()
         if not worksheet_data:
-            return jsonify({'data': [], 'formato': {}})
+            return jsonify({'data': [], 'formato': {}, 'last_edit_time': None})
         
+        current_time = worksheet_data.last_edit_time
+        current_timestamp = current_time.isoformat() if current_time else None
         return jsonify({
             'data': worksheet_data.data,
-            'formato': worksheet_data.formato or {}
+            'formato': worksheet_data.formato or {},
+            'last_edit_time': current_timestamp
         })
         
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+def _apply_worksheet_changes_for_shared(current_data, changes, num_cols):
+    """Aplica cambios [[row, col, value], ...] sobre current_data (mismo formato que api.py)"""
+    if not changes:
+        return current_data
+    result = list(current_data) if current_data else []
+    for item in changes:
+        if not isinstance(item, (list, tuple)) or len(item) < 3:
+            continue
+        r, c, val = int(item[0]), int(item[1]), item[2]
+        if r < 0 or c < 0 or (num_cols > 0 and c >= num_cols):
+            continue
+        while len(result) <= r:
+            result.append([''] * max(num_cols, 1))
+        row = result[r]
+        if not isinstance(row, list):
+            row = [str(row)] if row else []
+        while len(row) <= c:
+            row.append('')
+        row[c] = val
+        result[r] = row
+    return result
+
 
 @csrf_exempt_route
 @store_bp.route('/api/shared/worksheet/<int:worksheet_id>/save', methods=['POST'])
@@ -4266,12 +4304,20 @@ def save_shared_worksheet_data(worksheet_id):
                 # Continuar - el token público sigue siendo válido
                 pass
         
-        # Obtener datos del request
+        # Obtener datos del request (soporta data completo o changes para merge)
         data = request.get_json()
         rows = data.get('data')
+        changes = data.get('changes')
+        db.session.expire_all()  # Leer datos actuales desde BD para merge correcto
         formato = data.get('formato', {})
-        
-        if not isinstance(rows, list):
+        template = WorksheetTemplate.query.get(worksheet_id)
+        template_cols = max(len(template.fields), 1) if (template and template.fields) else 1
+
+        if changes is not None and isinstance(changes, list):
+            worksheet_data_obj = WorksheetData.query.filter_by(template_id=worksheet_id).first()
+            current = (worksheet_data_obj.data if worksheet_data_obj and worksheet_data_obj.data else []) or []
+            rows = _apply_worksheet_changes_for_shared(current, changes, template_cols)
+        elif not isinstance(rows, list):
             return jsonify({'error': 'Datos inválidos'}), 400
         
         # ⭐ NUEVO: Registrar información del editor para el historial
@@ -4349,6 +4395,8 @@ def check_shared_worksheet_changes(worksheet_id):
         if not permission:
             return jsonify({'error': 'Token inválido'}), 403
         
+        # Evitar caché de SQLAlchemy para devolver datos actuales
+        db.session.expire_all()
         # Obtener datos actuales
         worksheet_data = WorksheetData.query.filter_by(template_id=worksheet_id).first()
         

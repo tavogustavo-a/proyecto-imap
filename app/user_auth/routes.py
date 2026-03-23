@@ -113,8 +113,11 @@ def login():
     """
     Pantalla de login para usuarios normales (o sub-usuarios).
     """
-    # Si ya está logueado, redirigir al home
-    if "logged_in" in session and "is_user" in session:
+    # Si llegamos desde logout, forzar limpieza y mostrar login (no redirigir a Códigos)
+    if request.args.get("from_logout"):
+        session.clear()
+    # Si ya está logueado y NO venimos de logout, redirigir al home
+    elif "logged_in" in session and "is_user" in session:
         return redirect(url_for("main_bp.home"))
 
     if request.method == "GET":
@@ -159,6 +162,7 @@ def login():
         
         session.clear()
         session["logged_in"] = True
+        session["username"] = user.username
         session["user_id"] = user.id
         session["is_user"] = True
         session["session_token"] = session_token  # ✅ Token único de sesión
@@ -211,16 +215,16 @@ def login():
 
 @user_auth_bp.route("/logout")
 def logout():
-    if "logged_in" in session and "is_user" in session:
-        # ✅ SEGURIDAD: Revocar token de sesión antes de limpiar
+    # Siempre limpiar sesión cuando el usuario hace logout explícito
+    if session.get("logged_in") or session.get("is_user") or session.get("user_id"):
         from app.auth.session_tokens import revoke_session_token
         session_token = session.get("session_token")
         if session_token:
             revoke_session_token(session_token)
-        
         session.clear()
         flash("Sesión de usuario cerrada.", "info")
-    return redirect(url_for("user_auth_bp.login"))
+    # Redirigir a login con ?from=logout para forzar pantalla de login (evita redirect a Códigos)
+    return redirect(url_for("user_auth_bp.login", from_logout=1))
 
 @user_auth_bp.route("/manage_my_page/<int:server_id>", methods=["GET"])
 @login_required

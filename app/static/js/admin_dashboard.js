@@ -115,37 +115,36 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    // Funcionalidad del botón ON/OFF para gestión IMAP
+    // Funcionalidad del botón ON/OFF para gestión IMAP (Observador - observer_enabled)
     const toggleBtn = document.getElementById('toggleImapManagementBtn');
     
     if (toggleBtn) {
         toggleBtn.addEventListener('click', function() {
-            const isActive = this.getAttribute('data-enabled') === 'false'; // OFF significa activa
-            
-            // Limpiar contenido existente
-            while (this.firstChild) {
-                this.removeChild(this.firstChild);
-            }
-            
-            if (isActive) {
-                // Cambiar a ON (inactiva)
-                this.setAttribute('data-enabled', 'true');
-                this.className = 'btn-red';
-                const icon = document.createElement('i');
-                icon.className = 'fas fa-power-off';
-                this.appendChild(icon);
-                this.appendChild(document.createTextNode(' ON'));
-            } else {
-                // Cambiar a OFF (activa)
-                this.setAttribute('data-enabled', 'false');
-                this.className = 'btn-green';
-                const icon = document.createElement('i');
-                icon.className = 'fas fa-power-off';
-                this.appendChild(icon);
-                this.appendChild(document.createTextNode(' OFF'));
-            }
-            
-            // Aquí puedes agregar la lógica para activar/desactivar la gestión IMAP
+            const btn = this;
+            if (btn.disabled) return;
+            btn.disabled = true;
+            const isActive = btn.getAttribute('data-enabled') === 'false'; // OFF = activo
+            const newEnabled = !isActive;
+
+            fetch('/admin/toggle_imap_management_ajax', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
+                body: JSON.stringify({}),
+                credentials: 'same-origin'
+            })
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                if (data.success) {
+                    const active = data.enabled;
+                    btn.setAttribute('data-enabled', active ? 'false' : 'true');
+                    btn.className = active ? 'btn-green' : 'btn-red';
+                    btn.innerHTML = '<i class="fas fa-power-off"></i> ' + (active ? 'OFF' : 'ON');
+                    const obsCheck = document.getElementById('observerEnabled');
+                    if (obsCheck) { obsCheck.checked = active; }
+                }
+            })
+            .catch(function() { })
+            .finally(function() { btn.disabled = false; });
         });
     }
 

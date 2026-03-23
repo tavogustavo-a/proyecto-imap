@@ -266,7 +266,7 @@ class WorksheetData(db.Model):
     pass
 
 
-# ⭐ Historial de cambios por celda para Ctrl+Z / Ctrl+Y (estilo Excel, 20 por celda)
+# ⭐ Historial de cambios por celda para Ctrl+Z / Ctrl+Y (estilo Excel, 15 por celda)
 class WorksheetCellHistory(db.Model):
     __tablename__ = 'worksheet_cell_history'
     id = db.Column(db.Integer, primary_key=True)

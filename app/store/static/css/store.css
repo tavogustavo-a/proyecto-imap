@@ -8390,6 +8390,11 @@ html, body {
     opacity: 0.8;
   }
   
+  /* Reducir espacio entre controles y tabla de hojas de cálculo */
+  #worksheetTableContainer.mt-4 {
+    margin-top: 0.5rem !important;
+  }
+  
   #worksheetTableContainer .table-responsive {
     width: 100%;
     overflow-x: auto !important;
@@ -9449,18 +9454,6 @@ html, body {
     padding: 0 1px !important;
   }
   
-  /* ⭐ OPTIMIZADO: Campo let compacto en modo copiar */
-  body.worksheet-mode-copiar #worksheetTableContainer th.col-let,
-  body.worksheet-mode-copiar #worksheetTableContainer td.col-let {
-    width: 35px !important;
-    min-width: 35px !important;
-    max-width: 35px !important;
-    white-space: nowrap;
-    overflow: hidden !important;
-    text-overflow: clip !important;
-    font-size: 12px !important;
-  }
-  
   body.worksheet-mode-standard #worksheetTableContainer th.col-let,
   body.worksheet-mode-standard #worksheetTableContainer td.col-let {
     width: 35px !important;
@@ -9494,47 +9487,6 @@ html, body {
   body.worksheet-mode-standard #worksheetTableContainer td.col-links,
   body.worksheet-mode-standard #worksheetTableContainer td.col-informacion-adicional {
     padding: 0 1px !important;
-  }
-  
-  /* ⭐ NUEVO: Inputs al 100% en modo copiar (sin iconos de copiar) */
-  body.worksheet-mode-copiar #worksheetTableContainer td.col-correo input,
-  body.worksheet-mode-copiar #worksheetTableContainer td.col-contraseña input,
-  body.worksheet-mode-copiar #worksheetTableContainer td.col-links input,
-  body.worksheet-mode-copiar #worksheetTableContainer td input[type="text"],
-  body.worksheet-mode-copiar #worksheetTableContainer td input[type="number"] {
-    width: 100% !important;
-    max-width: 100% !important;
-    min-width: 100% !important;
-    box-sizing: border-box !important;
-    border: none !important;
-    padding: 0 4px !important;
-    margin: 0 !important;
-    height: 26px !important;
-    line-height: 26px !important;
-  }
-  
-  /* ⭐ NUEVO: Celdas con padding mínimo en modo copiar */
-  body.worksheet-mode-copiar #worksheetTableContainer td.col-correo,
-  body.worksheet-mode-copiar #worksheetTableContainer td.col-contraseña,
-  body.worksheet-mode-copiar #worksheetTableContainer td.col-links {
-    padding: 0 1px !important;
-  }
-  
-  /* Estilos específicos para el input del campo numero en modo copiar */
-  body.worksheet-mode-copiar #worksheetTableContainer td.col-numeracion input,
-  body.worksheet-mode-copiar #worksheetTableContainer td.col-numeracion .cell-numero {
-    width: 100% !important;
-    min-width: 100% !important;
-    max-width: 100% !important;
-    padding: 0 2px !important;
-    margin: 0 !important;
-    box-sizing: border-box !important;
-    text-align: center !important;
-    border: none !important;
-    background: transparent !important;
-    font-size: 12px !important;
-    height: 22px !important;
-    line-height: 22px !important;
   }
   
   .config-container {
@@ -10643,7 +10595,8 @@ html, body {
     padding-right: 2rem !important;
   }
   
-  /* Estilos para iconos de encabezados de tabla */
+  /* Estilos unificados para iconos de encabezados (engranaje y filtro) */
+  .th-gear-icon,
   .th-filter-icon {
     color: #007bff;
     cursor: pointer;
@@ -10651,15 +10604,9 @@ html, body {
     font-size: 14px;
   }
   
+  .th-gear-icon:hover,
   .th-filter-icon:hover {
     color: #0056b3;
-  }
-  
-  .th-gear-icon {
-    color: #007bff;
-    cursor: pointer;
-    margin-left: -0.3rem;
-    font-size: 14px;
   }
   
   .th-gear-icon i {
@@ -10792,10 +10739,6 @@ html, body {
     display: none !important;
   }
   
-  .th-gear-icon:hover {
-    color: #0056b3;
-  }
-  
   /* Responsive para iconos de encabezados */
   @media (max-width: 700px) {
     .th-filter-icon, .th-gear-icon {
@@ -10830,7 +10773,6 @@ html, body {
 body.shared-mode.theme-active.tema1 {
   visibility: hidden;
   opacity: 0;
-  transition: opacity 0.3s ease-in-out;
 }
 
 body.shared-mode.theme-active.tema1.loaded {
@@ -10851,39 +10793,34 @@ body.shared-mode.theme-active.tema1.loaded {
   box-shadow: 0 2px 4px rgba(0,0,0,0.1);
 }
 
-/* Asegurar que el fondo tema1 funcione en modo compartido */
+/* Asegurar que el fondo tema1 funcione en modo compartido (usa /static del app principal) */
 body.shared-mode.theme-active.tema1 {
-  background: url("../images/tema1.png") no-repeat center center fixed !important;
+  background: url("/static/images/tema1.png") no-repeat center center fixed !important;
   background-size: cover !important;
   background-attachment: fixed !important;
+  background-repeat: no-repeat !important;
+  background-position: center center !important;
   min-height: 100vh !important;
+  font-family: sans-serif !important;
 }
 
 /* Forzar fondo para todos los temas en modo compartido */
 body.shared-mode.theme-active.tema2 {
-  background: url("../images/tema2.png") no-repeat center center fixed !important;
+  background: url("/static/images/tema2.png") no-repeat center center fixed !important;
   background-size: cover !important;
   background-attachment: fixed !important;
   min-height: 100vh !important;
 }
 
 body.shared-mode.theme-active.tema3 {
-  background: url("../images/tema3.png") no-repeat center center fixed !important;
+  background: url("/static/images/tema3.png") no-repeat center center fixed !important;
   background-size: cover !important;
   background-attachment: fixed !important;
   min-height: 100vh !important;
 }
 
-/* Asegurar que todos los elementos base funcionen - SOLO para hojas compartidas */
-body.shared-mode.theme-active.tema1 {
-  font-family: sans-serif !important;
-  min-height: 100vh !important;
-}
-
 body.shared-mode.theme-active.tema1 .container {
-  width: 95.5% !important;
   max-width: 1200px !important;
-  margin: 1rem auto !important;
 }
 
 body.shared-mode.theme-active.tema1 .worksheet-panel {
@@ -10893,7 +10830,7 @@ body.shared-mode.theme-active.tema1 .worksheet-panel {
   box-shadow: 0 2px 12px rgba(0,0,0,0.07) !important;
   border-radius: 16px !important;
   padding: 0.75rem !important;
-  max-width: 95vw !important;
+  max-width: 100vw !important;
 }
 
 /* Ocultar elementos de navegación en modo compartido */
@@ -10919,6 +10856,37 @@ body.shared-mode.readonly .action-btn:not(.copy-btn) {
   display: none !important;
 }
 
+/* En modo compartido (readonly y editable), permitir seleccionar texto en la tabla */
+body.shared-mode #worksheetTableContainer td,
+body.shared-mode #worksheetTableContainer th,
+body.shared-mode #worksheetTableContainer input,
+body.shared-mode #worksheetTableContainer textarea {
+  user-select: text !important;
+  -webkit-user-select: text !important;
+  -moz-user-select: text !important;
+  -ms-user-select: text !important;
+}
+/* Modo lectura: permitir selección de texto en celdas de datos para copiar */
+body.shared-mode.readonly #worksheetTableContainer td,
+body.shared-mode.readonly #worksheetTableContainer th {
+  cursor: text;
+}
+/* Encabezados y numeración de filas NO seleccionables para copiar */
+body.shared-mode.readonly #worksheetTableContainer th,
+body.shared-mode.readonly #worksheetTableContainer td.col-numeracion {
+  user-select: none !important;
+  -webkit-user-select: none !important;
+  -moz-user-select: none !important;
+  -ms-user-select: none !important;
+  cursor: default;
+}
+/* Selección de columna exclusiva en modo lectura */
+body.shared-mode.readonly #worksheetTableContainer.column-selection-active tbody td:not(.selection-target) {
+  user-select: none !important;
+  -webkit-user-select: none !important;
+  -moz-user-select: none !important;
+  -ms-user-select: none !important;
+}
 /* FORZAR la visibilidad de botones de funcionalidad en modo compartido */
 body.shared-mode.theme-active.tema1 #btnAbrirAgregarTabla,
 body.shared-mode.theme-active.tema1 #btnDividirTexto,
@@ -10949,14 +10917,6 @@ body.shared-mode.theme-active.tema1 .d-flex.justify-content-center.align-items-c
 /* Forzar el fondo a aplicarse inmediatamente */
 html, body {
   background-attachment: fixed !important;
-}
-
-/* Asegurar que el fondo se mantenga */
-body.shared-mode.theme-active.tema1 {
-  background-attachment: fixed !important;
-  background-repeat: no-repeat !important;
-  background-position: center center !important;
-  background-size: cover !important;
 }
 
 /* ===============================================
@@ -10994,6 +10954,11 @@ body.shared-mode.theme-active.tema1 {
     font-weight: bold;
     min-width: 18px;
     text-align: center;
+}
+
+/* Ocultar botón de registro de conexiones en modo compartido (solo admin lo ve) */
+body.shared-mode .connection-logs-btn {
+    display: none !important;
 }
 
 /* ⭐ NUEVO: Estilos para modal de registros de conexión */
@@ -13828,15 +13793,6 @@ body .card.product-texture-bg::before,
    ESTILOS PARA HOJAS DE CÁLCULO COMPARTIDAS
    ============================================ */
 
-/* Contenedor principal de la tabla compartida */
-.shared-worksheet-container {
-  background: white;
-  padding: 20px;
-  border: 3px solid #4CAF50;
-  border-radius: 10px;
-  margin: 20px 0;
-}
-
 /* Título de la hoja compartida */
 .shared-worksheet-title {
   color: #4CAF50;
@@ -13852,63 +13808,6 @@ body .card.product-texture-bg::before,
   color: #666;
   margin-bottom: 20px;
   font-size: 0.9rem;
-}
-
-/* Contenedor de la tabla con scroll */
-.shared-worksheet-table-container {
-  overflow-x: auto;
-  max-height: 70vh;
-  border: 2px solid #ddd;
-  border-radius: 5px;
-}
-
-/* Tabla compartida */
-.shared-worksheet-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-family: Arial, sans-serif;
-  min-width: 800px;
-}
-
-/* Encabezado de la tabla */
-.shared-worksheet-thead {
-  position: sticky;
-  top: 0;
-  background: white;
-  z-index: 10;
-}
-
-.shared-worksheet-header-row {
-  background: #4CAF50;
-}
-
-.shared-worksheet-header-cell {
-  border: 2px solid #333;
-  padding: 12px;
-  text-align: center;
-  font-weight: bold;
-  color: white;
-  min-width: 120px;
-}
-
-/* Filas de datos */
-.shared-worksheet-row-even {
-  background: #f9f9f9;
-  border-bottom: 1px solid #eee;
-}
-
-.shared-worksheet-row-odd {
-  background: #ffffff;
-  border-bottom: 1px solid #eee;
-}
-
-.shared-worksheet-cell {
-  border: 1px solid #ddd;
-  padding: 8px;
-  text-align: left;
-  vertical-align: top;
-  word-wrap: break-word;
-  max-width: 200px;
 }
 
 /* Mensaje de estado */
@@ -13935,6 +13834,53 @@ body .card.product-texture-bg::before,
 .shared-worksheet-error h3 {
   margin: 0;
   font-size: 1.2rem;
+}
+
+/* Ajustes móviles para modo compartido (solo ver) */
+@media (max-width: 768px) {
+  body.shared-mode .worksheet-panel {
+    min-height: auto !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding: 0.5rem !important;
+    box-sizing: border-box !important;
+    overflow: hidden !important;
+  }
+
+  body.shared-mode #worksheetTableContainer {
+    width: 100% !important;
+    max-width: 100% !important;
+    overflow-x: hidden !important;
+  }
+
+  .shared-worksheet-container {
+    margin: 0.5rem 0 !important;
+    padding: 0.5rem !important;
+    box-sizing: border-box !important;
+  }
+
+  .shared-worksheet-table-container {
+    width: 100% !important;
+    max-width: 100% !important;
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .shared-worksheet-table {
+    min-width: 100% !important;
+    width: 100% !important;
+    table-layout: fixed;
+  }
+
+  .shared-worksheet-header-cell,
+  .shared-worksheet-cell {
+    min-width: 0 !important;
+    max-width: none !important;
+    word-break: break-word;
+    font-size: 12px;
+    padding: 6px;
+  }
 }
 
 /* ============================================
@@ -14613,6 +14559,58 @@ body .card.product-texture-bg::before,
 /* Clase para search-container con position relative */
 .search-container-relative {
   position: relative;
+}
+
+/* Ajuste final móvil para vista compartida solo lectura */
+@media (max-width: 768px) {
+  body.shared-mode {
+    overflow-x: hidden !important;
+  }
+
+  body.shared-mode.theme-active.tema1 .container {
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+    box-sizing: border-box !important;
+  }
+
+  body.shared-mode.readonly .container.container-max-width-900.store-light.worksheet-panel {
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding: 8px !important;
+    box-sizing: border-box !important;
+    min-height: auto !important;
+    overflow: hidden !important;
+    border-radius: 8px !important;
+  }
+
+  body.shared-mode.readonly #worksheetTableContainer {
+    width: 100% !important;
+    max-width: 100% !important;
+    box-sizing: border-box !important;
+  }
+
+  body.shared-mode.readonly .table-responsive {
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch;
+    width: 100% !important;
+  }
+
+  body.shared-mode.readonly .table {
+    min-width: 100% !important;
+    width: 100% !important;
+    table-layout: auto !important;
+  }
+
+  body.shared-mode.readonly th,
+  body.shared-mode.readonly td {
+    padding: 6px !important;
+    font-size: 12px !important;
+    word-break: break-word !important;
+  }
 }
 
 /* Clases para progress bar de limpieza */
