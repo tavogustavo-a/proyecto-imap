@@ -291,61 +291,6 @@
         <div class="smtp-field">
           <strong>Servidor SMTP:</strong>
           <code>mail.tu-dominio.com:25</code>
-          <button type="button" class="btn btn-sm btn-green ml-10" data-action="test-smtp">
-            <i class="fas fa-vial"></i> Probar SMTP
-          </button>
-          <button type="button" class="btn btn-sm btn-blue ml-5" data-action="smtp-status">
-            <i class="fas fa-heartbeat"></i> Estado SMTP
-          </button>
-        </div>
-      </div>
-
-      <!-- Nueva sección de Verificación de Conectividad -->
-      <div class="dns-section">
-        <h5><i class="fas fa-network-wired"></i> Verificación de Conectividad</h5>
-        <div class="connectivity-checks">
-          
-          <div class="check-item">
-            <div class="check-header">
-              <strong>1. IP Pública Actual</strong>
-              <button type="button" class="btn btn-sm btn-blue" id="btnCheckPublicIP">
-                <i class="fas fa-sync"></i> Verificar IP
-              </button>
-            </div>
-            <div class="check-result">
-              <code id="publicIPResult">Haz clic para verificar...</code>
-            </div>
-          </div>
-
-          <div class="check-item">
-            <div class="check-header">
-              <strong>2. Verificación DNS Manual</strong>
-              <div class="manual-check-links">
-                <a href="https://mxtoolbox.com/SuperTool.aspx" target="_blank" class="btn btn-sm btn-blue">
-                  <i class="fas fa-external-link-alt"></i> MX Toolbox
-                </a>
-                <a href="https://dnschecker.org/" target="_blank" class="btn btn-sm btn-green">
-                  <i class="fas fa-globe"></i> DNS Checker
-                </a>
-              </div>
-            </div>
-            <div class="check-result">
-              <code>Usa herramientas externas confiables para verificar DNS</code>
-            </div>
-          </div>
-
-          <div class="check-item">
-            <div class="check-header">
-              <strong>3. Servidor SMTP</strong>
-              <button type="button" class="btn btn-sm btn-blue" data-action="check-smtp-server">
-                <i class="fas fa-server"></i> Verificar SMTP
-              </button>
-            </div>
-            <div class="check-result">
-              <code id="smtpServerResult">Haz clic para verificar...</code>
-            </div>
-          </div>
-
         </div>
       </div>
 
@@ -502,31 +447,6 @@
         </div>
       </div>
 
-      <div class="dns-section">
-        <h5><i class="fas fa-clock"></i> Tiempo de Propagación</h5>
-        <div class="propagation-info">
-          <div class="time-estimate">
-            <i class="fas fa-hourglass-half"></i>
-            <span><strong>24-48 horas</strong> para propagación completa</span>
-          </div>
-          <div class="time-estimate">
-            <i class="fas fa-flash"></i>
-            <span><strong>15-30 minutos</strong> para cambios básicos</span>
-          </div>
-        </div>
-        <small class="text-muted">Los cambios DNS pueden tardar en aplicarse globalmente</small>
-      </div>
-
-
-      <div class="dns-section">
-        <h5><i class="fas fa-vial"></i> Verificar Configuración</h5>
-        <div class="verification-tools">
-          <div class="tool-item">
-            <strong>Comando para verificar MX:</strong>
-            <code>nslookup -type=MX tudominio.com</code>
-          </div>
-        </div>
-      </div>
     </div>
   </div>
 </div>

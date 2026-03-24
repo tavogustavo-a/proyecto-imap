@@ -1922,21 +1922,6 @@ document.addEventListener('DOMContentLoaded', function() {
     });
   });
 
-  // Verificar servidor SMTP
-  document.querySelectorAll('[data-action="check-smtp-server"]').forEach(element => {
-    element.addEventListener('click', function() {
-      checkSMTPServer();
-    });
-  });
-
-  // Botón para verificar IP pública
-  const btnCheckPublicIP = document.getElementById('btnCheckPublicIP');
-  if (btnCheckPublicIP) {
-    btnCheckPublicIP.addEventListener('click', function() {
-      checkPublicIP();
-    });
-  }
-
   // Seleccionar todos los checkboxes
   document.querySelectorAll('[data-action="select-all"]').forEach(button => {
     button.addEventListener('click', function() {
@@ -2284,46 +2269,6 @@ document.addEventListener('DOMContentLoaded', function() {
   // Aplicar colores dinámicos a etiquetas
   applyDynamicColors();
 });
-
-// Funciones para Verificación de SMTP
-function checkPublicIP() {
-  const resultElement = document.getElementById('publicIPResult');
-  resultElement.textContent = 'Verificando...';
-  resultElement.className = '';
-  
-  fetch('/admin/email-buzon/api/public-ip')
-    .then(response => response.json())
-    .then(data => {
-      resultElement.textContent = data.ip || 'Error';
-      resultElement.className = data.ip ? 'success' : 'error';
-    })
-    .catch(error => {
-      resultElement.textContent = 'Error obteniendo IP: ' + error.message;
-      resultElement.className = 'error';
-    });
-}
-
-function checkSMTPServer() {
-  const resultElement = document.getElementById('smtpServerResult');
-  resultElement.textContent = 'Verificando servidor SMTP...';
-  resultElement.className = '';
-  
-  fetch('/admin/smtp/status')
-    .then(response => response.json())
-    .then(data => {
-      if (data.success) {
-        resultElement.textContent = `✅ Servidor SMTP activo - Puerto 25 funcionando`;
-        resultElement.className = 'success';
-      } else {
-        resultElement.textContent = 'Servidor SMTP con errores: ' + data.message;
-        resultElement.className = 'warning';
-      }
-    })
-    .catch(error => {
-      resultElement.textContent = '❌ Servidor SMTP no responde: ' + error.message;
-      resultElement.className = 'error';
-    });
-}
 
 // Función para aplicar colores dinámicos
 function applyDynamicColors() {
