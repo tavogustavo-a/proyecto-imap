@@ -1359,3 +1359,17 @@ def delete_cleanup(cleanup_id):
         traceback.print_exc()
         flash(f'Error al eliminar limpieza automática: {str(e)}', 'error')
         return redirect(url_for('admin_email_buzon.manage_email_buzon'))
+
+
+@admin_email_buzon_bp.route('/email-buzon/api/public-ip', methods=['GET'])
+@admin_required
+def public_ip():
+    """Devuelve la IP pública del servidor (evita CSP al llamar desde el backend)."""
+    try:
+        import urllib.request
+        with urllib.request.urlopen('https://api.ipify.org?format=json', timeout=5) as resp:
+            import json
+            data = json.loads(resp.read().decode())
+            return jsonify({'ip': data.get('ip', '')})
+    except Exception as e:
+        return jsonify({'ip': '', 'error': str(e)})

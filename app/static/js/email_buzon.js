@@ -2291,11 +2291,11 @@ function checkPublicIP() {
   resultElement.textContent = 'Verificando...';
   resultElement.className = '';
   
-  fetch('https://api.ipify.org?format=json')
+  fetch('/admin/email-buzon/api/public-ip')
     .then(response => response.json())
     .then(data => {
-      resultElement.textContent = data.ip;
-      resultElement.className = 'success';
+      resultElement.textContent = data.ip || 'Error';
+      resultElement.className = data.ip ? 'success' : 'error';
     })
     .catch(error => {
       resultElement.textContent = 'Error obteniendo IP: ' + error.message;
