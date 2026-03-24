@@ -201,6 +201,60 @@ def process_smtp_email(email_data):
         return None
 
 
+def cascade_delete_received_emails_for_forwarding(forwarding):
+    """
+    Al eliminar un reenvío/catch-all, borra los ReceivedEmail que ya no tendrían
+    regla de aceptación equivalente.
+
+    - Reenvío con source_email concreto: borra correos cuyo to_email coincide.
+    - Catch-all (source_email None): si no queda otro catch-all, borra correos cuyo
+      destinatario no coincide con ningún source_email de los reenvíos restantes;
+      si no queda ningún reenvío, borra todos los recibidos.
+    """
+    from app.models.email_forwarding import EmailForwarding
+    from sqlalchemy import func
+
+    fid = forwarding.id
+    src = forwarding.source_email
+    others = EmailForwarding.query.filter(EmailForwarding.id != fid).all()
+
+    def norm(s):
+        return (s or "").strip().lower()
+
+    to_delete = []
+
+    if src is not None:
+        n = norm(src)
+        to_delete = (
+            ReceivedEmail.query.filter(
+                func.lower(func.trim(ReceivedEmail.to_email)) == n
+            ).all()
+        )
+    else:
+        still_catch_all = any(f.source_email is None for f in others)
+        if still_catch_all:
+            return 0
+        specifics = {norm(f.source_email) for f in others if f.source_email}
+        if not specifics:
+            to_delete = ReceivedEmail.query.all()
+        else:
+            to_delete = (
+                ReceivedEmail.query.filter(
+                    ~func.lower(func.trim(ReceivedEmail.to_email)).in_(list(specifics))
+                ).all()
+            )
+
+    count = 0
+    for email in to_delete:
+        try:
+            email.tags.clear()
+        except Exception:
+            pass
+        db.session.delete(email)
+        count += 1
+    return count
+
+
 def get_received_emails(limit=100, processed=None, tag_id=None):
     """Obtiene emails recibidos con filtros opcionales"""
     query = ReceivedEmail.query

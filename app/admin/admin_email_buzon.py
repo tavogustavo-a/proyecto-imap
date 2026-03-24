@@ -7,7 +7,8 @@ from app.models.email_forwarding import EmailForwarding
 from app.models.email_cleanup import EmailCleanup
 from app.services.email_buzon_service import (
     get_received_emails, mark_email_as_processed, get_recent_emails,
-    move_email_to_trash, restore_email_from_trash, get_trash_emails, permanently_delete_email, cleanup_old_trash_emails, cleanup_all_trash_emails
+    move_email_to_trash, restore_email_from_trash, get_trash_emails, permanently_delete_email, cleanup_old_trash_emails, cleanup_all_trash_emails,
+    cascade_delete_received_emails_for_forwarding,
 )
 from app.services.email_tag_service import (
     get_all_tags, create_tag as create_tag_service, update_tag as update_tag_service, update_tag_filters, delete_tag, get_tag,
@@ -118,15 +119,19 @@ def edit_forwarding(forwarding_id):
 @admin_email_buzon_bp.route('/email-buzon/delete-forwarding/<int:forwarding_id>', methods=['POST'])
 @admin_required
 def delete_forwarding(forwarding_id):
-    """Eliminar correo de recepción"""
+    """Eliminar correo de recepción y, en cascada, correos del buzón asociados a esa regla."""
     try:
         forwarding = EmailForwarding.query.get_or_404(forwarding_id)
         destination_email = forwarding.destination_email
-        
+
+        removed = cascade_delete_received_emails_for_forwarding(forwarding)
         db.session.delete(forwarding)
         db.session.commit()
-        
-        flash(f'Correo de recepción eliminado exitosamente: {destination_email}', 'success')
+
+        msg = f'Correo de recepción eliminado: {destination_email}.'
+        if removed:
+            msg += f' Se eliminaron {removed} correo(s) del buzón en cascada.'
+        flash(msg, 'success')
         
     except Exception as e:
         db.session.rollback()

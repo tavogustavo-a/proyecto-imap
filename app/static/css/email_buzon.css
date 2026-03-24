@@ -2454,7 +2454,6 @@ form {
 
 /* Estilos para campos de información */
 .record-field strong,
-.smtp-field strong,
 .email-field strong {
   font-weight: bold;
   color: #333;
