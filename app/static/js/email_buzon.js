@@ -165,11 +165,9 @@ function markEmailAsReadWhenViewed(emailId) {
   .then(response => response.json())
   .then(data => {
     if (data.success) {
-      // Actualizar visualmente el email como leído
       const emailItem = document.querySelector(`[data-email-id="${emailId}"]`);
       if (emailItem) {
         emailItem.classList.remove('unread');
-        console.log(`Email ${emailId} marcado como leído automáticamente`);
       }
     }
   })
@@ -477,7 +475,6 @@ function contextMoveToInbox() {
 function contextMoveToTrash() {
   if (!contextMenuEmailId) return;
   
-  console.log('Intentando mover email a papelera desde menú contextual:', contextMenuEmailId);
   
   // Verificar si estamos en la página de papelera
   const currentUrl = window.location.pathname;
@@ -485,7 +482,6 @@ function contextMoveToTrash() {
   
   if (isInTrashPage) {
     // Si estamos en papelera, eliminar permanentemente
-    console.log('Estamos en papelera, eliminando permanentemente');
     if (confirm('⚠️ ¿Eliminar permanentemente este email?\n\n❌ Esta acción NO se puede deshacer\n\n¿Continuar?')) {
       fetch(`/admin/email-buzon/permanently-delete/${contextMenuEmailId}`, {
         method: 'POST',
@@ -495,11 +491,9 @@ function contextMoveToTrash() {
         }
       })
       .then(response => {
-        console.log('Respuesta eliminación permanente:', response.status, response.statusText);
         return response.json();
       })
       .then(data => {
-        console.log('Datos eliminación permanente:', data);
         if (data.success) {
           location.reload();
         } else {
@@ -513,7 +507,6 @@ function contextMoveToTrash() {
     }
   } else {
     // Si no estamos en papelera, mover a papelera
-    console.log('No estamos en papelera, moviendo a papelera');
     fetch(`/admin/email-buzon/move-to-trash/${contextMenuEmailId}`, {
       method: 'POST',
       headers: {
@@ -522,11 +515,9 @@ function contextMoveToTrash() {
       }
     })
     .then(response => {
-      console.log('Respuesta del menú contextual:', response.status, response.statusText);
       return response.json();
     })
     .then(data => {
-      console.log('Datos del menú contextual:', data);
       if (data.success) {
         location.reload();
       } else {
@@ -683,7 +674,6 @@ function markEmailAsProcessed() {
 function moveEmailToTrash() {
   if (!currentEmailId) return;
   
-  console.log('Intentando mover email a papelera:', currentEmailId);
   
   // Verificar si el email ya está en papelera (botón dice "Restaurar")
   const moveToTrashBtn = document.getElementById('moveToTrashBtn');
@@ -692,7 +682,6 @@ function moveEmailToTrash() {
   if (isInTrash) {
     // Si está en papelera, no debería usar esta función
     // Esta función es solo para mover A papelera, no para eliminar DE papelera
-    console.log('Email ya está en papelera, no se puede mover a papelera nuevamente');
     return;
   }
   
@@ -704,11 +693,9 @@ function moveEmailToTrash() {
     }
   })
   .then(response => {
-    console.log('Respuesta recibida:', response.status, response.statusText);
     return response.json();
   })
   .then(data => {
-    console.log('Datos recibidos:', data);
     if (data.success) {
       closeViewEmailModal();
       location.reload();
@@ -850,7 +837,6 @@ function deleteSelected() {
     checkboxes.forEach(checkbox => {
       const emailId = checkbox.closest('.email-item').dataset.emailId;
       if (emailId) {
-        console.log('Eliminar email:', emailId);
       }
     });
   }
@@ -1734,7 +1720,6 @@ function showNotification(message, type) {
   if (cleanupTrashBtn) {
     cleanupTrashBtn.addEventListener('click', function() {
       if (confirm('⚠️ ¿Vaciar completamente la papelera?\n\nEsta acción eliminará PERMANENTEMENTE todos los emails de la papelera.\n\n❌ Esta acción NO se puede deshacer.\n\n¿Continuar?')) {
-        console.log('Iniciando vaciado completo de papelera...');
         fetch('/admin/email-buzon/cleanup-trash', {
           method: 'POST',
           headers: {
@@ -1743,11 +1728,9 @@ function showNotification(message, type) {
           }
         })
         .then(response => {
-          console.log('Respuesta de vaciar papelera:', response.status, response.statusText);
           return response.json();
         })
         .then(data => {
-          console.log('Resultado de vaciar papelera:', data);
           if (data.success) {
             alert(data.message || 'Papelera vaciada exitosamente');
             location.reload();

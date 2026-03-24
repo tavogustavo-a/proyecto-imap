@@ -2,16 +2,17 @@
 
 import re
 import requests
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
+from email.utils import format_datetime, parsedate_to_datetime
 from flask import current_app
-from email.utils import parsedate_to_datetime
+from sqlalchemy import func, or_
 from sqlalchemy.orm import joinedload
 from urllib.parse import urlparse
 from ipaddress import ip_address, AddressValueError
 
 from app.models import (
     IMAPServer, IMAPServer2, ServiceModel, FilterModel, RegexModel, User,
-    SecurityRule, TriggerLog
+    SecurityRule, TriggerLog, ReceivedEmail,
 )
 from app.imap.advanced_imap import search_in_all_servers
 from app.admin.regex import passes_any_regex, extract_regex
@@ -102,6 +103,60 @@ def validate_and_sanitize_external_response(data, project_name):
 # Constantes internas para validación del sistema
 _SEARCH_MODULE_ID = 0x7C8D
 _SEARCH_MODULE_VER = 0x9E0F
+
+
+def _buzon_emails_as_mail_dicts(to_address, limit_days=2, max_rows=None):
+    """
+    Correos guardados en BD (buzón SMTP / Gestionar buzón), To coincidente, no en papelera.
+    Mismo shape que los dicts de IMAP para _process_mails.
+    Por defecto usa la misma ventana que el primer pase IMAP (limit_days=2) y devuelve
+    todos los correos en ese rango (sin cap fijo de 100). max_rows solo acota si se define.
+    limit_days=None: sin filtro por fecha.
+    """
+    to_norm = (to_address or "").strip().lower()
+    if not to_norm or "@" not in to_norm:
+        return []
+    try:
+        q = ReceivedEmail.query.filter(
+            ReceivedEmail.deleted.is_(False),
+            func.lower(func.trim(ReceivedEmail.to_email)) == to_norm,
+        )
+        if limit_days is not None:
+            cutoff = datetime.now(timezone.utc) - timedelta(days=int(limit_days))
+            q = q.filter(
+                or_(
+                    ReceivedEmail.received_at >= cutoff,
+                    ReceivedEmail.received_at.is_(None),
+                )
+            )
+        q = q.order_by(ReceivedEmail.received_at.desc())
+        if max_rows is not None:
+            q = q.limit(int(max_rows))
+        rows = q.all()
+    except Exception:
+        return []
+
+    out = []
+    for email in rows:
+        rdt = email.received_at
+        if rdt is None:
+            rdt = datetime.now(timezone.utc)
+        elif rdt.tzinfo is None:
+            rdt = rdt.replace(tzinfo=timezone.utc)
+        out.append(
+            {
+                "from": email.from_email or "",
+                "to": email.to_email or "",
+                "subject": email.subject or "",
+                "text": email.content_text or "",
+                "html": email.content_html or "",
+                "date": format_datetime(rdt),
+                "message_id": email.message_id or f"buzon-db-{email.id}",
+                "internal_date": rdt,
+            }
+        )
+    return out
+
 
 def search_and_apply_filters(to_address, service_id=None, user=None, origin_domain=None, public_access=False):
     """
@@ -241,7 +296,13 @@ def search_and_apply_filters(to_address, service_id=None, user=None, origin_doma
         pass
     # --- FIN: Logging para Depuración ---
 
-    # 4) Buscamos en servidores IMAP (y opcionalmente IMAP2)
+    # 3b) Buzón local (BD): prioridad sobre IMAP (más rápido)
+    buzon_mails = _buzon_emails_as_mail_dicts(to_address)
+    found_mail = _process_mails(buzon_mails, final_filters, final_regexes, user, to_address)
+    if found_mail:
+        return found_mail
+
+    # 4) Servidores IMAP solo si están activos (enabled=True; en admin suele mostrarse como OFF)
     servers = []
     
     # Obtener servidores IMAP normales (principal)
@@ -393,6 +454,12 @@ def search_and_apply_filters2(to_address, service_id=None, user=None):
             final_filters = [f for f in service_filters if f.id in final_filter_ids_to_use]
             final_regexes = [r for r in service_regexes if r.id in final_regex_ids_to_use]
 
+    # 3b) Buzón local (BD) antes de IMAP2
+    buzon_mails = _buzon_emails_as_mail_dicts(to_address)
+    found_mail = _process_mails(buzon_mails, final_filters, final_regexes, user, to_address)
+    if found_mail:
+        return found_mail
+
     # 4) Buscamos en servidores IMAP2 habilitados
     servers = IMAPServer2.query.filter_by(enabled=True).all()
     if not servers:
@@ -536,6 +603,12 @@ def search_imap2_server_dynamic(to_address, imap_server_id, user=None):
 
             final_filters = [f for f in server_filters if f.id in final_filter_ids_to_use]
             final_regexes = [r for r in server_regexes if r.id in final_regex_ids_to_use]
+
+    # 3b) Buzón local (BD) antes de IMAP / IMAP2 vinculados
+    buzon_mails = _buzon_emails_as_mail_dicts(to_address)
+    found_mail = _process_mails(buzon_mails, final_filters, final_regexes, user, to_address)
+    if found_mail:
+        return found_mail
 
     # 4) Buscar en este servidor IMAP2 específico Y en los servidores IMAP vinculados
     # IMPORTANTE: Cada servidor funciona independientemente según su estado enabled

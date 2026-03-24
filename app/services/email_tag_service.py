@@ -112,11 +112,6 @@ def get_emails_by_tag(tag_id):
     tag = EmailTag.query.get_or_404(tag_id)
     emails = ReceivedEmail.query.join(ReceivedEmail.tags).filter(EmailTag.id == tag_id).order_by(ReceivedEmail.received_at.desc()).all()
     
-    print(f"[TAG] 🏷️ Encontrados {len(emails)} emails con etiqueta '{tag.name}' (ID: {tag_id})")
-    for email in emails[:3]:  # Solo mostrar los primeros 3
-        tag_names = [t.name for t in email.tags]
-        print(f"[TAG] Email ID {email.id}: '{email.subject[:30]}...' - Etiquetas: {tag_names}")
-    
     return emails
 
 def get_emails_without_tags():

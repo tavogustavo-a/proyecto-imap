@@ -87,13 +87,11 @@ def should_email_go_to_trash(email_data):
             })()
             
             if email_filter.matches_email(temp_email):
-                print(f"🗑️ Email rechazado - coincide con filtro de papelera: {email_filter.name}")
                 return True
         
         return False
         
-    except Exception as e:
-        print(f"❌ Error verificando filtros de papelera: {e}")
+    except Exception:
         return False
 
 def process_incoming_email(raw_email_data, buzon_server_id=None):
@@ -106,12 +104,10 @@ def process_incoming_email(raw_email_data, buzon_server_id=None):
         # 🚫 VERIFICAR REMITENTES BLOQUEADOS ANTES DE GUARDAR
         from app.services.blocked_sender_service import is_sender_blocked
         if is_sender_blocked(from_email):
-            print(f"🚫 Email rechazado - remitente bloqueado: {from_email}")
             return None  # No guardar en la base de datos
         
         # 🗑️ VERIFICAR FILTROS DE PAPELERA ANTES DE GUARDAR
         if should_email_go_to_trash(parsed_email):
-            print(f"🗑️ Email rechazado - filtro de papelera: {from_email}")
             return None  # No guardar en la base de datos
         
         # Crear registro en la base de datos
@@ -133,11 +129,9 @@ def process_incoming_email(raw_email_data, buzon_server_id=None):
         from app.services.email_filter_service import auto_tag_email
         auto_tag_email(received_email)
         
-        print(f"✅ Email procesado y guardado: {from_email} -> {parsed_email.get('to', '')}")
         return received_email
         
-    except Exception as e:
-        print(f"Error procesando email: {e}")
+    except Exception:
         return None
 
 def process_smtp_email(email_data):
@@ -166,7 +160,6 @@ def process_smtp_email(email_data):
 
         to_norm = (to_email or "").strip().lower()
         if not to_norm or "@" not in to_norm:
-            print(f"📧 Email rechazado - destinatario inválido: {to_email!r}", flush=True)
             return None
 
         configured_forwarding = (
@@ -178,24 +171,15 @@ def process_smtp_email(email_data):
         )
 
         if not configured_forwarding:
-            print(
-                f"📧 Email rechazado - no hay buzón activo para: {to_email!r} "
-                f"(debe coincidir con una dirección dada de alta)",
-                flush=True,
-            )
             return None
 
-        print(f"✅ Email de destino validado: {to_email} (buzón explícito y activo)", flush=True)
-        
         # 🚫 VERIFICAR REMITENTES BLOQUEADOS ANTES DE GUARDAR
         from app.services.blocked_sender_service import is_sender_blocked
         if is_sender_blocked(from_email):
-            print(f"🚫 Email rechazado - remitente bloqueado: {from_email}", flush=True)
             return None  # No guardar en la base de datos
         
         # 🗑️ VERIFICAR FILTROS DE PAPELERA ANTES DE GUARDAR
         if should_email_go_to_trash(email_data):
-            print(f"🗑️ Email rechazado - filtro de papelera: {from_email}", flush=True)
             return None  # No guardar en la base de datos
         
         # Crear registro directamente desde datos del SMTP
@@ -216,11 +200,9 @@ def process_smtp_email(email_data):
         from app.services.email_filter_service import auto_tag_email
         auto_tag_email(received_email)
         
-        print(f"✅ Email SMTP procesado: {from_email} -> {to_email}", flush=True)
         return received_email
         
-    except Exception as e:
-        print(f"❌ Error procesando email desde SMTP: {e}", flush=True)
+    except Exception:
         return None
 
 
@@ -302,11 +284,6 @@ def get_recent_emails(limit=50):
         ~ReceivedEmail.tags.any()  # No tiene ninguna etiqueta
     ).order_by(ReceivedEmail.received_at.desc()).limit(limit).all()
     
-    print(f"[INBOX] 📥 Encontrados {len(emails)} emails sin etiquetas para 'Recibidos'")
-    for email in emails[:3]:  # Solo mostrar los primeros 3
-        tag_names = [tag.name for tag in email.tags]
-        print(f"[INBOX] Email ID {email.id}: '{email.subject[:30]}...' - Etiquetas: {tag_names}")
-    
     return emails
 
 def mark_email_processed(email_id):
@@ -362,16 +339,12 @@ def cleanup_all_trash_emails():
         ReceivedEmail.deleted == True
     ).all()
     
-    print(f"[CLEANUP] Encontrados {len(all_trash_emails)} emails en papelera para eliminar permanentemente")
-    
     count = 0
     for email in all_trash_emails:
-        print(f"[CLEANUP] Eliminando permanentemente email ID {email.id}: {email.subject[:50]}...")
         db.session.delete(email)
         count += 1
     
     db.session.commit()
-    print(f"[CLEANUP] ✅ Eliminados permanentemente {count} emails de la base de datos")
     return count
 
 
@@ -428,21 +401,11 @@ def run_scheduled_email_cleanups_for_colombia_clock():
             emails = q.all()
             n = _delete_received_emails_bulk(emails)
             total += n
-            if n:
-                print(
-                    f"[CLEANUP SCHED] Recibidos: eliminados {n} correos (hora CO {t.strftime('%H:%M')})",
-                    flush=True,
-                )
 
         elif rule.folder_type == "trash":
             emails = ReceivedEmail.query.filter(ReceivedEmail.deleted.is_(True)).all()
             n = _delete_received_emails_bulk(emails)
             total += n
-            if n:
-                print(
-                    f"[CLEANUP SCHED] Papelera: eliminados {n} correos (hora CO {t.strftime('%H:%M')})",
-                    flush=True,
-                )
 
         elif rule.folder_type == "tag":
             if not rule.tag_id:
@@ -457,10 +420,5 @@ def run_scheduled_email_cleanups_for_colombia_clock():
             )
             n = _delete_received_emails_bulk(emails)
             total += n
-            if n:
-                print(
-                    f"[CLEANUP SCHED] Etiqueta '{tag.name}': eliminados {n} correos (hora CO {t.strftime('%H:%M')})",
-                    flush=True,
-                )
 
     return total

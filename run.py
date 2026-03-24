@@ -746,9 +746,7 @@ def cleanup_email_trash_30d_job():
         try:
             from app.services.email_buzon_service import cleanup_old_trash_emails
 
-            n = cleanup_old_trash_emails(days=30)
-            if n:
-                app.logger.info("Buzón email: papelera automática eliminó %s mensajes (>30 días).", n)
+            cleanup_old_trash_emails(days=30)
         except Exception as e:
             db.session.rollback()
             app.logger.warning("Buzón email: error en limpieza papelera 30d: %s", e)
@@ -760,9 +758,7 @@ def scheduled_email_buzon_cleanup_tick_job():
         try:
             from app.services.email_buzon_service import run_scheduled_email_cleanups_for_colombia_clock
 
-            n = run_scheduled_email_cleanups_for_colombia_clock()
-            if n:
-                app.logger.info("Buzón email: limpieza programada eliminó %s mensajes.", n)
+            run_scheduled_email_cleanups_for_colombia_clock()
         except Exception as e:
             db.session.rollback()
             app.logger.warning("Buzón email: error en limpieza programada (tick): %s", e)
