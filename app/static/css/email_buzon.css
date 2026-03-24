@@ -48,7 +48,8 @@ form {
   font-size: 12px;
 }
 
-.email-content {
+/* Columna principal lista + sidebar (no usar en el modal de ver correo) */
+.email-page-layout {
   display: flex;
   min-height: 1500px;
 }
@@ -2083,7 +2084,7 @@ form {
 
 /* Responsive para el buzón de mensajes */
 @media (max-width: 768px) {
-  .email-content {
+  .email-page-layout {
     flex-direction: column;
   }
   
@@ -2151,6 +2152,37 @@ form {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+}
+
+#viewEmailModal .view-email-modal-header {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  flex-shrink: 0;
+  padding: 10px 12px 8px;
+  margin: 0;
+  border-bottom: 1px solid #eee;
+}
+
+#viewEmailModal .view-email-close-btn {
+  flex-shrink: 0;
+  background: #e74c3c;
+  color: #fff;
+  border: none;
+  border-radius: 50%;
+  width: 36px;
+  height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+  transition: background-color 0.2s ease;
+}
+
+#viewEmailModal .view-email-close-btn:hover {
+  background: #c0392b;
 }
 
 #viewEmailModal .modal-body {
@@ -2269,6 +2301,12 @@ form {
   border-top: 1px solid #eee;
 }
 
+#viewEmailModal .email-details {
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
 .email-details {
   margin-bottom: 20px;
 }
@@ -2290,15 +2328,19 @@ form {
   word-break: break-word;
 }
 
-/* Visor de mensaje (solo modal; no confundir con .email-content de la columna principal) */
+/* Visor de mensaje (clase propia; no mezclar con .email-page-layout de la lista) */
 #viewEmailModal .email-content-viewer {
   display: flex;
   flex-direction: column;
   flex: 1 1 auto;
+  align-self: stretch;
+  width: 100%;
+  max-width: 100%;
   min-height: 0;
   margin-top: 12px;
   padding-top: 12px;
   border-top: 1px solid #eee;
+  box-sizing: border-box;
 }
 
 #viewEmailModal .email-content-tabs {
@@ -2333,15 +2375,23 @@ form {
 #viewEmailModal .email-content-body {
   position: relative;
   flex: 1 1 auto;
+  align-self: stretch;
+  width: 100%;
+  max-width: 100%;
   min-height: 280px;
   max-height: min(62vh, 720px);
   overflow: hidden;
   display: flex;
   flex-direction: column;
+  box-sizing: border-box;
 }
 
 #viewEmailModal .email-tab-content {
   flex: 1 1 auto;
+  align-self: stretch;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
   min-height: 0;
   max-height: none;
   overflow: auto;
@@ -2354,11 +2404,12 @@ form {
 }
 
 #viewEmailModal .email-tab-plain {
-  padding: 14px 16px;
+  padding: 0;
   background-color: #f8f9fa;
   border: 1px solid #dee2e6;
   white-space: pre-wrap;
   word-wrap: break-word;
+  word-break: break-word;
   font-family: ui-monospace, "Cascadia Code", "Courier New", monospace;
   font-size: 13px;
   line-height: 1.45;

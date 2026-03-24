@@ -1,7 +1,7 @@
 {% extends "admin_dashboard.html" %}
 
 {% block content %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/email_buzon.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/email_buzon.css') }}?v=20260326">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/store.css') }}">
 
 <!-- Token CSRF global -->
@@ -62,7 +62,7 @@
       <h3><i class="fas fa-envelope"></i> Buzón de Mensajes</h3>
     </header>
   
-  <div class="email-content">
+  <div class="email-page-layout">
     <aside class="email-sidebar" role="complementary" aria-label="Carpetas y etiquetas">
       <div class="email-folder {{ 'active' if current_view == 'inbox' or not current_view else '' }}" data-filter="all" data-action="navigate" data-url="{{ url_for('admin_email_buzon.manage_email_buzon') }}">
         <i class="fas fa-inbox"></i>
@@ -745,10 +745,10 @@
 <!-- Modal para ver email completo -->
 <div id="viewEmailModal" class="edit-modal hidden">
   <div class="edit-modal-content">
-    <div class="modal-header">
-      <h3>Ver Email</h3>
-      <button type="button" class="close-btn" data-action="close-view-modal" aria-label="Cerrar modal de ver email">
-        <i class="fas fa-times"></i>
+    <div class="modal-header view-email-modal-header">
+      <span class="sr-only">Detalle del correo</span>
+      <button type="button" class="view-email-close-btn" data-action="close-view-modal" aria-label="Cerrar">
+        <i class="fas fa-times" aria-hidden="true"></i>
       </button>
     </div>
     <div class="modal-body">
@@ -774,7 +774,7 @@
           <div id="emailTags"></div>
         </div>
       </div>
-      <div class="email-content email-content-viewer">
+      <div class="email-content-viewer">
         <div class="email-content-tabs">
           <button type="button" class="tab-btn active" data-action="show-tab" data-tab="text" aria-label="Mostrar texto plano">Texto plano</button>
           <button type="button" class="tab-btn hidden" data-action="show-tab" data-tab="html" id="htmlTabBtn" aria-label="Mostrar vista previa del mensaje">Vista previa</button>
@@ -802,7 +802,7 @@
   </div>
 </div>
 
-<script src="{{ url_for('static', filename='js/email_buzon.js') }}?v=20260325-cleanup-sched"></script>
+<script src="{{ url_for('static', filename='js/email_buzon.js') }}?v=20260326-view-modal"></script>
 <script src="{{ url_for('static', filename='js/menu_busqueda.js') }}"></script>
 <script src="{{ url_for('static', filename='js/clear_trigger_logs.js') }}?v=20241220-original"></script>
 {% endblock %}
