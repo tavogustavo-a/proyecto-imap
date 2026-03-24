@@ -5,6 +5,7 @@ import email
 import logging
 import threading
 import time
+from email.header import decode_header
 from typing import Optional
 
 from aiosmtpd.controller import Controller
@@ -29,6 +30,28 @@ def bind_smtp_flask_app(app: Flask) -> None:
 def _line(msg: str) -> None:
     print(msg, flush=True)
     _log.info(msg)
+
+
+def _decode_mime_header(value) -> str:
+    """Decodifica =?UTF-8?Q?...?= y similares en cabeceras RFC 2047."""
+    if value is None:
+        return ""
+    if not isinstance(value, str):
+        value = str(value)
+    value = value.strip()
+    if not value:
+        return ""
+    try:
+        parts = decode_header(value)
+        chunks = []
+        for text, charset in parts:
+            if isinstance(text, bytes):
+                chunks.append(text.decode(charset or "utf-8", errors="replace"))
+            else:
+                chunks.append(text)
+        return "".join(chunks).strip()
+    except Exception:
+        return value
 
 
 class LoggingSMTP(SMTPServer):
@@ -68,7 +91,7 @@ class EmailHandler:
             # Extraer información del email
             from_email = envelope.mail_from
             to_emails = envelope.rcpt_tos
-            subject = message.get('Subject', '')
+            subject = _decode_mime_header(message.get("Subject", ""))
             
             # Obtener contenido del email
             content_text = ""
@@ -102,9 +125,11 @@ class EmailHandler:
 
                 with _smtp_flask_app.app_context():
                     result = process_smtp_email(email_data)
+                    # Leer id dentro del contexto: fuera de él el objeto queda detached tras commit.
+                    saved_id = result.id if result is not None else None
 
-                if result:
-                    _line(f"✅ SMTP: guardado id={result.id}")
+                if saved_id is not None:
+                    _line(f"✅ SMTP: guardado id={saved_id}")
                 else:
                     _line("🚫 SMTP: rechazado (sin buzón / bloqueo / filtro papelera)")
             
