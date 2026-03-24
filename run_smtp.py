@@ -19,7 +19,7 @@ logging.basicConfig(
 logging.getLogger("aiosmtpd").setLevel(logging.INFO)
 
 from app import create_app
-from app.smtp.smtp_server import start_smtp_server
+from app.smtp.smtp_server import bind_smtp_flask_app, start_smtp_server
 
 
 def signal_handler(sig, frame):
@@ -32,7 +32,8 @@ def signal_handler(sig, frame):
 if __name__ == '__main__':
     # Crear la aplicación Flask
     app = create_app()
-    
+    bind_smtp_flask_app(app)
+
     # Configurar manejador de señales
     signal.signal(signal.SIGINT, signal_handler)
     signal.signal(signal.SIGTERM, signal_handler)

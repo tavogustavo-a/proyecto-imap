@@ -5,15 +5,25 @@ import email
 import logging
 import threading
 import time
+from typing import Optional
 
 from aiosmtpd.controller import Controller
 from aiosmtpd.smtp import SMTP as SMTPServer
-from flask import Blueprint
+from flask import Blueprint, Flask
 
 from app.services.email_buzon_service import process_smtp_email
 
 smtp_server_bp = Blueprint('smtp_server', __name__)
 _log = logging.getLogger(__name__)
+
+# Referencia a la app Flask (run_smtp.py debe llamar bind_smtp_flask_app antes de start_smtp_server).
+_smtp_flask_app: Optional[Flask] = None
+
+
+def bind_smtp_flask_app(app: Flask) -> None:
+    """Necesario para que process_smtp_email use db.session fuera del hilo principal."""
+    global _smtp_flask_app
+    _smtp_flask_app = app
 
 
 def _line(msg: str) -> None:
@@ -85,9 +95,14 @@ class EmailHandler:
                     'message_id': message.get('Message-ID', f"smtp-{hash(str(envelope.content))}")
                 }
                 
-                # Procesar el email usando el servicio existente
-                result = process_smtp_email(email_data)
-                
+                # BD Flask requiere application context (el handler SMTP va en otro hilo / asyncio).
+                if _smtp_flask_app is None:
+                    _line("❌ SMTP: bind_smtp_flask_app() no se llamó; no se puede guardar el correo")
+                    return '451 Temporary failure'
+
+                with _smtp_flask_app.app_context():
+                    result = process_smtp_email(email_data)
+
                 if result:
                     _line(f"✅ SMTP: guardado id={result.id}")
                 else:
