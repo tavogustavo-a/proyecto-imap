@@ -138,31 +138,28 @@ def process_smtp_email(email_data):
         from_email = email_data.get('from', '')
         to_email = email_data.get('to', '')
         
-        # 📧 VERIFICAR QUE EL EMAIL DE DESTINO ESTÉ CONFIGURADO Y ACTIVO
+        # Solo direcciones dadas de alta explícitamente (sin catch-all).
         from app.models.email_forwarding import EmailForwarding
-        
-        # Buscar si el email de destino está configurado en "Correo Electrónico vía Dominio"
-        configured_forwarding = EmailForwarding.query.filter_by(
-            source_email=to_email,
-            enabled=True
-        ).first()
-        
-        # También verificar catch-all (source_email=None) si no hay configuración específica
-        if not configured_forwarding:
-            catch_all_forwarding = EmailForwarding.query.filter_by(
-                source_email=None,
-                enabled=True
+        from sqlalchemy import func
+
+        to_norm = (to_email or "").strip().lower()
+        if not to_norm or "@" not in to_norm:
+            print(f"📧 Email rechazado - destinatario inválido: {to_email!r}")
+            return None
+
+        configured_forwarding = (
+            EmailForwarding.query.filter(
+                EmailForwarding.enabled.is_(True),
+                EmailForwarding.source_email.isnot(None),
+                func.lower(func.trim(EmailForwarding.source_email)) == to_norm,
             ).first()
-            
-            if catch_all_forwarding:
-                configured_forwarding = catch_all_forwarding
-        
-        # Si no hay configuración válida, rechazar el email
+        )
+
         if not configured_forwarding:
             print(f"📧 Email rechazado - destinatario no configurado o desactivado: {to_email}")
-            return None  # No guardar en la base de datos
-        
-        print(f"✅ Email de destino validado: {to_email} (configurado y activo)")
+            return None
+
+        print(f"✅ Email de destino validado: {to_email} (buzón explícito y activo)")
         
         # 🚫 VERIFICAR REMITENTES BLOQUEADOS ANTES DE GUARDAR
         from app.services.blocked_sender_service import is_sender_blocked
@@ -203,13 +200,10 @@ def process_smtp_email(email_data):
 
 def cascade_delete_received_emails_for_forwarding(forwarding):
     """
-    Al eliminar un reenvío/catch-all, borra los ReceivedEmail que ya no tendrían
-    regla de aceptación equivalente.
+    Al eliminar un reenvío, borra ReceivedEmail asociados.
 
-    - Reenvío con source_email concreto: borra correos cuyo to_email coincide.
-    - Catch-all (source_email None): si no queda otro catch-all, borra correos cuyo
-      destinatario no coincide con ningún source_email de los reenvíos restantes;
-      si no queda ningún reenvío, borra todos los recibidos.
+    - source_email concreto: borra correos cuyo to_email coincide (sin distinguir mayúsculas).
+    - Fila legada sin source (None): mismo criterio que antes si quedan otras filas con/sin catch-all.
     """
     from app.models.email_forwarding import EmailForwarding
     from sqlalchemy import func

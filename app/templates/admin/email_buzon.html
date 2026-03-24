@@ -169,11 +169,20 @@
   </div>
   
   <div id="email-forwarding-content" class="accordion-content hidden">
+
+  <p class="forwarding-help text-muted" style="margin-bottom:12px;font-size:14px;">
+    Solo las direcciones que des de alta aquí pueden recibir correo por SMTP. Cada una recibe todo lo que llegue a esa dirección; bloqueos y filtros pueden rechazar mensajes después.
+  </p>
+  {% if email_forwardings|selectattr('source_email', 'equalto', none)|list|length > 0 %}
+  <p class="priority-badge" style="display:block;margin-bottom:10px;padding:8px;background:#fff3cd;color:#856404;border-radius:4px;">
+    Tienes recepciones sin dirección SMTP explícita (antiguo catch-all). Edita cada una y guarda el correo completo (ej. <code>1@tudominio.com</code>) o no recibirás mensajes.
+  </p>
+  {% endif %}
   
   {% for forwarding in email_forwardings %}
   <div class="forwarding-item">
     <div class="forwarding-info">
-      <strong>{{ forwarding.destination_email }}</strong>
+      <strong>{{ forwarding.source_email or forwarding.destination_email }}</strong>
     </div>
     <div class="forwarding-actions">
       <button class="btn btn-green edit-forwarding-btn" 
@@ -202,12 +211,12 @@
   
   <form action="{{ url_for('admin_email_buzon.create_forwarding') }}" method="POST" class="create-server-form">
     <input type="hidden" id="csrf_create_forwarding" name="_csrf_token" value="{{ csrf_token() }}">
-    <h5>Crear Correo de Recepción donde recibirás todo:</h5>
+    <h5>Agregar dirección de recepción SMTP</h5>
     <div class="create-server-fields">
       <div class="create-server-field">
-        <input type="email" id="destinationEmail" name="destination_email" placeholder="micorreo@midominio.com" required autocomplete="email" aria-label="Correo donde recibirás todo">
+        <input type="email" id="sourceEmailInput" name="source_email" placeholder="ventas@tudominio.com" required autocomplete="email" aria-label="Correo en tu dominio que recibirá mensajes">
       </div>
-      <button type="submit" class="btn btn-blue" aria-label="Crear nuevo correo de recepción">Crear Correo</button>
+      <button type="submit" class="btn btn-blue" aria-label="Agregar dirección de recepción">Agregar dirección</button>
     </div>
   </form>
   </div>
@@ -686,9 +695,9 @@
     <form id="editForwardingForm" method="POST">
       <input type="hidden" id="csrf_edit_forwarding" name="_csrf_token" value="{{ csrf_token() }}">
       <div class="edit-form-group">
-        <label for="editDestinationEmail">Correo donde recibirás todo:</label>
-        <input type="email" id="editDestinationEmail" name="destination_email" required autocomplete="email">
-        <small>Configura Gmail/Outlook para reenviar a este correo</small>
+        <label for="editSourceEmail">Dirección que recibe por SMTP:</label>
+        <input type="email" id="editSourceEmail" name="source_email" required autocomplete="email">
+        <small>Debe coincidir con el correo al que envían (RCPT TO), en tu dominio.</small>
       </div>
       <div class="edit-modal-actions">
         <button type="button" class="btn btn-red" data-action="close-forwarding-modal" aria-label="Cancelar edición de correo">Cancelar</button>

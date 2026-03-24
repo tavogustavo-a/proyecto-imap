@@ -1847,7 +1847,11 @@ function showNotification(message, type) {
 
 // Funciones para el modal de edición de reenvío
 function openEditForwardingModal(forwardingId, sourceEmail, destinationEmail) {
-  document.getElementById('editDestinationEmail').value = destinationEmail || '';
+  const el = document.getElementById('editSourceEmail');
+  if (el) {
+    const s = sourceEmail && sourceEmail !== 'null' && sourceEmail !== '' ? sourceEmail : null;
+    el.value = s || destinationEmail || '';
+  }
   document.getElementById('editForwardingForm').action = `/admin/email-buzon/edit-forwarding/${forwardingId}`;
   showElement('editForwardingModal');
 }

@@ -57,31 +57,33 @@ def manage_email_buzon():
 @admin_email_buzon_bp.route('/email-buzon/create-forwarding', methods=['POST'])
 @admin_required
 def create_forwarding():
-    """Crear nuevo correo de recepción (catch-all)"""
+    """Alta de una dirección concreta que podrá recibir por SMTP (sin catch-all)."""
     try:
-        destination_email = request.form.get('destination_email', '').strip()
-        
-        if not destination_email:
-            flash('El correo de destino es obligatorio', 'error')
+        from sqlalchemy import func
+
+        mailbox = (request.form.get('source_email') or request.form.get('destination_email') or "").strip()
+
+        if not mailbox or "@" not in mailbox:
+            flash('Indica un correo completo en tu dominio (ej. ventas@tudominio.com).', 'error')
             return redirect(url_for('admin_email_buzon.manage_email_buzon'))
-        
-        # Verificar si ya existe un catch-all (source_email = None)
-        existing_catchall = EmailForwarding.query.filter_by(source_email=None).first()
-        if existing_catchall:
-            flash('Ya existe un correo catch-all configurado. Solo puedes tener uno.', 'error')
+
+        dup = EmailForwarding.query.filter(
+            func.lower(func.trim(EmailForwarding.source_email)) == mailbox.lower()
+        ).first()
+        if dup:
+            flash(f'Ya existe la dirección {mailbox}.', 'error')
             return redirect(url_for('admin_email_buzon.manage_email_buzon'))
-        
-        # Crear nuevo reenvío catch-all
+
         forwarding = EmailForwarding(
-            source_email=None,  # Catch-all: recibe todos los correos
-            destination_email=destination_email,
-            enabled=True
+            source_email=mailbox,
+            destination_email=mailbox,
+            enabled=True,
         )
-        
+
         db.session.add(forwarding)
         db.session.commit()
-        
-        flash(f'Correo de recepción creado exitosamente: {destination_email}', 'success')
+
+        flash(f'Dirección de recepción creada: {mailbox}', 'success')
         
     except Exception as e:
         db.session.rollback()
@@ -92,24 +94,32 @@ def create_forwarding():
 @admin_email_buzon_bp.route('/email-buzon/edit-forwarding/<int:forwarding_id>', methods=['POST'])
 @admin_required
 def edit_forwarding(forwarding_id):
-    """Editar correo de recepción"""
+    """Editar la dirección que recibe por SMTP (origen y destino se mantienen iguales)."""
     try:
+        from sqlalchemy import func
+
         forwarding = EmailForwarding.query.get_or_404(forwarding_id)
-        
-        destination_email = request.form.get('destination_email', '').strip()
-        
-        if not destination_email:
-            return jsonify({'success': False, 'message': 'El correo de destino es obligatorio'})
-        
-        # Actualizar solo el email de destino
-        forwarding.destination_email = destination_email
-        
+
+        mailbox = (request.form.get('source_email') or request.form.get('destination_email') or "").strip()
+        if not mailbox or "@" not in mailbox:
+            return jsonify({'success': False, 'message': 'Correo inválido'})
+
+        conflict = EmailForwarding.query.filter(
+            EmailForwarding.id != forwarding_id,
+            func.lower(func.trim(EmailForwarding.source_email)) == mailbox.lower(),
+        ).first()
+        if conflict:
+            return jsonify({'success': False, 'message': f'Ya existe la dirección {mailbox}'})
+
+        forwarding.source_email = mailbox
+        forwarding.destination_email = mailbox
+
         db.session.commit()
-        
+
         return jsonify({
             'success': True,
-            'message': 'Correo de recepción actualizado exitosamente',
-            'forwarding': forwarding.to_dict()
+            'message': 'Dirección de recepción actualizada',
+            'forwarding': forwarding.to_dict(),
         })
         
     except Exception as e:
@@ -512,18 +522,20 @@ def reply_email():
         
         domain_configured = False
         for forwarding in configured_emails:
-            if forwarding.source_email and '@' in forwarding.source_email:
-                configured_domain = forwarding.source_email.split('@')[1].lower()
-                if configured_domain == reply_domain:
-                    domain_configured = True
-                    break
-        
+            for addr in (forwarding.source_email, forwarding.destination_email):
+                if addr and '@' in addr:
+                    if addr.split('@')[1].lower() == reply_domain:
+                        domain_configured = True
+                        break
+            if domain_configured:
+                break
+
         if not domain_configured:
             return jsonify({
-                'success': False, 
+                'success': False,
                 'error': f'El dominio "@{reply_domain}" no está configurado en "Correo Electrónico vía Dominio". Solo puedes enviar desde dominios configurados.'
             })
-        
+
         # Obtener el email original
         original_email = ReceivedEmail.query.get_or_404(email_id)
         
@@ -603,11 +615,13 @@ def forward_email():
         
         domain_configured = False
         for forwarding in configured_emails:
-            if forwarding.source_email and '@' in forwarding.source_email:
-                configured_domain = forwarding.source_email.split('@')[1].lower()
-                if configured_domain == forward_domain:
-                    domain_configured = True
-                    break
+            for addr in (forwarding.source_email, forwarding.destination_email):
+                if addr and '@' in addr:
+                    if addr.split('@')[1].lower() == forward_domain:
+                        domain_configured = True
+                        break
+            if domain_configured:
+                break
         
         if not domain_configured:
             return jsonify({
