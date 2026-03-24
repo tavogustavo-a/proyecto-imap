@@ -2,29 +2,55 @@
 
 import asyncio
 import email
-from email.mime.text import MIMEText
-from aiosmtpd.controller import Controller
-from aiosmtpd.smtp import SMTP as SMTPServer
-from flask import Blueprint
-from app.services.email_buzon_service import process_smtp_email
+import logging
 import threading
 import time
 
+from aiosmtpd.controller import Controller
+from aiosmtpd.smtp import SMTP as SMTPServer
+from flask import Blueprint
+
+from app.services.email_buzon_service import process_smtp_email
+
 smtp_server_bp = Blueprint('smtp_server', __name__)
+_log = logging.getLogger(__name__)
+
+
+def _line(msg: str) -> None:
+    print(msg, flush=True)
+    _log.info(msg)
+
+
+class LoggingSMTP(SMTPServer):
+    """Registra cada conexión TCP al puerto 25 (diagnóstico en journalctl)."""
+
+    def connection_made(self, transport):
+        try:
+            peer = transport.get_extra_info('peername')
+            _line(f"🔌 SMTP conexión entrante desde {peer!r}")
+        except Exception:
+            _line("🔌 SMTP conexión entrante (sin datos de peer)")
+        super().connection_made(transport)
+
+
+class LoggingController(Controller):
+    def factory(self):
+        return LoggingSMTP(self.handler)
+
 
 class EmailHandler:
     """Manejador de emails SMTP que procesa los emails recibidos"""
     
     async def handle_RCPT(self, server, session, envelope, address, rcpt_options):
         """Maneja el comando RCPT TO del protocolo SMTP"""
-        print(f"📧 SMTP: Recibiendo email para {address}")
+        _line(f"📧 SMTP: RCPT TO <{address}>")
         envelope.rcpt_tos.append(address)
         return '250 OK'
 
     async def handle_DATA(self, server, session, envelope):
         """Maneja los datos del email recibido"""
         try:
-            print(f"📧 SMTP: Procesando email de {envelope.mail_from} para {envelope.rcpt_tos}")
+            _line(f"📧 SMTP: DATA de mail_from={envelope.mail_from!r} rcpt={envelope.rcpt_tos!r}")
             
             # Parsear el email
             message = email.message_from_bytes(envelope.content)
@@ -63,14 +89,14 @@ class EmailHandler:
                 result = process_smtp_email(email_data)
                 
                 if result:
-                    print(f"✅ SMTP: Email procesado correctamente - ID {result.id}")
+                    _line(f"✅ SMTP: guardado id={result.id}")
                 else:
-                    print(f"🚫 SMTP: Email rechazado por filtros o configuración")
+                    _line("🚫 SMTP: rechazado (sin buzón / bloqueo / filtro papelera)")
             
             return '250 Message accepted for delivery'
             
         except Exception as e:
-            print(f"❌ SMTP: Error procesando email: {str(e)}")
+            _line(f"❌ SMTP: error procesando: {e}")
             return '550 Error processing message'
 
 class SMTPServerManager:
@@ -85,23 +111,23 @@ class SMTPServerManager:
     def start(self):
         """Inicia el servidor SMTP"""
         try:
-            self.controller = Controller(
+            self.controller = LoggingController(
                 self.handler,
                 hostname=self.host,
-                port=self.port
+                port=self.port,
             )
             self.controller.start()
-            print(f"🚀 Servidor SMTP iniciado en {self.host}:{self.port}")
+            _line(f"🚀 Servidor SMTP escuchando en {self.host}:{self.port}")
             return True
         except Exception as e:
-            print(f"❌ Error iniciando servidor SMTP: {str(e)}")
+            _line(f"❌ Error iniciando servidor SMTP: {e}")
             return False
     
     def stop(self):
         """Detiene el servidor SMTP"""
         if self.controller:
             self.controller.stop()
-            print("🛑 Servidor SMTP detenido")
+            _line("🛑 Servidor SMTP detenido")
 
 # Instancia global del servidor SMTP
 smtp_manager = SMTPServerManager()
@@ -121,7 +147,7 @@ def start_smtp_server():
             except KeyboardInterrupt:
                 smtp_manager.stop()
         else:
-            print("❌ No se pudo iniciar el servidor SMTP")
+            _line("❌ No se pudo iniciar el servidor SMTP")
     
     # Ejecutar en un hilo separado
     smtp_thread = threading.Thread(target=run_server, daemon=True)

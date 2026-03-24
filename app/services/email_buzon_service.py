@@ -144,7 +144,7 @@ def process_smtp_email(email_data):
 
         to_norm = (to_email or "").strip().lower()
         if not to_norm or "@" not in to_norm:
-            print(f"📧 Email rechazado - destinatario inválido: {to_email!r}")
+            print(f"📧 Email rechazado - destinatario inválido: {to_email!r}", flush=True)
             return None
 
         configured_forwarding = (
@@ -156,20 +156,24 @@ def process_smtp_email(email_data):
         )
 
         if not configured_forwarding:
-            print(f"📧 Email rechazado - destinatario no configurado o desactivado: {to_email}")
+            print(
+                f"📧 Email rechazado - no hay buzón activo para: {to_email!r} "
+                f"(debe coincidir con una dirección dada de alta)",
+                flush=True,
+            )
             return None
 
-        print(f"✅ Email de destino validado: {to_email} (buzón explícito y activo)")
+        print(f"✅ Email de destino validado: {to_email} (buzón explícito y activo)", flush=True)
         
         # 🚫 VERIFICAR REMITENTES BLOQUEADOS ANTES DE GUARDAR
         from app.services.blocked_sender_service import is_sender_blocked
         if is_sender_blocked(from_email):
-            print(f"🚫 Email rechazado - remitente bloqueado: {from_email}")
+            print(f"🚫 Email rechazado - remitente bloqueado: {from_email}", flush=True)
             return None  # No guardar en la base de datos
         
         # 🗑️ VERIFICAR FILTROS DE PAPELERA ANTES DE GUARDAR
         if should_email_go_to_trash(email_data):
-            print(f"🗑️ Email rechazado - filtro de papelera: {from_email}")
+            print(f"🗑️ Email rechazado - filtro de papelera: {from_email}", flush=True)
             return None  # No guardar en la base de datos
         
         # Crear registro directamente desde datos del SMTP
@@ -190,11 +194,11 @@ def process_smtp_email(email_data):
         from app.services.email_filter_service import auto_tag_email
         auto_tag_email(received_email)
         
-        print(f"✅ Email SMTP procesado: {from_email} -> {to_email}")
+        print(f"✅ Email SMTP procesado: {from_email} -> {to_email}", flush=True)
         return received_email
         
     except Exception as e:
-        print(f"❌ Error procesando email desde SMTP: {e}")
+        print(f"❌ Error procesando email desde SMTP: {e}", flush=True)
         return None
 
 
