@@ -32,6 +32,61 @@ def _line(msg: str) -> None:
     _log.info(msg)
 
 
+def _decode_part_payload(part) -> str | None:
+    """Decodifica el cuerpo de una parte MIME (no multipart)."""
+    if part.get_content_maintype() == "multipart":
+        return None
+    payload = part.get_payload(decode=True)
+    if payload is None:
+        return None
+    if not isinstance(payload, bytes):
+        return str(payload)
+    charset = part.get_content_charset() or "utf-8"
+    try:
+        return payload.decode(charset, errors="replace")
+    except (LookupError, TypeError, UnicodeError):
+        return payload.decode("utf-8", errors="replace")
+
+
+def extract_text_and_html_from_message(message: email.message.Message) -> tuple[str, str]:
+    """
+    Extrae texto plano y HTML de un mensaje, incluyendo multiparts anidados.
+    Prefiere el HTML más largo (correos marketing suelen traer varias partes).
+    """
+    plain_chunks: list[str] = []
+    html_chunks: list[str] = []
+
+    if message.is_multipart():
+        for part in message.walk():
+            if part.get_content_maintype() == "multipart":
+                continue
+            if part.get_content_disposition() == "attachment":
+                continue
+            ctype = part.get_content_type()
+            body = _decode_part_payload(part)
+            if not body or not str(body).strip():
+                continue
+            if ctype == "text/plain":
+                plain_chunks.append(body)
+            elif ctype == "text/html":
+                html_chunks.append(body)
+        content_text = "\n\n".join(plain_chunks).strip()
+        content_html = max(html_chunks, key=len).strip() if html_chunks else ""
+    else:
+        body = _decode_part_payload(message)
+        if body is None:
+            body = ""
+        ctype = message.get_content_type()
+        if ctype == "text/html":
+            content_html = body.strip()
+            content_text = ""
+        else:
+            content_text = body.strip()
+            content_html = ""
+
+    return content_text, content_html
+
+
 def _decode_mime_header(value) -> str:
     """Decodifica =?UTF-8?Q?...?= y similares en cabeceras RFC 2047."""
     if value is None:
@@ -93,19 +148,7 @@ class EmailHandler:
             to_emails = envelope.rcpt_tos
             subject = _decode_mime_header(message.get("Subject", ""))
             
-            # Obtener contenido del email
-            content_text = ""
-            content_html = ""
-            
-            if message.is_multipart():
-                for part in message.walk():
-                    content_type = part.get_content_type()
-                    if content_type == "text/plain":
-                        content_text = part.get_payload(decode=True).decode('utf-8', errors='ignore')
-                    elif content_type == "text/html":
-                        content_html = part.get_payload(decode=True).decode('utf-8', errors='ignore')
-            else:
-                content_text = message.get_payload(decode=True).decode('utf-8', errors='ignore')
+            content_text, content_html = extract_text_and_html_from_message(message)
             
             # Procesar cada destinatario
             for to_email in to_emails:

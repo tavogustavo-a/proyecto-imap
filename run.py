@@ -18,7 +18,8 @@ from dotenv import load_dotenv
 from cryptography.fernet import Fernet, InvalidToken
 from app.services.imap_crypto import decrypt_password_with_key, encrypt_password_with_key
 from werkzeug.security import generate_password_hash
-from datetime import datetime, timedelta, timezone 
+from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 import re 
 from app.models import User, AppSecrets, SecurityRule, TriggerLog, RememberDevice, IMAPServer, ObserverIMAPServer
 from app.models.imap2 import IMAPServer2
@@ -41,6 +42,8 @@ import os
 
 # Crear la app fuera de main para que los decoradores de comandos la usen
 app = create_app(Config)
+
+from app.services.email_buzon_service import EMAIL_CLEANUP_SCHEDULER_INTERVAL_MINUTES
 
 # Variables globales para el scheduler
 _scheduler = None
@@ -129,6 +132,25 @@ def start_scheduler_if_needed():
                     id='cleanup_old_sms_messages',
                     replace_existing=True,
                     next_run_time=datetime.now(timezone.utc) + timedelta(minutes=1)
+                )
+
+                _scheduler.add_job(
+                    func=cleanup_email_trash_30d_job,
+                    trigger='cron',
+                    hour=4,
+                    minute=0,
+                    id='cleanup_email_trash_30d',
+                    replace_existing=True,
+                    timezone=ZoneInfo('America/Bogota'),
+                )
+
+                _scheduler.add_job(
+                    func=scheduled_email_buzon_cleanup_tick_job,
+                    trigger='interval',
+                    minutes=EMAIL_CLEANUP_SCHEDULER_INTERVAL_MINUTES,
+                    id='email_buzon_scheduled_cleanup_tick',
+                    replace_existing=True,
+                    next_run_time=datetime.now(timezone.utc) + timedelta(seconds=45),
                 )
             
             import atexit
@@ -717,6 +739,35 @@ def cleanup_trigger_logs_job():
             pass  # Log eliminado
         # Tarea de limpieza finalizada
 
+
+def cleanup_email_trash_30d_job():
+    """Elimina permanentemente correos en papelera con más de 30 días (deleted_at)."""
+    with app.app_context():
+        try:
+            from app.services.email_buzon_service import cleanup_old_trash_emails
+
+            n = cleanup_old_trash_emails(days=30)
+            if n:
+                app.logger.info("Buzón email: papelera automática eliminó %s mensajes (>30 días).", n)
+        except Exception as e:
+            db.session.rollback()
+            app.logger.warning("Buzón email: error en limpieza papelera 30d: %s", e)
+
+
+def scheduled_email_buzon_cleanup_tick_job():
+    """Cada minuto: si en Colombia coincide HH:MM con una regla EmailCleanup activa, borra esa carpeta."""
+    with app.app_context():
+        try:
+            from app.services.email_buzon_service import run_scheduled_email_cleanups_for_colombia_clock
+
+            n = run_scheduled_email_cleanups_for_colombia_clock()
+            if n:
+                app.logger.info("Buzón email: limpieza programada eliminó %s mensajes.", n)
+        except Exception as e:
+            db.session.rollback()
+            app.logger.warning("Buzón email: error en limpieza programada (tick): %s", e)
+
+
 def main():
     scheduler = BackgroundScheduler(executors={"default": ThreadPoolExecutor(max_workers=5)})
 
@@ -814,6 +865,25 @@ def main():
             id=sms_cleanup_job_id,
             replace_existing=True,
             next_run_time=datetime.now(timezone.utc) + timedelta(minutes=1)  # Empezar después de 1 minuto
+        )
+
+        scheduler.add_job(
+            func=cleanup_email_trash_30d_job,
+            trigger='cron',
+            hour=4,
+            minute=0,
+            id='cleanup_email_trash_30d',
+            replace_existing=True,
+            timezone=ZoneInfo('America/Bogota'),
+        )
+
+        scheduler.add_job(
+            func=scheduled_email_buzon_cleanup_tick_job,
+            trigger='interval',
+            minutes=EMAIL_CLEANUP_SCHEDULER_INTERVAL_MINUTES,
+            id='email_buzon_scheduled_cleanup_tick',
+            replace_existing=True,
+            next_run_time=datetime.now(timezone.utc) + timedelta(seconds=45),
         )
 
     

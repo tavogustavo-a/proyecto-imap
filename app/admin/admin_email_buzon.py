@@ -7,8 +7,9 @@ from app.models.email_forwarding import EmailForwarding
 from app.models.email_cleanup import EmailCleanup
 from app.services.email_buzon_service import (
     get_received_emails, mark_email_as_processed, get_recent_emails,
-    move_email_to_trash, restore_email_from_trash, get_trash_emails, permanently_delete_email, cleanup_old_trash_emails, cleanup_all_trash_emails,
+    move_email_to_trash, restore_email_from_trash, get_trash_emails, permanently_delete_email, cleanup_all_trash_emails,
     cascade_delete_received_emails_for_forwarding,
+    EMAIL_CLEANUP_SCHEDULER_INTERVAL_MINUTES,
 )
 from app.services.email_tag_service import (
     get_all_tags, create_tag as create_tag_service, update_tag as update_tag_service, update_tag_filters, delete_tag, get_tag,
@@ -50,7 +51,8 @@ def manage_email_buzon():
                          current_view='inbox',
                          spam_count=spam_count,
                          active_emails_count=active_emails_count,
-                         trash_emails_count=trash_emails_count)
+                         trash_emails_count=trash_emails_count,
+                         email_cleanup_interval_minutes=EMAIL_CLEANUP_SCHEDULER_INTERVAL_MINUTES)
 
 # ==================== RUTAS PARA REENVÍO DE CORREOS ====================
 
@@ -301,7 +303,8 @@ def filter_by_tag(tag_id):
                          current_view='tag',
                          spam_count=spam_count,
                          active_emails_count=active_emails_count,
-                         trash_emails_count=trash_emails_count)
+                         trash_emails_count=trash_emails_count,
+                         email_cleanup_interval_minutes=EMAIL_CLEANUP_SCHEDULER_INTERVAL_MINUTES)
 
 @admin_email_buzon_bp.route('/email-buzon/add-tag/<int:email_id>/<int:tag_id>', methods=['POST'])
 @admin_required
@@ -390,7 +393,8 @@ def view_trash():
                          current_view='trash',
                          spam_count=spam_count,
                          active_emails_count=active_emails_count,
-                         trash_emails_count=trash_emails_count)
+                         trash_emails_count=trash_emails_count,
+                         email_cleanup_interval_minutes=EMAIL_CLEANUP_SCHEDULER_INTERVAL_MINUTES)
 
 @admin_email_buzon_bp.route('/email-buzon/spam')
 @admin_required
@@ -424,7 +428,8 @@ def view_spam():
                          current_view='spam',
                          spam_count=spam_count,
                          active_emails_count=active_emails_count,
-                         trash_emails_count=trash_emails_count)
+                         trash_emails_count=trash_emails_count,
+                         email_cleanup_interval_minutes=EMAIL_CLEANUP_SCHEDULER_INTERVAL_MINUTES)
 
 @admin_email_buzon_bp.route('/email-buzon/move-to-trash/<int:email_id>', methods=['POST'])
 @admin_required
@@ -1232,43 +1237,60 @@ def toggle_blocked_sender_route(sender_id):
 
 # ==================== RUTAS PARA LIMPIEZA AUTOMÁTICA ====================
 
+def _parse_cleanup_folder_form_value(raw):
+    """Valores del select: 'inbox', 'trash', 'tag:<id>' → (folder_type, tag_id o None)."""
+    raw = (raw or "").strip()
+    if not raw:
+        return None, None
+    if raw.startswith("tag:"):
+        try:
+            tid = int(raw.split(":", 1)[1].strip())
+        except (ValueError, IndexError):
+            return None, None
+        return "tag", tid
+    if raw in ("inbox", "trash"):
+        return raw, None
+    return None, None
+
+
 @admin_email_buzon_bp.route('/email-buzon/cleanup/create', methods=['POST'])
 @admin_required
 def create_cleanup():
     """Crear nueva limpieza automática"""
     try:
         from datetime import datetime
-        
+        from app.models.email_buzon import EmailTag
+
         cleanup_time_str = request.form.get('cleanup_time')
-        folder_type = request.form.get('folder_type')
-        
-        if not cleanup_time_str or not folder_type:
+        folder_raw = request.form.get('folder_type')
+
+        if not cleanup_time_str or not folder_raw:
             flash('Hora y tipo de carpeta son requeridos', 'error')
             return redirect(url_for('admin_email_buzon.manage_email_buzon'))
-        
+
+        folder_type, tag_id = _parse_cleanup_folder_form_value(folder_raw)
+        if folder_type is None:
+            flash('Carpeta o etiqueta no válida.', 'error')
+            return redirect(url_for('admin_email_buzon.manage_email_buzon'))
+
         # Convertir string de tiempo a objeto time
         cleanup_time = datetime.strptime(cleanup_time_str, '%H:%M').time()
-        
+
         print(f"🕐 DEBUG: Hora recibida: {cleanup_time_str} -> {cleanup_time} (Timezone Colombia)")
-        
-        # Obtener tag_id si es necesario
-        tag_id = None
-        if folder_type == 'tag':
-            # Para etiquetas, necesitamos obtener el tag_id del select
-            # Por ahora usaremos el primer tag disponible, esto se puede mejorar
-            from app.models.email_buzon import EmailTag
-            first_tag = EmailTag.query.first()
-            if first_tag:
-                tag_id = first_tag.id
-            else:
-                flash('No hay etiquetas disponibles para limpieza', 'error')
+
+        if folder_type == "tag":
+            if not tag_id:
+                flash('Debes elegir una etiqueta concreta.', 'error')
                 return redirect(url_for('admin_email_buzon.manage_email_buzon'))
-        
+            if not EmailTag.query.get(tag_id):
+                flash('La etiqueta indicada no existe.', 'error')
+                return redirect(url_for('admin_email_buzon.manage_email_buzon'))
+
         # Crear la limpieza
         cleanup = EmailCleanup.create_cleanup(
             cleanup_time=cleanup_time,
             folder_type=folder_type,
-            tag_id=tag_id
+            tag_id=tag_id if folder_type == "tag" else None
         )
         
         flash(f'Limpieza automática creada: {cleanup.time.strftime("%H:%M")} - {cleanup.get_folder_name()}', 'success')
@@ -1289,35 +1311,38 @@ def edit_cleanup(cleanup_id):
         from datetime import datetime
         
         cleanup = EmailCleanup.query.get_or_404(cleanup_id)
-        
+        from app.models.email_buzon import EmailTag
+
         cleanup_time_str = request.form.get('cleanup_time')
-        folder_type = request.form.get('folder_type')
-        
-        if not cleanup_time_str or not folder_type:
+        folder_raw = request.form.get('folder_type')
+
+        if not cleanup_time_str or not folder_raw:
             flash('Hora y tipo de carpeta son requeridos', 'error')
             return redirect(url_for('admin_email_buzon.manage_email_buzon'))
-        
+
+        folder_type, tag_id = _parse_cleanup_folder_form_value(folder_raw)
+        if folder_type is None:
+            flash('Carpeta o etiqueta no válida.', 'error')
+            return redirect(url_for('admin_email_buzon.manage_email_buzon'))
+
         # Convertir string de tiempo a objeto time
         cleanup_time = datetime.strptime(cleanup_time_str, '%H:%M').time()
-        
+
         print(f"🕐 DEBUG: Hora editada: {cleanup_time_str} -> {cleanup_time} (Timezone Colombia)")
-        
+
+        if folder_type == "tag":
+            if not tag_id:
+                flash('Debes elegir una etiqueta concreta.', 'error')
+                return redirect(url_for('admin_email_buzon.manage_email_buzon'))
+            if not EmailTag.query.get(tag_id):
+                flash('La etiqueta indicada no existe.', 'error')
+                return redirect(url_for('admin_email_buzon.manage_email_buzon'))
+
         # Actualizar campos
         cleanup.time = cleanup_time
         cleanup.folder_type = folder_type
-        
-        # Actualizar tag_id si es necesario
-        if folder_type == 'tag':
-            from app.models.email_buzon import EmailTag
-            first_tag = EmailTag.query.first()
-            if first_tag:
-                cleanup.tag_id = first_tag.id
-            else:
-                flash('No hay etiquetas disponibles para limpieza', 'error')
-                return redirect(url_for('admin_email_buzon.manage_email_buzon'))
-        else:
-            cleanup.tag_id = None
-        
+        cleanup.tag_id = tag_id if folder_type == "tag" else None
+
         db.session.commit()
         
         flash(f'Limpieza automática actualizada: {cleanup.time.strftime("%H:%M")} - {cleanup.get_folder_name()}', 'success')

@@ -5,6 +5,25 @@ let currentEmailId = null;
 let contextMenuEmailId = null;
 let contextMenu = null;
 
+/** Envuelve HTML de correo para mostrarlo en iframe (documento completo o fragmento). */
+function wrapEmailHtmlForIframe(html) {
+  if (!html || !String(html).trim()) {
+    return '<!DOCTYPE html><html><head><meta charset="utf-8"></head><body></body></html>';
+  }
+  const t = String(html).trim();
+  if (/^<!DOCTYPE/i.test(t) || /^<html[\s>]/i.test(t)) {
+    return t;
+  }
+  return (
+    '<!DOCTYPE html><html><head><meta charset="utf-8">' +
+    '<base target="_blank" rel="noopener noreferrer">' +
+    '<style>body{margin:0;padding:16px;font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;font-size:14px;line-height:1.5;color:#111;}img,table{max-width:100%;height:auto;}table{border-collapse:collapse;}</style>' +
+    '</head><body>' +
+    html +
+    '</body></html>'
+  );
+}
+
 // Funciones para el buzón de mensajes
 function viewEmail(emailId) {
   currentEmailId = emailId;
@@ -46,18 +65,48 @@ function viewEmail(emailId) {
           tagsContainer.style.display = 'none';
         }
         
-        // Llenar contenido de texto
-        const textContent = email.content_text || 'Sin contenido de texto';
-        document.getElementById('emailContentText').textContent = textContent;
-        
-        // Mostrar pestaña HTML si hay contenido HTML
+        const textEl = document.getElementById('emailContentText');
         const htmlTabBtn = document.getElementById('htmlTabBtn');
-        const htmlContent = document.getElementById('emailContentHtml');
-        if (email.content_html && email.content_html.trim()) {
-          htmlTabBtn.style.display = 'block';
-          htmlContent.innerHTML = email.content_html;
+        const htmlPane = document.getElementById('emailContentHtml');
+        const htmlFrame = document.getElementById('emailContentHtmlFrame');
+        const textTabBtn = document.querySelector('#viewEmailModal .tab-btn[data-tab="text"]');
+
+        const textContent = (email.content_text && email.content_text.trim())
+          ? email.content_text
+          : 'Sin contenido de texto';
+        textEl.textContent = textContent;
+
+        const hasHtml = email.content_html && String(email.content_html).trim();
+
+        document.querySelectorAll('#viewEmailModal .email-content-tabs .tab-btn').forEach((b) => b.classList.remove('active'));
+        document.querySelectorAll('#viewEmailModal .email-tab-content').forEach((pane) => {
+          pane.classList.remove('active');
+          pane.classList.add('hidden');
+          pane.setAttribute('aria-hidden', 'true');
+        });
+
+        if (hasHtml) {
+          htmlTabBtn.classList.remove('hidden');
+          htmlTabBtn.style.display = '';
+          if (htmlFrame) {
+            htmlFrame.srcdoc = wrapEmailHtmlForIframe(email.content_html);
+          }
+          htmlTabBtn.classList.add('active');
+          htmlPane.classList.remove('hidden');
+          htmlPane.classList.add('active');
+          htmlPane.setAttribute('aria-hidden', 'false');
+          textEl.classList.add('hidden');
+          textEl.setAttribute('aria-hidden', 'true');
         } else {
+          htmlTabBtn.classList.add('hidden');
           htmlTabBtn.style.display = 'none';
+          if (htmlFrame) {
+            htmlFrame.srcdoc = '';
+          }
+          if (textTabBtn) textTabBtn.classList.add('active');
+          textEl.classList.remove('hidden');
+          textEl.classList.add('active');
+          textEl.setAttribute('aria-hidden', 'false');
         }
         
         // Configurar botones según el estado del email
@@ -566,23 +615,45 @@ function escapeHtml(text) {
 }
 
 function closeViewEmailModal() {
+  const frame = document.getElementById('emailContentHtmlFrame');
+  if (frame) {
+    frame.srcdoc = '';
+  }
   hideElement('viewEmailModal');
   currentEmailId = null;
 }
 
-function showEmailTab(tabType) {
-  // Remover clase active de todos los botones y contenidos
-  document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
-  document.querySelectorAll('.email-tab-content').forEach(content => {
+function showEmailTab(tabType, clickedButton) {
+  const modal = document.getElementById('viewEmailModal');
+  if (!modal) return;
+
+  modal.querySelectorAll('.email-content-tabs .tab-btn').forEach((btn) => btn.classList.remove('active'));
+  modal.querySelectorAll('.email-tab-content').forEach((content) => {
     content.classList.remove('active');
-    content.style.display = 'none';
+    content.classList.add('hidden');
+    content.setAttribute('aria-hidden', 'true');
   });
-  
-  // Activar el tab seleccionado
-  event.target.classList.add('active');
-  const contentDiv = document.getElementById(`emailContent${tabType.charAt(0).toUpperCase() + tabType.slice(1)}`);
-  contentDiv.classList.add('active');
-  contentDiv.style.display = 'block';
+
+  const trigger = clickedButton || modal.querySelector(`.email-content-tabs .tab-btn[data-tab="${tabType}"]`);
+  if (trigger) {
+    trigger.classList.add('active');
+  }
+
+  if (tabType === 'html') {
+    const htmlPane = document.getElementById('emailContentHtml');
+    if (htmlPane) {
+      htmlPane.classList.remove('hidden');
+      htmlPane.classList.add('active');
+      htmlPane.setAttribute('aria-hidden', 'false');
+    }
+  } else {
+    const textPane = document.getElementById('emailContentText');
+    if (textPane) {
+      textPane.classList.remove('hidden');
+      textPane.classList.add('active');
+      textPane.setAttribute('aria-hidden', 'false');
+    }
+  }
 }
 
 function markEmailAsProcessed() {
@@ -1863,7 +1934,12 @@ function closeEditForwardingModal() {
 // Funciones para el modal de edición de limpieza automática
 function openEditCleanupModal(cleanupId, cleanupTime, cleanupFolder, cleanupTagId) {
   document.getElementById('editCleanupTime').value = cleanupTime || '';
-  document.getElementById('editCleanupFolder').value = cleanupFolder || 'inbox';
+  const folderSelect = document.getElementById('editCleanupFolder');
+  if (cleanupFolder === 'tag' && cleanupTagId) {
+    folderSelect.value = `tag:${cleanupTagId}`;
+  } else {
+    folderSelect.value = cleanupFolder || 'inbox';
+  }
   document.getElementById('editCleanupForm').action = `/admin/email-buzon/cleanup/edit/${cleanupId}`;
   showElement('editCleanupModal');
 }
@@ -2247,7 +2323,7 @@ document.addEventListener('DOMContentLoaded', function() {
   document.querySelectorAll('[data-action="show-tab"]').forEach(button => {
     button.addEventListener('click', function() {
       const tab = this.getAttribute('data-tab');
-      showEmailTab(tab);
+      showEmailTab(tab, this);
     });
   });
 

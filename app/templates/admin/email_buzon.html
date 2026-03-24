@@ -235,7 +235,7 @@
   <div class="forwarding-item">
     <div class="forwarding-info">
       <strong>{{ cleanup.get_time_12h() }} - {{ cleanup.folder_name }}</strong><br>
-      <small>Limpieza diaria automática (Hora Colombia)</small>
+      <small>Limpieza diaria a partir de esta hora (Colombia), con margen de unos minutos. El servidor comprueba cada {{ email_cleanup_interval_minutes }} min. Requiere el programador de tareas (proceso que carga <code>run.py</code>).</small>
     </div>
     <div class="forwarding-actions">
       <button class="btn btn-green edit-cleanup-btn" 
@@ -276,7 +276,7 @@
           <option value="inbox">📥 Recibidos</option>
           <option value="trash">🗑️ Papelera</option>
           {% for tag in tags %}
-          <option value="tag" data-tag-id="{{ tag.id }}">🏷️ {{ tag.name }}</option>
+          <option value="tag:{{ tag.id }}">🏷️ {{ tag.name }}</option>
           {% endfor %}
         </select>
       </div>
@@ -729,7 +729,7 @@
           <option value="inbox">📥 Recibidos</option>
           <option value="trash">🗑️ Papelera</option>
           {% for tag in tags %}
-          <option value="tag" data-tag-id="{{ tag.id }}">🏷️ {{ tag.name }}</option>
+          <option value="tag:{{ tag.id }}">🏷️ {{ tag.name }}</option>
           {% endfor %}
         </select>
         <small>Selecciona qué carpeta se limpiará automáticamente</small>
@@ -774,14 +774,16 @@
           <div id="emailTags"></div>
         </div>
       </div>
-      <div class="email-content">
+      <div class="email-content email-content-viewer">
         <div class="email-content-tabs">
-          <button class="tab-btn active" data-action="show-tab" data-tab="text" aria-label="Mostrar contenido como texto">Texto</button>
-          <button class="tab-btn hidden" data-action="show-tab" data-tab="html" id="htmlTabBtn" aria-label="Mostrar contenido como HTML">HTML</button>
+          <button type="button" class="tab-btn active" data-action="show-tab" data-tab="text" aria-label="Mostrar texto plano">Texto plano</button>
+          <button type="button" class="tab-btn hidden" data-action="show-tab" data-tab="html" id="htmlTabBtn" aria-label="Mostrar vista previa del mensaje">Vista previa</button>
         </div>
         <div class="email-content-body">
-          <div id="emailContentText" class="email-tab-content active"></div>
-          <div id="emailContentHtml" class="email-tab-content hidden"></div>
+          <div id="emailContentText" class="email-tab-content email-tab-plain active"></div>
+          <div id="emailContentHtml" class="email-tab-content email-tab-html hidden" aria-hidden="true">
+            <iframe id="emailContentHtmlFrame" class="email-html-frame" title="Vista previa del mensaje" sandbox="allow-popups allow-popups-to-escape-sandbox" referrerpolicy="no-referrer"></iframe>
+          </div>
         </div>
       </div>
     </div>
@@ -800,7 +802,7 @@
   </div>
 </div>
 
-<script src="{{ url_for('static', filename='js/email_buzon.js') }}?v=20241220-logs"></script>
+<script src="{{ url_for('static', filename='js/email_buzon.js') }}?v=20260325-cleanup-sched"></script>
 <script src="{{ url_for('static', filename='js/menu_busqueda.js') }}"></script>
 <script src="{{ url_for('static', filename='js/clear_trigger_logs.js') }}?v=20241220-original"></script>
 {% endblock %}

@@ -6,6 +6,28 @@ from app.imap.parser import parse_raw_email
 # Importación de auto_tag_email se hace dentro de la función para evitar importaciones circulares
 from datetime import datetime, timedelta
 
+# Intervalo del job en run.py y ancho de la ventana de disparo (deben coincidir).
+# La limpieza se ejecuta si "ahora" (Colombia) está entre la hora configurada y esa hora + N minutos.
+EMAIL_CLEANUP_SCHEDULER_INTERVAL_MINUTES = 5
+
+
+def _cleanup_rule_fires_in_window(now, rule_time, interval_minutes):
+    """
+    True si `now` cae en [slot_start, slot_start + interval) en hora Colombia.
+    slot_start es la última ocurrencia de rule_time (H:M) en el calendario local
+    que no es posterior a `now` (puede ser el día anterior si cruza medianoche).
+    """
+    slot_today = now.replace(
+        hour=rule_time.hour, minute=rule_time.minute, second=0, microsecond=0
+    )
+    if now >= slot_today:
+        slot_start = slot_today
+    else:
+        slot_start = slot_today - timedelta(days=1)
+    slot_end = slot_start + timedelta(minutes=interval_minutes)
+    return slot_start <= now < slot_end
+
+
 def create_buzon_server(domain, smtp_port=25, max_emails_per_second=300):
     """Crea un nuevo servidor de buzón SMTP"""
     buzon_server = EmailBuzonServer(
@@ -351,3 +373,94 @@ def cleanup_all_trash_emails():
     db.session.commit()
     print(f"[CLEANUP] ✅ Eliminados permanentemente {count} emails de la base de datos")
     return count
+
+
+def _delete_received_emails_bulk(emails):
+    """
+    Elimina correos de la BD y limpia etiquetas (tabla de unión) antes de borrar cada fila.
+    Retorna cantidad eliminada.
+    """
+    count = 0
+    for email in emails:
+        try:
+            email.tags.clear()
+        except Exception:
+            pass
+        db.session.delete(email)
+        count += 1
+    if count:
+        db.session.commit()
+    return count
+
+
+def run_scheduled_email_cleanups_for_colombia_clock():
+    """
+    Ejecuta las reglas EmailCleanup activas cuando la hora Colombia cae en la ventana configurada.
+
+    Ventana: desde la hora guardada (HH:MM) hasta esa hora + EMAIL_CLEANUP_SCHEDULER_INTERVAL_MINUTES.
+    El job en run.py debe dispararse con ese mismo intervalo (p. ej. cada 5 min); no hace falta coincidir
+    al minuto exacto.
+
+    - inbox: correos no eliminados y sin etiquetas (misma lógica que vista Recibidos).
+    - trash: todos los correos en papelera (borrado permanente).
+    - tag: correos que tienen la etiqueta indicada en cleanup.tag_id (borrado permanente).
+    """
+    from app.models.email_cleanup import EmailCleanup
+    from app.models.email_buzon import EmailTag
+    from app.utils.timezone import get_colombia_now
+
+    now = get_colombia_now()
+    window = EMAIL_CLEANUP_SCHEDULER_INTERVAL_MINUTES
+
+    cleanups = EmailCleanup.get_active_cleanups()
+    total = 0
+
+    for rule in cleanups:
+        t = rule.time
+        if not _cleanup_rule_fires_in_window(now, t, window):
+            continue
+
+        if rule.folder_type == "inbox":
+            q = ReceivedEmail.query.filter(
+                ReceivedEmail.deleted.is_(False),
+                ~ReceivedEmail.tags.any(),
+            )
+            emails = q.all()
+            n = _delete_received_emails_bulk(emails)
+            total += n
+            if n:
+                print(
+                    f"[CLEANUP SCHED] Recibidos: eliminados {n} correos (hora CO {t.strftime('%H:%M')})",
+                    flush=True,
+                )
+
+        elif rule.folder_type == "trash":
+            emails = ReceivedEmail.query.filter(ReceivedEmail.deleted.is_(True)).all()
+            n = _delete_received_emails_bulk(emails)
+            total += n
+            if n:
+                print(
+                    f"[CLEANUP SCHED] Papelera: eliminados {n} correos (hora CO {t.strftime('%H:%M')})",
+                    flush=True,
+                )
+
+        elif rule.folder_type == "tag":
+            if not rule.tag_id:
+                continue
+            tag = EmailTag.query.get(rule.tag_id)
+            if not tag:
+                continue
+            emails = (
+                ReceivedEmail.query.join(ReceivedEmail.tags)
+                .filter(EmailTag.id == rule.tag_id)
+                .all()
+            )
+            n = _delete_received_emails_bulk(emails)
+            total += n
+            if n:
+                print(
+                    f"[CLEANUP SCHED] Etiqueta '{tag.name}': eliminados {n} correos (hora CO {t.strftime('%H:%M')})",
+                    flush=True,
+                )
+
+    return total
