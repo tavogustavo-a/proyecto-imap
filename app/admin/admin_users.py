@@ -1830,8 +1830,15 @@ def add_global_linked_project():
 @admin_required
 def manage_global_linked_project(project_id):
     """Actualiza o elimina una API global."""
+    admin_username = current_app.config.get("ADMIN_USER", "admin")
+    admin = User.query.filter_by(username=admin_username).first()
+    if not admin:
+        return jsonify({"status": "error", "message": "Admin no encontrado"}), 404
+
     project = LinkedProject.query.get_or_404(project_id)
-    
+    if project.user_id != admin.id:
+        return jsonify({"status": "error", "message": "No autorizado"}), 403
+
     if request.method == "DELETE":
         db.session.delete(project)
     else:

@@ -318,15 +318,13 @@ def search_and_apply_filters(to_address, service_id=None, user=None, origin_doma
     if not public_access:
         imap2_servers = IMAPServer2.query.filter_by(enabled=True).all()
         servers.extend(imap2_servers)
-    
-    if not servers:
-        return None
 
-    # -- Primer intento: 2 días
-    all_mails = search_in_all_servers(to_address, servers, limit_days=2)
-    found_mail = _process_mails(all_mails, final_filters, final_regexes, user, to_address)
-    if found_mail:
-        return found_mail
+    if servers:
+        # -- Primer intento: 2 días
+        all_mails = search_in_all_servers(to_address, servers, limit_days=2)
+        found_mail = _process_mails(all_mails, final_filters, final_regexes, user, to_address)
+        if found_mail:
+            return found_mail
 
     # --- NUEVA LÓGICA: Búsqueda en Proyectos Vinculados ---
     if user and user.enabled:
@@ -467,14 +465,12 @@ def search_and_apply_filters2(to_address, service_id=None, user=None):
 
     # 4) Buscamos en servidores IMAP2 habilitados
     servers = IMAPServer2.query.filter_by(enabled=True).all()
-    if not servers:
-        return None
-
-    # -- Primer intento: 2 días
-    all_mails = search_in_all_servers(to_address, servers, limit_days=2)
-    found_mail = _process_mails(all_mails, final_filters, final_regexes, user, to_address)
-    if found_mail:
-        return found_mail
+    if servers:
+        # -- Primer intento: 2 días
+        all_mails = search_in_all_servers(to_address, servers, limit_days=2)
+        found_mail = _process_mails(all_mails, final_filters, final_regexes, user, to_address)
+        if found_mail:
+            return found_mail
 
     # --- NUEVA LÓGICA: Búsqueda en Proyectos Vinculados ---
     if user and user.enabled:
@@ -627,16 +623,13 @@ def search_imap2_server_dynamic(to_address, imap_server_id, user=None):
     linked_imap_servers = imap_server.linked_imap_servers.filter_by(enabled=True).all()
     for linked_imap in linked_imap_servers:
         servers.append(linked_imap)
-    
-    # Si no hay ningún servidor habilitado (ni principal ni vinculados), retornar None
-    if not servers:
-        return None
-    
-    # -- Primer intento: 2 días
-    all_mails = search_in_all_servers(to_address, servers, limit_days=2)
-    found_mail = _process_mails(all_mails, final_filters, final_regexes, user, to_address)
-    if found_mail:
-        return found_mail
+
+    if servers:
+        # -- Primer intento: 2 días
+        all_mails = search_in_all_servers(to_address, servers, limit_days=2)
+        found_mail = _process_mails(all_mails, final_filters, final_regexes, user, to_address)
+        if found_mail:
+            return found_mail
 
     # --- NUEVA LÓGICA: Búsqueda en Proyectos Vinculados ---
     if user and user.enabled:
