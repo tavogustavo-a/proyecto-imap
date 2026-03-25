@@ -6,6 +6,7 @@ import logging
 import threading
 import time
 from email.header import decode_header
+from email.utils import getaddresses
 from typing import Optional
 
 from aiosmtpd.controller import Controller
@@ -109,6 +110,34 @@ def _decode_mime_header(value) -> str:
         return value
 
 
+def _normalize_smtp_envelope_address(addr: str) -> str:
+    """Quita <> y espacios del MAIL FROM / RCPT."""
+    if not addr:
+        return ""
+    s = addr.strip()
+    if s.startswith("<") and s.endswith(">"):
+        s = s[1:-1].strip()
+    return s
+
+
+def _sender_from_rfc822_headers(message: email.message.Message) -> Optional[str]:
+    """
+    Dirección del remitente según cabeceras del mensaje (From / Sender / Resent-From).
+    En reenvíos desde Gmail, MAIL FROM suele ser SRS (ej. +caf_=...) pero el From
+    del MIME sigue siendo el emisor real (p. ej. Netflix).
+    """
+    for header in ("From", "Sender", "Resent-From"):
+        raw = message.get(header)
+        if not raw:
+            continue
+        decoded = _decode_mime_header(raw)
+        for _name, addr in getaddresses([decoded]):
+            addr = (addr or "").strip()
+            if addr and "@" in addr:
+                return addr
+    return None
+
+
 class LoggingSMTP(SMTPServer):
     """Registra cada conexión TCP al puerto 25 (diagnóstico en journalctl)."""
 
@@ -143,8 +172,11 @@ class EmailHandler:
             # Parsear el email
             message = email.message_from_bytes(envelope.content)
             
-            # Extraer información del email
-            from_email = envelope.mail_from
+            # Remitente: preferir From (RFC 822) frente a MAIL FROM del sobre SMTP
+            # (reenvíos/Gmail SRS suelen tener sobre distinto al emisor mostrable).
+            hdr_from = _sender_from_rfc822_headers(message)
+            env_from = _normalize_smtp_envelope_address(envelope.mail_from or "")
+            from_email = hdr_from or env_from
             to_emails = envelope.rcpt_tos
             subject = _decode_mime_header(message.get("Subject", ""))
             
