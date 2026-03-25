@@ -120,24 +120,40 @@ def _normalize_smtp_envelope_address(addr: str) -> str:
     return s
 
 
+def _first_recipient_address_not_envelope(
+    decoded: str, env_norm: str
+) -> Optional[str]:
+    """Primera dirección en la cadena que no sea el RCPT del sobre SMTP."""
+    for _name, addr in getaddresses([decoded]):
+        addr = (addr or "").strip()
+        if not addr or "@" not in addr:
+            continue
+        if addr.lower() == env_norm:
+            continue
+        return addr
+    return None
+
+
 def _forwarded_recipient_for_display(
     message: email.message.Message, envelope_rcpt: str
 ) -> Optional[str]:
     """
-    En reenvíos desde Gmail, Delivered-To / X-Original-To suelen ser la cuenta real
-    (ej. usuario@gmail.com); RCPT en nuestro SMTP es la dirección configurada (ej. mensaje@dominio).
+    En reenvíos desde Gmail, la cuenta útil puede ir en Delivered-To, X-Original-To, etc.
+    O en la cabecera To del MIME (p. ej. Netflix envía a usuario@gmail.com y Gmail
+    reenvía a tu servidor; el RCPT es tu dirección configurada).
     Solo devuelve una dirección si difiere del RCPT (normalizado).
     """
-    env_norm = _normalize_smtp_envelope_address(envelope_rcpt)
-    env_norm = env_norm.lower()
+    env_norm = _normalize_smtp_envelope_address(envelope_rcpt).lower()
     if not env_norm:
         return None
+
     for header in (
         "Delivered-To",
         "X-Original-To",
         "X-Forwarded-To",
         "Envelope-To",
         "X-Envelope-To",
+        "Original-Recipient",
     ):
         chunks = message.get_all(header, [])
         if not chunks:
@@ -148,13 +164,18 @@ def _forwarded_recipient_for_display(
             if not raw:
                 continue
             decoded = _decode_mime_header(raw)
-            for _name, addr in getaddresses([decoded]):
-                addr = (addr or "").strip()
-                if not addr or "@" not in addr:
-                    continue
-                if addr.lower() == env_norm:
-                    continue
-                return addr
+            found = _first_recipient_address_not_envelope(decoded, env_norm)
+            if found:
+                return found
+
+    # To del mensaje: muchas veces el destinatario real (Gmail) antes del reenvío al dominio propio
+    to_raw = message.get("To")
+    if to_raw:
+        decoded = _decode_mime_header(to_raw)
+        found = _first_recipient_address_not_envelope(decoded, env_norm)
+        if found:
+            return found
+
     return None
 
 
