@@ -3,6 +3,7 @@
 import asyncio
 import email
 import logging
+import os
 import re
 import threading
 import time
@@ -32,6 +33,47 @@ def bind_smtp_flask_app(app: Flask) -> None:
 def _line(msg: str) -> None:
     print(msg, flush=True)
     _log.info(msg)
+
+
+def _smtp_debug_headers_enabled() -> bool:
+    v = (os.getenv("SMTP_DEBUG_HEADERS") or "").strip().lower()
+    return v in ("1", "true", "yes", "on")
+
+
+def _log_message_headers_for_debug(message: email.message.Message) -> None:
+    """Volcado de nombres y cabeceras relevantes (solo si SMTP_DEBUG_HEADERS=1)."""
+    keys = sorted(set(message.keys()))
+    _line(f"🔍 SMTP DEBUG: cabeceras presentes ({len(keys)}): {keys}")
+    for h in (
+        "Delivered-To",
+        "To",
+        "Cc",
+        "X-Original-To",
+        "X-Gm-Original-To",
+        "X-Google-Original-To",
+        "X-Forwarded-To",
+        "Envelope-To",
+        "X-Envelope-To",
+        "Original-Recipient",
+        "Return-Path",
+    ):
+        for raw in message.get_all(h) or []:
+            if not raw:
+                continue
+            s = raw if isinstance(raw, str) else str(raw)
+            if len(s) > 1200:
+                s = s[:1200] + "…"
+            _line(f"🔍 SMTP DEBUG: {h}: {s}")
+    received = message.get_all("Received") or []
+    for i, raw in enumerate(received[:5]):
+        if not raw:
+            continue
+        s = raw if isinstance(raw, str) else str(raw)
+        if len(s) > 1500:
+            s = s[:1500] + "…"
+        _line(f"🔍 SMTP DEBUG: Received[{i}]: {s}")
+    if len(received) > 5:
+        _line(f"🔍 SMTP DEBUG: … y {len(received) - 5} cabeceras Received más")
 
 
 def _decode_part_payload(part) -> str | None:
@@ -303,7 +345,9 @@ class EmailHandler:
             
             # Parsear el email
             message = email.message_from_bytes(envelope.content)
-            
+            if _smtp_debug_headers_enabled():
+                _log_message_headers_for_debug(message)
+
             # Remitente: preferir From (RFC 822) frente a MAIL FROM del sobre SMTP
             # (reenvíos/Gmail SRS suelen tener sobre distinto al emisor mostrable).
             hdr_from = _sender_from_rfc822_headers(message)
