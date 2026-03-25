@@ -986,11 +986,11 @@ function filterEmailsByTag(tagId) {
       tempDiv.innerHTML = html;
       
       // Extraer solo el contenido de la lista de emails
-      const newEmailList = tempDiv.querySelector('.email-list');
+      const newWrapper = tempDiv.querySelector('.email-list-wrapper');
+      const curWrapper = document.querySelector('.email-list-wrapper');
       
-      if (newEmailList) {
-        // Actualizar la lista de emails
-        document.querySelector('.email-list').innerHTML = newEmailList.innerHTML;
+      if (newWrapper && curWrapper) {
+        curWrapper.innerHTML = newWrapper.innerHTML;
         
         // Actualizar el sidebar para marcar la etiqueta como activa
         document.querySelectorAll('.email-folder').forEach(folder => {
@@ -1035,12 +1035,14 @@ function filterEmailsTrash() {
       tempDiv.innerHTML = html;
       
       // Extraer solo el contenido de la lista de emails
-      const newEmailList = tempDiv.querySelector('.email-list');
+      const newWrapper = tempDiv.querySelector('.email-list-wrapper');
       const newSidebar = tempDiv.querySelector('.email-sidebar');
       
-      if (newEmailList && newSidebar) {
-        // Actualizar la lista de emails
-        document.querySelector('.email-list').innerHTML = newEmailList.innerHTML;
+      if (newWrapper && newSidebar) {
+        const curWrapper = document.querySelector('.email-list-wrapper');
+        if (curWrapper) {
+          curWrapper.innerHTML = newWrapper.innerHTML;
+        }
         
         // Actualizar el sidebar para marcar Papelera como activa
         document.querySelectorAll('.email-folder').forEach(folder => {

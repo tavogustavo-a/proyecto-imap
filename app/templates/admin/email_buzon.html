@@ -1,7 +1,7 @@
 {% extends "admin_dashboard.html" %}
 
 {% block content %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/email_buzon.css') }}?v=20260326">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/email_buzon.css') }}?v=20260327">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/store.css') }}">
 
 <!-- Token CSRF global -->
@@ -85,7 +85,7 @@
       <div class="email-folder tag-folder {{ 'active' if current_view == 'tag' and current_tag and current_tag.id == tag.id else '' }}" data-filter="tag" data-tag-id="{{ tag.id }}" data-action="navigate" data-url="{{ url_for('admin_email_buzon.filter_by_tag', tag_id=tag.id) }}">
         <i class="fas fa-tag"></i>
         <span>{{ tag.name }}</span>
-        <span class="email-folder-count">{{ recent_emails|selectattr('tags')|selectattr('id', 'equalto', tag.id)|list|length }}</span>
+        <span class="email-folder-count">{{ (tag_counts.get(tag.id, 0) if tag_counts is defined else 0) }}</span>
         <button class="tag-settings-btn" data-tag-id="{{ tag.id }}" data-tag-name="{{ tag.name }}" data-tag-color="{{ tag.color }}" title="Editar etiqueta" aria-label="Editar etiqueta {{ tag.name }}" data-action="tag-settings">
           <i class="fas fa-cog"></i>
         </button>
@@ -126,6 +126,7 @@
       </div>
       
       <h2 id="email-list-heading" class="sr-only">Lista de correos electrónicos</h2>
+      <div class="email-list-wrapper">
       <div class="email-list" role="list" aria-label="Lista de correos electrónicos">
         {% for email in recent_emails %}
         <div class="email-item {{ 'unread' if not email.processed else '' }} {{ 'deleted' if email.deleted else '' }} cursor-pointer" 
@@ -156,6 +157,84 @@
           <p>No hay mensajes en la bandeja de entrada</p>
         </div>
         {% endif %}
+      </div>
+
+      {% if pagination %}
+      {% set cv = current_view|default('inbox') %}
+      <nav class="email-pagination" aria-label="Paginación de correos">
+        <div class="email-pagination-info">
+          {% if pagination.total > 0 %}
+            {% set start_i = (pagination.page - 1) * pagination.per_page + 1 %}
+            {% set end_i = (pagination.page - 1) * pagination.per_page + (recent_emails|length) %}
+            <span>{{ start_i }}–{{ end_i }} de {{ pagination.total }}</span>
+          {% else %}
+            <span>0 mensajes</span>
+          {% endif %}
+        </div>
+        <div class="email-pagination-nav">
+          {% if cv == 'inbox' or not current_view %}
+            {% if pagination.has_prev %}
+            <a class="btn btn-blue email-pagination-btn" href="{{ url_for('admin_email_buzon.manage_email_buzon', page=pagination.prev_num, per_page=pagination.per_page) }}">Anterior</a>
+            {% else %}
+            <span class="btn btn-gray email-pagination-btn email-pagination-btn-disabled">Anterior</span>
+            {% endif %}
+            {% if pagination.has_next %}
+            <a class="btn btn-blue email-pagination-btn" href="{{ url_for('admin_email_buzon.manage_email_buzon', page=pagination.next_num, per_page=pagination.per_page) }}">Siguiente</a>
+            {% else %}
+            <span class="btn btn-gray email-pagination-btn email-pagination-btn-disabled">Siguiente</span>
+            {% endif %}
+          {% elif cv == 'tag' and current_tag %}
+            {% if pagination.has_prev %}
+            <a class="btn btn-blue email-pagination-btn" href="{{ url_for('admin_email_buzon.filter_by_tag', tag_id=current_tag.id, page=pagination.prev_num, per_page=pagination.per_page) }}">Anterior</a>
+            {% else %}
+            <span class="btn btn-gray email-pagination-btn email-pagination-btn-disabled">Anterior</span>
+            {% endif %}
+            {% if pagination.has_next %}
+            <a class="btn btn-blue email-pagination-btn" href="{{ url_for('admin_email_buzon.filter_by_tag', tag_id=current_tag.id, page=pagination.next_num, per_page=pagination.per_page) }}">Siguiente</a>
+            {% else %}
+            <span class="btn btn-gray email-pagination-btn email-pagination-btn-disabled">Siguiente</span>
+            {% endif %}
+          {% elif cv == 'trash' %}
+            {% if pagination.has_prev %}
+            <a class="btn btn-blue email-pagination-btn" href="{{ url_for('admin_email_buzon.view_trash', page=pagination.prev_num, per_page=pagination.per_page) }}">Anterior</a>
+            {% else %}
+            <span class="btn btn-gray email-pagination-btn email-pagination-btn-disabled">Anterior</span>
+            {% endif %}
+            {% if pagination.has_next %}
+            <a class="btn btn-blue email-pagination-btn" href="{{ url_for('admin_email_buzon.view_trash', page=pagination.next_num, per_page=pagination.per_page) }}">Siguiente</a>
+            {% else %}
+            <span class="btn btn-gray email-pagination-btn email-pagination-btn-disabled">Siguiente</span>
+            {% endif %}
+          {% elif cv == 'spam' %}
+            {% if pagination.has_prev %}
+            <a class="btn btn-blue email-pagination-btn" href="{{ url_for('admin_email_buzon.view_spam', page=pagination.prev_num, per_page=pagination.per_page) }}">Anterior</a>
+            {% else %}
+            <span class="btn btn-gray email-pagination-btn email-pagination-btn-disabled">Anterior</span>
+            {% endif %}
+            {% if pagination.has_next %}
+            <a class="btn btn-blue email-pagination-btn" href="{{ url_for('admin_email_buzon.view_spam', page=pagination.next_num, per_page=pagination.per_page) }}">Siguiente</a>
+            {% else %}
+            <span class="btn btn-gray email-pagination-btn email-pagination-btn-disabled">Siguiente</span>
+            {% endif %}
+          {% endif %}
+        </div>
+        <form method="get" class="email-pagination-per-page" aria-label="Correos por página"
+          {% if cv == 'inbox' or not current_view %}action="{{ url_for('admin_email_buzon.manage_email_buzon') }}"
+          {% elif cv == 'tag' and current_tag %}action="{{ url_for('admin_email_buzon.filter_by_tag', tag_id=current_tag.id) }}"
+          {% elif cv == 'trash' %}action="{{ url_for('admin_email_buzon.view_trash') }}"
+          {% elif cv == 'spam' %}action="{{ url_for('admin_email_buzon.view_spam') }}"
+          {% else %}action="{{ url_for('admin_email_buzon.manage_email_buzon') }}"
+          {% endif %}>
+          <input type="hidden" name="page" value="1">
+          <label for="buzonPerPageSelect">Por página</label>
+          <select name="per_page" id="buzonPerPageSelect" class="buzon-per-page-select" onchange="this.form.submit()">
+            {% for n in buzon_per_page_choices|default((25, 50, 100, 200)) %}
+            <option value="{{ n }}" {% if pagination.per_page == n %}selected{% endif %}>{{ n }}</option>
+            {% endfor %}
+          </select>
+        </form>
+      </nav>
+      {% endif %}
       </div>
     </div>
   </div>
@@ -234,8 +313,7 @@
   {% for cleanup in auto_cleanups %}
   <div class="forwarding-item">
     <div class="forwarding-info">
-      <strong>{{ cleanup.get_time_12h() }} - {{ cleanup.folder_name }}</strong><br>
-      <small>Limpieza diaria a partir de esta hora (Colombia), con margen de unos minutos. El servidor comprueba cada {{ email_cleanup_interval_minutes }} min. Requiere el programador de tareas (proceso que carga <code>run.py</code>).</small>
+      <strong>{{ cleanup.get_time_12h() }} - {{ cleanup.folder_name }}</strong>
     </div>
     <div class="forwarding-actions">
       <button class="btn btn-green edit-cleanup-btn" 

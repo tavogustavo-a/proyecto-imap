@@ -6,10 +6,21 @@ from app.models import ReceivedEmail
 from app.models.email_forwarding import EmailForwarding
 from app.models.email_cleanup import EmailCleanup
 from app.services.email_buzon_service import (
-    get_received_emails, mark_email_as_processed, get_recent_emails,
-    move_email_to_trash, restore_email_from_trash, get_trash_emails, permanently_delete_email, cleanup_all_trash_emails,
+    get_received_emails, mark_email_as_processed,
+    move_email_to_trash, restore_email_from_trash, permanently_delete_email, cleanup_all_trash_emails,
     cascade_delete_received_emails_for_forwarding,
     EMAIL_CLEANUP_SCHEDULER_INTERVAL_MINUTES,
+    normalize_buzon_list_page,
+    normalize_buzon_list_per_page,
+    paginate_recent_emails,
+    paginate_trash_emails,
+    paginate_emails_for_tag,
+    count_recent_emails,
+    count_trash_emails,
+    count_emails_for_tag,
+    get_tag_email_counts_non_deleted,
+    BUZON_LIST_PER_PAGE_DEFAULT,
+    BUZON_LIST_PER_PAGE_CHOICES,
 )
 from app.services.email_tag_service import (
     get_all_tags, create_tag as create_tag_service, update_tag as update_tag_service, update_tag_filters, delete_tag, get_tag,
@@ -22,37 +33,50 @@ from app.admin.decorators import admin_required
 
 admin_email_buzon_bp = Blueprint('admin_email_buzon', __name__)
 
+
+def _email_buzon_sidebar_counts():
+    from app.models.email_buzon import EmailTag
+
+    spam_tag = EmailTag.query.filter_by(name='spam').first()
+    spam_count = (
+        count_emails_for_tag(spam_tag.id, exclude_deleted=True) if spam_tag else 0
+    )
+    return {
+        'active_emails_count': count_recent_emails(),
+        'trash_emails_count': count_trash_emails(),
+        'spam_count': spam_count,
+        'tag_counts': get_tag_email_counts_non_deleted(),
+    }
+
+
 @admin_email_buzon_bp.route('/email-buzon')
 @admin_required
 def manage_email_buzon():
     """Página principal de gestión del buzón de mensajes"""
-    recent_emails = get_recent_emails(limit=50)
+    page = normalize_buzon_list_page(request.args.get('page', 1))
+    per_page = normalize_buzon_list_per_page(
+        request.args.get('per_page', BUZON_LIST_PER_PAGE_DEFAULT)
+    )
+    pagination = paginate_recent_emails(page=page, per_page=per_page)
+    recent_emails = pagination.items
+
     tags = get_all_tags()
     email_forwardings = EmailForwarding.query.all()
     auto_cleanups = EmailCleanup.query.all()
-    
-    # Calcular contadores para la sidebar
-    from app.models.email_buzon import EmailTag
-    spam_tag = EmailTag.query.filter_by(name='spam').first()
-    spam_count = 0
-    if spam_tag:
-        spam_emails = get_emails_by_tag(spam_tag.id)
-        spam_count = len([email for email in spam_emails if not email.deleted])
-    
-    # Contadores para todas las vistas
-    active_emails_count = len(recent_emails)
-    trash_emails_count = len(get_trash_emails(limit=50))
-    
-    return render_template('admin/email_buzon.html', 
-                         recent_emails=recent_emails, 
-                         tags=tags,
-                         email_forwardings=email_forwardings,
-                         auto_cleanups=auto_cleanups,
-                         current_view='inbox',
-                         spam_count=spam_count,
-                         active_emails_count=active_emails_count,
-                         trash_emails_count=trash_emails_count,
-                         email_cleanup_interval_minutes=EMAIL_CLEANUP_SCHEDULER_INTERVAL_MINUTES)
+    sidebar = _email_buzon_sidebar_counts()
+
+    return render_template(
+        'admin/email_buzon.html',
+        recent_emails=recent_emails,
+        tags=tags,
+        email_forwardings=email_forwardings,
+        auto_cleanups=auto_cleanups,
+        current_view='inbox',
+        pagination=pagination,
+        buzon_per_page_choices=BUZON_LIST_PER_PAGE_CHOICES,
+        **sidebar,
+        email_cleanup_interval_minutes=EMAIL_CLEANUP_SCHEDULER_INTERVAL_MINUTES,
+    )
 
 # ==================== RUTAS PARA REENVÍO DE CORREOS ====================
 
@@ -276,35 +300,34 @@ def delete_tag_route(tag_id):
 @admin_required
 def filter_by_tag(tag_id):
     """Filtrar emails por etiqueta"""
-    emails = get_emails_by_tag(tag_id)
+    page = normalize_buzon_list_page(request.args.get('page', 1))
+    per_page = normalize_buzon_list_per_page(
+        request.args.get('per_page', BUZON_LIST_PER_PAGE_DEFAULT)
+    )
+    pagination = paginate_emails_for_tag(
+        tag_id, page=page, per_page=per_page, exclude_deleted=False
+    )
+    recent_emails = pagination.items
+
     tags = get_all_tags()
     current_tag = get_tag(tag_id)
     email_forwardings = EmailForwarding.query.all()
     auto_cleanups = EmailCleanup.query.all()
-    
-    # Calcular contadores para la sidebar
-    from app.models.email_buzon import EmailTag
-    spam_tag = EmailTag.query.filter_by(name='spam').first()
-    spam_count = 0
-    if spam_tag:
-        spam_emails = get_emails_by_tag(spam_tag.id)
-        spam_count = len([email for email in spam_emails if not email.deleted])
-    
-    # Contadores para todas las vistas
-    active_emails_count = len(get_recent_emails(limit=50))
-    trash_emails_count = len(get_trash_emails(limit=50))
-    
-    return render_template('admin/email_buzon.html', 
-                         recent_emails=emails,
-                         tags=tags,
-                         email_forwardings=email_forwardings,
-                         auto_cleanups=auto_cleanups,
-                         current_tag=current_tag,
-                         current_view='tag',
-                         spam_count=spam_count,
-                         active_emails_count=active_emails_count,
-                         trash_emails_count=trash_emails_count,
-                         email_cleanup_interval_minutes=EMAIL_CLEANUP_SCHEDULER_INTERVAL_MINUTES)
+    sidebar = _email_buzon_sidebar_counts()
+
+    return render_template(
+        'admin/email_buzon.html',
+        recent_emails=recent_emails,
+        tags=tags,
+        email_forwardings=email_forwardings,
+        auto_cleanups=auto_cleanups,
+        current_tag=current_tag,
+        current_view='tag',
+        pagination=pagination,
+        buzon_per_page_choices=BUZON_LIST_PER_PAGE_CHOICES,
+        **sidebar,
+        email_cleanup_interval_minutes=EMAIL_CLEANUP_SCHEDULER_INTERVAL_MINUTES,
+    )
 
 @admin_email_buzon_bp.route('/email-buzon/add-tag/<int:email_id>/<int:tag_id>', methods=['POST'])
 @admin_required
@@ -368,68 +391,72 @@ def mark_email_processed_route(email_id):
 @admin_required
 def view_trash():
     """Ver emails en la papelera"""
-    trash_emails = get_trash_emails(limit=50)
+    page = normalize_buzon_list_page(request.args.get('page', 1))
+    per_page = normalize_buzon_list_per_page(
+        request.args.get('per_page', BUZON_LIST_PER_PAGE_DEFAULT)
+    )
+    pagination = paginate_trash_emails(page=page, per_page=per_page)
+    trash_emails = pagination.items
+
     tags = get_all_tags()
     email_forwardings = EmailForwarding.query.all()
     auto_cleanups = EmailCleanup.query.all()
-    
-    # Calcular contadores para la sidebar
-    from app.models.email_buzon import EmailTag
-    spam_tag = EmailTag.query.filter_by(name='spam').first()
-    spam_count = 0
-    if spam_tag:
-        spam_emails = get_emails_by_tag(spam_tag.id)
-        spam_count = len([email for email in spam_emails if not email.deleted])
-    
-    # Contadores para todas las vistas
-    active_emails_count = len(get_recent_emails(limit=50))
-    trash_emails_count = len(trash_emails)
-    
-    return render_template('admin/email_buzon.html', 
-                         recent_emails=trash_emails,
-                         tags=tags,
-                         email_forwardings=email_forwardings,
-                         auto_cleanups=auto_cleanups,
-                         current_view='trash',
-                         spam_count=spam_count,
-                         active_emails_count=active_emails_count,
-                         trash_emails_count=trash_emails_count,
-                         email_cleanup_interval_minutes=EMAIL_CLEANUP_SCHEDULER_INTERVAL_MINUTES)
+    sidebar = _email_buzon_sidebar_counts()
+
+    return render_template(
+        'admin/email_buzon.html',
+        recent_emails=trash_emails,
+        tags=tags,
+        email_forwardings=email_forwardings,
+        auto_cleanups=auto_cleanups,
+        current_view='trash',
+        pagination=pagination,
+        buzon_per_page_choices=BUZON_LIST_PER_PAGE_CHOICES,
+        **sidebar,
+        email_cleanup_interval_minutes=EMAIL_CLEANUP_SCHEDULER_INTERVAL_MINUTES,
+    )
 
 @admin_email_buzon_bp.route('/email-buzon/spam')
 @admin_required
 def view_spam():
     """Ver emails marcados como spam"""
     from app.models.email_buzon import EmailTag
-    
-    # Buscar la etiqueta "spam"
+
     spam_tag = EmailTag.query.filter_by(name='spam').first()
+    page = normalize_buzon_list_page(request.args.get('page', 1))
+    per_page = normalize_buzon_list_per_page(
+        request.args.get('per_page', BUZON_LIST_PER_PAGE_DEFAULT)
+    )
+
     if spam_tag:
-        spam_emails = get_emails_by_tag(spam_tag.id)
-        # Filtrar solo emails no eliminados
-        spam_emails = [email for email in spam_emails if not email.deleted]
+        pagination = paginate_emails_for_tag(
+            spam_tag.id,
+            page=page,
+            per_page=per_page,
+            exclude_deleted=True,
+        )
+        spam_emails = pagination.items
     else:
+        pagination = None
         spam_emails = []
-    
+
     tags = get_all_tags()
     email_forwardings = EmailForwarding.query.all()
     auto_cleanups = EmailCleanup.query.all()
-    spam_count = len(spam_emails)
-    
-    # Contadores para todas las vistas
-    active_emails_count = len(get_recent_emails(limit=50))
-    trash_emails_count = len(get_trash_emails(limit=50))
-    
-    return render_template('admin/email_buzon.html', 
-                         recent_emails=spam_emails,
-                         tags=tags,
-                         email_forwardings=email_forwardings,
-                         auto_cleanups=auto_cleanups,
-                         current_view='spam',
-                         spam_count=spam_count,
-                         active_emails_count=active_emails_count,
-                         trash_emails_count=trash_emails_count,
-                         email_cleanup_interval_minutes=EMAIL_CLEANUP_SCHEDULER_INTERVAL_MINUTES)
+    sidebar = _email_buzon_sidebar_counts()
+
+    return render_template(
+        'admin/email_buzon.html',
+        recent_emails=spam_emails,
+        tags=tags,
+        email_forwardings=email_forwardings,
+        auto_cleanups=auto_cleanups,
+        current_view='spam',
+        pagination=pagination,
+        buzon_per_page_choices=BUZON_LIST_PER_PAGE_CHOICES,
+        **sidebar,
+        email_cleanup_interval_minutes=EMAIL_CLEANUP_SCHEDULER_INTERVAL_MINUTES,
+    )
 
 @admin_email_buzon_bp.route('/email-buzon/move-to-trash/<int:email_id>', methods=['POST'])
 @admin_required

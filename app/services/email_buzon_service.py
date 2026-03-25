@@ -1,7 +1,10 @@
 # app/services/email_buzon_service.py
 
+from sqlalchemy import func
+
 from app.extensions import db
-from app.models import EmailBuzonServer, ReceivedEmail
+from app.models import EmailBuzonServer, ReceivedEmail, EmailTag
+from app.models.email_buzon import email_tags
 from app.imap.parser import parse_raw_email
 # Importación de auto_tag_email se hace dentro de la función para evitar importaciones circulares
 from datetime import datetime, timedelta
@@ -9,6 +12,28 @@ from datetime import datetime, timedelta
 # Intervalo del job en run.py y ancho de la ventana de disparo (deben coincidir).
 # La limpieza se ejecuta si "ahora" (Colombia) está entre la hora configurada y esa hora + N minutos.
 EMAIL_CLEANUP_SCHEDULER_INTERVAL_MINUTES = 5
+
+# Lista de correos (admin buzón): tamaño por defecto y opciones tipo Gmail
+BUZON_LIST_PER_PAGE_DEFAULT = 100
+BUZON_LIST_PER_PAGE_CHOICES = (25, 50, 100, 200)
+
+
+def normalize_buzon_list_page(value):
+    try:
+        p = int(value)
+        return p if p >= 1 else 1
+    except (TypeError, ValueError):
+        return 1
+
+
+def normalize_buzon_list_per_page(value):
+    try:
+        v = int(value)
+        if v in BUZON_LIST_PER_PAGE_CHOICES:
+            return v
+    except (TypeError, ValueError):
+        pass
+    return BUZON_LIST_PER_PAGE_DEFAULT
 
 
 def _cleanup_rule_fires_in_window(now, rule_time, interval_minutes):
@@ -276,15 +301,33 @@ def mark_email_as_processed(email_id):
     db.session.commit()
     return email
 
-def get_recent_emails(limit=50):
+def get_recent_emails(limit=None):
     """Obtiene los emails más recientes (excluyendo eliminados Y sin etiquetas)"""
-    # Solo emails que NO están eliminados Y NO tienen etiquetas asignadas
-    emails = ReceivedEmail.query.filter(
+    q = ReceivedEmail.query.filter(
         ReceivedEmail.deleted == False,
-        ~ReceivedEmail.tags.any()  # No tiene ninguna etiqueta
-    ).order_by(ReceivedEmail.received_at.desc()).limit(limit).all()
-    
-    return emails
+        ~ReceivedEmail.tags.any(),
+    ).order_by(ReceivedEmail.received_at.desc())
+    if limit is not None:
+        q = q.limit(limit)
+    return q.all()
+
+
+def count_recent_emails():
+    return (
+        ReceivedEmail.query.filter(
+            ReceivedEmail.deleted == False,
+            ~ReceivedEmail.tags.any(),
+        ).count()
+    )
+
+
+def paginate_recent_emails(page=1, per_page=BUZON_LIST_PER_PAGE_DEFAULT):
+    """Recibidos (sin etiquetas), paginado."""
+    q = ReceivedEmail.query.filter(
+        ReceivedEmail.deleted == False,
+        ~ReceivedEmail.tags.any(),
+    ).order_by(ReceivedEmail.received_at.desc())
+    return q.paginate(page=page, per_page=per_page, error_out=False)
 
 def mark_email_processed(email_id):
     """Marca un email como procesado (alias para compatibilidad)"""
@@ -306,9 +349,54 @@ def restore_email_from_trash(email_id):
     db.session.commit()
     return email
 
-def get_trash_emails(limit=50):
+def get_trash_emails(limit=None):
     """Obtiene emails en la papelera"""
-    return ReceivedEmail.query.filter(ReceivedEmail.deleted == True).order_by(ReceivedEmail.deleted_at.desc()).limit(limit).all()
+    q = ReceivedEmail.query.filter(ReceivedEmail.deleted == True).order_by(
+        ReceivedEmail.deleted_at.desc()
+    )
+    if limit is not None:
+        q = q.limit(limit)
+    return q.all()
+
+
+def count_trash_emails():
+    return ReceivedEmail.query.filter(ReceivedEmail.deleted == True).count()
+
+
+def paginate_trash_emails(page=1, per_page=BUZON_LIST_PER_PAGE_DEFAULT):
+    q = ReceivedEmail.query.filter(ReceivedEmail.deleted == True).order_by(
+        ReceivedEmail.deleted_at.desc()
+    )
+    return q.paginate(page=page, per_page=per_page, error_out=False)
+
+
+def count_emails_for_tag(tag_id, exclude_deleted=False):
+    q = ReceivedEmail.query.join(ReceivedEmail.tags).filter(EmailTag.id == tag_id)
+    if exclude_deleted:
+        q = q.filter(ReceivedEmail.deleted == False)
+    return q.count()
+
+
+def paginate_emails_for_tag(
+    tag_id, page=1, per_page=BUZON_LIST_PER_PAGE_DEFAULT, exclude_deleted=False
+):
+    q = ReceivedEmail.query.join(ReceivedEmail.tags).filter(EmailTag.id == tag_id)
+    if exclude_deleted:
+        q = q.filter(ReceivedEmail.deleted == False)
+    q = q.order_by(ReceivedEmail.received_at.desc())
+    return q.paginate(page=page, per_page=per_page, error_out=False)
+
+
+def get_tag_email_counts_non_deleted():
+    """Conteo por etiqueta (solo correos no eliminados) para badges del sidebar."""
+    rows = (
+        db.session.query(email_tags.c.tag_id, func.count(ReceivedEmail.id))
+        .join(ReceivedEmail, ReceivedEmail.id == email_tags.c.email_id)
+        .filter(ReceivedEmail.deleted.is_(False))
+        .group_by(email_tags.c.tag_id)
+        .all()
+    )
+    return {tid: n for tid, n in rows}
 
 def permanently_delete_email(email_id):
     """Elimina permanentemente un email de la base de datos"""
