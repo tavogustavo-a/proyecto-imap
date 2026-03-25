@@ -364,6 +364,7 @@ def view_email(email_id):
                 'id': email.id,
                 'from_email': email.from_email,
                 'to_email': email.to_email,
+                'to_email_display': email.original_to_email or email.to_email,
                 'subject': email.subject or '(Sin asunto)',
                 'content_text': email.content_text or '',
                 'content_html': email.content_html or '',

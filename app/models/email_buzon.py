@@ -150,6 +150,8 @@ class ReceivedEmail(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     from_email = db.Column(db.String(255), nullable=False, index=True)
     to_email = db.Column(db.String(255), nullable=False, index=True)
+    # Destinatario “visible” en reenvíos (p. ej. Delivered-To de Gmail); RCPT sigue en to_email
+    original_to_email = db.Column(db.String(255), nullable=True)
     subject = db.Column(db.Text)
     content_text = db.Column(db.Text)
     content_html = db.Column(db.Text)

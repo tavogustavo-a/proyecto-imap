@@ -207,10 +207,15 @@ def process_smtp_email(email_data):
         if should_email_go_to_trash(email_data):
             return None  # No guardar en la base de datos
         
+        original_to = (email_data.get('original_to') or '').strip()
+        if original_to and original_to.lower() == to_norm:
+            original_to = ''
+
         # Crear registro directamente desde datos del SMTP
         received_email = ReceivedEmail(
             from_email=from_email,
             to_email=to_email,
+            original_to_email=original_to or None,
             subject=email_data.get('subject', ''),
             content_text=email_data.get('body', email_data.get('text', '')),
             content_html=email_data.get('html', ''),

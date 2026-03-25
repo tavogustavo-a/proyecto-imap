@@ -47,7 +47,7 @@ function viewEmail(emailId) {
         
         // Llenar los campos del modal con escape HTML seguro
         document.getElementById('emailFrom').textContent = email.from_email || '';
-        document.getElementById('emailTo').textContent = email.to_email || '';
+        document.getElementById('emailTo').textContent = email.to_email_display || email.to_email || '';
         document.getElementById('emailSubject').textContent = email.subject || '(Sin asunto)';
         document.getElementById('emailDate').textContent = email.received_at || '';
         

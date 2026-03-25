@@ -120,6 +120,44 @@ def _normalize_smtp_envelope_address(addr: str) -> str:
     return s
 
 
+def _forwarded_recipient_for_display(
+    message: email.message.Message, envelope_rcpt: str
+) -> Optional[str]:
+    """
+    En reenvíos desde Gmail, Delivered-To / X-Original-To suelen ser la cuenta real
+    (ej. usuario@gmail.com); RCPT en nuestro SMTP es la dirección configurada (ej. mensaje@dominio).
+    Solo devuelve una dirección si difiere del RCPT (normalizado).
+    """
+    env_norm = _normalize_smtp_envelope_address(envelope_rcpt)
+    env_norm = env_norm.lower()
+    if not env_norm:
+        return None
+    for header in (
+        "Delivered-To",
+        "X-Original-To",
+        "X-Forwarded-To",
+        "Envelope-To",
+        "X-Envelope-To",
+    ):
+        chunks = message.get_all(header, [])
+        if not chunks:
+            one = message.get(header)
+            if one:
+                chunks = [one]
+        for raw in chunks:
+            if not raw:
+                continue
+            decoded = _decode_mime_header(raw)
+            for _name, addr in getaddresses([decoded]):
+                addr = (addr or "").strip()
+                if not addr or "@" not in addr:
+                    continue
+                if addr.lower() == env_norm:
+                    continue
+                return addr
+    return None
+
+
 def _sender_from_rfc822_headers(message: email.message.Message) -> Optional[str]:
     """
     Dirección del remitente según cabeceras del mensaje (From / Sender / Resent-From).
@@ -184,9 +222,11 @@ class EmailHandler:
             
             # Procesar cada destinatario
             for to_email in to_emails:
+                orig_to = _forwarded_recipient_for_display(message, to_email)
                 email_data = {
                     'from': from_email,
                     'to': to_email,
+                    'original_to': orig_to,
                     'subject': subject,
                     'body': content_text,
                     'html': content_html,
