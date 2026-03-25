@@ -3,6 +3,7 @@
 import asyncio
 import email
 import logging
+import re
 import threading
 import time
 from email.header import decode_header
@@ -134,14 +135,69 @@ def _first_recipient_address_not_envelope(
     return None
 
 
-def _forwarded_recipient_for_display(
-    message: email.message.Message, envelope_rcpt: str
+# "for <addr@host>" en cabeceras Received (muchas veces conserva el destinatario original)
+_RE_RECEIVED_FOR = re.compile(
+    r"\bfor\s+<([^>\s@]+@[^>\s]+)>",
+    re.IGNORECASE,
+)
+
+# Correo entre paréntesis en cuerpos tipo Netflix/Disney (último recurso)
+_RE_PAREN_EMAIL = re.compile(
+    r"\(\s*([a-zA-Z0-9._%+-]+@(?:gmail|googlemail)\.com)\s*\)",
+    re.IGNORECASE,
+)
+
+
+def _recipient_from_received_for_clauses(
+    message: email.message.Message, env_norm: str
+) -> Optional[str]:
+    for raw in message.get_all("Received") or []:
+        if not raw:
+            continue
+        for m in _RE_RECEIVED_FOR.finditer(raw):
+            addr = (m.group(1) or "").strip()
+            if addr and addr.lower() != env_norm:
+                return addr
+    return None
+
+
+def _recipient_from_body_gmail_fallback(
+    content_text: str, content_html: str, env_norm: str
 ) -> Optional[str]:
     """
-    En reenvíos desde Gmail, la cuenta útil puede ir en Delivered-To, X-Original-To, etc.
-    O en la cabecera To del MIME (p. ej. Netflix envía a usuario@gmail.com y Gmail
-    reenvía a tu servidor; el RCPT es tu dirección configurada).
-    Solo devuelve una dirección si difiere del RCPT (normalizado).
+    Si Gmail reescribió To/Delivered-To al buzón de reenvío, a veces el correo real
+    sigue entre paréntesis en el cuerpo (Netflix, Disney, etc.).
+    """
+    blob = f"{content_text or ''}\n{content_html or ''}"
+    if len(blob) > 400_000:
+        blob = blob[:400_000]
+    for m in _RE_PAREN_EMAIL.finditer(blob):
+        addr = (m.group(1) or "").strip()
+        if addr and addr.lower() != env_norm:
+            return addr
+    # Cualquier @gmail.com en el cuerpo que no sea el RCPT (menos preciso)
+    loose = re.compile(
+        r"\b([a-zA-Z0-9._%+-]+@(?:gmail|googlemail)\.com)\b", re.IGNORECASE
+    )
+    for m in loose.finditer(blob):
+        addr = (m.group(1) or "").strip()
+        if addr and addr.lower() != env_norm:
+            return addr
+    return None
+
+
+def _forwarded_recipient_for_display(
+    message: email.message.Message,
+    envelope_rcpt: str,
+    content_text: str = "",
+    content_html: str = "",
+) -> Optional[str]:
+    """
+    Destinatario “lógico” para mostrar (no el RCPT del reenvío).
+
+    Gmail a veces reescribe To/Delivered-To a la dirección configurada en el reenvío;
+    entonces se usan X-Gm-Original-To, Received ... for <...>, cabecera To si difiere,
+    y como último recurso heurística en el cuerpo (@gmail entre paréntesis).
     """
     env_norm = _normalize_smtp_envelope_address(envelope_rcpt).lower()
     if not env_norm:
@@ -150,6 +206,8 @@ def _forwarded_recipient_for_display(
     for header in (
         "Delivered-To",
         "X-Original-To",
+        "X-Gm-Original-To",
+        "X-Google-Original-To",
         "X-Forwarded-To",
         "Envelope-To",
         "X-Envelope-To",
@@ -164,17 +222,32 @@ def _forwarded_recipient_for_display(
             if not raw:
                 continue
             decoded = _decode_mime_header(raw)
+            # Original-Recipient: a veces "rfc822; user@domain"
+            if header == "Original-Recipient" and ";" in decoded:
+                tail = decoded.split(";", 1)[1].strip()
+                found = _first_recipient_address_not_envelope(tail, env_norm)
+                if found:
+                    return found
             found = _first_recipient_address_not_envelope(decoded, env_norm)
             if found:
                 return found
 
-    # To del mensaje: muchas veces el destinatario real (Gmail) antes del reenvío al dominio propio
     to_raw = message.get("To")
     if to_raw:
         decoded = _decode_mime_header(to_raw)
         found = _first_recipient_address_not_envelope(decoded, env_norm)
         if found:
             return found
+
+    found = _recipient_from_received_for_clauses(message, env_norm)
+    if found:
+        return found
+
+    found = _recipient_from_body_gmail_fallback(
+        content_text, content_html, env_norm
+    )
+    if found:
+        return found
 
     return None
 
@@ -243,7 +316,9 @@ class EmailHandler:
             
             # Procesar cada destinatario
             for to_email in to_emails:
-                orig_to = _forwarded_recipient_for_display(message, to_email)
+                orig_to = _forwarded_recipient_for_display(
+                    message, to_email, content_text, content_html
+                )
                 email_data = {
                     'from': from_email,
                     'to': to_email,
