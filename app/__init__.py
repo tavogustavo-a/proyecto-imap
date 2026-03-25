@@ -23,7 +23,7 @@ else:
 from flask import Flask, session
 from config import Config
 from werkzeug.security import generate_password_hash
-from sqlalchemy import inspect
+from sqlalchemy import inspect, text
 from flask_seasurf import SeaSurf
 from app.extensions import db, migrate
 from app.models import User  # <-- Importa tu modelo User
@@ -84,11 +84,26 @@ def create_app(config_class_passed=None):
     # SocketIO se maneja solo en socketio_server.py para la tienda
 
     with app.app_context():
-        # ---------------------------------------------------------------------
-        # El bloque de inicialización de datos (seed) ha sido eliminado de aquí.
-        # Se moverá a un script de migración o comando de seed.
-        # ---------------------------------------------------------------------
-        pass # Puedes dejar 'pass' o simplemente eliminar el bloque 'with' si no hace nada más.
+        # Columnas nuevas sin migración Alembic en servidor (p. ej. original_to_email en received_emails)
+        try:
+            insp = inspect(db.engine)
+            if insp.has_table("received_emails"):
+                col_names = {c["name"] for c in insp.get_columns("received_emails")}
+                if "original_to_email" not in col_names:
+                    db.session.execute(
+                        text(
+                            "ALTER TABLE received_emails ADD COLUMN original_to_email VARCHAR(255)"
+                        )
+                    )
+                    db.session.commit()
+                    app.logger.info(
+                        "Esquema: columna original_to_email añadida a received_emails"
+                    )
+        except Exception as schema_err:
+            db.session.rollback()
+            app.logger.warning(
+                "No se pudo aplicar parche de esquema email buzón: %s", schema_err
+            )
 
     # === Registro de Blueprints ===
     from app.auth.routes import auth_bp
