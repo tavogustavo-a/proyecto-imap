@@ -100,6 +100,72 @@ def validate_and_sanitize_external_response(data, project_name):
         current_app.logger.error(f"[SECURITY] Error procesando respuesta de proyecto '{project_name}': {e}")
         return None
 
+
+def search_linked_projects_only(to_address, user):
+    """
+    Solo consulta las URLs configuradas en proyectos vinculados (otro servidor/proyecto).
+
+    Sirve cuando el correo no está en AllowedEmail de este proyecto pero sí puede existir
+    en el otro proyecto (misma cadena de confianza vía token en LinkedProject).
+    """
+    if not user or not getattr(user, "enabled", False):
+        return None
+    linked_projects = user.linked_projects.filter_by(enabled=True).all()
+    if not linked_projects:
+        return None
+    from flask import request as flask_request
+
+    try:
+        origin_domain = flask_request.url_root.rstrip("/") if flask_request else "unknown"
+    except RuntimeError:
+        origin_domain = "unknown"
+
+    for project in linked_projects:
+        try:
+            if not project.url or not project.url.strip():
+                current_app.logger.warning(
+                    f"Proyecto vinculado '{project.name}' tiene URL vacía, saltando..."
+                )
+                continue
+            url_stripped = project.url.strip()
+            if not url_stripped.startswith(("http://", "https://")):
+                current_app.logger.warning(
+                    f"Proyecto vinculado '{project.name}' tiene URL inválida (sin esquema): "
+                    f"'{url_stripped}', saltando..."
+                )
+                continue
+            if not validate_external_url_ssrf(url_stripped):
+                current_app.logger.warning(
+                    f"[SSRF-BLOCKED] Proyecto '{project.name}' tiene URL que apunta a "
+                    f"recursos internos: {url_stripped}"
+                )
+                continue
+            payload = {
+                "token": project.token,
+                "email_to_search": to_address,
+                "origin_user": user.username,
+                "origin_domain": origin_domain,
+            }
+            response = requests.post(url_stripped, json=payload, timeout=10)
+            if response.status_code == 200:
+                try:
+                    data = response.json()
+                    external_result = validate_and_sanitize_external_response(
+                        data, project.name
+                    )
+                    if external_result:
+                        return external_result
+                except ValueError as e:
+                    current_app.logger.error(
+                        f"[SECURITY] Error parseando JSON de proyecto '{project.name}': {e}"
+                    )
+        except Exception as e:
+            current_app.logger.error(
+                f"Error buscando en proyecto vinculado '{project.name}': {e}"
+            )
+    return None
+
+
 # Constantes internas para validación del sistema
 _SEARCH_MODULE_ID = 0x7C8D
 _SEARCH_MODULE_VER = 0x9E0F
@@ -326,62 +392,9 @@ def search_and_apply_filters(to_address, service_id=None, user=None, origin_doma
         if found_mail:
             return found_mail
 
-    # --- NUEVA LÓGICA: Búsqueda en Proyectos Vinculados ---
-    if user and user.enabled:
-        # Obtener proyectos vinculados habilitados
-        linked_projects = user.linked_projects.filter_by(enabled=True).all()
-        if linked_projects:
-            for project in linked_projects:
-                try:
-                    # Validar que la URL sea válida antes de intentar la petición
-                    if not project.url or not project.url.strip():
-                        current_app.logger.warning(f"Proyecto vinculado '{project.name}' tiene URL vacía, saltando...")
-                        continue
-                    
-                    # Verificar que la URL tenga un esquema válido (http:// o https://)
-                    url_stripped = project.url.strip()
-                    if not url_stripped.startswith(('http://', 'https://')):
-                        current_app.logger.warning(f"Proyecto vinculado '{project.name}' tiene URL inválida (sin esquema): '{url_stripped}', saltando...")
-                        continue
-                    
-                    # ===== SEGURIDAD: Protección SSRF =====
-                    if not validate_external_url_ssrf(url_stripped):
-                        current_app.logger.warning(f"[SSRF-BLOCKED] Proyecto '{project.name}' tiene URL que apunta a recursos internos: {url_stripped}")
-                        continue
-                    
-                    # Preparar la petición a la API externa
-                    from flask import request
-                    origin_domain = request.url_root.rstrip('/') if request else "unknown"
-                    
-                    payload = {
-                        "token": project.token,
-                        "email_to_search": to_address,
-                        "origin_user": user.username,
-                        "origin_domain": origin_domain
-                        # NO pasar service_id: el proyecto destino buscará directamente en todos sus regex/filtros habilitados
-                        # respetando las reglas del usuario del proyecto destino
-                    }
-                    
-                    response = requests.post(
-                        url_stripped,
-                        json=payload,
-                        timeout=10 # Timeout de 10 segundos - si no responde en este tiempo, se salta
-                    )
-                    
-                    if response.status_code == 200:
-                        # ===== SEGURIDAD: Validación de respuesta del proyecto externo =====
-                        try:
-                            data = response.json()
-                            external_result = validate_and_sanitize_external_response(data, project.name)
-                            if external_result:
-                                return external_result
-                        except ValueError as e:
-                            current_app.logger.error(f"[SECURITY] Error parseando JSON de proyecto '{project.name}': {e}")
-                            continue
-                except Exception as e:
-                    current_app.logger.error(f"Error buscando en proyecto vinculado '{project.name}': {e}")
-                    continue
-    # --- FIN LÓGICA PROYECTOS VINCULADOS ---
+    ext = search_linked_projects_only(to_address, user)
+    if ext:
+        return ext
 
     return None
 
@@ -472,62 +485,9 @@ def search_and_apply_filters2(to_address, service_id=None, user=None):
         if found_mail:
             return found_mail
 
-    # --- NUEVA LÓGICA: Búsqueda en Proyectos Vinculados ---
-    if user and user.enabled:
-        # Obtener proyectos vinculados habilitados
-        linked_projects = user.linked_projects.filter_by(enabled=True).all()
-        if linked_projects:
-            for project in linked_projects:
-                try:
-                    # Validar que la URL sea válida antes de intentar la petición
-                    if not project.url or not project.url.strip():
-                        current_app.logger.warning(f"Proyecto vinculado '{project.name}' tiene URL vacía, saltando...")
-                        continue
-                    
-                    # Verificar que la URL tenga un esquema válido (http:// o https://)
-                    url_stripped = project.url.strip()
-                    if not url_stripped.startswith(('http://', 'https://')):
-                        current_app.logger.warning(f"Proyecto vinculado '{project.name}' tiene URL inválida (sin esquema): '{url_stripped}', saltando...")
-                        continue
-                    
-                    # ===== SEGURIDAD: Protección SSRF =====
-                    if not validate_external_url_ssrf(url_stripped):
-                        current_app.logger.warning(f"[SSRF-BLOCKED] Proyecto '{project.name}' tiene URL que apunta a recursos internos: {url_stripped}")
-                        continue
-                    
-                    # Preparar la petición a la API externa
-                    from flask import request
-                    origin_domain = request.url_root.rstrip('/') if request else "unknown"
-                    
-                    payload = {
-                        "token": project.token,
-                        "email_to_search": to_address,
-                        "origin_user": user.username,
-                        "origin_domain": origin_domain
-                        # NO pasar service_id: el proyecto destino buscará directamente en todos sus regex/filtros habilitados
-                        # respetando las reglas del usuario del proyecto destino
-                    }
-                    
-                    response = requests.post(
-                        url_stripped,
-                        json=payload,
-                        timeout=10 # Timeout de 10 segundos - si no responde en este tiempo, se salta
-                    )
-                    
-                    if response.status_code == 200:
-                        # ===== SEGURIDAD: Validación de respuesta del proyecto externo =====
-                        try:
-                            data = response.json()
-                            external_result = validate_and_sanitize_external_response(data, project.name)
-                            if external_result:
-                                return external_result
-                        except ValueError as e:
-                            current_app.logger.error(f"[SECURITY] Error parseando JSON de proyecto '{project.name}': {e}")
-                            continue
-                except Exception as e:
-                    current_app.logger.error(f"Error buscando en proyecto vinculado '{project.name}': {e}")
-                    continue
-    # --- FIN LÓGICA PROYECTOS VINCULADOS ---
+    ext = search_linked_projects_only(to_address, user)
+    if ext:
+        return ext
 
     return None
 
@@ -631,62 +591,9 @@ def search_imap2_server_dynamic(to_address, imap_server_id, user=None):
         if found_mail:
             return found_mail
 
-    # --- NUEVA LÓGICA: Búsqueda en Proyectos Vinculados ---
-    if user and user.enabled:
-        # Obtener proyectos vinculados habilitados
-        linked_projects = user.linked_projects.filter_by(enabled=True).all()
-        if linked_projects:
-            for project in linked_projects:
-                try:
-                    # Validar que la URL sea válida antes de intentar la petición
-                    if not project.url or not project.url.strip():
-                        current_app.logger.warning(f"Proyecto vinculado '{project.name}' tiene URL vacía, saltando...")
-                        continue
-                    
-                    # Verificar que la URL tenga un esquema válido (http:// o https://)
-                    url_stripped = project.url.strip()
-                    if not url_stripped.startswith(('http://', 'https://')):
-                        current_app.logger.warning(f"Proyecto vinculado '{project.name}' tiene URL inválida (sin esquema): '{url_stripped}', saltando...")
-                        continue
-                    
-                    # ===== SEGURIDAD: Protección SSRF =====
-                    if not validate_external_url_ssrf(url_stripped):
-                        current_app.logger.warning(f"[SSRF-BLOCKED] Proyecto '{project.name}' tiene URL que apunta a recursos internos: {url_stripped}")
-                        continue
-                    
-                    # Preparar la petición a la API externa
-                    from flask import request
-                    origin_domain = request.url_root.rstrip('/') if request else "unknown"
-                    
-                    payload = {
-                        "token": project.token,
-                        "email_to_search": to_address,
-                        "origin_user": user.username,
-                        "origin_domain": origin_domain
-                        # NO pasar service_id: el proyecto destino buscará directamente en todos sus regex/filtros habilitados
-                        # respetando las reglas del usuario del proyecto destino
-                    }
-                    
-                    response = requests.post(
-                        url_stripped,
-                        json=payload,
-                        timeout=10 # Timeout de 10 segundos - si no responde en este tiempo, se salta
-                    )
-                    
-                    if response.status_code == 200:
-                        # ===== SEGURIDAD: Validación de respuesta del proyecto externo =====
-                        try:
-                            data = response.json()
-                            external_result = validate_and_sanitize_external_response(data, project.name)
-                            if external_result:
-                                return external_result
-                        except ValueError as e:
-                            current_app.logger.error(f"[SECURITY] Error parseando JSON de proyecto '{project.name}': {e}")
-                            continue
-                except Exception as e:
-                    current_app.logger.error(f"Error buscando en proyecto vinculado '{project.name}': {e}")
-                    continue
-    # --- FIN LÓGICA PROYECTOS VINCULADOS ---
+    ext = search_linked_projects_only(to_address, user)
+    if ext:
+        return ext
 
     return None
 

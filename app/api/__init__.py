@@ -1,7 +1,12 @@
 # app/api/__init__.py
 
 from flask import Blueprint, jsonify, request, session, current_app
-from app.services.search_service import search_and_apply_filters, search_and_apply_filters2, search_imap2_server_dynamic
+from app.services.search_service import (
+    search_and_apply_filters,
+    search_and_apply_filters2,
+    search_imap2_server_dynamic,
+    search_linked_projects_only,
+)
 from app.models import User
 from app.models.user import AllowedEmail
 from app.models.service import ServiceModel
@@ -270,6 +275,10 @@ def search_mails():
         if not user.can_search_any:
             is_allowed = user.allowed_email_entries.filter_by(email=email_normalized).first() is not None
             if not is_allowed:
+                # El correo puede estar permitido solo en otro proyecto vinculado
+                mail_result = search_linked_projects_only(email_to_search, user)
+                if mail_result:
+                    return jsonify({"results": [mail_result]}), 200
                 return jsonify({"error": "No tienes permiso al consultar este correo."}), 403
         # Si tiene configuración 2FA y pasa las validaciones, permitir acceso
     else:
@@ -282,6 +291,9 @@ def search_mails():
             # Verificar AllowedEmail (solo si NO tiene configuración 2FA)
             is_allowed = user.allowed_email_entries.filter_by(email=email_normalized).first() is not None
             if not is_allowed:
+                mail_result = search_linked_projects_only(email_to_search, user)
+                if mail_result:
+                    return jsonify({"results": [mail_result]}), 200
                 return jsonify({"error": "No tienes permiso para consultar este correo específico."}), 403
 
     # Llamada con user
@@ -980,6 +992,9 @@ def external_search():
         if not user.can_search_any:
             is_allowed = user.allowed_email_entries.filter_by(email=email_normalized).first() is not None
             if not is_allowed:
+                mail_result = search_linked_projects_only(email_to_search, user)
+                if mail_result:
+                    return jsonify({"results": [mail_result]}), 200
                 return jsonify({"error": "No tienes permiso al consultar este correo."}), 403
     else:
         # Si no es admin y NO tiene configuración 2FA, validar permisos normalmente
@@ -990,6 +1005,9 @@ def external_search():
         if not user.can_search_any:
             is_allowed = user.allowed_email_entries.filter_by(email=email_normalized).first() is not None
             if not is_allowed:
+                mail_result = search_linked_projects_only(email_to_search, user)
+                if mail_result:
+                    return jsonify({"results": [mail_result]}), 200
                 return jsonify({"error": "No tienes permiso para consultar este correo específico."}), 403
 
     # IMPORTANTE: Pasamos el usuario REAL del proyecto B para que se respeten TODAS sus reglas
