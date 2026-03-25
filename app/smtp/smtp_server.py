@@ -163,18 +163,56 @@ def _normalize_smtp_envelope_address(addr: str) -> str:
     return s
 
 
-def _first_recipient_address_not_envelope(
-    decoded: str, env_norm: str
-) -> Optional[str]:
-    """Primera dirección en la cadena que no sea el RCPT del sobre SMTP."""
+def _all_addresses_excluding_envelope(decoded: str, env_norm: str) -> list[str]:
+    """Todas las direcciones en la cadena que no sean el RCPT del sobre SMTP."""
+    out: list[str] = []
     for _name, addr in getaddresses([decoded]):
         addr = (addr or "").strip()
         if not addr or "@" not in addr:
             continue
         if addr.lower() == env_norm:
             continue
-        return addr
-    return None
+        out.append(addr)
+    return out
+
+
+def _pick_best_display_recipient(candidates: list[str]) -> Optional[str]:
+    """
+    Entre varias cabeceras (reenvío Gmail), elige la mejor para mostrar al usuario.
+
+    Prioriza Gmail/Googlemail con subdirección (+alias), típica de servicios
+    (Disney, bancos). Evita quedarse solo en la primera dirección distinta del RCPT
+    cuando X-Forwarded-To mezcla el buzón de reenvío con otra cuenta.
+    """
+    if not candidates:
+        return None
+    seen: set[str] = set()
+    uniq: list[str] = []
+    for c in candidates:
+        cl = c.lower()
+        if cl in seen:
+            continue
+        seen.add(cl)
+        uniq.append(c)
+
+    plus_gmails: list[str] = []
+    plain_gmails: list[str] = []
+    rest: list[str] = []
+    for c in uniq:
+        local, _, domain = c.partition("@")
+        d = domain.lower()
+        if d in ("gmail.com", "googlemail.com"):
+            if "+" in local:
+                plus_gmails.append(c)
+            else:
+                plain_gmails.append(c)
+        else:
+            rest.append(c)
+    if plus_gmails:
+        return plus_gmails[0]
+    if plain_gmails:
+        return plain_gmails[0]
+    return rest[0] if rest else None
 
 
 # "for <addr@host>" en cabeceras Received (muchas veces conserva el destinatario original)
@@ -188,19 +226,6 @@ _RE_PAREN_EMAIL = re.compile(
     r"\(\s*([a-zA-Z0-9._%+-]+@(?:gmail|googlemail)\.com)\s*\)",
     re.IGNORECASE,
 )
-
-
-def _recipient_from_received_for_clauses(
-    message: email.message.Message, env_norm: str
-) -> Optional[str]:
-    for raw in message.get_all("Received") or []:
-        if not raw:
-            continue
-        for m in _RE_RECEIVED_FOR.finditer(raw):
-            addr = (m.group(1) or "").strip()
-            if addr and addr.lower() != env_norm:
-                return addr
-    return None
 
 
 def _recipient_from_body_gmail_fallback(
@@ -228,6 +253,44 @@ def _recipient_from_body_gmail_fallback(
     return None
 
 
+def _gather_header_recipient_candidates(
+    message: email.message.Message, env_norm: str
+) -> list[str]:
+    """
+    Recoge todas las direcciones distintas del RCPT en cabeceras relevantes.
+
+    Delivered-To antes que X-Forwarded-To: en reenvíos, el +alias de servicios
+    suele aparecer en Delivered-To; X-Forwarded-To a veces repite el buzón de reenvío.
+    """
+    candidates: list[str] = []
+    for header in (
+        "X-Gm-Original-To",
+        "X-Google-Original-To",
+        "X-Original-To",
+        "Delivered-To",
+        "X-Forwarded-To",
+        "Envelope-To",
+        "X-Envelope-To",
+        "Original-Recipient",
+        "To",
+    ):
+        chunks = message.get_all(header, [])
+        if not chunks:
+            one = message.get(header)
+            if one:
+                chunks = [one]
+        for raw in chunks:
+            if not raw:
+                continue
+            decoded = _decode_mime_header(raw)
+            if header == "Original-Recipient" and ";" in decoded:
+                tail = decoded.split(";", 1)[1].strip()
+                candidates.extend(_all_addresses_excluding_envelope(tail, env_norm))
+            else:
+                candidates.extend(_all_addresses_excluding_envelope(decoded, env_norm))
+    return candidates
+
+
 def _forwarded_recipient_for_display(
     message: email.message.Message,
     envelope_rcpt: str,
@@ -245,46 +308,21 @@ def _forwarded_recipient_for_display(
     if not env_norm:
         return None
 
-    # Orden: primero cabeceras que suelen conservar el destinatario lógico en reenvíos
-    # (Gmail); Delivered-To suele ser el buzón final (mensaje@dominio-reenvío) y
-    # a veces lista varias direcciones donde la primera no es la del usuario +alias.
-    for header in (
-        "X-Gm-Original-To",
-        "X-Google-Original-To",
-        "X-Original-To",
-        "X-Forwarded-To",
-        "Delivered-To",
-        "Envelope-To",
-        "X-Envelope-To",
-        "Original-Recipient",
-    ):
-        chunks = message.get_all(header, [])
-        if not chunks:
-            one = message.get(header)
-            if one:
-                chunks = [one]
-        for raw in chunks:
-            if not raw:
-                continue
-            decoded = _decode_mime_header(raw)
-            # Original-Recipient: a veces "rfc822; user@domain"
-            if header == "Original-Recipient" and ";" in decoded:
-                tail = decoded.split(";", 1)[1].strip()
-                found = _first_recipient_address_not_envelope(tail, env_norm)
-                if found:
-                    return found
-            found = _first_recipient_address_not_envelope(decoded, env_norm)
-            if found:
-                return found
+    found = _pick_best_display_recipient(
+        _gather_header_recipient_candidates(message, env_norm)
+    )
+    if found:
+        return found
 
-    to_raw = message.get("To")
-    if to_raw:
-        decoded = _decode_mime_header(to_raw)
-        found = _first_recipient_address_not_envelope(decoded, env_norm)
-        if found:
-            return found
-
-    found = _recipient_from_received_for_clauses(message, env_norm)
+    recv_candidates: list[str] = []
+    for raw in message.get_all("Received") or []:
+        if not raw:
+            continue
+        for m in _RE_RECEIVED_FOR.finditer(raw):
+            addr = (m.group(1) or "").strip()
+            if addr and addr.lower() != env_norm:
+                recv_candidates.append(addr)
+    found = _pick_best_display_recipient(recv_candidates)
     if found:
         return found
 
