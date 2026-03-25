@@ -200,6 +200,21 @@ def csrf_exempt_api(func):
     func._csrf_exempt = True
     return func
 
+def _parse_optional_service_id(raw):
+    """None si no viene o vacío; int >= 1 si es válido."""
+    if raw is None:
+        return None
+    if isinstance(raw, str) and not raw.strip():
+        return None
+    try:
+        v = int(raw)
+    except (TypeError, ValueError):
+        return None
+    if v < 1:
+        return None
+    return v
+
+
 @api_bp.route("/search_mails", methods=["POST"])
 def search_mails():
     data = request.get_json()
@@ -207,7 +222,10 @@ def search_mails():
         return jsonify({"error": "Missing email_to_search"}), 400
 
     email_to_search = data["email_to_search"]
-    service_id = data.get("service_id")
+    raw_sid = data.get("service_id")
+    service_id = _parse_optional_service_id(raw_sid)
+    if raw_sid is not None and str(raw_sid).strip() != "" and service_id is None:
+        return jsonify({"error": "service_id inválido"}), 400
 
     user_id = session.get("user_id")
     if user_id:
@@ -246,6 +264,12 @@ def search_mails():
         if not mail_result:
             return jsonify({"results": []}), 200
         return jsonify({"results": [mail_result]}), 200
+
+    # Usuario logueado: obligar a elegir servicio (botón/categoría) para no mezclar regex/filtros
+    if service_id is None:
+        return jsonify({
+            "error": "Debes seleccionar un servicio (categoría) antes de buscar."
+        }), 400
     
     # Validar usuario (para búsquedas normales de correos)
     # El admin puede consultar sin restricciones
@@ -276,7 +300,9 @@ def search_mails():
             is_allowed = user.allowed_email_entries.filter_by(email=email_normalized).first() is not None
             if not is_allowed:
                 # El correo puede estar permitido solo en otro proyecto vinculado
-                mail_result = search_linked_projects_only(email_to_search, user)
+                mail_result = search_linked_projects_only(
+                    email_to_search, user, service_id=service_id
+                )
                 if mail_result:
                     return jsonify({"results": [mail_result]}), 200
                 return jsonify({"error": "No tienes permiso al consultar este correo."}), 403
@@ -291,7 +317,9 @@ def search_mails():
             # Verificar AllowedEmail (solo si NO tiene configuración 2FA)
             is_allowed = user.allowed_email_entries.filter_by(email=email_normalized).first() is not None
             if not is_allowed:
-                mail_result = search_linked_projects_only(email_to_search, user)
+                mail_result = search_linked_projects_only(
+                    email_to_search, user, service_id=service_id
+                )
                 if mail_result:
                     return jsonify({"results": [mail_result]}), 200
                 return jsonify({"error": "No tienes permiso para consultar este correo específico."}), 403
@@ -881,9 +909,11 @@ def external_search():
     email_to_search = data.get("email_to_search")
     origin_user = data.get("origin_user") # Usuario que envía desde Proyecto A
     origin_domain = data.get("origin_domain") # Dominio del proyecto A (opcional, para logging)
-    # NO usar service_id: buscar directamente en todos los regex/filtros habilitados del proyecto B
-    # respetando las reglas del usuario del proyecto B
-    
+    raw_ext_sid = data.get("service_id")
+    ext_service_id = _parse_optional_service_id(raw_ext_sid)
+    if raw_ext_sid is not None and str(raw_ext_sid).strip() != "" and ext_service_id is None:
+        return jsonify({"error": "service_id inválido"}), 400
+
     if not token or not email_to_search:
         return jsonify({"error": "Missing token or email_to_search"}), 400
     
@@ -992,7 +1022,9 @@ def external_search():
         if not user.can_search_any:
             is_allowed = user.allowed_email_entries.filter_by(email=email_normalized).first() is not None
             if not is_allowed:
-                mail_result = search_linked_projects_only(email_to_search, user)
+                mail_result = search_linked_projects_only(
+                    email_to_search, user, service_id=ext_service_id
+                )
                 if mail_result:
                     return jsonify({"results": [mail_result]}), 200
                 return jsonify({"error": "No tienes permiso al consultar este correo."}), 403
@@ -1005,18 +1037,18 @@ def external_search():
         if not user.can_search_any:
             is_allowed = user.allowed_email_entries.filter_by(email=email_normalized).first() is not None
             if not is_allowed:
-                mail_result = search_linked_projects_only(email_to_search, user)
+                mail_result = search_linked_projects_only(
+                    email_to_search, user, service_id=ext_service_id
+                )
                 if mail_result:
                     return jsonify({"results": [mail_result]}), 200
                 return jsonify({"error": "No tienes permiso para consultar este correo específico."}), 403
 
     # IMPORTANTE: Pasamos el usuario REAL del proyecto B para que se respeten TODAS sus reglas
-    # El usuario será tratado como NORMAL (con todas sus restricciones) incluso si es admin en proyecto A
-    # Las 2 condiciones anteriores solo autorizan el uso de la API, NO otorgan acceso total
-    # Las validaciones de seguridad de correos se aplican ANTES de buscar
-    # NO usar service_id: buscar directamente en todos los regex/filtros habilitados del proyecto B
-    # respetando las reglas del usuario del proyecto B (regex habilitado globalmente + permisos del usuario)
-    mail_result = search_and_apply_filters(email_to_search, service_id=None, user=user)
+    # service_id opcional: si viene (p. ej. desde otro proyecto vinculado), acota regex/filtros a ese servicio
+    mail_result = search_and_apply_filters(
+        email_to_search, service_id=ext_service_id, user=user
+    )
     
     if mail_result:
         return jsonify({"results": [mail_result]}), 200

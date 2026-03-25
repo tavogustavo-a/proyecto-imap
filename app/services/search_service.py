@@ -101,12 +101,15 @@ def validate_and_sanitize_external_response(data, project_name):
         return None
 
 
-def search_linked_projects_only(to_address, user):
+def search_linked_projects_only(to_address, user, service_id=None):
     """
     Solo consulta las URLs configuradas en proyectos vinculados (otro servidor/proyecto).
 
     Sirve cuando el correo no está en AllowedEmail de este proyecto pero sí puede existir
     en el otro proyecto (misma cadena de confianza vía token en LinkedProject).
+
+    service_id: si se indica, el proyecto remoto debe acotar regex/filtros a ese servicio
+    (mismo botón/categoría), no a todos los globales.
     """
     if not user or not getattr(user, "enabled", False):
         return None
@@ -146,6 +149,8 @@ def search_linked_projects_only(to_address, user):
                 "origin_user": user.username,
                 "origin_domain": origin_domain,
             }
+            if service_id is not None:
+                payload["service_id"] = service_id
             response = requests.post(url_stripped, json=payload, timeout=10)
             if response.status_code == 200:
                 try:

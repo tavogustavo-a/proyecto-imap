@@ -405,16 +405,19 @@ document.addEventListener("DOMContentLoaded", function () {
       }
 
       const email = document.getElementById("searchEmail").value.trim();
-      const serviceId = document.getElementById("selectedServiceId").value.trim();
+      const serviceIdRaw = document.getElementById("selectedServiceId").value.trim();
+      const serviceIdNum = parseInt(serviceIdRaw, 10);
 
       // En páginas dinámicas de IMAP2, no se requiere serviceId
-      if (!serviceId && !isImap2DynamicPage) {
-        if (getIsUserLoggedIn()) {
-          alert("No tienes servicios disponibles. Contacta al administrador para que te asigne servicios con modo 'on-usuarios'.");
-        } else {
-          alert("Por favor, selecciona un servicio antes de buscar.");
+      if (!isImap2DynamicPage) {
+        if (!serviceIdRaw || !Number.isFinite(serviceIdNum) || serviceIdNum < 1) {
+          if (getIsUserLoggedIn()) {
+            alert("No tienes servicios disponibles o no hay categoría seleccionada. Elige un botón (servicio) antes de buscar.");
+          } else {
+            alert("Por favor, selecciona un servicio antes de buscar.");
+          }
+          return;
         }
-        return;
       }
       if (!email) {
         return;
@@ -448,7 +451,7 @@ document.addEventListener("DOMContentLoaded", function () {
         searchEndpoint = searchEndpoint || "/api/search_mails";
         requestBody = {
           email_to_search: email,
-          service_id: serviceId
+          service_id: serviceIdNum
         };
       }
 
