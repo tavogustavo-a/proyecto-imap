@@ -117,9 +117,14 @@ def _buzon_emails_as_mail_dicts(to_address, limit_days=2, max_rows=None):
     if not to_norm or "@" not in to_norm:
         return []
     try:
+        # Coincidir por RCPT (to_email) o por destinatario mostrable (original_to_email),
+        # p. ej. usuario busca user+tag@gmail.com pero el sobre SMTP es mensaje@dominio-reenvío.
         q = ReceivedEmail.query.filter(
             ReceivedEmail.deleted.is_(False),
-            func.lower(func.trim(ReceivedEmail.to_email)) == to_norm,
+            or_(
+                func.lower(func.trim(ReceivedEmail.to_email)) == to_norm,
+                func.lower(func.trim(ReceivedEmail.original_to_email)) == to_norm,
+            ),
         )
         if limit_days is not None:
             cutoff = datetime.now(timezone.utc) - timedelta(days=int(limit_days))
@@ -146,7 +151,7 @@ def _buzon_emails_as_mail_dicts(to_address, limit_days=2, max_rows=None):
         out.append(
             {
                 "from": email.from_email or "",
-                "to": email.to_email or "",
+                "to": (email.original_to_email or email.to_email or ""),
                 "subject": email.subject or "",
                 "text": email.content_text or "",
                 "html": email.content_html or "",
