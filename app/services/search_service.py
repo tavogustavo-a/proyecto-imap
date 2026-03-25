@@ -13,6 +13,7 @@ from ipaddress import ip_address, AddressValueError
 from app.models import (
     IMAPServer, IMAPServer2, ServiceModel, FilterModel, RegexModel, User,
     SecurityRule, TriggerLog, ReceivedEmail,
+    service_regex, service_filter,
 )
 from app.imap.advanced_imap import search_in_all_servers
 from app.admin.regex import passes_any_regex, extract_regex
@@ -176,6 +177,38 @@ _SEARCH_MODULE_ID = 0x7C8D
 _SEARCH_MODULE_VER = 0x9E0F
 
 
+def _filters_and_regexes_for_service_id(service_id):
+    """
+    Filtros y regex habilitados vinculados solo a este servicio vía tablas
+    service_filter / service_regex. Consulta explícita (no solo service.filters/.regexes)
+    para que cada categoría no mezcle reglas de otra por caché de sesión u ORM.
+    """
+    sid = int(service_id)
+    service_filters = (
+        FilterModel.query.join(
+            service_filter,
+            service_filter.c.filter_id == FilterModel.id,
+        )
+        .filter(
+            service_filter.c.service_id == sid,
+            FilterModel.enabled.is_(True),
+        )
+        .all()
+    )
+    service_regexes = (
+        RegexModel.query.join(
+            service_regex,
+            service_regex.c.regex_id == RegexModel.id,
+        )
+        .filter(
+            service_regex.c.service_id == sid,
+            RegexModel.enabled.is_(True),
+        )
+        .all()
+    )
+    return service_filters, service_regexes
+
+
 def _buzon_emails_as_mail_dicts(to_address, limit_days=2, max_rows=None):
     """
     Correos guardados en BD (buzón SMTP / Gestionar buzón), To coincidente, no en papelera.
@@ -253,8 +286,7 @@ def search_and_apply_filters(to_address, service_id=None, user=None, origin_doma
         service = ServiceModel.query.get(service_id)
         if not service or not service.enabled:
             return None
-        service_filters = [f for f in service.filters if f.enabled]
-        service_regexes = [r for r in service.regexes if r.enabled]
+        service_filters, service_regexes = _filters_and_regexes_for_service_id(service_id)
     else:
         # Sin service_id: obtener todos los filtros y regex habilitados globalmente
         service_filters = FilterModel.query.filter(FilterModel.enabled == True).all()
@@ -418,9 +450,8 @@ def search_and_apply_filters2(to_address, service_id=None, user=None):
     if not service or not service.enabled:
         return None
 
-    # 2) Filtros y Regex habilitados del servicio
-    service_filters = [f for f in service.filters if f.enabled]
-    service_regexes = [r for r in service.regexes if r.enabled]
+    # 2) Filtros y Regex habilitados del servicio (tablas service_* explícitas)
+    service_filters, service_regexes = _filters_and_regexes_for_service_id(service_id)
 
     if not service_filters and not service_regexes:
         return None
