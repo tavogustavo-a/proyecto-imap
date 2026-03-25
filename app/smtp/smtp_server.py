@@ -245,12 +245,15 @@ def _forwarded_recipient_for_display(
     if not env_norm:
         return None
 
+    # Orden: primero cabeceras que suelen conservar el destinatario lógico en reenvíos
+    # (Gmail); Delivered-To suele ser el buzón final (mensaje@dominio-reenvío) y
+    # a veces lista varias direcciones donde la primera no es la del usuario +alias.
     for header in (
-        "Delivered-To",
-        "X-Original-To",
         "X-Gm-Original-To",
         "X-Google-Original-To",
+        "X-Original-To",
         "X-Forwarded-To",
+        "Delivered-To",
         "Envelope-To",
         "X-Envelope-To",
         "Original-Recipient",
