@@ -14,6 +14,8 @@ warnings.filterwarnings("ignore")
 os.environ['PYTHONWARNINGS'] = 'ignore'
 
 import click # Importar click para los comandos
+import json
+from sqlalchemy import inspect
 from dotenv import load_dotenv
 from cryptography.fernet import Fernet, InvalidToken
 from app.services.imap_crypto import decrypt_password_with_key, encrypt_password_with_key
@@ -273,15 +275,141 @@ def init_imap_keys_command():
             db.session.rollback()
             print(f"ERROR FATAL durante inicialización de claves IMAP: {e}")
 
+
+def _seed_default_catalog():
+    """Inserta filtros, regex, servicios y vínculos M2M desde app/data/default_catalog_seed.json
+    solo si las tres tablas están vacías (despliegue nuevo). Idempotente."""
+    project_root = os.path.dirname(os.path.abspath(__file__))
+    json_path = os.path.join(project_root, "app", "data", "default_catalog_seed.json")
+    if not os.path.isfile(json_path):
+        print(f"[seed-catalog] No existe {json_path}; se omite.")
+        return
+    skip = os.getenv("SKIP_CATALOG_SEED", "").strip().lower()
+    if skip in ("1", "true", "yes"):
+        print("[seed-catalog] SKIP_CATALOG_SEED está activo; se omite.")
+        return
+
+    from app.models import FilterModel as Filter, RegexModel as RegexPattern, ServiceModel, service_regex, service_filter
+
+    if Filter.query.count() or RegexPattern.query.count() or ServiceModel.query.count():
+        print("[seed-catalog] Ya existen filtros, regex o servicios; no se inserta el catálogo por defecto.")
+        return
+
+    try:
+        with open(json_path, encoding="utf-8") as f:
+            bundle = json.load(f)
+    except Exception as e:
+        print(f"[seed-catalog] No se pudo leer JSON: {e}")
+        return
+
+    filters_data = bundle.get("filters") or []
+    regexes_data = bundle.get("regexes") or []
+    services_data = bundle.get("services") or []
+    pairs_sr = bundle.get("service_regex_pairs") or []
+    pairs_sf = bundle.get("service_filter_pairs") or []
+    if not filters_data and not regexes_data and not services_data:
+        print("[seed-catalog] JSON sin datos de catálogo; se omite.")
+        return
+
+    try:
+        mapper_svc = inspect(ServiceModel)
+        service_column_keys = {c.key for c in mapper_svc.columns}
+    except Exception:
+        service_column_keys = None
+
+    def _as_bool(v):
+        if v is None:
+            return v
+        return bool(int(v)) if isinstance(v, (int, str)) and str(v).isdigit() else bool(v)
+
+    old_to_new_filter = {}
+    old_to_new_regex = {}
+    old_to_new_service = {}
+
+    try:
+        for row in sorted(filters_data, key=lambda x: x.get("id") or 0):
+            old_id = row.get("id")
+            d = {k: v for k, v in row.items() if k != "id"}
+            if "enabled" in d:
+                d["enabled"] = _as_bool(d.get("enabled"))
+            if "is_default" in d:
+                d["is_default"] = _as_bool(d.get("is_default"))
+            obj = Filter(**d)
+            db.session.add(obj)
+            db.session.flush()
+            if old_id is not None:
+                old_to_new_filter[old_id] = obj.id
+
+        for row in sorted(regexes_data, key=lambda x: x.get("id") or 0):
+            old_id = row.get("id")
+            d = {k: v for k, v in row.items() if k != "id"}
+            for key in ("enabled", "is_default", "protected"):
+                if key in d:
+                    d[key] = _as_bool(d.get(key))
+            obj = RegexPattern(**d)
+            db.session.add(obj)
+            db.session.flush()
+            if old_id is not None:
+                old_to_new_regex[old_id] = obj.id
+
+        for row in sorted(services_data, key=lambda x: x.get("id") or 0):
+            old_id = row.get("id")
+            d = {k: v for k, v in row.items() if k != "id"}
+            if service_column_keys is not None:
+                d = {k: v for k, v in d.items() if k in service_column_keys}
+            for key in ("enabled", "protected"):
+                if key in d:
+                    d[key] = _as_bool(d.get(key))
+            obj = ServiceModel(**d)
+            db.session.add(obj)
+            db.session.flush()
+            if old_id is not None:
+                old_to_new_service[old_id] = obj.id
+
+        for p in pairs_sr:
+            ns = old_to_new_service.get(p.get("service_id"))
+            nr = old_to_new_regex.get(p.get("regex_id"))
+            if ns and nr:
+                db.session.execute(service_regex.insert().values(service_id=ns, regex_id=nr))
+
+        for p in pairs_sf:
+            ns = old_to_new_service.get(p.get("service_id"))
+            nf = old_to_new_filter.get(p.get("filter_id"))
+            if ns and nf:
+                db.session.execute(service_filter.insert().values(service_id=ns, filter_id=nf))
+
+        db.session.commit()
+        print(
+            f"[seed-catalog] OK: {len(old_to_new_filter)} filtros, {len(old_to_new_regex)} regex, "
+            f"{len(old_to_new_service)} servicios, +vínculos M2M."
+        )
+    except Exception as e:
+        db.session.rollback()
+        print(f"[seed-catalog] ERROR: {e}")
+
+
+@app.cli.command("seed-catalog")
+def seed_catalog_command():
+    """Inserta catálogo por defecto (filtros/regex/servicios) si las tablas están vacías."""
+    project_root = os.path.dirname(os.path.abspath(__file__))
+    load_dotenv(os.path.join(project_root, ".env"))
+    print("=== seed-catalog ===")
+    with app.app_context():
+        _seed_default_catalog()
+    print("=== seed-catalog terminado ===")
+
+
 @app.cli.command("initial-seed")
 def initial_seed_command():
-    """Ejecuta create-admin e init-imap-keys."""
+    """Ejecuta create-admin, init-imap-keys y catálogo por defecto (filtros/regex/servicios)."""
     # Cargar .env desde la raíz del proyecto
     project_root = os.path.dirname(os.path.abspath(__file__))
     load_dotenv(os.path.join(project_root, ".env"))
     print("=== Ejecutando initial-seed ===")
     create_admin_command()
     init_imap_keys_command()
+    with app.app_context():
+        _seed_default_catalog()
     print("=== initial-seed terminado ===")
 
 def rotate_imap_keys_job():

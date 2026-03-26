@@ -9,6 +9,7 @@ from flask import (
     Response, session, make_response
 )
 from werkzeug.utils import secure_filename
+from sqlalchemy import inspect
 from . import admin_bp
 from app.extensions import db
 from app.models import (
@@ -577,7 +578,6 @@ def import_config():
             # Crear Filtros y Regex (como antes)
             if filters_data:
                 # Verificar una sola vez si el modelo tiene el campo description
-                from sqlalchemy import inspect
                 try:
                     mapper = inspect(Filter)
                     filter_columns = [col.key for col in mapper.columns]
@@ -616,6 +616,11 @@ def import_config():
                         old_to_new_regex_ids[old_id] = new_regex.id
             
             # 6.5. Crear Servicios (sin relaciones ManyToMany todavía)
+            # Solo columnas mapeadas (evita fallos si el JSON trae claves nuevas y el modelo local no)
+            try:
+                _service_column_keys = {c.key for c in inspect(ServiceModel).columns}
+            except Exception:
+                _service_column_keys = None
             services_to_create = []
             if original_services_data:
                 for s_data in original_services_data:
@@ -628,6 +633,10 @@ def import_config():
                             'filter_ids', 'regex_ids', 'aliases', 'service_icon_names', 'service_icons'
                         ]
                     }
+                    if _service_column_keys is not None:
+                        s_data_cleaned = {
+                            k: v for k, v in s_data_cleaned.items() if k in _service_column_keys
+                        }
                     new_service = ServiceModel(**s_data_cleaned)
                     db.session.add(new_service)
                     db.session.flush()

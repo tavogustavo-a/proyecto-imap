@@ -94,6 +94,7 @@
       <a href="{{ url_for('store_bp.admin_support') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-headset"></i> Chat Soporte</a>
       <button id="btnClearTriggerLogMenu" type="button" class="btn-panel btn-red mobile-menu-btn mb-04"><i class="fas fa-trash"></i> Limpiar Logs</button>
       <a href="{{ url_for('auth_bp.logout') }}" class="btn-panel btn-red mobile-menu-btn mb-04"><i class="fas fa-sign-out-alt"></i> Cerrar Sesión</a>
+      <button id="btnLogoutAllAndClearCookies" type="button" class="btn-panel btn-red mobile-menu-btn mb-04" data-url="{{ url_for('admin_bp.logout_all_and_clear_cookies') }}"><i class="fas fa-cookie-bite"></i> Cerrar sesión y limpiar cookies</button>
     </div>
     {% else %}
     <!-- MENÚ LATERAL MÓVIL PARA USUARIOS NORMALES Y SUB-USUARIOS -->
@@ -374,6 +375,7 @@
 <script src="{{ url_for('store_bp.static', filename='js/chat_dashboard_integrated.js') }}" defer></script>
 <meta name="clear_trigger_log_url" content="{{ url_for('admin_bp.clear_trigger_log') }}">
 <script src="{{ url_for('static', filename='js/clear_trigger_logs.js') }}" defer></script>
+<script src="{{ url_for('static', filename='js/logout_all_cookies_btn.js') }}" defer></script>
 
 <!-- ✅ NUEVO: Chat Enhancements - Funcionalidades mejoradas compartidas -->
 <script src="{{ url_for('store_bp.static', filename='js/chat_enhancements.js') }}" defer></script>
