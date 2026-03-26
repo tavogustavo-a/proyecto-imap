@@ -297,6 +297,22 @@ def edit_service(service_id):
                 return redirect(url_for("admin_bp.edit_service", service_id=srv.id))
             srv.name = new_name
 
+        mk_raw = request.form.get("match_key", "").strip()
+        if mk_raw:
+            if len(mk_raw) > 64:
+                flash("La clave entre proyectos (match_key) admite máximo 64 caracteres.", "danger")
+                return redirect(url_for("admin_bp.edit_service", service_id=srv.id))
+            conflict_mk = ServiceModel.query.filter(
+                ServiceModel.match_key == mk_raw,
+                ServiceModel.id != srv.id,
+            ).first()
+            if conflict_mk:
+                flash(f"Esa clave ya la usa el servicio «{conflict_mk.name}».", "danger")
+                return redirect(url_for("admin_bp.edit_service", service_id=srv.id))
+            srv.match_key = mk_raw
+        else:
+            srv.match_key = None
+
         try:
             new_position = int(new_position_str)
         except ValueError:

@@ -110,7 +110,9 @@ def search_linked_projects_only(to_address, user, service_id=None):
     en el otro proyecto (misma cadena de confianza vía token en LinkedProject).
 
     service_id: si se indica, el proyecto remoto debe acotar regex/filtros a ese servicio
-    (mismo botón/categoría), no a todos los globales.
+    (mismo botón/categoría), no a todos los globales). Se envía también service_name
+    (nombre del ServiceModel en origen) para que el otro proyecto resuelva el id local
+    aunque el número no coincida entre bases de datos.
     """
     if not user or not getattr(user, "enabled", False):
         return None
@@ -152,6 +154,16 @@ def search_linked_projects_only(to_address, user, service_id=None):
             }
             if service_id is not None:
                 payload["service_id"] = service_id
+                try:
+                    svc = ServiceModel.query.get(int(service_id))
+                    if svc:
+                        if getattr(svc, "name", None):
+                            payload["service_name"] = (svc.name or "").strip()
+                        mk = getattr(svc, "match_key", None)
+                        if mk and str(mk).strip():
+                            payload["service_match_key"] = str(mk).strip()
+                except (TypeError, ValueError):
+                    pass
             response = requests.post(url_stripped, json=payload, timeout=10)
             if response.status_code == 200:
                 try:

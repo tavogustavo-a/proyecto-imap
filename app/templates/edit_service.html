@@ -30,6 +30,11 @@
         {# Aplicada clase específica #}
         <input id="service_name_input" type="text" name="service_name" value="{{ srv.name }}" class="service-name-input">
       </div>
+      <div class="mb-1">
+        <label for="match_key_input">Clave entre proyectos (opcional):</label><br>
+        <input id="match_key_input" type="text" name="match_key" value="{{ srv.match_key or '' }}" class="service-name-input" maxlength="64" placeholder="misma clave en el otro servidor si el nombre difiere">
+        <small class="text-muted">Misma cadena en ambos proyectos enlaza el botón aunque el nombre visible o el id numérico no coincidan.</small>
+      </div>
       <div class="position-visibility-container mb-1-5">
         <div>
           <label for="position_input" class="m-0">Posición:</label>

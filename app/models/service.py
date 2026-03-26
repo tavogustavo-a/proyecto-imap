@@ -29,6 +29,8 @@ class ServiceModel(db.Model):
     click_color1 = db.Column(db.String(50), default="#031faa") # Color 1 al hacer clic
     click_color2 = db.Column(db.String(50), default="#031faa") # Color 2 al hacer clic
     position = db.Column(db.Integer, default=1)
+    # Misma clave en otro proyecto (otra BD) con distinto id/nombre visible; enlaza regex/filtros equivalentes
+    match_key = db.Column(db.String(64), nullable=True, unique=True, index=True)
     enabled = db.Column(db.Boolean, default=True)
     protected = db.Column(db.Boolean, default=False)
 
@@ -68,6 +70,7 @@ class ServiceModel(db.Model):
         data = {
             'id': self.id,
             'name': self.name,
+            'match_key': self.match_key,
             'color': self.color,
             'border_color': self.border_color,
             'gradient_color': self.gradient_color,

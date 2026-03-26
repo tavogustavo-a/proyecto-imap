@@ -20,8 +20,27 @@ import secrets
 import threading
 from urllib.parse import urlparse
 from ipaddress import ip_address, AddressValueError
+from sqlalchemy import func
 
 api_bp = Blueprint("api_bp", __name__)
+
+
+def _user_has_allowed_email(user, email_normalized: str) -> bool:
+    """
+    True si el correo está en allowed_emails del usuario.
+    Comparación insensible a mayúsculas y con trim (evita rechazos si en BD quedó otro casing o espacios).
+    """
+    if not user or not email_normalized:
+        return False
+    en = email_normalized.strip().lower()
+    if not en:
+        return False
+    return (
+        user.allowed_email_entries.filter(
+            func.lower(func.trim(AllowedEmail.email)) == en
+        ).first()
+        is not None
+    )
 
 # ===== SEGURIDAD: Rate Limiting =====
 # Almacenar requests por IP con timestamps
@@ -215,6 +234,34 @@ def _parse_optional_service_id(raw):
     return v
 
 
+def _resolve_external_service_id(ext_service_id, service_name_raw, match_key_raw=None):
+    """
+    Entre proyectos con distinta BD, el mismo botón puede tener otro service_id u otro nombre visible.
+    Orden: match_key (clave compartida) > nombre > id numérico del origen.
+    """
+    if isinstance(match_key_raw, str) and match_key_raw.strip():
+        mk = match_key_raw.strip()
+        if len(mk) > 64:
+            mk = mk[:64]
+        svc = ServiceModel.query.filter(
+            ServiceModel.enabled.is_(True),
+            ServiceModel.match_key == mk,
+        ).first()
+        if svc:
+            return svc.id
+    if isinstance(service_name_raw, str) and service_name_raw.strip():
+        nm = service_name_raw.strip()
+        if len(nm) > 100:
+            nm = nm[:100]
+        svc = ServiceModel.query.filter(
+            ServiceModel.enabled.is_(True),
+            func.lower(func.trim(ServiceModel.name)) == func.lower(nm),
+        ).first()
+        if svc:
+            return svc.id
+    return ext_service_id
+
+
 @api_bp.route("/search_mails", methods=["POST"])
 def search_mails():
     data = request.get_json()
@@ -242,16 +289,9 @@ def search_mails():
             # search_sms_messages ya maneja la verificación de 2FA internamente
             return search_sms_messages(email_to_search, user)
 
-    # PRIMERO: Verificar si existe configuración 2FA para este correo (solo para correos normales, no SMS)
-    # Si existe, el correo ya está vinculado y no necesita estar en AllowedEmail
+    # Normalización del correo (búsqueda IMAP: permisos por lista + proyecto vinculado + regex/filtro;
+    # no se usa TwoFAConfig para decidir si se permite la consulta).
     email_normalized = email_to_search.lower().strip()
-    has_2fa_config = False
-    configs_2fa = TwoFAConfig.query.filter(TwoFAConfig.is_enabled == True).all()
-    for cfg in configs_2fa:
-        emails_list = cfg.get_emails_list()
-        if email_normalized in emails_list:
-            has_2fa_config = True
-            break
 
     # Si el usuario no está logueado: permitir búsqueda solo si acceso público está habilitado
     if not user:
@@ -272,8 +312,7 @@ def search_mails():
         }), 400
     
     # Validar usuario (para búsquedas normales de correos)
-    # El admin puede consultar sin restricciones
-    # Si existe configuración 2FA, el correo ya está vinculado (no necesita AllowedEmail)
+    # El admin puede consultar sin restricciones de AllowedEmail
     admin_username = current_app.config.get("ADMIN_USER", "admin")
     # Verificar si es admin basándose SOLO en la base de datos (más confiable)
     # Admin: username == admin_username Y parent_id is None
@@ -287,35 +326,12 @@ def search_mails():
     
     # Si es admin, puede consultar sin restricciones de correo específico
     if is_admin:
-        # Admin puede consultar cualquier correo sin restricciones de AllowedEmail
         pass
-    elif has_2fa_config:
-        # Si existe configuración 2FA, validar permisos ANTES de permitir búsqueda
-        # Esto evita mostrar el spinner cuando el usuario no tiene permisos
-        if not user.enabled:
-            return jsonify({"error": "No tienes permiso al consultar este correo."}), 403
-        
-        # Si el usuario NO puede buscar cualquiera, verificar AllowedEmail (igual que SMS)
-        if not user.can_search_any:
-            is_allowed = user.allowed_email_entries.filter_by(email=email_normalized).first() is not None
-            if not is_allowed:
-                # El correo puede estar permitido solo en otro proyecto vinculado
-                mail_result = search_linked_projects_only(
-                    email_to_search, user, service_id=service_id
-                )
-                if mail_result:
-                    return jsonify({"results": [mail_result]}), 200
-                return jsonify({"error": "No tienes permiso al consultar este correo."}), 403
-        # Si tiene configuración 2FA y pasa las validaciones, permitir acceso
     else:
-        # Si no es admin y NO tiene configuración 2FA, validar permisos normalmente
-        if not user.enabled:
-            return jsonify({"error": "No tienes permiso al consultar este correo."}), 403
-        
-        # Si el usuario NO puede buscar cualquiera, verificamos si el email está permitido
+        # Usuario normal: lista permitida localmente O resultado del proyecto vinculado (mismo service_id).
+        # Basta con que el correo esté permitido en el proyecto que realmente consulta el buzón (p. ej. solo proyecto 1).
         if not user.can_search_any:
-            # Verificar AllowedEmail (solo si NO tiene configuración 2FA)
-            is_allowed = user.allowed_email_entries.filter_by(email=email_normalized).first() is not None
+            is_allowed = _user_has_allowed_email(user, email_normalized)
             if not is_allowed:
                 mail_result = search_linked_projects_only(
                     email_to_search, user, service_id=service_id
@@ -366,7 +382,7 @@ def search_sms_messages(email_to_search, user=None, origin_domain=None):
             
             # Si el usuario NO puede buscar cualquiera, verificar AllowedEmail (igual que correos normales)
             if not user.can_search_any:
-                is_allowed = user.allowed_email_entries.filter_by(email=email_normalized).first() is not None
+                is_allowed = _user_has_allowed_email(user, email_normalized)
                 if not is_allowed:
                     return jsonify({"error": "No tienes permiso al consultar este correo."}), 403
             # Si tiene configuración 2FA y pasa las validaciones, permitir acceso
@@ -378,7 +394,7 @@ def search_sms_messages(email_to_search, user=None, origin_domain=None):
             # Si el usuario NO puede buscar cualquiera, verificamos si el email está permitido
             if not user.can_search_any:
                 # Consulta a la tabla AllowedEmail del usuario
-                is_allowed = user.allowed_email_entries.filter_by(email=email_normalized).first() is not None
+                is_allowed = _user_has_allowed_email(user, email_normalized)
                 if not is_allowed:
                     return jsonify({"error": "No tienes permiso para consultar este correo específico."}), 403
     
@@ -550,7 +566,7 @@ def get_2fa_code_for_email(email):
                 # Si el usuario NO puede buscar cualquiera, verificar AllowedEmail (igual que SMS y correos normales)
                 if not user.can_search_any:
                     # Verificar AllowedEmail: el correo debe estar en la lista de correos permitidos del usuario
-                    is_allowed = user.allowed_email_entries.filter_by(email=email_normalized).first() is not None
+                    is_allowed = _user_has_allowed_email(user, email_normalized)
                     if not is_allowed:
                         return jsonify({"error": "No tienes permiso al consultar este correo."}), 403
         
@@ -911,8 +927,14 @@ def external_search():
     origin_domain = data.get("origin_domain") # Dominio del proyecto A (opcional, para logging)
     raw_ext_sid = data.get("service_id")
     ext_service_id = _parse_optional_service_id(raw_ext_sid)
+    service_name_raw = data.get("service_name")
+    match_key_raw = data.get("service_match_key") or data.get("match_key")
+    # service_id numérico inválido: puede resolverse por match_key o nombre en el otro proyecto
     if raw_ext_sid is not None and str(raw_ext_sid).strip() != "" and ext_service_id is None:
-        return jsonify({"error": "service_id inválido"}), 400
+        sn_ok = isinstance(service_name_raw, str) and bool(service_name_raw.strip())
+        mk_ok = isinstance(match_key_raw, str) and bool(match_key_raw.strip())
+        if not (sn_ok or mk_ok):
+            return jsonify({"error": "service_id inválido"}), 400
 
     if not token or not email_to_search:
         return jsonify({"error": "Missing token or email_to_search"}), 400
@@ -992,62 +1014,34 @@ def external_search():
         f"Domain: {origin_domain or 'unknown'}"
     )
 
-    # --- VALIDACIONES DE SEGURIDAD DE CORREOS (IGUAL QUE search_mails) ---
-    # Normalizar el correo
+    # Mismo servicio lógico que en el proyecto origen: por nombre si el id numérico no coincide entre BDs
+    resolved_sid = _resolve_external_service_id(
+        ext_service_id, service_name_raw, match_key_raw
+    )
+
+    # --- VALIDACIONES DE CORREOS (misma idea que search_mails: sin usar TwoFAConfig) ---
     email_normalized = email_to_search.lower().strip()
-    
-    # Verificar si existe configuración 2FA para este correo
-    has_2fa_config = False
-    configs_2fa = TwoFAConfig.query.filter(TwoFAConfig.is_enabled == True).all()
-    for cfg in configs_2fa:
-        emails_list = cfg.get_emails_list()
-        if email_normalized in emails_list:
-            has_2fa_config = True
-            break
-    
-    # is_admin_project_b ya está definido arriba
-    
+
     # Aplicar las mismas validaciones que search_mails
     # IMPORTANTE: El admin del proyecto B NO tiene restricciones (incluso si está inhabilitado)
     if is_admin_project_b:
-        # Admin del proyecto B puede consultar cualquier correo sin restricciones
-        # No necesita estar habilitado para recibir consultas externas
         pass
-    elif has_2fa_config:
-        # Si existe configuración 2FA, validar permisos
-        if not user.enabled:
-            return jsonify({"error": "No tienes permiso al consultar este correo."}), 403
-        
-        # Si el usuario NO puede buscar cualquiera, verificar AllowedEmail
-        if not user.can_search_any:
-            is_allowed = user.allowed_email_entries.filter_by(email=email_normalized).first() is not None
-            if not is_allowed:
-                mail_result = search_linked_projects_only(
-                    email_to_search, user, service_id=ext_service_id
-                )
-                if mail_result:
-                    return jsonify({"results": [mail_result]}), 200
-                return jsonify({"error": "No tienes permiso al consultar este correo."}), 403
     else:
-        # Si no es admin y NO tiene configuración 2FA, validar permisos normalmente
-        if not user.enabled:
-            return jsonify({"error": "No tienes permiso al consultar este correo."}), 403
-        
-        # Si el usuario NO puede buscar cualquiera, verificar AllowedEmail
+        # Usuario no admin: ya se rechazó inhabilitado arriba; aquí solo lista + vinculado
         if not user.can_search_any:
-            is_allowed = user.allowed_email_entries.filter_by(email=email_normalized).first() is not None
+            is_allowed = _user_has_allowed_email(user, email_normalized)
             if not is_allowed:
                 mail_result = search_linked_projects_only(
-                    email_to_search, user, service_id=ext_service_id
+                    email_to_search, user, service_id=resolved_sid
                 )
                 if mail_result:
                     return jsonify({"results": [mail_result]}), 200
                 return jsonify({"error": "No tienes permiso para consultar este correo específico."}), 403
 
     # IMPORTANTE: Pasamos el usuario REAL del proyecto B para que se respeten TODAS sus reglas
-    # service_id opcional: si viene (p. ej. desde otro proyecto vinculado), acota regex/filtros a ese servicio
+    # resolved_sid: servicio local tras resolver por nombre si vino desde otro proyecto
     mail_result = search_and_apply_filters(
-        email_to_search, service_id=ext_service_id, user=user
+        email_to_search, service_id=resolved_sid, user=user
     )
     
     if mail_result:
