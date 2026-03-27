@@ -11,6 +11,16 @@
 let licenses = [];
 let currentLicenseId = null;
 
+/** Actualiza cache en memoria tras guardar notas en el servidor (bloc admin). */
+function patchLicenseNotesCache(licenseId, personal_notes, license_notes) {
+    const L = licenses.find(l => l.id === licenseId);
+    if (L) {
+        L.personal_notes = personal_notes;
+        L.license_notes = license_notes;
+    }
+}
+window.patchLicenseNotesCache = patchLicenseNotesCache;
+
 // Inicialización
 document.addEventListener('DOMContentLoaded', function() {
     // Asegurar que la página quede en la parte superior al cargar
@@ -217,6 +227,23 @@ function renderLicensesGrid() {
             <div class="license-saved-accounts d-none" id="licenseSavedAccountsContainer">
                 <div class="saved-accounts-list" id="licenseSavedAccountsList"></div>
             </div>
+            <div class="license-notepads-wrap" id="licenseNotepadsWrap">
+                <section class="admin-licencias-bloc admin-licencias-bloc--personal" aria-label="Notas personales del producto">
+                    <div class="admin-licencias-bloc-header">
+                        <span class="admin-licencias-bloc-title"><i class="fas fa-book" aria-hidden="true"></i> Notas personales</span>
+                    </div>
+                    <label for="adminLicenciasNotepadPersonal" class="sr-only">Notas personales de este producto (solo en este navegador)</label>
+                    <textarea id="adminLicenciasNotepadPersonal" class="admin-licencias-notepad-textarea" rows="6" spellcheck="true" autocomplete="off" placeholder="Apuntes solo para este producto… se guardan en este dispositivo (sin conexión)."></textarea>
+                </section>
+                <section class="admin-licencias-bloc admin-licencias-bloc--license" aria-label="Licencias del producto">
+                    <div class="admin-licencias-bloc-header">
+                        <span class="admin-licencias-bloc-title"><i class="fas fa-ticket-alt" aria-hidden="true"></i> <span id="adminLicenciasLicenciasHeading">Licencias</span></span>
+                    </div>
+                    <label for="adminLicenciasNotepadByLicense" class="sr-only">Licencias de este producto (solo en este navegador)</label>
+                    <textarea id="adminLicenciasNotepadByLicense" class="admin-licencias-notepad-textarea" rows="8" spellcheck="true" autocomplete="off" placeholder="Licencias, datos… vinculado al producto seleccionado arriba."></textarea>
+                </section>
+                <div id="adminLicenciasNotepadToast" class="admin-licencias-notepad-toast" role="status" aria-live="polite"></div>
+            </div>
             <div class="license-all-days-container d-none" id="licenseAllDaysContainer">
                 <!-- Aquí se cargarán todos los días del 1 al 31 con sus correos vendidos -->
             </div>
@@ -230,6 +257,10 @@ function renderLicensesGrid() {
     
     // Agregar event listeners a las tarjetas
     addLicenseCardListeners();
+    
+    if (typeof window.initAdminLicenciasNotepad === 'function') {
+        window.initAdminLicenciasNotepad();
+    }
     
     // Restaurar tarjeta seleccionada si existe
     restoreSelectedLicense();
@@ -356,7 +387,9 @@ function addLicenseCardListeners() {
             if (!isActive && license) {
                 activateLicenseCard(card, licenseId, true);
             } else {
-                // Si estaba activa, ocultar el contenedor
+                if (window.AdminLicenciasNotepad && typeof window.AdminLicenciasNotepad.flushLicense === 'function') {
+                    window.AdminLicenciasNotepad.flushLicense();
+                }
                 localStorage.removeItem('selectedLicenseId');
                 if (inputContainer) {
                     inputContainer.classList.add('d-none');
@@ -389,6 +422,12 @@ function activateLicenseCard(card, licenseId, skipScroll = false) {
         
         // Cargar y mostrar todos los días con sus correos vendidos
         loadAllDaysSoldAccounts(licenseId);
+        
+        if (window.AdminLicenciasNotepad && typeof window.AdminLicenciasNotepad.bindLicense === 'function') {
+            const lic = licenses.find(function (l) { return l.id === licenseId; });
+            const pname = lic && lic.product_name ? lic.product_name : '';
+            window.AdminLicenciasNotepad.bindLicense(licenseId, pname, lic || null);
+        }
         
         // Aplicar resaltado de búsqueda si hay un término activo
         const searchInput = document.getElementById('adminStoreSearch');

@@ -487,6 +487,9 @@ class License(db.Model):
     enabled = db.Column(db.Boolean, default=True, index=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    # Notas de admin (también sincronizadas desde el bloc en la UI)
+    personal_notes = db.Column(db.Text, nullable=True)
+    license_notes = db.Column(db.Text, nullable=True)
     
     # Relación con producto
     product = db.relationship('Product', backref='license_info')

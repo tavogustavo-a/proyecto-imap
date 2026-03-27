@@ -105,6 +105,33 @@ def create_app(config_class_passed=None):
                 "No se pudo aplicar parche de esquema email buzón: %s", schema_err
             )
 
+        try:
+            insp = inspect(db.engine)
+            if insp.has_table("store_licenses"):
+                col_names = {c["name"] for c in insp.get_columns("store_licenses")}
+                if "personal_notes" not in col_names:
+                    db.session.execute(
+                        text("ALTER TABLE store_licenses ADD COLUMN personal_notes TEXT")
+                    )
+                    db.session.commit()
+                    app.logger.info(
+                        "Esquema: columna personal_notes añadida a store_licenses"
+                    )
+                col_names = {c["name"] for c in insp.get_columns("store_licenses")}
+                if "license_notes" not in col_names:
+                    db.session.execute(
+                        text("ALTER TABLE store_licenses ADD COLUMN license_notes TEXT")
+                    )
+                    db.session.commit()
+                    app.logger.info(
+                        "Esquema: columna license_notes añadida a store_licenses"
+                    )
+        except Exception as schema_err:
+            db.session.rollback()
+            app.logger.warning(
+                "No se pudo aplicar parche store_licenses (notas): %s", schema_err
+            )
+
     # === Registro de Blueprints ===
     from app.auth.routes import auth_bp
     app.register_blueprint(auth_bp, url_prefix="/auth")

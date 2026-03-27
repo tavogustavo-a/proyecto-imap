@@ -3413,6 +3413,8 @@ def api_get_licenses():
                 'position': license.position,
                 'enabled': license.enabled,
                 'created_at': license.created_at.isoformat() if license.created_at else None,
+                'personal_notes': license.personal_notes or '',
+                'license_notes': license.license_notes or '',
                 'accounts': []
             }
             
@@ -3438,6 +3440,30 @@ def api_get_licenses():
         
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@store_bp.route('/api/licenses/<int:license_id>/notes', methods=['PUT'])
+@admin_required
+def api_put_license_notes(license_id):
+    """Guardar notas personales y de licencias (bloc admin) en base de datos."""
+    from app.store.models import License
+    try:
+        license_obj = License.query.get_or_404(license_id)
+        data = request.get_json(silent=True) or {}
+        if 'personal_notes' in data:
+            license_obj.personal_notes = (
+                data['personal_notes'] if data['personal_notes'] is not None else ''
+            )
+        if 'license_notes' in data:
+            license_obj.license_notes = (
+                data['license_notes'] if data['license_notes'] is not None else ''
+            )
+        db.session.commit()
+        return jsonify({'success': True})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
 
 @store_bp.route('/api/licenses/archived', methods=['GET'])
 @admin_required
@@ -3475,6 +3501,8 @@ def api_get_archived_licenses():
                 'enabled': license.enabled,
                 'created_at': license.created_at.isoformat(),
                 'updated_at': license.updated_at.isoformat(),
+                'personal_notes': license.personal_notes or '',
+                'license_notes': license.license_notes or '',
                 'accounts': accounts_data
             })
         
