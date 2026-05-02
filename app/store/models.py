@@ -484,12 +484,24 @@ class License(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     product_id = db.Column(db.Integer, db.ForeignKey('store_products.id', ondelete='CASCADE'), nullable=False)
     position = db.Column(db.Integer, default=0, index=True)  # Posición para ordenar
+    # Días de garantía (admin «Gestionar productos»); por defecto 5
+    warranty_days = db.Column(db.Integer, default=5, nullable=False)
     enabled = db.Column(db.Boolean, default=True, index=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     # Notas de admin (también sincronizadas desde el bloc en la UI)
     personal_notes = db.Column(db.Text, nullable=True)
     license_notes = db.Column(db.Text, nullable=True)
+    # Caídas / suspendidas (mismo formato que license_notes; persiste hasta borrado manual)
+    suspended_notes = db.Column(db.Text, nullable=True)
+    # Cuentas / licencias no renovables (sin mes a mes); mismo formato que license_notes
+    expired_notes = db.Column(db.Text, nullable=True)
+    # Si True, el producto se renueva mes a mes (oculta bloc Vencidas en admin)
+    month_to_month = db.Column(db.Boolean, default=False, nullable=False)
+    # Bloc «Cambios» (mes a mes): correo, terminado / problemas; mismo formato pipe que license_notes
+    changes_notes = db.Column(db.Text, nullable=True)
+    # JSON {"1":"texto bloc día 1", ...} — texto exacto del bloc por día (persiste aunque falle el parseo a cuentas)
+    day_notepads_json = db.Column(db.Text, nullable=True)
     
     # Relación con producto
     product = db.relationship('Product', backref='license_info')
@@ -516,6 +528,8 @@ class LicenseAccount(db.Model):
     
     # Relación con usuario asignado
     assigned_user = db.relationship('User', backref='assigned_license_accounts')
+    # Notas privadas del cliente (solo lectura/escritura en vista «Licencias» usuario; distintas del bloc admin).
+    client_notes = db.Column(db.Text, nullable=True)
     
     def __repr__(self):
         return f'<LicenseAccount {self.account_identifier} ({self.status})>'

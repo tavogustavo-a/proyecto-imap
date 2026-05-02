@@ -1,8 +1,23 @@
 # app/admin/decorators.py
 
 from functools import wraps
-from flask import session, current_app, flash, redirect, url_for, request, jsonify
+from flask import session, current_app, flash, redirect, url_for, request, jsonify, g
 from app.models import User
+
+
+def _permissions_is_ajax_like():
+    content_type = request.headers.get('Content-Type', '')
+    return (
+        request.is_json
+        or content_type.startswith('application/json')
+        or request.headers.get('X-Requested-With') == 'XMLHttpRequest'
+        or request.path.startswith('/api/')
+        or request.path.endswith('/ajax')
+        or request.path.endswith('.json')
+        or '/ajax' in request.path
+        or (request.method == 'POST' and content_type.startswith('application/json'))
+    )
+
 
 def admin_required(f):
     @wraps(f)
@@ -151,4 +166,104 @@ def admin_required(f):
             pass  # Permitir acceso si todas las demás verificaciones pasaron
 
         return f(*args, **kwargs)
+    return decorated_function
+
+
+def _permissions_user_has_soporte_licencias_effective(user_obj):
+    """
+    Misma regla que la tienda: el permiso puede estar en el principal o,
+    si es hijo con acceso a tienda, tomarse del usuario padre.
+    """
+    if not user_obj:
+        return False
+    if getattr(user_obj, "parent_id", None):
+        if not getattr(user_obj, "can_access_store", False):
+            return False
+        pu = User.query.get(user_obj.parent_id)
+        if not pu:
+            return False
+        pup = pu.user_prices if isinstance(pu.user_prices, dict) else {}
+        return bool(pup.get("soporte_licencias"))
+    up = user_obj.user_prices if isinstance(user_obj.user_prices, dict) else {}
+    return bool(up.get("soporte_licencias"))
+
+
+def admin_or_soporte_licencias_required(f):
+    """Administrador total, o usuario con ``user_prices.soporte_licencias`` (panel licencias limitado)."""
+
+    admin_wrapped = admin_required(f)
+
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        is_ajax = _permissions_is_ajax_like()
+
+        def return_error(message, status_code=403, clear_session=False):
+            if is_ajax:
+                return jsonify({'success': False, 'error': message}), status_code
+            flash(message, 'danger')
+            if clear_session:
+                session.clear()
+            return redirect(url_for('user_auth_bp.login'))
+
+        if not session.get('is_user'):
+            return admin_wrapped(*args, **kwargs)
+
+        if not session.get('logged_in'):
+            return return_error('Inicia sesión para acceder.', 401, clear_session=False)
+
+        from app.auth.session_tokens import validate_session_token, generate_session_token
+
+        user_id = session.get('user_id')
+        if user_id is None:
+            return return_error('Sesión inválida. Vuelve a iniciar sesión.', 401, clear_session=not is_ajax)
+
+        session_token = session.get('session_token')
+
+        def token_valid(tok):
+            return bool(tok) and validate_session_token(
+                tok, expected_user_id=user_id, require_admin=False
+            )
+
+        if not token_valid(session_token):
+            chk = User.query.get(user_id)
+            sess_uname = session.get('username')
+            recover_ok = chk and chk.enabled and (not sess_uname or chk.username == sess_uname)
+            if recover_ok:
+                session_token = generate_session_token(user_id, is_admin=False)
+                session['session_token'] = session_token
+            else:
+                return return_error(
+                    'Sesión inválida o expirada. Vuelve a iniciar sesión.',
+                    401,
+                    clear_session=not is_ajax,
+                )
+
+        user_obj = User.query.get(user_id)
+        if not user_obj:
+            return return_error('Usuario no encontrado.', 401, clear_session=not is_ajax)
+        if not user_obj.enabled:
+            return return_error('Este usuario está deshabilitado.', 403, clear_session=not is_ajax)
+        if user_obj.parent_id is not None and not getattr(user_obj, 'can_access_store', False):
+            return return_error(
+                'Esta sesión no tiene acceso al panel de licencias.',
+                403,
+                clear_session=False,
+            )
+        if user_obj.user_session_rev_count > session.get('user_session_rev_count_local', 0):
+            return return_error(
+                'Tu sesión se ha cerrado por un cambio en tu configuración.',
+                401,
+                clear_session=not is_ajax,
+            )
+
+        if not _permissions_user_has_soporte_licencias_effective(user_obj):
+            return return_error(
+                'No tienes permiso de soporte licencias para esta sección.',
+                403,
+                clear_session=False,
+            )
+
+        g.license_support_restricted_mode = True
+        return f(*args, **kwargs)
+
     return decorated_function

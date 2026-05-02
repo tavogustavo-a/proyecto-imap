@@ -8,7 +8,7 @@
   <link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/html_tools.css') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='fontawesome/css/all.css') }}">
   <script src="https://code.iconify.design/iconify-icon/2.1.0/iconify-icon.min.js"></script>
-  <script>window.HTML_TOOLS_STATIC_IMAGES = "{{ url_for('static', filename='images/') }}";</script>
+  <meta name="html-tools-static-images" content="{{ url_for('static', filename='images/') }}">
 {% endblock %}
 
 {% block content %}
@@ -170,5 +170,5 @@
 
 {% block scripts %}
   {{ super() }}
-  <script src="{{ url_for('store_bp.static', filename='js/admin_html_tools.js') }}" defer></script>
+  <script src="{{ url_for('store_bp.static', filename='js/admin_html_tools.js') }}?v=20260421-meta-static" defer></script>
 {% endblock %}

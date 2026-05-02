@@ -5,6 +5,18 @@
   'use strict';
 
   document.addEventListener('DOMContentLoaded', function() {
+    var pageRoot = document.querySelector('.search-page-container.search-page[data-imap2-background-url]');
+    if (pageRoot) {
+      var bgUrl = pageRoot.getAttribute('data-imap2-background-url');
+      if (bgUrl && bgUrl.trim()) {
+        document.body.classList.add('imap2-dynamic-custom-bg');
+        document.body.style.setProperty(
+          '--imap2-user-bg-image',
+          'url("' + bgUrl.replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '")'
+        );
+      }
+    }
+
     const ajaxSearchForm = document.getElementById('ajax-search-form');
     
     if (!ajaxSearchForm) {

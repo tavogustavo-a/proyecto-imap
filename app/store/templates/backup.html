@@ -1,0 +1,148 @@
+{% extends "base.html" %}
+
+{% block title %}Copias de seguridad{% endblock %}
+
+{% block head %}
+  {{ super() }}
+  <meta name="csrf_token" content="{{ csrf_token() }}">
+  <meta name="clear_trigger_log_url" content="{{ url_for('admin_bp.clear_trigger_log') }}">
+  <link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}?v=136">
+  <link rel="stylesheet" href="{{ url_for('static', filename='fontawesome/css/all.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="container container-max-width-900 store-light backup-page-shell" 
+     data-clear-trigger-log-url="{{ url_for('admin_bp.clear_trigger_log') }}"
+     data-logout-all-cookies-url="{{ url_for('admin_bp.logout_all_and_clear_cookies') }}">
+  
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <div class="d-flex gap-05">
+      <button id="menuToggleBtn" class="btn-panel btn-blue ml-2 menu-toggle-btn">&#9776; Menú</button>
+      <button id="menu2ToggleBtn" class="btn-panel btn-blue menu-toggle-btn">&#9776; Menú2</button>
+    </div>
+    <h1 class="backup-page-toolbar-title mb-0 text-break"><i class="fas fa-database text-primary backup-page-toolbar-icon" aria-hidden="true"></i> Copias de seguridad</h1>
+  </div>
+
+  <div id="mobileMenu" class="mobile-menu-store hidden">
+    <div class="menu-user-info-row menu-user-info-row--name-only menu-sidebar-heading-name">
+      <span class="menu-user-name">{{ session.get('username', 'Admin') }}</span>
+    </div>
+    <a href="{{ url_for('admin_bp.dashboard') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-cogs"></i> Administración</a>
+    <a href="{{ url_for('admin_bp.parrafos_page') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-paragraph"></i> Párrafos</a>
+    <a href="{{ url_for('admin_bp.filters_page') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-filter"></i> Filtros</a>
+    <a href="{{ url_for('admin_bp.regex_page') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-random"></i> Regex</a>
+    <a href="{{ url_for('admin_bp.services_page') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-cogs"></i> Servicios</a>
+    <a href="{{ url_for('admin_bp.usuarios_page') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-users"></i> Usuarios</a>
+    <a href="{{ url_for('admin_bp.security_rules_page') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-shield-alt"></i> Reglas de Seguridad</a>
+    <a href="{{ url_for('admin_bp.view_trigger_logs_page') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-clipboard-list"></i> Consultar logs</a>
+    <a href="{{ url_for('store_bp.admin_sms') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-sms"></i> Consulta SMS</a>
+    <a href="{{ url_for('admin_bp.manage_permissions_page') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-key"></i> Gestión de Permisos</a>
+    <a href="{{ url_for('store_bp.admin_work_sheets') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-table"></i> Hojas de Cálculo</a>
+    <a href="{{ url_for('store_bp.html_tools') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-code"></i> HTML</a>
+    <a href="{{ url_for('store_bp.admin_support') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-headset"></i> Chat Soporte</a>
+    <a href="{{ url_for('store_bp.admin_backup') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-database"></i> Backup</a>
+    <button id="btnClearTriggerLogMenu" type="button" class="btn-panel btn-red mobile-menu-btn mb-04"><i class="fas fa-trash"></i> Limpiar Logs</button>
+    <a href="{{ url_for('auth_bp.logout') }}" class="btn-panel btn-red mobile-menu-btn mb-04"><i class="fas fa-sign-out-alt"></i> Cerrar Sesión</a>
+    <button id="btnLogoutAllAndClearCookies" type="button" class="btn-panel btn-red mobile-menu-btn mb-04" data-url="{{ url_for('admin_bp.logout_all_and_clear_cookies') }}"><i class="fas fa-cookie-bite"></i> Cerrar sesión y limpiar cookies</button>
+  </div>
+
+  <div id="mobileMenu2" class="mobile-menu-store hidden">
+    <div class="menu-user-info-row menu-user-info-row--name-only menu-sidebar-heading-name">
+      <span class="menu-user-name">Menú</span>
+    </div>
+    <a href="{{ url_for('store_bp.admin_store') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-store"></i> Licencias</a>
+    <a href="{{ url_for('store_bp.admin_productos') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-box"></i> Productos</a>
+    <a href="{{ url_for('store_bp.admin_productos') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-ticket-alt"></i> Cupones</a>
+    <a href="{{ url_for('store_bp.admin_tools') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-tools"></i> Herramientas Admin</a>
+    <a href="{{ url_for('store_bp.admin_configurations') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-cog"></i> Configuraciones</a>
+    <a href="{{ url_for('store_bp.store_front') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-store"></i> Tienda Pública</a>
+    <a href="{{ url_for('store_bp.tools_public') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-tools"></i> Herramientas Pública</a>
+    <a href="{{ url_for('store_bp.historial_compras_usuario') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-history"></i> Mi Historial de Compras</a>
+    <a href="{{ url_for('main_bp.home') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-code"></i> Códigos</a>
+    <a href="{{ url_for('store_bp.admin_productos') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-list"></i> Gestionar Productos</a>
+    <a href="{{ url_for('store_bp.admin_archivados') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-archive"></i> Archivados</a>
+  </div>
+
+  <div id="menuOverlay" class="menu-overlay"></div>
+
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      {% for cat, msg in messages %}
+        <div class="alert alert-{{ cat }} alert-dismissible fade show" role="alert">{{ msg }}</div>
+      {% endfor %}
+    {% endif %}
+  {% endwith %}
+
+  {% if not is_sqlite %}
+    <div class="alert alert-info">
+      <strong>PostgreSQL / otras BDs:</strong> Esta pantalla automatiza solo copias de archivos <strong>SQLite</strong> (<code>.db</code>) — copiar el fichero y restaurarlo tiene sentido cuando la BD es un solo archivo local.
+      <span class="d-block mt-2">En <strong>producción con PostgreSQL</strong> esa lógica no aplica igual: ahí los backups típicos son <code>pg_dump</code>/<code>pg_restore</code>, instantáneas del proveedor (RDS, Supabase, etc.) o políticas del VPS/hosting. No están integrados aquí; conviene configurarlos donde corre la base.</span>
+    </div>
+  {% else %}
+    <div class="card bg-dark border-secondary mb-4 text-light">
+      <div class="card-body py-3">
+        <ul class="small mb-0 ps-3 text-secondary">
+          <li>Se crea una copia <strong>cada hora</strong> con nombre <code>auto_AAAAMMDD_HHMMSS.db</code>.</li>
+          <li>Solo se conservan hasta <strong>100</strong> copias automáticas; las más antiguas se eliminan cuando se supera ese límite.</li>
+          <li>Las copias manuales se nombran <code>manual_…</code> y no entran en la rotación.</li>
+          <li><strong>Copia = instantánea de todo lo que está dentro del SQLite</strong> en ese momento (usuarios y sesiones persistidas ahí si las hay, tienda/ licencias incluidas <strong>archivadas</strong>, productos, etc.). No incluye ficheros externos (p. ej. otros discos/Drive).</li>
+          <li><strong>Restaurar</strong> sustituye el archivo SQLite activo por la copia elegida — vuelves al estado completo hasta la fecha/hora en que se hizo esa copia.</li>
+        </ul>
+      </div>
+    </div>
+
+    <form method="post" action="{{ url_for('store_bp.admin_backup_manual') }}" class="mb-4">
+      <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+      <button type="submit" class="btn btn-outline-primary btn-sm"><i class="fas fa-plus"></i> Crear copia manual ahora</button>
+    </form>
+
+    {% if backups|length == 0 %}
+      <p class="text-muted">Aún no hay copias generadas.</p>
+    {% else %}
+      <div class="table-responsive rounded border border-secondary overflow-hidden">
+        <table class="table table-dark table-striped table-hover table-sm mb-0">
+          <thead>
+            <tr>
+              <th>Archivo</th>
+              <th>Tipo</th>
+              <th>Tamaño</th>
+              <th>Fecha</th>
+              <th class="text-end">Acciones</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for b in backups %}
+            <tr>
+              <td><code class="small">{{ b.name_display }}</code></td>
+              <td><span class="badge bg-{{ 'info' if b.kind == 'auto' else 'secondary' }}">{{ b.kind }}</span></td>
+              <td>{{ b.size_h }}</td>
+              <td class="text-nowrap small">{{ b.mtime_h }}</td>
+              <td class="text-end text-nowrap">
+                <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('store_bp.admin_backup_download', filename=b.name) }}" title="Descargar"><i class="fas fa-download"></i></a>
+                <form method="post" action="{{ url_for('store_bp.admin_backup_restore') }}" class="d-inline" onsubmit="return confirm('¿Reemplazar la base activa por esta copia?\nSe guardará antes un archivo .antes_restaurar_*.db junto al .db principal.');">
+                  <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+                  <input type="hidden" name="filename" value="{{ b.name }}">
+                  <button type="submit" class="btn btn-sm btn-outline-secondary ms-1" title="Restaurar BD desde esta copia" aria-label="Restaurar copia"><i class="fas fa-undo-alt"></i></button>
+                </form>
+                <form method="post" action="{{ url_for('store_bp.admin_backup_delete') }}" class="d-inline" onsubmit="return confirm('¿Eliminar permanentemente este archivo de copia desde el disco?\nNo afecta la base de datos en uso.');">
+                  <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+                  <input type="hidden" name="filename" value="{{ b.name }}">
+                  <button type="submit" class="btn btn-sm btn-outline-warning ms-1" title="Eliminar solo este archivo de backup" aria-label="Eliminar copia"><i class="fas fa-trash-alt"></i></button>
+                </form>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% endif %}
+  {% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+  {{ super() }}
+  <script src="{{ url_for('store_bp.static', filename='js/menu_tienda.js') }}" defer></script>
+  <script src="{{ url_for('static', filename='js/clear_trigger_logs.js') }}" defer></script>
+  <script src="{{ url_for('static', filename='js/logout_all_cookies_btn.js') }}" defer></script>
+{% endblock %}

@@ -1,5 +1,7 @@
 # app/services/email_buzon_service.py
 
+import logging
+
 from sqlalchemy import func
 
 from app.extensions import db
@@ -8,6 +10,8 @@ from app.models.email_buzon import email_tags
 from app.imap.parser import parse_raw_email
 # Importación de auto_tag_email se hace dentro de la función para evitar importaciones circulares
 from datetime import datetime, timedelta
+
+logger = logging.getLogger(__name__)
 
 # Intervalo del job en run.py y ancho de la ventana de disparo (deben coincidir).
 # La limpieza se ejecuta si "ahora" (Colombia) está entre la hora configurada y esa hora + N minutos.
@@ -129,10 +133,15 @@ def process_incoming_email(raw_email_data, buzon_server_id=None):
         # 🚫 VERIFICAR REMITENTES BLOQUEADOS ANTES DE GUARDAR
         from app.services.blocked_sender_service import is_sender_blocked
         if is_sender_blocked(from_email):
+            logger.warning("[buzón] process_incoming_email omitido: remitente bloqueado from=%s", from_email)
             return None  # No guardar en la base de datos
         
         # 🗑️ VERIFICAR FILTROS DE PAPELERA ANTES DE GUARDAR
         if should_email_go_to_trash(parsed_email):
+            logger.warning(
+                "[buzón] process_incoming_email omitido: filtro papelera from=%s",
+                from_email,
+            )
             return None  # No guardar en la base de datos
         
         # Crear registro en la base de datos
@@ -157,6 +166,7 @@ def process_incoming_email(raw_email_data, buzon_server_id=None):
         return received_email
         
     except Exception:
+        logger.exception("[buzón] process_incoming_email error al guardar")
         return None
 
 def process_smtp_email(email_data):
@@ -185,6 +195,7 @@ def process_smtp_email(email_data):
 
         to_norm = (to_email or "").strip().lower()
         if not to_norm or "@" not in to_norm:
+            logger.warning("[buzón] SMTP rechazado: destinatario inválido to=%r", to_email)
             return None
 
         configured_forwarding = (
@@ -196,15 +207,28 @@ def process_smtp_email(email_data):
         )
 
         if not configured_forwarding:
+            logger.warning(
+                "[buzón] SMTP rechazado: no hay EmailForwarding habilitado con source_email=%s (from=%s)",
+                to_norm,
+                from_email or "?",
+            )
             return None
 
         # 🚫 VERIFICAR REMITENTES BLOQUEADOS ANTES DE GUARDAR
         from app.services.blocked_sender_service import is_sender_blocked
         if is_sender_blocked(from_email):
+            logger.warning(
+                "[buzón] SMTP rechazado: remitente bloqueado from=%s to=%s", from_email, to_norm
+            )
             return None  # No guardar en la base de datos
         
         # 🗑️ VERIFICAR FILTROS DE PAPELERA ANTES DE GUARDAR
         if should_email_go_to_trash(email_data):
+            logger.warning(
+                "[buzón] SMTP rechazado: filtro papelera from=%s to=%s",
+                from_email,
+                to_norm,
+            )
             return None  # No guardar en la base de datos
         
         original_to = (email_data.get('original_to') or '').strip()
@@ -233,6 +257,11 @@ def process_smtp_email(email_data):
         return received_email
         
     except Exception:
+        logger.exception(
+            "[buzón] process_smtp_email error (from=%s to=%s)",
+            (email_data or {}).get("from"),
+            (email_data or {}).get("to"),
+        )
         return None
 
 

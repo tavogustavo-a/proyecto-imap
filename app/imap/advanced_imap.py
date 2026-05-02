@@ -219,7 +219,8 @@ def search_emails_for_observer(servers, since_date_utc, optional_sender_from_rul
             try:
                 # Concurrencia controlada solo por el Pool
                 worker_current_app = current_app_for_worker
-                
+                current_time_str_worker = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+
                 context = ssl.create_default_context()
                 client = IMAPClient(host=server_obj.host, port=server_obj.port, ssl=True, ssl_context=context, timeout=60)
                 

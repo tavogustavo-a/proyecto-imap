@@ -1,0 +1,131 @@
+{% extends "base.html" %}
+
+{% block title %}Licencias{% endblock %}
+
+{% block head %}
+  {{ super() }}
+  <link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}?v=159">
+  <link rel="stylesheet" href="{{ url_for('static', filename='fontawesome/css/all.css') }}">
+{% endblock %}
+
+{% macro format_license_price_num(n) -%}
+    {%- set n = n|float -%}
+    {%- set n = (n * 100)|round / 100 -%}
+    {%- if n % 1 == 0 -%}
+        {{ n|int }}
+    {%- else -%}
+        {{ ('%.2f' % n).replace('.00','').rstrip('0').rstrip('.') }}
+    {%- endif -%}
+{%- endmacro %}
+
+{% block content %}
+{% set blocked_users = ['soporte','soporte1','soporte2','soporte3'] %}
+{% if session.get('logged_in') and (not session.get('username') or session.get('username').lower() not in blocked_users) %}
+<div class="container mt-2 store-light worksheet-panel admin-licencias-page admin-licencias-shell user-licencias-shell">
+  <div class="user-licencias-toolbar d-flex flex-wrap align-items-center gap-2 w-100">
+    <div class="d-flex gap-05 admin-store-menus flex-shrink-0 align-items-center">
+      <button type="button" id="menuToggleBtn" class="btn-blue menu-btn-worksheet user-licencias-toolbar__menu-btn">&#9776; Menú</button>
+      {% if soporte_licencias_nav %}
+      <a href="{{ url_for('store_bp.admin_store') }}" class="btn-blue menu-btn-worksheet user-licencias-toolbar-cambios-link text-decoration-none" title="Ir a Cambios mes a mes (Admin Licencias)" aria-label="Cambios en Admin Licencias">
+        <i class="fas fa-exchange-alt" aria-hidden="true"></i> Cambios
+      </a>
+      {% endif %}
+      <button type="button" id="licensesCollapseBtn" class="btn-blue menu-btn-worksheet licenses-collapse-btn licenses-collapse-btn--toolbar" title="Contraer o expandir licencias" aria-label="Contraer o expandir licencias">
+        <i class="fas fa-chevron-up" id="collapseIcon" aria-hidden="true"></i>
+      </button>
+    </div>
+  </div>
+  {% if current_user and current_user.parent_id %}
+  <p class="user-licencias-subuser-hint mb-2 mt-0"><i class="fas fa-info-circle" aria-hidden="true"></i> Los precios y licencias mostrados corresponden a tu usuario principal.</p>
+  {% endif %}
+
+  <div id="mobileMenu" class="mobile-menu-store hidden">
+    <div class="menu-user-info-row menu-user-info-row--name-only menu-sidebar-heading-name">
+      <span class="menu-user-name">{{ session.get('username', 'Invitado') }}</span>
+    </div>
+    {% set user_object = None %}
+    {% set current_user_id = session.get("user_id") %}
+    {% if current_user_id %}
+      {% set user_object = User.query.get(current_user_id) %}
+      {% if user_object %}
+      {% set show_store = False %}
+      {% if is_admin %}
+        {% set show_store = True %}
+      {% elif user_object.parent_id %}
+        {% if user_object.can_access_store %}
+          {% set parent_nav = User.query.get(user_object.parent_id) %}
+          {% if parent_nav and parent_nav.user_prices and (
+            parent_nav.user_prices.get('tipo_precio') in ['USD', 'COP']
+            or parent_nav.user_prices.get('soporte_licencias')
+          ) %}
+            {% set show_store = True %}
+          {% endif %}
+        {% endif %}
+      {% elif user_object.user_prices and (
+        user_object.user_prices.get('tipo_precio') in ['USD', 'COP']
+        or user_object.user_prices.get('soporte_licencias')
+      ) %}
+        {% set show_store = True %}
+      {% endif %}
+      {% if show_store %}
+        <a href="{{ url_for('store_bp.store_front') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-store"></i> Tienda</a>
+        <a href="{{ url_for('store_bp.user_licencias') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-link"></i> Licencias</a>
+        <a href="{{ url_for('store_bp.historial_compras_usuario') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-receipt"></i> Mi Historial de Compras</a>
+      {% endif %}
+      {% endif %}
+    {% endif %}
+    {% if user_object and user_object.has_public_tools_access() %}
+      <a href="{{ url_for('store_bp.tools_public') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-tools"></i> Herramientas</a>
+    {% endif %}
+    <a href="{{ url_for('main_bp.home') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-code"></i> Códigos</a>
+    {% if is_user and current_user %}
+      {% if current_user.is_support %}
+        <a href="{{ url_for('store_bp.support_dashboard') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-headset"></i> Chat de Soporte Admin</a>
+      {% elif current_user.can_chat %}
+        <a href="{{ url_for('store_bp.user_chat_soporte') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-headset"></i> Chat de Soporte</a>
+      {% endif %}
+    {% endif %}
+    {% if is_user and user_object and user_object.can_create_subusers %}
+      <a href="{{ url_for('subuser_bp.manage_subusers') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-users"></i> Sub-usuarios</a>
+    {% endif %}
+    {% if is_user and not current_user.parent_id and user_has_worksheet_access(current_user) %}
+      <a href="{{ url_for('store_bp.user_work_sheets') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-table"></i> Hojas de Cálculo</a>
+    {% endif %}
+    {% if is_user and current_user and current_user.managed_imap2_pages|length > 0 %}
+      <a href="{{ url_for('user_auth_bp.my_pages_list') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-file-alt"></i> Gestionar mi página</a>
+    {% endif %}
+    {% if is_admin %}
+      <a href="{{ url_for('admin_bp.dashboard') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-cogs"></i> Administración</a>
+      <a href="{{ url_for('auth_bp.logout') }}" class="btn-panel btn-red mobile-menu-btn mb-04"><i class="fas fa-sign-out-alt"></i> Cerrar Sesión</a>
+    {% elif is_user %}
+      <a href="{{ url_for('user_auth_bp.logout') }}" class="btn-panel btn-red mobile-menu-btn mb-04"><i class="fas fa-sign-out-alt"></i> Cerrar Sesión</a>
+    {% else %}
+      <a href="{{ url_for('user_auth_bp.logout') }}" class="btn-panel btn-red mobile-menu-btn mb-04"><i class="fas fa-sign-out-alt"></i> Cerrar Sesión</a>
+    {% endif %}
+    {% include 'includes/store_user_menu_saldo_block.html' %}
+  </div>
+  <div id="menuOverlay" class="menu-overlay"></div>
+
+  <div class="d-flex flex-wrap align-items-center mb-3 productos-buscar-mostrar productos-buscar-mostrar-centered w-100">
+    <div class="search-container user-licencias-search-wrap">
+      <label for="userLicenciasSearch" class="sr-only">Buscar</label>
+      <input type="search" id="userLicenciasSearch" name="userLicenciasSearch" class="form-control text-center" placeholder="Buscar licencia o producto…" autocomplete="off">
+    </div>
+  </div>
+
+  <div id="userLicenciasGridHost" class="licencias-container user-licencias-grid-host mb-3 w-100 d-none" hidden aria-hidden="true">
+    <div id="userLicenciasGrid" class="licenses-grid"></div>
+  </div>
+
+  <div id="userLicenciasTableOuter" class="user-licencias-view-wrap w-100" data-api-url="{{ url_for('store_bp.api_user_my_license_accounts') }}" data-historial-url="{{ url_for('store_bp.historial_compras_usuario') }}" data-day-status-url="{{ url_for('store_bp.api_user_license_day_row_status') }}">
+    <p class="text-center user-licencias-empty py-4 mb-0" id="userLicenciasLoadingMsg">Cargando licencias…</p>
+  </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script src="{{ url_for('static', filename='js/menu_busqueda.js') }}" defer></script>
+<script src="{{ url_for('store_bp.static', filename='js/user_licencias.js') }}?v=31" defer></script>
+{% endblock %}

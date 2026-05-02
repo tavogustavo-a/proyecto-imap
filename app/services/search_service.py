@@ -1,5 +1,7 @@
 # app/services/search_service.py
 
+import logging
+import os
 import re
 import requests
 from datetime import datetime, timezone, timedelta
@@ -20,6 +22,14 @@ from app.admin.regex import passes_any_regex, extract_regex
 from app.extensions import db
 from app.helpers import safe_regex_search
 from app.store.api import format_colombia_time
+
+_buzon_search_log = logging.getLogger(__name__)
+
+
+def _buzon_search_trace_enabled():
+    """Logs de filas buzón usadas en búsqueda: export BUZON_SEARCH_TRACE=1"""
+    return (os.environ.get("BUZON_SEARCH_TRACE") or "").strip().lower() in ("1", "true", "yes", "on")
+
 
 # ===== SEGURIDAD: Funciones auxiliares =====
 def is_internal_ip(ip_str):
@@ -255,7 +265,17 @@ def _buzon_emails_as_mail_dicts(to_address, limit_days=2, max_rows=None):
             q = q.limit(int(max_rows))
         rows = q.all()
     except Exception:
+        _buzon_search_log.exception("[buzón búsqueda] error consultando received_emails para to=%s", to_norm)
         return []
+
+    if _buzon_search_trace_enabled():
+        _buzon_search_log.info(
+            "[buzón búsqueda] to=%s filas_en_ventana=%s limit_days=%s max_rows=%s",
+            to_norm,
+            len(rows),
+            limit_days,
+            max_rows,
+        )
 
     out = []
     for email in rows:

@@ -44,13 +44,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 imgEl.src = `${staticImagesPath}stream${i}.png`;
                 imgEl.alt = `stream${i}.png`;
                 imgEl.title = `stream${i}.png`;
-                imgEl.onclick = (e) => {
+                imgEl.addEventListener('click', (e) => {
                     e.stopPropagation();
                     sel.value = `stream${i}.png`;
                     sel.dispatchEvent(new Event('change'));
                     grid.style.display = 'none';
                     if (overlay) overlay.style.display = 'none';
-                };
+                });
                 grid.appendChild(imgEl);
             }
             grid.style.display = 'grid';
@@ -344,5 +344,8 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    window.addEventListener('DOMContentLoaded', loadCoupons);
+    // Solo en la vista de productos/cupones (tabla presente). Admin Licencias incluye este script pero no debe pedir la lista de cupones.
+    if (document.getElementById('coupons-table-body')) {
+        loadCoupons();
+    }
 }); 

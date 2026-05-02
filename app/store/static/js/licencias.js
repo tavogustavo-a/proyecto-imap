@@ -7,58 +7,230 @@
  * - Gestión de cuentas mensuales
  */
 
+(function initArchivedLicensesModeFromMeta() {
+    try {
+        var meta = document.querySelector('meta[name="licenses-archive-mode"]');
+        if (meta && meta.getAttribute('content') === '1') {
+            window.IS_ARCHIVED_MODE = true;
+        }
+    } catch (e) {}
+})();
+
 // Variables globales
 let licenses = [];
 let currentLicenseId = null;
+const MAX_HEAVY_NOTEPAD_CHARS = 200000;
+
+/** Mapa correo→línea del bloc Licencias (por producto); se invalida al recargar o guardar notas. */
+let _licenseNotesCredentialLineCache = null;
+
+function invalidateLicenseNotesCredentialLineCache() {
+    _licenseNotesCredentialLineCache = null;
+}
+
+/** Vista global: combina cuentas vendidas por día de todas las licencias (no existe en la API). */
+const AGGREGATE_LICENSE_ID = 0;
+
+/** Listado Cambios: solo productos con líneas vs todos los «mes a mes» (añadir manualmente). */
+const ADMIN_LICENCIAS_CHANGES_LIST_MODE_KEY = 'admin_licencias_changes_list_mode_v1';
+const CHANGES_LIST_MODE_ONLY = 'only_with_lines';
+const CHANGES_LIST_MODE_ALL = 'all_month_to_month';
+
+/** Panel lateral en admin licencias: restaurar Historial o Reportes tras recarga o re-render del grid. */
+const ADMIN_LICENCIAS_SIDEBAR_MODE_KEY = 'adminLicenciasSidebarMode';
+
+/** Evita re-pintar el listado Cambios al activar la tarjeta del producto desde «devolver» (mantiene estable el DOM de la fila). */
+let _adminLicSkipNextChangesProductsRefreshOnce = false;
+
+
+function isAnyDayNotepadActivelyEditing() {
+    const el = document.activeElement;
+    if (el && el.closest && el.closest('.day-license-split-root')) {
+        const root = el.closest('.day-license-split-root');
+        if (root && !root.classList.contains('license-notepad--locked')) {
+            return true;
+        }
+    }
+    return (
+        el &&
+        el.classList &&
+        el.classList.contains('day-day-notepad') &&
+        el.getAttribute('contenteditable') === 'true'
+    );
+}
+
+function scheduleLoadAllDaysSoldAccounts(licenseId) {
+    if (licenseId == null || licenseId === '') return;
+    const lid = Number(licenseId);
+    if (Number.isNaN(lid)) return;
+    if (isAnyDayNotepadActivelyEditing()) {
+        _pendingLoadAllDaysLicenseId = lid;
+        return;
+    }
+    _pendingLoadAllDaysLicenseId = null;
+    loadAllDaysSoldAccounts(lid);
+}
+
+function flushPendingLoadAllDaysSoldAccounts() {
+    if (_pendingLoadAllDaysLicenseId == null) return;
+    if (isAnyDayNotepadActivelyEditing()) return;
+    const lid = _pendingLoadAllDaysLicenseId;
+    _pendingLoadAllDaysLicenseId = null;
+    loadAllDaysSoldAccounts(lid);
+}
+
+function injectAggregateLicenseEntry() {
+    if (window.IS_ARCHIVED_MODE) return;
+    if (!Array.isArray(licenses) || licenses.some(l => l.isAggregate)) return;
+    licenses.unshift({
+        id: AGGREGATE_LICENSE_ID,
+        product_id: 0,
+        product_name: 'Todos',
+        position: -1,
+        warranty_days: 5,
+        enabled: true,
+        personal_notes: '',
+        license_notes: '',
+        suspended_notes: '',
+        expired_notes: '',
+        changes_notes: '',
+        month_to_month: false,
+        day_notepads: {},
+        accounts: [],
+        isAggregate: true
+    });
+}
+
+function getFirstRealLicenseId() {
+    const sorted = licenses
+        .filter(l => !l.isAggregate && (window.IS_ARCHIVED_MODE || l.enabled))
+        .sort((a, b) => a.position - b.position);
+    return sorted.length ? sorted[0].id : null;
+}
+
+/**
+ * Vista «Todos»: IDs de productos cuya tarjeta está en el grid y no oculta por búsqueda.
+ */
+function getAggregateVisibleLicenseIdSet() {
+    const s = new Set();
+    document.querySelectorAll('#licensesGrid .license-card:not(.license-card--aggregate)').forEach(function (card) {
+        if (card.classList.contains('hidden-by-search')) return;
+        const id = parseInt(card.dataset.licenseId, 10);
+        if (Number.isFinite(id)) s.add(id);
+    });
+    return s;
+}
 
 /** Actualiza cache en memoria tras guardar notas en el servidor (bloc admin). */
-function patchLicenseNotesCache(licenseId, personal_notes, license_notes) {
+function patchLicenseNotesCache(
+    licenseId,
+    personal_notes,
+    license_notes,
+    suspended_notes,
+    expired_notes,
+    month_to_month,
+    changes_notes
+) {
     const L = licenses.find(l => l.id === licenseId);
+    var prevChanges = L && Object.prototype.hasOwnProperty.call(L, 'changes_notes') ? L.changes_notes : undefined;
     if (L) {
         L.personal_notes = personal_notes;
         L.license_notes = license_notes;
+        if (suspended_notes !== undefined) {
+            L.suspended_notes = suspended_notes;
+        }
+        if (expired_notes !== undefined) {
+            L.expired_notes = expired_notes;
+        }
+        if (changes_notes !== undefined) {
+            L.changes_notes = changes_notes;
+        }
+        if (month_to_month !== undefined) {
+            L.month_to_month = month_to_month;
+        }
+        invalidateLicenseNotesCredentialLineCache();
+    }
+    if (changes_notes !== undefined && typeof refreshChangesProductsListing === 'function') {
+        var prevS = prevChanges != null ? String(prevChanges).replace(/\r\n/g, '\n') : '';
+        var nextS = changes_notes != null ? String(changes_notes).replace(/\r\n/g, '\n') : '';
+        if (prevS !== nextS) {
+            refreshChangesProductsListing();
+        }
     }
 }
 window.patchLicenseNotesCache = patchLicenseNotesCache;
+
+function patchLicenseChangesNotesInCacheOnly(licenseId, changes_notes) {
+    const L = licenses.find((l) => l.id === licenseId);
+    if (L && changes_notes !== undefined) {
+        L.changes_notes = changes_notes;
+        invalidateLicenseNotesCredentialLineCache();
+    }
+}
+window.patchLicenseChangesNotesInCacheOnly = patchLicenseChangesNotesInCacheOnly;
+
+/**
+ * En contenteditable, la barra espaciadora puede desplazar la página en lugar de insertar espacio.
+ * Evita el scroll y escribe el espacio en el foco (Licencias, Caídas, días).
+ */
+function setupContentEditableSpaceKeyFix() {
+    if (document.documentElement.dataset.licenciasSpaceFixBound === '1') return;
+    document.documentElement.dataset.licenciasSpaceFixBound = '1';
+    document.addEventListener(
+        'keydown',
+        function (e) {
+            if (e.key !== ' ' && e.code !== 'Space') return;
+            if (e.ctrlKey || e.metaKey || e.altKey) return;
+            const host = e.target.closest(
+                '#adminLicenciasNotepadByLicense, #adminLicenciasSuspendedNotepad, #adminLicenciasExpiredNotepad, #adminLicenciasChangesNotepad, .day-day-notepad'
+            );
+            if (!host) return;
+            if (host.getAttribute('contenteditable') !== 'true') return;
+            e.preventDefault();
+            if (document.queryCommandSupported && document.queryCommandSupported('insertText')) {
+                document.execCommand('insertText', false, ' ');
+            }
+        },
+        true
+    );
+}
 
 // Inicialización
 document.addEventListener('DOMContentLoaded', function() {
     // Asegurar que la página quede en la parte superior al cargar
     window.scrollTo(0, 0);
     
+    setupContentEditableSpaceKeyFix();
     initializeLicenses();
     setupEventListeners();
 });
 
+const LICENSES_FETCH_TIMEOUT_MS = 28000;
+
 async function initializeLicenses() {
     try {
-        // Primero intentar cargar licencias existentes
         await loadLicenses();
         
-        // Si no hay licencias, inicializarlas automáticamente
-        if (licenses.length === 0) {
+        if (licenses.length === 0 && !window.IS_ARCHIVED_MODE) {
             await initializeLicensesFromProducts();
         }
     } catch (error) {
         console.error('Error al inicializar licencias:', error);
-        // Intentar inicializar de todas formas
         try {
+            if (!window.IS_ARCHIVED_MODE) {
             await initializeLicensesFromProducts();
+            }
         } catch (initError) {
             console.error('Error al inicializar licencias automáticamente:', initError);
         }
+    } finally {
+        // Si la API falló o el fetch hizo abort, `licenses` sigue vacío y nunca se pintó el grid (pantalla en blanco).
+        if (licenses.length === 0) {
+            invalidateLicenseNotesCredentialLineCache();
+            injectAggregateLicenseEntry();
+            renderLicensesGrid();
+        }
     }
-}
-
-function setupEventListeners() {
-    // Búsqueda
-    const searchInput = document.getElementById('adminStoreSearch');
-    if (searchInput) {
-        searchInput.addEventListener('input', filterLicenses);
-    }
-    
-    // Botón de contraer/expandir
-    setupCollapseButton();
 }
 
 // Configurar botón de contraer/expandir
@@ -107,6 +279,2563 @@ function setupCollapseButton() {
     }
 }
 
+const ADMIN_LICENSE_LINE_DUPLICATE_CLASS = 'admin-license-line-duplicate';
+const ADMIN_LICENSE_LINE_DUPLICATE_FIRST_CLASS = 'admin-license-line-duplicate-first';
+
+/** Evita que syncRowCount (p. ej. dentro de getMergedText) dispare otro refresh mientras se calculan duplicados. */
+let __markAdminDupInProgress = false;
+
+/** Persistencia: credencial, usuario, estado, notas (ASCII Unit Separator; sin //). */
+const LICENSE_LINE_FIELD_SEP = '\x1f';
+
+/** Tras normalizar \\r\\n: cadena vacía → [] (evita una fila fantasma con split('\\n')). */
+function licenseSplitCredLinesFromRaw(raw) {
+    const r = String(raw != null ? raw : '').replace(/\r\n/g, '\n');
+    return r.length === 0 ? [] : r.split('\n');
+}
+
+/**
+ * Quita repetición de líneas vacías al final (…..\n\n\n) hasta dejar una sola nueva línea
+ * de continuación si el usuario abrió otra fila con Enter — evita columnas fantasmas (~4–5 huecos sin datos).
+ */
+function licenseCredLinesCollapseRepeatedTrailingBlankLines(lines) {
+    const arr = lines != null ? lines.slice() : [];
+    while (arr.length >= 2 && String(arr[arr.length - 1]).trim() === '' && String(arr[arr.length - 2]).trim() === '') {
+        arr.pop();
+    }
+    return arr;
+}
+
+/**
+ * Líneas de credencial del bloc principal Licencias, sin “basura” trailing de saltos repetidos.
+ */
+function adminMainLicenseCredLinesCollapsed(raw) {
+    const lines = licenseSplitCredLinesFromRaw(String(raw != null ? raw : '').replace(/\r\n/g, '\n'));
+    return licenseCredLinesCollapseRepeatedTrailingBlankLines(lines);
+}
+
+/** Cuántas filas mostrar lado derecho: al menos una fila cuando el texto está vacío (para poder escribir). */
+function adminMainLicenseBlocSyncRowCountFromCollapsed(collapsedLines) {
+    if (!collapsedLines || collapsedLines.length === 0) return 1;
+    return collapsedLines.length;
+}
+
+/**
+ * Opcionalmente reescribe el textarea sólo cuando no tiene foco, para igualar modelo de datos ↔ filas DOM.
+ */
+function adminMainLicenseNormalizeCredTaTrailingRunsIfBlur(ta) {
+    if (!ta || ta.tagName !== 'TEXTAREA' || ta.id !== 'adminLicenciasNotepadByLicense') return;
+    if (document.activeElement === ta) return;
+    const prev = String(ta.value != null ? ta.value : '').replace(/\r\n/g, '\n');
+    const merged = licenseCredLinesCollapseRepeatedTrailingBlankLines(licenseSplitCredLinesFromRaw(prev)).join('\n');
+    if (merged !== prev) {
+        ta.value = merged;
+    }
+}
+
+function normalizePlainLineForDuplicateParse(text) {
+    if (text == null || typeof text !== 'string') return '';
+    return text.trim().replace(/\s+/g, ' ');
+}
+
+/** Duplicados: misma credencial (columna izquierda / primer campo), sin exigir formato correo/clave. */
+function credentialDuplicateKeyFromMergedLine(line) {
+    const t = String(line || '').trim();
+    if (!t) return null;
+    let credPart = t;
+    if (t.indexOf(LICENSE_LINE_FIELD_SEP) !== -1) {
+        credPart = t.slice(0, t.indexOf(LICENSE_LINE_FIELD_SEP));
+    } else if (indexOfLegacyDoubleSlashSeparatorFrom(t, 0) !== -1) {
+        const sp = splitLineCredNotesUser(t);
+        credPart = sp.cred != null && String(sp.cred).trim() !== '' ? String(sp.cred).trim() : t;
+    }
+    const norm = normalizePlainLineForDuplicateParse(credPart);
+    if (!norm) return null;
+    return 'raw:' + norm;
+}
+
+function clearSuspendedDuplicateLineLayer() {
+    const ta = document.getElementById('adminLicenciasSuspendedNotepad');
+    if (!ta) return;
+    if (ta._boundSuspendedDupScroll) {
+        ta.removeEventListener('scroll', ta._boundSuspendedDupScroll);
+        delete ta._boundSuspendedDupScroll;
+    }
+    if (ta._boundSuspendedDupInput) {
+        ta.removeEventListener('input', ta._boundSuspendedDupInput);
+        delete ta._boundSuspendedDupInput;
+    }
+    if (ta._suspendedDupInputT != null) {
+        clearTimeout(ta._suspendedDupInputT);
+        delete ta._suspendedDupInputT;
+    }
+    const stack = ta.closest('.admin-suspended-ta-dup-stack');
+    if (stack) {
+        stack.classList.remove('admin-dup-lines-active');
+        const layer = stack.querySelector('.admin-suspended-dup-line-layer');
+        if (layer) {
+            layer.innerHTML = '';
+            layer.style.transform = '';
+            delete layer.dataset.firstDupLine;
+        }
+    }
+    ta.style.background = '';
+}
+
+function adminDupHighlightSetActive(on) {
+    document.documentElement.dataset.adminLicDupHighlightActive = on ? '1' : '0';
+    const btn = document.getElementById('licensesDuplicatesBtn');
+    if (btn) {
+        btn.classList.toggle('licenses-duplicates-btn--active', !!on);
+        btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+    }
+}
+
+function adminDupHighlightDeactivate() {
+    clearAdminDuplicateLineHighlights();
+    adminDupHighlightSetActive(false);
+}
+
+/** Quita marcas visuales de duplicados sin cambiar el estado del botón (p. ej. antes de volver a calcular). */
+function clearAdminDuplicateLineHighlights() {
+    document.querySelectorAll(`.admin-license-line-row.${ADMIN_LICENSE_LINE_DUPLICATE_CLASS}`).forEach((el) => {
+        el.classList.remove(ADMIN_LICENSE_LINE_DUPLICATE_CLASS);
+    });
+    document.querySelectorAll(`.license-split-editor__row.${ADMIN_LICENSE_LINE_DUPLICATE_CLASS}`).forEach((el) => {
+        el.classList.remove(ADMIN_LICENSE_LINE_DUPLICATE_CLASS);
+    });
+    document.querySelectorAll(`.${ADMIN_LICENSE_LINE_DUPLICATE_FIRST_CLASS}`).forEach((el) => {
+        el.classList.remove(ADMIN_LICENSE_LINE_DUPLICATE_FIRST_CLASS);
+    });
+    clearSuspendedDuplicateLineLayer();
+    clearExpiredDuplicateLineLayer();
+    clearChangesDuplicateLineLayer();
+}
+
+function ensureSuspendedTextareaDupStack(ta) {
+    if (!ta || ta.tagName !== 'TEXTAREA') return null;
+    let stack = ta.closest('.admin-suspended-ta-dup-stack');
+    if (stack) return stack;
+    const parent = ta.parentNode;
+    if (!parent) return null;
+    stack = document.createElement('div');
+    stack.className = 'admin-suspended-ta-dup-stack';
+    const layer = document.createElement('div');
+    layer.className = 'admin-suspended-dup-line-layer';
+    layer.setAttribute('aria-hidden', 'true');
+    parent.insertBefore(stack, ta);
+    stack.appendChild(layer);
+    stack.appendChild(ta);
+    return stack;
+}
+
+/**
+ * Capa detrás del textarea de Caídas: franjas amarillas por línea (incluye duplicados cruzados con Licencias/Días).
+ */
+function applySuspendedDuplicateLineLayer(ta, dupIndicesSet) {
+    if (!ta || ta.tagName !== 'TEXTAREA') return;
+    const stack = ensureSuspendedTextareaDupStack(ta);
+    if (!stack) return;
+    const layer = stack.querySelector('.admin-suspended-dup-line-layer');
+    if (!layer) return;
+
+    if (!dupIndicesSet || dupIndicesSet.size === 0) {
+        stack.classList.remove('admin-dup-lines-active');
+        layer.innerHTML = '';
+        layer.style.transform = '';
+        delete layer.dataset.firstDupLine;
+        ta.style.background = '';
+        return;
+    }
+
+    const cs = window.getComputedStyle(ta);
+    const fontSize = parseFloat(cs.fontSize) || 14;
+    let lineHeightPx = parseFloat(cs.lineHeight);
+    if (!lineHeightPx || Number.isNaN(lineHeightPx) || cs.lineHeight === 'normal') {
+        lineHeightPx = fontSize * 1.45;
+    }
+    const padT = parseFloat(cs.paddingTop) || 0;
+    const padR = parseFloat(cs.paddingRight) || 0;
+    const padB = parseFloat(cs.paddingBottom) || 0;
+    const padL = parseFloat(cs.paddingLeft) || 0;
+
+    layer.style.paddingTop = cs.paddingTop;
+    layer.style.paddingRight = cs.paddingRight;
+    layer.style.paddingBottom = cs.paddingBottom;
+    layer.style.paddingLeft = cs.paddingLeft;
+    layer.style.fontFamily = cs.fontFamily;
+    layer.style.fontSize = cs.fontSize;
+    layer.style.lineHeight = cs.lineHeight;
+    layer.style.width = '100%';
+    layer.style.boxSizing = cs.boxSizing || 'border-box';
+
+    const raw = String(ta.value || '').replace(/\r\n/g, '\n');
+    const lines = raw.length === 0 ? [] : raw.split('\n');
+    layer.innerHTML = '';
+    for (let i = 0; i < lines.length; i++) {
+        const strip = document.createElement('div');
+        strip.style.height = lineHeightPx + 'px';
+        strip.style.boxSizing = 'border-box';
+        strip.style.margin = '0';
+        if (dupIndicesSet.has(i)) {
+            strip.style.background = 'rgba(250, 204, 21, 0.35)';
+            strip.style.boxShadow = 'inset 0 0 0 1px rgba(234, 179, 8, 0.75)';
+        }
+        layer.appendChild(strip);
+    }
+
+    try {
+        layer.style.minHeight = Math.max(ta.scrollHeight, padT + lines.length * lineHeightPx + padB) + 'px';
+    } catch (mhErr) {
+        /* ignore */
+    }
+
+    const minLine = Math.min.apply(null, Array.from(dupIndicesSet));
+    layer.dataset.firstDupLine = String(minLine);
+
+    stack.classList.add('admin-dup-lines-active');
+    ta.style.background = 'transparent';
+
+    const syncScroll = function () {
+        layer.style.transform = 'translateY(' + -ta.scrollTop + 'px)';
+    };
+    syncScroll();
+
+    if (!ta._boundSuspendedDupScroll) {
+        ta._boundSuspendedDupScroll = syncScroll;
+        ta.addEventListener('scroll', ta._boundSuspendedDupScroll);
+    }
+
+    if (!ta._boundSuspendedDupInput) {
+        ta._boundSuspendedDupInput = function () {
+            if (document.documentElement.dataset.adminLicDupHighlightActive !== '1') return;
+            clearTimeout(ta._suspendedDupInputT);
+            ta._suspendedDupInputT = setTimeout(function () {
+                if (typeof window.refreshAdminDuplicateHighlightsIfActive === 'function') {
+                    window.refreshAdminDuplicateHighlightsIfActive();
+                }
+            }, 180);
+        };
+        ta.addEventListener('input', ta._boundSuspendedDupInput);
+    }
+}
+
+function clearChangesDuplicateLineLayer() {
+    document.querySelectorAll('#licenseChangesProductsContainer .changes-license-split__creds').forEach(function (ta) {
+        if (!ta || ta.tagName !== 'TEXTAREA') return;
+        if (ta._boundExpiredDupScroll) {
+            ta.removeEventListener('scroll', ta._boundExpiredDupScroll);
+            delete ta._boundExpiredDupScroll;
+        }
+        if (ta._boundExpiredDupInput) {
+            ta.removeEventListener('input', ta._boundExpiredDupInput);
+            delete ta._boundExpiredDupInput;
+        }
+        if (ta._expiredDupInputT != null) {
+            clearTimeout(ta._expiredDupInputT);
+            delete ta._expiredDupInputT;
+        }
+        const stack = ta.closest('.admin-expired-ta-dup-stack');
+        if (stack) {
+            stack.classList.remove('admin-dup-lines-active');
+            const layer = stack.querySelector('.admin-expired-dup-line-layer');
+            if (layer) {
+                layer.innerHTML = '';
+                layer.style.transform = '';
+                delete layer.dataset.firstDupLine;
+            }
+        }
+        ta.style.background = '';
+    });
+}
+
+function clearExpiredDuplicateLineLayer() {
+    const ta = document.getElementById('adminLicenciasExpiredNotepad');
+    if (!ta) return;
+    if (ta._boundExpiredDupScroll) {
+        ta.removeEventListener('scroll', ta._boundExpiredDupScroll);
+        delete ta._boundExpiredDupScroll;
+    }
+    if (ta._boundExpiredDupInput) {
+        ta.removeEventListener('input', ta._boundExpiredDupInput);
+        delete ta._boundExpiredDupInput;
+    }
+    if (ta._expiredDupInputT != null) {
+        clearTimeout(ta._expiredDupInputT);
+        delete ta._expiredDupInputT;
+    }
+    const stack = ta.closest('.admin-expired-ta-dup-stack');
+    if (stack) {
+        stack.classList.remove('admin-dup-lines-active');
+        const layer = stack.querySelector('.admin-expired-dup-line-layer');
+        if (layer) {
+            layer.innerHTML = '';
+            layer.style.transform = '';
+            delete layer.dataset.firstDupLine;
+        }
+    }
+    ta.style.background = '';
+}
+
+function ensureExpiredTextareaDupStack(ta) {
+    if (!ta || ta.tagName !== 'TEXTAREA') return null;
+    let stack = ta.closest('.admin-expired-ta-dup-stack');
+    if (stack) return stack;
+    const parent = ta.parentNode;
+    if (!parent) return null;
+    stack = document.createElement('div');
+    stack.className = 'admin-expired-ta-dup-stack';
+    const layer = document.createElement('div');
+    layer.className = 'admin-expired-dup-line-layer';
+    layer.setAttribute('aria-hidden', 'true');
+    parent.insertBefore(stack, ta);
+    stack.appendChild(layer);
+    stack.appendChild(ta);
+    return stack;
+}
+
+function applyExpiredDuplicateLineLayer(ta, dupIndicesSet) {
+    if (!ta || ta.tagName !== 'TEXTAREA') return;
+    const stack = ensureExpiredTextareaDupStack(ta);
+    if (!stack) return;
+    const layer = stack.querySelector('.admin-expired-dup-line-layer');
+    if (!layer) return;
+
+    if (!dupIndicesSet || dupIndicesSet.size === 0) {
+        stack.classList.remove('admin-dup-lines-active');
+        layer.innerHTML = '';
+        layer.style.transform = '';
+        delete layer.dataset.firstDupLine;
+        ta.style.background = '';
+        return;
+    }
+
+    const cs = window.getComputedStyle(ta);
+    const fontSize = parseFloat(cs.fontSize) || 14;
+    let lineHeightPx = parseFloat(cs.lineHeight);
+    if (!lineHeightPx || Number.isNaN(lineHeightPx) || cs.lineHeight === 'normal') {
+        lineHeightPx = fontSize * 1.45;
+    }
+    const padT = parseFloat(cs.paddingTop) || 0;
+    const padB = parseFloat(cs.paddingBottom) || 0;
+
+    layer.style.paddingTop = cs.paddingTop;
+    layer.style.paddingRight = cs.paddingRight;
+    layer.style.paddingBottom = cs.paddingBottom;
+    layer.style.paddingLeft = cs.paddingLeft;
+    layer.style.fontFamily = cs.fontFamily;
+    layer.style.fontSize = cs.fontSize;
+    layer.style.lineHeight = cs.lineHeight;
+    layer.style.width = '100%';
+    layer.style.boxSizing = cs.boxSizing || 'border-box';
+
+    const raw = String(ta.value || '').replace(/\r\n/g, '\n');
+    const lines = raw.length === 0 ? [] : raw.split('\n');
+    layer.innerHTML = '';
+    for (let i = 0; i < lines.length; i++) {
+        const strip = document.createElement('div');
+        strip.style.height = lineHeightPx + 'px';
+        strip.style.boxSizing = 'border-box';
+        strip.style.margin = '0';
+        if (dupIndicesSet.has(i)) {
+            strip.style.background = 'rgba(250, 204, 21, 0.35)';
+            strip.style.boxShadow = 'inset 0 0 0 1px rgba(234, 179, 8, 0.75)';
+        }
+        layer.appendChild(strip);
+    }
+
+    try {
+        layer.style.minHeight = Math.max(ta.scrollHeight, padT + lines.length * lineHeightPx + padB) + 'px';
+    } catch (mhErr) {
+        /* ignore */
+    }
+
+    const minLine = Math.min.apply(null, Array.from(dupIndicesSet));
+    layer.dataset.firstDupLine = String(minLine);
+
+    stack.classList.add('admin-dup-lines-active');
+    ta.style.background = 'transparent';
+
+    const syncScroll = function () {
+        layer.style.transform = 'translateY(' + -ta.scrollTop + 'px)';
+    };
+    syncScroll();
+
+    if (!ta._boundExpiredDupScroll) {
+        ta._boundExpiredDupScroll = syncScroll;
+        ta.addEventListener('scroll', ta._boundExpiredDupScroll);
+    }
+
+    if (!ta._boundExpiredDupInput) {
+        ta._boundExpiredDupInput = function () {
+            if (document.documentElement.dataset.adminLicDupHighlightActive !== '1') return;
+            clearTimeout(ta._expiredDupInputT);
+            ta._expiredDupInputT = setTimeout(function () {
+                if (typeof window.refreshAdminDuplicateHighlightsIfActive === 'function') {
+                    window.refreshAdminDuplicateHighlightsIfActive();
+                }
+            }, 180);
+        };
+        ta.addEventListener('input', ta._boundExpiredDupInput);
+    }
+}
+
+function collectAdminDuplicateScanRoots() {
+    const roots = [];
+    const lic = document.getElementById('adminLicenciasNotepadByLicense');
+    if (lic) roots.push(lic);
+    const suspended = document.getElementById('adminLicenciasSuspendedNotepad');
+    if (suspended) roots.push(suspended);
+    const expired = document.getElementById('adminLicenciasExpiredNotepad');
+    if (expired) roots.push(expired);
+    document
+        .querySelectorAll('#licenseChangesProductsContainer .changes-license-split__creds')
+        .forEach((el) => roots.push(el));
+    document.querySelectorAll('#licenseAllDaysContainer .day-license-split-root').forEach((el) => roots.push(el));
+    return roots;
+}
+
+/**
+ * Duplicados = misma credencial (primer campo / texto antes de separadores).
+ * Cuenta en conjunto Licencias (split editor) + Días + Caídas; pinta filas DOM (.admin-license-line-row o .license-split-editor__row).
+ */
+function markCredentialDuplicateLineRowsAcrossRoots(roots) {
+    __markAdminDupInProgress = true;
+    try {
+    const byKey = new Map();
+    function pushRow(key, rowEl) {
+        if (!key || !rowEl) return;
+        if (!byKey.has(key)) byKey.set(key, []);
+        byKey.get(key).push(rowEl);
+    }
+    document.querySelectorAll('.day-license-split-root').forEach(function (root) {
+        if (typeof dayLicenseSplitGetMergedText !== 'function') return;
+        const merged = String(dayLicenseSplitGetMergedText(root) || '').replace(/\r\n/g, '\n');
+        const lines = merged === '' ? [] : merged.split('\n');
+        const splitRows = dayLicenseSplitGetRowElements(root);
+        for (let i = 0; i < lines.length; i++) {
+            const line = lines[i];
+            const norm = normalizePlainLineForDuplicateParse(line);
+            if (!norm) continue;
+            const key = credentialDuplicateKeyFromMergedLine(line);
+            const domRow = splitRows[i];
+            pushRow(key, domRow);
+        }
+    });
+    roots.forEach((root) => {
+        root.querySelectorAll('.admin-license-line-row').forEach((row) => {
+            const line = normalizePlainLineForDuplicateParse(row.textContent || '');
+            if (!line) return;
+            const key = credentialDuplicateKeyFromMergedLine(line);
+            pushRow(key, row);
+        });
+    });
+    const licTa = document.getElementById('adminLicenciasNotepadByLicense');
+    if (
+        licTa &&
+        licTa.classList &&
+        licTa.classList.contains('license-split-editor__creds') &&
+        typeof adminLicenseSplitGetMergedNotes === 'function'
+    ) {
+        const merged = String(adminLicenseSplitGetMergedNotes() || '').replace(/\r\n/g, '\n');
+        const lines = merged === '' ? [] : merged.split('\n');
+        const splitRows = adminLicenseSplitGetRowElements();
+        for (let i = 0; i < lines.length; i++) {
+            const line = lines[i];
+            const norm = normalizePlainLineForDuplicateParse(line);
+            if (!norm) continue;
+            const key = credentialDuplicateKeyFromMergedLine(line);
+            const domRow = splitRows[i];
+            pushRow(key, domRow);
+        }
+    }
+
+    const suspTa = document.getElementById('adminLicenciasSuspendedNotepad');
+    if (suspTa && suspTa.tagName === 'TEXTAREA') {
+        const sraw = String(suspTa.value || '').replace(/\r\n/g, '\n');
+        const slines = sraw.length === 0 ? [] : sraw.split('\n');
+        slines.forEach(function (line, idx) {
+            const norm = normalizePlainLineForDuplicateParse(line);
+            if (!norm) return;
+            const key = credentialDuplicateKeyFromMergedLine(line);
+            if (!key) return;
+            pushRow(key, { _suspendedDupRef: true, ta: suspTa, lineIndex: idx });
+        });
+    }
+
+    const expTa = document.getElementById('adminLicenciasExpiredNotepad');
+    if (expTa && expTa.tagName === 'TEXTAREA') {
+        const eraw = String(expTa.value || '').replace(/\r\n/g, '\n');
+        const elines = eraw.length === 0 ? [] : eraw.split('\n');
+        elines.forEach(function (line, idx) {
+            const norm = normalizePlainLineForDuplicateParse(line);
+            if (!norm) return;
+            const key = credentialDuplicateKeyFromMergedLine(line);
+            if (!key) return;
+            pushRow(key, { _expiredDupRef: true, ta: expTa, lineIndex: idx });
+        });
+    }
+
+    document.querySelectorAll('#licenseChangesProductsContainer .changes-license-split-root').forEach(function (chRoot) {
+        if (typeof changesLicenseSplitGetMergedText !== 'function') return;
+        const merged = String(changesLicenseSplitGetMergedText(chRoot) || '').replace(/\r\n/g, '\n');
+        const lines = merged === '' ? [] : merged.split('\n');
+        const splitRows = changesLicenseSplitGetRowElements(chRoot);
+        const ta = changesLicenseSplitQueryCredsTa(chRoot);
+        for (let i = 0; i < lines.length; i++) {
+            const line = lines[i];
+            const norm = normalizePlainLineForDuplicateParse(line);
+            if (!norm) continue;
+            const key = credentialDuplicateKeyFromMergedLine(line);
+            const domRow = splitRows[i];
+            if (domRow) {
+                pushRow(key, domRow);
+            } else if (ta && ta.tagName === 'TEXTAREA') {
+                pushRow(key, { _changesDupRef: true, ta: ta, lineIndex: i });
+            }
+        }
+    });
+
+    const suspendedDupByTa = new Map();
+    const expiredDupByTa = new Map();
+    const changesDupByTa = new Map();
+    let firstSplitDup = null;
+    byKey.forEach((list) => {
+        if (list.length < 2) return;
+        list.forEach((item) => {
+            if (item && item._suspendedDupRef) {
+                if (!suspendedDupByTa.has(item.ta)) suspendedDupByTa.set(item.ta, new Set());
+                suspendedDupByTa.get(item.ta).add(item.lineIndex);
+                return;
+            }
+            if (item && item._changesDupRef) {
+                if (!changesDupByTa.has(item.ta)) changesDupByTa.set(item.ta, new Set());
+                changesDupByTa.get(item.ta).add(item.lineIndex);
+                return;
+            }
+            if (item && item._expiredDupRef) {
+                if (!expiredDupByTa.has(item.ta)) expiredDupByTa.set(item.ta, new Set());
+                expiredDupByTa.get(item.ta).add(item.lineIndex);
+                return;
+            }
+            if (item && item.classList && item.classList.contains('license-split-editor__row')) {
+                item.classList.add(ADMIN_LICENSE_LINE_DUPLICATE_CLASS);
+                if (!firstSplitDup) firstSplitDup = item;
+                return;
+            }
+            if (item && item.classList) {
+                item.classList.add(ADMIN_LICENSE_LINE_DUPLICATE_CLASS);
+            }
+        });
+    });
+    if (firstSplitDup) {
+        firstSplitDup.classList.add(ADMIN_LICENSE_LINE_DUPLICATE_FIRST_CLASS);
+    }
+    suspendedDupByTa.forEach(function (indices, ta) {
+        applySuspendedDuplicateLineLayer(ta, indices);
+    });
+    expiredDupByTa.forEach(function (indices, ta) {
+        applyExpiredDuplicateLineLayer(ta, indices);
+    });
+    changesDupByTa.forEach(function (indices, ta) {
+        applyExpiredDuplicateLineLayer(ta, indices);
+    });
+    } finally {
+        __markAdminDupInProgress = false;
+    }
+}
+
+function refreshAdminDuplicateHighlightsIfActive() {
+    if (document.documentElement.dataset.adminLicDupHighlightActive !== '1') return;
+    clearAdminDuplicateLineHighlights();
+    const roots = collectAdminDuplicateScanRoots();
+    roots.forEach((root) => {
+        try {
+            if (root.classList && root.classList.contains('day-license-split-root')) {
+                return;
+            }
+            if (typeof highlightEmailsAndPasswords === 'function') {
+                highlightEmailsAndPasswords(root);
+            }
+        } catch (err) {
+            console.error('Duplicados: error al resaltar líneas', err);
+        }
+    });
+    try {
+        markCredentialDuplicateLineRowsAcrossRoots(roots);
+    } catch (err2) {
+        console.error('Duplicados: error al marcar filas', err2);
+    }
+}
+
+window.refreshAdminDuplicateHighlightsIfActive = refreshAdminDuplicateHighlightsIfActive;
+
+let _refreshAdminDupDeb = null;
+function scheduleRefreshAdminDupIfActive() {
+    if (document.documentElement.dataset.adminLicDupHighlightActive !== '1') return;
+    clearTimeout(_refreshAdminDupDeb);
+    _refreshAdminDupDeb = setTimeout(function () {
+        if (typeof window.refreshAdminDuplicateHighlightsIfActive === 'function') {
+            window.refreshAdminDuplicateHighlightsIfActive();
+        }
+    }, 180);
+}
+
+window.scheduleRefreshAdminDupIfActive = scheduleRefreshAdminDupIfActive;
+
+/** Duplicados: mismo correo+clave en Licencias, Días y Caídas. Segundo clic o cambio de licencia quita el resaltado. */
+function scanAdminDuplicateLines() {
+    if (document.documentElement.dataset.adminLicDupHighlightActive === '1') {
+        adminDupHighlightDeactivate();
+        return;
+    }
+    clearAdminDuplicateLineHighlights();
+    const roots = collectAdminDuplicateScanRoots();
+    roots.forEach((root) => {
+        try {
+            if (root.classList && root.classList.contains('day-license-split-root')) {
+                return;
+            }
+            if (typeof highlightEmailsAndPasswords === 'function') {
+                highlightEmailsAndPasswords(root);
+            }
+        } catch (err) {
+            console.error('Duplicados: error al resaltar líneas', err);
+        }
+    });
+    try {
+        markCredentialDuplicateLineRowsAcrossRoots(roots);
+    } catch (err) {
+        console.error('Duplicados: error al marcar filas', err);
+        adminDupHighlightSetActive(false);
+        return;
+    }
+    adminDupHighlightSetActive(true);
+
+    const firstSplit =
+        document.querySelector(
+            `#adminLicenciasStructuredRows .license-split-editor__row.${ADMIN_LICENSE_LINE_DUPLICATE_FIRST_CLASS}`
+        ) ||
+        document.querySelector(
+            `#adminLicenciasExpiredRows .license-split-editor__row.${ADMIN_LICENSE_LINE_DUPLICATE_FIRST_CLASS}`
+        ) ||
+        document.querySelector(
+            `#licenseChangesProductsContainer .license-split-editor__row.${ADMIN_LICENSE_LINE_DUPLICATE_FIRST_CLASS}`
+        ) ||
+        document.querySelector(
+            `#licenseAllDaysContainer .license-split-editor__row.${ADMIN_LICENSE_LINE_DUPLICATE_FIRST_CLASS}`
+        );
+    if (firstSplit) {
+        try {
+            firstSplit.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' });
+        } catch (e) {
+            try {
+                firstSplit.scrollIntoView(true);
+            } catch (e2) {
+                /* ignore */
+            }
+        }
+        return;
+    }
+    const ta = document.getElementById('adminLicenciasSuspendedNotepad');
+    const stack = ta && ta.closest('.admin-suspended-ta-dup-stack');
+    const layer = stack && stack.querySelector('.admin-suspended-dup-line-layer');
+    if (ta && layer && layer.dataset.firstDupLine != null && layer.dataset.firstDupLine !== '') {
+        const line = parseInt(layer.dataset.firstDupLine, 10);
+        if (Number.isFinite(line)) {
+            const cs = window.getComputedStyle(ta);
+            const fs = parseFloat(cs.fontSize) || 14;
+            let lh = parseFloat(cs.lineHeight);
+            if (!lh || Number.isNaN(lh) || cs.lineHeight === 'normal') {
+                lh = fs * 1.45;
+            }
+            const pt = parseFloat(cs.paddingTop) || 0;
+            try {
+                ta.scrollTop = Math.max(0, line * lh - pt);
+            } catch (e3) {
+                /* ignore */
+            }
+        }
+        try {
+            stack.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        } catch (e4) {
+            try {
+                stack.scrollIntoView(true);
+            } catch (e5) {
+                /* ignore */
+            }
+        }
+        return;
+    }
+    const taExp = document.getElementById('adminLicenciasExpiredNotepad');
+    const stackExp = taExp && taExp.closest('.admin-expired-ta-dup-stack');
+    const layerExp = stackExp && stackExp.querySelector('.admin-expired-dup-line-layer');
+    if (taExp && layerExp && layerExp.dataset.firstDupLine != null && layerExp.dataset.firstDupLine !== '') {
+        const lineExp = parseInt(layerExp.dataset.firstDupLine, 10);
+        if (Number.isFinite(lineExp)) {
+            const csE = window.getComputedStyle(taExp);
+            const fsE = parseFloat(csE.fontSize) || 14;
+            let lhE = parseFloat(csE.lineHeight);
+            if (!lhE || Number.isNaN(lhE) || csE.lineHeight === 'normal') {
+                lhE = fsE * 1.45;
+            }
+            const ptE = parseFloat(csE.paddingTop) || 0;
+            try {
+                taExp.scrollTop = Math.max(0, lineExp * lhE - ptE);
+            } catch (e6) {
+                /* ignore */
+            }
+        }
+        try {
+            stackExp.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        } catch (e7) {
+            try {
+                stackExp.scrollIntoView(true);
+            } catch (e8) {
+                /* ignore */
+            }
+        }
+        return;
+    }
+    const taChList = document.querySelectorAll('#licenseChangesProductsContainer .changes-license-split__creds');
+    for (let ci = 0; ci < taChList.length; ci++) {
+        const taCh = taChList[ci];
+        const stackCh = taCh && taCh.closest('.admin-expired-ta-dup-stack');
+        const layerCh = stackCh && stackCh.querySelector('.admin-expired-dup-line-layer');
+        if (taCh && layerCh && layerCh.dataset.firstDupLine != null && layerCh.dataset.firstDupLine !== '') {
+            const lineCh = parseInt(layerCh.dataset.firstDupLine, 10);
+            if (Number.isFinite(lineCh)) {
+                const csC = window.getComputedStyle(taCh);
+                const fsC = parseFloat(csC.fontSize) || 14;
+                let lhC = parseFloat(csC.lineHeight);
+                if (!lhC || Number.isNaN(lhC) || csC.lineHeight === 'normal') {
+                    lhC = fsC * 1.45;
+                }
+                const ptC = parseFloat(csC.paddingTop) || 0;
+                try {
+                    taCh.scrollTop = Math.max(0, lineCh * lhC - ptC);
+                } catch (e9) {
+                    /* ignore */
+                }
+            }
+            try {
+                stackCh.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            } catch (e10) {
+                try {
+                    stackCh.scrollIntoView(true);
+                } catch (e11) {
+                    /* ignore */
+                }
+            }
+            return;
+        }
+    }
+}
+
+function setupDuplicatesScanButton() {
+    if (document.documentElement.dataset.licensesDupScanBound === '1') {
+        return;
+    }
+    document.documentElement.dataset.licensesDupScanBound = '1';
+    document.addEventListener('click', function licensesDuplicatesToolbarClick(ev) {
+        const btn = ev.target && ev.target.closest ? ev.target.closest('#licensesDuplicatesBtn') : null;
+        if (!btn) {
+            return;
+        }
+        ev.preventDefault();
+        scanAdminDuplicateLines();
+    });
+}
+
+function adminLicenseSplitGetFocusedLicenseRow() {
+    const root = document.getElementById('adminLicenciasLicenseSplitRoot');
+    if (!root) return null;
+    const ae = document.activeElement;
+    if (ae && root.contains(ae)) {
+        const row = ae.closest('.license-split-editor__row');
+        if (row) return row;
+    }
+    return null;
+}
+
+function scrollAdminLicenciasCambiosListIntoView() {
+    if (typeof refreshChangesProductsListing === 'function') {
+        refreshChangesProductsListing();
+    }
+    scrollAdminLicenciasCambiosPanelIntoView();
+}
+
+function setupMoveToChangesToolbarButton() {
+    if (document.documentElement.dataset.licensesMoveToChangesBound === '1') {
+        return;
+    }
+    document.documentElement.dataset.licensesMoveToChangesBound = '1';
+    document.addEventListener('click', function licensesMoveToChangesClick(ev) {
+        const btn = ev.target && ev.target.closest ? ev.target.closest('#licensesMoveToChangesBtn') : null;
+        if (!btn) {
+            return;
+        }
+        ev.preventDefault();
+        openAdminLicenciasCambiosPanelUi({ skipScroll: true });
+        const row = adminLicenseSplitGetFocusedLicenseRow();
+        if (row) {
+            void adminLicenseSplitMoveRowToChanges(row).finally(function () {
+                scrollAdminLicenciasCambiosPanelIntoView();
+            });
+            return;
+        }
+        scrollAdminLicenciasCambiosPanelIntoView();
+    });
+}
+
+const ADMIN_USER_SEARCH_MIN_CHARS = 1;
+let _adminUserSearchDebounce = null;
+
+function _adminUserSearchEscHandler(e) {
+    if (e.key === 'Escape') {
+        closeAdminUserSearchModal();
+    }
+}
+
+function closeAdminUserSearchModal() {
+    const m = document.getElementById('adminLicenseUserSearchModal');
+    if (m) {
+        m.remove();
+    }
+    document.removeEventListener('keydown', _adminUserSearchEscHandler);
+}
+
+function openAdminUserSearchModal(initialQuery) {
+    closeAdminUserSearchModal();
+    const initial = (initialQuery || '').trim();
+    const modal = document.createElement('div');
+    modal.id = 'adminLicenseUserSearchModal';
+    modal.className = 'admin-license-user-search-modal show';
+    modal.setAttribute('role', 'dialog');
+    modal.setAttribute('aria-modal', 'true');
+    modal.setAttribute('aria-labelledby', 'adminLicenseUserSearchTitle');
+    modal.innerHTML = `
+        <div class="admin-license-user-search-content">
+            <h3 id="adminLicenseUserSearchTitle">Buscar usuario</h3>
+            <p class="admin-license-user-search-hint">Por nombre o usuario (principales). Doble clic en un resultado: copia y cierra.</p>
+            <label for="adminLicenseUserSearchInput" class="sr-only">Buscar usuario</label>
+            <input type="search" id="adminLicenseUserSearchInput" class="admin-license-user-search-input" placeholder="Buscar por nombre o usuario…" autocomplete="off">
+            <div id="adminLicenseUserSearchStatus" class="admin-license-user-search-status" aria-live="polite"></div>
+            <div id="adminLicenseUserSearchResults" class="admin-license-user-search-results"></div>
+            <div class="admin-license-user-search-footer">
+                <button type="button" class="btn-panel btn-red" data-action="close-admin-user-search">Cerrar</button>
+            </div>
+        </div>
+    `;
+    document.body.appendChild(modal);
+
+    const inp = modal.querySelector('#adminLicenseUserSearchInput');
+    const resultsEl = modal.querySelector('#adminLicenseUserSearchResults');
+    const statusEl = modal.querySelector('#adminLicenseUserSearchStatus');
+    inp.value = initial;
+
+    function renderUsers(users) {
+        resultsEl.innerHTML = '';
+        if (!users || !users.length) {
+            const p = document.createElement('p');
+            p.className = 'admin-license-user-search-empty';
+            p.textContent = 'Sin resultados.';
+            resultsEl.appendChild(p);
+            return;
+        }
+        users.forEach(function (u) {
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'admin-license-user-search-row';
+            if (u.username) {
+                btn.dataset.username = u.username;
+            }
+            const spanUser = document.createElement('span');
+            spanUser.className = 'admin-license-user-search-row-user';
+            spanUser.textContent = u.username || '';
+            btn.appendChild(spanUser);
+            if (u.full_name && String(u.full_name).trim()) {
+                const spanName = document.createElement('span');
+                spanName.className = 'admin-license-user-search-row-name';
+                spanName.textContent = String(u.full_name).trim();
+                btn.appendChild(spanName);
+            }
+            if (u.email && String(u.email).trim()) {
+                const spanEmail = document.createElement('span');
+                spanEmail.className = 'admin-license-user-search-row-email';
+                spanEmail.textContent = String(u.email).trim();
+                btn.appendChild(spanEmail);
+            }
+            resultsEl.appendChild(btn);
+        });
+    }
+
+    async function runSearch(q) {
+        const t = (q || '').trim();
+        if (t.length < ADMIN_USER_SEARCH_MIN_CHARS) {
+            statusEl.textContent = '';
+            resultsEl.innerHTML = '';
+            return;
+        }
+        statusEl.textContent = 'Buscando…';
+        try {
+            const url = '/admin/search_users_ajax?query=' + encodeURIComponent(t);
+            const res = await fetch(url, { credentials: 'same-origin' });
+            const data = await res.json();
+            if (data.status === 'ok' && Array.isArray(data.users)) {
+                renderUsers(data.users);
+                statusEl.textContent = data.users.length
+                    ? data.users.length + ' resultado(s)'
+                    : 'Sin coincidencias.';
+            } else {
+                statusEl.textContent = 'No se pudo cargar la búsqueda.';
+                resultsEl.innerHTML = '';
+            }
+        } catch (err) {
+            statusEl.textContent = 'Error de red.';
+            resultsEl.innerHTML = '';
+        }
+    }
+
+    modal.addEventListener('click', function (e) {
+        if (e.target === modal) {
+            closeAdminUserSearchModal();
+        }
+    });
+    const closeBtn = modal.querySelector('[data-action="close-admin-user-search"]');
+    if (closeBtn) {
+        closeBtn.addEventListener('click', closeAdminUserSearchModal);
+    }
+    resultsEl.addEventListener('dblclick', function (e) {
+        const row = e.target.closest('.admin-license-user-search-row');
+        if (!row || !row.dataset.username) return;
+        e.preventDefault();
+        const un = row.dataset.username;
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(un).catch(function () {});
+        }
+        closeAdminUserSearchModal();
+    });
+
+    inp.addEventListener('input', function () {
+        clearTimeout(_adminUserSearchDebounce);
+        const v = inp.value;
+        _adminUserSearchDebounce = setTimeout(function () {
+            runSearch(v);
+        }, 320);
+    });
+
+    document.addEventListener('keydown', _adminUserSearchEscHandler);
+    setTimeout(function () {
+        inp.focus();
+        inp.select();
+        if (initial.length >= ADMIN_USER_SEARCH_MIN_CHARS) {
+            runSearch(initial);
+        }
+    }, 0);
+}
+
+function setupAdminUserLabelSearchModal() {
+    document.addEventListener(
+        'dblclick',
+        function (e) {
+            const label = e.target.closest('.day-account-user-label');
+            if (!label || !document.querySelector('.admin-licencias-page')) {
+                return;
+            }
+            if (!label.closest('.admin-licencias-page')) {
+                return;
+            }
+            const licRoot = label.closest(
+                '#adminLicenciasNotepadByLicense, #adminLicenciasSuspendedNotepad, .day-license-split-root, .day-day-notepad, .admin-licencias-license-editable, .admin-licencias-suspended-editable'
+            );
+            if (!licRoot) {
+                return;
+            }
+            e.preventDefault();
+            e.stopPropagation();
+            const raw = (label.textContent || '').trim();
+            const initial = raw.toLowerCase() === 'anonimo' ? '' : raw;
+            openAdminUserSearchModal(initial);
+        },
+        true
+    );
+}
+
+/** Oculta notas/licencias/días y deja solo grid + panel lateral (historial, reportes o cambios). */
+function syncAdminHistorialShellMode() {
+    const hist = document.getElementById('adminLicenciasHistorialPanel');
+    const rep = document.getElementById('adminLicenciasReportesPanel');
+    const cam = document.getElementById('adminLicenciasCambiosPanel');
+    const shell = document.querySelector('.admin-licencias-shell');
+    if (!shell) {
+        return;
+    }
+    const historialOpen = hist && !hist.classList.contains('d-none');
+    const reportesOpen = rep && !rep.classList.contains('d-none');
+    const cambiosOpen = cam && !cam.classList.contains('d-none');
+    shell.classList.toggle('admin-licencias-historial-mode', historialOpen || reportesOpen || cambiosOpen);
+}
+
+function closeAdminLicenciasCambiosPanelUi() {
+    const panel = document.getElementById('adminLicenciasCambiosPanel');
+    const btn = document.getElementById('adminLicenciasCambiosToggleBtn');
+    if (panel && !panel.classList.contains('d-none')) {
+        panel.classList.add('d-none');
+        panel.setAttribute('aria-hidden', 'true');
+    }
+    if (btn) {
+        btn.setAttribute('aria-expanded', 'false');
+        btn.classList.remove('admin-licencias-cambios-toggle--open');
+        btn.classList.remove('active');
+    }
+    syncAdminHistorialShellMode();
+}
+
+/**
+ * Tras devolver cuenta desde Caídas o Vencidas: cierra Cambios si estaba abierto,
+ * restaura .active del producto, limpia modo lateral en localStorage
+ * y hace scroll al bloc Licencias. (Desde «devolver» en Cambios no se llama: se queda en Cambios.)
+ */
+function adminLicenciasReturnToLicenseEditorAfterRestoreUi(licenseId) {
+    var licSplitFallback = document.getElementById('adminLicenciasLicenseSplitRoot');
+    if (!Number.isFinite(licenseId) || licenseId === AGGREGATE_LICENSE_ID) {
+        if (licSplitFallback && typeof licSplitFallback.scrollIntoView === 'function') {
+            licSplitFallback.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+        return;
+    }
+    closeAdminLicenciasCambiosPanelUi();
+    try {
+        localStorage.removeItem(ADMIN_LICENCIAS_SIDEBAR_MODE_KEY);
+    } catch (_e0) {}
+    var sid = String(licenseId);
+    document.querySelectorAll('.license-card').forEach(function (c) {
+        if (c.classList.contains('license-card--panel-toggle')) return;
+        c.classList.remove('active');
+    });
+    var card = document.querySelector(
+        '.license-card[data-license-id="' + sid + '"]:not(.license-card--aggregate)'
+    );
+    if (card) {
+        card.classList.add('active');
+    }
+    window.requestAnimationFrame(function () {
+        if (card && typeof card.scrollIntoView === 'function') {
+            card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+        var ls = document.getElementById('adminLicenciasLicenseSplitRoot');
+        if (ls && typeof ls.scrollIntoView === 'function') {
+            ls.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+    });
+}
+
+/** Abre el panel Cambios como vista única (mismo comportamiento que Historial / Reportes). */
+function openAdminLicenciasCambiosPanelUi(opts) {
+    const skipScroll = opts && opts.skipScroll === true;
+    const panel = document.getElementById('adminLicenciasCambiosPanel');
+    const btn = document.getElementById('adminLicenciasCambiosToggleBtn');
+    closeAdminLicenciasHistorialPanelUi();
+    closeAdminLicenciasReportesPanelUi();
+    document.querySelectorAll('.license-card').forEach(function (c) {
+        c.classList.remove('active');
+    });
+    if (panel) {
+        panel.classList.remove('d-none');
+        panel.setAttribute('aria-hidden', 'false');
+    }
+    if (btn) {
+        btn.setAttribute('aria-expanded', 'true');
+        btn.classList.add('admin-licencias-cambios-toggle--open');
+        btn.classList.add('active');
+    }
+    syncAdminHistorialShellMode();
+    try {
+        localStorage.setItem(ADMIN_LICENCIAS_SIDEBAR_MODE_KEY, 'cambios');
+    } catch (e) {}
+    if (typeof refreshChangesProductsListing === 'function') {
+        refreshChangesProductsListing();
+    }
+    if (!skipScroll && typeof scrollAdminLicenciasCambiosPanelIntoView === 'function') {
+        scrollAdminLicenciasCambiosPanelIntoView();
+    }
+}
+
+function scrollAdminLicenciasCambiosPanelIntoView() {
+    window.requestAnimationFrame(function () {
+        const panel = document.getElementById('adminLicenciasCambiosPanel');
+        if (panel && !panel.classList.contains('d-none') && typeof panel.scrollIntoView === 'function') {
+            panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            return;
+        }
+        const section = document.querySelector('.admin-licencias-bloc--changes-product');
+        if (section && typeof section.scrollIntoView === 'function') {
+            section.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+    });
+}
+
+function setupAdminLicenciasCambiosToggle() {
+    const panel = document.getElementById('adminLicenciasCambiosPanel');
+    if (!panel || document.documentElement.dataset.adminCambiosToggleInit === '1') {
+        return;
+    }
+    document.documentElement.dataset.adminCambiosToggleInit = '1';
+    const licensesGridEl = document.getElementById('licensesGrid');
+    if (!licensesGridEl) {
+        return;
+    }
+    licensesGridEl.addEventListener('click', function adminCambiosGridClick(e) {
+        const btn = e.target.closest('#adminLicenciasCambiosToggleBtn');
+        if (!btn) {
+            return;
+        }
+        e.preventDefault();
+        e.stopPropagation();
+        const isHidden = panel.classList.contains('d-none');
+        if (isHidden) {
+            openAdminLicenciasCambiosPanelUi({ skipScroll: false });
+        } else {
+            closeAdminLicenciasCambiosPanelUi();
+            try {
+                localStorage.removeItem(ADMIN_LICENCIAS_SIDEBAR_MODE_KEY);
+            } catch (err) {}
+            restoreActiveProductLicenseCardFromStorage();
+        }
+    });
+}
+
+function closeAdminLicenciasReportesPanelUi() {
+    const panel = document.getElementById('adminLicenciasReportesPanel');
+    const btn = document.getElementById('adminLicenciasReportesBtn');
+    if (panel && !panel.classList.contains('d-none')) {
+        panel.classList.add('d-none');
+        panel.setAttribute('aria-hidden', 'true');
+    }
+    if (btn) {
+        btn.setAttribute('aria-expanded', 'false');
+        btn.classList.remove('admin-licencias-reportes-toggle--open');
+    }
+}
+
+function closeAdminLicenciasHistorialPanelUi() {
+    const panel = document.getElementById('adminLicenciasHistorialPanel');
+    const btn = document.getElementById('adminLicenciasHistorialToggleBtn');
+    if (panel && !panel.classList.contains('d-none')) {
+        panel.classList.add('d-none');
+        panel.setAttribute('aria-hidden', 'true');
+    }
+    if (btn) {
+        btn.setAttribute('aria-expanded', 'false');
+        btn.classList.remove('admin-licencias-historial-toggle--open');
+    }
+}
+
+/** Devuelve la clase .active a la tarjeta de producto guardada (no Historial/Reportes). */
+function restoreActiveProductLicenseCardFromStorage() {
+    const sid = localStorage.getItem('selectedLicenseId');
+    if (!sid) return;
+    const c = document.querySelector('.license-card[data-license-id="' + sid + '"]');
+    if (
+        !c ||
+        c.classList.contains('license-card--panel-toggle')
+    ) {
+        return;
+    }
+    document.querySelectorAll('.license-card').forEach(function (x) {
+        x.classList.remove('active');
+    });
+    c.classList.add('active');
+}
+
+/** Texto legible del problema/incidencia de una fila (p. ej. para historial tras reemplazo por garantía). */
+function adminLicenseFormatHistorialProblemFromParts(p) {
+    if (!p) {
+        return 'Sin descripción del problema en la fila.';
+    }
+    const parts = [];
+    const sbRaw = String(p.statusBad != null ? p.statusBad : '').trim();
+    const sg = String(p.statusGood != null ? p.statusGood : '').trim();
+    const extra = String(p.extra != null ? p.extra : '').trim();
+    const user = String(p.user != null ? p.user : '').trim();
+    const od = String(p.otroDetail != null ? p.otroDetail : '').trim();
+    let sbKey = '';
+    if (sbRaw && typeof adminLicenseNormalizeStatusKey === 'function') {
+        try {
+            sbKey = adminLicenseNormalizeStatusKey(sbRaw) || '';
+        } catch (e) {
+            sbKey = '';
+        }
+    }
+
+    if (sbRaw) {
+        if (sbKey === 'otro' || sbRaw.toLowerCase() === 'otro') {
+            parts.push(
+                od
+                    ? 'Incidencia (otro): ' + od + '.'
+                    : 'Incidencia registrada como «otro» (sin texto adicional).'
+            );
+        } else {
+            parts.push('Incidencia reportada: «' + sbRaw + '».');
+        }
+    } else if (sg) {
+        parts.push('La fila tenía estado verde «' + sg + '» y constaba en reportes para revisión.');
+    }
+    if (user && user.toLowerCase() !== 'anonimo') {
+        parts.push('Cliente / usuario en ficha: ' + user + '.');
+    }
+    if (extra) {
+        parts.push('Notas en la fila: ' + extra + '.');
+    }
+    if (!parts.length) {
+        return 'Cuenta sustituida por garantía tras reporte (sin más detalle en la línea).';
+    }
+    return parts.join(' ');
+}
+
+/** Panel «Historial» en admin licencias: búsqueda propia + paginación; datos de ejemplo hasta enlazar eventos reales. */
+function setupAdminLicenciasHistorial() {
+    const panel = document.getElementById('adminLicenciasHistorialPanel');
+    const searchInp = document.getElementById('adminHistorialSearch');
+    const pageSizeSel = document.getElementById('adminHistorialPageSize');
+    const metaEl = document.getElementById('adminHistorialMeta');
+    const tableBody = document.getElementById('adminHistorialTableBody');
+    const prevBtn = document.getElementById('adminHistorialPrev');
+    const nextBtn = document.getElementById('adminHistorialNext');
+    if (!panel || !searchInp || !pageSizeSel || !metaEl || !tableBody || !prevBtn || !nextBtn) {
+        return;
+    }
+    if (document.documentElement.dataset.adminHistorialInit === '1') {
+        return;
+    }
+    document.documentElement.dataset.adminHistorialInit = '1';
+
+    function loadHistorialLiveFromStorage() {
+        try {
+            const raw = localStorage.getItem('admin_licencias_historial_live_v1');
+            if (!raw) return [];
+            const p = JSON.parse(raw);
+            if (!Array.isArray(p)) return [];
+            return p.map(function (x) {
+                const kind = String(x.kind || '').trim();
+                const text = String(x.text != null ? x.text : '').trim();
+                const merged =
+                    kind && text
+                        ? kind + '\n\n' + text
+                        : kind || text || '';
+                return {
+                    id: x.id,
+                    at: x.at ? new Date(x.at) : new Date(),
+                    text: merged
+                };
+            });
+        } catch (e) {
+            return [];
+        }
+    }
+
+    function persistHistorialLiveRows() {
+        try {
+            const slim = historialLiveRows.slice(0, 300).map(function (r) {
+                return {
+                    id: r.id,
+                    at: r.at instanceof Date ? r.at.toISOString() : r.at,
+                    text: String(r.text != null ? r.text : '')
+                };
+            });
+            localStorage.setItem('admin_licencias_historial_live_v1', JSON.stringify(slim));
+        } catch (e) {}
+    }
+
+    let historialLiveRows = loadHistorialLiveFromStorage();
+
+    function makePlaceholderHistorialData() {
+        const prefixes = [
+            'Cambio en licencias (ejemplo)',
+            'Cuenta vencida (ejemplo)',
+            'Garantía / reemplazo (ejemplo)'
+        ];
+        const out = [];
+        const base = new Date();
+        for (let i = 0; i < 120; i++) {
+            const d = new Date(base);
+            d.setMinutes(d.getMinutes() - i * 37 - (i % 5) * 1440);
+            out.push({
+                id: i + 1,
+                at: d,
+                text:
+                    prefixes[i % prefixes.length] +
+                    ' — Ejemplo ' +
+                    (i + 1) +
+                    ': aquí aparecerán modificaciones reales (altas, bajas, reemplazos por garantía con cuenta anterior y actual, envíos a Caídas, etc.) cuando enlaces el backend.'
+            });
+        }
+        return out;
+    }
+
+    const sourceRows = makePlaceholderHistorialData();
+    let page = 1;
+    let searchDebounce = null;
+
+    window.appendAdminLicenciasHistorialLive = function (a, b) {
+        let detail = '';
+        if (arguments.length >= 2 && b != null && String(b).trim() !== '') {
+            const head = String(a != null ? a : '').trim();
+            const tail = String(b != null ? b : '').trim();
+            detail = head ? head + '\n\n' + tail : tail;
+        } else {
+            detail = String(a != null ? a : '');
+        }
+        historialLiveRows.unshift({
+            id: String(Date.now()) + '-' + Math.random().toString(36).slice(2, 9),
+            at: new Date(),
+            text: detail.trim()
+        });
+        persistHistorialLiveRows();
+        if (!panel.classList.contains('d-none')) {
+            renderHistorialPanel();
+        }
+    };
+
+    function escapeHistorialHtml(s) {
+        return String(s)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;');
+    }
+
+    function getPageSize() {
+        const v = pageSizeSel.value;
+        if (v === 'all') return Infinity;
+        const n = parseInt(v, 10);
+        return Number.isFinite(n) && n > 0 ? n : 30;
+    }
+
+    function getFilteredHistorialRows() {
+        const q = String(searchInp.value || '')
+            .toLowerCase()
+            .trim();
+        const combined = historialLiveRows.concat(sourceRows);
+        if (!q) return combined.slice();
+        return combined.filter(function (row) {
+            const t = String(row.text != null ? row.text : '');
+            const blob = t.toLowerCase() + ' ' + row.at.toLocaleString('es-ES').toLowerCase();
+            return blob.indexOf(q) !== -1;
+        });
+    }
+
+    function renderHistorialPanel() {
+        const qRaw = String(searchInp.value || '').trim();
+        const filtered = getFilteredHistorialRows();
+        const total = filtered.length;
+        const ps = getPageSize();
+        const totalPages = ps === Infinity || total === 0 ? 1 : Math.max(1, Math.ceil(total / ps));
+        if (page > totalPages) page = totalPages;
+        if (page < 1) page = 1;
+
+        let start = 0;
+        let end = total;
+        let slice = filtered;
+        if (ps !== Infinity && total > 0) {
+            start = (page - 1) * ps;
+            end = Math.min(start + ps, total);
+            slice = filtered.slice(start, end);
+        }
+
+        if (total === 0) {
+            metaEl.textContent = qRaw ? 'Sin coincidencias' : '0 eventos';
+        } else if (ps === Infinity) {
+            metaEl.textContent = total + (total === 1 ? ' evento' : ' eventos');
+        } else {
+            metaEl.textContent =
+                start +
+                1 +
+                '–' +
+                end +
+                ' de ' +
+                total +
+                (total === 1 ? ' evento' : ' eventos') +
+                ' · pág. ' +
+                page +
+                '/' +
+                totalPages;
+        }
+
+        tableBody.innerHTML = '';
+        if (slice.length === 0) {
+            const tr = document.createElement('tr');
+            tr.className = 'admin-licencias-historial-row admin-licencias-historial-row--empty';
+            tr.innerHTML =
+                '<td class="admin-licencias-historial-col-detail" colspan="2">No hay filas para mostrar.</td>';
+            tableBody.appendChild(tr);
+        } else {
+            slice.forEach(function (row) {
+                const tr = document.createElement('tr');
+                tr.className = 'admin-licencias-historial-row';
+                const dateStr = row.at.toLocaleString('es-ES', {
+                    dateStyle: 'short',
+                    timeStyle: 'short'
+                });
+                tr.innerHTML =
+                    '<td class="admin-licencias-historial-col-date">' +
+                    escapeHistorialHtml(dateStr) +
+                    '</td>' +
+                    '<td class="admin-licencias-historial-col-detail">' +
+                    escapeHistorialHtml(String(row.text != null ? row.text : '')) +
+                    '</td>';
+                tableBody.appendChild(tr);
+            });
+        }
+
+        prevBtn.disabled = page <= 1 || ps === Infinity || total === 0;
+        nextBtn.disabled = page >= totalPages || ps === Infinity || total === 0;
+    }
+
+    function syncHistorialToggleButtonUi(open) {
+        const btn = document.getElementById('adminLicenciasHistorialToggleBtn');
+        if (!btn) return;
+        if (open) {
+            btn.setAttribute('aria-expanded', 'true');
+            btn.classList.add('admin-licencias-historial-toggle--open');
+        } else {
+            btn.setAttribute('aria-expanded', 'false');
+            btn.classList.remove('admin-licencias-historial-toggle--open');
+        }
+        syncAdminHistorialShellMode();
+    }
+
+    const licensesGridEl = document.getElementById('licensesGrid');
+    if (licensesGridEl) {
+        licensesGridEl.addEventListener('click', function (e) {
+            const btn = e.target.closest('#adminLicenciasHistorialToggleBtn');
+            if (!btn) return;
+            e.preventDefault();
+            e.stopPropagation();
+            const isHidden = panel.classList.contains('d-none');
+            if (isHidden) {
+                closeAdminLicenciasReportesPanelUi();
+                closeAdminLicenciasCambiosPanelUi();
+                document.querySelectorAll('.license-card').forEach(function (c) {
+                    c.classList.remove('active');
+                });
+                const hBtn = document.getElementById('adminLicenciasHistorialToggleBtn');
+                if (hBtn) hBtn.classList.add('active');
+                panel.classList.remove('d-none');
+                panel.setAttribute('aria-hidden', 'false');
+                syncHistorialToggleButtonUi(true);
+                try {
+                    localStorage.setItem(ADMIN_LICENCIAS_SIDEBAR_MODE_KEY, 'historial');
+                } catch (e) {}
+                page = 1;
+                renderHistorialPanel();
+            } else {
+                panel.classList.add('d-none');
+                panel.setAttribute('aria-hidden', 'true');
+                syncHistorialToggleButtonUi(false);
+                const hBtn2 = document.getElementById('adminLicenciasHistorialToggleBtn');
+                if (hBtn2) hBtn2.classList.remove('active');
+                try {
+                    localStorage.removeItem(ADMIN_LICENCIAS_SIDEBAR_MODE_KEY);
+                } catch (e) {}
+                restoreActiveProductLicenseCardFromStorage();
+            }
+        });
+    }
+
+    searchInp.addEventListener('input', function () {
+        clearTimeout(searchDebounce);
+        searchDebounce = setTimeout(function () {
+            page = 1;
+            if (!panel.classList.contains('d-none')) {
+                renderHistorialPanel();
+            }
+        }, 200);
+    });
+
+    pageSizeSel.addEventListener('change', function () {
+        page = 1;
+        if (!panel.classList.contains('d-none')) {
+            renderHistorialPanel();
+        }
+    });
+
+    prevBtn.addEventListener('click', function () {
+        if (page > 1) {
+            page -= 1;
+            renderHistorialPanel();
+        }
+    });
+
+    nextBtn.addEventListener('click', function () {
+        const filtered = getFilteredHistorialRows();
+        const ps = getPageSize();
+        const total = filtered.length;
+        const totalPages = ps === Infinity || total === 0 ? 1 : Math.max(1, Math.ceil(total / ps));
+        if (page < totalPages) {
+            page += 1;
+            renderHistorialPanel();
+        }
+    });
+
+    window.__adminHistorialRenderIfVisible = function () {
+        if (!panel.classList.contains('d-none')) {
+            renderHistorialPanel();
+        }
+    };
+}
+
+function adminLicenseEscapeReportesHtml(s) {
+    return String(s)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+}
+
+/** Filas con estado rojo (mismo criterio que el icono de reporte): Licencias + días. */
+function adminLicenseCollectReportEntries() {
+    const out = [];
+
+    function credLineForRow(rowsWrap, ta, row) {
+        if (!rowsWrap || !ta || !row) return '';
+        const rows = rowsWrap.querySelectorAll('.license-split-editor__row');
+        let idx = -1;
+        for (let i = 0; i < rows.length; i++) {
+            if (rows[i] === row) {
+                idx = i;
+                break;
+            }
+        }
+        if (idx < 0) return '';
+        const raw = String(ta.value != null ? ta.value : '').replace(/\r\n/g, '\n');
+        const credLines = licenseSplitCredLinesFromRaw(raw);
+        return credLines[idx] != null ? String(credLines[idx]).trim() : '';
+    }
+
+    function addFromWrap(rowsWrap, ta, sourceLabel, licenseIdFixed, dayNum) {
+        if (!rowsWrap || !ta) return;
+        const rows = rowsWrap.querySelectorAll('.license-split-editor__row');
+        const shells = rowsWrap.querySelectorAll('.license-split-editor__status-select-shell--report');
+        shells.forEach(function (shell) {
+            const row = shell.closest('.license-split-editor__row');
+            if (!row) return;
+            let idx = -1;
+            for (let j = 0; j < rows.length; j++) {
+                if (rows[j] === row) {
+                    idx = j;
+                    break;
+                }
+            }
+            const cuenta = credLineForRow(rowsWrap, ta, row);
+            const r = adminLicenseSplitReadRow(row);
+            const selBad = row.querySelector('.license-split-editor__status-bad');
+            let statusLabel = r.statusBad || '';
+            if (selBad && selBad.selectedIndex >= 0) {
+                statusLabel = String(selBad.options[selBad.selectedIndex].textContent || '').trim();
+            }
+            let licenseId = licenseIdFixed;
+            if (licenseId == null) {
+                const ic = document.getElementById('licenseAccountsInputContainer');
+                const rawL = ic && ic.dataset.activeLicenseId;
+                const n = rawL != null && rawL !== '' ? parseInt(rawL, 10) : NaN;
+                licenseId = Number.isFinite(n) ? n : NaN;
+            }
+            out.push({
+                sourceLabel: sourceLabel,
+                cuenta: cuenta,
+                user: String(r.user != null ? r.user : '').trim(),
+                status: statusLabel,
+                origin: dayNum != null ? 'day' : 'license',
+                dayNum: dayNum != null ? dayNum : null,
+                licenseId: licenseId,
+                badRowIndex: idx
+            });
+        });
+    }
+
+    const licWrap = document.getElementById('adminLicenciasStructuredRows');
+    const licTa = document.getElementById('adminLicenciasNotepadByLicense');
+    addFromWrap(licWrap, licTa, 'Licencias', null, null);
+
+    document.querySelectorAll('#licenseAllDaysContainer .day-license-split-rows').forEach(function (wrap) {
+        const root = wrap.closest('.day-license-split-root');
+        const dayRaw = root && root.dataset.day != null ? parseInt(root.dataset.day, 10) : NaN;
+        const lidRaw = root && root.dataset.licenseId != null ? parseInt(root.dataset.licenseId, 10) : NaN;
+        const ta = root ? dayLicenseSplitQueryCredsTa(root) : null;
+        const dayNum = Number.isFinite(dayRaw) ? dayRaw : null;
+        const lid = Number.isFinite(lidRaw) ? lidRaw : NaN;
+        addFromWrap(wrap, ta, 'Día ' + (dayNum != null ? dayNum : '?'), lid, dayNum);
+    });
+
+    return out;
+}
+
+function adminLicenseMakeReportEntrySig(e) {
+    return [
+        e.licenseId,
+        e.origin,
+        e.dayNum != null ? e.dayNum : '',
+        e.badRowIndex,
+        String(e.cuenta || ''),
+        String(e.user || '')
+    ].join('\x1e');
+}
+
+function adminLicenseFindReportEntryBySig(sig) {
+    const all = adminLicenseCollectReportEntries();
+    for (let i = 0; i < all.length; i++) {
+        if (adminLicenseMakeReportEntrySig(all[i]) === sig) {
+            return all[i];
+        }
+    }
+    return null;
+}
+
+function adminLicenseFindFirstWarrantyPoolIndex(mergedLinesArr) {
+    for (let i = 0; i < mergedLinesArr.length; i++) {
+        const p = parseAdminLicenseLineToSplitParts(mergedLinesArr[i]);
+        if (String(p.statusBad || '').trim()) {
+            continue;
+        }
+        const g = adminLicenseNormalizeStatusKey(
+            adminLicenseSplitCanonicalGoodFromStored(p.statusGood != null ? p.statusGood : '')
+        );
+        if (g === adminLicenseNormalizeStatusKey('garantia') && String(p.cred || '').trim()) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+function adminLicenseReportesUndoSelect(selEl, sigRaw) {
+    if (selEl) {
+        selEl.value = '';
+    }
+    if (sigRaw && window.__adminReportesMalaSelectionBySig) {
+        delete window.__adminReportesMalaSelectionBySig[sigRaw];
+    }
+}
+
+async function adminLicenseReportesApplyBuenaResolved(entry, selEl) {
+    if (window.__adminReportesTableActionInFlight) {
+        return;
+    }
+    if (!entry || entry.badRowIndex == null || entry.badRowIndex < 0) {
+        showError('Fila no válida.');
+        adminLicenseReportesUndoSelect(selEl, '');
+        return;
+    }
+    const sigK = adminLicenseMakeReportEntrySig(entry);
+    if (!Number.isFinite(entry.licenseId) || entry.licenseId === AGGREGATE_LICENSE_ID) {
+        showError('Selecciona un producto concreto en el grid (no «Todos»).');
+        adminLicenseReportesUndoSelect(selEl, sigK);
+        return;
+    }
+    const ic = document.getElementById('licenseAccountsInputContainer');
+    const activeRaw = ic && ic.dataset.activeLicenseId;
+    const active = activeRaw != null && activeRaw !== '' ? parseInt(activeRaw, 10) : NaN;
+    if (active !== entry.licenseId) {
+        showError('Activa en el grid la misma licencia a la que pertenece este reporte.');
+        adminLicenseReportesUndoSelect(selEl, sigK);
+        return;
+    }
+
+    window.__adminReportesTableActionInFlight = true;
+    if (selEl) {
+        selEl.disabled = true;
+    }
+    try {
+        let oldCred = '';
+        const where =
+            entry.origin === 'day' && entry.dayNum != null
+                ? 'Licencias · Día ' + entry.dayNum
+                : 'Licencias';
+
+        if (entry.origin === 'license') {
+            const licMergedStr = adminLicenseSplitGetMergedNotes();
+            const lines = licMergedStr === '' ? [] : licMergedStr.split('\n');
+            const bIdx = entry.badRowIndex;
+            if (bIdx < 0 || bIdx >= lines.length) {
+                showError('Índice de fila fuera de rango en Licencias.');
+                adminLicenseReportesUndoSelect(selEl, sigK);
+                return;
+            }
+            const p = parseAdminLicenseLineToSplitParts(lines[bIdx]);
+            oldCred = String(p.cred || '').trim();
+            const newLine = buildAdminLicenseStorageLine(p.cred, p.user, 'ok', '', p.extra);
+            const oldMerged = licMergedStr;
+            lines[bIdx] = newLine;
+            adminLicenseSplitApplyMergedText(lines.join('\n'));
+            const saveRes =
+                typeof window.adminLicenciasSaveCurrentLicenseNotesImmediate === 'function'
+                    ? await window.adminLicenciasSaveCurrentLicenseNotesImmediate()
+                    : { success: false };
+            if (!saveRes || !saveRes.success) {
+                adminLicenseSplitApplyMergedText(oldMerged);
+                showError('No se pudo guardar el bloc Licencias.');
+                adminLicenseReportesUndoSelect(selEl, sigK);
+                return;
+            }
+        } else {
+            const dayNum = entry.dayNum;
+            if (!Number.isFinite(dayNum)) {
+                showError('Día no válido.');
+                adminLicenseReportesUndoSelect(selEl, sigK);
+                return;
+            }
+            const container = document.getElementById('licenseAllDaysContainer');
+            const dayRoot =
+                container &&
+                container.querySelector(
+                    '.day-license-split-root[data-day="' +
+                        dayNum +
+                        '"][data-license-id="' +
+                        entry.licenseId +
+                        '"]'
+                );
+            if (!dayRoot) {
+                showError('No se encontró el bloc del día ' + dayNum + '.');
+                adminLicenseReportesUndoSelect(selEl, sigK);
+                return;
+            }
+            const dayMergedStr = dayLicenseSplitGetMergedText(dayRoot);
+            const dayLines = dayMergedStr === '' ? [] : dayMergedStr.split('\n');
+            const bIdx = entry.badRowIndex;
+            if (bIdx < 0 || bIdx >= dayLines.length) {
+                showError('Índice de fila fuera de rango en el día ' + dayNum + '.');
+                adminLicenseReportesUndoSelect(selEl, sigK);
+                return;
+            }
+            const p = parseAdminLicenseLineToSplitParts(dayLines[bIdx]);
+            oldCred = String(p.cred || '').trim();
+            const newLine = buildAdminLicenseStorageLine(p.cred, p.user, 'ok', '', p.extra);
+            const oldDay = dayMergedStr;
+            dayLines[bIdx] = newLine;
+            dayLicenseSplitApplyMergedText(dayRoot, dayLines.join('\n'));
+            await syncDayNotepad(entry.licenseId, dayNum, dayLicenseSplitGetMergedText(dayRoot), {});
+        }
+
+        if (typeof window.appendAdminLicenciasHistorialLive === 'function') {
+            window.appendAdminLicenciasHistorialLive(
+                'Cuenta marcada como buena desde reportes (' +
+                    where +
+                    ').\n\nCuenta: ' +
+                    (oldCred || '—')
+            );
+        }
+        showSuccess('Fila marcada como buena y guardada.');
+        if (window.__adminReportesMalaSelectionBySig) {
+            delete window.__adminReportesMalaSelectionBySig[sigK];
+        }
+        if (typeof window.__adminReportesRenderIfVisible === 'function') {
+            window.__adminReportesRenderIfVisible();
+        }
+        scheduleRefreshAdminLicenciasReportCounts();
+        if (typeof refreshDuplicateEmailHighlights === 'function') {
+            refreshDuplicateEmailHighlights(entry.licenseId);
+        }
+        if (typeof window.refreshAdminDuplicateHighlightsIfActive === 'function') {
+            window.refreshAdminDuplicateHighlightsIfActive();
+        }
+    } catch (err) {
+        console.error('adminLicenseReportesApplyBuenaResolved', err);
+        showError('Error al marcar como buena.');
+        adminLicenseReportesUndoSelect(selEl, sigK);
+    } finally {
+        window.__adminReportesTableActionInFlight = false;
+        if (selEl) {
+            selEl.disabled = false;
+        }
+    }
+}
+
+/**
+ * Reporte con origen bloc Licencias y «caida»: quita la fila de Licencias y la añade a Caídas (sin repuesto).
+ */
+async function adminLicenseReportesMoveLicenseRowToSuspended(entry, selEl) {
+    if (window.__adminReportesTableActionInFlight) {
+        return;
+    }
+    if (!entry || entry.badRowIndex == null || entry.badRowIndex < 0) {
+        showError('Fila no válida.');
+        adminLicenseReportesUndoSelect(selEl, '');
+        return;
+    }
+    if (entry.origin !== 'license') {
+        showError('El envío a Caídas desde reportes aplica solo al bloc Licencias.');
+        adminLicenseReportesUndoSelect(selEl, adminLicenseMakeReportEntrySig(entry));
+        return;
+    }
+    const sigK = adminLicenseMakeReportEntrySig(entry);
+    if (!Number.isFinite(entry.licenseId) || entry.licenseId === AGGREGATE_LICENSE_ID) {
+        showError('Selecciona un producto concreto en el grid (no «Todos»).');
+        adminLicenseReportesUndoSelect(selEl, sigK);
+        return;
+    }
+    const ic = document.getElementById('licenseAccountsInputContainer');
+    const activeRaw = ic && ic.dataset.activeLicenseId;
+    const active = activeRaw != null && activeRaw !== '' ? parseInt(activeRaw, 10) : NaN;
+    if (active !== entry.licenseId) {
+        showError('Activa en el grid la misma licencia a la que pertenece este reporte.');
+        adminLicenseReportesUndoSelect(selEl, sigK);
+        return;
+    }
+    const taLic = document.getElementById('adminLicenciasNotepadByLicense');
+    if (!taLic || parseInt(taLic.dataset.licenseId, 10) !== entry.licenseId) {
+        showError('El bloc Licencias no coincide. Abre la licencia correcta.');
+        adminLicenseReportesUndoSelect(selEl, sigK);
+        return;
+    }
+    const taS = document.getElementById('adminLicenciasSuspendedNotepad');
+    const suspRoot = document.getElementById('adminLicenciasSuspendedSplitRoot');
+    if (!taS || !suspRoot || parseInt(taS.dataset.licenseId, 10) !== entry.licenseId) {
+        showError('El bloc Caídas no está abierto para esta licencia.');
+        adminLicenseReportesUndoSelect(selEl, sigK);
+        return;
+    }
+
+    const licMergedStr = adminLicenseSplitGetMergedNotes();
+    const licLines = licMergedStr === '' ? [] : licMergedStr.split('\n');
+    const bIdx = entry.badRowIndex;
+    if (bIdx < 0 || bIdx >= licLines.length) {
+        showError('Índice de fila fuera de rango en Licencias.');
+        adminLicenseReportesUndoSelect(selEl, sigK);
+        return;
+    }
+    const rawLine = String(licLines[bIdx] != null ? licLines[bIdx] : '').trim();
+    const p = parseAdminLicenseLineToSplitParts(rawLine);
+    if (!String(p.cred || '').trim()) {
+        showError('La fila no tiene credencial.');
+        adminLicenseReportesUndoSelect(selEl, sigK);
+        return;
+    }
+    const lineToMove = rawLine;
+
+    const newLicLines = licLines.slice();
+    newLicLines.splice(bIdx, 1);
+    while (newLicLines.length && newLicLines[newLicLines.length - 1] === '') {
+        newLicLines.pop();
+    }
+    const oldLicMerged = licMergedStr;
+    const newLicMerged = newLicLines.join('\n');
+
+    const oldSuspMerged = suspendedLicenseSplitGetMergedText(suspRoot);
+    const suspLines = oldSuspMerged === '' ? [] : oldSuspMerged.split('\n');
+    while (suspLines.length && suspLines[suspLines.length - 1] === '') {
+        suspLines.pop();
+    }
+    suspLines.push(lineToMove);
+    const newSuspMerged = suspLines.join('\n');
+
+    window.__adminReportesTableActionInFlight = true;
+    if (selEl) {
+        selEl.disabled = true;
+    }
+    try {
+        adminLicenseSplitApplyMergedText(newLicMerged);
+        suspendedLicenseSplitApplyMergedText(suspRoot, newSuspMerged);
+        const saveRes =
+            typeof window.adminLicenciasSaveCurrentLicenseNotesImmediate === 'function'
+                ? await window.adminLicenciasSaveCurrentLicenseNotesImmediate()
+                : { success: false };
+        if (!saveRes || !saveRes.success) {
+            adminLicenseSplitApplyMergedText(oldLicMerged);
+            suspendedLicenseSplitApplyMergedText(suspRoot, oldSuspMerged);
+            showError('No se pudo guardar Licencias / Caídas.');
+            adminLicenseReportesUndoSelect(selEl, sigK);
+            return;
+        }
+
+        const oldCred = String(p.cred || '').trim();
+        if (typeof window.appendAdminLicenciasHistorialLive === 'function') {
+            window.appendAdminLicenciasHistorialLive(
+                'Cuenta pasada a Caídas desde reportes (bloc Licencias).\n\nCuenta: ' + (oldCred || '—')
+            );
+        }
+        showSuccess('Cuenta enviada a Caídas y guardada.');
+        if (window.__adminReportesMalaSelectionBySig) {
+            delete window.__adminReportesMalaSelectionBySig[sigK];
+        }
+        if (typeof window.__adminReportesRenderIfVisible === 'function') {
+            window.__adminReportesRenderIfVisible();
+        }
+        scheduleRefreshAdminLicenciasReportCounts();
+        if (typeof refreshDuplicateEmailHighlights === 'function') {
+            refreshDuplicateEmailHighlights(entry.licenseId);
+        }
+        if (typeof window.refreshAdminDuplicateHighlightsIfActive === 'function') {
+            window.refreshAdminDuplicateHighlightsIfActive();
+        }
+        if (typeof window.updateSuspendedBlocLineCountBadge === 'function') {
+            window.updateSuspendedBlocLineCountBadge();
+        }
+        if (suspRoot && typeof suspRoot.scrollIntoView === 'function') {
+            suspRoot.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+    } catch (err) {
+        console.error('adminLicenseReportesMoveLicenseRowToSuspended', err);
+        try {
+            adminLicenseSplitApplyMergedText(oldLicMerged);
+        } catch (e2) {
+            console.error(e2);
+        }
+        try {
+            suspendedLicenseSplitApplyMergedText(suspRoot, oldSuspMerged);
+        } catch (e3) {
+            console.error(e3);
+        }
+        showError('Error al enviar la cuenta a Caídas.');
+        adminLicenseReportesUndoSelect(selEl, sigK);
+    } finally {
+        window.__adminReportesTableActionInFlight = false;
+        if (selEl) {
+            selEl.disabled = false;
+        }
+    }
+}
+
+/** Línea en Caídas: credencial sin estados verde/rojo; nota indica revisión OK. */
+function licenseSplitBuildStorageLineBuenaRevisadaToSuspended(p) {
+    const cred = String(p.cred != null ? p.cred : '').trim();
+    const prevExtra = String(p.extra != null ? p.extra : '').trim();
+    const tag = 'Buena y revisada — comprobada OK';
+    const extra = [prevExtra, tag].filter(Boolean).join(' · ');
+    return buildAdminLicenseStorageLine(cred, '', '', '', extra).trim();
+}
+
+/**
+ * Desde columna verde «Buena y revisada»: quita la fila del bloc Licencias o del día y la añade a Caídas / suspendidas.
+ */
+async function licenseSplitBuenaRevisadaMoveRowToSuspended(row) {
+    if (!row || window.__licenseSplitBuenaRevisadaMoveInFlight) {
+        return;
+    }
+    function revertGoodSelectAfterAbort() {
+        const sg = row.querySelector('.license-split-editor__status-good');
+        if (!sg) return;
+        const prev = sg.getAttribute('data-lic-sel-good-prev');
+        sg.value = prev != null && prev !== '' ? prev : '';
+        const wrap = sg.closest('.license-split-editor__status-wrap');
+        const sb = wrap ? wrap.querySelector('.license-split-editor__status-bad') : null;
+        const n = row.querySelector('.license-split-editor__note');
+        adminLicenseSplitApplyGoodSelectTierClass(sg);
+        adminLicenseSplitApplyNotePlaceholderFromDual(sb, n);
+        const oc = row.querySelector('.license-split-editor__otro-combined');
+        if (sb && oc) {
+            adminLicenseSplitSyncOtroDetailVisibility(sb, oc);
+        }
+    }
+    const mainWrap = document.getElementById('adminLicenciasStructuredRows');
+    const dayRoot = row.closest('.day-license-split-root');
+    const inMain = mainWrap && mainWrap.contains(row);
+
+    if (!inMain && !dayRoot) {
+        return;
+    }
+
+    const ic = document.getElementById('licenseAccountsInputContainer');
+    const activeRaw = ic && ic.dataset.activeLicenseId;
+    const active = activeRaw != null && activeRaw !== '' ? parseInt(activeRaw, 10) : NaN;
+    if (!Number.isFinite(active) || active === AGGREGATE_LICENSE_ID) {
+        showError('Selecciona un producto concreto en el grid (no «Todos») para usar Caídas / suspendidas.');
+        revertGoodSelectAfterAbort();
+        return;
+    }
+
+    const taLic = document.getElementById('adminLicenciasNotepadByLicense');
+    const taS = document.getElementById('adminLicenciasSuspendedNotepad');
+    const suspRoot = document.getElementById('adminLicenciasSuspendedSplitRoot');
+    if (!taLic || !taS || !suspRoot || parseInt(taLic.dataset.licenseId, 10) !== active) {
+        showError('Abre el bloc Licencias y Caídas del mismo producto en la cuadrícula.');
+        revertGoodSelectAfterAbort();
+        return;
+    }
+    if (parseInt(taS.dataset.licenseId, 10) !== active) {
+        showError('El bloc Caídas no coincide con la licencia activa.');
+        revertGoodSelectAfterAbort();
+        return;
+    }
+
+    let licenseIdForDay = active;
+    let dayNum = null;
+    let oldDayMerged = '';
+    let newDayMerged = '';
+    let oldLicMerged = '';
+    let newLicMerged = '';
+
+    const oldSuspMerged = suspendedLicenseSplitGetMergedText(suspRoot);
+    const suspLines = oldSuspMerged === '' ? [] : oldSuspMerged.split('\n');
+    while (suspLines.length && suspLines[suspLines.length - 1] === '') {
+        suspLines.pop();
+    }
+
+    let lineToAppend = '';
+    let credForMsg = '';
+
+    if (inMain) {
+        const rows = mainWrap.querySelectorAll('.license-split-editor__row');
+        const idx = Array.prototype.indexOf.call(rows, row);
+        if (idx < 0) {
+            showError('No se encontró la fila en Licencias.');
+            revertGoodSelectAfterAbort();
+            return;
+        }
+        const licMergedStr = adminLicenseSplitGetMergedNotes();
+        const licLines = licMergedStr === '' ? [] : licMergedStr.split('\n');
+        if (idx < 0 || idx >= licLines.length) {
+            showError('Índice de fila fuera de rango en Licencias.');
+            revertGoodSelectAfterAbort();
+            return;
+        }
+        const rawLine = String(licLines[idx] != null ? licLines[idx] : '').trim();
+        const p = parseAdminLicenseLineToSplitParts(rawLine);
+        if (!String(p.cred || '').trim()) {
+            showError('La fila no tiene credencial.');
+            revertGoodSelectAfterAbort();
+            return;
+        }
+        credForMsg = String(p.cred || '').trim();
+        lineToAppend = licenseSplitBuildStorageLineBuenaRevisadaToSuspended(p);
+        if (!lineToAppend) {
+            showError('No se pudo preparar la línea para Caídas.');
+            revertGoodSelectAfterAbort();
+            return;
+        }
+        const newLicLines = licLines.slice();
+        newLicLines.splice(idx, 1);
+        while (newLicLines.length && newLicLines[newLicLines.length - 1] === '') {
+            newLicLines.pop();
+        }
+        oldLicMerged = licMergedStr;
+        newLicMerged = newLicLines.join('\n');
+    } else {
+        licenseIdForDay = parseInt(dayRoot.dataset.licenseId, 10);
+        dayNum = parseInt(dayRoot.dataset.day, 10);
+        if (!Number.isFinite(licenseIdForDay) || licenseIdForDay === AGGREGATE_LICENSE_ID) {
+            showError('En la vista «Todos» no se puede enviar filas a Caídas así. Abre un producto.');
+            revertGoodSelectAfterAbort();
+            return;
+        }
+        if (!Number.isFinite(dayNum)) {
+            showError('Día no válido.');
+            revertGoodSelectAfterAbort();
+            return;
+        }
+        if (licenseIdForDay !== active) {
+            showError('El día abierto no pertenece a la licencia activa en el grid.');
+            revertGoodSelectAfterAbort();
+            return;
+        }
+        const dayRows = dayLicenseSplitGetRowElements(dayRoot);
+        const idx = dayRows.indexOf(row);
+        if (idx < 0) {
+            showError('No se encontró la fila en el día.');
+            revertGoodSelectAfterAbort();
+            return;
+        }
+        const dayMergedStr = dayLicenseSplitGetMergedText(dayRoot);
+        const dayLines = dayMergedStr === '' ? [] : dayMergedStr.split('\n');
+        if (idx < 0 || idx >= dayLines.length) {
+            showError('Índice de fila fuera de rango en el día ' + dayNum + '.');
+            revertGoodSelectAfterAbort();
+            return;
+        }
+        const rawLine = String(dayLines[idx] != null ? dayLines[idx] : '').trim();
+        const p = parseAdminLicenseLineToSplitParts(rawLine);
+        if (!String(p.cred || '').trim()) {
+            showError('La fila no tiene credencial.');
+            revertGoodSelectAfterAbort();
+            return;
+        }
+        credForMsg = String(p.cred || '').trim();
+        lineToAppend = licenseSplitBuildStorageLineBuenaRevisadaToSuspended(p);
+        if (!lineToAppend) {
+            showError('No se pudo preparar la línea para Caídas.');
+            revertGoodSelectAfterAbort();
+            return;
+        }
+        const newDayLines = dayLines.slice();
+        newDayLines.splice(idx, 1);
+        while (newDayLines.length && newDayLines[newDayLines.length - 1] === '') {
+            newDayLines.pop();
+        }
+        oldDayMerged = dayMergedStr;
+        newDayMerged = newDayLines.join('\n');
+    }
+
+    suspLines.push(lineToAppend);
+    const newSuspMerged = suspLines.join('\n');
+
+    window.__licenseSplitBuenaRevisadaMoveInFlight = true;
+    try {
+        if (inMain) {
+            adminLicenseSplitApplyMergedText(newLicMerged);
+        } else {
+            dayLicenseSplitApplyMergedText(dayRoot, newDayMerged);
+        }
+        suspendedLicenseSplitApplyMergedText(suspRoot, newSuspMerged);
+
+        const saveRes =
+            typeof window.adminLicenciasSaveCurrentLicenseNotesImmediate === 'function'
+                ? await window.adminLicenciasSaveCurrentLicenseNotesImmediate()
+                : { success: false };
+        if (!saveRes || !saveRes.success) {
+            if (inMain) {
+                adminLicenseSplitApplyMergedText(oldLicMerged);
+            } else {
+                dayLicenseSplitApplyMergedText(dayRoot, oldDayMerged);
+            }
+            suspendedLicenseSplitApplyMergedText(suspRoot, oldSuspMerged);
+            showError('No se pudo guardar. Revisa la conexión.');
+            return;
+        }
+
+        if (!inMain) {
+            await syncDayNotepad(licenseIdForDay, dayNum, dayLicenseSplitGetMergedText(dayRoot), {});
+        }
+
+        if (typeof window.appendAdminLicenciasHistorialLive === 'function') {
+            const where = inMain ? 'bloc Licencias' : 'Licencias · Día ' + dayNum;
+            window.appendAdminLicenciasHistorialLive(
+                'Buena y revisada → Caídas\n\nCuenta comprobada OK y archivada en Caídas / suspendidas (' +
+                    where +
+                    ').\n\nCredencial: ' +
+                    (credForMsg || '—')
+            );
+        }
+        showSuccess('Cuenta comprobada: enviada a Caídas / suspendidas.');
+        scheduleRefreshAdminLicenciasReportCounts();
+        if (typeof refreshDuplicateEmailHighlights === 'function') {
+            refreshDuplicateEmailHighlights(active);
+        }
+        if (typeof window.refreshAdminDuplicateHighlightsIfActive === 'function') {
+            window.refreshAdminDuplicateHighlightsIfActive();
+        }
+        if (typeof window.updateSuspendedBlocLineCountBadge === 'function') {
+            window.updateSuspendedBlocLineCountBadge();
+        }
+        if (suspRoot && typeof suspRoot.scrollIntoView === 'function') {
+            suspRoot.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+    } catch (err) {
+        console.error('licenseSplitBuenaRevisadaMoveRowToSuspended', err);
+        try {
+            if (inMain) {
+                adminLicenseSplitApplyMergedText(oldLicMerged);
+            } else {
+                dayLicenseSplitApplyMergedText(dayRoot, oldDayMerged);
+            }
+        } catch (e2) {
+            console.error(e2);
+        }
+        try {
+            suspendedLicenseSplitApplyMergedText(suspRoot, oldSuspMerged);
+        } catch (e3) {
+            console.error(e3);
+        }
+        showError('No se pudo completar el traslado a Caídas.');
+    } finally {
+        window.__licenseSplitBuenaRevisadaMoveInFlight = false;
+    }
+}
+
+async function adminLicenseReportesApplyWarrantyReplace(entry, selEl) {
+    if (window.__adminReportesTableActionInFlight) {
+        return;
+    }
+    if (!entry || entry.badRowIndex == null || entry.badRowIndex < 0) {
+        showError('Fila no válida.');
+        adminLicenseReportesUndoSelect(selEl, '');
+        return;
+    }
+    const sigK = adminLicenseMakeReportEntrySig(entry);
+    if (!Number.isFinite(entry.licenseId) || entry.licenseId === AGGREGATE_LICENSE_ID) {
+        showError(
+            'Para usar la lista de garantía, selecciona un producto concreto en el grid (no «Todos»).'
+        );
+        adminLicenseReportesUndoSelect(selEl, sigK);
+        return;
+    }
+    const ic = document.getElementById('licenseAccountsInputContainer');
+    const activeRaw = ic && ic.dataset.activeLicenseId;
+    const active = activeRaw != null && activeRaw !== '' ? parseInt(activeRaw, 10) : NaN;
+    if (active !== entry.licenseId) {
+        showError('Activa en el grid la misma licencia a la que pertenece este reporte.');
+        adminLicenseReportesUndoSelect(selEl, sigK);
+        return;
+    }
+    if (entry.origin !== 'day' || !Number.isFinite(entry.dayNum)) {
+        showError('El reemplazo por garantía solo aplica a cuentas en un día.');
+        adminLicenseReportesUndoSelect(selEl, sigK);
+        return;
+    }
+    const licMergedStr = adminLicenseSplitGetMergedNotes();
+    const licLines = licMergedStr === '' ? [] : licMergedStr.split('\n');
+    const wIdx = adminLicenseFindFirstWarrantyPoolIndex(licLines);
+    if (wIdx < 0) {
+        showError(
+            'No hay repuestos en la lista de garantía. En Licencias, añade una línea con credencial y estado verde «Garantía (repuesto)».'
+        );
+        adminLicenseReportesUndoSelect(selEl, sigK);
+        return;
+    }
+    const poolP = parseAdminLicenseLineToSplitParts(licLines[wIdx]);
+    const newCred = String(poolP.cred || '').trim();
+    if (!newCred) {
+        showError('La línea de garantía no tiene credencial.');
+        adminLicenseReportesUndoSelect(selEl, sigK);
+        return;
+    }
+
+    window.__adminReportesTableActionInFlight = true;
+    if (selEl) {
+        selEl.disabled = true;
+    }
+    try {
+        const dayNum = entry.dayNum;
+        const container = document.getElementById('licenseAllDaysContainer');
+        const dayRoot =
+            container &&
+            container.querySelector(
+                '.day-license-split-root[data-day="' +
+                    dayNum +
+                    '"][data-license-id="' +
+                    entry.licenseId +
+                    '"]'
+            );
+        if (!dayRoot) {
+            showError('No se encontró el bloc del día ' + dayNum + '.');
+            adminLicenseReportesUndoSelect(selEl, sigK);
+            return;
+        }
+        const dayMergedStr = dayLicenseSplitGetMergedText(dayRoot);
+        const dayLines = dayMergedStr === '' ? [] : dayMergedStr.split('\n');
+        const bIdx = entry.badRowIndex;
+        if (bIdx < 0 || bIdx >= dayLines.length) {
+            showError('Índice de fila fuera de rango en el día ' + dayNum + '.');
+            adminLicenseReportesUndoSelect(selEl, sigK);
+            return;
+        }
+        const badP = parseAdminLicenseLineToSplitParts(dayLines[bIdx]);
+        const oldCred = String(badP.cred || '').trim();
+        const replacedLine = buildAdminLicenseStorageLine(
+            poolP.cred,
+            badP.user,
+            'ok',
+            '',
+            badP.extra
+        );
+        const newDayLines = dayLines.slice();
+        newDayLines[bIdx] = replacedLine;
+        const oldDayMerged = dayMergedStr;
+        const newLicLines = licLines.slice();
+        newLicLines.splice(wIdx, 1);
+        while (newLicLines.length && newLicLines[newLicLines.length - 1] === '') {
+            newLicLines.pop();
+        }
+        const newLicMerged = newLicLines.join('\n');
+        const licOld = licMergedStr;
+        adminLicenseSplitApplyMergedText(newLicMerged);
+        dayLicenseSplitApplyMergedText(dayRoot, newDayLines.join('\n'));
+        const saveRes =
+            typeof window.adminLicenciasSaveCurrentLicenseNotesImmediate === 'function'
+                ? await window.adminLicenciasSaveCurrentLicenseNotesImmediate()
+                : { success: false };
+        if (!saveRes || !saveRes.success) {
+            adminLicenseSplitApplyMergedText(licOld);
+            dayLicenseSplitApplyMergedText(dayRoot, oldDayMerged);
+            showError('No se pudo guardar tras el reemplazo.');
+            adminLicenseReportesUndoSelect(selEl, sigK);
+            return;
+        }
+        await syncDayNotepad(entry.licenseId, dayNum, dayLicenseSplitGetMergedText(dayRoot), {});
+
+        const where = 'Licencias · Día ' + dayNum;
+        const registeredStr = new Date().toLocaleString('es-ES', {
+            dateStyle: 'full',
+            timeStyle: 'short'
+        });
+        const problemaTxt = adminLicenseFormatHistorialProblemFromParts(badP);
+        const historialDetalle =
+            'Reemplazo por garantía en ' +
+            where +
+            '\n\n' +
+            'Registro (fecha y hora): ' +
+            registeredStr +
+            '\n\n' +
+            '• Cuenta anterior:\n' +
+            (oldCred || '—') +
+            '\n\n' +
+            '• Cuenta actual (repuesto aplicado):\n' +
+            (newCred || '—') +
+            '\n\n' +
+            'Qué pasaba con la cuenta\n' +
+            problemaTxt;
+        if (typeof window.appendAdminLicenciasHistorialLive === 'function') {
+            window.appendAdminLicenciasHistorialLive(historialDetalle);
+        }
+        showSuccess('Cuenta sustituida por garantía y guardada.');
+        if (window.__adminReportesMalaSelectionBySig) {
+            delete window.__adminReportesMalaSelectionBySig[sigK];
+        }
+        if (typeof window.__adminReportesRenderIfVisible === 'function') {
+            window.__adminReportesRenderIfVisible();
+        }
+        scheduleRefreshAdminLicenciasReportCounts();
+        if (typeof refreshDuplicateEmailHighlights === 'function') {
+            refreshDuplicateEmailHighlights(entry.licenseId);
+        }
+        if (typeof window.refreshAdminDuplicateHighlightsIfActive === 'function') {
+            window.refreshAdminDuplicateHighlightsIfActive();
+        }
+    } catch (err) {
+        console.error('adminLicenseReportesApplyWarrantyReplace', err);
+        showError('Error al aplicar el reemplazo por garantía.');
+        adminLicenseReportesUndoSelect(selEl, sigK);
+    } finally {
+        window.__adminReportesTableActionInFlight = false;
+        if (selEl) {
+            selEl.disabled = false;
+        }
+    }
+}
+
+function setupAdminLicenciasReportes() {
+    const panel = document.getElementById('adminLicenciasReportesPanel');
+    const searchInp = document.getElementById('adminReportesSearch');
+    const metaEl = document.getElementById('adminReportesMeta');
+    const tableBody = document.getElementById('adminReportesTableBody');
+    if (!panel || !searchInp || !metaEl || !tableBody) {
+        return;
+    }
+    if (document.documentElement.dataset.adminReportesInit === '1') {
+        return;
+    }
+    document.documentElement.dataset.adminReportesInit = '1';
+
+    /** Por fila de reporte (firma): '' | 'buena' | 'caida' */
+    const reportesMalaSelectionBySig = Object.create(null);
+    window.__adminReportesMalaSelectionBySig = reportesMalaSelectionBySig;
+
+    let searchDebounce = null;
+
+    function syncReportesToggleButtonUi(open) {
+        const btn = document.getElementById('adminLicenciasReportesBtn');
+        if (!btn) return;
+        if (open) {
+            btn.setAttribute('aria-expanded', 'true');
+            btn.classList.add('admin-licencias-reportes-toggle--open');
+        } else {
+            btn.setAttribute('aria-expanded', 'false');
+            btn.classList.remove('admin-licencias-reportes-toggle--open');
+        }
+        syncAdminHistorialShellMode();
+    }
+
+    function getFilteredReportesRows() {
+        const q = String(searchInp.value || '')
+            .toLowerCase()
+            .trim();
+        const all = adminLicenseCollectReportEntries();
+        if (!q) return all.slice();
+        return all.filter(function (row) {
+            const blob = [
+                row.sourceLabel,
+                row.cuenta,
+                row.user,
+                row.status
+            ]
+                .join(' ')
+                .toLowerCase();
+            return blob.indexOf(q) !== -1;
+        });
+    }
+
+    function renderReportesPanel() {
+        const qRaw = String(searchInp.value || '').trim();
+        const filtered = getFilteredReportesRows();
+        const total = filtered.length;
+        if (total === 0) {
+            metaEl.textContent = qRaw
+                ? 'Sin coincidencias'
+                : '0 cuentas con estado rojo en la vista actual (Licencias y días)';
+        } else {
+            metaEl.textContent =
+                total + (total === 1 ? ' cuenta con estado rojo / reporte' : ' cuentas con estado rojo / reporte');
+        }
+
+        const ic = document.getElementById('licenseAccountsInputContainer');
+        const activeRaw = ic && ic.dataset.activeLicenseId;
+        const active = activeRaw != null && activeRaw !== '' ? parseInt(activeRaw, 10) : NaN;
+
+        tableBody.innerHTML = '';
+        if (filtered.length === 0) {
+            const tr = document.createElement('tr');
+            tr.className = 'admin-licencias-reportes-row admin-licencias-reportes-row--empty';
+            tr.innerHTML =
+                '<td class="admin-licencias-reportes-col-cuenta" colspan="4">No hay cuentas con estado rojo en Licencias ni en los días (vista actual). Al marcar un estado rojo en una fila, aparecerá aquí.</td>';
+            tableBody.appendChild(tr);
+        } else {
+            filtered.forEach(function (row, rowIdx) {
+                const tr = document.createElement('tr');
+                tr.className = 'admin-licencias-reportes-row';
+                const canAct =
+                    Number.isFinite(row.licenseId) &&
+                    row.licenseId !== AGGREGATE_LICENSE_ID &&
+                    active === row.licenseId &&
+                    row.badRowIndex >= 0;
+                const sigRaw = adminLicenseMakeReportEntrySig(row);
+                const malaSel = reportesMalaSelectionBySig[sigRaw] || '';
+                const sigEnc = encodeURIComponent(sigRaw);
+                const selId = 'adminReportesMalaSel-' + rowIdx;
+                tr.innerHTML =
+                    '<td class="admin-licencias-reportes-col-cuenta"><code class="admin-licencias-reportes-cred">' +
+                    adminLicenseEscapeReportesHtml(row.cuenta || '—') +
+                    '</code></td>' +
+                    '<td class="admin-licencias-reportes-col-user">' +
+                    adminLicenseEscapeReportesHtml(row.user || '—') +
+                    '</td>' +
+                    '<td class="admin-licencias-reportes-col-status">' +
+                    adminLicenseEscapeReportesHtml(row.status || '—') +
+                    '</td>' +
+                    '<td class="admin-licencias-reportes-col-action">' +
+                    '<label class="sr-only" for="' +
+                    selId +
+                    '">Resolver reporte: buena o caida</label>' +
+                    '<select id="' +
+                    selId +
+                    '" class="admin-licencias-reportes-mala-select" data-report-sig="' +
+                    sigEnc +
+                    '" aria-label="Resolver reporte: buena o caida"' +
+                    (canAct ? '' : ' disabled') +
+                    ' title="' +
+                    adminLicenseEscapeReportesHtml(
+                        canAct
+                            ? 'buena: ok en el bloc; caida en Licencias → Caídas; caida en un día → repuesto de garantía.'
+                            : 'Activa en el grid la licencia de esta fila (no «Todos»).'
+                    ) +
+                    '">' +
+                    '<option value=""' +
+                    (malaSel === '' ? ' selected' : '') +
+                    '>--</option>' +
+                    '<option value="buena"' +
+                    (malaSel === 'buena' ? ' selected' : '') +
+                    '>buena</option>' +
+                    '<option value="caida"' +
+                    (malaSel === 'caida' ? ' selected' : '') +
+                    '>caida</option>' +
+                    '</select>' +
+                    '</td>';
+                tableBody.appendChild(tr);
+            });
+        }
+    }
+
+    tableBody.addEventListener('change', function (e) {
+        const sel = e.target.closest('.admin-licencias-reportes-mala-select');
+        if (!sel || sel.disabled) {
+            return;
+        }
+        const rawEnc = sel.getAttribute('data-report-sig');
+        if (!rawEnc) {
+            return;
+        }
+        let sig = '';
+        try {
+            sig = decodeURIComponent(rawEnc);
+        } catch (decErr) {
+            adminLicenseReportesUndoSelect(sel, '');
+            showError('No se pudo leer la fila del reporte.');
+            return;
+        }
+        const entry = adminLicenseFindReportEntryBySig(sig);
+        if (!entry) {
+            adminLicenseReportesUndoSelect(sel, sig);
+            showError('El reporte cambió; actualiza el panel Reportes.');
+            return;
+        }
+        const v = String(sel.value || '').trim();
+        if (v === '') {
+            delete reportesMalaSelectionBySig[sig];
+            return;
+        }
+        reportesMalaSelectionBySig[sig] = v;
+        if (v === 'buena') {
+            void adminLicenseReportesApplyBuenaResolved(entry, sel);
+            return;
+        }
+        if (v === 'caida') {
+            if (entry.origin === 'license') {
+                void adminLicenseReportesMoveLicenseRowToSuspended(entry, sel);
+            } else {
+                void adminLicenseReportesApplyWarrantyReplace(entry, sel);
+            }
+            return;
+        }
+        delete reportesMalaSelectionBySig[sig];
+    });
+
+    window.__adminReportesOnButtonClick = function () {
+        const isHidden = panel.classList.contains('d-none');
+        const reportesBtn = document.getElementById('adminLicenciasReportesBtn');
+        if (isHidden) {
+            closeAdminLicenciasHistorialPanelUi();
+            closeAdminLicenciasCambiosPanelUi();
+            syncAdminHistorialShellMode();
+            document.querySelectorAll('.license-card').forEach(function (c) {
+                c.classList.remove('active');
+            });
+            if (reportesBtn) reportesBtn.classList.add('active');
+            panel.classList.remove('d-none');
+            panel.setAttribute('aria-hidden', 'false');
+            syncReportesToggleButtonUi(true);
+            try {
+                localStorage.setItem(ADMIN_LICENCIAS_SIDEBAR_MODE_KEY, 'reportes');
+            } catch (e) {}
+            renderReportesPanel();
+        } else {
+            panel.classList.add('d-none');
+            panel.setAttribute('aria-hidden', 'true');
+            syncReportesToggleButtonUi(false);
+            if (reportesBtn) reportesBtn.classList.remove('active');
+            try {
+                localStorage.removeItem(ADMIN_LICENCIAS_SIDEBAR_MODE_KEY);
+            } catch (e) {}
+            restoreActiveProductLicenseCardFromStorage();
+        }
+    };
+
+    searchInp.addEventListener('input', function () {
+        clearTimeout(searchDebounce);
+        searchDebounce = setTimeout(function () {
+            if (!panel.classList.contains('d-none')) {
+                renderReportesPanel();
+            }
+        }, 200);
+    });
+
+    window.__adminReportesRenderIfVisible = function () {
+        if (!panel.classList.contains('d-none')) {
+            renderReportesPanel();
+        }
+    };
+}
+
+/** Clic en Reportes: el botón se recrea en cada render del grid; el listener debe ir en el botón, no solo en delegación del grid. */
+function wireAdminLicenciasReportesButton() {
+    const btn = document.getElementById('adminLicenciasReportesBtn');
+    if (!btn) return;
+    btn.addEventListener('click', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (typeof window.__adminReportesOnButtonClick === 'function') {
+            window.__adminReportesOnButtonClick();
+        }
+    });
+}
+
 function setupEventListeners() {
     // Búsqueda
     const searchInput = document.getElementById('adminStoreSearch');
@@ -116,6 +2845,12 @@ function setupEventListeners() {
     
     // Botón de contraer/expandir
     setupCollapseButton();
+    setupDuplicatesScanButton();
+    setupMoveToChangesToolbarButton();
+    setupAdminUserLabelSearchModal();
+    setupAdminLicenciasHistorial();
+    setupAdminLicenciasReportes();
+    setupAdminLicenciasCambiosToggle();
     
     // Cerrar menús al hacer clic fuera
     document.addEventListener('click', function(event) {
@@ -141,20 +2876,31 @@ function setupEventListeners() {
             menu.style.display = 'none';
         });
     });
+
+    // Si hay búsqueda activa, actualizar resaltados al editar notas / licencias / días
+    document.addEventListener('input', function (e) {
+        if (!e.target.closest('#licenseAccountsInputContainer')) return;
+        const si = document.getElementById('adminStoreSearch');
+        if (si && si.value.trim()) {
+            highlightMatchingEmails(si.value.toLowerCase().trim());
+        }
+    }, true);
 }
 
 // Cargar licencias desde el servidor
-async function loadLicenses() {
+// options.skipGridRender: solo actualiza `licenses` en memoria (p. ej. tras guardar varios días al cambiar de producto).
+async function loadLicenses(options) {
+    const ac = new AbortController();
+    const t = setTimeout(() => ac.abort(), LICENSES_FETCH_TIMEOUT_MS);
     try {
-        const response = await fetch('/tienda/api/licenses');
+        const endpoint = window.IS_ARCHIVED_MODE ? '/tienda/api/licenses/archived' : '/tienda/api/licenses';
+        const response = await fetch(endpoint, { signal: ac.signal });
         
-        // Verificar si hay redirección (no autenticado)
         if (response.redirected || response.status === 302) {
             showError('Debes estar autenticado como administrador para acceder a las licencias');
             return;
         }
         
-        // Verificar si hay error de autenticación
         if (response.status === 401 || response.status === 403) {
             showError('No tienes permisos para acceder a las licencias');
             return;
@@ -165,22 +2911,60 @@ async function loadLicenses() {
             return;
         }
         
-        const data = await response.json();
+        let data;
+        try {
+            data = await response.json();
+        } catch (parseErr) {
+            console.error('Respuesta no JSON en /api/licenses:', parseErr);
+            showError('El servidor devolvió una respuesta inválida al cargar licencias (no JSON). ¿Sesión caducada?');
+            return;
+        }
         
         if (data.success) {
             licenses = data.licenses || [];
-            renderLicensesGrid();
+            invalidateLicenseNotesCredentialLineCache();
+            injectAggregateLicenseEntry();
+
+            const skipGrid = options && options.skipGridRender;
+            if (!skipGrid) {
+                const grid = document.getElementById('licensesGrid');
+                if (grid && !grid.classList.contains('d-none')) {
+                    const inputContainer = document.getElementById('licenseAccountsInputContainer');
+                    const isEditing = inputContainer && inputContainer.contains(document.activeElement);
+                    if (!isEditing) {
+                        renderLicensesGrid();
+                    }
+                }
+                if (
+                    typeof window !== 'undefined' &&
+                    window.LICENSE_SUPPORT_RESTRICTED &&
+                    !window.__licenseSupportCambiosOpened
+                ) {
+                    window.__licenseSupportCambiosOpened = true;
+                    window.requestAnimationFrame(function licenseSupportAfterGrid() {
+                        try {
+                            if (typeof openAdminLicenciasCambiosPanelUi === 'function') {
+                                openAdminLicenciasCambiosPanelUi({ skipScroll: true });
+                            }
+                        } catch (_eLicSup) {}
+                    });
+                }
+            }
         } else {
             console.error('Error al cargar licencias:', data.error);
-            // No mostrar error si es la primera carga
-            if (licenses.length === 0) {
-            } else {
+            if (licenses.length !== 0) {
                 showError('Error al cargar las licencias: ' + (data.error || 'Error desconocido'));
             }
         }
     } catch (error) {
+        const msg =
+            error && error.name === 'AbortError'
+                ? 'La petición de licencias tardó demasiado (timeout). Revisa la red o el servidor.'
+                : 'Error de conexión al cargar licencias: ' + (error && error.message ? error.message : 'desconocido');
         console.error('Error de red:', error);
-        showError('Error de conexión al cargar licencias: ' + error.message);
+        showError(msg);
+    } finally {
+        clearTimeout(t);
     }
 }
 
@@ -188,64 +2972,217 @@ async function loadLicenses() {
 function renderLicensesGrid() {
     const grid = document.getElementById('licensesGrid');
     if (!grid) return;
+
+    // Antes de innerHTML se destruyen los textareas; persistir blocs para no perder datos ni guardar vacío tras re-pintar.
+    try {
+        if (window.AdminLicenciasNotepad && typeof window.AdminLicenciasNotepad.flushLicense === 'function') {
+            window.AdminLicenciasNotepad.flushLicense();
+        }
+    } catch (flushGridErr) {
+        console.error('Error al guardar notas antes de re-render del grid:', flushGridErr);
+    }
     
     if (licenses.length === 0) {
+        if (window.IS_ARCHIVED_MODE) {
+            grid.innerHTML = `
+                <div class="archived-empty-state text-center mt-5">
+                    <i class="fas fa-archive fa-3x mb-3 text-muted"></i>
+                    <h3 class="text-muted">No hay licencias archivadas</h3>
+                    <p class="text-muted">Las licencias archivadas aparecerán aquí</p>
+                </div>
+            `;
+        } else {
         grid.innerHTML = `
             <div class="licenses-loading-state">
                 <i class="fas fa-spinner fa-spin licenses-loading-spinner"></i>
                 <p>Inicializando licencias desde productos...</p>
             </div>
         `;
+        }
         return;
     }
     
-    // Separar licencias activas y archivadas
-    const activeLicenses = licenses.filter(license => license.enabled);
-    const archivedLicenses = licenses.filter(license => !license.enabled);
+    let sortedArchivedLicenses = [];
 
-    // Ordenar por posición
-    const sortedActiveLicenses = [...activeLicenses].sort((a, b) => a.position - b.position);
-    const sortedArchivedLicenses = [...archivedLicenses].sort((a, b) => a.position - b.position);
+    try {
+    // Separar licencias activas y archivadas
+    const activeLicenses = window.IS_ARCHIVED_MODE ? licenses : licenses.filter(license => license.enabled);
+    const archivedLicenses = window.IS_ARCHIVED_MODE ? [] : licenses.filter(license => !license.enabled);
+
+    // Ordenar por posición; "Todos" (vista global de días) al final
+    const sortedActiveLicenses = [...activeLicenses].sort((a, b) => {
+        if (a.isAggregate) return 1;
+        if (b.isAggregate) return -1;
+        return a.position - b.position;
+    });
+    sortedArchivedLicenses = [...archivedLicenses].sort((a, b) => a.position - b.position);
     
     let licensesHtml = '';
     
-    // Agregar el botón de contraer/expandir primero
-    licensesHtml += `
-        <button class="licenses-collapse-btn" id="licensesCollapseBtn" title="Contraer/Expandir">
-            <i class="fas fa-chevron-up" id="collapseIcon"></i>
-        </button>
-    `;
-    
-    // Licencias activas - distribución automática con grid
+    // Licencias activas - distribución automática con grid (flecha contraer/expandir: barra superior, admin_store.html)
     if (sortedActiveLicenses.length > 0) {
-        licensesHtml += sortedActiveLicenses.map(license => createLicenseCard(license)).join('');
+        licensesHtml += sortedActiveLicenses
+            .map(function (license) {
+                let h = createLicenseCard(license);
+                if (license.isAggregate) {
+                    h += createHistorialGridButtonHtml();
+                    h += createReportesGridButtonHtml();
+                    h += createCambiosGridButtonHtml();
+                }
+                return h;
+            })
+            .join('');
     }
     
     // Agregar el campo de entrada al final de todas las tarjetas
     licensesHtml += `
         <div class="license-accounts-input-container d-none" id="licenseAccountsInputContainer">
-            <div class="license-saved-accounts d-none" id="licenseSavedAccountsContainer">
-                <div class="saved-accounts-list" id="licenseSavedAccountsList"></div>
-            </div>
             <div class="license-notepads-wrap" id="licenseNotepadsWrap">
-                <section class="admin-licencias-bloc admin-licencias-bloc--personal" aria-label="Notas personales del producto">
+                <section class="admin-licencias-bloc admin-licencias-bloc--personal" id="adminLicenciasBlocPersonal" aria-label="Notas del producto">
                     <div class="admin-licencias-bloc-header">
-                        <span class="admin-licencias-bloc-title"><i class="fas fa-book" aria-hidden="true"></i> Notas personales</span>
+                        <span class="admin-licencias-bloc-title"><i class="fas fa-book" aria-hidden="true"></i> Notas</span>
+                        <div class="admin-licencias-bloc-header-actions">
+                            <div class="admin-bloc-undo-toolbar admin-bloc-undo-toolbar--in-header" role="toolbar" aria-label="Deshacer y rehacer">
+                                <button type="button" class="admin-bloc-undo-btn" id="adminUndoRedoPersonalUndo" title="Deshacer (Ctrl+Z)" aria-label="Deshacer"><i class="fas fa-undo" aria-hidden="true"></i></button>
+                                <button type="button" class="admin-bloc-undo-btn" id="adminUndoRedoPersonalRedo" title="Rehacer (Ctrl+Y)" aria-label="Rehacer"><i class="fas fa-redo" aria-hidden="true"></i></button>
+                            </div>
+                            <span id="adminLicenciasPersonalLineBadge" class="day-account-badge admin-licencias-notepad-line-badge" hidden></span>
+                        </div>
                     </div>
-                    <label for="adminLicenciasNotepadPersonal" class="sr-only">Notas personales de este producto (solo en este navegador)</label>
-                    <textarea id="adminLicenciasNotepadPersonal" class="admin-licencias-notepad-textarea" rows="6" spellcheck="true" autocomplete="off" placeholder="Apuntes solo para este producto… se guardan en este dispositivo (sin conexión)."></textarea>
+                    <div class="admin-licencias-personal-body">
+                    <label for="adminLicenciasNotepadPersonal" class="sr-only">Notas de este producto (solo en este navegador). Clic para editar.</label>
+                    <textarea id="adminLicenciasNotepadPersonal" name="admin_lic_personal_notes" class="admin-licencias-notepad-textarea" rows="4" spellcheck="true" autocomplete="off" readonly title="Clic para editar" placeholder="Apuntes solo para este producto… se guardan en este dispositivo (sin conexión)."></textarea>
+                    </div>
                 </section>
-                <section class="admin-licencias-bloc admin-licencias-bloc--license" aria-label="Licencias del producto">
+                <section class="admin-licencias-bloc admin-licencias-bloc--license" id="adminLicenciasBlocLicense" aria-label="Licencias del producto">
                     <div class="admin-licencias-bloc-header">
                         <span class="admin-licencias-bloc-title"><i class="fas fa-ticket-alt" aria-hidden="true"></i> <span id="adminLicenciasLicenciasHeading">Licencias</span></span>
+                        <div class="admin-licencias-bloc-header-actions">
+                            <div class="admin-licencias-show-limit-wrap">
+                                <select id="adminLicenciasLicenseShowSelect" class="admin-licencias-show-limit-select" title="Cuántas filas visibles a la vez (credenciales y campos)" aria-label="Filas visibles en el listado de licencias">
+                                    <option value="20">20</option>
+                                    <option value="50">50</option>
+                                    <option value="100">100</option>
+                                    <option value="300">300</option>
+                                    <option value="all" selected>Todos</option>
+                                </select>
+                                <button type="button" id="adminLicenciasToggleStatusColBtn" class="admin-licencias-toggle-notes-col-btn" title="Ocultar columnas Estado (verde y rojo)" aria-label="Ocultar columnas Estado verde y rojo de cada fila" aria-pressed="false">
+                                    <i class="fas fa-eye-slash" aria-hidden="true"></i>
+                                </button>
+                                <button type="button" id="adminLicenciasToggleNotesColBtn" class="admin-licencias-toggle-notes-col-btn" title="Ocultar columna Notas" aria-label="Ocultar columna Notas de cada fila" aria-pressed="false">
+                                    <i class="fas fa-eye-slash" aria-hidden="true"></i>
+                                </button>
+                            </div>
+                            <div class="admin-bloc-undo-toolbar admin-bloc-undo-toolbar--in-header" role="toolbar" aria-label="Deshacer y rehacer">
+                                <button type="button" class="admin-bloc-undo-btn" id="adminUndoRedoLicenseUndo" title="Deshacer (Ctrl+Z)" aria-label="Deshacer"><i class="fas fa-undo" aria-hidden="true"></i></button>
+                                <button type="button" class="admin-bloc-undo-btn" id="adminUndoRedoLicenseRedo" title="Rehacer (Ctrl+Y)" aria-label="Rehacer"><i class="fas fa-redo" aria-hidden="true"></i></button>
+                            </div>
+                            <span id="adminLicenciasLicenseReportBadge" class="admin-licencias-report-header-badge" hidden role="status" aria-live="polite" aria-label="Sin reportes pendientes en Licencias">Reportes <span class="admin-licencias-report-header-badge__num">0</span></span>
+                            <span id="adminLicenciasLicenseLineBadge" class="day-account-badge admin-licencias-notepad-line-badge" hidden></span>
+                        </div>
                     </div>
-                    <label for="adminLicenciasNotepadByLicense" class="sr-only">Licencias de este producto (solo en este navegador)</label>
-                    <textarea id="adminLicenciasNotepadByLicense" class="admin-licencias-notepad-textarea" rows="8" spellcheck="true" autocomplete="off" placeholder="Licencias, datos… vinculado al producto seleccionado arriba."></textarea>
+                    <label id="adminLicenciasNotepadByLicenseLabel" class="sr-only" for="adminLicenciasNotepadByLicense">Licencias: credenciales a la izquierda (bloc de notas); usuario, estados verde y rojo, y notas a la derecha. Clic para editar.</label>
+                    <div class="license-split-editor license-notepad--locked" id="adminLicenciasLicenseSplitRoot" data-license-viz="all">
+                        <div class="license-split-editor__viewport">
+                        <div class="license-split-editor__grid">
+                            <div class="license-split-editor__creds-cell">
+                            <textarea id="adminLicenciasNotepadByLicense" name="admin_lic_license_creds" class="admin-licencias-notepad-textarea license-split-editor__creds" rows="1" spellcheck="true" autocomplete="off" readonly title="Clic para editar" aria-labelledby="adminLicenciasNotepadByLicenseLabel" placeholder="Correo y contraseña (una licencia por línea, Enter = nueva línea)."></textarea>
+                            </div>
+                            <div class="license-split-editor__side" aria-label="Usuario, estados verde y rojo, y notas por línea">
+                                <div id="adminLicenciasStructuredRows" class="license-split-editor__rows" role="region" aria-label="Usuario, estados verde y rojo, y notas por cada línea de licencia"></div>
+                            </div>
+                        </div>
+                        </div>
+                    </div>
                 </section>
                 <div id="adminLicenciasNotepadToast" class="admin-licencias-notepad-toast" role="status" aria-live="polite"></div>
+                <div class="license-all-days-container d-none" id="licenseAllDaysContainer">
+                    <!-- Días 1–31: mismo patrón visual que Licencias (admin-licencias-bloc) -->
+                </div>
             </div>
-            <div class="license-all-days-container d-none" id="licenseAllDaysContainer">
-                <!-- Aquí se cargarán todos los días del 1 al 31 con sus correos vendidos -->
+            <div class="license-suspended-notepad-wrap">
+                <div class="day-section suspended-section" id="licenseSuspendedSection" aria-label="Caídas y cuentas suspendidas">
+                    <div class="day-section-header">
+                        <div class="day-header-content day-header-content--with-actions">
+                            <div class="day-header-label">
+                                <i class="fas fa-exclamation-triangle day-icon" aria-hidden="true"></i>
+                                <span class="day-number">Caídas / suspendidas</span>
+                            </div>
+                            <div class="day-header-actions">
+                                <button type="button" id="adminLicenciasToggleSuspendedRestoreColBtn" class="admin-licencias-toggle-notes-col-btn" title="Ocultar flecha subir a Licencias" aria-label="Ocultar botón subir a Licencias en caídas" aria-pressed="false">
+                                    <i class="fas fa-eye-slash" aria-hidden="true"></i>
+                                </button>
+                                <button type="button" id="adminLicenciasToggleSuspendedNotesColBtn" class="admin-licencias-toggle-notes-col-btn" title="Ocultar columna Notas" aria-label="Ocultar columna Notas en caídas" aria-pressed="false">
+                                    <i class="fas fa-eye-slash" aria-hidden="true"></i>
+                                </button>
+                                <div class="admin-bloc-undo-toolbar admin-bloc-undo-toolbar--in-header" role="toolbar" aria-label="Deshacer y rehacer">
+                                    <button type="button" class="admin-bloc-undo-btn" id="adminUndoRedoSuspendedUndo" title="Deshacer (Ctrl+Z)" aria-label="Deshacer"><i class="fas fa-undo" aria-hidden="true"></i></button>
+                                    <button type="button" class="admin-bloc-undo-btn" id="adminUndoRedoSuspendedRedo" title="Rehacer (Ctrl+Y)" aria-label="Rehacer"><i class="fas fa-redo" aria-hidden="true"></i></button>
+                                </div>
+                                <span id="adminLicenciasSuspendedLineBadge" class="day-account-badge admin-licencias-notepad-line-badge" hidden></span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="day-accounts-list suspended-section-body">
+                        <div class="license-notepads-wrap license-notepads-wrap--suspended-inner">
+                            <label id="adminLicenciasSuspendedNotepadLabel" class="sr-only" for="adminLicenciasSuspendedNotepad">Caídas: credenciales a la izquierda; estado rojo, subir a Licencias y notas a la derecha.</label>
+                            <div id="adminLicenciasSuspendedSplitRoot" class="license-split-editor license-split-editor--day suspended-license-split-root admin-licencias-license-editable license-notepad--locked" data-license-viz="all" tabindex="-1" role="region" aria-label="Caídas y suspendidas: credenciales a la izquierda; estado rojo, subir a Licencias y notas a la derecha. Clic para editar.">
+                                <div class="license-split-editor__viewport">
+                                    <div class="license-split-editor__grid">
+                                        <div class="license-split-editor__creds-cell">
+                                            <textarea id="adminLicenciasSuspendedNotepad" name="admin_lic_suspended_notes" class="admin-licencias-notepad-textarea license-split-editor__creds suspended-license-split__creds" rows="1" spellcheck="true" autocomplete="off" readonly title="Clic para editar" aria-labelledby="adminLicenciasSuspendedNotepadLabel" placeholder="Correo y contraseña (una por línea)."></textarea>
+                                        </div>
+                                        <div class="license-split-editor__side" aria-label="Estado rojo, subir a Licencias y notas (caídas)">
+                                            <div id="adminLicenciasSuspendedRows" class="license-split-editor__rows suspended-license-split-rows" role="region" aria-label="Filas de caídas: estado rojo y notas"></div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="license-expired-notepad-wrap">
+                <div class="day-section expired-section" id="licenseExpiredSection" aria-label="Cuentas vencidas o sin renovación mes a mes">
+                    <div class="day-section-header">
+                        <div class="day-header-content day-header-content--with-actions">
+                            <div class="day-header-label">
+                                <i class="fas fa-calendar-times day-icon" aria-hidden="true"></i>
+                                <span class="day-number">Vencidas</span>
+                            </div>
+                            <div class="day-header-actions">
+                                <button type="button" id="adminLicenciasToggleExpiredRestoreColBtn" class="admin-licencias-toggle-notes-col-btn" title="Ocultar flecha subir a Licencias" aria-label="Ocultar botón subir a Licencias en vencidas" aria-pressed="false">
+                                    <i class="fas fa-eye-slash" aria-hidden="true"></i>
+                                </button>
+                                <button type="button" id="adminLicenciasToggleExpiredNotesColBtn" class="admin-licencias-toggle-notes-col-btn" title="Ocultar columna Notas" aria-label="Ocultar columna Notas en vencidas" aria-pressed="false">
+                                    <i class="fas fa-eye-slash" aria-hidden="true"></i>
+                                </button>
+                                <div class="admin-bloc-undo-toolbar admin-bloc-undo-toolbar--in-header" role="toolbar" aria-label="Deshacer y rehacer (vencidas)">
+                                    <button type="button" class="admin-bloc-undo-btn" id="adminUndoRedoExpiredUndo" title="Deshacer (Ctrl+Z)" aria-label="Deshacer"><i class="fas fa-undo" aria-hidden="true"></i></button>
+                                    <button type="button" class="admin-bloc-undo-btn" id="adminUndoRedoExpiredRedo" title="Rehacer (Ctrl+Y)" aria-label="Rehacer"><i class="fas fa-redo" aria-hidden="true"></i></button>
+                                </div>
+                                <span id="adminLicenciasExpiredLineBadge" class="day-account-badge admin-licencias-notepad-line-badge" hidden></span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="day-accounts-list expired-section-body">
+                        <div class="license-notepads-wrap license-notepads-wrap--expired-inner">
+                            <label id="adminLicenciasExpiredNotepadLabel" class="sr-only" for="adminLicenciasExpiredNotepad">Vencidas: credenciales a la izquierda; estado rojo, subir a Licencias y notas a la derecha.</label>
+                            <div id="adminLicenciasExpiredSplitRoot" class="license-split-editor license-split-editor--day expired-license-split-root admin-licencias-license-editable license-notepad--locked" data-license-viz="all" tabindex="-1" role="region" aria-label="Vencidas: credenciales a la izquierda; estado rojo, subir a Licencias y notas a la derecha. Clic para editar.">
+                                <div class="license-split-editor__viewport">
+                                    <div class="license-split-editor__grid">
+                                        <div class="license-split-editor__creds-cell">
+                                            <textarea id="adminLicenciasExpiredNotepad" name="admin_lic_expired_notes" class="admin-licencias-notepad-textarea license-split-editor__creds expired-license-split__creds" rows="1" spellcheck="true" autocomplete="off" readonly title="Clic para editar" aria-labelledby="adminLicenciasExpiredNotepadLabel" placeholder="Correo y contraseña (una por línea)."></textarea>
+                                        </div>
+                                        <div class="license-split-editor__side" aria-label="Estado rojo, subir a Licencias y notas (vencidas)">
+                                            <div id="adminLicenciasExpiredRows" class="license-split-editor__rows expired-license-split-rows" role="region" aria-label="Filas de vencidas: estado rojo y notas"></div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
     `;
@@ -257,85 +3194,253 @@ function renderLicensesGrid() {
     
     // Agregar event listeners a las tarjetas
     addLicenseCardListeners();
+    wireAdminLicenciasReportesButton();
     
+    try {
     if (typeof window.initAdminLicenciasNotepad === 'function') {
         window.initAdminLicenciasNotepad();
     }
-    
-    // Restaurar tarjeta seleccionada si existe
-    restoreSelectedLicense();
-    
-    // Actualizar contador de archivados
-    updateArchivedCount(sortedArchivedLicenses.length);
-}
+    } catch (notepadErr) {
+        console.error('Error al inicializar bloc de notas (admin):', notepadErr);
+    }
 
-// Crear tarjeta de licencia archivada
-function createArchivedLicenseCard(license) {
-    return `
-        <div class="archived-license-card" data-license-id="${license.id}">
-            <button class="archived-license-action-btn" data-action="show-archived-license-menu" data-license-id="${license.id}" title="Opciones">
-                <i class="fas fa-ellipsis-v"></i>
-            </button>
-            <div class="archived-license-card-header">
-                <h3 class="archived-license-name">${license.product_name}</h3>
-            </div>
-            <div class="archived-license-accounts">
-                <span class="archived-label">Archivado</span>
-            </div>
-        </div>
-    `;
+    try {
+        if (typeof window.adminLicenseShowLimitSyncUi === 'function') {
+            window.adminLicenseShowLimitSyncUi();
+        }
+    } catch (showLimErr) {
+        console.error('adminLicenseShowLimitSyncUi:', showLimErr);
+    }
+
+    try {
+        if (typeof window.adminLicenseHideNotesColSyncUi === 'function') {
+            window.adminLicenseHideNotesColSyncUi();
+        }
+    } catch (hideNotesErr) {
+        console.error('adminLicenseHideNotesColSyncUi:', hideNotesErr);
+    }
+
+    try {
+        if (typeof window.adminSuspendedHideNotesColSyncUi === 'function') {
+            window.adminSuspendedHideNotesColSyncUi();
+        }
+    } catch (suspHideNotesErr) {
+        console.error('adminSuspendedHideNotesColSyncUi:', suspHideNotesErr);
+    }
+
+    try {
+        if (typeof window.adminSuspendedHideRestoreColSyncUi === 'function') {
+            window.adminSuspendedHideRestoreColSyncUi();
+        }
+    } catch (suspHideRestoreErr) {
+        console.error('adminSuspendedHideRestoreColSyncUi:', suspHideRestoreErr);
+    }
+
+    try {
+        if (typeof window.adminExpiredHideNotesColSyncUi === 'function') {
+            window.adminExpiredHideNotesColSyncUi();
+        }
+    } catch (expHideNotesErr) {
+        console.error('adminExpiredHideNotesColSyncUi:', expHideNotesErr);
+    }
+
+    try {
+        if (typeof window.adminExpiredHideRestoreColSyncUi === 'function') {
+            window.adminExpiredHideRestoreColSyncUi();
+        }
+    } catch (expHideRestoreErr) {
+        console.error('adminExpiredHideRestoreColSyncUi:', expHideRestoreErr);
+    }
+
+    try {
+        if (typeof window.adminLicenseHideStatusColSyncUi === 'function') {
+            window.adminLicenseHideStatusColSyncUi();
+        }
+    } catch (hideStatusErr) {
+        console.error('adminLicenseHideStatusColSyncUi:', hideStatusErr);
+    }
+
+    try {
+    setupSuspendedSectionCollapse();
+    } catch (suspErr) {
+        console.error('setupSuspendedSectionCollapse:', suspErr);
+    }
+
+    try {
+        setupExpiredSectionCollapse();
+    } catch (expCollErr) {
+        console.error('setupExpiredSectionCollapse:', expCollErr);
+    }
+
+    try {
+        wireLicenseChangesProductsCollapseOnce();
+    } catch (chCollErr) {
+        console.error('wireLicenseChangesProductsCollapseOnce:', chCollErr);
+    }
+
+    try {
+        wireLicenseChangesModeToolbarOnce();
+    } catch (chModeErr) {
+        console.error('wireLicenseChangesModeToolbarOnce:', chModeErr);
+    }
+
+    try {
+        setupPersonalBlocCollapse();
+    } catch (personalCollErr) {
+        console.error('setupPersonalBlocCollapse:', personalCollErr);
+    }
+
+    try {
+        restoreAdminLicenciasUiAfterGridRender();
+    } catch (restoreErr) {
+        console.error('restoreAdminLicenciasUiAfterGridRender:', restoreErr);
+    }
+
+    const historialBtn = document.getElementById('adminLicenciasHistorialToggleBtn');
+    const historialPanel = document.getElementById('adminLicenciasHistorialPanel');
+    if (historialBtn && historialPanel) {
+        if (!historialPanel.classList.contains('d-none')) {
+            historialBtn.setAttribute('aria-expanded', 'true');
+            historialBtn.classList.add('admin-licencias-historial-toggle--open');
+        } else {
+            historialBtn.setAttribute('aria-expanded', 'false');
+            historialBtn.classList.remove('admin-licencias-historial-toggle--open');
+        }
+    }
+    const reportesBtnAfterRender = document.getElementById('adminLicenciasReportesBtn');
+    const reportesPanelAfterRender = document.getElementById('adminLicenciasReportesPanel');
+    if (reportesBtnAfterRender && reportesPanelAfterRender) {
+        if (!reportesPanelAfterRender.classList.contains('d-none')) {
+            reportesBtnAfterRender.setAttribute('aria-expanded', 'true');
+            reportesBtnAfterRender.classList.add('admin-licencias-reportes-toggle--open');
+        } else {
+            reportesBtnAfterRender.setAttribute('aria-expanded', 'false');
+            reportesBtnAfterRender.classList.remove('admin-licencias-reportes-toggle--open');
+        }
+    }
+    const cambiosBtnAfterRender = document.getElementById('adminLicenciasCambiosToggleBtn');
+    const cambiosPanelAfterRender = document.getElementById('adminLicenciasCambiosPanel');
+    if (cambiosBtnAfterRender && cambiosPanelAfterRender) {
+        if (!cambiosPanelAfterRender.classList.contains('d-none')) {
+            cambiosBtnAfterRender.setAttribute('aria-expanded', 'true');
+            cambiosBtnAfterRender.classList.add('admin-licencias-cambios-toggle--open');
+            cambiosBtnAfterRender.classList.add('active');
+        } else {
+            cambiosBtnAfterRender.setAttribute('aria-expanded', 'false');
+            cambiosBtnAfterRender.classList.remove('admin-licencias-cambios-toggle--open');
+            cambiosBtnAfterRender.classList.remove('active');
+        }
+    }
+    syncAdminHistorialShellMode();
+    scheduleRefreshAdminLicenciasReportCounts();
+
+    updateArchivedCount(sortedArchivedLicenses.length);
+    } catch (renderErr) {
+        console.error('Error al renderizar grid de licencias:', renderErr);
+        grid.innerHTML =
+            '<div class="licenses-loading-state licenses-error-state" role="alert">' +
+            '<p><strong>No se pudo mostrar las licencias.</strong> Revisa la consola (F12) o recarga la página.</p>' +
+            '<p class="text-muted small">' +
+            String(renderErr && renderErr.message ? renderErr.message : renderErr) +
+            '</p>' +
+            '<button type="button" class="btn-blue mt-2" id="licenciasGridRetryBtn">Recargar página</button>' +
+            '</div>';
+        const retry = document.getElementById('licenciasGridRetryBtn');
+        if (retry) {
+            retry.addEventListener('click', function () {
+                window.location.reload();
+            });
+        }
+    }
 }
 
 // Crear tarjeta de licencia
 function createLicenseCard(license) {
-    const accountsHtml = license.accounts.map(account => createAccountItem(account)).join('');
-    
-    const firstLetter = license.product_name.charAt(0).toUpperCase();
+    if (!license || license.id == null) {
+        return '';
+    }
+    const productNameSafe = license.product_name != null ? String(license.product_name) : '';
+
+    if (license.isAggregate) {
+        return `
+        <div class="license-card license-card--aggregate" data-license-id="${license.id}">
+            <div class="license-card-header">
+                <h3 class="license-name">
+                    <span class="full-text">${productNameSafe}</span>
+                    <span class="first-letter">T</span>
+                </h3>
+            </div>
+        </div>`;
+    }
+
+    const firstLetter = productNameSafe ? productNameSafe.charAt(0).toUpperCase() : '?';
     
     return `
         <div class="license-card" data-license-id="${license.id}">
             <div class="license-card-header">
                 <h3 class="license-name">
-                    <span class="full-text">${license.product_name}</span>
+                    <span class="full-text">${productNameSafe}</span>
                     <span class="first-letter">${firstLetter}</span>
                 </h3>
-                <div class="license-accounts">
-                    ${accountsHtml || ''}
-                </div>
             </div>
         </div>
     `;
 }
 
-// Crear item de cuenta
-function createAccountItem(account) {
-    const statusClass = account.status;
-    const statusText = {
-        'available': 'Disponible',
-        'assigned': 'Asignada',
-        'sold': 'Vendida'
-    }[account.status] || account.status;
-    
+/** Botón Historial junto a «Todos»; mismo aspecto rojizo (.license-card--aggregate). */
+function createHistorialGridButtonHtml() {
     return `
-        <div class="account-item" data-account-id="${account.id}">
-            <span class="account-status ${statusClass}">${statusText}</span>
-            <div class="account-identifier">${account.account_identifier}</div>
-            <div class="account-email">${account.email.toLowerCase()}</div>
-            <div class="account-password">${account.password}</div>
-            
-            <div class="account-actions">
-                <button class="account-action-btn" data-action="edit-account" data-account-id="${account.id}" title="Editar cuenta">
-                    <i class="fas fa-edit"></i>
-                </button>
-                <button class="account-action-btn" data-action="assign-account" data-account-id="${account.id}" title="Asignar cuenta">
-                    <i class="fas fa-user-plus"></i>
-                </button>
-                <button class="account-action-btn danger" data-action="remove-account" data-account-id="${account.id}" title="Eliminar cuenta">
-                    <i class="fas fa-trash"></i>
-                </button>
+        <button type="button"
+            class="license-card license-card--aggregate license-card--panel-toggle admin-licencias-historial-toggle"
+            id="adminLicenciasHistorialToggleBtn"
+            title="Historial de cambios en licencias (en desarrollo)"
+            aria-expanded="false"
+            aria-controls="adminLicenciasHistorialPanel">
+            <div class="license-card-header">
+                <h3 class="license-name">
+                    <span class="full-text">Historial</span>
+                    <span class="first-letter">H</span>
+                </h3>
             </div>
-        </div>
-    `;
+        </button>`;
+}
+
+/** Botón Reportes: igual que Historial (siempre visible junto a «Todos»); lista puede estar vacía. */
+function createReportesGridButtonHtml() {
+    return `
+        <button type="button"
+            class="license-card license-card--aggregate license-card--panel-toggle admin-licencias-reportes-toggle"
+            id="adminLicenciasReportesBtn"
+            title="Reportes: ver cuentas con estado rojo"
+            aria-expanded="false"
+            aria-controls="adminLicenciasReportesPanel"
+            aria-label="Reportes: ver cuentas con estado rojo">
+            <div class="license-card-header">
+                <h3 class="license-name">
+                    <span class="full-text">Reportes<span id="adminLicenciasReportesTotalBadge" class="license-card-report-total-badge" hidden role="status" aria-live="polite" aria-label="Sin reportes pendientes"><span class="license-card-report-total-badge__num">0</span></span></span>
+                    <span class="first-letter">R</span>
+                </h3>
+            </div>
+        </button>`;
+}
+
+/** Botón Cambios junto a Historial y Reportes: vista a pantalla como esos paneles. */
+function createCambiosGridButtonHtml() {
+    return `
+        <button type="button"
+            class="license-card license-card--aggregate license-card--panel-toggle admin-licencias-cambios-toggle"
+            id="adminLicenciasCambiosToggleBtn"
+            title="Cambios mes a mes por producto (vista completa)"
+            aria-expanded="false"
+            aria-controls="adminLicenciasCambiosPanel"
+            aria-label="Abrir vista de Cambios mes a mes por producto">
+            <div class="license-card-header">
+                <h3 class="license-name">
+                    <span class="full-text">Cambios</span>
+                    <span class="first-letter">C</span>
+                </h3>
+            </div>
+        </button>`;
 }
 
 // Agregar event listeners a las tarjetas
@@ -344,6 +3449,9 @@ function addLicenseCardListeners() {
     const cards = document.querySelectorAll('.license-card');
     
     cards.forEach(card => {
+        if (card.classList.contains('license-card--panel-toggle')) {
+            return;
+        }
         // Evitar que el clic en el botón de acción active la selección
         const actionBtn = card.querySelector('.license-action-btn');
         if (actionBtn) {
@@ -361,7 +3469,9 @@ function addLicenseCardListeners() {
                 const licenseId = parseInt(card.dataset.licenseId);
                 const isActive = card.classList.contains('active');
                 if (!isActive) {
-                    activateLicenseCard(card, licenseId, true);
+                    void activateLicenseCard(card, licenseId, true).catch(function (err) {
+                        console.error('Error al activar licencia:', err);
+                    });
                 }
             });
         }
@@ -385,15 +3495,29 @@ function addLicenseCardListeners() {
             
             // Si la tarjeta no estaba activa, activarla y mostrar las cuentas
             if (!isActive && license) {
-                activateLicenseCard(card, licenseId, true);
+                void activateLicenseCard(card, licenseId, true).catch(function (err) {
+                    console.error('Error al activar licencia:', err);
+                });
             } else {
-                if (window.AdminLicenciasNotepad && typeof window.AdminLicenciasNotepad.flushLicense === 'function') {
-                    window.AdminLicenciasNotepad.flushLicense();
-                }
-                localStorage.removeItem('selectedLicenseId');
-                if (inputContainer) {
-                    inputContainer.classList.add('d-none');
-                }
+                const prevRaw = inputContainer && inputContainer.dataset.activeLicenseId;
+                const prevId = prevRaw != null && prevRaw !== '' ? parseInt(prevRaw, 10) : NaN;
+                void (async function () {
+                    try {
+                        if (!Number.isNaN(prevId)) {
+                            await flushDayNotepadsBeforeLicenseSwitch(prevId);
+                        }
+                    } catch (err) {
+                        console.error('Error al guardar blocs del día:', err);
+                    }
+                    if (window.AdminLicenciasNotepad && typeof window.AdminLicenciasNotepad.flushLicense === 'function') {
+                        window.AdminLicenciasNotepad.flushLicense();
+                    }
+                    adminDupHighlightDeactivate();
+                    localStorage.removeItem('selectedLicenseId');
+                    if (inputContainer) {
+                        inputContainer.classList.add('d-none');
+                    }
+                })();
             }
         });
     });
@@ -401,12 +3525,88 @@ function addLicenseCardListeners() {
     // La selección se maneja en restoreSelectedLicense()
 }
 
+/**
+ * Vista «Todos»: solo Días 1–31 (licencias combinadas de productos visibles en el grid).
+ * Sin notas personales, sin bloc Licencias y sin Caídas / suspendidas.
+ */
+function refreshExpiredNotepadWrapVisibilityForLicense(licenseId) {
+    const wrap = document.querySelector('#licenseAccountsInputContainer .license-expired-notepad-wrap');
+    if (!wrap) return;
+    if (licenseId === AGGREGATE_LICENSE_ID) {
+        wrap.classList.add('d-none');
+        return;
+    }
+    const lic = licenses.find((l) => l.id === licenseId);
+    const hideForMonthToMonth = lic && licenseMonthToMonthUiChecked(lic);
+    wrap.classList.toggle('d-none', !!hideForMonthToMonth);
+}
+
+function refreshChangesNotepadWrapVisibilityForLicense(_licenseId) {
+    if (_adminLicSkipNextChangesProductsRefreshOnce) {
+        _adminLicSkipNextChangesProductsRefreshOnce = false;
+        return;
+    }
+    if (typeof refreshChangesProductsListing === 'function') {
+        refreshChangesProductsListing();
+    }
+}
+
+function updateNotepadsVisibilityForLicense(licenseId) {
+    const hideForAggregate = licenseId === AGGREGATE_LICENSE_ID;
+    const personal = document.getElementById('adminLicenciasBlocPersonal');
+    const licenseBloc = document.getElementById('adminLicenciasBlocLicense');
+    const toast = document.getElementById('adminLicenciasNotepadToast');
+    const suspendedWrap = document.querySelector(
+        '#licenseAccountsInputContainer .license-suspended-notepad-wrap'
+    );
+    if (personal) personal.classList.toggle('d-none', hideForAggregate);
+    if (licenseBloc) licenseBloc.classList.toggle('d-none', hideForAggregate);
+    if (toast) toast.classList.toggle('d-none', hideForAggregate);
+    if (suspendedWrap) suspendedWrap.classList.toggle('d-none', hideForAggregate);
+    refreshExpiredNotepadWrapVisibilityForLicense(licenseId);
+    refreshChangesNotepadWrapVisibilityForLicense(licenseId);
+}
+
 // Activar una tarjeta de licencia
-function activateLicenseCard(card, licenseId, skipScroll = false) {
+// options.preserveSidebar: al restaurar UI tras re-render, mantener Historial/Reportes/Cambios abiertos y no borrar su modo en localStorage.
+async function activateLicenseCard(card, licenseId, skipScroll = false, options) {
+    const preserveSidebar = options && options.preserveSidebar === true;
     const inputContainer = document.getElementById('licenseAccountsInputContainer');
-    
-    // Remover clase active de todas las tarjetas
-    document.querySelectorAll('.license-card').forEach(c => c.classList.remove('active'));
+    let prevId = NaN;
+    if (inputContainer && inputContainer.dataset.activeLicenseId != null && inputContainer.dataset.activeLicenseId !== '') {
+        prevId = parseInt(inputContainer.dataset.activeLicenseId, 10);
+    }
+    if (!Number.isNaN(prevId) && prevId !== licenseId) {
+        adminDupHighlightDeactivate();
+    }
+    /* Captura inmediata + guardado en segundo plano: antes se hacía await de hasta 31× sync + loadLicencias y el cambio de tarjeta se sentía lento. */
+    if (inputContainer && !Number.isNaN(prevId) && prevId !== licenseId) {
+        if (typeof window.adminLicenciasFlushPendingChangesNotesSaves === 'function') {
+            window.adminLicenciasFlushPendingChangesNotesSaves();
+        }
+        const dayTextsSnapshot = captureDayTextsForLicense(prevId);
+        void flushDayNotepadsForLicenseWithTexts(prevId, dayTextsSnapshot).catch(function (e) {
+            console.error('Error al guardar blocs del día antes de cambiar de licencia:', e);
+        });
+    }
+
+    if (!preserveSidebar) {
+        closeAdminLicenciasReportesPanelUi();
+        closeAdminLicenciasHistorialPanelUi();
+        closeAdminLicenciasCambiosPanelUi();
+        syncAdminHistorialShellMode();
+        try {
+            localStorage.removeItem(ADMIN_LICENCIAS_SIDEBAR_MODE_KEY);
+        } catch (e) {}
+    }
+
+    /* No quitar .active de Historial/Reportes/Cambios si el lateral debe seguir abierto (recarga con panel visible). */
+    document.querySelectorAll('.license-card').forEach(function (c) {
+        if (preserveSidebar && c.classList.contains('license-card--panel-toggle')) {
+            return;
+        }
+        c.classList.remove('active');
+    });
     
     // Activar la tarjeta seleccionada
     card.classList.add('active');
@@ -416,11 +3616,13 @@ function activateLicenseCard(card, licenseId, skipScroll = false) {
     
     if (inputContainer) {
         inputContainer.classList.remove('d-none');
+        inputContainer.dataset.activeLicenseId = String(licenseId);
         
         // Cargar y mostrar las cuentas guardadas (editables)
         loadAndDisplaySavedAccounts(licenseId);
         
         // Cargar y mostrar todos los días con sus correos vendidos
+        _pendingLoadAllDaysLicenseId = null;
         loadAllDaysSoldAccounts(licenseId);
         
         if (window.AdminLicenciasNotepad && typeof window.AdminLicenciasNotepad.bindLicense === 'function') {
@@ -428,6 +3630,14 @@ function activateLicenseCard(card, licenseId, skipScroll = false) {
             const pname = lic && lic.product_name ? lic.product_name : '';
             window.AdminLicenciasNotepad.bindLicense(licenseId, pname, lic || null);
         }
+
+        if (licenseId !== AGGREGATE_LICENSE_ID && typeof restorePersonalBlocState === 'function') {
+            restorePersonalBlocState(licenseId);
+        }
+
+        updateNotepadsVisibilityForLicense(licenseId);
+
+        refreshDuplicateEmailHighlights(licenseId);
         
         // Aplicar resaltado de búsqueda si hay un término activo
         const searchInput = document.getElementById('adminStoreSearch');
@@ -445,36 +3655,152 @@ function activateLicenseCard(card, licenseId, skipScroll = false) {
     }
 }
 
+/** Tras pintar el grid: Historial / Reportes / Cambios tienen prioridad si el usuario los dejó abiertos; si no, licencia o «Todos». */
+function restoreAdminLicenciasUiAfterGridRender() {
+    let mode = null;
+    try {
+        mode = localStorage.getItem(ADMIN_LICENCIAS_SIDEBAR_MODE_KEY);
+    } catch (e) {
+        mode = null;
+    }
+    if (mode === 'historial') {
+        const histPanel = document.getElementById('adminLicenciasHistorialPanel');
+        const histBtn = document.getElementById('adminLicenciasHistorialToggleBtn');
+        if (histPanel && histBtn) {
+            closeAdminLicenciasReportesPanelUi();
+            closeAdminLicenciasCambiosPanelUi();
+            document.querySelectorAll('.license-card').forEach(function (c) {
+                if (c.classList.contains('license-card--panel-toggle')) {
+                    return;
+                }
+                c.classList.remove('active');
+            });
+            histBtn.classList.add('active');
+            histPanel.classList.remove('d-none');
+            histPanel.setAttribute('aria-hidden', 'false');
+            histBtn.setAttribute('aria-expanded', 'true');
+            histBtn.classList.add('admin-licencias-historial-toggle--open');
+            syncAdminHistorialShellMode();
+            if (typeof window.__adminHistorialRenderIfVisible === 'function') {
+                window.__adminHistorialRenderIfVisible();
+            }
+            restoreSelectedLicense({ preserveSidebar: true });
+            return;
+        }
+        try {
+            localStorage.removeItem(ADMIN_LICENCIAS_SIDEBAR_MODE_KEY);
+        } catch (e2) {}
+    } else if (mode === 'reportes') {
+        const repPanel = document.getElementById('adminLicenciasReportesPanel');
+        const repBtn = document.getElementById('adminLicenciasReportesBtn');
+        if (repPanel && repBtn) {
+            closeAdminLicenciasHistorialPanelUi();
+            closeAdminLicenciasCambiosPanelUi();
+            document.querySelectorAll('.license-card').forEach(function (c) {
+                if (c.classList.contains('license-card--panel-toggle')) {
+                    return;
+                }
+                c.classList.remove('active');
+            });
+            repBtn.classList.add('active');
+            repPanel.classList.remove('d-none');
+            repPanel.setAttribute('aria-hidden', 'false');
+            repBtn.setAttribute('aria-expanded', 'true');
+            repBtn.classList.add('admin-licencias-reportes-toggle--open');
+            syncAdminHistorialShellMode();
+            if (typeof window.__adminReportesRenderIfVisible === 'function') {
+                window.__adminReportesRenderIfVisible();
+            }
+            /* Sin una licencia cargada no hay filas en el DOM: contadores y tabla en 0 hasta abrir un producto. */
+            restoreSelectedLicense({ preserveSidebar: true });
+            return;
+        }
+        try {
+            localStorage.removeItem(ADMIN_LICENCIAS_SIDEBAR_MODE_KEY);
+        } catch (e3) {}
+    } else if (mode === 'cambios') {
+        const camPanel = document.getElementById('adminLicenciasCambiosPanel');
+        const camBtn = document.getElementById('adminLicenciasCambiosToggleBtn');
+        if (camPanel) {
+            closeAdminLicenciasHistorialPanelUi();
+            closeAdminLicenciasReportesPanelUi();
+            document.querySelectorAll('.license-card').forEach(function (c) {
+                if (c.classList.contains('license-card--panel-toggle')) {
+                    return;
+                }
+                c.classList.remove('active');
+            });
+            if (camBtn) {
+                camBtn.classList.add('active');
+                camBtn.setAttribute('aria-expanded', 'true');
+                camBtn.classList.add('admin-licencias-cambios-toggle--open');
+            }
+            camPanel.classList.remove('d-none');
+            camPanel.setAttribute('aria-hidden', 'false');
+            syncAdminHistorialShellMode();
+            if (typeof refreshChangesProductsListing === 'function') {
+                refreshChangesProductsListing();
+            }
+            restoreSelectedLicense({ preserveSidebar: true });
+            return;
+        }
+        try {
+            localStorage.removeItem(ADMIN_LICENCIAS_SIDEBAR_MODE_KEY);
+        } catch (e4) {}
+    }
+    restoreSelectedLicense();
+}
+
 // Restaurar la tarjeta seleccionada desde localStorage
-function restoreSelectedLicense() {
+// options.preserveSidebar: ver activateLicenseCard.
+function restoreSelectedLicense(options) {
+    const opts = options || {};
     const savedLicenseId = localStorage.getItem('selectedLicenseId');
     const cards = document.querySelectorAll('.license-card');
     const inputContainer = document.getElementById('licenseAccountsInputContainer');
+
+    function isPanelToggleCard(el) {
+        return el && el.classList && el.classList.contains('license-card--panel-toggle');
+    }
     
     if (savedLicenseId && cards.length > 0) {
-        const savedId = parseInt(savedLicenseId);
-        const savedCard = Array.from(cards).find(card => parseInt(card.dataset.licenseId) === savedId);
+        const savedId = parseInt(savedLicenseId, 10);
+        const savedCard = Array.from(cards).find(function (card) {
+            if (isPanelToggleCard(card)) return false;
+            return parseInt(card.dataset.licenseId, 10) === savedId;
+        });
         
         if (savedCard) {
-            // Remover clase active de todas las tarjetas
-            cards.forEach(c => c.classList.remove('active'));
-            
-            // Activar la tarjeta guardada sin hacer scroll (skipScroll = true)
-            activateLicenseCard(savedCard, savedId, true);
+            cards.forEach(function (c) {
+                if (opts.preserveSidebar && isPanelToggleCard(c)) return;
+                c.classList.remove('active');
+            });
+
+            void activateLicenseCard(savedCard, savedId, true, opts).catch(function (err) {
+                console.error('Error al restaurar licencia:', err);
+            });
             return;
         }
     }
     
-    // Si no hay tarjeta guardada o no se encontró, seleccionar la primera
     const activeCard = document.querySelector('.license-card.active');
     if (!activeCard && cards.length > 0) {
-        const firstCard = cards[0];
-        const firstLicenseId = parseInt(firstCard.dataset.licenseId);
+        const productCards = Array.prototype.filter.call(cards, function (c) {
+            return !isPanelToggleCard(c);
+        });
+        const firstCard = productCards[0];
+        if (!firstCard) return;
+        const firstLicenseId = parseInt(firstCard.dataset.licenseId, 10);
         const firstLicense = licenses.find(l => l.id === firstLicenseId);
         
         if (firstLicense) {
-            // Activar la primera tarjeta sin hacer scroll (skipScroll = true)
-            activateLicenseCard(firstCard, firstLicenseId, true);
+            productCards.forEach(function (c) {
+                if (opts.preserveSidebar && isPanelToggleCard(c)) return;
+                c.classList.remove('active');
+            });
+            void activateLicenseCard(firstCard, firstLicenseId, true, opts).catch(function (err) {
+                console.error('Error al seleccionar primera licencia:', err);
+            });
         }
     }
 }
@@ -496,8 +3822,6 @@ function setupLicenseInputField() {
     let saveTimeout;
     
     inputField.addEventListener('input', function() {
-        highlightEmailsAndPasswords(this);
-        
         // Guardar automáticamente después de 2 segundos sin escribir
         clearTimeout(saveTimeout);
         const licenseId = parseInt(this.dataset.licenseId);
@@ -552,65 +3876,583 @@ function setupLicenseInputField() {
     }
 }
 
-// Resaltar correos en azul y contraseñas en blanco
+/** Evita saltos de scroll al reemplazar innerHTML en contenteditable (mismo problema no afecta a textarea).
+ *  Guarda también el scroll del propio host si es scrollable (bloc Día / notepad), para no resetear la vista al soltar foco.
+ *  Tras restaurar, ensureCaretVisibleInScrollableEditor corrige si el caret quedó fuera del área visible. */
+function getScrollSnapshot(anchorEl) {
+    const snap = { x: window.scrollX, y: window.scrollY, ancestors: [], editor: null };
+    if (anchorEl && anchorEl.nodeType === 1) {
+        const el = anchorEl;
+        if (el.scrollHeight > el.clientHeight + 1 || el.scrollWidth > el.clientWidth + 1) {
+            snap.editor = { el: el, top: el.scrollTop, left: el.scrollLeft };
+        }
+    }
+    let node = anchorEl && anchorEl.parentElement;
+    while (node && node !== document.documentElement) {
+        if (node.scrollHeight > node.clientHeight + 1 || node.scrollWidth > node.clientWidth + 1) {
+            snap.ancestors.push({ el: node, top: node.scrollTop, left: node.scrollLeft });
+        }
+        node = node.parentElement;
+    }
+    return snap;
+}
+
+function restoreScrollSnapshot(snap) {
+    if (!snap) return;
+    window.scrollTo(snap.x, snap.y);
+    snap.ancestors.forEach(function (a) {
+        if (a.el && a.el.isConnected) {
+            a.el.scrollTop = a.top;
+            a.el.scrollLeft = a.left;
+        }
+    });
+    if (snap.editor && snap.editor.el && snap.editor.el.isConnected) {
+        const el = snap.editor.el;
+        el.scrollTop = snap.editor.top;
+        el.scrollLeft = snap.editor.left;
+        const maxTop = Math.max(0, el.scrollHeight - el.clientHeight);
+        const maxLeft = Math.max(0, el.scrollWidth - el.clientWidth);
+        el.scrollTop = Math.min(Math.max(0, el.scrollTop), maxTop);
+        el.scrollLeft = Math.min(Math.max(0, el.scrollLeft), maxLeft);
+    }
+}
+
+function ensureCaretVisibleInScrollableEditor(hostEl) {
+    if (!hostEl || hostEl.nodeType !== 1) return;
+    const sel = window.getSelection();
+    if (!sel.rangeCount) return;
+    const range = sel.getRangeAt(0);
+    if (!hostEl.contains(range.commonAncestorContainer)) return;
+    const r = range.getBoundingClientRect();
+    const h = hostEl.getBoundingClientRect();
+    const pad = 6;
+    if (r.bottom > h.bottom - pad) {
+        hostEl.scrollTop += r.bottom - h.bottom + pad;
+    } else if (r.top < h.top + pad) {
+        hostEl.scrollTop += r.top - h.top - pad;
+    }
+    if (r.right > h.right - pad) {
+        hostEl.scrollLeft += r.right - h.right + pad;
+    } else if (r.left < h.left + pad) {
+        hostEl.scrollLeft += r.left - h.left - pad;
+    }
+}
+
+/** Longitud de texto plano hasta (endNode, endOffset) dentro del contenteditable. */
+function measurePlainTextOffsetToPoint(root, endNode, endOffset) {
+    let total = 0;
+    function visit(node) {
+        if (node === endNode) {
+            if (node.nodeType === Node.TEXT_NODE) {
+                total += Math.min(endOffset, (node.nodeValue || '').length);
+                return true;
+            }
+            if (node.nodeType === Node.ELEMENT_NODE) {
+                for (let i = 0; i < endOffset; i++) {
+                    const ch = node.childNodes[i];
+                    if (ch && visit(ch)) return true;
+                }
+                return true;
+            }
+            return true;
+        }
+        if (node.nodeType === Node.TEXT_NODE) {
+            total += (node.nodeValue || '').length;
+            return false;
+        }
+        if (node.nodeName === 'BR') {
+            total += 1;
+            return false;
+        }
+        if (node.nodeType === Node.ELEMENT_NODE) {
+            for (let i = 0; i < node.childNodes.length; i++) {
+                const ch = node.childNodes[i];
+                if (ch && visit(ch)) return true;
+            }
+        }
+        return false;
+    }
+    visit(root);
+    return total;
+}
+
+/** Offset del caret en texto plano (alineado con getNotepadText). */
+function getCaretPlainTextOffset(element) {
+    const sel = window.getSelection();
+    if (!sel.rangeCount) return 0;
+    const range = sel.getRangeAt(0);
+    if (!element.contains(range.commonAncestorContainer)) return 0;
+    return measurePlainTextOffsetToPoint(element, range.endContainer, range.endOffset);
+}
+
+/**
+ * Coloca el caret por offset de texto plano. Los <br> cuentan como 1 carácter (como \n en innerText).
+ * Sin esto, tras reescribir innerHTML el cursor salta de línea al usar solo nodos de texto.
+ */
+/**
+ * Cuando el texto normalizado cambia de longitud por línea, el offset plano del caret
+ * debe reasignarse por línea/columna; si no, el cursor salta "hacia atrás" (p. ej. tras Enter).
+ */
+function mapCaretOffsetAfterNormalize(raw, next, off) {
+    raw = raw !== null && raw !== undefined ? String(raw) : '';
+    next = next !== null && next !== undefined ? String(next) : '';
+    const o = Math.max(0, Math.min(off, raw.length));
+    if (!raw.length) {
+        return Math.min(o, next.length);
+    }
+    const rLines = raw.split('\n');
+    const nLines = next.split('\n');
+    if (rLines.length !== nLines.length) {
+        const d = next.length - raw.length;
+        return Math.max(0, Math.min(o + d, next.length));
+    }
+    function lineStartInNext(idx) {
+        let p = 0;
+        for (let j = 0; j < idx; j++) {
+            p += (nLines[j] || '').length + 1;
+        }
+        return p;
+    }
+    let rPos = 0;
+    for (let i = 0; i < rLines.length; i++) {
+        const rl = rLines[i];
+        const lineStart = rPos;
+        const lineEnd = rPos + rl.length;
+        if (o <= lineEnd) {
+            const col = o - lineStart;
+            const nl = nLines[i] || '';
+            const mappedCol = Math.min(Math.max(0, col), nl.length);
+            return Math.min(lineStartInNext(i) + mappedCol, next.length);
+        }
+        if (i < rLines.length - 1) {
+            if (o === lineEnd + 1) {
+                return Math.min(lineStartInNext(i + 1), next.length);
+            }
+            rPos = lineEnd + 1;
+        }
+    }
+    return next.length;
+}
+
+function setCaretByPlainTextOffset(element, offset) {
+    if (!element) return;
+    const sel = window.getSelection();
+    let remaining = Math.max(0, offset);
+    function walk(node) {
+        if (node.nodeType === Node.TEXT_NODE) {
+            const len = node.textContent.length;
+            if (remaining <= len) {
+                const range = document.createRange();
+                range.setStart(node, Math.max(0, Math.min(remaining, len)));
+                range.collapse(true);
+                sel.removeAllRanges();
+                sel.addRange(range);
+                return true;
+            }
+            remaining -= len;
+            return false;
+        }
+        if (node.nodeName === 'BR') {
+            if (remaining === 0) {
+                const range = document.createRange();
+                range.setStartBefore(node);
+                range.collapse(true);
+                sel.removeAllRanges();
+                sel.addRange(range);
+                return true;
+            }
+            remaining -= 1;
+            return false;
+        }
+        if (node.nodeType === Node.ELEMENT_NODE) {
+            for (let i = 0; i < node.childNodes.length; i++) {
+                if (walk(node.childNodes[i])) return true;
+            }
+        }
+        return false;
+    }
+    if (walk(element)) return;
+    try {
+        const range = document.createRange();
+        range.selectNodeContents(element);
+        range.collapse(false);
+        sel.removeAllRanges();
+        sel.addRange(range);
+    } catch (e) {}
+}
+
+/** Licencia activa para blocs día (no tienen data-license-id en el nodo). */
+function resolveLicenseIdForNotepad(element) {
+    if (element && element.dataset && element.dataset.licenseId != null && String(element.dataset.licenseId) !== '') {
+        return element.dataset.licenseId;
+    }
+    const wrap = document.getElementById('licenseAccountsInputContainer');
+    return wrap && wrap.dataset.activeLicenseId != null && String(wrap.dataset.activeLicenseId) !== ''
+        ? wrap.dataset.activeLicenseId
+        : null;
+}
+
+/**
+ * Enter: nueva línea en el bloc Licencias / Caídas / Día.
+ * insertText('\\n') suele fallar en contenteditable con spans; insertLineBreak / párrafo + fallback plano.
+ */
+function insertLicenseNotepadNewLineWithSeparator(element) {
+    if (!element || element.tagName === 'TEXTAREA') return false;
+    if (!element.isContentEditable) return false;
+    const ids = ['adminLicenciasNotepadByLicense', 'adminLicenciasSuspendedNotepad'];
+    const isDay = element.classList && element.classList.contains('day-day-notepad');
+    if (ids.indexOf(element.id) === -1 && !isDay) return false;
+
+    try {
+        element.focus({ preventScroll: true });
+    } catch (e) {
+        try {
+            element.focus();
+        } catch (e2) {}
+    }
+
+    const before = getCaretPlainTextOffset(element);
+    const plain = editablePlainTextForPipeNormalize(element);
+    let inserted = false;
+
+    if (document.queryCommandSupported && document.queryCommandSupported('insertLineBreak')) {
+        try {
+            inserted = document.execCommand('insertLineBreak', false, null);
+        } catch (e) {
+            inserted = false;
+        }
+    }
+    if (!inserted && document.queryCommandSupported && document.queryCommandSupported('insertParagraph')) {
+        try {
+            inserted = document.execCommand('insertParagraph', false, null);
+        } catch (e) {
+            inserted = false;
+        }
+    }
+    if (!inserted && document.queryCommandSupported && document.queryCommandSupported('insertText')) {
+        try {
+            inserted = document.execCommand('insertText', false, '\n');
+        } catch (e) {
+            inserted = false;
+        }
+    }
+
+    let plainAfter = editablePlainTextForPipeNormalize(element);
+    if (!inserted || plainAfter.length <= plain.length) {
+        const after = plain.slice(0, before) + '\n' + plain.slice(before);
+        element.textContent = after;
+        plainAfter = after;
+    }
+
+    const afterInsert = before + 1;
+    const licenseId = resolveLicenseIdForNotepad(element);
+    if (licenseId != null && typeof window.normalizePipeSeparatorsInElement === 'function') {
+        window.normalizePipeSeparatorsInElement(element, licenseId, { liveTyping: false, forceNormalize: true });
+    } else {
+        setCaretByPlainTextOffset(element, Math.min(afterInsert, plainAfter.length));
+    }
+
+    try {
+        element.dispatchEvent(new Event('input', { bubbles: true }));
+    } catch (e) {}
+
+    return true;
+}
+
+window.insertLicenseNotepadNewLineWithSeparator = insertLicenseNotepadNewLineWithSeparator;
+
+/**
+ * Bloc admin Licencias / Caídas / Día: quita spans de correo/clave al editar y deja texto plano con saltos.
+ */
+function flattenLicenseNotepadForEditing(element) {
+    if (!element || element.tagName === 'TEXTAREA') return;
+    const id = element.id;
+    const isDayNotepad = element.classList && element.classList.contains('day-day-notepad');
+    if (
+        id !== 'adminLicenciasNotepadByLicense' &&
+        id !== 'adminLicenciasSuspendedNotepad' &&
+        !isDayNotepad
+    ) {
+        return;
+    }
+    const hadRichSpans = element.querySelector(
+        'span.day-account-email, span.saved-account-email, span.day-account-credential-line, span.day-account-line-fallback, span.day-account-license-prefix, span.day-account-user-label, span.day-account-status-label'
+    );
+    if (!hadRichSpans) {
+        return;
+    }
+    const off = getCaretPlainTextOffset(element);
+    const plain = editablePlainTextForPipeNormalize(element);
+    element.innerHTML = innerHtmlFromPlainWithSlashPills(plain);
+    setCaretByPlainTextOffset(element, Math.min(off, plain.length));
+}
+
+window.flattenLicenseNotepadForEditing = flattenLicenseNotepadForEditing;
+
+/** Texto plano solo en campos legacy (sin estilos por línea). */
+function licenseNotepadUsesPlainTextOnly(element) {
+    if (!element) return false;
+    const id = element.id;
+    if (id === 'licenseAccountsInput' || id === 'soldAccountsInput') return true;
+    if (id === 'adminLicenciasNotepadByLicense' || id === 'adminLicenciasSuspendedNotepad') return true;
+    return false;
+}
+
+function buildCredSpansFromParsed(parsed, useColon, emailClass, passwordClass, separatorClass) {
+    if (parsed.netflixSlot != null) {
+        return `<span class="${emailClass}">${escapeHtml(parsed.email)}</span><span class="${separatorClass}"> </span><span class="${passwordClass}">${escapeHtml(parsed.password)}</span>`;
+    }
+    if (useColon) {
+        return `<span class="${emailClass}">${escapeHtml(parsed.email)}</span><span class="${separatorClass}">:</span><span class="${passwordClass}">${escapeHtml(parsed.password)}</span>`;
+    }
+    return `<span class="${emailClass}">${escapeHtml(parsed.email)}</span><span class="${separatorClass}"> </span><span class="${passwordClass}">${escapeHtml(parsed.password)}</span>`;
+}
+
+/** Licencias / días / caídas: fila a partir de línea persistida (separador unitario o legado //). */
+function buildAdminLicenseLineHtml(
+    line,
+    isNetflix,
+    emailClass,
+    passwordClass,
+    separatorClass,
+    clientClass,
+    statusClass,
+    extraClass
+) {
+    const trimmed = line.trim();
+    if (!trimmed) return '';
+    const clientClassFinal = clientClass || 'day-account-user-label';
+    const statusClassFinal = statusClass || 'day-account-status-label';
+    const extraClassFinal = extraClass || 'day-account-notes-segment2';
+    const clientTitleAttr = ' title="Cliente (doble clic para buscar usuario)"';
+    const statusTitleAttr = ' title="Estado o fallo (caída o suspendida, no reproduce, otro-…)"';
+    const extraTitleAttr = ' title="Notas adicionales (solo admin)"';
+
+    const p = parseAdminLicenseLineToSplitParts(trimmed);
+    const credPart = String(p.cred || '').trim();
+    const clientDisplay = (p.user || '').trim() || 'anonimo';
+    const g = String(p.statusGood || '').trim();
+    let badShow = String(p.statusBad || '').trim();
+    if (adminLicenseNormalizeStatusKey(badShow) === 'otro' && p.otroDetail) {
+        badShow = 'otro-' + String(p.otroDetail).trim();
+    }
+    const statusParts = [];
+    if (g) statusParts.push(g);
+    if (badShow) statusParts.push(badShow);
+    const statusDisplay = statusParts.join(' · ');
+    const extraDisplay = String(p.extra || '').trim();
+
+    const parsedCred = parseLineAccountFieldsBest(credPart, isNetflix);
+    let credInner;
+    if (parsedCred) {
+        const useColon = /^[^\s:]+@[^\s:]+\.\S+:/.test(credPart);
+        credInner = buildCredSpansFromParsed(parsedCred, useColon, emailClass, passwordClass, separatorClass);
+    } else {
+        credInner = `<span class="day-account-license-prefix">${escapeHtml(credPart)}</span>`;
+    }
+    const tierForCss =
+        badShow && String(badShow).trim()
+            ? adminLicenseStatusTierFromStored(badShow)
+            : g
+              ? adminLicenseStatusTierFromStored(g)
+              : 'neutral';
+    const statusTierCls = adminLicenseStatusCssTierClass(tierForCss);
+        let out = `<span class="day-account-credential-line">${credInner}</span>`;
+        out += `<span class="${clientClassFinal}"${clientTitleAttr}>${escapeHtml(clientDisplay)}</span>`;
+    out += `<span class="${statusClassFinal} ${statusTierCls}"${statusTitleAttr}>${escapeHtml(statusDisplay)}</span>`;
+    out += `<span class="${extraClassFinal}"${extraTitleAttr}>${escapeHtml(extraDisplay)}</span>`;
+    return out;
+}
+
+/**
+ * Evita que innerText en contenteditable con filas display:block cree un \\n final fantasma;
+ * cada blur→highlight añadía una línea vacía (p. ej. al hacer clic en el título y quitar foco).
+ */
+function normalizeContentEditablePlainTextForParse(text) {
+    if (text == null) return '';
+    return String(text)
+        .replace(/\r\n/g, '\n');
+}
+
+/** Texto del bloc a partir del DOM (separador de persistencia entre columnas). */
+function getNotepadText(node) {
+    if (!node) return '';
+    if (node.nodeType === 3) return node.nodeValue;
+    if (node.nodeType === 1) {
+        if (node.tagName === 'BR') return '\n';
+
+        if (node.classList && node.classList.contains('admin-license-line-row')) {
+            const cred = node.querySelector('.day-account-credential-line');
+            const client = node.querySelector('.day-account-user-label, .saved-account-user-label');
+            const status = node.querySelector('.day-account-status-label, .saved-account-status-label');
+            const extra = node.querySelector('.day-account-notes-segment2, .saved-account-notes-segment2');
+            
+            let text = cred ? (cred.innerText || cred.textContent).trim() : '';
+            const cText = client ? (client.innerText || client.textContent).trim() : '';
+            const sText = status ? (status.innerText || status.textContent).trim() : '';
+            const eText = extra ? (extra.innerText || extra.textContent).trim() : '';
+            
+            if (cText || sText || eText || text) {
+                text = [text, cText || 'anonimo', sText, eText].join(LICENSE_LINE_FIELD_SEP);
+            }
+            
+            if (node.nextSibling) {
+                text += '\n';
+            }
+            return text;
+        }
+
+        const isBlock = node.tagName === 'DIV' || node.tagName === 'P';
+        let text = '';
+        for (let i = 0; i < node.childNodes.length; i++) {
+            text += getNotepadText(node.childNodes[i]);
+        }
+        if (isBlock && node.nextSibling) {
+            text += '\n';
+        }
+        return text;
+    }
+    return '';
+}
+
+function editablePlainTextForPipeNormalize(el) {
+    if (!el) return '';
+    if (el.classList && el.classList.contains('day-license-split-root') && typeof dayLicenseSplitGetMergedText === 'function') {
+        return String(dayLicenseSplitGetMergedText(el) || '')
+            .replace(/\r\n/g, '\n')
+            .replace(/\r/g, '\n');
+    }
+    if (el.tagName === 'TEXTAREA') {
+        return String(el.value != null ? el.value : '')
+            .replace(/\r\n/g, '\n')
+            .replace(/\r/g, '\n');
+    }
+    const hasHtml = el.firstElementChild !== null;
+    const t = hasHtml ? getNotepadText(el) : (el.innerText !== undefined && el.innerText !== null ? el.innerText : el.textContent || '');
+    return String(t)
+        .replace(/\r\n/g, '\n')
+        .replace(/\r/g, '\n');
+}
+
+// Resaltar correos/contraseñas (notas solo admin; duplicados ya no se marcan en amarillo)
 function highlightEmailsAndPasswords(element) {
-    const text = element.innerText || element.textContent;
-    if (!text) return;
+    if (!element) return;
+    if (licenseNotepadUsesPlainTextOnly(element)) {
+        return;
+    }
     
-    // Determinar qué clases usar según el tipo de elemento
-    const isDayItem = element.classList.contains('day-account-item');
-    const emailClass = isDayItem ? 'day-account-email' : 'saved-account-email';
-    const passwordClass = isDayItem ? 'day-account-password' : 'saved-account-password';
-    const separatorClass = isDayItem ? 'day-account-separator' : 'saved-account-separator';
-    
+    const isEditing = document.activeElement === element;
+    const scrollSnap = isEditing ? getScrollSnapshot(element) : null;
+
+    const hasHtml = element.firstElementChild !== null;
+    const rawText = hasHtml ? getNotepadText(element) : (element.innerText !== undefined ? element.innerText : element.textContent || '');
+    if (!isEditing && rawText.length > MAX_HEAVY_NOTEPAD_CHARS) {
+        // Guard de rendimiento: evita congelar el hilo principal con bloques enormes.
+        return;
+    }
+    const text = normalizeContentEditablePlainTextForParse(rawText);
+    if (text === '') {
+        element.innerHTML = '';
+        if (isEditing) restoreScrollSnapshot(scrollSnap);
+        return;
+    }
+
+    const isDayNotepad =
+        element.classList && element.classList.contains('day-day-notepad');
+    const isDayItem = element.classList && element.classList.contains('day-account-item');
+    const isAdminLicenseNotepad =
+        element.classList.contains('admin-licencias-license-editable') ||
+        element.classList.contains('admin-licencias-suspended-editable');
+    /* Bloc Día N: mismo HTML que Licencias (buildAdminLicenseLineHtml); no depender solo de .day-account-item */
+    const useDayStyling = isAdminLicenseNotepad || isDayNotepad || isDayItem;
+
+    const inputContainer = document.getElementById('licenseAccountsInputContainer');
+    const activeLid = inputContainer && inputContainer.dataset.activeLicenseId
+        ? parseInt(inputContainer.dataset.activeLicenseId, 10)
+        : NaN;
+
+    const emailClass = useDayStyling ? 'day-account-email' : 'saved-account-email';
+    const passwordClass = useDayStyling ? 'day-account-password' : 'saved-account-password';
+    const separatorClass = useDayStyling ? 'day-account-separator' : 'saved-account-separator';
+    const clientClass = useDayStyling ? 'day-account-user-label' : 'saved-account-user-label';
+    const statusClass = useDayStyling ? 'day-account-status-label' : 'saved-account-status-label';
+    const legacyNotesClass = useDayStyling ? 'day-account-private-notes' : 'saved-account-private-notes';
+
+    function wrapCredentialLine(innerHtml) {
+        if (!useDayStyling) return innerHtml;
+        return `<span class="day-account-credential-line">${innerHtml}</span>`;
+    }
+
+    const licenseForActive = !Number.isNaN(activeLid) ? licenses.find(l => l.id === activeLid) : null;
+    const isNetflix = licenseForActive && isNetflixProductName(licenseForActive.product_name);
+
     const lines = text.split('\n');
     let html = '';
     let hasValidEmail = false;
-    
+
     for (let i = 0; i < lines.length; i++) {
         const line = lines[i];
         if (!line.trim()) {
-            // Solo agregar <br> si no es el último elemento y hay más líneas
             if (i < lines.length - 1) {
+                html += '<br>';
+            } else if (lines.length > 1) {
                 html += '<br>';
             }
             continue;
         }
-        
-        // Detectar formato: correo@gmail.com contraseña o correo@gmail.com:contraseña
-        const colonMatch = line.match(/^([^\s:]+@[^\s:]+\.\S+):(.+)$/);
-        const spaceMatch = line.match(/^([^\s]+@[^\s]+\.\S+)\s+(.+)$/);
-        
-        if (colonMatch) {
-            const email = colonMatch[1].trim();
-            const password = colonMatch[2].trim();
-            // Agregar salto de línea antes de cada correo (excepto el primero)
+
+        if (useDayStyling) {
+            const lineHtml = buildAdminLicenseLineHtml(
+                line,
+                isNetflix,
+                emailClass,
+                passwordClass,
+                separatorClass,
+                clientClass,
+                statusClass
+            );
+            if (lineHtml) {
+                /* Sin <br> entre filas: .admin-license-line-row es display:block y ya separa líneas; <br>+block duplicaba huecos */
+                html += `<span class="admin-license-line-row">${lineHtml}</span>`;
+                hasValidEmail = true;
+            }
+            continue;
+        }
+
+        const parsed = parseLineAccountFields(line, { isNetflix });
+        if (parsed) {
             if (hasValidEmail) {
                 html += '<br>';
             }
-            html += `<span class="${emailClass}">${escapeHtml(email.toLowerCase())}</span><span class="${separatorClass}">:</span><span class="${passwordClass}">${escapeHtml(password)}</span>`;
-            hasValidEmail = true;
-        } else if (spaceMatch) {
-            const email = spaceMatch[1].trim();
-            const password = spaceMatch[2].trim();
-            // Agregar salto de línea antes de cada correo (excepto el primero)
-            if (hasValidEmail) {
-                html += '<br>';
+            const useColon = /^[^\s:]+@[^\s:]+\.\S+:/.test(line.trim());
+            let cred;
+            const emailCls = emailClass;
+            if (parsed.netflixSlot != null) {
+                cred = `<span class="${emailCls}">${escapeHtml(parsed.email)}</span><span class="${separatorClass}"> </span><span class="${passwordClass}">${escapeHtml(parsed.password)}</span>`;
+            } else if (useColon) {
+                cred = `<span class="${emailCls}">${escapeHtml(parsed.email)}</span><span class="${separatorClass}">:</span><span class="${passwordClass}">${escapeHtml(parsed.password)}</span>`;
+            } else {
+                cred = `<span class="${emailCls}">${escapeHtml(parsed.email)}</span><span class="${separatorClass}"> </span><span class="${passwordClass}">${escapeHtml(parsed.password)}</span>`;
             }
-            html += `<span class="${emailClass}">${escapeHtml(email.toLowerCase())}</span><span class="${separatorClass}"> </span><span class="${passwordClass}">${escapeHtml(password)}</span>`;
+            let credHtml = cred;
+            if (parsed.privateNotes) {
+                credHtml += `<span class="${separatorClass}"> </span><span class="${legacyNotesClass}">${escapeHtml(parsed.privateNotes)}</span>`;
+            }
+            html += wrapCredentialLine(credHtml);
             hasValidEmail = true;
         } else {
-            // Buscar correo en la línea
             const emailMatch = line.match(/(\S+@\S+\.\S+)/);
             if (emailMatch) {
                 const email = emailMatch[1].trim();
                 const password = line.replace(email, '').trim().replace(/^[:;\s]+/, '');
                 if (password) {
-                    // Agregar salto de línea antes de cada correo (excepto el primero)
                     if (hasValidEmail) {
                         html += '<br>';
                     }
-                    html += `<span class="${emailClass}">${escapeHtml(email.toLowerCase())}</span><span class="${separatorClass}"> </span><span class="${passwordClass}">${escapeHtml(password)}</span>`;
+                    const emLow = email.toLowerCase();
+                    const emailCls = emailClass;
+                    const cred = `<span class="${emailCls}">${escapeHtml(emLow)}</span><span class="${separatorClass}"> </span><span class="${passwordClass}">${escapeHtml(password)}</span>`;
+                    html += wrapCredentialLine(cred);
                     hasValidEmail = true;
                 } else {
                     html += escapeHtml(line);
@@ -620,49 +4462,580 @@ function highlightEmailsAndPasswords(element) {
             }
         }
     }
-    
-    // Guardar posición del cursor
-    const selection = window.getSelection();
-    let cursorPosition = 0;
-    if (selection.rangeCount > 0) {
-        const range = selection.getRangeAt(0);
-        const preCaretRange = range.cloneRange();
-        preCaretRange.selectNodeContents(element);
-        preCaretRange.setEnd(range.endContainer, range.endOffset);
-        cursorPosition = preCaretRange.toString().length;
-    }
-    
+
+    const cursorOffset = isEditing ? getCaretPlainTextOffset(element) : 0;
     element.innerHTML = html;
     
-    // Restaurar posición del cursor (aproximada)
-    try {
-        const range = document.createRange();
-        const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT, null, false);
-        let charCount = 0;
-        let node;
-        
-        while ((node = walker.nextNode())) {
-            const nodeLength = node.textContent.length;
-            if (charCount + nodeLength >= cursorPosition) {
-                range.setStart(node, cursorPosition - charCount);
-                range.setEnd(node, cursorPosition - charCount);
-                selection.removeAllRanges();
-                selection.addRange(range);
-                break;
-            }
-            charCount += nodeLength;
-        }
-    } catch (e) {
-        // Si falla, simplemente colocar el cursor al final
+    // Optimization: avoid innerText reflow if we don't need to restore caret
+    if (isEditing && cursorOffset > 0) {
+        const plainAfter = editablePlainTextForPipeNormalize(element);
+    const clamped = Math.min(cursorOffset, plainAfter.length);
+    setCaretByPlainTextOffset(element, clamped);
+    }
+
+    if (isEditing) {
+    restoreScrollSnapshot(scrollSnap);
+    ensureCaretVisibleInScrollableEditor(element);
     }
 }
 
+window.highlightEmailsAndPasswords = highlightEmailsAndPasswords;
+
 // Función auxiliar para escapar HTML
 function escapeHtml(text) {
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
+    if (text == null) return '';
+    return String(text)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
 }
+
+function teardownChangesProductUndoControllers() {
+    if (!window.__changesProductUndoTeardowns) {
+        window.__changesProductUndoTeardowns = [];
+    }
+    window.__changesProductUndoTeardowns.forEach(function (fn) {
+        try {
+            fn();
+        } catch (e) {}
+    });
+    window.__changesProductUndoTeardowns = [];
+}
+
+function snapshotChangesNotesFromDomToLicensesCache() {
+    const c = document.getElementById('licenseChangesProductsContainer');
+    if (!c) return;
+    c.querySelectorAll('.changes-license-split-root[data-license-id]').forEach(function (root) {
+        const id = parseInt(root.dataset.licenseId, 10);
+        if (!Number.isFinite(id)) return;
+        const L = licenses.find((l) => l.id === id);
+        if (L && typeof changesLicenseSplitGetMergedText === 'function') {
+            L.changes_notes = changesLicenseSplitGetMergedText(root);
+        }
+    });
+}
+
+function getAdminLicenciasChangesListMode() {
+    try {
+        const v = localStorage.getItem(ADMIN_LICENCIAS_CHANGES_LIST_MODE_KEY);
+        if (v === CHANGES_LIST_MODE_ALL) return CHANGES_LIST_MODE_ALL;
+    } catch (e) {}
+    return CHANGES_LIST_MODE_ONLY;
+}
+
+function setAdminLicenciasChangesListMode(mode) {
+    const next = mode === CHANGES_LIST_MODE_ALL ? CHANGES_LIST_MODE_ALL : CHANGES_LIST_MODE_ONLY;
+    if (getAdminLicenciasChangesListMode() === next) return;
+    try {
+        localStorage.setItem(ADMIN_LICENCIAS_CHANGES_LIST_MODE_KEY, next);
+    } catch (e) {}
+    if (typeof refreshChangesProductsListing === 'function') {
+        refreshChangesProductsListing();
+    }
+}
+
+/**
+ * Productos en Cambios: solo los del grid de Licencias activas (no archivados).
+ * En la página Archivados no debe listarse ningún producto en Cambios.
+ */
+function licenseBaseEligibleForChangesPanel(lic) {
+    if (!lic || lic.isAggregate || lic.id === AGGREGATE_LICENSE_ID) return false;
+    if (window.IS_ARCHIVED_MODE) return false;
+    if (lic.enabled === false) return false;
+    return true;
+}
+
+function adminLicenciasHasAnyLicenseForChangesPanel() {
+    for (let i = 0; i < licenses.length; i++) {
+        if (licenseBaseEligibleForChangesPanel(licenses[i])) return true;
+    }
+    return false;
+}
+
+function syncLicenseChangesModeToolbar() {
+    const mode = getAdminLicenciasChangesListMode();
+    const wrap = document.querySelector('#adminLicenciasCambiosPanel .license-changes-notepad-wrap');
+    if (!wrap) return;
+    wrap.querySelectorAll('.license-changes-mode-btn').forEach(function (btn) {
+        const m = btn.getAttribute('data-changes-list-mode');
+        const active = m === mode;
+        btn.classList.toggle('license-changes-mode-btn--active', active);
+        btn.setAttribute('aria-pressed', active ? 'true' : 'false');
+    });
+}
+
+function wireLicenseChangesModeToolbarOnce() {
+    const wrap = document.querySelector('#adminLicenciasCambiosPanel .license-changes-notepad-wrap');
+    if (!wrap || wrap.dataset.changesModeToolbarBound === '1') return;
+    wrap.dataset.changesModeToolbarBound = '1';
+    wrap.addEventListener('click', function (e) {
+        const b = e.target.closest && e.target.closest('.license-changes-mode-btn');
+        if (!b || !wrap.contains(b)) return;
+        e.preventDefault();
+        const mode = b.getAttribute('data-changes-list-mode');
+        if (mode === CHANGES_LIST_MODE_ALL || mode === CHANGES_LIST_MODE_ONLY) {
+            setAdminLicenciasChangesListMode(mode);
+        }
+    });
+}
+
+function getLicensesForChangesProductsListing() {
+    const mode = getAdminLicenciasChangesListMode();
+    const base = licenses.filter(licenseBaseEligibleForChangesPanel);
+    /* Mismo criterio que la cuadrícula de productos (#licensesGrid): position ascendente */
+    const sorted = base.slice().sort(function (a, b) {
+        const pa = typeof a.position === 'number' && !Number.isNaN(a.position) ? a.position : 0;
+        const pb = typeof b.position === 'number' && !Number.isNaN(b.position) ? b.position : 0;
+        if (pa !== pb) return pa - pb;
+        return (a.id || 0) - (b.id || 0);
+    });
+    if (mode === CHANGES_LIST_MODE_ALL) return sorted;
+    return sorted.filter(function (l) {
+        return countNonEmptyLinesInText(l.changes_notes != null ? String(l.changes_notes) : '') >= 1;
+    });
+}
+
+function changesProductSectionStorageKey(licenseId) {
+    return 'admin_licencias_changes_product_section_collapsed_' + licenseId + '_v1';
+}
+
+function wireLicenseChangesProductsCollapseOnce() {
+    const container = document.getElementById('licenseChangesProductsContainer');
+    if (!container || container.dataset.collapseDelegated === '1') return;
+    container.dataset.collapseDelegated = '1';
+    container.addEventListener('click', function (e) {
+        const header =
+            e.target.closest && e.target.closest('.admin-licencias-bloc--changes-product .day-section-header');
+        if (!header || !container.contains(header)) return;
+        if (e.target.closest('.day-account-badge')) return;
+        if (e.target.closest('.admin-bloc-undo-toolbar')) return;
+        const section = header.closest('.admin-licencias-bloc--changes-product');
+        if (!section) return;
+        const body = section.querySelector('.changes-product-section-body');
+        if (!body) return;
+        section.classList.toggle('collapsed');
+        const isCollapsed = section.classList.contains('collapsed');
+        body.style.display = isCollapsed ? 'none' : 'block';
+        const lid = section.dataset.changesProductLicenseId;
+        if (!lid) return;
+        try {
+            localStorage.setItem(changesProductSectionStorageKey(lid), isCollapsed ? 'true' : 'false');
+        } catch (err) {}
+        try {
+            if (typeof adminChangesSyncExpandAllToolbarBtn === 'function') {
+                adminChangesSyncExpandAllToolbarBtn();
+            }
+        } catch (syncErr) {}
+    });
+}
+
+function restoreChangesProductSectionsState() {
+    document.querySelectorAll('.admin-licencias-bloc--changes-product').forEach(function (section) {
+        const lid = section.dataset.changesProductLicenseId;
+        if (!lid) return;
+        const body = section.querySelector('.changes-product-section-body');
+        if (!body) return;
+        let saved = null;
+        try {
+            saved = localStorage.getItem(changesProductSectionStorageKey(lid));
+        } catch (e) {}
+        if (saved === 'true') {
+            section.classList.add('collapsed');
+            body.style.display = 'none';
+        } else {
+            section.classList.remove('collapsed');
+            body.style.display = 'block';
+        }
+    });
+}
+
+/** Icono flecha junto al icono de Cambios: mismo criterio que «plegar / desplegar todos los días». */
+function adminChangesSyncExpandAllToolbarBtn() {
+    const btn = document.getElementById('adminLicenciasToggleAllChangesSectionsBtn');
+    if (!btn) return;
+    const sections = document.querySelectorAll('#licenseChangesProductsContainer .admin-licencias-bloc--changes-product');
+    if (!sections.length) {
+        btn.style.display = 'none';
+        return;
+    }
+    btn.style.display = '';
+    let anyExpanded = false;
+    sections.forEach(function (section) {
+        if (!section.classList.contains('collapsed')) {
+            anyExpanded = true;
+        }
+    });
+    const icon = btn.querySelector('i');
+    if (anyExpanded) {
+        if (icon) {
+            icon.className = 'fas fa-chevron-up';
+        }
+        btn.title = 'Plegar todos los productos en Cambios';
+        btn.setAttribute('aria-label', 'Plegar todas las secciones de Cambios');
+        btn.setAttribute('aria-expanded', 'true');
+    } else {
+        if (icon) {
+            icon.className = 'fas fa-chevron-down';
+        }
+        btn.title = 'Desplegar todos los productos en Cambios';
+        btn.setAttribute('aria-label', 'Desplegar todas las secciones de Cambios');
+        btn.setAttribute('aria-expanded', 'false');
+    }
+}
+
+function adminChangesToggleAllProductSections() {
+    const sections = document.querySelectorAll('#licenseChangesProductsContainer .admin-licencias-bloc--changes-product');
+    if (!sections.length) return;
+    let anyExpanded = false;
+    sections.forEach(function (section) {
+        if (!section.classList.contains('collapsed')) {
+            anyExpanded = true;
+        }
+    });
+    const collapseAll = anyExpanded;
+    sections.forEach(function (section) {
+        const body = section.querySelector('.changes-product-section-body');
+        const lid = section.dataset.changesProductLicenseId;
+        if (!body || !lid) return;
+        if (collapseAll) {
+            section.classList.add('collapsed');
+            body.style.display = 'none';
+            try {
+                localStorage.setItem(changesProductSectionStorageKey(lid), 'true');
+            } catch (e) {}
+        } else {
+            section.classList.remove('collapsed');
+            body.style.display = 'block';
+            try {
+                localStorage.setItem(changesProductSectionStorageKey(lid), 'false');
+            } catch (e) {}
+        }
+    });
+    adminChangesSyncExpandAllToolbarBtn();
+}
+
+window.adminChangesSyncExpandAllToolbarBtn = adminChangesSyncExpandAllToolbarBtn;
+window.adminChangesToggleAllProductSections = adminChangesToggleAllProductSections;
+
+/** Un bloc «Cambios» por producto (mes a mes), mismo patrón de desbloqueo y guardado que los días. */
+function setupEditableChangesProductRoots(list) {
+    list.forEach(function (lic) {
+        const licenseId = lic.id;
+        const root = document.querySelector(
+            '#licenseChangesProductsContainer .changes-license-split-root[data-license-id="' + licenseId + '"]'
+        );
+        if (!root) return;
+        const ta = changesLicenseSplitQueryCredsTa(root);
+        const rowsWrap = changesLicenseSplitQueryRowsWrap(root);
+        if (!ta || !rowsWrap) return;
+
+        const sectionEl = root.closest('.admin-licencias-bloc--changes-product');
+        const undoBtn = sectionEl ? sectionEl.querySelector('.js-ch-product-undo[data-license-id="' + licenseId + '"]') : null;
+        const redoBtn = sectionEl ? sectionEl.querySelector('.js-ch-product-redo[data-license-id="' + licenseId + '"]') : null;
+
+        if (!window.__changesProductUndoTeardowns) {
+            window.__changesProductUndoTeardowns = [];
+        }
+        if (window.AdminLicenciasUndoCore && typeof window.AdminLicenciasUndoCore.attach === 'function') {
+            const ctrl = window.AdminLicenciasUndoCore.attach(root, {
+                listenElement: root,
+                useFocusOutDelegate: true,
+                getPlainText: function () {
+                    return changesLicenseSplitGetMergedText(root);
+                },
+                setPlainText: function (text) {
+                    changesLicenseSplitApplyMergedText(root, text != null ? text : '');
+                },
+                undoBtn: undoBtn,
+                redoBtn: redoBtn,
+                onPersist: function () {
+                    if (typeof window.adminLicenciasScheduleSaveChangesNotesOnly === 'function') {
+                        window.adminLicenciasScheduleSaveChangesNotesOnly(licenseId);
+                    }
+                    if (typeof window.updateChangesBlocLineCountBadge === 'function') {
+                        window.updateChangesBlocLineCountBadge();
+                    }
+                },
+                afterVisual: function () {
+                    if (typeof refreshDuplicateEmailHighlights === 'function') {
+                        refreshDuplicateEmailHighlights(licenseId);
+                    }
+                    changesLicenseSplitScheduleAutosize(root);
+                    if (typeof window.scheduleRefreshAdminDupIfActive === 'function') {
+                        window.scheduleRefreshAdminDupIfActive();
+                    }
+                }
+            });
+            if (ctrl && typeof ctrl.destroy === 'function' && window.__changesProductUndoTeardowns) {
+                window.__changesProductUndoTeardowns.push(function () {
+                    ctrl.destroy();
+                });
+            }
+        }
+
+        root.addEventListener(
+            'mousedown',
+            function (e) {
+                if (!root.classList.contains('license-notepad--locked')) return;
+                if (e.target.closest && e.target.closest('.license-split-editor__user-suggestions')) return;
+                const inCreds =
+                    e.target === ta || (e.target.closest && e.target.closest('.license-split-editor__creds-cell'));
+                const inSide = e.target.closest && e.target.closest('.license-split-editor__side');
+                if (!inCreds && !inSide) return;
+                e.preventDefault();
+                changesLicenseSplitUnlock(root);
+                if (e.target.closest && e.target.closest('.license-split-editor__restore-to-license-btn')) {
+                    return;
+                }
+                let cell =
+                    e.target.closest &&
+                    e.target.closest(
+                        '.license-split-editor__user, .license-split-editor__status-good, .license-split-editor__status-bad, .license-split-editor__otro-combined, .license-split-editor__note'
+                    );
+                if (!cell && e.target.closest) {
+                    const uw = e.target.closest('.license-split-editor__user-wrap');
+                    if (uw) cell = uw.querySelector('.license-split-editor__user');
+                }
+                if (!cell && e.target.closest) {
+                    const row = e.target.closest('.license-split-editor__row');
+                    if (row) cell = row.querySelector('.license-split-editor__user');
+                }
+                if (inSide && cell) {
+                    e.preventDefault();
+                    cell.focus();
+                } else if (inSide) {
+                    e.preventDefault();
+                    ta.focus();
+                } else if (inCreds) {
+                    e.preventDefault();
+                    ta.focus();
+                }
+            },
+            true
+        );
+
+        ta.addEventListener(
+            'beforeinput',
+            function (e) {
+                if (ta.readOnly) {
+                    e.preventDefault();
+                }
+            },
+            true
+        );
+        ta.addEventListener(
+            'paste',
+            function (e) {
+                if (ta.readOnly) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                }
+            },
+            true
+        );
+
+        function onFieldInput() {
+            changesLicenseSplitSyncRowsToTextarea(root);
+            if (typeof window.adminLicenciasScheduleSaveChangesNotesOnly === 'function') {
+                window.adminLicenciasScheduleSaveChangesNotesOnly(licenseId);
+            }
+            if (typeof window.updateChangesBlocLineCountBadge === 'function') {
+                window.updateChangesBlocLineCountBadge();
+            }
+            if (typeof window.scheduleRefreshAdminDupIfActive === 'function') {
+                window.scheduleRefreshAdminDupIfActive();
+            }
+        }
+
+        ta.addEventListener('input', onFieldInput);
+        rowsWrap.addEventListener('input', onFieldInput);
+        rowsWrap.addEventListener('change', onFieldInput);
+
+        rowsWrap.addEventListener('change', function onChangesGoodAutoRestoreToLicencias(ev) {
+            const targ = ev.target;
+            if (!targ || !targ.classList || !targ.classList.contains('license-split-editor__status-good')) return;
+            if (changesLicenseSplitCanonicalGood(targ.value) !== 'terminado') return;
+            const row = targ.closest('.license-split-editor__row');
+            if (!row || !row.classList.contains('license-split-editor__row--changes')) return;
+            if (typeof window.changesLicenseSplitResolveOutboundRow === 'function') {
+                void window.changesLicenseSplitResolveOutboundRow(row);
+            }
+        });
+
+        root.addEventListener('focusout', function () {
+            window.setTimeout(function () {
+                const a = document.activeElement;
+                if (a && root.contains(a)) return;
+                if (typeof window.adminLicenciasFlushPendingChangesNotesSaves === 'function') {
+                    window.adminLicenciasFlushPendingChangesNotesSaves();
+                }
+                changesLicenseSplitLock(root);
+                if (typeof window.scheduleRefreshAdminDupIfActive === 'function') {
+                    window.scheduleRefreshAdminDupIfActive();
+                }
+            }, 0);
+        });
+    });
+}
+
+function refreshChangesProductsListing() {
+    const wrap = document.querySelector('#adminLicenciasCambiosPanel .license-changes-notepad-wrap');
+    const container = document.getElementById('licenseChangesProductsContainer');
+    if (!wrap || !container) return;
+
+    snapshotChangesNotesFromDomToLicensesCache();
+
+    if (!adminLicenciasHasAnyLicenseForChangesPanel()) {
+        teardownChangesProductUndoControllers();
+        wrap.classList.add('d-none');
+        container.innerHTML = '';
+        if (typeof adminChangesSyncExpandAllToolbarBtn === 'function') {
+            adminChangesSyncExpandAllToolbarBtn();
+        }
+        return;
+    }
+
+    wrap.classList.remove('d-none');
+    syncLicenseChangesModeToolbar();
+
+    const list = getLicensesForChangesProductsListing();
+    if (list.length === 0) {
+        teardownChangesProductUndoControllers();
+        container.innerHTML =
+            '<div class="license-changes-empty-hint" role="status">En <strong>Cambios vencidos</strong> no hay ningún producto con líneas en este bloc. Pulsa <strong>Todos los productos</strong> para listar todos los servicios y añadir cuentas manualmente, o usa el botón de la barra con una fila enfocada en Licencias.</div>';
+        if (typeof adminChangesSyncExpandAllToolbarBtn === 'function') {
+            adminChangesSyncExpandAllToolbarBtn();
+        }
+        if (typeof adminChangesHideStatusColSyncUi === 'function') {
+            adminChangesHideStatusColSyncUi();
+        }
+        if (typeof adminChangesHideNotesColSyncUi === 'function') {
+            adminChangesHideNotesColSyncUi();
+        }
+        if (typeof adminChangesHideRestoreColSyncUi === 'function') {
+            adminChangesHideRestoreColSyncUi();
+        }
+        return;
+    }
+
+    teardownChangesProductUndoControllers();
+
+    let html = '';
+    list.forEach(function (lic) {
+        const lid = lic.id;
+        const pname = lic.product_name || 'Producto';
+        const lineCount = countNonEmptyLinesInText(lic.changes_notes != null ? String(lic.changes_notes) : '');
+        const badgeTitle = lineCount === 1 ? '1 línea' : lineCount + ' líneas';
+        const escName = escapeHtml(pname);
+        html +=
+            '<section class="day-section admin-licencias-bloc admin-licencias-bloc--changes-product changes-section" data-changes-product-license-id="' +
+            lid +
+            '" aria-label="Cambios: ' +
+            escName +
+            '">' +
+            '<div class="day-section-header admin-licencias-bloc-header">' +
+            '<span class="admin-licencias-bloc-title"><i class="fas fa-exchange-alt" aria-hidden="true"></i> <span>' +
+            escName +
+            '</span></span>' +
+            '<div class="admin-licencias-bloc-header-actions">' +
+            '<div class="admin-bloc-undo-toolbar admin-bloc-undo-toolbar--in-header" role="toolbar" aria-label="Deshacer y rehacer (cambios)">' +
+            '<button type="button" class="admin-bloc-undo-btn js-ch-product-undo" data-license-id="' +
+            lid +
+            '" title="Deshacer (Ctrl+Z)" aria-label="Deshacer"><i class="fas fa-undo" aria-hidden="true"></i></button>' +
+            '<button type="button" class="admin-bloc-undo-btn js-ch-product-redo" data-license-id="' +
+            lid +
+            '" title="Rehacer (Ctrl+Y)" aria-label="Rehacer"><i class="fas fa-redo" aria-hidden="true"></i></button>' +
+            '</div>' +
+            (lineCount > 0
+                ? '<span class="day-account-badge admin-licencias-notepad-line-badge js-changes-product-line-badge" title="' +
+                  escapeHtml(badgeTitle) +
+                  '">' +
+                  lineCount +
+                  '</span>'
+                : '') +
+            '</div></div>' +
+            '<div class="day-accounts-list changes-product-section-body">' +
+            '<div class="license-split-editor license-split-editor--day changes-license-split-root admin-licencias-license-editable license-notepad--locked" data-license-id="' +
+            lid +
+            '" data-license-viz="all" tabindex="-1" role="region" aria-label="Cambios mes a mes: ' +
+            escName +
+            '">' +
+            '<div class="license-split-editor__viewport">' +
+            '<div class="license-split-editor__grid">' +
+            '<div class="license-split-editor__creds-cell">' +
+            '<textarea id="adminLicChangesCreds-' +
+            lid +
+            '" name="admin_lic_changes_creds_' +
+            lid +
+            '" class="admin-licencias-notepad-textarea license-split-editor__creds changes-license-split__creds" rows="1" spellcheck="true" autocomplete="off" readonly title="Clic para editar" aria-label="Credenciales en Cambios (' +
+            escName +
+            ')" placeholder="Correo y contraseña (una por línea)."></textarea>' +
+            '</div>' +
+            '<div class="license-split-editor__side" aria-label="Terminado, problemas y notas (cambios)">' +
+            '<div class="license-split-editor__rows changes-license-split-rows" role="region" aria-label="Filas de cambios"></div>' +
+            '</div></div></div></div></div></section>';
+    });
+
+    container.innerHTML = html;
+
+    list.forEach(function (lic) {
+        const root = container.querySelector('.changes-license-split-root[data-license-id="' + lic.id + '"]');
+        if (!root) return;
+        const text = lic.changes_notes != null ? String(lic.changes_notes) : '';
+        changesLicenseSplitApplyMergedText(root, text);
+        changesLicenseSplitLock(root);
+        changesLicenseSplitWireScrollSync(root);
+    });
+
+    document.querySelectorAll('.admin-licencias-bloc--changes-product .day-section-header').forEach(function (h) {
+        h.style.cursor = 'pointer';
+    });
+
+    restoreChangesProductSectionsState();
+    setupEditableChangesProductRoots(list);
+
+    if (typeof adminChangesSyncExpandAllToolbarBtn === 'function') {
+        adminChangesSyncExpandAllToolbarBtn();
+    }
+    if (typeof adminChangesHideStatusColSyncUi === 'function') {
+        adminChangesHideStatusColSyncUi();
+    }
+    if (typeof adminChangesHideNotesColSyncUi === 'function') {
+        adminChangesHideNotesColSyncUi();
+    }
+    if (typeof adminChangesHideRestoreColSyncUi === 'function') {
+        adminChangesHideRestoreColSyncUi();
+    }
+    if (typeof window.updateChangesBlocLineCountBadge === 'function') {
+        window.updateChangesBlocLineCountBadge();
+    }
+    if (
+        document.documentElement.dataset.adminLicDupHighlightActive === '1' &&
+        typeof scheduleRefreshAdminDupIfActive === 'function'
+    ) {
+        scheduleRefreshAdminDupIfActive();
+    }
+}
+
+window.refreshChangesProductsListing = refreshChangesProductsListing;
+
+function innerHtmlFromPlainWithSlashPills(raw) {
+    return String(raw)
+        .split('\n')
+        .map(function (ln) {
+            return escapeHtml(ln);
+        })
+        .join('<br>');
+}
+
+// applySlashSeparatorPillsInEditable is no longer needed because we don't flatten HTML
+function applySlashSeparatorPillsInEditable(el) {
+    return;
+}
+
+window.applySlashSeparatorPillsInEditable = applySlashSeparatorPillsInEditable;
 
 // Editar posición de licencia
 function editLicensePosition(licenseId) {
@@ -934,66 +5307,310 @@ async function removeAccount(accountId) {
     }
 }
 
-// Parsear texto para extraer correos y contraseñas
-function parseAccountsText(text) {
-    const accounts = [];
-    const lines = text.split('\n');
-    
-    for (let line of lines) {
-        line = line.trim();
-        if (!line) continue;
-        
-        // Detectar formato: correo@gmail.com contraseña o correo@gmail.com:contraseña
-        const colonMatch = line.match(/^([^\s:]+@[^\s:]+\.\S+):(.+)$/);
-        const spaceMatch = line.match(/^([^\s]+@[^\s]+\.\S+)\s+(.+)$/);
-        
-        let email = null;
-        let password = null;
-        
-        if (colonMatch) {
-            email = colonMatch[1].trim();
-            password = colonMatch[2].trim();
-        } else if (spaceMatch) {
-            email = spaceMatch[1].trim();
-            password = spaceMatch[2].trim();
-        } else {
-            // Buscar correo en la línea (debe tener @ y .)
-            const emailMatch = line.match(/(\S+@\S+\.\S+)/);
-            if (emailMatch) {
-                email = emailMatch[1].trim();
-                // El resto de la línea es la contraseña
-                password = line.replace(email, '').trim();
-            }
+/** Productos Netflix (1 / 2 / 4 pantallas): formato especial correo (n) contraseña */
+function isNetflixProductName(productName) {
+    if (!productName || typeof productName !== 'string') return false;
+    return /netflix/i.test(productName.trim());
+}
+
+/** Primer // que no forma parte de :// (p. ej. https://) para formato legado cred//…//… */
+function indexOfLegacyDoubleSlashSeparatorFrom(s, startPos) {
+    const t = String(s || '');
+    let pos = startPos || 0;
+    while (pos < t.length) {
+        const i = t.indexOf('//', pos);
+        if (i === -1) return -1;
+        if (i === 0 || t[i - 1] !== ':') return i;
+        pos = i + 2;
+    }
+    return -1;
+}
+
+/**
+ * Formato legado: separadores // entre cred, cliente, estado y notas.
+ * Las líneas nuevas usan LICENSE_LINE_FIELD_SEP (\\x1f) y se parten en parseAdminLicenseLineToSplitParts.
+ */
+function splitLineCredNotesUser(line) {
+    const t = String(line || '').trim();
+    if (!t) return { cred: '', notes: '', user: '', extra: '' };
+    const i1 = indexOfLegacyDoubleSlashSeparatorFrom(t, 0);
+    if (i1 === -1) return { cred: t, notes: '', user: '', extra: '' };
+    const cred = t.slice(0, i1).trim();
+    const after1 = t.slice(i1 + 2);
+    const i2 = indexOfLegacyDoubleSlashSeparatorFrom(after1, 0);
+    if (i2 === -1) {
+        return { cred, notes: after1.trim(), user: '', extra: '' };
+    }
+    const notes = after1.slice(0, i2).trim();
+    const after2 = after1.slice(i2 + 2);
+    const i3 = indexOfLegacyDoubleSlashSeparatorFrom(after2, 0);
+    if (i3 === -1) {
+        return { cred, notes, user: after2.trim(), extra: '' };
+    }
+    return {
+        cred,
+        notes,
+        user: after2.slice(0, i3).trim(),
+        extra: after2.slice(i3 + 2).trim()
+    };
+}
+
+/**
+ * Intenta extraer correo/contraseña de la parte credencial para resaltado (opcional).
+ * Líneas con separador de persistencia o antiguas con //: solo se usa el primer campo como cred.
+ */
+function parseLineAccountFields(line, options) {
+    if (!options) options = {};
+    const isNetflix = !!options.isNetflix;
+
+    line = (line || '').trim();
+    if (!line) {
+        return null;
+    }
+
+    let forcedNotes = null;
+    let work = line;
+    let clientFromSegments = '';
+    let statusFromSegments = '';
+    if (line.indexOf(LICENSE_LINE_FIELD_SEP) !== -1) {
+        const seg = line.split(LICENSE_LINE_FIELD_SEP);
+        work = (seg[0] || '').trim();
+        clientFromSegments = (seg[1] || '').trim();
+        statusFromSegments = (seg[2] || '').trim();
+        forcedNotes = (seg[3] || '').trim() || null;
+    } else if (indexOfLegacyDoubleSlashSeparatorFrom(line, 0) !== -1) {
+        const sp = splitLineCredNotesUser(line);
+        work = sp.cred;
+        clientFromSegments = (sp.notes || '').trim();
+        statusFromSegments = (sp.user || '').trim();
+        forcedNotes = null;
+    }
+
+    let email = null;
+    let password = null;
+    let privateNotes = '';
+
+    if (isNetflix) {
+        const netflix = work.match(/^(\S+@\S+\.\S+)\s+\((\d+)\)\s+(\S+)(?:\s+(.*))?$/);
+        if (netflix) {
+            const base = netflix[1].trim().toLowerCase();
+            const slot = netflix[2];
+            password = netflix[3].trim();
+            privateNotes = forcedNotes !== null ? forcedNotes : (netflix[4] || '').trim();
+            email = `${base} (${slot})`;
+            return {
+                email: email,
+                emailBase: base,
+                password: password,
+                identifier: base.split('@')[0],
+                privateNotes: privateNotes,
+                netflixSlot: parseInt(slot, 10),
+                userLabel: clientFromSegments,
+                statusLabel: statusFromSegments
+            };
         }
-        
-        // Validar que el correo tenga @ y .
-        if (email && email.includes('@') && email.includes('.')) {
-            // Extraer contraseña si no se encontró antes
-            if (!password) {
-                const parts = line.split(email);
-                if (parts.length > 1) {
-                    password = parts.slice(1).join('').trim();
-                    // Limpiar separadores comunes
-                    password = password.replace(/^[:;\s]+/, '').trim();
+    }
+
+    const colon = work.match(/^([^\s:]+@[^\s:]+\.\S+):(\S+)(?:\s+(.*))?$/);
+    if (colon) {
+        email = colon[1].trim().toLowerCase();
+        password = colon[2].trim();
+        privateNotes = (colon[3] || '').trim();
+    } else {
+        const space = work.match(/^([^\s]+@[^\s]+\.\S+)\s+(\S+)(?:\s+(.*))?$/);
+        if (space) {
+            email = space[1].trim().toLowerCase();
+            password = space[2].trim();
+            privateNotes = (space[3] || '').trim();
+        } else {
+            const emailMatch = work.match(/(\S+@\S+\.\S+)/);
+            if (emailMatch) {
+                const em = emailMatch[1];
+                email = em.trim().toLowerCase();
+                let rest = work.slice(work.indexOf(em) + em.length).trim().replace(/^[:;\s]+/, '');
+                const restMatch = rest.match(/^(\S+)(?:\s+(.*))?$/);
+                if (restMatch) {
+                    password = restMatch[1].trim();
+                    privateNotes = (restMatch[2] || '').trim();
+                } else {
+                    password = rest;
                 }
             }
-            
-            // Si aún no hay contraseña, usar un valor por defecto o saltar
-            if (!password) {
-                continue;
-            }
-            
-            // Usar el correo como identificador si no hay uno específico
-            const identifier = email.split('@')[0];
-            
+        }
+    }
+
+    if (!email || !email.includes('@') || !email.includes('.')) {
+        return null;
+    }
+    if (password == null) password = '';
+    password = String(password).trim();
+
+    if (forcedNotes !== null) {
+        privateNotes = forcedNotes;
+    }
+
+    const hasSeg =
+        indexOfLegacyDoubleSlashSeparatorFrom(line, 0) !== -1 ||
+        line.indexOf(LICENSE_LINE_FIELD_SEP) !== -1;
+    return {
+        email: email,
+        password: password,
+        identifier: email.split('@')[0],
+        privateNotes: privateNotes,
+        userLabel: hasSeg ? clientFromSegments : '',
+        statusLabel: hasSeg ? statusFromSegments : ''
+    };
+}
+
+/** Prueba Netflix / no Netflix cuando la vista no define producto (p. ej. «Todos»). */
+function parseLineAccountFieldsBest(line, isNetflix) {
+    const order = isNetflix ? [true, false] : [false, true];
+    for (let i = 0; i < order.length; i++) {
+        const p = parseLineAccountFields(line, { isNetflix: order[i] });
+        if (p) return p;
+    }
+    return null;
+}
+
+/** Vista «Todos»: sin producto fijo; prioriza formato Netflix (n) si aplica. */
+function parseCredentialLineForAggregateMerge(line) {
+    const t = String(line || '').trim();
+    if (!t) return null;
+    const parts = parseAdminLicenseLineToSplitParts(t);
+    const credUse = String(parts.cred || '').trim() || t;
+    const pN = parseLineAccountFields(credUse, { isNetflix: true });
+    const pS = parseLineAccountFields(credUse, { isNetflix: false });
+    if (pN && pN.netflixSlot != null) return pN;
+    if (pS) return pS;
+    return pN || pS;
+}
+
+function serializeCredentialLine(parsed, useColon) {
+    if (parsed.netflixSlot != null && parsed.emailBase) {
+        return `${parsed.emailBase} (${parsed.netflixSlot}) ${parsed.password}`.trim();
+    }
+    if (useColon) {
+        return `${parsed.email}:${parsed.password}`;
+    }
+    return `${parsed.email} ${parsed.password}`;
+}
+
+/**
+ * Quita (1) / (1d) entre correo y contraseña en productos que no son Netflix (restos tipo Disney u otros).
+ */
+function stripNonNetflixSlotInCredPart(credPart, isNetflix) {
+    if (credPart == null) return credPart;
+    if (isNetflix) return credPart;
+    return String(credPart)
+        .replace(/^(\S+@\S+\.\S+)\s+\((\d+[a-zA-Z]*)\)\s+(\S+)/, '$1 $3')
+        .trim();
+}
+
+function stripNonNetflixSlotMarkersFromLineStart(line, isNetflix) {
+    if (line == null) return line;
+    if (isNetflix) return line;
+    return String(line).replace(/^(\S+@\S+\.\S+)\s+\((\d+[a-zA-Z]*)\)\s+(\S+)/, '$1 $3');
+}
+
+/**
+ * Normaliza una línea al formato LICENSE_LINE_FIELD_SEP (sin // legado).
+ * El texto de la credencial no se parte por | ni por // salvo formato legado (// no precedido de :).
+ */
+function normalizeLineWithDoubleSlashSeparator(line, isNetflix, opts) {
+    let t = String(line || '').trim();
+    if (!t) return '';
+    const parts = parseAdminLicenseLineToSplitParts(t);
+    let c = String(parts.cred != null ? parts.cred : '').trim();
+    c = stripNonNetflixSlotMarkersFromLineStart(c, isNetflix);
+    c = stripNonNetflixSlotInCredPart(c, isNetflix);
+    return buildAdminLicenseStorageLine(
+        c,
+        parts.user,
+        parts.statusGood != null ? parts.statusGood : '',
+        parts.statusBad != null ? parts.statusBad : '',
+        parts.extra
+    );
+}
+
+function normalizePipeSeparatorsInText(text, licenseId, opts) {
+    const isNetflix = (() => {
+        if (licenseId == null || licenseId === '') return false;
+        const lic = licenses.find(l => String(l.id) === String(licenseId));
+        return lic ? isNetflixProductName(lic.product_name) : false;
+    })();
+    return text
+        .split(/\r?\n/)
+        .map(function (ln) {
+            return normalizeLineWithDoubleSlashSeparator(ln, isNetflix, opts);
+        })
+        .join('\n');
+}
+
+function normalizePipeSeparatorsInElement(el, licenseId, opts) {
+    if (!el) return;
+    if (el.classList && el.classList.contains('day-license-split-root')) {
+        return;
+    }
+    if (el.classList && el.classList.contains('day-license-split__creds')) {
+        return;
+    }
+    if (el.tagName === 'TEXTAREA') return;
+    const lid = licenseId != null && licenseId !== '' ? Number(licenseId) : NaN;
+    if (Number.isNaN(lid)) return;
+    if (lid === 0 && !(el.classList && el.classList.contains('day-day-notepad'))) return;
+    const raw = editablePlainTextForPipeNormalize(el);
+    const next = normalizePipeSeparatorsInText(raw, lid, opts);
+    const editing =
+        document.activeElement === el &&
+        (el.getAttribute('contenteditable') === 'true' || el.isContentEditable);
+
+    // Durante escritura en vivo, no reescribir DOM para evitar salto de cursor y pérdida de caracteres.
+    if (editing && opts && opts.liveTyping) {
+        return;
+    }
+
+    if (next !== raw) {
+        const off = getCaretPlainTextOffset(el);
+        // En lugar de asignar textContent (que destruye el HTML y borra los cuadros),
+        // llamamos a highlightEmailsAndPasswords para que reconstruya el HTML con el nuevo texto.
+        el.textContent = next;
+        if (typeof highlightEmailsAndPasswords === 'function') {
+            highlightEmailsAndPasswords(el);
+        }
+        const newOff = mapCaretOffsetAfterNormalize(raw, next, off);
+        setCaretByPlainTextOffset(el, newOff);
+        return; // highlightEmailsAndPasswords ya hizo el trabajo
+    }
+
+    /* Sin foco: resaltado completo. Con foco: no tocar estructura para evitar que "desaparezcan cuadros". */
+    if (!editing || (opts && opts.forceNormalize)) {
+        if (typeof highlightEmailsAndPasswords === 'function') {
+            highlightEmailsAndPasswords(el);
+        }
+    }
+}
+
+window.normalizePipeSeparatorsInElement = normalizePipeSeparatorsInElement;
+window.normalizePipeSeparatorsInText = normalizePipeSeparatorsInText;
+
+// Parsear texto para extraer correos y contraseñas (notas personales al final de línea se ignoran)
+function parseAccountsText(text, licenseId) {
+    const license = licenseId != null ? licenses.find(l => l.id === licenseId) : null;
+    const isNetflix = license && isNetflixProductName(license.product_name);
+    const accounts = [];
+    const lines = text.split('\n');
+
+    for (let line of lines) {
+        const parsed = parseLineAccountFields(line, { isNetflix });
+        if (parsed) {
             accounts.push({
-                email: email,
-                password: password,
-                identifier: identifier
+                email: parsed.email,
+                password: parsed.password,
+                identifier: parsed.identifier
             });
         }
     }
-    
+
     return accounts;
 }
 
@@ -1008,7 +5625,7 @@ async function saveBulkAccounts(licenseId, text) {
         return; // Guardar silenciosamente, no mostrar errores
     }
     
-    const accounts = parseAccountsText(text);
+    const accounts = parseAccountsText(text, licenseId);
     
     if (accounts.length === 0) {
         return; // Guardar silenciosamente, no mostrar errores
@@ -1089,177 +5706,49 @@ async function saveBulkAccounts(licenseId, text) {
     }
 }
 
-// Función para encontrar correos duplicados
-function findDuplicateEmails(accounts) {
-    const emailCount = new Map();
-    const duplicates = new Set();
-    
-    // Contar ocurrencias de cada correo
-    accounts.forEach(account => {
-        const email = account.email ? account.email.toLowerCase().trim() : '';
-        if (email) {
-            const count = emailCount.get(email) || 0;
-            emailCount.set(email, count + 1);
+/** Cuenta correos en cada línea del bloc Licencias (misma lógica que parseAccountsText). */
+function collectEmailsFromLicenseNotesText(text, licenseId) {
+    const license = licenseId != null ? licenses.find(l => l.id === licenseId) : null;
+    const isNetflix = license && isNetflixProductName(license.product_name);
+    const emails = [];
+    const lines = String(text || '').split('\n');
+    for (let i = 0; i < lines.length; i++) {
+        const parsed = parseLineAccountFields(lines[i], { isNetflix });
+        if (parsed && parsed.email) {
+            emails.push(parsed.email.toLowerCase().trim());
         }
-    });
-    
-    // Identificar correos que aparecen más de una vez
-    emailCount.forEach((count, email) => {
-        if (count > 1) {
-            duplicates.add(email);
-        }
-    });
-    
-    return duplicates;
+    }
+    return emails;
 }
 
-// Cargar y mostrar las cuentas guardadas para una licencia
+function refreshDuplicateEmailHighlights(licenseId, options) {
+    if (licenseId === null || licenseId === undefined || licenseId === '') return;
+    const skipNotepad = options && options.skipNotepad;
+    const skipSuspended = options && options.skipSuspended;
+
+    if (!skipNotepad) {
+        const np = document.getElementById('adminLicenciasNotepadByLicense');
+        if (np && String(np.dataset.licenseId || '') === String(licenseId)) {
+            highlightEmailsAndPasswords(np);
+        }
+    }
+    if (!skipSuspended) {
+        const sp = document.getElementById('adminLicenciasSuspendedNotepad');
+        if (sp && String(sp.dataset.licenseId || '') === String(licenseId)) {
+            highlightEmailsAndPasswords(sp);
+        }
+    }
+}
+
+window.refreshDuplicateEmailHighlights = refreshDuplicateEmailHighlights;
+
+// Lista de cuentas “guardadas” retirada de la UI: solo Notas + Licencias + Días.
 async function loadAndDisplaySavedAccounts(licenseId) {
-    const savedAccountsContainer = document.getElementById('licenseSavedAccountsContainer');
-    const savedAccountsList = document.getElementById('licenseSavedAccountsList');
-    
-    if (!savedAccountsContainer || !savedAccountsList) return;
-    
-    // Buscar la licencia en el array de licencias
-    const license = licenses.find(l => l.id === licenseId);
-    
-    // Siempre mostrar el contenedor, incluso si no hay cuentas
-    savedAccountsContainer.classList.remove('d-none');
-    
-    // Filtrar solo cuentas disponibles y asignadas (no vendidas)
-    const availableAccounts = license && license.accounts 
-        ? license.accounts.filter(account => account.status !== 'sold')
-        : [];
-    
-    // Obtener todas las cuentas (incluyendo vendidas) para detectar duplicados completos
-    const allAccounts = license && license.accounts ? license.accounts : [];
-    const duplicateEmails = findDuplicateEmails(allAccounts);
-    
-    // Generar HTML con todas las cuentas (editables)
-    let accountsHtml = '';
-    availableAccounts.forEach((account, index) => {
-        const isDuplicate = duplicateEmails.has(account.email.toLowerCase());
-        const duplicateClass = isDuplicate ? ' duplicate' : '';
-        accountsHtml += `
-            <div class="saved-account-item${duplicateClass}" contenteditable="true" data-account-id="${account.id}" data-is-editable="true" data-email="${escapeHtml(account.email.toLowerCase())}">
-                <span class="saved-account-email">${escapeHtml(account.email.toLowerCase())}</span>
-                <span class="saved-account-separator"> </span>
-                <span class="saved-account-password">${escapeHtml(account.password)}</span>
-            </div>
-        `;
-    });
-    
-    // Agregar un item vacío al final para poder agregar nuevos correos
-    accountsHtml += `
-        <div class="saved-account-item" contenteditable="true" data-account-id="" data-is-new="true"></div>
-    `;
-    
-    savedAccountsList.innerHTML = accountsHtml;
-    
-    // Configurar event listeners para los items editables
-    setupEditableAccounts(licenseId);
-    
-    // Aplicar resaltado de búsqueda si hay un término activo
+    refreshDuplicateEmailHighlights(licenseId);
     const searchInput = document.getElementById('adminStoreSearch');
     if (searchInput && searchInput.value.trim()) {
         highlightMatchingEmails(searchInput.value.toLowerCase().trim());
     }
-}
-
-// Configurar los campos editables de cuentas
-function setupEditableAccounts(licenseId) {
-    const accountItems = document.querySelectorAll('.saved-account-item[contenteditable="true"]');
-    
-    accountItems.forEach((item, index) => {
-        // Guardar automáticamente después de dejar de escribir (como Colornote)
-        let saveTimeout;
-        let isSaving = false;
-        let lastSavedText = '';
-        
-        // Función para guardar
-        const saveItem = async function() {
-            // Obtener el texto limpio sin HTML
-            const text = this.innerText || this.textContent || '';
-            
-            // Evitar guardar si no hay cambios o si ya se está guardando
-            if (text.trim() === lastSavedText || isSaving) {
-                return;
-            }
-            
-            if (text.trim()) {
-                isSaving = true;
-                const accountId = this.dataset.accountId;
-                const isNew = this.dataset.isNew === 'true';
-                
-                try {
-                    if (isNew || !accountId) {
-                        // Es un nuevo correo, guardarlo masivamente (cada línea es una licencia)
-                        await saveBulkAccountsFromEditable(licenseId, text);
-                    } else {
-                        // Es un correo existente editado
-                        // Buscar la cuenta original para preservar datos si es necesario
-                        const originalAccount = licenses
-                            .flatMap(l => l.accounts || [])
-                            .find(acc => acc.id === parseInt(accountId));
-                        
-                        // Actualizar con mejor manejo del parseo
-                        await updateExistingAccountImproved(licenseId, parseInt(accountId), text, originalAccount);
-                    }
-                    lastSavedText = text.trim();
-                } catch (error) {
-                    console.error('Error al guardar:', error);
-                } finally {
-                    isSaving = false;
-                }
-            }
-        };
-        
-        item.addEventListener('input', function() {
-            clearTimeout(saveTimeout);
-            
-            // Resaltar emails y passwords en tiempo real
-            highlightEmailsAndPasswords(this);
-            
-            // Guardar automáticamente después de 500ms de inactividad (más rápido, como Colornote)
-            saveTimeout = setTimeout(() => {
-                saveItem.call(this);
-            }, 500);
-        });
-        
-        // Guardar inmediatamente al perder el foco (blur)
-        item.addEventListener('blur', function() {
-            clearTimeout(saveTimeout);
-            saveItem.call(this);
-            
-            // Manejar placeholder (vacío)
-            if (this.dataset.isNew === 'true') {
-                if (this.textContent.trim() === '') {
-                    this.classList.add('empty');
-                } else {
-                    this.classList.remove('empty');
-                }
-            }
-        });
-        
-        // Guardar al presionar Ctrl+Enter
-        item.addEventListener('keydown', function(e) {
-            if (e.key === 'Enter' && !e.ctrlKey && !e.metaKey) {
-                // Permitir Enter normal para nueva línea (cada línea será una licencia)
-                return;
-            }
-            
-            if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
-                e.preventDefault();
-                clearTimeout(saveTimeout);
-                saveItem.call(this);
-            }
-        });
-        
-        // Inicializar el texto guardado
-        if (item.dataset.isNew !== 'true') {
-            lastSavedText = (item.innerText || item.textContent || '').trim();
-        }
-    });
 }
 
 // Guardar cuentas desde campo editable
@@ -1272,7 +5761,7 @@ async function saveBulkAccountsFromEditable(licenseId, text) {
         return;
     }
     
-    const accounts = parseAccountsText(text);
+    const accounts = parseAccountsText(text, licenseId);
     
     if (accounts.length === 0) {
         return;
@@ -1326,7 +5815,7 @@ async function saveBulkAccountsForDay(licenseId, text, day) {
         return;
     }
     
-    const accounts = parseAccountsText(text);
+    const accounts = parseAccountsText(text, licenseId);
     
     if (accounts.length === 0) {
         return;
@@ -1403,7 +5892,7 @@ async function updateOrCreateMultipleAccountsImproved(licenseId, accountId, text
     
     // Procesar la primera línea (la cuenta que se está editando)
     const firstLine = lines[0];
-    const parsed = parseEmailAndPassword(firstLine, originalAccount);
+    const parsed = parseEmailAndPassword(firstLine, originalAccount, licenseId);
     
     if (!parsed.email && !originalAccount) {
         console.error('No se pudo extraer email de la línea editada');
@@ -1471,37 +5960,20 @@ async function updateOrCreateMultipleAccounts(licenseId, accountId, text, day) {
     return await updateOrCreateMultipleAccountsImproved(licenseId, accountId, text, day, originalAccount);
 }
 
-// Función mejorada para parsear email y contraseña de una línea de texto
-function parseEmailAndPassword(text, originalAccount = null) {
+// Función mejorada para parsear email y contraseña de una línea de texto (notas al final ignoradas para API)
+function parseEmailAndPassword(text, originalAccount = null, licenseId) {
     if (!text || !text.trim()) {
         return { email: null, password: null };
     }
-    
+
     const line = text.trim();
-    
-    // Intentar detectar formato: correo@gmail.com contraseña o correo@gmail.com:contraseña
-    const colonMatch = line.match(/^([^\s:]+@[^\s:]+\.\S+):(.+)$/);
-    const spaceMatch = line.match(/^([^\s]+@[^\s]+\.\S+)\s+(.+)$/);
-    
-    let email = null;
-    let password = null;
-    
-    if (colonMatch) {
-        email = colonMatch[1].trim().toLowerCase();
-        password = colonMatch[2].trim();
-    } else if (spaceMatch) {
-        email = spaceMatch[1].trim().toLowerCase();
-        password = spaceMatch[2].trim();
-    } else {
-        // Buscar correo en la línea
-        const emailMatch = line.match(/(\S+@\S+\.\S+)/);
-        if (emailMatch) {
-            email = emailMatch[1].trim().toLowerCase();
-            // El resto de la línea es la contraseña
-            password = line.replace(emailMatch[0], '').trim().replace(/^[:;\s]+/, '');
-        }
-    }
-    
+    const license = licenseId != null ? licenses.find(l => l.id === licenseId) : null;
+    const isNetflix = license && isNetflixProductName(license.product_name);
+    const parsed = parseLineAccountFields(line, { isNetflix });
+
+    let email = parsed ? parsed.email : null;
+    let password = parsed ? parsed.password : null;
+
     // Si no se encontró email pero hay cuenta original, usar la original
     if (!email && originalAccount) {
         email = originalAccount.email.toLowerCase();
@@ -1525,10 +5997,19 @@ function parseEmailAndPassword(text, originalAccount = null) {
         return { email: null, password: null };
     }
     
+    let identifier = null;
+    if (parsed && parsed.identifier != null) {
+        identifier = parsed.identifier;
+    } else if (email) {
+        identifier = email.split('@')[0];
+    } else if (originalAccount) {
+        identifier = originalAccount.account_identifier;
+    }
+
     return {
         email: email || (originalAccount ? originalAccount.email.toLowerCase() : null),
         password: password || (originalAccount ? originalAccount.password : null),
-        identifier: email ? email.split('@')[0] : (originalAccount ? originalAccount.account_identifier : null)
+        identifier: identifier
     };
 }
 
@@ -1546,7 +6027,7 @@ async function updateExistingAccountImproved(licenseId, accountId, text, origina
     
     // Procesar la primera línea (la cuenta que se está editando)
     const firstLine = lines[0];
-    const parsed = parseEmailAndPassword(firstLine, originalAccount);
+    const parsed = parseEmailAndPassword(firstLine, originalAccount, licenseId);
     
     if (!parsed.email && !originalAccount) {
         console.error('No se pudo extraer email de la línea editada');
@@ -1608,122 +6089,6643 @@ async function updateExistingAccount(licenseId, accountId, text) {
     return await updateExistingAccountImproved(licenseId, accountId, text, originalAccount);
 }
 
+/** Cuentas vendidas cuyo assigned_at cae en este día del mes (1–31). */
+function getSoldAccountsForDayNumber(licenseId, day) {
+    if (licenseId === AGGREGATE_LICENSE_ID) {
+        const out = [];
+        const accountToProduct = new Map();
+        const visibleIds = getAggregateVisibleLicenseIdSet();
+        for (const lic of licenses) {
+            if (!lic.accounts || lic.isAggregate) continue;
+            if (!visibleIds.has(lic.id)) continue;
+            for (const account of lic.accounts) {
+                if (account.status !== 'sold' || !account.assigned_at) continue;
+                const saleDate = new Date(account.assigned_at);
+                if (saleDate.getDate() !== day) continue;
+                accountToProduct.set(account.id, lic.product_name || '');
+                out.push(Object.assign({}, account, { _sourceLicenseId: lic.id }));
+            }
+        }
+        out.sort((a, b) => {
+            const pa = accountToProduct.get(a.id) || '';
+            const pb = accountToProduct.get(b.id) || '';
+            const c = pa.localeCompare(pb, 'es');
+            if (c !== 0) return c;
+            return normalizeAccountEmailKey(a.email).localeCompare(normalizeAccountEmailKey(b.email));
+        });
+        return out;
+    }
+    const license = licenses.find(l => l.id === licenseId);
+    if (!license) return [];
+    const accs = Array.isArray(license.accounts) ? license.accounts : [];
+    return accs.filter(account => {
+        if (account.status !== 'sold' || !account.assigned_at) return false;
+        const saleDate = new Date(account.assigned_at);
+        return saleDate.getDate() === day;
+    });
+}
+
+function normalizeAccountEmailKey(email) {
+    return String(email || '').toLowerCase().trim();
+}
+
+/** Texto plano del bloc del día (una línea por cuenta), mismo formato que parseAccountsText. */
+function buildDayNotepadTextFromAccounts(dayAccounts) {
+    if (!dayAccounts || !dayAccounts.length) return '';
+    return dayAccounts
+        .map(acc => {
+            const pwd = String(acc.password != null ? acc.password : '').replace(/\r?\n/g, ' ');
+            return `${normalizeAccountEmailKey(acc.email)} ${pwd}`;
+        })
+        .join('\n');
+}
+
+/**
+ * El bloc día guardado puede quedar con menos líneas que las ventas reales.
+ * Se priorizan las líneas derivadas de cuentas vendidas y se añaden del guardado las que no estén ya (por correo).
+ */
+function mergeDayBlocWithDerivedAccounts(saved, built) {
+    const builtStr = built != null ? String(built).trim() : '';
+    const savedStr = saved != null ? String(saved).trim() : '';
+    if (!builtStr) {
+        return savedStr;
+    }
+    const builtLines = builtStr.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+    const emailSet = new Set();
+    for (const bl of builtLines) {
+        const m = bl.match(/(\S+@\S+\.\S+)/);
+        if (m) emailSet.add(m[1].toLowerCase());
+    }
+    if (!savedStr) {
+        return builtStr;
+    }
+    const savedLines = savedStr.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+    const out = [...builtLines];
+    for (const sl of savedLines) {
+        const m = sl.match(/(\S+@\S+\.\S+)/);
+        if (m) {
+            const em = m[1].toLowerCase();
+            if (!emailSet.has(em)) {
+                out.push(sl);
+                emailSet.add(em);
+            }
+        } else if (sl.length > 0 && !out.includes(sl)) {
+            out.push(sl);
+        }
+    }
+    return out.join('\n');
+}
+
+/** Texto de day_notepads de licencias incluidas en onlyIds (vista «Todos» y productos visibles). */
+function getDayNotepadSavedFromAllLicenses(day, onlyIds) {
+    const key = String(day);
+    const parts = [];
+    for (const lic of licenses) {
+        if (!lic || lic.isAggregate) continue;
+        if (onlyIds && !onlyIds.has(lic.id)) continue;
+        if (!lic.day_notepads || !Object.prototype.hasOwnProperty.call(lic.day_notepads, key)) continue;
+        const raw = lic.day_notepads[key];
+        const s = raw != null ? String(raw).trim() : '';
+        if (s) parts.push(s);
+    }
+    return parts.join('\n');
+}
+
+/** Mapa correo→línea del bloc Licencias solo para los productos indicados (vista «Todos» filtrada). */
+function buildLicenseNotesCredentialKeyMapForIds(onlyIds) {
+    const map = new Map();
+    if (onlyIds && onlyIds.size === 0) return map;
+    for (const lic of licenses) {
+        if (!lic || lic.isAggregate) continue;
+        if (onlyIds && !onlyIds.has(lic.id)) continue;
+        const notes = lic.license_notes || '';
+        for (const rawLine of notes.split(/\r?\n/)) {
+            const line = rawLine.trim();
+            if (!line) continue;
+            const parts = parseAdminLicenseLineToSplitParts(line);
+            const cred = String(parts.cred || '').trim();
+            const m = /\S+@\S+\.\S+/.exec(cred);
+            if (!m) continue;
+            map.set(normalizeAccountEmailKey(m[0]), line);
+        }
+    }
+    return map;
+}
+
+/**
+ * Índice correo(normalizado)→línea completa del bloc «Licencias / producto» (license_notes).
+ * Netflix se parsea con el flag correcto por producto.
+ */
+function getLicenseNotesLineByCredentialKeyMap() {
+    if (!_licenseNotesCredentialLineCache) {
+        const map = new Map();
+        for (const lic of licenses) {
+            if (!lic || lic.isAggregate) continue;
+            const notes = lic.license_notes || '';
+            for (const rawLine of notes.split(/\r?\n/)) {
+                const line = rawLine.trim();
+                if (!line) continue;
+                const parts = parseAdminLicenseLineToSplitParts(line);
+                const cred = String(parts.cred || '').trim();
+                const m = /\S+@\S+\.\S+/.exec(cred);
+                if (!m) continue;
+                map.set(normalizeAccountEmailKey(m[0]), line);
+            }
+        }
+        _licenseNotesCredentialLineCache = map;
+    }
+    return _licenseNotesCredentialLineCache;
+}
+
+/**
+ * Vista «Todos»: sustituye líneas planas (email pass) por la línea del bloc Licencias del producto
+ * cuando coincide el correo (incl. Netflix (n)); añade al final cuentas del día que faltaban por colisión/dedup.
+ */
+function enrichAggregateMergedWithLicenseNotes(mergedText, dayAccounts, onlyIds) {
+    const byKey = onlyIds ? buildLicenseNotesCredentialKeyMapForIds(onlyIds) : getLicenseNotesLineByCredentialKeyMap();
+    const lines = String(mergedText || '')
+        .split(/\r?\n/)
+        .map(l => l.trim())
+        .filter(Boolean);
+    const replaced = lines.map(function (line) {
+        const p = parseCredentialLineForAggregateMerge(line);
+        if (!p) return line;
+        const key = normalizeAccountEmailKey(p.email);
+        return byKey.has(key) ? byKey.get(key) : line;
+    });
+    const seen = new Set();
+    for (const ln of replaced) {
+        const p = parseCredentialLineForAggregateMerge(ln);
+        if (p) seen.add(normalizeAccountEmailKey(p.email));
+    }
+    if (dayAccounts && dayAccounts.length) {
+        for (const acc of dayAccounts) {
+            const k = normalizeAccountEmailKey(acc.email);
+            if (seen.has(k)) continue;
+            seen.add(k);
+            if (byKey.has(k)) {
+                replaced.push(byKey.get(k));
+            } else {
+                const pwd = String(acc.password != null ? acc.password : '').replace(/\r?\n/g, ' ');
+                replaced.push(`${k} ${pwd}`.trim());
+            }
+        }
+    }
+    return replaced.join('\n');
+}
+
+/** Texto mostrado en el bloc: guardado en servidor (day_notepads) o, si no hay, derivado de cuentas vendidas. */
+function getDayNotepadDisplayText(licenseId, day, dayAccounts, aggregateVisibleIdsOpt) {
+    const built = buildDayNotepadTextFromAccounts(dayAccounts);
+    if (licenseId === AGGREGATE_LICENSE_ID) {
+        const visibleIds = aggregateVisibleIdsOpt || getAggregateVisibleLicenseIdSet();
+        const combinedSaved = getDayNotepadSavedFromAllLicenses(day, visibleIds);
+        const merged = mergeDayBlocWithDerivedAccounts(combinedSaved, built);
+        return enrichAggregateMergedWithLicenseNotes(merged, dayAccounts, visibleIds);
+    }
+    const lic = licenses.find(l => l.id === licenseId);
+    if (!lic || !lic.day_notepads) {
+        return built;
+    }
+    const key = String(day);
+    if (Object.prototype.hasOwnProperty.call(lic.day_notepads, key)) {
+        const raw = lic.day_notepads[key];
+        const saved = raw != null ? String(raw) : '';
+        return mergeDayBlocWithDerivedAccounts(saved, built);
+    }
+    return built;
+}
+
+/** Estados «verdes» (columna propia, independiente de la roja). */
+const ADMIN_LICENSE_STATUS_OPTIONS_GOOD = [
+    { v: '', label: '—' },
+    { v: 'ok', label: 'Buena y revisada' },
+    { v: 'renovar 1 mes mas', label: 'Renovar 1 mes más' },
+    { v: 'dejar mes a mes', label: 'Dejar mes a mes' },
+    { v: 'no renovar', label: 'No renovar' },
+    { v: 'garantia', label: 'Garantía (repuesto)' },
+    { v: 'reemplazar', label: 'Reemplazar' }
+];
+
+/** Estados «rojos» (columna propia). */
+const ADMIN_LICENSE_STATUS_OPTIONS_BAD = [
+    { v: '', label: '—' },
+    { v: 'caida o suspendida', label: 'Caída o suspendida' },
+    { v: 'no reproduce', label: 'No reproduce' },
+    { v: 'otro', label: 'Otro' }
+];
+
+/** Todas las opciones conocidas (p. ej. canonical desde texto guardado). */
+const ADMIN_LICENSE_STATUS_OPTIONS = ADMIN_LICENSE_STATUS_OPTIONS_GOOD.concat(
+    ADMIN_LICENSE_STATUS_OPTIONS_BAD.filter(function (o) {
+        return o.v !== '';
+    })
+);
+
+/** Texto normalizado para comparar estado guardado vs listas verde/rojo. */
+function adminLicenseNormalizeStatusKey(s) {
+    try {
+        return String(s || '')
+            .trim()
+            .normalize('NFD')
+            .replace(/\p{M}/gu, '')
+            .toLowerCase()
+            .replace(/\s+/g, ' ');
+    } catch (e) {
+        return String(s || '')
+            .trim()
+            .toLowerCase()
+            .replace(/\s+/g, ' ');
+    }
+}
+
+const ADMIN_LICENSE_STATUS_GOOD_KEYS = new Set(
+    ['ok', 'renovar 1 mes mas', 'dejar mes a mes', 'no renovar', 'garantia', 'reemplazar', 'terminado'].map(
+        adminLicenseNormalizeStatusKey
+    )
+);
+/* Incluye «repetida» solo para colorear datos viejos; ya no está en el desplegable. */
+const ADMIN_LICENSE_STATUS_BAD_KEYS = new Set(
+    ['caida o suspendida', 'caida', 'suspendida', 'no reproduce', 'repetida'].map(
+        adminLicenseNormalizeStatusKey
+    )
+);
+
+function adminLicenseStatusIsKnownGoodOption(st) {
+    const k = adminLicenseNormalizeStatusKey(st);
+    return ADMIN_LICENSE_STATUS_OPTIONS_GOOD.some(function (o) {
+        return o.v && adminLicenseNormalizeStatusKey(o.v) === k;
+    });
+}
+
+function adminLicenseStatusIsKnownBadOption(st) {
+    const k = adminLicenseNormalizeStatusKey(st);
+    return ADMIN_LICENSE_STATUS_OPTIONS_BAD.some(function (o) {
+        return o.v && adminLicenseNormalizeStatusKey(o.v) === k;
+    });
+}
+
+/** Tier visual: buenos (verde), problemas (rojo), resto (neutro). «otro» / otro-… cuenta como problema (rojo). */
+function adminLicenseStatusTierFromStored(statusText) {
+    const raw = String(statusText || '').trim();
+    const k = adminLicenseNormalizeStatusKey(raw);
+    if (!k) return 'neutral';
+    if (/^otro[-:\s]/i.test(raw) || k === 'otro') return 'bad';
+    if (ADMIN_LICENSE_STATUS_GOOD_KEYS.has(k)) return 'good';
+    if (ADMIN_LICENSE_STATUS_BAD_KEYS.has(k)) return 'bad';
+    return 'neutral';
+}
+
+function adminLicenseStatusCssTierClass(tier) {
+    if (tier === 'good') return 'day-account-status--good';
+    if (tier === 'bad') return 'day-account-status--bad';
+    return 'day-account-status--neutral';
+}
+
+function adminLicenseSplitEffectiveStatusForTier(sel, otroCombined) {
+    if (!sel) return '';
+    const sv = String(sel.value || '').trim();
+    if (adminLicenseNormalizeStatusKey(sv) === 'otro') {
+        const d = otroCombined ? String(otroCombined.value || '').trim() : '';
+        const detail = d.replace(/^otro-?/i, '');
+        return detail ? 'otro-' + detail : 'otro-';
+    }
+    return sv;
+}
+
+function adminLicenseSplitApplyGoodSelectTierClass(selGood) {
+    if (!selGood) return;
+    const v = String(selGood.value || '').trim();
+    const tier = v ? 'good' : 'neutral';
+    selGood.classList.remove(
+        'license-split-editor__status--tier-good',
+        'license-split-editor__status--tier-bad',
+        'license-split-editor__status--tier-neutral'
+    );
+    selGood.classList.add('license-split-editor__status--tier-' + tier);
+}
+
+function adminLicenseSplitApplyBadSelectTierClass(selBad, otroCombined) {
+    if (!selBad) return;
+    const tier = adminLicenseStatusTierFromStored(adminLicenseSplitEffectiveStatusForTier(selBad, otroCombined));
+    selBad.classList.remove(
+        'license-split-editor__status--tier-good',
+        'license-split-editor__status--tier-bad',
+        'license-split-editor__status--tier-neutral'
+    );
+    selBad.classList.add('license-split-editor__status--tier-' + tier);
+    if (otroCombined) {
+        otroCombined.classList.remove(
+            'license-split-editor__otro-combined--tier-good',
+            'license-split-editor__otro-combined--tier-bad',
+            'license-split-editor__otro-combined--tier-neutral'
+        );
+        otroCombined.classList.add('license-split-editor__otro-combined--tier-' + tier);
+    }
+    adminLicenseSplitSyncReportIcon(selBad, otroCombined);
+}
+
+function adminLicenseSplitApplyDualStatusTierClasses(selGood, selBad, otroCombined) {
+    adminLicenseSplitApplyGoodSelectTierClass(selGood);
+    adminLicenseSplitApplyBadSelectTierClass(selBad, otroCombined);
+}
+
+var __adminLicReportCountRefreshScheduled = false;
+function scheduleRefreshAdminLicenciasReportCounts() {
+    if (__adminLicReportCountRefreshScheduled) return;
+    __adminLicReportCountRefreshScheduled = true;
+    window.requestAnimationFrame(function () {
+        __adminLicReportCountRefreshScheduled = false;
+        refreshAdminLicenciasReportCounts();
+    });
+}
+
+function adminLicenseSplitCountReportShells(scopeEl) {
+    if (!scopeEl || !scopeEl.querySelectorAll) return 0;
+    return scopeEl.querySelectorAll('.license-split-editor__status-select-shell--report').length;
+}
+
+function refreshAdminLicenciasReportCounts() {
+    const rowsMain = document.getElementById('adminLicenciasStructuredRows');
+    const nMain = rowsMain ? adminLicenseSplitCountReportShells(rowsMain) : 0;
+
+    const badgeMain = document.getElementById('adminLicenciasLicenseReportBadge');
+    if (badgeMain) {
+        const numEl = badgeMain.querySelector('.admin-licencias-report-header-badge__num');
+        if (nMain > 0) {
+            badgeMain.hidden = false;
+            if (numEl) numEl.textContent = String(nMain);
+            badgeMain.setAttribute(
+                'aria-label',
+                nMain === 1 ? '1 reporte por cuadrar en Licencias' : nMain + ' reportes por cuadrar en Licencias'
+            );
+            badgeMain.title =
+                nMain === 1
+                    ? '1 línea con estado que requiere reporte (Licencias)'
+                    : nMain + ' líneas con estado que requieren reporte (Licencias)';
+        } else {
+            badgeMain.hidden = true;
+            if (numEl) numEl.textContent = '0';
+            badgeMain.removeAttribute('title');
+            badgeMain.setAttribute('aria-label', 'Sin reportes pendientes en Licencias');
+        }
+    }
+
+    let nDaysSum = 0;
+    document.querySelectorAll('.js-admin-day-report-badge').forEach(function (badge) {
+        const day = badge.getAttribute('data-day');
+        let wrap = null;
+        const section = badge.closest('.day-section');
+        if (section) {
+            wrap = section.querySelector('.day-license-split-rows');
+        }
+        if (!wrap && day != null && day !== '') {
+            const root = document.querySelector('.day-license-split-root[data-day="' + day + '"]');
+            if (root) wrap = root.querySelector('.day-license-split-rows');
+        }
+        const n = wrap ? adminLicenseSplitCountReportShells(wrap) : 0;
+        nDaysSum += n;
+        const numEl = badge.querySelector('.admin-licencias-report-header-badge__num');
+        if (n > 0) {
+            badge.hidden = false;
+            if (numEl) numEl.textContent = String(n);
+            const bt =
+                n === 1
+                    ? '1 reporte por cuadrar en el día ' + day
+                    : n + ' reportes por cuadrar en el día ' + day;
+            badge.title = bt;
+            badge.setAttribute('aria-label', bt);
+        } else {
+            badge.hidden = true;
+            if (numEl) numEl.textContent = '0';
+            badge.removeAttribute('title');
+            badge.setAttribute('aria-label', 'Sin reportes pendientes en el día ' + (day || ''));
+        }
+    });
+
+    const nTotal = nMain + nDaysSum;
+    const reportesTotalEl = document.getElementById('adminLicenciasReportesTotalBadge');
+    if (reportesTotalEl) {
+        const numEl = reportesTotalEl.querySelector('.license-card-report-total-badge__num');
+        if (nTotal > 0) {
+            reportesTotalEl.hidden = false;
+            if (numEl) numEl.textContent = String(nTotal);
+            const tt =
+                nTotal === 1
+                    ? '1 reporte por cuadrar en total (Licencias + días)'
+                    : nTotal + ' reportes por cuadrar en total (Licencias + días)';
+            reportesTotalEl.title = tt;
+            reportesTotalEl.setAttribute('aria-label', tt);
+        } else {
+            reportesTotalEl.hidden = true;
+            if (numEl) numEl.textContent = '0';
+            reportesTotalEl.removeAttribute('title');
+            reportesTotalEl.setAttribute('aria-label', 'Sin reportes pendientes');
+        }
+    }
+
+    const reportesBtn = document.getElementById('adminLicenciasReportesBtn');
+    if (reportesBtn) {
+        reportesBtn.removeAttribute('hidden');
+        const baseTitle =
+            nTotal > 0
+                ? nTotal === 1
+                    ? 'Reportes: 1 cuenta con estado rojo — ver lista'
+                    : 'Reportes: ' + nTotal + ' cuentas con estado rojo — ver lista'
+                : 'Reportes: ver lista (vacía si no hay estados rojos en Licencias ni días)';
+        reportesBtn.title = baseTitle;
+        reportesBtn.setAttribute('aria-label', baseTitle);
+    }
+
+    try {
+        if (typeof window.__adminReportesRenderIfVisible === 'function') {
+            window.__adminReportesRenderIfVisible();
+        }
+    } catch (repLiveErr) {
+        console.error('__adminReportesRenderIfVisible:', repLiveErr);
+    }
+
+    syncAdminHistorialShellMode();
+}
+
+window.scheduleRefreshAdminLicenciasReportCounts = scheduleRefreshAdminLicenciasReportCounts;
+
+/** Marca el shell del estado rojo para contadores de Reportes (sin icono extra junto al select). */
+function adminLicenseSplitSyncReportIcon(sel, otroCombined) {
+    if (!sel) return;
+    const shell = sel.closest('.license-split-editor__status-select-shell');
+    if (!shell) return;
+    shell.querySelectorAll('.license-split-editor__status-report-dismiss').forEach(function (el) {
+        el.remove();
+    });
+    shell.querySelectorAll('.license-split-editor__status-report-flag').forEach(function (el) {
+        el.remove();
+    });
+    const tier = adminLicenseStatusTierFromStored(adminLicenseSplitEffectiveStatusForTier(sel, otroCombined));
+    const show = tier === 'bad';
+    if (show) {
+        shell.classList.add('license-split-editor__status-select-shell--report');
+    } else {
+        shell.classList.remove('license-split-editor__status-select-shell--report');
+    }
+    scheduleRefreshAdminLicenciasReportCounts();
+}
+
+function adminLicenseStatusIsKnownOption(st) {
+    return adminLicenseStatusIsKnownGoodOption(st) || adminLicenseStatusIsKnownBadOption(st);
+}
+
+/** Alinea texto guardado al value del <select> (p. ej. caída → caida o suspendida). */
+function adminLicenseSplitCanonicalStatusFromStored(st) {
+    const raw = String(st != null ? st : '').trim();
+    if (!raw) return '';
+    const k = adminLicenseNormalizeStatusKey(raw);
+    if (k === 'caida' || k === 'suspendida') {
+        return 'caida o suspendida';
+    }
+    for (let i = 0; i < ADMIN_LICENSE_STATUS_OPTIONS.length; i++) {
+        const o = ADMIN_LICENSE_STATUS_OPTIONS[i];
+        if (adminLicenseNormalizeStatusKey(o.v) === k) return o.v;
+    }
+    return raw;
+}
+
+function adminLicenseSplitCanonicalGoodFromStored(st) {
+    const raw = String(st != null ? st : '').trim();
+    if (!raw) return '';
+    const k = adminLicenseNormalizeStatusKey(raw);
+    for (let i = 0; i < ADMIN_LICENSE_STATUS_OPTIONS_GOOD.length; i++) {
+        const o = ADMIN_LICENSE_STATUS_OPTIONS_GOOD[i];
+        if (o.v && adminLicenseNormalizeStatusKey(o.v) === k) return o.v;
+    }
+    return raw;
+}
+
+function adminLicenseSplitCanonicalBadFromStored(st) {
+    const raw = String(st != null ? st : '').trim();
+    if (!raw) return '';
+    const k = adminLicenseNormalizeStatusKey(raw);
+    if (k === 'caida' || k === 'suspendida') {
+        return 'caida o suspendida';
+    }
+    for (let i = 0; i < ADMIN_LICENSE_STATUS_OPTIONS_BAD.length; i++) {
+        const o = ADMIN_LICENSE_STATUS_OPTIONS_BAD[i];
+        if (o.v && adminLicenseNormalizeStatusKey(o.v) === k) return o.v;
+    }
+    return raw;
+}
+
+function adminLicenseSplitStatusNeedsProblemDetail(statusVal) {
+    const s = String(statusVal || '').trim().toLowerCase();
+    return s === 'soporte';
+}
+
+function adminLicenseSplitNotePlaceholderForStatus(statusVal) {
+    const s = String(statusVal || '').trim().toLowerCase();
+    if (s === 'soporte') {
+        return 'Detalle del reporte o soporte…';
+    }
+    return 'Notas';
+}
+
+/** Con «otro» en la columna roja: muestra el campo de detalle. */
+function adminLicenseSplitSyncOtroDetailVisibility(selBad, otroCombined) {
+    if (!selBad || !otroCombined) return;
+    const wrap = selBad.closest('.license-split-editor__status-wrap');
+    const v = String(selBad.value || '').trim().toLowerCase();
+    const show = v === 'otro';
+    if (show) {
+        if (wrap) {
+            wrap.classList.add('license-split-editor__status-wrap--otro');
+        }
+        otroCombined.removeAttribute('hidden');
+        otroCombined.hidden = false;
+        otroCombined.style.display = '';
+        let cur = String(otroCombined.value || '').trim();
+        if (/^otro-/i.test(cur)) {
+            otroCombined.value = cur.replace(/^otro-?/i, '');
+        }
+    } else {
+        if (wrap) {
+            wrap.classList.remove('license-split-editor__status-wrap--otro');
+        }
+        otroCombined.hidden = true;
+        otroCombined.style.display = 'none';
+        otroCombined.value = '';
+    }
+    const selGood = wrap ? wrap.querySelector('.license-split-editor__status-good') : null;
+    adminLicenseSplitApplyDualStatusTierClasses(selGood, selBad, otroCombined);
+}
+
+function adminLicenseSplitApplyNotePlaceholderFromDual(selBad, noteInput, lineNum) {
+    if (!noteInput) return;
+    const ph = adminLicenseSplitNotePlaceholderForStatus(selBad ? selBad.value : '');
+    noteInput.placeholder = ph;
+    const lineBit = lineNum != null ? ' (línea ' + lineNum + ')' : '';
+    if (selBad && adminLicenseSplitStatusNeedsProblemDetail(selBad.value)) {
+        const short = ph.replace(/\u2026/g, '').trim();
+        noteInput.setAttribute('aria-label', short + lineBit);
+    } else {
+        noteInput.setAttribute('aria-label', 'Notas' + lineBit);
+    }
+}
+
+/** Dos &lt;select&gt; independientes (verde / rojo) + notas + detalle «otro». */
+function adminLicenseSplitWireDualStatusNoteLink(selGood, selBad, noteInput, otroCombined) {
+    if (!selGood || !selBad || !noteInput) return;
+    function focusOtroCombinedField() {
+        if (!otroCombined) return;
+        window.requestAnimationFrame(function () {
+            window.requestAnimationFrame(function () {
+                otroCombined.focus();
+                try {
+                    const len = String(otroCombined.value != null ? otroCombined.value : '').length;
+                    otroCombined.setSelectionRange(len, len);
+                } catch (e) {
+                    /* ignore */
+                }
+                try {
+                    otroCombined.dispatchEvent(new Event('input', { bubbles: true }));
+                } catch (e2) {
+                    /* ignore */
+                }
+            });
+        });
+    }
+    function syncFromBad() {
+        if (otroCombined) {
+            adminLicenseSplitSyncOtroDetailVisibility(selBad, otroCombined);
+        } else {
+            const wrap = selBad.closest('.license-split-editor__status-wrap');
+            const sg = wrap ? wrap.querySelector('.license-split-editor__status-good') : null;
+            adminLicenseSplitApplyDualStatusTierClasses(sg, selBad, null);
+        }
+        adminLicenseSplitApplyNotePlaceholderFromDual(selBad, noteInput);
+    }
+    selGood.addEventListener('focusin', function () {
+        selGood.setAttribute('data-lic-sel-good-prev', selGood.value != null ? String(selGood.value) : '');
+    });
+    selGood.addEventListener('change', function () {
+        const v = String(selGood.value || '').trim();
+        if (v === 'ok') {
+            const row = selGood.closest('.license-split-editor__row');
+            const mainRows = document.getElementById('adminLicenciasStructuredRows');
+            const dayR = row && row.closest ? row.closest('.day-license-split-root') : null;
+            if (row && ((mainRows && mainRows.contains(row)) || dayR)) {
+                void licenseSplitBuenaRevisadaMoveRowToSuspended(row);
+                return;
+            }
+        }
+        const wrap = selGood.closest('.license-split-editor__status-wrap');
+        const sb = wrap ? wrap.querySelector('.license-split-editor__status-bad') : selBad;
+        adminLicenseSplitApplyGoodSelectTierClass(selGood);
+        adminLicenseSplitApplyNotePlaceholderFromDual(sb, noteInput);
+    });
+    selBad.addEventListener('change', function () {
+        const v = String(selBad.value || '').trim().toLowerCase();
+        if (v === 'otro' && otroCombined) {
+            focusOtroCombinedField();
+        } else if (v === 'soporte') {
+            window.requestAnimationFrame(function () {
+                noteInput.focus();
+                try {
+                    const len = String(noteInput.value != null ? noteInput.value : '').length;
+                    noteInput.setSelectionRange(len, len);
+                } catch (e) {
+                    /* ignore */
+                }
+            });
+        }
+        syncFromBad();
+    });
+    adminLicenseSplitApplyNotePlaceholderFromDual(selBad, noteInput);
+    if (otroCombined) {
+        adminLicenseSplitSyncOtroDetailVisibility(selBad, otroCombined);
+        otroCombined.addEventListener('input', function () {
+            adminLicenseSplitApplyBadSelectTierClass(selBad, otroCombined);
+        });
+    } else {
+        syncFromBad();
+    }
+}
+
+/** Caídas / suspendidas: solo columna roja + notas + «otro» (sin verde). */
+function adminLicenseSplitWireBadOnlyStatusNoteLink(selBad, noteInput, otroCombined) {
+    if (!selBad || !noteInput) return;
+    function focusOtroCombinedField() {
+        if (!otroCombined) return;
+        window.requestAnimationFrame(function () {
+            window.requestAnimationFrame(function () {
+                otroCombined.focus();
+                try {
+                    const len = String(otroCombined.value != null ? otroCombined.value : '').length;
+                    otroCombined.setSelectionRange(len, len);
+                } catch (e) {
+                    /* ignore */
+                }
+                try {
+                    otroCombined.dispatchEvent(new Event('input', { bubbles: true }));
+                } catch (e2) {
+                    /* ignore */
+                }
+            });
+        });
+    }
+    function syncFromBad() {
+        if (otroCombined) {
+            adminLicenseSplitSyncOtroDetailVisibility(selBad, otroCombined);
+        } else {
+            adminLicenseSplitApplyBadSelectTierClass(selBad, null);
+        }
+        adminLicenseSplitApplyNotePlaceholderFromDual(selBad, noteInput);
+    }
+    selBad.addEventListener('change', function () {
+        const v = String(selBad.value || '').trim().toLowerCase();
+        if (v === 'otro' && otroCombined) {
+            focusOtroCombinedField();
+        } else if (v === 'soporte') {
+            window.requestAnimationFrame(function () {
+                noteInput.focus();
+                try {
+                    const len = String(noteInput.value != null ? noteInput.value : '').length;
+                    noteInput.setSelectionRange(len, len);
+                } catch (e) {
+                    /* ignore */
+                }
+            });
+        }
+        syncFromBad();
+    });
+    adminLicenseSplitApplyNotePlaceholderFromDual(selBad, noteInput);
+    if (otroCombined) {
+        adminLicenseSplitSyncOtroDetailVisibility(selBad, otroCombined);
+        otroCombined.addEventListener('input', function () {
+            adminLicenseSplitApplyBadSelectTierClass(selBad, otroCombined);
+        });
+    } else {
+        syncFromBad();
+    }
+}
+
+function adminLicenseParseRowTailFields(cred, user, seg3, seg4) {
+    const c = cred != null ? String(cred) : '';
+    const u = (user || '').trim();
+    const s3 = (seg3 || '').trim();
+    const s4 = (seg4 || '').trim();
+    const mDash = s3.match(/^otro\s*-\s*(.*)$/i);
+    if (mDash) {
+        return { cred: c, user: u, status: 'otro', otroDetail: (mDash[1] || '').trim(), extra: s4 };
+    }
+    const mColon = s3.match(/^otro:\s*(.*)$/i);
+    if (mColon) {
+        return { cred: c, user: u, status: 'otro', otroDetail: (mColon[1] || '').trim(), extra: s4 };
+    }
+    if (s3.toLowerCase() === 'otro' && s4) {
+        return { cred: c, user: u, status: 'otro', otroDetail: s4, extra: '' };
+    }
+    const normStatus =
+        s3.toLowerCase() === 'otro' ? 'otro' : adminLicenseSplitCanonicalStatusFromStored(s3);
+    return { cred: c, user: u, status: normStatus, otroDetail: '', extra: s4 };
+}
+
+function adminLicenseSplitParseBadStoredSegment(badRaw) {
+    const s = String(badRaw || '').trim();
+    if (!s) return { selValue: '', otroDetail: '' };
+    const m = s.match(/^otro-?\s*(.*)$/i);
+    if (m) {
+        return { selValue: 'otro', otroDetail: (m[1] || '').trim() };
+    }
+    return { selValue: adminLicenseSplitCanonicalBadFromStored(s) || s, otroDetail: '' };
+}
+
+function adminLicenseDualFromStoredSegments(cred, user, goodRaw, badRaw, extra) {
+    const badParsed = adminLicenseSplitParseBadStoredSegment(badRaw);
+    const statusGood = goodRaw ? adminLicenseSplitCanonicalGoodFromStored(goodRaw) || goodRaw : '';
+    return {
+        cred: cred,
+        user: user,
+        statusGood: statusGood,
+        statusBad: badParsed.selValue,
+        otroDetail: badParsed.otroDetail,
+        extra: extra
+    };
+}
+
+function adminLicenseMigrateLegacyFourPartToDual(cred, user, seg3, seg4) {
+    const legacy = adminLicenseParseRowTailFields(cred, user, seg3, seg4);
+    const st = legacy.status;
+    const stForTier =
+        String(st).toLowerCase() === 'otro' && legacy.otroDetail
+            ? 'otro-' + String(legacy.otroDetail).trim()
+            : st;
+    const tier = adminLicenseStatusTierFromStored(stForTier);
+    if (tier === 'good') {
+        return {
+            cred: legacy.cred,
+            user: legacy.user,
+            statusGood: adminLicenseSplitCanonicalGoodFromStored(st) || st,
+            statusBad: '',
+            otroDetail: '',
+            extra: legacy.extra
+        };
+    }
+    if (tier === 'bad') {
+        let od = '';
+        let badSel = '';
+        if (String(st).toLowerCase() === 'otro') {
+            badSel = 'otro';
+            od = legacy.otroDetail != null ? String(legacy.otroDetail) : '';
+        } else {
+            badSel = adminLicenseSplitCanonicalBadFromStored(st) || st;
+        }
+        return {
+            cred: legacy.cred,
+            user: legacy.user,
+            statusGood: '',
+            statusBad: badSel,
+            otroDetail: od,
+            extra: legacy.extra
+        };
+    }
+    if (!st) {
+        return {
+            cred: legacy.cred,
+            user: legacy.user,
+            statusGood: '',
+            statusBad: '',
+            otroDetail: '',
+            extra: legacy.extra
+        };
+    }
+    return {
+        cred: legacy.cred,
+        user: legacy.user,
+        statusGood: adminLicenseSplitCanonicalGoodFromStored(st) || st,
+        statusBad: '',
+        otroDetail: '',
+        extra: legacy.extra
+    };
+}
+
+function parseAdminLicenseLineToSplitParts(line) {
+    const raw = String(line != null ? line : '').replace(/\r/g, '');
+    if (!raw.trim()) {
+        return { cred: '', user: '', statusGood: '', statusBad: '', otroDetail: '', extra: '' };
+    }
+    if (raw.indexOf(LICENSE_LINE_FIELD_SEP) !== -1) {
+        const parts = raw.split(LICENSE_LINE_FIELD_SEP);
+        const cred = parts[0] != null ? parts[0] : '';
+        const user = (parts[1] || '').trim();
+        if (parts.length >= 5) {
+            const good = (parts[2] || '').trim();
+            const badRaw = (parts[3] || '').trim();
+            const extra = (parts[4] || '').trim();
+            return adminLicenseDualFromStoredSegments(cred, user, good, badRaw, extra);
+        }
+        const seg3 = (parts[2] || '').trim();
+        const seg4 = (parts[3] || '').trim();
+        return adminLicenseMigrateLegacyFourPartToDual(cred, user, seg3, seg4);
+    }
+    if (indexOfLegacyDoubleSlashSeparatorFrom(raw, 0) === -1) {
+        return adminLicenseMigrateLegacyFourPartToDual(raw, '', '', '');
+    }
+    const sp = splitLineCredNotesUser(raw);
+    const cred = sp.cred != null ? sp.cred : '';
+    const user = (sp.notes || '').trim();
+    const seg3 = (sp.user || '').trim();
+    const seg4 = (sp.extra || '').trim();
+    return adminLicenseMigrateLegacyFourPartToDual(cred, user, seg3, seg4);
+}
+
+function buildAdminLicenseStorageLine(cred, user, statusGood, statusBad, extra) {
+    const c = String(cred != null ? cred : '').trim();
+    const u = String(user || '').trim();
+    const uu = u || 'anonimo';
+    const sg = String(statusGood != null ? statusGood : '').trim();
+    const sb = String(statusBad != null ? statusBad : '').trim();
+    const e = String(extra != null ? extra : '').trim();
+    if (!c && !sg && !sb && !e && (!u || uu === 'anonimo')) {
+        return '';
+    }
+    return [c, uu, sg, sb, e].join(LICENSE_LINE_FIELD_SEP);
+}
+
+function adminLicenseSplitGetRowElements() {
+    const wrap = document.getElementById('adminLicenciasStructuredRows');
+    if (!wrap) return [];
+    return Array.prototype.slice.call(wrap.querySelectorAll('.license-split-editor__row'));
+}
+
+function adminLicenseSplitReadRow(row) {
+    const u = row.querySelector('.license-split-editor__user');
+    const selGood = row.querySelector('.license-split-editor__status-good');
+    const selBad = row.querySelector('.license-split-editor__status-bad');
+    const c = row.querySelector('.license-split-editor__otro-combined');
+    const n = row.querySelector('.license-split-editor__note');
+    const goodVal = selGood ? String(selGood.value || '').trim() : '';
+    let statusBad = '';
+    const selBadVal = selBad ? String(selBad.value || '').trim() : '';
+    if (adminLicenseNormalizeStatusKey(selBadVal) === 'otro') {
+        const d = c && !c.hidden ? String(c.value || '').trim() : '';
+        const detail = d.replace(/^otro-?/i, '');
+        statusBad = detail ? 'otro-' + detail : 'otro-';
+    } else if (selBadVal) {
+        statusBad = selBadVal;
+    }
+    return {
+        user: u ? u.value : '',
+        statusGood: goodVal,
+        statusBad: statusBad,
+        extra: n ? n.value : ''
+    };
+}
+
+/** Mismo usuario en todas las filas que tienen credencial (línea izquierda no vacía). */
+function adminLicenseSplitApplyUserToAllLicensedRows(userName) {
+    const ta = document.getElementById('adminLicenciasNotepadByLicense');
+    if (!ta) return 0;
+    const name = String(userName != null ? userName : '').trim();
+    if (!name) return 0;
+    const raw = String(ta.value != null ? ta.value : '').replace(/\r\n/g, '\n');
+    const credLines = licenseSplitCredLinesFromRaw(raw);
+    const rows = adminLicenseSplitGetRowElements();
+    let count = 0;
+    for (let i = 0; i < rows.length; i++) {
+        const cred = credLines[i] != null ? credLines[i] : '';
+        if (String(cred).trim() === '') continue;
+        const u = rows[i].querySelector('.license-split-editor__user');
+        if (!u || u.readOnly) continue;
+        u.value = name;
+        u.classList.remove('license-split-editor__user--unknown');
+        try {
+            u.dispatchEvent(new Event('input', { bubbles: true }));
+        } catch (e) {
+            /* ignore */
+        }
+        void licenseSplitValidateUserInput(u);
+        count += 1;
+    }
+    return count;
+}
+
+window.adminLicenseSplitApplyUserToAllLicensedRows = adminLicenseSplitApplyUserToAllLicensedRows;
+
+function mergeLicenseSplitUserSuggestions(q, namesFromApi) {
+    const ql = String(q || '').trim().toLowerCase();
+    const out = [];
+    const seen = {};
+    function add(name) {
+        const k = String(name).toLowerCase();
+        if (seen[k]) return;
+        seen[k] = true;
+        out.push(name);
+    }
+    if (!ql || 'anonimo'.startsWith(ql)) {
+        add('anonimo');
+    }
+    (namesFromApi || []).forEach(function (name) {
+        if (String(name).toLowerCase() !== 'anonimo') {
+            add(name);
+        }
+    });
+    return out.slice(0, 25);
+}
+
+function licenseSplitHideUserSuggestions(box) {
+    if (!box) return;
+    box.hidden = true;
+    box.setAttribute('aria-hidden', 'true');
+    box.innerHTML = '';
+    box.style.cssText = '';
+}
+
+/** Sube la vista para dejar la fila de usuario más arriba y ver mejor el input al abrir sugerencias. */
+function licenseSplitScrollUserFieldIntoView(input) {
+    if (!input || !document.body.contains(input)) return;
+    const liftPx = 72;
+    const anchor = input.closest('.license-split-editor__row') || input;
+    try {
+        anchor.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' });
+    } catch (e) {
+        try {
+            anchor.scrollIntoView(true);
+        } catch (e2) {
+            /* ignore */
+        }
+    }
+    window.setTimeout(function () {
+        try {
+            window.scrollBy({ top: -liftPx, behavior: 'smooth' });
+        } catch (e3) {
+            window.scrollBy(0, -liftPx);
+        }
+    }, 160);
+}
+
+function licenseSplitPositionSuggestionsBox(box, input) {
+    if (!box || !input) return;
+    /* Más hueco bajo la lista y sobre el input: se ve lo que escribes sin que el panel tape la fila. */
+    const clearanceBelowList = 18;
+    const extraLiftPx = 36;
+    const r = input.getBoundingClientRect();
+    const offsetAboveInput = clearanceBelowList + extraLiftPx;
+    function place() {
+        const maxH = Math.min(200, Math.max(72, r.top - offsetAboveInput - 8));
+        box.style.maxHeight = maxH + 'px';
+        box.style.overflowY = 'auto';
+        const h = Math.min(Math.max(box.scrollHeight, 1), maxH);
+        const top = Math.max(8, r.top - offsetAboveInput - h);
+        box.style.position = 'fixed';
+        box.style.left = Math.max(6, r.left) + 'px';
+        box.style.width = Math.min(r.width, window.innerWidth - 12) + 'px';
+        box.style.top = top + 'px';
+        box.style.bottom = 'auto';
+        box.style.right = 'auto';
+        box.style.zIndex = '10050';
+    }
+    place();
+    window.requestAnimationFrame(function () {
+        window.requestAnimationFrame(place);
+    });
+}
+
+function ensureLicenseSplitSuggestionCloseListeners() {
+    function hideAll() {
+        document.querySelectorAll('.license-split-editor__user-suggestions').forEach(licenseSplitHideUserSuggestions);
+    }
+    if (!window._licenseSplitSuggestGlobalDone) {
+        window._licenseSplitSuggestGlobalDone = true;
+        window.addEventListener('scroll', hideAll, true);
+        window.addEventListener('resize', hideAll);
+    }
+    var rows = document.getElementById('adminLicenciasStructuredRows');
+    if (rows && rows.dataset.licSugScroll !== '1') {
+        rows.dataset.licSugScroll = '1';
+        rows.addEventListener('scroll', hideAll);
+    }
+}
+
+/** Evita cientos de GET simultáneos (ERR_INSUFFICIENT_RESOURCES) al pintar todos los días. */
+var LICENSE_USER_EXISTS_TTL_MS = 120000;
+var licenseUserExistsCache = new Map();
+var licenseUserExistsInflight = new Map();
+
+function licenseSplitApplyExistsClassToInput(input, exists) {
+    if (!input) return;
+    if (exists) {
+        input.classList.remove('license-split-editor__user--unknown');
+    } else {
+        input.classList.add('license-split-editor__user--unknown');
+    }
+}
+
+/**
+ * Resuelve si el usuario existe (una petición por nombre, con caché y deduplicación en vuelo).
+ */
+function licenseSplitResolveUserExists(usernameTrimmed) {
+    const raw = String(usernameTrimmed != null ? usernameTrimmed : '').trim();
+    if (!raw) {
+        return Promise.resolve(true);
+    }
+    const k = raw.toLowerCase();
+    if (k === 'anonimo') {
+        return Promise.resolve(true);
+    }
+    const now = Date.now();
+    const cached = licenseUserExistsCache.get(k);
+    if (cached && now - cached.t < LICENSE_USER_EXISTS_TTL_MS) {
+        return Promise.resolve(cached.exists);
+    }
+    let inflight = licenseUserExistsInflight.get(k);
+    if (!inflight) {
+        inflight = fetch('/tienda/api/users/exists?username=' + encodeURIComponent(raw))
+            .then(function (r) {
+                return r.json();
+            })
+            .then(function (j) {
+                licenseUserExistsInflight.delete(k);
+                if (j && j.success) {
+                    licenseUserExistsCache.set(k, { exists: !!j.exists, t: Date.now() });
+                    return !!j.exists;
+                }
+                return null;
+            })
+            .catch(function () {
+                licenseUserExistsInflight.delete(k);
+                return null;
+            });
+        licenseUserExistsInflight.set(k, inflight);
+    }
+    return inflight;
+}
+
+async function licenseSplitValidateUserInput(input) {
+    if (!input || !input.classList || !input.classList.contains('license-split-editor__user')) return;
+    const raw = String(input.value != null ? input.value : '').trim();
+    if (!raw) {
+        input.classList.remove('license-split-editor__user--unknown');
+        return;
+    }
+    if (raw.toLowerCase() === 'anonimo') {
+        input.classList.remove('license-split-editor__user--unknown');
+        return;
+    }
+    try {
+        const exists = await licenseSplitResolveUserExists(raw);
+        if (exists === null) {
+            input.classList.remove('license-split-editor__user--unknown');
+            return;
+        }
+        licenseSplitApplyExistsClassToInput(input, exists);
+    } catch (e) {
+        input.classList.remove('license-split-editor__user--unknown');
+    }
+}
+
+/** scopeRoot: solo inputs dentro de ese nodo (p. ej. un día). Si se omite, recorre todo el documento. */
+function adminLicenseSplitValidateAllUserInputs(scopeRoot) {
+    var nodes =
+        scopeRoot && scopeRoot.querySelectorAll
+            ? scopeRoot.querySelectorAll('.license-split-editor__user')
+            : document.querySelectorAll('.license-split-editor__user');
+    nodes.forEach(function (el) {
+        void licenseSplitValidateUserInput(el);
+    });
+}
+
+function adminLicenseSplitUserCaretToEnd(input) {
+    if (!input || input.readOnly) return;
+    const len = String(input.value != null ? input.value : '').length;
+    window.requestAnimationFrame(function () {
+        try {
+            input.setSelectionRange(len, len);
+        } catch (e) {
+            /* IE / type mismatch */
+        }
+    });
+}
+
+function adminLicenseSplitWireUserField(input, box) {
+    let fetchTimer = null;
+    let hideTimer = null;
+    ensureLicenseSplitSuggestionCloseListeners();
+
+    async function fetchSuggestions() {
+        const q = String(input.value != null ? input.value : '').trim();
+        input._licenseUserSuggestSeq = (input._licenseUserSuggestSeq || 0) + 1;
+        const seq = input._licenseUserSuggestSeq;
+        try {
+            const r = await fetch('/tienda/api/users/usernames?q=' + encodeURIComponent(q) + '&limit=25');
+            const j = await r.json();
+            if (seq !== input._licenseUserSuggestSeq) return;
+            if (!j.success || !box) return;
+            const merged = mergeLicenseSplitUserSuggestions(q, j.usernames || []);
+            box.innerHTML = '';
+            merged.forEach(function (name) {
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = 'license-split-editor__user-suggest-item';
+                btn.setAttribute('aria-label', 'Usar usuario ' + name);
+                btn.textContent = name;
+                btn.addEventListener('mousedown', function (e) {
+                    e.preventDefault();
+                    input.value = name;
+                    licenseSplitHideUserSuggestions(box);
+                    input.classList.remove('license-split-editor__user--unknown');
+                    try {
+                        input.dispatchEvent(new Event('input', { bubbles: true }));
+                    } catch (e2) {}
+                    void licenseSplitValidateUserInput(input);
+                });
+                box.appendChild(btn);
+            });
+            if (!box.children.length) {
+                licenseSplitHideUserSuggestions(box);
+                return;
+            }
+            const suggestionsJustOpened = !!box.hidden;
+            box.hidden = false;
+            box.setAttribute('aria-hidden', 'false');
+            licenseSplitPositionSuggestionsBox(box, input);
+            if (suggestionsJustOpened) {
+                licenseSplitScrollUserFieldIntoView(input);
+            }
+        } catch (e) {
+            licenseSplitHideUserSuggestions(box);
+        }
+    }
+
+    input.addEventListener('input', function () {
+        clearTimeout(fetchTimer);
+        fetchTimer = setTimeout(fetchSuggestions, 200);
+        const t = String(input.value != null ? input.value : '').trim();
+        if (!t) {
+            input.classList.remove('license-split-editor__user--unknown');
+        }
+    });
+    input.addEventListener('focus', function () {
+        clearTimeout(fetchTimer);
+        fetchSuggestions();
+    });
+    input.addEventListener('click', function () {
+        window.requestAnimationFrame(function () {
+            if (box && !box.hidden) {
+                licenseSplitScrollUserFieldIntoView(input);
+                licenseSplitPositionSuggestionsBox(box, input);
+            }
+        });
+    });
+    input.addEventListener('blur', function () {
+        clearTimeout(hideTimer);
+        hideTimer = setTimeout(function () {
+            licenseSplitHideUserSuggestions(box);
+            void licenseSplitValidateUserInput(input);
+        }, 180);
+    });
+}
+
+/** Panel derecho del split (día, carrito, usuario, estado, notas): flechas estilo Excel. No aplica al textarea de credenciales. */
+function licenseSplitIsOtroFieldVisible(otro) {
+    if (!otro) return false;
+    if (otro.hidden) return false;
+    try {
+        const st = window.getComputedStyle(otro);
+        return st.display !== 'none' && st.visibility !== 'hidden' && Number(st.opacity) !== 0;
+    } catch (e) {
+        return false;
+    }
+}
+
+function licenseSplitRowEligibleFocus(el) {
+    if (!el) return false;
+    if (el.disabled) return false;
+    if (el.getAttribute('tabindex') === '-1') return false;
+    return true;
+}
+
+function licenseSplitBuildRowFocusSequence(row) {
+    const seq = [];
+    if (!row) return seq;
+    const dayInp = row.querySelector('.license-split-editor__day-num');
+    const sellBtn = row.querySelector('.license-split-editor__sell-btn');
+    const restoreBtn = row.querySelector('.license-split-editor__restore-to-license-btn');
+    const u = row.querySelector('.license-split-editor__user');
+    const selGood = row.querySelector('.license-split-editor__status-good');
+    const selBad = row.querySelector('.license-split-editor__status-bad');
+    const otro = row.querySelector('.license-split-editor__otro-combined');
+    const n = row.querySelector('.license-split-editor__note');
+    if (licenseSplitRowEligibleFocus(dayInp)) seq.push(dayInp);
+    if (licenseSplitRowEligibleFocus(sellBtn)) seq.push(sellBtn);
+    if (licenseSplitRowEligibleFocus(restoreBtn)) seq.push(restoreBtn);
+    if (licenseSplitRowEligibleFocus(u)) seq.push(u);
+    if (licenseSplitRowEligibleFocus(selGood)) seq.push(selGood);
+    if (licenseSplitRowEligibleFocus(selBad)) seq.push(selBad);
+    if (licenseSplitRowEligibleFocus(otro) && licenseSplitIsOtroFieldVisible(otro)) seq.push(otro);
+    if (licenseSplitRowEligibleFocus(n)) seq.push(n);
+    return seq;
+}
+
+function licenseSplitGetRowSiblings(row) {
+    const p = row.parentElement;
+    if (!p) return [];
+    return Array.prototype.filter.call(p.children, function (c) {
+        return c.classList && c.classList.contains('license-split-editor__row');
+    });
+}
+
+function licenseSplitTextOrNumberNavBoundaryOk(input, key) {
+    if (!input || input.tagName !== 'INPUT') return true;
+    const t = input.type;
+    if (t !== 'text' && t !== 'number' && t !== 'search' && t !== 'tel' && t !== 'email' && t !== 'url') {
+        return true;
+    }
+    if (input.readOnly) return true;
+    const len = String(input.value != null ? input.value : '').length;
+    let start = 0;
+    let end = 0;
+    try {
+        start = input.selectionStart != null ? input.selectionStart : len;
+        end = input.selectionEnd != null ? input.selectionEnd : len;
+    } catch (e) {
+        return true;
+    }
+    if (t === 'number' && (input.selectionStart == null || input.selectionEnd == null)) {
+        return true;
+    }
+    const lo = Math.min(start, end);
+    const hi = Math.max(start, end);
+    if (key === 'ArrowLeft') return lo === 0 && hi === 0;
+    if (key === 'ArrowRight') return lo === len && hi === len;
+    return true;
+}
+
+function licenseSplitUserSuggestionsOpenForTarget(t) {
+    const uw = t.closest && t.closest('.license-split-editor__user-wrap');
+    if (!uw) return false;
+    const sug = uw.querySelector('.license-split-editor__user-suggestions');
+    if (!sug || sug.hidden) return false;
+    return sug.getAttribute('aria-hidden') !== 'true';
+}
+
+function licenseSplitOnArrowKeydown(e) {
+    const key = e.key;
+    if (key !== 'ArrowUp' && key !== 'ArrowDown' && key !== 'ArrowLeft' && key !== 'ArrowRight') {
+        return;
+    }
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
+    if (e.shiftKey) return;
+
+    const t = e.target;
+    if (!t || !t.closest) return;
+
+    if (t.closest && t.closest('.license-split-editor__creds-cell')) return;
+
+    const row = t.closest('.license-split-editor__row');
+    if (!row) return;
+
+    const rowsWrap = t.closest('.license-split-editor__rows');
+    if (!rowsWrap) return;
+
+    if (t.closest && t.closest('.license-split-editor__user-suggestions')) return;
+
+    if (licenseSplitUserSuggestionsOpenForTarget(t)) return;
+
+    const seq = licenseSplitBuildRowFocusSequence(row);
+    const idx = seq.indexOf(t);
+    if (idx < 0) return;
+
+    if (key === 'ArrowLeft' || key === 'ArrowRight') {
+        if (!licenseSplitTextOrNumberNavBoundaryOk(t, key)) {
+            return;
+        }
+    }
+
+    let nextEl = null;
+    if (key === 'ArrowLeft') {
+        if (idx > 0) nextEl = seq[idx - 1];
+    } else if (key === 'ArrowRight') {
+        if (idx < seq.length - 1) nextEl = seq[idx + 1];
+    } else if (key === 'ArrowUp' || key === 'ArrowDown') {
+        const siblings = licenseSplitGetRowSiblings(row);
+        const rIdx = siblings.indexOf(row);
+        if (rIdx < 0) return;
+        const delta = key === 'ArrowUp' ? -1 : 1;
+        const rNext = siblings[rIdx + delta];
+        if (!rNext) return;
+        const seqN = licenseSplitBuildRowFocusSequence(rNext);
+        if (!seqN.length) return;
+        nextEl = seqN[Math.min(idx, seqN.length - 1)];
+    }
+
+    if (!nextEl) return;
+
+    e.preventDefault();
+    e.stopPropagation();
+    nextEl.focus();
+}
+
+function wireLicenseSplitArrowNavigation() {
+    if (document.documentElement.dataset.licSplitArrowNav === '1') return;
+    document.documentElement.dataset.licSplitArrowNav = '1';
+    const handler = licenseSplitOnArrowKeydown;
+    const structured = document.getElementById('adminLicenciasStructuredRows');
+    if (structured) structured.addEventListener('keydown', handler, true);
+    const suspended = document.getElementById('adminLicenciasSuspendedRows');
+    if (suspended) suspended.addEventListener('keydown', handler, true);
+    const expiredR = document.getElementById('adminLicenciasExpiredRows');
+    if (expiredR) expiredR.addEventListener('keydown', handler, true);
+    const changesParent = document.getElementById('licenseChangesProductsContainer');
+    if (changesParent) changesParent.addEventListener('keydown', handler, true);
+    const daysParent = document.getElementById('licenseAllDaysContainer');
+    if (daysParent) daysParent.addEventListener('keydown', handler, true);
+}
+
+window.wireLicenseSplitArrowNavigation = wireLicenseSplitArrowNavigation;
+
+/** Días que tiene el mes civil de refDate (28–31); refDate por defecto = hoy (incluye bisiestos). */
+function adminLicenseDaysInCalendarMonth(refDate) {
+    const d =
+        refDate instanceof Date && !Number.isNaN(refDate.getTime()) ? refDate : new Date();
+    return new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+}
+
+function adminLicenseSplitApplyDayNumInputLimits(dayInp, refDate) {
+    if (!dayInp) return;
+    const d =
+        refDate instanceof Date && !Number.isNaN(refDate.getTime()) ? refDate : new Date();
+    const maxD = adminLicenseDaysInCalendarMonth(d);
+    dayInp.min = '1';
+    dayInp.max = String(maxD);
+    const y = d.getFullYear();
+    const m = d.getMonth() + 1;
+    dayInp.title =
+        'Día del mes en curso: 1–' + maxD + ' (' + y + '-' + String(m).padStart(2, '0') + ')';
+    dayInp.setAttribute('aria-label', 'Día del mes (1 a ' + maxD + ') para enviar la licencia');
+}
+
+function adminLicenseSplitClampDayNumValue(raw, refDate) {
+    const d =
+        refDate instanceof Date && !Number.isNaN(refDate.getTime()) ? refDate : new Date();
+    const maxD = adminLicenseDaysInCalendarMonth(d);
+    let v = parseInt(raw, 10);
+    if (!Number.isFinite(v)) {
+        const today = d.getDate();
+        return Math.min(maxD, Math.max(1, today >= 1 && today <= maxD ? today : 1));
+    }
+    return Math.min(maxD, Math.max(1, v));
+}
+
+function adminLicenseSplitWireDayNumInput(dayInp) {
+    if (!dayInp || dayInp.dataset.licDayWired === '1') return;
+    dayInp.dataset.licDayWired = '1';
+    const onAdjust = function () {
+        const now = new Date();
+        adminLicenseSplitApplyDayNumInputLimits(dayInp, now);
+        dayInp.value = String(adminLicenseSplitClampDayNumValue(dayInp.value, now));
+    };
+    dayInp.addEventListener('focus', function () {
+        adminLicenseSplitApplyDayNumInputLimits(dayInp, new Date());
+    });
+    dayInp.addEventListener('input', onAdjust);
+    dayInp.addEventListener('change', onAdjust);
+}
+
+function adminLicenseSplitDefaultDayOfMonth() {
+    const now = new Date();
+    const maxD = adminLicenseDaysInCalendarMonth(now);
+    const d = now.getDate();
+    return d >= 1 && d <= maxD ? d : 1;
+}
+
+function adminLicenseSplitCreateRow(
+    initialUser,
+    initialStatusGood,
+    initialStatusBad,
+    initialExtra,
+    initialOtroDetail,
+    initialDay
+) {
+    const row = document.createElement('div');
+    row.className = 'license-split-editor__row';
+    const now = new Date();
+    let dayVal = adminLicenseSplitDefaultDayOfMonth();
+    if (initialDay != null && initialDay !== '') {
+        const parsed = parseInt(initialDay, 10);
+        if (Number.isFinite(parsed)) {
+            dayVal = adminLicenseSplitClampDayNumValue(parsed, now);
+        }
+    }
+    const daySellCell = document.createElement('div');
+    daySellCell.className = 'license-split-editor__day-sell-cell';
+    const dayInp = document.createElement('input');
+    dayInp.type = 'number';
+    dayInp.className = 'license-split-editor__day-num';
+    dayInp.min = '1';
+    dayInp.value = String(dayVal);
+    adminLicenseSplitApplyDayNumInputLimits(dayInp, now);
+    adminLicenseSplitWireDayNumInput(dayInp);
+    const sellBtn = document.createElement('button');
+    sellBtn.type = 'button';
+    sellBtn.className = 'license-split-editor__sell-btn';
+    sellBtn.title = 'Pasar esta licencia al día indicado (vender)';
+    sellBtn.setAttribute('aria-label', 'Pasar licencia al día seleccionado');
+    sellBtn.innerHTML = '<i class="fas fa-cart-arrow-down" aria-hidden="true"></i>';
+    daySellCell.appendChild(dayInp);
+    daySellCell.appendChild(sellBtn);
+    const userWrap = document.createElement('div');
+    userWrap.className = 'license-split-editor__user-wrap';
+    const sugBox = document.createElement('div');
+    sugBox.className = 'license-split-editor__user-suggestions';
+    sugBox.hidden = true;
+    sugBox.setAttribute('aria-hidden', 'true');
+    sugBox.setAttribute('role', 'group');
+    sugBox.setAttribute('aria-label', 'Sugerencias de usuario');
+    const u = document.createElement('input');
+    u.type = 'text';
+    u.className = 'license-split-editor__user';
+    u.setAttribute('autocomplete', 'off');
+    u.setAttribute('aria-label', 'Usuario o cliente de la licencia');
+    u.placeholder = 'anonimo';
+    u.value = initialUser != null ? initialUser : '';
+    userWrap.appendChild(sugBox);
+    userWrap.appendChild(u);
+    adminLicenseSplitWireUserField(u, sugBox);
+    const statusWrap = document.createElement('div');
+    statusWrap.className = 'license-split-editor__status-wrap';
+    const selGood = document.createElement('select');
+    selGood.className = 'license-split-editor__status license-split-editor__status-good';
+    selGood.title = 'Estado favorable (al día, renovación, etc.)';
+    selGood.setAttribute('aria-label', 'Estado favorable de la licencia');
+    ADMIN_LICENSE_STATUS_OPTIONS_GOOD.forEach(function (opt) {
+        const o = document.createElement('option');
+        o.value = opt.v;
+        o.textContent = opt.label;
+        selGood.appendChild(o);
+    });
+    const sg = initialStatusGood != null ? String(initialStatusGood).trim() : '';
+    if (sg && !adminLicenseStatusIsKnownGoodOption(sg)) {
+        const o = document.createElement('option');
+        o.value = sg;
+        o.textContent = sg;
+        selGood.appendChild(o);
+    }
+    selGood.value = adminLicenseSplitCanonicalGoodFromStored(sg) || '';
+    const selBad = document.createElement('select');
+    selBad.className = 'license-split-editor__status license-split-editor__status-bad';
+    selBad.title =
+        'Incidencia o problema (caída, no reproduce, otro). Con «Otro», describa el detalle a la derecha.';
+    selBad.setAttribute('aria-label', 'Estado de incidencia o problema');
+    ADMIN_LICENSE_STATUS_OPTIONS_BAD.forEach(function (opt) {
+        const o = document.createElement('option');
+        o.value = opt.v;
+        o.textContent = opt.label;
+        selBad.appendChild(o);
+    });
+    const sb = initialStatusBad != null ? String(initialStatusBad).trim() : '';
+    if (sb && !adminLicenseStatusIsKnownBadOption(sb)) {
+        const o = document.createElement('option');
+        o.value = sb;
+        o.textContent = sb;
+        selBad.appendChild(o);
+    }
+    selBad.value = adminLicenseSplitCanonicalBadFromStored(sb) || '';
+    const od = initialOtroDetail != null ? String(initialOtroDetail) : '';
+    const otroCombined = document.createElement('input');
+    otroCombined.type = 'text';
+    otroCombined.className = 'license-split-editor__otro-combined';
+    otroCombined.setAttribute('autocomplete', 'off');
+    otroCombined.placeholder = 'des.. problema';
+    otroCombined.title =
+        'Describe el problema; se guarda con el estado «Otro» de la columna roja.';
+    if (String(selBad.value || '').trim().toLowerCase() === 'otro') {
+        otroCombined.value = od != null ? String(od) : '';
+    } else {
+        otroCombined.value = '';
+    }
+    otroCombined.hidden = true;
+    otroCombined.style.display = 'none';
+    const goodShell = document.createElement('div');
+    goodShell.className = 'license-split-editor__status-select-shell license-split-editor__status-select-shell--good';
+    goodShell.appendChild(selGood);
+    const badShell = document.createElement('div');
+    badShell.className = 'license-split-editor__status-select-shell license-split-editor__status-select-shell--bad';
+    badShell.appendChild(selBad);
+    statusWrap.appendChild(goodShell);
+    statusWrap.appendChild(badShell);
+    statusWrap.appendChild(otroCombined);
+    const n = document.createElement('input');
+    n.type = 'text';
+    n.className = 'license-split-editor__note';
+    n.setAttribute('autocomplete', 'off');
+    n.setAttribute('aria-label', 'Notas de la licencia');
+    n.placeholder = 'Notas';
+    n.value = initialExtra != null ? initialExtra : '';
+    const lead = document.createElement('div');
+    lead.className = 'license-split-editor__lead';
+    lead.appendChild(daySellCell);
+    lead.appendChild(userWrap);
+    row.appendChild(lead);
+    row.appendChild(statusWrap);
+    row.appendChild(n);
+    adminLicenseSplitWireDualStatusNoteLink(selGood, selBad, n, otroCombined);
+    return row;
+}
+
+function adminLicenseSplitClearRows() {
+    const wrap = document.getElementById('adminLicenciasStructuredRows');
+    if (wrap) wrap.innerHTML = '';
+}
+
+/** Etiquetas ARIA + id/name únicos (Chrome Issues: form fields need id or name). */
+function adminLicenseSplitRefreshRowAccessibility() {
+    const wrap = document.getElementById('adminLicenciasStructuredRows');
+    if (!wrap) return;
+    const rows = wrap.querySelectorAll('.license-split-editor__row');
+    rows.forEach(function (row, i) {
+        const line = i + 1;
+        const idBase = 'licSplitL' + line;
+        row.setAttribute('role', 'group');
+        row.setAttribute(
+            'aria-label',
+            'Fila ' + line + ': día, vender, usuario, estados verde y rojo, y notas de la licencia'
+        );
+        const dayInpEl = row.querySelector('.license-split-editor__day-num');
+        const sellB = row.querySelector('.license-split-editor__sell-btn');
+        const u = row.querySelector('.license-split-editor__user');
+        const selGood = row.querySelector('.license-split-editor__status-good');
+        const selBad = row.querySelector('.license-split-editor__status-bad');
+        const otroD = row.querySelector('.license-split-editor__otro-combined');
+        const n = row.querySelector('.license-split-editor__note');
+        if (dayInpEl) {
+            const refNow = new Date();
+            const maxL = adminLicenseDaysInCalendarMonth(refNow);
+            adminLicenseSplitApplyDayNumInputLimits(dayInpEl, refNow);
+            dayInpEl.value = String(adminLicenseSplitClampDayNumValue(dayInpEl.value, refNow));
+            adminLicenseSplitWireDayNumInput(dayInpEl);
+            dayInpEl.id = idBase + 'Day';
+            dayInpEl.setAttribute('name', 'lic_split_l' + line + '_day');
+            dayInpEl.setAttribute('aria-label', 'Día del mes (1–' + maxL + ') en la línea ' + line);
+        }
+        if (sellB) {
+            sellB.id = idBase + 'Sell';
+            sellB.setAttribute('aria-label', 'Pasar licencia de la línea ' + line + ' al día indicado');
+        }
+        if (u) {
+            u.id = idBase + 'User';
+            u.setAttribute('name', 'lic_split_l' + line + '_user');
+            u.setAttribute('aria-label', 'Usuario o cliente en la línea ' + line + ' de licencias');
+        }
+        if (selGood) {
+            selGood.id = idBase + 'StatusGood';
+            selGood.setAttribute('name', 'lic_split_l' + line + '_status_good');
+            selGood.setAttribute(
+                'aria-label',
+                'Estado favorable en la línea ' + line + ' (buena, renovación, mes a mes, no renovar)'
+            );
+        }
+        if (selBad) {
+            selBad.id = idBase + 'StatusBad';
+            selBad.setAttribute('name', 'lic_split_l' + line + '_status_bad');
+            selBad.setAttribute(
+                'aria-label',
+                'Estado de incidencia en la línea ' + line + ' (caída, no reproduce, otro)'
+            );
+        }
+        if (otroD) {
+            otroD.id = idBase + 'OtroCombined';
+            otroD.setAttribute('name', 'lic_split_l' + line + '_otro_combined');
+            otroD.setAttribute(
+                'aria-label',
+                'Descripción del problema (estado Otro) en la línea ' + line + ' de licencias'
+            );
+        }
+        if (n) {
+            n.id = idBase + 'Note';
+            n.setAttribute('name', 'lic_split_l' + line + '_note');
+            if (selBad) {
+                adminLicenseSplitApplyNotePlaceholderFromDual(selBad, n, line);
+            } else {
+                n.setAttribute('aria-label', 'Notas (línea ' + line + ')');
+            }
+        }
+        if (selBad && otroD) {
+            adminLicenseSplitSyncOtroDetailVisibility(selBad, otroD);
+        }
+    });
+}
+
+function adminLicenseSplitSyncRowCount(credLineCount) {
+    const wrap = document.getElementById('adminLicenciasStructuredRows');
+    if (!wrap) return;
+    let n = Math.max(0, parseInt(credLineCount, 10) || 0);
+    while (wrap.children.length < n) {
+        wrap.appendChild(adminLicenseSplitCreateRow('', '', '', '', undefined, undefined));
+    }
+    while (wrap.children.length > n) {
+        wrap.removeChild(wrap.lastChild);
+    }
+    adminLicenseSplitRefreshRowAccessibility();
+    if (
+        !__markAdminDupInProgress &&
+        document.documentElement.dataset.adminLicDupHighlightActive === '1' &&
+        typeof window.scheduleRefreshAdminDupIfActive === 'function'
+    ) {
+        window.scheduleRefreshAdminDupIfActive();
+    }
+    scheduleRefreshAdminLicenciasReportCounts();
+}
+
+/** Si la línea de credencial (izquierda) queda vacía, limpia usuario, estado y notas de esa fila. */
+function adminLicenseSplitClearRowSideFields(row) {
+    if (!row) return;
+    const dayInp = row.querySelector('.license-split-editor__day-num');
+    if (dayInp) {
+        const refNow = new Date();
+        adminLicenseSplitApplyDayNumInputLimits(dayInp, refNow);
+        dayInp.value = String(adminLicenseSplitDefaultDayOfMonth());
+    }
+    const u = row.querySelector('.license-split-editor__user');
+    const selGood = row.querySelector('.license-split-editor__status-good');
+    const selBad = row.querySelector('.license-split-editor__status-bad');
+    const otro = row.querySelector('.license-split-editor__otro-combined');
+    const n = row.querySelector('.license-split-editor__note');
+    const sug = row.querySelector('.license-split-editor__user-suggestions');
+    if (u) {
+        u.value = '';
+        u.classList.remove('license-split-editor__user--unknown');
+    }
+    if (sug) {
+        licenseSplitHideUserSuggestions(sug);
+    }
+    if (selGood) {
+        selGood.value = '';
+        delete selGood.dataset.otroDraft;
+    }
+    if (selBad) {
+        selBad.value = '';
+        delete selBad.dataset.otroDraft;
+    }
+    if (otro) {
+        otro.value = '';
+    }
+    if (n) {
+        n.value = '';
+    }
+    if (selBad && otro) {
+        adminLicenseSplitSyncOtroDetailVisibility(selBad, otro);
+        adminLicenseSplitApplyNotePlaceholderFromDual(selBad, n);
+    } else if (selBad && n) {
+        adminLicenseSplitApplyNotePlaceholderFromDual(selBad, n);
+    }
+}
+
+function adminLicenseSplitCascadeClearSidesForEmptyCredLines() {
+    const ta = document.getElementById('adminLicenciasNotepadByLicense');
+    if (!ta || ta.tagName !== 'TEXTAREA') return;
+    const credLines = licenseSplitCredLinesFromRaw(String(ta.value != null ? ta.value : '').replace(/\r\n/g, '\n'));
+    const rows = adminLicenseSplitGetRowElements();
+    let anyCleared = false;
+    for (let i = 0; i < rows.length; i++) {
+        const cred = credLines[i] != null ? credLines[i] : '';
+        if (String(cred).trim() === '') {
+            adminLicenseSplitClearRowSideFields(rows[i]);
+            anyCleared = true;
+        }
+    }
+    if (anyCleared) {
+        adminLicenseSplitRefreshRowAccessibility();
+    }
+}
+
+function adminLicenseSplitGetMergedNotes() {
+    const ta = document.getElementById('adminLicenciasNotepadByLicense');
+    if (!ta || ta.tagName !== 'TEXTAREA') return '';
+    adminMainLicenseNormalizeCredTaTrailingRunsIfBlur(ta);
+    const raw = String(ta.value != null ? ta.value : '').replace(/\r\n/g, '\n');
+    const credLines = adminMainLicenseCredLinesCollapsed(raw);
+    adminLicenseSplitSyncRowCount(adminMainLicenseBlocSyncRowCountFromCollapsed(credLines));
+    adminLicenseSplitCascadeClearSidesForEmptyCredLines();
+    const rows = adminLicenseSplitGetRowElements();
+    const out = [];
+    for (let i = 0; i < credLines.length; i++) {
+        const r = rows[i]
+            ? adminLicenseSplitReadRow(rows[i])
+            : { user: '', statusGood: '', statusBad: '', extra: '' };
+        const line = buildAdminLicenseStorageLine(
+            credLines[i],
+            r.user,
+            r.statusGood != null ? r.statusGood : '',
+            r.statusBad != null ? r.statusBad : '',
+            r.extra
+        );
+        out.push(line);
+    }
+    while (out.length && out[out.length - 1] === '') {
+        out.pop();
+    }
+    return out.join('\n');
+}
+
+function adminLicenseSplitApplyMergedText(text) {
+    const ta = document.getElementById('adminLicenciasNotepadByLicense');
+    const wrap = document.getElementById('adminLicenciasStructuredRows');
+    if (!ta || !wrap) return;
+    let t = text != null ? String(text).replace(/\r\n/g, '\n') : '';
+    /** Misma idea que Cambios/Días: no crear 4–5 filas sólo por datos guardados como \n\n\n… sin contenido útil */
+    let lines = [];
+    if (t.trim() !== '') {
+        lines = licenseCredLinesCollapseRepeatedTrailingBlankLines(t.split('\n'));
+        while (lines.length && String(lines[lines.length - 1]).trim() === '') {
+            lines.pop();
+        }
+    }
+    adminLicenseSplitClearRows();
+    const credParts = [];
+    lines.forEach(function (ln) {
+        const p = parseAdminLicenseLineToSplitParts(ln);
+        credParts.push(p.cred);
+        wrap.appendChild(
+            adminLicenseSplitCreateRow(
+                p.user,
+                p.statusGood != null ? p.statusGood : '',
+                p.statusBad != null ? p.statusBad : '',
+                p.extra,
+                p.otroDetail != null ? p.otroDetail : '',
+                undefined
+            )
+        );
+    });
+    ta.value = credParts.join('\n');
+    if (lines.length === 0) {
+        ta.value = '';
+    }
+    adminLicenseSplitRefreshRowAccessibility();
+    adminLicenseSplitSyncRowsToTextarea();
+    window.requestAnimationFrame(function () {
+        adminLicenseSplitScheduleAutosizeCreds();
+        const licRoot = document.getElementById('adminLicenciasLicenseSplitRoot');
+        adminLicenseSplitValidateAllUserInputs(licRoot || undefined);
+        scheduleRefreshAdminLicenciasReportCounts();
+    });
+}
+
+/**
+ * Quita la fila del bloc Licencias, guarda notas y añade la línea al bloc del día indicado (sync cuentas vendidas).
+ */
+async function adminLicenseSplitSellRowToDay(row) {
+    if (!row || window.__adminLicenseSplitSellInFlight) return;
+    const ta = document.getElementById('adminLicenciasNotepadByLicense');
+    if (!ta || ta.tagName !== 'TEXTAREA') return;
+    const licenseId = parseInt(ta.dataset.licenseId, 10);
+    if (!Number.isFinite(licenseId) || licenseId === AGGREGATE_LICENSE_ID) {
+        showError('Selecciona una licencia concreta (no «Todos») para pasar cuentas al día.');
+        return;
+    }
+    const rows = adminLicenseSplitGetRowElements();
+    const idx = rows.indexOf(row);
+    if (idx < 0) return;
+    const credLines = licenseSplitCredLinesFromRaw(String(ta.value != null ? ta.value : '').replace(/\r\n/g, '\n'));
+    if (idx >= credLines.length) return;
+    const cred = credLines[idx] != null ? credLines[idx] : '';
+    if (!String(cred).trim()) {
+        showError('Esta fila no tiene credencial.');
+        return;
+    }
+    const r = adminLicenseSplitReadRow(row);
+    const lineToMove = buildAdminLicenseStorageLine(
+        cred,
+        r.user,
+        r.statusGood != null ? r.statusGood : '',
+        r.statusBad != null ? r.statusBad : '',
+        r.extra
+    ).trim();
+    if (!lineToMove) {
+        showError('No hay datos válidos para mover.');
+        return;
+    }
+    const dayInp = row.querySelector('.license-split-editor__day-num');
+    const refNow = new Date();
+    let day = dayInp ? parseInt(dayInp.value, 10) : NaN;
+    if (!Number.isFinite(day)) day = adminLicenseSplitDefaultDayOfMonth();
+    day = adminLicenseSplitClampDayNumValue(day, refNow);
+    if (dayInp) {
+        adminLicenseSplitApplyDayNumInputLimits(dayInp, refNow);
+        dayInp.value = String(day);
+    }
+
+    const container = document.getElementById('licenseAllDaysContainer');
+    const dayRoot =
+        container &&
+        container.querySelector(`.day-license-split-root[data-day="${day}"][data-license-id="${licenseId}"]`);
+    if (!dayRoot) {
+        showError('No se encontró el bloc del día ' + day + '.');
+        return;
+    }
+
+    const newCredLines = credLines.slice(0, idx).concat(credLines.slice(idx + 1));
+    const newMergedLines = [];
+    for (let i = 0; i < newCredLines.length; i++) {
+        const oldRowIdx = i < idx ? i : i + 1;
+        const rrow = rows[oldRowIdx];
+        const rr = rrow
+            ? adminLicenseSplitReadRow(rrow)
+            : { user: '', statusGood: '', statusBad: '', extra: '' };
+        newMergedLines.push(
+            buildAdminLicenseStorageLine(
+                newCredLines[i],
+                rr.user,
+                rr.statusGood != null ? rr.statusGood : '',
+                rr.statusBad != null ? rr.statusBad : '',
+                rr.extra
+            )
+        );
+    }
+    while (newMergedLines.length && newMergedLines[newMergedLines.length - 1] === '') {
+        newMergedLines.pop();
+    }
+    const newMerged = newMergedLines.join('\n');
+    const oldMerged = adminLicenseSplitGetMergedNotes();
+
+    window.__adminLicenseSplitSellInFlight = true;
+    try {
+        adminLicenseSplitApplyMergedText(newMerged);
+        const saveRes =
+            typeof window.adminLicenciasSaveCurrentLicenseNotesImmediate === 'function'
+                ? await window.adminLicenciasSaveCurrentLicenseNotesImmediate()
+                : { success: false, error: 'no_save_fn' };
+        if (!saveRes || !saveRes.success) {
+            adminLicenseSplitApplyMergedText(oldMerged);
+            showError('No se pudo guardar el bloc Licencias. Revisa la conexión o vuelve a intentar.');
+            return;
+        }
+
+        const rawDay = dayLicenseSplitGetMergedText(dayRoot);
+        const dayPrev = String(rawDay != null ? rawDay : '').replace(/\r\n/g, '\n').trimEnd();
+        const combined = dayPrev ? dayPrev + '\n' + lineToMove : lineToMove;
+        dayLicenseSplitApplyMergedText(dayRoot, combined);
+        const finalText = dayLicenseSplitGetMergedText(dayRoot);
+        saveDayDraftLocal(licenseId, day, finalText);
+        await syncDayNotepad(licenseId, day, finalText);
+        showSuccess('Licencia pasada al día ' + day + '.');
+        const section = dayRoot.closest('.day-section');
+        if (section && typeof section.scrollIntoView === 'function') {
+            section.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+        if (typeof refreshDuplicateEmailHighlights === 'function') {
+            refreshDuplicateEmailHighlights(licenseId);
+        }
+        if (typeof window.refreshAdminDuplicateHighlightsIfActive === 'function') {
+            window.refreshAdminDuplicateHighlightsIfActive();
+        }
+    } catch (err) {
+        console.error('adminLicenseSplitSellRowToDay', err);
+        adminLicenseSplitApplyMergedText(oldMerged);
+        if (typeof window.adminLicenciasSaveCurrentLicenseNotesImmediate === 'function') {
+            await window.adminLicenciasSaveCurrentLicenseNotesImmediate();
+        }
+        showError('No se pudo completar la venta al día. Se restauró la fila en Licencias.');
+    } finally {
+        window.__adminLicenseSplitSellInFlight = false;
+    }
+}
+
+window.adminLicenseSplitSellRowToDay = adminLicenseSplitSellRowToDay;
+
+/* --- Split por día (mismo modelo que Licencias; flecha arriba devuelve al bloc principal) --- */
+
+function dayLicenseSplitQueryCredsTa(root) {
+    return root && root.querySelector ? root.querySelector('.day-license-split__creds') : null;
+}
+
+function dayLicenseSplitQueryRowsWrap(root) {
+    return root && root.querySelector ? root.querySelector('.day-license-split-rows') : null;
+}
+
+function dayLicenseSplitGetRowElements(root) {
+    const wrap = dayLicenseSplitQueryRowsWrap(root);
+    if (!wrap) return [];
+    return Array.prototype.slice.call(wrap.querySelectorAll('.license-split-editor__row'));
+}
+
+function dayLicenseSplitClearRows(root) {
+    const wrap = dayLicenseSplitQueryRowsWrap(root);
+    if (wrap) wrap.innerHTML = '';
+}
+
+function dayLicenseSplitCreateRow(
+    initialUser,
+    initialStatusGood,
+    initialStatusBad,
+    initialExtra,
+    initialOtroDetail
+) {
+    const row = document.createElement('div');
+    row.className = 'license-split-editor__row';
+    const restoreCell = document.createElement('div');
+    restoreCell.className = 'license-split-editor__day-restore-cell';
+    const restoreBtn = document.createElement('button');
+    restoreBtn.type = 'button';
+    restoreBtn.className = 'license-split-editor__restore-to-license-btn';
+    restoreBtn.title = 'Devolver esta licencia al bloc Licencias';
+    restoreBtn.setAttribute('aria-label', 'Devolver licencia al bloc Licencias');
+    restoreBtn.innerHTML = '<i class="fas fa-arrow-up" aria-hidden="true"></i>';
+    restoreCell.appendChild(restoreBtn);
+    const userWrap = document.createElement('div');
+    userWrap.className = 'license-split-editor__user-wrap';
+    const sugBox = document.createElement('div');
+    sugBox.className = 'license-split-editor__user-suggestions';
+    sugBox.hidden = true;
+    sugBox.setAttribute('aria-hidden', 'true');
+    sugBox.setAttribute('role', 'group');
+    sugBox.setAttribute('aria-label', 'Sugerencias de usuario');
+    const u = document.createElement('input');
+    u.type = 'text';
+    u.className = 'license-split-editor__user';
+    u.setAttribute('autocomplete', 'off');
+    u.setAttribute('aria-label', 'Usuario o cliente de la licencia');
+    u.placeholder = 'anonimo';
+    u.value = initialUser != null ? initialUser : '';
+    userWrap.appendChild(sugBox);
+    userWrap.appendChild(u);
+    adminLicenseSplitWireUserField(u, sugBox);
+    const statusWrap = document.createElement('div');
+    statusWrap.className = 'license-split-editor__status-wrap';
+    const selGood = document.createElement('select');
+    selGood.className = 'license-split-editor__status license-split-editor__status-good';
+    selGood.title = 'Estado favorable (al día, renovación, etc.)';
+    selGood.setAttribute('aria-label', 'Estado favorable de la licencia');
+    ADMIN_LICENSE_STATUS_OPTIONS_GOOD.forEach(function (opt) {
+        const o = document.createElement('option');
+        o.value = opt.v;
+        o.textContent = opt.label;
+        selGood.appendChild(o);
+    });
+    const sg = initialStatusGood != null ? String(initialStatusGood).trim() : '';
+    if (sg && !adminLicenseStatusIsKnownGoodOption(sg)) {
+        const o = document.createElement('option');
+        o.value = sg;
+        o.textContent = sg;
+        selGood.appendChild(o);
+    }
+    selGood.value = adminLicenseSplitCanonicalGoodFromStored(sg) || '';
+    const selBad = document.createElement('select');
+    selBad.className = 'license-split-editor__status license-split-editor__status-bad';
+    selBad.title =
+        'Incidencia o problema (caída, no reproduce, otro). Con «Otro», describa el detalle a la derecha.';
+    selBad.setAttribute('aria-label', 'Estado de incidencia o problema');
+    ADMIN_LICENSE_STATUS_OPTIONS_BAD.forEach(function (opt) {
+        const o = document.createElement('option');
+        o.value = opt.v;
+        o.textContent = opt.label;
+        selBad.appendChild(o);
+    });
+    const sb = initialStatusBad != null ? String(initialStatusBad).trim() : '';
+    if (sb && !adminLicenseStatusIsKnownBadOption(sb)) {
+        const o = document.createElement('option');
+        o.value = sb;
+        o.textContent = sb;
+        selBad.appendChild(o);
+    }
+    selBad.value = adminLicenseSplitCanonicalBadFromStored(sb) || '';
+    const od = initialOtroDetail != null ? String(initialOtroDetail) : '';
+    const otroCombined = document.createElement('input');
+    otroCombined.type = 'text';
+    otroCombined.className = 'license-split-editor__otro-combined';
+    otroCombined.setAttribute('autocomplete', 'off');
+    otroCombined.placeholder = 'des.. problema';
+    otroCombined.title =
+        'Describe el problema; se guarda con el estado «Otro» de la columna roja.';
+    if (String(selBad.value || '').trim().toLowerCase() === 'otro') {
+        otroCombined.value = od != null ? String(od) : '';
+    } else {
+        otroCombined.value = '';
+    }
+    otroCombined.hidden = true;
+    otroCombined.style.display = 'none';
+    const goodShell = document.createElement('div');
+    goodShell.className = 'license-split-editor__status-select-shell license-split-editor__status-select-shell--good';
+    goodShell.appendChild(selGood);
+    const badShell = document.createElement('div');
+    badShell.className = 'license-split-editor__status-select-shell license-split-editor__status-select-shell--bad';
+    badShell.appendChild(selBad);
+    statusWrap.appendChild(goodShell);
+    statusWrap.appendChild(badShell);
+    statusWrap.appendChild(otroCombined);
+    const n = document.createElement('input');
+    n.type = 'text';
+    n.className = 'license-split-editor__note';
+    n.setAttribute('autocomplete', 'off');
+    n.setAttribute('aria-label', 'Notas de la licencia');
+    n.placeholder = 'Notas';
+    n.value = initialExtra != null ? initialExtra : '';
+    const lead = document.createElement('div');
+    lead.className = 'license-split-editor__lead';
+    lead.appendChild(restoreCell);
+    lead.appendChild(userWrap);
+    row.appendChild(lead);
+    row.appendChild(statusWrap);
+    row.appendChild(n);
+    adminLicenseSplitWireDualStatusNoteLink(selGood, selBad, n, otroCombined);
+    return row;
+}
+
+function dayLicenseSplitRefreshRowAccessibility(root) {
+    const wrap = dayLicenseSplitQueryRowsWrap(root);
+    if (!wrap || !root.dataset) return;
+    const dayNum = root.dataset.day || '?';
+    const rows = wrap.querySelectorAll('.license-split-editor__row');
+    rows.forEach(function (row, i) {
+        const line = i + 1;
+        const idBase = 'daySplitD' + dayNum + 'L' + line;
+        row.setAttribute('role', 'group');
+        row.setAttribute(
+            'aria-label',
+            'Día ' + dayNum + ', fila ' + line + ': devolver, usuario, estados verde y rojo, y notas'
+        );
+        const restoreB = row.querySelector('.license-split-editor__restore-to-license-btn');
+        const u = row.querySelector('.license-split-editor__user');
+        const selGood = row.querySelector('.license-split-editor__status-good');
+        const selBad = row.querySelector('.license-split-editor__status-bad');
+        const otroD = row.querySelector('.license-split-editor__otro-combined');
+        const n = row.querySelector('.license-split-editor__note');
+        if (restoreB) {
+            restoreB.id = idBase + 'Restore';
+            restoreB.setAttribute('aria-label', 'Devolver licencia de la fila ' + line + ' al bloc Licencias');
+        }
+        if (u) {
+            u.id = idBase + 'User';
+            u.setAttribute('name', 'day_split_d' + dayNum + '_l' + line + '_user');
+            u.setAttribute('aria-label', 'Usuario o cliente (día ' + dayNum + ', línea ' + line + ')');
+        }
+        if (selGood) {
+            selGood.id = idBase + 'StatusGood';
+            selGood.setAttribute('name', 'day_split_d' + dayNum + '_l' + line + '_status_good');
+            selGood.setAttribute(
+                'aria-label',
+                'Estado favorable (día ' + dayNum + ', línea ' + line + ')'
+            );
+        }
+        if (selBad) {
+            selBad.id = idBase + 'StatusBad';
+            selBad.setAttribute('name', 'day_split_d' + dayNum + '_l' + line + '_status_bad');
+            selBad.setAttribute(
+                'aria-label',
+                'Estado de incidencia (día ' + dayNum + ', línea ' + line + ')'
+            );
+        }
+        if (otroD) {
+            otroD.id = idBase + 'OtroCombined';
+            otroD.setAttribute('name', 'day_split_d' + dayNum + '_l' + line + '_otro_combined');
+            otroD.setAttribute('aria-label', 'Descripción del problema Otro (día ' + dayNum + ', línea ' + line + ')');
+        }
+        if (n) {
+            n.id = idBase + 'Note';
+            n.setAttribute('name', 'day_split_d' + dayNum + '_l' + line + '_note');
+            if (selBad) {
+                adminLicenseSplitApplyNotePlaceholderFromDual(selBad, n, line);
+            } else {
+                n.setAttribute('aria-label', 'Notas (día ' + dayNum + ', línea ' + line + ')');
+            }
+        }
+        if (selBad && otroD) {
+            adminLicenseSplitSyncOtroDetailVisibility(selBad, otroD);
+        }
+    });
+}
+
+function dayLicenseSplitSyncRowCount(root, credLineCount) {
+    const wrap = dayLicenseSplitQueryRowsWrap(root);
+    if (!wrap) return;
+    let n = Math.max(0, parseInt(credLineCount, 10) || 0);
+    while (wrap.children.length < n) {
+        wrap.appendChild(dayLicenseSplitCreateRow('', '', '', '', undefined));
+    }
+    while (wrap.children.length > n) {
+        wrap.removeChild(wrap.lastChild);
+    }
+    dayLicenseSplitRefreshRowAccessibility(root);
+    if (
+        !__markAdminDupInProgress &&
+        document.documentElement.dataset.adminLicDupHighlightActive === '1' &&
+        typeof window.scheduleRefreshAdminDupIfActive === 'function'
+    ) {
+        window.scheduleRefreshAdminDupIfActive();
+    }
+    scheduleRefreshAdminLicenciasReportCounts();
+}
+
+function dayLicenseSplitClearRowSideFields(row) {
+    if (!row) return;
+    const u = row.querySelector('.license-split-editor__user');
+    const selGood = row.querySelector('.license-split-editor__status-good');
+    const selBad = row.querySelector('.license-split-editor__status-bad');
+    const otro = row.querySelector('.license-split-editor__otro-combined');
+    const n = row.querySelector('.license-split-editor__note');
+    const sug = row.querySelector('.license-split-editor__user-suggestions');
+    if (u) {
+        u.value = '';
+        u.classList.remove('license-split-editor__user--unknown');
+    }
+    if (sug) {
+        licenseSplitHideUserSuggestions(sug);
+    }
+    if (selGood) {
+        selGood.value = '';
+        delete selGood.dataset.otroDraft;
+    }
+    if (selBad) {
+        selBad.value = '';
+        delete selBad.dataset.otroDraft;
+    }
+    if (otro) {
+        otro.value = '';
+    }
+    if (n) {
+        n.value = '';
+    }
+    if (selBad && otro) {
+        adminLicenseSplitSyncOtroDetailVisibility(selBad, otro);
+        adminLicenseSplitApplyNotePlaceholderFromDual(selBad, n);
+    } else if (selBad && n) {
+        adminLicenseSplitApplyNotePlaceholderFromDual(selBad, n);
+    }
+}
+
+function dayLicenseSplitCascadeClearSidesForEmptyCredLines(root) {
+    const ta = dayLicenseSplitQueryCredsTa(root);
+    if (!ta || ta.tagName !== 'TEXTAREA') return;
+    const credLines = licenseSplitCredLinesFromRaw(String(ta.value != null ? ta.value : '').replace(/\r\n/g, '\n'));
+    const rows = dayLicenseSplitGetRowElements(root);
+    let anyCleared = false;
+    for (let i = 0; i < rows.length; i++) {
+        const cred = credLines[i] != null ? credLines[i] : '';
+        if (String(cred).trim() === '') {
+            dayLicenseSplitClearRowSideFields(rows[i]);
+            anyCleared = true;
+        }
+    }
+    if (anyCleared) {
+        dayLicenseSplitRefreshRowAccessibility(root);
+    }
+}
+
+function dayLicenseSplitGetMergedText(root) {
+    const ta = dayLicenseSplitQueryCredsTa(root);
+    if (!ta || ta.tagName !== 'TEXTAREA') return '';
+    const raw = String(ta.value != null ? ta.value : '').replace(/\r\n/g, '\n');
+    const credLines = licenseSplitCredLinesFromRaw(raw);
+    dayLicenseSplitSyncRowCount(root, credLines.length);
+    dayLicenseSplitCascadeClearSidesForEmptyCredLines(root);
+    const rows = dayLicenseSplitGetRowElements(root);
+    const out = [];
+    for (let i = 0; i < credLines.length; i++) {
+        const r = rows[i]
+            ? adminLicenseSplitReadRow(rows[i])
+            : { user: '', statusGood: '', statusBad: '', extra: '' };
+        const line = buildAdminLicenseStorageLine(
+            credLines[i],
+            r.user,
+            r.statusGood != null ? r.statusGood : '',
+            r.statusBad != null ? r.statusBad : '',
+            r.extra
+        );
+        out.push(line);
+    }
+    while (out.length && out[out.length - 1] === '') {
+        out.pop();
+    }
+    return out.join('\n');
+}
+
+function dayLicenseSplitApplyMergedText(root, text) {
+    const ta = dayLicenseSplitQueryCredsTa(root);
+    const wrap = dayLicenseSplitQueryRowsWrap(root);
+    if (!ta || !wrap) return;
+    const t = text != null ? String(text).replace(/\r\n/g, '\n') : '';
+    const lines = t === '' ? [] : t.split('\n');
+    dayLicenseSplitClearRows(root);
+    const credParts = [];
+    lines.forEach(function (ln) {
+        const p = parseAdminLicenseLineToSplitParts(ln);
+        credParts.push(p.cred);
+        wrap.appendChild(
+            dayLicenseSplitCreateRow(
+                p.user,
+                p.statusGood != null ? p.statusGood : '',
+                p.statusBad != null ? p.statusBad : '',
+                p.extra,
+                p.otroDetail != null ? p.otroDetail : ''
+            )
+        );
+    });
+    ta.value = credParts.join('\n');
+    if (lines.length === 0) {
+        ta.value = '';
+    }
+    dayLicenseSplitRefreshRowAccessibility(root);
+    window.requestAnimationFrame(function () {
+        dayLicenseSplitScheduleAutosize(root);
+        adminLicenseSplitValidateAllUserInputs(root);
+        scheduleRefreshAdminLicenciasReportCounts();
+    });
+}
+
+function dayLicenseSplitSyncRowsToTextarea(root) {
+    const ta = dayLicenseSplitQueryCredsTa(root);
+    if (!ta) return;
+    const credLines = licenseSplitCredLinesFromRaw(String(ta.value != null ? ta.value : '').replace(/\r\n/g, '\n'));
+    dayLicenseSplitSyncRowCount(root, credLines.length);
+    dayLicenseSplitCascadeClearSidesForEmptyCredLines(root);
+    dayLicenseSplitScheduleAutosize(root);
+}
+
+var __daySplitAutosizeTimers = {};
+
+function dayLicenseSplitScheduleAutosize(root) {
+    if (!root || !root.dataset) return;
+    const k = root.dataset.day || '';
+    dayLicenseSplitAutosizeCreds(root);
+    clearTimeout(__daySplitAutosizeTimers[k]);
+    __daySplitAutosizeTimers[k] = setTimeout(function () {
+        dayLicenseSplitAutosizeCreds(root);
+        clearTimeout(__daySplitAutosizeTimers[k]);
+        __daySplitAutosizeTimers[k] = setTimeout(function () {
+            dayLicenseSplitAutosizeCreds(root);
+        }, 60);
+    }, 30);
+}
+
+/**
+ * Sin wrap: si el contenido cabe en la columna 1fr, el textarea usa 100% (llena el espacio).
+ * Solo si una línea es más ancha que el hueco disponible se fija ancho en px y crece la grilla (scroll horizontal).
+ */
+function licenseSplitSyncCredsTaContentWidth(ta) {
+    if (!ta || ta.tagName !== 'TEXTAREA') return;
+
+    /* Asegurar que el textarea no haga wrap nativo para poder medir el ancho real del texto */
+    if (ta.getAttribute('wrap') !== 'off') {
+        ta.setAttribute('wrap', 'off');
+    }
+
+    ta.style.removeProperty('width');
+    ta.style.removeProperty('min-width');
+    void ta.offsetWidth;
+
+    const cs = window.getComputedStyle(ta);
+    const minWcss = parseFloat(cs.minWidth);
+    const minPx = Number.isFinite(minWcss) && minWcss > 0 ? minWcss : 320;
+
+    const avail = Math.max(minPx, ta.clientWidth);
+    
+    // Usar Canvas para medir el texto con precisión milimétrica sin depender del DOM/scrollWidth
+    const font = (cs.fontWeight || 'normal') + ' ' + (cs.fontSize || '14px') + ' ' + (cs.fontFamily || 'sans-serif');
+    const lines = (ta.value || '').split('\n');
+    let maxTextW = 0;
+    
+    const canvas = licenseSplitSyncCredsTaContentWidth.canvas || (licenseSplitSyncCredsTaContentWidth.canvas = document.createElement("canvas"));
+    const context = canvas.getContext("2d");
+    context.font = font;
+    
+    for (let i = 0; i < lines.length; i++) {
+        const w = context.measureText(lines[i]).width;
+        if (w > maxTextW) maxTextW = w;
+    }
+    
+    const padX = (parseFloat(cs.paddingLeft) || 0) + (parseFloat(cs.paddingRight) || 0);
+    const borderX = (parseFloat(cs.borderLeftWidth) || 0) + (parseFloat(cs.borderRightWidth) || 0);
+    const contentW = maxTextW + padX + borderX + 16; // 16px de margen para el cursor
+
+    const need = Math.ceil(Math.max(minPx, contentW));
+
+    if (need <= avail + 1) {
+        ta.style.removeProperty('width');
+        ta.style.removeProperty('min-width');
+    } else {
+        ta.style.setProperty('width', need + 'px', 'important');
+        ta.style.setProperty('min-width', need + 'px', 'important');
+    }
+}
+
+function dayLicenseSplitAutosizeCreds(root) {
+    const ta = dayLicenseSplitQueryCredsTa(root);
+    if (!ta || ta.tagName !== 'TEXTAREA') return;
+    const hadFocus = document.activeElement === ta;
+    const prevScrollTop = ta.scrollTop;
+    const sel0 = ta.selectionStart;
+    const sel1 = ta.selectionEnd;
+    const valLenBefore = String(ta.value != null ? ta.value : '').length;
+
+    const splitSide = root.querySelector('.license-split-editor__side');
+    const rowsEl = dayLicenseSplitQueryRowsWrap(root);
+    const raw = String(ta.value != null ? ta.value : '').replace(/\r\n/g, '\n');
+    const credLines = licenseSplitCredLinesFromRaw(raw);
+    dayLicenseSplitSyncRowCount(root, credLines.length);
+    dayLicenseSplitCascadeClearSidesForEmptyCredLines(root);
+
+    let hPx;
+    if (splitSide && splitSide.hidden) {
+        ta.style.minHeight = '0';
+        ta.style.height = '0px';
+        const ns = ta.scrollHeight;
+        ta.style.minHeight = '';
+        ta.style.height = '';
+        const cs = window.getComputedStyle(ta);
+        let minPx = parseFloat(cs.minHeight);
+        if (Number.isNaN(minPx)) minPx = 20;
+        hPx = Math.max(minPx, ns + 2);
+    } else {
+        if (rowsEl) {
+            void rowsEl.offsetHeight;
+        }
+
+        const cs0 = window.getComputedStyle(ta);
+        const linePx = adminLicSplitParseLineHeightPx(cs0);
+        const padY = (parseFloat(cs0.paddingTop) || 0) + (parseFloat(cs0.paddingBottom) || 0);
+        const estimateByLines = linePx * credLines.length + padY;
+
+        ta.style.minHeight = '0';
+        ta.style.height = '0px';
+        const naturalScroll = ta.scrollHeight;
+        ta.style.minHeight = '';
+        ta.style.height = '';
+
+        const cs = window.getComputedStyle(ta);
+        let minPx = parseFloat(cs.minHeight);
+        if (Number.isNaN(minPx)) minPx = 20;
+        const contentH = Math.max(naturalScroll + 2, estimateByLines);
+        /* Días: no igualar altura con la columna derecha (evita textarea/flex estirado y hueco negro). */
+        hPx = Math.max(minPx, contentH);
+    }
+
+    ta.style.height = Math.ceil(hPx) + 'px';
+    licenseSplitSyncCredsTaContentWidth(ta);
+
+    /* Medir con height:0px resetea scrollTop en muchos navegadores; restaurar para que Enter no “suba” el bloc. */
+    const restoreScrollAndCaret = function () {
+        if (!ta.isConnected) return;
+        const maxTop = Math.max(0, ta.scrollHeight - ta.clientHeight);
+        const caretAtEnd = hadFocus && sel0 === sel1 && sel0 != null && sel0 >= valLenBefore;
+        if (caretAtEnd) {
+            ta.scrollTop = maxTop;
+        } else {
+            ta.scrollTop = Math.min(Math.max(0, prevScrollTop), maxTop);
+        }
+        if (hadFocus && document.activeElement === ta && typeof ta.setSelectionRange === 'function') {
+            try {
+                const len = ta.value.length;
+                const a = Math.min(Math.max(0, sel0 != null ? sel0 : len), len);
+                const b = Math.min(Math.max(0, sel1 != null ? sel1 : len), len);
+                ta.setSelectionRange(a, b);
+            } catch (err) {
+                /* ignore */
+            }
+        }
+    };
+    if (typeof window.requestAnimationFrame === 'function') {
+        window.requestAnimationFrame(restoreScrollAndCaret);
+    } else {
+        restoreScrollAndCaret();
+    }
+}
+
+function dayLicenseSplitLock(root) {
+    if (!root) return;
+    const ta = dayLicenseSplitQueryCredsTa(root);
+    if (ta) {
+        ta.readOnly = true;
+        ta.setAttribute('tabindex', '-1');
+    }
+    root.classList.add('license-notepad--locked');
+    root.querySelectorAll('.license-split-editor__row input').forEach(function (x) {
+        if (x.classList.contains('license-split-editor__restore-to-license-btn')) return;
+        x.disabled = false;
+        x.readOnly = true;
+        x.tabIndex = -1;
+    });
+    root.querySelectorAll('.license-split-editor__row select').forEach(function (x) {
+        x.disabled = false;
+        x.tabIndex = -1;
+    });
+    root.querySelectorAll('.license-split-editor__restore-to-license-btn').forEach(function (b) {
+        b.disabled = false;
+        b.tabIndex = -1;
+    });
+}
+
+function dayLicenseSplitUnlock(root) {
+    if (!root) return;
+    const ta = dayLicenseSplitQueryCredsTa(root);
+    if (ta) {
+        ta.readOnly = false;
+        ta.removeAttribute('tabindex');
+    }
+    root.classList.remove('license-notepad--locked');
+    root.querySelectorAll('.license-split-editor__row input').forEach(function (x) {
+        if (x.classList.contains('license-split-editor__restore-to-license-btn')) return;
+        x.readOnly = false;
+        x.removeAttribute('tabindex');
+    });
+    root.querySelectorAll('.license-split-editor__row select').forEach(function (x) {
+        x.removeAttribute('tabindex');
+    });
+    root.querySelectorAll('.license-split-editor__restore-to-license-btn').forEach(function (b) {
+        b.removeAttribute('tabindex');
+    });
+}
+
+function dayLicenseSplitWireScrollSync(root) {
+    const ta = dayLicenseSplitQueryCredsTa(root);
+    const rows = dayLicenseSplitQueryRowsWrap(root);
+    if (!ta || !rows || rows.dataset.dayLicScrollSync === '1') return;
+    rows.dataset.dayLicScrollSync = '1';
+    let syncing = false;
+    ta.addEventListener('scroll', function () {
+        if (syncing) return;
+        syncing = true;
+        rows.scrollTop = ta.scrollTop;
+        window.requestAnimationFrame(function () {
+            syncing = false;
+        });
+    });
+    rows.addEventListener('scroll', function () {
+        if (syncing) return;
+        syncing = true;
+        ta.scrollTop = rows.scrollTop;
+        window.requestAnimationFrame(function () {
+            syncing = false;
+        });
+    });
+}
+
+/* --- Caídas / suspendidas: flecha arriba, solo estado rojo (+ otro), notas (sin usuario ni verde) --- */
+
+function suspendedLicenseSplitQueryRoot() {
+    return document.getElementById('adminLicenciasSuspendedSplitRoot');
+}
+
+function suspendedLicenseSplitQueryCredsTa(root) {
+    const r = root || suspendedLicenseSplitQueryRoot();
+    return r && r.querySelector ? r.querySelector('.suspended-license-split__creds') : null;
+}
+
+function suspendedLicenseSplitQueryRowsWrap(root) {
+    const r = root || suspendedLicenseSplitQueryRoot();
+    return r && r.querySelector ? r.querySelector('.suspended-license-split-rows') : null;
+}
+
+function suspendedLicenseSplitGetRowElements(root) {
+    const wrap = suspendedLicenseSplitQueryRowsWrap(root);
+    if (!wrap) return [];
+    return Array.prototype.slice.call(wrap.querySelectorAll('.license-split-editor__row'));
+}
+
+function suspendedLicenseSplitClearRows(root) {
+    const wrap = suspendedLicenseSplitQueryRowsWrap(root);
+    if (wrap) wrap.innerHTML = '';
+}
+
+function suspendedLicenseSplitCreateRow(initialExtra, initialStatusBad, initialOtroDetail) {
+    const row = document.createElement('div');
+    row.className = 'license-split-editor__row license-split-editor__row--suspended';
+    const restoreCell = document.createElement('div');
+    restoreCell.className = 'license-split-editor__day-restore-cell';
+    const restoreBtn = document.createElement('button');
+    restoreBtn.type = 'button';
+    restoreBtn.className = 'license-split-editor__restore-to-license-btn';
+    restoreBtn.title = 'Devolver esta licencia al bloc Licencias';
+    restoreBtn.setAttribute('aria-label', 'Devolver licencia al bloc Licencias');
+    restoreBtn.innerHTML = '<i class="fas fa-arrow-up" aria-hidden="true"></i>';
+    restoreCell.appendChild(restoreBtn);
+    const statusWrap = document.createElement('div');
+    statusWrap.className = 'license-split-editor__status-wrap';
+    const selBad = document.createElement('select');
+    selBad.className = 'license-split-editor__status license-split-editor__status-bad';
+    selBad.title =
+        'Incidencia o problema (caída, no reproduce, otro). Con «Otro», describa el detalle a la derecha.';
+    selBad.setAttribute('aria-label', 'Estado de incidencia (cuenta caída o suspendida)');
+    ADMIN_LICENSE_STATUS_OPTIONS_BAD.forEach(function (opt) {
+        const o = document.createElement('option');
+        o.value = opt.v;
+        o.textContent = opt.label;
+        selBad.appendChild(o);
+    });
+    const sb = initialStatusBad != null ? String(initialStatusBad).trim() : '';
+    if (sb && !adminLicenseStatusIsKnownBadOption(sb)) {
+        const o = document.createElement('option');
+        o.value = sb;
+        o.textContent = sb;
+        selBad.appendChild(o);
+    }
+    selBad.value = adminLicenseSplitCanonicalBadFromStored(sb) || '';
+    const od = initialOtroDetail != null ? String(initialOtroDetail) : '';
+    const otroCombined = document.createElement('input');
+    otroCombined.type = 'text';
+    otroCombined.className = 'license-split-editor__otro-combined';
+    otroCombined.setAttribute('autocomplete', 'off');
+    otroCombined.placeholder = 'des.. problema';
+    otroCombined.title =
+        'Describe el problema; se guarda con el estado «Otro» de la columna roja.';
+    if (String(selBad.value || '').trim().toLowerCase() === 'otro') {
+        otroCombined.value = od != null ? String(od) : '';
+    } else {
+        otroCombined.value = '';
+    }
+    otroCombined.hidden = true;
+    otroCombined.style.display = 'none';
+    const badShell = document.createElement('div');
+    badShell.className = 'license-split-editor__status-select-shell license-split-editor__status-select-shell--bad';
+    badShell.appendChild(selBad);
+    statusWrap.appendChild(badShell);
+    statusWrap.appendChild(otroCombined);
+    const n = document.createElement('input');
+    n.type = 'text';
+    n.className = 'license-split-editor__note';
+    n.setAttribute('autocomplete', 'off');
+    n.setAttribute('aria-label', 'Notas de la licencia');
+    n.placeholder = 'Notas';
+    n.value = initialExtra != null ? initialExtra : '';
+    const lead = document.createElement('div');
+    lead.className = 'license-split-editor__lead';
+    lead.appendChild(restoreCell);
+    row.appendChild(lead);
+    row.appendChild(statusWrap);
+    row.appendChild(n);
+    adminLicenseSplitWireBadOnlyStatusNoteLink(selBad, n, otroCombined);
+    return row;
+}
+
+function suspendedLicenseSplitRefreshRowAccessibility(root) {
+    const wrap = suspendedLicenseSplitQueryRowsWrap(root);
+    if (!wrap || !root || !root.dataset) return;
+    const rows = wrap.querySelectorAll('.license-split-editor__row');
+    rows.forEach(function (row, i) {
+        const line = i + 1;
+        const idBase = 'suspSplitL' + line;
+        row.setAttribute('role', 'group');
+        row.setAttribute(
+            'aria-label',
+            'Caídas, fila ' + line + ': devolver a Licencias, estado rojo y notas'
+        );
+        const restoreB = row.querySelector('.license-split-editor__restore-to-license-btn');
+        const selBad = row.querySelector('.license-split-editor__status-bad');
+        const otroD = row.querySelector('.license-split-editor__otro-combined');
+        const n = row.querySelector('.license-split-editor__note');
+        if (restoreB) {
+            restoreB.id = idBase + 'Restore';
+            restoreB.setAttribute('aria-label', 'Devolver fila ' + line + ' al bloc Licencias');
+        }
+        if (selBad) {
+            selBad.id = idBase + 'StatusBad';
+            selBad.setAttribute('name', 'susp_split_l' + line + '_status_bad');
+            selBad.setAttribute(
+                'aria-label',
+                'Estado de incidencia en caídas (línea ' + line + ')'
+            );
+        }
+        if (otroD) {
+            otroD.id = idBase + 'OtroCombined';
+            otroD.setAttribute('name', 'susp_split_l' + line + '_otro_combined');
+            otroD.setAttribute(
+                'aria-label',
+                'Detalle «Otro» en caídas (línea ' + line + ')'
+            );
+        }
+        if (n) {
+            n.id = idBase + 'Note';
+            n.setAttribute('name', 'susp_split_l' + line + '_note');
+            if (selBad) {
+                adminLicenseSplitApplyNotePlaceholderFromDual(selBad, n, line);
+            } else {
+                n.setAttribute('aria-label', 'Notas (caídas, línea ' + line + ')');
+            }
+        }
+        if (selBad && otroD) {
+            adminLicenseSplitSyncOtroDetailVisibility(selBad, otroD);
+        }
+    });
+}
+
+function suspendedLicenseSplitSyncRowCount(root, credLineCount) {
+    const wrap = suspendedLicenseSplitQueryRowsWrap(root);
+    if (!wrap) return;
+    let n = Math.max(0, parseInt(credLineCount, 10) || 0);
+    while (wrap.children.length < n) {
+        wrap.appendChild(suspendedLicenseSplitCreateRow('', '', undefined));
+    }
+    while (wrap.children.length > n) {
+        wrap.removeChild(wrap.lastChild);
+    }
+    suspendedLicenseSplitRefreshRowAccessibility(root);
+    if (
+        !__markAdminDupInProgress &&
+        document.documentElement.dataset.adminLicDupHighlightActive === '1' &&
+        typeof window.scheduleRefreshAdminDupIfActive === 'function'
+    ) {
+        window.scheduleRefreshAdminDupIfActive();
+    }
+}
+
+function suspendedLicenseSplitCascadeClearSidesForEmptyCredLines(root) {
+    const ta = suspendedLicenseSplitQueryCredsTa(root);
+    if (!ta || ta.tagName !== 'TEXTAREA') return;
+    const credLines = licenseSplitCredLinesFromRaw(String(ta.value != null ? ta.value : '').replace(/\r\n/g, '\n'));
+    const rows = suspendedLicenseSplitGetRowElements(root);
+    let anyCleared = false;
+    for (let i = 0; i < rows.length; i++) {
+        const cred = credLines[i] != null ? credLines[i] : '';
+        if (String(cred).trim() === '') {
+            dayLicenseSplitClearRowSideFields(rows[i]);
+            anyCleared = true;
+        }
+    }
+    if (anyCleared) {
+        suspendedLicenseSplitRefreshRowAccessibility(root);
+    }
+}
+
+function suspendedLicenseSplitGetMergedText(root) {
+    const r = root || suspendedLicenseSplitQueryRoot();
+    const ta = suspendedLicenseSplitQueryCredsTa(r);
+    if (!ta || ta.tagName !== 'TEXTAREA') return '';
+    const raw = String(ta.value != null ? ta.value : '').replace(/\r\n/g, '\n');
+    const credLines = licenseSplitCredLinesFromRaw(raw);
+    suspendedLicenseSplitSyncRowCount(r, credLines.length);
+    suspendedLicenseSplitCascadeClearSidesForEmptyCredLines(r);
+    const rows = suspendedLicenseSplitGetRowElements(r);
+    const out = [];
+    for (let i = 0; i < credLines.length; i++) {
+        const rr = rows[i]
+            ? adminLicenseSplitReadRow(rows[i])
+            : { user: '', statusGood: '', statusBad: '', extra: '' };
+        const line = buildAdminLicenseStorageLine(
+            credLines[i],
+            '',
+            '',
+            rr.statusBad != null ? rr.statusBad : '',
+            rr.extra
+        );
+        out.push(line);
+    }
+    while (out.length && out[out.length - 1] === '') {
+        out.pop();
+    }
+    return out.join('\n');
+}
+
+function suspendedLicenseSplitApplyMergedText(root, text) {
+    const r = root || suspendedLicenseSplitQueryRoot();
+    const ta = suspendedLicenseSplitQueryCredsTa(r);
+    const wrap = suspendedLicenseSplitQueryRowsWrap(r);
+    if (!ta || !wrap) return;
+    const t = text != null ? String(text).replace(/\r\n/g, '\n') : '';
+    const lines = t === '' ? [] : t.split('\n');
+    suspendedLicenseSplitClearRows(r);
+    const credParts = [];
+    lines.forEach(function (ln) {
+        const p = parseAdminLicenseLineToSplitParts(ln);
+        credParts.push(p.cred);
+        let note = (p.extra != null ? String(p.extra) : '').trim();
+        const u = (p.user != null ? String(p.user).trim() : '');
+        if (u && u.toLowerCase() !== 'anonimo') {
+            note = note ? u + ' — ' + note : u;
+        }
+        const sg = (p.statusGood != null ? String(p.statusGood) : '').trim();
+        const sb = (p.statusBad != null ? String(p.statusBad) : '').trim();
+        if (sg && !sb) {
+            note = note ? note + ' · ' + sg : sg;
+        }
+        wrap.appendChild(
+            suspendedLicenseSplitCreateRow(
+                note,
+                sb,
+                p.otroDetail != null ? p.otroDetail : ''
+            )
+        );
+    });
+    ta.value = credParts.join('\n');
+    if (lines.length === 0) {
+        ta.value = '';
+    }
+    suspendedLicenseSplitRefreshRowAccessibility(r);
+    window.requestAnimationFrame(function () {
+        suspendedLicenseSplitScheduleAutosize(r);
+        adminLicenseSplitValidateAllUserInputs(r);
+    });
+}
+
+function suspendedLicenseSplitSyncRowsToTextarea(root) {
+    const r = root || suspendedLicenseSplitQueryRoot();
+    const ta = suspendedLicenseSplitQueryCredsTa(r);
+    if (!ta) return;
+    const credLines = licenseSplitCredLinesFromRaw(String(ta.value != null ? ta.value : '').replace(/\r\n/g, '\n'));
+    suspendedLicenseSplitSyncRowCount(r, credLines.length);
+    suspendedLicenseSplitCascadeClearSidesForEmptyCredLines(r);
+    suspendedLicenseSplitScheduleAutosize(r);
+}
+
+var __suspSplitAutosizeTimers = {};
+
+function suspendedLicenseSplitScheduleAutosize(root) {
+    const r = root || suspendedLicenseSplitQueryRoot();
+    if (!r) return;
+    suspendedLicenseSplitAutosizeCreds(r);
+    clearTimeout(__suspSplitAutosizeTimers._k);
+    __suspSplitAutosizeTimers._k = setTimeout(function () {
+        suspendedLicenseSplitAutosizeCreds(r);
+        clearTimeout(__suspSplitAutosizeTimers._k2);
+        __suspSplitAutosizeTimers._k2 = setTimeout(function () {
+            suspendedLicenseSplitAutosizeCreds(r);
+        }, 60);
+    }, 30);
+}
+
+function suspendedLicenseSplitAutosizeCreds(root) {
+    const r = root || suspendedLicenseSplitQueryRoot();
+    const ta = suspendedLicenseSplitQueryCredsTa(r);
+    if (!ta || ta.tagName !== 'TEXTAREA') return;
+    const splitSide = r.querySelector('.license-split-editor__side');
+    const rowsEl = suspendedLicenseSplitQueryRowsWrap(r);
+    const raw = String(ta.value != null ? ta.value : '').replace(/\r\n/g, '\n');
+    const credLines = licenseSplitCredLinesFromRaw(raw);
+    suspendedLicenseSplitSyncRowCount(r, credLines.length);
+    suspendedLicenseSplitCascadeClearSidesForEmptyCredLines(r);
+
+    if (splitSide && splitSide.hidden) {
+        ta.style.minHeight = '0';
+        ta.style.height = '0px';
+        const ns = ta.scrollHeight;
+        ta.style.minHeight = '';
+        ta.style.height = '';
+        const cs = window.getComputedStyle(ta);
+        let minPx = parseFloat(cs.minHeight);
+        if (Number.isNaN(minPx)) minPx = 20; // Adaptable, sin mínimo fijo de 112px
+        ta.style.height = Math.max(minPx, ns + 2) + 'px';
+        licenseSplitSyncCredsTaContentWidth(ta);
+        return;
+    }
+
+    if (rowsEl) {
+        void rowsEl.offsetHeight;
+    }
+
+    const cs0 = window.getComputedStyle(ta);
+    const linePx = adminLicSplitParseLineHeightPx(cs0);
+    const padY = (parseFloat(cs0.paddingTop) || 0) + (parseFloat(cs0.paddingBottom) || 0);
+    const estimateByLines = linePx * credLines.length + padY;
+
+    ta.style.minHeight = '0';
+    ta.style.height = '0px';
+    const naturalScroll = ta.scrollHeight;
+    ta.style.minHeight = '';
+    ta.style.height = '';
+
+    const cs = window.getComputedStyle(ta);
+    let minPx = parseFloat(cs.minHeight);
+    if (Number.isNaN(minPx)) minPx = 20; // Adaptable, sin mínimo fijo de 112px
+    const contentH = Math.max(naturalScroll + 2, estimateByLines);
+    const h = Math.max(minPx, contentH);
+    ta.style.height = Math.ceil(h) + 'px';
+    licenseSplitSyncCredsTaContentWidth(ta);
+}
+
+function suspendedLicenseSplitLock(root) {
+    const r = root || suspendedLicenseSplitQueryRoot();
+    if (!r) return;
+    const ta = suspendedLicenseSplitQueryCredsTa(r);
+    if (ta) {
+        ta.readOnly = true;
+        ta.setAttribute('tabindex', '-1');
+    }
+    r.classList.add('license-notepad--locked');
+    r.querySelectorAll('.license-split-editor__row input').forEach(function (x) {
+        if (x.classList.contains('license-split-editor__restore-to-license-btn')) return;
+        x.disabled = false;
+        x.readOnly = true;
+        x.tabIndex = -1;
+    });
+    r.querySelectorAll('.license-split-editor__restore-to-license-btn').forEach(function (b) {
+        b.disabled = false;
+        b.tabIndex = -1;
+    });
+}
+
+function suspendedLicenseSplitUnlock(root) {
+    const r = root || suspendedLicenseSplitQueryRoot();
+    if (!r) return;
+    const ta = suspendedLicenseSplitQueryCredsTa(r);
+    if (String(r.dataset.licenseId || '') === '0') {
+        return;
+    }
+    if (ta) {
+        ta.readOnly = false;
+        ta.removeAttribute('tabindex');
+    }
+    r.classList.remove('license-notepad--locked');
+    r.querySelectorAll('.license-split-editor__row input').forEach(function (x) {
+        if (x.classList.contains('license-split-editor__restore-to-license-btn')) return;
+        x.readOnly = false;
+        x.removeAttribute('tabindex');
+    });
+    r.querySelectorAll('.license-split-editor__restore-to-license-btn').forEach(function (b) {
+        b.removeAttribute('tabindex');
+    });
+}
+
+function suspendedLicenseSplitWireScrollSync(root) {
+    const r = root || suspendedLicenseSplitQueryRoot();
+    const ta = suspendedLicenseSplitQueryCredsTa(r);
+    const rows = suspendedLicenseSplitQueryRowsWrap(r);
+    if (!ta || !rows || rows.dataset.suspLicScrollSync === '1') return;
+    rows.dataset.suspLicScrollSync = '1';
+    let syncing = false;
+    ta.addEventListener('scroll', function () {
+        if (syncing) return;
+        syncing = true;
+        rows.scrollTop = ta.scrollTop;
+        window.requestAnimationFrame(function () {
+            syncing = false;
+        });
+    });
+    rows.addEventListener('scroll', function () {
+        if (syncing) return;
+        syncing = true;
+        ta.scrollTop = rows.scrollTop;
+        window.requestAnimationFrame(function () {
+            syncing = false;
+        });
+    });
+}
+
+async function suspendedLicenseSplitRestoreRowToLicense(row) {
+    if (!row || window.__suspendedLicenseSplitRestoreInFlight) return;
+    const root = row.closest('.suspended-license-split-root');
+    if (!root) return;
+    const licenseId = parseInt(root.dataset.licenseId, 10);
+    if (!Number.isFinite(licenseId) || licenseId === AGGREGATE_LICENSE_ID) {
+        showError('Selecciona un producto concreto (no «Todos») para devolver licencias al bloc Licencias.');
+        return;
+    }
+    const inputContainer = document.getElementById('licenseAccountsInputContainer');
+    const activeId =
+        inputContainer && inputContainer.dataset.activeLicenseId != null
+            ? parseInt(inputContainer.dataset.activeLicenseId, 10)
+            : NaN;
+    if (!Number.isFinite(activeId) || activeId !== licenseId) {
+        showError('Abre el mismo producto en la cuadrícula para devolver esta licencia al bloc Licencias.');
+        return;
+    }
+    const taLic = document.getElementById('adminLicenciasNotepadByLicense');
+    if (!taLic || parseInt(taLic.dataset.licenseId, 10) !== licenseId) {
+        showError('El bloc Licencias no coincide. Abre la licencia correcta.');
+        return;
+    }
+
+    const ta = suspendedLicenseSplitQueryCredsTa(root);
+    if (!ta) return;
+    const rows = suspendedLicenseSplitGetRowElements(root);
+    const idx = rows.indexOf(row);
+    if (idx < 0) return;
+    const credLines = licenseSplitCredLinesFromRaw(String(ta.value != null ? ta.value : '').replace(/\r\n/g, '\n'));
+    if (idx >= credLines.length) return;
+    const cred = credLines[idx] != null ? credLines[idx] : '';
+    if (!String(cred).trim()) {
+        showError('Esta fila no tiene credencial.');
+        return;
+    }
+    const r = adminLicenseSplitReadRow(row);
+    const lineToMove = buildAdminLicenseStorageLine(
+        cred,
+        '',
+        '',
+        r.statusBad != null ? r.statusBad : '',
+        r.extra
+    ).trim();
+    if (!lineToMove) {
+        showError('No hay datos válidos para mover.');
+        return;
+    }
+
+    const newCredLines = credLines.slice(0, idx).concat(credLines.slice(idx + 1));
+    const newMergedLines = [];
+    for (let i = 0; i < newCredLines.length; i++) {
+        const oldRowIdx = i < idx ? i : i + 1;
+        const rrow = rows[oldRowIdx];
+        const rr = rrow
+            ? adminLicenseSplitReadRow(rrow)
+            : { user: '', statusGood: '', statusBad: '', extra: '' };
+        newMergedLines.push(
+            buildAdminLicenseStorageLine(
+                newCredLines[i],
+                '',
+                '',
+                rr.statusBad != null ? rr.statusBad : '',
+                rr.extra
+            )
+        );
+    }
+    while (newMergedLines.length && newMergedLines[newMergedLines.length - 1] === '') {
+        newMergedLines.pop();
+    }
+    const newSuspendedMerged = newMergedLines.join('\n');
+    const oldSuspendedMerged = suspendedLicenseSplitGetMergedText(root);
+    const oldLicenseMerged = adminLicenseSplitGetMergedNotes();
+    const licLines = oldLicenseMerged.replace(/\r\n/g, '\n').split('\n');
+    while (licLines.length && licLines[licLines.length - 1] === '') {
+        licLines.pop();
+    }
+    licLines.push(lineToMove);
+    const newLicenseMerged = licLines.join('\n');
+
+    window.__suspendedLicenseSplitRestoreInFlight = true;
+    try {
+        suspendedLicenseSplitApplyMergedText(root, newSuspendedMerged);
+        adminLicenseSplitApplyMergedText(newLicenseMerged);
+        const saveLicRes =
+            typeof window.adminLicenciasSaveCurrentLicenseNotesImmediate === 'function'
+                ? await window.adminLicenciasSaveCurrentLicenseNotesImmediate()
+                : { success: false, error: 'no_save_fn' };
+        if (!saveLicRes || !saveLicRes.success) {
+            adminLicenseSplitApplyMergedText(oldLicenseMerged);
+            suspendedLicenseSplitApplyMergedText(root, oldSuspendedMerged);
+            showError('No se pudo guardar. Revisa la conexión.');
+            return;
+        }
+        showSuccess('Licencia devuelta al bloc Licencias.');
+        if (typeof refreshDuplicateEmailHighlights === 'function') {
+            refreshDuplicateEmailHighlights(licenseId);
+        }
+        if (typeof window.refreshAdminDuplicateHighlightsIfActive === 'function') {
+            window.refreshAdminDuplicateHighlightsIfActive();
+        }
+        if (typeof window.updateSuspendedBlocLineCountBadge === 'function') {
+            window.updateSuspendedBlocLineCountBadge();
+        }
+        adminLicenciasReturnToLicenseEditorAfterRestoreUi(licenseId);
+    } catch (err) {
+        console.error('suspendedLicenseSplitRestoreRowToLicense', err);
+        try {
+            adminLicenseSplitApplyMergedText(oldLicenseMerged);
+        } catch (e2) {
+            console.error(e2);
+        }
+        try {
+            suspendedLicenseSplitApplyMergedText(root, oldSuspendedMerged);
+        } catch (e3) {
+            console.error(e3);
+        }
+        showError('No se pudo completar. Revisa los blocs o recarga la página si hace falta.');
+    } finally {
+        window.__suspendedLicenseSplitRestoreInFlight = false;
+    }
+}
+
+window.suspendedLicenseSplitGetMergedText = suspendedLicenseSplitGetMergedText;
+window.suspendedLicenseSplitApplyMergedText = suspendedLicenseSplitApplyMergedText;
+window.suspendedLicenseSplitSyncRowsToTextarea = suspendedLicenseSplitSyncRowsToTextarea;
+window.suspendedLicenseSplitScheduleAutosize = suspendedLicenseSplitScheduleAutosize;
+window.suspendedLicenseSplitLock = suspendedLicenseSplitLock;
+window.suspendedLicenseSplitUnlock = suspendedLicenseSplitUnlock;
+window.suspendedLicenseSplitWireScrollSync = suspendedLicenseSplitWireScrollSync;
+window.suspendedLicenseSplitRestoreRowToLicense = suspendedLicenseSplitRestoreRowToLicense;
+/* --- Vencidas: flecha arriba, solo estado rojo (+ otro), notas (sin usuario ni verde) --- */
+
+function expiredLicenseSplitQueryRoot() {
+    return document.getElementById('adminLicenciasExpiredSplitRoot');
+}
+
+function expiredLicenseSplitQueryCredsTa(root) {
+    const r = root || expiredLicenseSplitQueryRoot();
+    return r && r.querySelector ? r.querySelector('.expired-license-split__creds') : null;
+}
+
+function expiredLicenseSplitQueryRowsWrap(root) {
+    const r = root || expiredLicenseSplitQueryRoot();
+    return r && r.querySelector ? r.querySelector('.expired-license-split-rows') : null;
+}
+
+function expiredLicenseSplitGetRowElements(root) {
+    const wrap = expiredLicenseSplitQueryRowsWrap(root);
+    if (!wrap) return [];
+    return Array.prototype.slice.call(wrap.querySelectorAll('.license-split-editor__row'));
+}
+
+function expiredLicenseSplitClearRows(root) {
+    const wrap = expiredLicenseSplitQueryRowsWrap(root);
+    if (wrap) wrap.innerHTML = '';
+}
+
+function expiredLicenseSplitCreateRow(initialExtra, initialStatusBad, initialOtroDetail) {
+    const row = document.createElement('div');
+    row.className = 'license-split-editor__row license-split-editor__row--expired';
+    const restoreCell = document.createElement('div');
+    restoreCell.className = 'license-split-editor__day-restore-cell';
+    const restoreBtn = document.createElement('button');
+    restoreBtn.type = 'button';
+    restoreBtn.className = 'license-split-editor__restore-to-license-btn';
+    restoreBtn.title = 'Devolver esta licencia al bloc Licencias';
+    restoreBtn.setAttribute('aria-label', 'Devolver licencia al bloc Licencias');
+    restoreBtn.innerHTML = '<i class="fas fa-arrow-up" aria-hidden="true"></i>';
+    restoreCell.appendChild(restoreBtn);
+    const statusWrap = document.createElement('div');
+    statusWrap.className = 'license-split-editor__status-wrap';
+    const selBad = document.createElement('select');
+    selBad.className = 'license-split-editor__status license-split-editor__status-bad';
+    selBad.title =
+        'Incidencia o problema (vencida, no reproduce, otro). Con «Otro», describa el detalle a la derecha.';
+    selBad.setAttribute('aria-label', 'Estado de incidencia (cuenta vencida o sin renovar)');
+    ADMIN_LICENSE_STATUS_OPTIONS_BAD.forEach(function (opt) {
+        const o = document.createElement('option');
+        o.value = opt.v;
+        o.textContent = opt.label;
+        selBad.appendChild(o);
+    });
+    const sb = initialStatusBad != null ? String(initialStatusBad).trim() : '';
+    if (sb && !adminLicenseStatusIsKnownBadOption(sb)) {
+        const o = document.createElement('option');
+        o.value = sb;
+        o.textContent = sb;
+        selBad.appendChild(o);
+    }
+    selBad.value = adminLicenseSplitCanonicalBadFromStored(sb) || '';
+    const od = initialOtroDetail != null ? String(initialOtroDetail) : '';
+    const otroCombined = document.createElement('input');
+    otroCombined.type = 'text';
+    otroCombined.className = 'license-split-editor__otro-combined';
+    otroCombined.setAttribute('autocomplete', 'off');
+    otroCombined.placeholder = 'des.. problema';
+    otroCombined.title =
+        'Describe el problema; se guarda con el estado «Otro» de la columna roja.';
+    if (String(selBad.value || '').trim().toLowerCase() === 'otro') {
+        otroCombined.value = od != null ? String(od) : '';
+    } else {
+        otroCombined.value = '';
+    }
+    otroCombined.hidden = true;
+    otroCombined.style.display = 'none';
+    const badShell = document.createElement('div');
+    badShell.className = 'license-split-editor__status-select-shell license-split-editor__status-select-shell--bad';
+    badShell.appendChild(selBad);
+    statusWrap.appendChild(badShell);
+    statusWrap.appendChild(otroCombined);
+    const n = document.createElement('input');
+    n.type = 'text';
+    n.className = 'license-split-editor__note';
+    n.setAttribute('autocomplete', 'off');
+    n.setAttribute('aria-label', 'Notas de la licencia');
+    n.placeholder = 'Notas';
+    n.value = initialExtra != null ? initialExtra : '';
+    const lead = document.createElement('div');
+    lead.className = 'license-split-editor__lead';
+    lead.appendChild(restoreCell);
+    row.appendChild(lead);
+    row.appendChild(statusWrap);
+    row.appendChild(n);
+    adminLicenseSplitWireBadOnlyStatusNoteLink(selBad, n, otroCombined);
+    return row;
+}
+
+function expiredLicenseSplitRefreshRowAccessibility(root) {
+    const wrap = expiredLicenseSplitQueryRowsWrap(root);
+    if (!wrap || !root || !root.dataset) return;
+    const rows = wrap.querySelectorAll('.license-split-editor__row');
+    rows.forEach(function (row, i) {
+        const line = i + 1;
+        const idBase = 'expSplitL' + line;
+        row.setAttribute('role', 'group');
+        row.setAttribute(
+            'aria-label',
+            'Vencidas, fila ' + line + ': devolver a Licencias, estado rojo y notas'
+        );
+        const restoreB = row.querySelector('.license-split-editor__restore-to-license-btn');
+        const selBad = row.querySelector('.license-split-editor__status-bad');
+        const otroD = row.querySelector('.license-split-editor__otro-combined');
+        const n = row.querySelector('.license-split-editor__note');
+        if (restoreB) {
+            restoreB.id = idBase + 'Restore';
+            restoreB.setAttribute('aria-label', 'Devolver fila ' + line + ' al bloc Licencias');
+        }
+        if (selBad) {
+            selBad.id = idBase + 'StatusBad';
+            selBad.setAttribute('name', 'exp_split_l' + line + '_status_bad');
+            selBad.setAttribute(
+                'aria-label',
+                'Estado de incidencia en vencidas (línea ' + line + ')'
+            );
+        }
+        if (otroD) {
+            otroD.id = idBase + 'OtroCombined';
+            otroD.setAttribute('name', 'exp_split_l' + line + '_otro_combined');
+            otroD.setAttribute(
+                'aria-label',
+                'Detalle «Otro» en vencidas (línea ' + line + ')'
+            );
+        }
+        if (n) {
+            n.id = idBase + 'Note';
+            n.setAttribute('name', 'exp_split_l' + line + '_note');
+            if (selBad) {
+                adminLicenseSplitApplyNotePlaceholderFromDual(selBad, n, line);
+            } else {
+                n.setAttribute('aria-label', 'Notas (vencidas, línea ' + line + ')');
+            }
+        }
+        if (selBad && otroD) {
+            adminLicenseSplitSyncOtroDetailVisibility(selBad, otroD);
+        }
+    });
+}
+
+function expiredLicenseSplitSyncRowCount(root, credLineCount) {
+    const wrap = expiredLicenseSplitQueryRowsWrap(root);
+    if (!wrap) return;
+    let n = Math.max(0, parseInt(credLineCount, 10) || 0);
+    while (wrap.children.length < n) {
+        wrap.appendChild(expiredLicenseSplitCreateRow('', '', undefined));
+    }
+    while (wrap.children.length > n) {
+        wrap.removeChild(wrap.lastChild);
+    }
+    expiredLicenseSplitRefreshRowAccessibility(root);
+    if (
+        !__markAdminDupInProgress &&
+        document.documentElement.dataset.adminLicDupHighlightActive === '1' &&
+        typeof window.scheduleRefreshAdminDupIfActive === 'function'
+    ) {
+        window.scheduleRefreshAdminDupIfActive();
+    }
+}
+
+function expiredLicenseSplitCascadeClearSidesForEmptyCredLines(root) {
+    const ta = expiredLicenseSplitQueryCredsTa(root);
+    if (!ta || ta.tagName !== 'TEXTAREA') return;
+    const credLines = licenseSplitCredLinesFromRaw(String(ta.value != null ? ta.value : '').replace(/\r\n/g, '\n'));
+    const rows = expiredLicenseSplitGetRowElements(root);
+    let anyCleared = false;
+    for (let i = 0; i < rows.length; i++) {
+        const cred = credLines[i] != null ? credLines[i] : '';
+        if (String(cred).trim() === '') {
+            dayLicenseSplitClearRowSideFields(rows[i]);
+            anyCleared = true;
+        }
+    }
+    if (anyCleared) {
+        expiredLicenseSplitRefreshRowAccessibility(root);
+    }
+}
+
+function expiredLicenseSplitGetMergedText(root) {
+    const r = root || expiredLicenseSplitQueryRoot();
+    const ta = expiredLicenseSplitQueryCredsTa(r);
+    if (!ta || ta.tagName !== 'TEXTAREA') return '';
+    const raw = String(ta.value != null ? ta.value : '').replace(/\r\n/g, '\n');
+    const credLines = licenseSplitCredLinesFromRaw(raw);
+    expiredLicenseSplitSyncRowCount(r, credLines.length);
+    expiredLicenseSplitCascadeClearSidesForEmptyCredLines(r);
+    const rows = expiredLicenseSplitGetRowElements(r);
+    const out = [];
+    for (let i = 0; i < credLines.length; i++) {
+        const rr = rows[i]
+            ? adminLicenseSplitReadRow(rows[i])
+            : { user: '', statusGood: '', statusBad: '', extra: '' };
+        const line = buildAdminLicenseStorageLine(
+            credLines[i],
+            '',
+            '',
+            rr.statusBad != null ? rr.statusBad : '',
+            rr.extra
+        );
+        out.push(line);
+    }
+    while (out.length && out[out.length - 1] === '') {
+        out.pop();
+    }
+    return out.join('\n');
+}
+
+function expiredLicenseSplitApplyMergedText(root, text) {
+    const r = root || expiredLicenseSplitQueryRoot();
+    const ta = expiredLicenseSplitQueryCredsTa(r);
+    const wrap = expiredLicenseSplitQueryRowsWrap(r);
+    if (!ta || !wrap) return;
+    const t = text != null ? String(text).replace(/\r\n/g, '\n') : '';
+    const lines = t === '' ? [] : t.split('\n');
+    expiredLicenseSplitClearRows(r);
+    const credParts = [];
+    lines.forEach(function (ln) {
+        const p = parseAdminLicenseLineToSplitParts(ln);
+        credParts.push(p.cred);
+        let note = (p.extra != null ? String(p.extra) : '').trim();
+        const u = (p.user != null ? String(p.user).trim() : '');
+        if (u && u.toLowerCase() !== 'anonimo') {
+            note = note ? u + ' — ' + note : u;
+        }
+        const sg = (p.statusGood != null ? String(p.statusGood) : '').trim();
+        const sb = (p.statusBad != null ? String(p.statusBad) : '').trim();
+        if (sg && !sb) {
+            note = note ? note + ' · ' + sg : sg;
+        }
+        wrap.appendChild(
+            expiredLicenseSplitCreateRow(
+                note,
+                sb,
+                p.otroDetail != null ? p.otroDetail : ''
+            )
+        );
+    });
+    ta.value = credParts.join('\n');
+    if (lines.length === 0) {
+        ta.value = '';
+    }
+    expiredLicenseSplitRefreshRowAccessibility(r);
+    window.requestAnimationFrame(function () {
+        expiredLicenseSplitScheduleAutosize(r);
+        adminLicenseSplitValidateAllUserInputs(r);
+    });
+}
+
+function expiredLicenseSplitSyncRowsToTextarea(root) {
+    const r = root || expiredLicenseSplitQueryRoot();
+    const ta = expiredLicenseSplitQueryCredsTa(r);
+    if (!ta) return;
+    const credLines = licenseSplitCredLinesFromRaw(String(ta.value != null ? ta.value : '').replace(/\r\n/g, '\n'));
+    expiredLicenseSplitSyncRowCount(r, credLines.length);
+    expiredLicenseSplitCascadeClearSidesForEmptyCredLines(r);
+    expiredLicenseSplitScheduleAutosize(r);
+}
+
+var __expSplitAutosizeTimers = {};
+
+function expiredLicenseSplitScheduleAutosize(root) {
+    const r = root || expiredLicenseSplitQueryRoot();
+    if (!r) return;
+    expiredLicenseSplitAutosizeCreds(r);
+    clearTimeout(__expSplitAutosizeTimers._k);
+    __expSplitAutosizeTimers._k = setTimeout(function () {
+        expiredLicenseSplitAutosizeCreds(r);
+        clearTimeout(__expSplitAutosizeTimers._k2);
+        __expSplitAutosizeTimers._k2 = setTimeout(function () {
+            expiredLicenseSplitAutosizeCreds(r);
+        }, 60);
+    }, 30);
+}
+
+function expiredLicenseSplitAutosizeCreds(root) {
+    const r = root || expiredLicenseSplitQueryRoot();
+    const ta = expiredLicenseSplitQueryCredsTa(r);
+    if (!ta || ta.tagName !== 'TEXTAREA') return;
+    const splitSide = r.querySelector('.license-split-editor__side');
+    const rowsEl = expiredLicenseSplitQueryRowsWrap(r);
+    const raw = String(ta.value != null ? ta.value : '').replace(/\r\n/g, '\n');
+    const credLines = licenseSplitCredLinesFromRaw(raw);
+    expiredLicenseSplitSyncRowCount(r, credLines.length);
+    expiredLicenseSplitCascadeClearSidesForEmptyCredLines(r);
+
+    if (splitSide && splitSide.hidden) {
+        ta.style.minHeight = '0';
+        ta.style.height = '0px';
+        const ns = ta.scrollHeight;
+        ta.style.minHeight = '';
+        ta.style.height = '';
+        const cs = window.getComputedStyle(ta);
+        let minPx = parseFloat(cs.minHeight);
+        if (Number.isNaN(minPx)) minPx = 20; // Adaptable, sin mínimo fijo de 112px
+        ta.style.height = Math.max(minPx, ns + 2) + 'px';
+        licenseSplitSyncCredsTaContentWidth(ta);
+        return;
+    }
+
+    if (rowsEl) {
+        void rowsEl.offsetHeight;
+    }
+
+    const cs0 = window.getComputedStyle(ta);
+    const linePx = adminLicSplitParseLineHeightPx(cs0);
+    const padY = (parseFloat(cs0.paddingTop) || 0) + (parseFloat(cs0.paddingBottom) || 0);
+    const estimateByLines = linePx * credLines.length + padY;
+
+    ta.style.minHeight = '0';
+    ta.style.height = '0px';
+    const naturalScroll = ta.scrollHeight;
+    ta.style.minHeight = '';
+    ta.style.height = '';
+
+    const cs = window.getComputedStyle(ta);
+    let minPx = parseFloat(cs.minHeight);
+    if (Number.isNaN(minPx)) minPx = 20; // Adaptable, sin mínimo fijo de 112px
+    const contentH = Math.max(naturalScroll + 2, estimateByLines);
+    const h = Math.max(minPx, contentH);
+    ta.style.height = Math.ceil(h) + 'px';
+    licenseSplitSyncCredsTaContentWidth(ta);
+}
+
+function expiredLicenseSplitLock(root) {
+    const r = root || expiredLicenseSplitQueryRoot();
+    if (!r) return;
+    const ta = expiredLicenseSplitQueryCredsTa(r);
+    if (ta) {
+        ta.readOnly = true;
+        ta.setAttribute('tabindex', '-1');
+    }
+    r.classList.add('license-notepad--locked');
+    r.querySelectorAll('.license-split-editor__row input').forEach(function (x) {
+        if (x.classList.contains('license-split-editor__restore-to-license-btn')) return;
+        x.disabled = false;
+        x.readOnly = true;
+        x.tabIndex = -1;
+    });
+    r.querySelectorAll('.license-split-editor__restore-to-license-btn').forEach(function (b) {
+        b.disabled = false;
+        b.tabIndex = -1;
+    });
+}
+
+function expiredLicenseSplitUnlock(root) {
+    const r = root || expiredLicenseSplitQueryRoot();
+    if (!r) return;
+    const ta = expiredLicenseSplitQueryCredsTa(r);
+    if (String(r.dataset.licenseId || '') === '0') {
+        return;
+    }
+    if (ta) {
+        ta.readOnly = false;
+        ta.removeAttribute('tabindex');
+    }
+    r.classList.remove('license-notepad--locked');
+    r.querySelectorAll('.license-split-editor__row input').forEach(function (x) {
+        if (x.classList.contains('license-split-editor__restore-to-license-btn')) return;
+        x.readOnly = false;
+        x.removeAttribute('tabindex');
+    });
+    r.querySelectorAll('.license-split-editor__restore-to-license-btn').forEach(function (b) {
+        b.removeAttribute('tabindex');
+    });
+}
+
+function expiredLicenseSplitWireScrollSync(root) {
+    const r = root || expiredLicenseSplitQueryRoot();
+    const ta = expiredLicenseSplitQueryCredsTa(r);
+    const rows = expiredLicenseSplitQueryRowsWrap(r);
+    if (!ta || !rows || rows.dataset.expLicScrollSync === '1') return;
+    rows.dataset.expLicScrollSync = '1';
+    let syncing = false;
+    ta.addEventListener('scroll', function () {
+        if (syncing) return;
+        syncing = true;
+        rows.scrollTop = ta.scrollTop;
+        window.requestAnimationFrame(function () {
+            syncing = false;
+        });
+    });
+    rows.addEventListener('scroll', function () {
+        if (syncing) return;
+        syncing = true;
+        ta.scrollTop = rows.scrollTop;
+        window.requestAnimationFrame(function () {
+            syncing = false;
+        });
+    });
+}
+
+async function expiredLicenseSplitRestoreRowToLicense(row) {
+    if (!row || window.__expiredLicenseSplitRestoreInFlight) return;
+    const root = row.closest('.expired-license-split-root');
+    if (!root) return;
+    const licenseId = parseInt(root.dataset.licenseId, 10);
+    if (!Number.isFinite(licenseId) || licenseId === AGGREGATE_LICENSE_ID) {
+        showError('Selecciona un producto concreto (no «Todos») para devolver licencias al bloc Licencias.');
+        return;
+    }
+    const inputContainer = document.getElementById('licenseAccountsInputContainer');
+    const activeId =
+        inputContainer && inputContainer.dataset.activeLicenseId != null
+            ? parseInt(inputContainer.dataset.activeLicenseId, 10)
+            : NaN;
+    if (!Number.isFinite(activeId) || activeId !== licenseId) {
+        showError('Abre el mismo producto en la cuadrícula para devolver esta licencia al bloc Licencias.');
+        return;
+    }
+    const taLic = document.getElementById('adminLicenciasNotepadByLicense');
+    if (!taLic || parseInt(taLic.dataset.licenseId, 10) !== licenseId) {
+        showError('El bloc Licencias no coincide. Abre la licencia correcta.');
+        return;
+    }
+
+    const ta = expiredLicenseSplitQueryCredsTa(root);
+    if (!ta) return;
+    const rows = expiredLicenseSplitGetRowElements(root);
+    const idx = rows.indexOf(row);
+    if (idx < 0) return;
+    const credLines = licenseSplitCredLinesFromRaw(String(ta.value != null ? ta.value : '').replace(/\r\n/g, '\n'));
+    if (idx >= credLines.length) return;
+    const cred = credLines[idx] != null ? credLines[idx] : '';
+    if (!String(cred).trim()) {
+        showError('Esta fila no tiene credencial.');
+        return;
+    }
+    const r = adminLicenseSplitReadRow(row);
+    const lineToMove = buildAdminLicenseStorageLine(
+        cred,
+        '',
+        '',
+        r.statusBad != null ? r.statusBad : '',
+        r.extra
+    ).trim();
+    if (!lineToMove) {
+        showError('No hay datos válidos para mover.');
+        return;
+    }
+
+    const newCredLines = credLines.slice(0, idx).concat(credLines.slice(idx + 1));
+    const newMergedLines = [];
+    for (let i = 0; i < newCredLines.length; i++) {
+        const oldRowIdx = i < idx ? i : i + 1;
+        const rrow = rows[oldRowIdx];
+        const rr = rrow
+            ? adminLicenseSplitReadRow(rrow)
+            : { user: '', statusGood: '', statusBad: '', extra: '' };
+        newMergedLines.push(
+            buildAdminLicenseStorageLine(
+                newCredLines[i],
+                '',
+                '',
+                rr.statusBad != null ? rr.statusBad : '',
+                rr.extra
+            )
+        );
+    }
+    while (newMergedLines.length && newMergedLines[newMergedLines.length - 1] === '') {
+        newMergedLines.pop();
+    }
+    const newSuspendedMerged = newMergedLines.join('\n');
+    const oldSuspendedMerged = expiredLicenseSplitGetMergedText(root);
+    const oldLicenseMerged = adminLicenseSplitGetMergedNotes();
+    const licLines = oldLicenseMerged.replace(/\r\n/g, '\n').split('\n');
+    while (licLines.length && licLines[licLines.length - 1] === '') {
+        licLines.pop();
+    }
+    licLines.push(lineToMove);
+    const newLicenseMerged = licLines.join('\n');
+
+    window.__expiredLicenseSplitRestoreInFlight = true;
+    try {
+        expiredLicenseSplitApplyMergedText(root, newSuspendedMerged);
+        adminLicenseSplitApplyMergedText(newLicenseMerged);
+        const saveLicRes =
+            typeof window.adminLicenciasSaveCurrentLicenseNotesImmediate === 'function'
+                ? await window.adminLicenciasSaveCurrentLicenseNotesImmediate()
+                : { success: false, error: 'no_save_fn' };
+        if (!saveLicRes || !saveLicRes.success) {
+            adminLicenseSplitApplyMergedText(oldLicenseMerged);
+            expiredLicenseSplitApplyMergedText(root, oldSuspendedMerged);
+            showError('No se pudo guardar. Revisa la conexión.');
+            return;
+        }
+        showSuccess('Licencia devuelta al bloc Licencias.');
+        if (typeof refreshDuplicateEmailHighlights === 'function') {
+            refreshDuplicateEmailHighlights(licenseId);
+        }
+        if (typeof window.refreshAdminDuplicateHighlightsIfActive === 'function') {
+            window.refreshAdminDuplicateHighlightsIfActive();
+        }
+        if (typeof window.updateExpiredBlocLineCountBadge === 'function') {
+            window.updateExpiredBlocLineCountBadge();
+        }
+        adminLicenciasReturnToLicenseEditorAfterRestoreUi(licenseId);
+    } catch (err) {
+        console.error('expiredLicenseSplitRestoreRowToLicense', err);
+        try {
+            adminLicenseSplitApplyMergedText(oldLicenseMerged);
+        } catch (e2) {
+            console.error(e2);
+        }
+        try {
+            expiredLicenseSplitApplyMergedText(root, oldSuspendedMerged);
+        } catch (e3) {
+            console.error(e3);
+        }
+        showError('No se pudo completar. Revisa los blocs o recarga la página si hace falta.');
+    } finally {
+        window.__expiredLicenseSplitRestoreInFlight = false;
+    }
+}
+
+window.expiredLicenseSplitGetMergedText = expiredLicenseSplitGetMergedText;
+window.expiredLicenseSplitApplyMergedText = expiredLicenseSplitApplyMergedText;
+window.expiredLicenseSplitSyncRowsToTextarea = expiredLicenseSplitSyncRowsToTextarea;
+window.expiredLicenseSplitScheduleAutosize = expiredLicenseSplitScheduleAutosize;
+window.expiredLicenseSplitLock = expiredLicenseSplitLock;
+window.expiredLicenseSplitUnlock = expiredLicenseSplitUnlock;
+window.expiredLicenseSplitWireScrollSync = expiredLicenseSplitWireScrollSync;
+window.expiredLicenseSplitRestoreRowToLicense = expiredLicenseSplitRestoreRowToLicense;
+
+/* --- Cambios (mes a mes): correo, rojo + verde «Terminado», devolver a Licencias solo si Terminado --- */
+const ADMIN_LICENSE_CHANGES_STATUS_GOOD = [
+    { v: '', label: '—' },
+    { v: 'terminado', label: 'Terminado' }
+];
+
+function changesLicenseSplitCanonicalGood(st) {
+    const k = adminLicenseNormalizeStatusKey(st);
+    if (k === 'terminado') return 'terminado';
+    return '';
+}
+
+function changesLicenseSplitQueryRoot() {
+    return null;
+}
+
+function changesLicenseSplitForEachProductRoot(fn) {
+    document.querySelectorAll('#licenseChangesProductsContainer .changes-license-split-root').forEach(fn);
+}
+
+function changesLicenseSplitQueryCredsTa(root) {
+    const r = root || changesLicenseSplitQueryRoot();
+    return r && r.querySelector ? r.querySelector('.changes-license-split__creds') : null;
+}
+
+function changesLicenseSplitQueryRowsWrap(root) {
+    const r = root || changesLicenseSplitQueryRoot();
+    return r && r.querySelector ? r.querySelector('.changes-license-split-rows') : null;
+}
+
+function changesLicenseSplitGetRowElements(root) {
+    const wrap = changesLicenseSplitQueryRowsWrap(root);
+    if (!wrap) return [];
+    return Array.prototype.slice.call(wrap.querySelectorAll('.license-split-editor__row'));
+}
+
+function changesLicenseSplitClearRows(root) {
+    const wrap = changesLicenseSplitQueryRowsWrap(root);
+    if (wrap) wrap.innerHTML = '';
+}
+
+function changesLicenseSplitCreateRow(initialExtra, initialStatusGood, initialStatusBad, initialOtroDetail) {
+    const row = document.createElement('div');
+    row.className = 'license-split-editor__row license-split-editor__row--changes';
+    const restoreCell = document.createElement('div');
+    restoreCell.className = 'license-split-editor__day-restore-cell';
+    const restoreBtn = document.createElement('button');
+    restoreBtn.type = 'button';
+    restoreBtn.className = 'license-split-editor__restore-to-license-btn';
+    restoreBtn.title =
+        'Cerrar tras «Terminado»: incidencia (caída, no reproduce, otro…) → Caídas del producto; sin incidencia → Licencias.';
+    restoreBtn.setAttribute('aria-label', 'Terminar cambio: incidencia a Caídas o cuenta a Licencias');
+    restoreBtn.innerHTML = '<i class="fas fa-arrow-up" aria-hidden="true"></i>';
+    restoreCell.appendChild(restoreBtn);
+    const statusWrap = document.createElement('div');
+    statusWrap.className = 'license-split-editor__status-wrap';
+    const selGood = document.createElement('select');
+    selGood.className = 'license-split-editor__status license-split-editor__status-good';
+    selGood.title = 'Marcar trabajo en cambios como terminado';
+    selGood.setAttribute('aria-label', 'Estado Terminado (cambios mes a mes)');
+    ADMIN_LICENSE_CHANGES_STATUS_GOOD.forEach(function (opt) {
+        const o = document.createElement('option');
+        o.value = opt.v;
+        o.textContent = opt.label;
+        selGood.appendChild(o);
+    });
+    const sgIn = initialStatusGood != null ? String(initialStatusGood).trim() : '';
+    if (sgIn && !changesLicenseSplitCanonicalGood(sgIn)) {
+        const o = document.createElement('option');
+        o.value = sgIn;
+        o.textContent = sgIn;
+        selGood.appendChild(o);
+    }
+    selGood.value = changesLicenseSplitCanonicalGood(sgIn) || '';
+    const selBad = document.createElement('select');
+    selBad.className = 'license-split-editor__status license-split-editor__status-bad';
+    selBad.title =
+        'Incidencia o problema. Con «Otro», describa el detalle a la derecha.';
+    selBad.setAttribute('aria-label', 'Estado de incidencia (cambios)');
+    ADMIN_LICENSE_STATUS_OPTIONS_BAD.forEach(function (opt) {
+        const o = document.createElement('option');
+        o.value = opt.v;
+        o.textContent = opt.label;
+        selBad.appendChild(o);
+    });
+    const sb = initialStatusBad != null ? String(initialStatusBad).trim() : '';
+    if (sb && !adminLicenseStatusIsKnownBadOption(sb)) {
+        const o = document.createElement('option');
+        o.value = sb;
+        o.textContent = sb;
+        selBad.appendChild(o);
+    }
+    selBad.value = adminLicenseSplitCanonicalBadFromStored(sb) || '';
+    const od = initialOtroDetail != null ? String(initialOtroDetail) : '';
+    const otroCombined = document.createElement('input');
+    otroCombined.type = 'text';
+    otroCombined.className = 'license-split-editor__otro-combined';
+    otroCombined.setAttribute('autocomplete', 'off');
+    otroCombined.placeholder = 'des.. problema';
+    otroCombined.title =
+        'Describe el problema; se guarda con el estado «Otro» de la columna roja.';
+    if (String(selBad.value || '').trim().toLowerCase() === 'otro') {
+        otroCombined.value = od != null ? String(od) : '';
+    } else {
+        otroCombined.value = '';
+    }
+    otroCombined.hidden = true;
+    otroCombined.style.display = 'none';
+    const goodShell = document.createElement('div');
+    goodShell.className = 'license-split-editor__status-select-shell license-split-editor__status-select-shell--good';
+    goodShell.appendChild(selGood);
+    const badShell = document.createElement('div');
+    badShell.className = 'license-split-editor__status-select-shell license-split-editor__status-select-shell--bad';
+    badShell.appendChild(selBad);
+    statusWrap.appendChild(goodShell);
+    statusWrap.appendChild(badShell);
+    statusWrap.appendChild(otroCombined);
+    const n = document.createElement('input');
+    n.type = 'text';
+    n.className = 'license-split-editor__note';
+    n.setAttribute('autocomplete', 'off');
+    n.setAttribute('aria-label', 'Notas de la licencia');
+    n.placeholder = 'Notas';
+    n.value = initialExtra != null ? initialExtra : '';
+    const lead = document.createElement('div');
+    lead.className = 'license-split-editor__lead';
+    lead.appendChild(restoreCell);
+    row.appendChild(lead);
+    row.appendChild(statusWrap);
+    row.appendChild(n);
+    adminLicenseSplitWireDualStatusNoteLink(selGood, selBad, n, otroCombined);
+    return row;
+}
+
+function changesLicenseSplitRefreshRowAccessibility(root) {
+    const wrap = changesLicenseSplitQueryRowsWrap(root);
+    if (!wrap || !root || !root.dataset) return;
+    const rows = wrap.querySelectorAll('.license-split-editor__row');
+    const licSuf = root.dataset.licenseId != null ? String(root.dataset.licenseId) : 'x';
+    rows.forEach(function (row, i) {
+        const line = i + 1;
+        const idBase = 'chSplitL' + licSuf + '_' + line;
+        row.setAttribute('role', 'group');
+        row.setAttribute(
+            'aria-label',
+            'Cambios, fila ' + line + ': devolver a Licencias, Terminado, estado rojo y notas'
+        );
+        const restoreB = row.querySelector('.license-split-editor__restore-to-license-btn');
+        const selGood = row.querySelector('.license-split-editor__status-good');
+        const selBad = row.querySelector('.license-split-editor__status-bad');
+        const otroD = row.querySelector('.license-split-editor__otro-combined');
+        const n = row.querySelector('.license-split-editor__note');
+        if (restoreB) {
+            restoreB.id = idBase + 'Restore';
+            restoreB.setAttribute('aria-label', 'Devolver fila ' + line + ' al bloc Licencias');
+        }
+        if (selGood) {
+            selGood.id = idBase + 'StatusGood';
+            selGood.setAttribute('name', 'ch_split_l' + line + '_status_good');
+            selGood.setAttribute(
+                'aria-label',
+                'Terminado (cambios, línea ' + line + ')'
+            );
+        }
+        if (selBad) {
+            selBad.id = idBase + 'StatusBad';
+            selBad.setAttribute('name', 'ch_split_l' + line + '_status_bad');
+            selBad.setAttribute(
+                'aria-label',
+                'Estado de incidencia en cambios (línea ' + line + ')'
+            );
+        }
+        if (otroD) {
+            otroD.id = idBase + 'OtroCombined';
+            otroD.setAttribute('name', 'ch_split_l' + line + '_otro_combined');
+            otroD.setAttribute(
+                'aria-label',
+                'Detalle «Otro» en cambios (línea ' + line + ')'
+            );
+        }
+        if (n) {
+            n.id = idBase + 'Note';
+            n.setAttribute('name', 'ch_split_l' + line + '_note');
+            if (selBad) {
+                adminLicenseSplitApplyNotePlaceholderFromDual(selBad, n, line);
+            } else {
+                n.setAttribute('aria-label', 'Notas (cambios, línea ' + line + ')');
+            }
+        }
+        if (selBad && otroD) {
+            adminLicenseSplitSyncOtroDetailVisibility(selBad, otroD);
+        }
+    });
+}
+
+function changesLicenseSplitSyncRowCount(root, credLineCount) {
+    const wrap = changesLicenseSplitQueryRowsWrap(root);
+    if (!wrap) return;
+    let n = Math.max(0, parseInt(credLineCount, 10) || 0);
+    while (wrap.children.length < n) {
+        wrap.appendChild(changesLicenseSplitCreateRow('', '', '', undefined));
+    }
+    while (wrap.children.length > n) {
+        wrap.removeChild(wrap.lastChild);
+    }
+    changesLicenseSplitRefreshRowAccessibility(root);
+    if (
+        !__markAdminDupInProgress &&
+        document.documentElement.dataset.adminLicDupHighlightActive === '1' &&
+        typeof window.scheduleRefreshAdminDupIfActive === 'function'
+    ) {
+        window.scheduleRefreshAdminDupIfActive();
+    }
+}
+
+function changesLicenseSplitCascadeClearSidesForEmptyCredLines(root) {
+    const ta = changesLicenseSplitQueryCredsTa(root);
+    if (!ta || ta.tagName !== 'TEXTAREA') return;
+    const credLines = licenseSplitCredLinesFromRaw(String(ta.value != null ? ta.value : '').replace(/\r\n/g, '\n'));
+    const rows = changesLicenseSplitGetRowElements(root);
+    let anyCleared = false;
+    for (let i = 0; i < rows.length; i++) {
+        const cred = credLines[i] != null ? credLines[i] : '';
+        if (String(cred).trim() === '') {
+            dayLicenseSplitClearRowSideFields(rows[i]);
+            anyCleared = true;
+        }
+    }
+    if (anyCleared) {
+        changesLicenseSplitRefreshRowAccessibility(root);
+    }
+}
+
+function changesLicenseSplitGetMergedText(root) {
+    const r = root;
+    if (!r) return '';
+    const ta = changesLicenseSplitQueryCredsTa(r);
+    if (!ta || ta.tagName !== 'TEXTAREA') return '';
+    const raw = String(ta.value != null ? ta.value : '').replace(/\r\n/g, '\n');
+    const credLines = licenseSplitCredLinesFromRaw(raw);
+    changesLicenseSplitSyncRowCount(r, credLines.length);
+    changesLicenseSplitCascadeClearSidesForEmptyCredLines(r);
+    const rows = changesLicenseSplitGetRowElements(r);
+    const out = [];
+    for (let i = 0; i < credLines.length; i++) {
+        const rr = rows[i]
+            ? adminLicenseSplitReadRow(rows[i])
+            : { user: '', statusGood: '', statusBad: '', extra: '' };
+        const line = buildAdminLicenseStorageLine(
+            credLines[i],
+            '',
+            rr.statusGood != null ? rr.statusGood : '',
+            rr.statusBad != null ? rr.statusBad : '',
+            rr.extra
+        );
+        out.push(line);
+    }
+    while (out.length && out[out.length - 1] === '') {
+        out.pop();
+    }
+    return out.join('\n');
+}
+
+function changesLicenseSplitApplyMergedText(root, text) {
+    const r = root;
+    if (!r) return;
+    const ta = changesLicenseSplitQueryCredsTa(r);
+    const wrap = changesLicenseSplitQueryRowsWrap(r);
+    if (!ta || !wrap) return;
+    const t = text != null ? String(text).replace(/\r\n/g, '\n') : '';
+    const lines = t === '' ? [] : t.split('\n');
+    changesLicenseSplitClearRows(r);
+    const credParts = [];
+    lines.forEach(function (ln) {
+        const p = parseAdminLicenseLineToSplitParts(ln);
+        credParts.push(p.cred);
+        let note = (p.extra != null ? String(p.extra) : '').trim();
+        const u = (p.user != null ? String(p.user).trim() : '');
+        if (u && u.toLowerCase() !== 'anonimo') {
+            note = note ? u + ' — ' + note : u;
+        }
+        const sg = (p.statusGood != null ? String(p.statusGood) : '').trim();
+        const sb = (p.statusBad != null ? String(p.statusBad) : '').trim();
+        wrap.appendChild(
+            changesLicenseSplitCreateRow(
+                note,
+                sg,
+                sb,
+                p.otroDetail != null ? p.otroDetail : undefined
+            )
+        );
+    });
+    ta.value = credParts.join('\n');
+    if (lines.length === 0) {
+        ta.value = '';
+    }
+    changesLicenseSplitRefreshRowAccessibility(r);
+    window.requestAnimationFrame(function () {
+        changesLicenseSplitScheduleAutosize(r);
+        adminLicenseSplitValidateAllUserInputs(r);
+    });
+}
+
+function changesLicenseSplitSyncRowsToTextarea(root) {
+    if (!root) {
+        changesLicenseSplitForEachProductRoot(function (r) {
+            changesLicenseSplitSyncRowsToTextarea(r);
+        });
+        return;
+    }
+    const ta = changesLicenseSplitQueryCredsTa(root);
+    if (!ta) return;
+    const credLines = licenseSplitCredLinesFromRaw(String(ta.value != null ? ta.value : '').replace(/\r\n/g, '\n'));
+    changesLicenseSplitSyncRowCount(root, credLines.length);
+    changesLicenseSplitCascadeClearSidesForEmptyCredLines(root);
+    changesLicenseSplitScheduleAutosize(root);
+}
+
+var __chSplitAutosizeTimers = {};
+
+function changesLicenseSplitScheduleAutosize(root) {
+    if (!root) {
+        changesLicenseSplitForEachProductRoot(function (r) {
+            changesLicenseSplitScheduleAutosize(r);
+        });
+        return;
+    }
+    changesLicenseSplitAutosizeCreds(root);
+    clearTimeout(__chSplitAutosizeTimers._k);
+    __chSplitAutosizeTimers._k = setTimeout(function () {
+        changesLicenseSplitAutosizeCreds(root);
+        clearTimeout(__chSplitAutosizeTimers._k2);
+        __chSplitAutosizeTimers._k2 = setTimeout(function () {
+            changesLicenseSplitAutosizeCreds(root);
+        }, 60);
+    }, 30);
+}
+
+function changesLicenseSplitAutosizeCreds(root) {
+    const r = root;
+    if (!r) return;
+    const ta = changesLicenseSplitQueryCredsTa(r);
+    if (!ta || ta.tagName !== 'TEXTAREA') return;
+    const splitSide = r.querySelector('.license-split-editor__side');
+    const rowsEl = changesLicenseSplitQueryRowsWrap(r);
+    const raw = String(ta.value != null ? ta.value : '').replace(/\r\n/g, '\n');
+    const credLines = licenseSplitCredLinesFromRaw(raw);
+    changesLicenseSplitSyncRowCount(r, credLines.length);
+    changesLicenseSplitCascadeClearSidesForEmptyCredLines(r);
+
+    if (splitSide && splitSide.hidden) {
+        ta.style.minHeight = '0';
+        ta.style.height = '0px';
+        const ns = ta.scrollHeight;
+        ta.style.minHeight = '';
+        ta.style.height = '';
+        const cs = window.getComputedStyle(ta);
+        let minPx = parseFloat(cs.minHeight);
+        if (Number.isNaN(minPx)) minPx = 20;
+        ta.style.height = Math.max(minPx, ns + 2) + 'px';
+        licenseSplitSyncCredsTaContentWidth(ta);
+        return;
+    }
+
+    if (rowsEl) {
+        void rowsEl.offsetHeight;
+    }
+
+    const cs0 = window.getComputedStyle(ta);
+    const linePx = adminLicSplitParseLineHeightPx(cs0);
+    const padY = (parseFloat(cs0.paddingTop) || 0) + (parseFloat(cs0.paddingBottom) || 0);
+    const estimateByLines = linePx * credLines.length + padY;
+
+    ta.style.minHeight = '0';
+    ta.style.height = '0px';
+    const naturalScroll = ta.scrollHeight;
+    ta.style.minHeight = '';
+    ta.style.height = '';
+
+    const cs = window.getComputedStyle(ta);
+    let minPx = parseFloat(cs.minHeight);
+    if (Number.isNaN(minPx)) minPx = 20;
+    const contentH = Math.max(naturalScroll + 2, estimateByLines);
+    const h = Math.max(minPx, contentH);
+    ta.style.height = Math.ceil(h) + 'px';
+    licenseSplitSyncCredsTaContentWidth(ta);
+}
+
+function changesLicenseSplitLock(root) {
+    const r = root;
+    if (!r) return;
+    const ta = changesLicenseSplitQueryCredsTa(r);
+    if (ta) {
+        ta.readOnly = true;
+        ta.setAttribute('tabindex', '-1');
+    }
+    r.classList.add('license-notepad--locked');
+    r.querySelectorAll('.license-split-editor__row input').forEach(function (x) {
+        if (x.classList.contains('license-split-editor__restore-to-license-btn')) return;
+        x.disabled = false;
+        x.readOnly = true;
+        x.tabIndex = -1;
+    });
+    r.querySelectorAll('.license-split-editor__row select').forEach(function (x) {
+        x.disabled = false;
+        x.tabIndex = -1;
+    });
+    r.querySelectorAll('.license-split-editor__restore-to-license-btn').forEach(function (b) {
+        b.disabled = false;
+        b.tabIndex = -1;
+    });
+}
+
+function changesLicenseSplitUnlock(root) {
+    const r = root;
+    if (!r) return;
+    const ta = changesLicenseSplitQueryCredsTa(r);
+    if (String(r.dataset.licenseId || '') === '0') {
+        return;
+    }
+    if (ta) {
+        ta.readOnly = false;
+        ta.removeAttribute('tabindex');
+    }
+    r.classList.remove('license-notepad--locked');
+    r.querySelectorAll('.license-split-editor__row input').forEach(function (x) {
+        if (x.classList.contains('license-split-editor__restore-to-license-btn')) return;
+        x.readOnly = false;
+        x.removeAttribute('tabindex');
+    });
+    r.querySelectorAll('.license-split-editor__row select').forEach(function (x) {
+        x.removeAttribute('tabindex');
+    });
+    r.querySelectorAll('.license-split-editor__restore-to-license-btn').forEach(function (b) {
+        b.removeAttribute('tabindex');
+    });
+}
+
+/**
+ * Cambios mes a mes: incidencia en la columna roja (caída, no reproduce, otro con texto, etc.) → puede ir a Caídas
+ * con la flecha sin exigir «Terminado». «Terminado» sin incidencia → devuelve a Licencias.
+ */
+function changesLicenseSplitRowHasResolvableIncident(row) {
+    if (!row) return false;
+    const rootEarly = row.closest('.changes-license-split-root');
+    if (rootEarly && typeof changesLicenseSplitSyncRowsToTextarea === 'function') {
+        changesLicenseSplitSyncRowsToTextarea(rootEarly);
+    }
+    const selBad = row.querySelector('.license-split-editor__status-bad');
+    const oc = row.querySelector('.license-split-editor__otro-combined');
+    if (!selBad) return false;
+    const sv = String(selBad.value || '').trim();
+    if (!sv) return false;
+    if (adminLicenseNormalizeStatusKey(sv) === 'otro') {
+        const d = oc ? String(oc.value || '').trim().replace(/^otro-?/i, '') : '';
+        if (!d) return false;
+        return true;
+    }
+    /** Lista explícita: mismo criterio que el desplegable rojo del admin (evita depender solo del tier). */
+    if (typeof adminLicenseStatusIsKnownBadOption === 'function' && adminLicenseStatusIsKnownBadOption(sv)) {
+        return true;
+    }
+    const eff = adminLicenseSplitEffectiveStatusForTier(selBad, oc);
+    return adminLicenseStatusTierFromStored(eff) === 'bad';
+}
+
+/** @deprecated usar changesLicenseSplitRowHasResolvableIncident; se mantiene por compat */
+function changesLicenseSplitRowEligibleForIncidentToSuspended(row) {
+    const sg = row && row.querySelector ? row.querySelector('.license-split-editor__status-good') : null;
+    const terminado = sg && changesLicenseSplitCanonicalGood(sg.value) === 'terminado';
+    return terminado && changesLicenseSplitRowHasResolvableIncident(row);
+}
+
+function changesLicenseSplitRevertTerminadoSelect(row) {
+    const sg = row && row.querySelector ? row.querySelector('.license-split-editor__status-good') : null;
+    if (!sg) return;
+    sg.value = '';
+    const sb = row.querySelector('.license-split-editor__status-bad');
+    const oc = row.querySelector('.license-split-editor__otro-combined');
+    if (typeof adminLicenseSplitApplyDualStatusTierClasses === 'function') {
+        adminLicenseSplitApplyDualStatusTierClasses(sg, sb, oc);
+    } else if (typeof adminLicenseSplitApplyGoodSelectTierClass === 'function') {
+        adminLicenseSplitApplyGoodSelectTierClass(sg);
+    }
+}
+
+async function changesLicenseSplitFinalizeIncidentToSuspended(row) {
+    if (!row || window.__changesLicenseSplitRestoreInFlight) return;
+    const root = row.closest('.changes-license-split-root');
+    if (!root) return;
+    if (typeof changesLicenseSplitSyncRowsToTextarea === 'function') {
+        changesLicenseSplitSyncRowsToTextarea(root);
+    }
+    const licenseId = parseInt(root.dataset.licenseId, 10);
+    if (!Number.isFinite(licenseId) || licenseId === AGGREGATE_LICENSE_ID) {
+        showError('Selecciona un producto concreto (no «Todos») para enviar cuentas a Caídas / suspendidas.');
+        return;
+    }
+    const inputContainer = document.getElementById('licenseAccountsInputContainer');
+    let activeId =
+        inputContainer && inputContainer.dataset.activeLicenseId != null
+            ? parseInt(inputContainer.dataset.activeLicenseId, 10)
+            : NaN;
+    let taLicMain = document.getElementById('adminLicenciasNotepadByLicense');
+    const gridMatches = Number.isFinite(activeId) && activeId === licenseId;
+    const mainBlocMatches =
+        taLicMain &&
+        taLicMain.tagName === 'TEXTAREA' &&
+        parseInt(taLicMain.dataset.licenseId, 10) === licenseId;
+    if (!gridMatches || !mainBlocMatches) {
+        const card = document.querySelector(
+            '.license-card[data-license-id="' + licenseId + '"]:not(.license-card--aggregate)'
+        );
+        if (!card) {
+            showError('No se encontró el producto en la cuadrícula.');
+            return;
+        }
+        _adminLicSkipNextChangesProductsRefreshOnce = true;
+        try {
+            await activateLicenseCard(card, licenseId, true, { preserveSidebar: true });
+        } catch (activateErr) {
+            console.error('changesLicenseSplitFinalizeIncidentToSuspended: activateLicenseCard', activateErr);
+            _adminLicSkipNextChangesProductsRefreshOnce = false;
+            showError('No se pudo preparar los blocs de este producto.');
+            return;
+        } finally {
+            if (_adminLicSkipNextChangesProductsRefreshOnce) {
+                _adminLicSkipNextChangesProductsRefreshOnce = false;
+            }
+        }
+        taLicMain = document.getElementById('adminLicenciasNotepadByLicense');
+        activeId =
+            inputContainer && inputContainer.dataset.activeLicenseId != null
+                ? parseInt(inputContainer.dataset.activeLicenseId, 10)
+                : NaN;
+        if (!Number.isFinite(activeId) || activeId !== licenseId) {
+            showError('No se pudo sincronizar el producto con la cuadrícula.');
+            return;
+        }
+        if (!taLicMain || parseInt(taLicMain.dataset.licenseId, 10) !== licenseId) {
+            showError('El bloc Licencias no coincide con este producto.');
+            return;
+        }
+    }
+
+    const taS = document.getElementById('adminLicenciasSuspendedNotepad');
+    const suspRoot = document.getElementById('adminLicenciasSuspendedSplitRoot');
+    if (!taS || !suspRoot || parseInt(taS.dataset.licenseId, 10) !== licenseId) {
+        showError('Abre este producto en el grid para cargar Caídas / suspendidas (misma licencia que en Cambios).');
+        return;
+    }
+
+    const ta = changesLicenseSplitQueryCredsTa(root);
+    if (!ta) return;
+    const rows = changesLicenseSplitGetRowElements(root);
+    const idx = rows.indexOf(row);
+    if (idx < 0) return;
+    const credLines = licenseSplitCredLinesFromRaw(String(ta.value != null ? ta.value : '').replace(/\r\n/g, '\n'));
+    if (idx >= credLines.length) return;
+    const cred = credLines[idx] != null ? credLines[idx] : '';
+    if (!String(cred).trim()) {
+        showError('Esta fila no tiene credencial.');
+        return;
+    }
+    const r = adminLicenseSplitReadRow(row);
+    const sbPersist = String(r.statusBad != null ? r.statusBad : '').trim();
+    const extra = r.extra != null ? r.extra : '';
+    const lineToMove = buildAdminLicenseStorageLine(cred, '', '', sbPersist, extra).trim();
+    if (!lineToMove || !sbPersist) {
+        showError('No hay datos de incidencia válidos para archivar en Caídas.');
+        return;
+    }
+
+    const newCredLines = credLines.slice(0, idx).concat(credLines.slice(idx + 1));
+    const newMergedLines = [];
+    for (let i = 0; i < newCredLines.length; i++) {
+        const oldRowIdx = i < idx ? i : i + 1;
+        const rrow = rows[oldRowIdx];
+        const rr = rrow
+            ? adminLicenseSplitReadRow(rrow)
+            : { user: '', statusGood: '', statusBad: '', extra: '' };
+        newMergedLines.push(
+            buildAdminLicenseStorageLine(
+                newCredLines[i],
+                '',
+                rr.statusGood != null ? rr.statusGood : '',
+                rr.statusBad != null ? rr.statusBad : '',
+                rr.extra
+            )
+        );
+    }
+    while (newMergedLines.length && newMergedLines[newMergedLines.length - 1] === '') {
+        newMergedLines.pop();
+    }
+    const newChangesMerged = newMergedLines.join('\n');
+    const oldChangesMerged = changesLicenseSplitGetMergedText(root);
+
+    const oldSuspMerged = suspendedLicenseSplitGetMergedText(suspRoot);
+    const suspLines = oldSuspMerged === '' ? [] : oldSuspMerged.split('\n');
+    while (suspLines.length && suspLines[suspLines.length - 1] === '') {
+        suspLines.pop();
+    }
+    suspLines.push(lineToMove);
+    const newSuspMerged = suspLines.join('\n');
+
+    window.__changesLicenseSplitRestoreInFlight = true;
+    try {
+        changesLicenseSplitApplyMergedText(root, newChangesMerged);
+        suspendedLicenseSplitApplyMergedText(suspRoot, newSuspMerged);
+        const saveRes =
+            typeof window.adminLicenciasSaveCurrentLicenseNotesImmediate === 'function'
+                ? await window.adminLicenciasSaveCurrentLicenseNotesImmediate()
+                : { success: false, error: 'no_save_fn' };
+        if (!saveRes || !saveRes.success) {
+            suspendedLicenseSplitApplyMergedText(suspRoot, oldSuspMerged);
+            changesLicenseSplitApplyMergedText(root, oldChangesMerged);
+            showError('No se pudo guardar Cambios y Caídas. Revisa la conexión.');
+            return;
+        }
+        const oldCredDisplay = String(cred || '').trim();
+        if (typeof window.appendAdminLicenciasHistorialLive === 'function') {
+            window.appendAdminLicenciasHistorialLive(
+                'Cambios (mes a mes): incidencia archivada en Caídas / suspendidas.\n\nCuenta: ' +
+                    (oldCredDisplay || '—')
+            );
+        }
+        showSuccess('Incidencia de Cambios enviada a Caídas / suspendidas.');
+        scheduleRefreshAdminLicenciasReportCounts();
+        if (typeof refreshDuplicateEmailHighlights === 'function') {
+            refreshDuplicateEmailHighlights(licenseId);
+        }
+        if (typeof window.refreshAdminDuplicateHighlightsIfActive === 'function') {
+            window.refreshAdminDuplicateHighlightsIfActive();
+        }
+        if (typeof window.updateChangesBlocLineCountBadge === 'function') {
+            window.updateChangesBlocLineCountBadge();
+        }
+        if (typeof window.updateSuspendedBlocLineCountBadge === 'function') {
+            window.updateSuspendedBlocLineCountBadge();
+        }
+        window.requestAnimationFrame(function () {
+            if (suspRoot && typeof suspRoot.scrollIntoView === 'function') {
+                suspRoot.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            }
+        });
+    } catch (err) {
+        console.error('changesLicenseSplitFinalizeIncidentToSuspended', err);
+        try {
+            suspendedLicenseSplitApplyMergedText(suspRoot, oldSuspMerged);
+            changesLicenseSplitApplyMergedText(root, oldChangesMerged);
+        } catch (e2) {
+            console.error(e2);
+        }
+        showError('No se pudo completar el traslado a Caídas.');
+    } finally {
+        window.__changesLicenseSplitRestoreInFlight = false;
+    }
+}
+
+async function changesLicenseSplitResolveOutboundRow(row) {
+    if (!row) return;
+    const sg = row.querySelector('.license-split-editor__status-good');
+    const selBad = row.querySelector('.license-split-editor__status-bad');
+    const oc = row.querySelector('.license-split-editor__otro-combined');
+    const terminado = sg && changesLicenseSplitCanonicalGood(sg.value) === 'terminado';
+
+    if (selBad && adminLicenseNormalizeStatusKey(String(selBad.value || '').trim()) === 'otro') {
+        const d = oc ? String(oc.value || '').trim().replace(/^otro-?/i, '') : '';
+        if (!d) {
+            showError('Describe el problema en «Otro» antes de usar la flecha o marcar «Terminado».');
+            if (terminado) {
+                changesLicenseSplitRevertTerminadoSelect(row);
+            }
+            return;
+        }
+    }
+
+    if (changesLicenseSplitRowHasResolvableIncident(row)) {
+        await changesLicenseSplitFinalizeIncidentToSuspended(row);
+        return;
+    }
+    if (terminado) {
+        await changesLicenseSplitRestoreRowToLicense(row);
+        return;
+    }
+    showError(
+        'Elige un motivo en la columna roja (p. ej. Caída o suspendida) y pulsa la flecha para archivar en Caídas, o marca «Terminado» para devolver la cuenta a Licencias sin incidencia.'
+    );
+}
+
+async function changesLicenseSplitResolveTerminadoRow(row) {
+    return changesLicenseSplitResolveOutboundRow(row);
+}
+
+function changesLicenseSplitWireScrollSync(root) {
+    const r = root;
+    if (!r) return;
+    const ta = changesLicenseSplitQueryCredsTa(r);
+    const rows = changesLicenseSplitQueryRowsWrap(r);
+    if (!ta || !rows || ta.dataset.chScrollSync === '1') return;
+    ta.dataset.chScrollSync = '1';
+    let syncing = false;
+    ta.addEventListener('scroll', function () {
+        if (syncing) return;
+        syncing = true;
+        rows.scrollTop = ta.scrollTop;
+        window.requestAnimationFrame(function () {
+            syncing = false;
+        });
+    });
+    rows.addEventListener('scroll', function () {
+        if (syncing) return;
+        syncing = true;
+        ta.scrollTop = rows.scrollTop;
+        window.requestAnimationFrame(function () {
+            syncing = false;
+        });
+    });
+}
+
+async function changesLicenseSplitRestoreRowToLicense(row) {
+    if (!row || window.__changesLicenseSplitRestoreInFlight) return;
+    const root = row.closest('.changes-license-split-root');
+    if (!root) return;
+    const licenseId = parseInt(root.dataset.licenseId, 10);
+    if (!Number.isFinite(licenseId) || licenseId === AGGREGATE_LICENSE_ID) {
+        showError('Selecciona un producto concreto (no «Todos») para devolver licencias al bloc Licencias.');
+        return;
+    }
+    const inputContainer = document.getElementById('licenseAccountsInputContainer');
+    let activeId =
+        inputContainer && inputContainer.dataset.activeLicenseId != null
+            ? parseInt(inputContainer.dataset.activeLicenseId, 10)
+            : NaN;
+    let taLicMain = document.getElementById('adminLicenciasNotepadByLicense');
+    const gridMatches = Number.isFinite(activeId) && activeId === licenseId;
+    const mainBlocMatches =
+        taLicMain &&
+        taLicMain.tagName === 'TEXTAREA' &&
+        parseInt(taLicMain.dataset.licenseId, 10) === licenseId;
+    if (!gridMatches || !mainBlocMatches) {
+        const card = document.querySelector(
+            '.license-card[data-license-id="' + licenseId + '"]:not(.license-card--aggregate)'
+        );
+        if (!card) {
+            showError('No se encontró el producto en la cuadrícula.');
+            return;
+        }
+        _adminLicSkipNextChangesProductsRefreshOnce = true;
+        try {
+            await activateLicenseCard(card, licenseId, true, { preserveSidebar: true });
+        } catch (activateErr) {
+            console.error('changesLicenseSplitRestoreRowToLicense: activateLicenseCard', activateErr);
+            _adminLicSkipNextChangesProductsRefreshOnce = false;
+            showError('No se pudo preparar el bloc Licencias de este producto.');
+            return;
+        } finally {
+            if (_adminLicSkipNextChangesProductsRefreshOnce) {
+                _adminLicSkipNextChangesProductsRefreshOnce = false;
+            }
+        }
+        taLicMain = document.getElementById('adminLicenciasNotepadByLicense');
+        activeId =
+            inputContainer && inputContainer.dataset.activeLicenseId != null
+                ? parseInt(inputContainer.dataset.activeLicenseId, 10)
+                : NaN;
+        if (!Number.isFinite(activeId) || activeId !== licenseId) {
+            showError('No se pudo sincronizar el producto con la cuadrícula.');
+            return;
+        }
+        if (!taLicMain || parseInt(taLicMain.dataset.licenseId, 10) !== licenseId) {
+            showError('El bloc Licencias no coincide con este producto.');
+            return;
+        }
+    }
+
+    const ta = changesLicenseSplitQueryCredsTa(root);
+    if (!ta) return;
+    const rows = changesLicenseSplitGetRowElements(root);
+    const idx = rows.indexOf(row);
+    if (idx < 0) return;
+    const credLines = licenseSplitCredLinesFromRaw(String(ta.value != null ? ta.value : '').replace(/\r\n/g, '\n'));
+    if (idx >= credLines.length) return;
+    const cred = credLines[idx] != null ? credLines[idx] : '';
+    if (!String(cred).trim()) {
+        showError('Esta fila no tiene credencial.');
+        return;
+    }
+    const r = adminLicenseSplitReadRow(row);
+    if (adminLicenseNormalizeStatusKey(r.statusGood) !== 'terminado') {
+        showError('Marca «Terminado» en la columna verde antes de devolver la cuenta a Licencias.');
+        return;
+    }
+    const lineToMove = buildAdminLicenseStorageLine(cred, '', '', '', '').trim();
+    if (!lineToMove) {
+        showError('No hay datos válidos para mover.');
+        return;
+    }
+
+    const newCredLines = credLines.slice(0, idx).concat(credLines.slice(idx + 1));
+    const newMergedLines = [];
+    for (let i = 0; i < newCredLines.length; i++) {
+        const oldRowIdx = i < idx ? i : i + 1;
+        const rrow = rows[oldRowIdx];
+        const rr = rrow
+            ? adminLicenseSplitReadRow(rrow)
+            : { user: '', statusGood: '', statusBad: '', extra: '' };
+        newMergedLines.push(
+            buildAdminLicenseStorageLine(
+                newCredLines[i],
+                '',
+                rr.statusGood != null ? rr.statusGood : '',
+                rr.statusBad != null ? rr.statusBad : '',
+                rr.extra
+            )
+        );
+    }
+    while (newMergedLines.length && newMergedLines[newMergedLines.length - 1] === '') {
+        newMergedLines.pop();
+    }
+    const newChangesMerged = newMergedLines.join('\n');
+    const oldChangesMerged = changesLicenseSplitGetMergedText(root);
+    const oldLicenseMerged = adminLicenseSplitGetMergedNotes();
+    const licLines = oldLicenseMerged.replace(/\r\n/g, '\n').split('\n');
+    while (licLines.length && licLines[licLines.length - 1] === '') {
+        licLines.pop();
+    }
+    licLines.push(lineToMove);
+    const newLicenseMerged = licLines.join('\n');
+
+    window.__changesLicenseSplitRestoreInFlight = true;
+    try {
+        changesLicenseSplitApplyMergedText(root, newChangesMerged);
+        adminLicenseSplitApplyMergedText(newLicenseMerged);
+        const saveLicRes =
+            typeof window.adminLicenciasSaveCurrentLicenseNotesImmediate === 'function'
+                ? await window.adminLicenciasSaveCurrentLicenseNotesImmediate()
+                : { success: false, error: 'no_save_fn' };
+        if (!saveLicRes || !saveLicRes.success) {
+            adminLicenseSplitApplyMergedText(oldLicenseMerged);
+            changesLicenseSplitApplyMergedText(root, oldChangesMerged);
+            showError('No se pudo guardar. Revisa la conexión.');
+            return;
+        }
+        if (typeof refreshDuplicateEmailHighlights === 'function') {
+            refreshDuplicateEmailHighlights(licenseId);
+        }
+        if (typeof window.refreshAdminDuplicateHighlightsIfActive === 'function') {
+            window.refreshAdminDuplicateHighlightsIfActive();
+        }
+        if (typeof window.updateChangesBlocLineCountBadge === 'function') {
+            window.updateChangesBlocLineCountBadge();
+        }
+        /* Permanecer en Cambios; no cerrar panel ni llevar foco al bloc Licencias del servicio. */
+        window.requestAnimationFrame(function () {
+            var sec = document.querySelector(
+                '[data-changes-product-license-id="' + licenseId + '"]'
+            );
+            if (sec && typeof sec.scrollIntoView === 'function') {
+                sec.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            } else if (typeof scrollAdminLicenciasCambiosPanelIntoView === 'function') {
+                scrollAdminLicenciasCambiosPanelIntoView();
+            }
+        });
+    } catch (err) {
+        console.error('changesLicenseSplitRestoreRowToLicense', err);
+        try {
+            adminLicenseSplitApplyMergedText(oldLicenseMerged);
+        } catch (e2) {
+            console.error(e2);
+        }
+        try {
+            changesLicenseSplitApplyMergedText(root, oldChangesMerged);
+        } catch (e3) {
+            console.error(e3);
+        }
+        showError('No se pudo completar. Revisa los blocs o recarga la página si hace falta.');
+    } finally {
+        window.__changesLicenseSplitRestoreInFlight = false;
+    }
+}
+
+window.changesLicenseSplitGetMergedText = changesLicenseSplitGetMergedText;
+window.changesLicenseSplitApplyMergedText = changesLicenseSplitApplyMergedText;
+window.changesLicenseSplitSyncRowsToTextarea = changesLicenseSplitSyncRowsToTextarea;
+window.changesLicenseSplitScheduleAutosize = changesLicenseSplitScheduleAutosize;
+window.changesLicenseSplitLock = changesLicenseSplitLock;
+window.changesLicenseSplitUnlock = changesLicenseSplitUnlock;
+window.changesLicenseSplitWireScrollSync = changesLicenseSplitWireScrollSync;
+window.changesLicenseSplitRestoreRowToLicense = changesLicenseSplitRestoreRowToLicense;
+window.changesLicenseSplitResolveOutboundRow = changesLicenseSplitResolveOutboundRow;
+window.changesLicenseSplitResolveTerminadoRow = changesLicenseSplitResolveTerminadoRow;
+
+async function adminLicenseSplitMoveRowToChanges(row) {
+    if (!row || window.__adminLicenseSplitMoveToChangesInFlight) return;
+    const licRoot = document.getElementById('adminLicenciasLicenseSplitRoot');
+    if (!licRoot || !licRoot.contains(row)) {
+        showError('Usa una fila del bloc Licencias.');
+        return;
+    }
+    const ta = document.getElementById('adminLicenciasNotepadByLicense');
+    if (!ta || ta.tagName !== 'TEXTAREA') return;
+    const licenseId = parseInt(ta.dataset.licenseId, 10);
+    if (!Number.isFinite(licenseId) || licenseId === AGGREGATE_LICENSE_ID) {
+        showError('Abre un producto concreto (no «Todos») para enviar cuentas a Cambios.');
+        return;
+    }
+    const lic = licenses.find(function (l) {
+        return l.id === licenseId;
+    });
+    if (!lic || !licenseBaseEligibleForChangesPanel(lic)) {
+        showError('No se puede enviar a Cambios desde este producto.');
+        return;
+    }
+    const rows = adminLicenseSplitGetRowElements();
+    const idx = rows.indexOf(row);
+    if (idx < 0) return;
+    const credLines = licenseSplitCredLinesFromRaw(String(ta.value != null ? ta.value : '').replace(/\r\n/g, '\n'));
+    if (idx >= credLines.length) return;
+    const cred = credLines[idx] != null ? credLines[idx] : '';
+    if (!String(cred).trim()) {
+        showError('Esta fila no tiene credencial.');
+        return;
+    }
+    const lineToMove = buildAdminLicenseStorageLine(cred, '', '', '', '').trim();
+    if (!lineToMove) {
+        showError('No hay datos válidos para mover.');
+        return;
+    }
+
+    const newCredLines = credLines.slice(0, idx).concat(credLines.slice(idx + 1));
+    const newMergedLines = [];
+    for (let i = 0; i < newCredLines.length; i++) {
+        const oldRowIdx = i < idx ? i : i + 1;
+        const rrow = rows[oldRowIdx];
+        const rr = rrow
+            ? adminLicenseSplitReadRow(rrow)
+            : { user: '', statusGood: '', statusBad: '', extra: '' };
+        newMergedLines.push(
+            buildAdminLicenseStorageLine(
+                newCredLines[i],
+                rr.user,
+                rr.statusGood != null ? rr.statusGood : '',
+                rr.statusBad != null ? rr.statusBad : '',
+                rr.extra
+            )
+        );
+    }
+    while (newMergedLines.length && newMergedLines[newMergedLines.length - 1] === '') {
+        newMergedLines.pop();
+    }
+    const newLicMerged = newMergedLines.join('\n');
+    const oldLicMerged = adminLicenseSplitGetMergedNotes();
+    let chRoot = document.querySelector(
+        '#licenseChangesProductsContainer .changes-license-split-root[data-license-id="' + licenseId + '"]'
+    );
+    let oldCh = lic.changes_notes != null ? String(lic.changes_notes) : '';
+    if (chRoot && typeof changesLicenseSplitGetMergedText === 'function') {
+        oldCh = changesLicenseSplitGetMergedText(chRoot);
+    }
+    const chPrev = String(oldCh != null ? oldCh : '').replace(/\r\n/g, '\n').trimEnd();
+    const combined = chPrev ? chPrev + '\n' + lineToMove : lineToMove;
+
+    window.__adminLicenseSplitMoveToChangesInFlight = true;
+    try {
+        adminLicenseSplitApplyMergedText(newLicMerged);
+        if (typeof patchLicenseChangesNotesInCacheOnly === 'function') {
+            patchLicenseChangesNotesInCacheOnly(licenseId, combined);
+        } else {
+            lic.changes_notes = combined;
+        }
+        if (typeof refreshChangesProductsListing === 'function') {
+            refreshChangesProductsListing();
+        }
+        chRoot = document.querySelector(
+            '#licenseChangesProductsContainer .changes-license-split-root[data-license-id="' + licenseId + '"]'
+        );
+        if (!chRoot) {
+            adminLicenseSplitApplyMergedText(oldLicMerged);
+            if (typeof patchLicenseChangesNotesInCacheOnly === 'function') {
+                patchLicenseChangesNotesInCacheOnly(licenseId, oldCh);
+            } else {
+                lic.changes_notes = oldCh;
+            }
+            if (typeof refreshChangesProductsListing === 'function') {
+                refreshChangesProductsListing();
+            }
+            showError('No se pudo abrir el bloc Cambios. Recarga la página.');
+            return;
+        }
+        changesLicenseSplitApplyMergedText(chRoot, combined);
+        const saveRes =
+            typeof window.adminLicenciasSaveCurrentLicenseNotesImmediate === 'function'
+                ? await window.adminLicenciasSaveCurrentLicenseNotesImmediate()
+                : { success: false, error: 'no_save_fn' };
+        if (!saveRes || !saveRes.success) {
+            adminLicenseSplitApplyMergedText(oldLicMerged);
+            if (typeof patchLicenseChangesNotesInCacheOnly === 'function') {
+                patchLicenseChangesNotesInCacheOnly(licenseId, oldCh);
+            } else {
+                lic.changes_notes = oldCh;
+            }
+            if (typeof refreshChangesProductsListing === 'function') {
+                refreshChangesProductsListing();
+            }
+            chRoot = document.querySelector(
+                '#licenseChangesProductsContainer .changes-license-split-root[data-license-id="' + licenseId + '"]'
+            );
+            if (chRoot) {
+                changesLicenseSplitApplyMergedText(chRoot, oldCh);
+            }
+            showError('No se pudo guardar. Revisa la conexión.');
+            return;
+        }
+        showSuccess('Cuenta enviada a Cambios.');
+        if (typeof refreshDuplicateEmailHighlights === 'function') {
+            refreshDuplicateEmailHighlights(licenseId);
+        }
+        if (typeof window.refreshAdminDuplicateHighlightsIfActive === 'function') {
+            window.refreshAdminDuplicateHighlightsIfActive();
+        }
+        if (typeof window.updateChangesBlocLineCountBadge === 'function') {
+            window.updateChangesBlocLineCountBadge();
+        }
+        const chSection = document.querySelector(
+            '.admin-licencias-bloc--changes-product[data-changes-product-license-id="' + licenseId + '"]'
+        );
+        if (chSection && typeof chSection.scrollIntoView === 'function') {
+            chSection.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+    } catch (err) {
+        console.error('adminLicenseSplitMoveRowToChanges', err);
+        adminLicenseSplitApplyMergedText(oldLicMerged);
+        try {
+            if (typeof patchLicenseChangesNotesInCacheOnly === 'function') {
+                patchLicenseChangesNotesInCacheOnly(licenseId, oldCh);
+            } else if (lic) {
+                lic.changes_notes = oldCh;
+            }
+            if (typeof refreshChangesProductsListing === 'function') {
+                refreshChangesProductsListing();
+            }
+            const rrb = document.querySelector(
+                '#licenseChangesProductsContainer .changes-license-split-root[data-license-id="' + licenseId + '"]'
+            );
+            if (rrb) {
+                changesLicenseSplitApplyMergedText(rrb, oldCh);
+            }
+        } catch (e2) {
+            console.error(e2);
+        }
+        showError('No se pudo enviar a Cambios.');
+    } finally {
+        window.__adminLicenseSplitMoveToChangesInFlight = false;
+    }
+}
+
+window.adminLicenseSplitMoveRowToChanges = adminLicenseSplitMoveRowToChanges;
+
+/**
+ * Sube una fila del día al bloc Licencias (misma licencia que el día; debe estar abierta en la cuadrícula).
+ */
+async function dayLicenseSplitRestoreRowToLicense(row) {
+    if (!row || window.__dayLicenseSplitRestoreInFlight) return;
+    const root = row.closest('.day-license-split-root');
+    if (!root) return;
+    const licenseId = parseInt(root.dataset.licenseId, 10);
+    const day = parseInt(root.dataset.day, 10);
+    if (!Number.isFinite(licenseId) || licenseId === AGGREGATE_LICENSE_ID) {
+        showError('Selecciona un producto concreto (no «Todos») para devolver licencias al bloc Licencias.');
+        return;
+    }
+    const inputContainer = document.getElementById('licenseAccountsInputContainer');
+    const activeId =
+        inputContainer && inputContainer.dataset.activeLicenseId != null
+            ? parseInt(inputContainer.dataset.activeLicenseId, 10)
+            : NaN;
+    if (!Number.isFinite(activeId) || activeId !== licenseId) {
+        showError('Abre el mismo producto en la cuadrícula para devolver esta licencia al bloc Licencias.');
+        return;
+    }
+    const taLic = document.getElementById('adminLicenciasNotepadByLicense');
+    if (!taLic || parseInt(taLic.dataset.licenseId, 10) !== licenseId) {
+        showError('El bloc Licencias no coincide con este día. Abre la licencia correcta.');
+        return;
+    }
+
+    const ta = dayLicenseSplitQueryCredsTa(root);
+    if (!ta) return;
+    const rows = dayLicenseSplitGetRowElements(root);
+    const idx = rows.indexOf(row);
+    if (idx < 0) return;
+    const credLines = licenseSplitCredLinesFromRaw(String(ta.value != null ? ta.value : '').replace(/\r\n/g, '\n'));
+    if (idx >= credLines.length) return;
+    const cred = credLines[idx] != null ? credLines[idx] : '';
+    if (!String(cred).trim()) {
+        showError('Esta fila no tiene credencial.');
+        return;
+    }
+    const r = adminLicenseSplitReadRow(row);
+    const lineToMove = buildAdminLicenseStorageLine(
+        cred,
+        r.user,
+        r.statusGood != null ? r.statusGood : '',
+        r.statusBad != null ? r.statusBad : '',
+        r.extra
+    ).trim();
+    if (!lineToMove) {
+        showError('No hay datos válidos para mover.');
+        return;
+    }
+
+    const newCredLines = credLines.slice(0, idx).concat(credLines.slice(idx + 1));
+    const newMergedLines = [];
+    for (let i = 0; i < newCredLines.length; i++) {
+        const oldRowIdx = i < idx ? i : i + 1;
+        const rrow = rows[oldRowIdx];
+        const rr = rrow
+            ? adminLicenseSplitReadRow(rrow)
+            : { user: '', statusGood: '', statusBad: '', extra: '' };
+        newMergedLines.push(
+            buildAdminLicenseStorageLine(
+                newCredLines[i],
+                rr.user,
+                rr.statusGood != null ? rr.statusGood : '',
+                rr.statusBad != null ? rr.statusBad : '',
+                rr.extra
+            )
+        );
+    }
+    while (newMergedLines.length && newMergedLines[newMergedLines.length - 1] === '') {
+        newMergedLines.pop();
+    }
+    const newDayMerged = newMergedLines.join('\n');
+    const oldDayMerged = dayLicenseSplitGetMergedText(root);
+    const oldLicenseMerged = adminLicenseSplitGetMergedNotes();
+    const licLines = oldLicenseMerged.replace(/\r\n/g, '\n').split('\n');
+    while (licLines.length && licLines[licLines.length - 1] === '') {
+        licLines.pop();
+    }
+    licLines.push(lineToMove);
+    const newLicenseMerged = licLines.join('\n');
+
+    window.__dayLicenseSplitRestoreInFlight = true;
+    try {
+        dayLicenseSplitApplyMergedText(root, newDayMerged);
+        try {
+            await syncDayNotepad(licenseId, day, dayLicenseSplitGetMergedText(root));
+        } catch (errDay) {
+            console.error(errDay);
+            dayLicenseSplitApplyMergedText(root, oldDayMerged);
+            showError('No se pudo guardar el día. Revisa la conexión.');
+            return;
+        }
+
+        adminLicenseSplitApplyMergedText(newLicenseMerged);
+        const saveLicRes =
+            typeof window.adminLicenciasSaveCurrentLicenseNotesImmediate === 'function'
+                ? await window.adminLicenciasSaveCurrentLicenseNotesImmediate()
+                : { success: false, error: 'no_save_fn' };
+        if (!saveLicRes || !saveLicRes.success) {
+            adminLicenseSplitApplyMergedText(oldLicenseMerged);
+            try {
+                await syncDayNotepad(licenseId, day, oldDayMerged);
+            } catch (revErr) {
+                console.error(revErr);
+            }
+            showError('No se pudo guardar el bloc Licencias. El día se restauró en el servidor.');
+            return;
+        }
+
+        const dayRootAfter = document.querySelector(
+            `#licenseAllDaysContainer .day-license-split-root[data-day="${day}"][data-license-id="${licenseId}"]`
+        );
+        saveDayDraftLocal(
+            licenseId,
+            day,
+            dayRootAfter ? dayLicenseSplitGetMergedText(dayRootAfter) : newDayMerged
+        );
+        showSuccess('Licencia devuelta al bloc Licencias.');
+        if (typeof refreshDuplicateEmailHighlights === 'function') {
+            refreshDuplicateEmailHighlights(licenseId);
+        }
+        if (typeof window.refreshAdminDuplicateHighlightsIfActive === 'function') {
+            window.refreshAdminDuplicateHighlightsIfActive();
+        }
+        const licSplit = document.getElementById('adminLicenciasLicenseSplitRoot');
+        if (licSplit && typeof licSplit.scrollIntoView === 'function') {
+            licSplit.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+    } catch (err) {
+        console.error('dayLicenseSplitRestoreRowToLicense', err);
+        try {
+            adminLicenseSplitApplyMergedText(oldLicenseMerged);
+        } catch (e2) {
+            console.error(e2);
+        }
+        try {
+            await syncDayNotepad(licenseId, day, oldDayMerged);
+        } catch (e3) {
+            console.error(e3);
+        }
+        showError('No se pudo completar. Revisa los blocs o recarga la página si hace falta.');
+    } finally {
+        window.__dayLicenseSplitRestoreInFlight = false;
+    }
+}
+
+window.dayLicenseSplitRestoreRowToLicense = dayLicenseSplitRestoreRowToLicense;
+
+if (!window.__dayLicenseSplitRestoreClickWired) {
+    window.__dayLicenseSplitRestoreClickWired = true;
+    document.addEventListener(
+        'click',
+        function (e) {
+            const btn = e.target.closest && e.target.closest('.license-split-editor__restore-to-license-btn');
+            if (!btn) return;
+            e.preventDefault();
+            e.stopPropagation();
+            const row = btn.closest('.license-split-editor__row');
+            if (!row) return;
+            if (
+                row.classList.contains('license-split-editor__row--suspended') &&
+                typeof window.suspendedLicenseSplitRestoreRowToLicense === 'function'
+            ) {
+                window.suspendedLicenseSplitRestoreRowToLicense(row);
+            } else if (
+                row.classList.contains('license-split-editor__row--expired') &&
+                typeof window.expiredLicenseSplitRestoreRowToLicense === 'function'
+            ) {
+                window.expiredLicenseSplitRestoreRowToLicense(row);
+            } else if (
+                row.classList.contains('license-split-editor__row--changes') &&
+                typeof window.changesLicenseSplitResolveOutboundRow === 'function'
+            ) {
+                window.changesLicenseSplitResolveOutboundRow(row);
+            } else if (typeof window.dayLicenseSplitRestoreRowToLicense === 'function') {
+                window.dayLicenseSplitRestoreRowToLicense(row);
+            }
+        },
+        false
+    );
+}
+
+function adminLicenseSplitSyncRowsToTextarea() {
+    const ta = document.getElementById('adminLicenciasNotepadByLicense');
+    if (!ta) return;
+    adminMainLicenseNormalizeCredTaTrailingRunsIfBlur(ta);
+    const credLines = adminMainLicenseCredLinesCollapsed(String(ta.value != null ? ta.value : '').replace(/\r\n/g, '\n'));
+    adminLicenseSplitSyncRowCount(adminMainLicenseBlocSyncRowCountFromCollapsed(credLines));
+    adminLicenseSplitCascadeClearSidesForEmptyCredLines();
+    adminLicenseSplitScheduleAutosizeCreds();
+}
+
+/** Cuando cambia la altura del panel de filas, el bloc izquierdo debe igualarla. */
+function ensureAdminLicenseSplitRowsResizeObserver() {
+    const rows = document.getElementById('adminLicenciasStructuredRows');
+    if (!rows || rows.dataset.licSplitResizeObs === '1') return;
+    if (typeof ResizeObserver === 'undefined') return;
+    rows.dataset.licSplitResizeObs = '1';
+    let debounceT = null;
+    const ro = new ResizeObserver(function () {
+        clearTimeout(debounceT);
+        debounceT = setTimeout(function () {
+            adminLicenseSplitAutosizeCredsTextarea();
+        }, 16);
+    });
+    ro.observe(rows);
+}
+
+/** Refuerzo de layout: varios frames y fuentes cargadas (evita scroll interno en el textarea). */
+function adminLicenseSplitScheduleAutosizeCreds() {
+    ensureAdminLicenseSplitRowsResizeObserver();
+    adminLicenseSplitAutosizeCredsTextarea();
+    window.requestAnimationFrame(function () {
+        adminLicenseSplitAutosizeCredsTextarea();
+        window.requestAnimationFrame(function () {
+            adminLicenseSplitAutosizeCredsTextarea();
+        });
+    });
+    try {
+        if (document.fonts && document.fonts.ready) {
+            document.fonts.ready.then(function () {
+                adminLicenseSplitAutosizeCredsTextarea();
+            });
+        }
+    } catch (e) {}
+}
+
+function adminLicSplitParseLineHeightPx(cs) {
+    const lh = cs.lineHeight;
+    const fs = parseFloat(cs.fontSize) || 14;
+    if (!lh || lh === 'normal') return fs * 1.45;
+    if (String(lh).indexOf('px') !== -1) return parseFloat(lh) || fs * 1.45;
+    const n = parseFloat(lh);
+    return Number.isFinite(n) ? n * fs : fs * 1.45;
+}
+
+/**
+ * Altura del bloc credenciales = máximo(texto, panel derecho); siempre mismo nº de filas que líneas.
+ */
+function adminLicenseSplitAutosizeCredsTextarea() {
+    const ta = document.getElementById('adminLicenciasNotepadByLicense');
+    if (!ta || ta.tagName !== 'TEXTAREA' || !ta.classList.contains('license-split-editor__creds')) return;
+    adminMainLicenseNormalizeCredTaTrailingRunsIfBlur(ta);
+    const splitSide = document.querySelector('#adminLicenciasLicenseSplitRoot .license-split-editor__side');
+    const rowsEl = document.getElementById('adminLicenciasStructuredRows');
+    const raw = String(ta.value != null ? ta.value : '').replace(/\r\n/g, '\n');
+    const credLines = adminMainLicenseCredLinesCollapsed(raw);
+    const lineCountEff = adminMainLicenseBlocSyncRowCountFromCollapsed(credLines);
+    adminLicenseSplitSyncRowCount(lineCountEff);
+    adminLicenseSplitCascadeClearSidesForEmptyCredLines();
+
+    const csEarly = window.getComputedStyle(ta);
+    const linePx = adminLicSplitParseLineHeightPx(csEarly);
+    const padY = (parseFloat(csEarly.paddingTop) || 0) + (parseFloat(csEarly.paddingBottom) || 0);
+    const nominalOneLine = Math.ceil(linePx + padY + 4);
+    const tallMin = 112;
+
+    if (splitSide && splitSide.hidden) {
+        ta.style.minHeight = '0';
+        ta.style.height = '0px';
+        const ns = ta.scrollHeight;
+        ta.style.minHeight = '';
+        ta.style.height = '';
+        const cs = window.getComputedStyle(ta);
+        let minPx = parseFloat(cs.minHeight);
+        if (Number.isNaN(minPx)) minPx = 20;
+        const floorHidden = Math.max(minPx, nominalOneLine);
+        ta.style.height = Math.max(floorHidden, ns + 2) + 'px';
+        licenseSplitSyncCredsTaContentWidth(ta);
+        return;
+    }
+
+    if (rowsEl) {
+        void rowsEl.offsetHeight;
+    }
+
+    const cs0 = window.getComputedStyle(ta);
+    const padY2 = (parseFloat(cs0.paddingTop) || 0) + (parseFloat(cs0.paddingBottom) || 0);
+    const nEst = credLines.length === 0 ? 1 : credLines.length;
+    const estimateByLines = adminLicSplitParseLineHeightPx(cs0) * nEst + padY2;
+
+    ta.style.minHeight = '0';
+    ta.style.height = '0px';
+    const naturalScroll = ta.scrollHeight;
+    ta.style.minHeight = '';
+    ta.style.height = '';
+
+    let peerH = 0;
+    if (rowsEl) {
+        peerH = Math.max(rowsEl.scrollHeight, rowsEl.offsetHeight);
+    }
+    if (splitSide) {
+        peerH = Math.max(peerH, splitSide.scrollHeight, splitSide.offsetHeight);
+    }
+
+    const cs = window.getComputedStyle(ta);
+    let minPx = parseFloat(cs.minHeight);
+    if (Number.isNaN(minPx)) minPx = 20;
+    const nominalOneLine2 = Math.ceil(adminLicSplitParseLineHeightPx(cs) + padY2 + 4);
+    const floorPx = Math.max(minPx, nominalOneLine2);
+    const contentH = Math.max(naturalScroll + 2, estimateByLines);
+    const h = Math.max(floorPx, contentH, peerH);
+    ta.style.height = Math.ceil(h) + 'px';
+    licenseSplitSyncCredsTaContentWidth(ta);
+}
+
+window.adminLicenseSplitApplyMergedText = adminLicenseSplitApplyMergedText;
+window.adminLicenseSplitGetMergedNotes = adminLicenseSplitGetMergedNotes;
+window.adminLicenseSplitSyncRowsToTextarea = adminLicenseSplitSyncRowsToTextarea;
+window.adminLicenseSplitValidateAllUserInputs = adminLicenseSplitValidateAllUserInputs;
+window.adminLicenseSplitAutosizeCredsTextarea = adminLicenseSplitAutosizeCredsTextarea;
+window.adminLicenseSplitScheduleAutosizeCreds = adminLicenseSplitScheduleAutosizeCreds;
+window.adminMainLicenseNormalizeCredTaTrailingRunsIfBlur = adminMainLicenseNormalizeCredTaTrailingRunsIfBlur;
+
+var ADMIN_LICENSE_SHOW_LIMIT_KEY = 'admin_licencias_license_show_limit_v1';
+
+function adminLicenseShowLimitReadStored() {
+    try {
+        var v = localStorage.getItem(ADMIN_LICENSE_SHOW_LIMIT_KEY);
+        if (v === '20' || v === '50' || v === '100' || v === '300' || v === 'all') {
+            return v;
+        }
+    } catch (e) {
+        /* ignore */
+    }
+    return 'all';
+}
+
+function adminLicenseShowLimitNormalize(val) {
+    var v = String(val != null ? val : 'all').trim();
+    if (v === '20' || v === '50' || v === '100' || v === '300' || v === 'all') {
+        return v;
+    }
+    return 'all';
+}
+
+function adminLicenseShowLimitApply() {
+    var sel = document.getElementById('adminLicenciasLicenseShowSelect');
+    var root = document.getElementById('adminLicenciasLicenseSplitRoot');
+    if (!root) return;
+    var val = adminLicenseShowLimitNormalize(sel ? sel.value : adminLicenseShowLimitReadStored());
+    root.setAttribute('data-license-viz', val);
+    try {
+        localStorage.setItem(ADMIN_LICENSE_SHOW_LIMIT_KEY, val);
+    } catch (e) {
+        /* ignore */
+    }
+}
+
+function adminLicenseShowLimitSyncUi() {
+    var sel = document.getElementById('adminLicenciasLicenseShowSelect');
+    var root = document.getElementById('adminLicenciasLicenseSplitRoot');
+    if (!root) return;
+    var val = adminLicenseShowLimitReadStored();
+    val = adminLicenseShowLimitNormalize(val);
+    if (sel) {
+        sel.value = val;
+    }
+    root.setAttribute('data-license-viz', val);
+}
+
+window.adminLicenseShowLimitApply = adminLicenseShowLimitApply;
+window.adminLicenseShowLimitSyncUi = adminLicenseShowLimitSyncUi;
+
+var ADMIN_LICENSE_HIDE_NOTES_COL_KEY = 'admin_licencias_license_hide_notes_col_v1';
+
+function adminLicenseHideNotesColReadStored() {
+    try {
+        var v = localStorage.getItem(ADMIN_LICENSE_HIDE_NOTES_COL_KEY);
+        if (v === '1' || v === 'true') {
+            return true;
+        }
+    } catch (e) {
+        /* ignore */
+    }
+    return false;
+}
+
+function adminLicenseHideNotesColApply(hidden) {
+    var root = document.getElementById('adminLicenciasLicenseSplitRoot');
+    var btn = document.getElementById('adminLicenciasToggleNotesColBtn');
+    if (!root) return;
+    var hid = !!hidden;
+    if (hid) {
+        root.classList.add('license-split-editor--notes-hidden');
+    } else {
+        root.classList.remove('license-split-editor--notes-hidden');
+    }
+    try {
+        localStorage.setItem(ADMIN_LICENSE_HIDE_NOTES_COL_KEY, hid ? '1' : '0');
+    } catch (e) {
+        /* ignore */
+    }
+    if (btn) {
+        var icon = btn.querySelector('i');
+        if (hid) {
+            if (icon) {
+                icon.className = 'fas fa-eye';
+            }
+            btn.title = 'Mostrar columna Notas';
+            btn.setAttribute('aria-label', 'Mostrar columna Notas de cada fila');
+            btn.setAttribute('aria-pressed', 'true');
+        } else {
+            if (icon) {
+                icon.className = 'fas fa-eye-slash';
+            }
+            btn.title = 'Ocultar columna Notas';
+            btn.setAttribute('aria-label', 'Ocultar columna Notas de cada fila');
+            btn.setAttribute('aria-pressed', 'false');
+        }
+    }
+    if (typeof window.adminLicenseSplitScheduleAutosizeCreds === 'function') {
+        window.adminLicenseSplitScheduleAutosizeCreds();
+    }
+}
+
+function adminLicenseHideNotesColToggle() {
+    var root = document.getElementById('adminLicenciasLicenseSplitRoot');
+    if (!root) return;
+    var now = root.classList.contains('license-split-editor--notes-hidden');
+    adminLicenseHideNotesColApply(!now);
+}
+
+function adminLicenseHideNotesColSyncUi() {
+    adminLicenseHideNotesColApply(adminLicenseHideNotesColReadStored());
+}
+
+window.adminLicenseHideNotesColApply = adminLicenseHideNotesColApply;
+window.adminLicenseHideNotesColSyncUi = adminLicenseHideNotesColSyncUi;
+window.adminLicenseHideNotesColToggle = adminLicenseHideNotesColToggle;
+
+var ADMIN_SUSPENDED_HIDE_NOTES_COL_KEY = 'admin_licencias_suspended_hide_notes_col_v1';
+
+function adminSuspendedHideNotesColReadStored() {
+    try {
+        var v = localStorage.getItem(ADMIN_SUSPENDED_HIDE_NOTES_COL_KEY);
+        if (v === '1' || v === 'true') {
+            return true;
+        }
+    } catch (e) {
+        /* ignore */
+    }
+    return false;
+}
+
+function adminSuspendedHideNotesColApply(hidden) {
+    var root = document.getElementById('adminLicenciasSuspendedSplitRoot');
+    var btn = document.getElementById('adminLicenciasToggleSuspendedNotesColBtn');
+    if (!root) return;
+    var hid = !!hidden;
+    if (hid) {
+        root.classList.add('license-split-editor--notes-hidden');
+    } else {
+        root.classList.remove('license-split-editor--notes-hidden');
+    }
+    try {
+        localStorage.setItem(ADMIN_SUSPENDED_HIDE_NOTES_COL_KEY, hid ? '1' : '0');
+    } catch (e) {
+        /* ignore */
+    }
+    if (btn) {
+        var icon = btn.querySelector('i');
+        if (hid) {
+            if (icon) {
+                icon.className = 'fas fa-eye';
+            }
+            btn.title = 'Mostrar columna Notas';
+            btn.setAttribute('aria-label', 'Mostrar columna Notas en caídas');
+            btn.setAttribute('aria-pressed', 'true');
+        } else {
+            if (icon) {
+                icon.className = 'fas fa-eye-slash';
+            }
+            btn.title = 'Ocultar columna Notas';
+            btn.setAttribute('aria-label', 'Ocultar columna Notas en caídas');
+            btn.setAttribute('aria-pressed', 'false');
+        }
+    }
+    if (typeof window.suspendedLicenseSplitScheduleAutosize === 'function') {
+        window.suspendedLicenseSplitScheduleAutosize();
+    }
+}
+
+function adminSuspendedHideNotesColToggle() {
+    var root = document.getElementById('adminLicenciasSuspendedSplitRoot');
+    if (!root) return;
+    var now = root.classList.contains('license-split-editor--notes-hidden');
+    adminSuspendedHideNotesColApply(!now);
+}
+
+function adminSuspendedHideNotesColSyncUi() {
+    adminSuspendedHideNotesColApply(adminSuspendedHideNotesColReadStored());
+}
+
+window.adminSuspendedHideNotesColApply = adminSuspendedHideNotesColApply;
+window.adminSuspendedHideNotesColSyncUi = adminSuspendedHideNotesColSyncUi;
+window.adminSuspendedHideNotesColToggle = adminSuspendedHideNotesColToggle;
+
+var ADMIN_SUSPENDED_HIDE_RESTORE_COL_KEY = 'admin_licencias_suspended_hide_restore_col_v1';
+
+function adminSuspendedHideRestoreColReadStored() {
+    try {
+        var v = localStorage.getItem(ADMIN_SUSPENDED_HIDE_RESTORE_COL_KEY);
+        if (v === '1' || v === 'true') {
+            return true;
+        }
+    } catch (e) {
+        /* ignore */
+    }
+    return false;
+}
+
+function adminSuspendedHideRestoreColApply(hidden) {
+    var root = document.getElementById('adminLicenciasSuspendedSplitRoot');
+    var btn = document.getElementById('adminLicenciasToggleSuspendedRestoreColBtn');
+    if (!root) return;
+    var hid = !!hidden;
+    if (hid) {
+        root.classList.add('license-split-editor--suspended-restore-hidden');
+    } else {
+        root.classList.remove('license-split-editor--suspended-restore-hidden');
+    }
+    try {
+        localStorage.setItem(ADMIN_SUSPENDED_HIDE_RESTORE_COL_KEY, hid ? '1' : '0');
+    } catch (e) {
+        /* ignore */
+    }
+    if (btn) {
+        var icon = btn.querySelector('i');
+        if (hid) {
+            if (icon) {
+                icon.className = 'fas fa-eye';
+            }
+            btn.title = 'Mostrar flecha subir a Licencias';
+            btn.setAttribute('aria-label', 'Mostrar botón subir a Licencias en caídas');
+            btn.setAttribute('aria-pressed', 'true');
+        } else {
+            if (icon) {
+                icon.className = 'fas fa-eye-slash';
+            }
+            btn.title = 'Ocultar flecha subir a Licencias';
+            btn.setAttribute('aria-label', 'Ocultar botón subir a Licencias en caídas');
+            btn.setAttribute('aria-pressed', 'false');
+        }
+    }
+    if (typeof window.suspendedLicenseSplitScheduleAutosize === 'function') {
+        window.suspendedLicenseSplitScheduleAutosize();
+    }
+}
+
+function adminSuspendedHideRestoreColToggle() {
+    var root = document.getElementById('adminLicenciasSuspendedSplitRoot');
+    if (!root) return;
+    var now = root.classList.contains('license-split-editor--suspended-restore-hidden');
+    adminSuspendedHideRestoreColApply(!now);
+}
+
+function adminSuspendedHideRestoreColSyncUi() {
+    adminSuspendedHideRestoreColApply(adminSuspendedHideRestoreColReadStored());
+}
+
+window.adminSuspendedHideRestoreColApply = adminSuspendedHideRestoreColApply;
+window.adminSuspendedHideRestoreColSyncUi = adminSuspendedHideRestoreColSyncUi;
+window.adminSuspendedHideRestoreColToggle = adminSuspendedHideRestoreColToggle;
+
+var ADMIN_EXPIRED_HIDE_NOTES_COL_KEY = 'admin_licencias_expired_hide_notes_col_v1';
+
+function adminExpiredHideNotesColReadStored() {
+    try {
+        var v = localStorage.getItem(ADMIN_EXPIRED_HIDE_NOTES_COL_KEY);
+        if (v === '1' || v === 'true') {
+            return true;
+        }
+    } catch (e) {
+        /* ignore */
+    }
+    return false;
+}
+
+function adminExpiredHideNotesColApply(hidden) {
+    var root = document.getElementById('adminLicenciasExpiredSplitRoot');
+    var btn = document.getElementById('adminLicenciasToggleExpiredNotesColBtn');
+    if (!root) return;
+    var hid = !!hidden;
+    if (hid) {
+        root.classList.add('license-split-editor--notes-hidden');
+    } else {
+        root.classList.remove('license-split-editor--notes-hidden');
+    }
+    try {
+        localStorage.setItem(ADMIN_EXPIRED_HIDE_NOTES_COL_KEY, hid ? '1' : '0');
+    } catch (e) {
+        /* ignore */
+    }
+    if (btn) {
+        var icon = btn.querySelector('i');
+        if (hid) {
+            if (icon) {
+                icon.className = 'fas fa-eye';
+            }
+            btn.title = 'Mostrar columna Notas';
+            btn.setAttribute('aria-label', 'Mostrar columna Notas en vencidas');
+            btn.setAttribute('aria-pressed', 'true');
+        } else {
+            if (icon) {
+                icon.className = 'fas fa-eye-slash';
+            }
+            btn.title = 'Ocultar columna Notas';
+            btn.setAttribute('aria-label', 'Ocultar columna Notas en vencidas');
+            btn.setAttribute('aria-pressed', 'false');
+        }
+    }
+    if (typeof window.expiredLicenseSplitScheduleAutosize === 'function') {
+        window.expiredLicenseSplitScheduleAutosize();
+    }
+}
+
+function adminExpiredHideNotesColToggle() {
+    var root = document.getElementById('adminLicenciasExpiredSplitRoot');
+    if (!root) return;
+    var now = root.classList.contains('license-split-editor--notes-hidden');
+    adminExpiredHideNotesColApply(!now);
+}
+
+function adminExpiredHideNotesColSyncUi() {
+    adminExpiredHideNotesColApply(adminExpiredHideNotesColReadStored());
+}
+
+window.adminExpiredHideNotesColApply = adminExpiredHideNotesColApply;
+window.adminExpiredHideNotesColSyncUi = adminExpiredHideNotesColSyncUi;
+window.adminExpiredHideNotesColToggle = adminExpiredHideNotesColToggle;
+
+var ADMIN_EXPIRED_HIDE_RESTORE_COL_KEY = 'admin_licencias_expired_hide_restore_col_v1';
+
+function adminExpiredHideRestoreColReadStored() {
+    try {
+        var v = localStorage.getItem(ADMIN_EXPIRED_HIDE_RESTORE_COL_KEY);
+        if (v === '1' || v === 'true') {
+            return true;
+        }
+    } catch (e) {
+        /* ignore */
+    }
+    return false;
+}
+
+function adminExpiredHideRestoreColApply(hidden) {
+    var root = document.getElementById('adminLicenciasExpiredSplitRoot');
+    var btn = document.getElementById('adminLicenciasToggleExpiredRestoreColBtn');
+    if (!root) return;
+    var hid = !!hidden;
+    if (hid) {
+        root.classList.add('license-split-editor--expired-restore-hidden');
+    } else {
+        root.classList.remove('license-split-editor--expired-restore-hidden');
+    }
+    try {
+        localStorage.setItem(ADMIN_EXPIRED_HIDE_RESTORE_COL_KEY, hid ? '1' : '0');
+    } catch (e) {
+        /* ignore */
+    }
+    if (btn) {
+        var icon = btn.querySelector('i');
+        if (hid) {
+            if (icon) {
+                icon.className = 'fas fa-eye';
+            }
+            btn.title = 'Mostrar flecha subir a Licencias';
+            btn.setAttribute('aria-label', 'Mostrar botón subir a Licencias en vencidas');
+            btn.setAttribute('aria-pressed', 'true');
+        } else {
+            if (icon) {
+                icon.className = 'fas fa-eye-slash';
+            }
+            btn.title = 'Ocultar flecha subir a Licencias';
+            btn.setAttribute('aria-label', 'Ocultar botón subir a Licencias en vencidas');
+            btn.setAttribute('aria-pressed', 'false');
+        }
+    }
+    if (typeof window.expiredLicenseSplitScheduleAutosize === 'function') {
+        window.expiredLicenseSplitScheduleAutosize();
+    }
+}
+
+function adminExpiredHideRestoreColToggle() {
+    var root = document.getElementById('adminLicenciasExpiredSplitRoot');
+    if (!root) return;
+    var now = root.classList.contains('license-split-editor--expired-restore-hidden');
+    adminExpiredHideRestoreColApply(!now);
+}
+
+function adminExpiredHideRestoreColSyncUi() {
+    adminExpiredHideRestoreColApply(adminExpiredHideRestoreColReadStored());
+}
+
+window.adminExpiredHideRestoreColApply = adminExpiredHideRestoreColApply;
+window.adminExpiredHideRestoreColSyncUi = adminExpiredHideRestoreColSyncUi;
+window.adminExpiredHideRestoreColToggle = adminExpiredHideRestoreColToggle;
+
+var ADMIN_DAYS_HIDE_RESTORE_COL_KEY = 'admin_licencias_days_hide_restore_col_v1';
+
+function adminDaysHideRestoreColReadStored() {
+    try {
+        var v = localStorage.getItem(ADMIN_DAYS_HIDE_RESTORE_COL_KEY);
+        if (v === '1' || v === 'true') {
+            return true;
+        }
+    } catch (e) {
+        /* ignore */
+    }
+    return false;
+}
+
+function adminDaysHideRestoreColApply(hidden) {
+    var container = document.getElementById('licenseAllDaysContainer');
+    var btn = document.getElementById('adminLicenciasToggleDaysRestoreColBtn');
+    if (!container) return;
+    var roots = container.querySelectorAll('.day-license-split-root');
+    var hid = !!hidden;
+    roots.forEach(function (root) {
+        if (hid) {
+            root.classList.add('license-split-editor--day-restore-hidden');
+        } else {
+            root.classList.remove('license-split-editor--day-restore-hidden');
+        }
+    });
+    try {
+        localStorage.setItem(ADMIN_DAYS_HIDE_RESTORE_COL_KEY, hid ? '1' : '0');
+    } catch (e) {
+        /* ignore */
+    }
+    if (btn) {
+        var icon = btn.querySelector('i');
+        if (hid) {
+            if (icon) {
+                icon.className = 'fas fa-eye';
+            }
+            btn.title = 'Mostrar flecha subir a Licencias en días';
+            btn.setAttribute('aria-label', 'Mostrar botón subir a Licencias en cada día');
+            btn.setAttribute('aria-pressed', 'true');
+        } else {
+            if (icon) {
+                icon.className = 'fas fa-eye-slash';
+            }
+            btn.title = 'Ocultar flecha subir a Licencias en días';
+            btn.setAttribute('aria-label', 'Ocultar botón subir a Licencias en cada día');
+            btn.setAttribute('aria-pressed', 'false');
+        }
+    }
+    roots.forEach(function (root) {
+        if (typeof dayLicenseSplitScheduleAutosize === 'function') {
+            dayLicenseSplitScheduleAutosize(root);
+        }
+    });
+}
+
+function adminDaysHideRestoreColToggle() {
+    adminDaysHideRestoreColApply(!adminDaysHideRestoreColReadStored());
+}
+
+function adminDaysHideRestoreColSyncUi() {
+    adminDaysHideRestoreColApply(adminDaysHideRestoreColReadStored());
+}
+
+window.adminDaysHideRestoreColApply = adminDaysHideRestoreColApply;
+window.adminDaysHideRestoreColSyncUi = adminDaysHideRestoreColSyncUi;
+window.adminDaysHideRestoreColToggle = adminDaysHideRestoreColToggle;
+
+var ADMIN_DAYS_HIDE_STATUS_COL_KEY = 'admin_licencias_days_hide_status_col_v1';
+
+function adminDaysHideStatusColReadStored() {
+    try {
+        var v = localStorage.getItem(ADMIN_DAYS_HIDE_STATUS_COL_KEY);
+        if (v === '1' || v === 'true') {
+            return true;
+        }
+    } catch (e) {
+        /* ignore */
+    }
+    return false;
+}
+
+function adminDaysHideStatusColApply(hidden) {
+    var container = document.getElementById('licenseAllDaysContainer');
+    var btn = document.getElementById('adminLicenciasToggleDaysStatusColBtn');
+    if (!container) return;
+    var roots = container.querySelectorAll('.day-license-split-root');
+    var hid = !!hidden;
+    roots.forEach(function (root) {
+        if (hid) {
+            root.classList.add('license-split-editor--status-hidden');
+        } else {
+            root.classList.remove('license-split-editor--status-hidden');
+        }
+    });
+    try {
+        localStorage.setItem(ADMIN_DAYS_HIDE_STATUS_COL_KEY, hid ? '1' : '0');
+    } catch (e) {
+        /* ignore */
+    }
+    if (btn) {
+        var icon = btn.querySelector('i');
+        if (hid) {
+            if (icon) {
+                icon.className = 'fas fa-eye';
+            }
+            btn.title = 'Mostrar columnas Estado (verde y rojo) en días';
+            btn.setAttribute('aria-label', 'Mostrar columnas Estado verde y rojo en cada día');
+            btn.setAttribute('aria-pressed', 'true');
+        } else {
+            if (icon) {
+                icon.className = 'fas fa-eye-slash';
+            }
+            btn.title = 'Ocultar columnas Estado (verde y rojo) en días';
+            btn.setAttribute('aria-label', 'Ocultar columnas Estado verde y rojo en cada día');
+            btn.setAttribute('aria-pressed', 'false');
+        }
+    }
+    roots.forEach(function (root) {
+        if (typeof dayLicenseSplitScheduleAutosize === 'function') {
+            dayLicenseSplitScheduleAutosize(root);
+        }
+    });
+}
+
+function adminDaysHideStatusColToggle() {
+    adminDaysHideStatusColApply(!adminDaysHideStatusColReadStored());
+}
+
+function adminDaysHideStatusColSyncUi() {
+    adminDaysHideStatusColApply(adminDaysHideStatusColReadStored());
+}
+
+window.adminDaysHideStatusColApply = adminDaysHideStatusColApply;
+window.adminDaysHideStatusColSyncUi = adminDaysHideStatusColSyncUi;
+window.adminDaysHideStatusColToggle = adminDaysHideStatusColToggle;
+
+var ADMIN_DAYS_HIDE_NOTES_COL_KEY = 'admin_licencias_days_hide_notes_col_v1';
+
+function adminDaysHideNotesColReadStored() {
+    try {
+        var v = localStorage.getItem(ADMIN_DAYS_HIDE_NOTES_COL_KEY);
+        if (v === '1' || v === 'true') {
+            return true;
+        }
+    } catch (e) {
+        /* ignore */
+    }
+    return false;
+}
+
+function adminDaysHideNotesColApply(hidden) {
+    var container = document.getElementById('licenseAllDaysContainer');
+    var btn = document.getElementById('adminLicenciasToggleDaysNotesColBtn');
+    if (!container) return;
+    var roots = container.querySelectorAll('.day-license-split-root');
+    var hid = !!hidden;
+    roots.forEach(function (root) {
+        if (hid) {
+            root.classList.add('license-split-editor--notes-hidden');
+        } else {
+            root.classList.remove('license-split-editor--notes-hidden');
+        }
+    });
+    try {
+        localStorage.setItem(ADMIN_DAYS_HIDE_NOTES_COL_KEY, hid ? '1' : '0');
+    } catch (e) {
+        /* ignore */
+    }
+    if (btn) {
+        var icon = btn.querySelector('i');
+        if (hid) {
+            if (icon) {
+                icon.className = 'fas fa-eye';
+            }
+            btn.title = 'Mostrar columna Notas en días';
+            btn.setAttribute('aria-label', 'Mostrar columna Notas en cada día');
+            btn.setAttribute('aria-pressed', 'true');
+        } else {
+            if (icon) {
+                icon.className = 'fas fa-eye-slash';
+            }
+            btn.title = 'Ocultar columna Notas en días';
+            btn.setAttribute('aria-label', 'Ocultar columna Notas en cada día');
+            btn.setAttribute('aria-pressed', 'false');
+        }
+    }
+    roots.forEach(function (root) {
+        if (typeof dayLicenseSplitScheduleAutosize === 'function') {
+            dayLicenseSplitScheduleAutosize(root);
+        }
+    });
+}
+
+function adminDaysHideNotesColToggle() {
+    adminDaysHideNotesColApply(!adminDaysHideNotesColReadStored());
+}
+
+function adminDaysHideNotesColSyncUi() {
+    adminDaysHideNotesColApply(adminDaysHideNotesColReadStored());
+}
+
+window.adminDaysHideNotesColApply = adminDaysHideNotesColApply;
+window.adminDaysHideNotesColSyncUi = adminDaysHideNotesColSyncUi;
+window.adminDaysHideNotesColToggle = adminDaysHideNotesColToggle;
+
+var ADMIN_CHANGES_HIDE_STATUS_COL_KEY = 'admin_licencias_changes_hide_status_col_v1';
+var ADMIN_CHANGES_HIDE_NOTES_COL_KEY = 'admin_licencias_changes_hide_notes_col_v1';
+
+function adminChangesHideStatusColReadStored() {
+    try {
+        var v = localStorage.getItem(ADMIN_CHANGES_HIDE_STATUS_COL_KEY);
+        if (v === '1' || v === 'true') {
+            return true;
+        }
+    } catch (e) {
+        /* ignore */
+    }
+    return false;
+}
+
+function adminChangesHideStatusColApply(hidden) {
+    var container = document.getElementById('licenseChangesProductsContainer');
+    var btn = document.getElementById('adminLicenciasToggleChangesStatusColBtn');
+    if (!container) return;
+    var roots = container.querySelectorAll('.changes-license-split-root');
+    var hid = !!hidden;
+    roots.forEach(function (root) {
+        if (hid) {
+            root.classList.add('license-split-editor--status-hidden');
+        } else {
+            root.classList.remove('license-split-editor--status-hidden');
+        }
+    });
+    try {
+        localStorage.setItem(ADMIN_CHANGES_HIDE_STATUS_COL_KEY, hid ? '1' : '0');
+    } catch (e) {
+        /* ignore */
+    }
+    if (btn) {
+        var icon = btn.querySelector('i');
+        if (hid) {
+            if (icon) {
+                icon.className = 'fas fa-eye';
+            }
+            btn.title = 'Mostrar columnas Terminado e incidencias';
+            btn.setAttribute('aria-label', 'Mostrar columnas Terminado (verde) e incidencias (rojo) en Cambios');
+            btn.setAttribute('aria-pressed', 'true');
+        } else {
+            if (icon) {
+                icon.className = 'fas fa-eye-slash';
+            }
+            btn.title = 'Ocultar columnas Terminado e incidencias';
+            btn.setAttribute('aria-label', 'Ocultar columnas Terminado (verde) e incidencias (rojo) en Cambios');
+            btn.setAttribute('aria-pressed', 'false');
+        }
+    }
+    roots.forEach(function (root) {
+        if (typeof changesLicenseSplitScheduleAutosize === 'function') {
+            changesLicenseSplitScheduleAutosize(root);
+        }
+    });
+}
+
+function adminChangesHideStatusColToggle() {
+    adminChangesHideStatusColApply(!adminChangesHideStatusColReadStored());
+}
+
+function adminChangesHideStatusColSyncUi() {
+    adminChangesHideStatusColApply(adminChangesHideStatusColReadStored());
+}
+
+window.adminChangesHideStatusColApply = adminChangesHideStatusColApply;
+window.adminChangesHideStatusColSyncUi = adminChangesHideStatusColSyncUi;
+window.adminChangesHideStatusColToggle = adminChangesHideStatusColToggle;
+
+function adminChangesHideNotesColReadStored() {
+    try {
+        var v = localStorage.getItem(ADMIN_CHANGES_HIDE_NOTES_COL_KEY);
+        if (v === '1' || v === 'true') {
+            return true;
+        }
+    } catch (e) {
+        /* ignore */
+    }
+    return false;
+}
+
+function adminChangesHideNotesColApply(hidden) {
+    var container = document.getElementById('licenseChangesProductsContainer');
+    var btn = document.getElementById('adminLicenciasToggleChangesNotesColBtn');
+    if (!container) return;
+    var roots = container.querySelectorAll('.changes-license-split-root');
+    var hid = !!hidden;
+    roots.forEach(function (root) {
+        if (hid) {
+            root.classList.add('license-split-editor--notes-hidden');
+        } else {
+            root.classList.remove('license-split-editor--notes-hidden');
+        }
+    });
+    try {
+        localStorage.setItem(ADMIN_CHANGES_HIDE_NOTES_COL_KEY, hid ? '1' : '0');
+    } catch (e) {
+        /* ignore */
+    }
+    if (btn) {
+        var icon = btn.querySelector('i');
+        if (hid) {
+            if (icon) {
+                icon.className = 'fas fa-eye';
+            }
+            btn.title = 'Mostrar columna Notas';
+            btn.setAttribute('aria-label', 'Mostrar columna Notas en Cambios');
+            btn.setAttribute('aria-pressed', 'true');
+        } else {
+            if (icon) {
+                icon.className = 'fas fa-eye-slash';
+            }
+            btn.title = 'Ocultar columna Notas';
+            btn.setAttribute('aria-label', 'Ocultar columna Notas en Cambios');
+            btn.setAttribute('aria-pressed', 'false');
+        }
+    }
+    roots.forEach(function (root) {
+        if (typeof changesLicenseSplitScheduleAutosize === 'function') {
+            changesLicenseSplitScheduleAutosize(root);
+        }
+    });
+}
+
+function adminChangesHideNotesColToggle() {
+    adminChangesHideNotesColApply(!adminChangesHideNotesColReadStored());
+}
+
+function adminChangesHideNotesColSyncUi() {
+    adminChangesHideNotesColApply(adminChangesHideNotesColReadStored());
+}
+
+window.adminChangesHideNotesColApply = adminChangesHideNotesColApply;
+window.adminChangesHideNotesColSyncUi = adminChangesHideNotesColSyncUi;
+window.adminChangesHideNotesColToggle = adminChangesHideNotesColToggle;
+
+var ADMIN_CHANGES_HIDE_RESTORE_COL_KEY = 'admin_licencias_changes_hide_restore_col_v1';
+
+function adminChangesHideRestoreColReadStored() {
+    try {
+        var v = localStorage.getItem(ADMIN_CHANGES_HIDE_RESTORE_COL_KEY);
+        if (v === '1' || v === 'true') {
+            return true;
+        }
+    } catch (e) {
+        /* ignore */
+    }
+    return false;
+}
+
+function adminChangesHideRestoreColApply(hidden) {
+    var container = document.getElementById('licenseChangesProductsContainer');
+    var btn = document.getElementById('adminLicenciasToggleChangesRestoreColBtn');
+    if (!container) return;
+    var roots = container.querySelectorAll('.changes-license-split-root');
+    var hid = !!hidden;
+    roots.forEach(function (root) {
+        if (hid) {
+            root.classList.add('license-split-editor--changes-restore-hidden');
+        } else {
+            root.classList.remove('license-split-editor--changes-restore-hidden');
+        }
+    });
+    try {
+        localStorage.setItem(ADMIN_CHANGES_HIDE_RESTORE_COL_KEY, hid ? '1' : '0');
+    } catch (e) {
+        /* ignore */
+    }
+    if (btn) {
+        var icon = btn.querySelector('i');
+        if (hid) {
+            if (icon) {
+                icon.className = 'fas fa-eye';
+            }
+            btn.title = 'Mostrar flecha devolver a Licencias';
+            btn.setAttribute('aria-label', 'Mostrar botón subir fila al bloc Licencias en Cambios');
+            btn.setAttribute('aria-pressed', 'true');
+        } else {
+            if (icon) {
+                icon.className = 'fas fa-eye-slash';
+            }
+            btn.title = 'Ocultar flecha devolver a Licencias';
+            btn.setAttribute('aria-label', 'Ocultar botón subir fila al bloc Licencias en Cambios');
+            btn.setAttribute('aria-pressed', 'false');
+        }
+    }
+    roots.forEach(function (root) {
+        if (typeof changesLicenseSplitScheduleAutosize === 'function') {
+            changesLicenseSplitScheduleAutosize(root);
+        }
+    });
+}
+
+function adminChangesHideRestoreColToggle() {
+    adminChangesHideRestoreColApply(!adminChangesHideRestoreColReadStored());
+}
+
+function adminChangesHideRestoreColSyncUi() {
+    adminChangesHideRestoreColApply(adminChangesHideRestoreColReadStored());
+}
+
+window.adminChangesHideRestoreColApply = adminChangesHideRestoreColApply;
+window.adminChangesHideRestoreColSyncUi = adminChangesHideRestoreColSyncUi;
+window.adminChangesHideRestoreColToggle = adminChangesHideRestoreColToggle;
+
+var ADMIN_LICENSE_HIDE_STATUS_COL_KEY = 'admin_licencias_license_hide_status_col_v1';
+
+function adminLicenseHideStatusColReadStored() {
+    try {
+        var v = localStorage.getItem(ADMIN_LICENSE_HIDE_STATUS_COL_KEY);
+        if (v === '1' || v === 'true') {
+            return true;
+        }
+    } catch (e) {
+        /* ignore */
+    }
+    return false;
+}
+
+function adminLicenseHideStatusColApply(hidden) {
+    var root = document.getElementById('adminLicenciasLicenseSplitRoot');
+    var btn = document.getElementById('adminLicenciasToggleStatusColBtn');
+    if (!root) return;
+    var hid = !!hidden;
+    if (hid) {
+        root.classList.add('license-split-editor--status-hidden');
+    } else {
+        root.classList.remove('license-split-editor--status-hidden');
+    }
+    try {
+        localStorage.setItem(ADMIN_LICENSE_HIDE_STATUS_COL_KEY, hid ? '1' : '0');
+    } catch (e) {
+        /* ignore */
+    }
+    if (btn) {
+        var icon = btn.querySelector('i');
+        if (hid) {
+            if (icon) {
+                icon.className = 'fas fa-eye';
+            }
+            btn.title = 'Mostrar columnas Estado (verde y rojo)';
+            btn.setAttribute('aria-label', 'Mostrar columnas Estado verde y rojo de cada fila');
+            btn.setAttribute('aria-pressed', 'true');
+        } else {
+            if (icon) {
+                icon.className = 'fas fa-eye-slash';
+            }
+            btn.title = 'Ocultar columnas Estado (verde y rojo)';
+            btn.setAttribute('aria-label', 'Ocultar columnas Estado verde y rojo de cada fila');
+            btn.setAttribute('aria-pressed', 'false');
+        }
+    }
+    if (typeof window.adminLicenseSplitScheduleAutosizeCreds === 'function') {
+        window.adminLicenseSplitScheduleAutosizeCreds();
+    }
+}
+
+function adminLicenseHideStatusColToggle() {
+    var root = document.getElementById('adminLicenciasLicenseSplitRoot');
+    if (!root) return;
+    var now = root.classList.contains('license-split-editor--status-hidden');
+    adminLicenseHideStatusColApply(!now);
+}
+
+function adminLicenseHideStatusColSyncUi() {
+    adminLicenseHideStatusColApply(adminLicenseHideStatusColReadStored());
+}
+
+window.adminLicenseHideStatusColApply = adminLicenseHideStatusColApply;
+window.adminLicenseHideStatusColSyncUi = adminLicenseHideStatusColSyncUi;
+window.adminLicenseHideStatusColToggle = adminLicenseHideStatusColToggle;
+
+/** Cuenta líneas con contenido (mismo criterio visual que el bloc). */
+function countNonEmptyLinesInText(text) {
+    if (text == null || String(text).trim() === '') return 0;
+    return String(text)
+        .split(/\r?\n/)
+        .filter(function (line) {
+            return line.trim().length > 0;
+        }).length;
+}
+
+/** Contador en cabecera del bloc Licencias (mismo criterio que Día N). */
+function updateLicenseBlocLineCountBadge() {
+    const badge = document.getElementById('adminLicenciasLicenseLineBadge');
+    const pad = document.getElementById('adminLicenciasNotepadByLicense');
+    if (!badge || !pad) return;
+    const lid = pad.dataset.licenseId;
+    if (lid === undefined || lid === '' || String(lid) === '0') {
+        badge.hidden = true;
+        badge.textContent = '';
+        badge.removeAttribute('title');
+        return;
+    }
+    const raw =
+        typeof window.adminLicenseSplitGetMergedNotes === 'function'
+            ? window.adminLicenseSplitGetMergedNotes()
+            : pad.tagName === 'TEXTAREA'
+              ? pad.value
+              : editablePlainTextForPipeNormalize(pad);
+    const n = countNonEmptyLinesInText(raw);
+    if (n > 0) {
+        badge.textContent = String(n);
+        badge.title = n === 1 ? '1 línea' : n + ' líneas';
+        badge.hidden = false;
+    } else {
+        badge.hidden = true;
+        badge.textContent = '';
+        badge.removeAttribute('title');
+    }
+}
+
+window.updateLicenseBlocLineCountBadge = updateLicenseBlocLineCountBadge;
+
+/** Contador en cabecera de Notas personales (mismo criterio de líneas). */
+function updatePersonalBlocLineCountBadge() {
+    const badge = document.getElementById('adminLicenciasPersonalLineBadge');
+    const ta = document.getElementById('adminLicenciasNotepadPersonal');
+    if (!badge || !ta) return;
+    const lid = ta.dataset.licenseId;
+    if (lid === undefined || lid === '' || String(lid) === '0') {
+        badge.hidden = true;
+        badge.textContent = '';
+        badge.removeAttribute('title');
+        return;
+    }
+    const n = countNonEmptyLinesInText(ta.value);
+    if (n > 0) {
+        badge.textContent = String(n);
+        badge.title = n === 1 ? '1 línea' : n + ' líneas';
+        badge.hidden = false;
+    } else {
+        badge.hidden = true;
+        badge.textContent = '';
+        badge.removeAttribute('title');
+    }
+}
+
+window.updatePersonalBlocLineCountBadge = updatePersonalBlocLineCountBadge;
+
+/** Contador en cabecera de Caídas / suspendidas (mismo criterio de líneas). */
+function updateSuspendedBlocLineCountBadge() {
+    const badge = document.getElementById('adminLicenciasSuspendedLineBadge');
+    const pad = document.getElementById('adminLicenciasSuspendedNotepad');
+    if (!badge || !pad) return;
+    const lid = pad.dataset.licenseId;
+    if (lid === undefined || lid === '' || String(lid) === '0') {
+        badge.hidden = true;
+        badge.textContent = '';
+        badge.removeAttribute('title');
+        return;
+    }
+    const suspRoot = document.getElementById('adminLicenciasSuspendedSplitRoot');
+    let raw;
+    if (suspRoot && typeof suspendedLicenseSplitGetMergedText === 'function') {
+        raw = suspendedLicenseSplitGetMergedText(suspRoot);
+    } else {
+        raw = pad.tagName === 'TEXTAREA' ? pad.value : editablePlainTextForPipeNormalize(pad);
+    }
+    const n = countNonEmptyLinesInText(raw);
+    if (n > 0) {
+        badge.textContent = String(n);
+        badge.title = n === 1 ? '1 línea' : n + ' líneas';
+        badge.hidden = false;
+    } else {
+        badge.hidden = true;
+        badge.textContent = '';
+        badge.removeAttribute('title');
+    }
+}
+
+window.updateSuspendedBlocLineCountBadge = updateSuspendedBlocLineCountBadge;
+
+/** Contador en cabecera de Vencidas (mismo criterio de líneas que Caídas). */
+function updateExpiredBlocLineCountBadge() {
+    const badge = document.getElementById('adminLicenciasExpiredLineBadge');
+    const pad = document.getElementById('adminLicenciasExpiredNotepad');
+    if (!badge || !pad) return;
+    const lid = pad.dataset.licenseId;
+    if (lid === undefined || lid === '' || String(lid) === '0') {
+        badge.hidden = true;
+        badge.textContent = '';
+        badge.removeAttribute('title');
+        return;
+    }
+    const expRoot = document.getElementById('adminLicenciasExpiredSplitRoot');
+    let raw;
+    if (expRoot && typeof expiredLicenseSplitGetMergedText === 'function') {
+        raw = expiredLicenseSplitGetMergedText(expRoot);
+    } else {
+        raw = pad.tagName === 'TEXTAREA' ? pad.value : editablePlainTextForPipeNormalize(pad);
+    }
+    const n = countNonEmptyLinesInText(raw);
+    if (n > 0) {
+        badge.textContent = String(n);
+        badge.title = n === 1 ? '1 línea' : n + ' líneas';
+        badge.hidden = false;
+    } else {
+        badge.hidden = true;
+        badge.textContent = '';
+        badge.removeAttribute('title');
+    }
+}
+
+window.updateExpiredBlocLineCountBadge = updateExpiredBlocLineCountBadge;
+
+function updateChangesBlocLineCountBadge() {
+    document.querySelectorAll('.admin-licencias-bloc--changes-product').forEach(function (section) {
+        const badge = section.querySelector('.js-changes-product-line-badge');
+        const root = section.querySelector('.changes-license-split-root');
+        if (!badge || !root || typeof changesLicenseSplitGetMergedText !== 'function') return;
+        const raw = changesLicenseSplitGetMergedText(root);
+        const n = countNonEmptyLinesInText(raw);
+        if (n > 0) {
+            badge.textContent = String(n);
+            badge.title = n === 1 ? '1 línea' : n + ' líneas';
+            badge.hidden = false;
+        } else {
+            badge.hidden = true;
+            badge.textContent = '';
+            badge.removeAttribute('title');
+        }
+    });
+}
+
+window.updateChangesBlocLineCountBadge = updateChangesBlocLineCountBadge;
+
+/** Quita una cuenta de la caché en memoria tras DELETE (evita N× loadLicenses al volcar varios días). */
+function adminLicRemoveAccountFromCache(accountId) {
+    if (accountId == null) return;
+    const id = Number(accountId);
+    if (!Number.isFinite(id)) return;
+    for (let i = 0; i < licenses.length; i++) {
+        const lic = licenses[i];
+        if (!lic || lic.isAggregate || !Array.isArray(lic.accounts)) continue;
+        const idx = lic.accounts.findIndex(function (a) {
+            return a && a.id === id;
+        });
+        if (idx !== -1) {
+            lic.accounts.splice(idx, 1);
+            invalidateLicenseNotesCredentialLineCache();
+            return;
+        }
+    }
+}
+
+/**
+ * Texto fusionado de cada día (1–31) antes de reemplazar el DOM al cambiar de producto.
+ */
+function captureDayTextsForLicense(licenseId) {
+    const container = document.getElementById('licenseAllDaysContainer');
+    const texts = {};
+    const lid = String(licenseId);
+    for (let d = 1; d <= 31; d++) {
+        const root =
+            container &&
+            container.querySelector(
+                '.day-license-split-root[data-day="' + d + '"][data-license-id="' + lid + '"]'
+            );
+        if (root && typeof dayLicenseSplitGetMergedText === 'function') {
+            texts[d] = dayLicenseSplitGetMergedText(root);
+        } else {
+            const st = loadDayDraftLocal(licenseId, d);
+            texts[d] = st !== null ? st : '';
+        }
+    }
+    return texts;
+}
+
+/**
+ * Persiste días con cambios respecto al servidor; un solo loadLicenses al final.
+ */
+async function flushDayNotepadsForLicenseWithTexts(fromLicenseId, dayTexts) {
+    if (fromLicenseId == null || Number.isNaN(fromLicenseId)) return false;
+    let any = false;
+    for (let d = 1; d <= 31; d++) {
+        const candidate = dayTexts[d] != null ? dayTexts[d] : '';
+        const serverPlain = buildServerPlainForDay(fromLicenseId, d);
+        if (normalizeDraftCompare(candidate) === normalizeDraftCompare(serverPlain)) {
+            if (loadDayDraftLocal(fromLicenseId, d) !== null) {
+                clearDayDraftLocal(fromLicenseId, d);
+            }
+            continue;
+        }
+        if (fromLicenseId === AGGREGATE_LICENSE_ID) {
+            await syncAggregateDayNotepad(d, candidate, { skipReload: true });
+        } else {
+            await syncDayNotepad(fromLicenseId, d, candidate, { skipReload: true });
+        }
+        any = true;
+    }
+    if (any) {
+        await loadLicenses({ skipGridRender: true });
+    }
+    return any;
+}
+
+/** Persiste el texto exacto del bloc del día en BD (como notas/licencias). No aplica a vista «Todos». */
+async function persistDayNotepadRawText(licenseId, day, rawText) {
+    if (licenseId === AGGREGATE_LICENSE_ID) return;
+    const text = rawText != null ? String(rawText) : '';
+    try {
+        const response = await fetch(`/tienda/api/licenses/${licenseId}/notes`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCSRFToken()
+            },
+            body: JSON.stringify({
+                day_notepads: { [String(day)]: text }
+            })
+        });
+        const data = await response.json();
+        if (data.success) {
+            const L = licenses.find(l => l.id === licenseId);
+            if (L) {
+                if (!L.day_notepads) L.day_notepads = {};
+                L.day_notepads[String(day)] = text;
+            }
+        }
+    } catch (e) {
+        console.error('Error al guardar texto del bloc del día:', e);
+    }
+}
+
+/**
+ * Sincroniza el bloc de un día con el servidor: borrar línea = borrar cuenta;
+ * mismas reglas de parseo que el bloc Licencias.
+ * options.skipReload: no llama loadLicenses (el llamador hace un único refresh, p. ej. al cambiar de producto).
+ */
+async function syncDayNotepad(licenseId, day, rawText, options) {
+    if (licenseId === AGGREGATE_LICENSE_ID) {
+        return syncAggregateDayNotepad(day, rawText, options);
+    }
+    const skipReload = options && options.skipReload;
+    const text = rawText != null ? String(rawText) : '';
+    await persistDayNotepadRawText(licenseId, day, text);
+    const trimmed = text.trim();
+
+    if (!trimmed) {
+        const existing = getSoldAccountsForDayNumber(licenseId, day);
+        if (existing.length === 0) return;
+        for (const acc of existing) {
+            try {
+                const response = await fetch(`/tienda/api/accounts/${acc.id}`, {
+                    method: 'DELETE',
+                    headers: { 'X-CSRFToken': getCSRFToken() }
+                });
+                await response.json();
+                if (skipReload) {
+                    adminLicRemoveAccountFromCache(acc.id);
+                }
+            } catch (e) {
+                console.error('Error al eliminar cuenta del día:', e);
+            }
+        }
+        clearDayDraftLocal(licenseId, day);
+        if (!skipReload) {
+            await loadLicenses();
+        loadAndDisplaySavedAccounts(licenseId);
+        scheduleLoadAllDaysSoldAccounts(licenseId);
+        }
+        return;
+    }
+
+    const parsedList = parseAccountsText(text, licenseId);
+    if (parsedList.length === 0) {
+        clearDayDraftLocal(licenseId, day);
+        if (!skipReload) {
+        loadAndDisplaySavedAccounts(licenseId);
+        scheduleLoadAllDaysSoldAccounts(licenseId);
+        }
+        return;
+    }
+
+    const parsedByEmail = new Map();
+    for (const p of parsedList) {
+        parsedByEmail.set(normalizeAccountEmailKey(p.email), p);
+    }
+
+    const toRemove = getSoldAccountsForDayNumber(licenseId, day).filter(
+        acc => !parsedByEmail.has(normalizeAccountEmailKey(acc.email))
+    );
+    for (const acc of toRemove) {
+        try {
+            const response = await fetch(`/tienda/api/accounts/${acc.id}`, {
+                method: 'DELETE',
+                headers: { 'X-CSRFToken': getCSRFToken() }
+            });
+            await response.json();
+            if (skipReload) {
+                adminLicRemoveAccountFromCache(acc.id);
+            }
+        } catch (e) {
+            console.error('Error al eliminar cuenta del día:', e);
+        }
+    }
+
+    if (toRemove.length && !skipReload) {
+        await loadLicenses();
+    }
+
+    const existing = getSoldAccountsForDayNumber(licenseId, day);
+    const existingByEmail = new Map();
+    existing.forEach(a => existingByEmail.set(normalizeAccountEmailKey(a.email), a));
+
+    const now = new Date();
+    const saleDate = new Date(now.getFullYear(), now.getMonth(), day);
+    const L = licenses.find(l => l.id === licenseId);
+
+    for (const [emailKey, p] of parsedByEmail) {
+        const match = existingByEmail.get(emailKey);
+        if (match) {
+            const needUpdate =
+                normalizeAccountEmailKey(match.email) !== normalizeAccountEmailKey(p.email) ||
+                String(match.password) !== String(p.password) ||
+                String(match.account_identifier || '') !== String(p.identifier || '');
+            if (needUpdate) {
+                try {
+                    const response = await fetch(`/tienda/api/accounts/${match.id}`, {
+                        method: 'PUT',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRFToken': getCSRFToken()
+                        },
+                        body: JSON.stringify({
+                            email: p.email,
+                            password: p.password,
+                            account_identifier: p.identifier
+                        })
+                    });
+                    const data = await response.json();
+                    if (!data.success) {
+                        console.error('Error al actualizar cuenta:', data.error);
+                    } else if (skipReload && L && Array.isArray(L.accounts)) {
+                        const accRow = L.accounts.find(a => a && a.id === match.id);
+                        if (accRow) {
+                            accRow.email = p.email;
+                            accRow.password = p.password;
+                            accRow.account_identifier = p.identifier;
+                            invalidateLicenseNotesCredentialLineCache();
+                        }
+                    }
+                } catch (e) {
+                    console.error('Error al actualizar cuenta:', e);
+                }
+            }
+        } else {
+            try {
+                const createResponse = await fetch(`/tienda/api/licenses/${licenseId}/accounts`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': getCSRFToken()
+                    },
+                    body: JSON.stringify({
+                        account_identifier: p.identifier,
+                        email: p.email,
+                        password: p.password
+                    })
+                });
+                const createData = await createResponse.json();
+                if (createData.success && createData.account_id) {
+                    await fetch(`/tienda/api/accounts/${createData.account_id}/mark-sold`, {
+                        method: 'PUT',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRFToken': getCSRFToken()
+                        },
+                        body: JSON.stringify({
+                            sold_date: saleDate.toISOString()
+                        })
+                    });
+                    if (skipReload && L) {
+                        if (!L.accounts) L.accounts = [];
+                        L.accounts.push({
+                            id: createData.account_id,
+                            email: p.email,
+                            password: p.password,
+                            account_identifier: p.identifier,
+                            status: 'sold',
+                            assigned_at: saleDate.toISOString()
+                        });
+                        invalidateLicenseNotesCredentialLineCache();
+                    }
+                }
+            } catch (e) {
+                console.error('Error al crear cuenta del día:', e);
+            }
+        }
+    }
+
+    clearDayDraftLocal(licenseId, day);
+    if (!skipReload) {
+        await loadLicenses();
+    loadAndDisplaySavedAccounts(licenseId);
+    scheduleLoadAllDaysSoldAccounts(licenseId);
+    }
+}
+
+/** Misma lógica que syncDayNotepad pero con cuentas de todas las licencias; nuevas cuentas → primera licencia real. */
+async function syncAggregateDayNotepad(day, rawText, options) {
+    const skipReload = options && options.skipReload;
+    const text = rawText != null ? String(rawText) : '';
+    const trimmed = text.trim();
+    const targetCreateLicenseId = getFirstRealLicenseId();
+
+    if (!trimmed) {
+        const existing = getSoldAccountsForDayNumber(AGGREGATE_LICENSE_ID, day);
+        if (existing.length === 0) return;
+        for (const acc of existing) {
+            try {
+                const response = await fetch(`/tienda/api/accounts/${acc.id}`, {
+                    method: 'DELETE',
+                    headers: { 'X-CSRFToken': getCSRFToken() }
+                });
+                await response.json();
+                if (skipReload) {
+                    adminLicRemoveAccountFromCache(acc.id);
+                }
+            } catch (e) {
+                console.error('Error al eliminar cuenta del día:', e);
+            }
+        }
+        clearDayDraftLocal(AGGREGATE_LICENSE_ID, day);
+        if (!skipReload) {
+            await loadLicenses();
+        loadAndDisplaySavedAccounts(AGGREGATE_LICENSE_ID);
+        scheduleLoadAllDaysSoldAccounts(AGGREGATE_LICENSE_ID);
+        }
+        return;
+    }
+
+    const parseLicenseId = targetCreateLicenseId != null ? targetCreateLicenseId : AGGREGATE_LICENSE_ID;
+    const parsedList = parseAccountsText(text, parseLicenseId);
+    if (parsedList.length === 0) {
+        clearDayDraftLocal(AGGREGATE_LICENSE_ID, day);
+        if (!skipReload) {
+        loadAndDisplaySavedAccounts(AGGREGATE_LICENSE_ID);
+        scheduleLoadAllDaysSoldAccounts(AGGREGATE_LICENSE_ID);
+        }
+        return;
+    }
+
+    const parsedByEmail = new Map();
+    for (const p of parsedList) {
+        parsedByEmail.set(normalizeAccountEmailKey(p.email), p);
+    }
+
+    const toRemove = getSoldAccountsForDayNumber(AGGREGATE_LICENSE_ID, day).filter(
+        acc => !parsedByEmail.has(normalizeAccountEmailKey(acc.email))
+    );
+    for (const acc of toRemove) {
+        try {
+            const response = await fetch(`/tienda/api/accounts/${acc.id}`, {
+                method: 'DELETE',
+                headers: { 'X-CSRFToken': getCSRFToken() }
+            });
+            await response.json();
+            if (skipReload) {
+                adminLicRemoveAccountFromCache(acc.id);
+            }
+        } catch (e) {
+            console.error('Error al eliminar cuenta del día:', e);
+        }
+    }
+
+    if (toRemove.length && !skipReload) {
+        await loadLicenses();
+    }
+
+    const existing = getSoldAccountsForDayNumber(AGGREGATE_LICENSE_ID, day);
+    const existingByEmail = new Map();
+    existing.forEach(a => existingByEmail.set(normalizeAccountEmailKey(a.email), a));
+
+    const now = new Date();
+    const saleDate = new Date(now.getFullYear(), now.getMonth(), day);
+
+    for (const [emailKey, p] of parsedByEmail) {
+        const match = existingByEmail.get(emailKey);
+        if (match) {
+            const needUpdate =
+                normalizeAccountEmailKey(match.email) !== normalizeAccountEmailKey(p.email) ||
+                String(match.password) !== String(p.password) ||
+                String(match.account_identifier || '') !== String(p.identifier || '');
+            if (needUpdate) {
+                try {
+                    const response = await fetch(`/tienda/api/accounts/${match.id}`, {
+                        method: 'PUT',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRFToken': getCSRFToken()
+                        },
+                        body: JSON.stringify({
+                            email: p.email,
+                            password: p.password,
+                            account_identifier: p.identifier
+                        })
+                    });
+                    const data = await response.json();
+                    if (!data.success) {
+                        console.error('Error al actualizar cuenta:', data.error);
+                    } else if (skipReload) {
+                        const ownerId = match._sourceLicenseId;
+                        const Lown = ownerId != null ? licenses.find(l => l.id === ownerId) : null;
+                        if (Lown && Array.isArray(Lown.accounts)) {
+                            const accRow = Lown.accounts.find(a => a && a.id === match.id);
+                            if (accRow) {
+                                accRow.email = p.email;
+                                accRow.password = p.password;
+                                accRow.account_identifier = p.identifier;
+                                invalidateLicenseNotesCredentialLineCache();
+                            }
+                        }
+                    }
+                } catch (e) {
+                    console.error('Error al actualizar cuenta:', e);
+                }
+            }
+        } else if (targetCreateLicenseId != null) {
+            try {
+                const createResponse = await fetch(`/tienda/api/licenses/${targetCreateLicenseId}/accounts`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': getCSRFToken()
+                    },
+                    body: JSON.stringify({
+                        account_identifier: p.identifier,
+                        email: p.email,
+                        password: p.password
+                    })
+                });
+                const createData = await createResponse.json();
+                if (createData.success && createData.account_id) {
+                    await fetch(`/tienda/api/accounts/${createData.account_id}/mark-sold`, {
+                        method: 'PUT',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRFToken': getCSRFToken()
+                        },
+                        body: JSON.stringify({
+                            sold_date: saleDate.toISOString()
+                        })
+                    });
+                    if (skipReload) {
+                        const Lnew = licenses.find(l => l.id === targetCreateLicenseId);
+                        if (Lnew) {
+                            if (!Lnew.accounts) Lnew.accounts = [];
+                            Lnew.accounts.push({
+                                id: createData.account_id,
+                                email: p.email,
+                                password: p.password,
+                                account_identifier: p.identifier,
+                                status: 'sold',
+                                assigned_at: saleDate.toISOString()
+                            });
+                            invalidateLicenseNotesCredentialLineCache();
+                        }
+                    }
+                }
+            } catch (e) {
+                console.error('Error al crear cuenta del día:', e);
+            }
+        }
+    }
+
+    clearDayDraftLocal(AGGREGATE_LICENSE_ID, day);
+    if (!skipReload) {
+        await loadLicenses();
+    loadAndDisplaySavedAccounts(AGGREGATE_LICENSE_ID);
+    scheduleLoadAllDaysSoldAccounts(AGGREGATE_LICENSE_ID);
+    }
+}
+
+/** Borrador local por día (respaldo ante fallos de red). */
+function dayDraftStorageKey(licenseId, day) {
+    return `admin_licencias_day_draft_${licenseId}_${day}_v1`;
+}
+
+function saveDayDraftLocal(licenseId, day, text) {
+    try {
+        localStorage.setItem(dayDraftStorageKey(licenseId, day), text != null ? String(text) : '');
+    } catch (e) {}
+}
+
+function loadDayDraftLocal(licenseId, day) {
+    try {
+        const v = localStorage.getItem(dayDraftStorageKey(licenseId, day));
+        return v === null ? null : v;
+    } catch (e) {
+        return null;
+    }
+}
+
+function clearDayDraftLocal(licenseId, day) {
+    try {
+        localStorage.removeItem(dayDraftStorageKey(licenseId, day));
+    } catch (e) {}
+}
+
+/** Comparación estable entre texto del servidor y borrador local (saltos de línea / espacios). */
+function normalizeDraftCompare(text) {
+    return String(text || '')
+        .replace(/\r\n/g, '\n')
+        .replace(/\r/g, '\n')
+        .trim();
+}
+
+function buildServerPlainForDay(licenseId, day) {
+    const accounts = getSoldAccountsForDayNumber(licenseId, day);
+    return getDayNotepadDisplayText(licenseId, day, accounts);
+}
+
+/** Guarda borradores de día antes de cambiar de licencia (lee el DOM actual o localStorage vía captura). */
+async function flushDayNotepadsBeforeLicenseSwitch(fromLicenseId) {
+    if (fromLicenseId == null || Number.isNaN(fromLicenseId)) return;
+    const dayTexts = captureDayTextsForLicense(fromLicenseId);
+    await flushDayNotepadsForLicenseWithTexts(fromLicenseId, dayTexts);
+}
+
 
 // Cargar y mostrar todos los días con sus correos vendidos
 async function loadAllDaysSoldAccounts(licenseId) {
     const allDaysContainer = document.getElementById('licenseAllDaysContainer');
     
     if (!allDaysContainer) return;
-    
-    // Buscar la licencia en el array de licencias
+
     const license = licenses.find(l => l.id === licenseId);
-    
-    if (!license || !license.accounts) {
-        allDaysContainer.classList.add('d-none');
-        return;
-    }
-    
-    // Filtrar solo cuentas vendidas
-    const soldAccounts = license.accounts.filter(account => account.status === 'sold' && account.assigned_at);
-    
-    // Siempre mostrar el contenedor, incluso si no hay correos vendidos
-    allDaysContainer.classList.remove('d-none');
-    
-    // Obtener todas las cuentas (guardadas y vendidas) para detectar duplicados
-    const allAccounts = license && license.accounts ? license.accounts : [];
-    const duplicateEmails = findDuplicateEmails(allAccounts);
-    
-    // Organizar cuentas por día
     const accountsByDay = {};
-    soldAccounts.forEach(account => {
-        const saleDate = new Date(account.assigned_at);
-        const day = saleDate.getDate();
-        
-        if (!accountsByDay[day]) {
-            accountsByDay[day] = [];
+    let aggregateVisibleIds = null;
+
+    if (licenseId === AGGREGATE_LICENSE_ID) {
+        aggregateVisibleIds = getAggregateVisibleLicenseIdSet();
+        const accountToProduct = new Map();
+        const visibleIds = aggregateVisibleIds;
+        for (const lic of licenses) {
+            if (!lic.accounts || lic.isAggregate) continue;
+            if (!visibleIds.has(lic.id)) continue;
+            for (const account of lic.accounts) {
+                accountToProduct.set(account.id, lic.product_name || '');
+                if (account.status !== 'sold' || !account.assigned_at) continue;
+                const saleDate = new Date(account.assigned_at);
+                const d = saleDate.getDate();
+                if (!accountsByDay[d]) {
+                    accountsByDay[d] = [];
+                }
+                accountsByDay[d].push(account);
+            }
         }
-        accountsByDay[day].push(account);
-    });
+        for (let d = 1; d <= 31; d++) {
+            const arr = accountsByDay[d];
+            if (arr && arr.length) {
+                arr.sort((a, b) => {
+                    const pa = accountToProduct.get(a.id) || '';
+                    const pb = accountToProduct.get(b.id) || '';
+                    const c = pa.localeCompare(pb, 'es');
+                    if (c !== 0) return c;
+                    return normalizeAccountEmailKey(a.email).localeCompare(normalizeAccountEmailKey(b.email));
+                });
+            }
+        }
+        allDaysContainer.classList.remove('d-none');
+    } else {
+        if (!license) {
+            allDaysContainer.classList.add('d-none');
+            if (licenseId !== AGGREGATE_LICENSE_ID && typeof restorePersonalBlocState === 'function') {
+                restorePersonalBlocState(licenseId);
+            }
+            return;
+        }
+
+        const accountsArr = Array.isArray(license.accounts) ? license.accounts : [];
+        const soldAccounts = accountsArr.filter(account => account.status === 'sold' && account.assigned_at);
+        allDaysContainer.classList.remove('d-none');
+
+        soldAccounts.forEach(account => {
+            const saleDate = new Date(account.assigned_at);
+            const day = saleDate.getDate();
+
+            if (!accountsByDay[day]) {
+                accountsByDay[day] = [];
+            }
+            accountsByDay[day].push(account);
+        });
+    }
     
     // Generar HTML para todos los días del 1 al 31 (siempre mostrar todos)
     let allDaysHtml = '';
     for (let day = 1; day <= 31; day++) {
         const dayAccounts = accountsByDay[day] || [];
-        
-        const accountCount = dayAccounts.length;
-        const badgeText = accountCount > 0 ? `${accountCount} ${accountCount === 1 ? 'cuenta' : 'cuentas'}` : '';
+        const displayBase = getDayNotepadDisplayText(
+            licenseId,
+            day,
+            dayAccounts,
+            licenseId === AGGREGATE_LICENSE_ID ? aggregateVisibleIds : undefined
+        );
+        const draft = loadDayDraftLocal(licenseId, day);
+        const textForBadge =
+            draft !== null && normalizeDraftCompare(draft) !== normalizeDraftCompare(displayBase)
+                ? draft
+                : displayBase;
+        const lineCount = countNonEmptyLinesInText(textForBadge);
+        const badgeText =
+            lineCount > 0 ? `${lineCount} ${lineCount === 1 ? 'línea' : 'líneas'}` : '';
         allDaysHtml += `
-            <div class="day-section" data-day="${day}">
-                <div class="day-section-header">
-                    <div class="day-header-content">
-                        <i class="fas fa-calendar-day day-icon"></i>
-                        <span class="day-number">Día ${day}</span>
-                        ${accountCount > 0 ? `<span class="day-account-badge" title="${badgeText}">${accountCount}</span>` : ''}
+            <section class="day-section admin-licencias-bloc admin-licencias-bloc--day" data-day="${day}" aria-label="Día ${day}">
+                <div class="day-section-header admin-licencias-bloc-header">
+                    <span class="admin-licencias-bloc-title"><i class="fas fa-calendar-day" aria-hidden="true"></i> <span>Día ${day}</span></span>
+                    <div class="admin-licencias-bloc-header-actions">
+                        <div class="admin-bloc-undo-toolbar admin-bloc-undo-toolbar--in-header admin-bloc-undo-toolbar--day" role="toolbar" aria-label="Deshacer y rehacer (día ${day})">
+                            <button type="button" class="admin-bloc-undo-btn js-day-undo" data-day="${day}" title="Deshacer (Ctrl+Z)" aria-label="Deshacer"><i class="fas fa-undo" aria-hidden="true"></i></button>
+                            <button type="button" class="admin-bloc-undo-btn js-day-redo" data-day="${day}" title="Rehacer (Ctrl+Y)" aria-label="Rehacer"><i class="fas fa-redo" aria-hidden="true"></i></button>
+                        </div>
+                        ${lineCount > 0 ? `<span class="day-account-badge admin-licencias-notepad-line-badge" title="${badgeText}">${lineCount}</span>` : ''}
+                        <span class="admin-licencias-report-header-badge js-admin-day-report-badge" data-day="${day}" hidden role="status" aria-live="polite" aria-label="Sin reportes pendientes en el día ${day}">Reportes <span class="admin-licencias-report-header-badge__num">0</span></span>
                     </div>
                 </div>
                 <div class="day-accounts-list">
-        `;
-        
-        if (dayAccounts.length > 0) {
-            dayAccounts.forEach((account, index) => {
-                const isDuplicate = duplicateEmails.has(account.email.toLowerCase());
-                const duplicateClass = isDuplicate ? ' duplicate' : '';
-                allDaysHtml += `
-                    <div class="day-account-item${duplicateClass}" contenteditable="false" data-account-id="${account.id}" data-day="${day}" data-is-sold="true" data-email="${escapeHtml(account.email.toLowerCase())}">
-                        <span class="day-account-email">${escapeHtml(account.email.toLowerCase())}</span>
-                        <span class="day-account-separator"> </span>
-                        <span class="day-account-password">${escapeHtml(account.password)}</span>
-                        <button class="btn-delete-day-account" data-account-id="${account.id}" title="Eliminar">
-                            <i class="fas fa-trash"></i>
-                        </button>
+                    <div class="license-split-editor license-split-editor--day day-license-split-root day-account-item admin-licencias-license-editable license-notepad--locked" data-day="${day}" data-license-id="${licenseId}" data-license-viz="all" tabindex="-1" role="region" aria-label="Día ${day}: credenciales a la izquierda; usuario, estados verde y rojo, y notas a la derecha. Clic para editar.">
+                        <div class="license-split-editor__viewport">
+                            <div class="license-split-editor__grid">
+                                <div class="license-split-editor__creds-cell">
+                                    <textarea id="adminLicDayCreds-${licenseId}-${day}" name="admin_lic_day_creds_${licenseId}_${day}" class="admin-licencias-notepad-textarea license-split-editor__creds day-license-split__creds" rows="1" spellcheck="true" autocomplete="off" readonly data-day="${day}" title="Clic para editar" aria-label="Credenciales del día ${day}, una licencia por línea" placeholder="Correo y contraseña (una licencia por línea, Enter = nueva línea). Clic para editar."></textarea>
+                                </div>
+                                <div class="license-split-editor__side" aria-label="Usuario, estados verde y rojo, y notas (día ${day})">
+                                    <div class="license-split-editor__rows day-license-split-rows" role="region" aria-label="Filas del día ${day}: usuario, estados verde y rojo, y notas"></div>
+                                </div>
+                            </div>
+                        </div>
                     </div>
-                `;
-            });
-        }
-        
-        // Agregar un item vacío al final de cada día para poder agregar nuevos correos
-        allDaysHtml += `
-            <div class="day-account-item" contenteditable="true" data-account-id="" data-day="${day}" data-is-new="true"></div>
-        `;
-        
-        allDaysHtml += `
                 </div>
-            </div>
+            </section>
         `;
     }
     
-    allDaysContainer.innerHTML = allDaysHtml;
-    
+    var daysNotesToggleBar =
+        '<div class="license-days-notes-toggle-bar" role="toolbar" aria-label="Plegar o desplegar todos los días; mostrar u ocultar columnas en todos los días">' +
+        '<button type="button" id="adminLicenciasToggleAllDaysSectionsBtn" class="admin-licencias-toggle-notes-col-btn admin-licencias-days-expand-all-btn" title="Plegar todos los días" aria-label="Plegar todas las secciones de días" aria-expanded="true">' +
+        '<i class="fas fa-chevron-up" aria-hidden="true"></i>' +
+        '</button>' +
+        '<button type="button" id="adminLicenciasToggleDaysRestoreColBtn" class="admin-licencias-toggle-notes-col-btn" title="Ocultar flecha subir a Licencias en días" aria-label="Ocultar botón subir a Licencias en cada día" aria-pressed="false">' +
+        '<i class="fas fa-eye-slash" aria-hidden="true"></i>' +
+        '</button>' +
+        '<button type="button" id="adminLicenciasToggleDaysStatusColBtn" class="admin-licencias-toggle-notes-col-btn" title="Ocultar columnas Estado (verde y rojo) en días" aria-label="Ocultar columnas Estado verde y rojo en cada día" aria-pressed="false">' +
+        '<i class="fas fa-eye-slash" aria-hidden="true"></i>' +
+        '</button>' +
+        '<button type="button" id="adminLicenciasToggleDaysNotesColBtn" class="admin-licencias-toggle-notes-col-btn" title="Ocultar columna Notas en días" aria-label="Ocultar columna Notas en cada día" aria-pressed="false">' +
+        '<i class="fas fa-eye-slash" aria-hidden="true"></i>' +
+        '</button>' +
+        '</div>';
+
+    allDaysContainer.innerHTML = daysNotesToggleBar + allDaysHtml;
+
+    for (let d = 1; d <= 31; d++) {
+        const dayAccounts = accountsByDay[d] || [];
+        const root = allDaysContainer.querySelector(`.day-license-split-root[data-day="${d}"]`);
+        if (root) {
+            const displayBase = getDayNotepadDisplayText(
+                licenseId,
+                d,
+                dayAccounts,
+                licenseId === AGGREGATE_LICENSE_ID ? aggregateVisibleIds : undefined
+            );
+            const draft = loadDayDraftLocal(licenseId, d);
+            let textToApply = displayBase;
+            if (draft !== null && normalizeDraftCompare(draft) !== normalizeDraftCompare(displayBase)) {
+                textToApply = draft;
+            } else if (draft !== null) {
+                    clearDayDraftLocal(licenseId, d);
+                }
+            dayLicenseSplitApplyMergedText(root, textToApply);
+            dayLicenseSplitAutosizeCreds(root);
+        }
+    }
+
     // Restaurar estados de días contraídos/expandidos
     restoreDaySectionsState(licenseId);
+    try {
+        if (typeof adminDaysSyncExpandAllToolbarBtn === 'function') {
+            adminDaysSyncExpandAllToolbarBtn();
+        }
+    } catch (expandBtnErr) {
+        console.error('adminDaysSyncExpandAllToolbarBtn:', expandBtnErr);
+    }
+    if (licenseId !== AGGREGATE_LICENSE_ID) {
+    restoreSuspendedSectionState(licenseId);
+        restoreExpiredSectionState(licenseId);
+        restorePersonalBlocState(licenseId);
+    }
     
     // Agregar event listeners para contraer/expandir días
     setupDaySectionsToggle(licenseId);
+
+    try {
+        if (typeof adminDaysHideRestoreColSyncUi === 'function') {
+            adminDaysHideRestoreColSyncUi();
+        }
+    } catch (daysRestoreErr) {
+        console.error('adminDaysHideRestoreColSyncUi:', daysRestoreErr);
+    }
+
+    try {
+        if (typeof adminDaysHideStatusColSyncUi === 'function') {
+            adminDaysHideStatusColSyncUi();
+        }
+    } catch (daysStatusErr) {
+        console.error('adminDaysHideStatusColSyncUi:', daysStatusErr);
+    }
+
+    try {
+        if (typeof adminDaysHideNotesColSyncUi === 'function') {
+            adminDaysHideNotesColSyncUi();
+        }
+    } catch (daysNotesErr) {
+        console.error('adminDaysHideNotesColSyncUi:', daysNotesErr);
+    }
     
-    // Agregar event listeners a los botones de eliminar
-    allDaysContainer.querySelectorAll('.btn-delete-day-account').forEach(btn => {
-        btn.addEventListener('click', async function(e) {
-            e.stopPropagation();
-            const accountId = parseInt(this.dataset.accountId);
-            if (accountId) {
-                await deleteAccountSilently(accountId, licenseId);
-            }
-        });
-    });
-    
-    // Configurar elementos editables de los días
+    // Un bloc por día (como notas): borrar línea = borrar cuenta al guardar
     setupEditableDayAccounts(licenseId);
+    
+    refreshDuplicateEmailHighlights(licenseId);
     
     // Aplicar resaltado de búsqueda si hay un término activo
     const searchInput = document.getElementById('adminStoreSearch');
     if (searchInput && searchInput.value.trim()) {
         highlightMatchingEmails(searchInput.value.toLowerCase().trim());
     }
+
+    if (document.documentElement.dataset.adminLicDupHighlightActive === '1') {
+        refreshAdminDuplicateHighlightsIfActive();
+    }
+
+    scheduleRefreshAdminLicenciasReportCounts();
 }
 
 // Configurar el toggle de contraer/expandir para secciones de días
 function setupDaySectionsToggle(licenseId) {
-    const daySections = document.querySelectorAll('.day-section');
+    const daySections = document.querySelectorAll('#licenseAllDaysContainer .day-section');
     
     daySections.forEach(section => {
         const header = section.querySelector('.day-section-header');
@@ -1739,6 +12741,15 @@ function setupDaySectionsToggle(licenseId) {
                 if (e.target.closest('.day-account-badge')) {
                     return;
                 }
+                if (e.target.closest('.admin-licencias-report-header-badge')) {
+                    return;
+                }
+                if (e.target.closest('.admin-bloc-undo-toolbar')) {
+                    return;
+                }
+                if (e.target.closest('.admin-licencias-toggle-notes-col-btn')) {
+                    return;
+                }
                 
                 section.classList.toggle('collapsed');
                 const isCollapsed = section.classList.contains('collapsed');
@@ -1752,6 +12763,13 @@ function setupDaySectionsToggle(licenseId) {
                 // Guardar estado en localStorage
                 const key = `daySection_${licenseId}_${day}_collapsed`;
                 localStorage.setItem(key, isCollapsed ? 'true' : 'false');
+                try {
+                    if (typeof adminDaysSyncExpandAllToolbarBtn === 'function') {
+                        adminDaysSyncExpandAllToolbarBtn();
+                    }
+                } catch (e) {
+                    /* ignore */
+                }
             });
         }
     });
@@ -1759,7 +12777,7 @@ function setupDaySectionsToggle(licenseId) {
 
 // Restaurar el estado de contracción/expansión de las secciones de días
 function restoreDaySectionsState(licenseId) {
-    const daySections = document.querySelectorAll('.day-section');
+    const daySections = document.querySelectorAll('#licenseAllDaysContainer .day-section');
     
     daySections.forEach(section => {
         const day = section.dataset.day;
@@ -1777,142 +12795,436 @@ function restoreDaySectionsState(licenseId) {
     });
 }
 
-// Configurar los campos editables de cuentas vendidas (días)
-function setupEditableDayAccounts(licenseId) {
-    const dayAccountItems = document.querySelectorAll('.day-account-item');
-    
-    dayAccountItems.forEach((item) => {
-        // Hacer editable al hacer doble clic
-        if (!item.dataset.isNew) {
-            item.addEventListener('dblclick', function(e) {
-                if (e.target.closest('.btn-delete-day-account')) return;
-                
-                // Hacer editable
-                this.contenteditable = 'true';
-                this.classList.add('editing');
-                
-                // Remover el botón de eliminar mientras edita
-                const deleteBtn = this.querySelector('.btn-delete-day-account');
-                if (deleteBtn) {
-                    deleteBtn.style.display = 'none';
-                }
-                
-                // Seleccionar todo el texto
-                setTimeout(() => {
-                    const range = document.createRange();
-                    range.selectNodeContents(this);
-                    range.collapse(false);
-                    const selection = window.getSelection();
-                    selection.removeAllRanges();
-                    selection.addRange(range);
-                }, 0);
-            });
-        } else {
-            // Si es nuevo, ya es editable
-            item.contenteditable = 'true';
+/** Licencia activa en la barra de Días (misma que la tarjeta seleccionada). */
+function adminDaysToolbarActiveLicenseId() {
+    const wrap = document.getElementById('licenseAccountsInputContainer');
+    if (!wrap || wrap.dataset.activeLicenseId == null || wrap.dataset.activeLicenseId === '') {
+        return null;
+    }
+    const n = parseInt(wrap.dataset.activeLicenseId, 10);
+    return Number.isFinite(n) ? n : null;
+}
+
+/** Actualiza icono y título del botón «plegar / desplegar todos los días». */
+function adminDaysSyncExpandAllToolbarBtn() {
+    const btn = document.getElementById('adminLicenciasToggleAllDaysSectionsBtn');
+    if (!btn) return;
+    const sections = document.querySelectorAll('#licenseAllDaysContainer .day-section');
+    if (!sections.length) return;
+    let anyExpanded = false;
+    sections.forEach(function (section) {
+        if (!section.classList.contains('collapsed')) {
+            anyExpanded = true;
         }
-        
-        // Guardar automáticamente después de dejar de escribir (como Colornote)
+    });
+    const icon = btn.querySelector('i');
+    if (anyExpanded) {
+        if (icon) {
+            icon.className = 'fas fa-chevron-up';
+        }
+        btn.title = 'Plegar todos los días';
+        btn.setAttribute('aria-label', 'Plegar todas las secciones de días');
+        btn.setAttribute('aria-expanded', 'true');
+    } else {
+        if (icon) {
+            icon.className = 'fas fa-chevron-down';
+        }
+        btn.title = 'Desplegar todos los días';
+        btn.setAttribute('aria-label', 'Desplegar todas las secciones de días');
+        btn.setAttribute('aria-expanded', 'false');
+    }
+}
+
+/** Si hay algún día abierto → pliega los 31; si todos cerrados → despliega todos. */
+function adminDaysToggleAllDaySections() {
+    const licenseId = adminDaysToolbarActiveLicenseId();
+    if (licenseId == null) return;
+    const sections = document.querySelectorAll('#licenseAllDaysContainer .day-section');
+    if (!sections.length) return;
+    let anyExpanded = false;
+    sections.forEach(function (section) {
+        if (!section.classList.contains('collapsed')) {
+            anyExpanded = true;
+        }
+    });
+    const collapseAll = anyExpanded;
+    sections.forEach(function (section) {
+        const accountsList = section.querySelector('.day-accounts-list');
+        const day = section.dataset.day;
+        if (!accountsList || day == null || day === '') return;
+        if (collapseAll) {
+            section.classList.add('collapsed');
+            accountsList.style.display = 'none';
+            try {
+                localStorage.setItem('daySection_' + licenseId + '_' + day + '_collapsed', 'true');
+            } catch (e) {
+                /* ignore */
+            }
+        } else {
+            section.classList.remove('collapsed');
+            accountsList.style.display = 'block';
+            try {
+                localStorage.setItem('daySection_' + licenseId + '_' + day + '_collapsed', 'false');
+            } catch (e) {
+                /* ignore */
+            }
+        }
+    });
+    adminDaysSyncExpandAllToolbarBtn();
+}
+
+window.adminDaysSyncExpandAllToolbarBtn = adminDaysSyncExpandAllToolbarBtn;
+window.adminDaysToggleAllDaySections = adminDaysToggleAllDaySections;
+
+function suspendedSectionStorageKey(licenseId) {
+    return `suspendedSection_${licenseId}_collapsed`;
+}
+
+function expiredSectionStorageKey(licenseId) {
+    return `expiredSection_${licenseId}_collapsed`;
+}
+
+function personalBlocStorageKey(licenseId) {
+    return `personalBloc_${licenseId}_collapsed`;
+}
+
+/** Una sola vez tras render del grid: plegar Notas personales (mismo criterio que Día N: clic en cabecera, estado por producto). */
+function setupPersonalBlocCollapse() {
+    const section = document.getElementById('adminLicenciasBlocPersonal');
+    if (!section || section.dataset.personalCollapseBound === '1') return;
+    const header = section.querySelector('.admin-licencias-bloc-header');
+    const body = section.querySelector('.admin-licencias-personal-body');
+    if (!header || !body) return;
+    section.dataset.personalCollapseBound = '1';
+    header.style.cursor = 'pointer';
+    header.addEventListener('click', function (e) {
+        if (e.target.closest('.day-account-badge')) {
+            return;
+        }
+        if (e.target.closest('.admin-bloc-undo-toolbar')) {
+            return;
+        }
+        if (e.target.closest('.admin-licencias-toggle-notes-col-btn')) {
+            return;
+        }
+        const inputContainer = document.getElementById('licenseAccountsInputContainer');
+        const licenseId = inputContainer && inputContainer.dataset.activeLicenseId;
+        if (!licenseId || String(licenseId) === String(AGGREGATE_LICENSE_ID)) return;
+        section.classList.toggle('collapsed');
+        const isCollapsed = section.classList.contains('collapsed');
+        body.style.display = isCollapsed ? 'none' : 'block';
+        try {
+            localStorage.setItem(personalBlocStorageKey(licenseId), isCollapsed ? 'true' : 'false');
+        } catch (err) {}
+    });
+}
+
+function restorePersonalBlocState(licenseId) {
+    const section = document.getElementById('adminLicenciasBlocPersonal');
+    const body = section && section.querySelector('.admin-licencias-personal-body');
+    if (!section || !body) return;
+    if (licenseId == null || String(licenseId) === String(AGGREGATE_LICENSE_ID)) {
+        section.classList.remove('collapsed');
+        body.style.display = 'block';
+        return;
+    }
+    let saved = null;
+    try {
+        saved = localStorage.getItem(personalBlocStorageKey(licenseId));
+    } catch (e) {}
+    if (saved === 'true') {
+        section.classList.add('collapsed');
+        body.style.display = 'none';
+    } else {
+        section.classList.remove('collapsed');
+        body.style.display = 'block';
+    }
+}
+
+/** Una sola vez tras render del grid: cabecera tipo “Día” para plegar Caídas / suspendidas. */
+function setupSuspendedSectionCollapse() {
+    const section = document.getElementById('licenseSuspendedSection');
+    if (!section || section.dataset.collapseBound === '1') return;
+    const header = section.querySelector('.day-section-header');
+    const body = section.querySelector('.suspended-section-body');
+    if (!header || !body) return;
+    section.dataset.collapseBound = '1';
+    header.style.cursor = 'pointer';
+    header.addEventListener('click', function (e) {
+        if (e.target.closest('.day-account-badge')) {
+            return;
+        }
+        if (e.target.closest('.admin-bloc-undo-toolbar')) {
+            return;
+        }
+        if (e.target.closest('.admin-licencias-toggle-notes-col-btn')) {
+            return;
+        }
+        const inputContainer = document.getElementById('licenseAccountsInputContainer');
+        const licenseId = inputContainer && inputContainer.dataset.activeLicenseId;
+        if (!licenseId) return;
+        section.classList.toggle('collapsed');
+        const isCollapsed = section.classList.contains('collapsed');
+        body.style.display = isCollapsed ? 'none' : 'block';
+        try {
+            localStorage.setItem(suspendedSectionStorageKey(licenseId), isCollapsed ? 'true' : 'false');
+        } catch (e) {}
+    });
+}
+
+function restoreSuspendedSectionState(licenseId) {
+    const section = document.getElementById('licenseSuspendedSection');
+    const body = section && section.querySelector('.suspended-section-body');
+    if (!section || !body) return;
+    let saved = null;
+    try {
+        saved = localStorage.getItem(suspendedSectionStorageKey(licenseId));
+    } catch (e) {}
+    if (saved === 'true') {
+        section.classList.add('collapsed');
+        body.style.display = 'none';
+    } else {
+        section.classList.remove('collapsed');
+        body.style.display = 'block';
+    }
+}
+
+/** Plegar / expandir bloc Vencidas (mismo patrón que Caídas). */
+function setupExpiredSectionCollapse() {
+    const section = document.getElementById('licenseExpiredSection');
+    if (!section || section.dataset.collapseBound === '1') return;
+    const header = section.querySelector('.day-section-header');
+    const body = section.querySelector('.expired-section-body');
+    if (!header || !body) return;
+    section.dataset.collapseBound = '1';
+    header.style.cursor = 'pointer';
+    header.addEventListener('click', function (e) {
+        if (e.target.closest('.day-account-badge')) {
+            return;
+        }
+        if (e.target.closest('.admin-bloc-undo-toolbar')) {
+            return;
+        }
+        if (e.target.closest('.admin-licencias-toggle-notes-col-btn')) {
+            return;
+        }
+        const inputContainer = document.getElementById('licenseAccountsInputContainer');
+        const licenseId = inputContainer && inputContainer.dataset.activeLicenseId;
+        if (!licenseId) return;
+        section.classList.toggle('collapsed');
+        const isCollapsed = section.classList.contains('collapsed');
+        body.style.display = isCollapsed ? 'none' : 'block';
+        try {
+            localStorage.setItem(expiredSectionStorageKey(licenseId), isCollapsed ? 'true' : 'false');
+        } catch (err) {}
+    });
+}
+
+function restoreExpiredSectionState(licenseId) {
+    const section = document.getElementById('licenseExpiredSection');
+    const body = section && section.querySelector('.expired-section-body');
+    if (!section || !body) return;
+    let saved = null;
+    try {
+        saved = localStorage.getItem(expiredSectionStorageKey(licenseId));
+    } catch (e) {}
+    if (saved === 'true') {
+        section.classList.add('collapsed');
+        body.style.display = 'none';
+    } else {
+        section.classList.remove('collapsed');
+        body.style.display = 'block';
+    }
+}
+
+function isDayNotepadUnlocked(item) {
+    if (!item) return false;
+    if (item.classList && item.classList.contains('day-license-split-root')) {
+        return !item.classList.contains('license-notepad--locked');
+    }
+    return item.getAttribute('contenteditable') === 'true';
+}
+
+/** Mismo modelo que Licencias (split): textarea de creds + filas; clic para desbloquear. */
+function setupEditableDayAccounts(licenseId) {
+    document.querySelectorAll('.day-license-split-root').forEach((root) => {
+        const ta = dayLicenseSplitQueryCredsTa(root);
+        const rowsWrap = dayLicenseSplitQueryRowsWrap(root);
+        if (!ta || !rowsWrap) return;
+
+        const day = parseInt(root.dataset.day, 10) || new Date().getDate();
+        dayLicenseSplitWireScrollSync(root);
+
         let saveTimeout;
+        let normalizeInputTimeout;
         let isSaving = false;
-        let lastSavedText = '';
-        const day = parseInt(item.dataset.day) || new Date().getDate();
-        
-        // Función para guardar
-        const saveItem = async function() {
-            const text = this.innerText || this.textContent || '';
-            
-            // Evitar guardar si no hay cambios o si ya se está guardando
-            if (text.trim() === lastSavedText || isSaving) {
+        let lastSyncedText = dayLicenseSplitGetMergedText(root).trim();
+
+        const sectionEl = root.closest('.day-section');
+        const undoBtn = sectionEl ? sectionEl.querySelector(`.js-day-undo[data-day="${day}"]`) : null;
+        const redoBtn = sectionEl ? sectionEl.querySelector(`.js-day-redo[data-day="${day}"]`) : null;
+
+        dayLicenseSplitLock(root);
+
+        saveDayDraftLocal(licenseId, day, dayLicenseSplitGetMergedText(root));
+
+        const runSync = async function () {
+            if (!root.isConnected || isSaving) return;
+            const text = dayLicenseSplitGetMergedText(root);
+            const t = text.trim();
+            if (t === lastSyncedText) return;
+            isSaving = true;
+            try {
+                await syncDayNotepad(licenseId, day, text);
+                lastSyncedText = t;
+            } catch (err) {
+                console.error('Error al sincronizar día:', err);
+            } finally {
+                isSaving = false;
+            }
+        };
+
+        if (window.AdminLicenciasUndoCore && typeof window.AdminLicenciasUndoCore.attach === 'function') {
+            window.AdminLicenciasUndoCore.attach(root, {
+                listenElement: root,
+                useFocusOutDelegate: true,
+                getPlainText: function () {
+                    return dayLicenseSplitGetMergedText(root);
+                },
+                setPlainText: function (text) {
+                    dayLicenseSplitApplyMergedText(root, text != null ? text : '');
+                    lastSyncedText = dayLicenseSplitGetMergedText(root).trim();
+                },
+                undoBtn: undoBtn,
+                redoBtn: redoBtn,
+                onPersist: function () {
+                    const text = dayLicenseSplitGetMergedText(root);
+                    saveDayDraftLocal(licenseId, day, text);
+                    lastSyncedText = text.trim();
+                    clearTimeout(saveTimeout);
+                    syncDayNotepad(licenseId, day, text).catch(function (err) {
+                        console.error('Error al sincronizar día (undo/redo):', err);
+                    });
+                },
+                afterVisual: function () {
+                    if (licenseId != null && typeof window.refreshDuplicateEmailHighlights === 'function') {
+                        window.refreshDuplicateEmailHighlights(licenseId);
+                    }
+                    dayLicenseSplitScheduleAutosize(root);
+                }
+            });
+        }
+
+        if (typeof ResizeObserver !== 'undefined' && rowsWrap.dataset.dayResizeObs !== '1') {
+            rowsWrap.dataset.dayResizeObs = '1';
+            const ro = new ResizeObserver(function () {
+                dayLicenseSplitAutosizeCreds(root);
+            });
+            ro.observe(rowsWrap);
+        }
+
+        root.addEventListener(
+            'mousedown',
+            function (e) {
+                if (!root.classList.contains('license-notepad--locked')) return;
+                if (e.target.closest && e.target.closest('.license-split-editor__user-suggestions')) return;
+                const inCreds =
+                    e.target === ta || (e.target.closest && e.target.closest('.license-split-editor__creds-cell'));
+                const inSide = e.target.closest && e.target.closest('.license-split-editor__side');
+                if (!inCreds && !inSide) return;
+                e.preventDefault();
+                dayLicenseSplitUnlock(root);
+                if (e.target.closest && e.target.closest('.license-split-editor__restore-to-license-btn')) {
                 return;
             }
-            
-            if (text.trim()) {
-                isSaving = true;
-                const accountId = this.dataset.accountId;
-                const isNew = this.dataset.isNew === 'true';
-                const currentDay = parseInt(this.dataset.day) || day;
-                
-                try {
-                    if (isNew || !accountId) {
-                        // Es un nuevo correo, guardarlo masivamente
-                        await saveBulkAccountsForDay(licenseId, text, currentDay);
-                    } else {
-                        // Es un correo existente editado, actualizarlo o crear múltiples
-                        await updateOrCreateMultipleAccounts(licenseId, parseInt(accountId), text, currentDay);
-                    }
-                    lastSavedText = text.trim();
-                } catch (error) {
-                    console.error('Error al guardar:', error);
-                } finally {
-                    isSaving = false;
+                let cell =
+                    e.target.closest &&
+                    e.target.closest(
+                        '.license-split-editor__user, .license-split-editor__status-good, .license-split-editor__status-bad, .license-split-editor__otro-combined, .license-split-editor__note'
+                    );
+                if (!cell && e.target.closest) {
+                    const uw = e.target.closest('.license-split-editor__user-wrap');
+                    if (uw) cell = uw.querySelector('.license-split-editor__user');
                 }
-            }
-        };
-        
-        const handleInput = function() {
+                if (!cell && e.target.closest) {
+                    const row = e.target.closest('.license-split-editor__row');
+                    if (row) cell = row.querySelector('.license-split-editor__user');
+                }
+                if (inSide && cell) {
+                e.preventDefault();
+                    cell.focus();
+                } else if (inSide) {
+                    e.preventDefault();
+                    ta.focus();
+                } else if (inCreds) {
+                    e.preventDefault();
+                    ta.focus();
+                }
+            },
+            true
+        );
+
+        ta.addEventListener(
+            'beforeinput',
+            function (e) {
+                if (ta.readOnly) {
+            e.preventDefault();
+                }
+            },
+            true
+        );
+        ta.addEventListener(
+            'paste',
+            function (e) {
+                if (ta.readOnly) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                }
+            },
+            true
+        );
+
+        function onFieldInput() {
             clearTimeout(saveTimeout);
-            
-            // Resaltar emails y passwords en tiempo real
-            highlightEmailsAndPasswords(this);
-            
-            // Guardar automáticamente después de 500ms de inactividad (más rápido, como Colornote)
-            saveTimeout = setTimeout(() => {
-                saveItem.call(this);
+            saveDayDraftLocal(licenseId, day, dayLicenseSplitGetMergedText(root));
+            saveTimeout = setTimeout(function () {
+                if (!root.isConnected) return;
+                runSync();
             }, 500);
-        };
-        
-        item.addEventListener('input', handleInput);
-        
-        // Guardar al presionar Ctrl+Enter
-        item.addEventListener('keydown', function(e) {
+            if (typeof window.scheduleRefreshAdminDupIfActive === 'function') {
+                window.scheduleRefreshAdminDupIfActive();
+            }
+        }
+
+        ta.addEventListener('input', function () {
+            dayLicenseSplitSyncRowsToTextarea(root);
+            onFieldInput();
+        });
+        rowsWrap.addEventListener('input', onFieldInput);
+        rowsWrap.addEventListener('change', onFieldInput);
+
+        ta.addEventListener('keydown', function (e) {
             if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
                 e.preventDefault();
-                clearTimeout(saveTimeout);
-                saveItem.call(this);
-            }
-            
-            // Salir del modo edición con Escape
-            if (e.key === 'Escape') {
-                this.contenteditable = 'false';
-                this.classList.remove('editing');
-                const deleteBtn = this.querySelector('.btn-delete-day-account');
-                if (deleteBtn) {
-                    deleteBtn.style.display = '';
-                }
-                // Recargar para restaurar el estado original
-                loadAllDaysSoldAccounts(licenseId);
-            }
-        });
-        
-        // Guardar inmediatamente al perder el foco (blur) y manejar salida del modo edición
-        item.addEventListener('blur', function() {
             clearTimeout(saveTimeout);
-            saveItem.call(this);
-            
-            if (!this.dataset.isNew && this.classList.contains('editing')) {
-                this.contenteditable = 'false';
-                this.classList.remove('editing');
-                const deleteBtn = this.querySelector('.btn-delete-day-account');
-                if (deleteBtn) {
-                    deleteBtn.style.display = '';
-                }
-            }
-            
-            // Manejar placeholder para items nuevos (vacío)
-            if (this.dataset.isNew === 'true') {
-                if (this.textContent.trim() === '') {
-                    this.classList.add('empty');
-                } else {
-                    this.classList.remove('empty');
-                }
+                runSync();
             }
         });
-        
-        // Inicializar el texto guardado
-        if (item.dataset.isNew !== 'true') {
-            lastSavedText = (item.innerText || item.textContent || '').trim();
-        }
+
+        root.addEventListener('focusout', function () {
+            window.setTimeout(function () {
+                const a = document.activeElement;
+                if (a && root.contains(a)) return;
+                clearTimeout(saveTimeout);
+                saveDayDraftLocal(licenseId, day, dayLicenseSplitGetMergedText(root));
+            runSync();
+                dayLicenseSplitLock(root);
+            flushPendingLoadAllDaysSoldAccounts();
+                if (typeof window.scheduleRefreshAdminDupIfActive === 'function') {
+                    window.scheduleRefreshAdminDupIfActive();
+                }
+            }, 0);
+        });
     });
 }
 
@@ -1927,8 +13239,6 @@ function setupSoldAccountsInput(licenseId, day) {
     let saveTimeout;
     
     soldInput.addEventListener('input', function() {
-        highlightEmailsAndPasswords(this);
-        
         // Guardar automáticamente después de 2 segundos sin escribir
         clearTimeout(saveTimeout);
         const text = this.innerText || this.textContent || '';
@@ -1989,7 +13299,7 @@ async function saveSoldAccounts(licenseId, text, day) {
         return;
     }
     
-    const accounts = parseAccountsText(text);
+    const accounts = parseAccountsText(text, licenseId);
     
     if (accounts.length === 0) {
         return;
@@ -2049,31 +13359,48 @@ async function saveSoldAccounts(licenseId, text, day) {
     loadAllDaysSoldAccounts(licenseId);
 }
 
-// Eliminar cuenta sin mostrar mensajes
-async function deleteAccountSilently(accountId, licenseId) {
+/** ¿Coincide el término (minúsculas) con producto, notas, caídas, cuentas o borradores locales? */
+function licenseMatchesSearchTerm(license, searchTerm) {
+    if (!searchTerm) return true;
+    const t = searchTerm.toLowerCase();
+    const inc = (s) => (s == null ? '' : String(s)).toLowerCase().includes(t);
+
+    if (inc(license.product_name)) return true;
+    if (inc(license.personal_notes)) return true;
+    if (inc(license.license_notes)) return true;
+    if (inc(license.suspended_notes)) return true;
+    if (inc(license.expired_notes)) return true;
+    if (inc(license.changes_notes)) return true;
+
     try {
-        const response = await fetch(`/tienda/api/accounts/${accountId}`, {
-            method: 'DELETE',
-            headers: {
-                'X-CSRFToken': getCSRFToken()
-            }
-        });
-        
-        const data = await response.json();
-        
-        if (data.success) {
-            // Recargar licencias y actualizar las listas
-            await loadLicenses();
-            loadAndDisplaySavedAccounts(licenseId);
-            loadAllDaysSoldAccounts(licenseId);
+        const id = license.id;
+        const pk = 'admin_licencias_bloc_personal_' + id + '_v1';
+        const lk = 'admin_licencias_bloc_license_' + id + '_v1';
+        const sk = 'admin_licencias_bloc_suspended_' + id + '_v1';
+        const ek = 'admin_licencias_bloc_expired_' + id + '_v1';
+        const ck = 'admin_licencias_bloc_changes_' + id + '_v1';
+        if (inc(localStorage.getItem(pk))) return true;
+        if (inc(localStorage.getItem(lk))) return true;
+        if (inc(localStorage.getItem(sk))) return true;
+        if (inc(localStorage.getItem(ek))) return true;
+        if (inc(localStorage.getItem(ck))) return true;
+        for (let d = 1; d <= 31; d++) {
+            if (inc(localStorage.getItem('admin_licencias_day_draft_' + id + '_' + d + '_v1'))) return true;
         }
-    } catch (error) {
-        console.error('Error:', error);
+    } catch (e) {}
+
+    if (license.accounts && license.accounts.length) {
+        for (let i = 0; i < license.accounts.length; i++) {
+            const acc = license.accounts[i];
+            if (inc(acc.email)) return true;
+            if (inc(acc.password)) return true;
+            if (inc(acc.account_identifier)) return true;
+        }
     }
+    return false;
 }
 
-
-// Filtrar licencias basado en correos
+// Filtrar licencias (producto, notas, licencias, caídas, días/cuentas; sin distinguir mayúsculas)
 function filterLicenses() {
     const searchInput = document.getElementById('adminStoreSearch');
     if (!searchInput) return;
@@ -2083,7 +13410,13 @@ function filterLicenses() {
     
     // Si no hay término de búsqueda, mostrar todo y quitar resaltado
     if (!searchTerm) {
-    cards.forEach(card => {
+        cards.forEach(card => {
+            if (
+                card.classList.contains('license-card--panel-toggle')
+            ) {
+                card.classList.remove('hidden-by-search');
+                return;
+            }
             card.classList.remove('hidden-by-search');
         });
         const inputContainer = document.getElementById('licenseAccountsInputContainer');
@@ -2091,6 +13424,12 @@ function filterLicenses() {
             inputContainer.classList.remove('search-active');
         }
         removeEmailHighlights();
+        const ic2 = document.getElementById('licenseAccountsInputContainer');
+        const aid2 =
+            ic2 && ic2.dataset.activeLicenseId != null ? parseInt(ic2.dataset.activeLicenseId, 10) : NaN;
+        if (aid2 === AGGREGATE_LICENSE_ID) {
+            scheduleLoadAllDaysSoldAccounts(AGGREGATE_LICENSE_ID);
+        }
         return;
     }
     
@@ -2100,82 +13439,173 @@ function filterLicenses() {
         inputContainer.classList.add('search-active');
     }
     
-    // Buscar en correos de cada licencia
     cards.forEach(card => {
-        const licenseId = parseInt(card.dataset.licenseId);
+        if (
+            card.classList.contains('license-card--panel-toggle')
+        ) {
+            card.classList.remove('hidden-by-search');
+            return;
+        }
+        const licenseId = parseInt(card.dataset.licenseId, 10);
         const license = licenses.find(l => l.id === licenseId);
-        
-        if (!license || !license.accounts) {
+        if (!license) {
             card.classList.add('hidden-by-search');
             return;
         }
-        
-        // Buscar si algún correo coincide con el término de búsqueda
-        let hasMatchingEmail = false;
-        license.accounts.forEach(account => {
-            if (account.email && account.email.toLowerCase().includes(searchTerm)) {
-                hasMatchingEmail = true;
-            }
-        });
-        
-        // Mostrar u ocultar la tarjeta según si tiene correos que coincidan
-        if (hasMatchingEmail) {
+        if (licenseMatchesSearchTerm(license, searchTerm)) {
             card.classList.remove('hidden-by-search');
         } else {
             card.classList.add('hidden-by-search');
         }
     });
     
-    // Resaltar correos que coincidan
     highlightMatchingEmails(searchTerm);
+
+    clearTimeout(window.__aggregateDaysFilterDebounce);
+    window.__aggregateDaysFilterDebounce = setTimeout(function () {
+        const ic = document.getElementById('licenseAccountsInputContainer');
+        const aid = ic && ic.dataset.activeLicenseId != null ? parseInt(ic.dataset.activeLicenseId, 10) : NaN;
+        if (aid === AGGREGATE_LICENSE_ID) {
+            scheduleLoadAllDaysSoldAccounts(AGGREGATE_LICENSE_ID);
+        }
+    }, 200);
 }
 
-// Resaltar correos que coincidan con el término de búsqueda
 function highlightMatchingEmails(searchTerm) {
     if (!searchTerm || searchTerm.length < 1) {
         removeEmailHighlights();
         return;
     }
-    
-    // Resaltar en cuentas guardadas
-    document.querySelectorAll('.saved-account-item').forEach(item => {
-        const emailSpan = item.querySelector('.saved-account-email');
-        if (emailSpan) {
-            const email = emailSpan.textContent.toLowerCase();
-            if (email.includes(searchTerm)) {
-                item.classList.add('search-match');
-                emailSpan.classList.add('search-highlight');
-            } else {
-                item.classList.remove('search-match');
-                emailSpan.classList.remove('search-highlight');
+
+    document.querySelectorAll('.day-account-item').forEach(item => {
+        const fullText = (
+            item.classList.contains('day-license-split-root') && typeof dayLicenseSplitGetMergedText === 'function'
+                ? dayLicenseSplitGetMergedText(item) || ''
+                : item.textContent || ''
+        ).toLowerCase();
+        const matches = fullText.includes(searchTerm);
+        const emailSpan = item.querySelector('.day-account-email');
+        const passwordSpan = item.querySelector('.day-account-password');
+
+        if (matches) {
+            item.classList.add('search-match');
+            if (emailSpan) {
+                if (emailSpan.textContent.toLowerCase().includes(searchTerm)) {
+                    emailSpan.classList.add('search-highlight');
+                } else {
+                    emailSpan.classList.remove('search-highlight');
+                }
             }
+            if (passwordSpan) {
+                if (passwordSpan.textContent.toLowerCase().includes(searchTerm)) {
+                    passwordSpan.classList.add('search-highlight');
+                } else {
+                    passwordSpan.classList.remove('search-highlight');
+                }
+            }
+        } else {
+            item.classList.remove('search-match');
+            if (emailSpan) emailSpan.classList.remove('search-highlight');
+            if (passwordSpan) passwordSpan.classList.remove('search-highlight');
         }
     });
-    
-    // Resaltar en cuentas de días
-    document.querySelectorAll('.day-account-item').forEach(item => {
-        const emailSpan = item.querySelector('.day-account-email');
-        if (emailSpan) {
-            const email = emailSpan.textContent.toLowerCase();
-            if (email.includes(searchTerm)) {
-                item.classList.add('search-match');
-                emailSpan.classList.add('search-highlight');
-            } else {
-                item.classList.remove('search-match');
-                emailSpan.classList.remove('search-highlight');
+
+    const personalTa = document.getElementById('adminLicenciasNotepadPersonal');
+    if (personalTa) {
+        if ((personalTa.value || '').toLowerCase().includes(searchTerm)) {
+            personalTa.classList.add('search-match');
+        } else {
+            personalTa.classList.remove('search-match');
+        }
+    }
+
+    function applyNotepadBlock(el) {
+        if (!el) return;
+        const plain = (
+            el.tagName === 'TEXTAREA' ? el.value || '' : el.textContent || ''
+        ).toLowerCase();
+        if (plain.includes(searchTerm)) {
+            el.classList.add('search-match');
+            if (el.tagName !== 'TEXTAREA') {
+            el.querySelectorAll('.day-account-email, .saved-account-email').forEach(span => {
+                if (span.textContent.toLowerCase().includes(searchTerm)) {
+                    span.classList.add('search-highlight');
+                } else {
+                    span.classList.remove('search-highlight');
+                }
+            });
+            el.querySelectorAll('.day-account-password, .saved-account-password').forEach(span => {
+                if (span.textContent.toLowerCase().includes(searchTerm)) {
+                    span.classList.add('search-highlight');
+                } else {
+                    span.classList.remove('search-highlight');
+                }
+            });
             }
+        } else {
+            el.classList.remove('search-match');
+            el.querySelectorAll('.search-highlight').forEach(n => n.classList.remove('search-highlight'));
+        }
+    }
+
+    const licSplitRoot = document.getElementById('adminLicenciasLicenseSplitRoot');
+    const licTa = document.getElementById('adminLicenciasNotepadByLicense');
+    if (licSplitRoot && licTa && typeof window.adminLicenseSplitGetMergedNotes === 'function') {
+        const merged = (window.adminLicenseSplitGetMergedNotes() || '').toLowerCase();
+        if (merged.includes(searchTerm)) {
+            licSplitRoot.classList.add('search-match');
+        } else {
+            licSplitRoot.classList.remove('search-match');
+        }
+    } else {
+        applyNotepadBlock(licTa);
+    }
+    const suspSplitRoot = document.getElementById('adminLicenciasSuspendedSplitRoot');
+    const suspTa = document.getElementById('adminLicenciasSuspendedNotepad');
+    if (suspSplitRoot && suspTa && typeof window.suspendedLicenseSplitGetMergedText === 'function') {
+        const suspMerged = (window.suspendedLicenseSplitGetMergedText(suspSplitRoot) || '').toLowerCase();
+        if (suspMerged.includes(searchTerm)) {
+            suspSplitRoot.classList.add('search-match');
+        } else {
+            suspSplitRoot.classList.remove('search-match');
+        }
+    } else {
+        applyNotepadBlock(suspTa);
+    }
+
+    document.querySelectorAll('.license-aggregate-product-text').forEach(function (pre) {
+        const plain = (pre.textContent || '').toLowerCase();
+        if (plain.includes(searchTerm)) {
+            pre.classList.add('search-match');
+        } else {
+            pre.classList.remove('search-match');
         }
     });
 }
 
-// Remover resaltado de correos
 function removeEmailHighlights() {
-    document.querySelectorAll('.saved-account-item, .day-account-item').forEach(item => {
+    document.querySelectorAll('.day-account-item').forEach(item => {
         item.classList.remove('search-match');
-        const emailSpan = item.querySelector('.saved-account-email, .day-account-email');
-        if (emailSpan) {
-            emailSpan.classList.remove('search-highlight');
+        const emailSpan = item.querySelector('.day-account-email');
+        if (emailSpan) emailSpan.classList.remove('search-highlight');
+        const passwordSpan = item.querySelector('.day-account-password');
+        if (passwordSpan) passwordSpan.classList.remove('search-highlight');
+    });
+    const personalTa = document.getElementById('adminLicenciasNotepadPersonal');
+    if (personalTa) personalTa.classList.remove('search-match');
+    const licSplitRoot = document.getElementById('adminLicenciasLicenseSplitRoot');
+    if (licSplitRoot) licSplitRoot.classList.remove('search-match');
+    const suspSplitRootRm = document.getElementById('adminLicenciasSuspendedSplitRoot');
+    if (suspSplitRootRm) suspSplitRootRm.classList.remove('search-match');
+    ['adminLicenciasNotepadByLicense', 'adminLicenciasSuspendedNotepad'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) {
+            el.classList.remove('search-match');
+            el.querySelectorAll('.search-highlight').forEach(n => n.classList.remove('search-highlight'));
         }
+    });
+    document.querySelectorAll('.license-aggregate-product-text').forEach(function (pre) {
+        pre.classList.remove('search-match');
     });
 }
 
@@ -2676,28 +14106,68 @@ document.addEventListener('DOMContentLoaded', function() {
             window.location.href = '/tienda/admin/archivados';
         });
     }
+
+    const btnRestaurarDesdeArchivo = document.getElementById('btnRestaurarDesdeArchivo');
+    if (btnRestaurarDesdeArchivo) {
+        btnRestaurarDesdeArchivo.addEventListener('click', function () {
+            void showRestaurarArchivadosModal();
+        });
+    }
 });
+
+/** Días de garantía (gar.) para UI; por defecto 5 si el servidor no envía valor. */
+function licenseWarrantyDaysUi(license) {
+    if (!license) return 5;
+    const v = license.warranty_days;
+    const n = v != null && v !== '' ? Number(v) : 5;
+    return Number.isFinite(n) && n >= 0 ? n : 5;
+}
+
+/** Checkbox «mes a mes» en Gestionar productos; el backend puede enviar month_to_month más adelante. */
+function licenseMonthToMonthUiChecked(license) {
+    if (!license || license.month_to_month == null) return false;
+    const v = license.month_to_month;
+    if (v === true || v === 1) return true;
+    if (typeof v === 'string') {
+        const s = v.trim().toLowerCase();
+        return s === '1' || s === 'true' || s === 'yes';
+    }
+    return false;
+}
 
 // Mostrar modal de gestionar productos
 function showGestionarProductosModal() {
-    // Filtrar solo licencias activas
-    const activeLicenses = licenses.filter(license => license.enabled);
+    // Filtrar solo licencias activas y excluir la pseudo-licencia "Todos"
+    const activeLicenses = licenses.filter(license => {
+        if (license.isAggregate || license.id === 0 || license.product_name === 'Todos') return false;
+        return window.IS_ARCHIVED_MODE ? true : license.enabled;
+    });
     
     if (activeLicenses.length === 0) {
-        showError('No hay productos para gestionar');
+        showError(window.IS_ARCHIVED_MODE ? 'No hay productos archivados para gestionar' : 'No hay productos para gestionar');
         return;
     }
     
     // Ordenar por posición
     const sortedLicenses = [...activeLicenses].sort((a, b) => a.position - b.position);
     
+    const title = window.IS_ARCHIVED_MODE ? 'Gestionar Productos Archivados' : 'Gestionar Productos';
+    const actionBtn = window.IS_ARCHIVED_MODE 
+        ? `<button type="button" class="gestion-productos-btn" data-action="restore-product-from-modal" data-license-id="\${license.id}" title="Desarchivar producto">
+               <i class="fas fa-undo"></i> Restaurar
+           </button>`
+        : `<button type="button" class="gestion-productos-btn-archive" data-action="archive-product-from-modal" data-license-id="\${license.id}" title="Archivar producto">
+               <i class="fas fa-archive"></i>
+           </button>`;
+    
     // Crear HTML del modal
     const modalHtml = `
         <div class="modal-overlay" id="gestionarProductosModal">
-            <div class="modal gestion-productos-modal-inner">
+            <div class="gestion-productos-modal-inner" role="dialog" aria-modal="true" aria-labelledby="gestionProductosTitulo">
                 <div class="gestion-productos-modal-content">
                     <div class="gestion-productos-modal-header">
-                        <h3><i class="fas fa-list"></i> Gestionar Productos</h3>
+                        <h3 id="gestionProductosTitulo"><i class="fas fa-list"></i> ${title}</h3>
+                        <button type="button" class="gestion-productos-modal-close" aria-label="Cerrar">&times;</button>
                     </div>
                     <div class="gestion-productos-list" id="productosList">
                         ${sortedLicenses.map((license) => `
@@ -2706,12 +14176,17 @@ function showGestionarProductosModal() {
                                     <strong>${license.product_name}</strong>
                                 </div>
                                 <div class="gestion-productos-item-actions">
-                                    <button class="btn btn-sm gestion-productos-btn" data-action="change-product-position" data-license-id="${license.id}">
-                                        C. P. <span class="gestion-productos-position-span">${license.position}</span>
+                                    <label class="gestion-productos-mes-a-mes" title="Renovación mes a mes: si lo activas, se oculta el bloc Vencidas en la cuadrícula. Lo que ya guardaste en Vencidas no se borra; al desmarcar, vuelve a verse. Solo se elimina si tú borras el contenido en ese bloc.">
+                                        <span class="gestion-productos-mes-icon" aria-hidden="true"><i class="fas fa-calendar-alt"></i></span>
+                                        <input type="checkbox" class="gestion-productos-mes-checkbox" data-license-id="${license.id}" aria-label="Mes a mes: oculta Vencidas sin borrar lo guardado; desmarcar lo vuelve a mostrar" ${licenseMonthToMonthUiChecked(license) ? 'checked' : ''} />
+                                    </label>
+                                    <button type="button" class="gestion-productos-btn" data-action="change-product-position" data-license-id="${license.id}" title="Cambiar posición">
+                                        Pos. <span class="gestion-productos-position-span">${license.position}</span>
                                     </button>
-                                    <button class="btn btn-sm btn-danger gestion-productos-btn-archive" data-action="archive-product-from-modal" data-license-id="${license.id}" title="Archivar">
-                                        <i class="fas fa-archive"></i>
+                                    <button type="button" class="gestion-productos-btn" data-action="change-product-warranty" data-license-id="${license.id}" title="Cambiar días de garantía (gar.)">
+                                        gar. <span class="gestion-productos-position-span">${licenseWarrantyDaysUi(license)}</span>
                                     </button>
+                                    ${actionBtn.replace(/\$\{license\.id\}/g, license.id)}
                                 </div>
                             </div>
                         `).join('')}
@@ -2724,13 +14199,66 @@ function showGestionarProductosModal() {
     // Insertar modal en el DOM
     document.body.insertAdjacentHTML('beforeend', modalHtml);
     
-    // Agregar funcionalidad para cerrar al hacer clic fuera del modal
     const modalOverlay = document.getElementById('gestionarProductosModal');
     modalOverlay.addEventListener('click', function(e) {
         if (e.target === modalOverlay) {
             closeGestionarProductosModal();
         }
     });
+    const btnClose = modalOverlay.querySelector('.gestion-productos-modal-close');
+    if (btnClose) {
+        btnClose.addEventListener('click', function (e) {
+            e.stopPropagation();
+            closeGestionarProductosModal();
+        });
+    }
+
+    const productosList = document.getElementById('productosList');
+    if (productosList) {
+        productosList.addEventListener('change', function (e) {
+            const t = e.target;
+            if (!t || !t.classList || !t.classList.contains('gestion-productos-mes-checkbox')) return;
+            const id = parseInt(t.getAttribute('data-license-id'), 10);
+            if (!Number.isFinite(id)) return;
+            const checked = !!t.checked;
+            fetch('/tienda/api/licenses/' + id + '/notes', {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': typeof getCSRFToken === 'function' ? getCSRFToken() : ''
+                },
+                body: JSON.stringify({ month_to_month: checked })
+            })
+                .then(function (r) {
+                    return r.json();
+                })
+                .then(function (data) {
+                    if (!data.success) {
+                        t.checked = !checked;
+                        showError(data && data.error ? String(data.error) : 'No se pudo guardar mes a mes.');
+                        return;
+                    }
+                    const L = licenses.find(function (l) {
+                        return l.id === id;
+                    });
+                    if (L) L.month_to_month = checked;
+                    const inputContainer = document.getElementById('licenseAccountsInputContainer');
+                    const activeRaw =
+                        inputContainer && inputContainer.dataset.activeLicenseId != null
+                            ? inputContainer.dataset.activeLicenseId
+                            : '';
+                    const active = parseInt(activeRaw, 10);
+                    if (Number.isFinite(active) && active === id) {
+                        refreshExpiredNotepadWrapVisibilityForLicense(id);
+                        refreshChangesNotepadWrapVisibilityForLicense(id);
+                    }
+                })
+                .catch(function () {
+                    t.checked = !checked;
+                    showError('No se pudo guardar mes a mes.');
+                });
+        });
+    }
 }
 
 // Cerrar modal de gestionar productos
@@ -2739,6 +14267,91 @@ function closeGestionarProductosModal() {
     if (modal) {
         modal.remove();
     }
+}
+
+/** Modal en plantilla Archivados: lista servicios archivados y restaurarlos en Licencias. Mismo estilo que Gestionar productos. */
+async function showRestaurarArchivadosModal() {
+    if (!window.IS_ARCHIVED_MODE) return;
+    try {
+        await loadLicenses({ skipGridRender: true });
+    } catch (e) {
+        console.warn('No se pudo refrescar licencias antes del modal de archivados:', e);
+    }
+
+    const archivedLicenses = licenses
+        .filter(function (license) {
+            return (
+                license &&
+                !license.isAggregate &&
+                license.id &&
+                license.enabled === false
+            );
+        })
+        .sort(function (a, b) {
+            return (a.position || 0) - (b.position || 0);
+        });
+
+    closeRestaurarArchivadosModal();
+
+    const listInner =
+        archivedLicenses.length === 0
+            ? '<p class="gestion-productos-list-empty" id="restaurarArchivadosVacio">No hay productos archivados.</p>'
+            : archivedLicenses
+                  .map(function (license) {
+                      const name = escapeHtml(license.product_name || 'Producto');
+                      return `
+                            <div class="producto-item gestion-productos-item" data-license-id="${license.id}">
+                                <div class="gestion-productos-item-name">
+                                    <strong>${name}</strong>
+                                </div>
+                                <div class="gestion-productos-item-actions">
+                                    <span class="gestion-productos-position-readonly" title="Posición guardada">Pos. <span class="gestion-productos-position-span">${license.position}</span></span>
+                                    <span class="gestion-productos-position-readonly" title="Garantía (días)">gar. <span class="gestion-productos-position-span">${licenseWarrantyDaysUi(license)}</span></span>
+                                    <button type="button" class="gestion-productos-btn" data-action="restore-product-from-modal" data-license-id="${license.id}" title="Volver a poner en Licencias">
+                                        <i class="fas fa-undo"></i> Restaurar
+                                    </button>
+                                </div>
+                            </div>`;
+                  })
+                  .join('');
+
+    const modalHtml = `
+        <div class="modal-overlay" id="restaurarArchivadosModal">
+            <div class="gestion-productos-modal-inner" role="dialog" aria-modal="true" aria-labelledby="restaurarArchivadosTitulo">
+                <div class="gestion-productos-modal-content">
+                    <div class="gestion-productos-modal-header">
+                        <h3 id="restaurarArchivadosTitulo"><i class="fas fa-folder-open" aria-hidden="true"></i> Restaurar a Licencias</h3>
+                        <button type="button" class="gestion-productos-modal-close" aria-label="Cerrar">&times;</button>
+                    </div>
+                    <div class="gestion-productos-list" id="restaurarArchivadosList">
+                        ${listInner}
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+
+    document.body.insertAdjacentHTML('beforeend', modalHtml);
+
+    const modalOverlay = document.getElementById('restaurarArchivadosModal');
+    if (!modalOverlay) return;
+    modalOverlay.addEventListener('click', function (e) {
+        if (e.target === modalOverlay) {
+            closeRestaurarArchivadosModal();
+        }
+    });
+    const btnClose = modalOverlay.querySelector('.gestion-productos-modal-close');
+    if (btnClose) {
+        btnClose.addEventListener('click', function (e) {
+            e.stopPropagation();
+            closeRestaurarArchivadosModal();
+        });
+    }
+}
+
+function closeRestaurarArchivadosModal() {
+    const modal = document.getElementById('restaurarArchivadosModal');
+    if (modal) modal.remove();
 }
 
 // Cambiar posición de producto desde el modal
@@ -2759,7 +14372,7 @@ async function changeProductPosition(licenseId) {
     const currentPosition = license.position;
     
     // Obtener todas las licencias activas ordenadas por posición
-    const activeLicenses = licenses.filter(l => l.enabled);
+    const activeLicenses = window.IS_ARCHIVED_MODE ? licenses : licenses.filter(l => l.enabled);
     const sortedLicenses = [...activeLicenses].sort((a, b) => a.position - b.position);
     
     // Calcular las nuevas posiciones para todos los productos
@@ -2820,6 +14433,50 @@ async function changeProductPosition(licenseId) {
     }
 }
 
+// Cambiar días de garantía (gar.) desde el modal Gestionar productos
+async function changeProductWarranty(licenseId) {
+    const license = licenses.find(l => l.id === licenseId);
+    if (!license) {
+        showError('Producto no encontrado');
+        return;
+    }
+    const current = licenseWarrantyDaysUi(license);
+    const raw = prompt('Días de garantía (gar.):', String(current));
+    if (raw === null || String(raw).trim() === '') {
+        return;
+    }
+    const n = parseInt(String(raw).trim(), 10);
+    if (Number.isNaN(n) || n < 0 || n > 3650) {
+        showError('Introduce un número entre 0 y 3650');
+        return;
+    }
+    try {
+        const response = await fetch(`/tienda/api/licenses/${licenseId}/warranty`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCSRFToken()
+            },
+            body: JSON.stringify({ warranty_days: n })
+        });
+        const data = await response.json().catch(function () {
+            return {};
+        });
+        if (response.ok && data.success) {
+            license.warranty_days = n;
+            showSuccess('Garantía actualizada');
+            await loadLicenses();
+            closeGestionarProductosModal();
+            showGestionarProductosModal();
+        } else {
+            showError(data.error || 'Error al guardar la garantía');
+        }
+    } catch (err) {
+        console.error(err);
+        showError('Error de conexión al guardar la garantía');
+    }
+}
+
 // Archivar producto desde el modal
 async function archiveProductFromModal(licenseId) {
     if (!confirm('¿Estás seguro de que quieres archivar este producto?')) {
@@ -2850,7 +14507,7 @@ async function archiveProductFromModal(licenseId) {
                 await loadLicenses();
                 
                 // Reorganizar posiciones de productos activos restantes
-                const activeLicenses = licenses.filter(l => l.enabled);
+                const activeLicenses = window.IS_ARCHIVED_MODE ? licenses : licenses.filter(l => l.enabled);
                 const sortedLicenses = [...activeLicenses].sort((a, b) => a.position - b.position);
                 
                 // Reorganizar posiciones: 1, 2, 3, 4, etc.
@@ -2891,6 +14548,84 @@ async function archiveProductFromModal(licenseId) {
     } catch (error) {
         console.error('Error:', error);
         showError('Error de conexión al archivar el producto');
+    }
+}
+
+// Restaurar producto desde el modal (solo en Archivados)
+async function restoreProductFromModal(licenseId) {
+    if (!confirm('¿Estás seguro de que quieres restaurar este producto?')) {
+        return;
+    }
+    
+    const license = licenses.find(l => l.id === licenseId);
+    
+    if (!license) {
+        showError('Producto no encontrado');
+        return;
+    }
+    
+    try {
+        const response = await fetch(`/tienda/api/licenses/${licenseId}/restore`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCSRFToken()
+            }
+        });
+
+        if (response.ok) {
+            const data = await response.json();
+            if (data.success) {
+                // Recargar licencias para obtener las actualizadas
+                await loadLicenses();
+                
+                // Reorganizar posiciones de productos archivados restantes
+                const activeLicenses = window.IS_ARCHIVED_MODE ? licenses : licenses.filter(l => l.enabled);
+                const sortedLicenses = [...activeLicenses].sort((a, b) => a.position - b.position);
+                
+                // Reorganizar posiciones: 1, 2, 3, 4, etc.
+                const updates = [];
+                for (let i = 0; i < sortedLicenses.length; i++) {
+                    const newPos = i + 1;
+                    if (sortedLicenses[i].position !== newPos) {
+                        updates.push({ id: sortedLicenses[i].id, position: newPos });
+                    }
+                }
+                
+                // Actualizar todas las posiciones
+                for (const update of updates) {
+                    const updateResponse = await fetch(`/tienda/api/licenses/${update.id}/position`, {
+                        method: 'PUT',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRFToken': getCSRFToken()
+                        },
+                        body: JSON.stringify({ position: update.position })
+                    });
+                    
+                    if (!updateResponse.ok) {
+                        console.error(`Error al actualizar posición ${update.position}`);
+                    }
+                }
+                
+                showSuccess('Producto restaurado y posiciones reorganizadas correctamente');
+                await loadLicenses();
+                if (document.getElementById('restaurarArchivadosModal')) {
+                    closeRestaurarArchivadosModal();
+                    void showRestaurarArchivadosModal();
+                } else if (document.getElementById('gestionarProductosModal')) {
+                    closeGestionarProductosModal();
+                    showGestionarProductosModal();
+                }
+            } else {
+                showError('Error al restaurar el producto');
+            }
+        } else {
+            showError('Error del servidor al restaurar el producto');
+        }
+    } catch (error) {
+        console.error('Error:', error);
+        showError('Error de conexión al restaurar el producto');
     }
 }
 
@@ -2945,10 +14680,20 @@ document.addEventListener('click', function(e) {
             const changeProductPosId = parseInt(target.getAttribute('data-license-id'));
             changeProductPosition(changeProductPosId);
             break;
+
+        case 'change-product-warranty':
+            const changeWarrantyId = parseInt(target.getAttribute('data-license-id'));
+            void changeProductWarranty(changeWarrantyId);
+            break;
             
         case 'archive-product-from-modal':
             const archiveProductId = parseInt(target.getAttribute('data-license-id'));
             archiveProductFromModal(archiveProductId);
+            break;
+            
+        case 'restore-product-from-modal':
+            const restoreProductId = parseInt(target.getAttribute('data-license-id'));
+            restoreProductFromModal(restoreProductId);
             break;
             
         case 'close-position-modal':
@@ -2960,3 +14705,343 @@ document.addEventListener('click', function(e) {
             break;
     }
 });
+
+// --- AdminLicenciasUndoCore (antes admin_licencias_undo.js): deshacer/rehacer en blocs y días ---
+(function () {
+    var DEBOUNCE_MS = 350;
+    var MAX_HISTORY = 80;
+
+    function getPlainText(el) {
+        if (!el) return '';
+        return el.tagName === 'TEXTAREA' ? el.value : el.innerText || '';
+    }
+
+    function setPlainText(el, text, runHighlight) {
+        if (!el) return;
+        var s = text != null ? text : '';
+        if (el.tagName === 'TEXTAREA') {
+            el.value = s;
+        } else {
+            el.textContent = s;
+            if (runHighlight && typeof window.highlightEmailsAndPasswords === 'function') {
+                window.highlightEmailsAndPasswords(el);
+            }
+        }
+    }
+
+    function attach(el, opts) {
+        opts = opts || {};
+        var listenEl = opts.listenElement != null ? opts.listenElement : el;
+
+        function getText() {
+            if (typeof opts.getPlainText === 'function') {
+                return opts.getPlainText();
+            }
+            return getPlainText(el);
+        }
+
+        function applyText(text, runHighlight) {
+            if (typeof opts.setPlainText === 'function') {
+                opts.setPlainText(text, runHighlight);
+                return;
+            }
+            setPlainText(el, text, runHighlight);
+        }
+
+        var history = [];
+        var cursor = 0;
+        var debounceTimer = null;
+
+        function updateButtons() {
+            if (opts.undoBtn) opts.undoBtn.disabled = cursor <= 0;
+            if (opts.redoBtn) opts.redoBtn.disabled = cursor >= history.length - 1;
+        }
+
+        function recordNow() {
+            var t = getText();
+            if (history.length && history[cursor] === t) return;
+            history = history.slice(0, cursor + 1);
+            history.push(t);
+            cursor = history.length - 1;
+            while (history.length > MAX_HISTORY) {
+                history.shift();
+                cursor--;
+            }
+            updateButtons();
+        }
+
+        function reset() {
+            var t = getText();
+            history = [t];
+            cursor = 0;
+            updateButtons();
+        }
+
+        function undo() {
+            if (cursor <= 0) return;
+            cursor--;
+            applyText(history[cursor], true);
+            if (typeof opts.afterVisual === 'function') opts.afterVisual();
+            opts.onPersist();
+            updateButtons();
+        }
+
+        function redo() {
+            if (cursor >= history.length - 1) return;
+            cursor++;
+            applyText(history[cursor], true);
+            if (typeof opts.afterVisual === 'function') opts.afterVisual();
+            opts.onPersist();
+            updateButtons();
+        }
+
+        function onInputDebounced() {
+            clearTimeout(debounceTimer);
+            debounceTimer = setTimeout(function () {
+                if (!listenEl.isConnected) return;
+                recordNow();
+            }, DEBOUNCE_MS);
+        }
+
+        function onBlur() {
+            clearTimeout(debounceTimer);
+            if (!listenEl.isConnected) return;
+            recordNow();
+        }
+
+        function onKeydown(e) {
+            var mod = e.ctrlKey || e.metaKey;
+            if (!mod) return;
+            if (e.key === 'z' || e.key === 'Z') {
+                e.preventDefault();
+                e.stopPropagation();
+                if (e.shiftKey) redo();
+                else undo();
+                return;
+            }
+            if (e.key === 'y' || e.key === 'Y') {
+                e.preventDefault();
+                e.stopPropagation();
+                redo();
+            }
+        }
+
+        var onFocusOutDelegate = null;
+        listenEl.addEventListener('input', onInputDebounced, true);
+        if (opts.useFocusOutDelegate) {
+            onFocusOutDelegate = function () {
+                window.setTimeout(function () {
+                    if (listenEl.contains(document.activeElement)) return;
+                    onBlur();
+                }, 0);
+            };
+            listenEl.addEventListener('focusout', onFocusOutDelegate, true);
+        } else {
+            el.addEventListener('blur', onBlur);
+        }
+        listenEl.addEventListener('keydown', onKeydown, true);
+
+        if (opts.undoBtn) {
+            opts.undoBtn.addEventListener('click', function (ev) {
+                ev.preventDefault();
+                undo();
+            });
+        }
+        if (opts.redoBtn) {
+            opts.redoBtn.addEventListener('click', function (ev) {
+                ev.preventDefault();
+                redo();
+            });
+        }
+
+        reset();
+
+        return {
+            reset: reset,
+            destroy: function () {
+                clearTimeout(debounceTimer);
+                listenEl.removeEventListener('input', onInputDebounced, true);
+                if (onFocusOutDelegate) {
+                    listenEl.removeEventListener('focusout', onFocusOutDelegate, true);
+                } else {
+                    el.removeEventListener('blur', onBlur);
+                }
+                listenEl.removeEventListener('keydown', onKeydown, true);
+            }
+        };
+    }
+
+    window.AdminLicenciasUndoCore = {
+        attach: attach
+    };
+})();
+
+(function () {
+    if (window.__adminLicenseShowLimitDelegated) return;
+    window.__adminLicenseShowLimitDelegated = true;
+    document.addEventListener(
+        'change',
+        function (e) {
+            var t = e.target;
+            if (!t || t.id !== 'adminLicenciasLicenseShowSelect') return;
+            if (typeof adminLicenseShowLimitApply === 'function') {
+                adminLicenseShowLimitApply();
+            }
+        },
+        false
+    );
+})();
+
+(function () {
+    if (window.__adminLicenseHideNotesColDelegated) return;
+    window.__adminLicenseHideNotesColDelegated = true;
+    document.addEventListener(
+        'click',
+        function (e) {
+            var tNotes =
+                e.target && e.target.closest ? e.target.closest('#adminLicenciasToggleNotesColBtn') : null;
+            var tDaysAll =
+                e.target && e.target.closest
+                    ? e.target.closest('#adminLicenciasToggleAllDaysSectionsBtn')
+                    : null;
+            var tChangesAll =
+                e.target && e.target.closest
+                    ? e.target.closest('#adminLicenciasToggleAllChangesSectionsBtn')
+                    : null;
+            var tChangesStatus =
+                e.target && e.target.closest
+                    ? e.target.closest('#adminLicenciasToggleChangesStatusColBtn')
+                    : null;
+            var tChangesNotes =
+                e.target && e.target.closest
+                    ? e.target.closest('#adminLicenciasToggleChangesNotesColBtn')
+                    : null;
+            var tChangesRestore =
+                e.target && e.target.closest
+                    ? e.target.closest('#adminLicenciasToggleChangesRestoreColBtn')
+                    : null;
+            var tDaysRestore =
+                e.target && e.target.closest ? e.target.closest('#adminLicenciasToggleDaysRestoreColBtn') : null;
+            var tDaysStatus =
+                e.target && e.target.closest ? e.target.closest('#adminLicenciasToggleDaysStatusColBtn') : null;
+            var tDaysNotes =
+                e.target && e.target.closest ? e.target.closest('#adminLicenciasToggleDaysNotesColBtn') : null;
+            var tSuspRestore =
+                e.target && e.target.closest
+                    ? e.target.closest('#adminLicenciasToggleSuspendedRestoreColBtn')
+                    : null;
+            var tSuspNotes =
+                e.target && e.target.closest
+                    ? e.target.closest('#adminLicenciasToggleSuspendedNotesColBtn')
+                    : null;
+            var tExpRestore =
+                e.target && e.target.closest
+                    ? e.target.closest('#adminLicenciasToggleExpiredRestoreColBtn')
+                    : null;
+            var tExpNotes =
+                e.target && e.target.closest
+                    ? e.target.closest('#adminLicenciasToggleExpiredNotesColBtn')
+                    : null;
+            var tStatus =
+                e.target && e.target.closest ? e.target.closest('#adminLicenciasToggleStatusColBtn') : null;
+            if (tNotes) {
+                e.preventDefault();
+                if (typeof adminLicenseHideNotesColToggle === 'function') {
+                    adminLicenseHideNotesColToggle();
+                }
+                return;
+            }
+            if (tDaysAll) {
+                e.preventDefault();
+                if (typeof adminDaysToggleAllDaySections === 'function') {
+                    adminDaysToggleAllDaySections();
+                }
+                return;
+            }
+            if (tChangesAll) {
+                e.preventDefault();
+                if (typeof adminChangesToggleAllProductSections === 'function') {
+                    adminChangesToggleAllProductSections();
+                }
+                return;
+            }
+            if (tChangesStatus) {
+                e.preventDefault();
+                if (typeof adminChangesHideStatusColToggle === 'function') {
+                    adminChangesHideStatusColToggle();
+                }
+                return;
+            }
+            if (tChangesNotes) {
+                e.preventDefault();
+                if (typeof adminChangesHideNotesColToggle === 'function') {
+                    adminChangesHideNotesColToggle();
+                }
+                return;
+            }
+            if (tChangesRestore) {
+                e.preventDefault();
+                if (typeof adminChangesHideRestoreColToggle === 'function') {
+                    adminChangesHideRestoreColToggle();
+                }
+                return;
+            }
+            if (tDaysRestore) {
+                e.preventDefault();
+                if (typeof adminDaysHideRestoreColToggle === 'function') {
+                    adminDaysHideRestoreColToggle();
+                }
+                return;
+            }
+            if (tDaysStatus) {
+                e.preventDefault();
+                if (typeof adminDaysHideStatusColToggle === 'function') {
+                    adminDaysHideStatusColToggle();
+                }
+                return;
+            }
+            if (tDaysNotes) {
+                e.preventDefault();
+                if (typeof adminDaysHideNotesColToggle === 'function') {
+                    adminDaysHideNotesColToggle();
+                }
+                return;
+            }
+            if (tSuspRestore) {
+                e.preventDefault();
+                if (typeof adminSuspendedHideRestoreColToggle === 'function') {
+                    adminSuspendedHideRestoreColToggle();
+                }
+                return;
+            }
+            if (tSuspNotes) {
+                e.preventDefault();
+                if (typeof adminSuspendedHideNotesColToggle === 'function') {
+                    adminSuspendedHideNotesColToggle();
+                }
+                return;
+            }
+            if (tExpRestore) {
+                e.preventDefault();
+                if (typeof adminExpiredHideRestoreColToggle === 'function') {
+                    adminExpiredHideRestoreColToggle();
+                }
+                return;
+            }
+            if (tExpNotes) {
+                e.preventDefault();
+                if (typeof adminExpiredHideNotesColToggle === 'function') {
+                    adminExpiredHideNotesColToggle();
+                }
+                return;
+            }
+            if (tStatus) {
+                e.preventDefault();
+                if (typeof adminLicenseHideStatusColToggle === 'function') {
+                    adminLicenseHideStatusColToggle();
+                }
+            }
+        },
+        false
+    );
+})();

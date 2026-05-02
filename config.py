@@ -19,6 +19,9 @@ class Config:
     DATABASE_PATH = os.path.join(basedir, 'dev.db')
     DATABASE_URI = os.getenv("DATABASE_URI", "sqlite:///dev.db")
     SQLALCHEMY_DATABASE_URI = DATABASE_URI
+    # Copias automáticas SQLite (instance/backups)
+    BACKUPS_DIR = os.path.join(basedir, 'instance', 'backups')
+    AUTO_BACKUP_MAX_FILES = int(os.getenv('AUTO_BACKUP_MAX_FILES', '100'))
     SQLALCHEMY_TRACK_MODIFICATIONS = False
 
     TWOFA_KEY = os.getenv("TWOFA_KEY")

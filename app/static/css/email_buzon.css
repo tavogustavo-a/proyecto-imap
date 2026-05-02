@@ -335,6 +335,20 @@ form {
   gap: 8px;
 }
 
+.email-forwarding-config .forwarding-help.text-muted.forwarding-help--intro {
+  margin-bottom: 12px;
+  font-size: 14px;
+}
+
+.email-forwarding-config .forwarding-catchall-warning {
+  display: block;
+  margin-bottom: 10px;
+  padding: 8px;
+  background: #fff3cd;
+  color: #856404;
+  border-radius: 4px;
+}
+
 .forwarding-item {
   display: flex;
   justify-content: space-between;

@@ -1,7 +1,7 @@
 {% extends "admin_dashboard.html" %}
 
 {% block content %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/email_buzon.css') }}?v=20260327">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/email_buzon.css') }}?v=20260421">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/store.css') }}">
 
 <!-- Token CSRF global -->
@@ -9,9 +9,8 @@
 
 <!-- MENÚ LATERAL MÓVIL -->
 <div id="mobileMenu" class="mobile-menu-store hidden">
-  <div class="menu-title-row">
-    <i class="fas fa-bars"></i>
-    <h3>Menú</h3>
+  <div class="menu-user-info-row menu-user-info-row--name-only menu-sidebar-heading-name">
+    <span class="menu-user-name">{{ session.get('username', 'Admin') }}</span>
   </div>
   <a href="{{ url_for('admin_bp.dashboard') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-cogs"></i> Administración</a>
   <a href="{{ url_for('admin_bp.parrafos_page') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-paragraph"></i> Párrafos</a>
@@ -33,9 +32,8 @@
 
 <!-- MENÚ2 LATERAL MÓVIL -->
 <div id="mobileMenu2" class="mobile-menu-store hidden">
-  <div class="menu-title-row">
-    <i class="fas fa-bars"></i>
-    <h3>Menú2</h3>
+  <div class="menu-user-info-row menu-user-info-row--name-only menu-sidebar-heading-name">
+    <span class="menu-user-name">Menú</span>
   </div>
   <a href="{{ url_for('store_bp.admin_store') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-store"></i> Licencias</a>
   <a href="{{ url_for('store_bp.admin_productos') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-box"></i> Productos</a>
@@ -46,7 +44,6 @@
   <a href="{{ url_for('store_bp.tools_public') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-tools"></i> Herramientas Pública</a>
   <a href="{{ url_for('store_bp.historial_compras_usuario') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-history"></i> Mi Historial de Compras</a>
   <a href="{{ url_for('main_bp.home') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-code"></i> Códigos</a>
-  <a href="{{ url_for('auth_bp.logout') }}" class="btn-panel btn-red mobile-menu-btn mb-04"><i class="fas fa-sign-out-alt"></i> Cerrar Sesión</a>
 </div>
 
 <!-- OVERLAY PARA CERRAR MENÚS -->
@@ -229,7 +226,7 @@
           {% endif %}>
           <input type="hidden" name="page" value="1">
           <label for="buzonPerPageSelect">Por página</label>
-          <select name="per_page" id="buzonPerPageSelect" class="buzon-per-page-select" onchange="this.form.submit()">
+          <select name="per_page" id="buzonPerPageSelect" class="buzon-per-page-select">
             {% for n in buzon_per_page_choices|default((25, 50, 100, 200)) %}
             <option value="{{ n }}" {% if pagination.per_page == n %}selected{% endif %}>{{ n }}</option>
             {% endfor %}
@@ -251,11 +248,11 @@
   
   <div id="email-forwarding-content" class="accordion-content hidden">
 
-  <p class="forwarding-help text-muted" style="margin-bottom:12px;font-size:14px;">
+  <p class="forwarding-help text-muted forwarding-help--intro">
     Solo las direcciones que des de alta aquí pueden recibir correo por SMTP. Cada una recibe todo lo que llegue a esa dirección; bloqueos y filtros pueden rechazar mensajes después.
   </p>
   {% if email_forwardings|selectattr('source_email', 'equalto', none)|list|length > 0 %}
-  <p class="priority-badge" style="display:block;margin-bottom:10px;padding:8px;background:#fff3cd;color:#856404;border-radius:4px;">
+  <p class="forwarding-catchall-warning">
     Tienes recepciones sin dirección SMTP explícita (antiguo catch-all). Edita cada una y guarda el correo completo (ej. <code>1@tudominio.com</code>) o no recibirás mensajes.
   </p>
   {% endif %}
@@ -882,7 +879,7 @@
   </div>
 </div>
 
-<script src="{{ url_for('static', filename='js/email_buzon.js') }}?v=20260326-no-console-log"></script>
+<script src="{{ url_for('static', filename='js/email_buzon.js') }}?v=20260421-csp-forms"></script>
 <script src="{{ url_for('static', filename='js/menu_busqueda.js') }}"></script>
 <script src="{{ url_for('static', filename='js/clear_trigger_logs.js') }}?v=20241220-original"></script>
 <script src="{{ url_for('static', filename='js/logout_all_cookies_btn.js') }}" defer></script>

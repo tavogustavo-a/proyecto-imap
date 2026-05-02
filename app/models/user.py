@@ -110,6 +110,9 @@ class User(db.Model):
     saldo_usd = db.Column(db.Float, default=0.0)
     saldo_cop = db.Column(db.Float, default=0.0)
 
+    # JSON { clave }: apuntes del cliente por fila día en «Licencias» (no editan bloc admin)
+    portal_license_row_notes = db.Column(db.Text, nullable=True)
+
     # Campo para indicar si el usuario puede buscar cualquier email (o solo los permitidos)
     can_search_any = db.Column(db.Boolean, default=False, nullable=False)
     

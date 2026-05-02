@@ -4,22 +4,48 @@
 
 {% block head %}
   {{ super() }}
-  <link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}">
+  <meta name="clear_trigger_log_url" content="{{ url_for('admin_bp.clear_trigger_log') }}">
+  <link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}?v=130">
   <link rel="stylesheet" href="{{ url_for('static', filename='fontawesome/css/all.css') }}">
 {% endblock %}
 {% block content %}
+{% if license_support_restricted_mode %}
+<script>
+(function () {
+  document.documentElement.classList.add('admin-licencias-license-support-mode');
+  window.LICENSE_SUPPORT_RESTRICTED = true;
+})();
+</script>
+{% endif %}
 <div class="container mt-2 store-light worksheet-panel admin-licencias-page admin-licencias-shell">
+  {% if license_support_restricted_mode %}
+  {# Misma fila que la tienda: Menú a la izquierda, acción derecha alineada (como carrito en store_front) #}
+  <div class="d-flex justify-content-between align-items-center flex-nowrap mb-3 w-100 admin-lic-toolbar-soporte-row">
+    <button type="button" id="menuToggleBtn" class="btn-blue menu-btn-worksheet flex-shrink-0">&#9776; Menú</button>
+    <a href="{{ url_for('store_bp.user_licencias') }}" class="btn-blue menu-btn-worksheet text-decoration-none flex-shrink-0 admin-lic-volver-licencias-btn" title="Volver a Licencias" aria-label="Volver a Licencias">
+      <i class="fas fa-arrow-left" aria-hidden="true"></i> Volver a Licencias
+    </a>
+  </div>
+  {% else %}
   <div class="d-flex align-items-center admin-licencias-toolbar">
     <div class="d-flex gap-05 admin-store-menus">
       <button id="menuToggleBtn" class="btn-blue menu-btn-worksheet">&#9776; Menú</button>
       <button id="menu2ToggleBtn" class="btn-blue menu-btn-worksheet">&#9776; Menú2</button>
-      <button id="menu4ToggleBtn" class="btn-blue menu-btn-worksheet"><i class="fas fa-tools"></i> herramientas</button>
+      <button type="button" id="licensesCollapseBtn" class="btn-blue menu-btn-worksheet licenses-collapse-btn licenses-collapse-btn--toolbar" title="Contraer o expandir licencias" aria-label="Contraer o expandir licencias">
+        <i class="fas fa-chevron-up" id="collapseIcon" aria-hidden="true"></i>
+      </button>
+      <button type="button" id="licensesDuplicatesBtn" class="btn-blue menu-btn-worksheet licenses-duplicates-btn licenses-duplicates-btn--toolbar" title="Resaltar en amarillo líneas repetidas: mismo correo y contraseña, o la misma credencial en texto (Licencias, Días, Caídas, Vencidas, Cambios)" aria-label="Alternar resaltado de duplicados por correo y contraseña en Licencias, Días, Caídas, Vencidas y Cambios" aria-pressed="false">
+        <i class="fas fa-clone" aria-hidden="true"></i>
+      </button>
+      <button type="button" id="licensesMoveToChangesBtn" class="btn-blue menu-btn-worksheet" title="Ir al listado de Cambios por producto. Si tienes una fila enfocada en Licencias, también la envía a Cambios." aria-label="Ver listado de Cambios o enviar fila enfocada de Licencias a Cambios">
+        <i class="fas fa-exchange-alt" aria-hidden="true"></i> Cambios
+      </button>
     </div>
   </div>
+  {% endif %}
   <div id="mobileMenu" class="mobile-menu-store hidden">
-    <div class="menu-title-row">
-      <i class="fas fa-bars"></i>
-      <h3>Menú</h3>
+    <div class="menu-user-info-row menu-user-info-row--name-only menu-sidebar-heading-name">
+      <span class="menu-user-name">{{ session.get('username', 'Admin') }}</span>
     </div>
     <a href="{{ url_for('admin_bp.dashboard') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-cogs"></i> Administración</a>
     <a href="{{ url_for('admin_bp.parrafos_page') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-paragraph"></i> Párrafos</a>
@@ -34,6 +60,7 @@
     <a href="{{ url_for('store_bp.admin_work_sheets') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-table"></i> Hojas de Cálculo</a>
     <a href="{{ url_for('store_bp.html_tools') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-code"></i> HTML</a>
     <a href="{{ url_for('store_bp.admin_support') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-headset"></i> Chat Soporte</a>
+    <a href="{{ url_for('store_bp.admin_backup') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-database"></i> Backup</a>
     <button id="btnClearTriggerLogMenu" type="button" class="btn-panel btn-red mobile-menu-btn mb-04"><i class="fas fa-trash"></i> Limpiar Logs</button>
     <a href="{{ url_for('auth_bp.logout') }}" class="btn-panel btn-red mobile-menu-btn mb-04"><i class="fas fa-sign-out-alt"></i> Cerrar Sesión</a>
     <button id="btnLogoutAllAndClearCookies" type="button" class="btn-panel btn-red mobile-menu-btn mb-04" data-url="{{ url_for('admin_bp.logout_all_and_clear_cookies') }}"><i class="fas fa-cookie-bite"></i> Cerrar sesión y limpiar cookies</button>
@@ -41,9 +68,8 @@
 
   <!-- MENÚ2 LATERAL MÓVIL -->
   <div id="mobileMenu2" class="mobile-menu-store hidden">
-    <div class="menu-title-row">
-      <i class="fas fa-bars"></i>
-      <h3>Menú2</h3>
+    <div class="menu-user-info-row menu-user-info-row--name-only menu-sidebar-heading-name">
+      <span class="menu-user-name">Menú</span>
     </div>
     <a href="{{ url_for('store_bp.admin_store') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-store"></i> Licencias</a>
     <a href="{{ url_for('store_bp.admin_productos') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-box"></i> Productos</a>
@@ -54,20 +80,13 @@
     <a href="{{ url_for('store_bp.tools_public') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-tools"></i> Herramientas Pública</a>
     <a href="{{ url_for('store_bp.historial_compras_usuario') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-history"></i> Mi Historial de Compras</a>
     <a href="{{ url_for('main_bp.home') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-code"></i> Códigos</a>
-    <a href="{{ url_for('auth_bp.logout') }}" class="btn-panel btn-red mobile-menu-btn mb-04"><i class="fas fa-sign-out-alt"></i> Cerrar Sesión</a>
+    <button id="btnGestionarProductos" type="button" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-list"></i> Gestionar Productos</button>
+    <button id="btnArchivados" type="button" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-archive"></i> Archivados <span id="archivadosCount">(0)</span></button>
   </div>
 
-  <!-- MENÚ4 HERRAMIENTAS -->
-  <div id="mobileMenu4" class="mobile-menu-store hidden">
-    <div class="menu-title-row">
-      <i class="fas fa-tools"></i>
-      <h3>Herramientas</h3>
-    </div>
-    <button id="btnGestionarProductos" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-list"></i> Gestionar Productos</button>
-    <button id="btnArchivados" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-archive"></i> Archivados <span id="archivadosCount">(0)</span></button>
-  </div>
   <div id="menuOverlay" class="menu-overlay"></div>
 
+  {% if not license_support_restricted_mode %}
   <div class="d-flex flex-column align-items-center justify-content-center mb-4 w-100">
     <div class="d-flex flex-wrap align-items-center productos-buscar-mostrar productos-buscar-mostrar-centered">
       <div class="search-container">
@@ -76,6 +95,7 @@
       </div>
     </div>
   </div>
+  {% endif %}
   
   <!-- Interfaz de Licencias -->
   <div class="licencias-container" id="licenciasContainer">
@@ -86,16 +106,109 @@
       </div>
     </div>
   </div>
+
+  <section id="adminLicenciasHistorialPanel" class="admin-licencias-historial-panel d-none" role="region" aria-label="Historial de licencias" aria-hidden="true">
+    <div class="admin-licencias-historial-inner">
+      <header class="admin-licencias-historial-head">
+        <p class="admin-licencias-historial-hint">Vista previa: aquí se mostrarán altas, bajas, vencidas, garantías reemplazadas por caídas, etc. Los datos reales se conectarán después.</p>
+      </header>
+      <div class="admin-licencias-historial-controls">
+        <div class="admin-licencias-historial-search-wrap">
+          <label for="adminHistorialSearch" class="sr-only">Buscar solo en historial</label>
+          <input type="search" id="adminHistorialSearch" class="form-control admin-licencias-historial-search" placeholder="Buscar en historial…" autocomplete="off">
+        </div>
+        <div class="admin-licencias-historial-page-size">
+          <select id="adminHistorialPageSize" class="form-control admin-licencias-historial-select" aria-label="Registros por página en historial">
+            <option value="30" selected>30</option>
+            <option value="50">50</option>
+            <option value="100">100</option>
+            <option value="500">500</option>
+            <option value="1000">1000</option>
+            <option value="all">Todos</option>
+          </select>
+        </div>
+      </div>
+      <div class="admin-licencias-historial-table-scroll">
+        <table class="admin-licencias-historial-table" role="grid" aria-label="Registros del historial">
+          <thead>
+            <tr>
+              <th scope="col">Fecha</th>
+              <th scope="col">Detalle</th>
+            </tr>
+          </thead>
+          <tbody id="adminHistorialTableBody"></tbody>
+        </table>
+      </div>
+      <div class="admin-licencias-historial-footer" role="navigation" aria-label="Paginación del historial">
+        <button type="button" id="adminHistorialPrev" class="btn-blue menu-btn-worksheet">Anterior</button>
+        <p class="admin-licencias-historial-meta" id="adminHistorialMeta" aria-live="polite"></p>
+        <button type="button" id="adminHistorialNext" class="btn-blue menu-btn-worksheet">Siguiente</button>
+      </div>
+    </div>
+  </section>
+
+  <section id="adminLicenciasReportesPanel" class="admin-licencias-reportes-panel d-none" role="region" aria-label="Cuentas con reporte por cuadrar" aria-hidden="true">
+    <div class="admin-licencias-reportes-inner">
+      <div class="admin-licencias-reportes-controls">
+        <label for="adminReportesSearch" class="sr-only">Filtrar lista de reportes</label>
+        <input type="search" id="adminReportesSearch" class="form-control admin-licencias-reportes-search" placeholder="Filtrar por cuenta, usuario, estado…" autocomplete="off">
+      </div>
+      <div class="admin-licencias-reportes-table-scroll">
+        <table class="admin-licencias-reportes-table" role="grid" aria-label="Cuentas reportadas">
+          <thead>
+            <tr>
+              <th scope="col">Cuenta</th>
+              <th scope="col">Usuario</th>
+              <th scope="col">Estado</th>
+              <th scope="col">Mala / garantía</th>
+            </tr>
+          </thead>
+          <tbody id="adminReportesTableBody"></tbody>
+        </table>
+      </div>
+      <p class="admin-licencias-reportes-meta" id="adminReportesMeta" aria-live="polite"></p>
+    </div>
+  </section>
+
+  <section id="adminLicenciasCambiosPanel" class="admin-licencias-cambios-panel d-none" role="region" aria-label="Cambios mes a mes por producto" aria-hidden="true">
+    <div class="admin-licencias-cambios-inner">
+      <div class="license-changes-notepad-wrap">
+        <div class="license-changes-panel-heading" aria-label="Cambios mes a mes">
+          <div class="license-changes-mode-toolbar" role="toolbar" aria-label="Modo de listado de Cambios">
+            <div class="license-changes-toolbar-start">
+              <span class="license-changes-mode-toolbar-label" title="Cambios mes a mes" aria-label="Cambios mes a mes"><i class="fas fa-exchange-alt" aria-hidden="true"></i></span>
+            </div>
+            <div class="license-changes-mode-btn-group">
+              <button type="button" id="adminLicenciasToggleChangesRestoreColBtn" class="admin-licencias-toggle-notes-col-btn" title="Ocultar flecha devolver a Licencias" aria-label="Ocultar botón subir fila al bloc Licencias en Cambios" aria-pressed="false">
+                <i class="fas fa-eye-slash" aria-hidden="true"></i>
+              </button>
+              <button type="button" id="adminLicenciasToggleChangesStatusColBtn" class="admin-licencias-toggle-notes-col-btn" title="Ocultar columnas Terminado e incidencias" aria-label="Ocultar columnas Terminado (verde) e incidencias (rojo) en Cambios" aria-pressed="false">
+                <i class="fas fa-eye-slash" aria-hidden="true"></i>
+              </button>
+              <button type="button" id="adminLicenciasToggleChangesNotesColBtn" class="admin-licencias-toggle-notes-col-btn" title="Ocultar columna Notas" aria-label="Ocultar columna Notas en Cambios" aria-pressed="false">
+                <i class="fas fa-eye-slash" aria-hidden="true"></i>
+              </button>
+              <button type="button" id="adminLicenciasToggleAllChangesSectionsBtn" class="admin-licencias-toggle-notes-col-btn admin-licencias-days-expand-all-btn admin-licencias-changes-expand-all-btn" title="Plegar todos los productos en Cambios" aria-label="Plegar todas las secciones de Cambios" aria-expanded="true">
+                <i class="fas fa-chevron-up" aria-hidden="true"></i>
+              </button>
+              <button type="button" class="license-changes-mode-btn license-changes-mode-btn--active" data-changes-list-mode="only_with_lines" id="licenseChangesModeOnlyBtn" aria-pressed="true" title="Solo productos con líneas en Cambios (vencidos)">Cambios vencidos</button>
+              <button type="button" class="license-changes-mode-btn" data-changes-list-mode="all_month_to_month" id="licenseChangesModeAllBtn" aria-pressed="false" title="Todos los productos del grid (vacíos incluidos; para añadir manualmente)">Todos los productos</button>
+            </div>
+          </div>
+        </div>
+        <div id="licenseChangesProductsContainer" class="license-changes-products-container" aria-label="Cambios por producto (mes a mes)"></div>
+      </div>
+    </div>
+  </section>
 </div>
 {% endblock %}
 
 {% block scripts %}
   {{ super() }}
-  <meta name="clear_trigger_log_url" content="{{ url_for('admin_bp.clear_trigger_log') }}">
-  <script src="{{ url_for('store_bp.static', filename='js/admin_store.js') }}" defer></script>
+  <script src="{{ url_for('store_bp.static', filename='js/admin_store.js') }}?v=20260421-no-onclick" defer></script>
   <script src="{{ url_for('store_bp.static', filename='js/menu_tienda.js') }}" defer></script>
-  <script src="{{ url_for('store_bp.static', filename='js/licencias.js') }}" defer></script>
-  <script src="{{ url_for('store_bp.static', filename='js/admin_licencias_notepad.js') }}" defer></script>
+  <script src="{{ url_for('store_bp.static', filename='js/licencias.js') }}?v=109" defer></script>
+  <script src="{{ url_for('store_bp.static', filename='js/admin_licencias_notepad.js') }}?v=13" defer></script>
   <script src="{{ url_for('static', filename='js/clear_trigger_logs.js') }}" defer></script>
   <script src="{{ url_for('static', filename='js/logout_all_cookies_btn.js') }}" defer></script>
 {% endblock %} 

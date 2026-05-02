@@ -103,6 +103,15 @@ body.theme-active.tema3 {
   color: var(--text-color);
 }
 
+/* Fondo personalizado IMAP2 (URL en --imap2-user-bg-image vía JS; sin <style> inline en plantilla) */
+body.theme-active.imap2-dynamic-custom-bg {
+  background-image: var(--imap2-user-bg-image, none) !important;
+  background-size: cover !important;
+  background-position: center center !important;
+  background-repeat: no-repeat !important;
+  background-attachment: fixed !important;
+}
+
 /* ========== Tarjetas (card/admin-card) ========== */
 /* LOG: Los popups usan esta clase base. Cambios aquí afectan el padding, borde y radio de muchas secciones. */
 .card, .admin-card {
@@ -3608,7 +3617,7 @@ a.btn-search.btn-rounded:hover {
 
 /* BOTONES DE ACCIÓN MÁS PEQUEÑOS Y COMPACTOS */
 .btn-blue, .btn-red, .btn-orange, .btn-green {
-  font-size: 0.92rem !important;
+  font-size: 1.3rem !important;
   padding: 2px 7px !important;
   min-width: 60px !important;
   border-radius: 6px !important;

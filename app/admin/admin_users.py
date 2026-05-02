@@ -77,7 +77,13 @@ def search_users_ajax():
     user_q = user_q.filter(User.username != admin_username)
 
     if query:
-        user_q = user_q.filter(User.username.ilike(f"%{query}%"))
+        like = f"%{query}%"
+        user_q = user_q.filter(
+            or_(
+                User.username.ilike(like),
+                User.full_name.ilike(like),
+            )
+        )
 
     # Se asume que el modelo User tiene un campo 'position'
     # (Si no existe, eliminar .order_by(User.position.asc()))
@@ -126,12 +132,14 @@ def search_users_ajax():
             data[-1]["descuento_cop"] = precio_data.get("descuento_cop", 0)
             data[-1]["descuento_usd"] = precio_data.get("descuento_usd", 0)
             data[-1]["tipo_precio"] = precio_data.get("tipo_precio")
+            data[-1]["soporte_licencias"] = bool(precio_data.get("soporte_licencias"))
         else:
             data[-1]["precio_original_cop"] = 0
             data[-1]["precio_original_usd"] = 0
             data[-1]["descuento_cop"] = 0
             data[-1]["descuento_usd"] = 0
             data[-1]["tipo_precio"] = None
+            data[-1]["soporte_licencias"] = False
             
     return jsonify({"status": "ok", "users": data}), 200
 
@@ -1435,7 +1443,7 @@ def update_tools_resources_permissions_ajax():
 def update_user_prices_ajax():
     """
     Actualiza los precios por usuario de forma masiva.
-    Recibe: { "updates": [{"user_id": 1, "tipo_precio": "USD", "precio_original_cop": 0, ...}, ...] }
+    Recibe: { "updates": [{"user_id": 1, "tipo_precio": "USD", "soporte_licencias": true|false }, ...] }
     """
     try:
         # Obtener el user_id del admin actual ANTES de hacer cambios
@@ -1479,12 +1487,18 @@ def update_user_prices_ajax():
             # Crear una copia del diccionario existente para evitar problemas con SQLAlchemy
             new_user_prices = dict(user.user_prices) if user.user_prices else {}
             
-            # Actualizar solo tipo_precio, preservando el resto
+            # Actualizar tipo_precio y opcionalmente soporte_licencias
             if nuevo_tipo_precio:
                 new_user_prices['tipo_precio'] = nuevo_tipo_precio
             elif 'tipo_precio' in new_user_prices:
                 # Si se envía None o vacío, eliminar tipo_precio
                 del new_user_prices['tipo_precio']
+
+            if 'soporte_licencias' in update_data:
+                if update_data['soporte_licencias'] is True:
+                    new_user_prices['soporte_licencias'] = True
+                else:
+                    new_user_prices.pop('soporte_licencias', None)
             
             # Asignar el nuevo diccionario y marcar como modificado
             user.user_prices = new_user_prices

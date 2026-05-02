@@ -46,7 +46,9 @@
         
         <!-- Menú móvil (oculto en compartido pero necesario para estructura) -->
         <div id="mobileMenu" class="mobile-menu-store hidden">
-            <div class="menu-title-row"></div>
+            <div class="menu-user-info-row menu-user-info-row--name-only menu-sidebar-heading-name">
+              <span class="menu-user-name">{{ current_username or session.get('username', 'Usuario') }}</span>
+            </div>
             <div class="menu-search-row px-2 py-2">
                 <div class="input-group">
                     <span class="input-group-text"><i class="fas fa-search"></i></span>
@@ -170,8 +172,8 @@
         </div>
     </div>
     
-    <!-- Datos de la plantilla compartida (script JSON evita problemas con comillas/apóstrofes en data attribute) -->
-    <script type="application/json" id="sharedWorksheetDataJson">{{ {"id": worksheet.id, "title": worksheet.title, "fields": worksheet.fields, "data": data, "dataTotal": data|length, "formato": formato, "last_edit_time": last_edit_time|default(none)} | tojson }}</script>
+    <!-- Datos embebidos sin script ejecutable (CSP): JSON escapado en data-shared-worksheet-data -->
+    <div hidden class="shared-worksheet-embedded-json" data-shared-worksheet-data="{{ {'id': worksheet.id, 'title': worksheet.title, 'fields': worksheet.fields, 'data': data, 'dataTotal': data|length, 'formato': formato, 'last_edit_time': last_edit_time|default(none)} | tojson | e }}"></div>
     
     <!-- Scripts necesarios -->
     <script src="{{ url_for('store_bp.static', filename='js/admin_work_sheets.js') }}?v=sync-minimal" defer></script>

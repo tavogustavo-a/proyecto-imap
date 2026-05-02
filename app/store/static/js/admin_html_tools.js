@@ -5,6 +5,11 @@
 (function() {
   'use strict';
 
+  var metaImg = document.querySelector('meta[name="html-tools-static-images"]');
+  if (metaImg && metaImg.content) {
+    window.HTML_TOOLS_STATIC_IMAGES = metaImg.content;
+  }
+
   var editor = document.getElementById('htmlEditor');
   var htmlOutput = document.getElementById('htmlOutput');
   var btnCopyHtml = document.getElementById('btnCopyHtml');

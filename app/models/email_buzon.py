@@ -5,8 +5,8 @@ from datetime import datetime
 
 # Tabla de asociación para la relación many-to-many entre emails y etiquetas
 email_tags = db.Table('email_tags',
-    db.Column('email_id', db.Integer, db.ForeignKey('received_emails.id'), primary_key=True),
-    db.Column('tag_id', db.Integer, db.ForeignKey('email_tags_table.id'), primary_key=True)
+    db.Column('email_id', db.Integer, db.ForeignKey('received_emails.id', ondelete='CASCADE'), primary_key=True),
+    db.Column('tag_id', db.Integer, db.ForeignKey('email_tags_table.id', ondelete='CASCADE'), primary_key=True)
 )
 
 class EmailBuzonServer(db.Model):
@@ -71,7 +71,7 @@ class EmailFilter(db.Model):
     
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(200), nullable=False)  # Nombre descriptivo del filtro
-    tag_id = db.Column(db.Integer, db.ForeignKey('email_tags_table.id'), nullable=True)  # Nullable para papelera
+    tag_id = db.Column(db.Integer, db.ForeignKey('email_tags_table.id', ondelete='SET NULL'), nullable=True)  # Nullable para papelera
     
     # Condiciones del filtro
     filter_from_email = db.Column(db.Text)  # Filtro por remitente (contiene)
@@ -158,7 +158,7 @@ class ReceivedEmail(db.Model):
     received_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
     processed = db.Column(db.Boolean, default=False, index=True)
     message_id = db.Column(db.String(255), unique=True)
-    buzon_server_id = db.Column(db.Integer, db.ForeignKey('email_buzon_servers.id'), nullable=True)
+    buzon_server_id = db.Column(db.Integer, db.ForeignKey('email_buzon_servers.id', ondelete='SET NULL'), nullable=True)
     
     # Campos para papelera
     deleted = db.Column(db.Boolean, default=False, index=True)

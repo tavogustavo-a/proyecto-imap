@@ -57,38 +57,55 @@ document.addEventListener('DOMContentLoaded', function() {
   let cuponAplicado = null;
   let descuentoCupon = 0;
 
-  // Variables para actualización de stock
-  let stockUpdateInterval = null;
+  // Existencias en casi tiempo real: solo polling (1,2 s visible / 8 s oculto).
+  // EventSource fallaba al cerrar el stream (~29 s) y mezclaba errores con reconexión;
+  // el GET /stock ya devuelve datos frescos sin depender de SSE.
+  let stockPollInterval = null;
 
-  // Función para actualizar el stock de todos los productos
+  function applyStockPayload(data) {
+    if (!data || !data.success || !data.stock) return;
+    Object.keys(data.stock).forEach(function (productId) {
+      const stockElement = document.querySelector('.product-stock-info[data-product-id="' + productId + '"]');
+      if (stockElement) {
+        stockElement.textContent = data.stock[productId] + ' existencias';
+      }
+    });
+  }
+
   async function updateAllProductsStock() {
     try {
       const response = await fetch('/tienda/api/products/stock');
-      if (!response.ok) {
-        console.error('Error al obtener stock de productos');
-        return;
-      }
-      
+      if (!response.ok) return;
       const data = await response.json();
-      if (data.success && data.stock) {
-        // Actualizar cada producto
-        Object.keys(data.stock).forEach(productId => {
-          const stockElement = document.querySelector(`.product-stock-info[data-product-id="${productId}"]`);
-          if (stockElement) {
-            const stock = data.stock[productId];
-            stockElement.textContent = `${stock} existencias`;
-          }
-        });
-      }
+      applyStockPayload(data);
     } catch (error) {
       console.error('Error al actualizar stock:', error);
     }
   }
 
-  // Cargar stock inicial y configurar actualización periódica
-  updateAllProductsStock();
-  // Actualizar cada 5 segundos
-  stockUpdateInterval = setInterval(updateAllProductsStock, 5000);
+  function stopStockRealtime() {
+    if (stockPollInterval) {
+      clearInterval(stockPollInterval);
+      stockPollInterval = null;
+    }
+  }
+
+  function startStockRealtime() {
+    if (!document.querySelector('.product-stock-info')) return;
+
+    stopStockRealtime();
+    updateAllProductsStock();
+
+    const ms = document.hidden ? 8000 : 1200;
+    stockPollInterval = setInterval(updateAllProductsStock, ms);
+  }
+
+  startStockRealtime();
+
+  document.addEventListener('visibilitychange', function () {
+    if (!document.querySelector('.product-stock-info')) return;
+    startStockRealtime();
+  });
 
   // Función para obtener el token CSRF
   function getCsrfToken() {

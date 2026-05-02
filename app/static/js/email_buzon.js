@@ -2399,3 +2399,11 @@ function toggleElement(element) {
     element.classList.toggle('hidden');
   }
 }
+
+document.addEventListener('DOMContentLoaded', function () {
+  var perPage = document.getElementById('buzonPerPageSelect');
+  if (!perPage || !perPage.form) return;
+  perPage.addEventListener('change', function () {
+    perPage.form.submit();
+  });
+});

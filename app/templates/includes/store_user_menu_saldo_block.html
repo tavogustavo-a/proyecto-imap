@@ -1,0 +1,6 @@
+{# Saldo tienda (USD/COP) al pie del menú lateral de usuario — datos vía inject_store_menu_balance en app/__init__.py #}
+{% if store_menu_show_saldo and store_menu_saldo_line %}
+<div class="mobile-menu-store-saldo-footer" role="region" aria-label="Saldo">
+  <p class="mobile-menu-store-saldo-line mb-0">{{ store_menu_saldo_line }}</p>
+</div>
+{% endif %}

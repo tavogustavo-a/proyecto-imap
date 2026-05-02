@@ -1,0 +1,613 @@
+# -*- coding: utf-8 -*-
+"""
+Parsing de líneas del bloc «mes a mes» (Licencias) alineado con licencias.js / parseAdminLicenseLineToSplitParts.
+Se usa en la API de vista cliente para colorear verde/rojo por día.
+"""
+from __future__ import annotations
+
+import re
+import unicodedata
+from typing import Any, Dict, List, Optional, Tuple
+
+LICENSE_LINE_FIELD_SEP = '\x1f'
+
+# Coincide con ADMIN_LICENSE_STATUS_OPTIONS_GOOD en licencias.js + «terminado» en GOOD_KEYS.
+OPTIONS_GOOD_VALUES = [
+    'ok',
+    'renovar 1 mes mas',
+    'dejar mes a mes',
+    'no renovar',
+    'garantia',
+    'reemplazar',
+    'terminado',
+]
+OPTIONS_BAD_VALUES = [
+    'caida o suspendida',
+    'no reproduce',
+    'otro',
+    'caida',
+    'suspendida',
+    'repetida',
+]
+
+
+def normalize_status_key(s: Any) -> str:
+    raw = str(s or '').strip()
+    if not raw:
+        return ''
+    try:
+        nfd = unicodedata.normalize('NFD', raw)
+        no_marks = ''.join(c for c in nfd if unicodedata.category(c) != 'Mn')
+    except Exception:
+        no_marks = raw
+    return re.sub(r'\s+', ' ', no_marks.lower()).strip()
+
+
+def _canonical_good_from_stored(st: str) -> str:
+    raw = str(st or '').strip()
+    if not raw:
+        return ''
+    k = normalize_status_key(raw)
+    for o in OPTIONS_GOOD_VALUES:
+        if o and normalize_status_key(o) == k:
+            return o
+    return raw
+
+
+def _canonical_bad_from_stored(st: str) -> str:
+    raw = str(st or '').strip()
+    if not raw:
+        return ''
+    k = normalize_status_key(raw)
+    if k in ('caida', 'suspendida'):
+        return 'caida o suspendida'
+    for o in OPTIONS_BAD_VALUES:
+        if o and normalize_status_key(o) == k:
+            return o
+    return raw
+
+
+def _canonical_status_from_stored(st: str) -> str:
+    raw = str(st or '').strip()
+    if not raw:
+        return ''
+    k = normalize_status_key(raw)
+    if k in ('caida', 'suspendida'):
+        return 'caida o suspendida'
+    for o in OPTIONS_GOOD_VALUES + OPTIONS_BAD_VALUES:
+        if o and normalize_status_key(o) == k:
+            return o
+    return raw
+
+
+ADMIN_LICENSE_STATUS_GOOD_KEYS = {normalize_status_key(x) for x in OPTIONS_GOOD_VALUES if x}
+ADMIN_LICENSE_STATUS_BAD_KEYS = {normalize_status_key(x) for x in OPTIONS_BAD_VALUES if x}
+
+
+def admin_license_status_tier_from_stored(status_text: Optional[str]) -> str:
+    raw = str(status_text or '').strip()
+    k = normalize_status_key(raw)
+    if not k:
+        return 'neutral'
+    if re.match(r'^otro[-:\s]', raw, re.I) or k == 'otro':
+        return 'bad'
+    if k in ADMIN_LICENSE_STATUS_GOOD_KEYS:
+        return 'good'
+    if k in ADMIN_LICENSE_STATUS_BAD_KEYS:
+        return 'bad'
+    return 'neutral'
+
+
+def parse_bad_stored_segment(bad_raw: str) -> Dict[str, str]:
+    s = str(bad_raw or '').strip()
+    if not s:
+        return {'selValue': '', 'otroDetail': ''}
+    m = re.match(r'^otro-?\s*(.*)$', s, re.I)
+    if m:
+        return {'selValue': 'otro', 'otroDetail': (m.group(1) or '').strip()}
+    return {'selValue': _canonical_bad_from_stored(s) or s, 'otroDetail': ''}
+
+
+def dual_from_stored_segments(cred: str, user: str, good_raw: str, bad_raw: str, extra: str) -> Dict[str, Any]:
+    bp = parse_bad_stored_segment(bad_raw)
+    sg = good_raw.strip() if good_raw else ''
+    status_good = (_canonical_good_from_stored(sg) or sg) if sg else ''
+    return {
+        'cred': cred if cred is not None else '',
+        'user': (user or '').strip(),
+        'statusGood': status_good,
+        'statusBad': bp['selValue'],
+        'otroDetail': bp['otroDetail'],
+        'extra': (extra or '').strip(),
+    }
+
+
+def effective_bad_for_tier(status_bad: str, otro_detail: str) -> str:
+    sv = str(status_bad or '').strip()
+    if not sv:
+        return ''
+    if normalize_status_key(sv) == 'otro':
+        d = str(otro_detail or '').strip()
+        d = re.sub(r'^otro-?', '', d, flags=re.I).strip()
+        return ('otro-' + d) if d else 'otro-'
+    return sv
+
+
+def dual_to_storage_line(dual: Dict[str, Any]) -> str:
+    """Formato LICENCIA con LICENSE_LINE_FIELD_SEP (alineado con buildAdminLicenseStorageLine en licencias.js)."""
+    c = str(dual.get('cred') or '').strip()
+    u_raw = str(dual.get('user') or '').strip()
+    uu = u_raw if u_raw else 'anonimo'
+    sg_raw = str(dual.get('statusGood') or '').strip()
+    sg = (_canonical_good_from_stored(sg_raw) or sg_raw) if sg_raw else ''
+    sb_sel = str(dual.get('statusBad') or '').strip()
+    od = str(dual.get('otroDetail') or '').strip()
+    bad_seg = effective_bad_for_tier(sb_sel, od)
+    extra = str(dual.get('extra') or '').strip()
+    if not c and not sg and not bad_seg and not extra and (not u_raw or uu == 'anonimo'):
+        return ''
+    return LICENSE_LINE_FIELD_SEP.join([c, uu, sg, bad_seg, extra])
+
+
+def collect_visible_day_line_targets_assigned(
+    day_text: Optional[str],
+    allowed_usernames: List[str],
+    email: str,
+    account_identifier: str,
+) -> Tuple[List[str], List[Tuple[int, str, Dict[str, Any]]]]:
+    raw_lines = str(day_text or '').replace('\r\n', '\n').replace('\r', '\n').split('\n')
+    visible: List[Tuple[int, str, Dict[str, Any]]] = []
+    for idx, line in enumerate(raw_lines):
+        stripped = line.strip()
+        if not stripped:
+            continue
+        dual = parse_admin_license_line_to_split_parts(line)
+        if not line_visible_for_assignee_account(dual, allowed_usernames, email, account_identifier):
+            continue
+        visible.append((idx, line, dual))
+    return raw_lines, visible
+
+
+def collect_visible_day_line_targets_username_only(
+    day_text: Optional[str],
+    allowed_usernames: List[str],
+) -> Tuple[List[str], List[Tuple[int, str, Dict[str, Any]]]]:
+    raw_lines = str(day_text or '').replace('\r\n', '\n').replace('\r', '\n').split('\n')
+    visible: List[Tuple[int, str, Dict[str, Any]]] = []
+    for idx, line in enumerate(raw_lines):
+        stripped = line.strip()
+        if not stripped:
+            continue
+        dual = parse_admin_license_line_to_split_parts(line)
+        if not username_linked_explicitly_to_viewer(str(dual.get('user') or ''), allowed_usernames):
+            continue
+        visible.append((idx, line, dual))
+    return raw_lines, visible
+
+
+def validate_portal_user_status_values(
+    status_good_raw: Any, status_bad_raw: Any, otro_detail_raw: Any
+) -> Tuple[str, str, str]:
+    """Devuelve (status_good canónico, statusBad selector '', 'otro', etc., otroDetail limpio)."""
+    sg_req = str(status_good_raw or '').strip()
+    sb_req = str(status_bad_raw or '').strip()
+    od_raw = str(otro_detail_raw or '').strip()
+    od_clean = re.sub(r'^otro-?', '', od_raw, flags=re.I).strip()
+
+    canon_good = ''
+    if sg_req:
+        nk_sg = normalize_status_key(sg_req)
+        found_g = ''
+        for o in OPTIONS_GOOD_VALUES:
+            if nk_sg == normalize_status_key(o):
+                found_g = o
+                break
+        if not found_g:
+            raise ValueError('Estado favorable no válido.')
+        canon_good = found_g
+
+    canon_sb = ''
+    nk_sb = normalize_status_key(sb_req) if sb_req else ''
+    if sb_req:
+        if nk_sb == 'otro':
+            canon_sb = 'otro'
+        else:
+            found_b = ''
+            for o in OPTIONS_BAD_VALUES:
+                if o and normalize_status_key(o) == nk_sb:
+                    found_b = o
+                    break
+            if not found_b:
+                raise ValueError('Estado de reporte no válido.')
+            canon_sb = _canonical_bad_from_stored(found_b) or found_b
+
+    if normalize_status_key(canon_sb or '') != 'otro':
+        otro_detail = ''
+    else:
+        if len(od_clean) > 2000:
+            od_clean = od_clean[:2000]
+        otro_detail = od_clean
+
+    return canon_good, canon_sb, otro_detail
+
+
+def rebuild_day_notepad_lines_with_physical_index(
+    raw_lines: List[str], physical_idx: int, new_line_content: str
+) -> str:
+    if physical_idx < 0 or physical_idx >= len(raw_lines):
+        raise ValueError('Índice de línea inconsistente.')
+    upd = raw_lines.copy()
+    upd[physical_idx] = new_line_content
+    return '\n'.join(upd)
+
+
+def parse_row_tail_fields(cred: str, user: str, seg3: str, seg4: str) -> Dict[str, Any]:
+    c = str(cred or '')
+    u = (user or '').strip()
+    s3 = (seg3 or '').strip()
+    s4 = (seg4 or '').strip()
+    m_dash = re.match(r'^otro\s*-\s*(.*)$', s3, re.I)
+    if m_dash:
+        return {'cred': c, 'user': u, 'status': 'otro', 'otroDetail': (m_dash.group(1) or '').strip(), 'extra': s4}
+    m_colon = re.match(r'^otro:\s*(.*)$', s3, re.I)
+    if m_colon:
+        return {'cred': c, 'user': u, 'status': 'otro', 'otroDetail': (m_colon.group(1) or '').strip(), 'extra': s4}
+    if s3.lower() == 'otro' and s4:
+        return {'cred': c, 'user': u, 'status': 'otro', 'otroDetail': s4, 'extra': ''}
+    norm = 'otro' if s3.lower() == 'otro' else _canonical_status_from_stored(s3)
+    return {'cred': c, 'user': u, 'status': norm, 'otroDetail': '', 'extra': s4}
+
+
+def migrate_legacy_four_part_to_dual(cred: str, user: str, seg3: str, seg4: str) -> Dict[str, Any]:
+    legacy = parse_row_tail_fields(cred, user, seg3, seg4)
+    st = legacy['status']
+    st_for_tier = ('otro-' + str(legacy['otroDetail']).strip()) if str(st).lower() == 'otro' and legacy.get('otroDetail') else st
+    tier = admin_license_status_tier_from_stored(str(st_for_tier))
+    if tier == 'good':
+        return {
+            'cred': legacy['cred'],
+            'user': legacy['user'],
+            'statusGood': _canonical_good_from_stored(st) or st,
+            'statusBad': '',
+            'otroDetail': '',
+            'extra': legacy['extra'],
+        }
+    if tier == 'bad':
+        if str(st).lower() == 'otro':
+            od = str(legacy.get('otroDetail') or '').strip()
+            return {
+                'cred': legacy['cred'],
+                'user': legacy['user'],
+                'statusGood': '',
+                'statusBad': 'otro',
+                'otroDetail': od,
+                'extra': legacy['extra'],
+            }
+        bs = _canonical_bad_from_stored(st) or st
+        return {
+            'cred': legacy['cred'],
+            'user': legacy['user'],
+            'statusGood': '',
+            'statusBad': bs,
+            'otroDetail': '',
+            'extra': legacy['extra'],
+        }
+    if not st:
+        return {
+            'cred': legacy['cred'],
+            'user': legacy['user'],
+            'statusGood': '',
+            'statusBad': '',
+            'otroDetail': '',
+            'extra': legacy['extra'],
+        }
+    return {
+        'cred': legacy['cred'],
+        'user': legacy['user'],
+        'statusGood': _canonical_good_from_stored(st) or st,
+        'statusBad': '',
+        'otroDetail': '',
+        'extra': legacy['extra'],
+    }
+
+
+def index_of_legacy_double_slash_from(s: str, start_pos: int = 0) -> int:
+    t = str(s or '')
+    pos = start_pos or 0
+    while pos < len(t):
+        i = t.find('//', pos)
+        if i == -1:
+            return -1
+        if i == 0 or t[i - 1] != ':':
+            return i
+        pos = i + 2
+    return -1
+
+
+def split_line_cred_notes_user(line: str) -> Dict[str, str]:
+    t = str(line or '').strip()
+    if not t:
+        return {'cred': '', 'notes': '', 'user': '', 'extra': ''}
+    i1 = index_of_legacy_double_slash_from(t, 0)
+    if i1 == -1:
+        return {'cred': t, 'notes': '', 'user': '', 'extra': ''}
+    cred = t[:i1].strip()
+    after1 = t[i1 + 2 :]
+    i2 = index_of_legacy_double_slash_from(after1, 0)
+    if i2 == -1:
+        return {'cred': cred, 'notes': after1.strip(), 'user': '', 'extra': ''}
+    notes = after1[:i2].strip()
+    after2 = after1[i2 + 2 :]
+    i3 = index_of_legacy_double_slash_from(after2, 0)
+    if i3 == -1:
+        return {'cred': cred, 'notes': notes, 'user': after2.strip(), 'extra': ''}
+    return {'cred': cred, 'notes': notes, 'user': after2[:i3].strip(), 'extra': after2[i3 + 2 :].strip()}
+
+
+def parse_admin_license_line_to_split_parts(line: Any) -> Dict[str, Any]:
+    raw = str(line if line is not None else '').replace('\r', '')
+    if not raw.strip():
+        return {'cred': '', 'user': '', 'statusGood': '', 'statusBad': '', 'otroDetail': '', 'extra': ''}
+    if LICENSE_LINE_FIELD_SEP in raw:
+        parts = raw.split(LICENSE_LINE_FIELD_SEP)
+        cred = parts[0] if parts else ''
+        usr = (parts[1] or '').strip()
+        if len(parts) >= 5:
+            good = (parts[2] or '').strip()
+            bad_raw = (parts[3] or '').strip()
+            extra = (parts[4] or '').strip()
+            return dual_from_stored_segments(cred, usr, good, bad_raw, extra)
+        seg3 = (parts[2] or '').strip()
+        seg4 = (parts[3] or '').strip()
+        return migrate_legacy_four_part_to_dual(cred, usr, seg3, seg4)
+    if index_of_legacy_double_slash_from(raw, 0) == -1:
+        return migrate_legacy_four_part_to_dual(raw, '', '', '')
+    sp = split_line_cred_notes_user(raw)
+    cred = sp['cred'] if sp['cred'] is not None else ''
+    usr = (sp['notes'] or '').strip()
+    seg3 = (sp['user'] or '').strip()
+    seg4 = (sp['extra'] or '').strip()
+    return migrate_legacy_four_part_to_dual(cred, usr, seg3, seg4)
+
+
+def dual_row_green_red(dual: Dict[str, Any]) -> Tuple[bool, bool]:
+    """(verde con columna buena rellena, rojo con tier malo en columna mala)."""
+    sg = str(dual.get('statusGood') or '').strip()
+    show_green = bool(sg)
+    eff = effective_bad_for_tier(dual.get('statusBad') or '', dual.get('otroDetail') or '')
+    tier_bad = admin_license_status_tier_from_stored(eff)
+    show_red = tier_bad == 'bad'
+    return show_green, show_red
+
+
+def usernames_match(line_user: str, allowed_names: List[str]) -> bool:
+    lu = normalize_status_key(line_user)
+    if not lu:
+        return False
+    for n in allowed_names:
+        if normalize_status_key(n) == lu:
+            return True
+    return lu == 'anonimo'
+
+
+def credential_matches_account(raw_cred: str, email: str, account_identifier: str) -> bool:
+    c = str(raw_cred or '').lower()
+    em = str(email or '').strip().lower()
+    aid = str(account_identifier or '').strip().lower()
+    if em and em in c:
+        return True
+    if aid and aid in c:
+        return True
+    if em:
+        prefix = em.split('@', 1)[0]
+        parts = str(raw_cred or '').strip().split()
+        first = parts[0].lower() if parts else ''
+        if prefix and prefix == first:
+            return True
+    return False
+
+
+def line_visible_for_assignee_account(
+    dual: Dict[str, Any],
+    allowed_usernames: List[str],
+    email: str,
+    account_identifier: str,
+) -> bool:
+    """
+    Vista portal: la credencial debe corresponder a esta cuenta.
+    Si la línea no trae cliente/usuario, sigue valiendo el cruce por credencial (muy habitual en el bloc).
+    Si trae usuario, debe coincidir con los nombres permitidos (principal/sub-usuario) o «anonimo».
+    """
+    if not credential_matches_account(str(dual.get('cred')), email, account_identifier):
+        return False
+    line_user = str(dual.get('user') or '').strip()
+    if not line_user:
+        return True
+    return usernames_match(line_user, allowed_usernames)
+
+
+def accumulate_day_signals_for_account(
+    day_text: Optional[str],
+    allowed_usernames: List[str],
+    email: str,
+    account_identifier: str,
+) -> Tuple[bool, bool]:
+    """OR de líneas del día que coinciden cliente + cuenta."""
+    txt = str(day_text or '')
+    show_green_any = False
+    show_red_any = False
+    for line in txt.split('\n'):
+        dual = parse_admin_license_line_to_split_parts(line)
+        if not line_visible_for_assignee_account(dual, allowed_usernames, email, account_identifier):
+            continue
+        g, r = dual_row_green_red(dual)
+        if g:
+            show_green_any = True
+        if r:
+            show_red_any = True
+    return show_green_any, show_red_any
+
+
+# Etiquetas en español (alineadas a licencias.js / desplegables admin)
+_GOOD_KEY_TO_LABEL: Dict[str, str] = {}
+for _raw, _es in (
+    ('ok', 'Buena y revisada'),
+    ('renovar 1 mes mas', 'Renovar 1 mes más'),
+    ('dejar mes a mes', 'Dejar mes a mes'),
+    ('no renovar', 'No renovar'),
+    ('garantia', 'Garantía (repuesto)'),
+    ('reemplazar', 'Reemplazar'),
+    ('terminado', 'Terminado'),
+):
+    _GOOD_KEY_TO_LABEL[normalize_status_key(_raw)] = _es
+
+_BAD_KEY_TO_LABEL: Dict[str, str] = {}
+for _raw, _es in (
+    ('caida o suspendida', 'Caída o suspendida'),
+    ('no reproduce', 'No reproduce'),
+    ('otro', 'Otro'),
+    ('caida', 'Caída o suspendida'),
+    ('suspendida', 'Caída o suspendida'),
+    ('repetida', 'Repetida'),
+):
+    _BAD_KEY_TO_LABEL[normalize_status_key(_raw)] = _es
+
+
+def _spanish_good_label(status_good: str) -> str:
+    s = str(status_good or '').strip()
+    if not s:
+        return ''
+    canon = _canonical_good_from_stored(s) or s
+    nk = normalize_status_key(canon)
+    return _GOOD_KEY_TO_LABEL.get(nk, canon)
+
+
+def _spanish_bad_label(sel: str, otro_detail: str) -> str:
+    s = str(sel or '').strip()
+    if not s:
+        return ''
+    nk = normalize_status_key(s)
+    if nk == 'otro':
+        od = str(otro_detail or '').strip()
+        od = re.sub(r'^otro-?', '', od, flags=re.I).strip()
+        return f'Otro: {od}' if od else 'Otro'
+    canon = _canonical_bad_from_stored(s) or s
+    nk2 = normalize_status_key(canon)
+    return _BAD_KEY_TO_LABEL.get(nk2, canon)
+
+
+def username_linked_explicitly_to_viewer(line_user: str, allowed_names: List[str]) -> bool:
+    """
+    La columna cliente de una línea del bloc día coincide exactamente con un nombre permitido
+    (principal o subusuario), sin usar el comodín histórico «anonimo», que solo aplica cuando
+    ya cruzamos credencial con una cuenta inventario.
+    """
+    lu = normalize_status_key(str(line_user or '').strip())
+    if not lu or lu == 'anonimo':
+        return False
+    for n in allowed_names:
+        if normalize_status_key(n) == lu:
+            return True
+    return False
+
+
+def matched_rows_for_username_only_day(
+    day_text: Optional[str],
+    allowed_usernames: List[str],
+    calendar_day: int,
+) -> List[Dict[str, Any]]:
+    """
+    Para licencias cargadas sólo en «Días» con el nombre del cliente (venta manual, sin cuenta
+    asignada por la tienda): mismas etiquetas sólo lectura que matched_rows_for_account_day.
+    """
+    out: List[Dict[str, Any]] = []
+    for line in str(day_text or '').split('\n'):
+        stripped = line.strip()
+        if not stripped:
+            continue
+        dual = parse_admin_license_line_to_split_parts(line)
+        if not username_linked_explicitly_to_viewer(str(dual.get('user') or ''), allowed_usernames):
+            continue
+        sg = str(dual.get('statusGood') or '').strip()
+        sb_sel = str(dual.get('statusBad') or '').strip()
+        od = str(dual.get('otroDetail') or '').strip()
+        eff = effective_bad_for_tier(sb_sel, od if sb_sel else '')
+        tier_bad = admin_license_status_tier_from_stored(eff)
+
+        gv = _spanish_good_label(sg) if sg else ''
+        bv = ''
+        if sb_sel or od:
+            bv = _spanish_bad_label(sb_sel, od)
+
+        lt_good = 'good' if sg else 'neutral'
+        lt_bad = 'bad' if tier_bad == 'bad' else 'neutral'
+        canon_g = (_canonical_good_from_stored(sg) or sg).strip() if sg else ''
+
+        out.append(
+            {
+                'cred': str(dual.get('cred') or ''),
+                'user': str(dual.get('user') or ''),
+                'vinculo_dia': int(calendar_day),
+                'label_good': gv,
+                'label_bad': bv,
+                'tier_good': lt_good,
+                'tier_bad': lt_bad,
+                'status_good': canon_g,
+                'status_bad': sb_sel,
+                'otro_detail': od,
+                'row_ordinal': len(out),
+            }
+        )
+    return out
+
+
+def matched_rows_for_account_day(
+    day_text: Optional[str],
+    allowed_usernames: List[str],
+    email: str,
+    account_identifier: str,
+    calendar_day: int,
+) -> List[Dict[str, Any]]:
+    """
+    Líneas del bloc día que corresponden a este cliente/cuenta, listas para mostrar sólo lectura.
+    calendar_day: día del calendario (1–31) de esta sección «Día N», para mostrar el vínculo usuario–día en la UI.
+    """
+    out: List[Dict[str, Any]] = []
+    for line in str(day_text or '').split('\n'):
+        stripped = line.strip()
+        if not stripped:
+            continue
+        dual = parse_admin_license_line_to_split_parts(line)
+        if not line_visible_for_assignee_account(dual, allowed_usernames, email, account_identifier):
+            continue
+        sg = str(dual.get('statusGood') or '').strip()
+        sb_sel = str(dual.get('statusBad') or '').strip()
+        od = str(dual.get('otroDetail') or '').strip()
+        eff = effective_bad_for_tier(sb_sel, od if sb_sel else '')
+        tier_bad = admin_license_status_tier_from_stored(eff)
+
+        gv = _spanish_good_label(sg) if sg else ''
+        bv = ''
+        if sb_sel or od:
+            bv = _spanish_bad_label(sb_sel, od)
+
+        lt_good = 'good' if sg else 'neutral'
+        lt_bad = 'bad' if tier_bad == 'bad' else 'neutral'
+        canon_g = (_canonical_good_from_stored(sg) or sg).strip() if sg else ''
+
+        out.append(
+            {
+                'cred': str(dual.get('cred') or ''),
+                'user': str(dual.get('user') or ''),
+                'vinculo_dia': int(calendar_day),
+                'label_good': gv,
+                'label_bad': bv,
+                'tier_good': lt_good,
+                'tier_bad': lt_bad,
+                'status_good': canon_g,
+                'status_bad': sb_sel,
+                'otro_detail': od,
+                'row_ordinal': len(out),
+            }
+        )
+    return out

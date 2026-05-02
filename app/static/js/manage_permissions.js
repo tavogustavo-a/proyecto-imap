@@ -756,7 +756,7 @@ document.addEventListener("DOMContentLoaded", function() {
   const searchUserPricesInput = document.getElementById("searchUserPricesInput");
   const clearUserPricesSearchBtn = document.getElementById("clearUserPricesSearchBtn");
   
-  let userPricesData = {}; // { userId: { tipo_precio: 'USD'|'COP'|null } }
+  let userPricesData = {}; // { userId: { tipo_precio, soporte_licencias } }
   let allUsersForPrices = []; // Todos los usuarios cargados
   let filteredUsersForPrices = []; // Usuarios filtrados por búsqueda
   
@@ -854,7 +854,8 @@ document.addEventListener("DOMContentLoaded", function() {
       const userId = user.id;
       // Cargar datos de precios desde el usuario si existen, sino usar valores por defecto
       const userData = userPricesData[userId] || {
-        tipo_precio: user.tipo_precio || null
+        tipo_precio: user.tipo_precio || null,
+        soporte_licencias: !!user.soporte_licencias
       };
       
       const tr = document.createElement('tr');
@@ -871,12 +872,11 @@ document.addEventListener("DOMContentLoaded", function() {
       tdTipoPrecio.className = 'text-center';
       
       const tipoPrecioContainer = document.createElement('div');
-      tipoPrecioContainer.className = 'd-flex flex-column align-items-center justify-content-center';
-      tipoPrecioContainer.style.setProperty('gap', '0.25rem');
+      tipoPrecioContainer.className = 'user-prices-tipo-stack';
       
       // Contenedor para USD (checkbox + label juntos sin espacio) - Arriba
       const usdContainer = document.createElement('div');
-      usdContainer.className = 'd-flex align-items-center';
+      usdContainer.className = 'user-prices-tipo-row';
       
       const usdCheckbox = document.createElement('input');
       usdCheckbox.type = 'checkbox';
@@ -892,8 +892,6 @@ document.addEventListener("DOMContentLoaded", function() {
       usdLabel.setAttribute('for', `tipo_usd_${userId}`);
       usdLabel.textContent = 'USD';
       usdLabel.className = 'user-price-label';
-      usdLabel.style.setProperty('margin-left', '0.25rem');
-      usdLabel.style.setProperty('margin-bottom', '0');
       usdLabel.style.setProperty('cursor', 'pointer');
       
       usdContainer.appendChild(usdCheckbox);
@@ -901,7 +899,7 @@ document.addEventListener("DOMContentLoaded", function() {
       
       // Contenedor para COP (checkbox + label juntos sin espacio) - Abajo
       const copContainer = document.createElement('div');
-      copContainer.className = 'd-flex align-items-center';
+      copContainer.className = 'user-prices-tipo-row';
       
       const copCheckbox = document.createElement('input');
       copCheckbox.type = 'checkbox';
@@ -917,15 +915,33 @@ document.addEventListener("DOMContentLoaded", function() {
       copLabel.setAttribute('for', `tipo_cop_${userId}`);
       copLabel.textContent = 'COP';
       copLabel.className = 'user-price-label';
-      copLabel.style.setProperty('margin-left', '0.25rem');
-      copLabel.style.setProperty('margin-bottom', '0');
       copLabel.style.setProperty('cursor', 'pointer');
       
       copContainer.appendChild(copCheckbox);
       copContainer.appendChild(copLabel);
+
+      const soporteContainer = document.createElement('div');
+      soporteContainer.className = 'user-prices-tipo-row';
+
+      const soporteCheckbox = document.createElement('input');
+      soporteCheckbox.type = 'checkbox';
+      soporteCheckbox.id = `soporte_lic_${userId}`;
+      soporteCheckbox.className = 'user-soporte-licencias-checkbox';
+      soporteCheckbox.checked = !!userData.soporte_licencias;
+      soporteCheckbox.setAttribute('data-user-id', userId);
+
+      const soporteLabel = document.createElement('label');
+      soporteLabel.setAttribute('for', `soporte_lic_${userId}`);
+      soporteLabel.textContent = 'Soporte licencias';
+      soporteLabel.className = 'user-price-label';
+      soporteLabel.style.setProperty('cursor', 'pointer');
+
+      soporteContainer.appendChild(soporteCheckbox);
+      soporteContainer.appendChild(soporteLabel);
       
       tipoPrecioContainer.appendChild(usdContainer);
       tipoPrecioContainer.appendChild(copContainer);
+      tipoPrecioContainer.appendChild(soporteContainer);
       tdTipoPrecio.appendChild(tipoPrecioContainer);
       tr.appendChild(tdTipoPrecio);
       
@@ -997,6 +1013,8 @@ document.addEventListener("DOMContentLoaded", function() {
       
       tr.appendChild(tdProductosAsociados);
       
+      userData.soporte_licencias = !!userData.soporte_licencias;
+      userData.tipo_precio = userData.tipo_precio || null;
       // Guardar datos iniciales
       userPricesData[userId] = userData;
       
@@ -1009,7 +1027,7 @@ document.addEventListener("DOMContentLoaded", function() {
     userPricesTableBody.appendChild(fragment);
     
     // Agregar event listeners para checkboxes mutuamente excluyentes
-    document.querySelectorAll('.user-price-type-checkbox').forEach(checkbox => {
+      document.querySelectorAll('.user-price-type-checkbox').forEach(checkbox => {
       checkbox.addEventListener('change', function() {
         const userId = this.getAttribute('data-user-id');
         const tipo = this.getAttribute('data-tipo');
@@ -1023,8 +1041,10 @@ document.addEventListener("DOMContentLoaded", function() {
           
           // Actualizar datos
           if (!userPricesData[userId]) {
+            const sl = document.getElementById(`soporte_lic_${userId}`);
             userPricesData[userId] = {
-              tipo_precio: null
+              tipo_precio: null,
+              soporte_licencias: sl ? !!sl.checked : false
             };
           }
           userPricesData[userId].tipo_precio = tipo;
@@ -1033,6 +1053,17 @@ document.addEventListener("DOMContentLoaded", function() {
           if (userPricesData[userId]) {
             userPricesData[userId].tipo_precio = null;
           }
+        }
+      });
+    });
+
+    document.querySelectorAll('.user-soporte-licencias-checkbox').forEach(cb => {
+      cb.addEventListener('change', function() {
+        const userId = this.getAttribute('data-user-id');
+        if (!userPricesData[userId]) {
+          userPricesData[userId] = { tipo_precio: null, soporte_licencias: !!this.checked };
+        } else {
+          userPricesData[userId].soporte_licencias = !!this.checked;
         }
       });
     });
@@ -1050,7 +1081,8 @@ document.addEventListener("DOMContentLoaded", function() {
         const userData = userPricesData[userId];
         updates.push({
           user_id: parseInt(userId),
-          tipo_precio: userData.tipo_precio || null
+          tipo_precio: userData.tipo_precio || null,
+          soporte_licencias: !!userData.soporte_licencias
         });
       });
       
@@ -1075,6 +1107,7 @@ document.addEventListener("DOMContentLoaded", function() {
       .then(res => res.json())
       .then(data => {
         if (data.status === 'ok') {
+          userPricesData = {};
           showUserPricesStatus(data.message || 'Cambios guardados correctamente', 'text-success');
           // Recargar datos después de guardar
           setTimeout(() => {

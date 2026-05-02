@@ -4,25 +4,31 @@
 
 {% block head %}
   {{ super() }}
-  <link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}">
+  <meta name="licenses-archive-mode" content="1">
+  <link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}?v=130">
   <link rel="stylesheet" href="{{ url_for('static', filename='fontawesome/css/all.css') }}">
 {% endblock %}
 
 {% block content %}
-<div class="container mt-0 store-light worksheet-panel admin-licencias-page">
-  <!-- Header con botón volver y botón gestionar -->
-  <div class="d-flex justify-content-center align-items-center mb-3 position-relative">
-    <div class="admin-back-button admin-back-button-position-left">
-      <a href="{{ url_for('store_bp.admin_store') }}" class="btn-arrow-back">
+<div class="container mt-2 store-light worksheet-panel admin-licencias-page admin-licencias-shell">
+  <div class="d-flex align-items-center admin-licencias-toolbar">
+    <div class="d-flex gap-05 admin-store-menus">
+      <a href="{{ url_for('store_bp.admin_store') }}" class="btn-arrow-back btn-arrow-back--toolbar-compact" aria-label="Volver a licencias">
         <i class="fas fa-arrow-left"></i>
       </a>
+      <button type="button" id="licensesCollapseBtn" class="btn-blue menu-btn-worksheet licenses-collapse-btn licenses-collapse-btn--toolbar" title="Contraer o expandir licencias" aria-label="Contraer o expandir licencias">
+        <i class="fas fa-chevron-up" id="collapseIcon" aria-hidden="true"></i>
+      </button>
+      <button type="button" id="btnRestaurarDesdeArchivo" class="btn-blue menu-btn-worksheet licenses-restore-archived-btn licenses-restore-archived-btn--toolbar" title="Volver a poner servicios en Licencias" aria-label="Restaurar productos en la plantilla Licencias">
+        <i class="fas fa-folder-open" aria-hidden="true"></i>
+      </button>
+      <button type="button" id="licensesMoveToChangesBtn" class="btn-blue menu-btn-worksheet" title="Ir al listado de Cambios por producto. Si tienes una fila enfocada en Licencias, también la envía a Cambios." aria-label="Ver listado de Cambios o enviar fila enfocada de Licencias a Cambios">
+        <i class="fas fa-exchange-alt" aria-hidden="true"></i> Cambios
+      </button>
     </div>
-    <button id="btnGestionarProductosArchivados" class="btn-panel btn-blue">
-      <i class="fas fa-archive"></i> Gestionar Productos Archivados
-    </button>
   </div>
-  
-  <div class="d-flex flex-column align-items-center justify-content-center mb-4 w-100 mt-3">
+
+  <div class="d-flex flex-column align-items-center justify-content-center mb-4 w-100">
     <div class="d-flex flex-wrap align-items-center productos-buscar-mostrar productos-buscar-mostrar-centered">
       <div class="search-container">
         <label for="adminStoreSearch" class="sr-only">Buscar en licencias</label>
@@ -31,42 +37,114 @@
     </div>
   </div>
   
-  <!-- Modal Gestionar Productos Archivados -->
-  <div id="modalGestionProductos" class="modal-overlay d-none">
-    <div class="modal-content worksheet-modal">
-      <div class="modal-header">
-        <h3 class="modal-title">Gestionar Productos Archivados</h3>
-        <button id="closeGestionProductos" class="btn-close">&times;</button>
-      </div>
-      <div class="modal-body">
-        <div class="gestion-productos-lista" id="gestionProductosLista">
-          <!-- Los productos se cargarán dinámicamente -->
-        </div>
-      </div>
-      <div class="modal-footer">
-        <button id="btnGuardarCambios" class="btn-panel btn-green">
-          <i class="fas fa-save"></i> Guardar Cambios
-        </button>
-        <button id="btnCancelarGestion" class="btn-panel btn-red">
-          Cancelar
-        </button>
-      </div>
-    </div>
-  </div>
-  
-  <!-- Interfaz de Licencias Archivadas -->
+  <!-- Interfaz de Licencias -->
   <div class="licencias-container" id="licenciasContainer">
     <div class="licencias-content">
-      <!-- Grid de Licencias Archivadas -->
-      <div id="archivedLicensesGrid" class="licenses-grid">
-        <!-- Las licencias archivadas se cargarán dinámicamente aquí -->
+      <!-- Grid de Licencias -->
+      <div id="licensesGrid" class="licenses-grid">
+        <!-- Las licencias se cargarán dinámicamente aquí -->
       </div>
     </div>
   </div>
+
+  <section id="adminLicenciasHistorialPanel" class="admin-licencias-historial-panel d-none" role="region" aria-label="Historial de licencias" aria-hidden="true">
+    <div class="admin-licencias-historial-inner">
+      <header class="admin-licencias-historial-head">
+        <p class="admin-licencias-historial-hint">Vista previa: aquí se mostrarán altas, bajas, vencidas, garantías reemplazadas por caídas, etc. Los datos reales se conectarán después.</p>
+      </header>
+      <div class="admin-licencias-historial-controls">
+        <div class="admin-licencias-historial-search-wrap">
+          <label for="adminHistorialSearch" class="sr-only">Buscar solo en historial</label>
+          <input type="search" id="adminHistorialSearch" class="form-control admin-licencias-historial-search" placeholder="Buscar en historial…" autocomplete="off">
+        </div>
+        <div class="admin-licencias-historial-page-size">
+          <select id="adminHistorialPageSize" class="form-control admin-licencias-historial-select" aria-label="Registros por página en historial">
+            <option value="30" selected>30</option>
+            <option value="50">50</option>
+            <option value="100">100</option>
+            <option value="500">500</option>
+            <option value="1000">1000</option>
+            <option value="all">Todos</option>
+          </select>
+        </div>
+      </div>
+      <div class="admin-licencias-historial-table-scroll">
+        <table class="admin-licencias-historial-table" role="grid" aria-label="Registros del historial">
+          <thead>
+            <tr>
+              <th scope="col">Fecha</th>
+              <th scope="col">Detalle</th>
+            </tr>
+          </thead>
+          <tbody id="adminHistorialTableBody"></tbody>
+        </table>
+      </div>
+      <div class="admin-licencias-historial-footer" role="navigation" aria-label="Paginación del historial">
+        <button type="button" id="adminHistorialPrev" class="btn-blue menu-btn-worksheet">Anterior</button>
+        <p class="admin-licencias-historial-meta" id="adminHistorialMeta" aria-live="polite"></p>
+        <button type="button" id="adminHistorialNext" class="btn-blue menu-btn-worksheet">Siguiente</button>
+      </div>
+    </div>
+  </section>
+
+  <section id="adminLicenciasReportesPanel" class="admin-licencias-reportes-panel d-none" role="region" aria-label="Cuentas con reporte por cuadrar" aria-hidden="true">
+    <div class="admin-licencias-reportes-inner">
+      <div class="admin-licencias-reportes-controls">
+        <label for="adminReportesSearch" class="sr-only">Filtrar lista de reportes</label>
+        <input type="search" id="adminReportesSearch" class="form-control admin-licencias-reportes-search" placeholder="Filtrar por cuenta, usuario, estado…" autocomplete="off">
+      </div>
+      <div class="admin-licencias-reportes-table-scroll">
+        <table class="admin-licencias-reportes-table" role="grid" aria-label="Cuentas reportadas">
+          <thead>
+            <tr>
+              <th scope="col">Cuenta</th>
+              <th scope="col">Usuario</th>
+              <th scope="col">Estado</th>
+              <th scope="col">Mala / garantía</th>
+            </tr>
+          </thead>
+          <tbody id="adminReportesTableBody"></tbody>
+        </table>
+      </div>
+      <p class="admin-licencias-reportes-meta" id="adminReportesMeta" aria-live="polite"></p>
+    </div>
+  </section>
+
+  <section id="adminLicenciasCambiosPanel" class="admin-licencias-cambios-panel d-none" role="region" aria-label="Cambios mes a mes por producto" aria-hidden="true">
+    <div class="admin-licencias-cambios-inner">
+      <div class="license-changes-notepad-wrap">
+        <div class="license-changes-panel-heading" aria-label="Cambios mes a mes">
+          <div class="license-changes-mode-toolbar" role="toolbar" aria-label="Modo de listado de Cambios">
+            <div class="license-changes-toolbar-start">
+              <span class="license-changes-mode-toolbar-label" title="Cambios mes a mes" aria-label="Cambios mes a mes"><i class="fas fa-exchange-alt" aria-hidden="true"></i></span>
+            </div>
+            <div class="license-changes-mode-btn-group">
+              <button type="button" id="adminLicenciasToggleChangesRestoreColBtn" class="admin-licencias-toggle-notes-col-btn" title="Ocultar flecha devolver a Licencias" aria-label="Ocultar botón subir fila al bloc Licencias en Cambios" aria-pressed="false">
+                <i class="fas fa-eye-slash" aria-hidden="true"></i>
+              </button>
+              <button type="button" id="adminLicenciasToggleChangesStatusColBtn" class="admin-licencias-toggle-notes-col-btn" title="Ocultar columnas Terminado e incidencias" aria-label="Ocultar columnas Terminado (verde) e incidencias (rojo) en Cambios" aria-pressed="false">
+                <i class="fas fa-eye-slash" aria-hidden="true"></i>
+              </button>
+              <button type="button" id="adminLicenciasToggleChangesNotesColBtn" class="admin-licencias-toggle-notes-col-btn" title="Ocultar columna Notas" aria-label="Ocultar columna Notas en Cambios" aria-pressed="false">
+                <i class="fas fa-eye-slash" aria-hidden="true"></i>
+              </button>
+              <button type="button" id="adminLicenciasToggleAllChangesSectionsBtn" class="admin-licencias-toggle-notes-col-btn admin-licencias-days-expand-all-btn admin-licencias-changes-expand-all-btn" title="Plegar todos los productos en Cambios" aria-label="Plegar todas las secciones de Cambios" aria-expanded="true">
+                <i class="fas fa-chevron-up" aria-hidden="true"></i>
+              </button>
+              <button type="button" class="license-changes-mode-btn license-changes-mode-btn--active" data-changes-list-mode="only_with_lines" id="licenseChangesModeOnlyBtn" aria-pressed="true" title="Solo productos con líneas en Cambios (vencidos)">Cambios vencidos</button>
+              <button type="button" class="license-changes-mode-btn" data-changes-list-mode="all_month_to_month" id="licenseChangesModeAllBtn" aria-pressed="false" title="Todos los productos del grid (vacíos incluidos; para añadir manualmente)">Todos los productos</button>
+            </div>
+          </div>
+        </div>
+        <div id="licenseChangesProductsContainer" class="license-changes-products-container" aria-label="Cambios por producto (mes a mes)"></div>
+      </div>
+    </div>
+  </section>
 </div>
 {% endblock %}
 
 {% block scripts %}
   {{ super() }}
-  <script src="{{ url_for('store_bp.static', filename='js/archivados.js') }}"></script>
+  <script src="{{ url_for('store_bp.static', filename='js/licencias.js') }}?v=106" defer></script>
+  <script src="{{ url_for('store_bp.static', filename='js/admin_licencias_notepad.js') }}?v=13" defer></script>
 {% endblock %}

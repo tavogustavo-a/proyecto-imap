@@ -154,6 +154,25 @@ def start_scheduler_if_needed():
                     replace_existing=True,
                     next_run_time=datetime.now(timezone.utc) + timedelta(seconds=45),
                 )
+
+                _scheduler.add_job(
+                    func=sync_month_to_month_changes_midnight_job,
+                    trigger='cron',
+                    hour=0,
+                    minute=0,
+                    id='sync_month_to_month_expired_to_changes',
+                    replace_existing=True,
+                    timezone=ZoneInfo('America/Bogota'),
+                )
+
+                _scheduler.add_job(
+                    func=hourly_sqlite_backup_job,
+                    trigger='interval',
+                    hours=1,
+                    id='hourly_sqlite_auto_backup',
+                    replace_existing=True,
+                    next_run_time=datetime.now(timezone.utc) + timedelta(minutes=3),
+                )
             
             import atexit
             _scheduler.start()
@@ -892,6 +911,38 @@ def scheduled_email_buzon_cleanup_tick_job():
             app.logger.warning("Buzón email: error en limpieza programada (tick): %s", e)
 
 
+def sync_month_to_month_changes_midnight_job():
+    """00:00 Colombia: vencidas mes a mes → bloc Cambios (cuentas con expires_at pasado + líneas en expired_notes)."""
+    with app.app_context():
+        try:
+            from app.store.month_to_month_changes_job import sync_month_to_month_expired_accounts_to_changes
+
+            r = sync_month_to_month_expired_accounts_to_changes()
+            if r.get('lines_added'):
+                app.logger.info(
+                    "Cambios mes a mes (medianoche CO): +%s líneas en %s licencias",
+                    r['lines_added'],
+                    r['licenses_touched'],
+                )
+        except Exception as e:
+            db.session.rollback()
+            app.logger.warning("Cambios mes a mes (medianoche CO): %s", e)
+
+
+def hourly_sqlite_backup_job():
+    """Copia horaria de la base SQLite (rotación de auto_*.db)."""
+    with app.app_context():
+        try:
+            from app.services.db_backup_service import scheduled_backup_tick
+
+            scheduled_backup_tick(app)
+        except Exception as e:
+            try:
+                app.logger.warning("Copia automática BD: %s", e)
+            except Exception:
+                pass
+
+
 def main():
     scheduler = BackgroundScheduler(executors={"default": ThreadPoolExecutor(max_workers=5)})
 
@@ -1008,6 +1059,25 @@ def main():
             id='email_buzon_scheduled_cleanup_tick',
             replace_existing=True,
             next_run_time=datetime.now(timezone.utc) + timedelta(seconds=45),
+        )
+
+        scheduler.add_job(
+            func=sync_month_to_month_changes_midnight_job,
+            trigger='cron',
+            hour=0,
+            minute=0,
+            id='sync_month_to_month_expired_to_changes',
+            replace_existing=True,
+            timezone=ZoneInfo('America/Bogota'),
+        )
+
+        scheduler.add_job(
+            func=hourly_sqlite_backup_job,
+            trigger='interval',
+            hours=1,
+            id='hourly_sqlite_auto_backup',
+            replace_existing=True,
+            next_run_time=datetime.now(timezone.utc) + timedelta(minutes=3),
         )
 
     

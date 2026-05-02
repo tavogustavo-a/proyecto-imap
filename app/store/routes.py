@@ -1,5 +1,4 @@
-from flask import render_template, request, redirect, url_for, flash, jsonify, current_app, session, Response, stream_template, send_file
-from datetime import datetime
+from flask import render_template, request, redirect, url_for, flash, jsonify, current_app, session, Response, stream_template, send_file, stream_with_context, g, abort
 from app.utils.timezone import get_colombia_now, colombia_strftime, utc_to_colombia, get_colombia_datetime, timesince
 # Importa tus modelos y db. Asumo nombres comunes, ajústalos si es necesario.
 from .models import Product, Sale, Coupon, coupon_products, ProductionLink, ApiInfo, WorksheetTemplate, WorksheetData, WorksheetPermission, DriveTransfer, WhatsAppConfig, GSheetsLink, SMSConfig, SMSMessage, AllowedSMSNumber, SMSRegex, TwoFAConfig
@@ -16,18 +15,18 @@ def csrf_exempt_route(func):
     # Marcar la función para exención de CSRF
     func._csrf_exempt = True
     return func
-from app.models.user import User
+from app.models.user import User, AllowedEmail
 from sqlalchemy.orm import joinedload, selectinload
+from sqlalchemy import func as sa_func, or_
 from app.store.models import ToolInfo, HtmlInfo, YouTubeListing, StoreSetting
 import requests
 import time
 import secrets
 import os
+import re
 
 import json
-from datetime import datetime, timedelta
-
-# ✅ NUEVO: Importar función para emitir eventos de chat eliminado
+from datetime import datetime, timedelta, timezone
 try:
     from app.store.socketio_events import emit_chat_deleted_event
 except ImportError:
@@ -68,8 +67,33 @@ def get_current_user():
     
     return None
 
+
+def _product_ids_with_archived_license():
+    """
+    IDs de producto con licencia archivada (store_licenses.enabled = False).
+    Esos productos no deben mostrarse en la tienda pública ni cobrarse en el carrito.
+    """
+    from app.store.models import License
+    rows = (
+        db.session.query(License.product_id)
+        .filter(License.enabled.is_(False))
+        .distinct()
+        .all()
+    )
+    return {rid for (rid,) in rows if rid is not None}
+
+
+def public_store_products_query():
+    """Productos del catálogo público: enabled en producto y licencia no archivada."""
+    q = Product.query.filter(Product.enabled.is_(True))
+    archived_ids = _product_ids_with_archived_license()
+    if archived_ids:
+        q = q.filter(~Product.id.in_(list(archived_ids)))
+    return q
+
+
 # Importar admin_required desde decorators para evitar duplicación
-from app.admin.decorators import admin_required
+from app.admin.decorators import admin_required, admin_or_soporte_licencias_required
 from functools import wraps
 
 # Decorador para controlar acceso a la tienda
@@ -130,6 +154,86 @@ def store_access_required(f):
                 return redirect(url_for("main_bp.home"))
         return f(*args, **kwargs)
     return decorated_function
+
+
+def _user_store_soporte_licencias_flag(user_obj):
+    """True si el perfil efectivo de tienda tiene ``user_prices.soporte_licencias`` (principal o padre)."""
+    if not user_obj:
+        return False
+    if user_obj.parent_id:
+        pu = User.query.get(user_obj.parent_id)
+        if not pu:
+            return False
+        up = pu.user_prices if isinstance(pu.user_prices, dict) else {}
+        return bool(up.get("soporte_licencias"))
+    up = user_obj.user_prices if isinstance(user_obj.user_prices, dict) else {}
+    return bool(up.get("soporte_licencias"))
+
+
+def _eligible_tienda_user_licencias_portal(user_obj):
+    """Misma regla para /licencias y la API my-license-accounts: USD/COP como cliente o soporte licencias."""
+    blocked_users = ("soporte", "soporte1", "soporte2", "soporte3")
+    if user_obj.username.lower() in blocked_users:
+        return False
+    if user_obj.parent_id is not None:
+        if not user_obj.can_access_store:
+            return False
+        pu = User.query.get(user_obj.parent_id)
+        if not pu:
+            return False
+        up = pu.user_prices if isinstance(pu.user_prices, dict) else {}
+        tipo = up.get("tipo_precio")
+        tipo_ok = tipo in ("USD", "COP")
+        soporte = bool(up.get("soporte_licencias"))
+        return tipo_ok or soporte
+    up = user_obj.user_prices if isinstance(user_obj.user_prices, dict) else {}
+    tipo_ok = up.get("tipo_precio") in ("USD", "COP")
+    soporte = bool(up.get("soporte_licencias"))
+    return tipo_ok or soporte
+
+
+def user_licencias_precio_required(f):
+    """
+    Usuarios con tipo de precio USD o COP como cliente; o soporte licencias (user_prices);
+    subusuario con mismo criterio vía usuario principal.
+    Sin bypass por hojas de cálculo. El admin se redirige al panel Admin Licencias.
+    """
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        admin_username = current_app.config.get("ADMIN_USER", "admin")
+        if not session.get("logged_in"):
+            flash("Debes iniciar sesión.", "warning")
+            return redirect(url_for("user_auth_bp.login"))
+        user_id = session.get("user_id")
+        user_obj = User.query.get(user_id) if user_id else None
+        if not user_obj:
+            flash("No se encontró tu usuario. Inicia sesión de nuevo.", "warning")
+            return redirect(url_for("user_auth_bp.login"))
+        if user_obj.username == admin_username:
+            return redirect(url_for("store_bp.admin_store"))
+        blocked_users = ["soporte", "soporte1", "soporte2", "soporte3"]
+        if user_obj and user_obj.username.lower() in blocked_users:
+            flash("No tienes permiso para ver esta página.", "danger")
+            return redirect(url_for("main_bp.home"))
+        if user_obj and user_obj.parent_id is not None:
+            if not user_obj.can_access_store:
+                flash("No tienes permiso para acceder. Solicita acceso a tu usuario principal.", "danger")
+                return redirect(url_for("main_bp.home"))
+            pu = User.query.get(user_obj.parent_id)
+            if not pu:
+                flash("No se encontró el usuario principal asociado.", "danger")
+                return redirect(url_for("main_bp.home"))
+        if user_obj.username != admin_username and not _eligible_tienda_user_licencias_portal(user_obj):
+            flash(
+                "Necesitas tipo de precio USD o COP configurado como cliente, "
+                "o permiso de soporte licencias, para usar esta página.",
+                "danger",
+            )
+            return redirect(url_for("main_bp.home"))
+        return f(*args, **kwargs)
+
+    return decorated_function
+
 
 # Decorador para chat de soporte: NO requiere tipo_precio (permite acceso al chat sin configurar USD/COP)
 def chat_access_required(f):
@@ -204,10 +308,16 @@ def worksheet_access_required(f):
     return decorated_function
 
 @store_bp.route('/admin', endpoint='admin_store')
-@admin_required
+@admin_or_soporte_licencias_required
 def admin_store():
     products = Product.query.order_by(Product.id.desc()).all()
-    return render_template('admin_store.html', products=products, title="Admin Licencias")
+    restricted = getattr(g, 'license_support_restricted_mode', False)
+    return render_template(
+        'admin_store.html',
+        products=products,
+        title='Admin Licencias',
+        license_support_restricted_mode=restricted,
+    )
 
 @store_bp.route('/admin/archivados')
 @admin_required
@@ -370,6 +480,79 @@ def delete_product_ajax(prod_id):
         current_app.logger.error(f"Error en delete_product_ajax para prod_id {prod_id}: {str(e)}")
         return jsonify({'success': False, 'error': 'Error interno al eliminar el producto.'}), 500
 
+
+def catalog_products_for_store_user(user):
+    """
+    Misma lista y descuentos que en store_front para un usuario tienda no administrador.
+    Devuelve (products, tipo_precio) donde tipo_precio es 'USD', 'COP' o None.
+    """
+    products = []
+    tipo_precio_effective = None
+    if not user:
+        return products, tipo_precio_effective
+    if user.parent_id:
+        parent = User.query.get(user.parent_id)
+        if not parent:
+            return [], None
+        parent_tipo_precio = None
+        parent_descuentos_productos = {}
+        if parent.user_prices and isinstance(parent.user_prices, dict):
+            parent_tipo_precio = parent.user_prices.get('tipo_precio')
+            parent_descuentos_productos = parent.user_prices.get('descuentos_productos', {})
+        if parent_tipo_precio and parent_tipo_precio in ['USD', 'COP']:
+            tipo_precio_effective = parent_tipo_precio
+            productos_permitidos_ids = None
+            if parent.user_prices and isinstance(parent.user_prices, dict):
+                if 'productos_permitidos' in parent.user_prices:
+                    productos_permitidos_ids = parent.user_prices.get('productos_permitidos', [])
+            if productos_permitidos_ids is not None:
+                if productos_permitidos_ids:
+                    products = (
+                        public_store_products_query()
+                        .filter(Product.id.in_(productos_permitidos_ids))
+                        .order_by(Product.name)
+                        .all()
+                    )
+                else:
+                    products = []
+            else:
+                products = public_store_products_query().order_by(Product.name).all()
+            for p in products:
+                d = parent_descuentos_productos.get(str(p.id)) or parent_descuentos_productos.get(int(p.id)) or {}
+                p.discount_cop_extra = d.get('cop', 0)
+                p.discount_usd_extra = d.get('usd', 0)
+        return products, tipo_precio_effective
+
+    tipo_precio = None
+    descuentos_productos = {}
+    if user.user_prices and isinstance(user.user_prices, dict):
+        tipo_precio = user.user_prices.get('tipo_precio')
+        descuentos_productos = user.user_prices.get('descuentos_productos', {})
+    if tipo_precio and tipo_precio in ['USD', 'COP']:
+        tipo_precio_effective = tipo_precio
+        productos_permitidos_ids = None
+        if user.user_prices and isinstance(user.user_prices, dict):
+            if 'productos_permitidos' in user.user_prices:
+                productos_permitidos_ids = user.user_prices.get('productos_permitidos', [])
+        if productos_permitidos_ids is not None:
+            if productos_permitidos_ids:
+                products = (
+                    public_store_products_query()
+                    .filter(Product.id.in_(productos_permitidos_ids))
+                    .order_by(Product.name)
+                    .all()
+                )
+            else:
+                products = []
+        else:
+            products = public_store_products_query().order_by(Product.name).all()
+        for p in products:
+            d = descuentos_productos.get(str(p.id)) or descuentos_productos.get(int(p.id)) or {}
+            p.discount_cop_extra = d.get('cop', 0)
+            p.discount_usd_extra = d.get('usd', 0)
+    return products, tipo_precio_effective
+
+
 # Ruta para la tienda de cara al público (ejemplo)
 @store_bp.route('/')
 @store_access_required
@@ -387,84 +570,9 @@ def store_front():
 
     # Filtrar productos según el tipo_precio del usuario o del padre si es sub-usuario
     if username == admin_user:
-        products = Product.query.filter_by(enabled=True).order_by(Product.name).all()
+        products = public_store_products_query().order_by(Product.name).all()
     elif user:
-        # Si es sub-usuario, verificar tipo_precio del padre
-        if user.parent_id:
-            parent = User.query.get(user.parent_id)
-            if parent:
-                parent_tipo_precio = None
-                parent_descuentos_productos = {}
-                if parent.user_prices and isinstance(parent.user_prices, dict):
-                    parent_tipo_precio = parent.user_prices.get('tipo_precio')
-                    parent_descuentos_productos = parent.user_prices.get('descuentos_productos', {})
-                if parent_tipo_precio and parent_tipo_precio in ['USD', 'COP']:
-                    # Obtener productos permitidos desde user_prices del padre, si existen
-                    productos_permitidos_ids = None
-                    if parent.user_prices and isinstance(parent.user_prices, dict):
-                        # Verificar si la clave existe (puede ser lista vacía)
-                        if 'productos_permitidos' in parent.user_prices:
-                            productos_permitidos_ids = parent.user_prices.get('productos_permitidos', [])
-                    
-                    if productos_permitidos_ids is not None:
-                        # Si tiene productos específicos configurados (aunque esté vacío), mostrar solo esos
-                        if productos_permitidos_ids:
-                            products = Product.query.filter(
-                                Product.id.in_(productos_permitidos_ids),
-                                Product.enabled == True
-                            ).order_by(Product.name).all()
-                        else:
-                            # Lista vacía: no mostrar productos
-                            products = []
-                    else:
-                        # Si no tiene productos específicos configurados, mostrar todos los habilitados
-                        products = Product.query.filter_by(enabled=True).order_by(Product.name).all()
-                    
-                    # Aplicar descuentos a los productos
-                    for p in products:
-                        d = parent_descuentos_productos.get(str(p.id)) or parent_descuentos_productos.get(int(p.id)) or {}
-                        p.discount_cop_extra = d.get('cop', 0)
-                        p.discount_usd_extra = d.get('usd', 0)
-                else:
-                    products = []
-            else:
-                products = []
-        else:
-            # Usuario principal: verificar tipo_precio en user_prices
-            tipo_precio = None
-            descuentos_productos = {}
-            if user.user_prices and isinstance(user.user_prices, dict):
-                tipo_precio = user.user_prices.get('tipo_precio')
-                descuentos_productos = user.user_prices.get('descuentos_productos', {})
-            if tipo_precio and tipo_precio in ['USD', 'COP']:
-                # Obtener productos permitidos desde user_prices, si existen
-                productos_permitidos_ids = None
-                if user.user_prices and isinstance(user.user_prices, dict):
-                    # Verificar si la clave existe (puede ser lista vacía)
-                    if 'productos_permitidos' in user.user_prices:
-                        productos_permitidos_ids = user.user_prices.get('productos_permitidos', [])
-                
-                if productos_permitidos_ids is not None:
-                    # Si tiene productos específicos configurados (aunque esté vacío), mostrar solo esos
-                    if productos_permitidos_ids:
-                        products = Product.query.filter(
-                            Product.id.in_(productos_permitidos_ids),
-                            Product.enabled == True
-                        ).order_by(Product.name).all()
-                    else:
-                        # Lista vacía: no mostrar productos
-                        products = []
-                else:
-                    # Si no tiene productos específicos configurados, mostrar todos los habilitados
-                    products = Product.query.filter_by(enabled=True).order_by(Product.name).all()
-                
-                # Aplicar descuentos a los productos
-                for p in products:
-                    d = descuentos_productos.get(str(p.id)) or descuentos_productos.get(int(p.id)) or {}
-                    p.discount_cop_extra = d.get('cop', 0)
-                    p.discount_usd_extra = d.get('usd', 0)
-            else:
-                products = []
+        products, _tipo = catalog_products_for_store_user(user)
     else:
         products = []
 
@@ -473,6 +581,38 @@ def store_front():
     saldo_cop = user.saldo_cop if user else 0
     return render_template('store_front.html', products=products, coupons=coupons, ADMIN_USER=admin_user, current_user=user, username=username, saldo_usd=saldo_usd, saldo_cop=saldo_cop)
 
+
+@store_bp.route('/licencias')
+@user_licencias_precio_required
+def user_licencias():
+    """
+    Vista usuarios de tienda: cuentas asignadas si las hay (solo lectura + notas cliente).
+    Acceso también con permiso ``soporte_licencias`` (gestión cambios desde /tienda/admin).
+    """
+    username = session.get('username')
+    user_id = session.get('user_id')
+    user = None
+    if username:
+        user = User.query.filter_by(username=username).first()
+    elif user_id:
+        user = User.query.get(user_id)
+        if user:
+            username = user.username
+    # Catálogo y precios: la tabla se rellena vía GET /api/user/my-license-accounts
+    _, tipo_precio = catalog_products_for_store_user(user)
+    saldo_usd = user.saldo_usd if user else 0
+    saldo_cop = user.saldo_cop if user else 0
+    soporte_licencias_nav = bool(_user_store_soporte_licencias_flag(user))
+    return render_template(
+        'user_licencias.html',
+        title='Licencias',
+        tipo_precio=tipo_precio,
+        current_user=user,
+        username=username,
+        saldo_usd=saldo_usd,
+        saldo_cop=saldo_cop,
+        soporte_licencias_nav=soporte_licencias_nav,
+    )
 
 
 
@@ -2813,6 +2953,120 @@ def admin_sms():
     """Página para consultar mensajes SMS recibidos"""
     return render_template('sms.html', title="Consulta de Códigos SMS")
 
+
+def _backup_mtime_colombia_12h(mtime_unix: float) -> str:
+    """mtime UTC del fichero → fecha/hora en Colombia, formato 12 h."""
+    utc_dt = datetime.fromtimestamp(mtime_unix, tz=timezone.utc)
+    co = utc_to_colombia(utc_dt)
+    h12 = co.hour % 12 or 12
+    am_pm = 'p. m.' if co.hour >= 12 else 'a. m.'
+    return f'{co.year:04d}-{co.month:02d}-{co.day:02d} {h12}:{co.strftime("%M")} {am_pm}'
+
+
+def _backup_filename_display(fname: str) -> str:
+    """Quita _HHMMSS antes de .db para la tabla (solo visual; el fichero real sigue completo)."""
+    if not fname:
+        return fname
+    return re.sub(r'_\d{6}(\.db)$', r'\1', fname, flags=re.IGNORECASE)
+
+
+def _human_size(n):
+    for u in ('B', 'KB', 'MB', 'GB'):
+        if n < 1024.0:
+            return f'{n:.1f} {u}'
+        n /= 1024.0
+    return f'{n:.1f} TB'
+
+
+@store_bp.route('/admin/backup', methods=['GET'], endpoint='admin_backup')
+@admin_required
+def admin_backup():
+    """Listado de copias SQLite + acciones."""
+    from app.services import db_backup_service as bk
+    rows = bk.list_backup_files()
+    backups = []
+    bd = bk.backups_directory()
+    for r in rows:
+        backups.append({
+            **r,
+            'name_display': _backup_filename_display(r['name']),
+            'size_h': _human_size(r['size']),
+            'mtime_h': _backup_mtime_colombia_12h(r['mtime']),
+            'kind': 'auto' if r['name'].startswith('auto_') else 'manual',
+        })
+    sqlite_path = bk.get_resolved_sqlite_database_path(current_app)
+    uri = (current_app.config.get('SQLALCHEMY_DATABASE_URI') or '')
+    is_sqlite = sqlite_path is not None and uri.lower().startswith('sqlite')
+    return render_template(
+        'backup.html',
+        title='Copias de seguridad',
+        backups=backups,
+        backups_dir=str(bd.resolve()),
+        db_path_preview=sqlite_path or '—',
+        is_sqlite=is_sqlite,
+    )
+
+
+@store_bp.route('/admin/backup/manual', methods=['POST'])
+@admin_required
+def admin_backup_manual():
+    """Crea una copia manual inmediata (no cuenta para la rotación de 100 autos)."""
+    from app.services import db_backup_service as bk
+    path = bk.create_manual_backup_now()
+    if path:
+        flash('Copia manual creada: ' + os.path.basename(path), 'success')
+    else:
+        flash('No se pudo crear la copia. Comprueba que la BD sea SQLite y exista el archivo.', 'danger')
+    return redirect(url_for('store_bp.admin_backup'))
+
+
+@store_bp.route('/admin/backup/restore', methods=['POST'])
+@admin_required
+def admin_backup_restore():
+    from app.services import db_backup_service as bk
+    fn = (request.form.get('filename') or '').strip()
+    if not fn:
+        flash('No se indicó el archivo.', 'danger')
+        return redirect(url_for('store_bp.admin_backup'))
+    ok, msg = bk.restore_from_backup_file(fn)
+    flash(msg, 'success' if ok else 'danger')
+    return redirect(url_for('store_bp.admin_backup'))
+
+
+@store_bp.route('/admin/backup/delete', methods=['POST'])
+@admin_required
+def admin_backup_delete():
+    from app.services import db_backup_service as bk
+
+    fn = (request.form.get('filename') or '').strip()
+    if not fn:
+        flash('No se indicó el archivo.', 'danger')
+        return redirect(url_for('store_bp.admin_backup'))
+    ok, msg = bk.delete_backup_file(fn)
+    flash(msg, 'success' if ok else 'danger')
+    return redirect(url_for('store_bp.admin_backup'))
+
+
+@store_bp.route('/admin/backup/download/<path:filename>')
+@admin_required
+def admin_backup_download(filename):
+    from app.services import db_backup_service as bk
+    from werkzeug.utils import secure_filename as _sec
+    if _sec(filename) != filename:
+        abort(404)
+    bd = bk.backups_directory()
+    fp = (bd / filename).resolve()
+    try:
+        bd_r = bd.resolve()
+        if not str(fp).startswith(str(bd_r) + os.sep):
+            abort(404)
+    except OSError:
+        abort(404)
+    if not fp.is_file():
+        abort(404)
+    return send_file(fp, as_attachment=True, download_name=filename, mimetype='application/octet-stream')
+
+
 @store_bp.route('/admin/support')
 @admin_required
 def admin_support():
@@ -3190,7 +3444,7 @@ def validate_coupon():
 @store_bp.route('/')
 @store_access_required
 def tienda_alias():
-    products = Product.query.filter_by(enabled=True).order_by(Product.name).all()
+    products = public_store_products_query().order_by(Product.name).all()
     coupons = Coupon.query.filter_by(enabled=True, show_public=True).order_by(Coupon.id.desc()).all()
     user = None
     username = session.get("username")
@@ -3207,7 +3461,7 @@ def tienda_alias():
 @store_bp.route('/store_front')
 @store_access_required
 def store_front_alias():
-    products = Product.query.filter_by(enabled=True).order_by(Product.name).all()
+    products = public_store_products_query().order_by(Product.name).all()
     coupons = Coupon.query.filter_by(enabled=True, show_public=True).order_by(Coupon.id.desc()).all()
     user = None
     username = session.get("username")
@@ -3239,6 +3493,10 @@ def update_subuser_access():
 @store_bp.route('/procesar_pago', methods=['POST'])
 @store_access_required
 def procesar_pago():
+    from collections import defaultdict
+    from datetime import datetime, timedelta
+    from app.store.models import Product, Sale, License, LicenseAccount
+
     user = None
     username = session.get("username")
     user_id = session.get("user_id")
@@ -3252,6 +3510,50 @@ def procesar_pago():
     productos = data.get('productos', [])
     if not productos:
         return jsonify({'success': False, 'error': 'No hay productos'}), 400
+
+    archived_pids = _product_ids_with_archived_license()
+    for _p in productos:
+        try:
+            _pid = int(_p.get('id'))
+        except (TypeError, ValueError):
+            continue
+        if _pid in archived_pids:
+            return jsonify(
+                {
+                    'success': False,
+                    'error': 'Hay productos archivados o no disponibles. Recarga la tienda y quítalos del carrito.',
+                }
+            ), 400
+
+    cantidad_por_producto = defaultdict(int)
+    for _p in productos:
+        try:
+            _pid = int(_p.get('id'))
+        except (TypeError, ValueError):
+            continue
+        try:
+            _q = int(_p.get('cantidad', 1) or 1)
+        except (TypeError, ValueError):
+            _q = 1
+        cantidad_por_producto[_pid] += max(1, _q)
+
+    for _pid, _qty in cantidad_por_producto.items():
+        _prod = Product.query.get(_pid)
+        if not _prod:
+            return jsonify({'success': False, 'error': 'Producto no válido en el pedido'}), 400
+        _sellable = _compute_public_sellable_stock_for_product(_prod)
+        _reserve = _warranty_reserve_for_product(_prod)
+        if _qty > _sellable:
+            return jsonify(
+                {
+                    'success': False,
+                    'error': (
+                        f'No hay suficientes existencias para «{_prod.name}». '
+                        f'Máximo vendible ahora: {_sellable} (reserva de garantía: {_reserve}).'
+                    ),
+                }
+            ), 400
+
     total_cop = 0
     total_usd = 0
     for p in productos:
@@ -3267,74 +3569,104 @@ def procesar_pago():
         return jsonify({'success': False, 'error': 'Saldo COP insuficiente'}), 400
     if total_usd > user.saldo_usd:
         return jsonify({'success': False, 'error': 'Saldo USD insuficiente'}), 400
-    # Descontar saldo
-    user.saldo_cop -= total_cop
-    user.saldo_usd -= total_usd
-    # Registrar compras y asignar licencias automáticamente
-    from app.store.models import Product, Sale, License, LicenseAccount
-    from app import db
-    from datetime import datetime, timedelta
-    
+
     cuentas_asignadas = []
-    
-    for p in productos:
-        producto = Product.query.get(p.get('id'))
-        if not producto:
-            continue
-        
-        cantidad = p.get('cantidad', 1)
-        
-        # Registrar la venta
-        venta = Sale(
-            user_id=user.id,
-            product_id=producto.id,
-            quantity=cantidad,
-            total_price=cantidad * p.get('precio_unitario', 0)
-        )
-        db.session.add(venta)
-        
-        # Buscar licencias disponibles para este producto
-        licenses = License.query.filter_by(product_id=producto.id, enabled=True).all()
-        
-        # Contar cuántas cuentas necesitamos asignar
-        cuentas_necesarias = cantidad
-        cuentas_asignadas_producto = 0
-        
-        # Iterar sobre todas las licencias hasta tener suficientes cuentas
-        for license in licenses:
-            if cuentas_asignadas_producto >= cuentas_necesarias:
-                break
-                
-            # Buscar cuentas disponibles (no vendidas) de esta licencia
-            cuentas_faltantes = cuentas_necesarias - cuentas_asignadas_producto
-            accounts = LicenseAccount.query.filter_by(
-                license_id=license.id,
-                status='available'
-            ).limit(cuentas_faltantes).all()
-            
-            # Asignar las cuentas al usuario
-            for account in accounts:
-                account.status = 'assigned'
-                account.assigned_to_user_id = user.id
-                account.assigned_at = datetime.utcnow()
-                account.expires_at = datetime.utcnow() + timedelta(days=30)  # 1 mes de expiración
-                
-                cuentas_asignadas.append({
-                    'producto': producto.name,
-                    'email': account.email,
-                    'password': account.password,
-                    'identifier': account.account_identifier
-                })
-                cuentas_asignadas_producto += 1
-    
-    db.session.commit()
-    
-    return jsonify({
-        'success': True, 
-        'new_saldo_cop': user.saldo_cop, 
-        'new_saldo_usd': user.saldo_usd,
-        'cuentas_asignadas': cuentas_asignadas
-    })
+    asignadas_por_producto = defaultdict(int)
+
+    try:
+        for p in productos:
+            producto = Product.query.get(p.get('id'))
+            if not producto:
+                continue
+
+            try:
+                cantidad = int(p.get('cantidad', 1) or 1)
+            except (TypeError, ValueError):
+                cantidad = 1
+            cantidad = max(1, cantidad)
+
+            venta = Sale(
+                user_id=user.id,
+                product_id=producto.id,
+                quantity=cantidad,
+                total_price=cantidad * p.get('precio_unitario', 0),
+            )
+            db.session.add(venta)
+
+            licenses = License.query.filter_by(product_id=producto.id, enabled=True).all()
+            cuentas_necesarias = cantidad
+            cuentas_asignadas_producto = 0
+
+            for license in licenses:
+                if cuentas_asignadas_producto >= cuentas_necesarias:
+                    break
+
+                reserve = _license_warranty_days_public(license)
+                cuentas_faltantes = cuentas_necesarias - cuentas_asignadas_producto
+
+                avail_now = LicenseAccount.query.filter_by(
+                    license_id=license.id,
+                    status='available',
+                ).count()
+                max_take = max(0, avail_now - reserve)
+                if max_take <= 0:
+                    continue
+
+                take = min(cuentas_faltantes, max_take)
+                accounts = LicenseAccount.query.filter_by(
+                    license_id=license.id,
+                    status='available',
+                ).limit(take).all()
+
+                for account in accounts:
+                    account.status = 'assigned'
+                    account.assigned_to_user_id = user.id
+                    account.assigned_at = datetime.utcnow()
+                    account.expires_at = datetime.utcnow() + timedelta(days=30)
+
+                    cuentas_asignadas.append(
+                        {
+                            'producto': producto.name,
+                            'email': account.email,
+                            'password': account.password,
+                            'identifier': account.account_identifier,
+                        }
+                    )
+                    cuentas_asignadas_producto += 1
+
+            asignadas_por_producto[producto.id] += cuentas_asignadas_producto
+
+        for _pid, _need in cantidad_por_producto.items():
+            if asignadas_por_producto.get(_pid, 0) < _need:
+                db.session.rollback()
+                _pn = Product.query.get(_pid)
+                _name = _pn.name if _pn else str(_pid)
+                return jsonify(
+                    {
+                        'success': False,
+                        'error': (
+                            f'No se pudieron asignar todas las cuentas para «{_name}». '
+                            'Recarga la tienda e inténtalo de nuevo.'
+                        ),
+                    }
+                ), 409
+
+        user.saldo_cop -= total_cop
+        user.saldo_usd -= total_usd
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.exception('procesar_pago: %s', e)
+        return jsonify({'success': False, 'error': 'Error al procesar el pago'}), 500
+
+    return jsonify(
+        {
+            'success': True,
+            'new_saldo_cop': user.saldo_cop,
+            'new_saldo_usd': user.saldo_usd,
+            'cuentas_asignadas': cuentas_asignadas,
+        }
+    )
 
 @store_bp.route('/historial_compras')
 @store_access_required
@@ -3394,27 +3726,731 @@ def historial_compras_usuario():
 
 # ================== RUTAS PARA LICENCIAS ==================
 
+def _ensure_license_day_notepads_column():
+    """Añade day_notepads_json en SQLite si la tabla ya existía sin esa columna."""
+    try:
+        from sqlalchemy import inspect, text
+        inspector = inspect(db.engine)
+        cols = {c['name'] for c in inspector.get_columns('store_licenses')}
+        if 'day_notepads_json' not in cols:
+            db.session.execute(text('ALTER TABLE store_licenses ADD COLUMN day_notepads_json TEXT'))
+            db.session.commit()
+    except Exception as e:
+        current_app.logger.warning('No se pudo asegurar columna day_notepads_json: %s', e)
+
+
+def _ensure_license_warranty_days_column():
+    """Añade warranty_days (garantía en días, default 5) si la tabla existía sin esa columna."""
+    try:
+        from sqlalchemy import inspect, text
+        inspector = inspect(db.engine)
+        cols = {c['name'] for c in inspector.get_columns('store_licenses')}
+        if 'warranty_days' not in cols:
+            db.session.execute(
+                text('ALTER TABLE store_licenses ADD COLUMN warranty_days INTEGER DEFAULT 5')
+            )
+            db.session.commit()
+    except Exception as e:
+        current_app.logger.warning('No se pudo asegurar columna warranty_days: %s', e)
+
+
+def _ensure_license_expired_notes_and_month_columns():
+    """Añade expired_notes y month_to_month en SQLite si la tabla ya existía sin ellas."""
+    try:
+        from sqlalchemy import inspect, text
+        inspector = inspect(db.engine)
+        cols = {c['name'] for c in inspector.get_columns('store_licenses')}
+        if 'expired_notes' not in cols:
+            db.session.execute(text('ALTER TABLE store_licenses ADD COLUMN expired_notes TEXT'))
+            db.session.commit()
+        cols = {c['name'] for c in inspector.get_columns('store_licenses')}
+        if 'month_to_month' not in cols:
+            db.session.execute(
+                text('ALTER TABLE store_licenses ADD COLUMN month_to_month INTEGER DEFAULT 0 NOT NULL')
+            )
+            db.session.commit()
+    except Exception as e:
+        current_app.logger.warning('No se pudo asegurar columnas expired_notes/month_to_month: %s', e)
+
+
+def _ensure_license_changes_notes_column():
+    """Añade changes_notes en SQLite si la tabla ya existía sin esa columna."""
+    try:
+        from sqlalchemy import inspect, text
+        inspector = inspect(db.engine)
+        cols = {c['name'] for c in inspector.get_columns('store_licenses')}
+        if 'changes_notes' not in cols:
+            db.session.execute(text('ALTER TABLE store_licenses ADD COLUMN changes_notes TEXT'))
+            db.session.commit()
+    except Exception as e:
+        current_app.logger.warning('No se pudo asegurar columna changes_notes: %s', e)
+
+
+def _ensure_license_account_client_notes_column():
+    """Añade client_notes en store_license_accounts si la tabla ya existía sin esa columna."""
+    try:
+        from sqlalchemy import inspect, text
+
+        inspector = inspect(db.engine)
+        if 'store_license_accounts' not in inspector.get_table_names():
+            return
+        cols = {c['name'] for c in inspector.get_columns('store_license_accounts')}
+        if 'client_notes' not in cols:
+            db.session.execute(text('ALTER TABLE store_license_accounts ADD COLUMN client_notes TEXT'))
+            db.session.commit()
+    except Exception as e:
+        current_app.logger.warning('No se pudo asegurar columna client_notes en cuentas: %s', e)
+
+
+def _ensure_user_portal_license_row_notes_column():
+    """Añade portal_license_row_notes en users (apuntes por fila en Licencias cliente)."""
+    try:
+        from sqlalchemy import inspect, text
+
+        inspector = inspect(db.engine)
+        if 'users' not in inspector.get_table_names():
+            return
+        cols = {c['name'] for c in inspector.get_columns('users')}
+        if 'portal_license_row_notes' not in cols:
+            db.session.execute(text('ALTER TABLE users ADD COLUMN portal_license_row_notes TEXT'))
+            db.session.commit()
+    except Exception as e:
+        current_app.logger.warning('No se pudo asegurar columna portal_license_row_notes: %s', e)
+
+
+def _portal_user_lic_row_note_storage_key(account_id, license_id, calendar_day: int, row_ordinal: int) -> str:
+    lid = int(license_id)
+    d = int(calendar_day)
+    o = int(row_ordinal)
+    if account_id is not None and account_id != '':
+        try:
+            return 'a:{}:{}:{}:{}'.format(int(account_id), lid, d, o)
+        except (TypeError, ValueError):
+            return 'v:{}:{}:{}'.format(lid, d, o)
+    return 'v:{}:{}:{}'.format(lid, d, o)
+
+
+def _user_portal_license_row_notes_blob(user_obj):
+    """Devuelve dict clave→texto; nunca muta usuario."""
+    import json as _json
+
+    raw = getattr(user_obj, 'portal_license_row_notes', None)
+    if not raw or not str(raw).strip():
+        return {}
+    try:
+        o = _json.loads(raw)
+        return o if isinstance(o, dict) else {}
+    except Exception:
+        return {}
+
+
+def _inject_user_portal_license_row_notes_into_accounts(user_obj, accounts_list):
+    _ensure_user_portal_license_row_notes_column()
+    blob = _user_portal_license_row_notes_blob(user_obj)
+    for acct in accounts_list or []:
+        if not isinstance(acct, dict):
+            continue
+        lic_id = acct.get('license_id')
+        try:
+            lid_int = int(lic_id)
+        except (TypeError, ValueError):
+            continue
+        aid_raw = acct.get('account_id')
+        dl = acct.get('day_lines')
+        if not isinstance(dl, dict):
+            continue
+        for dk, rows in dl.items():
+            try:
+                cd = int(dk)
+            except (TypeError, ValueError):
+                continue
+            if not isinstance(rows, list):
+                continue
+            for row in rows:
+                if not isinstance(row, dict):
+                    continue
+                ro = row.get('row_ordinal')
+                try:
+                    ro_int = int(ro)
+                except (TypeError, ValueError):
+                    ro_int = 0
+                k = _portal_user_lic_row_note_storage_key(aid_raw, lid_int, cd, ro_int)
+                v = blob.get(k)
+                row['user_row_note'] = str(v).strip() if v is not None else ''
+
+
+def _user_licencias_viewer_scope(user_obj):
+    """
+    IDs de usuario cuyas cuentas asignadas pueden ver en «Licencias» (principal + padre si aplica).
+    Lista de usernames para cruzar con el campo «cliente» en líneas mes a mes.
+    """
+    ids = [user_obj.id]
+    names = [(user_obj.username or '').strip()]
+    if getattr(user_obj, 'parent_id', None) and getattr(user_obj, 'can_access_store', False):
+        parent = User.query.get(user_obj.parent_id)
+        if parent:
+            ids.append(parent.id)
+            pu = (parent.username or '').strip()
+            if pu and pu not in names:
+                names.append(pu)
+    # únicos preservando orden
+    seen = set()
+    uids = []
+    for i in ids:
+        if i not in seen:
+            seen.add(i)
+            uids.append(i)
+    return uids, [n for n in names if n]
+
+
+def _mask_license_cred_preview(identifier: str, email_val: str) -> str:
+    ident = str(identifier or '').strip()
+    if ident:
+        return ident
+    em = str(email_val or '').strip()
+    if not em or '@' not in em:
+        return '—'
+    local, _, domain = em.partition('@')
+    if len(local) <= 2:
+        return f'{local[0]}…@{domain}' if local else f'@{domain}'
+    return f'{local[:3]}…@{domain}'
+
+
+def _license_warranty_days_public(license_row):
+    """Valor entero ≥0 para API/UI; por defecto 5 si falta o es inválido."""
+    v = getattr(license_row, 'warranty_days', None)
+    if v is None:
+        return 5
+    try:
+        iv = int(v)
+        return iv if iv >= 0 else 5
+    except (TypeError, ValueError):
+        return 5
+
+
+def _reject_user_licencias_api(message, code=403):
+    return jsonify({'success': False, 'error': message}), code
+
+
+@store_bp.route('/api/user/my-license-accounts', methods=['GET'])
+@csrf_exempt_route
+def api_user_my_license_accounts():
+    """Cuentas inventario asignadas + filas «mes a mes» donde el nombre cliente coincide (sin venta tienda)."""
+    try:
+        from app.store.models import License, LicenseAccount
+        import json as _json
+        from app.store.user_license_line_parse import matched_rows_for_account_day, matched_rows_for_username_only_day
+
+        if not session.get('logged_in'):
+            return _reject_user_licencias_api('Debes iniciar sesión.', 401)
+        user_obj = User.query.get(session.get('user_id'))
+        if not user_obj:
+            return _reject_user_licencias_api('Usuario no encontrado.', 403)
+        admin_username = current_app.config.get('ADMIN_USER', 'admin')
+        if user_obj.username == admin_username:
+            return _reject_user_licencias_api('Los administradores usan Admin Licencias.', 403)
+
+        blocked_users = ['soporte', 'soporte1', 'soporte2', 'soporte3']
+        if user_obj.username.lower() in blocked_users:
+            return _reject_user_licencias_api('No tienes permiso.', 403)
+        soporte_nav = bool(_user_store_soporte_licencias_flag(user_obj))
+        # Misma política que la página user_licencias
+        if user_obj.parent_id is not None:
+            if not user_obj.can_access_store:
+                return _reject_user_licencias_api('Sin acceso.', 403)
+            pu = User.query.get(user_obj.parent_id)
+            if not pu:
+                return _reject_user_licencias_api('Usuario principal no encontrado.', 403)
+        if not _eligible_tienda_user_licencias_portal(user_obj):
+            return _reject_user_licencias_api(
+                'Necesitas tipo de precio USD o COP o permiso de soporte licencias.',
+                403,
+            )
+
+        _ensure_license_day_notepads_column()
+        _ensure_license_account_client_notes_column()
+
+        assignee_ids, allowed_names = _user_licencias_viewer_scope(user_obj)
+        if not assignee_ids:
+            return jsonify({'success': True, 'accounts': [], 'soporte_licencias': soporte_nav})
+
+        accts = (
+            LicenseAccount.query.options(
+                joinedload(LicenseAccount.license).joinedload(License.product),
+            )
+            .filter(LicenseAccount.assigned_to_user_id.in_(assignee_ids))
+            .filter(
+                or_(
+                    sa_func.lower(sa_func.coalesce(LicenseAccount.status, '')).in_(('assigned', 'sold')),
+                    LicenseAccount.status.is_(None),
+                )
+            )
+            .all()
+        )
+
+        assigned_license_ids = set()
+        for acc in accts:
+            lid_a = getattr(acc, 'license_id', None)
+            if lid_a is not None:
+                assigned_license_ids.add(lid_a)
+
+        out = []
+        for acc in accts:
+            lic = acc.license
+            cn = getattr(acc, 'client_notes', None) or ''
+            at = getattr(acc, 'assigned_at', None)
+            linked_sale_day = at.day if at is not None else None
+            exp_at = getattr(acc, 'expires_at', None)
+            try:
+                days_left = acc.days_until_expiry
+            except Exception:
+                days_left = None
+
+            lic_id_eff = getattr(acc, 'license_id', None)
+            prod_id_eff = None
+            raw_dn = ''
+            pname = 'Cuenta sin licencia vinculada'
+            warranty_days_pub = _license_warranty_days_public(None)
+
+            if lic:
+                warranty_days_pub = _license_warranty_days_public(lic)
+                lic_id_eff = lic.id
+                prod_id_eff = getattr(lic, 'product_id', None)
+                raw_dn = getattr(lic, 'day_notepads_json', None) or ''
+                pname = lic.product.name if lic.product else '—'
+
+            day_map = {}
+            if str(raw_dn).strip():
+                try:
+                    day_map = _json.loads(raw_dn)
+                    if not isinstance(day_map, dict):
+                        day_map = {}
+                except Exception:
+                    day_map = {}
+            day_lines = {}
+            for d in range(1, 32):
+                k = str(d)
+                day_text = day_map.get(k) or ''
+                day_lines[k] = matched_rows_for_account_day(
+                    day_text,
+                    allowed_names,
+                    acc.email or '',
+                    acc.account_identifier or '',
+                    calendar_day=d,
+                )
+
+            img_fn = None
+            if lic and lic.product:
+                try:
+                    img_fn = (lic.product.image_filename or '').strip()
+                    if img_fn.lower() == 'none' or img_fn == '':
+                        img_fn = None
+                except Exception:
+                    img_fn = None
+            if not img_fn:
+                img_fn = 'stream1.png'
+
+            product_image_url = ''
+            try:
+                product_image_url = url_for('static', filename='images/' + img_fn)
+            except Exception:
+                product_image_url = ''
+
+            out.append({
+                'account_id': acc.id,
+                'license_id': lic_id_eff,
+                'product_id': prod_id_eff,
+                'product_name': pname,
+                'product_image_filename': img_fn,
+                'product_image_url': product_image_url,
+                'credential_preview': _mask_license_cred_preview(acc.account_identifier, acc.email),
+                'client_notes': cn,
+                'day_lines': day_lines,
+                'linked_sale_day': linked_sale_day,
+                'assigned_at_iso': at.isoformat() if at is not None else None,
+                'expires_at_iso': exp_at.isoformat() if exp_at is not None else None,
+                'days_until_expiry': days_left,
+                'account_expired': bool(acc.is_expired),
+                'warranty_days': warranty_days_pub,
+            })
+
+        cand_lics = (
+            License.query.options(joinedload(License.product))
+            .filter(License.enabled == True)
+            .filter(License.day_notepads_json.isnot(None))
+            .all()
+        )
+        for lic in cand_lics:
+            if lic.id in assigned_license_ids:
+                continue
+            raw_dn_v = getattr(lic, 'day_notepads_json', None) or ''
+            if not str(raw_dn_v).strip():
+                continue
+            day_map_v = {}
+            try:
+                day_map_v = _json.loads(raw_dn_v)
+                if not isinstance(day_map_v, dict):
+                    day_map_v = {}
+            except Exception:
+                day_map_v = {}
+            day_lines_v = {}
+            for d_v in range(1, 32):
+                k_v = str(d_v)
+                day_text_v = day_map_v.get(k_v) or ''
+                day_lines_v[k_v] = matched_rows_for_username_only_day(
+                    day_text_v,
+                    allowed_names,
+                    calendar_day=d_v,
+                )
+            if not any(day_lines_v[str(dv)] for dv in range(1, 32)):
+                continue
+
+            pname_v = lic.product.name if lic.product else '—'
+            warranty_days_v = _license_warranty_days_public(lic)
+            lic_id_v = lic.id
+            prod_id_v = getattr(lic, 'product_id', None)
+            cred_preview_seed = ''
+            for d_scan in range(1, 32):
+                for row_v in day_lines_v[str(d_scan)]:
+                    c_tmp = row_v.get('cred') if isinstance(row_v, dict) else ''
+                    cs = str(c_tmp or '').strip()
+                    if cs:
+                        cred_preview_seed = cs
+                        break
+                if cred_preview_seed:
+                    break
+
+            img_fn_v = None
+            if lic.product:
+                try:
+                    img_fn_v = (lic.product.image_filename or '').strip()
+                    if img_fn_v.lower() == 'none' or img_fn_v == '':
+                        img_fn_v = None
+                except Exception:
+                    img_fn_v = None
+            if not img_fn_v:
+                img_fn_v = 'stream1.png'
+
+            product_image_url_v = ''
+            try:
+                product_image_url_v = url_for('static', filename='images/' + img_fn_v)
+            except Exception:
+                product_image_url_v = ''
+
+            out.append({
+                'account_id': None,
+                'virtual': True,
+                'license_id': lic_id_v,
+                'product_id': prod_id_v,
+                'product_name': pname_v,
+                'product_image_filename': img_fn_v,
+                'product_image_url': product_image_url_v,
+                'credential_preview': _mask_license_cred_preview(cred_preview_seed, '') if cred_preview_seed else '(mes a mes)',
+                'client_notes': '',
+                'day_lines': day_lines_v,
+                'linked_sale_day': None,
+                'assigned_at_iso': None,
+                'expires_at_iso': None,
+                'days_until_expiry': None,
+                'account_expired': False,
+                'warranty_days': warranty_days_v,
+            })
+
+        out.sort(
+            key=lambda r: (
+                str(r['product_name']).lower(),
+                r['license_id'] or 0,
+                (0, int(r['account_id'])) if r.get('account_id') is not None else (1, 0),
+            )
+        )
+        _inject_user_portal_license_row_notes_into_accounts(user_obj, out)
+        return jsonify({'success': True, 'accounts': out, 'soporte_licencias': soporte_nav})
+    except Exception as e:
+        current_app.logger.exception('api_user_my_license_accounts')
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@store_bp.route('/api/user/license-account/<int:account_id>/client-notes', methods=['PUT'])
+@csrf_exempt_route
+def api_user_license_account_client_notes(account_id):
+    """Persistir notas privadas del cliente solo para esa cuenta."""
+    try:
+        from app.store.models import LicenseAccount
+
+        if not session.get('logged_in'):
+            return _reject_user_licencias_api('Debes iniciar sesión.', 401)
+        user_obj = User.query.get(session.get('user_id'))
+        if not user_obj:
+            return _reject_user_licencias_api('Usuario no encontrado.', 403)
+        assignee_ids, _ = _user_licencias_viewer_scope(user_obj)
+
+        account = LicenseAccount.query.get(account_id)
+        if not account or account.assigned_to_user_id not in assignee_ids:
+            return _reject_user_licencias_api('Cuenta no encontrada o no disponible.', 404)
+
+        _ensure_license_account_client_notes_column()
+
+        data = request.get_json(silent=True) or {}
+        notes_raw = data.get('client_notes', '')
+        if notes_raw is None:
+            notes_raw = ''
+        notes = str(notes_raw).strip()
+        if len(notes) > 8000:
+            notes = notes[:8000]
+        account.client_notes = notes if notes else None
+        db.session.commit()
+        return jsonify({'success': True, 'client_notes': account.client_notes or ''})
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.exception('api_user_license_account_client_notes')
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@store_bp.route('/api/user/license-day-row-status', methods=['PUT'])
+@csrf_exempt_route
+def api_user_license_day_row_status():
+    """
+    Persistir estados favorable (columna verde) e incidencia (columna roja) para una línea del bloc
+    «Días» que el cliente ya puede ver por cuenta inventario o nombre vinculado.
+    """
+    try:
+        from app.store.models import License, LicenseAccount
+        import json as _json
+        from sqlalchemy import or_
+        from sqlalchemy.sql import func as sa_sql_func
+        from app.store.user_license_line_parse import (
+            collect_visible_day_line_targets_assigned,
+            collect_visible_day_line_targets_username_only,
+            dual_to_storage_line,
+            rebuild_day_notepad_lines_with_physical_index,
+            validate_portal_user_status_values,
+        )
+
+        if not session.get('logged_in'):
+            return _reject_user_licencias_api('Debes iniciar sesión.', 401)
+        user_obj = User.query.get(session.get('user_id'))
+        if not user_obj:
+            return _reject_user_licencias_api('Usuario no encontrado.', 403)
+        admin_username = current_app.config.get('ADMIN_USER', 'admin')
+        if user_obj.username == admin_username:
+            return _reject_user_licencias_api('Los administradores usan Admin Licencias.', 403)
+        blocked_users = ['soporte', 'soporte1', 'soporte2', 'soporte3']
+        if user_obj.username.lower() in blocked_users:
+            return _reject_user_licencias_api('No tienes permiso.', 403)
+        if user_obj.parent_id is not None:
+            if not user_obj.can_access_store:
+                return _reject_user_licencias_api('Sin acceso.', 403)
+            pu = User.query.get(user_obj.parent_id)
+            if not pu:
+                return _reject_user_licencias_api('Usuario principal no encontrado.', 403)
+        if not _eligible_tienda_user_licencias_portal(user_obj):
+            return _reject_user_licencias_api(
+                'Necesitas tipo de precio USD o COP o permiso de soporte licencias.',
+                403,
+            )
+
+        assignee_ids, allowed_names = _user_licencias_viewer_scope(user_obj)
+        if not assignee_ids:
+            return _reject_user_licencias_api('Sin acceso.', 403)
+
+        data = request.get_json(silent=True) or {}
+
+        account_id_sel = None
+        ap_raw = data.get('account_id')
+        if ap_raw is not None and str(ap_raw).strip() != '':
+            try:
+                account_id_sel = int(ap_raw)
+            except (TypeError, ValueError):
+                return jsonify({'success': False, 'error': 'Cuenta inválida.'}), 400
+
+        try:
+            license_id_int = int(data.get('license_id'))
+            calendar_day_int = int(data.get('calendar_day'))
+            row_ordinal = int(data.get('row_ordinal'))
+        except (TypeError, ValueError):
+            return jsonify({'success': False, 'error': 'Parámetros incompletos o inválidos.'}), 400
+
+        try:
+            canon_good, canon_sb, otro_use = validate_portal_user_status_values(
+                data.get('status_good'),
+                data.get('status_bad'),
+                data.get('otro_detail'),
+            )
+        except ValueError as verr:
+            return jsonify({'success': False, 'error': str(verr)}), 400
+
+        if calendar_day_int < 1 or calendar_day_int > 31:
+            return jsonify({'success': False, 'error': 'Día del calendario inválido.'}), 400
+
+        _ensure_license_day_notepads_column()
+
+        license_row = License.query.get(license_id_int)
+        if not license_row:
+            return jsonify({'success': False, 'error': 'Licencia no encontrada.'}), 404
+
+        day_map = {}
+        raw_dn = getattr(license_row, 'day_notepads_json', None)
+        if raw_dn and str(raw_dn).strip():
+            try:
+                day_map = _json.loads(raw_dn)
+                if not isinstance(day_map, dict):
+                    day_map = {}
+            except Exception:
+                day_map = {}
+
+        dk = str(calendar_day_int)
+        day_text = day_map.get(dk)
+        day_text_s = '' if day_text is None else str(day_text)
+
+        assigned_any_here = (
+            LicenseAccount.query.filter(
+                LicenseAccount.license_id == license_row.id,
+                LicenseAccount.assigned_to_user_id.in_(assignee_ids),
+                or_(
+                    sa_sql_func.lower(sa_sql_func.coalesce(LicenseAccount.status, '')).in_(('assigned', 'sold')),
+                    LicenseAccount.status.is_(None),
+                ),
+            ).first()
+            is not None
+        )
+
+        if account_id_sel is not None:
+            account = LicenseAccount.query.get(account_id_sel)
+            if not account or account.assigned_to_user_id not in assignee_ids:
+                return _reject_user_licencias_api('Cuenta no encontrada o no disponible.', 404)
+            if account.license_id != license_row.id:
+                return jsonify({'success': False, 'error': 'La cuenta no coincide con la licencia.'}), 400
+            raw_lines, visible = collect_visible_day_line_targets_assigned(
+                day_text_s,
+                allowed_names,
+                str(account.email or ''),
+                str(account.account_identifier or ''),
+            )
+        else:
+            if assigned_any_here:
+                return jsonify(
+                    {
+                        'success': False,
+                        'error': 'Debes usar la ficha de la cuenta inventario para cambiar estos estados.',
+                    },
+                    403,
+                )
+            raw_lines, visible = collect_visible_day_line_targets_username_only(day_text_s, allowed_names)
+
+        if row_ordinal < 0 or row_ordinal >= len(visible):
+            return jsonify({'success': False, 'error': 'No se encontró la fila (actualiza la página).'}), 409
+
+        phys_idx, _orig_ln, dual_base = visible[row_ordinal]
+        merged_dual = dict(dual_base)
+        merged_dual['statusGood'] = canon_good
+        merged_dual['statusBad'] = canon_sb
+        merged_dual['otroDetail'] = otro_use
+
+        new_line = dual_to_storage_line(merged_dual)
+        new_day_text = rebuild_day_notepad_lines_with_physical_index(raw_lines, phys_idx, new_line)
+
+        if str(new_day_text).strip():
+            day_map[dk] = new_day_text
+        else:
+            day_map.pop(dk, None)
+
+        license_row.day_notepads_json = _json.dumps(day_map, ensure_ascii=False)
+
+        texts_for_sync = [
+            license_row.license_notes or '',
+            getattr(license_row, 'suspended_notes', None) or '',
+            getattr(license_row, 'expired_notes', None) or '',
+            getattr(license_row, 'changes_notes', None) or '',
+        ]
+        raw_day_sy = getattr(license_row, 'day_notepads_json', None)
+        if raw_day_sy and str(raw_day_sy).strip():
+            try:
+                dm_sy = _json.loads(raw_day_sy)
+                if isinstance(dm_sy, dict):
+                    for v_sy in dm_sy.values():
+                        if v_sy:
+                            texts_for_sync.append(str(v_sy))
+            except Exception:
+                pass
+        _sync_allowed_emails_from_license_admin_texts(texts_for_sync)
+
+        if 'user_notes' in data:
+            _ensure_user_portal_license_row_notes_column()
+            blob = dict(_user_portal_license_row_notes_blob(user_obj))
+            un_raw = data.get('user_notes')
+            un_str = '' if un_raw is None else str(un_raw).strip()
+            if len(un_str) > 4000:
+                un_str = un_str[:4000]
+            nk = _portal_user_lic_row_note_storage_key(
+                account_id_sel, license_id_int, calendar_day_int, row_ordinal
+            )
+            if not un_str:
+                blob.pop(nk, None)
+            else:
+                blob[nk] = un_str
+            user_obj.portal_license_row_notes = (
+                _json.dumps(blob, ensure_ascii=False) if blob else None
+            )
+
+        db.session.commit()
+        return jsonify({'success': True})
+
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.exception('api_user_license_day_row_status')
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
 @store_bp.route('/api/licenses')
-@admin_required
+@admin_or_soporte_licencias_required
 def api_get_licenses():
     """Obtener todas las licencias con sus cuentas"""
     try:
         from app.store.models import License, LicenseAccount, Product
-        
-        # Obtener todas las licencias con sus productos y cuentas
-        licenses = License.query.join(Product).all()
+        import json as _json
+
+        _ensure_license_day_notepads_column()
+        _ensure_license_warranty_days_column()
+        _ensure_license_expired_notes_and_month_columns()
+        _ensure_license_changes_notes_column()
+
+        # Todas las licencias (incluso si el producto fue eliminado). Antes: .join(Product) excluía filas huérfanas.
+        licenses = License.query.options(
+            joinedload(License.product), selectinload(License.accounts)
+        ).all()
         
         licenses_data = []
         for license in licenses:
+            day_map = {}
+            raw = getattr(license, 'day_notepads_json', None)
+            if raw and str(raw).strip():
+                try:
+                    day_map = _json.loads(raw)
+                    if not isinstance(day_map, dict):
+                        day_map = {}
+                except Exception:
+                    day_map = {}
+            license_notes_val = license.license_notes or ''
+            suspended_notes_val = getattr(license, 'suspended_notes', None) or ''
+            expired_notes_val = getattr(license, 'expired_notes', None) or ''
+            changes_notes_val = getattr(license, 'changes_notes', None) or ''
+            personal_notes_val = license.personal_notes or ''
+            m2m = bool(getattr(license, 'month_to_month', False))
             license_data = {
                 'id': license.id,
                 'product_id': license.product_id,
-                'product_name': license.product.name,
+                'product_name': license.product.name if license.product else 'Producto eliminado',
                 'position': license.position,
+                'warranty_days': _license_warranty_days_public(license),
                 'enabled': license.enabled,
                 'created_at': license.created_at.isoformat() if license.created_at else None,
-                'personal_notes': license.personal_notes or '',
-                'license_notes': license.license_notes or '',
+                'personal_notes': personal_notes_val,
+                'license_notes': license_notes_val,
+                'suspended_notes': suspended_notes_val,
+                'expired_notes': expired_notes_val,
+                'changes_notes': changes_notes_val,
+                'month_to_month': m2m,
+                'day_notepads': day_map,
                 'accounts': []
             }
             
@@ -3435,21 +4471,158 @@ def api_get_licenses():
                 license_data['accounts'].append(account_data)
             
             licenses_data.append(license_data)
-        
         return jsonify({'success': True, 'licenses': licenses_data})
         
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
-@store_bp.route('/api/licenses/<int:license_id>/notes', methods=['PUT'])
-@admin_required
-def api_put_license_notes(license_id):
-    """Guardar notas personales y de licencias (bloc admin) en base de datos."""
-    from app.store.models import License
+@store_bp.route('/api/users/usernames')
+@admin_or_soporte_licencias_required
+def api_store_user_usernames():
+    """Lista parcial de usuarios (principal) para autocompletado en bloc Licencias."""
     try:
+        q = (request.args.get('q') or '').strip()
+        try:
+            limit = int(request.args.get('limit', 30))
+        except (TypeError, ValueError):
+            limit = 30
+        limit = max(1, min(limit, 100))
+        admin_username = current_app.config.get('ADMIN_USER', 'admin')
+        users_query = User.query.filter(User.username != admin_username, User.parent_id.is_(None))
+        if q:
+            users_query = users_query.filter(User.username.ilike(f'%{q}%'))
+        users_query = users_query.order_by(User.username.asc()).limit(limit)
+        names = [u.username for u in users_query.all()]
+        return jsonify({'success': True, 'usernames': names})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@store_bp.route('/api/users/exists')
+@admin_or_soporte_licencias_required
+def api_store_user_exists():
+    """Comprueba si el texto del campo cliente coincide con un usuario. «anonimo» y vacío son válidos."""
+    try:
+        from sqlalchemy import func
+
+        raw = (request.args.get('username') or '').strip()
+        if not raw:
+            return jsonify({'success': True, 'exists': True})
+        if raw.lower() == 'anonimo':
+            return jsonify({'success': True, 'exists': True})
+        admin_username = current_app.config.get('ADMIN_USER', 'admin')
+        found = User.query.filter(
+            User.username != admin_username,
+            User.parent_id.is_(None),
+            func.lower(User.username) == raw.lower(),
+        ).first()
+        return jsonify({'success': True, 'exists': found is not None})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+def _index_of_legacy_double_slash(s, start=0):
+    """Primer '//' que no forma parte de :// (p. ej. https://), alineado con licencias.js."""
+    t = s or ''
+    pos = start or 0
+    while pos < len(t):
+        i = t.find('//', pos)
+        if i == -1:
+            return -1
+        if i == 0 or t[i - 1] != ':':
+            return i
+        pos = i + 2
+    return -1
+
+
+def _split_line_cred_notes_user_admin(line):
+    """Credencial, cliente y resto: separador \\x1f (nuevo) o legado // como en splitLineCredNotesUser (JS)."""
+    t = (line or '').strip()
+    if not t:
+        return '', '', ''
+    sep = '\x1f'
+    if sep in t:
+        parts = t.split(sep)
+        cred = (parts[0] or '').strip()
+        client = (parts[1] or '').strip() if len(parts) > 1 else ''
+        status = (parts[2] or '').strip() if len(parts) > 2 else ''
+        return cred, client, status
+    i1 = _index_of_legacy_double_slash(t, 0)
+    if i1 == -1:
+        return t, '', ''
+    cred = t[:i1].strip()
+    after1 = t[i1 + 2 :]
+    i2 = _index_of_legacy_double_slash(after1, 0)
+    if i2 == -1:
+        return cred, after1.strip(), ''
+    return cred, after1[:i2].strip(), after1[i2 + 2 :].strip()
+
+
+_LICENSE_CRED_FIRST_EMAIL_RE = re.compile(r'\S+@\S+\.\S+')
+
+
+def _sync_allowed_emails_from_license_admin_texts(text_blocks):
+    """
+    Por cada línea con credencial y cliente (separadores \\x1f o legado //), toma el primer correo de la credencial
+    y lo añade a AllowedEmail del usuario principal cuyo username coincide con <cliente>.
+    Omite cliente vacío o 'anonimo'; no duplica filas existentes.
+    """
+    from sqlalchemy import func
+
+    seen = set()
+    added = 0
+    for block in text_blocks:
+        if not block or not str(block).strip():
+            continue
+        for line in str(block).replace('\r\n', '\n').split('\n'):
+            cred, client_part, _status = _split_line_cred_notes_user_admin(line)
+            ul = (client_part or '').strip()
+            if not ul or ul.lower() == 'anonimo':
+                continue
+            m = _LICENSE_CRED_FIRST_EMAIL_RE.search((cred or '').strip())
+            if not m:
+                continue
+            email = m.group(0).strip().lower()
+            if '@' not in email or '.' not in email:
+                continue
+            principal = User.query.filter(
+                User.parent_id.is_(None),
+                func.lower(User.username) == ul.lower(),
+            ).first()
+            if not principal:
+                continue
+            key = (principal.id, email)
+            if key in seen:
+                continue
+            seen.add(key)
+            exists = AllowedEmail.query.filter_by(user_id=principal.id, email=email).first()
+            if exists:
+                continue
+            db.session.add(AllowedEmail(user_id=principal.id, email=email))
+            added += 1
+    return added
+
+
+@store_bp.route('/api/licenses/<int:license_id>/notes', methods=['PUT'])
+@admin_or_soporte_licencias_required
+def api_put_license_notes(license_id):
+    """Guardar notas personales y de licencias (bloc admin) en base de datos.
+
+    Cuerpo parcial: solo se actualizan las claves enviadas. En particular, enviar solo
+    ``month_to_month`` no modifica ``expired_notes`` ni el resto de blocs (siguen en BD).
+    """
+    from app.store.models import License
+    import json as _json
+    try:
+        _ensure_license_day_notepads_column()
+        _ensure_license_expired_notes_and_month_columns()
+        _ensure_license_changes_notes_column()
         license_obj = License.query.get_or_404(license_id)
         data = request.get_json(silent=True) or {}
+        if getattr(g, 'license_support_restricted_mode', False):
+            allowed_keys = {'changes_notes', 'month_to_month', 'license_notes'}
+            data = {k: v for k, v in data.items() if k in allowed_keys}
         if 'personal_notes' in data:
             license_obj.personal_notes = (
                 data['personal_notes'] if data['personal_notes'] is not None else ''
@@ -3458,6 +4631,64 @@ def api_put_license_notes(license_id):
             license_obj.license_notes = (
                 data['license_notes'] if data['license_notes'] is not None else ''
             )
+        if 'suspended_notes' in data:
+            license_obj.suspended_notes = (
+                data['suspended_notes'] if data['suspended_notes'] is not None else ''
+            )
+        if 'expired_notes' in data:
+            license_obj.expired_notes = (
+                data['expired_notes'] if data['expired_notes'] is not None else ''
+            )
+        if 'month_to_month' in data:
+            v = data['month_to_month']
+            license_obj.month_to_month = bool(v) if v is not None else False
+        if 'changes_notes' in data:
+            license_obj.changes_notes = (
+                data['changes_notes'] if data['changes_notes'] is not None else ''
+            )
+        if 'day_notepads' in data and isinstance(data['day_notepads'], dict):
+            current = {}
+            raw = getattr(license_obj, 'day_notepads_json', None)
+            if raw and str(raw).strip():
+                try:
+                    current = _json.loads(raw)
+                    if not isinstance(current, dict):
+                        current = {}
+                except Exception:
+                    current = {}
+            for k, v in data['day_notepads'].items():
+                sk = str(k)
+                if v is None or (isinstance(v, str) and v.strip() == ''):
+                    current.pop(sk, None)
+                else:
+                    current[sk] = v if isinstance(v, str) else str(v)
+            license_obj.day_notepads_json = _json.dumps(current, ensure_ascii=False)
+
+        if (
+            'license_notes' in data
+            or 'suspended_notes' in data
+            or 'expired_notes' in data
+            or 'changes_notes' in data
+            or ('day_notepads' in data and isinstance(data.get('day_notepads'), dict))
+        ):
+            texts_for_sync = [
+                license_obj.license_notes or '',
+                license_obj.suspended_notes or '',
+                getattr(license_obj, 'expired_notes', None) or '',
+                getattr(license_obj, 'changes_notes', None) or '',
+            ]
+            raw_day = getattr(license_obj, 'day_notepads_json', None)
+            if raw_day and str(raw_day).strip():
+                try:
+                    dm = _json.loads(raw_day)
+                    if isinstance(dm, dict):
+                        for v in dm.values():
+                            if v:
+                                texts_for_sync.append(str(v))
+                except Exception:
+                    pass
+            _sync_allowed_emails_from_license_admin_texts(texts_for_sync)
+
         db.session.commit()
         return jsonify({'success': True})
     except Exception as e:
@@ -3472,11 +4703,26 @@ def api_get_archived_licenses():
     try:
         from app.store.models import License, LicenseAccount, Product
         from app import db
-        
+
+        _ensure_license_warranty_days_column()
+        _ensure_license_expired_notes_and_month_columns()
+        _ensure_license_changes_notes_column()
+
         licenses = License.query.filter_by(enabled=False).options(joinedload(License.accounts)).all()
         
         licenses_data = []
         for license in licenses:
+            day_map = {}
+            raw = getattr(license, 'day_notepads_json', None)
+            if raw and str(raw).strip():
+                try:
+                    import json as _json
+                    day_map = _json.loads(raw)
+                    if not isinstance(day_map, dict):
+                        day_map = {}
+                except Exception:
+                    day_map = {}
+            
             accounts_data = []
             for account in license.accounts:
                 accounts_data.append({
@@ -3498,11 +4744,17 @@ def api_get_archived_licenses():
                 'product_id': license.product_id,
                 'product_name': license.product.name if license.product else 'Producto eliminado',
                 'position': license.position,
+                'warranty_days': _license_warranty_days_public(license),
                 'enabled': license.enabled,
                 'created_at': license.created_at.isoformat(),
                 'updated_at': license.updated_at.isoformat(),
                 'personal_notes': license.personal_notes or '',
                 'license_notes': license.license_notes or '',
+                'suspended_notes': getattr(license, 'suspended_notes', None) or '',
+                'expired_notes': getattr(license, 'expired_notes', None) or '',
+                'changes_notes': getattr(license, 'changes_notes', None) or '',
+                'month_to_month': bool(getattr(license, 'month_to_month', False)),
+                'day_notepads': day_map,
                 'accounts': accounts_data
             })
         
@@ -3515,6 +4767,7 @@ def api_get_archived_licenses():
 @admin_required
 def api_archive_license(license_id):
     """Archivar una licencia (deshabilitarla)"""
+    from app.store.models import License
     try:
         license = License.query.get_or_404(license_id)
         license.enabled = False
@@ -3535,6 +4788,7 @@ def api_archive_license(license_id):
 @admin_required
 def api_restore_license(license_id):
     """Restaurar una licencia archivada (habilitarla)"""
+    from app.store.models import License
     try:
         license = License.query.get_or_404(license_id)
         license.enabled = True
@@ -3551,10 +4805,37 @@ def api_restore_license(license_id):
             'error': str(e)
         }), 500
 
+@store_bp.route('/api/licenses/<int:license_id>/warranty', methods=['PUT'])
+@admin_required
+def api_update_license_warranty(license_id):
+    """Actualizar días de garantía (gar.) de una licencia / producto."""
+    from app.store.models import License
+    try:
+        _ensure_license_warranty_days_column()
+        data = request.get_json(silent=True) or {}
+        raw = data.get('warranty_days')
+        if raw is None:
+            return jsonify({'success': False, 'error': 'warranty_days requerido'}), 400
+        try:
+            wd = int(raw)
+        except (TypeError, ValueError):
+            return jsonify({'success': False, 'error': 'Valor de garantía inválido'}), 400
+        if wd < 0 or wd > 3650:
+            return jsonify({'success': False, 'error': 'La garantía debe estar entre 0 y 3650 días'}), 400
+        lic = License.query.get_or_404(license_id)
+        lic.warranty_days = wd
+        db.session.commit()
+        return jsonify({'success': True, 'warranty_days': wd})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
 @store_bp.route('/api/licenses/<int:license_id>', methods=['DELETE'])
 @admin_required
 def api_delete_license(license_id):
     """Eliminar permanentemente una licencia"""
+    from app.store.models import License
     try:
         license = License.query.get_or_404(license_id)
         db.session.delete(license)
@@ -3664,30 +4945,84 @@ def api_reorganize_all_licenses():
         db.session.rollback()
         return jsonify({'success': False, 'error': str(e)}), 500
 
+
+def _count_inventory_lines_from_license_notes(license_notes):
+    """
+    Líneas con contenido en el bloc Licencias (mismo criterio que el badge del admin:
+    countNonEmptyLinesInText en licencias.js). Antes solo contaban líneas que pasaban
+    un regex estricto, y había desfase con lo que el usuario ve (p. ej. 11 vs 15).
+    """
+    if not license_notes or not str(license_notes).strip():
+        return 0
+    n = 0
+    for ln in str(license_notes).splitlines():
+        if str(ln).strip():
+            n += 1
+    return n
+
+
+def _stock_for_single_license(license_obj):
+    """
+    Inventario por licencia: filas en LicenseAccount (available/assigned) o líneas
+    en license_notes, lo que sea mayor (el admin suele usar solo el bloc de texto).
+    """
+    from app.store.models import LicenseAccount
+    acc_count = LicenseAccount.query.filter(
+        LicenseAccount.license_id == license_obj.id,
+        LicenseAccount.status.in_(['available', 'assigned'])
+    ).count()
+    note_count = _count_inventory_lines_from_license_notes(license_obj.license_notes)
+    return max(acc_count, note_count)
+
+
+def _compute_stock_for_product(product):
+    """Suma el stock de todas las licencias activas del producto."""
+    from app.store.models import License
+    licenses = License.query.filter_by(product_id=product.id, enabled=True).all()
+    if not licenses:
+        return 0
+    total = 0
+    for lic in licenses:
+        total += _stock_for_single_license(lic)
+    return total
+
+
+def _warranty_reserve_for_product(product):
+    """Unidades reservadas como garantía (suma de gar. por licencia activa del producto)."""
+    from app.store.models import License
+
+    _ensure_license_warranty_days_column()
+    lic_rows = License.query.filter_by(product_id=product.id, enabled=True).all()
+    total = 0
+    for lic in lic_rows:
+        total += _license_warranty_days_public(lic)
+    return total
+
+
+def _compute_public_sellable_stock_for_product(product):
+    """
+    Existencias mostradas en tienda pública y tope de venta: inventario bruto menos
+    reserva de garantía (gar.). Nunca se ofrece vender hasta agotar el colchón de garantía.
+    """
+    raw = _compute_stock_for_product(product)
+    reserve = _warranty_reserve_for_product(product)
+    return max(0, raw - reserve)
+
+
 @store_bp.route('/api/products/<int:product_id>/stock', methods=['GET'])
 def api_get_product_stock(product_id):
     """Obtener el conteo de licencias disponibles para un producto"""
     try:
-        from app.store.models import License, LicenseAccount
-        
-        # Buscar todas las licencias del producto
-        licenses = License.query.filter_by(product_id=product_id, enabled=True).all()
-        
-        if not licenses:
+        from app.store.models import Product
+
+        db.session.expire_all()
+        product = Product.query.get(product_id)
+        if not product:
             return jsonify({'success': True, 'stock': 0})
-        
-        # Contar todas las cuentas disponibles (no vendidas) de todas las licencias del producto
-        # Status 'available' y 'assigned' se consideran disponibles
-        total_stock = 0
-        for license in licenses:
-            available_accounts = LicenseAccount.query.filter(
-                LicenseAccount.license_id == license.id,
-                LicenseAccount.status.in_(['available', 'assigned'])
-            ).count()
-            total_stock += available_accounts
-        
+
+        total_stock = _compute_public_sellable_stock_for_product(product)
         return jsonify({'success': True, 'stock': total_stock})
-        
+
     except Exception as e:
         current_app.logger.error(f'Error al obtener stock del producto {product_id}: {str(e)}')
         return jsonify({'success': False, 'error': str(e)}), 500
@@ -3696,32 +5031,54 @@ def api_get_product_stock(product_id):
 def api_get_all_products_stock():
     """Obtener el conteo de licencias disponibles para todos los productos"""
     try:
-        from app.store.models import License, LicenseAccount, Product
-        
-        # Obtener todos los productos habilitados
-        products = Product.query.filter_by(enabled=True).all()
-        
+        from app.store.models import Product
+
+        db.session.expire_all()
+        products = public_store_products_query().all()
         stock_data = {}
         for product in products:
-            # Buscar todas las licencias del producto
-            licenses = License.query.filter_by(product_id=product.id, enabled=True).all()
-            
-            total_stock = 0
-            for license in licenses:
-                # Status 'available' y 'assigned' se consideran disponibles
-                available_accounts = LicenseAccount.query.filter(
-                    LicenseAccount.license_id == license.id,
-                    LicenseAccount.status.in_(['available', 'assigned'])
-                ).count()
-                total_stock += available_accounts
-            
-            stock_data[product.id] = total_stock
-        
+            stock_data[product.id] = _compute_public_sellable_stock_for_product(product)
+
         return jsonify({'success': True, 'stock': stock_data})
-        
+
     except Exception as e:
         current_app.logger.error(f'Error al obtener stock de productos: {str(e)}')
         return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@store_bp.route('/api/products/stock/stream')
+def api_products_stock_stream():
+    """
+    Server-Sent Events: envía existencias cada ~1,2 s.
+    El ciclo termina a los ~29 s y el navegador reconecta solo (evita timeouts en proxies/Gunicorn).
+    """
+    @stream_with_context
+    def generate():
+        # ~24 * 1.2s ≈ 29s por petición; EventSource vuelve a abrir la conexión.
+        for _ in range(24):
+            try:
+                db.session.expire_all()
+                products = public_store_products_query().all()
+                stock_data = {}
+                for product in products:
+                    stock_data[product.id] = _compute_public_sellable_stock_for_product(product)
+                payload = json.dumps({'success': True, 'stock': stock_data})
+                yield f"data: {payload}\n\n"
+            except Exception as e:
+                current_app.logger.error(f'Error en stream de stock: {e}')
+                yield f"data: {json.dumps({'success': False, 'error': str(e)})}\n\n"
+            time.sleep(1.2)
+
+    return Response(
+        generate(),
+        mimetype='text/event-stream',
+        headers={
+            'Cache-Control': 'no-cache',
+            'Connection': 'keep-alive',
+            'X-Accel-Buffering': 'no',
+        },
+    )
+
 
 @store_bp.route('/api/licenses/<int:license_id>/toggle', methods=['PUT'])
 @admin_required
@@ -3745,7 +5102,7 @@ def api_toggle_license(license_id):
         return jsonify({'success': False, 'error': str(e)}), 500
 
 @store_bp.route('/api/licenses/<int:license_id>/accounts', methods=['POST'])
-@admin_required
+@admin_or_soporte_licencias_required
 def api_add_license_account(license_id):
     """Agregar cuenta a una licencia"""
     try:
@@ -3787,7 +5144,7 @@ def api_add_license_account(license_id):
         return jsonify({'success': False, 'error': str(e)}), 500
 
 @store_bp.route('/api/accounts/<int:account_id>', methods=['DELETE', 'PUT', 'OPTIONS'])
-@admin_required
+@admin_or_soporte_licencias_required
 def api_update_license_account(account_id):
     """Actualizar o eliminar cuenta de licencia"""
     # Manejar preflight requests
@@ -3845,7 +5202,7 @@ def api_update_license_account(account_id):
         return jsonify({'success': False, 'error': str(e)}), 500
 
 @store_bp.route('/api/accounts/<int:account_id>/mark-sold', methods=['PUT'])
-@admin_required
+@admin_or_soporte_licencias_required
 def api_mark_account_sold(account_id):
     """Marcar cuenta como vendida con fecha"""
     try:
@@ -3882,7 +5239,9 @@ def api_initialize_licenses():
     try:
         from app.store.models import License, Product
         from app import db
-        
+
+        _ensure_license_warranty_days_column()
+
         # Obtener todos los productos habilitados
         products = Product.query.filter_by(enabled=True).all()
         
@@ -3895,7 +5254,8 @@ def api_initialize_licenses():
                 new_license = License(
                     product_id=product.id,
                     position=i,
-                    enabled=True
+                    enabled=True,
+                    warranty_days=5,
                 )
                 db.session.add(new_license)
                 created_licenses.append({

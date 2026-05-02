@@ -6,7 +6,7 @@
 {% block head %}
 <meta name="csrf_token" content="{{ csrf_token() }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/store.css') }}">
-<link rel="stylesheet" href="{{ url_for('static', filename='css/manage_permissions.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/manage_permissions.css') }}?v=2">
 <link rel="stylesheet" href="{{ url_for('static', filename='fontawesome/css/all.css') }}">
 {% endblock %}
 
@@ -166,7 +166,7 @@
         <thead>
           <tr>
             <th>Usuario</th>
-            <th>Tipo Precio</th>
+            <th class="user-prices-th-tipo">Tipo precio <span class="user-prices-th-tipo-sub text-muted">USD · COP · Soporte licencias</span></th>
             <th>Saldo</th>
             <th>Productos Asociados</th>
           </tr>

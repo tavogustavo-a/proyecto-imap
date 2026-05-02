@@ -19039,7 +19039,12 @@ document.addEventListener('DOMContentLoaded', function() {
         try {
             const scriptEl = document.getElementById('sharedWorksheetDataJson');
             const dataAttrEl = document.querySelector('[data-shared-worksheet-data]');
-            const dataJson = scriptEl ? scriptEl.textContent : (dataAttrEl ? dataAttrEl.getAttribute('data-shared-worksheet-data') : null);
+            var dataJson = null;
+            if (scriptEl && scriptEl.textContent && String(scriptEl.textContent).trim()) {
+                dataJson = scriptEl.textContent;
+            } else if (dataAttrEl) {
+                dataJson = dataAttrEl.getAttribute('data-shared-worksheet-data');
+            }
             if (dataJson && dataJson.trim()) {
                 window.sharedWorksheetData = JSON.parse(dataJson);
             }

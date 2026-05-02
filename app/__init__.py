@@ -126,10 +126,40 @@ def create_app(config_class_passed=None):
                     app.logger.info(
                         "Esquema: columna license_notes añadida a store_licenses"
                     )
+                col_names = {c["name"] for c in insp.get_columns("store_licenses")}
+                if "suspended_notes" not in col_names:
+                    db.session.execute(
+                        text("ALTER TABLE store_licenses ADD COLUMN suspended_notes TEXT")
+                    )
+                    db.session.commit()
+                    app.logger.info(
+                        "Esquema: columna suspended_notes añadida a store_licenses"
+                    )
         except Exception as schema_err:
             db.session.rollback()
             app.logger.warning(
                 "No se pudo aplicar parche store_licenses (notas): %s", schema_err
+            )
+
+        try:
+            insp = inspect(db.engine)
+            if insp.has_table("users"):
+                usr_cols = {c["name"] for c in insp.get_columns("users")}
+                if "portal_license_row_notes" not in usr_cols:
+                    db.session.execute(
+                        text(
+                            "ALTER TABLE users ADD COLUMN portal_license_row_notes TEXT"
+                        )
+                    )
+                    db.session.commit()
+                    app.logger.info(
+                        "Esquema: columna portal_license_row_notes añadida a users"
+                    )
+        except Exception as schema_err:
+            db.session.rollback()
+            app.logger.warning(
+                "No se pudo aplicar parche users.portal_license_row_notes: %s",
+                schema_err,
             )
 
     # === Registro de Blueprints ===
@@ -272,6 +302,57 @@ def create_app(config_class_passed=None):
                 return False
             return {"user_has_worksheet_access": dummy_worksheet_access}
 
+    @app.context_processor
+    def inject_store_menu_balance():
+        """Texto de saldo para el pie del menú móvil de usuarios con tienda (USD/COP)."""
+        from flask import session
+
+        defaults = {"store_menu_show_saldo": False, "store_menu_saldo_line": None}
+        if not session.get("logged_in"):
+            return defaults
+        try:
+            from app.store.routes import (
+                _eligible_tienda_user_licencias_portal,
+                catalog_products_for_store_user,
+            )
+        except ImportError:
+            return defaults
+
+        uid = session.get("user_id")
+        if not uid:
+            return defaults
+        user = User.query.get(uid)
+        if not user:
+            return defaults
+        admin_username = app.config.get("ADMIN_USER", "admin")
+        if user.username == admin_username:
+            return defaults
+        blocked = {"soporte", "soporte1", "soporte2", "soporte3"}
+        if user.username and user.username.lower() in blocked:
+            return defaults
+        if not _eligible_tienda_user_licencias_portal(user):
+            return defaults
+        _, tipo_precio = catalog_products_for_store_user(user)
+
+        def _fmt_num(n):
+            try:
+                x = float(n)
+            except (TypeError, ValueError):
+                x = 0.0
+            if abs(x - round(x)) < 1e-9:
+                return str(int(round(x)))
+            s = ("%.2f" % x).replace(".00", "").rstrip("0").rstrip(".")
+            return s
+
+        cop = float(user.saldo_cop or 0)
+        usd = float(user.saldo_usd or 0)
+        if tipo_precio == "COP":
+            line = "Saldo $%s COP" % _fmt_num(cop)
+        elif tipo_precio == "USD":
+            line = "Saldo $%s USD" % _fmt_num(usd)
+        else:
+            return defaults
+        return {"store_menu_show_saldo": True, "store_menu_saldo_line": line}
 
     # Aplicar exenciones de CSRF después de registrar todos los blueprints
     apply_csrf_exemptions()

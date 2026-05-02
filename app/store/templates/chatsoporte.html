@@ -75,9 +75,8 @@
     <!-- MENÚ LATERAL MÓVIL PARA ADMINISTRADORES -->
     {% if is_admin %}
     <div id="mobileMenu" class="mobile-menu-store hidden">
-      <div class="menu-title-row">
-        <i class="fas fa-bars"></i>
-        <h3>Menú</h3>
+      <div class="menu-user-info-row menu-user-info-row--name-only menu-sidebar-heading-name">
+        <span class="menu-user-name">{{ session.get('username', 'Admin') }}</span>
       </div>
       <a href="{{ url_for('admin_bp.dashboard') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-cogs"></i> Administración</a>
       <a href="{{ url_for('admin_bp.parrafos_page') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-paragraph"></i> Párrafos</a>
@@ -92,6 +91,7 @@
       <a href="{{ url_for('store_bp.admin_work_sheets') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-table"></i> Hojas de Cálculo</a>
       <a href="{{ url_for('store_bp.html_tools') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-code"></i> HTML</a>
       <a href="{{ url_for('store_bp.admin_support') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-headset"></i> Chat Soporte</a>
+      <a href="{{ url_for('store_bp.admin_backup') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-database"></i> Backup</a>
       <button id="btnClearTriggerLogMenu" type="button" class="btn-panel btn-red mobile-menu-btn mb-04"><i class="fas fa-trash"></i> Limpiar Logs</button>
       <a href="{{ url_for('auth_bp.logout') }}" class="btn-panel btn-red mobile-menu-btn mb-04"><i class="fas fa-sign-out-alt"></i> Cerrar Sesión</a>
       <button id="btnLogoutAllAndClearCookies" type="button" class="btn-panel btn-red mobile-menu-btn mb-04" data-url="{{ url_for('admin_bp.logout_all_and_clear_cookies') }}"><i class="fas fa-cookie-bite"></i> Cerrar sesión y limpiar cookies</button>
@@ -99,9 +99,8 @@
     {% else %}
     <!-- MENÚ LATERAL MÓVIL PARA USUARIOS NORMALES Y SUB-USUARIOS -->
     <div id="mobileMenu" class="mobile-menu-store hidden">
-      <div class="menu-title-row">
-        <i class="fas fa-bars"></i>
-        <h3>Menú</h3>
+      <div class="menu-user-info-row menu-user-info-row--name-only menu-sidebar-heading-name">
+        <span class="menu-user-name">{{ session.get('username', 'Invitado') }}</span>
       </div>
       {% set current_user_id = session.get("user_id") %}
       {% if current_user_id %}
@@ -121,6 +120,7 @@
         {% endif %}
         {% if show_store %}
           <a href="{{ url_for('store_bp.store_front') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-store"></i> Tienda</a>
+          <a href="{{ url_for('store_bp.user_licencias') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-link"></i> Licencias</a>
           <a href="{{ url_for('store_bp.historial_compras_usuario') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-receipt"></i> Mi Historial de Compras</a>
         {% endif %}
       {% endif %}
@@ -134,6 +134,9 @@
       {% if is_user and not current_user.parent_id and user_has_worksheet_access(current_user) %}
   <a href="{{ url_for('store_bp.user_work_sheets') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-table"></i> Hojas de Cálculo</a>
 {% endif %}
+      {% if is_user and current_user and current_user.managed_imap2_pages|length > 0 %}
+        <a href="{{ url_for('user_auth_bp.my_pages_list') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-file-alt"></i> Gestionar mi página</a>
+      {% endif %}
       {% if is_admin %}
         <a href="{{ url_for('admin_bp.dashboard') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-cogs"></i> Administración</a>
       {% endif %}
@@ -144,15 +147,15 @@
       {% else %}
         <a href="{{ url_for('auth_bp.logout') }}" class="btn-panel btn-red mobile-menu-btn mb-04"><i class="fas fa-sign-out-alt"></i> Cerrar Sesión</a>
       {% endif %}
+      {% include 'includes/store_user_menu_saldo_block.html' %}
     </div>
     {% endif %}
 
     <!-- Modal Menú2 para administradores -->
     {% if is_admin %}
     <div id="mobileMenu2" class="mobile-menu-store hidden">
-      <div class="menu-title-row">
-        <i class="fas fa-bars"></i>
-        <h3>Licencias</h3>
+      <div class="menu-user-info-row menu-user-info-row--name-only menu-sidebar-heading-name">
+        <span class="menu-user-name">Menú</span>
       </div>
       <a href="{{ url_for('store_bp.admin_store') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-store"></i> Licencias</a>
       <a href="{{ url_for('store_bp.admin_productos') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-box"></i> Productos</a>
@@ -163,7 +166,6 @@
       <a href="{{ url_for('store_bp.tools_public') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-tools"></i> Herramientas Pública</a>
       <a href="{{ url_for('store_bp.historial_compras_usuario') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-receipt"></i> Mi Historial de Compras</a>
       <a href="{{ url_for('main_bp.home') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-code"></i> Códigos</a>
-      <a href="{{ url_for('auth_bp.logout') }}" class="btn-panel btn-red mobile-menu-btn mb-04"><i class="fas fa-sign-out-alt"></i> Cerrar Sesión</a>
     </div>
     {% endif %}
     <div id="menuOverlay" class="menu-overlay"></div>
