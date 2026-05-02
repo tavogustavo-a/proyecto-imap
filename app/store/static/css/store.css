@@ -692,19 +692,12 @@ html, body {
     width: 100%;
     max-width: 720px;
     margin: 0 auto 1rem auto;
-    padding: 0.65rem 0.85rem;
     border-radius: 12px;
     background: linear-gradient(145deg, #fff9e6 0%, #fff3c4 100%);
-    border: 1px solid rgba(180, 140, 40, 0.35);
     box-shadow: 0 2px 10px rgba(0, 0, 0, 0.06);
   }
-  .admin-licencias-bloc-header {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 0.35rem 0.75rem;
-    margin-bottom: 0.45rem;
-  }
+  /* Cabeceras .admin-licencias-bloc-header: cada contexto define estilo — sin regla «global»
+     que aplique flex-wrap/beige sobre franjas azules dentro de .license-notepads-wrap */
   .admin-licencias-bloc-title {
     font-weight: 600;
     font-size: 0.95rem;
@@ -901,18 +894,22 @@ html, body {
     border: none !important;
     border-top: none !important;
   }
+  /* Dentro del wrap de notas licencias/días: cabecera tipo franja azul (no layout de bloc adhesivo) */
   .license-notepads-wrap .admin-licencias-bloc-header {
+    display: flex;
+    align-items: center;
+    flex-wrap: nowrap;
+    gap: 0.35rem;
     margin-bottom: 0 !important;
-    background: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 50%, #2563eb 100%);
-    padding: 0.1rem 0.35rem;
-    border-radius: 5px 5px 0 0;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.22);
-    box-sizing: border-box;
     line-height: 1.15;
     min-height: 0;
+    box-sizing: border-box;
   }
-  .admin-licencias-page .license-notepads-wrap .admin-licencias-bloc-header {
+  .admin-licencias-page.admin-licencias-shell .license-notepads-wrap .admin-licencias-bloc-header {
+    background: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 50%, #2563eb 100%);
     padding: 0.1rem 0.35rem !important;
+    border-radius: 5px 5px 0 0;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.22);
   }
   /* Franja casi al ras (como proyecto anterior): botones undo/redo no marcan la altura */
   .admin-licencias-page .license-notepads-wrap .admin-bloc-undo-toolbar--in-header {
@@ -935,19 +932,19 @@ html, body {
     opacity: 1;
   }
 
-  /* Título + deshacer/rehacer en una fila (ahorra espacio) */
-  .license-notepads-wrap .admin-licencias-bloc--personal .admin-licencias-bloc-header,
-  .license-notepads-wrap .admin-licencias-bloc--license .admin-licencias-bloc-header,
-  .license-notepads-wrap .admin-licencias-bloc--day .admin-licencias-bloc-header {
+  /* Título + deshacer/rehacer / acciones: solo Admin Licencias (.admin-licencias-shell), no vista usuario */
+  .admin-licencias-page.admin-licencias-shell .license-notepads-wrap .admin-licencias-bloc--personal .admin-licencias-bloc-header,
+  .admin-licencias-page.admin-licencias-shell .license-notepads-wrap .admin-licencias-bloc--license .admin-licencias-bloc-header,
+  .admin-licencias-page.admin-licencias-shell .license-notepads-wrap .admin-licencias-bloc--day .admin-licencias-bloc-header {
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 0.35rem;
     flex-wrap: nowrap;
   }
-  .license-notepads-wrap .admin-licencias-bloc--personal .admin-licencias-bloc-title,
-  .license-notepads-wrap .admin-licencias-bloc--license .admin-licencias-bloc-title,
-  .license-notepads-wrap .admin-licencias-bloc--day .admin-licencias-bloc-title {
+  .admin-licencias-page.admin-licencias-shell .license-notepads-wrap .admin-licencias-bloc--personal .admin-licencias-bloc-title,
+  .admin-licencias-page.admin-licencias-shell .license-notepads-wrap .admin-licencias-bloc--license .admin-licencias-bloc-title,
+  .admin-licencias-page.admin-licencias-shell .license-notepads-wrap .admin-licencias-bloc--day .admin-licencias-bloc-title {
     flex: 1;
     min-width: 0;
     text-align: center;
@@ -1314,7 +1311,8 @@ html, body {
     column-gap: 0;
     align-items: stretch;
     min-width: max(100%, var(--lic-split-min-width));
-    width: auto;
+    /* width: 100% evita hueco a la derecha: con width:auto la cuadrícula no siempre llena el viewport */
+    width: 100%;
     box-sizing: border-box;
   }
   .license-notepads-wrap .license-split-editor__creds-cell {
@@ -3149,7 +3147,8 @@ html, body {
     max-height: none !important;
   }
 
-  .admin-licencias-page.admin-licencias-shell {
+  .admin-licencias-page.admin-licencias-shell,
+  .admin-licencias-page.user-licencias-shell {
     width: 100% !important;
     max-width: 100% !important;
     margin-left: 0 !important;
@@ -3159,15 +3158,17 @@ html, body {
     box-sizing: border-box !important;
   }
 
-  .admin-licencias-page.admin-licencias-shell.worksheet-panel {
+  .admin-licencias-page.admin-licencias-shell.worksheet-panel,
+  .admin-licencias-page.user-licencias-shell.worksheet-panel {
     max-width: none !important;
     /* Evitar segundo scroll: el panel de worksheets fuerza 1500px y contenedores con overflow ocultan el flujo natural */
     min-height: 0 !important;
     overflow: visible !important;
   }
 
-  /* base.html envuelve el bloque en .container; admin_store añade otro .container: quitar límite de ancho del interno */
-  body .container > .container.admin-licencias-page.admin-licencias-shell {
+  /* base.html envuelve el bloque en .container; admin puede anidar otro .container */
+  body .container > .container.admin-licencias-page.admin-licencias-shell,
+  body .container > .container.admin-licencias-page.user-licencias-shell {
     max-width: 100% !important;
     width: 100% !important;
     margin-left: 0 !important;
@@ -3208,7 +3209,8 @@ html, body {
   }
 
   /* Página al ras del viewport: menos aire arriba y bloques pegados (cabecera = ancho del cuerpo) */
-  .admin-licencias-page.admin-licencias-shell.container.mt-2 {
+  .admin-licencias-page.admin-licencias-shell.container.mt-2,
+  .admin-licencias-page.user-licencias-shell.container.mt-2 {
     margin-top: 0.2rem !important;
   }
   .admin-licencias-page .license-notepads-wrap {
@@ -3400,21 +3402,24 @@ html, body {
     padding-right: 0.35rem;
   }
 
-  /* Contenedor padre (base.html) a ancho completo solo en Admin Licencias */
-  body .container:has(.admin-licencias-page.admin-licencias-shell) {
-    max-width: 100% !important;
+  /* Contenedor padre (base.html) a ancho completo en Admin y Licencias usuario */
+  body .container:has(.admin-licencias-page.admin-licencias-shell),
+  body .container:has(.admin-licencias-page.user-licencias-shell) {
+    max-width: none !important;
     width: 100% !important;
     padding-left: 0 !important;
     padding-right: 0 !important;
     margin-left: 0 !important;
-    margin-right: auto !important;
+    margin-right: 0 !important;
     box-sizing: border-box !important;
     overflow: visible !important;
     max-height: none !important;
   }
 
   html:has(.admin-licencias-page.admin-licencias-shell),
-  body:has(.admin-licencias-page.admin-licencias-shell) {
+  body:has(.admin-licencias-page.admin-licencias-shell),
+  html:has(.admin-licencias-page.user-licencias-shell),
+  body:has(.admin-licencias-page.user-licencias-shell) {
     overflow-x: hidden;
   }
   
@@ -8197,9 +8202,8 @@ html, body {
   }
 
   /* Misma caja que .btn-blue (styles.css: padding 2px 10px, border 2px) — no usar padding mayor que Menú/Herramientas */
-  .admin-licencias-toolbar .licenses-collapse-btn--toolbar,
-  .user-licencias-toolbar .licenses-collapse-btn--toolbar,
-  .admin-licencias-toolbar .licenses-duplicates-btn--toolbar {
+  .admin-licencias-toolbar .menu-btn-worksheet,
+  .user-licencias-toolbar .licenses-collapse-btn--toolbar {
     padding: 2px 10px !important;
     min-width: 0 !important;
     width: auto !important;
@@ -11606,7 +11610,6 @@ html, body {
       font-size: 13px !important;
       padding: 6px 10px !important;
     }
-    #menuToggleBtn.menu-btn-worksheet,
     .user-licencias-toolbar-cambios-link.menu-btn-worksheet {
       font-size: 14px !important;
       padding: 5px 8px !important;
@@ -18952,7 +18955,22 @@ body .card.product-texture-bg::before,
 
 /* Licencias — vista usuario (productos vinculados, sólo lectura; tono alineado con admin licencias) */
 .admin-licencias-page.user-licencias-shell {
-  max-width: 100%;
+  max-width: none !important;
+  width: 100% !important;
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+  border-radius: 0 !important;
+  border-left: none !important;
+  border-right: none !important;
+  border-top: none !important;
+  border-bottom: none !important;
+  padding-bottom: 0.35rem;
+  box-sizing: border-box;
+}
+.admin-licencias-page.user-licencias-shell .user-licencias-toolbar {
+  padding-left: 0.35rem !important;
+  padding-right: 0.35rem !important;
+  padding-top: 0.35rem !important;
 }
 /* Barra superior: Menú + usuario + saldo (misma fila) */
 .user-licencias-toolbar {
@@ -19006,13 +19024,13 @@ body .card.product-texture-bg::before,
 
 /* Misma caja que .btn-blue (gradiente, borde y alto) para Menú y Cambios — pisa reglas globales sueltas de #menuToggleBtn */
 .admin-licencias-page.user-licencias-shell .user-licencias-toolbar #menuToggleBtn.menu-btn-worksheet,
-.admin-licencias-page.user-licencias-shell .user-licencias-toolbar .user-licencias-toolbar-cambios-link.menu-btn-worksheet {
+.admin-licencias-page.user-licencias-shell .user-licencias-toolbar .user-licencias-toolbar-cambios-link.menu-btn-worksheet,
+.admin-licencias-page.user-licencias-shell .user-licencias-toolbar .licenses-collapse-btn--toolbar {
   display: inline-flex !important;
   align-items: center !important;
   justify-content: center !important;
   box-sizing: border-box !important;
   padding: 2px 10px !important;
-  min-width: 83px !important;
   width: auto !important;
   min-height: 0 !important;
   height: auto !important;
@@ -19022,13 +19040,33 @@ body .card.product-texture-bg::before,
   border-radius: 8px !important;
   border-width: 2px !important;
   border-style: solid !important;
+  vertical-align: middle !important;
+  flex-shrink: 0;
+  box-shadow: none !important;
+  text-shadow: none !important;
+}
+
+.admin-licencias-page.user-licencias-shell .user-licencias-toolbar #menuToggleBtn.menu-btn-worksheet,
+.admin-licencias-page.user-licencias-shell .user-licencias-toolbar .user-licencias-toolbar-cambios-link.menu-btn-worksheet {
+  min-width: 83px !important;
+}
+
+.admin-licencias-page.user-licencias-shell .user-licencias-toolbar .licenses-collapse-btn--toolbar {
+  min-width: 0 !important;
+}
+
+.admin-licencias-page.user-licencias-shell .user-licencias-toolbar #menuToggleBtn.menu-btn-worksheet,
+.admin-licencias-page.user-licencias-shell .user-licencias-toolbar .user-licencias-toolbar-cambios-link.menu-btn-worksheet,
+.admin-licencias-page.user-licencias-shell .user-licencias-toolbar .licenses-collapse-btn--toolbar {
   box-shadow: none !important;
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
   border-color: #0d6efd !important;
   color: #fff !important;
 }
+
 .admin-licencias-page.user-licencias-shell .user-licencias-toolbar #menuToggleBtn.menu-btn-worksheet:hover,
-.admin-licencias-page.user-licencias-shell .user-licencias-toolbar .user-licencias-toolbar-cambios-link.menu-btn-worksheet:hover {
+.admin-licencias-page.user-licencias-shell .user-licencias-toolbar .user-licencias-toolbar-cambios-link.menu-btn-worksheet:hover,
+.admin-licencias-page.user-licencias-shell .user-licencias-toolbar .licenses-collapse-btn--toolbar:hover {
   background: #1256a6 !important;
   border-color: #1256a6 !important;
   color: #fff !important;
@@ -19102,7 +19140,8 @@ body .card.product-texture-bg::before,
   font-size: 0.75rem;
 }
 .user-licencias-empty {
-  color: rgba(148, 163, 184, 0.95) !important;
+  color: #000000 !important;
+  font-weight: 500;
   padding: 1.25rem 0.5rem !important;
 }
 .user-licencias-search-wrap .form-control {
@@ -19173,20 +19212,103 @@ body .card.product-texture-bg::before,
 }
 
 /* —— Licencias usuario: vista «Días 1–31» (mismo idioma visual que admin, sólo lectura) —— */
-.admin-licencias-page.user-licencias-shell .user-lic-bundle-wrap .admin-licencias-bloc-header {
-  margin-bottom: 0 !important;
-  background: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 50%, #2563eb 100%);
-  padding: 0.1rem 0.35rem;
-  border-radius: 5px 5px 0 0;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.22);
+/* Mismo ancho que admin (.license-notepads-wrap #licenseAllDaysContainer): la vista usuario no usa ese id */
+.admin-licencias-page.user-licencias-shell .user-lic-all-accounts,
+.admin-licencias-page.user-licencias-shell .license-notepads-wrap.user-lic-bundle-wrap,
+.admin-licencias-page.user-licencias-shell .user-licencias-view-wrap {
+  width: 100%;
+  max-width: 100%;
   box-sizing: border-box;
-  line-height: 1.15;
-  min-height: 0;
+}
+/* Sin marco exterior; columna compacta igual que admin (sin huecos entre días) */
+.admin-licencias-page.user-licencias-shell .license-notepads-wrap.user-lic-bundle-wrap {
+  border: none !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  background-color: #000 !important;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+/* Toolbar Días 1–31 (igual criterio que Admin #licenseAllDaysContainer): chevron + ojos Estado / Notas */
+.admin-licencias-page.user-licencias-shell .license-notepads-wrap.user-lic-bundle-wrap .license-days-notes-toggle-bar.user-lic-days-notes-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.35rem;
+  padding: 0.1rem 0 0.12rem;
+  margin: 0 0 0.08rem;
+  box-sizing: border-box;
+  width: 100%;
+  flex-shrink: 0;
+}
+.admin-licencias-page.user-licencias-shell .license-notepads-wrap.user-lic-bundle-wrap .user-lic-days-expand-all {
+  margin-right: 0.28rem;
+}
+/* Días del bundle: micro-separación como Admin (#licenseAllDaysContainer → 0.12rem tras toolbar, ~0.08rem entre barras contraídas) */
+.admin-licencias-page.user-licencias-shell .user-lic-bundle-wrap > .day-section.user-lic-readonly-day:first-of-type {
+  margin-top: 0.12rem !important;
+}
+.admin-licencias-page.user-licencias-shell .user-lic-bundle-wrap > .day-section.user-lic-readonly-day ~ .day-section.user-lic-readonly-day {
+  margin-top: 0.08rem !important;
+}
+.admin-licencias-page.user-licencias-shell .user-lic-bundle-wrap .day-section.user-lic-readonly-day {
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+  margin-bottom: 0 !important;
+  border: none !important;
+  outline: none !important;
+  box-shadow: none !important;
+  border-radius: 0 !important;
+}
+.admin-licencias-page.user-licencias-shell .user-lic-readonly-day .day-accounts-list {
+  padding: 0.18rem 0.32rem 0.22rem !important;
+  border: none !important;
+  border-top: none !important;
+}
+.admin-licencias-page.user-licencias-shell .license-notepads-wrap.user-lic-bundle-wrap .admin-licencias-bloc {
+  width: 100% !important;
+  max-width: 100% !important;
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+}
+.admin-licencias-page.user-licencias-shell .user-lic-bundle-wrap .admin-licencias-bloc--day {
+  padding: 0 !important;
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+  margin-bottom: 0 !important;
+  border: none !important;
+  outline: none !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  box-sizing: border-box;
+}
+.admin-licencias-page.user-licencias-shell .user-lic-bundle-wrap .admin-licencias-bloc-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 0.35rem;
   flex-wrap: nowrap;
+  background: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 50%, #2563eb 100%);
+  padding: 0.1rem 0.35rem !important;
+  margin-bottom: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  line-height: 1.15;
+  min-height: 0;
+  box-sizing: border-box;
+}
+.admin-licencias-page.user-licencias-shell .user-lic-bundle-wrap .admin-licencias-bloc--day .admin-licencias-bloc-title {
+  flex: 1;
+  min-width: 0;
+  text-align: center;
+}
+.admin-licencias-page.user-licencias-shell .user-lic-bundle-wrap .user-lic-day-header-actions {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
 }
 .admin-licencias-page.user-licencias-shell .user-lic-bundle-wrap .admin-licencias-bloc-title {
   font-size: 0.8rem !important;
@@ -19197,16 +19319,12 @@ body .card.product-texture-bg::before,
   color: rgba(255, 255, 255, 0.92) !important;
   opacity: 1;
 }
-.admin-licencias-page.user-licencias-shell .user-lic-bundle-wrap .admin-licencias-bloc--day {
-  margin: 0.08rem 0 0 0 !important;
-}
-.admin-licencias-page.user-licencias-shell .user-lic-bundle-wrap .admin-licencias-bloc--day:first-child {
-  margin-top: 0.12rem !important;
+.admin-licencias-page.user-licencias-shell .user-lic-bundle-wrap .day-section-header {
+  outline: none !important;
+  border: none !important;
+  box-shadow: none !important;
 }
 /* Sobrescribe .day-section { margin-bottom: 1.5rem } para acercar días como en admin (#licenseAllDaysContainer) */
-.admin-licencias-page.user-licencias-shell .user-lic-bundle-wrap .day-section.user-lic-readonly-day {
-  margin-bottom: 0.1rem !important;
-}
 .admin-licencias-page.user-licencias-shell .user-lic-bundle-wrap .day-section.user-lic-readonly-day:last-child {
   margin-bottom: 0 !important;
 }
@@ -19224,44 +19342,73 @@ body .card.product-texture-bg::before,
   font-size: 0.8rem !important;
   line-height: 1.18 !important;
 }
-.admin-licencias-page.user-licencias-shell .user-lic-readonly-day .day-accounts-list {
-  padding: 0.18rem 0.32rem 0.22rem !important;
-}
 .admin-licencias-page.user-licencias-shell .user-lic-bundle-wrap .license-split-editor {
   --lic-pad-y: 0;
   --lic-pad-x: 0.22rem;
   --lic-cell-gap: 0;
+  --lic-border-w: 2px;
   --lic-line-fs: 0.78rem;
   --lic-line-lh: 1.45;
   --lic-line-box: calc(var(--lic-line-fs) * var(--lic-line-lh));
+  --lic-row-stride: calc(var(--lic-line-box) + var(--lic-border-w));
   border: none !important;
   padding: 0 !important;
   min-height: 0 !important;
+  background: #000000 !important;
 }
 .admin-licencias-page.user-licencias-shell .user-lic-bundle-wrap .license-split-editor__grid {
-  align-items: start;
+  align-items: stretch;
   grid-template-columns: minmax(10rem, max-content) minmax(18rem, 1fr);
+  width: 100% !important;
+  box-sizing: border-box;
 }
 .admin-licencias-page.user-licencias-shell .user-lic-bundle-wrap .license-split-editor__creds-cell {
-  align-self: start;
+  align-self: stretch;
   min-width: 10rem;
   min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: #000000;
+  box-sizing: border-box;
 }
 .admin-licencias-page.user-licencias-shell .user-lic-bundle-wrap .license-split-editor__side {
-  align-self: start;
+  display: flex;
+  flex-direction: column;
+  align-self: stretch;
   min-width: 18rem;
+  margin: 0;
+  padding: 0;
+  border-left: var(--lic-border-w) solid rgba(59, 130, 246, 0.45);
+  background: #000000;
+  box-sizing: border-box;
+  overflow-x: visible;
+  overflow-y: visible;
+  min-height: 0;
 }
 .admin-licencias-page.user-licencias-shell .user-lic-bundle-wrap .license-split-editor__creds.user-lic-creds-ro {
   min-width: 10rem !important;
   min-height: var(--lic-line-box) !important;
-  flex: 0 0 auto !important;
-  background: transparent !important;
+  flex: 1 1 auto !important;
+  background-color: #000000 !important;
+  background-image: repeating-linear-gradient(
+    to bottom,
+    transparent 0,
+    transparent calc(var(--lic-row-stride) - var(--lic-border-w)),
+    rgba(59, 130, 246, 0.48) calc(var(--lic-row-stride) - var(--lic-border-w)),
+    rgba(59, 130, 246, 0.48) var(--lic-row-stride)
+  ) !important;
+  background-attachment: local !important;
+  background-origin: padding-box !important;
+  background-clip: padding-box !important;
   border: none !important;
   box-shadow: none !important;
   padding-top: 0 !important;
   padding-bottom: 0 !important;
   padding-left: var(--lic-pad-x) !important;
   padding-right: var(--lic-pad-x) !important;
+  font-size: var(--lic-line-fs) !important;
+  line-height: var(--lic-row-stride) !important;
+  white-space: pre !important;
   outline: none !important;
 }
 .admin-licencias-page.user-licencias-shell .user-lic-bundle-wrap .license-split-editor__rows {
@@ -19270,32 +19417,138 @@ body .card.product-texture-bg::before,
   overflow-y: visible !important;
   max-height: none !important;
 }
+.admin-licencias-page.user-licencias-shell .user-lic-bundle-wrap .license-split-editor__row:first-child {
+  margin-top: 0 !important;
+  border-top: none;
+}
+.admin-licencias-page.user-licencias-shell .user-lic-bundle-wrap .license-split-editor__row:last-child {
+  margin-bottom: 0 !important;
+}
 .admin-licencias-page.user-licencias-shell .user-lic-bundle-wrap .license-split-editor__row {
   align-items: stretch;
-  border-bottom: var(--lic-border-w, 1px) solid rgba(59, 130, 246, 0.48);
+  min-height: var(--lic-row-stride);
+  border-bottom: var(--lic-border-w) solid rgba(59, 130, 246, 0.48);
   border-top: none;
 }
 .admin-licencias-page.user-licencias-shell .user-lic-bundle-wrap .license-split-editor__status-wrap {
   align-self: stretch;
-  min-height: var(--lic-line-box, 2rem);
-  border-right: var(--lic-border-w, 1px) solid rgba(59, 130, 246, 0.48);
+  min-height: var(--lic-row-stride);
+  border-right: var(--lic-border-w) solid rgba(59, 130, 246, 0.48);
   box-sizing: border-box;
+}
+/* mismo criterio que admin Licencias — columna entre select «bueno» e «incidencias» (+ columna ante «Otro») */
+.admin-licencias-page.user-licencias-shell .user-lic-bundle-wrap .license-split-editor__status-select-shell--good {
+  border-right: var(--lic-border-w) solid rgba(59, 130, 246, 0.48);
+  box-sizing: border-box;
+}
+.admin-licencias-page.user-licencias-shell .user-lic-bundle-wrap .license-split-editor__status-wrap--otro .license-split-editor__status-select-shell--bad {
+  border-right: var(--lic-border-w) solid rgba(59, 130, 246, 0.48);
+  box-sizing: border-box;
+}
+/* Tres ojos portal: ocultar solo verde, solo roja+Otro, o notas (sin el ojo único de todo el estado) */
+.admin-licencias-page.user-licencias-shell
+  .user-lic-bundle-wrap
+  .day-license-split-root.license-split-editor--day.user-lic-col-hide-good
+  .license-split-editor__status-select-shell--good {
+  display: none !important;
+}
+.admin-licencias-page.user-licencias-shell
+  .user-lic-bundle-wrap
+  .day-license-split-root.license-split-editor--day.user-lic-col-hide-bad
+  .license-split-editor__status-select-shell--bad,
+.admin-licencias-page.user-licencias-shell
+  .user-lic-bundle-wrap
+  .day-license-split-root.license-split-editor--day.user-lic-col-hide-bad
+  .license-split-editor__otro-combined {
+  display: none !important;
+}
+.admin-licencias-page.user-licencias-shell
+  .user-lic-bundle-wrap
+  .day-license-split-root.license-split-editor--day.user-lic-col-hide-good.user-lic-col-hide-bad
+  .license-split-editor__status-wrap {
+  display: none !important;
+}
+.admin-licencias-page.user-licencias-shell
+  .user-lic-bundle-wrap
+  .day-license-split-root.license-split-editor--day.user-lic-col-hide-good.user-lic-col-hide-bad
+  .license-split-editor__row.user-lic-readonly-row {
+  grid-template-columns: minmax(3.75rem, 0.42fr) minmax(5rem, 1fr) !important;
+}
+.admin-licencias-page.user-licencias-shell
+  .user-lic-bundle-wrap
+  .day-license-split-root.license-split-editor--day.user-lic-col-hide-good.user-lic-col-hide-bad.license-split-editor--notes-hidden
+  .license-split-editor__row.user-lic-readonly-row {
+  grid-template-columns: minmax(3.75rem, 1fr) !important;
+}
+.admin-licencias-page.user-licencias-shell .user-lic-bundle-wrap .license-split-editor__status-wrap .license-split-editor__status {
+  min-height: var(--lic-row-stride);
+  height: 100% !important;
+  align-self: stretch;
+}
+.admin-licencias-page.user-licencias-shell .user-lic-bundle-wrap .license-split-editor__status-wrap .license-split-editor__otro-combined {
+  min-height: var(--lic-row-stride);
+  align-self: stretch;
+}
+/* Columna solo lectura: saldo de cuenta antes de «Notas» */
+.admin-licencias-page.user-licencias-shell .user-lic-bundle-wrap .license-split-editor__saldo-cell {
+  align-self: stretch;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: var(--lic-row-stride);
+  border-right: var(--lic-border-w) solid rgba(59, 130, 246, 0.48);
+  box-sizing: border-box;
+  padding: 0 0.28rem;
+  min-width: 0;
+  background: #000000;
+}
+.admin-licencias-page.user-licencias-shell .user-lic-bundle-wrap .user-lic-saldo-display {
+  font-size: var(--lic-line-fs, 0.78rem);
+  line-height: var(--lic-line-lh, 1.45);
+  font-weight: 700;
+  text-align: center;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.admin-licencias-page.user-licencias-shell .user-lic-bundle-wrap .user-lic-saldo-display--paid {
+  color: rgba(134, 239, 172, 0.96);
+}
+.admin-licencias-page.user-licencias-shell .user-lic-bundle-wrap .user-lic-saldo-display--due {
+  color: rgba(254, 226, 160, 0.98);
 }
 .admin-licencias-page.user-licencias-shell .user-lic-bundle-wrap .license-split-editor__lead {
-  border-right: var(--lic-border-w, 1px) solid rgba(59, 130, 246, 0.48);
+  border-right: var(--lic-border-w) solid rgba(59, 130, 246, 0.48);
   box-sizing: border-box;
   min-height: var(--lic-line-box, 2rem);
 }
-.admin-licencias-page.user-licencias-shell .user-lic-bundle-wrap .license-split-editor__note.user-lic-ro-note-readonly {
+/* Columna «Notas» portal: igual criterio que admin (input, texto blanco) */
+.admin-licencias-page.user-licencias-shell .user-lic-bundle-wrap .license-split-editor__row input.user-lic-note-client.license-split-editor__note {
   align-self: stretch;
   height: auto !important;
-  min-height: var(--lic-line-box, 2rem);
+  min-height: var(--lic-row-stride);
   box-sizing: border-box !important;
-  display: flex;
-  align-items: flex-start;
-  padding: 0.3rem 0.4rem;
-  white-space: pre-wrap;
-  word-break: break-word;
+  width: 100%;
+  min-width: 0;
+  margin: 0;
+  padding: 0 0.32rem !important;
+  border: none !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  outline: none;
+  font-size: var(--lic-line-fs, 0.78rem) !important;
+  line-height: var(--lic-line-lh, 1.45) !important;
+  background-color: transparent !important;
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+  caret-color: #ffffff !important;
+}
+.admin-licencias-page.user-licencias-shell .user-lic-bundle-wrap .license-split-editor__row input.user-lic-note-client.license-split-editor__note::placeholder {
+  color: rgba(255, 255, 255, 0.45) !important;
+  -webkit-text-fill-color: rgba(255, 255, 255, 0.45) !important;
+}
+.admin-licencias-page.user-licencias-shell .user-lic-bundle-wrap .license-split-editor__row input.user-lic-note-client.license-split-editor__note:-webkit-autofill,
+.admin-licencias-page.user-licencias-shell .user-lic-bundle-wrap .license-split-editor__row input.user-lic-note-client.license-split-editor__note:-webkit-autofill:focus {
+  -webkit-text-fill-color: #ffffff !important;
 }
 .admin-licencias-page.user-licencias-shell .user-lic-ro-static {
   display: block;
@@ -19336,7 +19589,7 @@ body .card.product-texture-bg::before,
 .user-lic-day-empty-msg {
   font-size: 0.8rem;
   color: rgba(148, 163, 184, 0.92);
-  padding: 0.45rem 0.35rem;
+  padding: 0.22rem 0.32rem 0.25rem;
 }
 
 .admin-licencias-page.user-licencias-shell .user-lic-linked-sale-hint {
@@ -19350,18 +19603,12 @@ body .card.product-texture-bg::before,
   margin-right: 0.35rem;
 }
 
-/* —— Licencias usuario: panel y días sin estilos inline —— */
-.admin-licencias-page.user-licencias-shell {
-  border-radius: 12px;
-  padding-bottom: 0.35rem;
-  box-sizing: border-box;
-}
 .admin-licencias-page.user-licencias-shell .user-lic-account-sheet {
-  background: rgba(15, 23, 42, 0.42);
-  border: 1px solid rgba(71, 85, 105, 0.45);
-  border-radius: 10px;
-  padding: 0.75rem 0.85rem;
-  margin-bottom: 1rem;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  padding: 0;
+  margin-bottom: 1.5rem;
   box-sizing: border-box;
 }
 .admin-licencias-page.user-licencias-shell .user-lic-day-header-toggle {
@@ -19371,9 +19618,16 @@ body .card.product-texture-bg::before,
 .admin-licencias-page.user-licencias-shell .user-lic-bundle-wrap .license-split-editor.license-notepad--locked .license-split-editor__row.user-lic-license-row-edit .license-split-editor__otro-combined {
   pointer-events: auto !important;
   opacity: 1 !important;
+}
+.admin-licencias-page.user-licencias-shell .user-lic-bundle-wrap .license-split-editor.license-notepad--locked .license-split-editor__row.user-lic-license-row-edit select {
   cursor: pointer;
 }
 .admin-licencias-page.user-licencias-shell .user-lic-bundle-wrap .license-split-editor.license-notepad--locked .license-split-editor__row.user-lic-license-row-edit .license-split-editor__otro-combined {
+  cursor: text;
+}
+.admin-licencias-page.user-licencias-shell .user-lic-bundle-wrap .license-split-editor.license-notepad--locked .license-split-editor__row.user-lic-license-row-edit .user-lic-note-client {
+  pointer-events: auto !important;
+  opacity: 1 !important;
   cursor: text;
 }
 
@@ -19448,8 +19702,14 @@ body .card.product-texture-bg::before,
   outline-offset: 1px;
 }
 .admin-licencias-page.user-licencias-shell .user-lic-bundle-wrap .license-split-editor__row.user-lic-readonly-row {
-  grid-template-columns: minmax(6.25rem, 1.35fr) minmax(5rem, 1fr);
+  grid-template-columns: minmax(6.25rem, 1.35fr) minmax(3.75rem, 0.42fr) minmax(5rem, 1fr);
   min-width: 0;
+}
+.admin-licencias-page.user-licencias-shell
+  .user-lic-bundle-wrap
+  .license-split-editor.license-split-editor--notes-hidden
+  .license-split-editor__row.user-lic-readonly-row {
+  grid-template-columns: minmax(6.25rem, 1.35fr) minmax(3.75rem, 0.42fr);
 }
 .admin-licencias-page.user-licencias-shell .licenses-grid .license-card-header {
   position: relative;

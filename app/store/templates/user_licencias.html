@@ -4,7 +4,7 @@
 
 {% block head %}
   {{ super() }}
-  <link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}?v=155">
+  <link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}?v=178">
   <link rel="stylesheet" href="{{ url_for('static', filename='fontawesome/css/all.css') }}">
 {% endblock %}
 
@@ -21,7 +21,7 @@
 {% block content %}
 {% set blocked_users = ['soporte','soporte1','soporte2','soporte3'] %}
 {% if session.get('logged_in') and (not session.get('username') or session.get('username').lower() not in blocked_users) %}
-<div class="container mt-2 store-light worksheet-panel admin-licencias-page admin-licencias-shell user-licencias-shell">
+<div class="container mt-2 store-light worksheet-panel admin-licencias-page user-licencias-shell">
   <div class="user-licencias-toolbar d-flex flex-wrap align-items-center gap-2 w-100">
     <div class="d-flex gap-05 admin-store-menus flex-shrink-0 align-items-center">
       <button type="button" id="menuToggleBtn" class="btn-blue menu-btn-worksheet user-licencias-toolbar__menu-btn">&#9776; Menú</button>
@@ -127,5 +127,5 @@
 {% block scripts %}
 {{ super() }}
 <script src="{{ url_for('static', filename='js/menu_busqueda.js') }}" defer></script>
-<script src="{{ url_for('store_bp.static', filename='js/user_licencias.js') }}?v=29" defer></script>
+<script src="{{ url_for('store_bp.static', filename='js/user_licencias.js') }}?v=35" defer></script>
 {% endblock %}

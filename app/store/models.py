@@ -502,7 +502,10 @@ class License(db.Model):
     changes_notes = db.Column(db.Text, nullable=True)
     # JSON {"1":"texto bloc día 1", ...} — texto exacto del bloc por día (persiste aunque falle el parseo a cuentas)
     day_notepads_json = db.Column(db.Text, nullable=True)
-    
+    # Notas del cliente en portal «Licencias» por línea de día (no mezcladas con notas admin del bloc).
+    # JSON: { "<user_id>": { "<día>_<índice_físico_línea>": "texto" } }
+    portal_day_row_notes_json = db.Column(db.Text, nullable=True)
+
     # Relación con producto
     product = db.relationship('Product', backref='license_info')
     

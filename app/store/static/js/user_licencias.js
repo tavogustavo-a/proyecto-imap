@@ -201,6 +201,8 @@
             var statusGoodVal = sgEl.value != null ? String(sgEl.value).trim() : '';
             var statusBadVal = sbEl.value != null ? String(sbEl.value).trim() : '';
             var otroDetailVal = otEl ? String(otEl.value || '').trim() : '';
+            var noteClientEl = row.querySelector('.user-lic-note-client');
+            var noteClientVal = noteClientEl ? String(noteClientEl.value != null ? noteClientEl.value : '') : '';
 
             row.classList.remove('user-lic-save-err');
 
@@ -218,6 +220,7 @@
                     status_good: statusGoodVal,
                     status_bad: statusBadVal,
                     otro_detail: otroDetailVal,
+                    client_note: noteClientVal,
                 }),
             })
                 .then(function (r) {
@@ -291,9 +294,30 @@
                 if (!row || !rootEl.contains(row)) return;
                 if (ev.target.classList.contains('license-split-editor__otro-combined')) {
                     schedulePersist(row);
+                    return;
+                }
+                if (ev.target.classList.contains('user-lic-note-client')) {
+                    schedulePersist(row);
                 }
             },
             true
+        );
+    }
+
+    /** Saldo de cuenta (API billing_saldo): 0 = al día; mayor a 0 muestra importe pendiente. */
+    function formatUserLicBillingSaldoCell(lm) {
+        var raw = lm && lm.billing_saldo != null ? Number(lm.billing_saldo) : 0;
+        if (!Number.isFinite(raw)) raw = 0;
+        if (Math.abs(raw) < 1e-9) {
+            return (
+                '<span class="user-lic-saldo-display user-lic-saldo-display--paid" title="Cuenta al día (sin saldo pendiente)">Pagada</span>'
+            );
+        }
+        var txt = Math.abs(raw - Math.round(raw)) < 1e-9 ? String(Math.round(raw)) : String(Number(raw.toFixed(2)));
+        return (
+            '<span class="user-lic-saldo-display user-lic-saldo-display--due" title="Saldo pendiente">' +
+            escHtml(txt) +
+            '</span>'
         );
     }
 
@@ -326,7 +350,8 @@
 
         var shellIsOtro = normalizeStatusKey(curSb) === 'otro';
 
-        var nText = escHtml(row.notes_admin_line || '');
+        var clientNoteRaw = row.notes_client != null ? String(row.notes_client) : '';
+        var nid = 'user-lic-cn-' + slug + '-d' + day + '-r' + ordStored;
 
         return (
             '<div class="license-split-editor__row user-lic-readonly-row user-lic-license-row-edit"' +
@@ -386,9 +411,21 @@
             ' title="Cuando seleccionás Otro en incidencias, describí aquí el detalle."' +
             '/>' +
             '</div>' +
-            '<span class="license-split-editor__note user-lic-ro-note-readonly">' +
-            (nText || '—') +
-            '</span>' +
+            '<div class="license-split-editor__saldo-cell"' +
+            ' role="gridcell"' +
+            ' aria-label="Saldo de cuenta">' +
+            formatUserLicBillingSaldoCell(lm || {}) +
+            '</div>' +
+            '<input id="' +
+            escAttr(nid) +
+            '" name="' +
+            escAttr(nid) +
+            '" type="text" class="license-split-editor__note user-lic-note-client" autocomplete="off" spellcheck="true"' +
+            ' value="' +
+            escAttr(clientNoteRaw) +
+            '" placeholder="Notas" aria-label="Notas"' +
+            ' title="Notas privadas solo para vos; las notas que escribe soporte están en otro lado."' +
+            '/>' +
             '</div>'
         );
     }
@@ -421,6 +458,16 @@
         var collapsedClass = isCollapsed ? ' collapsed' : '';
         var slug = slugForCredFieldId(credFieldSlug);
         var taIdName = 'user-lic-creds-' + slug + '-d' + String(day);
+        var badgeTitle = n === 1 ? '1 cuenta' : n + ' cuentas';
+        var badgeHtml =
+            n > 0
+                ? '<div class="admin-licencias-bloc-header-actions user-lic-day-header-actions">' +
+                  '<span class="day-account-badge admin-licencias-notepad-line-badge" title="' +
+                  escAttr(badgeTitle) +
+                  '">' +
+                  String(n) +
+                  '</span></div>'
+                : '';
 
         return (
             '<section class="day-section admin-licencias-bloc admin-licencias-bloc--day user-lic-readonly-day' + collapsedClass + '" data-user-day="' +
@@ -430,7 +477,9 @@
             '<span class="admin-licencias-bloc-title">' +
             '<i class="fas fa-calendar-day" aria-hidden="true"></i> <span>Día ' +
             day +
-            '</span></span></div>' +
+            '</span></span>' +
+            badgeHtml +
+            '</div>' +
             '<div class="day-accounts-list">' +
             '<div class="license-split-editor license-split-editor--day day-license-split-root day-account-item license-notepad--locked user-lic-days-bundle">' +
             '<div class="license-split-editor__viewport">' +
@@ -446,12 +495,257 @@
             escTextarea(credsJoined) +
             '</textarea>' +
             '</div>' +
-            '<div class="license-split-editor__side" aria-label="Estado y notas">' +
+            '<div class="license-split-editor__side" aria-label="Estado, saldo y notas">' +
             '<div class="license-split-editor__rows day-license-split-rows" role="region">' +
             rowLines +
             '</div></div></div></div></div>' +
             '</div></section>'
         );
+    }
+
+    /** Barra: plegar todos + ojos (columna incidencias+Otro, notas). La columna verde permanece siempre visible. */
+    function renderUserLicDaysToolbarHtml() {
+        return (
+            '<div class="license-days-notes-toggle-bar user-lic-days-notes-toolbar" role="toolbar" aria-label="Plegar o desplegar todos los días; mostrar u ocultar columnas de incidencias y notas">' +
+            '<button type="button" class="admin-licencias-toggle-notes-col-btn admin-licencias-days-expand-all-btn user-lic-days-expand-all" title="Plegar todos los días" aria-label="Plegar todas las secciones de días" aria-expanded="true">' +
+            '<i class="fas fa-chevron-up" aria-hidden="true"></i>' +
+            '</button>' +
+            '<button type="button" class="admin-licencias-toggle-notes-col-btn user-lic-days-toggle-bad" title="Ocultar columna incidencias (roja) y «Otro»" aria-label="Ocultar columna incidencias (roja) y detalle Otro" aria-pressed="false">' +
+            '<i class="fas fa-eye-slash" aria-hidden="true"></i>' +
+            '</button>' +
+            '<button type="button" class="admin-licencias-toggle-notes-col-btn user-lic-days-toggle-notes" title="Ocultar columna Notas" aria-label="Ocultar columna Notas en cada día" aria-pressed="false">' +
+            '<i class="fas fa-eye-slash" aria-hidden="true"></i>' +
+            '</button>' +
+            '</div>'
+        );
+    }
+
+    var USER_LIC_PORTAL_HIDE_BAD_KEY = 'user_lic_portal_days_hide_bad_v1';
+    var USER_LIC_PORTAL_HIDE_NOTES_KEY = 'user_lic_portal_days_hide_notes_v1';
+    var USER_LIC_PORTAL_HIDE_STATUS_LEGACY_KEY = 'user_lic_portal_days_hide_status_v1';
+
+    function userLicPortalMigrateLegacyColumnKeys() {
+        try {
+            var leg = localStorage.getItem(USER_LIC_PORTAL_HIDE_STATUS_LEGACY_KEY);
+            if (leg === '1' || leg === 'true') {
+                localStorage.setItem(USER_LIC_PORTAL_HIDE_BAD_KEY, '1');
+                try {
+                    localStorage.removeItem('user_lic_portal_days_hide_good_v1');
+                } catch (eLegacyG) {
+                    /* ignore */
+                }
+                localStorage.removeItem(USER_LIC_PORTAL_HIDE_STATUS_LEGACY_KEY);
+            }
+        } catch (eM) {
+            /* ignore */
+        }
+    }
+
+    function userLicPortalSheetStorageKey(articleEl) {
+        if (!articleEl) return 'u0';
+        var raw = articleEl.getAttribute('data-license-id');
+        return raw != null && String(raw).trim() !== '' ? String(raw).trim() : 'u0';
+    }
+
+    function userLicPortalHideBadRead() {
+        try {
+            var v = localStorage.getItem(USER_LIC_PORTAL_HIDE_BAD_KEY);
+            return v === '1' || v === 'true';
+        } catch (e0b) {
+            return false;
+        }
+    }
+
+    function userLicPortalHideNotesRead() {
+        try {
+            var v = localStorage.getItem(USER_LIC_PORTAL_HIDE_NOTES_KEY);
+            return v === '1' || v === 'true';
+        } catch (e1) {
+            return false;
+        }
+    }
+
+    function userLicPortalToggleEyeButtonUi(btn, hidden, titleWhenHidden, labelWhenHidden, titleWhenShown, labelWhenShown) {
+        if (!btn) return;
+        var ic = btn.querySelector('i');
+        if (hidden) {
+            if (ic) ic.className = 'fas fa-eye';
+            btn.title = titleWhenShown;
+            btn.setAttribute('aria-label', labelWhenShown);
+            btn.setAttribute('aria-pressed', 'true');
+        } else {
+            if (ic) ic.className = 'fas fa-eye-slash';
+            btn.title = titleWhenHidden;
+            btn.setAttribute('aria-label', labelWhenHidden);
+            btn.setAttribute('aria-pressed', 'false');
+        }
+    }
+
+    function userLicPortalSyncAllColumnToolbars(outer) {
+        if (!outer) return;
+        var hidB = userLicPortalHideBadRead();
+        var hidNt = userLicPortalHideNotesRead();
+        outer.querySelectorAll('.user-lic-days-toggle-bad').forEach(function (b) {
+            userLicPortalToggleEyeButtonUi(
+                b,
+                hidB,
+                'Ocultar columna incidencias (roja) y «Otro»',
+                'Ocultar columna incidencias (roja) y detalle Otro',
+                'Mostrar columna incidencias (roja) y «Otro»',
+                'Mostrar columna incidencias (roja) y detalle Otro'
+            );
+        });
+        outer.querySelectorAll('.user-lic-days-toggle-notes').forEach(function (b) {
+            userLicPortalToggleEyeButtonUi(
+                b,
+                hidNt,
+                'Ocultar columna Notas',
+                'Ocultar columna Notas en cada día',
+                'Mostrar columna Notas',
+                'Mostrar columna Notas en cada día'
+            );
+        });
+    }
+
+    function userLicPortalApplyColumnVisibility(outer) {
+        if (!outer) return;
+        userLicPortalMigrateLegacyColumnKeys();
+        try {
+            localStorage.removeItem('user_lic_portal_days_hide_good_v1');
+        } catch (eClrG) {
+            /* ignore */
+        }
+        var hidB = userLicPortalHideBadRead();
+        var hidNt = userLicPortalHideNotesRead();
+        outer.querySelectorAll('.user-lic-bundle-wrap .day-license-split-root.license-split-editor--day').forEach(function (root) {
+            root.classList.remove('user-lic-col-hide-good');
+            root.classList.toggle('user-lic-col-hide-bad', hidB);
+            root.classList.toggle('license-split-editor--notes-hidden', hidNt);
+            root.classList.remove('license-split-editor--status-hidden');
+        });
+        userLicPortalSyncAllColumnToolbars(outer);
+    }
+
+    function userLicPortalSyncExpandAllToolbar(bundleWrap) {
+        var btn = bundleWrap ? bundleWrap.querySelector('.user-lic-days-expand-all') : null;
+        if (!btn || !bundleWrap) return;
+        var sections = bundleWrap.querySelectorAll('.user-lic-readonly-day[data-user-day]');
+        if (!sections.length) return;
+        var anyExpanded = false;
+        var i;
+        for (i = 0; i < sections.length; i += 1) {
+            if (!sections[i].classList.contains('collapsed')) {
+                anyExpanded = true;
+                break;
+            }
+        }
+        var icon = btn.querySelector('i');
+        if (anyExpanded) {
+            if (icon) icon.className = 'fas fa-chevron-up';
+            btn.title = 'Plegar todos los días';
+            btn.setAttribute('aria-label', 'Plegar todas las secciones de días');
+            btn.setAttribute('aria-expanded', 'true');
+        } else {
+            if (icon) icon.className = 'fas fa-chevron-down';
+            btn.title = 'Desplegar todos los días';
+            btn.setAttribute('aria-label', 'Desplegar todas las secciones de días');
+            btn.setAttribute('aria-expanded', 'false');
+        }
+    }
+
+    function userLicPortalPersistDayCollapsed(article, dayStr, isCollapsed) {
+        var sk = userLicPortalSheetStorageKey(article);
+        try {
+            localStorage.setItem('userLicPortalDay_' + sk + '_' + String(dayStr) + '_collapsed', isCollapsed ? 'true' : 'false');
+        } catch (e2) {
+            /* ignore */
+        }
+    }
+
+    function userLicPortalToggleAllDaysInBundle(bundleWrap) {
+        var article = bundleWrap ? bundleWrap.closest('.user-lic-account-sheet') : null;
+        if (!bundleWrap || !article) return;
+        var sections = bundleWrap.querySelectorAll('.user-lic-readonly-day[data-user-day]');
+        if (!sections.length) return;
+        var anyExpanded = false;
+        var i;
+        for (i = 0; i < sections.length; i += 1) {
+            if (!sections[i].classList.contains('collapsed')) {
+                anyExpanded = true;
+                break;
+            }
+        }
+        var collapseAll = anyExpanded;
+        for (i = 0; i < sections.length; i += 1) {
+            var sec = sections[i];
+            var day = sec.getAttribute('data-user-day');
+            if (day == null) continue;
+            if (collapseAll) {
+                sec.classList.add('collapsed');
+            } else {
+                sec.classList.remove('collapsed');
+            }
+            userLicPortalPersistDayCollapsed(article, day, collapseAll);
+        }
+        userLicPortalSyncExpandAllToolbar(bundleWrap);
+    }
+
+    function userLicPortalRestoreDaySectionsAndToolbars(outer) {
+        if (!outer) return;
+        outer.querySelectorAll('.user-lic-account-sheet').forEach(function (article) {
+            var sk = userLicPortalSheetStorageKey(article);
+            var bundleWrap = article.querySelector('.user-lic-bundle-wrap');
+            if (!bundleWrap) return;
+            bundleWrap.querySelectorAll('.user-lic-readonly-day[data-user-day]').forEach(function (sec) {
+                var day = sec.getAttribute('data-user-day');
+                if (day == null) return;
+                var sv = localStorage.getItem('userLicPortalDay_' + sk + '_' + String(day) + '_collapsed');
+                if (sv === 'true') sec.classList.add('collapsed');
+                else if (sv === 'false') sec.classList.remove('collapsed');
+            });
+            userLicPortalSyncExpandAllToolbar(bundleWrap);
+        });
+    }
+
+    function wireUserLicDaysToolbar(outer) {
+        if (!outer || outer.getAttribute('data-user-lic-days-toolbar') === '1') return;
+        outer.setAttribute('data-user-lic-days-toolbar', '1');
+        outer.addEventListener('click', function (e) {
+            var t = e.target;
+            if (!t || !t.closest) return;
+
+            var exp = t.closest('.user-lic-days-expand-all');
+            if (exp && outer.contains(exp)) {
+                var bw = exp.closest('.user-lic-bundle-wrap');
+                if (bw && outer.contains(bw)) {
+                    userLicPortalToggleAllDaysInBundle(bw);
+                }
+                return;
+            }
+
+            var bBtn = t.closest('.user-lic-days-toggle-bad');
+            if (bBtn && outer.contains(bBtn)) {
+                var nb = !userLicPortalHideBadRead();
+                try {
+                    localStorage.setItem(USER_LIC_PORTAL_HIDE_BAD_KEY, nb ? '1' : '0');
+                } catch (eB) {
+                    /* ignore */
+                }
+                userLicPortalApplyColumnVisibility(outer);
+                return;
+            }
+
+            var ntBtn = t.closest('.user-lic-days-toggle-notes');
+            if (ntBtn && outer.contains(ntBtn)) {
+                var nextN = !userLicPortalHideNotesRead();
+                try {
+                    localStorage.setItem(USER_LIC_PORTAL_HIDE_NOTES_KEY, nextN ? '1' : '0');
+                } catch (e4) {
+                    /* ignore */
+                }
+                userLicPortalApplyColumnVisibility(outer);
+            }
+        });
     }
 
     function renderAccountBlock(acc) {
@@ -465,6 +759,7 @@
             account_id: acc.account_id != null ? acc.account_id : null,
             virtual: !!(acc.virtual === true || acc.is_virtual === true),
             credSlug: credSlug,
+            billing_saldo: acc.billing_saldo != null ? Number(acc.billing_saldo) : 0,
         };
         for (d = 1; d <= 31; d += 1) {
             daysHtml += renderDaySection(d, dl[String(d)] || [], credSlug, licenseMeta);
@@ -527,6 +822,7 @@
                 : '') +
             notesBlock +
             '<div class="license-notepads-wrap user-lic-bundle-wrap">' +
+            renderUserLicDaysToolbarHtml() +
             daysHtml +
             '</div>' +
             '</article>'
@@ -728,9 +1024,17 @@
         outer.addEventListener('click', function (e) {
             var headerToggle = e.target.closest('.user-lic-day-header-toggle');
             if (headerToggle && outer.contains(headerToggle)) {
+                if (e.target.closest('.day-account-badge')) return;
                 var section = headerToggle.closest('.day-section');
-                if (section) {
+                var bundle = headerToggle.closest('.user-lic-bundle-wrap');
+                var art = headerToggle.closest('.user-lic-account-sheet');
+                if (section && bundle && art) {
                     section.classList.toggle('collapsed');
+                    var dAttr = section.getAttribute('data-user-day');
+                    if (dAttr != null) {
+                        userLicPortalPersistDayCollapsed(art, dAttr, section.classList.contains('collapsed'));
+                    }
+                    userLicPortalSyncExpandAllToolbar(bundle);
                 }
                 return;
             }
@@ -897,6 +1201,9 @@
                 wireLicenseStatusAutosave(outer);
                 wireSearchFilter(outer);
                 wireScrollButtons(outer);
+                wireUserLicDaysToolbar(outer);
+                userLicPortalApplyColumnVisibility(outer);
+                userLicPortalRestoreDaySectionsAndToolbars(outer);
                 setupCollapseButton();
                 outer.dataset.userLicActiveFilter = 'all';
                 applyLicenseFilter(outer, gridHostEl, 'all');
@@ -914,6 +1221,9 @@
                 wireLicenseStatusAutosave(outer);
                 wireSearchFilter(outer);
                 wireScrollButtons(outer);
+                wireUserLicDaysToolbar(outer);
+                userLicPortalApplyColumnVisibility(outer);
+                userLicPortalRestoreDaySectionsAndToolbars(outer);
                 setupCollapseButton();
                 outer.dataset.userLicActiveFilter = 'all';
                 applyLicenseFilter(outer, gridHostEl, 'all');

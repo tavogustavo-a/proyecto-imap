@@ -3739,6 +3739,87 @@ def _ensure_license_day_notepads_column():
         current_app.logger.warning('No se pudo asegurar columna day_notepads_json: %s', e)
 
 
+def _ensure_license_portal_day_row_notes_column():
+    """JSON de notas portal por usuario y línea física del bloc día (no mezcladas con notas admin)."""
+    try:
+        from sqlalchemy import inspect, text
+        inspector = inspect(db.engine)
+        cols = {c['name'] for c in inspector.get_columns('store_licenses')}
+        if 'portal_day_row_notes_json' not in cols:
+            db.session.execute(
+                text('ALTER TABLE store_licenses ADD COLUMN portal_day_row_notes_json TEXT')
+            )
+            db.session.commit()
+    except Exception as e:
+        current_app.logger.warning('No se pudo asegurar columna portal_day_row_notes_json: %s', e)
+
+
+def _portal_day_notes_map_for_user(license_row, viewer_user_id):
+    import json as _json
+    raw = getattr(license_row, 'portal_day_row_notes_json', None) if license_row else None
+    raw = raw or ''
+    if not str(raw).strip():
+        return {}
+    try:
+        blob = _json.loads(raw)
+    except Exception:
+        return {}
+    if not isinstance(blob, dict):
+        return {}
+    uid_s = str(int(viewer_user_id))
+    inner = blob.get(uid_s)
+    if not isinstance(inner, dict):
+        return {}
+    return {str(k): (v if isinstance(v, str) else (str(v) if v is not None else '')) for k, v in inner.items()}
+
+
+def _apply_notes_client_to_user_day_rows(rows, license_row, viewer_user_id, calendar_day_int):
+    """Añade notes_client a cada fila devuelta por matched_rows_*."""
+    if not rows or license_row is None or viewer_user_id is None:
+        return
+    notes_map = _portal_day_notes_map_for_user(license_row, viewer_user_id)
+    cds = str(int(calendar_day_int))
+    for r in rows:
+        if not isinstance(r, dict):
+            continue
+        try:
+            pi = int(r.get('phys_line_index', -1))
+        except (TypeError, ValueError):
+            continue
+        key = cds + '_' + str(pi)
+        r['notes_client'] = str(notes_map.get(key) or '')
+
+
+def _persist_user_portal_day_row_note(license_row, viewer_user_id, calendar_day_int, phys_idx, note_text):
+    """Guarda una nota cliente para la línea física del día en la licencia (no toca el texto admin)."""
+    import json as _json
+    if license_row is None or viewer_user_id is None:
+        return
+    nt = str(note_text or '').strip()
+    if len(nt) > 4000:
+        nt = nt[:4000]
+    uid_s = str(int(viewer_user_id))
+    dk = str(int(calendar_day_int)) + '_' + str(int(phys_idx))
+    raw = getattr(license_row, 'portal_day_row_notes_json', None) or ''
+    blob = {}
+    if str(raw).strip():
+        try:
+            blob = _json.loads(raw)
+            if not isinstance(blob, dict):
+                blob = {}
+        except Exception:
+            blob = {}
+    if uid_s not in blob or not isinstance(blob.get(uid_s), dict):
+        blob[uid_s] = {}
+    if nt:
+        blob[uid_s][dk] = nt
+    else:
+        blob[uid_s].pop(dk, None)
+        if not blob[uid_s]:
+            del blob[uid_s]
+    license_row.portal_day_row_notes_json = _json.dumps(blob, ensure_ascii=False) if blob else None
+
+
 def _ensure_license_warranty_days_column():
     """Añade warranty_days (garantía en días, default 5) si la tabla existía sin esa columna."""
     try:
@@ -3891,6 +3972,7 @@ def api_user_my_license_accounts():
             )
 
         _ensure_license_day_notepads_column()
+        _ensure_license_portal_day_row_notes_column()
         _ensure_license_account_client_notes_column()
         _ensure_license_warranty_days_column()
         _ensure_license_expired_notes_and_month_columns()
@@ -3899,6 +3981,16 @@ def api_user_my_license_accounts():
         assignee_ids, allowed_names = _user_licencias_viewer_scope(user_obj)
         if not assignee_ids:
             return jsonify({'success': True, 'accounts': [], 'soporte_licencias': soporte_nav})
+
+        billing_user = user_obj
+        if user_obj.parent_id:
+            pu_b = User.query.get(user_obj.parent_id)
+            if pu_b:
+                billing_user = pu_b
+        try:
+            billing_saldo = float(getattr(billing_user, 'saldo', 0) or 0)
+        except (TypeError, ValueError):
+            billing_saldo = 0.0
 
         accts = (
             LicenseAccount.query.options(
@@ -3964,6 +4056,7 @@ def api_user_my_license_accounts():
                     acc.account_identifier or '',
                     calendar_day=d,
                 )
+                _apply_notes_client_to_user_day_rows(day_lines[k], lic, user_obj.id, d)
 
             img_fn = None
             if lic and lic.product:
@@ -3998,6 +4091,7 @@ def api_user_my_license_accounts():
                 'days_until_expiry': days_left,
                 'account_expired': bool(acc.is_expired),
                 'warranty_days': warranty_days_pub,
+                'billing_saldo': billing_saldo,
             })
 
         cand_lics = (
@@ -4028,6 +4122,7 @@ def api_user_my_license_accounts():
                     allowed_names,
                     calendar_day=d_v,
                 )
+                _apply_notes_client_to_user_day_rows(day_lines_v[k_v], lic, user_obj.id, d_v)
             if not any(day_lines_v[str(dv)] for dv in range(1, 32)):
                 continue
 
@@ -4080,6 +4175,7 @@ def api_user_my_license_accounts():
                 'days_until_expiry': None,
                 'account_expired': False,
                 'warranty_days': warranty_days_v,
+                'billing_saldo': billing_saldo,
             })
 
         out.sort(
@@ -4208,6 +4304,7 @@ def api_user_license_day_row_status():
             return jsonify({'success': False, 'error': 'Día del calendario inválido.'}), 400
 
         _ensure_license_day_notepads_column()
+        _ensure_license_portal_day_row_notes_column()
 
         license_row = License.query.get(license_id_int)
         if not license_row:
@@ -4266,6 +4363,15 @@ def api_user_license_day_row_status():
             return jsonify({'success': False, 'error': 'No se encontró la fila (actualiza la página).'}), 409
 
         phys_idx, _orig_ln, dual_base = visible[row_ordinal]
+        if 'client_note' in data:
+            _persist_user_portal_day_row_note(
+                license_row,
+                user_obj.id,
+                calendar_day_int,
+                int(phys_idx),
+                data.get('client_note'),
+            )
+
         merged_dual = dict(dual_base)
         merged_dual['statusGood'] = canon_good
         merged_dual['statusBad'] = canon_sb

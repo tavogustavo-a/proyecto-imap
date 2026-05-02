@@ -121,6 +121,7 @@ def search_users_ajax():
             "email": u.email or "",
             "saldo_usd": u.saldo_usd or 0,
             "saldo_cop": u.saldo_cop or 0,
+            "saldo": float(getattr(u, "saldo", 0) or 0),
             "tipo_precio_rol": tipo_precio_rol
         })
         

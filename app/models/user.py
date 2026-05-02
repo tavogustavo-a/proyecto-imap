@@ -110,6 +110,10 @@ class User(db.Model):
     saldo_usd = db.Column(db.Float, default=0.0)
     saldo_cop = db.Column(db.Float, default=0.0)
 
+    # Saldo pendiente de la cuenta / por cobrar: 0 = al día (pagado); mayor que 0 = importe adeudado.
+    # No confundir con saldo_usd/saldo_cop (créditos prepago en la tienda).
+    saldo = db.Column(db.Float, nullable=False, default=0.0, server_default='0')
+
     # JSON { clave }: apuntes del cliente por fila día en «Licencias» (no editan bloc admin)
     portal_license_row_notes = db.Column(db.Text, nullable=True)
 

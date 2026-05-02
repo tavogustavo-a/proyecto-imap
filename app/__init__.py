@@ -141,6 +141,26 @@ def create_app(config_class_passed=None):
                 "No se pudo aplicar parche store_licenses (notas): %s", schema_err
             )
 
+        try:
+            insp = inspect(db.engine)
+            if insp.has_table("users"):
+                ucols = {c["name"] for c in insp.get_columns("users")}
+                if "saldo" not in ucols:
+                    db.session.execute(
+                        text(
+                            "ALTER TABLE users ADD COLUMN saldo REAL NOT NULL DEFAULT 0"
+                        )
+                    )
+                    db.session.commit()
+                    app.logger.info(
+                        'Esquema: columna saldo (pendiente de cuenta; 0 = al día) añadida a users'
+                    )
+        except Exception as schema_users_saldo_err:
+            db.session.rollback()
+            app.logger.warning(
+                "No se pudo asegurar columna users.saldo: %s", schema_users_saldo_err
+            )
+
     # === Registro de Blueprints ===
     from app.auth.routes import auth_bp
     app.register_blueprint(auth_bp, url_prefix="/auth")

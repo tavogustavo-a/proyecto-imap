@@ -521,7 +521,8 @@ def matched_rows_for_username_only_day(
     asignada por la tienda): mismas etiquetas sólo lectura que matched_rows_for_account_day.
     """
     out: List[Dict[str, Any]] = []
-    for line in str(day_text or '').split('\n'):
+    raw_lines = str(day_text or '').replace('\r\n', '\n').replace('\r', '\n').split('\n')
+    for phys_idx, line in enumerate(raw_lines):
         stripped = line.strip()
         if not stripped:
             continue
@@ -550,12 +551,12 @@ def matched_rows_for_username_only_day(
                 'vinculo_dia': int(calendar_day),
                 'label_good': gv,
                 'label_bad': bv,
-                'notes_admin_line': str(dual.get('extra') or ''),
                 'tier_good': lt_good,
                 'tier_bad': lt_bad,
                 'status_good': canon_g,
                 'status_bad': sb_sel,
                 'otro_detail': od,
+                'phys_line_index': int(phys_idx),
                 'row_ordinal': len(out),
             }
         )
@@ -574,7 +575,8 @@ def matched_rows_for_account_day(
     calendar_day: día del calendario (1–31) de esta sección «Día N», para mostrar el vínculo usuario–día en la UI.
     """
     out: List[Dict[str, Any]] = []
-    for line in str(day_text or '').split('\n'):
+    raw_lines = str(day_text or '').replace('\r\n', '\n').replace('\r', '\n').split('\n')
+    for phys_idx, line in enumerate(raw_lines):
         stripped = line.strip()
         if not stripped:
             continue
@@ -603,12 +605,12 @@ def matched_rows_for_account_day(
                 'vinculo_dia': int(calendar_day),
                 'label_good': gv,
                 'label_bad': bv,
-                'notes_admin_line': str(dual.get('extra') or ''),
                 'tier_good': lt_good,
                 'tier_bad': lt_bad,
                 'status_good': canon_g,
                 'status_bad': sb_sel,
                 'otro_detail': od,
+                'phys_line_index': int(phys_idx),
                 'row_ordinal': len(out),
             }
         )
