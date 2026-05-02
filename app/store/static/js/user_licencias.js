@@ -195,14 +195,12 @@
             var sgEl = row.querySelector('.license-split-editor__status-good');
             var sbEl = row.querySelector('.license-split-editor__status-bad');
             var otEl = row.querySelector('.license-split-editor__otro-combined');
-            var unEl = row.querySelector('.user-lic-user-row-notes-inp');
             if (!sgEl || !sbEl || !Number.isFinite(lid) || lid <= 0 || !Number.isFinite(dayNum) || !Number.isFinite(ordinal)) {
                 return;
             }
             var statusGoodVal = sgEl.value != null ? String(sgEl.value).trim() : '';
             var statusBadVal = sbEl.value != null ? String(sbEl.value).trim() : '';
             var otroDetailVal = otEl ? String(otEl.value || '').trim() : '';
-            var userNotesVal = unEl ? String(unEl.value || '').trim() : '';
 
             row.classList.remove('user-lic-save-err');
 
@@ -220,7 +218,6 @@
                     status_good: statusGoodVal,
                     status_bad: statusBadVal,
                     otro_detail: otroDetailVal,
-                    user_notes: userNotesVal,
                 }),
             })
                 .then(function (r) {
@@ -292,10 +289,7 @@
             function (ev) {
                 var row = ev.target.closest('.user-lic-license-row-edit');
                 if (!row || !rootEl.contains(row)) return;
-                if (
-                    ev.target.classList.contains('license-split-editor__otro-combined') ||
-                    ev.target.classList.contains('user-lic-user-row-notes-inp')
-                ) {
+                if (ev.target.classList.contains('license-split-editor__otro-combined')) {
                     schedulePersist(row);
                 }
             },
@@ -332,9 +326,7 @@
 
         var shellIsOtro = normalizeStatusKey(curSb) === 'otro';
 
-        var curUn = row.user_row_note != null ? String(row.user_row_note) : '';
-
-        var unid = 'user-lic-un-' + slug + '-d' + day + '-r' + ordStored;
+        var nText = escHtml(row.notes_admin_line || '');
 
         return (
             '<div class="license-split-editor__row user-lic-readonly-row user-lic-license-row-edit"' +
@@ -394,17 +386,9 @@
             ' title="Cuando seleccionás Otro en incidencias, describí aquí el detalle."' +
             '/>' +
             '</div>' +
-            '<input id="' +
-            unid +
-            '" name="' +
-            unid +
-            '" type="text" class="license-split-editor__note user-lic-user-row-notes-inp" maxlength="4000" autocomplete="off"' +
-            ' aria-label="Tus notas en esta línea (solo vos)"' +
-            ' title="Bloc de notas solo para vos; no modifica los apuntes del administrador."' +
-            ' placeholder="Notas (solo vos)"' +
-            ' value="' +
-            escAttr(curUn) +
-            '" />' +
+            '<span class="license-split-editor__note user-lic-ro-note-readonly">' +
+            (nText || '—') +
+            '</span>' +
             '</div>'
         );
     }

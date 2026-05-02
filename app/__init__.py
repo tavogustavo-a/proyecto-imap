@@ -141,27 +141,6 @@ def create_app(config_class_passed=None):
                 "No se pudo aplicar parche store_licenses (notas): %s", schema_err
             )
 
-        try:
-            insp = inspect(db.engine)
-            if insp.has_table("users"):
-                usr_cols = {c["name"] for c in insp.get_columns("users")}
-                if "portal_license_row_notes" not in usr_cols:
-                    db.session.execute(
-                        text(
-                            "ALTER TABLE users ADD COLUMN portal_license_row_notes TEXT"
-                        )
-                    )
-                    db.session.commit()
-                    app.logger.info(
-                        "Esquema: columna portal_license_row_notes añadida a users"
-                    )
-        except Exception as schema_err:
-            db.session.rollback()
-            app.logger.warning(
-                "No se pudo aplicar parche users.portal_license_row_notes: %s",
-                schema_err,
-            )
-
     # === Registro de Blueprints ===
     from app.auth.routes import auth_bp
     app.register_blueprint(auth_bp, url_prefix="/auth")

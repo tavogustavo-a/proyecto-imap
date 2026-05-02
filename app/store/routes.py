@@ -3802,83 +3802,6 @@ def _ensure_license_account_client_notes_column():
         current_app.logger.warning('No se pudo asegurar columna client_notes en cuentas: %s', e)
 
 
-def _ensure_user_portal_license_row_notes_column():
-    """Añade portal_license_row_notes en users (apuntes por fila en Licencias cliente)."""
-    try:
-        from sqlalchemy import inspect, text
-
-        inspector = inspect(db.engine)
-        if 'users' not in inspector.get_table_names():
-            return
-        cols = {c['name'] for c in inspector.get_columns('users')}
-        if 'portal_license_row_notes' not in cols:
-            db.session.execute(text('ALTER TABLE users ADD COLUMN portal_license_row_notes TEXT'))
-            db.session.commit()
-    except Exception as e:
-        current_app.logger.warning('No se pudo asegurar columna portal_license_row_notes: %s', e)
-
-
-def _portal_user_lic_row_note_storage_key(account_id, license_id, calendar_day: int, row_ordinal: int) -> str:
-    lid = int(license_id)
-    d = int(calendar_day)
-    o = int(row_ordinal)
-    if account_id is not None and account_id != '':
-        try:
-            return 'a:{}:{}:{}:{}'.format(int(account_id), lid, d, o)
-        except (TypeError, ValueError):
-            return 'v:{}:{}:{}'.format(lid, d, o)
-    return 'v:{}:{}:{}'.format(lid, d, o)
-
-
-def _user_portal_license_row_notes_blob(user_obj):
-    """Devuelve dict clave→texto; nunca muta usuario."""
-    import json as _json
-
-    raw = getattr(user_obj, 'portal_license_row_notes', None)
-    if not raw or not str(raw).strip():
-        return {}
-    try:
-        o = _json.loads(raw)
-        return o if isinstance(o, dict) else {}
-    except Exception:
-        return {}
-
-
-def _inject_user_portal_license_row_notes_into_accounts(user_obj, accounts_list):
-    _ensure_user_portal_license_row_notes_column()
-    blob = _user_portal_license_row_notes_blob(user_obj)
-    for acct in accounts_list or []:
-        if not isinstance(acct, dict):
-            continue
-        lic_id = acct.get('license_id')
-        try:
-            lid_int = int(lic_id)
-        except (TypeError, ValueError):
-            continue
-        aid_raw = acct.get('account_id')
-        dl = acct.get('day_lines')
-        if not isinstance(dl, dict):
-            continue
-        for dk, rows in dl.items():
-            try:
-                cd = int(dk)
-            except (TypeError, ValueError):
-                continue
-            if not isinstance(rows, list):
-                continue
-            for row in rows:
-                if not isinstance(row, dict):
-                    continue
-                ro = row.get('row_ordinal')
-                try:
-                    ro_int = int(ro)
-                except (TypeError, ValueError):
-                    ro_int = 0
-                k = _portal_user_lic_row_note_storage_key(aid_raw, lid_int, cd, ro_int)
-                v = blob.get(k)
-                row['user_row_note'] = str(v).strip() if v is not None else ''
-
-
 def _user_licencias_viewer_scope(user_obj):
     """
     IDs de usuario cuyas cuentas asignadas pueden ver en «Licencias» (principal + padre si aplica).
@@ -4163,7 +4086,6 @@ def api_user_my_license_accounts():
                 (0, int(r['account_id'])) if r.get('account_id') is not None else (1, 0),
             )
         )
-        _inject_user_portal_license_row_notes_into_accounts(user_obj, out)
         return jsonify({'success': True, 'accounts': out, 'soporte_licencias': soporte_nav})
     except Exception as e:
         current_app.logger.exception('api_user_my_license_accounts')
@@ -4373,24 +4295,6 @@ def api_user_license_day_row_status():
             except Exception:
                 pass
         _sync_allowed_emails_from_license_admin_texts(texts_for_sync)
-
-        if 'user_notes' in data:
-            _ensure_user_portal_license_row_notes_column()
-            blob = dict(_user_portal_license_row_notes_blob(user_obj))
-            un_raw = data.get('user_notes')
-            un_str = '' if un_raw is None else str(un_raw).strip()
-            if len(un_str) > 4000:
-                un_str = un_str[:4000]
-            nk = _portal_user_lic_row_note_storage_key(
-                account_id_sel, license_id_int, calendar_day_int, row_ordinal
-            )
-            if not un_str:
-                blob.pop(nk, None)
-            else:
-                blob[nk] = un_str
-            user_obj.portal_license_row_notes = (
-                _json.dumps(blob, ensure_ascii=False) if blob else None
-            )
 
         db.session.commit()
         return jsonify({'success': True})

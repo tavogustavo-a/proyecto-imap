@@ -4,7 +4,7 @@
 
 {% block head %}
   {{ super() }}
-  <link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}?v=159">
+  <link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}?v=154">
   <link rel="stylesheet" href="{{ url_for('static', filename='fontawesome/css/all.css') }}">
 {% endblock %}
 
@@ -127,5 +127,5 @@
 {% block scripts %}
 {{ super() }}
 <script src="{{ url_for('static', filename='js/menu_busqueda.js') }}" defer></script>
-<script src="{{ url_for('store_bp.static', filename='js/user_licencias.js') }}?v=31" defer></script>
+<script src="{{ url_for('store_bp.static', filename='js/user_licencias.js') }}?v=29" defer></script>
 {% endblock %}

@@ -3617,7 +3617,6 @@ a.btn-search.btn-rounded:hover {
 
 /* BOTONES DE ACCIÓN MÁS PEQUEÑOS Y COMPACTOS */
 .btn-blue, .btn-red, .btn-orange, .btn-green {
-  font-size: 1.3rem !important;
   padding: 2px 7px !important;
   min-width: 60px !important;
   border-radius: 6px !important;

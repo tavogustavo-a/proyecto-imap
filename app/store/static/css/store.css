@@ -3414,9 +3414,7 @@ html, body {
   }
 
   html:has(.admin-licencias-page.admin-licencias-shell),
-  body:has(.admin-licencias-page.admin-licencias-shell),
-  html:has(.admin-licencias-page.user-licencias-shell),
-  body:has(.admin-licencias-page.user-licencias-shell) {
+  body:has(.admin-licencias-page.admin-licencias-shell) {
     overflow-x: hidden;
   }
   
@@ -18950,43 +18948,9 @@ body .card.product-texture-bg::before,
   width: 0%;
 }
 
-/* Licencias usuario: mismo ancho útil que admin y bloque «Días» al ras (como license-notepads-wrap) */
+/* Licencias — vista usuario (productos vinculados, sólo lectura; tono alineado con admin licencias) */
 .admin-licencias-page.user-licencias-shell {
-  max-width: 100% !important;
-  width: 100% !important;
-  margin-left: 0 !important;
-  margin-right: 0 !important;
-  padding-left: 0 !important;
-  padding-right: 0 !important;
-  border-radius: 0 !important;
-  box-sizing: border-box !important;
-}
-.admin-licencias-page.admin-licencias-shell.container.mt-2.user-licencias-shell {
-  margin-top: 0.2rem !important;
-}
-.admin-licencias-page.user-licencias-shell > .user-licencias-toolbar,
-.admin-licencias-page.user-licencias-shell > .user-licencias-subuser-hint,
-.admin-licencias-page.user-licencias-shell > .productos-buscar-mostrar-centered {
-  padding-left: 0.35rem;
-  padding-right: 0.35rem;
-  box-sizing: border-box;
-}
-.admin-licencias-page.user-licencias-shell .user-licencias-view-wrap,
-.admin-licencias-page.user-licencias-shell .user-lic-all-accounts {
-  width: 100% !important;
-  max-width: 100% !important;
-  margin-left: 0 !important;
-  margin-right: 0 !important;
-  padding-left: 0 !important;
-  padding-right: 0 !important;
-  box-sizing: border-box !important;
-}
-.admin-licencias-page.user-licencias-shell .user-licencias-grid-host {
-  margin-left: 0 !important;
-  margin-right: 0 !important;
-  padding-left: 0 !important;
-  padding-right: 0 !important;
-  box-sizing: border-box;
+  max-width: 100%;
 }
 /* Barra superior: Menú + usuario + saldo (misma fila) */
 .user-licencias-toolbar {
@@ -19207,33 +19171,11 @@ body .card.product-texture-bg::before,
 }
 
 /* —— Licencias usuario: vista «Días 1–31» (mismo idioma visual que admin, sólo lectura) —— */
-.admin-licencias-page.user-licencias-shell .license-notepads-wrap.user-lic-bundle-wrap {
-  border-radius: 0 !important;
-  border-left: none !important;
-  border-right: none !important;
-  border-top: 1px solid rgba(59, 130, 246, 0.42) !important;
-  border-bottom: 1px solid rgba(59, 130, 246, 0.42) !important;
-  overflow-x: hidden !important;
-  overflow-y: visible !important;
-  width: 100% !important;
-  max-width: 100% !important;
-  box-sizing: border-box !important;
-  margin-left: 0 !important;
-  margin-right: 0 !important;
-  padding-left: 0 !important;
-  padding-right: 0 !important;
-}
-.admin-licencias-page.user-licencias-shell .user-lic-bundle-wrap .license-split-editor__viewport,
-.admin-licencias-page.user-licencias-shell .user-lic-bundle-wrap .license-split-editor__grid {
-  width: 100% !important;
-  max-width: 100% !important;
-  box-sizing: border-box !important;
-}
 .admin-licencias-page.user-licencias-shell .user-lic-bundle-wrap .admin-licencias-bloc-header {
   margin-bottom: 0 !important;
   background: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 50%, #2563eb 100%);
   padding: 0.1rem 0.35rem;
-  border-radius: 0 !important;
+  border-radius: 5px 5px 0 0;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.22);
   box-sizing: border-box;
   line-height: 1.15;
@@ -19259,23 +19201,19 @@ body .card.product-texture-bg::before,
 .admin-licencias-page.user-licencias-shell .user-lic-bundle-wrap .admin-licencias-bloc--day:first-child {
   margin-top: 0.12rem !important;
 }
-/* Un solo hueco vertical entre días (evita margen día + margen bloc duplicados) */
+/* Sobrescribe .day-section { margin-bottom: 1.5rem } para acercar días como en admin (#licenseAllDaysContainer) */
 .admin-licencias-page.user-licencias-shell .user-lic-bundle-wrap .day-section.user-lic-readonly-day {
-  margin-bottom: 0 !important;
-  padding-bottom: 0 !important;
+  margin-bottom: 0.1rem !important;
 }
 .admin-licencias-page.user-licencias-shell .user-lic-bundle-wrap .day-section.user-lic-readonly-day:last-child {
   margin-bottom: 0 !important;
 }
-.admin-licencias-page.user-licencias-shell .user-lic-readonly-day .day-section-header.admin-licencias-bloc-header {
-  border-radius: 0 !important;
+.admin-licencias-page.user-licencias-shell .user-lic-readonly-day .day-header-content {
   padding: 0.1rem 0.35rem !important;
   gap: 0.35rem !important;
   line-height: 1.15 !important;
   min-height: 0 !important;
-  box-shadow: none !important;
-  margin-bottom: 0 !important;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.22) !important;
 }
 .admin-licencias-page.user-licencias-shell .user-lic-readonly-day .day-icon {
   font-size: 0.82rem !important;
@@ -19297,36 +19235,26 @@ body .card.product-texture-bg::before,
   border: none !important;
   padding: 0 !important;
   min-height: 0 !important;
-  width: 100% !important;
-  box-sizing: border-box !important;
-}
-.admin-licencias-page.user-licencias-shell .user-lic-bundle-wrap .license-split-editor__viewport {
-  width: 100% !important;
 }
 .admin-licencias-page.user-licencias-shell .user-lic-bundle-wrap .license-split-editor__grid {
   align-items: start;
-  grid-template-columns: minmax(10rem, 15rem) minmax(18rem, 1fr) !important;
-  width: 100% !important;
+  grid-template-columns: minmax(10rem, max-content) minmax(18rem, 1fr);
 }
 .admin-licencias-page.user-licencias-shell .user-lic-bundle-wrap .license-split-editor__creds-cell {
   align-self: start;
   min-width: 10rem;
-  width: 100% !important;
   min-height: 0;
 }
 .admin-licencias-page.user-licencias-shell .user-lic-bundle-wrap .license-split-editor__side {
   align-self: start;
   min-width: 18rem;
-  width: 100% !important;
 }
 .admin-licencias-page.user-licencias-shell .user-lic-bundle-wrap .license-split-editor__creds.user-lic-creds-ro {
-  width: 100% !important;
   min-width: 10rem !important;
   min-height: var(--lic-line-box) !important;
   flex: 0 0 auto !important;
   background: transparent !important;
   border: none !important;
-  border-right: var(--lic-border-w, 1px) solid rgba(59, 130, 246, 0.48) !important;
   box-shadow: none !important;
   padding-top: 0 !important;
   padding-bottom: 0 !important;
@@ -19339,62 +19267,33 @@ body .card.product-texture-bg::before,
   padding-top: 0 !important;
   overflow-y: visible !important;
   max-height: none !important;
-  width: 100% !important;
 }
 .admin-licencias-page.user-licencias-shell .user-lic-bundle-wrap .license-split-editor__row {
   align-items: stretch;
   border-bottom: var(--lic-border-w, 1px) solid rgba(59, 130, 246, 0.48);
   border-top: none;
-  width: 100% !important;
 }
 .admin-licencias-page.user-licencias-shell .user-lic-bundle-wrap .license-split-editor__status-wrap {
   align-self: stretch;
   min-height: var(--lic-line-box, 2rem);
   border-right: var(--lic-border-w, 1px) solid rgba(59, 130, 246, 0.48);
   box-sizing: border-box;
-  flex: 0 0 16rem !important;
-}
-.admin-licencias-page.user-licencias-shell .user-lic-bundle-wrap .license-split-editor__status-wrap .license-split-editor__status-select-shell--good,
-.admin-licencias-page.user-licencias-shell .user-lic-bundle-wrap .license-split-editor__status-wrap .license-split-editor__status-select-shell--bad {
-  width: 8rem !important;
-}
-.admin-licencias-page.user-licencias-shell .user-lic-bundle-wrap .license-split-editor__status-wrap .license-split-editor__status-select-shell--good {
-  border-right: var(--lic-border-w, 1px) solid rgba(59, 130, 246, 0.48) !important;
-}
-.admin-licencias-page.user-licencias-shell .user-lic-bundle-wrap .license-split-editor__status-wrap--otro {
-  flex: 0 0 24rem !important;
-}
-.admin-licencias-page.user-licencias-shell .user-lic-bundle-wrap .license-split-editor__status-wrap--otro .license-split-editor__status-select-shell--bad {
-  border-right: var(--lic-border-w, 1px) solid rgba(59, 130, 246, 0.48) !important;
-}
-.admin-licencias-page.user-licencias-shell .user-lic-bundle-wrap .license-split-editor__status-wrap--otro .license-split-editor__otro-combined {
-  width: 8rem !important;
-  border: none !important;
 }
 .admin-licencias-page.user-licencias-shell .user-lic-bundle-wrap .license-split-editor__lead {
   border-right: var(--lic-border-w, 1px) solid rgba(59, 130, 246, 0.48);
   box-sizing: border-box;
   min-height: var(--lic-line-box, 2rem);
-  display: none !important;
 }
-.admin-licencias-page.user-licencias-shell .user-lic-bundle-wrap input.license-split-editor__note.user-lic-user-row-notes-inp {
+.admin-licencias-page.user-licencias-shell .user-lic-bundle-wrap .license-split-editor__note.user-lic-ro-note-readonly {
   align-self: stretch;
-  width: 100%;
-  flex: 1 1 0% !important;
-  box-sizing: border-box !important;
-  padding: 0 0.35rem;
-  margin: 0;
-  font: inherit;
-  font-size: var(--lic-line-fs, 0.78rem);
-  line-height: var(--lic-line-lh, 1.45);
-  background: transparent;
-  color: rgba(248, 250, 252, 0.95);
-  border: none;
+  height: auto !important;
   min-height: var(--lic-line-box, 2rem);
-}
-.admin-licencias-page.user-licencias-shell .user-lic-bundle-wrap input.license-split-editor__note.user-lic-user-row-notes-inp:focus {
-  outline: none;
-  background: rgba(15, 23, 42, 0.35);
+  box-sizing: border-box !important;
+  display: flex;
+  align-items: flex-start;
+  padding: 0.3rem 0.4rem;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 .admin-licencias-page.user-licencias-shell .user-lic-ro-static {
   display: block;
@@ -19450,35 +19349,18 @@ body .card.product-texture-bg::before,
 }
 
 /* —— Licencias usuario: panel y días sin estilos inline —— */
-.admin-licencias-page.user-licencias-shell .user-lic-account-sheet {
-  width: 100% !important;
-  max-width: 100% !important;
-  background: transparent !important;
-  border: none !important;
-  border-radius: 0 !important;
-  padding: 0 !important;
-  margin-left: 0 !important;
-  margin-right: 0 !important;
-  margin-bottom: 0 !important;
-  box-sizing: border-box !important;
-}
-.admin-licencias-page.user-licencias-shell .user-lic-account-sheet > .user-lic-inv-head,
-.admin-licencias-page.user-licencias-shell .user-lic-account-sheet > .user-lic-linked-sale-hint,
-.admin-licencias-page.user-licencias-shell .user-lic-account-sheet > .user-lic-client-notes-block {
-  margin-left: 0.35rem;
-  margin-right: 0.35rem;
+.admin-licencias-page.user-licencias-shell {
+  border-radius: 12px;
+  padding-bottom: 0.35rem;
   box-sizing: border-box;
 }
-.admin-licencias-page.user-licencias-shell .user-lic-account-sheet > .user-lic-inv-head {
-  margin-top: 0.35rem;
-}
-.admin-licencias-page.user-licencias-shell .user-lic-account-sheet > .user-lic-bundle-wrap {
-  margin-top: 0.35rem !important;
-}
-.admin-licencias-page.user-licencias-shell article.user-lic-account-sheet:not(:last-child) {
-  margin-bottom: 0.75rem !important;
-  padding-bottom: 0.5rem !important;
-  border-bottom: 1px solid rgba(59, 130, 246, 0.22);
+.admin-licencias-page.user-licencias-shell .user-lic-account-sheet {
+  background: rgba(15, 23, 42, 0.42);
+  border: 1px solid rgba(71, 85, 105, 0.45);
+  border-radius: 10px;
+  padding: 0.75rem 0.85rem;
+  margin-bottom: 1rem;
+  box-sizing: border-box;
 }
 .admin-licencias-page.user-licencias-shell .user-lic-day-header-toggle {
   cursor: pointer;
