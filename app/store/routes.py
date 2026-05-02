@@ -3892,6 +3892,9 @@ def api_user_my_license_accounts():
 
         _ensure_license_day_notepads_column()
         _ensure_license_account_client_notes_column()
+        _ensure_license_warranty_days_column()
+        _ensure_license_expired_notes_and_month_columns()
+        _ensure_license_changes_notes_column()
 
         assignee_ids, allowed_names = _user_licencias_viewer_scope(user_obj)
         if not assignee_ids:

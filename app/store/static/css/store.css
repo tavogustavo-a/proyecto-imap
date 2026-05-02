@@ -8198,6 +8198,7 @@ html, body {
 
   /* Misma caja que .btn-blue (styles.css: padding 2px 10px, border 2px) — no usar padding mayor que Menú/Herramientas */
   .admin-licencias-toolbar .licenses-collapse-btn--toolbar,
+  .user-licencias-toolbar .licenses-collapse-btn--toolbar,
   .admin-licencias-toolbar .licenses-duplicates-btn--toolbar {
     padding: 2px 10px !important;
     min-width: 0 !important;
@@ -8221,6 +8222,7 @@ html, body {
   }
 
   .admin-licencias-toolbar .licenses-collapse-btn--toolbar i,
+  .user-licencias-toolbar .licenses-collapse-btn--toolbar i,
   .admin-licencias-toolbar .licenses-duplicates-btn--toolbar i {
     font-size: 1em !important;
     line-height: 1 !important;
