@@ -3937,15 +3937,25 @@ def _ensure_user_portal_license_activity_log_column():
         from sqlalchemy import inspect, text
 
         inspector = inspect(db.engine)
-        if 'users' not in inspector.get_table_names():
+        dialect = getattr(db.engine.dialect, "name", "") or ""
+
+        tbls = inspector.get_table_names()
+        if "users" not in tbls:
             return True
-        cols = {c['name'] for c in inspector.get_columns('users')}
-        if 'portal_license_activity_log' not in cols:
-            db.session.execute(text('ALTER TABLE users ADD COLUMN portal_license_activity_log TEXT'))
+        cols_lower = {c["name"].lower() for c in inspector.get_columns("users")}
+        if "portal_license_activity_log" not in cols_lower:
+            db.session.execute(
+                text("ALTER TABLE users ADD COLUMN portal_license_activity_log TEXT")
+            )
             db.session.commit()
         return True
     except Exception as e:
-        current_app.logger.warning('No se pudo asegurar columna portal_license_activity_log: %s', e)
+        dialect = getattr(db.engine.dialect, "name", "") or ""
+        current_app.logger.warning(
+            'No se pudo asegurar columna portal_license_activity_log (%s): %s',
+            dialect,
+            e,
+        )
         return False
 
 
@@ -3954,7 +3964,7 @@ _STORE_USER_PORTAL_ACTIVITY_SCHEMA_ENSURED = False
 
 @store_bp.before_request
 def _store_bp_ensure_portal_license_activity_schema():
-    """SQLite: crear columna antes del primer SELECT a users en rutas tienda (/licencias, etc.)."""
+    """Asegura columna en PostgreSQL/SQLite antes del primer SELECT a users en rutas tienda."""
     global _STORE_USER_PORTAL_ACTIVITY_SCHEMA_ENSURED
     if _STORE_USER_PORTAL_ACTIVITY_SCHEMA_ENSURED:
         return

@@ -143,19 +143,32 @@ def create_app(config_class_passed=None):
 
         try:
             insp = inspect(db.engine)
+            dialect = getattr(db.engine.dialect, "name", "") or ""
+
+            def _cols(table):
+                raw = insp.get_columns(table)
+                # PostgreSQL devuelve nombres en minúsculas; el modelo suele usar minúsculas igual.
+                return {c["name"].lower() for c in raw}
+
             if insp.has_table("users"):
-                ucols = {c["name"] for c in insp.get_columns("users")}
+                ucols = _cols("users")
                 if "saldo" not in ucols:
-                    db.session.execute(
-                        text(
-                            "ALTER TABLE users ADD COLUMN saldo REAL NOT NULL DEFAULT 0"
+                    if dialect == "sqlite":
+                        saldo_sql = "ALTER TABLE users ADD COLUMN saldo REAL NOT NULL DEFAULT 0"
+                    else:
+                        # PostgreSQL / MySQL típicos de producción (REAL también vale en PG; DOUBLE PRECISION más explícito)
+                        saldo_sql = (
+                            "ALTER TABLE users ADD COLUMN saldo DOUBLE PRECISION NOT NULL DEFAULT 0"
                         )
-                    )
+                    db.session.execute(text(saldo_sql))
                     db.session.commit()
                     app.logger.info(
-                        'Esquema: columna saldo (pendiente de cuenta; 0 = al día) añadida a users'
+                        "Esquema: columna saldo (pendiente de cuenta; 0 = al día) "
+                        "añadida a users (%s)",
+                        dialect,
                     )
-                ucols = {c["name"] for c in insp.get_columns("users")}
+
+                ucols = _cols("users")
                 if "portal_license_activity_log" not in ucols:
                     db.session.execute(
                         text(
@@ -164,8 +177,9 @@ def create_app(config_class_passed=None):
                     )
                     db.session.commit()
                     app.logger.info(
-                        "Esquema: columna portal_license_activity_log (historial actividad licencias) "
-                        "añadida a users"
+                        "Esquema: columna portal_license_activity_log "
+                        "(historial actividad licencias) añadida a users (%s)",
+                        dialect,
                     )
         except Exception as schema_users_patch_err:
             db.session.rollback()
