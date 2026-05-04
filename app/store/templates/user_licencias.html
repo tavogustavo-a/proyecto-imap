@@ -4,7 +4,7 @@
 
 {% block head %}
   {{ super() }}
-  <link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}?v=178">
+  <link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}?v=212">
   <link rel="stylesheet" href="{{ url_for('static', filename='fontawesome/css/all.css') }}">
 {% endblock %}
 
@@ -30,6 +30,7 @@
         <i class="fas fa-exchange-alt" aria-hidden="true"></i> Cambios
       </a>
       {% endif %}
+      <a href="{{ url_for('store_bp.user_licencias_actividad_portal') }}" class="btn-blue menu-btn-worksheet user-licencias-toolbar-historial-link text-decoration-none" title="Entregas, reportes o incidencias y renovaciones (portal)" aria-label="Historial de licencias: entregas y actividad en portal">Historial</a>
       <button type="button" id="licensesCollapseBtn" class="btn-blue menu-btn-worksheet licenses-collapse-btn licenses-collapse-btn--toolbar" title="Contraer o expandir licencias" aria-label="Contraer o expandir licencias">
         <i class="fas fa-chevron-up" id="collapseIcon" aria-hidden="true"></i>
       </button>
@@ -117,7 +118,7 @@
     <div id="userLicenciasGrid" class="licenses-grid"></div>
   </div>
 
-  <div id="userLicenciasTableOuter" class="user-licencias-view-wrap w-100" data-api-url="{{ url_for('store_bp.api_user_my_license_accounts') }}" data-historial-url="{{ url_for('store_bp.historial_compras_usuario') }}" data-day-status-url="{{ url_for('store_bp.api_user_license_day_row_status') }}">
+  <div id="userLicenciasTableOuter" class="user-licencias-view-wrap w-100" data-api-url="{{ url_for('store_bp.api_user_my_license_accounts') }}" data-day-status-url="{{ url_for('store_bp.api_user_license_day_row_status') }}">
     <p class="text-center user-licencias-empty py-4 mb-0" id="userLicenciasLoadingMsg">Cargando licencias…</p>
   </div>
 </div>
@@ -127,5 +128,5 @@
 {% block scripts %}
 {{ super() }}
 <script src="{{ url_for('static', filename='js/menu_busqueda.js') }}" defer></script>
-<script src="{{ url_for('store_bp.static', filename='js/user_licencias.js') }}?v=35" defer></script>
+<script src="{{ url_for('store_bp.static', filename='js/user_licencias.js') }}?v=39" defer></script>
 {% endblock %}

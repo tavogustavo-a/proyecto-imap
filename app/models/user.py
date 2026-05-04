@@ -117,6 +117,9 @@ class User(db.Model):
     # JSON { clave }: apuntes del cliente por fila día en «Licencias» (no editan bloc admin)
     portal_license_row_notes = db.Column(db.Text, nullable=True)
 
+    # JSON array: últimas actividades de portal (reportes, renovaciones) — ver user_license_activity.py
+    portal_license_activity_log = db.Column(db.Text, nullable=True)
+
     # Campo para indicar si el usuario puede buscar cualquier email (o solo los permitidos)
     can_search_any = db.Column(db.Boolean, default=False, nullable=False)
     

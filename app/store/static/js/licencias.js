@@ -42,7 +42,23 @@ const ADMIN_LICENCIAS_SIDEBAR_MODE_KEY = 'adminLicenciasSidebarMode';
 /** Evita re-pintar el listado Cambios al activar la tarjeta del producto desde «devolver» (mantiene estable el DOM de la fila). */
 let _adminLicSkipNextChangesProductsRefreshOnce = false;
 
+/** Días aplazados mientras hay un bloc-día enfocado para no pisar texto al vuelo. */
+let _pendingLoadAllDaysLicenseId = null;
 
+/** Intervalo corto (~s): reflejar asignaciones desde tienda/otra sesión sin recargar toda la página. */
+const ADMIN_LICENCIAS_DAYS_POLL_MS = 5500;
+
+/** Tras cerrar foco desde un día, otra pestaña puede dejar pendiente refrescar «Días» — se reintenta a menudo. */
+const ADMIN_LICENCIAS_PENDING_DAYS_FLUSH_MS = 1800;
+
+let __adminLicDaysPollTimer = null;
+
+let __adminLicPendingDaysFlushTimer = null;
+
+let __adminLicDaysRealtimeRefreshBusy = false;
+
+/** Cuentas assigned/sold ya volcadas al bloc Licencias desde la API en esta sesión (evita líneas duplicadas). */
+let __adminLicInjectedAssignedAccountIds = new Set();
 function isAnyDayNotepadActivelyEditing() {
     const el = document.activeElement;
     if (el && el.closest && el.closest('.day-license-split-root')) {
@@ -77,6 +93,125 @@ function flushPendingLoadAllDaysSoldAccounts() {
     const lid = _pendingLoadAllDaysLicenseId;
     _pendingLoadAllDaysLicenseId = null;
     loadAllDaysSoldAccounts(lid);
+}
+
+/**
+ * Panel de producto visible: tras `loadLicenses`, actualiza highlights y «Días» con los datos nuevos del servidor.
+ * Usa schedule para no pisar borradores mientras el admin edita un día.
+ */
+function refreshExpandedDaysAndAccountsFromLatestLicenses() {
+    const inputContainer = document.getElementById('licenseAccountsInputContainer');
+    if (!inputContainer || inputContainer.classList.contains('d-none')) return;
+    const raw = inputContainer.dataset.activeLicenseId;
+    if (raw == null || raw === '') return;
+    const licenseId = parseInt(raw, 10);
+    if (!Number.isFinite(licenseId)) return;
+    void loadAndDisplaySavedAccounts(licenseId);
+    scheduleLoadAllDaysSoldAccounts(licenseId);
+    /** Compras asignan cuenta en servidor pero no amplían license_notes automáticamente: alinear bloc si el admin no está editando ahí. */
+    adminTryInjectNewAssignedAccountsIntoOpenBloc();
+}
+
+function startAdminLicenciasPendingDaysFlushTicker() {
+    if (__adminLicPendingDaysFlushTimer != null || window.IS_ARCHIVED_MODE) return;
+    __adminLicPendingDaysFlushTimer = setInterval(function () {
+        try {
+            flushPendingLoadAllDaysSoldAccounts();
+        } catch (_eFlush) {}
+    }, ADMIN_LICENCIAS_PENDING_DAYS_FLUSH_MS);
+}
+
+/** Extrae correo normalizado desde el fragmento «credencial» de una línea del bloc Licencias (mesma lógica suelta que otros parsers). */
+function adminMainBlocCredEmailKeyFromParsedLine(parts) {
+    const c = String(parts && parts.cred != null ? parts.cred : '');
+    const m = /\S+@\S+\.\S+/.exec(c);
+    return m ? normalizeAccountEmailKey(m[0]) : '';
+}
+
+function collectEmailKeysPresentInMainLicenseBloc() {
+    if (typeof adminLicenseSplitGetMergedNotes !== 'function') return new Set();
+    const raw = String(adminLicenseSplitGetMergedNotes()).replace(/\r\n/g, '\n');
+    const keys = new Set();
+    raw.split('\n').forEach(function (ln) {
+        const pk = adminMainBlocCredEmailKeyFromParsedLine(parseAdminLicenseLineToSplitParts(ln));
+        if (pk) keys.add(pk);
+    });
+    return keys;
+}
+
+/**
+ * Añade al bloc Licencias líneas nuevas para cuentas sold/assigned de la API que aún no estén por correo,
+ * cuando el usuario no tiene el foco en el split Licencias (no pisamos edición en curso).
+ */
+function adminTryInjectNewAssignedAccountsIntoOpenBloc() {
+    const inp = document.getElementById('licenseAccountsInputContainer');
+    if (!inp || inp.classList.contains('d-none')) return;
+    const rawId = inp.dataset.activeLicenseId;
+    if (rawId == null || rawId === '') return;
+    const licenseId = parseInt(rawId, 10);
+    if (!Number.isFinite(licenseId) || licenseId === AGGREGATE_LICENSE_ID) return;
+
+    const active = document.activeElement;
+    if (active && active.closest && active.closest('#adminLicenciasLicenseSplitRoot')) return;
+
+    const L = licenses.find(function (lic) {
+        return lic.id === licenseId;
+    });
+    if (!L || !Array.isArray(L.accounts)) return;
+
+    const presentEmails = collectEmailKeysPresentInMainLicenseBloc();
+    const toAppend = [];
+
+    for (let i = 0; i < L.accounts.length; i++) {
+        const acc = L.accounts[i];
+        if (!acc || acc.id == null || !isAccountCountedInAdminDaysView(acc)) continue;
+        const emKey = normalizeAccountEmailKey(acc.email);
+        if (presentEmails.has(emKey)) {
+            __adminLicInjectedAssignedAccountIds.add(acc.id);
+            continue;
+        }
+        if (__adminLicInjectedAssignedAccountIds.has(acc.id)) continue;
+
+        const cred = (
+            String(acc.email != null ? acc.email : '').trim() +
+            ' ' +
+            String(acc.password != null ? acc.password : '').trim()
+        ).trim();
+        if (!cred) continue;
+        __adminLicInjectedAssignedAccountIds.add(acc.id);
+        presentEmails.add(emKey);
+        toAppend.push(buildAdminLicenseStorageLine(cred, 'anonimo', '', '', ''));
+    }
+
+    if (!toAppend.length) return;
+
+    let base = typeof adminLicenseSplitGetMergedNotes === 'function' ? adminLicenseSplitGetMergedNotes() : '';
+    base = base != null ? String(base).replace(/\r\n/g, '\n').trimEnd() : '';
+    const assembled = base ? base + '\n' + toAppend.join('\n') : toAppend.join('\n');
+
+    if (typeof window.adminLicenseSplitApplyMergedText === 'function') {
+        window.adminLicenseSplitApplyMergedText(assembled);
+    }
+    invalidateLicenseNotesCredentialLineCache();
+    if (typeof refreshDuplicateEmailHighlights === 'function') {
+        refreshDuplicateEmailHighlights(licenseId);
+    }
+    if (typeof window.adminLicenciasSaveCurrentLicenseNotesImmediate === 'function') {
+        window.adminLicenciasSaveCurrentLicenseNotesImmediate().catch(function () {});
+    }
+}
+
+function startAdminLicenciasDaysRealtimePoll() {
+    if (__adminLicDaysPollTimer != null || window.IS_ARCHIVED_MODE) return;
+    __adminLicDaysPollTimer = setInterval(function adminLicDaysPollTick() {
+        if (__adminLicDaysRealtimeRefreshBusy) return;
+        if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return;
+        __adminLicDaysRealtimeRefreshBusy = true;
+        loadLicenses({ skipGridRender: true }).finally(function () {
+            refreshExpandedDaysAndAccountsFromLatestLicenses();
+            __adminLicDaysRealtimeRefreshBusy = false;
+        });
+    }, ADMIN_LICENCIAS_DAYS_POLL_MS);
 }
 
 function injectAggregateLicenseEntry() {
@@ -203,6 +338,17 @@ document.addEventListener('DOMContentLoaded', function() {
     setupContentEditableSpaceKeyFix();
     initializeLicenses();
     setupEventListeners();
+    startAdminLicenciasDaysRealtimePoll();
+    startAdminLicenciasPendingDaysFlushTicker();
+    document.addEventListener('visibilitychange', function adminLicenciasDaysOnVisible() {
+        if (typeof document.visibilityState !== 'undefined' && document.visibilityState !== 'visible') return;
+        if (window.IS_ARCHIVED_MODE || __adminLicDaysRealtimeRefreshBusy) return;
+        __adminLicDaysRealtimeRefreshBusy = true;
+        loadLicenses({ skipGridRender: true }).finally(function () {
+            refreshExpandedDaysAndAccountsFromLatestLicenses();
+            __adminLicDaysRealtimeRefreshBusy = false;
+        });
+    });
 });
 
 const LICENSES_FETCH_TIMEOUT_MS = 28000;
@@ -735,18 +881,28 @@ function markCredentialDuplicateLineRowsAcrossRoots(roots) {
         licTa &&
         licTa.classList &&
         licTa.classList.contains('license-split-editor__creds') &&
-        typeof adminLicenseSplitGetMergedNotes === 'function'
+        typeof buildAdminLicenseStorageLine === 'function' &&
+        typeof adminLicenseSplitReadRow === 'function'
     ) {
-        const merged = String(adminLicenseSplitGetMergedNotes() || '').replace(/\r\n/g, '\n');
-        const lines = merged === '' ? [] : merged.split('\n');
+        const raw = String(licTa.value != null ? licTa.value : '').replace(/\r\n/g, '\n');
+        const credLines = adminMainLicenseCredLinesCollapsed(licenseSplitCredLinesFromRaw(raw));
         const splitRows = adminLicenseSplitGetRowElements();
-        for (let i = 0; i < lines.length; i++) {
-            const line = lines[i];
+        for (let i = 0; i < credLines.length; i++) {
+            const row = splitRows[i];
+            const r = row
+                ? adminLicenseSplitReadRow(row)
+                : { user: '', statusGood: '', statusBad: '', extra: '' };
+            const line = buildAdminLicenseStorageLine(
+                credLines[i],
+                r.user != null ? r.user : '',
+                r.statusGood != null ? r.statusGood : '',
+                r.statusBad != null ? r.statusBad : '',
+                r.extra != null ? r.extra : ''
+            );
             const norm = normalizePlainLineForDuplicateParse(line);
             if (!norm) continue;
             const key = credentialDuplicateKeyFromMergedLine(line);
-            const domRow = splitRows[i];
-            pushRow(key, domRow);
+            pushRow(key, row);
         }
     }
 
@@ -1277,18 +1433,31 @@ function syncAdminHistorialShellMode() {
     shell.classList.toggle('admin-licencias-historial-mode', historialOpen || reportesOpen || cambiosOpen);
 }
 
+function getAdminLicenciasCambiosToolbarBtn() {
+    return document.getElementById('licensesMoveToChangesBtn');
+}
+
+function syncAdminLicenciasCambiosToolbarBtnOpen(isOpen) {
+    const btn = getAdminLicenciasCambiosToolbarBtn();
+    if (!btn) {
+        return;
+    }
+    if (isOpen) {
+        btn.setAttribute('aria-expanded', 'true');
+        btn.classList.add('licenses-move-to-changes-btn--active');
+    } else {
+        btn.setAttribute('aria-expanded', 'false');
+        btn.classList.remove('licenses-move-to-changes-btn--active');
+    }
+}
+
 function closeAdminLicenciasCambiosPanelUi() {
     const panel = document.getElementById('adminLicenciasCambiosPanel');
-    const btn = document.getElementById('adminLicenciasCambiosToggleBtn');
     if (panel && !panel.classList.contains('d-none')) {
         panel.classList.add('d-none');
         panel.setAttribute('aria-hidden', 'true');
     }
-    if (btn) {
-        btn.setAttribute('aria-expanded', 'false');
-        btn.classList.remove('admin-licencias-cambios-toggle--open');
-        btn.classList.remove('active');
-    }
+    syncAdminLicenciasCambiosToolbarBtnOpen(false);
     syncAdminHistorialShellMode();
 }
 
@@ -1335,7 +1504,6 @@ function adminLicenciasReturnToLicenseEditorAfterRestoreUi(licenseId) {
 function openAdminLicenciasCambiosPanelUi(opts) {
     const skipScroll = opts && opts.skipScroll === true;
     const panel = document.getElementById('adminLicenciasCambiosPanel');
-    const btn = document.getElementById('adminLicenciasCambiosToggleBtn');
     closeAdminLicenciasHistorialPanelUi();
     closeAdminLicenciasReportesPanelUi();
     document.querySelectorAll('.license-card').forEach(function (c) {
@@ -1345,11 +1513,7 @@ function openAdminLicenciasCambiosPanelUi(opts) {
         panel.classList.remove('d-none');
         panel.setAttribute('aria-hidden', 'false');
     }
-    if (btn) {
-        btn.setAttribute('aria-expanded', 'true');
-        btn.classList.add('admin-licencias-cambios-toggle--open');
-        btn.classList.add('active');
-    }
+    syncAdminLicenciasCambiosToolbarBtnOpen(true);
     syncAdminHistorialShellMode();
     try {
         localStorage.setItem(ADMIN_LICENCIAS_SIDEBAR_MODE_KEY, 'cambios');
@@ -1372,36 +1536,6 @@ function scrollAdminLicenciasCambiosPanelIntoView() {
         const section = document.querySelector('.admin-licencias-bloc--changes-product');
         if (section && typeof section.scrollIntoView === 'function') {
             section.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-        }
-    });
-}
-
-function setupAdminLicenciasCambiosToggle() {
-    const panel = document.getElementById('adminLicenciasCambiosPanel');
-    if (!panel || document.documentElement.dataset.adminCambiosToggleInit === '1') {
-        return;
-    }
-    document.documentElement.dataset.adminCambiosToggleInit = '1';
-    const licensesGridEl = document.getElementById('licensesGrid');
-    if (!licensesGridEl) {
-        return;
-    }
-    licensesGridEl.addEventListener('click', function adminCambiosGridClick(e) {
-        const btn = e.target.closest('#adminLicenciasCambiosToggleBtn');
-        if (!btn) {
-            return;
-        }
-        e.preventDefault();
-        e.stopPropagation();
-        const isHidden = panel.classList.contains('d-none');
-        if (isHidden) {
-            openAdminLicenciasCambiosPanelUi({ skipScroll: false });
-        } else {
-            closeAdminLicenciasCambiosPanelUi();
-            try {
-                localStorage.removeItem(ADMIN_LICENCIAS_SIDEBAR_MODE_KEY);
-            } catch (err) {}
-            restoreActiveProductLicenseCardFromStorage();
         }
     });
 }
@@ -2850,7 +2984,7 @@ function setupEventListeners() {
     setupAdminUserLabelSearchModal();
     setupAdminLicenciasHistorial();
     setupAdminLicenciasReportes();
-    setupAdminLicenciasCambiosToggle();
+    setupAdminLicenseBulkEditUi();
     
     // Cerrar menús al hacer clic fuera
     document.addEventListener('click', function(event) {
@@ -2950,6 +3084,7 @@ async function loadLicenses(options) {
                     });
                 }
             }
+            refreshExpandedDaysAndAccountsFromLatestLicenses();
         } else {
             console.error('Error al cargar licencias:', data.error);
             if (licenses.length !== 0) {
@@ -3027,7 +3162,6 @@ function renderLicensesGrid() {
                 if (license.isAggregate) {
                     h += createHistorialGridButtonHtml();
                     h += createReportesGridButtonHtml();
-                    h += createCambiosGridButtonHtml();
                 }
                 return h;
             })
@@ -3056,8 +3190,11 @@ function renderLicensesGrid() {
                 </section>
                 <section class="admin-licencias-bloc admin-licencias-bloc--license" id="adminLicenciasBlocLicense" aria-label="Licencias del producto">
                     <div class="admin-licencias-bloc-header">
-                        <span class="admin-licencias-bloc-title"><i class="fas fa-ticket-alt" aria-hidden="true"></i> <span id="adminLicenciasLicenciasHeading">Licencias</span></span>
+                        <span class="admin-licencias-bloc-title"><span id="adminLicenciasLicenciasHeading">Licencias</span></span>
                         <div class="admin-licencias-bloc-header-actions">
+                            <button type="button" id="adminLicenciasBulkEditBtn" class="admin-lic-bulk-toolbar-btn" title="Editar varias filas a la vez (usuario, estados, notas, día de venta)" aria-label="Edición masiva de licencias seleccionadas">
+                                <i class="fas fa-object-group" aria-hidden="true"></i> Masivo
+                            </button>
                             <div class="admin-licencias-show-limit-wrap">
                                 <select id="adminLicenciasLicenseShowSelect" class="admin-licencias-show-limit-select" title="Cuántas filas visibles a la vez (credenciales y campos)" aria-label="Filas visibles en el listado de licencias">
                                     <option value="20">20</option>
@@ -3318,18 +3455,9 @@ function renderLicensesGrid() {
             reportesBtnAfterRender.classList.remove('admin-licencias-reportes-toggle--open');
         }
     }
-    const cambiosBtnAfterRender = document.getElementById('adminLicenciasCambiosToggleBtn');
     const cambiosPanelAfterRender = document.getElementById('adminLicenciasCambiosPanel');
-    if (cambiosBtnAfterRender && cambiosPanelAfterRender) {
-        if (!cambiosPanelAfterRender.classList.contains('d-none')) {
-            cambiosBtnAfterRender.setAttribute('aria-expanded', 'true');
-            cambiosBtnAfterRender.classList.add('admin-licencias-cambios-toggle--open');
-            cambiosBtnAfterRender.classList.add('active');
-        } else {
-            cambiosBtnAfterRender.setAttribute('aria-expanded', 'false');
-            cambiosBtnAfterRender.classList.remove('admin-licencias-cambios-toggle--open');
-            cambiosBtnAfterRender.classList.remove('active');
-        }
+    if (cambiosPanelAfterRender) {
+        syncAdminLicenciasCambiosToolbarBtnOpen(!cambiosPanelAfterRender.classList.contains('d-none'));
     }
     syncAdminHistorialShellMode();
     scheduleRefreshAdminLicenciasReportCounts();
@@ -3419,25 +3547,6 @@ function createReportesGridButtonHtml() {
                 <h3 class="license-name">
                     <span class="full-text">Reportes<span id="adminLicenciasReportesTotalBadge" class="license-card-report-total-badge" hidden role="status" aria-live="polite" aria-label="Sin reportes pendientes"><span class="license-card-report-total-badge__num">0</span></span></span>
                     <span class="first-letter">R</span>
-                </h3>
-            </div>
-        </button>`;
-}
-
-/** Botón Cambios junto a Historial y Reportes: vista a pantalla como esos paneles. */
-function createCambiosGridButtonHtml() {
-    return `
-        <button type="button"
-            class="license-card license-card--aggregate license-card--panel-toggle admin-licencias-cambios-toggle"
-            id="adminLicenciasCambiosToggleBtn"
-            title="Cambios mes a mes por producto (vista completa)"
-            aria-expanded="false"
-            aria-controls="adminLicenciasCambiosPanel"
-            aria-label="Abrir vista de Cambios mes a mes por producto">
-            <div class="license-card-header">
-                <h3 class="license-name">
-                    <span class="full-text">Cambios</span>
-                    <span class="first-letter">C</span>
                 </h3>
             </div>
         </button>`;
@@ -3617,7 +3726,10 @@ async function activateLicenseCard(card, licenseId, skipScroll = false, options)
     if (inputContainer) {
         inputContainer.classList.remove('d-none');
         inputContainer.dataset.activeLicenseId = String(licenseId);
-        
+        try {
+            __adminLicInjectedAssignedAccountIds.clear();
+        } catch (_injClear) {}
+
         // Cargar y mostrar las cuentas guardadas (editables)
         loadAndDisplaySavedAccounts(licenseId);
         
@@ -3720,7 +3832,6 @@ function restoreAdminLicenciasUiAfterGridRender() {
         } catch (e3) {}
     } else if (mode === 'cambios') {
         const camPanel = document.getElementById('adminLicenciasCambiosPanel');
-        const camBtn = document.getElementById('adminLicenciasCambiosToggleBtn');
         if (camPanel) {
             closeAdminLicenciasHistorialPanelUi();
             closeAdminLicenciasReportesPanelUi();
@@ -3730,11 +3841,7 @@ function restoreAdminLicenciasUiAfterGridRender() {
                 }
                 c.classList.remove('active');
             });
-            if (camBtn) {
-                camBtn.classList.add('active');
-                camBtn.setAttribute('aria-expanded', 'true');
-                camBtn.classList.add('admin-licencias-cambios-toggle--open');
-            }
+            syncAdminLicenciasCambiosToolbarBtnOpen(true);
             camPanel.classList.remove('d-none');
             camPanel.setAttribute('aria-hidden', 'false');
             syncAdminHistorialShellMode();
@@ -6089,7 +6196,14 @@ async function updateExistingAccount(licenseId, accountId, text) {
     return await updateExistingAccountImproved(licenseId, accountId, text, originalAccount);
 }
 
-/** Cuentas vendidas cuyo assigned_at cae en este día del mes (1–31). */
+/** Entregas visibles en «Días»: manual/marca vendida (`sold`) o asignación por compra (`assigned`), con `assigned_at`. */
+function isAccountCountedInAdminDaysView(account) {
+    if (!account || !account.assigned_at) return false;
+    const s = String(account.status || '').toLowerCase();
+    return s === 'sold' || s === 'assigned';
+}
+
+/** Cuentas entregadas cuyo assigned_at cae en este día del mes (1–31). */
 function getSoldAccountsForDayNumber(licenseId, day) {
     if (licenseId === AGGREGATE_LICENSE_ID) {
         const out = [];
@@ -6099,7 +6213,7 @@ function getSoldAccountsForDayNumber(licenseId, day) {
             if (!lic.accounts || lic.isAggregate) continue;
             if (!visibleIds.has(lic.id)) continue;
             for (const account of lic.accounts) {
-                if (account.status !== 'sold' || !account.assigned_at) continue;
+                if (!isAccountCountedInAdminDaysView(account)) continue;
                 const saleDate = new Date(account.assigned_at);
                 if (saleDate.getDate() !== day) continue;
                 accountToProduct.set(account.id, lic.product_name || '');
@@ -6119,7 +6233,7 @@ function getSoldAccountsForDayNumber(licenseId, day) {
     if (!license) return [];
     const accs = Array.isArray(license.accounts) ? license.accounts : [];
     return accs.filter(account => {
-        if (account.status !== 'sold' || !account.assigned_at) return false;
+        if (!isAccountCountedInAdminDaysView(account)) return false;
         const saleDate = new Date(account.assigned_at);
         return saleDate.getDate() === day;
     });
@@ -6296,10 +6410,9 @@ function getDayNotepadDisplayText(licenseId, day, dayAccounts, aggregateVisibleI
     return built;
 }
 
-/** Estados «verdes» (columna propia, independiente de la roja). */
+/** Estados «verdes» en Licencias y Días (columna propia). «Buena y revisada» (ok) no se ofrece aquí: flujo vía Cambios / revisión en caídas. */
 const ADMIN_LICENSE_STATUS_OPTIONS_GOOD = [
     { v: '', label: '—' },
-    { v: 'ok', label: 'Buena y revisada' },
     { v: 'renovar 1 mes mas', label: 'Renovar 1 mes más' },
     { v: 'dejar mes a mes', label: 'Dejar mes a mes' },
     { v: 'no renovar', label: 'No renovar' },
@@ -6312,6 +6425,7 @@ const ADMIN_LICENSE_STATUS_OPTIONS_BAD = [
     { v: '', label: '—' },
     { v: 'caida o suspendida', label: 'Caída o suspendida' },
     { v: 'no reproduce', label: 'No reproduce' },
+    { v: 'error de contraseña', label: 'Error de contraseña' },
     { v: 'otro', label: 'Otro' }
 ];
 
@@ -6346,16 +6460,36 @@ const ADMIN_LICENSE_STATUS_GOOD_KEYS = new Set(
 );
 /* Incluye «repetida» solo para colorear datos viejos; ya no está en el desplegable. */
 const ADMIN_LICENSE_STATUS_BAD_KEYS = new Set(
-    ['caida o suspendida', 'caida', 'suspendida', 'no reproduce', 'repetida'].map(
-        adminLicenseNormalizeStatusKey
-    )
+    [
+        'caida o suspendida',
+        'caida',
+        'suspendida',
+        'no reproduce',
+        'error de contraseña',
+        'repetida'
+    ].map(adminLicenseNormalizeStatusKey)
 );
 
 function adminLicenseStatusIsKnownGoodOption(st) {
     const k = adminLicenseNormalizeStatusKey(st);
+    if (k === 'ok') return true;
     return ADMIN_LICENSE_STATUS_OPTIONS_GOOD.some(function (o) {
         return o.v && adminLicenseNormalizeStatusKey(o.v) === k;
     });
+}
+
+/** Si el guardado ya tenía valor ok (legado), añade la opción para poder lectura/cambiar sin reaparecer en listas nuevas. */
+function adminLicenseSplitEnsureBuenaRevisadaOptionForSelect(selGood, storedGoodRaw) {
+    if (!selGood) return;
+    const canon = adminLicenseSplitCanonicalGoodFromStored(storedGoodRaw != null ? String(storedGoodRaw).trim() : '');
+    if (adminLicenseNormalizeStatusKey(canon) !== 'ok') return;
+    for (let i = 0; i < selGood.options.length; i++) {
+        if (adminLicenseNormalizeStatusKey(selGood.options[i].value) === 'ok') return;
+    }
+    const o = document.createElement('option');
+    o.value = 'ok';
+    o.textContent = 'Buena y revisada';
+    selGood.appendChild(o);
 }
 
 function adminLicenseStatusIsKnownBadOption(st) {
@@ -7010,6 +7144,385 @@ function adminLicenseSplitApplyUserToAllLicensedRows(userName) {
 
 window.adminLicenseSplitApplyUserToAllLicensedRows = adminLicenseSplitApplyUserToAllLicensedRows;
 
+/** Modal de edición masiva: filas seleccionadas con casilla + mismos campos que cada línea. */
+var __adminLicBulkCtx = { mode: 'main', dayRoot: null, dayNum: null };
+
+function adminLicenseBulkFillStatusSelect(sel, optionsList) {
+    if (!sel || sel.dataset.licBulkFilled === '1') return;
+    sel.dataset.licBulkFilled = '1';
+    sel.innerHTML = '';
+    optionsList.forEach(function (opt) {
+        const o = document.createElement('option');
+        o.value = opt.v;
+        o.textContent = opt.label;
+        sel.appendChild(o);
+    });
+}
+
+function adminLicenseBulkModalEnsureSelects() {
+    const g = document.getElementById('adminLicBulkSelGood');
+    const b = document.getElementById('adminLicBulkSelBad');
+    if (g) {
+        adminLicenseBulkFillStatusSelect(g, ADMIN_LICENSE_STATUS_OPTIONS_GOOD);
+    }
+    if (b) {
+        adminLicenseBulkFillStatusSelect(b, ADMIN_LICENSE_STATUS_OPTIONS_BAD);
+    }
+}
+
+function adminLicenseBulkSyncModalOtroVisibility() {
+    const sel = document.getElementById('adminLicBulkSelBad');
+    const wrap = document.getElementById('adminLicBulkOtroWrap');
+    if (!sel || !wrap) return;
+    const isOtro = String(sel.value || '').trim().toLowerCase() === 'otro';
+    wrap.hidden = !isOtro;
+}
+
+function adminLicenseBulkToggleToolbarButton() {
+    const btn = document.getElementById('adminLicenciasBulkEditBtn');
+    if (!btn) return;
+    const ic = document.getElementById('licenseAccountsInputContainer');
+    const lid = ic && ic.dataset.activeLicenseId != null ? parseInt(ic.dataset.activeLicenseId, 10) : NaN;
+    const mainOk = Number.isFinite(lid) && lid !== AGGREGATE_LICENSE_ID;
+    btn.disabled = !mainOk;
+    btn.setAttribute('aria-disabled', mainOk ? 'false' : 'true');
+}
+
+function adminLicenseBulkApplyPatchToRow(row, patch) {
+    if (!row || !patch) return;
+    const u = row.querySelector('.license-split-editor__user');
+    const selGood = row.querySelector('.license-split-editor__status-good');
+    const selBad = row.querySelector('.license-split-editor__status-bad');
+    const otroCombined = row.querySelector('.license-split-editor__otro-combined');
+    const n = row.querySelector('.license-split-editor__note');
+    const dayInp = row.querySelector('.license-split-editor__day-num');
+
+    if (patch.applyUser && u && !u.readOnly) {
+        u.value = String(patch.userVal != null ? patch.userVal : '').trim();
+        u.classList.remove('license-split-editor__user--unknown');
+        try {
+            u.dispatchEvent(new Event('input', { bubbles: true }));
+        } catch (e) {}
+        void licenseSplitValidateUserInput(u);
+    }
+
+    if (patch.applyGood && selGood) {
+        const gv = String(patch.goodVal != null ? patch.goodVal : '').trim();
+        selGood.value = gv;
+        try {
+            selGood.dispatchEvent(new Event('change', { bubbles: true }));
+        } catch (e2) {}
+    }
+
+    if (patch.applyBad && selBad) {
+        const selCan = String(patch.badSelectVal != null ? patch.badSelectVal : '').trim();
+        selBad.value = selCan;
+        if (otroCombined) {
+            if (String(selBad.value || '').trim().toLowerCase() === 'otro') {
+                otroCombined.value = String(patch.otroDetail != null ? patch.otroDetail : '').trim();
+            } else {
+                otroCombined.value = '';
+            }
+            adminLicenseSplitSyncOtroDetailVisibility(selBad, otroCombined);
+        }
+        try {
+            selBad.dispatchEvent(new Event('change', { bubbles: true }));
+        } catch (e3) {}
+    }
+
+    if (patch.applyNote && n) {
+        n.value = String(patch.noteVal != null ? patch.noteVal : '');
+        try {
+            n.dispatchEvent(new Event('input', { bubbles: true }));
+        } catch (e4) {}
+    }
+
+    if (patch.applyDay && dayInp) {
+        const refNow = new Date();
+        let d = parseInt(patch.dayNum, 10);
+        if (!Number.isFinite(d)) {
+            d = adminLicenseSplitDefaultDayOfMonth();
+        }
+        adminLicenseSplitApplyDayNumInputLimits(dayInp, refNow);
+        dayInp.value = String(adminLicenseSplitClampDayNumValue(d, refNow));
+        try {
+            dayInp.dispatchEvent(new Event('input', { bubbles: true }));
+        } catch (e5) {}
+    }
+}
+
+function adminLicenseBulkListRowsWithCredentialMain() {
+    const rows = adminLicenseSplitGetRowElements();
+    const ta = document.getElementById('adminLicenciasNotepadByLicense');
+    if (!ta) return [];
+    const credLines = licenseSplitCredLinesFromRaw(String(ta.value != null ? ta.value : '').replace(/\r\n/g, '\n'));
+    const out = [];
+    for (let i = 0; i < rows.length; i++) {
+        const cred = credLines[i] != null ? credLines[i] : '';
+        if (String(cred).trim() !== '') {
+            out.push(rows[i]);
+        }
+    }
+    return out;
+}
+
+function adminLicenseBulkListRowsWithCredentialDay(root) {
+    if (!root) return [];
+    const rows = dayLicenseSplitGetRowElements(root);
+    const ta = dayLicenseSplitQueryCredsTa(root);
+    if (!ta) return [];
+    const credLines = licenseSplitCredLinesFromRaw(String(ta.value != null ? ta.value : '').replace(/\r\n/g, '\n'));
+    const out = [];
+    for (let i = 0; i < rows.length; i++) {
+        const cred = credLines[i] != null ? credLines[i] : '';
+        if (String(cred).trim() !== '') {
+            out.push(rows[i]);
+        }
+    }
+    return out;
+}
+
+function adminLicenseBulkSyncRowCountInputLimits() {
+    const inp = document.getElementById('adminLicBulkRowCount');
+    if (!inp) return;
+    let list = [];
+    if (__adminLicBulkCtx.mode === 'day' && __adminLicBulkCtx.dayRoot) {
+        list = adminLicenseBulkListRowsWithCredentialDay(__adminLicBulkCtx.dayRoot);
+    } else {
+        list = adminLicenseBulkListRowsWithCredentialMain();
+    }
+    const maxC = Math.max(1, list.length);
+    inp.max = String(maxC);
+    let v = parseInt(inp.value, 10);
+    if (!Number.isFinite(v) || v < 1) {
+        v = 1;
+    }
+    if (v > maxC) {
+        v = maxC;
+    }
+    inp.value = String(v);
+}
+
+function adminLicenseBulkOpenModal(ctx) {
+    adminLicenseBulkModalEnsureSelects();
+    const modal = document.getElementById('adminLicenciasBulkModal');
+    const dayRow = document.getElementById('adminLicBulkDayRow');
+    const dayInp = document.getElementById('adminLicBulkDay');
+    const userInp = document.getElementById('adminLicBulkUser');
+    if (!modal) return;
+    __adminLicBulkCtx = ctx || { mode: 'main', dayRoot: null, dayNum: null };
+    if (dayRow) {
+        dayRow.style.display = __adminLicBulkCtx.mode === 'main' ? '' : 'none';
+    }
+    if (dayInp && __adminLicBulkCtx.mode === 'main') {
+        const now = new Date();
+        adminLicenseSplitApplyDayNumInputLimits(dayInp, now);
+        dayInp.value = String(adminLicenseSplitClampDayNumValue(adminLicenseSplitDefaultDayOfMonth(), now));
+    }
+    if (userInp) {
+        userInp.value = 'anonimo';
+    }
+    adminLicenseBulkSyncModalOtroVisibility();
+    adminLicenseBulkSyncRowCountInputLimits();
+    try {
+        document.documentElement.classList.add('admin-lic-bulk-modal--lock');
+    } catch (lockErr) {}
+    modal.hidden = false;
+    modal.setAttribute('aria-hidden', 'false');
+    const applyBtn = document.getElementById('adminLicBulkApplyBtn');
+    if (applyBtn) {
+        try {
+            applyBtn.focus({ preventScroll: true });
+        } catch (f) {
+            try {
+                applyBtn.focus();
+            } catch (f2) {}
+        }
+    }
+}
+
+function adminLicenseBulkCloseModal() {
+    const modal = document.getElementById('adminLicenciasBulkModal');
+    if (!modal) return;
+    const opener = document.getElementById('adminLicenciasBulkEditBtn');
+    if (opener && typeof opener.focus === 'function' && !opener.disabled) {
+        try {
+            opener.focus({ preventScroll: true });
+        } catch (e1) {
+            try {
+                opener.focus();
+            } catch (e2) {}
+        }
+    }
+    if (document.activeElement && modal.contains(document.activeElement)) {
+        try {
+            document.activeElement.blur();
+        } catch (e3) {}
+    }
+    try {
+        document.documentElement.classList.remove('admin-lic-bulk-modal--lock');
+    } catch (e4) {}
+    window.setTimeout(function () {
+        if (document.activeElement && modal.contains(document.activeElement)) {
+            try {
+                document.activeElement.blur();
+            } catch (e5) {}
+        }
+        modal.hidden = true;
+        modal.setAttribute('aria-hidden', 'true');
+    }, 0);
+}
+
+async function adminLicenseBulkApplyFromModal() {
+    const applyGood = document.getElementById('adminLicBulkChkGood') && document.getElementById('adminLicBulkChkGood').checked;
+    const applyBad = document.getElementById('adminLicBulkChkBad') && document.getElementById('adminLicBulkChkBad').checked;
+    const applyNote = document.getElementById('adminLicBulkChkNote') && document.getElementById('adminLicBulkChkNote').checked;
+
+    const mainL = __adminLicBulkCtx.mode === 'main';
+    const applyDay = mainL;
+    const uInp = document.getElementById('adminLicBulkUser');
+    let userVal = uInp ? String(uInp.value != null ? uInp.value : '').trim() : '';
+    if (!userVal) {
+        userVal = 'anonimo';
+    }
+
+    const countInp = document.getElementById('adminLicBulkRowCount');
+    const nWant = countInp ? parseInt(countInp.value, 10) : NaN;
+    if (!Number.isFinite(nWant) || nWant < 1) {
+        showError('Indica cuántas licencias editar (un número mayor o igual a 1).');
+        return;
+    }
+
+    let withCred = [];
+    if (__adminLicBulkCtx.mode === 'day' && __adminLicBulkCtx.dayRoot) {
+        withCred = adminLicenseBulkListRowsWithCredentialDay(__adminLicBulkCtx.dayRoot);
+    } else {
+        withCred = adminLicenseBulkListRowsWithCredentialMain();
+    }
+
+    if (withCred.length === 0) {
+        showError('No hay filas con credencial; no hay nada que actualizar.');
+        return;
+    }
+
+    const rows = withCred.slice(0, Math.min(nWant, withCred.length));
+
+    const patch = {
+        applyUser: true,
+        userVal: userVal,
+        applyGood: applyGood,
+        goodVal: document.getElementById('adminLicBulkSelGood') ? document.getElementById('adminLicBulkSelGood').value : '',
+        applyBad: applyBad,
+        badSelectVal: document.getElementById('adminLicBulkSelBad') ? document.getElementById('adminLicBulkSelBad').value : '',
+        otroDetail: document.getElementById('adminLicBulkOtro') ? document.getElementById('adminLicBulkOtro').value : '',
+        applyNote: applyNote,
+        noteVal: document.getElementById('adminLicBulkNote') ? document.getElementById('adminLicBulkNote').value : '',
+        applyDay: applyDay,
+        dayNum: document.getElementById('adminLicBulkDay') ? document.getElementById('adminLicBulkDay').value : ''
+    };
+
+    for (let r = 0; r < rows.length; r++) {
+        adminLicenseBulkApplyPatchToRow(rows[r], patch);
+    }
+
+    const applied = rows.length;
+
+    if (__adminLicBulkCtx.mode === 'day' && __adminLicBulkCtx.dayRoot) {
+        const root = __adminLicBulkCtx.dayRoot;
+        const d = __adminLicBulkCtx.dayNum;
+        const lidRaw = root.dataset.licenseId;
+        const licenseId = lidRaw != null ? parseInt(lidRaw, 10) : NaN;
+        dayLicenseSplitSyncRowsToTextarea(root);
+        const merged = dayLicenseSplitGetMergedText(root);
+        if (Number.isFinite(licenseId) && licenseId !== AGGREGATE_LICENSE_ID && Number.isFinite(d)) {
+            await syncDayNotepad(licenseId, d, merged, {});
+        } else if (Number.isFinite(licenseId) && licenseId === AGGREGATE_LICENSE_ID && Number.isFinite(d)) {
+            await syncAggregateDayNotepad(d, merged, {});
+        }
+        adminLicenseSplitValidateAllUserInputs(root);
+        scheduleRefreshAdminLicenciasReportCounts();
+    } else {
+        adminLicenseSplitSyncRowsToTextarea();
+        adminLicenseSplitScheduleAutosizeCreds();
+        scheduleRefreshAdminLicenciasReportCounts();
+        if (typeof window.adminLicenciasSaveCurrentLicenseNotesImmediate === 'function') {
+            await window.adminLicenciasSaveCurrentLicenseNotesImmediate();
+        }
+        const licRoot = document.getElementById('adminLicenciasLicenseSplitRoot');
+        adminLicenseSplitValidateAllUserInputs(licRoot || undefined);
+    }
+
+    adminLicenseBulkCloseModal();
+    showSuccess('Actualizado en ' + applied + ' fila(s).');
+}
+
+function setupAdminLicenseBulkEditUi() {
+    adminLicenseBulkModalEnsureSelects();
+    setupAdminLicenseBulkModalFocusNoPageScroll();
+    document.addEventListener(
+        'click',
+        function (e) {
+            if (e.target.closest && e.target.closest('#adminLicenciasBulkEditBtn')) {
+                e.preventDefault();
+                const ic = document.getElementById('licenseAccountsInputContainer');
+                const lid = ic && ic.dataset.activeLicenseId != null ? parseInt(ic.dataset.activeLicenseId, 10) : NaN;
+                if (!Number.isFinite(lid) || lid === AGGREGATE_LICENSE_ID) {
+                    showError('Selecciona un producto concreto (no «Todos») para edición masiva en Licencias.');
+                    return;
+                }
+                adminLicenseBulkOpenModal({ mode: 'main', dayRoot: null, dayNum: null });
+                return;
+            }
+            if (e.target.closest && e.target.closest('[data-admin-lic-bulk-dismiss]')) {
+                adminLicenseBulkCloseModal();
+            }
+        },
+        false
+    );
+
+    const selBadM = document.getElementById('adminLicBulkSelBad');
+    if (selBadM) {
+        selBadM.addEventListener('change', adminLicenseBulkSyncModalOtroVisibility);
+    }
+
+    const applyBtn = document.getElementById('adminLicBulkApplyBtn');
+    if (applyBtn) {
+        applyBtn.addEventListener('click', function () {
+            void adminLicenseBulkApplyFromModal();
+        });
+    }
+
+    const icObs = document.getElementById('licenseAccountsInputContainer');
+    if (icObs && typeof MutationObserver !== 'undefined') {
+        const observer = new MutationObserver(function () {
+            adminLicenseBulkToggleToolbarButton();
+        });
+        observer.observe(icObs, { attributes: true, attributeFilter: ['data-active-license-id'] });
+    }
+    adminLicenseBulkToggleToolbarButton();
+}
+
+/** Con el modal abierto, el foco en inputs puede hacer scroll la página de fondo; la fijamos. */
+function setupAdminLicenseBulkModalFocusNoPageScroll() {
+    const modal = document.getElementById('adminLicenciasBulkModal');
+    if (!modal || modal.dataset.licBulkFocusGuard === '1') return;
+    modal.dataset.licBulkFocusGuard = '1';
+    modal.addEventListener(
+        'focusin',
+        function () {
+            if (!document.documentElement.classList.contains('admin-lic-bulk-modal--lock')) {
+                return;
+            }
+            const y = window.scrollY != null ? window.scrollY : document.documentElement.scrollTop || 0;
+            const x = window.scrollX != null ? window.scrollX : document.documentElement.scrollLeft || 0;
+            window.requestAnimationFrame(function () {
+                window.scrollTo(x, y);
+            });
+        },
+        true
+    );
+}
+
 function mergeLicenseSplitUserSuggestions(q, namesFromApi) {
     const ql = String(q || '').trim().toLowerCase();
     const out = [];
@@ -7529,7 +8042,7 @@ function adminLicenseSplitCreateRow(
     sellBtn.className = 'license-split-editor__sell-btn';
     sellBtn.title = 'Pasar esta licencia al día indicado (vender)';
     sellBtn.setAttribute('aria-label', 'Pasar licencia al día seleccionado');
-    sellBtn.innerHTML = '<i class="fas fa-cart-arrow-down" aria-hidden="true"></i>';
+    sellBtn.innerHTML = '<i class="fas fa-shopping-cart" aria-hidden="true"></i>';
     daySellCell.appendChild(dayInp);
     daySellCell.appendChild(sellBtn);
     const userWrap = document.createElement('div');
@@ -7563,6 +8076,7 @@ function adminLicenseSplitCreateRow(
         selGood.appendChild(o);
     });
     const sg = initialStatusGood != null ? String(initialStatusGood).trim() : '';
+    adminLicenseSplitEnsureBuenaRevisadaOptionForSelect(selGood, sg);
     if (sg && !adminLicenseStatusIsKnownGoodOption(sg)) {
         const o = document.createElement('option');
         o.value = sg;
@@ -8061,6 +8575,7 @@ function dayLicenseSplitCreateRow(
         selGood.appendChild(o);
     });
     const sg = initialStatusGood != null ? String(initialStatusGood).trim() : '';
+    adminLicenseSplitEnsureBuenaRevisadaOptionForSelect(selGood, sg);
     if (sg && !adminLicenseStatusIsKnownGoodOption(sg)) {
         const o = document.createElement('option');
         o.value = sg;
@@ -12528,7 +13043,7 @@ async function loadAllDaysSoldAccounts(licenseId) {
             if (!visibleIds.has(lic.id)) continue;
             for (const account of lic.accounts) {
                 accountToProduct.set(account.id, lic.product_name || '');
-                if (account.status !== 'sold' || !account.assigned_at) continue;
+                if (!isAccountCountedInAdminDaysView(account)) continue;
                 const saleDate = new Date(account.assigned_at);
                 const d = saleDate.getDate();
                 if (!accountsByDay[d]) {
@@ -12560,7 +13075,7 @@ async function loadAllDaysSoldAccounts(licenseId) {
         }
 
         const accountsArr = Array.isArray(license.accounts) ? license.accounts : [];
-        const soldAccounts = accountsArr.filter(account => account.status === 'sold' && account.assigned_at);
+        const soldAccounts = accountsArr.filter(isAccountCountedInAdminDaysView);
         allDaysContainer.classList.remove('d-none');
 
         soldAccounts.forEach(account => {
@@ -12592,11 +13107,33 @@ async function loadAllDaysSoldAccounts(licenseId) {
         const lineCount = countNonEmptyLinesInText(textForBadge);
         const badgeText =
             lineCount > 0 ? `${lineCount} ${lineCount === 1 ? 'línea' : 'líneas'}` : '';
+        const toolbarD1 =
+            day === 1
+                ? '<div class="license-days-notes-toggle-bar license-days-notes-toggle-bar--in-day-header" role="toolbar" aria-label="Días: plegar todos; flecha subir a Licencias y columnas Estado y Notas">' +
+                  '<button type="button" id="adminLicenciasToggleAllDaysSectionsBtn" class="admin-licencias-toggle-notes-col-btn admin-licencias-days-expand-all-btn" title="Plegar todos los días" aria-label="Plegar todas las secciones de días" aria-expanded="true">' +
+                  '<i class="fas fa-chevron-up" aria-hidden="true"></i>' +
+                  '</button>' +
+                  '<button type="button" id="adminLicenciasToggleDaysRestoreColBtn" class="admin-licencias-toggle-notes-col-btn" title="Ocultar flecha subir a Licencias en días" aria-label="Ocultar botón subir a Licencias en cada día" aria-pressed="false">' +
+                  '<i class="fas fa-eye-slash" aria-hidden="true"></i>' +
+                  '</button>' +
+                  '<button type="button" id="adminLicenciasToggleDaysStatusColBtn" class="admin-licencias-toggle-notes-col-btn" title="Ocultar columnas Estado (verde y rojo) en días" aria-label="Ocultar columnas Estado verde y rojo en cada día" aria-pressed="false">' +
+                  '<i class="fas fa-eye-slash" aria-hidden="true"></i>' +
+                  '</button>' +
+                  '<button type="button" id="adminLicenciasToggleDaysNotesColBtn" class="admin-licencias-toggle-notes-col-btn" title="Ocultar columna Notas en días" aria-label="Ocultar columna Notas en cada día" aria-pressed="false">' +
+                  '<i class="fas fa-eye-slash" aria-hidden="true"></i>' +
+                  '</button>' +
+                  '</div>'
+                : '';
+        const dayHeaderActionsClass =
+            day === 1
+                ? 'admin-licencias-bloc-header-actions admin-licencias-bloc-header-actions--with-d1-toolbar'
+                : 'admin-licencias-bloc-header-actions';
         allDaysHtml += `
             <section class="day-section admin-licencias-bloc admin-licencias-bloc--day" data-day="${day}" aria-label="Día ${day}">
                 <div class="day-section-header admin-licencias-bloc-header">
                     <span class="admin-licencias-bloc-title"><i class="fas fa-calendar-day" aria-hidden="true"></i> <span>Día ${day}</span></span>
-                    <div class="admin-licencias-bloc-header-actions">
+                    <div class="${dayHeaderActionsClass}">
+                        ${toolbarD1}
                         <div class="admin-bloc-undo-toolbar admin-bloc-undo-toolbar--in-header admin-bloc-undo-toolbar--day" role="toolbar" aria-label="Deshacer y rehacer (día ${day})">
                             <button type="button" class="admin-bloc-undo-btn js-day-undo" data-day="${day}" title="Deshacer (Ctrl+Z)" aria-label="Deshacer"><i class="fas fa-undo" aria-hidden="true"></i></button>
                             <button type="button" class="admin-bloc-undo-btn js-day-redo" data-day="${day}" title="Rehacer (Ctrl+Y)" aria-label="Rehacer"><i class="fas fa-redo" aria-hidden="true"></i></button>
@@ -12623,23 +13160,7 @@ async function loadAllDaysSoldAccounts(licenseId) {
         `;
     }
     
-    var daysNotesToggleBar =
-        '<div class="license-days-notes-toggle-bar" role="toolbar" aria-label="Plegar o desplegar todos los días; mostrar u ocultar columnas en todos los días">' +
-        '<button type="button" id="adminLicenciasToggleAllDaysSectionsBtn" class="admin-licencias-toggle-notes-col-btn admin-licencias-days-expand-all-btn" title="Plegar todos los días" aria-label="Plegar todas las secciones de días" aria-expanded="true">' +
-        '<i class="fas fa-chevron-up" aria-hidden="true"></i>' +
-        '</button>' +
-        '<button type="button" id="adminLicenciasToggleDaysRestoreColBtn" class="admin-licencias-toggle-notes-col-btn" title="Ocultar flecha subir a Licencias en días" aria-label="Ocultar botón subir a Licencias en cada día" aria-pressed="false">' +
-        '<i class="fas fa-eye-slash" aria-hidden="true"></i>' +
-        '</button>' +
-        '<button type="button" id="adminLicenciasToggleDaysStatusColBtn" class="admin-licencias-toggle-notes-col-btn" title="Ocultar columnas Estado (verde y rojo) en días" aria-label="Ocultar columnas Estado verde y rojo en cada día" aria-pressed="false">' +
-        '<i class="fas fa-eye-slash" aria-hidden="true"></i>' +
-        '</button>' +
-        '<button type="button" id="adminLicenciasToggleDaysNotesColBtn" class="admin-licencias-toggle-notes-col-btn" title="Ocultar columna Notas en días" aria-label="Ocultar columna Notas en cada día" aria-pressed="false">' +
-        '<i class="fas fa-eye-slash" aria-hidden="true"></i>' +
-        '</button>' +
-        '</div>';
-
-    allDaysContainer.innerHTML = daysNotesToggleBar + allDaysHtml;
+    allDaysContainer.innerHTML = allDaysHtml;
 
     for (let d = 1; d <= 31; d++) {
         const dayAccounts = accountsByDay[d] || [];

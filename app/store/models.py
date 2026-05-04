@@ -515,6 +515,15 @@ class License(db.Model):
     def __repr__(self):
         return f'<License {self.product.name if self.product else "Unknown"} (pos: {self.position})>'
 
+def _license_account_expiry_as_utc_aware(dt):
+    """PostgreSQL puede devolver timestamptz (aware); utcnow() naive mezclado → TypeError en comparaciones."""
+    if dt is None:
+        return None
+    if dt.tzinfo is not None:
+        return dt.astimezone(timezone.utc)
+    return dt.replace(tzinfo=timezone.utc)
+
+
 class LicenseAccount(db.Model):
     __tablename__ = 'store_license_accounts'
     id = db.Column(db.Integer, primary_key=True)
@@ -542,14 +551,16 @@ class LicenseAccount(db.Model):
         """Verifica si la cuenta ha expirado"""
         if not self.expires_at:
             return False
-        return datetime.utcnow() > self.expires_at
+        exp = _license_account_expiry_as_utc_aware(self.expires_at)
+        return datetime.now(timezone.utc) > exp
     
     @property
     def days_until_expiry(self):
         """Devuelve los días hasta la expiración"""
         if not self.expires_at:
             return None
-        delta = self.expires_at - datetime.utcnow()
+        exp = _license_account_expiry_as_utc_aware(self.expires_at)
+        delta = exp - datetime.now(timezone.utc)
         return delta.days if delta.days > 0 else 0
 
 class AllowedSMSNumber(db.Model):

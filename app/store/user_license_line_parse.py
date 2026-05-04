@@ -24,6 +24,7 @@ OPTIONS_GOOD_VALUES = [
 OPTIONS_BAD_VALUES = [
     'caida o suspendida',
     'no reproduce',
+    'error de contraseña',
     'otro',
     'caida',
     'suspendida',
@@ -465,6 +466,7 @@ _BAD_KEY_TO_LABEL: Dict[str, str] = {}
 for _raw, _es in (
     ('caida o suspendida', 'Caída o suspendida'),
     ('no reproduce', 'No reproduce'),
+    ('error de contraseña', 'Error de contraseña'),
     ('otro', 'Otro'),
     ('caida', 'Caída o suspendida'),
     ('suspendida', 'Caída o suspendida'),

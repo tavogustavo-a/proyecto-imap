@@ -5,7 +5,7 @@
 {% block head %}
   {{ super() }}
   <meta name="clear_trigger_log_url" content="{{ url_for('admin_bp.clear_trigger_log') }}">
-  <link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}?v=160">
+  <link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}?v=209">
   <link rel="stylesheet" href="{{ url_for('static', filename='fontawesome/css/all.css') }}">
 {% endblock %}
 {% block content %}
@@ -37,7 +37,7 @@
       <button type="button" id="licensesDuplicatesBtn" class="btn-blue menu-btn-worksheet licenses-duplicates-btn licenses-duplicates-btn--toolbar" title="Resaltar en amarillo líneas repetidas: mismo correo y contraseña, o la misma credencial en texto (Licencias, Días, Caídas, Vencidas, Cambios)" aria-label="Alternar resaltado de duplicados por correo y contraseña en Licencias, Días, Caídas, Vencidas y Cambios" aria-pressed="false">
         <i class="fas fa-clone" aria-hidden="true"></i>
       </button>
-      <button type="button" id="licensesMoveToChangesBtn" class="btn-blue menu-btn-worksheet" title="Ir al listado de Cambios por producto. Si tienes una fila enfocada en Licencias, también la envía a Cambios." aria-label="Ver listado de Cambios o enviar fila enfocada de Licencias a Cambios">
+      <button type="button" id="licensesMoveToChangesBtn" class="btn-blue menu-btn-worksheet" title="Ir al listado de Cambios por producto. Si tienes una fila enfocada en Licencias, también la envía a Cambios." aria-label="Ver listado de Cambios o enviar fila enfocada de Licencias a Cambios" aria-expanded="false" aria-controls="adminLicenciasCambiosPanel">
         <i class="fas fa-exchange-alt" aria-hidden="true"></i> Cambios
       </button>
     </div>
@@ -200,14 +200,62 @@
       </div>
     </div>
   </section>
+
+  <div id="adminLicenciasBulkModal" class="admin-lic-bulk-modal" hidden aria-hidden="true">
+    <div class="admin-lic-bulk-modal__backdrop" data-admin-lic-bulk-dismiss="1"></div>
+    <div class="admin-lic-bulk-modal__panel" role="dialog" aria-modal="true" aria-labelledby="adminLicenciasBulkModalTitle">
+      <div class="admin-lic-bulk-modal__head">
+        <h2 id="adminLicenciasBulkModalTitle" class="admin-lic-bulk-modal__title">Edición masiva</h2>
+        <button type="button" class="admin-lic-bulk-modal__close" data-admin-lic-bulk-dismiss="1" title="Cerrar" aria-label="Cerrar"><i class="fas fa-times" aria-hidden="true"></i></button>
+      </div>
+      <div class="admin-lic-bulk-modal__rows" id="adminLicBulkModalFields">
+        <div class="admin-lic-bulk-modal__field admin-lic-bulk-modal__field--inline admin-lic-bulk-modal__field--count">
+          <label for="adminLicBulkRowCount" class="admin-lic-bulk-modal__label-plain">Cantidad</label>
+          <input type="number" id="adminLicBulkRowCount" class="form-control admin-lic-bulk-modal__input admin-lic-bulk-modal__input--qty" min="1" value="1" aria-label="Cuántas licencias con credencial editar, desde arriba">
+        </div>
+        <div class="admin-lic-bulk-modal__field admin-lic-bulk-modal__field--inline" id="adminLicBulkDayRow">
+          <label for="adminLicBulkDay" class="admin-lic-bulk-modal__label-plain">Día destino</label>
+          <input type="number" id="adminLicBulkDay" class="form-control admin-lic-bulk-modal__input admin-lic-bulk-modal__input--qty" min="1" max="31" aria-label="Día del mes (1–31)">
+        </div>
+        <div class="admin-lic-bulk-modal__field admin-lic-bulk-modal__field--stack">
+          <label for="adminLicBulkUser" class="admin-lic-bulk-modal__label-plain admin-lic-bulk-modal__label-plain--stack">Usuario/cliente</label>
+          <input type="text" id="adminLicBulkUser" class="form-control admin-lic-bulk-modal__input" value="anonimo" placeholder="anonimo" autocomplete="off" aria-label="Usuario o cliente">
+        </div>
+        <div class="admin-lic-bulk-modal__field">
+          <label class="admin-lic-bulk-modal__check">
+            <input type="checkbox" id="adminLicBulkChkGood"> Aplicar estado verde
+          </label>
+          <select id="adminLicBulkSelGood" class="form-control admin-lic-bulk-modal__input" aria-label="Estado verde"></select>
+        </div>
+        <div class="admin-lic-bulk-modal__field">
+          <label class="admin-lic-bulk-modal__check">
+            <input type="checkbox" id="adminLicBulkChkBad"> Aplicar estado rojo
+          </label>
+          <select id="adminLicBulkSelBad" class="form-control admin-lic-bulk-modal__input" aria-label="Estado rojo"></select>
+          <div id="adminLicBulkOtroWrap" class="admin-lic-bulk-modal__otro-wrap" hidden>
+            <label for="adminLicBulkOtro">Detalle «Otro»</label>
+            <input type="text" id="adminLicBulkOtro" class="form-control admin-lic-bulk-modal__input" placeholder="des.. problema" autocomplete="off">
+          </div>
+        </div>
+        <div class="admin-lic-bulk-modal__field">
+          <label class="admin-lic-bulk-modal__check">
+            <input type="checkbox" id="adminLicBulkChkNote"> Aplicar notas
+          </label>
+          <input type="text" id="adminLicBulkNote" class="form-control admin-lic-bulk-modal__input" placeholder="Notas" autocomplete="off" aria-label="Notas a aplicar">
+        </div>
+      </div>
+      <div class="admin-lic-bulk-modal__footer">
+        <button type="button" class="btn-blue menu-btn-worksheet" id="adminLicBulkApplyBtn">Aplicar a selección</button>
+      </div>
+    </div>
+  </div>
 </div>
 {% endblock %}
-
 {% block scripts %}
   {{ super() }}
   <script src="{{ url_for('store_bp.static', filename='js/admin_store.js') }}?v=20260421-no-onclick" defer></script>
   <script src="{{ url_for('store_bp.static', filename='js/menu_tienda.js') }}" defer></script>
-  <script src="{{ url_for('store_bp.static', filename='js/licencias.js') }}?v=109" defer></script>
+  <script src="{{ url_for('store_bp.static', filename='js/licencias.js') }}?v=130" defer></script>
   <script src="{{ url_for('store_bp.static', filename='js/admin_licencias_notepad.js') }}?v=13" defer></script>
   <script src="{{ url_for('static', filename='js/clear_trigger_logs.js') }}" defer></script>
   <script src="{{ url_for('static', filename='js/logout_all_cookies_btn.js') }}" defer></script>

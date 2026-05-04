@@ -200,6 +200,7 @@ def user_licencias_precio_required(f):
     """
     @wraps(f)
     def decorated_function(*args, **kwargs):
+        _ensure_user_portal_license_activity_log_column()
         admin_username = current_app.config.get("ADMIN_USER", "admin")
         if not session.get("logged_in"):
             flash("Debes iniciar sesión.", "warning")
@@ -3724,6 +3725,53 @@ def historial_compras_usuario():
                          username=username,
                          ADMIN_USER=admin_user)
 
+
+@store_bp.route('/licencias/actividad')
+@user_licencias_precio_required
+def user_licencias_actividad_portal():
+    """Entregas (cuentas asignadas) + registro cronológico al cambiar estados reporte/renovación en portal."""
+    from app.store.user_license_activity import build_user_license_activity_timeline_rows
+
+    username = session.get('username')
+    user_id = session.get('user_id')
+    user = None
+    if username:
+        user = User.query.filter_by(username=username).first()
+    elif user_id:
+        user = User.query.get(user_id)
+        if user:
+            username = user.username
+    if not user:
+        flash('Debes iniciar sesión.', 'warning')
+        return redirect(url_for('user_auth_bp.login'))
+
+    _ensure_user_portal_license_activity_log_column()
+    assignee_ids, _ = _user_licencias_viewer_scope(user)
+
+    timeline_rows = build_user_license_activity_timeline_rows(
+        assignee_ids, user, utc_to_colombia_fn=utc_to_colombia
+    )
+
+    admin_user = current_app.config.get('ADMIN_USER', 'admin')
+    _, tipo_precio = catalog_products_for_store_user(user)
+    saldo_usd = user.saldo_usd if user else 0
+    saldo_cop = user.saldo_cop if user else 0
+    soporte_licencias_nav = bool(_user_store_soporte_licencias_flag(user))
+
+    return render_template(
+        'user_license_actividad.html',
+        title='Historial · Licencias',
+        timeline_rows=timeline_rows,
+        current_user=user,
+        username=username,
+        ADMIN_USER=admin_user,
+        tipo_precio=tipo_precio,
+        saldo_usd=saldo_usd,
+        saldo_cop=saldo_cop,
+        soporte_licencias_nav=soporte_licencias_nav,
+    )
+
+
 # ================== RUTAS PARA LICENCIAS ==================
 
 def _ensure_license_day_notepads_column():
@@ -3881,6 +3929,37 @@ def _ensure_license_account_client_notes_column():
             db.session.commit()
     except Exception as e:
         current_app.logger.warning('No se pudo asegurar columna client_notes en cuentas: %s', e)
+
+
+def _ensure_user_portal_license_activity_log_column():
+    """Historial vista Licencias cliente: lista JSON portal_license_activity_log en users."""
+    try:
+        from sqlalchemy import inspect, text
+
+        inspector = inspect(db.engine)
+        if 'users' not in inspector.get_table_names():
+            return True
+        cols = {c['name'] for c in inspector.get_columns('users')}
+        if 'portal_license_activity_log' not in cols:
+            db.session.execute(text('ALTER TABLE users ADD COLUMN portal_license_activity_log TEXT'))
+            db.session.commit()
+        return True
+    except Exception as e:
+        current_app.logger.warning('No se pudo asegurar columna portal_license_activity_log: %s', e)
+        return False
+
+
+_STORE_USER_PORTAL_ACTIVITY_SCHEMA_ENSURED = False
+
+
+@store_bp.before_request
+def _store_bp_ensure_portal_license_activity_schema():
+    """SQLite: crear columna antes del primer SELECT a users en rutas tienda (/licencias, etc.)."""
+    global _STORE_USER_PORTAL_ACTIVITY_SCHEMA_ENSURED
+    if _STORE_USER_PORTAL_ACTIVITY_SCHEMA_ENSURED:
+        return
+    if _ensure_user_portal_license_activity_log_column():
+        _STORE_USER_PORTAL_ACTIVITY_SCHEMA_ENSURED = True
 
 
 def _user_licencias_viewer_scope(user_obj):
@@ -4405,6 +4484,24 @@ def api_user_license_day_row_status():
                 pass
         _sync_allowed_emails_from_license_admin_texts(texts_for_sync)
 
+        try:
+            _ensure_user_portal_license_activity_log_column()
+            from app.store.user_license_activity import portal_log_status_changes
+
+            lic_prod = getattr(license_row, 'product', None)
+            pname_ctx = lic_prod.name if lic_prod else 'Producto'
+            portal_log_status_changes(
+                viewer_user_row=user_obj,
+                product_name=pname_ctx or 'Producto',
+                calendar_day=calendar_day_int,
+                dual_base=dual_base,
+                canon_good=canon_good or '',
+                canon_sb=canon_sb or '',
+                otro_use=otro_use or '',
+            )
+        except Exception as act_err:
+            current_app.logger.warning('portal_log_status_changes omitido: %s', act_err)
+
         db.session.commit()
         return jsonify({'success': True})
 
@@ -4423,6 +4520,8 @@ def api_get_licenses():
         import json as _json
 
         _ensure_license_day_notepads_column()
+        _ensure_license_portal_day_row_notes_column()
+        _ensure_license_account_client_notes_column()
         _ensure_license_warranty_days_column()
         _ensure_license_expired_notes_and_month_columns()
         _ensure_license_changes_notes_column()
@@ -4487,6 +4586,7 @@ def api_get_licenses():
         return jsonify({'success': True, 'licenses': licenses_data})
         
     except Exception as e:
+        current_app.logger.exception('api_get_licenses')
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
@@ -5253,7 +5353,12 @@ def api_initialize_licenses():
         from app.store.models import License, Product
         from app import db
 
+        _ensure_license_day_notepads_column()
+        _ensure_license_portal_day_row_notes_column()
+        _ensure_license_account_client_notes_column()
         _ensure_license_warranty_days_column()
+        _ensure_license_expired_notes_and_month_columns()
+        _ensure_license_changes_notes_column()
 
         # Obtener todos los productos habilitados
         products = Product.query.filter_by(enabled=True).all()
@@ -5287,6 +5392,7 @@ def api_initialize_licenses():
         
     except Exception as e:
         db.session.rollback()
+        current_app.logger.exception('api_initialize_licenses')
         return jsonify({'success': False, 'error': str(e)}), 500
 
 from app.store.models import StoreSetting

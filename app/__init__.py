@@ -155,10 +155,23 @@ def create_app(config_class_passed=None):
                     app.logger.info(
                         'Esquema: columna saldo (pendiente de cuenta; 0 = al día) añadida a users'
                     )
-        except Exception as schema_users_saldo_err:
+                ucols = {c["name"] for c in insp.get_columns("users")}
+                if "portal_license_activity_log" not in ucols:
+                    db.session.execute(
+                        text(
+                            "ALTER TABLE users ADD COLUMN portal_license_activity_log TEXT"
+                        )
+                    )
+                    db.session.commit()
+                    app.logger.info(
+                        "Esquema: columna portal_license_activity_log (historial actividad licencias) "
+                        "añadida a users"
+                    )
+        except Exception as schema_users_patch_err:
             db.session.rollback()
             app.logger.warning(
-                "No se pudo asegurar columna users.saldo: %s", schema_users_saldo_err
+                "No se pudo aplicar parche columnas users (saldo / portal_license_activity_log): %s",
+                schema_users_patch_err,
             )
 
     # === Registro de Blueprints ===

@@ -1,5 +1,6 @@
 /**
- * Licencias usuario — grid por producto (≥1 cuenta), Historial / Todos, días hasta vencimiento y flechas al bloque del día (como en admin).
+ * Licencias usuario — grid por producto («Todos» + productos), barra Historial junto al menú,
+ * días hasta vencimiento y flechas al bloque del día (como en admin).
  */
 (function () {
     'use strict';
@@ -83,6 +84,7 @@
         { v: '', label: '—' },
         { v: 'caida o suspendida', label: 'Caída o suspendida' },
         { v: 'no reproduce', label: 'No reproduce' },
+        { v: 'error de contraseña', label: 'Error de contraseña' },
         { v: 'repetida', label: 'Repetida' },
         { v: 'otro', label: 'Otro' },
     ];
@@ -461,13 +463,17 @@
         var badgeTitle = n === 1 ? '1 cuenta' : n + ' cuentas';
         var badgeHtml =
             n > 0
-                ? '<div class="admin-licencias-bloc-header-actions user-lic-day-header-actions">' +
-                  '<span class="day-account-badge admin-licencias-notepad-line-badge" title="' +
+                ? '<span class="day-account-badge admin-licencias-notepad-line-badge" title="' +
                   escAttr(badgeTitle) +
                   '">' +
                   String(n) +
-                  '</span></div>'
+                  '</span>'
                 : '';
+
+        var toolbarHtml = day === 1 ? renderUserLicDaysToolbarHtml() : '';
+
+        var headerActions = '<div class="admin-licencias-bloc-header-actions user-lic-day-header-actions">' +
+                            toolbarHtml + badgeHtml + '</div>';
 
         return (
             '<section class="day-section admin-licencias-bloc admin-licencias-bloc--day user-lic-readonly-day' + collapsedClass + '" data-user-day="' +
@@ -478,7 +484,7 @@
             '<i class="fas fa-calendar-day" aria-hidden="true"></i> <span>Día ' +
             day +
             '</span></span>' +
-            badgeHtml +
+            headerActions +
             '</div>' +
             '<div class="day-accounts-list">' +
             '<div class="license-split-editor license-split-editor--day day-license-split-root day-account-item license-notepad--locked user-lic-days-bundle">' +
@@ -506,7 +512,6 @@
     /** Barra: plegar todos + ojos (columna incidencias+Otro, notas). La columna verde permanece siempre visible. */
     function renderUserLicDaysToolbarHtml() {
         return (
-            '<div class="license-days-notes-toggle-bar user-lic-days-notes-toolbar" role="toolbar" aria-label="Plegar o desplegar todos los días; mostrar u ocultar columnas de incidencias y notas">' +
             '<button type="button" class="admin-licencias-toggle-notes-col-btn admin-licencias-days-expand-all-btn user-lic-days-expand-all" title="Plegar todos los días" aria-label="Plegar todas las secciones de días" aria-expanded="true">' +
             '<i class="fas fa-chevron-up" aria-hidden="true"></i>' +
             '</button>' +
@@ -515,8 +520,7 @@
             '</button>' +
             '<button type="button" class="admin-licencias-toggle-notes-col-btn user-lic-days-toggle-notes" title="Ocultar columna Notas" aria-label="Ocultar columna Notas en cada día" aria-pressed="false">' +
             '<i class="fas fa-eye-slash" aria-hidden="true"></i>' +
-            '</button>' +
-            '</div>'
+            '</button>'
         );
     }
 
@@ -762,7 +766,7 @@
             billing_saldo: acc.billing_saldo != null ? Number(acc.billing_saldo) : 0,
         };
         for (d = 1; d <= 31; d += 1) {
-            daysHtml += renderDaySection(d, dl[String(d)] || [], credSlug, licenseMeta);
+            daysHtml += renderDaySection(d, dl[String(d)] || [], credSlug, licenseMeta, d === 1);
         }
         var filt =
             (String(acc.product_name || '') +
@@ -822,7 +826,6 @@
                 : '') +
             notesBlock +
             '<div class="license-notepads-wrap user-lic-bundle-wrap">' +
-            renderUserLicDaysToolbarHtml() +
             daysHtml +
             '</div>' +
             '</article>'
@@ -866,7 +869,7 @@
         return out;
     }
 
-    function renderUserLicenciasGrid(summaryList, historialUrl, accountsLen) {
+    function renderUserLicenciasGrid(summaryList) {
         var parts = [];
 
         parts.push(
@@ -876,16 +879,6 @@
             escHtml('Todos') +
             '</span><span class="first-letter">T</span></h3>' +
             '</div></button>'
-        );
-
-        parts.push(
-            '<a href="' +
-            escAttr(historialUrl || '#') +
-            '" class="license-card license-card--aggregate user-lic-grid-historial">' +
-            '<div class="license-card-header">' +
-            '<h3 class="license-name"><span class="full-text">' +
-            escHtml('Historial') +
-            '</span><span class="first-letter">H</span></h3></div></a>'
         );
 
         var idx;
@@ -1024,7 +1017,7 @@
         outer.addEventListener('click', function (e) {
             var headerToggle = e.target.closest('.user-lic-day-header-toggle');
             if (headerToggle && outer.contains(headerToggle)) {
-                if (e.target.closest('.day-account-badge')) return;
+                if (e.target.closest('.day-account-badge') || e.target.closest('.admin-licencias-toggle-notes-col-btn')) return;
                 var section = headerToggle.closest('.day-section');
                 var bundle = headerToggle.closest('.user-lic-bundle-wrap');
                 var art = headerToggle.closest('.user-lic-account-sheet');
@@ -1144,7 +1137,6 @@
         var apiUrl =
             outer.getAttribute('data-api-url') ||
             (typeof window.USER_LICENCIAS_API_URL === 'string' ? window.USER_LICENCIAS_API_URL : '');
-        var historialUrl = outer.getAttribute('data-historial-url') || '#';
 
         if (!apiUrl) return;
 
@@ -1173,7 +1165,7 @@
                 var summaryList = groupSummariesFromAccounts(accounts);
 
                 if (gridInner && gridHostEl) {
-                    gridInner.innerHTML = renderUserLicenciasGrid(summaryList, historialUrl, accounts.length);
+                    gridInner.innerHTML = renderUserLicenciasGrid(summaryList);
                     setGridVisible(gridHostEl, true);
                     wireGridClick(gridInner, outer);
                 }
@@ -1210,7 +1202,7 @@
             })
             .catch(function () {
                 if (gridInner && gridHostEl) {
-                    gridInner.innerHTML = renderUserLicenciasGrid([], historialUrl, 0);
+                    gridInner.innerHTML = renderUserLicenciasGrid([]);
                     setGridVisible(gridHostEl, true);
                     wireGridClick(gridInner, outer);
                 }

@@ -1,0 +1,122 @@
+{% extends "base.html" %}
+
+{% block title %}Historial · Licencias{% endblock %}
+
+{% block head %}
+  {{ super() }}
+  <link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}?v=212">
+  <link rel="stylesheet" href="{{ url_for('static', filename='fontawesome/css/all.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="container container-max-width-900 store-light store-front-main px-2 pb-3 purchase-history-container">
+  {% set blocked_users = ['soporte','soporte1','soporte2','soporte3'] %}
+  {% if session.get('logged_in') and (not session.get('username') or session.get('username').lower() not in blocked_users) %}
+    <div class="d-flex justify-content-between align-items-center store-front-header gap-2 espaciado-responsive flex-wrap">
+      <button id="menuToggleBtn" type="button" class="btn-blue menu-btn-worksheet">&#9776; Menú</button>
+      <a href="{{ url_for('store_bp.user_licencias') }}" class="btn-panel btn-blue text-decoration-none" title="Volver a Licencias" aria-label="Volver a Licencias"><i class="fas fa-arrow-left" aria-hidden="true"></i> Volver</a>
+    </div>
+    <h2 class="mb-2 mt-3 text-center">Historial de Licencias</h2>
+    <p class="text-center mx-auto px-2 mb-3" style="max-width: 36rem; font-size: 0.9rem; opacity: 0.92;">
+      Entregas de cuentas, cambios cuando registras una <strong>incidencia o reporte</strong> en el portal (columna roja)
+      y cuando eliges opciones de <strong>renovación o garantía</strong> (columna verde). Las entradas nuevas se guardan desde ahora en adelante;
+      también mostramos la fecha de entrega tomada del sistema cuando se te asignó cada licencia.
+    </p>
+
+    <div id="mobileMenu" class="mobile-menu-store hidden">
+      <div class="menu-user-info-row menu-user-info-row--name-only menu-sidebar-heading-name">
+        <span class="menu-user-name">{{ session.get('username', 'Invitado') }}</span>
+      </div>
+      {% set current_user_id = session.get('user_id') %}
+      {% if current_user_id %}
+        {% set user_object = User.query.get(current_user_id) %}
+        {% set show_store = False %}
+        {% if is_admin %}
+          {% set show_store = True %}
+        {% elif user_object and user_object.parent_id %}
+          {% if user_object.can_access_store %}
+            {% set parent = User.query.get(user_object.parent_id) %}
+            {% if parent and parent.user_prices and parent.user_prices.get('tipo_precio') in ['USD', 'COP'] %}
+              {% set show_store = True %}
+            {% endif %}
+          {% endif %}
+        {% elif user_object and user_object.user_prices and user_object.user_prices.get('tipo_precio') in ['USD', 'COP'] %}
+          {% set show_store = True %}
+        {% endif %}
+        {% if show_store %}
+          <a href="{{ url_for('store_bp.store_front') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-store"></i> Tienda</a>
+          <a href="{{ url_for('store_bp.user_licencias') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-link"></i> Licencias</a>
+          <a href="{{ url_for('store_bp.user_licencias_actividad_portal') }}" class="btn-panel btn-blue mobile-menu-btn mb-04">Historial · Licencias</a>
+          <a href="{{ url_for('store_bp.historial_compras_usuario') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-receipt"></i> Mi Historial de Compras</a>
+        {% endif %}
+      {% endif %}
+      {% if current_user and current_user.has_public_tools_access() %}
+        <a href="{{ url_for('store_bp.tools_public') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-tools"></i> Herramientas</a>
+      {% endif %}
+      <a href="{{ url_for('main_bp.home') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-code"></i> Códigos</a>
+      {% if is_user and current_user %}
+        {% if current_user.is_support %}
+          <a href="{{ url_for('store_bp.support_dashboard') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-headset"></i> Chat de Soporte Admin</a>
+        {% elif current_user.can_chat %}
+          <a href="{{ url_for('store_bp.user_chat_soporte') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-headset"></i> Chat de Soporte</a>
+        {% endif %}
+      {% endif %}
+      {% if current_user and current_user.can_create_subusers %}
+        <a href="{{ url_for('subuser_bp.manage_subusers') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-users"></i> Sub-usuarios</a>
+      {% endif %}
+      {% if is_user and current_user and not current_user.parent_id and user_has_worksheet_access(current_user) %}
+        <a href="{{ url_for('store_bp.user_work_sheets') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-table"></i> Hojas de Cálculo</a>
+      {% endif %}
+      {% if is_user and current_user and current_user.managed_imap2_pages|length > 0 %}
+        <a href="{{ url_for('user_auth_bp.my_pages_list') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-file-alt"></i> Gestionar mi página</a>
+      {% endif %}
+      {% if is_admin %}
+        <a href="{{ url_for('admin_bp.dashboard') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-cogs"></i> Administración</a>
+      {% endif %}
+      {% if is_admin %}
+        <a href="{{ url_for('auth_bp.logout') }}" class="btn-panel btn-red mobile-menu-btn mb-04"><i class="fas fa-sign-out-alt"></i> Cerrar Sesión</a>
+      {% elif is_user %}
+        <a href="{{ url_for('user_auth_bp.logout') }}" class="btn-panel btn-red mobile-menu-btn mb-04"><i class="fas fa-sign-out-alt"></i> Cerrar Sesión</a>
+      {% else %}
+        <a href="{{ url_for('user_auth_bp.logout') }}" class="btn-panel btn-red mobile-menu-btn mb-04"><i class="fas fa-sign-out-alt"></i> Cerrar Sesión</a>
+      {% endif %}
+      {% include 'includes/store_user_menu_saldo_block.html' %}
+    </div>
+    <div id="menuOverlay" class="menu-overlay"></div>
+  {% endif %}
+
+  <div class="mt-2 mb-3 espaciado-responsive purchase-history-table-wrapper">
+    <table id="tabla-actividad-licencias" class="w-100">
+      <thead>
+        <tr>
+          <th scope="col">Fecha</th>
+          <th scope="col">Tipo</th>
+          <th scope="col">Resumen</th>
+          <th scope="col">Detalle</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in timeline_rows %}
+        <tr>
+          <td>{{ row.fecha_col }}</td>
+          <td>{{ row.tipo_label }}</td>
+          <td>{{ row.summary }}</td>
+          <td>{% if row.detail %}{{ row.detail }}{% else %}—{% endif %}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="4" class="text-center py-4">Aún no hay actividad registrada. Cuando recibas una licencia o actualices estado en tus días aparecerá aquí.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    <p class="text-center mt-4 mb-2" style="font-size: 0.85rem;">
+      ¿Buscabas facturación por productos de la tienda?
+      <a href="{{ url_for('store_bp.historial_compras_usuario') }}" class="text-decoration-none">Mi historial de compras</a>.
+    </p>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script src="{{ url_for('store_bp.static', filename='js/menu_tienda.js') }}" defer></script>
+{% endblock %}
