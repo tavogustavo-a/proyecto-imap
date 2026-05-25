@@ -2,9 +2,13 @@
 
 {% block title %}{{ title }}{% endblock %}
 
-{% block head %}{{ super() }}<link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}?v=20260522-admin-recargas-menus"><link rel="stylesheet" href="{{ url_for('static', filename='fontawesome/css/all.css') }}"><meta name="csrf_token" content="{{ csrf_token() }}">{% endblock %}
+{% block head %}{{ super() }}<link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}?v=20260523-pm-users-currency"><link rel="stylesheet" href="{{ url_for('static', filename='fontawesome/css/all.css') }}"><meta name="csrf_token" content="{{ csrf_token() }}">{% endblock %}
 {% block content %}
-<div class="purchase-history-page purchase-history-admin">
+<div class="purchase-history-page purchase-history-admin admin-recargas-page"
+     data-list-url="{{ url_for('store_bp.api_admin_balance_recharges') }}"
+     data-review-url-base="{{ url_for('store_bp.api_admin_balance_recharge_review', recharge_id=0) }}"
+     data-methods-url="{{ url_for('store_bp.api_admin_payment_methods_settings') }}"
+     data-search-users-url="{{ url_for('admin_bp.search_users_ajax') }}">
   <div id="mobileMenu" class="mobile-menu-store hidden">
     <div class="menu-user-info-row menu-user-info-row--name-only menu-sidebar-heading-name">
       <span class="menu-user-name">{{ session.get('username', 'Admin') }}</span>
@@ -22,26 +26,12 @@
   </div>
   <div id="menuOverlay" class="menu-overlay"></div>
 
-  <div class="store-light purchase-history-container mx-auto admin-recargas-page"
-       data-list-url="{{ url_for('store_bp.api_admin_balance_recharges') }}"
-       data-review-url-base="{{ url_for('store_bp.api_admin_balance_recharge_review', recharge_id=0) }}"
-       data-methods-url="{{ url_for('store_bp.api_admin_payment_methods_settings') }}"
-       data-user-methods-url="{{ url_for('store_bp.api_admin_user_payment_methods') }}"
-       data-search-users-url="{{ url_for('admin_bp.search_users_ajax') }}">
-    <div class="purchase-history-admin-toolbar">
-      <button id="menuToggleBtn" type="button" class="btn-panel btn-blue menu-toggle-btn" title="Menú de navegación" aria-label="Abrir menú de navegación">&#9776; Menú</button>
-      <button id="menu2ToggleBtn" type="button" class="btn-panel btn-blue menu-toggle-btn" title="Menú secundario" aria-label="Abrir segundo menú">&#9776; Menú2</button>
-    </div>
-
-    <h1 class="text-center purchase-history-page-title"><i class="fas fa-wallet"></i> Recargas y pagos</h1>
-
-    <div class="admin-recargas-tabs" role="tablist">
-      <button type="button" class="admin-recargas-tab admin-recargas-tab--active" data-tab="review" role="tab" aria-selected="true">Revisar consignaciones</button>
-      <button type="button" class="admin-recargas-tab" data-tab="methods" role="tab" aria-selected="false">Medios de pago</button>
-      <button type="button" class="admin-recargas-tab" data-tab="users" role="tab" aria-selected="false">Usuarios y medios</button>
-    </div>
-
-    <section id="adminRecargasPanelReview" class="admin-recargas-panel">
+  <section id="adminRecargasPanelReview" class="admin-recargas-panel">
+    <div class="store-light purchase-history-container mx-auto admin-recargas-cleanup-wrap">
+      <div class="purchase-history-admin-toolbar">
+        <button id="menuToggleBtn" type="button" class="btn-panel btn-blue menu-toggle-btn" title="Menú de navegación" aria-label="Abrir menú de navegación">&#9776; Menú</button>
+        <button id="menu2ToggleBtn" type="button" class="btn-panel btn-blue menu-toggle-btn" title="Menú secundario" aria-label="Abrir segundo menú">&#9776; Menú2</button>
+      </div>
       <section class="purchase-history-cleanup-panel admin-recargas-cleanup-panel" id="brCleanupPanel"
                data-settings-url="{{ url_for('store_bp.api_balance_recharge_cleanup_settings') }}"
                data-purge-url="{{ url_for('store_bp.api_balance_recharge_purge') }}"
@@ -119,9 +109,14 @@
         </div>
         <div id="brCleanupStatus" class="mt-05" role="status" aria-live="polite"></div>
       </section>
+    </div>
 
-      <hr class="admin-recargas-section-sep" aria-hidden="true">
-
+    <div class="store-light purchase-history-container mx-auto admin-recargas-review-wrap">
+      <div class="admin-recargas-tabs" role="tablist">
+        <button type="button" class="admin-recargas-tab admin-recargas-tab--active" data-tab="review" role="tab" aria-selected="true">Revisar consignaciones</button>
+        <button type="button" class="admin-recargas-tab" data-tab="methods" role="tab" aria-selected="false">Medios de pago</button>
+      </div>
+      <h2 class="text-center purchase-history-page-title admin-recargas-review-subtitle"><i class="fas fa-inbox"></i> Consignaciones a revisar</h2>
       <div class="admin-recargas-review-toolbar">
         <label for="adminRecargasFilter" class="sr-only">Estado</label>
         <select id="adminRecargasFilter" class="form-select">
@@ -136,29 +131,89 @@
       <div id="adminRecargasList" class="admin-recargas-list">
         <p class="text-muted">Cargando solicitudes…</p>
       </div>
-    </section>
+    </div>
+  </section>
 
-    <section id="adminRecargasPanelMethods" class="admin-recargas-panel" hidden>
-      <p class="admin-recargas-hint">Configura los datos de pago que verán los clientes al recargar saldo. En moneda USD se muestra como <strong>USDT</strong>.</p>
-      <div id="adminPaymentMethodsEditor" class="admin-payment-methods-editor"></div>
-      <button type="button" id="adminPaymentMethodsSave" class="btn-panel btn-green mt-2">Guardar medios de pago</button>
-      <p id="adminPaymentMethodsMsg" class="mt-05" role="status" aria-live="polite"></p>
-    </section>
-
-    <section id="adminRecargasPanelUsers" class="admin-recargas-panel" hidden>
-      <p class="admin-recargas-hint">Deja todos marcados para que el usuario vea todos los medios de su moneda. Si desmarcas alguno, solo verá los seleccionados.</p>
-      <div class="purchase-history-cleanup-user-search-wrap">
-        <label for="adminUserPmSearch" class="form-label">Usuario</label>
-        <input type="search" id="adminUserPmSearch" class="form-control" placeholder="Buscar por nombre de usuario…" autocomplete="off">
-        <div id="adminUserPmResults" class="purchase-history-cleanup-user-results" hidden role="listbox"></div>
+  <section id="adminRecargasPanelMethods" class="admin-recargas-panel" hidden>
+    <div class="store-light purchase-history-container mx-auto admin-recargas-pm-cop-wrap">
+      <div class="purchase-history-admin-toolbar">
+        <button id="menuToggleBtnMethods" type="button" class="btn-panel btn-blue menu-toggle-btn" title="Menú de navegación" aria-label="Abrir menú de navegación">&#9776; Menú</button>
+        <button id="menu2ToggleBtnMethods" type="button" class="btn-panel btn-blue menu-toggle-btn" title="Menú secundario" aria-label="Abrir segundo menú">&#9776; Menú2</button>
       </div>
-      <p id="adminUserPmSelected" class="purchase-history-cleanup-user-selected mb-2" hidden>
-        Usuario: <strong id="adminUserPmSelectedLabel"></strong>
-      </p>
-      <div id="adminUserPmCheckboxes" class="admin-user-pm-checkboxes"></div>
-      <button type="button" id="adminUserPmSave" class="btn-panel btn-green mt-2" disabled>Guardar restricción</button>
-      <p id="adminUserPmMsg" class="mt-05" role="status" aria-live="polite"></p>
-    </section>
+      <div class="admin-recargas-tabs" role="tablist">
+        <button type="button" class="admin-recargas-tab" data-tab="review" role="tab" aria-selected="false">Revisar consignaciones</button>
+        <button type="button" class="admin-recargas-tab admin-recargas-tab--active" data-tab="methods" role="tab" aria-selected="true">Medios de pago</button>
+      </div>
+      <h2 class="text-center purchase-history-page-title admin-recargas-methods-subtitle purchase-history-cleanup-heading">
+        <i class="fas fa-credit-card" aria-hidden="true"></i> Medios de pago
+        <span class="purchase-history-cleanup-info-wrap">
+          <button type="button" id="adminPmMethodsInfoBtn" class="purchase-history-cleanup-info-btn" aria-expanded="false" aria-controls="adminPmMethodsInfoBox" title="Más información">
+            <i class="fas fa-info-circle" aria-hidden="true"></i>
+            <span class="sr-only">Más información sobre medios de pago</span>
+          </button>
+          <div id="adminPmMethodsInfoBox" class="purchase-history-cleanup-info-box" hidden>
+            Configura los datos de pago que verán los clientes al recargar saldo. En moneda USD se muestra como USDT. Por defecto un medio es visible para todos; en Usuarios puedes limitarlo solo a algunos. Sube un QR opcional para mostrarlo al cliente.
+          </div>
+        </span>
+      </h2>
+      <h3 class="admin-pm-currency-title">COP</h3>
+      <div class="admin-pm-list" data-currency="COP"></div>
+      <button type="button" class="btn-panel btn-blue btn-sm admin-pm-add" data-currency="COP">+ Añadir medio</button>
+    </div>
+    <div class="store-light purchase-history-container mx-auto admin-recargas-pm-usd-wrap">
+      <h3 class="admin-pm-currency-title">USDT (USD)</h3>
+      <div class="admin-pm-list" data-currency="USD"></div>
+      <button type="button" class="btn-panel btn-blue btn-sm admin-pm-add" data-currency="USD">+ Añadir medio</button>
+      <p id="adminPaymentMethodsMsg" class="admin-pm-methods-msg mt-05 mb-0" role="status" aria-live="polite"></p>
+    </div>
+  </section>
+
+  <div id="adminPmUsersModal" class="admin-pm-users-modal d-none" role="dialog" aria-modal="true" aria-labelledby="adminPmUsersModalTitle" hidden>
+    <div class="admin-pm-users-modal__backdrop" data-pm-modal-close="1"></div>
+    <div class="admin-pm-users-modal__panel">
+      <div class="admin-pm-users-modal__head">
+        <h2 id="adminPmUsersModalTitle" class="admin-pm-users-modal__title">
+          <span id="adminPmUsersModalTitleText">Usuarios del medio</span>
+          <span class="purchase-history-cleanup-info-wrap admin-pm-users-modal__info-wrap">
+            <button type="button" id="adminPmUsersModalInfoBtn" class="purchase-history-cleanup-info-btn" aria-expanded="false" aria-controls="adminPmUsersModalInfoBox" title="Más información">
+              <i class="fas fa-info-circle" aria-hidden="true"></i>
+              <span class="sr-only">Más información sobre usuarios del medio</span>
+            </button>
+            <div id="adminPmUsersModalInfoBox" class="purchase-history-cleanup-info-box admin-pm-users-modal__info-box" hidden>
+              Elige qué usuarios pueden ver y usar este medio al recargar saldo. Si no marcas a nadie, el medio queda visible para todos. Si marcas usuarios, solo ellos lo verán. Cierra el modal y pulsa Guardar en la fila del medio.
+            </div>
+          </span>
+        </h2>
+        <button type="button" class="admin-pm-users-modal__close" data-pm-modal-close="1" aria-label="Cerrar">&times;</button>
+      </div>
+      <div class="admin-pm-users-modal__toolbar">
+        <div class="admin-pm-users-modal__filters">
+          <label for="adminPmUsersFilter" class="sr-only">Filtrar usuarios</label>
+          <input type="search" id="adminPmUsersFilter" name="admin_pm_users_filter" class="form-control admin-pm-users-modal__filter" placeholder="Filtrar por usuario o nombre…" autocomplete="off">
+        </div>
+        <div class="admin-pm-users-modal__bulk-actions">
+          <button type="button" class="btn-panel btn-blue btn-sm" id="adminPmUsersSelectAllBtn">Seleccionar todos</button>
+          <button type="button" class="btn-panel btn-sm admin-pm-users-deselect-btn" id="adminPmUsersDeselectAllBtn">Deseleccionar todos</button>
+        </div>
+      </div>
+      <div class="admin-pm-users-table-wrap">
+        <table class="admin-pm-users-table" aria-label="Usuarios del medio">
+          <thead>
+            <tr>
+              <th class="admin-pm-users-table-col-check" scope="col">
+                <label class="sr-only" for="adminPmUsersSelectAllVisible">Seleccionar usuarios visibles</label>
+                <input type="checkbox" id="adminPmUsersSelectAllVisible" name="admin_pm_users_select_all_visible" aria-label="Seleccionar usuarios visibles">
+              </th>
+              <th scope="col">Usuario</th>
+              <th scope="col">Nombre</th>
+            </tr>
+          </thead>
+          <tbody id="adminPmUsersTableBody">
+            <tr><td colspan="3" class="admin-pm-users-empty">Cargando usuarios…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
   </div>
 </div>
 {% endblock %}
@@ -167,5 +222,5 @@
   <script src="{{ url_for('store_bp.static', filename='js/menu_tienda.js') }}" defer></script>
   <script src="{{ url_for('static', filename='js/clear_trigger_logs.js') }}" defer></script>
   <script src="{{ url_for('store_bp.static', filename='js/admin_recargas_cleanup.js') }}?v=20260522" defer></script>
-  <script src="{{ url_for('store_bp.static', filename='js/admin_recargas_saldo.js') }}?v=20260522" defer></script>
+  <script src="{{ url_for('store_bp.static', filename='js/admin_recargas_saldo.js') }}?v=20260523-pm-users-currency" defer></script>
 {% endblock %}

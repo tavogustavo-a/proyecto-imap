@@ -91,7 +91,7 @@
         <div class="toolbar-row-1">
           <div class="search-container">
             <label for="searchInput" class="sr-only">Buscar en correos</label>
-            <input type="search" class="email-search" id="searchInput" placeholder="Buscar en correos..." aria-label="Buscar en correos" autocomplete="off">
+            <input type="search" class="email-search" id="searchInput" placeholder="Buscar por correo, remitente o asunto…" aria-label="Buscar por correo, remitente o asunto" autocomplete="off">
             <button type="button" class="search-clear-btn" id="clearSearchBtn" aria-label="Limpiar búsqueda">
               <i class="fas fa-times"></i>
             </button>
@@ -109,114 +109,7 @@
       
       <h2 id="email-list-heading" class="sr-only">Lista de correos electrónicos</h2>
       <div class="email-list-wrapper">
-      <div class="email-list" role="list" aria-label="Lista de correos electrónicos">
-        {% for email in recent_emails %}
-        <div class="email-item {{ 'unread' if not email.processed else '' }} {{ 'deleted' if email.deleted else '' }} cursor-pointer" 
-             data-email-id="{{ email.id }}" role="listitem" data-action="view-email">
-          <input type="checkbox" id="email-checkbox-{{ email.id }}" name="email_select" value="{{ email.id }}" class="email-checkbox" data-action="stop-propagation" aria-label="Seleccionar correo de {{ email.from_email }}">
-          <div class="email-sender">{{ email.from_email }}</div>
-          <div class="email-subject">
-            {{ email.subject or '(Sin asunto)' }}
-            {% if email.content_html %}<i class="fas fa-paperclip email-attachment"></i>{% endif %}
-          </div>
-          {% if email.tags %}
-          <div class="email-tags">
-            {% for tag in email.tags %}
-            <span class="email-tag" data-color="{{ tag.color }}">{{ tag.name }}</span>
-            {% endfor %}
-          </div>
-          {% endif %}
-          <div class="email-time">{{ email.get_time_12h() }}</div>
-          <div class="email-actions">
-            <!-- Los botones de acción se manejaran por menú contextual -->
-          </div>
-        </div>
-        {% endfor %}
-        
-        {% if not recent_emails %}
-        <div class="email-empty-state">
-          <i class="fas fa-inbox"></i>
-          <p>No hay mensajes en la bandeja de entrada</p>
-        </div>
-        {% endif %}
-      </div>
-
-      {% if pagination %}
-      {% set cv = current_view|default('inbox') %}
-      <nav class="email-pagination" aria-label="Paginación de correos">
-        <div class="email-pagination-info">
-          {% if pagination.total > 0 %}
-            {% set start_i = (pagination.page - 1) * pagination.per_page + 1 %}
-            {% set end_i = (pagination.page - 1) * pagination.per_page + (recent_emails|length) %}
-            <span>{{ start_i }}–{{ end_i }} de {{ pagination.total }}</span>
-          {% else %}
-            <span>0 mensajes</span>
-          {% endif %}
-        </div>
-        <div class="email-pagination-nav">
-          {% if cv == 'inbox' or not current_view %}
-            {% if pagination.has_prev %}
-            <a class="btn btn-blue email-pagination-btn" href="{{ url_for('admin_email_buzon.manage_email_buzon', page=pagination.prev_num, per_page=pagination.per_page) }}">Anterior</a>
-            {% else %}
-            <span class="btn btn-gray email-pagination-btn email-pagination-btn-disabled">Anterior</span>
-            {% endif %}
-            {% if pagination.has_next %}
-            <a class="btn btn-blue email-pagination-btn" href="{{ url_for('admin_email_buzon.manage_email_buzon', page=pagination.next_num, per_page=pagination.per_page) }}">Siguiente</a>
-            {% else %}
-            <span class="btn btn-gray email-pagination-btn email-pagination-btn-disabled">Siguiente</span>
-            {% endif %}
-          {% elif cv == 'tag' and current_tag %}
-            {% if pagination.has_prev %}
-            <a class="btn btn-blue email-pagination-btn" href="{{ url_for('admin_email_buzon.filter_by_tag', tag_id=current_tag.id, page=pagination.prev_num, per_page=pagination.per_page) }}">Anterior</a>
-            {% else %}
-            <span class="btn btn-gray email-pagination-btn email-pagination-btn-disabled">Anterior</span>
-            {% endif %}
-            {% if pagination.has_next %}
-            <a class="btn btn-blue email-pagination-btn" href="{{ url_for('admin_email_buzon.filter_by_tag', tag_id=current_tag.id, page=pagination.next_num, per_page=pagination.per_page) }}">Siguiente</a>
-            {% else %}
-            <span class="btn btn-gray email-pagination-btn email-pagination-btn-disabled">Siguiente</span>
-            {% endif %}
-          {% elif cv == 'trash' %}
-            {% if pagination.has_prev %}
-            <a class="btn btn-blue email-pagination-btn" href="{{ url_for('admin_email_buzon.view_trash', page=pagination.prev_num, per_page=pagination.per_page) }}">Anterior</a>
-            {% else %}
-            <span class="btn btn-gray email-pagination-btn email-pagination-btn-disabled">Anterior</span>
-            {% endif %}
-            {% if pagination.has_next %}
-            <a class="btn btn-blue email-pagination-btn" href="{{ url_for('admin_email_buzon.view_trash', page=pagination.next_num, per_page=pagination.per_page) }}">Siguiente</a>
-            {% else %}
-            <span class="btn btn-gray email-pagination-btn email-pagination-btn-disabled">Siguiente</span>
-            {% endif %}
-          {% elif cv == 'spam' %}
-            {% if pagination.has_prev %}
-            <a class="btn btn-blue email-pagination-btn" href="{{ url_for('admin_email_buzon.view_spam', page=pagination.prev_num, per_page=pagination.per_page) }}">Anterior</a>
-            {% else %}
-            <span class="btn btn-gray email-pagination-btn email-pagination-btn-disabled">Anterior</span>
-            {% endif %}
-            {% if pagination.has_next %}
-            <a class="btn btn-blue email-pagination-btn" href="{{ url_for('admin_email_buzon.view_spam', page=pagination.next_num, per_page=pagination.per_page) }}">Siguiente</a>
-            {% else %}
-            <span class="btn btn-gray email-pagination-btn email-pagination-btn-disabled">Siguiente</span>
-            {% endif %}
-          {% endif %}
-        </div>
-        <form method="get" class="email-pagination-per-page" aria-label="Correos por página"
-          {% if cv == 'inbox' or not current_view %}action="{{ url_for('admin_email_buzon.manage_email_buzon') }}"
-          {% elif cv == 'tag' and current_tag %}action="{{ url_for('admin_email_buzon.filter_by_tag', tag_id=current_tag.id) }}"
-          {% elif cv == 'trash' %}action="{{ url_for('admin_email_buzon.view_trash') }}"
-          {% elif cv == 'spam' %}action="{{ url_for('admin_email_buzon.view_spam') }}"
-          {% else %}action="{{ url_for('admin_email_buzon.manage_email_buzon') }}"
-          {% endif %}>
-          <input type="hidden" name="page" value="1">
-          <label for="buzonPerPageSelect">Por página</label>
-          <select name="per_page" id="buzonPerPageSelect" class="buzon-per-page-select">
-            {% for n in buzon_per_page_choices|default((25, 50, 100, 200)) %}
-            <option value="{{ n }}" {% if pagination.per_page == n %}selected{% endif %}>{{ n }}</option>
-            {% endfor %}
-          </select>
-        </form>
-      </nav>
-      {% endif %}
+      {% include 'admin/includes/email_buzon_list_wrapper.html' %}
       </div>
     </section>
   </div>

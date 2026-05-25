@@ -682,44 +682,45 @@ def _process_mails(all_mails, filters, regexes, user_searching, searched_address
         current_app.logger.error(f"Error al obtener SecurityRules: {e}")
         active_security_rules = []
 
-    logs_to_commit = False  # Registro si se añadieron TriggerLogs
-    found_mail = None       # Guardará el mail que coincida para retornar al final
+    logs_to_commit = False
+    filter_candidate = None
+    regex_candidate = None
 
     for mail in all_mails:
         _format_date(mail)
         body_raw = mail.get("text", "") + mail.get("html", "")
         sender_lower = mail.get("from", "").lower()
 
-        needs_commit_for_log = False  # Reiniciar bandera por correo
-        # Filtro
         matched_filter = get_first_filter_that_matches(mail, filters)
         if matched_filter:
             body_text_before = mail.get("text") or ""
             body_html_before = mail.get("html") or ""
 
-            # Aplicar cortar HTML desde (cut_after_html)
             cut_after_str = (matched_filter.cut_after_html or "").strip() if matched_filter.cut_after_html else ""
             if cut_after_str:
                 apply_cut_after_html(mail, cut_after_str)
-            
-            # Aplicar cortar HTML hacia (cut_before_html)
+
             cut_before_str = (matched_filter.cut_before_html or "").strip() if matched_filter.cut_before_html else ""
             if cut_before_str:
                 apply_cut_before_html(mail, cut_before_str)
 
-            mail["filter_code"] = extract_filter_display_code(mail, matched_filter)
-            if not mail["filter_code"] and _is_netflix_login_session_6_digits_filter(matched_filter):
-                mail["filter_code"] = _extract_netflix_login_session_code_from_raw_body(
-                    body_text_before, body_html_before
-                )
             mail["filter_matched"] = True
+            if _is_netflix_login_6_digits_filter(matched_filter):
+                mail["filter_code"] = (
+                    _extract_six_digit_code_from_mail(mail)
+                    or _extract_six_digit_code_from_mail({
+                        "text": body_text_before,
+                        "html": body_html_before,
+                    })
+                )
+            else:
+                mail["filter_code"] = None
         else:
             mail["filter_matched"] = False
             mail["filter_code"] = None
 
-        # Regex
         found_regex = False
-        if regexes:
+        if not mail["filter_matched"] and regexes:
             if passes_any_regex(mail, regexes):
                 found_regex = True
                 mail["regex_matches"] = extract_regex(mail, regexes)
@@ -728,52 +729,24 @@ def _process_mails(all_mails, filters, regexes, user_searching, searched_address
         else:
             mail["regex_matches"] = {}
 
-        # Si coincide regex pero NO hay filtro => ocultamos HTML
         if not mail["filter_matched"] and found_regex:
             mail["html"] = ""
             mail["text"] = ""
 
-        # Si coincidió Filtro o Regex => retornamos
-        if mail["filter_matched"] or found_regex:
-            
-            # --- NUEVO: Lógica de Security Rules (Trigger Logging) ---
-            # Solo loguear si busca un usuario logueado Y no es el admin
-            admin_username_cfg = current_app.config.get("ADMIN_USER", "admin")
-            if user_searching and user_searching.username != admin_username_cfg and active_security_rules:
-                # Usar el Message-ID parseado si existe, sino el fallback
-                email_id = mail.get("message_id") or mail.get("subject", "") + str(mail.get("internal_date", datetime.min))
+        if mail["filter_matched"] and filter_candidate is None:
+            filter_candidate = mail
+            if _maybe_log_security_triggers(
+                mail, body_raw, sender_lower, user_searching, searched_address, active_security_rules
+            ):
+                logs_to_commit = True
+        elif found_regex and regex_candidate is None:
+            regex_candidate = mail
+            if _maybe_log_security_triggers(
+                mail, body_raw, sender_lower, user_searching, searched_address, active_security_rules
+            ):
+                logs_to_commit = True
 
-                for rule in active_security_rules:
-                    rule_sender_lower = (rule.sender or "").lower()
-                    if rule_sender_lower and rule_sender_lower not in sender_lower:
-                        continue
-
-                    try:
-                        # Comprobar Patrón Activador en ESTE correo específico
-                        if safe_regex_search(rule.trigger_pattern, body_raw):
-                            # --- INICIO DE MODIFICACIÓN ---
-                            # Siempre crear un nuevo log en lugar de actualizar el existente
-                            log_entry = TriggerLog(
-                                user_id=user_searching.id,
-                                rule_id=rule.id,
-                                email_identifier=email_id[:512],
-                                searched_email=searched_address,
-                                timestamp=datetime.now(timezone.utc)
-                            )
-                            db.session.add(log_entry)
-                            needs_commit_for_log = True
-
-                            # --- FIN DE MODIFICACIÓN ---
-                    except re.error as re_err:
-                        current_app.logger.error(f"Error de Regex en SecurityRule ID {rule.id} (trigger_pattern): {re_err}")
-                    except Exception as log_err:
-                         current_app.logger.error(f"Error procesando SecurityRule ID {rule.id} o creando TriggerLog para email encontrado: {log_err}")
-            # --- FIN Lógica Security Rules MOVIDA ---
-
-            # Marcamos que hay logs pendientes y guardamos mail coincidente
-            logs_to_commit = True if logs_to_commit or needs_commit_for_log else logs_to_commit
-            found_mail = mail
-            break  # Salimos del bucle después de primer match
+    found_mail = filter_candidate or regex_candidate
 
     # Commit final (si corresponde) después de salir del bucle
     if logs_to_commit:
@@ -786,29 +759,54 @@ def _process_mails(all_mails, filters, regexes, user_searching, searched_address
     return found_mail
 
 
-def get_first_filter_that_matches(mail_dict, filters):
-    """
-    Retorna el primer Filter que coincida con:
-    - f.sender en mail['from'] (si f.sender no es None)
-    - f.keyword en body_text (si f.keyword no es None)
-    """
-    body_text = (mail_dict.get("text", "") + mail_dict.get("html", "")).lower()
-    sender_text = mail_dict.get("from", "").lower()
+def _maybe_log_security_triggers(mail, body_raw, sender_lower, user_searching, searched_address, active_security_rules):
+    admin_username_cfg = current_app.config.get("ADMIN_USER", "admin")
+    if not user_searching or user_searching.username == admin_username_cfg or not active_security_rules:
+        return False
 
-    for f in filters:
-        filter_sender = (f.sender or "").lower()
-        filter_keyword = (f.keyword or "").lower()
+    email_id = mail.get("message_id") or mail.get("subject", "") + str(mail.get("internal_date", datetime.min))
+    needs_commit = False
 
-        if filter_sender and filter_sender not in sender_text:
+    for rule in active_security_rules:
+        rule_sender_lower = (rule.sender or "").lower()
+        if rule_sender_lower and rule_sender_lower not in sender_lower:
             continue
-        if filter_keyword and filter_keyword not in body_text:
-            continue
-        return f
-    return None
+        try:
+            if safe_regex_search(rule.trigger_pattern, body_raw):
+                log_entry = TriggerLog(
+                    user_id=user_searching.id,
+                    rule_id=rule.id,
+                    email_identifier=email_id[:512],
+                    searched_email=searched_address,
+                    timestamp=datetime.now(timezone.utc),
+                )
+                db.session.add(log_entry)
+                needs_commit = True
+        except re.error as re_err:
+            current_app.logger.error(
+                "Error de Regex en SecurityRule ID %s (trigger_pattern): %s",
+                rule.id,
+                re_err,
+            )
+        except Exception as log_err:
+            current_app.logger.error(
+                "Error procesando SecurityRule ID %s o creando TriggerLog: %s",
+                rule.id,
+                log_err,
+            )
+    return needs_commit
 
 
-def _strip_html_to_plain_text(html: str) -> str:
-    """Texto visible a partir de HTML (p. ej. códigos Netflix en celdas separadas)."""
+def _normalize_for_filter_match(value) -> str:
+    """Minúsculas sin tildes para comparar palabras clave de filtros."""
+    import unicodedata
+
+    raw = str(value or "").strip().lower()
+    decomposed = unicodedata.normalize("NFD", raw)
+    return "".join(ch for ch in decomposed if unicodedata.category(ch) != "Mn")
+
+
+def _plain_text_from_html(html: str) -> str:
     import html as html_module
 
     if not html:
@@ -820,24 +818,57 @@ def _strip_html_to_plain_text(html: str) -> str:
     return re.sub(r"\s+", " ", t).strip()
 
 
-def _normalize_filter_signature_text(value) -> str:
-    import unicodedata
-
-    raw = str(value or "").strip().lower()
-    decomposed = unicodedata.normalize("NFD", raw)
-    return "".join(ch for ch in decomposed if unicodedata.category(ch) != "Mn")
-
-
-def _is_netflix_login_session_6_digits_filter(matched_filter) -> bool:
+def _filter_searchable_text(mail_dict) -> str:
     """
-    Caso puntual: «ingreso sesión Netflix 6 dígitos» (info@account.netflix.com).
-    Solo este filtro usa vista tipo regex con botón copiar si hay 6 dígitos en el correo.
+    Texto donde buscar la palabra clave del filtro: asunto + cuerpo visible.
+    Los correos tipo Netflix Hogar suelen repetir la clave en el asunto y en HTML con tags.
     """
+    parts = [
+        mail_dict.get("subject") or "",
+        mail_dict.get("text") or "",
+        _plain_text_from_html(mail_dict.get("html") or ""),
+    ]
+    combined = " ".join(p for p in parts if p).strip()
+    return _normalize_for_filter_match(combined)
+
+
+def get_first_filter_that_matches(mail_dict, filters):
+    """
+    Retorna el Filter que coincida con:
+    - f.sender en mail['from'] (si f.sender no es None)
+    - f.keyword en asunto/cuerpo (si f.keyword no es None)
+    Prioriza reglas más específicas (con palabra clave).
+    """
+    body_text = _filter_searchable_text(mail_dict)
+    sender_text = _normalize_for_filter_match(mail_dict.get("from", ""))
+
+    def _specificity(f):
+        score = 0
+        if (f.sender or "").strip():
+            score += 100
+        if (f.keyword or "").strip():
+            score += 1000 + min(len((f.keyword or "").strip()), 500)
+        return score
+
+    for f in sorted(filters, key=_specificity, reverse=True):
+        filter_sender = _normalize_for_filter_match(f.sender or "")
+        filter_keyword = _normalize_for_filter_match(f.keyword or "")
+
+        if filter_sender and filter_sender not in sender_text:
+            continue
+        if filter_keyword and filter_keyword not in body_text:
+            continue
+        return f
+    return None
+
+
+def _is_netflix_login_6_digits_filter(matched_filter) -> bool:
+    """Caso puntual: ingreso sesión Netflix 6 dígitos (info@account.netflix.com)."""
     if matched_filter is None:
         return False
-    sender = _normalize_filter_signature_text(getattr(matched_filter, "sender", ""))
-    keyword = _normalize_filter_signature_text(getattr(matched_filter, "keyword", ""))
-    description = _normalize_filter_signature_text(getattr(matched_filter, "description", ""))
+    sender = _normalize_for_filter_match(getattr(matched_filter, "sender", ""))
+    keyword = _normalize_for_filter_match(getattr(matched_filter, "keyword", ""))
+    description = _normalize_for_filter_match(getattr(matched_filter, "description", ""))
     return (
         sender == "info@account.netflix.com"
         and "alguien intenta acceder a tu cuenta" in keyword
@@ -858,45 +889,12 @@ def _extract_six_digit_code_from_text(combined: str):
     return None
 
 
-def _extract_netflix_login_session_code_from_raw_body(body_text: str, body_html: str):
-    """Busca 6 dígitos en el cuerpo original antes de los cortes del filtro."""
-    combined = " ".join(
-        p for p in (body_text or "", _strip_html_to_plain_text(body_html or "")) if p
-    ).strip()
-    return _extract_six_digit_code_from_text(combined)
-
-
-def extract_filter_display_code(mail, matched_filter=None):
-    """
-    Tras cortar con un filtro, extrae un código limpio para mostrar como regex (copiar).
-    Usa code_pattern del filtro si existe; si no, detecta 6 dígitos (con o sin espacios).
-    """
-    pattern = None
-    if matched_filter is not None:
-        pattern = (getattr(matched_filter, "code_pattern", None) or "").strip()
-
-    parts = [mail.get("text") or "", _strip_html_to_plain_text(mail.get("html") or "")]
+def _extract_six_digit_code_from_mail(mail_dict):
+    parts = [
+        mail_dict.get("text") or "",
+        _plain_text_from_html(mail_dict.get("html") or ""),
+    ]
     combined = " ".join(p for p in parts if p).strip()
-    if not combined:
-        return None
-
-    if pattern:
-        try:
-            m = re.search(pattern, combined, re.IGNORECASE | re.MULTILINE)
-        except re.error as err:
-            current_app.logger.warning(
-                "code_pattern inválido en filtro %s: %s",
-                getattr(matched_filter, "id", "?"),
-                err,
-            )
-            m = None
-        if m:
-            raw = m.group(1) if m.lastindex else m.group(0)
-            cleaned = re.sub(r"\D", "", str(raw or ""))
-            if cleaned:
-                return cleaned
-        return None
-
     return _extract_six_digit_code_from_text(combined)
 
 

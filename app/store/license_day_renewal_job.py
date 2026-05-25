@@ -102,22 +102,26 @@ def run_license_day_renewal_pipeline() -> Dict[str, Any]:
     if calendar_day < 1 or calendar_day > 31:
         calendar_day = 1
     renew_stats = process_day_renewals_for_calendar_day(calendar_day, co_now)
-    charged_keys = renew_stats.get('charged_keys') or set()
+    charged_keys = _normalize_charged_keys(renew_stats.get('charged_keys'))
     route_stats = route_unrenewed_day_lines_on_renewal_day(calendar_day, charged_keys)
+    stripped = strip_day_bloc_lines_present_in_side_blocs_for_calendar_day(calendar_day)
     expired_stats = sync_expired_accounts_by_renewal_policy()
     touched_license_ids = (
         renew_stats.get('license_ids', [])
         + route_stats.get('license_ids', [])
         + expired_stats.get('license_ids', [])
+        + stripped.get('license_ids', [])
     )
     if (
         renew_stats.get('charged')
         or renew_stats.get('routed_charge_failed')
         or route_stats.get('lines_moved')
         or expired_stats.get('lines_moved')
+        or stripped.get('lines_removed')
         or renew_stats.get('license_ids')
         or route_stats.get('license_ids')
         or expired_stats.get('license_ids')
+        or stripped.get('license_ids')
     ):
         try:
             db.session.commit()
@@ -131,6 +135,7 @@ def run_license_day_renewal_pipeline() -> Dict[str, Any]:
         'renewals': renew_stats,
         'routed_day_lines': route_stats,
         'expired': expired_stats,
+        'day_bloc_stripped': stripped,
     }
 
 
@@ -190,15 +195,16 @@ def process_day_renewals_for_calendar_day(calendar_day: int, co_now: datetime) -
                     ck = _line_cred_key(str(dual.get('cred') or ''))
                     if ck:
                         charged_keys.add((int(lic.id), ck))
+                    try:
+                        db.session.flush()
+                    except Exception:
+                        pass
                 elif _charge_fail_should_route_to_bloc(msg):
-                    changes_cur, expired_cur, moved = _route_dual_line_to_changes_or_expired(
+                    changes_cur, expired_cur, _moved = _route_dual_line_to_changes_or_expired(
                         lic, dual, changes_cur, expired_cur, seen_changes, seen_expired
                     )
-                    if moved:
-                        routed_charge_failed += 1
-                        lic_changed = True
-                    else:
-                        new_lines.append(line)
+                    routed_charge_failed += 1
+                    lic_changed = True
                     errors += 1
                     logger.info(
                         'Renovación día %s lic %s sin saldo → Cambios/Vencidas: %s',
@@ -238,15 +244,16 @@ def process_day_renewals_for_calendar_day(calendar_day: int, co_now: datetime) -
                     ck = _line_cred_key(str(dual.get('cred') or ''))
                     if ck:
                         charged_keys.add((int(lic.id), ck))
+                    try:
+                        db.session.flush()
+                    except Exception:
+                        pass
                 elif _charge_fail_should_route_to_bloc(msg):
-                    changes_cur, expired_cur, moved = _route_dual_line_to_changes_or_expired(
+                    changes_cur, expired_cur, _moved = _route_dual_line_to_changes_or_expired(
                         lic, dual, changes_cur, expired_cur, seen_changes, seen_expired
                     )
-                    if moved:
-                        routed_charge_failed += 1
-                        lic_changed = True
-                    else:
-                        new_lines.append(line)
+                    routed_charge_failed += 1
+                    lic_changed = True
                     errors += 1
                     logger.info(
                         'Mes a mes día %s lic %s sin saldo → Cambios/Vencidas: %s',
@@ -753,6 +760,93 @@ def _cred_keys_in_bloc(text: str) -> set:
         if k:
             seen.add(k)
     return seen
+
+
+def _side_bloc_cred_keys(lic) -> set:
+    keys = set()
+    for attr in ('changes_notes', 'expired_notes', 'suspended_notes'):
+        keys |= _cred_keys_in_bloc(getattr(lic, attr, None) or '')
+    return keys
+
+
+def _normalize_charged_keys(raw) -> set:
+    """Convierte charged_keys (set o lista JSON) a set de (license_id, cred_key)."""
+    if not raw:
+        return set()
+    if isinstance(raw, set):
+        out = set()
+        for item in raw:
+            if isinstance(item, (list, tuple)) and len(item) >= 2:
+                out.add((int(item[0]), str(item[1])))
+        return out
+    out = set()
+    if isinstance(raw, (list, tuple)):
+        for item in raw:
+            if isinstance(item, (list, tuple)) and len(item) >= 2:
+                out.add((int(item[0]), str(item[1])))
+    return out
+
+
+def strip_day_bloc_lines_present_in_side_blocs_for_calendar_day(calendar_day: int) -> Dict[str, Any]:
+    """
+    Quita del bloc del día N cualquier línea cuya credencial ya esté en
+    Cambios / Vencidas / Caídas (evita fantasmas tras guardar la UI).
+    """
+    from app.store.models import License
+
+    day_key = str(int(calendar_day))
+    now_utc = datetime.utcnow()
+    license_ids: List[int] = []
+    lines_removed = 0
+
+    for lic in License.query.filter(License.enabled.is_(True)).all():
+        day_map = _load_day_map(lic)
+        raw_day = day_map.get(day_key)
+        if not raw_day or not str(raw_day).strip():
+            continue
+        side_keys = _side_bloc_cred_keys(lic)
+        if not side_keys:
+            continue
+        kept: List[str] = []
+        removed_here = 0
+        for line in str(raw_day).replace('\r\n', '\n').split('\n'):
+            line = line.strip()
+            if not line:
+                continue
+            cred = line.split(LICENSE_LINE_SEP)[0] if LICENSE_LINE_SEP in line else line
+            if _line_cred_key(cred) in side_keys:
+                removed_here += 1
+                continue
+            kept.append(line)
+        if not removed_here:
+            continue
+        lines_removed += removed_here
+        if kept:
+            day_map[day_key] = '\n'.join(kept).strip()
+        else:
+            day_map.pop(day_key, None)
+        lic.day_notepads_json = json.dumps(day_map, ensure_ascii=False) if day_map else None
+        lic.updated_at = now_utc
+        license_ids.append(int(lic.id))
+
+    return {'lines_removed': lines_removed, 'license_ids': list(set(license_ids))}
+
+
+def filter_day_text_excluding_side_blocs(lic, day_text: str) -> str:
+    """Texto del día sin líneas que ya están en Cambios/Vencidas/Caídas."""
+    side_keys = _side_bloc_cred_keys(lic)
+    if not side_keys:
+        return str(day_text or '')
+    kept: List[str] = []
+    for line in str(day_text or '').replace('\r\n', '\n').split('\n'):
+        line = line.strip()
+        if not line:
+            continue
+        cred = line.split(LICENSE_LINE_SEP)[0] if LICENSE_LINE_SEP in line else line
+        if _line_cred_key(cred) in side_keys:
+            continue
+        kept.append(line)
+    return '\n'.join(kept).strip()
 
 
 def _emails_in_bloc(text: str) -> set:

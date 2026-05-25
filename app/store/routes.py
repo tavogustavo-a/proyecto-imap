@@ -1,4 +1,4 @@
-from flask import render_template, request, redirect, url_for, flash, jsonify, current_app, session, Response, stream_template, send_file, stream_with_context, g, abort, make_response
+from flask import render_template, request, redirect, url_for, flash, jsonify, current_app, session, Response, stream_template, send_file, send_from_directory, stream_with_context, g, abort, make_response
 from app.utils.timezone import get_colombia_now, colombia_strftime, utc_to_colombia, get_colombia_datetime, timesince
 # Importa tus modelos y db. Asumo nombres comunes, ajústalos si es necesario.
 from .models import Product, Sale, Coupon, coupon_products, ProductionLink, ApiInfo, WorksheetTemplate, WorksheetData, WorksheetPermission, DriveTransfer, WhatsAppConfig, GSheetsLink, SMSConfig, SMSMessage, AllowedSMSNumber, SMSRegex, TwoFAConfig
@@ -343,7 +343,7 @@ def _renewal_block_user_message(reason: str, currency: str = 'COP') -> str:
     if reason == 'supera_limite_deuda':
         return (
             'No tienes saldo suficiente para la renovación (supera el límite de deuda '
-            f'en cuenta Licencias). La cuenta no se renovará y pasará a vencidas.'
+            'en cuenta Licencias). La cuenta no se renovará y pasará a Cambios o Vencidas.'
         )
     if reason == 'saldo_insuficiente':
         return (
@@ -5397,7 +5397,8 @@ _BALANCE_RECHARGE_ALLOWED_MIME = frozenset({
     'image/jpeg', 'image/png', 'image/webp', 'image/gif',
 })
 _BALANCE_RECHARGE_MAX_FILES = 1
-_BALANCE_RECHARGE_MAX_BYTES = 8 * 1024 * 1024
+_BALANCE_RECHARGE_MAX_MB = 30
+_BALANCE_RECHARGE_MAX_BYTES = _BALANCE_RECHARGE_MAX_MB * 1024 * 1024
 
 
 def _ensure_balance_recharges_table():
@@ -5440,6 +5441,35 @@ def _balance_recharge_files_list(recharge_row):
 
 def _balance_recharge_viewer_billing_user(viewer):
     return _billing_user_for_store_debt_limit(viewer) or viewer
+
+
+def _recharge_payment_methods_payload(viewer):
+    from app.store.balance_recharge_payment import (
+        currency_display_name,
+        methods_for_user,
+        payment_method_qr_public_filename,
+    )
+
+    billing = _balance_recharge_viewer_billing_user(viewer)
+    _, tipo_precio = catalog_products_for_store_user(billing or viewer)
+    tp = (tipo_precio or 'COP').upper()
+    payment_methods = methods_for_user(billing or viewer, tp, viewer=viewer)
+    pm_rows = []
+    for m in payment_methods:
+        row = {
+            'id': m.get('id'),
+            'label': m.get('label') or '',
+            'details': m.get('details') or '',
+            'enabled': bool(m.get('enabled', True)),
+        }
+        fn = m.get('qr_filename')
+        if fn:
+            row['qr_url'] = url_for(
+                'store_bp.api_payment_method_qr_image',
+                filename=payment_method_qr_public_filename(fn),
+            )
+        pm_rows.append(row)
+    return tp, currency_display_name(tp), pm_rows
 
 
 def _balance_recharge_row_accessible(recharge_row, viewer):
@@ -5531,24 +5561,18 @@ def recargas_saldo():
         return redirect(url_for('main_bp.home'))
 
     _ensure_balance_recharges_table()
-    from app.store.balance_recharge_payment import (
-        currency_display_name,
-        methods_for_user,
-    )
 
     billing = _balance_recharge_viewer_billing_user(user)
-    _, tipo_precio = catalog_products_for_store_user(billing or user)
-    tp = (tipo_precio or 'COP').upper()
+    tp, currency_label, pm_rows = _recharge_payment_methods_payload(user)
     saldo_info = build_store_menu_saldo_display(billing or user)
-    payment_methods = methods_for_user(billing or user, tp)
 
     return render_template(
         'recargas_saldo.html',
         current_user=user,
         tipo_precio=tp,
-        currency_label=currency_display_name(tp),
+        currency_label=currency_label,
         saldo_line=saldo_info.get('line'),
-        payment_methods=payment_methods,
+        payment_methods=pm_rows,
     )
 
 
@@ -5632,7 +5656,7 @@ def api_user_balance_recharge_submit():
         if size == 0:
             continue
         if size > _BALANCE_RECHARGE_MAX_BYTES:
-            return jsonify({'success': False, 'message': 'Cada imagen debe pesar menos de 8 MB'}), 400
+            return jsonify({'success': False, 'message': f'Cada imagen debe pesar menos de {_BALANCE_RECHARGE_MAX_MB} MB'}), 400
         mime = (file.content_type or '').lower()
         if mime not in _BALANCE_RECHARGE_ALLOWED_MIME:
             return jsonify({'success': False, 'message': 'Solo se permiten imágenes (JPG, PNG, WebP, GIF)'}), 400
@@ -5651,7 +5675,7 @@ def api_user_balance_recharge_submit():
     from app.store.balance_recharge_payment import methods_for_user
 
     payment_method_id = (request.form.get('payment_method_id') or '').strip()
-    allowed = methods_for_user(billing or user, currency)
+    allowed = methods_for_user(billing or user, currency, viewer=user)
     if not allowed:
         return jsonify({
             'success': False,
@@ -5728,17 +5752,12 @@ def api_user_balance_recharge_payment_methods():
     if user.username != current_app.config.get('ADMIN_USER', 'admin') and not _eligible_tienda_user_licencias_portal(user):
         return jsonify({'success': False, 'message': 'Sin acceso'}), 403
 
-    from app.store.balance_recharge_payment import currency_display_name, methods_for_user
-
-    billing = _balance_recharge_viewer_billing_user(user)
-    _, tipo_precio = catalog_products_for_store_user(billing or user)
-    tp = (tipo_precio or 'COP').upper()
-    methods = methods_for_user(billing or user, tp)
+    tp, currency_label, pm_rows = _recharge_payment_methods_payload(user)
     return jsonify({
         'success': True,
         'currency': tp,
-        'currency_label': currency_display_name(tp),
-        'methods': methods,
+        'currency_label': currency_label,
+        'methods': pm_rows,
     })
 
 
@@ -6026,15 +6045,70 @@ def api_admin_balance_recharge_review(recharge_id):
 def api_admin_payment_methods_settings():
     from app.store.balance_recharge_payment import (
         get_payment_methods_config,
+        payment_method_qr_public_filename,
         save_payment_methods_config,
     )
 
     if request.method == 'GET':
-        return jsonify({'success': True, 'methods': get_payment_methods_config()})
+        cfg = get_payment_methods_config()
+        user_ids = set()
+        for lst in cfg.values():
+            for m in lst:
+                for uid in m.get('allowed_user_ids') or []:
+                    try:
+                        user_ids.add(int(uid))
+                    except (TypeError, ValueError):
+                        pass
+        users_map = {}
+        if user_ids:
+            for u in User.query.filter(User.id.in_(user_ids)).all():
+                users_map[int(u.id)] = u.username
+        enriched = {}
+        for cur, lst in cfg.items():
+            enriched[cur] = []
+            for m in lst:
+                row = dict(m)
+                fn = row.get('qr_filename')
+                if fn:
+                    row['qr_url'] = url_for(
+                        'store_bp.api_payment_method_qr_image',
+                        filename=payment_method_qr_public_filename(fn),
+                    )
+                ids = row.get('allowed_user_ids') or []
+                row['allowed_users'] = [
+                    {'id': int(uid), 'username': users_map.get(int(uid), str(uid))}
+                    for uid in ids
+                ]
+                enriched[cur].append(row)
+        return jsonify({'success': True, 'methods': enriched})
 
     data = request.get_json(silent=True) or {}
-    methods = save_payment_methods_config(data.get('methods') or data)
+    previous = get_payment_methods_config()
+    methods = save_payment_methods_config(
+        data.get('methods') or data,
+        app=current_app._get_current_object(),
+        previous=previous,
+    )
     return jsonify({'success': True, 'message': 'Medios de pago guardados.', 'methods': methods})
+
+
+@store_bp.route('/api/payment-methods/qr/<path:filename>')
+def api_payment_method_qr_image(filename):
+    """Imagen QR de un medio de pago (portal cliente o admin autenticado)."""
+    from app.store.balance_recharge_payment import (
+        payment_method_qr_public_filename,
+        payment_method_qr_upload_dir,
+    )
+
+    if not session.get('logged_in'):
+        return jsonify({'success': False, 'message': 'No autorizado'}), 403
+    fn = payment_method_qr_public_filename(filename)
+    if not fn:
+        return jsonify({'success': False, 'message': 'Archivo inválido'}), 400
+    path = os.path.join(payment_method_qr_upload_dir(current_app), fn)
+    if not os.path.isfile(path):
+        return jsonify({'success': False, 'message': 'No encontrado'}), 404
+    return send_from_directory(os.path.dirname(path), os.path.basename(path))
 
 
 @store_bp.route('/api/admin/users/payment-methods', methods=['GET', 'POST'])
@@ -8803,7 +8877,15 @@ def api_put_license_notes(license_id):
                 if v is None or (isinstance(v, str) and v.strip() == ''):
                     current.pop(sk, None)
                 else:
-                    current[sk] = v if isinstance(v, str) else str(v)
+                    from app.store.license_day_renewal_job import filter_day_text_excluding_side_blocs
+
+                    cleaned = filter_day_text_excluding_side_blocs(
+                        license_obj, v if isinstance(v, str) else str(v)
+                    )
+                    if cleaned:
+                        current[sk] = cleaned
+                    else:
+                        current.pop(sk, None)
             license_obj.day_notepads_json = _json.dumps(current, ensure_ascii=False)
 
         if (

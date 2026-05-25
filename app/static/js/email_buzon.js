@@ -843,13 +843,129 @@ function deleteSelected() {
 }
 
 
-function searchEmails(query) {
+function getCurrentBuzonViewContext() {
+  const activeFolder = document.querySelector('.email-folder.active[data-filter]');
+  if (!activeFolder) {
+    return { view: 'inbox', tagId: null };
+  }
+  const filter = String(activeFolder.dataset.filter || 'all').toLowerCase();
+  if (filter === 'trash') {
+    return { view: 'trash', tagId: null };
+  }
+  if (filter === 'spam') {
+    return { view: 'spam', tagId: null };
+  }
+  if (filter === 'tag') {
+    return { view: 'tag', tagId: activeFolder.dataset.tagId || null };
+  }
+  return { view: 'inbox', tagId: null };
+}
+
+function bindEmailListItemEvents() {
+  document.querySelectorAll('[data-action="view-email"]').forEach(function (item) {
+    if (item.dataset.buzonBound === '1') {
+      return;
+    }
+    item.dataset.buzonBound = '1';
+    item.addEventListener('click', function () {
+      const emailId = this.getAttribute('data-email-id');
+      viewEmail(emailId);
+    });
+    item.addEventListener('contextmenu', function (event) {
+      event.preventDefault();
+      const emailId = this.getAttribute('data-email-id');
+      showContextMenu(event, emailId);
+      return false;
+    });
+  });
+}
+
+function reloadCurrentBuzonList() {
+  const activeFolder = document.querySelector('.email-folder.active[data-filter]');
+  if (!activeFolder) {
+    window.location.reload();
+    return;
+  }
+  const filter = activeFolder.dataset.filter;
+  if (filter === 'trash') {
+    filterEmailsTrash();
+    return;
+  }
+  if (filter === 'tag' && activeFolder.dataset.tagId) {
+    filterEmailsByTag(activeFolder.dataset.tagId);
+    return;
+  }
+  const url = activeFolder.getAttribute('data-url');
+  if (url) {
+    window.location.href = url;
+    return;
+  }
+  window.location.reload();
+}
+
+let buzonSearchRequestId = 0;
+
+function filterEmailItemsLocally(query) {
+  const q = String(query || '').trim().toLowerCase();
   const emailItems = document.querySelectorAll('.email-item');
-  emailItems.forEach(item => {
+  emailItems.forEach(function (item) {
+    if (!q) {
+      item.style.display = 'flex';
+      return;
+    }
+    const fromEmail = String(item.dataset.fromEmail || '').toLowerCase();
+    const toEmail = String(item.dataset.toEmail || '').toLowerCase();
+    const originalTo = String(item.dataset.originalToEmail || '').toLowerCase();
     const text = item.textContent.toLowerCase();
-    const matches = text.includes(query.toLowerCase());
+    const matches =
+      fromEmail.includes(q) ||
+      toEmail.includes(q) ||
+      originalTo.includes(q) ||
+      text.includes(q);
     item.style.display = matches ? 'flex' : 'none';
   });
+}
+
+function searchEmails(query) {
+  const q = String(query || '').trim();
+  if (!q) {
+    reloadCurrentBuzonList();
+    return;
+  }
+
+  const ctx = getCurrentBuzonViewContext();
+  const params = new URLSearchParams({ q: q, view: ctx.view });
+  if (ctx.tagId) {
+    params.set('tag_id', ctx.tagId);
+  }
+
+  const requestId = ++buzonSearchRequestId;
+
+  fetch('/admin/email-buzon/search?' + params.toString(), {
+    headers: { Accept: 'application/json' }
+  })
+    .then(function (response) {
+      return response.json();
+    })
+    .then(function (data) {
+      if (requestId !== buzonSearchRequestId) {
+        return;
+      }
+      if (!data.success) {
+        filterEmailItemsLocally(q);
+        return;
+      }
+      const curWrapper = document.querySelector('.email-list-wrapper');
+      if (curWrapper) {
+        curWrapper.innerHTML = data.html;
+        bindEmailListItemEvents();
+      }
+    })
+    .catch(function () {
+      if (requestId === buzonSearchRequestId) {
+        filterEmailItemsLocally(q);
+      }
+    });
 }
 
 // Funciones para el modal de edición
@@ -991,6 +1107,7 @@ function filterEmailsByTag(tagId) {
       
       if (newWrapper && curWrapper) {
         curWrapper.innerHTML = newWrapper.innerHTML;
+        bindEmailListItemEvents();
         
         // Actualizar el sidebar para marcar la etiqueta como activa
         document.querySelectorAll('.email-folder').forEach(folder => {
@@ -1042,6 +1159,7 @@ function filterEmailsTrash() {
         const curWrapper = document.querySelector('.email-list-wrapper');
         if (curWrapper) {
           curWrapper.innerHTML = newWrapper.innerHTML;
+          bindEmailListItemEvents();
         }
         
         // Actualizar el sidebar para marcar Papelera como activa
@@ -1240,7 +1358,7 @@ document.addEventListener('DOMContentLoaded', function() {
     clearSearchBtn.addEventListener('click', function() {
       if (searchInput) {
         searchInput.value = '';
-        searchEmails(''); // Mostrar todos los emails
+        reloadCurrentBuzonList();
         this.style.display = 'none'; // Ocultar botón X
         searchInput.focus(); // Mantener foco en el input
       }
@@ -2224,20 +2342,7 @@ document.addEventListener('DOMContentLoaded', function() {
   });
 
   // Items de email clickeables
-  document.querySelectorAll('[data-action="view-email"]').forEach(item => {
-    item.addEventListener('click', function() {
-      const emailId = this.getAttribute('data-email-id');
-      viewEmail(emailId);
-    });
-
-    // Agregar event listener para clic derecho
-    item.addEventListener('contextmenu', function(event) {
-      event.preventDefault();
-      const emailId = this.getAttribute('data-email-id');
-      showContextMenu(event, emailId);
-      return false;
-    });
-  });
+  bindEmailListItemEvents();
 
   // Botones de acción de emails
   document.querySelectorAll('[data-action="restore"]').forEach(button => {

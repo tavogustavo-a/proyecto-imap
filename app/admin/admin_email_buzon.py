@@ -15,6 +15,7 @@ from app.services.email_buzon_service import (
     paginate_recent_emails,
     paginate_trash_emails,
     paginate_emails_for_tag,
+    search_received_emails,
     count_recent_emails,
     count_trash_emails,
     count_emails_for_tag,
@@ -77,6 +78,33 @@ def manage_email_buzon():
         **sidebar,
         email_cleanup_interval_minutes=EMAIL_CLEANUP_SCHEDULER_INTERVAL_MINUTES,
     )
+
+
+@admin_email_buzon_bp.route('/email-buzon/search')
+@admin_required
+def search_email_buzon():
+    """Búsqueda AJAX: remitente, destinatario (to / original_to) y asunto."""
+    query = (request.args.get('q') or '').strip()
+    if not query:
+        return jsonify({'success': False, 'error': 'Indica un término de búsqueda.'}), 400
+
+    view = (request.args.get('view') or 'inbox').strip().lower()
+    tag_id = request.args.get('tag_id', type=int)
+
+    try:
+        results = search_received_emails(query, view=view, tag_id=tag_id)
+        html = render_template(
+            'admin/includes/email_buzon_list_wrapper.html',
+            recent_emails=results,
+            pagination=None,
+            current_view=view,
+            current_tag=get_tag(tag_id) if tag_id else None,
+            search_query=query,
+            buzon_per_page_choices=BUZON_LIST_PER_PAGE_CHOICES,
+        )
+        return jsonify({'success': True, 'html': html, 'total': len(results)})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 # ==================== RUTAS PARA REENVÍO DE CORREOS ====================
 

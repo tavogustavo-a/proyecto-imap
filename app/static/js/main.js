@@ -704,18 +704,15 @@ document.addEventListener("DOMContentLoaded", function () {
             resultsDiv.appendChild(mainContainer);
           }
 
-          if (filterCode) {
-            const codeEl = renderCodeResult(filterCode, mailDateFormatted);
-            if (codeEl) {
-              resultsDiv.appendChild(codeEl);
+          if (filterMatched) {
+            if (filterCode) {
+              const codeEl = renderCodeResult(filterCode, mailDateFormatted);
+              if (codeEl) {
+                resultsDiv.appendChild(codeEl);
+              } else if (hasFilterContent) {
+                appendFilterHtmlView();
+              }
             } else if (hasFilterContent) {
-              appendFilterHtmlView();
-            }
-          } else if (hasFilterContent && regexWillRender) {
-            const regexElement = renderRegexMatches(regexDict, mailDateFormatted);
-            if (regexElement) {
-              resultsDiv.appendChild(regexElement);
-            } else {
               appendFilterHtmlView();
             }
           } else if (regexWillRender) {

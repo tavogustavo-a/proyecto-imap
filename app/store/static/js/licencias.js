@@ -6644,7 +6644,59 @@ function resolveAccountAssignedUsername(acc) {
     if (!acc) return '';
     const direct = acc.assigned_username != null ? String(acc.assigned_username).trim() : '';
     if (direct) return direct;
+    const uid = acc.assigned_to_user_id != null ? acc.assigned_to_user_id : acc.assignedUserId;
+    if (uid != null && String(uid).trim() !== '') return String(uid).trim();
     return '';
+}
+
+/** Tokens de credencial en Cambios / Vencidas / Caídas (huella + texto en bruto). */
+function collectSideBlocMatchTokens(licenseId) {
+    const tokens = new Set();
+    const lid = typeof licenseId === 'number' ? licenseId : NaN;
+    if (!Number.isFinite(lid) || lid <= 0 || lid === AGGREGATE_LICENSE_ID) return tokens;
+    const lic = licenses.find(function (l) {
+        return l.id === lid;
+    });
+    if (!lic) return tokens;
+    [lic.changes_notes, lic.expired_notes, lic.suspended_notes].forEach(function (txt) {
+        String(txt || '')
+            .replace(/\r\n/g, '\n')
+            .split('\n')
+            .forEach(function (ln) {
+                ln = String(ln || '').trim();
+                if (!ln) return;
+                const fp = dayBlocLineCredentialFinger(ln, lid);
+                if (fp) tokens.add('fp:' + fp);
+                const parts = parseAdminLicenseLineToSplitParts(ln);
+                const cred = String(parts.cred || '').trim().toLowerCase();
+                if (!cred) return;
+                tokens.add('cred:' + cred);
+                const firstWord = cred.split(/\s+/)[0];
+                if (firstWord) tokens.add('w:' + firstWord);
+            });
+    });
+    return tokens;
+}
+
+function accountMatchesSideBlocTokens(acc, licenseId) {
+    const tokens = collectSideBlocMatchTokens(licenseId);
+    if (!tokens.size || !acc) return false;
+    const fp = accountCredentialFingerFromRecord(acc, licenseId);
+    if (fp && tokens.has('fp:' + fp)) return true;
+    const pwd = String(acc.password != null ? acc.password : '').replace(/\r?\n/g, ' ').trim();
+    const ident = String(acc.account_identifier != null ? acc.account_identifier : '').trim();
+    const em = normalizeAccountEmailKey(acc.email);
+    const variants = [];
+    if (em) variants.push((em + ' ' + pwd).trim().toLowerCase());
+    if (ident) variants.push((ident + ' ' + pwd).trim().toLowerCase());
+    if (pwd) variants.push(pwd.toLowerCase());
+    for (let i = 0; i < variants.length; i++) {
+        const v = variants[i];
+        if (tokens.has('cred:' + v)) return true;
+        const w = v.split(/\s+/)[0];
+        if (w && tokens.has('w:' + w)) return true;
+    }
+    return false;
 }
 
 /** Huella de credencial de una cuenta vendida (sin depender del usuario en la línea). */
@@ -6693,15 +6745,45 @@ function filterDayAccountsExcludedFromSideBlocs(dayAccounts, licenseId) {
             if (!lid) return true;
             const fp = accountCredentialFingerFromRecord(acc, lid);
             const side = credentialFingerprintsInLicenseSideBlocs(lid);
-            return !fp || !side.has(fp);
+            if (fp && side.has(fp)) return false;
+            return !accountMatchesSideBlocTokens(acc, lid);
         });
     }
     const side = credentialFingerprintsInLicenseSideBlocs(licenseId);
-    if (!side.size) return dayAccounts.slice();
     return dayAccounts.filter(function (acc) {
         const fp = accountCredentialFingerFromRecord(acc, licenseId);
-        return !fp || !side.has(fp);
+        if (fp && side.has(fp)) return false;
+        return !accountMatchesSideBlocTokens(acc, licenseId);
     });
+}
+
+function filterDayTextLinesExcludedFromSideBlocs(text, licenseIdOpt) {
+    const lid = typeof licenseIdOpt === 'number' ? licenseIdOpt : NaN;
+    if (!Number.isFinite(lid) || lid <= 0 || lid === AGGREGATE_LICENSE_ID) {
+        return text != null ? String(text) : '';
+    }
+    const side = credentialFingerprintsInLicenseSideBlocs(lid);
+    const tokens = collectSideBlocMatchTokens(lid);
+    if (!side.size && !tokens.size) {
+        return text != null ? String(text) : '';
+    }
+    const kept = [];
+    String(text || '')
+        .replace(/\r\n/g, '\n')
+        .split('\n')
+        .forEach(function (ln) {
+            ln = String(ln || '').trim();
+            if (!ln) return;
+            const fp = dayBlocLineCredentialFinger(ln, lid);
+            if (fp && side.has(fp)) return;
+            const parts = parseAdminLicenseLineToSplitParts(ln);
+            const cred = String(parts.cred || '').trim().toLowerCase();
+            if (cred && tokens.has('cred:' + cred)) return;
+            const w = cred.split(/\s+/)[0];
+            if (w && tokens.has('w:' + w)) return;
+            kept.push(ln);
+        });
+    return kept.join('\n');
 }
 
 function buildDayNotepadTextFromAccounts(dayAccounts, licenseIdOpt) {
@@ -6786,6 +6868,14 @@ function mergeDayBlocWithDerivedAccounts(saved, built, licenseIdOpt) {
             const currentSaved = seenCount.get(k) || 0;
             // Si hay más cuentas derivadas que las guardadas en el bloc, añadimos la diferencia.
             if (currentBuilt > currentSaved) {
+                const parsedB = parseAdminLicenseLineToSplitParts(ln);
+                const builtUser = String(parsedB.user || '').trim().toLowerCase();
+                if (
+                    (builtUser === 'anonimo' || builtUser === 'anónimo') &&
+                    (seenCount.get(k) || 0) > 0
+                ) {
+                    return;
+                }
                 out.push(ln);
             }
         } else {
@@ -6920,19 +7010,25 @@ function getDayNotepadDisplayText(licenseId, day, dayAccounts, aggregateVisibleI
         const visibleIds = aggregateVisibleIdsOpt || getAggregateVisibleLicenseIdSet();
         const combinedSaved = getDayNotepadSavedFromAllLicenses(day, visibleIds);
         const merged = mergeDayBlocWithDerivedAccounts(combinedSaved, built, null);
-        return enrichAggregateMergedWithLicenseNotes(merged, filteredAccounts, visibleIds);
+        return filterDayTextLinesExcludedFromSideBlocs(
+            enrichAggregateMergedWithLicenseNotes(merged, filteredAccounts, visibleIds),
+            licenseId
+        );
     }
     const lic = licenses.find(l => l.id === licenseId);
     if (!lic || !lic.day_notepads) {
-        return built;
+        return filterDayTextLinesExcludedFromSideBlocs(built, licenseId);
     }
     const key = String(day);
     if (Object.prototype.hasOwnProperty.call(lic.day_notepads, key)) {
         const raw = lic.day_notepads[key];
         const saved = raw != null ? String(raw) : '';
-        return mergeDayBlocWithDerivedAccounts(saved, built, licenseId);
+        return filterDayTextLinesExcludedFromSideBlocs(
+            mergeDayBlocWithDerivedAccounts(saved, built, licenseId),
+            licenseId
+        );
     }
-    return built;
+    return filterDayTextLinesExcludedFromSideBlocs(built, licenseId);
 }
 
 /** Estados «verdes» en Licencias y Días (columna propia). «Buena y revisada» (ok) no se ofrece aquí: flujo vía Cambios / revisión en caídas. */

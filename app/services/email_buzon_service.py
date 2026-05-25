@@ -363,6 +363,58 @@ def paginate_recent_emails(page=1, per_page=BUZON_LIST_PER_PAGE_DEFAULT):
     ).order_by(ReceivedEmail.received_at.desc())
     return q.paginate(page=page, per_page=per_page, error_out=False)
 
+
+def _buzon_search_text_condition(query: str):
+    """Coincidencia parcial en remitente, destinatario, destino original y asunto."""
+    from sqlalchemy import or_
+
+    term = (query or "").strip()
+    if not term:
+        return None
+    pattern = f"%{term}%"
+    return or_(
+        ReceivedEmail.from_email.ilike(pattern),
+        ReceivedEmail.to_email.ilike(pattern),
+        ReceivedEmail.original_to_email.ilike(pattern),
+        ReceivedEmail.subject.ilike(pattern),
+    )
+
+
+def search_received_emails(query, view="inbox", tag_id=None, limit=200):
+    """
+    Busca correos por remitente, destinatario (to / original_to) y asunto.
+    En Recibidos incluye también mensajes con etiquetas (no solo la bandeja sin tag).
+    """
+    cond = _buzon_search_text_condition(query)
+    if cond is None:
+        return []
+
+    q = ReceivedEmail.query.filter(cond)
+    view_key = (view or "inbox").strip().lower()
+
+    if view_key == "trash":
+        q = q.filter(ReceivedEmail.deleted.is_(True))
+    elif view_key == "tag" and tag_id:
+        q = q.join(ReceivedEmail.tags).filter(EmailTag.id == int(tag_id))
+        q = q.filter(ReceivedEmail.deleted.is_(False))
+    elif view_key == "spam":
+        spam_tag = EmailTag.query.filter_by(name="spam").first()
+        if spam_tag:
+            q = q.join(ReceivedEmail.tags).filter(EmailTag.id == spam_tag.id)
+        else:
+            return []
+        q = q.filter(ReceivedEmail.deleted.is_(False))
+    else:
+        q = q.filter(ReceivedEmail.deleted.is_(False))
+
+    try:
+        lim = int(limit)
+    except (TypeError, ValueError):
+        lim = 200
+    lim = max(1, min(lim, 500))
+
+    return q.order_by(ReceivedEmail.received_at.desc()).limit(lim).all()
+
 def mark_email_processed(email_id):
     """Marca un email como procesado (alias para compatibilidad)"""
     return mark_email_as_processed(email_id)

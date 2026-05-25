@@ -58,7 +58,7 @@
     var list = document.getElementById('balanceRechargeList');
     if (!list) return;
     if (!items || !items.length) {
-      list.innerHTML = '<p class="balance-recharge-empty">Aún no has enviado solicitudes de recarga.</p>';
+      list.innerHTML = '<p class="balance-recharge-empty text-muted">No hay solicitudes cargadas.</p>';
       return;
     }
     var html = items.map(function (it) {
@@ -103,20 +103,118 @@
   }
 
   function loadList(meta) {
+    meta = meta || {};
     var list = document.getElementById('balanceRechargeList');
-    if (!list || !meta.listUrl) return;
-    fetch(meta.listUrl, { credentials: 'same-origin', headers: { Accept: 'application/json' } })
-      .then(function (r) { return r.json(); })
+    if (!list) return;
+    var listUrl = meta.listUrl || list.getAttribute('data-list-url') || '';
+    if (!listUrl) {
+      renderList([], meta);
+      return;
+    }
+    fetch(listUrl, { credentials: 'same-origin', headers: { Accept: 'application/json' } })
+      .then(function (r) {
+        return r.json();
+      })
       .then(function (data) {
         if (!data || !data.success) {
-          list.innerHTML = '<p class="balance-recharge-empty text-danger">No se pudo cargar el historial.</p>';
+          list.innerHTML =
+            '<p class="balance-recharge-empty text-muted">No hay solicitudes cargadas.</p>';
           return;
         }
         renderList(data.items || [], meta);
       })
       .catch(function () {
-        list.innerHTML = '<p class="balance-recharge-empty text-danger">Error de conexión.</p>';
+        list.innerHTML = '<p class="balance-recharge-empty text-muted">No hay solicitudes cargadas.</p>';
       });
+  }
+
+  function renderPaymentMethods(methods) {
+    var list = document.getElementById('balanceRechargeMethodsList');
+    var submitBtn = document.getElementById('balanceRechargeSubmit');
+    if (!list) return;
+    if (!methods || !methods.length) {
+      list.innerHTML =
+        '<p class="balance-recharge-hint text-danger">No tienes medios de pago habilitados. Contacta al administrador.</p>';
+      if (submitBtn) submitBtn.disabled = true;
+      updateSelectedMethodQr();
+      return;
+    }
+    list.innerHTML = methods
+      .map(function (m, idx) {
+        var qrAttr = m.qr_url ? ' data-qr-url="' + escapeHtml(m.qr_url) + '"' : '';
+        var checked = idx === 0 ? ' checked' : '';
+        var details = m.details
+          ? '<span class="balance-recharge-method-details">' + escapeHtml(m.details) + '</span>'
+          : '';
+        return (
+          '<label class="balance-recharge-method-option"' +
+          qrAttr +
+          '>' +
+          '<input type="radio" name="payment_method_id" value="' +
+          escapeHtml(m.id || '') +
+          '"' +
+          checked +
+          ' required>' +
+          '<span class="balance-recharge-method-label">' +
+          escapeHtml(m.label || 'Medio') +
+          '</span>' +
+          details +
+          '</label>'
+        );
+      })
+      .join('');
+    if (submitBtn) submitBtn.disabled = false;
+    updateSelectedMethodQr();
+  }
+
+  function loadPaymentMethods(meta) {
+    var list = document.getElementById('balanceRechargeMethodsList');
+    if (!list || !meta.methodsUrl) return Promise.resolve();
+    return fetch(meta.methodsUrl, { credentials: 'same-origin', headers: { Accept: 'application/json' } })
+      .then(function (r) {
+        return r.json();
+      })
+      .then(function (data) {
+        if (!data || !data.success) {
+          list.innerHTML =
+            '<p class="balance-recharge-hint text-danger">No se pudieron cargar los medios de pago.</p>';
+          return;
+        }
+        renderPaymentMethods(data.methods || []);
+      })
+      .catch(function () {
+        if (!list.querySelector('.balance-recharge-method-option')) {
+          list.innerHTML =
+            '<p class="balance-recharge-hint text-danger">Error al cargar medios de pago.</p>';
+        }
+      });
+  }
+
+  function updateSelectedMethodQr() {
+    var wrap = document.getElementById('balanceRechargeMethodQr');
+    var img = document.getElementById('balanceRechargeMethodQrImg');
+    var checked = document.querySelector('input[name="payment_method_id"]:checked');
+    if (!wrap || !img) return;
+    var label = checked && checked.closest('.balance-recharge-method-option');
+    var qrUrl = label ? label.getAttribute('data-qr-url') : '';
+    if (qrUrl) {
+      img.src = qrUrl;
+      wrap.hidden = false;
+    } else {
+      img.removeAttribute('src');
+      wrap.hidden = true;
+    }
+  }
+
+  function bindPaymentMethodQr() {
+    var list = document.getElementById('balanceRechargeMethodsList');
+    if (!list) return;
+    list.addEventListener('change', function (e) {
+      if (e.target && e.target.name === 'payment_method_id') {
+        updateSelectedMethodQr();
+      }
+    });
+    updateSelectedMethodQr();
   }
 
   function bindForm(meta) {
@@ -184,7 +282,9 @@
 
   document.addEventListener('DOMContentLoaded', function () {
     var meta = readMeta();
+    bindPaymentMethodQr();
     bindForm(meta);
+    loadPaymentMethods(meta);
     loadList(meta);
   });
 })();
