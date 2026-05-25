@@ -1,0 +1,4 @@
+{% set _menu_user = current_user if current_user is defined and current_user else (current_user_obj if current_user_obj is defined else none) %}
+{% if _menu_user and _menu_user.has_public_tools_access() %}
+<a href="{{ url_for('store_bp.tools_public') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-tools"></i> Herramientas</a>
+{% endif %}

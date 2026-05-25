@@ -1,10 +1,12 @@
 {% extends "admin_dashboard.html" %}
 
+{% block head %}
+  {{ super() }}
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/email_buzon.css') }}?v=20260526-email-filters">
+  {# store.css ya en admin_dashboard; email_buzon.css aporta estilos compartidos con el buzón #}
+{% endblock %}
+
 {% block content %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/email_buzon.css') }}">
-<link rel="stylesheet" href="{{ url_for('static', filename='css/store.css') }}">
-
-
 <!-- Interfaz principal de filtros -->
 <main class="email-interface" role="main">
   
@@ -27,9 +29,14 @@
     <div class="filters-list-section">
       <div class="filters-header">
         <h4>Filtros</h4>
-        <button class="btn btn-green" id="createFilterBtn" data-action="create-filter" aria-label="Crear nuevo filtro">
-          <i class="fas fa-plus" aria-hidden="true"></i> Nuevo Filtro
-        </button>
+        <div class="filters-header-actions">
+          <button type="button" class="btn btn-secondary" id="purgeOrphanFiltersBtn" aria-label="Eliminar filtros sin etiqueta válida">
+            <i class="fas fa-broom" aria-hidden="true"></i> Limpiar huérfanos
+          </button>
+          <button class="btn btn-green" id="createFilterBtn" data-action="create-filter" aria-label="Crear nuevo filtro">
+            <i class="fas fa-plus" aria-hidden="true"></i> Nuevo Filtro
+          </button>
+        </div>
       </div>
 
       <!-- Campo mostrar y buscar en la misma línea -->
@@ -431,7 +438,11 @@
   </div>
 </div>
 
-<script src="{{ url_for('static', filename='js/email_filters.js') }}"></script>
-<script src="{{ url_for('static', filename='js/menu_busqueda.js') }}"></script>
-<script src="{{ url_for('static', filename='js/clear_trigger_logs.js') }}"></script>
+i{% endblock %}
+
+{% block scripts %}
+  {{ super() }}
+  <script src="{{ url_for('static', filename='js/email_filters.js') }}" defer></script>
+  <script src="{{ url_for('static', filename='js/menu_busqueda.js') }}" defer></script>
+  <script src="{{ url_for('static', filename='js/clear_trigger_logs.js') }}" defer></script>
 {% endblock %}

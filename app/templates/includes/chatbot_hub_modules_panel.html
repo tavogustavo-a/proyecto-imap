@@ -1,0 +1,46 @@
+<section class="chatbot-rp-hub" aria-labelledby="chatbotRpHubTitle">
+  <h2 id="chatbotRpHubTitle" class="chatbot-rp-section-title">Centro de integraciones</h2>
+  <p class="chatbot-rp-hub-intro">Aquí se concentran las herramientas que alimentan al asistente. Añade conocimiento, enlaza módulos y consulta el chat en la pestaña «Asistente».</p>
+  <div class="chatbot-rp-hub-grid">
+    <a href="#chatbotRpKnowledgeBlock" class="chatbot-rp-hub-card chatbot-rp-hub-card--active">
+      <i class="fas fa-book" aria-hidden="true"></i>
+      <span class="chatbot-rp-hub-card-title">Base de conocimiento</span>
+      <span class="chatbot-rp-hub-card-desc">Notas, NotebookLM y guías para el bot</span>
+    </a>
+    <a href="{{ url_for('store_bp.store_front') }}" class="chatbot-rp-hub-card">
+      <i class="fas fa-store" aria-hidden="true"></i>
+      <span class="chatbot-rp-hub-card-title">Tienda</span>
+      <span class="chatbot-rp-hub-card-desc">Productos, carrito y saldo</span>
+    </a>
+    <a href="{{ url_for('store_bp.admin_store') }}" class="chatbot-rp-hub-card">
+      <i class="fas fa-link" aria-hidden="true"></i>
+      <span class="chatbot-rp-hub-card-title">Licencias</span>
+      <span class="chatbot-rp-hub-card-desc">Cuentas, renovaciones y entregas</span>
+    </a>
+    <a href="{{ url_for('main_bp.home') }}" class="chatbot-rp-hub-card">
+      <i class="fas fa-code" aria-hidden="true"></i>
+      <span class="chatbot-rp-hub-card-title">Códigos</span>
+      <span class="chatbot-rp-hub-card-desc">Consulta IMAP y alias</span>
+    </a>
+    <a href="{{ url_for('store_bp.recargas_saldo') }}" class="chatbot-rp-hub-card">
+      <i class="fas fa-wallet" aria-hidden="true"></i>
+      <span class="chatbot-rp-hub-card-title">Recargas de saldo</span>
+      <span class="chatbot-rp-hub-card-desc">Comprobantes y prepago</span>
+    </a>
+    <a href="{{ url_for('store_bp.admin_support') }}" class="chatbot-rp-hub-card">
+      <i class="fas fa-headset" aria-hidden="true"></i>
+      <span class="chatbot-rp-hub-card-title">Chat soporte</span>
+      <span class="chatbot-rp-hub-card-desc">Atención a usuarios</span>
+    </a>
+    <a href="{{ url_for('store_bp.admin_configurations') }}" class="chatbot-rp-hub-card">
+      <i class="fas fa-cog" aria-hidden="true"></i>
+      <span class="chatbot-rp-hub-card-title">Configuraciones</span>
+      <span class="chatbot-rp-hub-card-desc">Ajustes de la tienda</span>
+    </a>
+    <span class="chatbot-rp-hub-card chatbot-rp-hub-card--soon" title="Próximamente">
+      <i class="fas fa-plus-circle" aria-hidden="true"></i>
+      <span class="chatbot-rp-hub-card-title">Más módulos</span>
+      <span class="chatbot-rp-hub-card-desc">Nuevas integraciones se añadirán aquí</span>
+    </span>
+  </div>
+</section>

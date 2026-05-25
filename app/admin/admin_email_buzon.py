@@ -740,6 +740,17 @@ def manage_filters():
     """Página principal de gestión de filtros automáticos"""
     try:
         print("🔍 DEBUG: Accediendo a manage_filters - VERSIÓN CORREGIDA")
+
+        try:
+            from app.services.email_filter_service import purge_orphan_email_filters
+            removed = purge_orphan_email_filters()
+            if removed:
+                flash(
+                    f'Se eliminaron automáticamente {removed} filtro(s) sin etiqueta válida.',
+                    'info',
+                )
+        except Exception as purge_err:
+            print(f"⚠️ Purga automática de filtros huérfanos: {purge_err}")
         
         # Obtener filtros usando SQLAlchemy
         try:
@@ -1021,6 +1032,22 @@ def update_filter_route(filter_id):
         flash(f'Error al actualizar filtro: {str(e)}', 'error')
     
     return redirect(url_for('admin_email_buzon.manage_filters'))
+
+@admin_email_buzon_bp.route('/email-buzon/purge-orphan-filters', methods=['POST'])
+@admin_required
+def purge_orphan_filters_route():
+    """Elimina filtros sin etiqueta válida (manual)."""
+    try:
+        from app.services.email_filter_service import purge_orphan_email_filters
+        removed = purge_orphan_email_filters()
+        if removed:
+            msg = f'Se eliminaron {removed} filtro(s) huérfano(s).'
+        else:
+            msg = 'No había filtros huérfanos que eliminar.'
+        return jsonify({'success': True, 'deleted': removed, 'message': msg})
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
 
 @admin_email_buzon_bp.route('/email-buzon/delete-filter/<int:filter_id>', methods=['POST'])
 @admin_required

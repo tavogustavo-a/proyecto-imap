@@ -543,4 +543,10 @@ def run_scheduled_email_cleanups_for_colombia_clock():
             n = _delete_received_emails_bulk(emails)
             total += n
 
+    try:
+        from app.services.email_filter_service import purge_orphan_email_filters
+        purge_orphan_email_filters()
+    except Exception as e:
+        print(f"⚠️ No se pudieron purgar filtros huérfanos: {e}")
+
     return total

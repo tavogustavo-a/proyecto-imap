@@ -2,7 +2,7 @@
 
 {% block title %}Tienda Pública{% endblock %}
 
-{% block head %}{{ super() }}<link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}"><link rel="stylesheet" href="{{ url_for('static', filename='fontawesome/css/all.css') }}"><link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/chat_soporte.css') }}"><meta name="csrf_token" content="{{ csrf_token() }}">{% endblock %}
+{% block head %}{{ super() }}<link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}?v=20260520-buena-revisada"><link rel="stylesheet" href="{{ url_for('static', filename='fontawesome/css/all.css') }}"><link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/chat_soporte.css') }}"><meta name="csrf_token" content="{{ csrf_token() }}">{% endblock %}
 {% block content %}
 <div class="container container-max-width-900 store-light store-front-main">
   {% set blocked_users = ['soporte','soporte1','soporte2','soporte3'] %}
@@ -29,20 +29,7 @@
       <div class="menu-user-info-row menu-user-info-row--name-only menu-sidebar-heading-name">
         <span class="menu-user-name">{{ session.get('username', 'Admin') }}</span>
       </div>
-      <a href="{{ url_for('admin_bp.dashboard') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-cogs"></i> Administración</a>
-      <a href="{{ url_for('admin_bp.parrafos_page') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-paragraph"></i> Párrafos</a>
-      <a href="{{ url_for('admin_bp.filters_page') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-filter"></i> Filtros</a>
-      <a href="{{ url_for('admin_bp.regex_page') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-random"></i> Regex</a>
-      <a href="{{ url_for('admin_bp.services_page') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-cogs"></i> Servicios</a>
-      <a href="{{ url_for('admin_bp.usuarios_page') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-users"></i> Usuarios</a>
-      <a href="{{ url_for('admin_bp.security_rules_page') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-shield-alt"></i> Reglas de Seguridad</a>
-      <a href="{{ url_for('admin_bp.view_trigger_logs_page') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-clipboard-list"></i> Consultar logs</a>
-      <a href="{{ url_for('store_bp.admin_sms') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-sms"></i> Consulta SMS</a>
-      <a href="{{ url_for('admin_bp.manage_permissions_page') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-key"></i> Gestión de Permisos</a>
-      <a href="{{ url_for('store_bp.admin_work_sheets') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-table"></i> Hojas de Cálculo</a>
-      <a href="{{ url_for('store_bp.html_tools') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-code"></i> HTML</a>
-      <a href="{{ url_for('store_bp.admin_support') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-headset"></i> Chat Soporte</a>
-      <a href="{{ url_for('store_bp.admin_backup') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-database"></i> Backup</a>
+      {% include 'includes/admin_menu_primary_links.html' %}
       <button id="btnClearTriggerLogMenu" type="button" class="btn-panel btn-red mobile-menu-btn mb-04"><i class="fas fa-trash"></i> Limpiar Logs</button>
       <a href="{{ url_for('auth_bp.logout') }}" class="btn-panel btn-red mobile-menu-btn mb-04"><i class="fas fa-sign-out-alt"></i> Cerrar Sesión</a>
       <button id="btnLogoutAllAndClearCookies" type="button" class="btn-panel btn-red mobile-menu-btn mb-04" data-url="{{ url_for('admin_bp.logout_all_and_clear_cookies') }}"><i class="fas fa-cookie-bite"></i> Cerrar sesión y limpiar cookies</button>
@@ -82,6 +69,8 @@
           <a href="{{ url_for('store_bp.store_front') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-store"></i> Tienda</a>
           <a href="{{ url_for('store_bp.user_licencias') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-link"></i> Licencias</a>
           <a href="{{ url_for('store_bp.historial_compras_usuario') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-receipt"></i> Mi Historial de Compras</a>
+          {% include 'includes/store_user_menu_recargas_link.html' %}
+          {% include 'includes/store_user_menu_chatbot_link.html' %}
         {% endif %}
       {% endif %}
       {% if user_object and user_object.has_public_tools_access() %}
@@ -124,15 +113,8 @@
       <div class="menu-user-info-row menu-user-info-row--name-only menu-sidebar-heading-name">
         <span class="menu-user-name">Menú</span>
       </div>
-      <a href="{{ url_for('store_bp.admin_store') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-store"></i> Licencias</a>
-      <a href="{{ url_for('store_bp.admin_productos') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-box"></i> Productos</a>
-      <a href="{{ url_for('store_bp.admin_productos') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-ticket-alt"></i> Cupones</a>
-      <a href="{{ url_for('store_bp.admin_tools') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-tools"></i> Herramientas Admin</a>
-      <a href="{{ url_for('store_bp.admin_configurations') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-cog"></i> Configuraciones</a>
-      <a href="{{ url_for('store_bp.store_front') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-store"></i> Tienda Pública</a>
-      <a href="{{ url_for('store_bp.tools_public') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-tools"></i> Herramientas Pública</a>
-      <a href="{{ url_for('store_bp.historial_compras_usuario') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-receipt"></i> Mi Historial de Compras</a>
-      <a href="{{ url_for('main_bp.home') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-code"></i> Códigos</a>
+      {% include 'includes/admin_menu_secondary_links.html' %}
+      {% include 'includes/admin_menu_licencias_extra_links.html' %}
     </div>
     {% endif %}
     <div id="menuOverlay" class="menu-overlay"></div>
@@ -141,7 +123,7 @@
   <!-- Form de búsqueda -->
   <div class="search-form-container">
     <form id="ajax-search-form" class="mb-05" name="storeSearchForm">
-      <div class="d-flex gap-05">
+      <div class="d-flex gap-05 store-search-actions">
         <label for="searchStoreInput" class="sr-only">Buscar producto</label>
         <input
           type="search"
@@ -152,7 +134,12 @@
           required
           autocomplete="off"
         >
-        <button type="button" class="btn-search" id="clearStoreSearch">Limpiar</button>
+        {% if current_user and not current_user.parent_id %}
+        <button type="button" class="btn-renovacion-tienda" id="btnStoreRenovacion" title="Buscar cuentas en licencias para venta y renovar">
+          <i class="fas fa-sync-alt" aria-hidden="true"></i>
+          <span>Renovación</span>
+        </button>
+        {% endif %}
       </div>
     </form>
   </div>
@@ -205,8 +192,10 @@
           </div>
         {% endif %}
         {% if current_user %}
+          {% set ps = product_stock_initial|default({}) %}
+          {% set _sock = ps.get(p.id, 0) %}
           <div class="d-flex align-items-center justify-content-center mt-02">
-            <span class="product-stock-info" data-product-id="{{ p.id }}">Cargando existencias...</span>
+            <span class="product-stock-info" data-product-id="{{ p.id }}" data-initial-stock="{{ _sock }}">{{ _sock }} existencias</span>
           </div>
         {% endif %}
         <!-- Fin campo de cantidad y botones + y - integrados -->
@@ -257,13 +246,11 @@
       <div class="resumen-saldo-cupon-section">
         <div class="saldo-info">
           <span class="saldo-label">Saldo disponible:</span>
-          <div class="saldo-amounts">
-            {% if saldo_cop %}
-              <span class="saldo-cop">${{ saldo_cop|int }} COP</span>
-            {% endif %}
-            {% if saldo_usd %}
-              {% if saldo_cop %}<span class="saldo-separator">|</span>{% endif %}
-              <span class="saldo-usd">${{ saldo_usd|int }} USD</span>
+          <div class="saldo-amounts" id="resumenSaldoAmounts">
+            {% if tipo_precio_store == 'cop' %}
+              <span class="saldo-cop">${{ saldo_cop|default(0)|int }} COP</span>
+            {% else %}
+              <span class="saldo-usd">${{ saldo_usd|default(0)|int }} USD</span>
             {% endif %}
           </div>
         </div>
@@ -319,6 +306,58 @@
   {% endfor %}
 {% endif %}
 
+<!-- Modal pago exitoso + credenciales -->
+<div id="pagoExitoModal" class="desc-modal modal-hidden" role="dialog" aria-labelledby="pagoExitoTitulo">
+  <div class="desc-modal-content pago-exito-modal-panel">
+    <button type="button" id="closePagoExitoModalBtn" class="btn-close-desc-modal" aria-label="Cerrar">&times;</button>
+    <h3 id="pagoExitoTitulo" class="pago-exito-title">Pago exitoso</h3>
+    <p class="pago-exito-intro" id="pagoExitoIntro"></p>
+    <div id="pagoExitoCredList" class="pago-exito-cred-list"></div>
+    <div class="pago-exito-actions">
+      <button type="button" id="btnPagoExitoCopiarTodo" class="btn-pago-exito-copy"><i class="fas fa-copy"></i> Copiar</button>
+    </div>
+    <textarea id="pagoExitoClipboardBuffer" class="pago-exito-buffer" tabindex="-1" aria-hidden="true"></textarea>
+  </div>
+</div>
+
+<!-- Modal renovación (cuentas en licencias para venta) -->
+<div id="renovacionModal" class="desc-modal renovacion-modal modal-hidden" role="dialog" aria-labelledby="renovacionModalTitle" aria-modal="true" data-buscar-url="{{ url_for('store_bp.api_store_renovacion_buscar') }}" data-reservar-url="{{ url_for('store_bp.api_store_renovacion_reservar') }}" data-liberar-url="{{ url_for('store_bp.api_store_renovacion_liberar') }}">
+  <div class="desc-modal-content renovacion-modal-panel">
+    <button type="button" id="closeRenovacionModalBtn" class="btn-close-desc-modal" aria-label="Cerrar">&times;</button>
+    <div class="renovacion-modal-title-row">
+    <h3 id="renovacionModalTitle" class="renovacion-modal-title">
+      <i class="fas fa-sync-alt" aria-hidden="true"></i>
+      <span class="renovacion-modal-title-text">Renovación de cuentas</span>
+    </h3>
+    <span class="renovacion-title-info-wrap">
+      <button type="button" class="renovacion-info-btn" id="btnRenovacionInfo" aria-label="Información sobre reserva de cuentas" aria-expanded="false" aria-controls="renovacionInfoTip">
+        <i class="fas fa-info-circle" aria-hidden="true"></i>
+      </button>
+    </span>
+    </div>
+    <div id="renovacionInfoTip" class="renovacion-info-tip hidden" role="tooltip">
+      Al agregar al carrito la cuenta queda reservada 5&nbsp;minutos para otros compradores. Pasado ese tiempo, si no se vendió, puedes seguir renovándola desde tu carrito; si otro la reserva o compra antes, se quitará al pagar.
+    </div>
+    <p class="renovacion-modal-hint">Escribe solo correos válidos (con @ y dominio con punto).</p>
+    <form id="renovacionSearchForm" class="renovacion-modal-search-row" role="search" autocomplete="off">
+      <label for="renovacionCuentasInput" class="sr-only">Correos a renovar</label>
+      <textarea id="renovacionCuentasInput" name="renovacionCuentasInput" rows="2" class="renovacion-cuentas-input flex-grow-1 resize-vertical" placeholder="Ingresa uno o varios correos (separados por comas, espacios o saltos de línea)." autocomplete="off"></textarea>
+      <button type="button" id="btnRenovacionBuscar" class="btn-search">Buscar</button>
+    </form>
+    <div class="renovacion-modal-scroll">
+    <div id="renovacionRenewableWrap" class="renovacion-results-wrap hidden">
+      <h4 class="renovacion-results-heading">Disponibles para renovar</h4>
+      <ul id="renovacionRenewableList" class="renovacion-results-list"></ul>
+    </div>
+    <div id="renovacionRejectedWrap" class="renovacion-results-wrap renovacion-rejected-wrap hidden">
+      <p class="renovacion-rejected-intro">No disponibles para renovación:</p>
+      <ul id="renovacionRejectedList" class="renovacion-results-list renovacion-results-list--rejected"></ul>
+    </div>
+    <p id="renovacionModalMsg" class="renovacion-modal-msg" aria-live="polite"></p>
+    </div>
+  </div>
+</div>
+
 <!-- Modal de descripción -->
 <div id="descModal" class="desc-modal modal-hidden">
   <div class="desc-modal-content">
@@ -339,14 +378,15 @@
   </div>
 </div>
 <!-- Fin Sidebar de Carrito -->
-<div id="userSaldoData" class="user-saldo-data-hidden" data-saldo-usd="{{ saldo_usd|default(0)|int }}" data-saldo-cop="{{ saldo_cop|default(0)|int }}"></div>
+<div id="userSaldoData" class="user-saldo-data-hidden" data-tipo-precio="{{ tipo_precio_store|default('usd') }}" data-tipo-precio-revision="{{ tipo_precio_revision|default(0)|int }}" data-saldo-usd="{{ saldo_usd|default(0)|int }}" data-saldo-cop="{{ saldo_cop|default(0)|int }}" data-puede-tener-deuda="{% if puede_tener_deuda|default(false) %}1{% else %}0{% endif %}" data-limite-deuda-usd="{% if limite_deuda_usd is not none %}{{ limite_deuda_usd|int }}{% endif %}" data-limite-deuda-cop="{% if limite_deuda_cop is not none %}{{ limite_deuda_cop|int }}{% endif %}"></div>
 
 
 {% endblock %}
 
 {% block scripts %}
 <meta name="clear_trigger_log_url" content="{{ url_for('admin_bp.clear_trigger_log') }}">
-<script src="{{ url_for('store_bp.static', filename='js/store_front.js') }}" defer></script>
+<script src="{{ url_for('store_bp.static', filename='js/store_front.js') }}?v=20260524-tipo-carrito" defer></script>
+<script src="{{ url_for('store_bp.static', filename='js/store_renovacion.js') }}?v=20260520-buena-revisada" defer></script>
 <script src="{{ url_for('store_bp.static', filename='js/menu_tienda.js') }}" defer></script>
 <script src="{{ url_for('static', filename='js/admin_imap.js') }}" defer></script>
 <script src="{{ url_for('static', filename='js/clear_trigger_logs.js') }}" defer></script>

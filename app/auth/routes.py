@@ -34,6 +34,12 @@ def check_session_revocation():
     NOTA: La verificación global session_revocation_count ahora se maneja en app/__init__.py
     NOTA: La expiración automática de sesión se maneja mediante PERMANENT_SESSION_LIFETIME (15 días)
     """
+    # Sesiones de la tienda (usuario / subusuario): misma revocación la aplica
+    # user_auth_bp.before_app_request (check_session_revocation_user) con redirect a /usuario/login.
+    # Si también pasamos por aquí, se redirigía a auth_bp.login (/auth/login — panel admin),
+    # rompiendo flujos y cookies en /tienda/ con sesiones antiguas o sin user_session_rev_count_local.
+    if session.get("is_user"):
+        return None
     if "logged_in" in session and "username" in session:
         user_id = session.get("user_id")
         if user_id:

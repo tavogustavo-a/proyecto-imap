@@ -5,28 +5,42 @@
 {% block head %}
   {{ super() }}
   <link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='fontawesome/css/all.css') }}">
   <meta name="csrf_token" content="{{ csrf_token() }}">
 {% endblock %}
-{% block scripts %}
-  {{ super() }}
-  <script src="{{ url_for('store_bp.static', filename='js/admin_gsheets_config.js') }}" defer></script>
-  <script src="{{ url_for('store_bp.static', filename='js/drive_manager.js') }}" defer></script>
-  <script src="{{ url_for('store_bp.static', filename='js/whatsapp_manager.js') }}" defer></script>
-{% endblock %}
 {% block content %}
-<div class="container container-max-width-900 store-light maxw-800 mx-auto br-8">
-  <!-- Primer contenedor blanco: Google Sheets -->
-    <div class="d-flex justify-content-between align-items-center mb-1">
-      <h2 class="m-0">Configuraciones</h2>
-      <button 
-        id="btnVolverPanel" 
-        type="button" 
-        class="btn-blue"
-        data-url="{{ url_for('store_bp.admin_store') }}"
-      >
-        Volver
-      </button>
+
+<div class="container container-max-width-900"
+     data-clear-trigger-log-url="{{ url_for('admin_bp.clear_trigger_log') }}"
+     data-logout-all-cookies-url="{{ url_for('admin_bp.logout_all_and_clear_cookies') }}">
+
+  <div id="mobileMenu" class="mobile-menu-store hidden">
+    <div class="menu-user-info-row menu-user-info-row--name-only menu-sidebar-heading-name">
+      <span class="menu-user-name">{{ session.get('username', 'Admin') }}</span>
     </div>
+    {% include 'includes/admin_menu_primary_links.html' %}
+    <button id="btnClearTriggerLogMenu" type="button" class="btn-panel btn-red mobile-menu-btn mb-04"><i class="fas fa-trash"></i> Limpiar Logs</button>
+    <a href="{{ url_for('auth_bp.logout') }}" class="btn-panel btn-red mobile-menu-btn mb-04"><i class="fas fa-sign-out-alt"></i> Cerrar Sesión</a>
+    <button id="btnLogoutAllAndClearCookies" type="button" class="btn-panel btn-red mobile-menu-btn mb-04" data-url="{{ url_for('admin_bp.logout_all_and_clear_cookies') }}"><i class="fas fa-cookie-bite"></i> Cerrar sesión y limpiar cookies</button>
+  </div>
+
+  <div id="mobileMenu2" class="mobile-menu-store hidden">
+    <div class="menu-user-info-row menu-user-info-row--name-only menu-sidebar-heading-name">
+      <span class="menu-user-name">Menú</span>
+    </div>
+    {% include 'includes/admin_menu_secondary_links.html' %}
+    {% include 'includes/admin_menu_licencias_extra_links.html' %}
+  </div>
+
+  <div id="menuOverlay" class="menu-overlay"></div>
+
+<div class="store-light maxw-800 mx-auto br-8 configuraciones-admin-page">
+  <div class="configuraciones-admin-toolbar d-flex gap-05 mb-1">
+    <button id="menuToggleBtn" type="button" class="btn-panel btn-blue menu-toggle-btn" title="Menú de navegación" aria-label="Abrir menú de navegación">&#9776; Menú</button>
+    <button id="menu2ToggleBtn" type="button" class="btn-panel btn-blue menu-toggle-btn" title="Menú secundario" aria-label="Abrir segundo menú">&#9776; Menú2</button>
+  </div>
+  <h2 class="m-0 mb-1 text-center w-100"><i class="fas fa-cog"></i> Configuraciones</h2>
+  <!-- Primer contenedor blanco: Google Sheets -->
     <h4 class="mb-1">Vinculación de plantillas con Google Sheets</h4>
     <form id="gsheets-config-form" method="post" autocomplete="off">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -65,7 +79,7 @@
   </div>
   
   <!-- Segundo contenedor blanco: Pasar de Drive a Drive -->
-  <div class="container container-max-width-900 store-light maxw-800 mx-auto br-8">
+  <div class="store-light maxw-800 mx-auto br-8 configuraciones-admin-page mt-1">
     <h4 class="mb-1">Pasar de Drive a Drive</h4>
     <form id="drive-transfer-form" method="post" autocomplete="off">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -103,7 +117,7 @@
   </div>
   
   <!-- Tercer contenedor blanco: API WhatsApp -->
-  <div class="container container-max-width-900 store-light maxw-800 mx-auto br-8">
+  <div class="store-light maxw-800 mx-auto br-8 configuraciones-admin-page mt-1">
     <h4 class="mb-1">API WhatsApp</h4>
     <p class="text-muted mb-3">Configuración para envío automático de mensajes de WhatsApp cuando se realicen compras en la tienda pública.</p>
     
@@ -214,6 +228,7 @@
     <!-- Espacio adicional al final de toda la página -->
     <div class="mb-5"></div>
   </div>
+
 </div>
 
 <!-- Modales (fuera de los contenedores) -->
@@ -357,4 +372,14 @@
     </form>
   </div>
 </div>
-{% endblock %} 
+{% endblock %}
+
+{% block scripts %}
+  {{ super() }}
+  <script src="{{ url_for('store_bp.static', filename='js/menu_tienda.js') }}" defer></script>
+  <script src="{{ url_for('static', filename='js/clear_trigger_logs.js') }}" defer></script>
+  <script src="{{ url_for('static', filename='js/logout_all_cookies_btn.js') }}" defer></script>
+  <script src="{{ url_for('store_bp.static', filename='js/admin_gsheets_config.js') }}" defer></script>
+  <script src="{{ url_for('store_bp.static', filename='js/drive_manager.js') }}" defer></script>
+  <script src="{{ url_for('store_bp.static', filename='js/whatsapp_manager.js') }}" defer></script>
+{% endblock %}

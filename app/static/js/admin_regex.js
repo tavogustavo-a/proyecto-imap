@@ -31,12 +31,23 @@ document.addEventListener("DOMContentLoaded", function() {
       });
     }
   
+    function sortRegexesByDescription(regexes) {
+      return [...(regexes || [])].sort((a, b) => {
+        const da = (a.description || "").toLocaleLowerCase("es");
+        const db = (b.description || "").toLocaleLowerCase("es");
+        const cmp = da.localeCompare(db, "es", { numeric: true, sensitivity: "base" });
+        if (cmp !== 0) return cmp;
+        return (a.id || 0) - (b.id || 0);
+      });
+    }
+
     function renderRegexItems(regexes) {
       let html = "";
-      if (!regexes || regexes.length === 0) {
+      const sorted = sortRegexesByDescription(regexes);
+      if (!sorted.length) {
         return "<p>No se encontraron Regex.</p>";
       }
-      regexes.forEach(r => {
+      sorted.forEach(r => {
         html += `
           <div class="regex-item">
             <strong>Remitente:</strong> ${r.sender || "(vacío)"}<br>

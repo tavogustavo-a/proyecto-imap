@@ -1,10 +1,12 @@
 {% extends "admin_dashboard.html" %}
 
-{% block content %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/email_buzon.css') }}?v=20260421">
-<link rel="stylesheet" href="{{ url_for('static', filename='css/store.css') }}">
+{% block head %}
+  {{ super() }}
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/email_buzon.css') }}?v=20260526-head">
+{% endblock %}
 
-<!-- Token CSRF global -->
+{% block content %}
+<!-- Token CSRF global (compat formularios) -->
 <input type="hidden" id="csrf_token" name="_csrf_token" value="{{ csrf_token() }}">
 
 <!-- MENÚ LATERAL MÓVIL -->
@@ -12,19 +14,7 @@
   <div class="menu-user-info-row menu-user-info-row--name-only menu-sidebar-heading-name">
     <span class="menu-user-name">{{ session.get('username', 'Admin') }}</span>
   </div>
-  <a href="{{ url_for('admin_bp.dashboard') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-cogs"></i> Administración</a>
-  <a href="{{ url_for('admin_bp.parrafos_page') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-paragraph"></i> Párrafos</a>
-  <a href="{{ url_for('admin_bp.filters_page') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-filter"></i> Filtros</a>
-  <a href="{{ url_for('admin_bp.regex_page') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-random"></i> Regex</a>
-  <a href="{{ url_for('admin_bp.services_page') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-cogs"></i> Servicios</a>
-  <a href="{{ url_for('admin_bp.usuarios_page') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-users"></i> Usuarios</a>
-  <a href="{{ url_for('admin_bp.security_rules_page') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-shield-alt"></i> Reglas de Seguridad</a>
-  <a href="{{ url_for('admin_bp.view_trigger_logs_page') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-clipboard-list"></i> Consultar logs</a>
-  <a href="{{ url_for('store_bp.admin_sms') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-sms"></i> Consulta SMS</a>
-  <a href="{{ url_for('admin_bp.manage_permissions_page') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-key"></i> Gestión de Permisos</a>
-  <a href="{{ url_for('store_bp.admin_work_sheets') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-table"></i> Hojas de Cálculo</a>
-  <a href="{{ url_for('store_bp.html_tools') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-code"></i> HTML</a>
-  <a href="{{ url_for('store_bp.admin_support') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-headset"></i> Chat Soporte</a>
+  {% include 'includes/admin_menu_primary_links.html' %}
   <button id="btnClearTriggerLogMenu" type="button" class="btn-panel btn-red mobile-menu-btn mb-04"><i class="fas fa-trash"></i> Limpiar Logs</button>
   <a href="{{ url_for('auth_bp.logout') }}" class="btn-panel btn-red mobile-menu-btn mb-04"><i class="fas fa-sign-out-alt"></i> Cerrar Sesión</a>
   <button id="btnLogoutAllAndClearCookies" type="button" class="btn-panel btn-red mobile-menu-btn mb-04" data-url="{{ url_for('admin_bp.logout_all_and_clear_cookies') }}"><i class="fas fa-cookie-bite"></i> Cerrar sesión y limpiar cookies</button>
@@ -35,15 +25,8 @@
   <div class="menu-user-info-row menu-user-info-row--name-only menu-sidebar-heading-name">
     <span class="menu-user-name">Menú</span>
   </div>
-  <a href="{{ url_for('store_bp.admin_store') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-store"></i> Licencias</a>
-  <a href="{{ url_for('store_bp.admin_productos') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-box"></i> Productos</a>
-  <a href="{{ url_for('store_bp.admin_productos') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-ticket-alt"></i> Cupones</a>
-  <a href="{{ url_for('store_bp.admin_tools') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-tools"></i> Herramientas Admin</a>
-  <a href="{{ url_for('store_bp.admin_configurations') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-cog"></i> Configuraciones</a>
-  <a href="{{ url_for('store_bp.store_front') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-store"></i> Tienda Pública</a>
-  <a href="{{ url_for('store_bp.tools_public') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-tools"></i> Herramientas Pública</a>
-  <a href="{{ url_for('store_bp.historial_compras_usuario') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-history"></i> Mi Historial de Compras</a>
-  <a href="{{ url_for('main_bp.home') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-code"></i> Códigos</a>
+  {% include 'includes/admin_menu_secondary_links.html' %}
+  {% include 'includes/admin_menu_licencias_extra_links.html' %}
 </div>
 
 <!-- OVERLAY PARA CERRAR MENÚS -->
@@ -879,8 +862,12 @@
   </div>
 </div>
 
-<script src="{{ url_for('static', filename='js/email_buzon.js') }}?v=20260421-csp-forms"></script>
-<script src="{{ url_for('static', filename='js/menu_busqueda.js') }}"></script>
-<script src="{{ url_for('static', filename='js/clear_trigger_logs.js') }}?v=20241220-original"></script>
-<script src="{{ url_for('static', filename='js/logout_all_cookies_btn.js') }}" defer></script>
+{% endblock %}
+
+{% block scripts %}
+  {{ super() }}
+  <script src="{{ url_for('static', filename='js/email_buzon.js') }}?v=20260421-csp-forms" defer></script>
+  <script src="{{ url_for('static', filename='js/menu_busqueda.js') }}" defer></script>
+  <script src="{{ url_for('static', filename='js/clear_trigger_logs.js') }}?v=20241220-original" defer></script>
+  <script src="{{ url_for('static', filename='js/logout_all_cookies_btn.js') }}" defer></script>
 {% endblock %}

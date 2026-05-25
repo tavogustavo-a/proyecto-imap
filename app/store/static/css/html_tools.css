@@ -3,7 +3,7 @@
 .html-tools-container {
   max-width: 900px;
   margin: 0 auto;
-  padding: 1.5rem;
+  padding: 0.75rem;
   background: #fff;
   border-radius: 10px;
   box-shadow: 0 2px 12px rgba(0,0,0,0.08);
@@ -19,8 +19,7 @@
   min-width: 0;
 }
 
-.html-tools-container h2 {
-  margin-bottom: 1rem;
+.html-tools-container h2.html-tools-title {
   font-size: 1.35rem;
 }
 
@@ -414,6 +413,20 @@
   margin-top: 8px;
 }
 
+/* No superponer Limpiar/Copiar sobre el menú lateral abierto */
+body.store-side-menu-open .html-tools-container .html-output-actions {
+  visibility: hidden;
+  pointer-events: none;
+}
+
+body.store-side-menu-open #menuOverlay.menu-overlay.active {
+  z-index: 10050;
+}
+
+body.store-side-menu-open .mobile-menu-store:not(.hidden) {
+  z-index: 10051;
+}
+
 .btn-copy-html {
   padding: 8px 14px;
   background: #28a745;
@@ -446,13 +459,13 @@
   background: #5a6268;
 }
 
-.html-tools-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 1rem;
-  flex-wrap: wrap;
-  gap: 10px;
+.html-tools-container > .d-flex.gap-05.mb-1 {
+  gap: 0.25rem;
+  margin-top: 0;
+}
+
+.html-tools-title {
+  font-size: 1.35rem;
 }
 
 .html-tools-instructions {

@@ -16,8 +16,16 @@ class Config:
     if FLASK_ENV != "development" and (not ADMIN_USER or not ADMIN_PASS):
         raise RuntimeError("ADMIN_USER y ADMIN_PASS deben estar definidos en producción.")
 
-    DATABASE_PATH = os.path.join(basedir, 'dev.db')
-    DATABASE_URI = os.getenv("DATABASE_URI", "sqlite:///dev.db")
+    # SQLite por defecto en instance/dev.db (copias en instance/backups).
+    # No usar sqlite:///dev.db solo: en el cwd del proyecto suele crear otro archivo vacío
+    # que no coincide con la BD donde persisten usuarios/inventario.
+    DATABASE_PATH = os.path.join(basedir, 'instance', 'dev.db')
+    _db_uri_default = 'sqlite:///' + DATABASE_PATH.replace('\\', '/')
+    _env_db_uri = os.getenv('DATABASE_URI')
+    if _env_db_uri and str(_env_db_uri).strip():
+        DATABASE_URI = str(_env_db_uri).strip()
+    else:
+        DATABASE_URI = _db_uri_default
     SQLALCHEMY_DATABASE_URI = DATABASE_URI
     # Copias automáticas SQLite (instance/backups)
     BACKUPS_DIR = os.path.join(basedir, 'instance', 'backups')
@@ -103,3 +111,7 @@ class Config:
     # Opcional: API key para autenticar requests desde apps Android
     # Si no se configura, el endpoint funcionará sin autenticación (menos seguro)
     ANDROID_SMS_API_KEY = os.getenv("ANDROID_SMS_API_KEY", None)
+
+    # Chatbot respuestas-preguntas (opcional, capa gratuita de Google / Groq)
+    GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", None)
+    GROQ_API_KEY = os.getenv("GROQ_API_KEY", None)

@@ -4,7 +4,7 @@
 
 {% block head %}
   {{ super() }}
-  <link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}?v=212">
+  <link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}?v=20260519-caducidad-notify-red-only">
   <link rel="stylesheet" href="{{ url_for('static', filename='fontawesome/css/all.css') }}">
 {% endblock %}
 
@@ -21,18 +21,20 @@
 {% block content %}
 {% set blocked_users = ['soporte','soporte1','soporte2','soporte3'] %}
 {% if session.get('logged_in') and (not session.get('username') or session.get('username').lower() not in blocked_users) %}
-<div class="container mt-2 store-light worksheet-panel admin-licencias-page user-licencias-shell">
+<div class="container-fluid mt-2 store-light worksheet-panel admin-licencias-page user-licencias-shell" data-licencias-persist-scope="{{ (session.get('username') or '')|e }}">
   <div class="user-licencias-toolbar d-flex flex-wrap align-items-center gap-2 w-100">
     <div class="d-flex gap-05 admin-store-menus flex-shrink-0 align-items-center">
       <button type="button" id="menuToggleBtn" class="btn-blue menu-btn-worksheet user-licencias-toolbar__menu-btn">&#9776; Menú</button>
       {% if soporte_licencias_nav %}
-      <a href="{{ url_for('store_bp.admin_store') }}" class="btn-blue menu-btn-worksheet user-licencias-toolbar-cambios-link text-decoration-none" title="Ir a Cambios mes a mes (Admin Licencias)" aria-label="Cambios en Admin Licencias">
-        <i class="fas fa-exchange-alt" aria-hidden="true"></i> Cambios
+      <a href="{{ url_for('store_bp.admin_store') }}" class="btn-blue menu-btn-worksheet user-licencias-toolbar-cambios-link user-licencias-toolbar-cambios-link--icon-only text-decoration-none" title="Cambios mes a mes (Admin Licencias)" aria-label="Cambios mes a mes en Admin Licencias">
+        <i class="fas fa-exchange-alt" aria-hidden="true"></i>
       </a>
       {% endif %}
-      <a href="{{ url_for('store_bp.user_licencias_actividad_portal') }}" class="btn-blue menu-btn-worksheet user-licencias-toolbar-historial-link text-decoration-none" title="Entregas, reportes o incidencias y renovaciones (portal)" aria-label="Historial de licencias: entregas y actividad en portal">Historial</a>
       <button type="button" id="licensesCollapseBtn" class="btn-blue menu-btn-worksheet licenses-collapse-btn licenses-collapse-btn--toolbar" title="Contraer o expandir licencias" aria-label="Contraer o expandir licencias">
         <i class="fas fa-chevron-up" id="collapseIcon" aria-hidden="true"></i>
+      </button>
+      <button type="button" id="btnUserLicVencimientos" class="btn-blue menu-btn-worksheet user-lic-vencimientos-btn" title="Caducidad: cuentas que vencen en 5 días o menos" aria-label="Caducidad: vence en 5 días o menos" aria-pressed="false">
+        <i class="fas fa-hourglass-half" aria-hidden="true"></i> Caducidad
       </button>
     </div>
   </div>
@@ -71,7 +73,9 @@
       {% if show_store %}
         <a href="{{ url_for('store_bp.store_front') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-store"></i> Tienda</a>
         <a href="{{ url_for('store_bp.user_licencias') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-link"></i> Licencias</a>
-        <a href="{{ url_for('store_bp.historial_compras_usuario') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-receipt"></i> Mi Historial de Compras</a>
+          <a href="{{ url_for('store_bp.historial_compras_usuario') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-receipt"></i> Mi Historial de Compras</a>
+        {% include 'includes/store_user_menu_recargas_link.html' %}
+        {% include 'includes/store_user_menu_chatbot_link.html' %}
       {% endif %}
       {% endif %}
     {% endif %}
@@ -114,12 +118,69 @@
     </div>
   </div>
 
+  <div id="userLicCaducidadNotifyBar" class="user-lic-caducidad-notify-bar w-100 d-none" hidden aria-hidden="true" role="region" aria-label="Avisos de caducidad">
+    <div class="user-lic-caducidad-notify-bar__inner">
+      <div class="user-lic-caducidad-notify-bar__lead-row">
+        <label class="user-lic-caducidad-notify-bar__check" title="Activar avisos de caducidad">
+          <input type="checkbox" id="userLicCaducidadNotifyEnabled" autocomplete="off">
+          <span class="user-lic-caducidad-notify-bar__lead-text">Activa si quieres que te avise sobre cuentas que vencen. Puedes avisar desde 5 días, repetidamente hasta 1 día.</span>
+        </label>
+        <label class="user-lic-caducidad-notify-bar__days" for="userLicCaducidadNotifyFromDays">
+          <select id="userLicCaducidadNotifyFromDays" class="user-lic-caducidad-notify-bar__select" disabled autocomplete="off" aria-label="Días para avisar antes del vencimiento">
+            <option value="5">5 días</option>
+            <option value="4">4 días</option>
+            <option value="3">3 días</option>
+            <option value="2">2 días</option>
+            <option value="1">1 día</option>
+          </select>
+        </label>
+      </div>
+      <p id="userLicCaducidadNotifyHint" class="user-lic-caducidad-notify-bar__hint mb-0" role="status" hidden></p>
+    </div>
+  </div>
+
+  <div id="userLicCaducidadAlertStack" class="user-lic-caducidad-alert-stack" aria-live="polite" aria-label="Alertas de caducidad" hidden></div>
+
   <div id="userLicenciasGridHost" class="licencias-container user-licencias-grid-host mb-3 w-100 d-none" hidden aria-hidden="true">
     <div id="userLicenciasGrid" class="licenses-grid"></div>
   </div>
 
-  <div id="userLicenciasTableOuter" class="user-licencias-view-wrap w-100" data-api-url="{{ url_for('store_bp.api_user_my_license_accounts') }}" data-day-status-url="{{ url_for('store_bp.api_user_license_day_row_status') }}">
+  <div id="userLicenciasTableOuter" class="user-licencias-view-wrap w-100" data-api-url="{{ url_for('store_bp.api_user_my_license_accounts') }}" data-rev-url="{{ url_for('store_bp.api_user_my_license_portal_rev') }}" data-day-status-url="{{ url_for('store_bp.api_user_license_day_row_status') }}" data-warranty-incidents-url="{{ url_for('store_bp.api_user_license_warranty_incidents') }}">
     <p class="text-center user-licencias-empty py-4 mb-0" id="userLicenciasLoadingMsg">Cargando licencias…</p>
+  </div>
+
+  <div id="userLicFullCredModal" class="user-lic-warranty-modal user-lic-full-cred-modal d-none" aria-hidden="true">
+    <div id="userLicFullCredModalBackdrop" class="user-lic-warranty-modal__backdrop"></div>
+    <div id="userLicFullCredModalDialog" class="user-lic-warranty-modal__dialog" role="dialog" aria-modal="true">
+      <div class="user-lic-warranty-modal__header user-lic-full-cred-modal__header-row">
+        <div class="user-lic-full-cred-modal__lead">
+          <p id="userLicFullCredModalProductLine" class="user-lic-full-cred-modal__product mb-0"></p>
+          <p class="user-lic-full-cred-modal__day mb-0">
+            <span id="userLicFullCredModalDayNum"></span><span id="userLicFullCredModalGoodHint" class="user-lic-full-cred-modal__good-hint"></span>
+          </p>
+        </div>
+        <button type="button" id="userLicFullCredModalClose" class="user-lic-warranty-modal__close" aria-label="Cerrar">&times;</button>
+      </div>
+      <div class="user-lic-full-cred-modal__body">
+        <div class="user-lic-full-cred-modal__cred-shell">
+          <pre id="userLicFullCredModalPre" class="user-lic-full-cred-modal__pre mb-0" tabindex="0"></pre>
+          <button type="button" id="userLicFullCredModalCopyBtn" class="user-lic-full-cred-modal__copy-btn" title="Copiar licencia" aria-label="Copiar texto de la licencia al portapapeles">
+            <i class="fas fa-copy" aria-hidden="true"></i>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="userLicWarrantyModal" class="user-lic-warranty-modal d-none" aria-hidden="true">
+    <div id="userLicWarrantyModalBackdrop" class="user-lic-warranty-modal__backdrop"></div>
+    <div class="user-lic-warranty-modal__dialog" role="dialog" aria-modal="true" aria-labelledby="userLicWarrantyModalTitle">
+      <div class="user-lic-warranty-modal__header">
+        <h2 id="userLicWarrantyModalTitle" class="user-lic-warranty-modal__title mb-0">Caídas y garantías</h2>
+        <button type="button" id="userLicWarrantyModalClose" class="user-lic-warranty-modal__close" aria-label="Cerrar">&times;</button>
+      </div>
+      <div id="userLicWarrantyModalBody" class="user-lic-warranty-modal__body"></div>
+    </div>
   </div>
 </div>
 {% endif %}
@@ -128,5 +189,5 @@
 {% block scripts %}
 {{ super() }}
 <script src="{{ url_for('static', filename='js/menu_busqueda.js') }}" defer></script>
-<script src="{{ url_for('store_bp.static', filename='js/user_licencias.js') }}?v=39" defer></script>
+<script src="{{ url_for('store_bp.static', filename='js/user_licencias.js') }}?v=20260519-renewal-saldo-notify" defer></script>
 {% endblock %}

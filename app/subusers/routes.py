@@ -340,9 +340,9 @@ def delete_subuser_ajax():
             return jsonify({"status":"error","message":"No existe o no te pertenece"}),403
 
     try:
-        # Eliminar archivos físicos del chat antes del CASCADE (evita archivos huérfanos)
-        from app.models.chat import ChatMessage
-        ChatMessage.delete_attachment_files_for_user(sub_user.id)
+        from app.services.user_deletion_cleanup import cleanup_disk_assets_for_user_ids
+
+        cleanup_disk_assets_for_user_ids(current_app._get_current_object(), sub_user.id)
         # Eliminar el sub-usuario
         # Nota: RememberDevice se elimina automáticamente por CASCADE (ondelete='CASCADE')
         # CASCADE también eliminará automáticamente:

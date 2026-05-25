@@ -3,30 +3,65 @@
 
 {% block title %}Mis Páginas{% endblock %}
 
+{% block head %}
+  {{ super() }}
+  <link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}?v=20260522-my-pages-menu">
+  <link rel="stylesheet" href="{{ url_for('static', filename='fontawesome/css/all.css') }}">
+{% endblock %}
+
 {% block content %}
-<div class="form-container-medium">
-  <div class="card">
-    <div class="d-flex justify-content-between align-items-center mb-1">
-      <h2 class="mb-0">Mis Páginas</h2>
-      <a href="{{ url_for('main_bp.home') }}" class="btn btn-blue text-decoration-none">Volver</a>
+{% set blocked_users = ['soporte','soporte1','soporte2','soporte3'] %}
+<div class="container container-max-width-900 store-light store-front-main px-2 pb-3 my-pages-list-page">
+  {% if session.get('logged_in') and (not session.get('username') or session.get('username').lower() not in blocked_users) %}
+    <div class="d-flex align-items-center store-front-header gap-2 espaciado-responsive mb-2">
+      <button id="menuToggleBtn" class="btn-blue menu-btn-worksheet" type="button">&#9776; Menú</button>
     </div>
-    
-    {% if managed_pages %}
-      <div class="d-flex flex-column gap-1">
-        {% for page in managed_pages %}
-          <div class="my-pages-item d-flex align-items-center justify-content-between">
-            <div>
-              <strong>{{ page.route_path }}</strong>
-            </div>
-            <a href="{{ url_for('user_auth_bp.manage_my_page', server_id=page.id) }}" class="btn-blue text-decoration-none">
-              <i class="fas fa-cog"></i> Gestionar
-            </a>
-          </div>
-        {% endfor %}
+    <div id="mobileMenu" class="mobile-menu-store hidden">
+      <div class="menu-user-info-row menu-user-info-row--name-only menu-sidebar-heading-name">
+        <span class="menu-user-name">{{ session.get('username', 'Invitado') }}</span>
       </div>
-    {% else %}
-      <p class="text-center text-secondary">No tienes páginas asignadas para gestionar.</p>
-    {% endif %}
+      {% if is_admin %}
+        {% include 'includes/admin_menu_primary_links.html' %}
+        {% include 'includes/store_user_menu_herramientas_link.html' %}
+        <button id="btnClearTriggerLogMenu" type="button" class="btn-panel btn-red mobile-menu-btn mb-04"><i class="fas fa-trash"></i> Limpiar Logs</button>
+        <a href="{{ url_for('auth_bp.logout') }}" class="btn-panel btn-red mobile-menu-btn mb-04"><i class="fas fa-sign-out-alt"></i> Cerrar Sesión</a>
+        <button id="btnLogoutAllAndClearCookies" type="button" class="btn-panel btn-red mobile-menu-btn mb-04" data-url="{{ url_for('admin_bp.logout_all_and_clear_cookies') }}"><i class="fas fa-cookie-bite"></i> Cerrar sesión y limpiar cookies</button>
+        {% include 'includes/store_user_menu_saldo_block.html' %}
+      {% else %}
+        {% include 'includes/store_user_menu_sidebar_body.html' %}
+      {% endif %}
+    </div>
+    <div id="menuOverlay" class="menu-overlay"></div>
+  {% endif %}
+
+  <div class="form-container-medium">
+    <div class="card">
+      <div class="d-flex justify-content-between align-items-center mb-1 flex-wrap gap-1">
+        <h2 class="mb-0">Mis Páginas</h2>
+      </div>
+
+      {% if managed_pages %}
+        <div class="d-flex flex-column gap-1">
+          {% for page in managed_pages %}
+            <div class="my-pages-item d-flex align-items-center justify-content-between">
+              <div>
+                <strong>{{ page.route_path }}</strong>
+              </div>
+              <a href="{{ url_for('user_auth_bp.manage_my_page', server_id=page.id) }}" class="btn-blue text-decoration-none">
+                <i class="fas fa-cog"></i> Gestionar
+              </a>
+            </div>
+          {% endfor %}
+        </div>
+      {% else %}
+        <p class="text-center text-secondary">No tienes páginas asignadas para gestionar.</p>
+      {% endif %}
+    </div>
   </div>
 </div>
+{% endblock %}
+
+{% block scripts %}
+  {{ super() }}
+  <script src="{{ url_for('store_bp.static', filename='js/menu_tienda.js') }}" defer></script>
 {% endblock %}

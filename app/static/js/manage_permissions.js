@@ -105,6 +105,7 @@ document.addEventListener("DOMContentLoaded", function() {
         checkbox.dataset.userId = user.id;
         checkbox.dataset.permission = perm.key;
         checkbox.id = `perm-${user.id}-${perm.key}`;
+        checkbox.name = `perm_${user.id}_${perm.key}`;
         
         // Establecer estado del checkbox según el permiso del usuario
         const permValue = user[perm.key];
@@ -467,6 +468,7 @@ document.addEventListener("DOMContentLoaded", function() {
         checkbox.dataset.resourceType = resource.type;
         checkbox.dataset.userId = user.id;
         checkbox.id = `resource-${resource.id}-${resource.type}-user-${user.id}`;
+        checkbox.name = `resource_${resource.id}_${resource.type}_user_${user.id}`;
         
         // Establecer estado del checkbox según si el usuario tiene acceso
         // Primero verificar si hay cambios pendientes para este recurso
@@ -756,9 +758,86 @@ document.addEventListener("DOMContentLoaded", function() {
   const searchUserPricesInput = document.getElementById("searchUserPricesInput");
   const clearUserPricesSearchBtn = document.getElementById("clearUserPricesSearchBtn");
   
-  let userPricesData = {}; // { userId: { tipo_precio, soporte_licencias } }
+  let userPricesData = {}; // { userId: { tipo_precio, soporte_licencias, puede_tener_deuda, limite_deuda_usd, limite_deuda_cop } }
   let allUsersForPrices = []; // Todos los usuarios cargados
   let filteredUsersForPrices = []; // Usuarios filtrados por búsqueda
+
+  function debtLimitForUserData(userData, tipoPrecioLower) {
+    if (!userData || !tipoPrecioLower) return null;
+    const tp = String(tipoPrecioLower).toLowerCase();
+    if (tp === 'usd') {
+      const v = userData.limite_deuda_usd;
+      return v != null && v !== '' && Number.isFinite(Number(v)) ? Math.max(0, Number(v)) : null;
+    }
+    if (tp === 'cop') {
+      const v = userData.limite_deuda_cop;
+      return v != null && v !== '' && Number.isFinite(Number(v)) ? Math.max(0, Number(v)) : null;
+    }
+    return null;
+  }
+
+  function formatDebtLimitBtnLabel(limite, tipoPrecioLower) {
+    const cur = String(tipoPrecioLower || '').toUpperCase();
+    if (limite == null || !Number.isFinite(Number(limite))) {
+      return 'Límite deuda';
+    }
+    return `Límite: ${Math.floor(Number(limite))} ${cur}`;
+  }
+
+  function syncUserDebtLimitButton(btn, userId, userData, tipoPrecioLower) {
+    if (!btn) return;
+    const puede = !!(userData && userData.puede_tener_deuda);
+    const tp = tipoPrecioLower ? String(tipoPrecioLower).toLowerCase() : null;
+    btn.disabled = !puede || !tp;
+    if (!puede || !tp) {
+      btn.textContent = 'Límite deuda';
+      btn.classList.remove('user-debt-limit-btn--set');
+      btn.setAttribute('title', 'Activa «Puede tener deuda» para configurar el límite');
+      return;
+    }
+    const lim = debtLimitForUserData(userData, tp);
+    btn.textContent = formatDebtLimitBtnLabel(lim, tp);
+    btn.classList.toggle('user-debt-limit-btn--set', lim != null);
+    btn.setAttribute(
+      'title',
+      lim != null
+        ? `Máximo préstamo: ${Math.floor(lim)} ${tp.toUpperCase()}`
+        : 'Definir monto máximo de deuda (préstamo)'
+    );
+    btn.setAttribute('data-user-id', String(userId));
+    btn.setAttribute('data-tipo-precio', tp);
+  }
+
+  /** Línea secundaria: el saldo en la moneda no activa sigue en BD al cambiar USD↔COP. */
+  function syncSaldoInactivoLine(container, tipoPrecioLower, saldoUsd, saldoCop) {
+    if (!container) return;
+    const main = container.querySelector('.user-saldo-principal');
+    if (!main) return;
+    let inactive = container.querySelector('.user-saldo-inactivo');
+    const cop = Math.floor(Number(saldoCop) || 0);
+    const usd = Math.floor(Number(saldoUsd) || 0);
+    const tp = (tipoPrecioLower || '').toLowerCase();
+    let text = '';
+    if (tp === 'usd' && cop !== 0) {
+      text = `COP guardado: ${cop.toLocaleString('es-CO')}`;
+    } else if (tp === 'cop' && usd !== 0) {
+      text = `USD guardado: ${usd}`;
+    }
+    if (text) {
+      if (!inactive) {
+        inactive = document.createElement('div');
+        inactive.className = 'user-saldo-inactivo';
+        inactive.setAttribute(
+          'title',
+          'Este saldo no se borra al cambiar entre USD y COP; solo cambia cuál moneda está activa en la tienda.'
+        );
+        main.insertAdjacentElement('afterend', inactive);
+      }
+      inactive.textContent = text;
+    } else if (inactive) {
+      inactive.remove();
+    }
+  }
   
   // Cargar usuarios para la tabla de precios
   function loadUsersForPrices() {
@@ -855,7 +934,16 @@ document.addEventListener("DOMContentLoaded", function() {
       // Cargar datos de precios desde el usuario si existen, sino usar valores por defecto
       const userData = userPricesData[userId] || {
         tipo_precio: user.tipo_precio || null,
-        soporte_licencias: !!user.soporte_licencias
+        soporte_licencias: !!user.soporte_licencias,
+        puede_tener_deuda: !!user.puede_tener_deuda,
+        limite_deuda_usd:
+          user.limite_deuda_usd != null && user.limite_deuda_usd !== ''
+            ? Number(user.limite_deuda_usd)
+            : null,
+        limite_deuda_cop:
+          user.limite_deuda_cop != null && user.limite_deuda_cop !== ''
+            ? Number(user.limite_deuda_cop)
+            : null
       };
       
       const tr = document.createElement('tr');
@@ -926,6 +1014,7 @@ document.addEventListener("DOMContentLoaded", function() {
       const soporteCheckbox = document.createElement('input');
       soporteCheckbox.type = 'checkbox';
       soporteCheckbox.id = `soporte_lic_${userId}`;
+      soporteCheckbox.name = `soporte_licencias_${userId}`;
       soporteCheckbox.className = 'user-soporte-licencias-checkbox';
       soporteCheckbox.checked = !!userData.soporte_licencias;
       soporteCheckbox.setAttribute('data-user-id', userId);
@@ -938,10 +1027,31 @@ document.addEventListener("DOMContentLoaded", function() {
 
       soporteContainer.appendChild(soporteCheckbox);
       soporteContainer.appendChild(soporteLabel);
-      
+
+      const deudaContainer = document.createElement('div');
+      deudaContainer.className = 'user-prices-tipo-row';
+
+      const deudaCheckbox = document.createElement('input');
+      deudaCheckbox.type = 'checkbox';
+      deudaCheckbox.id = `puede_deuda_${userId}`;
+      deudaCheckbox.name = `puede_deuda_${userId}`;
+      deudaCheckbox.className = 'user-puede-deuda-checkbox';
+      deudaCheckbox.checked = !!userData.puede_tener_deuda;
+      deudaCheckbox.setAttribute('data-user-id', userId);
+
+      const deudaLabel = document.createElement('label');
+      deudaLabel.setAttribute('for', `puede_deuda_${userId}`);
+      deudaLabel.textContent = 'Puede tener deuda';
+      deudaLabel.className = 'user-price-label';
+      deudaLabel.style.setProperty('cursor', 'pointer');
+
+      deudaContainer.appendChild(deudaCheckbox);
+      deudaContainer.appendChild(deudaLabel);
+
       tipoPrecioContainer.appendChild(usdContainer);
       tipoPrecioContainer.appendChild(copContainer);
       tipoPrecioContainer.appendChild(soporteContainer);
+      tipoPrecioContainer.appendChild(deudaContainer);
       tdTipoPrecio.appendChild(tipoPrecioContainer);
       tr.appendChild(tdTipoPrecio);
       
@@ -961,6 +1071,7 @@ document.addEventListener("DOMContentLoaded", function() {
       
       // Mostrar saldo solo si el usuario tiene tipo_precio configurado (tiene acceso a la tienda) - Arriba
       const saldoText = document.createElement('span');
+      saldoText.className = 'user-saldo-principal';
       if (tipoPrecioSaldo) {
         // Usuario tiene tipo_precio configurado, mostrar saldo según tipo de precio
         if (tipoPrecioSaldo === 'usd') {
@@ -975,24 +1086,60 @@ document.addEventListener("DOMContentLoaded", function() {
         saldoText.textContent = '-';
       }
       saldoContainer.appendChild(saldoText);
-      
-      // Botón Editar (solo si el usuario tiene tipo_precio configurado) - Abajo
-      const actionStack = document.createElement('div');
-      actionStack.className = 'action-stack';
-      
       if (tipoPrecioSaldo) {
-        const editBtn = document.createElement('a');
-        editBtn.href = '#';
-        editBtn.className = 'action-btn action-blue open-balance-modal';
-        editBtn.textContent = 'Editar';
-        editBtn.setAttribute('data-username', user.username);
-        editBtn.setAttribute('data-tipo-precio', tipoPrecioSaldo);
-        editBtn.setAttribute('data-user-id', userId);
-        
-        actionStack.appendChild(editBtn);
+        syncSaldoInactivoLine(saldoContainer, tipoPrecioSaldo, user.saldo_usd, user.saldo_cop);
       }
       
-      saldoContainer.appendChild(actionStack);
+      const saldoActionsWrap = document.createElement('div');
+      saldoActionsWrap.className = 'saldo-actions-wrap';
+
+      const actionStack = document.createElement('div');
+      actionStack.className = 'action-stack action-stack--balance';
+
+      if (tipoPrecioSaldo) {
+        const addBalBtn = document.createElement('button');
+        addBalBtn.type = 'button';
+        addBalBtn.id = `balance_add_${userId}`;
+        addBalBtn.name = `balance_add_${userId}`;
+        addBalBtn.className = 'action-btn action-btn-icon action-green-balance open-balance-modal';
+        addBalBtn.setAttribute('title', 'Añadir saldo');
+        addBalBtn.setAttribute('data-balance-mode', 'add');
+        addBalBtn.setAttribute('data-username', user.username);
+        addBalBtn.setAttribute('data-tipo-precio', tipoPrecioSaldo);
+        addBalBtn.setAttribute('data-user-id', String(userId));
+        addBalBtn.innerHTML = '<i class="fas fa-plus"></i>';
+
+        const subBalBtn = document.createElement('button');
+        subBalBtn.type = 'button';
+        subBalBtn.id = `balance_sub_${userId}`;
+        subBalBtn.name = `balance_sub_${userId}`;
+        subBalBtn.className = 'action-btn action-btn-icon action-amber-balance open-balance-modal';
+        subBalBtn.setAttribute('title', 'Descontar saldo');
+        subBalBtn.setAttribute('data-balance-mode', 'subtract');
+        subBalBtn.setAttribute('data-username', user.username);
+        subBalBtn.setAttribute('data-tipo-precio', tipoPrecioSaldo);
+        subBalBtn.setAttribute('data-user-id', String(userId));
+        subBalBtn.innerHTML = '<i class="fas fa-minus"></i>';
+
+        actionStack.appendChild(addBalBtn);
+        actionStack.appendChild(subBalBtn);
+
+        const debtLimitBtn = document.createElement('button');
+        debtLimitBtn.type = 'button';
+        debtLimitBtn.id = `debt_limit_btn_${userId}`;
+        debtLimitBtn.name = `debt_limit_btn_${userId}`;
+        debtLimitBtn.className = 'user-debt-limit-btn open-debt-limit-modal';
+        debtLimitBtn.setAttribute('data-user-id', String(userId));
+        debtLimitBtn.setAttribute('data-username', user.username);
+        debtLimitBtn.setAttribute('data-tipo-precio', tipoPrecioSaldo);
+        syncUserDebtLimitButton(debtLimitBtn, userId, userData, tipoPrecioSaldo);
+        saldoActionsWrap.appendChild(actionStack);
+        saldoActionsWrap.appendChild(debtLimitBtn);
+      } else {
+        saldoActionsWrap.appendChild(actionStack);
+      }
+
+      saldoContainer.appendChild(saldoActionsWrap);
       tdSaldo.appendChild(saldoContainer);
       tr.appendChild(tdSaldo);
       
@@ -1014,7 +1161,14 @@ document.addEventListener("DOMContentLoaded", function() {
       tr.appendChild(tdProductosAsociados);
       
       userData.soporte_licencias = !!userData.soporte_licencias;
+      userData.puede_tener_deuda = !!userData.puede_tener_deuda;
       userData.tipo_precio = userData.tipo_precio || null;
+      if (userData.limite_deuda_usd == null && user.limite_deuda_usd != null) {
+        userData.limite_deuda_usd = Number(user.limite_deuda_usd);
+      }
+      if (userData.limite_deuda_cop == null && user.limite_deuda_cop != null) {
+        userData.limite_deuda_cop = Number(user.limite_deuda_cop);
+      }
       // Guardar datos iniciales
       userPricesData[userId] = userData;
       
@@ -1042,9 +1196,11 @@ document.addEventListener("DOMContentLoaded", function() {
           // Actualizar datos
           if (!userPricesData[userId]) {
             const sl = document.getElementById(`soporte_lic_${userId}`);
+            const pd = document.getElementById(`puede_deuda_${userId}`);
             userPricesData[userId] = {
               tipo_precio: null,
-              soporte_licencias: sl ? !!sl.checked : false
+              soporte_licencias: sl ? !!sl.checked : false,
+              puede_tener_deuda: pd ? !!pd.checked : false
             };
           }
           userPricesData[userId].tipo_precio = tipo;
@@ -1054,6 +1210,14 @@ document.addEventListener("DOMContentLoaded", function() {
             userPricesData[userId].tipo_precio = null;
           }
         }
+        const debtBtnTp = document.getElementById(`debt_limit_btn_${userId}`);
+        const tpSync = userPricesData[userId] && userPricesData[userId].tipo_precio
+          ? userPricesData[userId].tipo_precio.toLowerCase()
+          : null;
+        if (debtBtnTp) {
+          if (tpSync) debtBtnTp.setAttribute('data-tipo-precio', tpSync);
+          syncUserDebtLimitButton(debtBtnTp, userId, userPricesData[userId], tpSync);
+        }
       });
     });
 
@@ -1061,10 +1225,48 @@ document.addEventListener("DOMContentLoaded", function() {
       cb.addEventListener('change', function() {
         const userId = this.getAttribute('data-user-id');
         if (!userPricesData[userId]) {
-          userPricesData[userId] = { tipo_precio: null, soporte_licencias: !!this.checked };
+          const pd = document.getElementById(`puede_deuda_${userId}`);
+          userPricesData[userId] = {
+            tipo_precio: null,
+            soporte_licencias: !!this.checked,
+            puede_tener_deuda: pd ? !!pd.checked : false
+          };
         } else {
           userPricesData[userId].soporte_licencias = !!this.checked;
         }
+      });
+    });
+
+    document.querySelectorAll('.user-puede-deuda-checkbox').forEach(cb => {
+      cb.addEventListener('change', function() {
+        const userId = this.getAttribute('data-user-id');
+        if (!userPricesData[userId]) {
+          const sl = document.getElementById(`soporte_lic_${userId}`);
+          userPricesData[userId] = {
+            tipo_precio: null,
+            soporte_licencias: sl ? !!sl.checked : false,
+            puede_tener_deuda: !!this.checked,
+            limite_deuda_usd: null,
+            limite_deuda_cop: null
+          };
+        } else {
+          userPricesData[userId].puede_tener_deuda = !!this.checked;
+          if (!this.checked) {
+            userPricesData[userId].limite_deuda_usd = null;
+            userPricesData[userId].limite_deuda_cop = null;
+          }
+        }
+        const debtBtn = document.getElementById(`debt_limit_btn_${userId}`);
+        const usdCb = document.querySelector(
+          `input[name="tipo_precio_${userId}"][data-tipo="USD"]`
+        );
+        const copCb = document.querySelector(
+          `input[name="tipo_precio_${userId}"][data-tipo="COP"]`
+        );
+        let tp = null;
+        if (usdCb && usdCb.checked) tp = 'usd';
+        else if (copCb && copCb.checked) tp = 'cop';
+        syncUserDebtLimitButton(debtBtn, userId, userPricesData[userId], tp);
       });
     });
   }
@@ -1079,11 +1281,17 @@ document.addEventListener("DOMContentLoaded", function() {
       // Recopilar todos los datos de la tabla
       Object.keys(userPricesData).forEach(userId => {
         const userData = userPricesData[userId];
-        updates.push({
+        const upd = {
           user_id: parseInt(userId),
           tipo_precio: userData.tipo_precio || null,
-          soporte_licencias: !!userData.soporte_licencias
-        });
+          soporte_licencias: !!userData.soporte_licencias,
+          puede_tener_deuda: !!userData.puede_tener_deuda
+        };
+        if (userData.puede_tener_deuda) {
+          upd.limite_deuda_usd = userData.limite_deuda_usd;
+          upd.limite_deuda_cop = userData.limite_deuda_cop;
+        }
+        updates.push(upd);
       });
       
       if (updates.length === 0) {
@@ -1199,32 +1407,91 @@ document.addEventListener("DOMContentLoaded", function() {
   const modalGroupCop = document.getElementById('modal-group-cop');
   const modalBalanceForm = document.getElementById('modal-balance-form');
   const closeBalanceModalBtns = document.querySelectorAll('.close-balance-modal');
-  
-  // Abrir modal al hacer clic en botón Editar
+  const balanceModalTitle = document.getElementById('balance-modal-title');
+  const balanceModalCurrentEl = document.getElementById('balance-modal-current');
+  const modalBalanceSubmitBtn = document.getElementById('modal-balance-submit');
+  let currentBalanceModalMode = 'add';
+
+  function balanceModalCurrencySuffix(tipoPrecio) {
+    const t = (tipoPrecio || '').toLowerCase();
+    if (t === 'usd') return ' USD';
+    if (t === 'cop') return ' COP';
+    return '';
+  }
+
+  function setBalanceModalUi(mode, ctx) {
+    currentBalanceModalMode = mode === 'subtract' ? 'subtract' : 'add';
+    const isSub = currentBalanceModalMode === 'subtract';
+    const tp = ctx && ctx.tipoPrecio
+      ? String(ctx.tipoPrecio).toLowerCase()
+      : null;
+    const suf = balanceModalCurrencySuffix(tp);
+    if (balanceModalTitle) {
+      balanceModalTitle.textContent = isSub
+        ? (suf ? `Descontar saldo${suf}` : 'Descontar saldo')
+        : (suf ? `Añadir saldo${suf}` : 'Añadir saldo');
+    }
+    if (modalBalanceSubmitBtn) {
+      modalBalanceSubmitBtn.textContent = isSub ? 'Descontar saldo' : 'Añadir saldo';
+    }
+    if (balanceModalCurrentEl) {
+      const c = ctx || {};
+      if (tp === 'usd') {
+        balanceModalCurrentEl.textContent = `Saldo actual: ${Math.floor(Number(c.saldoUsd) || 0)} USD`;
+      } else if (tp === 'cop') {
+        balanceModalCurrentEl.textContent = `Saldo actual: ${Math.floor(Number(c.saldoCop) || 0)} COP`;
+      } else {
+        balanceModalCurrentEl.textContent = '';
+      }
+    }
+    if (modalBalanceUsdInput) {
+      if (isSub && tp === 'usd' && ctx) {
+        modalBalanceUsdInput.setAttribute('max', String(Math.max(0, Number(ctx.saldoUsd) || 0)));
+      } else {
+        modalBalanceUsdInput.removeAttribute('max');
+      }
+    }
+    if (modalBalanceCopInput) {
+      if (isSub && tp === 'cop' && ctx) {
+        modalBalanceCopInput.setAttribute('max', String(Math.max(0, Math.floor(Number(ctx.saldoCop) || 0))));
+      } else {
+        modalBalanceCopInput.removeAttribute('max');
+      }
+    }
+  }
+
+  // Abrir modal al hacer clic en + / −
   document.addEventListener('click', function(e) {
-    if (e.target.classList.contains('open-balance-modal')) {
-      e.preventDefault();
-      const btn = e.target;
-      const username = btn.getAttribute('data-username');
-      const tipoPrecio = btn.getAttribute('data-tipo-precio');
-      
-      if (balanceModalOverlay && balanceModal && modalUsernameInput) {
-        balanceModalOverlay.classList.remove('d-none');
-        modalUsernameInput.value = username;
-        if (modalBalanceUsdInput) modalBalanceUsdInput.value = '';
-        if (modalBalanceCopInput) modalBalanceCopInput.value = '';
-        
-        // Mostrar/ocultar campos según tipo de precio
-        if (tipoPrecio === 'usd') {
-          if (modalGroupUsd) modalGroupUsd.classList.remove('d-none');
-          if (modalGroupCop) modalGroupCop.classList.add('d-none');
-        } else if (tipoPrecio === 'cop') {
-          if (modalGroupUsd) modalGroupUsd.classList.add('d-none');
-          if (modalGroupCop) modalGroupCop.classList.remove('d-none');
-        } else {
-          if (modalGroupUsd) modalGroupUsd.classList.remove('d-none');
-          if (modalGroupCop) modalGroupCop.classList.remove('d-none');
-        }
+    const btn = e.target.closest('.open-balance-modal');
+    if (!btn) return;
+    e.preventDefault();
+    const username = btn.getAttribute('data-username');
+    const tipoPrecio = btn.getAttribute('data-tipo-precio');
+    const mode = btn.getAttribute('data-balance-mode') || 'add';
+    const uid = btn.getAttribute('data-user-id');
+    const userRow = uid != null ? allUsersForPrices.find(u => String(u.id) === String(uid)) : null;
+
+    if (balanceModalOverlay && balanceModal && modalUsernameInput) {
+      balanceModalOverlay.classList.remove('d-none');
+      modalUsernameInput.value = username;
+      if (modalBalanceUsdInput) modalBalanceUsdInput.value = '';
+      if (modalBalanceCopInput) modalBalanceCopInput.value = '';
+      setBalanceModalUi(mode, userRow ? {
+        tipoPrecio,
+        saldoUsd: userRow.saldo_usd,
+        saldoCop: userRow.saldo_cop
+      } : { tipoPrecio });
+
+      // Mostrar/ocultar campos según tipo de precio
+      if (tipoPrecio === 'usd') {
+        if (modalGroupUsd) modalGroupUsd.classList.remove('d-none');
+        if (modalGroupCop) modalGroupCop.classList.add('d-none');
+      } else if (tipoPrecio === 'cop') {
+        if (modalGroupUsd) modalGroupUsd.classList.add('d-none');
+        if (modalGroupCop) modalGroupCop.classList.remove('d-none');
+      } else {
+        if (modalGroupUsd) modalGroupUsd.classList.remove('d-none');
+        if (modalGroupCop) modalGroupCop.classList.remove('d-none');
       }
     }
   });
@@ -1271,13 +1538,20 @@ document.addEventListener("DOMContentLoaded", function() {
         return;
       }
       
+      const subtract = currentBalanceModalMode === 'subtract';
+
       fetch('/tienda/admin/pagos/add_balance', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'X-CSRFToken': getCsrfToken()
         },
-        body: JSON.stringify({ username: user.username, amount_usd: amountUsd, amount_cop: amountCop })
+        body: JSON.stringify({
+          username: user.username,
+          amount_usd: amountUsd,
+          amount_cop: amountCop,
+          subtract: subtract
+        })
       })
       .then(r => r.json())
       .then(data => {
@@ -1285,16 +1559,20 @@ document.addEventListener("DOMContentLoaded", function() {
           const userRow = userPricesTableBody.querySelector(`tr[data-user-id="${user.id}"]`);
           if (userRow) {
             const saldoCell = userRow.children[2];
-            const saldoText = saldoCell.querySelector('span');
+            const saldoWrap = saldoCell && saldoCell.firstElementChild;
             const tipoPrecio = (userPricesData[user.id]?.tipo_precio ? userPricesData[user.id].tipo_precio.toLowerCase() : null);
-            if (saldoText) {
+            const main = saldoWrap && saldoWrap.querySelector('.user-saldo-principal');
+            if (main) {
               if (tipoPrecio === 'usd') {
-                saldoText.textContent = `${parseInt(data.new_saldo_usd)} USD`;
+                main.textContent = `${parseInt(data.new_saldo_usd, 10)} USD`;
               } else if (tipoPrecio === 'cop') {
-                saldoText.textContent = `${parseInt(data.new_saldo_cop)} COP`;
+                main.textContent = `${parseInt(data.new_saldo_cop, 10)} COP`;
               } else {
-                saldoText.textContent = '-';
+                main.textContent = '-';
               }
+            }
+            if (saldoWrap && tipoPrecio) {
+              syncSaldoInactivoLine(saldoWrap, tipoPrecio, data.new_saldo_usd, data.new_saldo_cop);
             }
             // Actualizar también en allUsersForPrices
             const userIndex = allUsersForPrices.findIndex(u => u.id === user.id);
@@ -1303,14 +1581,122 @@ document.addEventListener("DOMContentLoaded", function() {
               allUsersForPrices[userIndex].saldo_cop = data.new_saldo_cop;
             }
           }
-          alert('Saldo añadido correctamente');
           modalBalanceForm.reset();
           closeBalanceModal();
         } else {
-          alert(data.error || 'Error al añadir saldo');
+          alert(data.error || (subtract ? 'Error al descontar saldo' : 'Error al añadir saldo'));
         }
       })
       .catch(() => alert('Error de red o servidor.'));
+    });
+  }
+
+  // Modal límite de deuda
+  const debtLimitModalOverlay = document.getElementById('debt-limit-modal-overlay');
+  const modalDebtLimitForm = document.getElementById('modal-debt-limit-form');
+  const modalDebtLimitUserId = document.getElementById('modal-debt-limit-user-id');
+  const modalDebtLimitCurrency = document.getElementById('modal-debt-limit-currency');
+  const modalDebtLimitAmount = document.getElementById('modal-debt-limit-amount');
+  const debtLimitModalUserEl = document.getElementById('debt-limit-modal-user');
+  const debtLimitModalLabel = document.getElementById('modal-debt-limit-label');
+  const closeDebtLimitModalBtns = document.querySelectorAll('.close-debt-limit-modal');
+
+  function closeDebtLimitModal() {
+    if (debtLimitModalOverlay) debtLimitModalOverlay.classList.add('d-none');
+  }
+
+  closeDebtLimitModalBtns.forEach(function (btn) {
+    btn.addEventListener('click', closeDebtLimitModal);
+  });
+
+  if (debtLimitModalOverlay) {
+    debtLimitModalOverlay.addEventListener('click', function (e) {
+      if (e.target === debtLimitModalOverlay) closeDebtLimitModal();
+    });
+  }
+
+  document.addEventListener('click', function (e) {
+    const btn = e.target.closest('.open-debt-limit-modal');
+    if (!btn || btn.disabled) return;
+    const userId = btn.getAttribute('data-user-id');
+    const tp = (btn.getAttribute('data-tipo-precio') || '').toLowerCase();
+    const username = btn.getAttribute('data-username') || '';
+    if (!userId || (tp !== 'usd' && tp !== 'cop')) return;
+    const ud = userPricesData[userId] || {};
+    if (!ud.puede_tener_deuda) return;
+
+    if (modalDebtLimitUserId) modalDebtLimitUserId.value = userId;
+    if (modalDebtLimitCurrency) modalDebtLimitCurrency.value = tp.toUpperCase();
+    if (debtLimitModalUserEl) {
+      debtLimitModalUserEl.textContent = username ? `Usuario: ${username}` : '';
+    }
+    const curLabel = tp.toUpperCase();
+    if (debtLimitModalLabel) {
+      debtLimitModalLabel.textContent = `Monto máximo de deuda (${curLabel})`;
+    }
+    if (modalDebtLimitAmount) {
+      modalDebtLimitAmount.step = tp === 'usd' ? '0.01' : '1';
+      const lim = debtLimitForUserData(ud, tp);
+      modalDebtLimitAmount.value = lim != null ? String(Math.floor(lim)) : '';
+    }
+    if (debtLimitModalOverlay) debtLimitModalOverlay.classList.remove('d-none');
+  });
+
+  if (modalDebtLimitForm) {
+    modalDebtLimitForm.addEventListener('submit', function (e) {
+      e.preventDefault();
+      const userId = modalDebtLimitUserId ? modalDebtLimitUserId.value : '';
+      const currency = modalDebtLimitCurrency ? modalDebtLimitCurrency.value : '';
+      const raw = modalDebtLimitAmount ? modalDebtLimitAmount.value.trim() : '';
+      if (!userId || !currency) return;
+
+      const payload = {
+        user_id: parseInt(userId, 10),
+        currency: currency,
+        limite_deuda: raw === '' ? null : raw
+      };
+
+      fetch('/admin/update_user_debt_limit_ajax', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRFToken': getCsrfToken()
+        },
+        body: JSON.stringify(payload)
+      })
+        .then(function (r) {
+          return r.json();
+        })
+        .then(function (data) {
+          if (data.status !== 'ok') {
+            alert(data.message || 'No se pudo guardar el límite.');
+            return;
+          }
+          if (!userPricesData[userId]) {
+            userPricesData[userId] = { puede_tener_deuda: true };
+          }
+          userPricesData[userId].limite_deuda_usd =
+            data.limite_deuda_usd != null ? Number(data.limite_deuda_usd) : null;
+          userPricesData[userId].limite_deuda_cop =
+            data.limite_deuda_cop != null ? Number(data.limite_deuda_cop) : null;
+
+          const uRow = allUsersForPrices.find(function (u) {
+            return String(u.id) === String(userId);
+          });
+          if (uRow) {
+            uRow.limite_deuda_usd = userPricesData[userId].limite_deuda_usd;
+            uRow.limite_deuda_cop = userPricesData[userId].limite_deuda_cop;
+          }
+
+          const debtBtn = document.getElementById(`debt_limit_btn_${userId}`);
+          const tp = currency.toLowerCase();
+          syncUserDebtLimitButton(debtBtn, userId, userPricesData[userId], tp);
+          closeDebtLimitModal();
+          showUserPricesStatus('Límite de deuda guardado', 'text-success');
+        })
+        .catch(function () {
+          alert('Error de red o servidor.');
+        });
     });
   }
 });

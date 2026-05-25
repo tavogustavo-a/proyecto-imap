@@ -1,9 +1,20 @@
 # app/services/filter_service.py
 
+from sqlalchemy import func
+
 from app.extensions import db
 from app.models import FilterModel, User
 # from app.helpers import increment_global_session_revocation_count # Comentar o eliminar import
 from flask import current_app
+
+
+def filter_list_order_by(query):
+    """Lista de filtros ordenada alfabéticamente por descripción (luego por id)."""
+    return query.order_by(
+        func.coalesce(func.lower(FilterModel.description), '').asc(),
+        FilterModel.id.asc(),
+    )
+
 
 def create_filter_service(sender, keyword, cut_after_html, cut_before_html, description, skip_revocation=False):
     new_filter = FilterModel(

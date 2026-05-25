@@ -1,5 +1,23 @@
 /* Estilos para página SMS - CSP Compliant */
 
+/* Contenedor ancho: las tarjetas usan todo el espacio disponible (hasta ~900px) */
+#sms-management-container.sms-page.container-max-width-900 {
+  width: 100%;
+  max-width: min(900px, 100%);
+  margin: 0 auto;
+  padding: 0 0.75rem;
+  box-sizing: border-box;
+}
+
+#sms-management-container.sms-page .admin-card,
+#sms-management-container .admin-card {
+  max-width: 100% !important;
+  width: 100% !important;
+  margin-left: auto;
+  margin-right: auto;
+  box-sizing: border-box;
+}
+
 .sms-message-row {
   cursor: pointer;
   transition: background-color 0.2s;
@@ -607,9 +625,11 @@
     max-width: 100%;
   }
   
-  .admin-card {
+  #sms-management-container.sms-page .admin-card,
+  #sms-management-container .admin-card {
     overflow-x: hidden;
-    max-width: 100%;
+    max-width: 100% !important;
+    width: 100% !important;
   }
 }
 

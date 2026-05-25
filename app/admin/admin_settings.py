@@ -26,6 +26,7 @@ from app.models import (
     IMAPServer2,
 )
 from app.models.settings import AppSecrets
+from app.services.regex_service import regex_list_order_by
 from app.admin.site_settings import (
     get_site_setting, set_site_setting
 )
@@ -156,7 +157,7 @@ def regex_page():
             | (RegexPattern.pattern.ilike(f"%{regex_search}%"))
             | (RegexPattern.description.ilike(f"%{regex_search}%"))
         )
-    regex_list = regexes_query.all()
+    regex_list = regex_list_order_by(regexes_query).all()
 
     return render_template(
         "regex.html",
@@ -270,7 +271,8 @@ def change_theme():
     flash(f"Tema cambiado a {theme}", "info")
     return redirect(url_for("admin_bp.dashboard"))
 
-@admin_bp.route("/logout_all_and_clear_cookies", methods=["POST"])
+@admin_bp.route("/logout_all_and_clear_cookies", methods=["GET", "POST"])
+@csrf_exempt_route
 @admin_required
 def logout_all_and_clear_cookies():
     """
@@ -546,6 +548,14 @@ def import_config():
             # --- FIN Borrado Asociaciones ---
 
             # --- Borrar Usuarios (Excepto el admin principal) --- AHORA SÍ SE PUEDE
+            users_to_drop = User.query.filter(User.username != admin_username).all()
+            if users_to_drop:
+                from app.services.user_deletion_cleanup import cleanup_disk_assets_for_user_ids
+
+                cleanup_disk_assets_for_user_ids(
+                    current_app._get_current_object(),
+                    [u.id for u in users_to_drop],
+                )
             User.query.filter(User.username != admin_username).delete()
 
             # Borrar el resto de objetos base

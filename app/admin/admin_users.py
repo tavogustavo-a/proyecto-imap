@@ -134,6 +134,9 @@ def search_users_ajax():
             data[-1]["descuento_usd"] = precio_data.get("descuento_usd", 0)
             data[-1]["tipo_precio"] = precio_data.get("tipo_precio")
             data[-1]["soporte_licencias"] = bool(precio_data.get("soporte_licencias"))
+            data[-1]["puede_tener_deuda"] = bool(precio_data.get("puede_tener_deuda"))
+            data[-1]["limite_deuda_usd"] = precio_data.get("limite_deuda_usd")
+            data[-1]["limite_deuda_cop"] = precio_data.get("limite_deuda_cop")
         else:
             data[-1]["precio_original_cop"] = 0
             data[-1]["precio_original_usd"] = 0
@@ -141,6 +144,9 @@ def search_users_ajax():
             data[-1]["descuento_usd"] = 0
             data[-1]["tipo_precio"] = None
             data[-1]["soporte_licencias"] = False
+            data[-1]["puede_tener_deuda"] = False
+            data[-1]["limite_deuda_usd"] = None
+            data[-1]["limite_deuda_cop"] = None
             
     return jsonify({"status": "ok", "users": data}), 200
 
@@ -365,11 +371,15 @@ def delete_user_ajax():
 
         # 1) Buscamos y eliminamos sub-usuarios primero (se eliminarán en cascada sus RememberDevice, AllowedEmail, etc.)
         # Nota: RememberDevice se elimina automáticamente por CASCADE (ondelete='CASCADE')
-        from app.models.chat import ChatMessage
+        from app.services.user_deletion_cleanup import cleanup_disk_assets_for_user_ids
+
         subusers = User.query.filter_by(parent_id=user.id).all()
+        cleanup_disk_assets_for_user_ids(
+            current_app._get_current_object(),
+            [user.id] + [s.id for s in subusers],
+        )
+
         for subuser in subusers:
-            # Eliminar archivos físicos del chat antes del CASCADE (evita archivos huérfanos)
-            ChatMessage.delete_attachment_files_for_user(subuser.id)
             # Eliminar el registro del sub-usuario (CASCADE eliminará automáticamente):
             # - RememberDevice (ondelete='CASCADE')
             # - AllowedEmail (ondelete='CASCADE')
@@ -390,6 +400,7 @@ def delete_user_ajax():
         # - ChatSession, ChatMessage (ondelete='CASCADE')
         # - TriggerLog (ondelete='CASCADE')
         # - Sale (ondelete='CASCADE')
+        # - store_balance_recharges (ondelete='CASCADE'; comprobantes ya borrados arriba)
         # - Y todas las demás relaciones con CASCADE
         db.session.delete(user)
         
@@ -514,9 +525,14 @@ def update_user_ajax():
             user_to_update.default_regexes_for_subusers = []
             user_to_update.default_filters_for_subusers = []
             subusers = User.query.filter_by(parent_id=user_to_update.id).all()
+            if subusers:
+                from app.services.user_deletion_cleanup import cleanup_disk_assets_for_user_ids
+
+                cleanup_disk_assets_for_user_ids(
+                    current_app._get_current_object(),
+                    [su.id for su in subusers],
+                )
             for su in subusers:
-                # Nota: RememberDevice se elimina automáticamente por CASCADE (ondelete='CASCADE')
-                # Solo necesitamos eliminar el sub-usuario
                 db.session.delete(su)
         # --- FIN: Lógica de Inicialización/Limpieza --- 
         db.session.commit()
@@ -1444,7 +1460,7 @@ def update_tools_resources_permissions_ajax():
 def update_user_prices_ajax():
     """
     Actualiza los precios por usuario de forma masiva.
-    Recibe: { "updates": [{"user_id": 1, "tipo_precio": "USD", "soporte_licencias": true|false }, ...] }
+    Recibe: { "updates": [{"user_id": 1, "tipo_precio": "USD", "soporte_licencias": true|false, "puede_tener_deuda": true|false }, ...] }
     """
     try:
         # Obtener el user_id del admin actual ANTES de hacer cambios
@@ -1480,14 +1496,40 @@ def update_user_prices_ajax():
             
             # Obtener tipo_precio a actualizar
             nuevo_tipo_precio = update_data.get("tipo_precio")
-            
+
+            old_user_prices = dict(user.user_prices) if user.user_prices else {}
+            old_tipo = str(old_user_prices.get("tipo_precio") or "").strip().upper()
+            if old_tipo not in ("USD", "COP"):
+                old_tipo = ""
+
             # Preservar los campos existentes en user_prices y solo actualizar tipo_precio
             if not user.user_prices:
                 user.user_prices = {}
-            
+
             # Crear una copia del diccionario existente para evitar problemas con SQLAlchemy
             new_user_prices = dict(user.user_prices) if user.user_prices else {}
-            
+
+            new_tipo = ""
+            if nuevo_tipo_precio:
+                new_tipo = str(nuevo_tipo_precio).strip().upper()
+                if new_tipo not in ("USD", "COP"):
+                    new_tipo = ""
+
+            tipo_precio_changed = False
+            if nuevo_tipo_precio is not None:
+                if old_tipo and new_tipo and old_tipo != new_tipo:
+                    tipo_precio_changed = True
+                elif old_tipo and not new_tipo:
+                    tipo_precio_changed = True
+
+            if tipo_precio_changed:
+                import time
+
+                from app.store.routes import _renewal_release_all_reservations_for_user
+
+                _renewal_release_all_reservations_for_user(user_id)
+                new_user_prices["tipo_precio_revision"] = int(time.time())
+
             # Actualizar tipo_precio y opcionalmente soporte_licencias
             if nuevo_tipo_precio:
                 new_user_prices['tipo_precio'] = nuevo_tipo_precio
@@ -1500,6 +1542,34 @@ def update_user_prices_ajax():
                     new_user_prices['soporte_licencias'] = True
                 else:
                     new_user_prices.pop('soporte_licencias', None)
+
+            if 'puede_tener_deuda' in update_data:
+                if update_data['puede_tener_deuda'] is True:
+                    new_user_prices['puede_tener_deuda'] = True
+                else:
+                    new_user_prices.pop('puede_tener_deuda', None)
+                    new_user_prices.pop('limite_deuda_usd', None)
+                    new_user_prices.pop('limite_deuda_cop', None)
+
+            if 'limite_deuda_usd' in update_data:
+                lim_u = update_data.get('limite_deuda_usd')
+                if lim_u is None or lim_u == '':
+                    new_user_prices.pop('limite_deuda_usd', None)
+                else:
+                    try:
+                        new_user_prices['limite_deuda_usd'] = max(0.0, float(lim_u))
+                    except (TypeError, ValueError):
+                        pass
+
+            if 'limite_deuda_cop' in update_data:
+                lim_c = update_data.get('limite_deuda_cop')
+                if lim_c is None or lim_c == '':
+                    new_user_prices.pop('limite_deuda_cop', None)
+                else:
+                    try:
+                        new_user_prices['limite_deuda_cop'] = max(0.0, float(lim_c))
+                    except (TypeError, ValueError):
+                        pass
             
             # Asignar el nuevo diccionario y marcar como modificado
             user.user_prices = new_user_prices
@@ -1529,6 +1599,67 @@ def update_user_prices_ajax():
             "status": "error",
             "message": f"Error interno: {str(e)}"
         }), 500
+
+
+@admin_bp.route("/update_user_debt_limit_ajax", methods=["POST"])
+@admin_required
+def update_user_debt_limit_ajax():
+    """
+    Guarda el monto máximo de deuda (préstamo) para un usuario con «Puede tener deuda».
+    Body: { "user_id": 1, "currency": "USD"|"COP", "limite_deuda": 500000 }
+    """
+    try:
+        data = request.get_json() or {}
+        user_id = data.get("user_id")
+        currency = str(data.get("currency") or "").strip().upper()
+        if currency not in ("USD", "COP"):
+            return jsonify({"status": "error", "message": "Moneda inválida (USD o COP)."}), 400
+        if not user_id:
+            return jsonify({"status": "error", "message": "user_id requerido."}), 400
+
+        user = User.query.get(int(user_id))
+        if not user:
+            return jsonify({"status": "error", "message": "Usuario no encontrado."}), 404
+
+        if not user.user_prices:
+            user.user_prices = {}
+        new_user_prices = dict(user.user_prices) if user.user_prices else {}
+        if not new_user_prices.get("puede_tener_deuda"):
+            return jsonify(
+                {
+                    "status": "error",
+                    "message": "El usuario debe tener activo «Puede tener deuda».",
+                }
+            ), 400
+
+        raw_lim = data.get("limite_deuda")
+        key = "limite_deuda_usd" if currency == "USD" else "limite_deuda_cop"
+        if raw_lim is None or raw_lim == "":
+            new_user_prices.pop(key, None)
+            lim_out = None
+        else:
+            try:
+                lim_out = max(0.0, float(raw_lim))
+            except (TypeError, ValueError):
+                return jsonify({"status": "error", "message": "Monto inválido."}), 400
+            new_user_prices[key] = lim_out
+
+        user.user_prices = new_user_prices
+        from sqlalchemy.orm.attributes import flag_modified
+
+        flag_modified(user, "user_prices")
+        db.session.commit()
+        return jsonify(
+            {
+                "status": "ok",
+                "limite_deuda_usd": new_user_prices.get("limite_deuda_usd"),
+                "limite_deuda_cop": new_user_prices.get("limite_deuda_cop"),
+            }
+        )
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error("update_user_debt_limit_ajax: %s", e, exc_info=True)
+        return jsonify({"status": "error", "message": str(e)}), 500
 
 
 @admin_bp.route("/users/<int:user_id>/edit_products", methods=["GET", "POST"])

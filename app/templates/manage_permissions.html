@@ -6,26 +6,49 @@
 {% block head %}
 <meta name="csrf_token" content="{{ csrf_token() }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/store.css') }}">
-<link rel="stylesheet" href="{{ url_for('static', filename='css/manage_permissions.css') }}?v=2">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/manage_permissions.css') }}?v=5">
 <link rel="stylesheet" href="{{ url_for('static', filename='fontawesome/css/all.css') }}">
 {% endblock %}
 
 {% block content %}
 
-<div class="container container-max-width-1200">
-  <div class="admin-card">
-    <div class="d-flex justify-content-between align-items-center mb-1">
-      <h3 class="m-0">🔐 Gestión Centralizada de Permisos</h3>
-      <a href="{{ url_for('admin_bp.dashboard') }}" class="btn-panel btn-blue">
-        <i class="fas fa-arrow-left"></i> Volver
-      </a>
+<div class="container container-max-width-1200"
+     data-clear-trigger-log-url="{{ url_for('admin_bp.clear_trigger_log') }}"
+     data-logout-all-cookies-url="{{ url_for('admin_bp.logout_all_and_clear_cookies') }}">
+
+  <div id="mobileMenu" class="mobile-menu-store hidden">
+    <div class="menu-user-info-row menu-user-info-row--name-only menu-sidebar-heading-name">
+      <span class="menu-user-name">{{ session.get('username', 'Admin') }}</span>
     </div>
+    {% include 'includes/admin_menu_primary_links.html' %}
+    <button id="btnClearTriggerLogMenu" type="button" class="btn-panel btn-red mobile-menu-btn mb-04"><i class="fas fa-trash"></i> Limpiar Logs</button>
+    <a href="{{ url_for('auth_bp.logout') }}" class="btn-panel btn-red mobile-menu-btn mb-04"><i class="fas fa-sign-out-alt"></i> Cerrar Sesión</a>
+    <button id="btnLogoutAllAndClearCookies" type="button" class="btn-panel btn-red mobile-menu-btn mb-04" data-url="{{ url_for('admin_bp.logout_all_and_clear_cookies') }}"><i class="fas fa-cookie-bite"></i> Cerrar sesión y limpiar cookies</button>
+  </div>
+
+  <div id="mobileMenu2" class="mobile-menu-store hidden">
+    <div class="menu-user-info-row menu-user-info-row--name-only menu-sidebar-heading-name">
+      <span class="menu-user-name">Menú</span>
+    </div>
+    {% include 'includes/admin_menu_secondary_links.html' %}
+    {% include 'includes/admin_menu_licencias_extra_links.html' %}
+  </div>
+
+  <div id="menuOverlay" class="menu-overlay"></div>
+
+  <div class="admin-card">
+    <div class="d-flex gap-05 mb-1">
+      <button id="menuToggleBtn" type="button" class="btn-panel btn-blue menu-toggle-btn" title="Menú de navegación" aria-label="Abrir menú de navegación">&#9776; Menú</button>
+      <button id="menu2ToggleBtn" type="button" class="btn-panel btn-blue menu-toggle-btn" title="Menú secundario" aria-label="Abrir segundo menú">&#9776; Menú2</button>
+    </div>
+    <h3 class="m-0 mb-1 text-center w-100">🔐 Gestión Centralizada de Permisos</h3>
     
     <div class="d-flex align-items-center justify-content-between gap-2 mb-1 search-stats-container">
       <div class="search-input-wrapper">
         <input 
           type="text" 
           id="searchUsersInput" 
+          name="search_users"
           class="search-users-input search-users-input-flex" 
           placeholder="Buscar usuario..."
           autocomplete="off"
@@ -89,6 +112,7 @@
         <input 
           type="text" 
           id="searchResourcesInput" 
+          name="search_resources"
           class="search-users-input search-users-input-flex" 
           placeholder="Buscar usuario..."
           autocomplete="off"
@@ -145,6 +169,7 @@
         <input 
           type="text" 
           id="searchUserPricesInput" 
+          name="search_user_prices"
           class="search-users-input search-users-input-flex" 
           placeholder="Buscar usuario..."
           autocomplete="off"
@@ -189,27 +214,54 @@
   </div>
 </div>
 
-<!-- Modal para añadir saldo -->
-<div id="balance-modal-overlay" class="modal-overlay d-none">
-  <div class="modal-balance-content">
-    <form id="modal-balance-form">
-      <input type="hidden" id="modal-username" name="username">
-      <div class="form-group" id="modal-group-usd">
-        <label for="modal-balance-usd" class="text-center">Saldo a añadir USD</label>
-        <input type="number" id="modal-balance-usd" name="usd" class="form-control" min="0" step="0.01" placeholder="Monto USD" autocomplete="off">
-      </div>
-      <div class="form-group" id="modal-group-cop">
-        <label for="modal-balance-cop" class="text-center">Saldo a añadir COP</label>
-        <input type="number" id="modal-balance-cop" name="cop" class="form-control" min="0" step="1" placeholder="Monto COP" autocomplete="off">
+<!-- Modal límite de deuda (monto máximo a prestar) -->
+<div id="debt-limit-modal-overlay" class="modal-overlay d-none">
+  <div class="modal-balance-content modal-debt-limit-content">
+    <form id="modal-debt-limit-form">
+      <input type="hidden" id="modal-debt-limit-user-id" name="user_id">
+      <input type="hidden" id="modal-debt-limit-currency" name="currency">
+      <p id="debt-limit-modal-user" class="modal-balance-current text-center" aria-live="polite"></p>
+      <h4 id="debt-limit-modal-title" class="text-center mb-3">Límite de deuda</h4>
+      <p class="modal-debt-limit-hint text-center mb-2">Monto máximo que puede quedar en negativo (préstamo) en la moneda activa del usuario.</p>
+      <div class="form-group">
+        <label for="modal-debt-limit-amount" id="modal-debt-limit-label" class="modal-debt-limit-label">Monto máximo</label>
+        <input type="number" id="modal-debt-limit-amount" name="limite_deuda" class="form-control" min="0" step="1" placeholder="Ej. 500000" autocomplete="off">
       </div>
       <div class="d-flex justify-content-between mt-1">
-        <button type="button" class="btn-panel btn-red close-balance-modal">Cancelar</button>
-        <button type="submit" class="btn-panel btn-green">Añadir saldo</button>
+        <button type="button" id="close-debt-limit-modal-btn" name="cancel_debt_limit" class="btn-panel btn-red close-debt-limit-modal">Cancelar</button>
+        <button type="submit" id="modal-debt-limit-submit" class="btn-panel btn-green">Guardar límite</button>
       </div>
     </form>
   </div>
 </div>
 
-<script src="{{ url_for('static', filename='js/manage_permissions.js') }}"></script>
+<!-- Modal para añadir o descontar saldo -->
+<div id="balance-modal-overlay" class="modal-overlay d-none">
+  <div class="modal-balance-content">
+    <form id="modal-balance-form">
+      <input type="hidden" id="modal-username" name="username">
+      <p id="balance-modal-current" class="modal-balance-current text-center" aria-live="polite"></p>
+      <h4 id="balance-modal-title" class="text-center mb-3">Añadir saldo</h4>
+      <div class="form-group" id="modal-group-usd">
+        <input type="number" id="modal-balance-usd" name="usd" class="form-control" min="0" step="0.01" placeholder="Monto" autocomplete="off" aria-label="Monto USD">
+      </div>
+      <div class="form-group" id="modal-group-cop">
+        <input type="number" id="modal-balance-cop" name="cop" class="form-control" min="0" step="1" placeholder="Monto" autocomplete="off" aria-label="Monto COP">
+      </div>
+      <div class="d-flex justify-content-between mt-1">
+        <button type="button" id="close-balance-modal-btn" name="cancel_balance" class="btn-panel btn-red close-balance-modal">Cancelar</button>
+        <button type="submit" id="modal-balance-submit" class="btn-panel btn-green">Añadir saldo</button>
+      </div>
+    </form>
+  </div>
+</div>
 
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script src="{{ url_for('store_bp.static', filename='js/menu_tienda.js') }}" defer></script>
+<script src="{{ url_for('static', filename='js/clear_trigger_logs.js') }}" defer></script>
+<script src="{{ url_for('static', filename='js/logout_all_cookies_btn.js') }}" defer></script>
+<script src="{{ url_for('static', filename='js/manage_permissions.js') }}" defer></script>
 {% endblock %}

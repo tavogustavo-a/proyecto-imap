@@ -5,13 +5,38 @@
 
 {% block head %}
   {{ super() }}
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/store.css') }}">
+  <link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}?v=20260522-my-pages-menu">
+  <link rel="stylesheet" href="{{ url_for('static', filename='fontawesome/css/all.css') }}">
   <link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/sms.css') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/edit_imap2.css') }}">
   <meta name="csrf_token" content="{{ csrf_token() }}">
 {% endblock %}
 
 {% block content %}
+{% set blocked_users = ['soporte','soporte1','soporte2','soporte3'] %}
+<div class="container container-max-width-900 store-light store-front-main px-2 pb-3 manage-my-page-shell">
+  {% if session.get('logged_in') and (not session.get('username') or session.get('username').lower() not in blocked_users) %}
+    <div class="d-flex align-items-center store-front-header gap-2 espaciado-responsive mb-2">
+      <button id="menuToggleBtn" class="btn-blue menu-btn-worksheet" type="button">&#9776; Menú</button>
+    </div>
+    <div id="mobileMenu" class="mobile-menu-store hidden">
+      <div class="menu-user-info-row menu-user-info-row--name-only menu-sidebar-heading-name">
+        <span class="menu-user-name">{{ session.get('username', 'Invitado') }}</span>
+      </div>
+      {% if is_admin %}
+        {% include 'includes/admin_menu_primary_links.html' %}
+        {% include 'includes/store_user_menu_herramientas_link.html' %}
+        <button id="btnClearTriggerLogMenu" type="button" class="btn-panel btn-red mobile-menu-btn mb-04"><i class="fas fa-trash"></i> Limpiar Logs</button>
+        <a href="{{ url_for('auth_bp.logout') }}" class="btn-panel btn-red mobile-menu-btn mb-04"><i class="fas fa-sign-out-alt"></i> Cerrar Sesión</a>
+        <button id="btnLogoutAllAndClearCookies" type="button" class="btn-panel btn-red mobile-menu-btn mb-04" data-url="{{ url_for('admin_bp.logout_all_and_clear_cookies') }}"><i class="fas fa-cookie-bite"></i> Cerrar sesión y limpiar cookies</button>
+        {% include 'includes/store_user_menu_saldo_block.html' %}
+      {% else %}
+        {% include 'includes/store_user_menu_sidebar_body.html' %}
+      {% endif %}
+    </div>
+    <div id="menuOverlay" class="menu-overlay"></div>
+  {% endif %}
+
 <div class="form-container-medium">
   <div class="admin-card">
     <h2 class="text-center mb-1">Gestionar mi página {{ imap_server.route_path }}</h2>
@@ -29,7 +54,7 @@
       >{{ imap_server.paragraph if imap_server.paragraph else '' }}</textarea>
       <div class="d-flex justify-content-center gap-1 flex-wrap">
         <button type="submit" class="btn-green">Guardar Párrafo</button>
-        <a href="{{ url_for('main_bp.home') }}" class="btn btn-blue text-decoration-none">Volver</a>
+        <a href="{{ url_for('user_auth_bp.my_pages_list') }}" class="btn btn-blue text-decoration-none">Mis Páginas</a>
       </div>
     </form>
     
@@ -408,10 +433,12 @@
     </form>
   </div>
 </div>
+</div>
 {% endblock %}
 
 {% block scripts %}
 {{ super() }}
+<script src="{{ url_for('store_bp.static', filename='js/menu_tienda.js') }}" defer></script>
 <script src="{{ url_for('static', filename='js/edit_imap2.js') }}" defer></script>
 <script src="{{ url_for('static', filename='js/edit_imap2_twofa.js') }}" defer></script>
 <script src="{{ url_for('static', filename='js/manage_my_page.js') }}" defer></script>

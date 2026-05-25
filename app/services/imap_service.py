@@ -144,6 +144,52 @@ def delete_imap_server(server_id, model_cls=IMAPServer):
     
     db.session.delete(srv)
     db.session.commit()
+    cleanup_orphaned_imap2_backgrounds()
+
+
+def cleanup_orphaned_imap2_backgrounds(app=None) -> int:
+    """Elimina archivos en imap2_backgrounds sin referencia en IMAPServer2.background_image."""
+    import logging
+
+    log = logging.getLogger(__name__)
+
+    def _run() -> int:
+        from app.models.imap2 import IMAPServer2
+
+        upload_dir = os.path.join(current_app.root_path, 'static', 'uploads', 'imap2_backgrounds')
+        if not os.path.isdir(upload_dir):
+            return 0
+
+        used_backgrounds = {
+            srv.background_image
+            for srv in IMAPServer2.query.all()
+            if srv.background_image
+        }
+
+        deleted = 0
+        for filename in os.listdir(upload_dir):
+            file_path = os.path.join(upload_dir, filename)
+            if not os.path.isfile(file_path):
+                continue
+            if filename in used_backgrounds:
+                continue
+            try:
+                os.remove(file_path)
+                deleted += 1
+                log.info('Fondo IMAP2 huérfano eliminado: %s', filename)
+            except OSError as exc:
+                log.warning('No se pudo eliminar fondo huérfano %s: %s', filename, exc)
+        return deleted
+
+    try:
+        if app is not None:
+            with app.app_context():
+                return _run()
+        return _run()
+    except Exception as exc:
+        log.exception('Error limpiando fondos IMAP2 huérfanos: %s', exc)
+        return 0
+
 
 def search_imap_with_days(server, to_address, limit_days=2):
     """

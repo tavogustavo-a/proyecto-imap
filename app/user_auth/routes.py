@@ -263,9 +263,12 @@ def manage_my_page(server_id):
     allowed_filters = [f for f in user.filters_allowed if f.enabled]
     allowed_regexes = [r for r in user.regexes_allowed if r.enabled]
     
-    # Ordenar por descripción
-    allowed_filters.sort(key=lambda x: (x.description or '').lower())
-    allowed_regexes.sort(key=lambda x: (x.description or '').lower())
+    # Ordenar alfabéticamente por descripción (igual que edit_imap2 / página Regex)
+    def _by_description(item):
+        return ((item.description or '').lower(), item.id or 0)
+
+    allowed_filters.sort(key=_by_description)
+    allowed_regexes.sort(key=_by_description)
     
     # Obtener IDs de filtros y regex asociados a este servidor IMAP2
     associated_filter_ids = [f.id for f in imap_server.filters]
@@ -278,7 +281,8 @@ def manage_my_page(server_id):
         all_filters=allowed_filters,
         all_regexes=allowed_regexes,
         associated_filter_ids=associated_filter_ids,
-        associated_regex_ids=associated_regex_ids
+        associated_regex_ids=associated_regex_ids,
+        current_user=user,
     )
 
 @user_auth_bp.route("/my_pages", methods=["GET"])
@@ -301,7 +305,8 @@ def my_pages_list():
     
     return render_template(
         "my_pages_list.html",
-        managed_pages=managed_pages
+        managed_pages=managed_pages,
+        current_user=user,
     )
 
 @user_auth_bp.route("/update_my_page_paragraph/<int:server_id>", methods=["POST"])
@@ -401,6 +406,9 @@ def upload_my_page_background(imap2_id):
             session["user_session_rev_count_local"] = current_user.user_session_rev_count
         
         db.session.commit()
+
+        from app.services.imap_service import cleanup_orphaned_imap2_backgrounds
+        cleanup_orphaned_imap2_backgrounds()
         
         return jsonify({
             "status": "ok",
@@ -454,6 +462,9 @@ def delete_my_page_background(imap2_id):
             session["user_session_rev_count_local"] = current_user.user_session_rev_count
         
         db.session.commit()
+
+        from app.services.imap_service import cleanup_orphaned_imap2_backgrounds
+        cleanup_orphaned_imap2_backgrounds()
         
         return jsonify({
             "status": "ok",

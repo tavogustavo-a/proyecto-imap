@@ -120,6 +120,9 @@ class User(db.Model):
     # JSON array: últimas actividades de portal (reportes, renovaciones) — ver user_license_activity.py
     portal_license_activity_log = db.Column(db.Text, nullable=True)
 
+    # JSON: preferencias UI del panel «Admin Licencias» (plegados Días / Notas / etc.) por usuario
+    admin_licencias_ui_prefs = db.Column(JSON, nullable=True)
+
     # Campo para indicar si el usuario puede buscar cualquier email (o solo los permitidos)
     can_search_any = db.Column(db.Boolean, default=False, nullable=False)
     

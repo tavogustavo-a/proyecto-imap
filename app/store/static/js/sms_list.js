@@ -152,17 +152,6 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('close-sms-modal')?.addEventListener('click', closeModal);
     document.getElementById('close-sms-modal-btn')?.addEventListener('click', closeModal);
 
-    // Botón volver
-    const btnVolver = document.getElementById('btnVolverPanel');
-    if (btnVolver) {
-        btnVolver.addEventListener('click', function() {
-            const url = this.getAttribute('data-url');
-            if (url) {
-                window.location.href = url;
-            }
-        });
-    }
-
     // ==================== FUNCIONES ====================
 
     async function loadSMSNumbers() {

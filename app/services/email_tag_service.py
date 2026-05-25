@@ -55,13 +55,10 @@ def delete_tag(tag_id):
     
     tag = EmailTag.query.get_or_404(tag_id)
     
-    # Buscar filtros que usan esta etiqueta
     filters_with_tag = EmailFilter.query.filter_by(tag_id=tag_id).all()
-    
-    # Convertir filtros a huérfanos (sin etiqueta asignada)
     for filter_obj in filters_with_tag:
-        filter_obj.tag_id = None  # Marcar como huérfano
-        print(f"🔄 Filtro '{filter_obj.name}' marcado como huérfano (sin etiqueta)")
+        db.session.delete(filter_obj)
+        print(f"🗑️ Filtro '{filter_obj.name}' eliminado (etiqueta borrada)")
     
     # Buscar todos los emails que tienen esta etiqueta
     emails_with_tag = get_emails_by_tag(tag_id)
@@ -79,7 +76,7 @@ def delete_tag(tag_id):
     db.session.delete(tag)
     db.session.commit()
     
-    print(f"✅ Etiqueta '{tag.name}' eliminada. {len(filters_with_tag)} filtros marcados como huérfanos. {emails_count} emails eliminados permanentemente")
+    print(f"✅ Etiqueta '{tag.name}' eliminada. {len(filters_with_tag)} filtros eliminados. {emails_count} emails eliminados permanentemente")
     return True
 
 def get_tag(tag_id):

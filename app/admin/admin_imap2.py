@@ -8,11 +8,14 @@ from app.extensions import db
 from app.models import IMAPServer2, FilterModel, RegexModel, User
 from app.models.imap import IMAPServer
 from app.models.imap2 import IMAP2TwoFAConfig
+from app.services.filter_service import filter_list_order_by
+from app.services.regex_service import regex_list_order_by
 from app.services.imap_service import (
     create_imap_server,
     update_imap_server,
     test_imap_connection,
-    delete_imap_server
+    delete_imap_server,
+    cleanup_orphaned_imap2_backgrounds,
 )
 from app.services.imap_crypto import encrypt_password
 from app.admin.decorators import admin_required
@@ -194,8 +197,12 @@ def test_imap2(server_id):
 def edit_imap2(server_id):
     srv = IMAPServer2.query.get_or_404(server_id)
     # Obtener todos los filtros y regex disponibles
-    all_filters = FilterModel.query.filter_by(enabled=True).order_by(FilterModel.keyword.asc()).all()
-    all_regexes = RegexModel.query.filter_by(enabled=True).order_by(RegexModel.description.asc()).all()
+    all_filters = filter_list_order_by(
+        FilterModel.query.filter_by(enabled=True)
+    ).all()
+    all_regexes = regex_list_order_by(
+        RegexModel.query.filter_by(enabled=True)
+    ).all()
     
     # Obtener IDs de filtros y regex asociados a este servidor
     associated_filter_ids = [f.id for f in srv.filters]
@@ -1000,6 +1007,8 @@ def upload_imap2_background(imap2_id):
                     current_app.logger.info(f"Archivo anterior eliminado: {old_background_filename}")
                 except Exception as e:
                     current_app.logger.warning(f"No se pudo eliminar el archivo anterior {old_background_filename}: {e}")
+
+        cleanup_orphaned_imap2_backgrounds()
         
         # Asegurar que la sesión del usuario actual no se haya perdido después del commit
         if current_user_id:
@@ -1017,44 +1026,6 @@ def upload_imap2_background(imap2_id):
         db.session.rollback()
         current_app.logger.error(f"Error al subir fondo de IMAP2: {e}", exc_info=True)
         return jsonify({"status": "error", "message": str(e)}), 400
-
-def cleanup_orphaned_imap2_backgrounds():
-    """Limpia archivos de fondo huérfanos (archivos que no están asociados a ningún servidor IMAP2)"""
-    try:
-        import os
-        from app.models.imap2 import IMAPServer2
-        
-        upload_dir = os.path.join(current_app.root_path, 'static', 'uploads', 'imap2_backgrounds')
-        if not os.path.exists(upload_dir):
-            return 0
-        
-        # Obtener todos los nombres de archivos de fondo que están en uso
-        used_backgrounds = set()
-        for server in IMAPServer2.query.all():
-            if server.background_image:
-                used_backgrounds.add(server.background_image)
-        
-        # Buscar archivos huérfanos
-        orphaned_count = 0
-        for filename in os.listdir(upload_dir):
-            file_path = os.path.join(upload_dir, filename)
-            
-            if not os.path.isfile(file_path):
-                continue
-            
-            # Si el archivo no está en la lista de usados, es huérfano
-            if filename not in used_backgrounds:
-                try:
-                    os.remove(file_path)
-                    orphaned_count += 1
-                    current_app.logger.info(f"Archivo huérfano eliminado: {filename}")
-                except Exception as e:
-                    current_app.logger.warning(f"No se pudo eliminar archivo huérfano {filename}: {e}")
-        
-        return orphaned_count
-    except Exception as e:
-        current_app.logger.error(f"Error al limpiar fondos huérfanos: {e}", exc_info=True)
-        return 0
 
 @admin_bp.route("/imap2/<int:imap2_id>/delete_background", methods=["POST"])
 @admin_required
@@ -1085,6 +1056,7 @@ def delete_imap2_background(imap2_id):
         current_user_id = flask_session.get("user_id")
         
         db.session.commit()
+        cleanup_orphaned_imap2_backgrounds()
         
         # Asegurar que la sesión del usuario actual no se haya perdido después del commit
         if current_user_id:

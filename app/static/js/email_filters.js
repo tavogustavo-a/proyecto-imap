@@ -89,6 +89,35 @@ function closeEditFilterModal() {
   document.getElementById('editFilterModal').style.display = 'none';
 }
 
+function purgeOrphanFilters() {
+  if (!confirm('¿Eliminar todos los filtros sin etiqueta válida (huérfanos)?')) {
+    return;
+  }
+  const btn = document.getElementById('purgeOrphanFiltersBtn');
+  if (btn) btn.disabled = true;
+
+  fetch('/admin/email-buzon/purge-orphan-filters', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-CSRFToken': document.querySelector('#csrf_token').value
+    }
+  })
+    .then(response => response.json())
+    .then(data => {
+      if (btn) btn.disabled = false;
+      alert(data.message || (data.success ? 'Listo' : 'Error'));
+      if (data.success && data.deleted > 0) {
+        location.reload();
+      }
+    })
+    .catch(err => {
+      if (btn) btn.disabled = false;
+      console.error(err);
+      alert('Error al limpiar filtros huérfanos');
+    });
+}
+
 // Función para eliminar filtro vía AJAX
 function deleteFilter(filterId) {
   if (confirm('¿Estás seguro de que quieres eliminar este filtro?')) {
@@ -992,6 +1021,11 @@ document.addEventListener('DOMContentLoaded', function() {
   }, 100);
 
   // Event listeners para data attributes
+  const purgeOrphanBtn = document.getElementById('purgeOrphanFiltersBtn');
+  if (purgeOrphanBtn) {
+    purgeOrphanBtn.addEventListener('click', purgeOrphanFilters);
+  }
+
   // Botón de crear filtro
   document.querySelectorAll('[data-action="create-filter"]').forEach(button => {
     button.addEventListener('click', function() {

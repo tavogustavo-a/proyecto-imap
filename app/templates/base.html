@@ -11,7 +11,11 @@
   {% endblock %}
 
   <link rel="icon" href="{{ url_for('static', filename='images/favicon.svg') }}?v=20241220" type="image/svg+xml">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}?v=20260501-btn-no-fs13">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}?v=20260519-mb-2">
+  {% if is_admin %}
+  <meta name="archived-licenses-count-url" content="{{ url_for('store_bp.api_archived_licenses_count') }}">
+  <meta name="archived-licenses-list-url" content="{{ url_for('store_bp.api_get_archived_licenses') }}">
+  {% endif %}
 </head>
 
 <body class="theme-active {{ site_settings.get('current_theme','tema1') }}" data-opacity="{{ site_settings.get('card_opacity','0.8') }}" data-debug-mode="{{ 'true' if config.DEBUG else 'false' }}">
@@ -42,8 +46,12 @@
   <script src="{{ url_for('static', filename='js/code_protection.js') }}" defer></script>
   {% endif %} #}
   
-  <script src="{{ url_for('static', filename='js/main.js') }}?v=20241220-fix-empty-mail-cards"></script>
+  <script src="{{ url_for('static', filename='js/main.js') }}?v=20260523-filter-code-copy"></script>
   <script src="{{ url_for('static', filename='js/loading_overlay.js') }}" defer></script>
+  <script src="{{ url_for('store_bp.static', filename='js/store_menu_saldo_poll.js') }}?v=1" defer></script>
+  {% if is_admin %}
+  <script src="{{ url_for('store_bp.static', filename='js/admin_archivados_menu_count.js') }}?v=2" defer></script>
+  {% endif %}
 
   {# Bloque para que las plantillas hijas puedan añadir sus propios scripts #}
   {% block scripts %}{% endblock %}

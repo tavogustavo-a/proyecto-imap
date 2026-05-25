@@ -27,7 +27,29 @@ class Sale(db.Model):
     product_id = db.Column(db.Integer, db.ForeignKey("store_products.id", ondelete='CASCADE'), nullable=False)
     quantity = db.Column(db.Integer, default=1)
     total_price = db.Column(db.Numeric(10, 2), nullable=False)
+    is_renewal = db.Column(db.Boolean, default=False, nullable=False, index=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
+
+
+class SalePurchaseSnapshot(db.Model):
+    """Copia permanente de credenciales por compra (historial / Ver licencias)."""
+    __tablename__ = 'store_sale_purchase_snapshots'
+    id = db.Column(db.Integer, primary_key=True)
+    sale_id = db.Column(db.Integer, nullable=True, index=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='CASCADE'), nullable=False, index=True)
+    product_id = db.Column(db.Integer, nullable=True)
+    product_name = db.Column(db.String(200), nullable=False)
+    quantity = db.Column(db.Integer, default=1)
+    total_price = db.Column(db.Numeric(10, 2), nullable=False)
+    sale_created_at = db.Column(db.DateTime, nullable=False, index=True)
+    licencias_json = db.Column(db.Text, nullable=False, default='[]')
+    is_renewal = db.Column(db.Boolean, default=False, nullable=False)
+    is_reversed = db.Column(db.Boolean, default=False, nullable=False)
+    reversed_at = db.Column(db.DateTime, nullable=True)
+    purged_from_sales = db.Column(db.Boolean, default=False, nullable=False, index=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
 
 class Coupon(db.Model):
     __tablename__ = "store_coupons"
@@ -484,7 +506,7 @@ class License(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     product_id = db.Column(db.Integer, db.ForeignKey('store_products.id', ondelete='CASCADE'), nullable=False)
     position = db.Column(db.Integer, default=0, index=True)  # Posición para ordenar
-    # Días de garantía (admin «Gestionar productos»); por defecto 5
+    # Reserva de garantía (admin «gar.»): n.º de cuentas disponibles que no se venden; por defecto 5
     warranty_days = db.Column(db.Integer, default=5, nullable=False)
     enabled = db.Column(db.Boolean, default=True, index=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
@@ -529,17 +551,32 @@ class LicenseAccount(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     license_id = db.Column(db.Integer, db.ForeignKey('store_licenses.id', ondelete='CASCADE'), nullable=False)
     account_identifier = db.Column(db.String(200), nullable=False)  # Ej: "disneyprem5+0k9"
-    email = db.Column(db.String(120), nullable=False)  # Ej: "disneyprem5+0k9@gmail.com"
+    # Correo opcional en inventario bloc: usar '' cuando la línea no trae formato email.
+    email = db.Column(db.String(120), nullable=False, default='')
     password = db.Column(db.String(200), nullable=False)  # Ej: "3dw9k65tz"
     status = db.Column(db.String(20), default='available')  # 'available', 'assigned', 'sold'
     assigned_to_user_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='SET NULL'), nullable=True)
+    # Venta en tienda pública que originó la asignación (historial de compras / credenciales por compra).
+    sale_id = db.Column(db.Integer, db.ForeignKey('store_sales.id', ondelete='SET NULL'), nullable=True, index=True)
     assigned_at = db.Column(db.DateTime, nullable=True)
     expires_at = db.Column(db.DateTime, nullable=True)  # Fecha de expiración (1 mes)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    
-    # Relación con usuario asignado
-    assigned_user = db.relationship('User', backref='assigned_license_accounts')
+    # Posición 1-based en el bloc «Licencias» (license_notes): una unidad por línea aunque la credencial se repita.
+    # NULL = creada fuera del sync del bloc (p. ej. API POST manual).
+    inventory_bloc_ord = db.Column(db.Integer, nullable=True, index=True)
+    # Reserva temporal en carrito de renovación (tienda pública).
+    renewal_reserved_user_id = db.Column(
+        db.Integer, db.ForeignKey('users.id', ondelete='SET NULL'), nullable=True, index=True
+    )
+    renewal_reserved_at = db.Column(db.DateTime, nullable=True)
+
+    # Relación con usuario asignado (foreign_keys: también existe renewal_reserved_user_id → users)
+    assigned_user = db.relationship(
+        'User',
+        foreign_keys=[assigned_to_user_id],
+        backref='assigned_license_accounts',
+    )
     # Notas privadas del cliente (solo lectura/escritura en vista «Licencias» usuario; distintas del bloc admin).
     client_notes = db.Column(db.Text, nullable=True)
     
@@ -605,5 +642,27 @@ class TwoFAConfig(db.Model):
     
     def __repr__(self):
         return f'<TwoFAConfig id={self.id} emails={self.emails[:50]}...>'
+
+
+class BalanceRecharge(db.Model):
+    """Solicitud de recarga de saldo (comprobante de transferencia, etc.)."""
+    __tablename__ = "store_balance_recharges"
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    submitted_by_user_id = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    currency = db.Column(db.String(3), nullable=False)
+    payment_method_id = db.Column(db.String(48), nullable=True, index=True)
+    amount_claimed = db.Column(db.Numeric(12, 2), nullable=True)
+    note = db.Column(db.Text, nullable=True)
+    status = db.Column(db.String(20), nullable=False, default="pending", index=True)
+    proof_files_json = db.Column(db.Text, nullable=False, default="[]")
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
+    reviewed_at = db.Column(db.DateTime, nullable=True)
+    reviewed_by_user_id = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    admin_note = db.Column(db.Text, nullable=True)
+
+    def __repr__(self):
+        return f"<BalanceRecharge id={self.id} user_id={self.user_id} status={self.status}>"
 
  

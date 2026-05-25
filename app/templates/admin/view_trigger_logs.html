@@ -9,13 +9,13 @@
 
 {% block content %}
 <div class="admin-card form-container-wide">
-    <div class="d-flex justify-content-between align-items-center mb-1">
+    <div class="d-flex justify-content-between align-items-center">
         <h3>Logs de Activadores</h3> <!-- Título más corto -->
-        <a href="{{ url_for('admin_bp.dashboard') }}" class="btn btn-blue text-decoration-none">Volver al Panel</a>
+        <a href="{{ url_for('admin_bp.dashboard') }}" class="btn btn-blue text-decoration-none">Volver</a>
     </div>
 
     <!-- NUEVO: Formulario de Búsqueda -->
-    <div class="mb-1">
+    <div>
         <input type="search" id="logSearchInput" name="search_query" placeholder="Buscar por usuario o correo consultado..." value="{{ search_query or '' }}" class="w-100">
     </div>
     <!-- FIN Formulario de Búsqueda -->

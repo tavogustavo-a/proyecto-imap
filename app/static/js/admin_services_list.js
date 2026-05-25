@@ -336,22 +336,7 @@ document.addEventListener("DOMContentLoaded", function() {
   const iconGridOverlay = document.getElementById("iconGridOverlay");
   const iconGridDiv = document.getElementById("iconGrid");
   const closeIconGridBtn = document.getElementById("closeIconGridBtn");
-  const btnVolverPanel = document.getElementById("btnVolverPanelServices");
   let currentServiceIdForIcons = null;
-
-  // Listener para botón Volver al Panel
-  if (btnVolverPanel) {
-    const dashboardUrl = btnVolverPanel.getAttribute("data-dashboard-url");
-    if (dashboardUrl) {
-      btnVolverPanel.addEventListener("click", () => {
-        window.location.href = dashboardUrl;
-      });
-    } else {
-      console.error("No se encontró data-dashboard-url en btnVolverPanel");
-    }
-  } else {
-    console.error("btnVolverPanel no encontrado");
-  }
 
   if (closeIconGridBtn) {
     closeIconGridBtn.addEventListener("click", () => {

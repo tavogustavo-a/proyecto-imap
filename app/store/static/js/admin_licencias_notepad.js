@@ -1540,12 +1540,46 @@
     setLicenseHeading('');
   }
 
+  function refreshLicenseSplitFromApi(licenseRow) {
+    if (!licenseRow || licenseRow.id == null) return;
+    var idStr = String(licenseRow.id);
+    var taLicense = getEl('adminLicenciasNotepadByLicense');
+    if (!taLicense || String(taLicense.dataset.licenseId) !== idStr) return;
+    if (!Object.prototype.hasOwnProperty.call(licenseRow, 'license_notes')) return;
+    var v = licenseRow.license_notes != null ? String(licenseRow.license_notes) : '';
+    v = stripStandaloneGenericoLines(v);
+    var cur = '';
+    if (typeof window.adminLicenseSplitGetMergedNotes === 'function') {
+      cur = String(window.adminLicenseSplitGetMergedNotes()).replace(/\r\n/g, '\n').trimEnd();
+    } else {
+      cur = licenseMergedOrBlockText(taLicense).replace(/\r\n/g, '\n').trimEnd();
+    }
+    var next = v.replace(/\r\n/g, '\n').trimEnd();
+    if (cur === next) return;
+    if (typeof window.adminLicenseSplitApplyMergedText === 'function') {
+      window.adminLicenseSplitApplyMergedText(v);
+    } else {
+      setLicenseBlockPlainText(taLicense, v);
+    }
+    saveLicenseForId(idStr, licenseMergedOrBlockText(taLicense));
+    refreshLicenseLineBadge();
+    if (typeof window.adminLicenseSplitScheduleAutosizeCreds === 'function') {
+      window.requestAnimationFrame(function () {
+        window.adminLicenseSplitScheduleAutosizeCreds();
+      });
+    }
+    if (typeof refreshDuplicateEmailHighlights === 'function') {
+      refreshDuplicateEmailHighlights(parseInt(idStr, 10));
+    }
+  }
+
   window.initAdminLicenciasNotepad = init;
   window.adminLicenciasSaveCurrentLicenseNotesImmediate = saveCurrentLicenseNotesImmediate;
   window.adminLicenciasScheduleSaveChangesNotesOnly = scheduleSaveChangesNotesOnly;
   window.adminLicenciasFlushPendingChangesNotesSaves = flushPendingChangesNotesSaves;
   window.AdminLicenciasNotepad = {
     bindLicense: bindLicense,
-    flushLicense: flushLicense
+    flushLicense: flushLicense,
+    refreshLicenseSplitFromApi: refreshLicenseSplitFromApi
   };
 })();

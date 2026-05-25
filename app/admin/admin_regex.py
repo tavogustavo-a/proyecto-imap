@@ -10,7 +10,8 @@ from app.models import RegexModel, User
 from app.services.regex_service import (
     create_regex_service,
     update_regex_service,
-    delete_regex_service
+    delete_regex_service,
+    regex_list_order_by,
 )
 from app.admin.decorators import admin_required
 
@@ -172,7 +173,7 @@ def search_regex_ajax():
             | (RegexModel.pattern.ilike(f"%{query}%"))
             | (RegexModel.description.ilike(f"%{query}%"))
         )
-    regex_list = regexes_q.all()
+    regex_list = regex_list_order_by(regexes_q).all()
 
     data = []
     for r in regex_list:
@@ -199,7 +200,7 @@ def toggle_regex_ajax():
         r.enabled = not currently_enabled
         db.session.commit()
 
-        all_regex = RegexModel.query.all()
+        all_regex = regex_list_order_by(RegexModel.query).all()
         data_resp = []
         for rx in all_regex:
             data_resp.append({

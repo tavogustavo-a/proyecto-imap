@@ -1,0 +1,171 @@
+{% extends "base.html" %}
+
+{% block title %}{{ title }}{% endblock %}
+
+{% block head %}{{ super() }}<link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}?v=20260522-admin-recargas-menus"><link rel="stylesheet" href="{{ url_for('static', filename='fontawesome/css/all.css') }}"><meta name="csrf_token" content="{{ csrf_token() }}">{% endblock %}
+{% block content %}
+<div class="purchase-history-page purchase-history-admin">
+  <div id="mobileMenu" class="mobile-menu-store hidden">
+    <div class="menu-user-info-row menu-user-info-row--name-only menu-sidebar-heading-name">
+      <span class="menu-user-name">{{ session.get('username', 'Admin') }}</span>
+    </div>
+    {% include 'includes/admin_menu_primary_links.html' %}
+    <button id="btnClearTriggerLogMenu" type="button" class="btn-panel btn-red mobile-menu-btn mb-04"><i class="fas fa-trash"></i> Limpiar Logs</button>
+    <a href="{{ url_for('auth_bp.logout') }}" class="btn-panel btn-red mobile-menu-btn mb-04"><i class="fas fa-sign-out-alt"></i> Cerrar Sesión</a>
+  </div>
+  <div id="mobileMenu2" class="mobile-menu-store hidden">
+    <div class="menu-user-info-row menu-user-info-row--name-only menu-sidebar-heading-name">
+      <span class="menu-user-name">Menú</span>
+    </div>
+    {% include 'includes/admin_menu_secondary_links.html' %}
+    {% include 'includes/admin_menu_licencias_extra_links.html' %}
+  </div>
+  <div id="menuOverlay" class="menu-overlay"></div>
+
+  <div class="store-light purchase-history-container mx-auto admin-recargas-page"
+       data-list-url="{{ url_for('store_bp.api_admin_balance_recharges') }}"
+       data-review-url-base="{{ url_for('store_bp.api_admin_balance_recharge_review', recharge_id=0) }}"
+       data-methods-url="{{ url_for('store_bp.api_admin_payment_methods_settings') }}"
+       data-user-methods-url="{{ url_for('store_bp.api_admin_user_payment_methods') }}"
+       data-search-users-url="{{ url_for('admin_bp.search_users_ajax') }}">
+    <div class="purchase-history-admin-toolbar">
+      <button id="menuToggleBtn" type="button" class="btn-panel btn-blue menu-toggle-btn" title="Menú de navegación" aria-label="Abrir menú de navegación">&#9776; Menú</button>
+      <button id="menu2ToggleBtn" type="button" class="btn-panel btn-blue menu-toggle-btn" title="Menú secundario" aria-label="Abrir segundo menú">&#9776; Menú2</button>
+    </div>
+
+    <h1 class="text-center purchase-history-page-title"><i class="fas fa-wallet"></i> Recargas y pagos</h1>
+
+    <div class="admin-recargas-tabs" role="tablist">
+      <button type="button" class="admin-recargas-tab admin-recargas-tab--active" data-tab="review" role="tab" aria-selected="true">Revisar consignaciones</button>
+      <button type="button" class="admin-recargas-tab" data-tab="methods" role="tab" aria-selected="false">Medios de pago</button>
+      <button type="button" class="admin-recargas-tab" data-tab="users" role="tab" aria-selected="false">Usuarios y medios</button>
+    </div>
+
+    <section id="adminRecargasPanelReview" class="admin-recargas-panel">
+      <section class="purchase-history-cleanup-panel admin-recargas-cleanup-panel" id="brCleanupPanel"
+               data-settings-url="{{ url_for('store_bp.api_balance_recharge_cleanup_settings') }}"
+               data-purge-url="{{ url_for('store_bp.api_balance_recharge_purge') }}"
+               data-preview-url="{{ url_for('store_bp.api_balance_recharge_purge_preview') }}"
+               data-search-users-url="{{ url_for('admin_bp.search_users_ajax') }}">
+        <h4 class="text-center purchase-history-cleanup-heading">
+          <i class="fas fa-broom" aria-hidden="true"></i> Limpieza del historial de recargas
+          <span class="purchase-history-cleanup-info-wrap">
+            <button type="button" id="brCleanupInfoBtn" class="purchase-history-cleanup-info-btn" aria-expanded="false" aria-controls="brCleanupInfoBox" title="Más información">
+              <i class="fas fa-info-circle" aria-hidden="true"></i>
+              <span class="sr-only">Más información sobre la limpieza de recargas</span>
+            </button>
+            <div id="brCleanupInfoBox" class="purchase-history-cleanup-info-box" hidden>
+              Borra solicitudes antiguas en la base de datos y sus comprobantes en disco. También elimina imágenes huérfanas sin registro asociado.
+            </div>
+          </span>
+        </h4>
+        <div class="purchase-history-cleanup-grid">
+          <div class="purchase-history-cleanup-days-row">
+            <label for="brCleanupDays" class="form-label purchase-history-cleanup-days-label">Eliminar solicitudes con más de (días)</label>
+            <input type="number" id="brCleanupDays" class="form-control purchase-history-cleanup-days-input" min="1" max="3650" value="{{ cleanup_settings.retention_days if cleanup_settings else 90 }}" autocomplete="off" aria-label="Días de antigüedad">
+          </div>
+          <div class="purchase-history-cleanup-field">
+            <label for="brCleanupScope" class="sr-only">Alcance de la limpieza</label>
+            <select id="brCleanupScope" class="form-select" autocomplete="off" title="Alcance de la limpieza" aria-label="Alcance de la limpieza">
+              <option value="all" {% if not cleanup_settings or cleanup_settings.scope != 'user' %}selected{% endif %}>Todos los usuarios</option>
+              <option value="user" {% if cleanup_settings and cleanup_settings.scope == 'user' %}selected{% endif %}>Solo un usuario</option>
+            </select>
+          </div>
+          <div class="purchase-history-cleanup-user-wrap" id="brCleanupUserWrap" {% if not cleanup_settings or cleanup_settings.scope != 'user' %}hidden{% endif %}>
+            <label for="brCleanupUserSearch" class="form-label">Usuario</label>
+            <input type="hidden" id="brCleanupUserId" value="{% if cleanup_selected_user %}{{ cleanup_selected_user.id }}{% endif %}">
+            <div class="purchase-history-cleanup-user-search-wrap">
+              <input type="search" id="brCleanupUserSearch" class="form-control" placeholder="Buscar por nombre de usuario…" autocomplete="off" aria-controls="brCleanupUserResults">
+              <div id="brCleanupUserResults" class="purchase-history-cleanup-user-results" hidden role="listbox"></div>
+            </div>
+            <p id="brCleanupUserSelected" class="purchase-history-cleanup-user-selected mb-0 mt-05"{% if not cleanup_selected_user %} hidden{% endif %}>
+              Seleccionado: <strong id="brCleanupUserSelectedLabel">{% if cleanup_selected_user %}{{ cleanup_selected_user.label }}{% endif %}</strong>
+              <button type="button" id="brCleanupUserClear" class="purchase-history-cleanup-user-clear">Quitar</button>
+            </p>
+          </div>
+          <div class="purchase-history-cleanup-actions-row">
+            <span class="purchase-history-cleanup-preview text-muted">
+              Coinciden: <strong id="brCleanupPreviewCount">—</strong> solicitud(es)
+            </span>
+            <button type="button" id="brCleanupPurgeBtn" class="btn-panel btn-red">Eliminar ahora</button>
+          </div>
+        </div>
+        <hr class="purchase-history-cleanup-separator" aria-hidden="true">
+        <h4 class="text-center purchase-history-cleanup-heading purchase-history-cleanup-heading-auto">
+          <i class="fas fa-clock" aria-hidden="true"></i> Limpieza automática programada
+        </h4>
+        <div class="purchase-history-cleanup-grid">
+          <div class="purchase-history-cleanup-auto-row">
+            <div class="form-check purchase-history-cleanup-auto-check mb-0">
+              <input class="form-check-input" type="checkbox" id="brCleanupAutoEnabled" {% if cleanup_settings and cleanup_settings.auto_enabled %}checked{% endif %} aria-label="Activar limpieza automática" title="Activar limpieza automática">
+              <label class="sr-only" for="brCleanupAutoEnabled">Activar limpieza automática</label>
+            </div>
+            <label for="brCleanupIntervalHours" class="sr-only">Ejecutar cada</label>
+            <select id="brCleanupIntervalHours" class="form-select purchase-history-cleanup-interval-select" autocomplete="off" title="Ejecutar cada" aria-label="Ejecutar cada"{% if not cleanup_settings or not cleanup_settings.auto_enabled %} disabled{% endif %}>
+              <option value="6" {% if cleanup_settings and cleanup_settings.run_interval_hours == 6 %}selected{% endif %}>Ejecutar cada 6 horas</option>
+              <option value="12" {% if cleanup_settings and cleanup_settings.run_interval_hours == 12 %}selected{% endif %}>Ejecutar cada 12 horas</option>
+              <option value="24" {% if not cleanup_settings or cleanup_settings.run_interval_hours == 24 %}selected{% endif %}>Ejecutar cada 24 horas (diario)</option>
+              <option value="48" {% if cleanup_settings and cleanup_settings.run_interval_hours == 48 %}selected{% endif %}>Ejecutar cada 48 horas</option>
+              <option value="168" {% if cleanup_settings and cleanup_settings.run_interval_hours == 168 %}selected{% endif %}>Ejecutar cada 168 horas (semanal)</option>
+              <option value="360" {% if cleanup_settings and cleanup_settings.run_interval_hours == 360 %}selected{% endif %}>Ejecutar cada 15 días</option>
+              <option value="720" {% if cleanup_settings and cleanup_settings.run_interval_hours == 720 %}selected{% endif %}>Ejecutar cada 30 días</option>
+              <option value="1440" {% if cleanup_settings and cleanup_settings.run_interval_hours == 1440 %}selected{% endif %}>Ejecutar cada 60 días</option>
+              <option value="2160" {% if cleanup_settings and cleanup_settings.run_interval_hours == 2160 %}selected{% endif %}>Ejecutar cada 90 días</option>
+              <option value="4320" {% if cleanup_settings and cleanup_settings.run_interval_hours == 4320 %}selected{% endif %}>Ejecutar cada 180 días</option>
+              <option value="8760" {% if cleanup_settings and cleanup_settings.run_interval_hours == 8760 %}selected{% endif %}>Ejecutar cada 365 días</option>
+            </select>
+            <button type="button" id="brCleanupSaveAutoBtn" class="btn-panel btn-green purchase-history-cleanup-save-btn">Guardar</button>
+          </div>
+        </div>
+        <div id="brCleanupStatus" class="mt-05" role="status" aria-live="polite"></div>
+      </section>
+
+      <hr class="admin-recargas-section-sep" aria-hidden="true">
+
+      <div class="admin-recargas-review-toolbar">
+        <label for="adminRecargasFilter" class="sr-only">Estado</label>
+        <select id="adminRecargasFilter" class="form-select">
+          <option value="pending" selected>Pendientes</option>
+          <option value="approved">Aprobadas</option>
+          <option value="rejected">Rechazadas</option>
+          <option value="all">Todas</option>
+        </select>
+        <span class="text-muted">Pendientes: <strong id="adminRecargasPendingCount">—</strong></span>
+        <button type="button" id="adminRecargasRefresh" class="btn-panel btn-blue btn-sm">Actualizar</button>
+      </div>
+      <div id="adminRecargasList" class="admin-recargas-list">
+        <p class="text-muted">Cargando solicitudes…</p>
+      </div>
+    </section>
+
+    <section id="adminRecargasPanelMethods" class="admin-recargas-panel" hidden>
+      <p class="admin-recargas-hint">Configura los datos de pago que verán los clientes al recargar saldo. En moneda USD se muestra como <strong>USDT</strong>.</p>
+      <div id="adminPaymentMethodsEditor" class="admin-payment-methods-editor"></div>
+      <button type="button" id="adminPaymentMethodsSave" class="btn-panel btn-green mt-2">Guardar medios de pago</button>
+      <p id="adminPaymentMethodsMsg" class="mt-05" role="status" aria-live="polite"></p>
+    </section>
+
+    <section id="adminRecargasPanelUsers" class="admin-recargas-panel" hidden>
+      <p class="admin-recargas-hint">Deja todos marcados para que el usuario vea todos los medios de su moneda. Si desmarcas alguno, solo verá los seleccionados.</p>
+      <div class="purchase-history-cleanup-user-search-wrap">
+        <label for="adminUserPmSearch" class="form-label">Usuario</label>
+        <input type="search" id="adminUserPmSearch" class="form-control" placeholder="Buscar por nombre de usuario…" autocomplete="off">
+        <div id="adminUserPmResults" class="purchase-history-cleanup-user-results" hidden role="listbox"></div>
+      </div>
+      <p id="adminUserPmSelected" class="purchase-history-cleanup-user-selected mb-2" hidden>
+        Usuario: <strong id="adminUserPmSelectedLabel"></strong>
+      </p>
+      <div id="adminUserPmCheckboxes" class="admin-user-pm-checkboxes"></div>
+      <button type="button" id="adminUserPmSave" class="btn-panel btn-green mt-2" disabled>Guardar restricción</button>
+      <p id="adminUserPmMsg" class="mt-05" role="status" aria-live="polite"></p>
+    </section>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+  {{ super() }}
+  <script src="{{ url_for('store_bp.static', filename='js/menu_tienda.js') }}" defer></script>
+  <script src="{{ url_for('static', filename='js/clear_trigger_logs.js') }}" defer></script>
+  <script src="{{ url_for('store_bp.static', filename='js/admin_recargas_cleanup.js') }}?v=20260522" defer></script>
+  <script src="{{ url_for('store_bp.static', filename='js/admin_recargas_saldo.js') }}?v=20260522" defer></script>
+{% endblock %}

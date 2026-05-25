@@ -7,16 +7,40 @@
   <link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}">
   <link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/html_tools.css') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='fontawesome/css/all.css') }}">
-  <script src="https://code.iconify.design/iconify-icon/2.1.0/iconify-icon.min.js"></script>
+  <script src="{{ url_for('store_bp.static', filename='js/vendor/iconify-icon.min.js') }}" defer></script>
   <meta name="html-tools-static-images" content="{{ url_for('static', filename='images/') }}">
 {% endblock %}
 
 {% block content %}
-<div class="container store-light html-tools-container">
-  <div class="html-tools-header">
-    <h2><i class="fas fa-code"></i> Herramienta HTML</h2>
-    <a href="{{ url_for('store_bp.admin_work_sheets') }}" class="html-tools-btn-back"><i class="fas fa-arrow-left"></i> Volver</a>
+<div class="container store-light html-tools-container"
+     data-clear-trigger-log-url="{{ url_for('admin_bp.clear_trigger_log') }}"
+     data-logout-all-cookies-url="{{ url_for('admin_bp.logout_all_and_clear_cookies') }}">
+
+  <div id="mobileMenu" class="mobile-menu-store hidden">
+    <div class="menu-user-info-row menu-user-info-row--name-only menu-sidebar-heading-name">
+      <span class="menu-user-name">{{ session.get('username', 'Admin') }}</span>
+    </div>
+    {% include 'includes/admin_menu_primary_links.html' %}
+    <button id="btnClearTriggerLogMenu" type="button" class="btn-panel btn-red mobile-menu-btn mb-04"><i class="fas fa-trash"></i> Limpiar Logs</button>
+    <a href="{{ url_for('auth_bp.logout') }}" class="btn-panel btn-red mobile-menu-btn mb-04"><i class="fas fa-sign-out-alt"></i> Cerrar Sesión</a>
+    <button id="btnLogoutAllAndClearCookies" type="button" class="btn-panel btn-red mobile-menu-btn mb-04" data-url="{{ url_for('admin_bp.logout_all_and_clear_cookies') }}"><i class="fas fa-cookie-bite"></i> Cerrar sesión y limpiar cookies</button>
   </div>
+
+  <div id="mobileMenu2" class="mobile-menu-store hidden">
+    <div class="menu-user-info-row menu-user-info-row--name-only menu-sidebar-heading-name">
+      <span class="menu-user-name">Menú</span>
+    </div>
+    {% include 'includes/admin_menu_secondary_links.html' %}
+    {% include 'includes/admin_menu_licencias_extra_links.html' %}
+  </div>
+
+  <div id="menuOverlay" class="menu-overlay"></div>
+
+  <div class="d-flex gap-05 mb-1">
+    <button id="menuToggleBtn" type="button" class="btn-panel btn-blue menu-toggle-btn" title="Menú de navegación" aria-label="Abrir menú de navegación">&#9776; Menú</button>
+    <button id="menu2ToggleBtn" type="button" class="btn-panel btn-blue menu-toggle-btn" title="Menú secundario" aria-label="Abrir segundo menú">&#9776; Menú2</button>
+  </div>
+  <h2 class="html-tools-title text-center w-100 m-0 mb-1"><i class="fas fa-code"></i> Herramienta HTML</h2>
 
   <p class="mb-3 text-muted html-tools-instructions">
     Escribe en el editor visual y el código HTML se genera en tiempo real. También puedes editar el HTML directamente y se aplica al editor automáticamente.
@@ -170,5 +194,8 @@
 
 {% block scripts %}
   {{ super() }}
+  <script src="{{ url_for('store_bp.static', filename='js/menu_tienda.js') }}" defer></script>
+  <script src="{{ url_for('static', filename='js/clear_trigger_logs.js') }}" defer></script>
+  <script src="{{ url_for('static', filename='js/logout_all_cookies_btn.js') }}" defer></script>
   <script src="{{ url_for('store_bp.static', filename='js/admin_html_tools.js') }}?v=20260421-meta-static" defer></script>
 {% endblock %}

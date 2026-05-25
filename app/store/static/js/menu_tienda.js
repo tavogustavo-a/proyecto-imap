@@ -16,6 +16,15 @@ document.addEventListener('DOMContentLoaded', function() {
   var menu4Btn = document.getElementById('menu4ToggleBtn');
   var mobileMenu4 = document.getElementById('mobileMenu4');
 
+  function syncSideMenuOpenState() {
+    var anyOpen =
+      (mobileMenu && !mobileMenu.classList.contains('hidden')) ||
+      (mobileMenu2 && !mobileMenu2.classList.contains('hidden')) ||
+      (mobileMenu3 && !mobileMenu3.classList.contains('hidden')) ||
+      (mobileMenu4 && !mobileMenu4.classList.contains('hidden'));
+    document.body.classList.toggle('store-side-menu-open', !!anyOpen);
+  }
+
   // Función para cerrar todos los menús
   function closeAllMenus() {
     if(mobileMenu) mobileMenu.classList.add('hidden');
@@ -23,6 +32,7 @@ document.addEventListener('DOMContentLoaded', function() {
     if(mobileMenu3) mobileMenu3.classList.add('hidden');
     if(mobileMenu4) mobileMenu4.classList.add('hidden');
     if(menuOverlay) menuOverlay.classList.remove('active');
+    syncSideMenuOpenState();
   }
 
   // Menú original
@@ -31,6 +41,7 @@ document.addEventListener('DOMContentLoaded', function() {
       closeAllMenus(); // Cerrar otros menús primero
       mobileMenu.classList.toggle('hidden');
       if(menuOverlay) menuOverlay.classList.toggle('active');
+      syncSideMenuOpenState();
     });
   }
 
@@ -40,6 +51,7 @@ document.addEventListener('DOMContentLoaded', function() {
       closeAllMenus(); // Cerrar otros menús primero
       mobileMenu2.classList.toggle('hidden');
       if(menuOverlay) menuOverlay.classList.toggle('active');
+      syncSideMenuOpenState();
     });
   }
 
@@ -49,6 +61,7 @@ document.addEventListener('DOMContentLoaded', function() {
       closeAllMenus(); // Cerrar otros menús primero
       mobileMenu3.classList.toggle('hidden');
       if(menuOverlay) menuOverlay.classList.toggle('active');
+      syncSideMenuOpenState();
     });
   }
 
@@ -58,6 +71,7 @@ document.addEventListener('DOMContentLoaded', function() {
       closeAllMenus(); // Cerrar otros menús primero
       mobileMenu4.classList.toggle('hidden');
       if(menuOverlay) menuOverlay.classList.toggle('active');
+      syncSideMenuOpenState();
     });
   }
 

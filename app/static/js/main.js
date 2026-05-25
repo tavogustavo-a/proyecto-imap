@@ -680,76 +680,53 @@ document.addEventListener("DOMContentLoaded", function () {
         if (resultsDiv) {
           resultsDiv.innerHTML = ''; // Limpiar SIEMPRE antes de añadir
 
-          // 1. Determinar si se renderizará Regex
           const regexWillRender = (regexDict && Object.keys(regexDict).length > 0);
-          // 2. Determinar si hay contenido de filtro
           const hasFilterContent = hasMailContent;
+          const filterCode = String(mail.filter_code || '').trim();
 
-
-          // 3. LÓGICA DE PRIORIDAD: Si hay filtro Y regex, mostrar solo filtro
-          if (hasFilterContent && regexWillRender) {
-            // CASO 1: Hay ambos - mostrar solo FILTRO
+          function appendFilterHtmlView() {
             const mainContainer = document.createElement('div');
             mainContainer.classList.add('regex-result-container');
             mainContainer.classList.add('text-center');
-
-            // Añadir el contenido del filtro
             mainContainer.appendChild(mailContentContainer);
-
-            // Añadir fecha para filtros
             if (mailDateFormatted) {
               const pDateOnly = document.createElement('p');
               pDateOnly.classList.add('regex-result-date-only');
-              
-              // Separar fecha y hora
-              const parts = mailDateFormatted.split('  '); // Doble espacio para separar
+              const parts = mailDateFormatted.split('  ');
               if (parts.length === 2) {
                 const [datePart, timePart] = parts;
                 pDateOnly.innerHTML = `Fecha: <span class="date-part">${escapeHtml(datePart)}</span>&nbsp;&nbsp;&nbsp;&nbsp;<span class="time-part">${escapeHtml(timePart)}</span>`;
               } else {
                 pDateOnly.textContent = `Fecha: ${mailDateFormatted}`;
               }
-              
               mainContainer.appendChild(pDateOnly);
             }
-
-            resultsDiv.appendChild(mainContainer);
-          } else if (regexWillRender) {
-            // CASO 2: Solo hay regex - mostrar REGEX
-            const regexElement = renderRegexMatches(regexDict, mailDateFormatted);
-            if (regexElement) { // Asegurarse de que no sea null/undefined
-              resultsDiv.appendChild(regexElement);
-            }
-          } else if (hasFilterContent) {
-            // CASO 3: Solo hay filtro - mostrar FILTRO
-            const mainContainer = document.createElement('div');
-            mainContainer.classList.add('regex-result-container');
-            mainContainer.classList.add('text-center');
-
-            // Añadir el contenido del filtro
-            mainContainer.appendChild(mailContentContainer);
-
-            // Añadir fecha para filtros
-            if (mailDateFormatted) {
-              const pDateOnly = document.createElement('p');
-              pDateOnly.classList.add('regex-result-date-only');
-              
-              // Separar fecha y hora
-              const parts = mailDateFormatted.split('  '); // Doble espacio para separar
-              if (parts.length === 2) {
-                const [datePart, timePart] = parts;
-                pDateOnly.innerHTML = `Fecha: <span class="date-part">${escapeHtml(datePart)}</span>&nbsp;&nbsp;&nbsp;&nbsp;<span class="time-part">${escapeHtml(timePart)}</span>`;
-              } else {
-                pDateOnly.textContent = `Fecha: ${mailDateFormatted}`;
-              }
-              
-              mainContainer.appendChild(pDateOnly);
-            }
-
             resultsDiv.appendChild(mainContainer);
           }
 
-          // 4. Mostrar el contenedor y añadir listeners
+          if (filterCode) {
+            const codeEl = renderCodeResult(filterCode, mailDateFormatted);
+            if (codeEl) {
+              resultsDiv.appendChild(codeEl);
+            } else if (hasFilterContent) {
+              appendFilterHtmlView();
+            }
+          } else if (hasFilterContent && regexWillRender) {
+            const regexElement = renderRegexMatches(regexDict, mailDateFormatted);
+            if (regexElement) {
+              resultsDiv.appendChild(regexElement);
+            } else {
+              appendFilterHtmlView();
+            }
+          } else if (regexWillRender) {
+            const regexElement = renderRegexMatches(regexDict, mailDateFormatted);
+            if (regexElement) {
+              resultsDiv.appendChild(regexElement);
+            }
+          } else if (hasFilterContent) {
+            appendFilterHtmlView();
+          }
+
           resultsDiv.classList.remove('d-none');
           resultsDiv.classList.add('d-block');
           attachCopyButtonListener();
@@ -777,6 +754,70 @@ document.addEventListener("DOMContentLoaded", function () {
     });
   }
 
+  window.renderCodeResult = function(code, mailDateFormatted) {
+    const codeStr = String(code != null ? code : '').trim();
+    if (!codeStr) {
+      return null;
+    }
+
+    const isLink = /^(https?:\/\/|www\.)/i.test(codeStr);
+    const MAX_LEN = 50;
+    let displayText = codeStr;
+    if (displayText.length > MAX_LEN) {
+      displayText = displayText.slice(0, MAX_LEN - 3) + '...';
+    }
+
+    const divContainer = document.createElement('div');
+    divContainer.classList.add('regex-result-container');
+    divContainer.classList.add('text-center');
+
+    const pCode = document.createElement('p');
+    pCode.classList.add('regex-result-code');
+
+    const strongCode = document.createElement('strong');
+    strongCode.id = 'regex-code';
+    strongCode.textContent = displayText;
+
+    pCode.appendChild(strongCode);
+    divContainer.appendChild(pCode);
+
+    const buttonsContainer = document.createElement('div');
+    buttonsContainer.classList.add('mt-05');
+
+    const copyButton = document.createElement('button');
+    copyButton.classList.add('btn', 'btn-search', 'btn-rounded', 'regex-result-copy-btn');
+    copyButton.id = 'copyRegexBtn';
+    copyButton.setAttribute('data-valor', codeStr);
+    copyButton.textContent = 'Copiar';
+    buttonsContainer.appendChild(copyButton);
+
+    if (isLink) {
+      const openLinkButton = document.createElement('button');
+      openLinkButton.classList.add('btn', 'btn-search', 'btn-rounded', 'regex-result-open-link-btn');
+      openLinkButton.id = 'openLinkBtn';
+      openLinkButton.setAttribute('data-link', codeStr);
+      openLinkButton.textContent = 'Abrir Enlace';
+      buttonsContainer.appendChild(openLinkButton);
+    }
+
+    divContainer.appendChild(buttonsContainer);
+
+    if (mailDateFormatted) {
+      const pDate = document.createElement('p');
+      pDate.classList.add('regex-result-date');
+      const parts = mailDateFormatted.split('  ');
+      if (parts.length === 2) {
+        const [datePart, timePart] = parts;
+        pDate.innerHTML = `Fecha: <span class="date-part">${escapeHtml(datePart)}</span>&nbsp;&nbsp;&nbsp;&nbsp;<span class="time-part">${escapeHtml(timePart)}</span>`;
+      } else {
+        pDate.textContent = `Fecha: ${mailDateFormatted}`;
+      }
+      divContainer.appendChild(pDate);
+    }
+
+    return divContainer;
+  };
+
   // Hacer disponible globalmente para páginas dinámicas
   window.renderRegexMatches = function(regexMatches, mailDateFormatted) {
     if (!regexMatches || typeof regexMatches !== 'object') {
@@ -790,84 +831,19 @@ document.addEventListener("DOMContentLoaded", function () {
       }
     }
     
-    // Si no hay matches, no devolver nada (evita cards vacíos)
     if (allMatches.length === 0) {
       return null;
     }
 
     let primerCodigo = allMatches[0];
     if (Array.isArray(primerCodigo)) {
-      primerCodigo = primerCodigo.join("");
+      primerCodigo = primerCodigo.join('');
     } else {
       primerCodigo = String(primerCodigo);
     }
 
-    const isLink = /^(https?:\/\/|www\.)/i.test(primerCodigo.trim());
-    const MAX_LEN = 50;
-    let displayText = primerCodigo;
-    if (displayText.length > MAX_LEN) {
-      displayText = displayText.slice(0, MAX_LEN - 3) + "...";
-    }
-
-    // --- Construcción con DOM APIs y Clases CSS ---
-    const divContainer = document.createElement('div');
-    divContainer.classList.add('regex-result-container');
-    divContainer.classList.add('text-center'); // <--- CENTRAR CONTENIDO
-
-    const pCode = document.createElement('p');
-    pCode.classList.add('regex-result-code');
-
-    const strongCode = document.createElement('strong');
-    strongCode.id = "regex-code";
-    strongCode.textContent = displayText;
-
-    pCode.appendChild(strongCode);
-    divContainer.appendChild(pCode);
-
-    // Crear contenedor para botones
-    const buttonsContainer = document.createElement('div');
-    buttonsContainer.classList.add('mt-05'); // Espacio entre texto y botones
-    // No es necesario centrar este div, ya que divContainer ya centra
-
-    // Botón Copiar (siempre visible)
-    const copyButton = document.createElement('button');
-    copyButton.classList.add('btn', 'btn-search', 'btn-rounded', 'regex-result-copy-btn'); 
-    copyButton.id = "copyRegexBtn";
-    copyButton.setAttribute("data-valor", primerCodigo);
-    copyButton.textContent = "Copiar";
-    buttonsContainer.appendChild(copyButton); // Añadir al contenedor de botones
-
-    // Botón Abrir Enlace (solo si es link)
-    if (isLink) {
-      const openLinkButton = document.createElement('button');
-      openLinkButton.classList.add('btn', 'btn-search', 'btn-rounded', 'regex-result-open-link-btn'); 
-      openLinkButton.id = "openLinkBtn";
-      openLinkButton.setAttribute("data-link", primerCodigo);
-      openLinkButton.textContent = "Abrir Enlace";
-      buttonsContainer.appendChild(openLinkButton); // Añadir al contenedor de botones
-    }
-    
-    divContainer.appendChild(buttonsContainer); // Añadir el contenedor de botones al principal
-
-    // Párrafo de Fecha (si aplica)
-    if (mailDateFormatted) {
-      const pDate = document.createElement('p');
-      pDate.classList.add('regex-result-date');
-      
-      // Separar fecha y hora
-      const parts = mailDateFormatted.split('  '); // Doble espacio para separar
-      if (parts.length === 2) {
-        const [datePart, timePart] = parts;
-        pDate.innerHTML = `Fecha: <span class="date-part">${escapeHtml(datePart)}</span>&nbsp;&nbsp;&nbsp;&nbsp;<span class="time-part">${escapeHtml(timePart)}</span>`;
-      } else {
-        pDate.textContent = `Fecha: ${mailDateFormatted}`;
-      }
-      
-      divContainer.appendChild(pDate);
-    }
-
-    return divContainer;
-  }
+    return renderCodeResult(primerCodigo, mailDateFormatted);
+  };
 
   // Hacer disponible globalmente para páginas dinámicas
   window.attachCopyButtonListener = function() {

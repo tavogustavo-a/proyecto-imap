@@ -1,9 +1,19 @@
 # app/services/regex_service.py
 
+from sqlalchemy import func
+
 from app.extensions import db
 from app.models import RegexModel, User
 # from app.helpers import increment_global_session_revocation_count # Comentar o eliminar import
 from flask import current_app
+
+
+def regex_list_order_by(query):
+    """Lista de regex ordenada alfabéticamente por descripción (luego por id)."""
+    return query.order_by(
+        func.coalesce(func.lower(RegexModel.description), '').asc(),
+        RegexModel.id.asc(),
+    )
 
 def create_regex_service(sender, pattern, description, skip_revocation=False):
     new_regex = RegexModel(

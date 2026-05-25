@@ -100,9 +100,9 @@ def validate_and_sanitize_external_response(data, project_name):
             return None
         
         # Sanitizar: solo permitir campos esperados
-        allowed_fields = ['subject', 'from', 'to', 'date', 'text', 'html', 
-                         'filter_matched', 'regex_matches', 'message_id', 
-                         'internal_date', 'external_project_name']
+        allowed_fields = ['subject', 'from', 'to', 'date', 'text', 'html',
+                         'filter_matched', 'filter_code', 'regex_matches', 'message_id',
+                         'internal_date', 'external_project_name', 'formatted_date']
         sanitized_result = {k: v for k, v in external_result.items() if k in allowed_fields}
         sanitized_result["external_project_name"] = project_name
         
@@ -694,6 +694,9 @@ def _process_mails(all_mails, filters, regexes, user_searching, searched_address
         # Filtro
         matched_filter = get_first_filter_that_matches(mail, filters)
         if matched_filter:
+            body_text_before = mail.get("text") or ""
+            body_html_before = mail.get("html") or ""
+
             # Aplicar cortar HTML desde (cut_after_html)
             cut_after_str = (matched_filter.cut_after_html or "").strip() if matched_filter.cut_after_html else ""
             if cut_after_str:
@@ -703,10 +706,16 @@ def _process_mails(all_mails, filters, regexes, user_searching, searched_address
             cut_before_str = (matched_filter.cut_before_html or "").strip() if matched_filter.cut_before_html else ""
             if cut_before_str:
                 apply_cut_before_html(mail, cut_before_str)
-            
+
+            mail["filter_code"] = extract_filter_display_code(mail, matched_filter)
+            if not mail["filter_code"] and _is_netflix_login_session_6_digits_filter(matched_filter):
+                mail["filter_code"] = _extract_netflix_login_session_code_from_raw_body(
+                    body_text_before, body_html_before
+                )
             mail["filter_matched"] = True
         else:
             mail["filter_matched"] = False
+            mail["filter_code"] = None
 
         # Regex
         found_regex = False
@@ -796,6 +805,99 @@ def get_first_filter_that_matches(mail_dict, filters):
             continue
         return f
     return None
+
+
+def _strip_html_to_plain_text(html: str) -> str:
+    """Texto visible a partir de HTML (p. ej. códigos Netflix en celdas separadas)."""
+    import html as html_module
+
+    if not html:
+        return ""
+    t = re.sub(r"(?i)<br\s*/?>", " ", html)
+    t = re.sub(r"<[^>]+>", " ", t)
+    t = html_module.unescape(t)
+    t = t.replace("\xa0", " ")
+    return re.sub(r"\s+", " ", t).strip()
+
+
+def _normalize_filter_signature_text(value) -> str:
+    import unicodedata
+
+    raw = str(value or "").strip().lower()
+    decomposed = unicodedata.normalize("NFD", raw)
+    return "".join(ch for ch in decomposed if unicodedata.category(ch) != "Mn")
+
+
+def _is_netflix_login_session_6_digits_filter(matched_filter) -> bool:
+    """
+    Caso puntual: «ingreso sesión Netflix 6 dígitos» (info@account.netflix.com).
+    Solo este filtro usa vista tipo regex con botón copiar si hay 6 dígitos en el correo.
+    """
+    if matched_filter is None:
+        return False
+    sender = _normalize_filter_signature_text(getattr(matched_filter, "sender", ""))
+    keyword = _normalize_filter_signature_text(getattr(matched_filter, "keyword", ""))
+    description = _normalize_filter_signature_text(getattr(matched_filter, "description", ""))
+    return (
+        sender == "info@account.netflix.com"
+        and "alguien intenta acceder a tu cuenta" in keyword
+        and "ingreso sesion netflix 6 digitos" in description
+    )
+
+
+def _extract_six_digit_code_from_text(combined: str):
+    if not combined:
+        return None
+    for pat in (r"(?:\d[\s\u00a0]*){6}", r"\b(\d{6})\b"):
+        m = re.search(pat, combined)
+        if not m:
+            continue
+        digits = re.sub(r"\D", "", m.group(0))
+        if len(digits) >= 6:
+            return digits[:6]
+    return None
+
+
+def _extract_netflix_login_session_code_from_raw_body(body_text: str, body_html: str):
+    """Busca 6 dígitos en el cuerpo original antes de los cortes del filtro."""
+    combined = " ".join(
+        p for p in (body_text or "", _strip_html_to_plain_text(body_html or "")) if p
+    ).strip()
+    return _extract_six_digit_code_from_text(combined)
+
+
+def extract_filter_display_code(mail, matched_filter=None):
+    """
+    Tras cortar con un filtro, extrae un código limpio para mostrar como regex (copiar).
+    Usa code_pattern del filtro si existe; si no, detecta 6 dígitos (con o sin espacios).
+    """
+    pattern = None
+    if matched_filter is not None:
+        pattern = (getattr(matched_filter, "code_pattern", None) or "").strip()
+
+    parts = [mail.get("text") or "", _strip_html_to_plain_text(mail.get("html") or "")]
+    combined = " ".join(p for p in parts if p).strip()
+    if not combined:
+        return None
+
+    if pattern:
+        try:
+            m = re.search(pattern, combined, re.IGNORECASE | re.MULTILINE)
+        except re.error as err:
+            current_app.logger.warning(
+                "code_pattern inválido en filtro %s: %s",
+                getattr(matched_filter, "id", "?"),
+                err,
+            )
+            m = None
+        if m:
+            raw = m.group(1) if m.lastindex else m.group(0)
+            cleaned = re.sub(r"\D", "", str(raw or ""))
+            if cleaned:
+                return cleaned
+        return None
+
+    return _extract_six_digit_code_from_text(combined)
 
 
 def apply_cut_after_html(mail, cut_str):

@@ -12,6 +12,7 @@ def _permissions_is_ajax_like():
         or content_type.startswith('application/json')
         or request.headers.get('X-Requested-With') == 'XMLHttpRequest'
         or request.path.startswith('/api/')
+        or '/api/' in request.path
         or request.path.endswith('/ajax')
         or request.path.endswith('.json')
         or '/ajax' in request.path
@@ -32,6 +33,7 @@ def admin_required(f):
             content_type.startswith('application/json') or
             request.headers.get('X-Requested-With') == 'XMLHttpRequest' or
             request.path.startswith('/api/') or
+            '/api/' in request.path or
             request.path.endswith('/ajax') or
             request.path.endswith('.json') or
             '/ajax' in request.path or

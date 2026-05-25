@@ -74,26 +74,162 @@ html, body {
   width: 35px;
   height: 35px;
   margin-right: 0.6rem;
-  border-radius: 6px;
-  overflow: hidden;
   flex-shrink: 0;
+  position: relative;
 }
 
 .resumen-pago-logo img {
   width: 100%;
   height: 100%;
   object-fit: cover;
+  border-radius: 6px;
+}
+
+.user-lic-buena-revisada-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.25rem;
+  margin: 0;
+  padding: 0 0.3rem;
+  box-sizing: border-box;
+  width: 100%;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: var(--lic-line-box, 1.27rem);
+  height: var(--lic-line-box, 1.27rem);
+  max-height: var(--lic-line-box, 1.27rem);
+  border: var(--lic-border-w, 2px) solid rgba(34, 197, 94, 0.55);
+  border-radius: 3px;
+  background: transparent;
+  color: #86efac;
+  font-size: var(--lic-line-fs, 0.875rem);
+  font-weight: 500;
+  line-height: var(--lic-line-lh, 1.45);
+  cursor: pointer;
+  white-space: nowrap;
+  text-align: center;
+  align-self: stretch;
+}
+
+.user-lic-buena-revisada-badge:hover {
+  background: rgba(34, 197, 94, 0.12);
+}
+
+.user-lic-buena-revisada-badge--pending {
+  opacity: 0.65;
+  pointer-events: none;
+}
+
+.user-lic-buena-revisada-badge .fa-check-circle {
+  flex-shrink: 0;
+  font-size: 0.82em;
+}
+
+.user-lic-garantia-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.25rem;
+  margin: 0;
+  padding: 0 0.3rem;
+  box-sizing: border-box;
+  width: 100%;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: var(--lic-line-box, 1.27rem);
+  height: var(--lic-line-box, 1.27rem);
+  max-height: var(--lic-line-box, 1.27rem);
+  border: var(--lic-border-w, 2px) solid rgba(34, 197, 94, 0.55);
+  border-radius: 3px;
+  background: transparent;
+  color: #86efac;
+  font-size: var(--lic-line-fs, 0.875rem);
+  font-weight: 500;
+  line-height: var(--lic-line-lh, 1.45);
+  white-space: nowrap;
+  text-align: center;
+  align-self: stretch;
+}
+
+.user-lic-garantia-badge .fa-shield-alt {
+  flex-shrink: 0;
+  font-size: 0.82em;
+}
+
+.admin-licencias-page.user-licencias-shell
+  .user-lic-bundle-wrap
+  .license-split-editor__status-select-shell--good
+  .user-lic-garantia-badge {
+  flex: 1 1 auto;
+  width: 100% !important;
+  max-width: none;
+}
+
+.admin-licencias-page.user-licencias-shell
+  .user-lic-bundle-wrap
+  .license-split-editor__status-select-shell--bad
+  .user-lic-buena-revisada-badge {
+  flex: 1 1 auto;
+  width: 100% !important;
+  max-width: none;
+}
+
+.admin-licencias-page.user-licencias-shell
+  .user-lic-bundle-wrap
+  .license-split-editor__status-good.user-lic-status-good--buena-locked {
+  opacity: 1;
+  cursor: default;
+}
+
+.renovacion-logo-badge,
+.resumen-pago-logo-badge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  background: #fff;
+  border-radius: 50%;
+  width: 16px;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  color: #059669;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.25);
+  z-index: 2;
 }
 
 .resumen-pago-nombre {
   flex: 1;
-  font-weight: 600;
   color: #333;
   font-size: 0.85rem;
   min-width: 0;
+  margin-right: 0.3rem;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.resumen-pago-nombre-title {
+  font-weight: 600;
+  white-space: normal;
+  word-break: break-word;
+  line-height: 1.2;
+}
+
+.resumen-pago-nombre-emails {
+  font-size: 0.72rem;
+  color: #64748b;
+  font-weight: 400;
+  white-space: normal !important;
+  word-break: break-all;
+  line-height: 1.25;
+  margin-top: 0.15rem;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .resumen-pago-cantidad {
@@ -356,6 +492,10 @@ html, body {
 
 /* Botón procesar pago en el modal del carrito */
 #btnProcesarPagoCarrito {
+  display: block;
+  margin-left: auto;
+  margin-right: auto;
+  margin-top: 0.75rem;
   background: linear-gradient(176deg, #fe0c0c, #b40c0c) !important;
   color: white !important;
   border: none !important;
@@ -502,15 +642,13 @@ html, body {
     height: 30px;
     margin-right: 0.4rem;
     flex-shrink: 0;
+    position: relative;
   }
   
   .resumen-pago-nombre {
     font-size: 0.8rem;
     flex: 1;
     min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
     margin-right: 0.3rem;
   }
   
@@ -955,6 +1093,86 @@ html, body {
     font-size: 0.78rem !important;
     line-height: 1 !important;
   }
+  /* Notas + Licencias: misma densidad vertical que cabeceras Día (undo/redo al ras). */
+  .admin-licencias-page.admin-licencias-shell
+    .license-notepads-wrap
+    .admin-licencias-bloc--personal
+    .admin-licencias-bloc-header,
+  .admin-licencias-page.admin-licencias-shell
+    .license-notepads-wrap
+    .admin-licencias-bloc--license
+    .admin-licencias-bloc-header {
+    padding-top: 0.03rem !important;
+    padding-bottom: 0.03rem !important;
+    min-height: 0 !important;
+  }
+  .admin-licencias-page
+    .license-notepads-wrap
+    .admin-licencias-bloc--personal
+    .admin-bloc-undo-toolbar--in-header,
+  .admin-licencias-page
+    .license-notepads-wrap
+    .admin-licencias-bloc--license
+    .admin-bloc-undo-toolbar--in-header {
+    gap: 0.1rem !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    align-self: center;
+  }
+  .admin-licencias-page
+    .license-notepads-wrap
+    .admin-licencias-bloc--personal
+    .admin-bloc-undo-toolbar--in-header
+    .admin-bloc-undo-btn,
+  .admin-licencias-page
+    .license-notepads-wrap
+    .admin-licencias-bloc--license
+    .admin-bloc-undo-toolbar--in-header
+    .admin-bloc-undo-btn {
+    min-width: 1.05rem !important;
+    min-height: 0 !important;
+    height: auto !important;
+    padding: 0 0.08rem !important;
+    font-size: 0.61rem !important;
+    line-height: 1 !important;
+    border-radius: 3px;
+  }
+  /* Día 1–31: undo/redo al ras de la franja azul (casi sin altura muerta). */
+  .admin-licencias-page.admin-licencias-shell
+    .license-notepads-wrap
+    #licenseAllDaysContainer
+    .admin-licencias-bloc--day
+    .admin-licencias-bloc-header {
+    padding-top: 0.03rem !important;
+    padding-bottom: 0.03rem !important;
+    min-height: 0 !important;
+  }
+  .admin-licencias-page .license-notepads-wrap #licenseAllDaysContainer .admin-bloc-undo-toolbar--in-header.admin-bloc-undo-toolbar--day {
+    gap: 0.1rem !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    align-self: center;
+  }
+  .admin-licencias-page .license-notepads-wrap #licenseAllDaysContainer .admin-bloc-undo-toolbar--in-header .admin-bloc-undo-btn {
+    min-width: 1.05rem !important;
+    min-height: 0 !important;
+    height: auto !important;
+    padding: 0 0.08rem !important;
+    font-size: 0.61rem !important;
+    line-height: 1 !important;
+    border-radius: 3px;
+  }
+  /* Día 1 — plegar todos + toggles «ojo» de columna flecha subir / estados / notas: mismo criterio, un punto más pequeños. */
+  .license-notepads-wrap
+    #licenseAllDaysContainer
+    .license-days-notes-toggle-bar--in-day-header
+    .admin-licencias-toggle-notes-col-btn {
+    min-width: 1.28rem;
+    min-height: 1.18rem;
+    padding: 0.03rem 0.22rem;
+    font-size: 0.6rem;
+    line-height: 1;
+  }
   .admin-licencias-page .license-notepads-wrap .admin-licencias-bloc-title {
     font-size: 0.8rem !important;
     line-height: 1.18 !important;
@@ -1044,10 +1262,10 @@ html, body {
     align-items: center;
     justify-content: center;
     margin: 0;
-    padding: 0.04rem 0.28rem;
-    min-width: 1.45rem;
-    min-height: 1.35rem;
-    font-size: 0.72rem;
+    padding: 0.02rem 0.22rem;
+    min-width: 1.28rem;
+    min-height: 0;
+    font-size: 0.6rem;
     line-height: 1;
     color: rgba(248, 250, 252, 0.95);
     background: rgba(0, 0, 0, 0.38);
@@ -1071,10 +1289,10 @@ html, body {
     align-items: center;
     justify-content: center;
     margin: 0;
-    padding: 0.04rem 0.28rem;
-    min-width: 1.45rem;
-    min-height: 1.35rem;
-    font-size: 0.72rem;
+    padding: 0.02rem 0.22rem;
+    min-width: 1.28rem;
+    min-height: 0;
+    font-size: 0.6rem;
     line-height: 1;
     color: rgba(248, 250, 252, 0.95);
     background: rgba(0, 0, 0, 0.38);
@@ -1509,8 +1727,8 @@ html, body {
   .license-notepads-wrap .license-split-editor__row {
     display: grid;
     box-sizing: border-box;
-    /* Bloque día+vender+usuario | estado | notas (sin huecos de grid entre carrito y usuario) */
-    grid-template-columns: minmax(0, 1.1fr) minmax(6.25rem, 1.35fr) minmax(5rem, 1fr);
+    /* Bloque día+vender+usuario | estado | notas (primera columna al ancho necesario; no ocupa hueco horizontal vacío). */
+    grid-template-columns: auto minmax(6.25rem, 1.35fr) minmax(5rem, 1fr);
     column-gap: var(--lic-cell-gap);
     row-gap: 0;
     padding: 0;
@@ -1520,6 +1738,9 @@ html, body {
     /* Evita que la cuadrícula comprima tanto que los 3 campos “rompan” línea en móvil */
     min-width: 28rem;
     box-sizing: border-box;
+    border-bottom: none;
+  }
+  .license-notepads-wrap .license-split-editor__row:not(:last-child) {
     border-bottom: var(--lic-border-w) solid rgba(59, 130, 246, 0.48);
   }
   /* Caídas / Vencidas / Cambios: botón subir | estados | notas */
@@ -1612,10 +1833,14 @@ html, body {
     gap: 0;
     min-width: 0;
     min-height: 0;
+    width: fit-content;
+    max-width: 100%;
   }
   .license-notepads-wrap .license-split-editor__user-wrap {
     min-width: 0;
-    flex: 1 1 auto;
+    flex: 0 1 auto;
+    width: fit-content;
+    max-width: 100%;
     display: flex;
     flex-direction: column;
     justify-content: flex-start;
@@ -1623,7 +1848,7 @@ html, body {
     min-height: 0;
   }
   .license-notepads-wrap .license-split-editor__user-wrap .license-split-editor__user {
-    flex: 1 1 auto;
+    flex: 0 1 auto;
     min-height: var(--lic-line-box);
     align-self: stretch;
   }
@@ -1825,6 +2050,17 @@ html, body {
     border: var(--lic-border-w) solid rgba(59, 130, 246, 0.42);
     border-radius: 3px;
   }
+  /* Credencial / usuario: crece sólo hasta el texto (hueco lateral vacío se evita); cap largo línea. */
+  .license-notepads-wrap .license-split-editor__row input.license-split-editor__user {
+    width: auto;
+    max-width: min(92ch, 100%);
+    min-width: 9rem;
+  }
+  @supports (field-sizing: content) {
+    .license-notepads-wrap .license-split-editor__row input.license-split-editor__user {
+      field-sizing: content;
+    }
+  }
   .license-notepads-wrap .license-split-editor__row select {
     cursor: pointer;
     -webkit-appearance: none;
@@ -1859,6 +2095,7 @@ html, body {
   .license-notepads-wrap .license-split-editor__row select.license-split-editor__status option[value='caida o suspendida'],
   .license-notepads-wrap .license-split-editor__row select.license-split-editor__status option[value='no reproduce'],
   .license-notepads-wrap .license-split-editor__row select.license-split-editor__status option[value='error de contraseña'],
+  .license-notepads-wrap .license-split-editor__row select.license-split-editor__status option[value='repetida'],
   .license-notepads-wrap .license-split-editor__row select.license-split-editor__status option[value='otro'] {
     color: #fca5a5 !important;
     background-color: #450a0a !important;
@@ -1946,6 +2183,57 @@ html, body {
     background-clip: padding-box !important;
   }
 
+  /* Vencidas: mismo bloc visual que Caídas / suspendidas (textarea + líneas horizontales alineadas con la derecha). */
+  .license-expired-notepad-wrap .admin-licencias-notepad-textarea {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-height: 7rem !important;
+    margin: 0 !important;
+    padding: 0.45rem 0.55rem !important;
+    color: #ffffff !important;
+    background: #000000 !important;
+    border: none !important;
+    border-top: none !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    resize: vertical;
+    font-family: inherit;
+    -webkit-appearance: none;
+    appearance: none;
+  }
+  .license-expired-notepad-wrap .admin-licencias-notepad-textarea:focus {
+    outline: none !important;
+    box-shadow: none !important;
+  }
+
+  /* Vencidas (split credenciales + filas): mismas líneas horizontales que Caídas */
+  .license-expired-notepad-wrap
+    .license-notepads-wrap
+    .license-split-editor__creds.expired-license-split__creds {
+    font-size: var(--lic-line-fs) !important;
+    line-height: var(--lic-row-stride) !important;
+    padding: 0 var(--lic-pad-x) !important;
+    margin: 0 !important;
+    border: none !important;
+    max-height: none !important;
+    resize: none !important;
+    overflow: hidden !important;
+    box-sizing: border-box !important;
+    background-color: #000000 !important;
+    background-image: 
+      linear-gradient(to top, #000000 0, #000000 calc(var(--lic-border-w) + 2px), transparent calc(var(--lic-border-w) + 2px)),
+      repeating-linear-gradient(
+        to bottom,
+        transparent 0,
+        transparent calc(var(--lic-row-stride) - var(--lic-border-w)),
+        rgba(59, 130, 246, 0.48) calc(var(--lic-row-stride) - var(--lic-border-w)),
+        rgba(59, 130, 246, 0.48) var(--lic-row-stride)
+      ) !important;
+    background-attachment: local !important;
+    background-origin: padding-box !important;
+    background-clip: padding-box !important;
+  }
+
   /* Búsqueda global: bloque con coincidencia */
   .license-notepads-wrap .admin-licencias-notepad-textarea.search-match,
   .license-notepads-wrap .admin-licencias-license-editable.search-match {
@@ -1985,6 +2273,7 @@ html, body {
   /* Sin color global en :focus: si todo el bloc fuera azul, al editar texto plano las notas tras el separador también se verían azules. El azul/blanco solo al soltar foco (resaltado con spans). */
   .admin-licencias-page .license-notepads-wrap .admin-licencias-license-editable:focus,
   .admin-licencias-page .license-suspended-notepad-wrap .admin-licencias-suspended-editable:focus,
+  .admin-licencias-page .license-expired-notepad-wrap .admin-licencias-notepad-textarea:focus,
   .admin-licencias-page #licenseAllDaysContainer .day-day-notepad:focus {
     caret-color: #93c5fd;
   }
@@ -2047,23 +2336,27 @@ html, body {
     min-width: 0;
   }
   .license-suspended-notepad-wrap .day-header-content {
-    padding: 0.1rem 0.35rem !important;
+    padding: 0.03rem 0.35rem !important;
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.22) !important;
-    gap: 0.35rem !important;
+    gap: 0.28rem !important;
     border-radius: 5px !important;
     line-height: 1.15;
     min-height: 0 !important;
   }
   .admin-licencias-page .license-suspended-notepad-wrap .day-header-content .admin-bloc-undo-toolbar--in-header {
-    gap: 0.22rem !important;
+    gap: 0.1rem !important;
     padding: 0 !important;
+    margin: 0 !important;
+    align-self: center;
   }
   .admin-licencias-page .license-suspended-notepad-wrap .day-header-content .admin-bloc-undo-toolbar--in-header .admin-bloc-undo-btn {
-    min-width: 1.45rem !important;
-    min-height: 1.35rem !important;
-    padding: 0.02rem 0.18rem !important;
-    font-size: 0.78rem !important;
+    min-width: 1.05rem !important;
+    min-height: 0 !important;
+    height: auto !important;
+    padding: 0 0.08rem !important;
+    font-size: 0.61rem !important;
     line-height: 1 !important;
+    border-radius: 3px;
   }
   .admin-licencias-page .license-suspended-notepad-wrap .suspended-section .day-number {
     font-size: 0.8rem !important;
@@ -2106,23 +2399,27 @@ html, body {
     min-width: 0;
   }
   .license-expired-notepad-wrap .day-header-content {
-    padding: 0.1rem 0.35rem !important;
+    padding: 0.03rem 0.35rem !important;
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.22) !important;
-    gap: 0.35rem !important;
+    gap: 0.28rem !important;
     border-radius: 5px !important;
     line-height: 1.15;
     min-height: 0 !important;
   }
   .admin-licencias-page .license-expired-notepad-wrap .day-header-content .admin-bloc-undo-toolbar--in-header {
-    gap: 0.22rem !important;
+    gap: 0.1rem !important;
     padding: 0 !important;
+    margin: 0 !important;
+    align-self: center;
   }
   .admin-licencias-page .license-expired-notepad-wrap .day-header-content .admin-bloc-undo-toolbar--in-header .admin-bloc-undo-btn {
-    min-width: 1.45rem !important;
-    min-height: 1.35rem !important;
-    padding: 0.02rem 0.18rem !important;
-    font-size: 0.78rem !important;
+    min-width: 1.05rem !important;
+    min-height: 0 !important;
+    height: auto !important;
+    padding: 0 0.08rem !important;
+    font-size: 0.61rem !important;
     line-height: 1 !important;
+    border-radius: 3px;
   }
   .admin-licencias-page .license-expired-notepad-wrap .expired-section .day-number {
     font-size: 0.8rem !important;
@@ -2691,6 +2988,11 @@ html, body {
     min-width: 0;
     flex: 1 1 auto;
   }
+  /* Separador entre columna verde y roja (igual que Licencias / Días). */
+  .admin-licencias-page .license-changes-products-container .license-split-editor__status-select-shell--good {
+    border-right: max(3px, var(--lic-border-w)) solid rgba(59, 130, 246, 0.72) !important;
+    box-sizing: border-box;
+  }
   .admin-licencias-page .license-changes-products-container .license-split-editor__status-wrap--otro .license-split-editor__status-select-shell {
     flex: 0 0 35% !important;
   }
@@ -2917,9 +3219,12 @@ html, body {
   .admin-licencias-page .license-notepads-wrap .admin-licencias-license-editable .admin-license-line-row .day-account-credential-line,
   .admin-licencias-page .license-suspended-notepad-wrap .admin-licencias-suspended-editable .admin-license-line-row .day-account-credential-line,
   .admin-licencias-page #licenseAllDaysContainer .day-day-notepad .admin-license-line-row .day-account-credential-line {
-    flex: 1 1 auto;
-    min-width: 250px;
+    flex: 0 1 auto;
+    min-width: 0;
+    max-width: min(92ch, 100%);
     white-space: nowrap !important;
+    overflow-x: auto;
+    overflow-y: visible;
     border: none;
     padding: 0;
     border-radius: 0;
@@ -2951,7 +3256,7 @@ html, body {
     box-shadow: inset 0 0 0 1px rgba(234, 179, 8, 0.75);
     border-radius: 3px;
   }
-  /* Bloc Licencias (split: textarea + filas): mismo criterio correo+clave que Días / Caídas */
+  /* Bloc Licencias (split): mismas claves de duplicado por primer token — todas las filas del grupo van en amarillo; *-first resalta desde la 2.ª para foco */
   .admin-licencias-page .license-notepads-wrap .license-split-editor__row.admin-license-line-duplicate {
     background: rgba(250, 204, 21, 0.32) !important;
     box-shadow: inset 0 0 0 1px rgba(234, 179, 8, 0.72);
@@ -3000,11 +3305,118 @@ html, body {
     border-radius: 3px;
     animation: admin-license-dup-pulse 1.2s ease-in-out 1;
   }
+  .admin-licencias-page #adminLicenciasSuspendedRows .license-split-editor__row.admin-license-line-duplicate,
+  .admin-licencias-page #adminLicenciasExpiredRows .license-split-editor__row.admin-license-line-duplicate {
+    background: transparent !important;
+    box-shadow: none !important;
+    border-radius: 0 !important;
+    animation: none !important;
+  }
+  .admin-licencias-page #adminLicenciasSuspendedRows .license-split-editor__row.admin-license-line-duplicate-first,
+  .admin-licencias-page #adminLicenciasExpiredRows .license-split-editor__row.admin-license-line-duplicate-first {
+    background: transparent !important;
+    box-shadow: none !important;
+    border-radius: 0 !important;
+    animation: none !important;
+  }
+  .admin-licencias-page
+    #adminLicenciasSuspendedRows
+    .license-split-editor__row.admin-license-line-duplicate
+    > .license-split-editor__lead,
+  .admin-licencias-page
+    #adminLicenciasSuspendedRows
+    .license-split-editor__row.admin-license-line-duplicate
+    > .license-split-editor__status-wrap,
+  .admin-licencias-page
+    #adminLicenciasSuspendedRows
+    .license-split-editor__row.admin-license-line-duplicate
+    > .license-split-editor__note,
+  .admin-licencias-page
+    #adminLicenciasExpiredRows
+    .license-split-editor__row.admin-license-line-duplicate
+    > .license-split-editor__lead,
+  .admin-licencias-page
+    #adminLicenciasExpiredRows
+    .license-split-editor__row.admin-license-line-duplicate
+    > .license-split-editor__status-wrap,
+  .admin-licencias-page
+    #adminLicenciasExpiredRows
+    .license-split-editor__row.admin-license-line-duplicate
+    > .license-split-editor__note {
+    background: rgba(250, 204, 21, 0.28) !important;
+    box-shadow: inset 0 0 0 1px rgba(234, 179, 8, 0.72);
+    border-radius: 3px;
+  }
+  .admin-licencias-page
+    #adminLicenciasSuspendedRows
+    .license-split-editor__row.admin-license-line-duplicate-first
+    > .license-split-editor__lead,
+  .admin-licencias-page
+    #adminLicenciasSuspendedRows
+    .license-split-editor__row.admin-license-line-duplicate-first
+    > .license-split-editor__status-wrap,
+  .admin-licencias-page
+    #adminLicenciasSuspendedRows
+    .license-split-editor__row.admin-license-line-duplicate-first
+    > .license-split-editor__note,
+  .admin-licencias-page
+    #adminLicenciasExpiredRows
+    .license-split-editor__row.admin-license-line-duplicate-first
+    > .license-split-editor__lead,
+  .admin-licencias-page
+    #adminLicenciasExpiredRows
+    .license-split-editor__row.admin-license-line-duplicate-first
+    > .license-split-editor__status-wrap,
+  .admin-licencias-page
+    #adminLicenciasExpiredRows
+    .license-split-editor__row.admin-license-line-duplicate-first
+    > .license-split-editor__note {
+    background: rgba(250, 204, 21, 0.42) !important;
+    box-shadow: inset 0 0 0 2px rgba(234, 179, 8, 0.92), 0 0 0 1px rgba(0, 0, 0, 0.35);
+    border-radius: 3px;
+    animation: admin-license-dup-pulse 1.2s ease-in-out 1;
+  }
+  .admin-licencias-page #adminLicenciasSuspendedRows .license-split-editor__row.admin-license-line-duplicate input,
+  .admin-licencias-page #adminLicenciasSuspendedRows .license-split-editor__row.admin-license-line-duplicate select,
+  .admin-licencias-page #adminLicenciasExpiredRows .license-split-editor__row.admin-license-line-duplicate input,
+  .admin-licencias-page #adminLicenciasExpiredRows .license-split-editor__row.admin-license-line-duplicate select {
+    background-color: rgba(250, 204, 21, 0.2) !important;
+    border-color: rgba(234, 179, 8, 0.55) !important;
+  }
+  .admin-licencias-page #licenseChangesProductsContainer .license-split-editor__row.admin-license-line-duplicate {
+    background: rgba(250, 204, 21, 0.32) !important;
+    box-shadow: inset 0 0 0 1px rgba(234, 179, 8, 0.72);
+    border-radius: 3px;
+  }
+  .admin-licencias-page #licenseChangesProductsContainer .license-split-editor__row.admin-license-line-duplicate-first {
+    background: rgba(250, 204, 21, 0.5) !important;
+    box-shadow: inset 0 0 0 2px rgba(234, 179, 8, 0.92), 0 0 0 1px rgba(0, 0, 0, 0.35);
+    border-radius: 3px;
+    animation: admin-license-dup-pulse 1.2s ease-in-out 1;
+  }
+  .admin-licencias-page #licenseChangesProductsContainer .license-split-editor__row.admin-license-line-duplicate input,
+  .admin-licencias-page #licenseChangesProductsContainer .license-split-editor__row.admin-license-line-duplicate select {
+    background-color: rgba(250, 204, 21, 0.2) !important;
+    border-color: rgba(234, 179, 8, 0.55) !important;
+  }
   /* Caídas: capa bajo el textarea para franjas amarillas por línea */
+  /* Envolver el textarea sin romper .license-split-editor__creds-cell (flex): si no hay flex aquí,
+     la primera columna colapsa y la cuadrícula de filas derecha parece texto amontonado. */
   .admin-licencias-page .admin-suspended-ta-dup-stack {
     position: relative;
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    align-self: stretch;
     width: 100%;
+    min-width: 0;
     min-height: 0;
+  }
+  .admin-licencias-page .admin-suspended-ta-dup-stack > .suspended-license-split__creds#adminLicenciasSuspendedNotepad,
+  .admin-licencias-page .admin-suspended-ta-dup-stack > textarea.suspended-license-split__creds {
+    flex: 1 1 auto;
+    width: 100% !important;
+    min-width: 0 !important;
   }
   .admin-licencias-page .admin-suspended-ta-dup-stack .admin-suspended-dup-line-layer {
     position: absolute;
@@ -3025,8 +3437,19 @@ html, body {
   }
   .admin-licencias-page .admin-expired-ta-dup-stack {
     position: relative;
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    align-self: stretch;
     width: 100%;
+    min-width: 0;
     min-height: 0;
+  }
+  .admin-licencias-page .admin-expired-ta-dup-stack > .expired-license-split__creds#adminLicenciasExpiredNotepad,
+  .admin-licencias-page .admin-expired-ta-dup-stack > textarea.expired-license-split__creds {
+    flex: 1 1 auto;
+    width: 100% !important;
+    min-width: 0 !important;
   }
   .admin-licencias-page .admin-expired-ta-dup-stack .admin-expired-dup-line-layer {
     position: absolute;
@@ -3054,13 +3477,16 @@ html, body {
     background: transparent !important;
     background-color: transparent !important;
   }
+  /* Pulse sin filter: filter en la fila con <select> provoca overlays / texto concatenado en Chromium. */
   @keyframes admin-license-dup-pulse {
     0%,
     100% {
-      filter: brightness(1);
+      box-shadow: inset 0 0 0 2px rgba(234, 179, 8, 0.92), 0 0 0 1px rgba(0, 0, 0, 0.35);
     }
     50% {
-      filter: brightness(1.1);
+      box-shadow: inset 0 0 0 3px rgba(253, 230, 138, 0.98),
+        0 0 10px rgba(234, 179, 8, 0.4),
+        0 0 0 1px rgba(0, 0, 0, 0.35);
     }
   }
   .admin-licencias-page .license-notepads-wrap .admin-licencias-license-editable .day-account-private-notes,
@@ -3239,9 +3665,11 @@ html, body {
     overflow: visible !important;
   }
 
-  /* base.html envuelve el bloque en .container; admin puede anidar otro .container */
+  /* base.html envuelve el bloque en .container; licencias usan .container-fluid para ancho real */
   body .container > .container.admin-licencias-page.admin-licencias-shell,
-  body .container > .container.admin-licencias-page.user-licencias-shell {
+  body .container > .container-fluid.admin-licencias-page.admin-licencias-shell,
+  body .container > .container.admin-licencias-page.user-licencias-shell,
+  body .container > .container-fluid.admin-licencias-page.user-licencias-shell {
     max-width: 100% !important;
     width: 100% !important;
     margin-left: 0 !important;
@@ -3249,8 +3677,18 @@ html, body {
     box-sizing: border-box !important;
   }
 
-  /* Historial / Reportes: panel y tabla al 100% del ancho útil (misma anchura que la rejilla) */
-  .admin-licencias-page .admin-licencias-historial-panel,
+  /* Pantallas anchas: Notas + Licencias + Días (y Caídas/Vencidas dentro del mismo contenedor) al 100% del ancho
+     para aprovechar monitores grandes (antes estaba limitado a 1200px). */
+  @media (min-width: 1280px) {
+    .admin-licencias-page.admin-licencias-shell #licenseAccountsInputContainer.license-accounts-input-container {
+      max-width: 100% !important;
+      margin-left: 0 !important;
+      margin-right: 0 !important;
+      box-sizing: border-box !important;
+    }
+  }
+
+  /* Reportes: panel y tabla al 100% del ancho útil (misma anchura que la rejilla) */
   .admin-licencias-page .admin-licencias-reportes-panel {
     width: 100% !important;
     max-width: 100% !important;
@@ -3259,21 +3697,18 @@ html, body {
     box-sizing: border-box !important;
   }
 
-  .admin-licencias-page .admin-licencias-historial-inner,
   .admin-licencias-page .admin-licencias-reportes-inner {
     width: 100% !important;
     max-width: 100% !important;
     box-sizing: border-box !important;
   }
 
-  .admin-licencias-page .admin-licencias-historial-table-scroll,
   .admin-licencias-page .admin-licencias-reportes-table-scroll {
     width: 100% !important;
     max-width: 100% !important;
     box-sizing: border-box !important;
   }
 
-  .admin-licencias-page .admin-licencias-historial-panel table.admin-licencias-historial-table,
   .admin-licencias-page .admin-licencias-reportes-panel table.admin-licencias-reportes-table {
     width: 100% !important;
     max-width: 100% !important;
@@ -3283,7 +3718,9 @@ html, body {
 
   /* Página al ras del viewport: menos aire arriba y bloques pegados (cabecera = ancho del cuerpo) */
   .admin-licencias-page.admin-licencias-shell.container.mt-2,
-  .admin-licencias-page.user-licencias-shell.container.mt-2 {
+  .admin-licencias-page.admin-licencias-shell.container-fluid.mt-2,
+  .admin-licencias-page.user-licencias-shell.container.mt-2,
+  .admin-licencias-page.user-licencias-shell.container-fluid.mt-2 {
     margin-top: 0.2rem !important;
   }
   .admin-licencias-page .license-notepads-wrap {
@@ -3325,6 +3762,9 @@ html, body {
     margin-bottom: 0 !important;
     border-bottom: none !important;
   }
+  .admin-licencias-page .license-notepads-wrap .license-split-editor__row.license-split-editor__row--search-hit {
+    background-color: rgba(0, 79, 255, 0.1);
+  }
   .admin-licencias-page .license-notepads-wrap .license-split-editor__creds {
     padding-top: 0 !important;
     padding-bottom: 0 !important;
@@ -3346,29 +3786,34 @@ html, body {
   .admin-licencias-page .license-notepads-wrap #licenseAllDaysContainer .license-split-editor__side {
     min-width: 0;
   }
-  .admin-licencias-page .license-suspended-notepad-wrap .license-split-editor__grid {
+  .admin-licencias-page .license-suspended-notepad-wrap .license-split-editor__grid,
+  .admin-licencias-page .license-expired-notepad-wrap .license-split-editor__grid {
     align-items: start;
     grid-template-columns: minmax(min(45%, 16rem), 1fr) minmax(14rem, 1.2fr);
     min-width: 0;
   }
   .admin-licencias-page .license-notepads-wrap #licenseAllDaysContainer .admin-licencias-license-editable,
-  .admin-licencias-page .license-suspended-notepad-wrap .admin-licencias-license-editable {
+  .admin-licencias-page .license-suspended-notepad-wrap .admin-licencias-license-editable,
+  .admin-licencias-page .license-expired-notepad-wrap .admin-licencias-license-editable {
     min-height: 0 !important;
     padding: 0 !important;
     border: none !important;
   }
   .admin-licencias-page .license-notepads-wrap #licenseAllDaysContainer .license-split-editor__creds-cell,
-  .admin-licencias-page .license-suspended-notepad-wrap .license-split-editor__creds-cell {
+  .admin-licencias-page .license-suspended-notepad-wrap .license-split-editor__creds-cell,
+  .admin-licencias-page .license-expired-notepad-wrap .license-split-editor__creds-cell {
     min-height: 0;
     /* Sin estirar a la altura de la columna derecha (evita franja negra bajo credenciales). */
     align-self: start;
   }
   .admin-licencias-page .license-notepads-wrap #licenseAllDaysContainer .license-split-editor__side,
-  .admin-licencias-page .license-suspended-notepad-wrap .license-split-editor__side {
+  .admin-licencias-page .license-suspended-notepad-wrap .license-split-editor__side,
+  .admin-licencias-page .license-expired-notepad-wrap .license-split-editor__side {
     align-self: start;
   }
   .admin-licencias-page .license-notepads-wrap #licenseAllDaysContainer .license-split-editor__creds,
-  .admin-licencias-page .license-suspended-notepad-wrap .license-split-editor__creds {
+  .admin-licencias-page .license-suspended-notepad-wrap .license-split-editor__creds,
+  .admin-licencias-page .license-expired-notepad-wrap .license-split-editor__creds {
     min-height: var(--lic-line-box) !important;
     flex: 0 0 auto !important;
   }
@@ -3385,8 +3830,10 @@ html, body {
    */
   .admin-licencias-page .license-notepads-wrap .license-split-editor__row {
     align-items: stretch;
-    border-bottom: var(--lic-border-w) solid rgba(59, 130, 246, 0.48);
     border-top: none;
+  }
+  .admin-licencias-page .license-notepads-wrap .license-split-editor__row:not(:last-child) {
+    border-bottom: var(--lic-border-w) solid rgba(59, 130, 246, 0.48);
   }
   .admin-licencias-page .license-notepads-wrap .license-split-editor__row:first-child {
     border-top: none;
@@ -3394,10 +3841,28 @@ html, body {
   .admin-licencias-page .license-notepads-wrap .license-split-editor__row:last-child {
     border-bottom: none !important;
   }
+  /*
+   * Columna credenciales: repeating-linear-gradient dibuja un trazo al final del área del textarea.
+   * Franja negra gruesa encima (Licencias + Días) para tapar esa última raya sin quitar las de entre líneas.
+   */
+  .admin-licencias-page .license-notepads-wrap #adminLicenciasLicenseSplitRoot .license-split-editor__creds,
+  .admin-licencias-page .license-notepads-wrap #licenseAllDaysContainer .license-split-editor__creds {
+    background-image:
+      linear-gradient(to top, #000000 0px, #000000 8px, rgba(0, 0, 0, 0) 8px),
+      linear-gradient(to top, #000000 0, #000000 calc(var(--lic-border-w) + 2px), transparent calc(var(--lic-border-w) + 2px)),
+      repeating-linear-gradient(
+        to bottom,
+        transparent 0,
+        transparent calc(var(--lic-row-stride) - var(--lic-border-w)),
+        rgba(59, 130, 246, 0.48) calc(var(--lic-row-stride) - var(--lic-border-w)),
+        rgba(59, 130, 246, 0.48) var(--lic-row-stride)
+      ) !important;
+  }
   /* Licencias / Días / Caídas: separación lateral credenciales | estado y notas (sin bandas horizontales verde/roja entre filas). */
   .admin-licencias-page .license-notepads-wrap #licenseAllDaysContainer .license-split-editor__side,
   .admin-licencias-page .license-notepads-wrap #adminLicenciasLicenseSplitRoot .license-split-editor__side,
-  .admin-licencias-page .license-suspended-notepad-wrap .license-split-editor__side {
+  .admin-licencias-page .license-suspended-notepad-wrap .license-split-editor__side,
+  .admin-licencias-page .license-expired-notepad-wrap .license-split-editor__side {
     border-left-width: max(3px, var(--lic-border-w));
     border-left-style: solid;
     border-left-color: rgba(59, 130, 246, 0.65);
@@ -3474,6 +3939,137 @@ html, body {
     overflow-y: visible !important;
     max-height: none !important;
   }
+
+  /*
+   * Escritorio admin: igual criterio que portal usuario — ancho fluido sin max-content gigante ni columna derecha clampada a 22rem.
+   * Así las credenciales usan bien el hueco hasta la columna día/usuario sin barra inferior de scroll perpetua (móvil ≤768 no toca).
+   */
+  @media (min-width: 769px) {
+    .admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+      .license-notepads-wrap
+      .license-split-editor__viewport,
+    .admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+      .license-suspended-notepad-wrap
+      .license-split-editor__viewport,
+    .admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+      .license-expired-notepad-wrap
+      .license-split-editor__viewport {
+      min-width: 0 !important;
+      max-width: 100% !important;
+    }
+
+    .admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+      .license-notepads-wrap
+      .license-split-editor__rows,
+    .admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+      .license-suspended-notepad-wrap
+      .license-split-editor__rows,
+    .admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+      .license-expired-notepad-wrap
+      .license-split-editor__rows {
+      width: 100% !important;
+      max-width: 100% !important;
+      min-width: 0 !important;
+      overflow-x: hidden !important;
+    }
+
+    .admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+      .license-notepads-wrap
+      #adminLicenciasLicenseSplitRoot
+      .license-split-editor__grid {
+      width: 100% !important;
+      max-width: 100% !important;
+      min-width: 0 !important;
+      grid-template-columns: minmax(min(52%, 22rem), 1.15fr) minmax(13.5rem, 1fr) !important;
+    }
+
+    .admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+      .license-notepads-wrap
+      #licenseAllDaysContainer
+      .license-split-editor__grid {
+      width: 100% !important;
+      max-width: 100% !important;
+      min-width: 0 !important;
+      grid-template-columns: minmax(min(48%, 18rem), 1fr) minmax(13.5rem, 1.2fr) !important;
+    }
+
+    .admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+      .license-suspended-notepad-wrap
+      .license-split-editor__grid,
+    .admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+      .license-expired-notepad-wrap
+      .license-split-editor__grid {
+      width: 100% !important;
+      max-width: 100% !important;
+      min-width: 0 !important;
+      grid-template-columns: minmax(min(45%, 15rem), 1fr) minmax(13.5rem, 1.2fr) !important;
+    }
+
+    .admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+      .license-notepads-wrap
+      #adminLicenciasLicenseSplitRoot
+      .license-split-editor__creds-cell,
+    .admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+      .license-notepads-wrap
+      #licenseAllDaysContainer
+      .license-split-editor__creds-cell,
+    .admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+      .license-suspended-notepad-wrap
+      .license-split-editor__creds-cell,
+    .admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+      .license-expired-notepad-wrap
+      .license-split-editor__creds-cell {
+      min-width: 0 !important;
+    }
+
+    .admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+      .license-notepads-wrap
+      #adminLicenciasLicenseSplitRoot
+      .license-split-editor__creds,
+    .admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+      .license-notepads-wrap
+      #licenseAllDaysContainer
+      .license-split-editor__creds,
+    .admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+      .license-suspended-notepad-wrap
+      .license-split-editor__creds,
+    .admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+      .license-expired-notepad-wrap
+      .license-split-editor__creds {
+      min-width: 0 !important;
+      white-space: pre-wrap !important;
+      overflow-wrap: anywhere !important;
+      word-break: break-word !important;
+      overflow-x: hidden !important;
+    }
+
+    .admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+      .license-notepads-wrap
+      #adminLicenciasLicenseSplitRoot
+      .license-split-editor__side,
+    .admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+      .license-notepads-wrap
+      #licenseAllDaysContainer
+      .license-split-editor__side,
+    .admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+      .license-suspended-notepad-wrap
+      .license-split-editor__side,
+    .admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+      .license-expired-notepad-wrap
+      .license-split-editor__side {
+      min-width: 0 !important;
+      max-width: 100% !important;
+      overflow-x: hidden !important;
+    }
+
+    .admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+      .license-notepads-wrap
+      .license-split-editor__row:not(.license-split-editor__row--suspended):not(.license-split-editor__row--expired):not(.license-split-editor__row--changes) {
+      min-width: 0 !important;
+      grid-template-columns: auto minmax(0, 1.35fr) minmax(0, 1fr) !important;
+    }
+  }
+
   .admin-licencias-page .license-notepads-wrap .admin-licencias-bloc {
     overflow: visible !important;
   }
@@ -3513,6 +4109,168 @@ html, body {
   html:has(.admin-licencias-page.user-licencias-shell),
   body:has(.admin-licencias-page.user-licencias-shell) {
     overflow-x: hidden;
+  }
+
+  /* Admin Licencias (no portal usuario): móvil — credenciales / usuario largos sin recortar; scroll horizontal en bloques. */
+  @media (max-width: 768px) {
+    .admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+      #licenseAllDaysContainer
+      .day-section.admin-licencias-bloc {
+      overflow-x: hidden !important;
+      overflow-y: visible !important;
+    }
+
+    .admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell) .license-notepads-wrap,
+    .admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell) .license-suspended-notepad-wrap,
+    .admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell) .license-expired-notepad-wrap,
+    .admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell) .license-changes-products-container {
+      overflow-x: hidden !important;
+    }
+
+    .admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+      .license-notepads-wrap
+      .license-split-editor {
+      overflow-x: visible !important;
+    }
+
+    .admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+      .license-notepads-wrap
+      .license-split-editor__viewport,
+    .admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+      .license-suspended-notepad-wrap
+      .license-split-editor__viewport,
+    .admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+      .license-expired-notepad-wrap
+      .license-split-editor__viewport,
+    .admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+      .license-changes-products-container
+      .license-split-editor__viewport {
+      overflow-x: auto !important;
+      box-sizing: border-box;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    .admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+      .license-notepads-wrap
+      #adminLicenciasLicenseSplitRoot
+      .license-split-editor__grid,
+    .admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+      .license-notepads-wrap
+      #licenseAllDaysContainer
+      .license-split-editor__grid,
+    .admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+      .license-suspended-notepad-wrap
+      .license-split-editor__grid,
+    .admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+      .license-expired-notepad-wrap
+      .license-split-editor__grid,
+    .admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+      .license-changes-products-container
+      .license-split-editor__grid {
+      width: max-content !important;
+      min-width: 100% !important;
+      max-width: none !important;
+      grid-template-columns: minmax(min(180px, 45vw), max-content) minmax(16rem, 1fr) !important;
+    }
+
+    .admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+      .license-notepads-wrap
+      #adminLicenciasLicenseSplitRoot
+      .license-split-editor__creds-cell,
+    .admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+      .license-notepads-wrap
+      #licenseAllDaysContainer
+      .license-split-editor__creds-cell,
+    .admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+      .license-suspended-notepad-wrap
+      .license-split-editor__creds-cell,
+    .admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+      .license-expired-notepad-wrap
+      .license-split-editor__creds-cell,
+    .admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+      .license-changes-products-container
+      .license-split-editor__creds-cell {
+      min-width: 0 !important;
+      width: auto !important;
+    }
+
+    .admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+      .license-notepads-wrap
+      .license-split-editor__creds,
+    .admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+      .license-suspended-notepad-wrap
+      .license-split-editor__creds,
+    .admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+      .license-expired-notepad-wrap
+      .license-split-editor__creds,
+    .admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+      .license-changes-products-container
+      .license-split-editor__creds {
+      overflow-x: auto !important;
+      overflow-y: visible !important;
+      white-space: pre !important;
+      max-width: none !important;
+      width: auto !important;
+      field-sizing: content !important;
+    }
+
+    .admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+      .license-notepads-wrap
+      .license-split-editor__lead,
+    .admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+      .license-notepads-wrap
+      .license-split-editor__user-wrap {
+      min-width: 0 !important;
+      max-width: 100%;
+    }
+
+    .admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+      .license-notepads-wrap
+      .license-split-editor__user-wrap
+      .license-split-editor__user,
+    .admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+      .license-changes-products-container
+      .license-split-editor__user-wrap
+      .license-split-editor__user {
+      width: auto !important;
+      min-width: 6rem !important;
+      max-width: min(92ch, 100%) !important;
+      overflow-x: auto !important;
+      white-space: nowrap !important;
+      box-sizing: border-box !important;
+    }
+
+    .admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+      .license-notepads-wrap
+      .license-split-editor__row:not(.license-split-editor__row--suspended):not(.license-split-editor__row--expired):not(.license-split-editor__row--changes) {
+      min-width: max-content !important;
+      max-width: none !important;
+    }
+
+    .admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+      .license-notepads-wrap
+      .admin-license-line-row,
+    .admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+      .license-suspended-notepad-wrap
+      .admin-license-line-row,
+    .admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+      #licenseAllDaysContainer
+      .admin-license-line-row,
+    .admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+      .license-changes-products-container
+      .admin-license-line-row {
+      overflow-x: auto !important;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    .admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+      .admin-license-line-row
+      .day-account-credential-line {
+      flex: 0 1 auto !important;
+      min-width: 0 !important;
+      max-width: min(92ch, 100%) !important;
+      overflow-x: auto !important;
+    }
   }
   
   /* Wrapper para la tabla para crear el efecto de "doble borde" o espaciado */
@@ -4115,12 +4873,17 @@ html, body {
     margin-bottom: 0 !important;
   }
 
-  /* Hacer que el contenedor principal ocupe todo el ancho */
-  .admin-licencias-page.container-max-width-900 {
+  /* Contenedor principal a ancho completo (Bootstrap .container aplicaba ~1140px) */
+  .admin-licencias-page.container-max-width-900,
+  .admin-licencias-page.admin-licencias-shell.container-fluid,
+  .admin-licencias-page.user-licencias-shell.container-fluid {
     max-width: 100% !important;
     padding-left: 0 !important;
+    padding-right: 0 !important;
     margin-left: 0 !important;
     margin-right: 0 !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
   }
 
   /* Estilos para la página de productos */
@@ -4737,7 +5500,7 @@ html, body {
     gap: 1rem;
     justify-content: flex-start;
   }
-  .card.product-texture-bg, .admin-card {
+  .d-flex.flex-wrap.gap-1 .card.product-texture-bg {
     width: 182px;
     margin-bottom: 0.7rem;
     box-sizing: border-box;
@@ -4747,7 +5510,7 @@ html, body {
       gap: 0.5rem !important;
       justify-content: center;
     }
-    .card.product-texture-bg, .admin-card {
+    .d-flex.flex-wrap.gap-1 .card.product-texture-bg {
       width: calc(50% - 0.3rem) !important;
       min-width: unset !important;
       max-width: unset !important;
@@ -5314,16 +6077,21 @@ html, body {
   }
   
   /* Logo del producto */
+  .carrito-producto-logo-wrap {
+    position: relative;
+    flex-shrink: 0;
+  }
+
   .carrito-producto-logo {
     width: 50px;
     height: 50px;
     border-radius: 12px;
-    overflow: hidden;
-    flex-shrink: 0;
+    display: block;
+    object-fit: cover;
     box-shadow: 0 4px 12px rgba(0,0,0,0.1);
   }
   
-  .carrito-producto-logo img {
+  .carrito-producto-logo-wrap .carrito-producto-logo img {
     width: 100%;
     height: 100%;
     object-fit: cover;
@@ -7263,6 +8031,122 @@ html, body {
     white-space: pre-line;
     margin-top: 0.5em;
   }
+  /* Modal pago exitoso (credenciales entregadas) */
+  .desc-modal-content.pago-exito-modal-panel {
+    max-width: min(580px, 95vw);
+    width: min(580px, 95vw);
+    min-height: min(440px, 72vh);
+    padding: 0.75rem 0.85rem 0.85rem;
+    box-sizing: border-box;
+  }
+  .pago-exito-modal-panel {
+    position: relative;
+    max-width: none;
+    max-height: min(90vh, 820px);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+  .pago-exito-title {
+    margin: 0 1.35rem 0.35rem 0;
+    font-size: 1.1rem;
+    color: #0d47a1;
+  }
+  .pago-exito-intro {
+    margin: 0 0 0.35rem 0;
+    color: #333;
+    font-size: 0.92rem;
+    line-height: 1.3;
+  }
+  .pago-exito-cred-list {
+    width: 100%;
+    box-sizing: border-box;
+    flex: 1 1 auto;
+    min-height: 10rem;
+    max-height: min(52vh, 420px);
+    overflow: auto;
+    text-align: left;
+    background: #f5f7fa;
+    border-radius: 6px;
+    padding: 0.28rem 0.32rem;
+    font-size: 0.82rem;
+    line-height: 1.22;
+    color: #111;
+    border: 1px solid #e0e4ea;
+  }
+  .pago-exito-prod {
+    font-weight: 700;
+    color: #1565c0;
+    margin: 0.28rem 0 0.06rem 0;
+    font-size: 0.86rem;
+    line-height: 1.2;
+  }
+  .pago-exito-prod:first-child {
+    margin-top: 0;
+  }
+  .pago-exito-line {
+    font-family: ui-monospace, 'Cascadia Code', Consolas, monospace;
+    padding: 0 0 0 0.4rem;
+    border-left: 2px solid #90caf9;
+    margin: 0 0 0.06rem 0;
+    line-height: 1.2;
+    word-break: break-word;
+  }
+  .pago-exito-line:last-child {
+    margin-bottom: 0;
+  }
+  .pago-exito-hint {
+    margin: 0.5rem 0 0.15rem;
+    font-size: 0.8rem;
+    color: #555;
+    line-height: 1.25;
+  }
+  .pago-exito-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.45rem;
+    margin-top: 0.75rem;
+    justify-content: center;
+  }
+  .btn-pago-exito-copy {
+    border: none;
+    border-radius: 8px;
+    padding: 0.55rem 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    background: #1976d2;
+    color: #fff;
+    font-size: 0.95rem;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+  }
+  .btn-pago-exito-copy:hover {
+    background: #1565c0;
+  }
+  .btn-pago-exito-copy.copiado {
+    background: #2e7d32;
+  }
+  .btn-pago-exito-close {
+    border: 1px solid #bdbdbd;
+    border-radius: 8px;
+    padding: 0.55rem 1rem;
+    background: #fff;
+    color: #333;
+    cursor: pointer;
+    font-size: 0.95rem;
+  }
+  .btn-pago-exito-close:hover {
+    background: #fafafa;
+  }
+  .pago-exito-buffer {
+    position: absolute;
+    left: -9999px;
+    top: 0;
+    width: 1px;
+    height: 1px;
+    opacity: 0;
+  }
   /* --- Sidebar de Carrito --- */
   .sidebar-carrito-overlay {
     display: none;
@@ -7300,6 +8184,26 @@ html, body {
   .sidebar-hidden { display: none !important; }
   
   /* Estilos específicos para herramientas.html (NO worksheets) */
+
+  .store-light.maxw-800.herramientas-admin-page {
+    padding: 0.75rem;
+    box-sizing: border-box;
+  }
+
+  .herramientas-admin-page .herramientas-admin-toolbar {
+    padding-top: 0.15rem;
+    margin-top: 0;
+  }
+
+  .store-light.maxw-800.configuraciones-admin-page {
+    padding: 0.75rem;
+    box-sizing: border-box;
+  }
+
+  .configuraciones-admin-page .configuraciones-admin-toolbar {
+    padding-top: 0.15rem;
+    margin-top: 0;
+  }
   
   .productos-buscar-mostrar {
     width: 100%;
@@ -8295,7 +9199,8 @@ html, body {
 
   /* Misma caja que .btn-blue (styles.css: padding 2px 10px, border 2px) — no usar padding mayor que Menú/Herramientas */
   .admin-licencias-toolbar .menu-btn-worksheet,
-  .user-licencias-toolbar .licenses-collapse-btn--toolbar {
+  .user-licencias-toolbar .licenses-collapse-btn--toolbar,
+  .user-licencias-toolbar .user-lic-vencimientos-btn.menu-btn-worksheet {
     padding: 2px 10px !important;
     min-width: 0 !important;
     width: auto !important;
@@ -8319,7 +9224,9 @@ html, body {
 
   .admin-licencias-toolbar .licenses-collapse-btn--toolbar i,
   .user-licencias-toolbar .licenses-collapse-btn--toolbar i,
-  .admin-licencias-toolbar .licenses-duplicates-btn--toolbar i {
+  .user-licencias-toolbar .user-lic-vencimientos-btn.menu-btn-worksheet > i,
+  .admin-licencias-toolbar .licenses-duplicates-btn--toolbar i,
+  .admin-licencias-toolbar #licensesMoveToChangesBtn.menu-btn-worksheet > i {
     font-size: 1em !important;
     line-height: 1 !important;
     display: block !important;
@@ -8344,6 +9251,460 @@ html, body {
     color: #fff !important;
   }
 
+  /* Portal cliente: Caducidad — mismo azul que Menú; resaltado al activar */
+  .user-licencias-toolbar .user-lic-vencimientos-btn.menu-btn-worksheet {
+    gap: 0.35rem;
+    white-space: nowrap;
+  }
+  .user-licencias-toolbar .user-lic-vencimientos-btn.user-lic-vencimientos-btn--active {
+    border-color: rgba(251, 191, 36, 0.95) !important;
+    background: linear-gradient(135deg, #78350f 0%, #d97706 45%, #b45309 100%) !important;
+    color: #fffbeb !important;
+    box-shadow: 0 0 0 1px rgba(251, 191, 36, 0.35) !important;
+  }
+  .user-licencias-toolbar .user-lic-vencimientos-btn.user-lic-vencimientos-btn--active i {
+    color: #fffbeb !important;
+  }
+  .user-lic-account-sheet--vencimientos .user-lic-vencimiento-day .admin-licencias-bloc-title {
+    font-weight: 600;
+  }
+
+  /* Caducidad: altura al contenido (sin estirar panel ni listas vacías) */
+  .admin-licencias-page.user-licencias-shell.user-licencias-shell--caducidad.store-light.worksheet-panel {
+    min-height: 0 !important;
+    padding-bottom: 0.75rem;
+    box-sizing: border-box;
+  }
+  .admin-licencias-page.user-licencias-shell.user-licencias-shell--caducidad .user-licencias-view-wrap {
+    min-height: 0;
+    display: block;
+    box-sizing: border-box;
+  }
+  .admin-licencias-page.user-licencias-shell.user-licencias-shell--caducidad
+    .user-lic-account-sheet--vencimientos
+    .user-lic-vencimientos-wrap {
+    flex: none;
+    min-height: 0;
+    display: block;
+    box-sizing: border-box;
+  }
+  .admin-licencias-page.user-licencias-shell.user-licencias-shell--caducidad
+    .user-lic-account-sheet--vencimientos
+    .user-lic-vencimiento-day:last-child
+    .day-accounts-list {
+    flex: none;
+    min-height: 0;
+    padding-bottom: 0.35rem;
+    box-sizing: border-box;
+  }
+
+  /* Caducidad: barra avisos — compacta, al ras del texto */
+  .admin-licencias-page.user-licencias-shell .user-lic-caducidad-notify-bar {
+    box-sizing: border-box;
+    flex: 0 0 auto;
+    width: 100%;
+    margin-top: 0.55rem;
+    margin-bottom: 0.55rem;
+  }
+  .user-lic-caducidad-notify-bar__inner {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    flex: 0 0 auto;
+    min-height: 0;
+    gap: 0.28rem;
+    padding: 0.38rem 0.62rem;
+    border-radius: 8px;
+    border: 1px solid rgba(59, 130, 246, 0.48);
+    background: #000000;
+    box-shadow: none;
+    color: #ffffff;
+    font-size: 0.86rem;
+    line-height: 1.3;
+  }
+  .user-lic-caducidad-notify-bar__lead-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.45rem 0.55rem;
+  }
+  .user-lic-caducidad-notify-bar__check {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    margin: 0;
+    cursor: pointer;
+    flex: 1 1 auto;
+    min-width: 0;
+    pointer-events: auto;
+  }
+  .user-lic-caducidad-notify-bar__check input[type='checkbox'] {
+    width: 1.05rem;
+    height: 1.05rem;
+    flex-shrink: 0;
+    margin: 0;
+    accent-color: #3b82f6;
+    cursor: pointer;
+    pointer-events: auto;
+    background-color: rgba(255, 255, 255, 0.14);
+    border: 1.5px solid rgba(147, 197, 253, 0.95);
+    border-radius: 3px;
+  }
+  .user-lic-caducidad-notify-bar__check input[type='checkbox']:checked {
+    accent-color: #60a5fa;
+    background-color: #2563eb;
+    border-color: #93c5fd;
+    box-shadow: 0 0 0 1px rgba(147, 197, 253, 0.45);
+  }
+  .user-lic-caducidad-notify-bar__lead-text {
+    font-size: 0.84rem;
+    line-height: 1.4;
+    color: rgba(255, 255, 255, 0.96);
+    cursor: pointer;
+  }
+  .user-lic-caducidad-notify-bar__days {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    margin: 0;
+    flex: 0 0 auto;
+    cursor: pointer;
+    pointer-events: auto;
+  }
+  .user-lic-caducidad-notify-bar__days-label {
+    white-space: nowrap;
+    color: rgba(255, 255, 255, 0.95);
+  }
+  .user-lic-caducidad-notify-bar__select {
+    min-width: 7.5rem;
+    padding: 0.2rem 0.45rem;
+    border-radius: 6px;
+    border: 1px solid rgba(59, 130, 246, 0.55);
+    background: rgba(0, 0, 0, 0.65);
+    color: #ffffff;
+    font-size: 0.86rem;
+    cursor: pointer;
+  }
+  .user-lic-caducidad-notify-bar__select option {
+    background: #000000;
+    color: #ffffff;
+  }
+  .user-lic-caducidad-notify-bar__select:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+  }
+  .user-lic-caducidad-notify-bar__hint {
+    font-size: 0.78rem;
+    line-height: 1.28;
+    margin: 0;
+    padding: 0;
+    color: rgba(219, 234, 254, 0.92);
+  }
+  .user-lic-caducidad-notify-bar__hint[hidden] {
+    display: none !important;
+  }
+  .user-lic-caducidad-notify-bar__hint--warn {
+    color: #fde68a;
+  }
+  .user-lic-caducidad-notify-bar__hint--ok {
+    color: #bbf7d0;
+  }
+
+  /* Caducidad: alertas en la propia página (fallback sin permiso del navegador) */
+  .user-lic-caducidad-alert-stack {
+    position: fixed;
+    top: 1rem;
+    right: 1rem;
+    z-index: 12050;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 0.55rem;
+    max-width: min(22rem, calc(100vw - 1.5rem));
+    pointer-events: none;
+  }
+  .user-lic-caducidad-alert-stack:not([hidden]) {
+    pointer-events: auto;
+  }
+  .user-lic-caducidad-alert {
+    pointer-events: auto;
+    width: 100%;
+    padding: 0.65rem 0.75rem 0.55rem;
+    border-radius: 10px;
+    border: 1px solid rgba(251, 191, 36, 0.65);
+    background: linear-gradient(165deg, #1e293b 0%, #0f172a 100%);
+    color: #f8fafc;
+    box-shadow: 0 10px 28px rgba(0, 0, 0, 0.45);
+    cursor: pointer;
+    animation: userLicCaducidadAlertIn 0.28s ease-out;
+  }
+  .user-lic-caducidad-alert--closing {
+    animation: userLicCaducidadAlertOut 0.22s ease-in forwards;
+  }
+  .user-lic-caducidad-alert--urgent {
+    border-color: rgba(248, 113, 113, 0.85);
+    background: linear-gradient(165deg, #450a0a 0%, #1c0505 100%);
+    box-shadow: 0 10px 28px rgba(127, 29, 29, 0.55);
+  }
+  .user-lic-caducidad-alert--urgent .user-lic-caducidad-alert__title {
+    color: #fecaca;
+  }
+  .user-lic-caducidad-alert--urgent .user-lic-caducidad-alert__foot {
+    color: rgba(254, 202, 202, 0.92);
+  }
+  .user-lic-caducidad-alert__head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 0.45rem;
+    margin-bottom: 0.25rem;
+  }
+  .user-lic-caducidad-alert__title {
+    font-size: 0.9rem;
+    font-weight: 700;
+    line-height: 1.25;
+    color: #fde68a;
+  }
+  .user-lic-caducidad-alert__close {
+    flex-shrink: 0;
+    border: none;
+    background: transparent;
+    color: rgba(248, 250, 252, 0.75);
+    font-size: 1.15rem;
+    line-height: 1;
+    padding: 0;
+    cursor: pointer;
+  }
+  .user-lic-caducidad-alert__close:hover {
+    color: #ffffff;
+  }
+  .user-lic-caducidad-alert__body {
+    font-size: 0.82rem;
+    line-height: 1.35;
+    color: rgba(248, 250, 252, 0.92);
+  }
+  .user-lic-caducidad-alert__foot {
+    margin-top: 0.35rem;
+    font-size: 0.72rem;
+    color: rgba(147, 197, 253, 0.9);
+  }
+  @keyframes userLicCaducidadAlertIn {
+    from {
+      opacity: 0;
+      transform: translateX(1rem);
+    }
+    to {
+      opacity: 1;
+      transform: translateX(0);
+    }
+  }
+  @keyframes userLicCaducidadAlertOut {
+    from {
+      opacity: 1;
+      transform: translateX(0);
+    }
+    to {
+      opacity: 0;
+      transform: translateX(0.75rem);
+    }
+  }
+  @media (max-width: 576px) {
+    .user-lic-caducidad-alert-stack {
+      top: auto;
+      bottom: 1rem;
+      left: 0.75rem;
+      right: 0.75rem;
+      max-width: none;
+      align-items: stretch;
+    }
+  }
+  @media (max-width: 576px) {
+    .user-lic-caducidad-notify-bar__lead-row {
+      align-items: flex-start;
+    }
+    .user-lic-caducidad-notify-bar__days {
+      margin-left: 1.5rem;
+    }
+    .user-lic-caducidad-notify-bar__select {
+      min-width: 5.5rem;
+    }
+  }
+  /* Caducidad: sin Pagada, Notas, reportes/incidencias ni ojos; solo renovación */
+  .admin-licencias-page.user-licencias-shell
+    .user-lic-account-sheet--vencimientos
+    .user-lic-bundle-wrap
+    .license-split-editor__saldo-cell,
+  .admin-licencias-page.user-licencias-shell
+    .user-lic-account-sheet--vencimientos
+    .user-lic-bundle-wrap
+    .user-lic-note-client.license-split-editor__note,
+  .admin-licencias-page.user-licencias-shell
+    .user-lic-account-sheet--vencimientos
+    .user-lic-bundle-wrap
+    .license-split-editor__status-select-shell--bad,
+  .admin-licencias-page.user-licencias-shell
+    .user-lic-account-sheet--vencimientos
+    .user-lic-bundle-wrap
+    .license-split-editor__otro-combined,
+  .admin-licencias-page.user-licencias-shell
+    .user-lic-account-sheet--vencimientos
+    .user-lic-bundle-wrap
+    .user-lic-warranty-history-btn,
+  .admin-licencias-page.user-licencias-shell
+    .user-lic-account-sheet--vencimientos
+    .user-lic-bundle-wrap
+    .user-lic-full-cred-trigger,
+  .admin-licencias-page.user-licencias-shell
+    .user-lic-account-sheet--vencimientos
+    .user-lic-bundle-wrap
+    .user-lic-buena-revisada-badge {
+    display: none !important;
+  }
+  .admin-licencias-page.user-licencias-shell
+    .user-lic-account-sheet--vencimientos
+    .user-lic-bundle-wrap
+    .license-split-editor__status-wrap,
+  .admin-licencias-page.user-licencias-shell
+    .user-lic-account-sheet--vencimientos
+    .user-lic-bundle-wrap
+    .license-split-editor__status-select-shell--good {
+    border-right: none !important;
+  }
+  /* Caducidad: líneas divisorias como en Días 1–31 (cabecera → lista + entre filas) */
+  .admin-licencias-page.user-licencias-shell
+    .user-lic-account-sheet--vencimientos
+    .user-lic-vencimiento-day
+    .day-accounts-list {
+    border-top: var(--lic-border-w, 2px) solid rgba(59, 130, 246, 0.48) !important;
+  }
+  .admin-licencias-page.user-licencias-shell
+    .user-lic-account-sheet--vencimientos
+    .user-lic-bundle-wrap
+    .license-split-editor__side {
+    border-left: var(--lic-border-w, 2px) solid rgba(59, 130, 246, 0.48) !important;
+  }
+  .admin-licencias-page.user-licencias-shell
+    .user-lic-account-sheet--vencimientos
+    .user-lic-bundle-wrap
+    .license-split-editor__row.user-lic-readonly-row:not(:last-child) {
+    border-bottom: var(--lic-border-w, 2px) solid rgba(59, 130, 246, 0.48) !important;
+  }
+  .admin-licencias-page.user-licencias-shell
+    .user-lic-account-sheet--vencimientos
+    .user-lic-bundle-wrap
+    .user-lic-caducidad-split
+    .license-split-editor__creds.user-lic-creds-ro {
+    background-image: none !important;
+  }
+  .admin-licencias-page.user-licencias-shell
+    .user-lic-account-sheet--vencimientos
+    .user-lic-vencimiento-day:not(:last-child) {
+    border-bottom: var(--lic-border-w, 2px) solid rgba(59, 130, 246, 0.48);
+    margin-bottom: 0.08rem !important;
+  }
+  .admin-licencias-page.user-licencias-shell
+    .user-lic-account-sheet--vencimientos
+    .user-lic-day-status-cnt-wrap {
+    display: none !important;
+  }
+  .admin-licencias-page.user-licencias-shell
+    .user-lic-account-sheet--vencimientos
+    .user-lic-bundle-wrap
+    .license-split-editor__row.user-lic-readonly-row {
+    grid-template-columns: minmax(6.25rem, 1fr) !important;
+  }
+  .admin-licencias-page.user-licencias-shell
+    .user-lic-account-sheet--vencimientos
+    .user-lic-days-toggle-creds,
+  .admin-licencias-page.user-licencias-shell
+    .user-lic-account-sheet--vencimientos
+    .user-lic-days-toggle-bad,
+  .admin-licencias-page.user-licencias-shell
+    .user-lic-account-sheet--vencimientos
+    .user-lic-days-toggle-notes {
+    display: none !important;
+  }
+  /* Caducidad: sin contador duplicado en el título (solo en la derecha junto a la flecha) */
+  .admin-licencias-page.user-licencias-shell
+    .user-lic-account-sheet--vencimientos
+    .admin-licencias-bloc-title
+    .day-account-badge {
+    display: none !important;
+  }
+  /* Caducidad: contador + flecha alineados en la franja azul */
+  .admin-licencias-page.user-licencias-shell
+    .user-lic-account-sheet--vencimientos
+    .user-lic-day-header-actions--caducidad {
+    grid-column: 3;
+    justify-self: end;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    min-height: 1.35rem;
+  }
+  .admin-licencias-page.user-licencias-shell
+    .user-lic-account-sheet--vencimientos
+    .user-lic-caducidad-header-end {
+    display: inline-flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 0.35rem;
+    flex-shrink: 0;
+  }
+  .admin-licencias-page.user-licencias-shell
+    .user-lic-account-sheet--vencimientos
+    .user-lic-caducidad-header-end
+    .day-account-badge {
+    position: static !important;
+    right: auto !important;
+    margin: 0 !important;
+    min-width: 1.35rem;
+    min-height: 1.35rem;
+    padding: 0.12rem 0.42rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .admin-licencias-page.user-licencias-shell
+    .user-lic-account-sheet--vencimientos
+    .user-lic-caducidad-header-end
+    .user-lic-days-expand-all {
+    margin-right: 0 !important;
+    min-width: 1.35rem;
+    min-height: 1.35rem;
+    padding: 0.04rem 0.28rem;
+  }
+  .admin-licencias-page.user-licencias-shell
+    .user-lic-account-sheet--vencimientos
+    .user-lic-day-section-chevron {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.35rem;
+    min-width: 1.35rem;
+    height: 1.35rem;
+    min-height: 1.35rem;
+    flex-shrink: 0;
+    color: rgba(255, 255, 255, 0.95);
+    font-size: 0.82rem;
+    line-height: 1;
+    pointer-events: none;
+  }
+  .admin-licencias-page.user-licencias-shell
+    .user-lic-account-sheet--vencimientos
+    .user-lic-day-section-chevron
+    i {
+    display: block;
+    transition: transform 0.15s ease;
+  }
+  .admin-licencias-page.user-licencias-shell
+    .user-lic-account-sheet--vencimientos
+    .user-lic-readonly-day.collapsed
+    .user-lic-day-section-chevron
+    i {
+    transform: rotate(180deg);
+  }
+
   /* Historial / Reportes junto a «Todos»: reset de botón nativo + misma tipografía (clase única .license-card--panel-toggle) */
   button.license-card.license-card--panel-toggle {
     -webkit-appearance: none;
@@ -8354,13 +9715,11 @@ html, body {
     color: inherit;
   }
 
-  .license-card.license-card--aggregate.license-card--panel-toggle.admin-licencias-historial-toggle--open,
   .license-card.license-card--aggregate.license-card--panel-toggle.admin-licencias-reportes-toggle--open {
     background: linear-gradient(176deg, #9b2828 0%, #6b1818 100%) !important;
     border: 1px solid rgba(255, 200, 200, 0.4) !important;
   }
 
-  .license-card.license-card--aggregate.license-card--panel-toggle.admin-licencias-historial-toggle--open::before,
   .license-card.license-card--aggregate.license-card--panel-toggle.admin-licencias-reportes-toggle--open::before {
     background: linear-gradient(
       135deg,
@@ -8433,35 +9792,6 @@ html, body {
 
   .admin-licencias-cambios-panel .license-changes-notepad-wrap {
     margin-top: 0;
-  }
-
-  .admin-licencias-historial-panel {
-    width: 100%;
-    max-width: 100%;
-    box-sizing: border-box;
-    margin-top: 1rem;
-    margin-bottom: 1.25rem;
-    padding: 0;
-    border: 1px solid rgba(59, 130, 246, 0.4);
-    border-radius: 10px;
-    background: linear-gradient(180deg, #0f172a 0%, #020617 100%);
-    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.35);
-  }
-
-  .admin-licencias-historial-inner {
-    padding: 0.85rem 1rem 1.1rem;
-    box-sizing: border-box;
-  }
-
-  .admin-licencias-historial-head {
-    margin-bottom: 0.75rem;
-  }
-
-  .admin-licencias-historial-hint {
-    margin: 0;
-    font-size: 0.82rem;
-    line-height: 1.4;
-    color: rgba(148, 163, 184, 0.95);
   }
 
   .admin-licencias-historial-controls {
@@ -8550,82 +9880,7 @@ html, body {
     background: rgba(15, 23, 42, 0.85) !important;
   }
 
-  /* Gana sobre .store-light table / th / td (fondo blanco + borde negro !important) */
-  .admin-licencias-page .admin-licencias-historial-panel table.admin-licencias-historial-table {
-    width: 100%;
-    border-collapse: collapse;
-    font-size: 0.88rem !important;
-    margin: 0 !important;
-    background-color: transparent !important;
-  }
-
-  .admin-licencias-page .admin-licencias-historial-panel table.admin-licencias-historial-table thead th {
-    position: sticky;
-    top: 0;
-    z-index: 1;
-    background: #0f172a !important;
-    color: #94a3b8 !important;
-    font-size: 0.76rem !important;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    text-align: left;
-    padding: 0.5rem 0.65rem !important;
-    border: none !important;
-    border-bottom: 1px solid rgba(59, 130, 246, 0.35) !important;
-    box-shadow: 0 1px 0 rgba(15, 23, 42, 0.9);
-    vertical-align: middle !important;
-    overflow: visible !important;
-    text-overflow: clip !important;
-  }
-
-  .admin-licencias-page .admin-licencias-historial-panel table.admin-licencias-historial-table tbody td {
-    padding: 0.45rem 0.65rem !important;
-    border: none !important;
-    border-bottom: 1px solid rgba(51, 65, 85, 0.55) !important;
-    color: #e2e8f0 !important;
-    background: transparent !important;
-    font-size: 0.88rem !important;
-    vertical-align: top !important;
-    text-align: left !important;
-    overflow: visible !important;
-    text-overflow: clip !important;
-  }
-
-  .admin-licencias-page
-    .admin-licencias-historial-panel
-    table.admin-licencias-historial-table
-    tbody
-    tr:nth-child(even):not(.admin-licencias-historial-row--empty)
-    td {
-    background: rgba(2, 6, 23, 0.55) !important;
-  }
-
-  .admin-licencias-page .admin-licencias-historial-table .admin-licencias-historial-col-date {
-    white-space: nowrap;
-    color: #94a3b8 !important;
-    font-size: 0.82rem !important;
-    width: 1%;
-  }
-
-  .admin-licencias-page .admin-licencias-historial-table .admin-licencias-historial-col-detail {
-    word-break: break-word;
-    line-height: 1.45;
-    white-space: pre-line;
-    color: #e2e8f0 !important;
-  }
-
-  .admin-licencias-page
-    .admin-licencias-historial-table
-    .admin-licencias-historial-row--empty
-    .admin-licencias-historial-col-detail {
-    text-align: center;
-    color: #94a3b8 !important;
-    font-style: italic;
-    padding: 0.85rem 0.65rem !important;
-  }
-
-  /* Panel Reportes: mismo cromatismo que Historial (azul / slate) */
+  /* Panel Reportes (azul / slate) */
   .admin-licencias-reportes-panel {
     width: 100%;
     max-width: 100%;
@@ -8810,17 +10065,8 @@ html, body {
     padding: 0.85rem 0.65rem !important;
   }
 
-  /* Historial: tablets y móviles */
+  /* Historial de compra / controles: tablets y móviles */
   @media (max-width: 768px) {
-    .admin-licencias-historial-inner {
-      padding: 0.65rem 0.75rem 0.9rem;
-    }
-
-    .admin-licencias-historial-hint {
-      font-size: 0.76rem;
-      line-height: 1.35;
-    }
-
     .admin-licencias-historial-controls {
       flex-direction: row;
       flex-wrap: nowrap;
@@ -8857,20 +10103,6 @@ html, body {
       padding: 2px 10px !important;
     }
 
-    .admin-licencias-page .admin-licencias-historial-panel table.admin-licencias-historial-table {
-      font-size: 0.82rem !important;
-    }
-
-    .admin-licencias-page .admin-licencias-historial-panel table.admin-licencias-historial-table thead th {
-      font-size: 0.72rem !important;
-      padding: 0.4rem 0.5rem !important;
-    }
-
-    .admin-licencias-page .admin-licencias-historial-panel table.admin-licencias-historial-table tbody td {
-      font-size: 0.82rem !important;
-      padding: 0.4rem 0.5rem !important;
-    }
-
     .admin-licencias-reportes-inner {
       padding: 0.65rem 0.75rem 0.9rem;
     }
@@ -8904,126 +10136,145 @@ html, body {
     }
   }
 
-  /* Tabla → filas tipo tarjeta (legible sin scroll horizontal) */
-  @media (max-width: 576px) {
-    .admin-licencias-historial-table-scroll {
-      border-radius: 6px;
-      overflow-x: hidden;
-    }
-
-    .admin-licencias-historial-footer .admin-licencias-historial-meta {
-      font-size: 0.7rem !important;
-      line-height: 1.3;
-    }
-
-    .admin-licencias-page .admin-licencias-historial-panel table.admin-licencias-historial-table thead {
-      position: absolute;
-      width: 1px;
-      height: 1px;
-      padding: 0;
-      margin: -1px;
-      overflow: hidden;
-      clip: rect(0, 0, 0, 0);
-      white-space: nowrap;
-      border: 0;
-    }
-
-    .admin-licencias-page .admin-licencias-historial-panel table.admin-licencias-historial-table tbody tr:not(.admin-licencias-historial-row--empty) {
-      display: block;
-      border: 1px solid rgba(51, 65, 85, 0.8);
-      border-radius: 8px;
-      margin-bottom: 0.5rem;
-      background: rgba(15, 23, 42, 0.55) !important;
-      overflow: hidden;
-    }
-
-    .admin-licencias-page
-      .admin-licencias-historial-panel
-      table.admin-licencias-historial-table
-      tbody
-      tr:nth-child(even):not(.admin-licencias-historial-row--empty) {
-      background: rgba(2, 6, 23, 0.72) !important;
-    }
-
-    .admin-licencias-page .admin-licencias-historial-panel table.admin-licencias-historial-table tbody td {
-      display: block !important;
-      width: 100% !important;
-      box-sizing: border-box;
-      border: none !important;
-      border-bottom: 1px solid rgba(51, 65, 85, 0.5) !important;
-      padding: 0.45rem 0.55rem 0.45rem 36% !important;
-      position: relative;
-      text-align: right !important;
-      white-space: normal !important;
-    }
-
-    .admin-licencias-page
-      .admin-licencias-historial-panel
-      table.admin-licencias-historial-table
-      tbody
-      td:last-child {
-      border-bottom: none !important;
-    }
-
-    .admin-licencias-page .admin-licencias-historial-table tbody td::before {
-      content: '';
-      position: absolute;
-      left: 0.55rem;
-      top: 0.45rem;
-      width: 32%;
-      max-width: 7.5rem;
-      font-size: 0.65rem;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: 0.03em;
-      color: #94a3b8;
-      text-align: left;
-      line-height: 1.25;
-    }
-
-    .admin-licencias-page .admin-licencias-historial-table tbody td.admin-licencias-historial-col-date::before {
-      content: 'Fecha';
-    }
-
-    .admin-licencias-page .admin-licencias-historial-table tbody td.admin-licencias-historial-col-detail::before {
-      content: 'Detalle';
-    }
-
-    .admin-licencias-page .admin-licencias-historial-table .admin-licencias-historial-col-date {
-      font-size: 0.78rem !important;
-    }
-
-    .admin-licencias-page .admin-licencias-historial-table tbody tr.admin-licencias-historial-row--empty {
-      display: block;
-      border: 1px solid rgba(51, 65, 85, 0.6);
-      border-radius: 8px;
-    }
-
-    .admin-licencias-page .admin-licencias-historial-table tbody tr.admin-licencias-historial-row--empty td {
-      display: block !important;
-      width: 100% !important;
-      padding: 0.85rem 0.55rem !important;
-      text-align: center !important;
-    }
-
-    .admin-licencias-page .admin-licencias-historial-table tbody tr.admin-licencias-historial-row--empty td::before {
-      display: none !important;
-      content: none !important;
-    }
-  }
-
   @media (max-width: 400px) {
     .admin-licencias-historial-footer .admin-licencias-historial-meta {
       font-size: 0.64rem !important;
     }
+  }
 
-    .admin-licencias-page .admin-licencias-historial-panel table.admin-licencias-historial-table tbody td {
-      padding-left: 40% !important;
+  /* Historial de compra (admin-lic-pages-historial-shell): sin caja blanca general */
+  .admin-lic-pages-historial-shell {
+    box-sizing: border-box;
+    width: 100%;
+    margin-left: auto;
+    margin-right: auto;
+    padding-left: 0.5rem;
+    padding-right: 0.5rem;
+  }
+
+  .admin-lic-pages-historial-shell .admin-licencias-historial-controls {
+    margin-bottom: 0.85rem !important;
+  }
+
+  /* Solo la tabla tiene contorno / borde negro y fondo blanco */
+  .admin-lic-pages-historial-shell > .lic-actividad-plate.admin-lic-pages-historial-table-plate {
+    margin-top: 0.15rem;
+    margin-bottom: 0.9rem;
+    padding: 0;
+    background: transparent;
+    border-radius: 0;
+    box-shadow: none;
+  }
+
+  .admin-lic-pages-historial-shell .admin-licencias-historial-search {
+    background: #fff !important;
+    border: 1px solid rgba(0, 0, 0, 0.2) !important;
+    color: #111 !important;
+  }
+
+  .admin-lic-pages-historial-shell .admin-licencias-historial-search::placeholder {
+    color: rgba(55, 65, 81, 0.7) !important;
+  }
+
+  .admin-lic-pages-historial-shell .admin-licencias-historial-select {
+    background: #fff !important;
+    border: 1px solid rgba(0, 0, 0, 0.2) !important;
+    color: #111 !important;
+  }
+
+  .admin-lic-pages-historial-shell .admin-licencias-historial-table-scroll {
+    background: transparent !important;
+    border: none !important;
+    border-radius: 0 !important;
+    overflow-x: auto !important;
+  }
+
+  .admin-lic-pages-historial-shell .admin-lic-pages-historial-footer .admin-licencias-historial-meta {
+    color: #374151 !important;
+  }
+
+  .admin-lic-pages-historial-shell .tabla-licencias-actividad th,
+  .admin-lic-pages-historial-shell .tabla-licencias-actividad td {
+    border: 1px solid #000 !important;
+    color: #111 !important;
+    background-color: #fff !important;
+    vertical-align: middle !important;
+    text-transform: none !important;
+    letter-spacing: normal !important;
+    font-weight: inherit !important;
+    font-size: 0.85rem !important;
+    line-height: 1.25 !important;
+    padding: 0.15rem 0.35rem !important;
+    box-shadow: none !important;
+  }
+
+  .admin-lic-pages-historial-shell .tabla-licencias-actividad thead th {
+    background: #f3f4f6 !important;
+    font-weight: 600 !important;
+    position: static !important;
+  }
+
+  .admin-lic-pages-historial-shell .admin-lic-pages-historial-table-wrap {
+    overflow-x: auto !important;
+  }
+
+  .admin-lic-pages-historial-shell .admin-licencias-historial-col-date {
+    white-space: nowrap !important;
+    width: 1% !important;
+    color: #111 !important;
+  }
+
+  .admin-lic-pages-historial-shell .admin-licencias-historial-col-user {
+    white-space: nowrap !important;
+    max-width: 10rem !important;
+  }
+
+  .admin-lic-pages-historial-shell .admin-licencias-historial-col-tipo {
+    white-space: normal !important;
+    max-width: 12rem !important;
+  }
+
+  .admin-lic-pages-historial-shell .admin-licencias-historial-col-detail,
+  .admin-lic-pages-historial-shell .admin-licencias-historial-col-resumen {
+    word-break: break-word !important;
+    line-height: 1.25 !important;
+    white-space: normal !important;
+    color: #111 !important;
+  }
+
+  @media (max-width: 576px) {
+    .admin-lic-pages-historial-shell .admin-licencias-historial-table-scroll table.admin-licencias-historial-table thead {
+      position: sticky !important;
+      top: 0 !important;
+      clip: auto !important;
+      width: 100% !important;
+      height: auto !important;
+      overflow: visible !important;
+      margin: 0 !important;
+      border: none !important;
+      display: table-header-group !important;
+      z-index: 2 !important;
     }
 
-    .admin-licencias-page .admin-licencias-historial-table tbody td::before {
-      font-size: 0.62rem;
-      width: 36%;
+    .admin-lic-pages-historial-shell .admin-licencias-historial-table-scroll table.admin-licencias-historial-table tbody tr:not(.admin-licencias-historial-row--empty) {
+      display: table-row !important;
+      margin: 0 !important;
+      border: none !important;
+      background: transparent !important;
+    }
+
+    .admin-lic-pages-historial-shell .admin-licencias-historial-table-scroll table.admin-licencias-historial-table tbody td {
+      display: table-cell !important;
+      width: auto !important;
+      border: 1px solid #000 !important;
+      padding: 0.4rem 0.45rem !important;
+      text-align: left !important;
+      position: static !important;
+    }
+
+    .admin-lic-pages-historial-shell .admin-lic-pages-historial-table-scroll table tbody td::before {
+      display: none !important;
+      content: none !important;
     }
   }
 
@@ -9663,14 +10914,15 @@ html, body {
     padding: 0 !important;
   }
   .admin-licencias-page #licenseAllDaysContainer .day-header-content .admin-bloc-undo-toolbar--in-header .admin-bloc-undo-btn {
-    min-width: 1.45rem !important;
-    min-height: 1.35rem !important;
-    padding: 0.02rem 0.18rem !important;
-    font-size: 0.78rem !important;
+    min-width: 1.05rem !important;
+    min-height: 0 !important;
+    height: auto !important;
+    padding: 0 0.08rem !important;
+    font-size: 0.61rem !important;
     line-height: 1 !important;
   }
   .admin-licencias-page #licenseAllDaysContainer .admin-bloc-undo-toolbar--day {
-    padding: 0.04rem 0.12rem !important;
+    padding: 0 !important;
   }
   .admin-licencias-page #licenseAllDaysContainer .day-header-actions .day-account-badge {
     padding: 0.1rem 0.38rem !important;
@@ -9684,6 +10936,10 @@ html, body {
   }
   .admin-licencias-page #licenseAllDaysContainer .day-accounts-list {
     padding: 0.18rem 0.32rem 0 !important;
+  }
+  /* Igual que portal usuario: el plegado se controla con .collapsed + localStorage */
+  .admin-licencias-page.admin-licencias-shell #licenseAllDaysContainer .admin-licencias-bloc--day.day-section.collapsed > .day-accounts-list {
+    display: none !important;
   }
   .admin-licencias-page .license-suspended-notepad-wrap .suspended-section-body.day-accounts-list {
     padding: 0 !important;
@@ -11629,15 +12885,15 @@ html, body {
   
   /* Panel más grande solo para hojas de cálculo */
   .worksheet-panel {
-    max-width: 2000px !important;
+    max-width: none !important;
     min-height: 1500px !important;
     margin-top: 0rem !important;
   }
   
   /* ⭐ NUEVO: Evitar que worksheets usen estilos de container-max-width-900 */
   .container.container-max-width-900.store-light:has(.worksheet-panel) {
-    padding: 0 1rem !important;
-    margin: 0 auto !important;
+    padding: 0 !important;
+    margin: 0 !important;
     max-width: 100% !important;
     width: 100% !important;
   }
@@ -11709,8 +12965,7 @@ html, body {
       font-size: 13px !important;
       padding: 6px 10px !important;
     }
-    .user-licencias-toolbar-cambios-link.menu-btn-worksheet,
-    .user-licencias-toolbar-historial-link.menu-btn-worksheet {
+    .user-licencias-toolbar-cambios-link.menu-btn-worksheet {
       font-size: 14px !important;
       padding: 5px 8px !important;
     }
@@ -11732,10 +12987,9 @@ html, body {
 
     /* Ajustar el header de la tienda en pantallas pequeñas para que los botones no se salgan */
     .store-front-main .store-front-header {
-      align-items: flex-start !important;
+      align-items: center !important;
       gap: 0.5rem !important;
       margin-bottom: 1rem !important;
-      margin-top: 1rem !important;
     }
 
     /* Forzar que los botones de menú estén en la primera línea */
@@ -11909,11 +13163,855 @@ html, body {
   .purchase-history-container {
     padding-left: 8px;
     padding-right: 8px;
+    padding-top: 0.75rem;
     padding-bottom: 18px;
   }
-  
+
+  .purchase-history-page .purchase-history-admin-toolbar {
+    display: inline-flex;
+    flex-wrap: nowrap;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 0.4rem;
+    width: auto;
+    max-width: 100%;
+  }
+
+  .purchase-history-page .purchase-history-admin-toolbar #menuToggleBtn,
+  .purchase-history-page .purchase-history-admin-toolbar #menu2ToggleBtn,
+  .purchase-history-page .purchase-history-admin-toolbar .menu-toggle-btn {
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+    float: none !important;
+    display: inline-flex !important;
+    align-items: center;
+    flex: 0 0 auto !important;
+    width: auto !important;
+  }
+
+  .purchase-history-page .purchase-history-page-title {
+    margin-top: 0;
+    margin-bottom: 0.65rem;
+    font-size: 1.15rem;
+    font-weight: 600;
+  }
+
+  .purchase-history-page .purchase-history-user-header + .purchase-history-page-title {
+    margin-top: 0.15rem;
+  }
+
+  .purchase-history-page.purchase-history-admin
+    .purchase-history-container:has(#purchaseHistoryCleanupPanel) {
+    padding-top: 0.75rem;
+  }
+
+  .purchase-history-cleanup-panel {
+    padding: 0;
+    border: none;
+    border-radius: 0;
+    background: transparent;
+    overflow: visible;
+  }
+
+  .purchase-history-cleanup-heading {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.35rem;
+    flex-wrap: wrap;
+    position: relative;
+    overflow: visible;
+    margin: 0 0 0.5rem;
+  }
+
+  .purchase-history-cleanup-info-wrap {
+    position: relative;
+    display: inline-flex;
+    vertical-align: middle;
+  }
+
+  .purchase-history-cleanup-info-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    margin: 0;
+    border: none;
+    background: transparent;
+    color: #6c757d;
+    font-size: 0.95rem;
+    cursor: pointer;
+    line-height: 1;
+  }
+
+  .purchase-history-cleanup-info-btn:hover,
+  .purchase-history-cleanup-info-btn:focus {
+    color: #0d6efd;
+    outline: none;
+  }
+
+  .purchase-history-cleanup-info-btn[aria-expanded="true"] {
+    color: #0d6efd;
+  }
+
+  .purchase-history-cleanup-info-box {
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 20;
+    width: max-content;
+    max-width: min(280px, 85vw);
+    padding: 0.5rem 0.65rem;
+    font-size: 0.8rem;
+    font-weight: normal;
+    line-height: 1.35;
+    text-align: left;
+    color: #212529;
+    background: #fff;
+    border: 1px solid rgba(0, 0, 0, 0.15);
+    border-radius: 6px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+  }
+
+  .purchase-history-cleanup-info-box[hidden] {
+    display: none !important;
+  }
+
+  .purchase-history-cleanup-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    max-width: 520px;
+    margin: 0 auto;
+  }
+
+  .purchase-history-cleanup-days-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+  }
+
+  .purchase-history-cleanup-days-label {
+    margin: 0;
+    flex: 1 1 auto;
+    min-width: 0;
+    font-size: 0.9rem;
+  }
+
+  .purchase-history-cleanup-days-input {
+    flex: 0 0 auto;
+    width: 4.5rem;
+    max-width: 4.5rem;
+    min-width: 4.5rem;
+    text-align: center;
+    padding-left: 0.35rem;
+    padding-right: 0.35rem;
+  }
+
+  .purchase-history-cleanup-actions-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+  }
+
+  .purchase-history-cleanup-preview {
+    font-size: 0.9rem;
+    margin: 0;
+  }
+
+  .purchase-history-cleanup-actions-row .btn-panel {
+    flex-shrink: 0;
+  }
+
+  .purchase-history-cleanup-separator {
+    margin: 1rem 0;
+    border: 0;
+    border-top: 1px solid rgba(0, 0, 0, 0.18);
+    opacity: 1;
+  }
+
+  .purchase-history-cleanup-heading-auto {
+    margin-top: 0.25rem;
+  }
+
+  .purchase-history-cleanup-auto-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .purchase-history-cleanup-auto-check {
+    flex: 0 0 auto;
+    margin: 0;
+    white-space: nowrap;
+    padding-left: 0;
+  }
+
+  .purchase-history-cleanup-interval-select {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  .purchase-history-cleanup-auto-row .purchase-history-cleanup-save-btn {
+    flex: 0 0 auto;
+    margin: 0;
+  }
+
+  .purchase-history-cleanup-interval-select:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+    background-color: #e9ecef;
+  }
+
+  .purchase-history-cleanup-user-search-wrap {
+    position: relative;
+  }
+
+  .purchase-history-cleanup-user-results {
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 0;
+    right: 0;
+    z-index: 30;
+    max-height: 220px;
+    overflow-y: auto;
+    background: #fff;
+    border: 1px solid rgba(0, 0, 0, 0.15);
+    border-radius: 6px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+  }
+
+  .purchase-history-cleanup-user-row {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    width: 100%;
+    padding: 0.45rem 0.6rem;
+    border: none;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+    background: #fff;
+    text-align: left;
+    cursor: pointer;
+    font-size: 0.85rem;
+    color: #212529;
+  }
+
+  .purchase-history-cleanup-user-row:hover,
+  .purchase-history-cleanup-user-row:focus {
+    background: #e7f1ff;
+    outline: none;
+  }
+
+  .purchase-history-cleanup-user-row:last-child {
+    border-bottom: none;
+  }
+
+  .purchase-history-cleanup-user-row-sub {
+    font-size: 0.75rem;
+    color: #6c757d;
+    margin-top: 0.1rem;
+  }
+
+  .purchase-history-cleanup-user-empty {
+    margin: 0;
+    padding: 0.5rem 0.6rem;
+    font-size: 0.8rem;
+    color: #6c757d;
+  }
+
+  .purchase-history-cleanup-user-selected {
+    font-size: 0.8rem;
+  }
+
+  .purchase-history-cleanup-user-clear {
+    margin-left: 0.35rem;
+    padding: 0;
+    border: none;
+    background: none;
+    color: #dc3545;
+    font-size: 0.8rem;
+    cursor: pointer;
+    text-decoration: underline;
+  }
+
+  .purchase-history-cleanup-user-clear:hover {
+    color: #a71d2a;
+  }
+
+  .purchase-history-cleanup-log-row td {
+    font-style: italic;
+    color: #495057;
+  }
+
+  .purchase-licencias-reversed-note,
+  .purchase-licencias-archived-note {
+    font-size: 0.85rem;
+    color: #495057;
+    margin: 0 0 0.65rem 0;
+    padding: 0.4rem 0.5rem;
+    background: #f8f9fa;
+    border-radius: 6px;
+    border-left: 3px solid #6c757d;
+  }
+
+  .purchase-licencias-reversed-note {
+    border-left-color: #dc3545;
+  }
+
+  .purchase-licencias-renewal-note {
+    font-size: 0.85rem;
+    color: #495057;
+    margin: 0 0 0.65rem 0;
+    padding: 0.4rem 0.5rem;
+    background: #f0f7ff;
+    border-radius: 6px;
+    border-left: 3px solid #0d6efd;
+  }
+
+  .purchase-history-product-icon-stack {
+    display: inline-flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
+    vertical-align: middle;
+    margin-right: 0.2rem;
+    width: 1.05em;
+    min-height: 1.35em;
+    flex-shrink: 0;
+  }
+
+  .purchase-history-product-icon-stack .purchase-history-product-icon-base {
+    font-size: 0.92em;
+    margin: 0;
+    line-height: 1;
+  }
+
+  .purchase-history-product-icon-stack .purchase-history-renewal-icon {
+    color: #0d6efd;
+    font-size: 0.58em;
+    margin: 0 0 0.05em 0;
+    line-height: 1;
+    vertical-align: top;
+  }
+
+  .purchase-history-page .purchase-history-stats-wrap,
+  .purchase-history-page .purchase-history-licencias-wrap {
+    margin-top: 1rem;
+  }
+
+  .purchase-history-page .purchase-history-licencias-controls {
+    display: flex;
+    flex-wrap: nowrap;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.5rem;
+  }
+
+  .purchase-history-page .purchase-history-licencias-controls .purchase-history-licencias-search {
+    flex: 1 1 0;
+    min-width: 0;
+  }
+
+  .purchase-history-page .purchase-history-licencias-controls .purchase-history-licencias-pagesize {
+    flex: 0 0 auto;
+    width: auto;
+    min-width: 4.5rem;
+  }
+
+  .purchase-history-stats-wrap .purchase-history-stats-filters {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    max-width: 520px;
+    margin: 0 auto;
+  }
+
+  .purchase-history-stats-period-apply-row {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+  }
+
+  .purchase-history-stats-period-apply-row .purchase-history-stats-period-picker {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  .purchase-history-stats-period-apply-row .purchase-history-stats-period-toggle,
+  .purchase-history-stats-wrap .purchase-history-stats-apply-btn.btn-panel.btn-green {
+    min-height: 2.125rem;
+    height: 2.125rem;
+    padding: 0.35rem 0.6rem;
+    font-size: 0.85rem;
+    line-height: 1.2;
+    box-sizing: border-box;
+  }
+
+  .purchase-history-stats-wrap .purchase-history-stats-apply-btn.btn-panel.btn-green {
+    flex: 0 0 auto;
+    width: auto;
+    margin: 0;
+    white-space: nowrap;
+    font-size: 0.85rem !important;
+    font-weight: 600;
+    background: #6aab82 !important;
+    border: 1px solid #5a9470 !important;
+    color: #fff !important;
+  }
+
+  .purchase-history-stats-wrap .purchase-history-stats-apply-btn.btn-panel.btn-green:hover {
+    background: #5d9a75 !important;
+    border-color: #4d8663 !important;
+    color: #fff !important;
+  }
+
+  .purchase-history-stats-period-picker {
+    position: relative;
+  }
+
+  .purchase-history-stats-period-toggle {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    width: 100%;
+    cursor: pointer;
+    background: #fff;
+    text-align: left;
+    border: 1px solid rgba(0, 0, 0, 0.15);
+    border-radius: 4px;
+  }
+
+  .purchase-history-stats-period-inline-label {
+    flex: 0 0 auto;
+    font-weight: 600;
+    font-size: 0.85rem;
+    color: #495057;
+  }
+
+  .purchase-history-stats-period-inline-value {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .purchase-history-stats-period-inline-icon {
+    flex: 0 0 auto;
+    margin-left: auto;
+    opacity: 0.75;
+    font-size: 0.95rem;
+  }
+
+  .purchase-history-stats-period-popover {
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 0;
+    right: 0;
+    z-index: 40;
+    padding: 0.65rem;
+    background: #fff;
+    border: 1px solid rgba(0, 0, 0, 0.15);
+    border-radius: 8px;
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.15);
+  }
+
+  .purchase-history-stats-period-popover[hidden] {
+    display: none !important;
+  }
+
+  .purchase-history-stats-period-popover-title {
+    font-size: 0.85rem;
+    font-weight: 600;
+    margin: 0 0 0.35rem;
+    text-align: center;
+  }
+
+  .purchase-history-stats-period-presets {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    justify-content: center;
+    margin-bottom: 0.35rem;
+  }
+
+  .purchase-history-stats-period-date-field {
+    margin-bottom: 0.35rem;
+  }
+
+  .purchase-history-stats-period-date-field:last-child {
+    margin-bottom: 0;
+  }
+
+  .purchase-history-stats-period-presets .btn-panel {
+    margin: 0;
+    padding: 0.2rem 0.45rem;
+    font-size: 0.75rem;
+  }
+
+  .purchase-history-stats-period-dates input[type="date"] {
+    width: 100%;
+    font-size: 0.9rem;
+  }
+
+  .purchase-history-stats-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(7.5rem, 1fr));
+    gap: 0.5rem;
+    margin-bottom: 0.75rem;
+  }
+
+  .purchase-history-stats-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 0.5rem 0.35rem;
+    border: 1px solid rgba(0, 0, 0, 0.12);
+    border-radius: 8px;
+    background: #f8f9fa;
+    text-align: center;
+    min-height: 4.5rem;
+  }
+
+  .purchase-history-stats-card i {
+    color: #495057;
+    font-size: 1rem;
+    margin-bottom: 0.2rem;
+  }
+
+  .purchase-history-stats-card-value {
+    font-weight: 700;
+    font-size: 1rem;
+    line-height: 1.2;
+  }
+
+  .purchase-history-stats-card-label {
+    font-size: 0.68rem;
+    color: #6c757d;
+    line-height: 1.15;
+    margin-top: 0.15rem;
+  }
+
+  .purchase-history-stats-subtitle {
+    font-size: 0.95rem;
+    text-align: center;
+    margin: 0.5rem 0 0.35rem;
+  }
+
+  .purchase-history-stats-table-wrap {
+    overflow-x: auto;
+    margin-bottom: 0.5rem;
+  }
+
+  .purchase-history-stats-table {
+    width: 100%;
+    font-size: 0.85rem;
+    border-collapse: collapse;
+  }
+
+  .purchase-history-stats-table th,
+  .purchase-history-stats-table td {
+    border: 1px solid #000;
+    padding: 0.25rem 0.4rem;
+    vertical-align: middle;
+  }
+
+  .purchase-history-stats-table thead th {
+    background: #f3f4f6;
+    font-weight: 600;
+    text-align: center;
+  }
+
+  .purchase-history-stats-table tbody tr.purchase-history-stats-table-total-row td {
+    background: #e8f4fc;
+    font-weight: 600;
+    border-top: 2px solid #0d6efd;
+  }
+
+  .purchase-history-page .purchase-history-user-header {
+    display: flex;
+    align-items: center;
+    margin-bottom: 0.5rem;
+  }
+
+  .purchase-history-page .purchase-history-table-wrapper {
+    margin-bottom: 0.5rem;
+  }
+
+  .purchase-history-page .purchase-history-controls {
+    display: flex;
+    flex-wrap: nowrap;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.5rem;
+  }
+
+  .purchase-history-page .purchase-history-controls .purchase-history-search,
+  .purchase-history-page .purchase-history-controls .purchase-history-pagesize {
+    height: 2.125rem;
+    min-height: 2.125rem;
+    padding: 0.375rem 0.5rem;
+    font-size: 0.9rem;
+    line-height: 1.25;
+    box-sizing: border-box;
+  }
+
+  .purchase-history-page .purchase-history-controls .purchase-history-search {
+    flex: 1 1 0;
+    min-width: 0;
+    width: auto;
+    max-width: 100%;
+  }
+
+  .purchase-history-page .purchase-history-controls-pagesize {
+    display: flex;
+    align-items: stretch;
+    flex: 0 0 auto;
+    flex-shrink: 0;
+  }
+
+  .purchase-history-page .purchase-history-controls-pagesize .purchase-history-pagesize {
+    width: auto;
+    min-width: 4.5rem;
+    margin: 0;
+  }
+
+  .purchase-history-page .purchase-history-pagination {
+    display: flex;
+    justify-content: center;
+    margin-top: 3rem;
+  }
+
   .purchase-history-table-wrapper {
     overflow-x: auto;
+  }
+
+  .admin-lic-pages-historial-shell .tabla-licencias-actividad,
+  .purchase-history-container .tabla-licencias-actividad {
+    border-collapse: collapse;
+    width: 100%;
+    font-size: 0.85rem;
+    line-height: 1.25;
+    color: #111827;
+    background: #ffffff;
+  }
+
+  .admin-lic-pages-historial-shell .tabla-licencias-actividad thead th,
+  .purchase-history-container .tabla-licencias-actividad thead th {
+    font-weight: 600;
+    text-align: center;
+    border: 1px solid #000000 !important;
+    background: #f3f4f6 !important;
+    color: #111827 !important;
+    padding: 0.2rem 0.35rem;
+    vertical-align: middle;
+    text-transform: none;
+    letter-spacing: normal;
+  }
+
+  .admin-lic-pages-historial-shell .tabla-licencias-actividad tbody td,
+  .purchase-history-container .tabla-licencias-actividad tbody td {
+    border: 1px solid #000000 !important;
+    background: #ffffff !important;
+    color: #111827 !important;
+    padding: 0.15rem 0.35rem;
+    vertical-align: middle;
+  }
+
+  .admin-lic-pages-historial-shell .tabla-licencias-actividad tbody tr:nth-child(even) td,
+  .purchase-history-container .tabla-licencias-actividad tbody tr:nth-child(even) td {
+    background: #e8eaed !important;
+    color: #111827 !important;
+  }
+
+  .admin-lic-pages-historial-shell .tabla-licencias-actividad tbody tr:nth-child(odd) td,
+  .purchase-history-container .tabla-licencias-actividad tbody tr:nth-child(odd) td {
+    background: #ffffff !important;
+    color: #111827 !important;
+  }
+
+  /* Gana sobre .store-light th/td (18px) y .store-light table (1.18em) en historial licencias */
+  .purchase-history-container.store-light table.tabla-licencias-actividad,
+  .admin-lic-pages-historial-shell table.tabla-licencias-actividad {
+    font-size: 0.85rem !important;
+    line-height: 1.25 !important;
+    margin: 0 !important;
+  }
+
+  .purchase-history-container.store-light .tabla-licencias-actividad th,
+  .purchase-history-container.store-light .tabla-licencias-actividad td,
+  .admin-lic-pages-historial-shell .tabla-licencias-actividad th,
+  .admin-lic-pages-historial-shell .tabla-licencias-actividad td {
+    font-size: 0.85rem !important;
+    line-height: 1.25 !important;
+    padding: 0.15rem 0.35rem !important;
+    border: 1px solid #000000 !important;
+    vertical-align: middle !important;
+    overflow: visible !important;
+    text-overflow: clip !important;
+  }
+
+  .purchase-history-container.store-light .tabla-licencias-actividad .admin-licencias-historial-detail-stack,
+  .admin-lic-pages-historial-shell .tabla-licencias-actividad .admin-licencias-historial-detail-stack {
+    display: block;
+    margin: 0;
+    padding: 0;
+    line-height: 1.25;
+  }
+
+  .purchase-history-container.store-light .tabla-licencias-actividad .admin-licencias-historial-detail-plain,
+  .admin-lic-pages-historial-shell .tabla-licencias-actividad .admin-licencias-historial-detail-plain {
+    margin: 0;
+    padding: 0;
+    line-height: 1.25;
+    font-size: inherit !important;
+  }
+
+  .purchase-history-page .purchase-history-search {
+    min-width: 0;
+  }
+
+  .purchase-licencias-modal-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 10880;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+    background: rgba(18, 20, 30, 0.72);
+    backdrop-filter: blur(4px);
+  }
+
+  .purchase-licencias-modal-panel {
+    width: 100%;
+    max-width: 960px;
+    max-height: 86vh;
+    overflow: hidden auto;
+    background: linear-gradient(180deg, #f8fafc 0%, #eef2f7 100%);
+    border-radius: 14px;
+    box-shadow: 0 22px 50px rgba(0, 0, 0, 0.35);
+    border: 1px solid rgba(255, 255, 255, 0.5);
+    color: #0f172a;
+  }
+
+  .purchase-licencias-modal-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 16px 18px;
+    border-bottom: 1px solid rgba(15, 23, 42, 0.1);
+    background: rgba(255, 255, 255, 0.65);
+  }
+
+  .purchase-licencias-modal-title {
+    margin: 0;
+    font-size: 1.1rem;
+    font-weight: 700;
+    line-height: 1.35;
+  }
+
+  .purchase-licencias-modal-sub {
+    margin: 4px 0 0;
+    font-size: 0.82rem;
+    font-weight: 500;
+    line-height: 1.3;
+    color: #2563eb;
+    max-width: 42rem;
+  }
+
+  .purchase-licencias-modal-sub[hidden] {
+    display: none;
+  }
+
+  .purchase-licencias-modal-close {
+    flex-shrink: 0;
+    width: 40px;
+    height: 40px;
+    border: none;
+    border-radius: 10px;
+    font-size: 1.35rem;
+    line-height: 1;
+    cursor: pointer;
+    background: rgba(239, 68, 68, 0.12);
+    color: #b91c1c;
+  }
+
+  .purchase-licencias-modal-close:hover {
+    background: rgba(239, 68, 68, 0.22);
+  }
+
+  .purchase-licencias-modal-body-inner {
+    position: relative;
+    padding: 14px 16px 18px;
+  }
+
+  .purchase-licencias-modal-copy-actions {
+    display: flex;
+    justify-content: center;
+    margin-top: 1rem;
+  }
+
+  .purchase-licencias-modal-copy-buffer {
+    position: absolute;
+    left: -9999px;
+    top: 0;
+    width: 1px;
+    height: 1px;
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  .purchase-licencias-modal-grid {
+    display: flex;
+    flex-direction: column;
+    flex-wrap: nowrap;
+    gap: 8px;
+    align-items: stretch;
+    justify-content: flex-start;
+  }
+
+  .purchase-licencia-card {
+    flex: 1 1 auto;
+    max-width: 100%;
+    min-width: 0;
+    border-radius: 12px;
+    padding: 10px 12px;
+    background: #fff;
+    border: 1px solid rgba(15, 23, 42, 0.1);
+    box-shadow: 0 4px 14px rgba(15, 23, 42, 0.06);
+  }
+
+  .purchase-licencia-card .lic-block {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono',
+      monospace;
+    font-size: 0.88rem;
+    line-height: 1.38;
+    white-space: pre-wrap;
+    word-break: break-word;
+    margin: 0;
+    color: #0f172a;
+  }
+
+  .purchase-licencias-empty {
+    padding: 12px;
+    margin: 0;
+    border-radius: 10px;
+    background: rgba(251, 191, 36, 0.12);
+    color: #854d0e;
+    border: 1px solid rgba(251, 191, 36, 0.35);
+    font-size: 0.92rem;
+  }
+
+  table#tabla-compras td .btn-ver-licencias-compra {
+    white-space: nowrap;
   }
   
   /* Clases para store_front.html */
@@ -12208,8 +14306,7 @@ html, body {
     }
     
     #menuToggleBtn.menu-btn-worksheet,
-    .user-licencias-toolbar-cambios-link.menu-btn-worksheet,
-    .user-licencias-toolbar-historial-link.menu-btn-worksheet {
+    .user-licencias-toolbar-cambios-link.menu-btn-worksheet {
       padding: 4px 6px !important;
     }
     
@@ -17843,7 +19940,6 @@ body .card.product-texture-bg::before,
     .d-flex.flex-wrap.gap-1 {
         gap: 0.5rem !important;
         justify-content: space-between !important;
-        padding: 0 0.5rem !important;
     }
     
     .product-img-container {
@@ -18597,7 +20693,397 @@ body .card.product-texture-bg::before,
   word-break: break-word;
 }
 
+/* ================== MODAL SALDO CLIENTES (reusa estilo gestión productos) ================== */
+#saldoClientesModal .saldo-clientes-modal-header {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0;
+  padding: 0.85rem 1rem 0.65rem;
+}
+
+#saldoClientesModal .saldo-clientes-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.35rem;
+  width: 100%;
+  padding-right: 1.75rem;
+  position: relative;
+  z-index: 2;
+}
+
+#saldoClientesModal .saldo-clientes-title-row h3 {
+  margin: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.saldo-clientes-info-wrap {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.saldo-clientes-info-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.35rem;
+  height: 1.35rem;
+  margin: 0;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: #2563eb;
+  font-size: 1.05rem;
+  line-height: 1;
+  cursor: pointer;
+  vertical-align: middle;
+}
+
+.store-dark .saldo-clientes-info-btn {
+  color: #60a5fa;
+}
+
+.saldo-clientes-info-btn:hover,
+.saldo-clientes-info-btn:focus-visible {
+  color: #1d4ed8;
+  outline: 2px solid rgba(37, 99, 235, 0.35);
+  outline-offset: 2px;
+}
+
+.store-dark .saldo-clientes-info-btn:hover,
+.store-dark .saldo-clientes-info-btn:focus-visible {
+  color: #93c5fd;
+}
+
+.saldo-clientes-info-tip {
+  position: relative;
+  z-index: 50;
+  flex-shrink: 0;
+  width: 100%;
+  margin: 0.45rem 0 0;
+  padding: 0.65rem 0.75rem;
+  font-size: 0.76rem;
+  font-weight: 400;
+  line-height: 1.45;
+  color: #0f172a;
+  text-align: left;
+  background: #f8fafc;
+  border: 1px solid #93c5fd;
+  border-left: 4px solid #2563eb;
+  border-radius: 8px;
+  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.12);
+  box-sizing: border-box;
+}
+
+.store-dark .saldo-clientes-info-tip {
+  color: #e5e7eb;
+  background: #111827;
+  border-color: rgba(96, 165, 250, 0.45);
+  border-left-color: #60a5fa;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
+}
+
+.saldo-clientes-info-tip.hidden {
+  display: none !important;
+}
+
+.saldo-clientes-info-tip__lead {
+  margin: 0 0 0.45rem;
+}
+
+.saldo-clientes-info-tip__list {
+  margin: 0;
+  padding-left: 1.1rem;
+}
+
+.saldo-clientes-info-tip__list li {
+  margin: 0 0 0.25rem;
+}
+
+.saldo-clientes-info-tip__list li:last-child {
+  margin-bottom: 0;
+}
+
+.gestion-productos-modal-content.saldo-clientes-info-open .saldo-clientes-toolbar,
+.gestion-productos-modal-content.saldo-clientes-info-open .saldo-clientes-list-wrap {
+  position: relative;
+  z-index: 1;
+}
+
+.saldo-clientes-toolbar {
+  flex-shrink: 0;
+  padding: 0.5rem 0.85rem;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.store-dark .saldo-clientes-toolbar {
+  border-bottom-color: rgba(255, 255, 255, 0.08);
+}
+
+.saldo-clientes-toolbar #saldoClientesFilter {
+  width: 100%;
+  font-size: 0.85rem;
+}
+
+#saldoClientesModal .saldo-clientes-list-wrap {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.saldo-clientes-list-head {
+  flex-shrink: 0;
+  display: grid;
+  grid-template-columns: 1fr minmax(4.75rem, auto) minmax(4rem, auto);
+  gap: 0.5rem;
+  align-items: center;
+  padding: 0.45rem 0.85rem;
+  font-size: 0.68rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #6b7280;
+  background: #f3f4f6;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+.store-dark .saldo-clientes-list-head {
+  color: #9ca3af;
+  background: #111827;
+  border-bottom-color: rgba(255, 255, 255, 0.08);
+}
+
+.saldo-clientes-list-head__saldo,
+.saldo-clientes-list-head__actions {
+  text-align: right;
+}
+
+#saldoClientesModal .gestion-productos-list {
+  scrollbar-gutter: stable;
+}
+
+#saldoClientesModal .saldo-clientes-row {
+  display: grid !important;
+  grid-template-columns: 1fr minmax(4.75rem, auto) minmax(4rem, auto);
+  gap: 0.5rem;
+  align-items: center !important;
+  justify-content: unset !important;
+  padding: 0.55rem 0.85rem !important;
+}
+
+.saldo-clientes-col--user {
+  min-width: 0;
+}
+
+.saldo-clientes-col--user strong {
+  display: block;
+  font-size: 0.82rem !important;
+  font-weight: 500 !important;
+  color: #111827;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+}
+
+.store-dark .saldo-clientes-col--user strong {
+  color: #f9fafb;
+}
+
+.saldo-clientes-col--saldo {
+  text-align: right;
+}
+
+.saldo-clientes-saldo {
+  font-variant-numeric: tabular-nums;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: #2563eb;
+  white-space: nowrap;
+}
+
+.store-dark .saldo-clientes-saldo {
+  color: #93c5fd;
+}
+
+.saldo-clientes-col--actions,
+.saldo-clientes-actions {
+  display: flex !important;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.25rem !important;
+  flex-shrink: 0 !important;
+}
+
+.saldo-clientes-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.45rem;
+  height: 1.45rem;
+  border-radius: 6px;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  cursor: pointer;
+  background: #f9fafb;
+  color: #111827;
+  padding: 0;
+  transition: background 0.15s;
+}
+
+.store-dark .saldo-clientes-icon-btn {
+  background: #374151;
+  border-color: rgba(255, 255, 255, 0.12);
+  color: #f9fafb;
+}
+
+.saldo-clientes-icon-btn:hover {
+  background: #eef2ff;
+}
+
+.store-dark .saldo-clientes-icon-btn:hover {
+  background: #4b5563;
+}
+
+.saldo-clientes-icon-btn--add {
+  color: #059669;
+  border-color: rgba(16, 185, 129, 0.45);
+}
+
+.saldo-clientes-icon-btn--sub {
+  color: #b91c1c;
+  border-color: rgba(239, 68, 68, 0.45);
+}
+
+.saldo-clientes-icon-btn i {
+  font-size: 0.62rem;
+  pointer-events: none;
+}
+
+/* ================== MODAL CONFIRMAR RENOVACIÓN DÍA (manual) ================== */
+#licenseDayRenewalConfirmModal.modal-overlay {
+  align-items: center;
+  justify-content: center;
+  padding: max(0.75rem, env(safe-area-inset-top)) max(0.75rem, env(safe-area-inset-right))
+    max(0.75rem, env(safe-area-inset-bottom)) max(0.75rem, env(safe-area-inset-left)) !important;
+  box-sizing: border-box;
+  background: rgba(0, 0, 0, 0.65);
+}
+
+#licenseDayRenewalConfirmModal > .license-day-renewal-confirm-modal__inner {
+  padding: 0 !important;
+  min-width: 0;
+  max-width: min(540px, 100%) !important;
+  width: min(94vw, 540px);
+  min-height: min(420px, 88vh);
+  max-height: min(88vh, 640px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: #ffffff;
+  border-radius: 12px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
+}
+
+.store-dark #licenseDayRenewalConfirmModal > .license-day-renewal-confirm-modal__inner {
+  background: #1f2937;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+}
+
+.license-day-renewal-confirm-modal__content {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.license-day-renewal-confirm-modal__header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 1rem 1.15rem 0.65rem;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+.store-dark .license-day-renewal-confirm-modal__header {
+  border-bottom-color: rgba(255, 255, 255, 0.1);
+}
+
+.license-day-renewal-confirm-modal__step {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #2563eb;
+  white-space: nowrap;
+}
+
+.store-dark .license-day-renewal-confirm-modal__step {
+  color: #93c5fd;
+}
+
+.license-day-renewal-confirm-modal__body {
+  flex: 1 1 auto;
+  min-height: 240px;
+  padding: 1rem 1.15rem 1.1rem;
+  overflow: visible;
+  font-size: 0.9rem;
+  line-height: 1.45;
+  color: #1f2937;
+}
+
+.store-dark .license-day-renewal-confirm-modal__body {
+  color: #e5e7eb;
+}
+
+.license-day-renewal-confirm-modal__body p {
+  margin: 0 0 0.75rem;
+}
+
+.license-day-renewal-confirm-modal__body ul {
+  margin: 0 0 0.85rem;
+  padding-left: 1.25rem;
+}
+
+.license-day-renewal-confirm-modal__body li {
+  margin-bottom: 0.45rem;
+}
+
+.license-day-renewal-confirm-modal__body .license-day-renewal-confirm-modal__lead {
+  font-weight: 600;
+  margin-bottom: 0.65rem;
+}
+
+.license-day-renewal-confirm-modal__body .license-day-renewal-confirm-modal__question {
+  margin-top: 0.5rem;
+  font-weight: 600;
+}
+
+.license-day-renewal-confirm-modal__footer {
+  flex-shrink: 0;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  padding: 0.75rem 1.15rem 1rem;
+  border-top: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+.store-dark .license-day-renewal-confirm-modal__footer {
+  border-top-color: rgba(255, 255, 255, 0.1);
+}
+
 /* ================== MODAL GESTIONAR PRODUCTOS / RESTAURAR ARCHIVADOS ================== */
+#saldoClientesModal.modal-overlay,
 #gestionarProductosModal.modal-overlay,
 #restaurarArchivadosModal.modal-overlay {
   align-items: center;
@@ -18608,6 +21094,7 @@ body .card.product-texture-bg::before,
   background: rgba(0, 0, 0, 0.65);
 }
 
+#saldoClientesModal > .gestion-productos-modal-inner,
 #gestionarProductosModal > .gestion-productos-modal-inner,
 #restaurarArchivadosModal > .gestion-productos-modal-inner {
   padding: 0 !important;
@@ -18628,6 +21115,12 @@ body .card.product-texture-bg::before,
   transform: none !important;
 }
 
+#saldoClientesModal > .gestion-productos-modal-inner {
+  max-width: min(560px, 100%) !important;
+  width: min(94vw, 560px);
+}
+
+.store-dark #saldoClientesModal > .gestion-productos-modal-inner,
 .store-dark #gestionarProductosModal > .gestion-productos-modal-inner,
 .store-dark #restaurarArchivadosModal > .gestion-productos-modal-inner {
   background: #1f2937;
@@ -18725,6 +21218,19 @@ body .card.product-texture-bg::before,
 }
 
 @media (max-width: 480px) {
+  #saldoClientesModal > .gestion-productos-modal-inner {
+    width: min(96vw, 560px);
+    max-height: min(90vh, 720px);
+  }
+
+  #saldoClientesModal .saldo-clientes-list-head,
+  #saldoClientesModal .saldo-clientes-row {
+    grid-template-columns: 1fr minmax(3.5rem, auto) minmax(3.5rem, auto);
+    gap: 0.35rem;
+    padding-left: 0.65rem !important;
+    padding-right: 0.65rem !important;
+  }
+
   #gestionarProductosModal > .gestion-productos-modal-inner,
   #restaurarArchivadosModal > .gestion-productos-modal-inner {
     width: min(96vw, 480px);
@@ -18903,6 +21409,31 @@ body .card.product-texture-bg::before,
   background-color: #374151 !important;
   border-color: #4b5563 !important;
   color: #f9fafb;
+}
+
+/* Vista previa del stock público (~disponibles en BD menos gar.), modal Gestionar productos */
+.gestion-productos-tienda-prev {
+  display: inline-flex !important;
+  align-items: center !important;
+  font-size: 0.58rem !important;
+  font-weight: 700 !important;
+  color: #059669 !important;
+  margin-left: 0.35rem !important;
+  white-space: nowrap !important;
+  cursor: help !important;
+  line-height: 1 !important;
+}
+
+.store-dark .gestion-productos-tienda-prev {
+  color: #34d399 !important;
+}
+
+.gestion-productos-tienda-prev--zero {
+  color: #ca8a04 !important;
+}
+
+.store-dark .gestion-productos-tienda-prev--zero {
+  color: #fcd34d !important;
 }
 
 .gestion-productos-btn-archive {
@@ -19110,8 +21641,7 @@ body .card.product-texture-bg::before,
 .user-licencias-toolbar-empty {
   color: rgba(148, 163, 184, 0.85);
 }
-.user-licencias-toolbar .user-licencias-toolbar-cambios-link,
-.user-licencias-toolbar .user-licencias-toolbar-historial-link {
+.user-licencias-toolbar .user-licencias-toolbar-cambios-link {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -19123,10 +21653,12 @@ body .card.product-texture-bg::before,
 .user-licencias-toolbar .user-licencias-toolbar-cambios-link .fa-exchange-alt {
   margin-right: 0.25rem;
 }
+.user-licencias-toolbar .user-licencias-toolbar-cambios-link--icon-only .fa-exchange-alt {
+  margin-right: 0;
+}
 
 /* Misma caja que .btn-blue (gradiente, borde y alto) para Menú y Cambios — pisa reglas globales sueltas de #menuToggleBtn */
 .admin-licencias-page.user-licencias-shell .user-licencias-toolbar #menuToggleBtn.menu-btn-worksheet,
-.admin-licencias-page.user-licencias-shell .user-licencias-toolbar .user-licencias-toolbar-historial-link.menu-btn-worksheet,
 .admin-licencias-page.user-licencias-shell .user-licencias-toolbar .user-licencias-toolbar-cambios-link.menu-btn-worksheet,
 .admin-licencias-page.user-licencias-shell .user-licencias-toolbar .licenses-collapse-btn--toolbar {
   display: inline-flex !important;
@@ -19135,7 +21667,8 @@ body .card.product-texture-bg::before,
   box-sizing: border-box !important;
   padding: 2px 10px !important;
   width: auto !important;
-  min-height: 0 !important;
+  /* Misma caja visual que .btn-blue: altura mínima por línea + padding + borde */
+  min-height: calc(1.08rem * 1.25 + 8px) !important;
   height: auto !important;
   font-size: 1.08rem !important;
   font-weight: 600 !important;
@@ -19149,10 +21682,31 @@ body .card.product-texture-bg::before,
   text-shadow: none !important;
 }
 
+/* Anula .worksheet-panel #licensesCollapseBtn { font-size: 22px } en ≤768px para igualar Menú/Historial */
+.admin-licencias-page.user-licencias-shell .user-licencias-toolbar #licensesCollapseBtn.menu-btn-worksheet.licenses-collapse-btn--toolbar {
+  font-size: 1.08rem !important;
+  line-height: 1.25 !important;
+}
+.admin-licencias-page.user-licencias-shell .user-licencias-toolbar #licensesCollapseBtn.menu-btn-worksheet.licenses-collapse-btn--toolbar > i,
+.admin-licencias-page.user-licencias-shell
+  .user-licencias-toolbar
+  .user-licencias-toolbar-cambios-link.user-licencias-toolbar-cambios-link--icon-only.menu-btn-worksheet
+  > i {
+  font-size: 1em !important;
+  line-height: 1 !important;
+}
+
 .admin-licencias-page.user-licencias-shell .user-licencias-toolbar #menuToggleBtn.menu-btn-worksheet,
-.admin-licencias-page.user-licencias-shell .user-licencias-toolbar .user-licencias-toolbar-historial-link.menu-btn-worksheet,
 .admin-licencias-page.user-licencias-shell .user-licencias-toolbar .user-licencias-toolbar-cambios-link.menu-btn-worksheet {
   min-width: 83px !important;
+}
+
+.admin-licencias-page.user-licencias-shell
+  .user-licencias-toolbar
+  .user-licencias-toolbar-cambios-link.user-licencias-toolbar-cambios-link--icon-only.menu-btn-worksheet {
+  min-width: 0 !important;
+  padding-left: 10px !important;
+  padding-right: 10px !important;
 }
 
 .admin-licencias-page.user-licencias-shell .user-licencias-toolbar .licenses-collapse-btn--toolbar {
@@ -19160,7 +21714,6 @@ body .card.product-texture-bg::before,
 }
 
 .admin-licencias-page.user-licencias-shell .user-licencias-toolbar #menuToggleBtn.menu-btn-worksheet,
-.admin-licencias-page.user-licencias-shell .user-licencias-toolbar .user-licencias-toolbar-historial-link.menu-btn-worksheet,
 .admin-licencias-page.user-licencias-shell .user-licencias-toolbar .user-licencias-toolbar-cambios-link.menu-btn-worksheet,
 .admin-licencias-page.user-licencias-shell .user-licencias-toolbar .licenses-collapse-btn--toolbar {
   box-shadow: none !important;
@@ -19170,19 +21723,45 @@ body .card.product-texture-bg::before,
 }
 
 .admin-licencias-page.user-licencias-shell .user-licencias-toolbar #menuToggleBtn.menu-btn-worksheet:hover,
-.admin-licencias-page.user-licencias-shell .user-licencias-toolbar .user-licencias-toolbar-historial-link.menu-btn-worksheet:hover,
 .admin-licencias-page.user-licencias-shell .user-licencias-toolbar .user-licencias-toolbar-cambios-link.menu-btn-worksheet:hover,
 .admin-licencias-page.user-licencias-shell .user-licencias-toolbar .licenses-collapse-btn--toolbar:hover {
   background: #1256a6 !important;
   border-color: #1256a6 !important;
   color: #fff !important;
 }
-.admin-licencias-page.user-licencias-shell .user-licencias-toolbar a.user-licencias-toolbar-historial-link.menu-btn-worksheet:link,
-.admin-licencias-page.user-licencias-shell .user-licencias-toolbar a.user-licencias-toolbar-historial-link.menu-btn-worksheet:visited,
 .admin-licencias-page.user-licencias-shell .user-licencias-toolbar a.user-licencias-toolbar-cambios-link.menu-btn-worksheet:link,
 .admin-licencias-page.user-licencias-shell .user-licencias-toolbar a.user-licencias-toolbar-cambios-link.menu-btn-worksheet:visited {
   color: #fff !important;
   text-decoration: none !important;
+}
+
+/* Responsive: los cuatro controles con mismo padding / min-height (evita que #licensesCollapseBtn se quede fuera de reglas sólo para texto) */
+@media (max-width: 768px) {
+  .admin-licencias-page.user-licencias-shell .user-licencias-toolbar #menuToggleBtn.menu-btn-worksheet,
+  .admin-licencias-page.user-licencias-shell .user-licencias-toolbar .user-licencias-toolbar-cambios-link.menu-btn-worksheet,
+  .admin-licencias-page.user-licencias-shell .user-licencias-toolbar #licensesCollapseBtn.menu-btn-worksheet.licenses-collapse-btn--toolbar {
+    padding: 4px 10px !important;
+    font-size: 1rem !important;
+    line-height: 1.25 !important;
+    min-height: calc(1rem * 1.25 + 8px) !important;
+  }
+  .admin-licencias-page.user-licencias-shell .user-licencias-toolbar #licensesCollapseBtn.menu-btn-worksheet.licenses-collapse-btn--toolbar {
+    font-size: 1rem !important;
+  }
+}
+
+@media (max-width: 480px) {
+  .admin-licencias-page.user-licencias-shell .user-licencias-toolbar #menuToggleBtn.menu-btn-worksheet,
+  .admin-licencias-page.user-licencias-shell .user-licencias-toolbar .user-licencias-toolbar-cambios-link.menu-btn-worksheet,
+  .admin-licencias-page.user-licencias-shell .user-licencias-toolbar #licensesCollapseBtn.menu-btn-worksheet.licenses-collapse-btn--toolbar {
+    padding: 4px 8px !important;
+    font-size: 0.95rem !important;
+    line-height: 1.25 !important;
+    min-height: calc(0.95rem * 1.25 + 8px) !important;
+  }
+  .admin-licencias-page.user-licencias-shell .user-licencias-toolbar #licensesCollapseBtn.menu-btn-worksheet.licenses-collapse-btn--toolbar {
+    font-size: 1.1rem !important;
+  }
 }
 
 .user-licencias-meta-panel {
@@ -19413,11 +21992,10 @@ body .card.product-texture-bg::before,
   box-sizing: border-box;
 }
 .admin-licencias-page.user-licencias-shell .user-lic-bundle-wrap .admin-licencias-bloc-header {
-  display: flex;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
   align-items: center;
-  justify-content: space-between;
   gap: 0.35rem;
-  flex-wrap: nowrap;
   background: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 50%, #2563eb 100%);
   padding: 0.1rem 0.35rem !important;
   margin-bottom: 0 !important;
@@ -19428,17 +22006,107 @@ body .card.product-texture-bg::before,
   box-sizing: border-box;
 }
 .admin-licencias-page.user-licencias-shell .user-lic-bundle-wrap .admin-licencias-bloc--day .admin-licencias-bloc-title {
-  flex: 1 1 auto;
+  grid-column: 2;
+  justify-self: center;
+  text-align: center;
+  padding-left: 0;
   min-width: 0;
-  text-align: left;
-  padding-left: 0.25rem;
 }
 .admin-licencias-page.user-licencias-shell .user-lic-bundle-wrap .user-lic-day-header-actions {
+  grid-column: 3;
+  justify-self: end;
   display: flex;
   align-items: center;
   flex-shrink: 0;
   gap: 0.25rem;
 }
+
+.admin-licencias-page.user-licencias-shell .user-lic-day-status-cnt-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.22rem;
+  flex-shrink: 0;
+}
+
+.admin-licencias-page.user-licencias-shell .user-lic-day-cnt-badge {
+  font-size: 0.68rem;
+  font-weight: 700;
+  padding: 0.12rem 0.38rem;
+  border-radius: 10px;
+  line-height: 1.1;
+  white-space: nowrap;
+  letter-spacing: 0.01em;
+}
+
+.admin-licencias-page.user-licencias-shell .user-lic-day-cnt-badge--reportes {
+  background: rgba(127, 29, 29, 0.95);
+  color: #fecaca;
+  border: 1px solid rgba(248, 113, 113, 0.65);
+  box-shadow: 0 0 0 1px rgba(239, 68, 68, 0.3);
+}
+
+.admin-licencias-page.user-licencias-shell .user-lic-day-cnt-badge--buena {
+  background: rgba(6, 78, 59, 0.95);
+  color: #bbf7d0;
+  border: 1px solid rgba(74, 222, 128, 0.65);
+  box-shadow: 0 0 0 1px rgba(34, 197, 94, 0.25);
+}
+
+.admin-licencias-page.user-licencias-shell .user-lic-day-cnt-badge--garantia {
+  background: rgba(6, 78, 59, 0.95);
+  color: #bbf7d0;
+  border: 1px solid rgba(74, 222, 128, 0.65);
+  box-shadow: 0 0 0 1px rgba(34, 197, 94, 0.25);
+}
+
+/* Cabecera del día: rojo reportes, verde buena/garantía; sin señal = azul normal */
+.admin-licencias-page.user-licencias-shell
+  .user-lic-readonly-day.user-lic-day--signal-reportes
+  > .day-section-header.user-lic-day-header-toggle {
+  background: linear-gradient(135deg, #7f1d1d 0%, #dc2626 48%, #991b1b 100%) !important;
+  box-shadow: inset 0 0 0 1px rgba(254, 202, 202, 0.35);
+}
+
+.admin-licencias-page.user-licencias-shell
+  .user-lic-readonly-day.user-lic-day--signal-buena
+  > .day-section-header.user-lic-day-header-toggle {
+  background: linear-gradient(135deg, #14532d 0%, #16a34a 48%, #166534 100%) !important;
+  box-shadow: inset 0 0 0 1px rgba(187, 247, 208, 0.35);
+}
+
+/* Fila completa (estados + saldo + notas): rojo reporte, verde buena o garantía */
+.admin-licencias-page.user-licencias-shell
+  .user-lic-bundle-wrap
+  .license-split-editor__row.user-lic-license-row-edit.user-lic-row--signal-reportes {
+  background: linear-gradient(90deg, rgba(127, 29, 29, 0.55) 0%, rgba(153, 27, 27, 0.38) 100%) !important;
+  box-shadow: inset 3px 0 0 rgba(248, 113, 113, 0.85);
+}
+
+.admin-licencias-page.user-licencias-shell
+  .user-lic-bundle-wrap
+  .license-split-editor__row.user-lic-license-row-edit.user-lic-row--signal-buena,
+.admin-licencias-page.user-licencias-shell
+  .user-lic-bundle-wrap
+  .license-split-editor__row.user-lic-license-row-edit.user-lic-row--signal-garantia {
+  background: linear-gradient(90deg, rgba(22, 101, 52, 0.55) 0%, rgba(34, 197, 94, 0.32) 100%) !important;
+  box-shadow: inset 3px 0 0 rgba(74, 222, 128, 0.85);
+}
+
+.admin-licencias-page.user-licencias-shell
+  .user-lic-bundle-wrap
+  .license-split-editor__row.user-lic-license-row-edit[class*='user-lic-row--signal-']
+  .license-split-editor__status-wrap,
+.admin-licencias-page.user-licencias-shell
+  .user-lic-bundle-wrap
+  .license-split-editor__row.user-lic-license-row-edit[class*='user-lic-row--signal-']
+  .license-split-editor__saldo-cell,
+.admin-licencias-page.user-licencias-shell
+  .user-lic-bundle-wrap
+  .license-split-editor__row.user-lic-license-row-edit[class*='user-lic-row--signal-']
+  .license-split-editor__note {
+  background-color: transparent !important;
+}
+
 .admin-licencias-page.user-licencias-shell .user-lic-bundle-wrap .admin-licencias-bloc-title {
   font-size: 0.8rem !important;
   line-height: 1.18 !important;
@@ -19462,7 +22130,7 @@ body .card.product-texture-bg::before,
   gap: 0.35rem !important;
   line-height: 1.15 !important;
   min-height: 0 !important;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.22) !important;
+  box-shadow: none !important;
 }
 .admin-licencias-page.user-licencias-shell .user-lic-readonly-day .day-icon {
   font-size: 0.82rem !important;
@@ -19505,6 +22173,24 @@ body .card.product-texture-bg::before,
   max-width: 100% !important;
   min-width: 0 !important;
   box-sizing: border-box;
+}
+.admin-licencias-page.user-licencias-shell
+  .user-lic-bundle-wrap
+  .day-license-split-root.license-split-editor--day.user-lic-col-hide-creds
+  .license-split-editor__creds-cell {
+  display: none !important;
+}
+.admin-licencias-page.user-licencias-shell
+  .user-lic-bundle-wrap
+  .day-license-split-root.license-split-editor--day.user-lic-col-hide-creds
+  .license-split-editor__grid {
+  grid-template-columns: minmax(13.5rem, 1fr);
+}
+.admin-licencias-page.user-licencias-shell
+  .user-lic-bundle-wrap
+  .day-license-split-root.license-split-editor--day.user-lic-col-hide-creds
+  .license-split-editor__side {
+  border-left: none !important;
 }
 .admin-licencias-page.user-licencias-shell .user-lic-bundle-wrap .license-split-editor__creds-cell {
   align-self: stretch;
@@ -19602,12 +22288,14 @@ body .card.product-texture-bg::before,
 .admin-licencias-page.user-licencias-shell .user-lic-bundle-wrap .license-split-editor__status-select-shell--good {
   border-right: var(--lic-border-w) solid rgba(59, 130, 246, 0.48);
   box-sizing: border-box;
+  gap: 0.22rem;
+  align-items: center;
 }
 .admin-licencias-page.user-licencias-shell .user-lic-bundle-wrap .license-split-editor__status-wrap--otro .license-split-editor__status-select-shell--bad {
   border-right: var(--lic-border-w) solid rgba(59, 130, 246, 0.48);
   box-sizing: border-box;
 }
-/* Tres ojos portal: ocultar solo verde, solo roja+Otro, o notas (sin el ojo único de todo el estado) */
+/* Cuatro ojos portal: credenciales izquierda; incidencias+Otro; notas (columna verde siempre visible en portal) */
 .admin-licencias-page.user-licencias-shell
   .user-lic-bundle-wrap
   .day-license-split-root.license-split-editor--day.user-lic-col-hide-good
@@ -19653,6 +22341,448 @@ body .card.product-texture-bg::before,
   min-height: var(--lic-line-box);
   align-self: stretch;
 }
+
+.admin-licencias-page.user-licencias-shell .user-lic-bundle-wrap .user-lic-full-cred-trigger {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.22rem;
+  min-height: var(--lic-line-box);
+  padding: 0;
+  margin: 0;
+  border: 1px solid rgba(56, 189, 248, 0.52);
+  border-radius: 0.18rem;
+  background: rgba(14, 165, 233, 0.14);
+  color: #7dd3fc;
+  cursor: pointer;
+  line-height: 1;
+  font-size: 0.58rem;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+.admin-licencias-page.user-licencias-shell .user-lic-bundle-wrap .user-lic-full-cred-trigger:hover {
+  background: rgba(14, 165, 233, 0.24);
+  border-color: rgba(125, 211, 252, 0.85);
+  color: #e0f2fe;
+}
+.admin-licencias-page.user-licencias-shell .user-lic-bundle-wrap .user-lic-full-cred-trigger:focus-visible {
+  outline: 2px solid rgba(56, 189, 248, 0.85);
+  outline-offset: 1px;
+}
+.admin-licencias-page.user-licencias-shell .user-lic-full-cred-modal .user-lic-full-cred-modal__header-row {
+  align-items: flex-start;
+}
+.admin-licencias-page.user-licencias-shell .user-lic-full-cred-modal .user-lic-full-cred-modal__lead {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding-right: 0.35rem;
+}
+.admin-licencias-page.user-licencias-shell .user-lic-full-cred-modal .user-lic-full-cred-modal__product {
+  font-size: 1.02rem;
+  font-weight: 700;
+  color: #f8fafc;
+  line-height: 1.28;
+}
+.admin-licencias-page.user-licencias-shell .user-lic-full-cred-modal .user-lic-full-cred-modal__day {
+  margin-top: 0.28rem;
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: rgba(226, 232, 240, 0.88);
+}
+.admin-licencias-page.user-licencias-shell .user-lic-full-cred-modal .user-lic-full-cred-modal__good-hint {
+  color: rgba(167, 243, 208, 0.95);
+  font-weight: 600;
+}
+.admin-licencias-page.user-licencias-shell .user-lic-full-cred-modal .user-lic-full-cred-modal__body {
+  overflow: auto;
+  padding: 0.65rem 0.95rem 0.9rem;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+.admin-licencias-page.user-licencias-shell .user-lic-full-cred-modal__cred-shell {
+  position: relative;
+  width: 100%;
+  max-height: min(52vh, 22rem);
+  border-radius: 0.35rem;
+  border: 1px solid rgba(99, 102, 241, 0.28);
+  background: rgba(15, 23, 42, 0.75);
+  box-sizing: border-box;
+}
+.admin-licencias-page.user-licencias-shell .user-lic-full-cred-modal__cred-shell .user-lic-full-cred-modal__pre {
+  display: block;
+  width: 100%;
+  font-size: 0.82rem;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  margin: 0;
+  padding: 0.5rem 2.55rem 0.5rem 0.55rem;
+  border: none;
+  background: transparent;
+  color: #e2e8f0;
+  max-height: min(52vh, 22rem);
+  overflow: auto;
+  box-sizing: border-box;
+}
+.admin-licencias-page.user-licencias-shell .user-lic-full-cred-modal__cred-shell .user-lic-full-cred-modal__copy-btn {
+  position: absolute;
+  top: 0.32rem;
+  right: 0.32rem;
+  z-index: 2;
+  flex: none;
+  margin: 0;
+  appearance: none;
+  border: 1px solid rgba(99, 102, 241, 0.45);
+  background: rgba(30, 27, 75, 0.92);
+  color: #c7d2fe;
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: 0.26rem;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.72rem;
+  line-height: 1;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.25);
+}
+.admin-licencias-page.user-licencias-shell .user-lic-full-cred-modal__cred-shell .user-lic-full-cred-modal__copy-btn:hover {
+  background: rgba(67, 56, 202, 0.55);
+  border-color: rgba(165, 180, 252, 0.6);
+  color: #eef2ff;
+}
+.admin-licencias-page.user-licencias-shell .user-lic-full-cred-modal__cred-shell .user-lic-full-cred-modal__copy-btn:focus-visible {
+  outline: 2px solid rgba(129, 140, 248, 0.9);
+  outline-offset: 2px;
+}
+
+.admin-licencias-page.user-licencias-shell .user-lic-bundle-wrap .user-lic-warranty-history-btn {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.22rem;
+  min-height: var(--lic-line-box);
+  padding: 0;
+  margin: 0;
+  border: 1px solid rgba(251, 191, 36, 0.5);
+  border-radius: 0.18rem;
+  background: rgba(251, 191, 36, 0.12);
+  color: #fbbf24;
+  cursor: pointer;
+  line-height: 1;
+  font-size: 0.62rem;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+.admin-licencias-page.user-licencias-shell .user-lic-bundle-wrap .user-lic-warranty-history-btn:hover {
+  background: rgba(251, 191, 36, 0.22);
+  border-color: rgba(252, 211, 77, 0.75);
+  color: #fde68a;
+}
+.admin-licencias-page.user-licencias-shell .user-lic-bundle-wrap .user-lic-warranty-history-btn:focus-visible {
+  outline: 2px solid rgba(252, 211, 77, 0.85);
+  outline-offset: 1px;
+}
+.admin-licencias-page.user-licencias-shell
+  .user-lic-bundle-wrap
+  .license-split-editor__status-select-shell--good
+  > .license-split-editor__status {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.admin-licencias-page.user-licencias-shell .user-lic-warranty-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 10890;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: max(1rem, env(safe-area-inset-top)) max(0.85rem, env(safe-area-inset-right))
+    max(1rem, env(safe-area-inset-bottom)) max(0.85rem, env(safe-area-inset-left));
+  box-sizing: border-box;
+}
+.admin-licencias-page.user-licencias-shell .user-lic-warranty-modal.d-none {
+  display: none !important;
+}
+.admin-licencias-page.user-licencias-shell .user-lic-warranty-modal__backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.72);
+  backdrop-filter: blur(2px);
+}
+.admin-licencias-page.user-licencias-shell .user-lic-warranty-modal__dialog {
+  position: relative;
+  width: min(26rem, 100%);
+  max-height: min(70vh, 28rem);
+  display: flex;
+  flex-direction: column;
+  background: linear-gradient(160deg, #1e1b4b 0%, #0f172a 55%);
+  border: 1px solid rgba(99, 102, 241, 0.45);
+  border-radius: 0.55rem;
+  box-shadow: 0 22px 50px rgba(0, 0, 0, 0.45);
+  color: #e2e8f0;
+  overflow: hidden;
+}
+.admin-licencias-page.user-licencias-shell .user-lic-warranty-modal__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.65rem;
+  padding: 0.75rem 0.95rem;
+  border-bottom: 1px solid rgba(99, 102, 241, 0.32);
+}
+.admin-licencias-page.user-licencias-shell .user-lic-warranty-modal__title {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: #f8fafc;
+}
+.admin-licencias-page.user-licencias-shell .user-lic-warranty-modal__close {
+  appearance: none;
+  border: none;
+  background: rgba(15, 23, 42, 0.6);
+  color: #cbd5f5;
+  font-size: 1.45rem;
+  line-height: 1;
+  width: 2.1rem;
+  height: 2.1rem;
+  border-radius: 0.3rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.admin-licencias-page.user-licencias-shell .user-lic-warranty-modal__close:hover {
+  color: #fff;
+  background: rgba(239, 68, 68, 0.28);
+}
+.admin-licencias-page.user-licencias-shell .user-lic-warranty-modal__subtitle {
+  padding: 0.45rem 0.95rem 0;
+  font-size: 0.74rem;
+  color: rgba(226, 232, 240, 0.75);
+}
+.admin-licencias-page.user-licencias-shell .user-lic-warranty-modal__subtitle strong {
+  color: rgba(251, 191, 36, 0.95);
+}
+.admin-licencias-page.user-licencias-shell .user-lic-warranty-modal__body {
+  overflow: auto;
+  padding: 0.65rem 0.95rem 0.9rem;
+  font-size: 0.82rem;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+.admin-licencias-page.user-licencias-shell .user-lic-warranty-modal__list {
+  padding-left: 0;
+  margin-bottom: 0;
+}
+.admin-licencias-page.user-licencias-shell .user-lic-warranty-modal__item {
+  padding: 0.5rem 0;
+  border-bottom: 1px solid rgba(99, 102, 241, 0.2);
+}
+.admin-licencias-page.user-licencias-shell .user-lic-warranty-modal__item:last-child {
+  border-bottom: none;
+}
+.admin-licencias-page.user-licencias-shell .user-lic-warranty-modal__date {
+  font-variant-numeric: tabular-nums;
+  color: rgba(226, 232, 240, 0.9);
+}
+.admin-licencias-page.user-licencias-shell .user-lic-warranty-modal__tipo {
+  font-weight: 600;
+  color: #fcd34d;
+}
+.admin-licencias-page.user-licencias-shell .user-lic-warranty-modal__summary {
+  margin-top: 0.25rem;
+  color: #f1f5f9;
+}
+.admin-licencias-page.user-licencias-shell .user-lic-warranty-modal__detail {
+  margin-top: 0.22rem;
+  color: rgba(148, 163, 184, 0.95) !important;
+}
+.admin-licencias-page.user-licencias-shell .user-lic-warranty-modal__hint {
+  margin-top: 0.85rem !important;
+  font-size: 0.75rem;
+  color: rgba(203, 213, 245, 0.78);
+}
+.admin-licencias-page.user-licencias-shell .user-lic-warranty-modal__empty,
+.admin-licencias-page.user-licencias-shell .user-lic-warranty-modal__loading {
+  color: rgba(226, 232, 240, 0.88);
+}
+
+/* Admin Licencias — advertencia por fila e historial (mismo modal/estilo que Licencias cliente) */
+.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+  .license-notepads-wrap
+  .license-split-editor__status-select-shell--good {
+  display: flex !important;
+  flex-direction: row;
+  align-items: stretch;
+  gap: 0.12rem;
+  min-width: 0;
+}
+.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+  .license-notepads-wrap
+  .license-split-editor__status-select-shell--good
+  > .license-split-editor__status {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+  .license-notepads-wrap
+  .user-lic-warranty-history-btn {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.22rem;
+  min-height: var(--lic-line-box);
+  padding: 0;
+  margin: 0;
+  border: 1px solid rgba(251, 191, 36, 0.5);
+  border-radius: 0.18rem;
+  background: rgba(251, 191, 36, 0.12);
+  color: #fbbf24;
+  cursor: pointer;
+  line-height: 1;
+  font-size: 0.62rem;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+  .license-notepads-wrap
+  .user-lic-warranty-history-btn:hover {
+  background: rgba(251, 191, 36, 0.22);
+  border-color: rgba(252, 211, 77, 0.75);
+  color: #fde68a;
+}
+.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+  .license-notepads-wrap
+  .user-lic-warranty-history-btn:focus-visible {
+  outline: 2px solid rgba(252, 211, 77, 0.85);
+  outline-offset: 1px;
+}
+.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+  .license-notepads-wrap
+  .user-lic-warranty-history-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell) .admin-licencias-historial-detail-stack {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.42rem;
+}
+.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell) .admin-licencias-historial-detail-plain {
+  flex: 1 1 auto;
+  min-width: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+  .admin-licencias-historial-table
+  .user-lic-warranty-history-btn {
+  flex: 0 0 auto;
+  width: 1.35rem;
+  min-height: 1.35rem;
+  font-size: 0.72rem;
+  margin-top: 0;
+}
+
+.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell) .user-lic-warranty-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 10920;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: max(1rem, env(safe-area-inset-top)) max(0.85rem, env(safe-area-inset-right))
+    max(1rem, env(safe-area-inset-bottom)) max(0.85rem, env(safe-area-inset-left));
+  box-sizing: border-box;
+}
+.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell) .user-lic-warranty-modal.d-none {
+  display: none !important;
+}
+.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell) .user-lic-warranty-modal__backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.72);
+  backdrop-filter: blur(2px);
+}
+.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell) .user-lic-warranty-modal__dialog {
+  position: relative;
+  width: min(26rem, 100%);
+  max-height: min(70vh, 28rem);
+  display: flex;
+  flex-direction: column;
+  background: linear-gradient(160deg, #1e1b4b 0%, #0f172a 55%);
+  border: 1px solid rgba(99, 102, 241, 0.45);
+  border-radius: 0.55rem;
+  box-shadow: 0 22px 50px rgba(0, 0, 0, 0.45);
+  color: #e2e8f0;
+  overflow: hidden;
+}
+.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell) .user-lic-warranty-modal__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.65rem;
+  padding: 0.75rem 0.95rem;
+  border-bottom: 1px solid rgba(99, 102, 241, 0.32);
+}
+.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell) .user-lic-warranty-modal__title {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: #f8fafc;
+}
+.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell) .user-lic-warranty-modal__close {
+  appearance: none;
+  border: none;
+  background: rgba(15, 23, 42, 0.6);
+  color: #cbd5f5;
+  font-size: 1.45rem;
+  line-height: 1;
+  width: 2.1rem;
+  height: 2.1rem;
+  border-radius: 0.3rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell) .user-lic-warranty-modal__close:hover {
+  background: rgba(51, 65, 85, 0.75);
+}
+.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell) .user-lic-warranty-modal__body {
+  overflow: auto;
+  padding: 0.85rem 0.95rem 1rem;
+}
+.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell) .user-lic-warranty-modal__list {
+  margin: 0;
+}
+.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell) .user-lic-warranty-modal__item {
+  padding-bottom: 0.65rem;
+  margin-bottom: 0.65rem;
+  border-bottom: 1px solid rgba(99, 102, 241, 0.2);
+}
+.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+  .user-lic-warranty-modal__item:last-child {
+  padding-bottom: 0;
+  margin-bottom: 0;
+  border-bottom: none;
+}
+.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell) .user-lic-warranty-modal__tipo {
+  color: rgba(196, 181, 253, 0.95);
+}
+.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell) .user-lic-warranty-modal__detail {
+  margin-top: 0.22rem;
+  color: rgba(148, 163, 184, 0.95) !important;
+}
+.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+  .user-lic-warranty-modal__empty,
+.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell) .user-lic-warranty-modal__loading {
+  color: rgba(226, 232, 240, 0.88);
+}
+
 /* Columna solo lectura: saldo de cuenta antes de «Notas» */
 .admin-licencias-page.user-licencias-shell .user-lic-bundle-wrap .license-split-editor__saldo-cell {
   align-self: stretch;
@@ -19733,6 +22863,54 @@ body .card.product-texture-bg::before,
   cursor: default !important;
   resize: vertical;
 }
+
+/* Pantallas angostas (móvil): credenciales largas sin partir en mil pedazos; scroll horizontal dentro del bloc / viewport. */
+@media (max-width: 768px) {
+  .admin-licencias-page.user-licencias-shell .user-lic-readonly-day .day-accounts-list {
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .admin-licencias-page.user-licencias-shell .user-lic-bundle-wrap .license-split-editor__viewport {
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .admin-licencias-page.user-licencias-shell .user-lic-bundle-wrap .license-split-editor__side {
+    overflow-x: visible !important;
+  }
+
+  .admin-licencias-page.user-licencias-shell .user-lic-bundle-wrap .license-split-editor__rows {
+    overflow-x: visible !important;
+  }
+
+  .admin-licencias-page.user-licencias-shell .user-lic-bundle-wrap .license-split-editor__grid {
+    grid-template-columns: minmax(min(240px, 72vw), max-content) minmax(13.5rem, 1fr) !important;
+    width: max-content !important;
+    max-width: none !important;
+    min-width: 100% !important;
+    box-sizing: border-box !important;
+  }
+
+  .admin-licencias-page.user-licencias-shell .user-lic-bundle-wrap .license-split-editor__creds-cell {
+    min-width: min(72vw, 22rem) !important;
+    max-width: none !important;
+  }
+
+  .admin-licencias-page.user-licencias-shell .user-lic-bundle-wrap .license-split-editor__creds.user-lic-creds-ro {
+    white-space: pre !important;
+    overflow-wrap: normal !important;
+    word-break: normal !important;
+    overflow-x: auto !important;
+    max-width: none !important;
+  }
+
+  .admin-licencias-page.user-licencias-shell .user-lic-bundle-wrap .license-split-editor__row {
+    min-width: max-content !important;
+    max-width: none !important;
+  }
+}
+
 .user-lic-account-sheet__head {
   font-size: 0.95rem;
   font-weight: 600;
@@ -19750,16 +22928,10 @@ body .card.product-texture-bg::before,
   color: rgba(148, 163, 184, 0.92);
   margin-bottom: 0.25rem;
 }
-.user-lic-day-empty-msg {
-  font-size: 0.8rem;
-  color: rgba(148, 163, 184, 0.92);
-  padding: 0.22rem 0.32rem 0.25rem;
-}
-
 .admin-licencias-page.user-licencias-shell .user-lic-linked-sale-hint {
   font-size: 0.78rem;
   color: rgba(186, 230, 253, 0.95);
-  margin: -0.15rem 0 0.75rem;
+  margin: 0 0 0.75rem;
   padding: 0.35rem 0;
 }
 .admin-licencias-page.user-licencias-shell .user-lic-linked-sale-hint .fa-calendar-check {
@@ -19910,6 +23082,150 @@ body .card.product-texture-bg::before,
   appearance: none;
 }
 
+/* Caducidad (portal): líneas divisorias — al final para pisar reglas globales de filas */
+#userLicenciasTableOuter .user-lic-account-sheet--vencimientos .user-lic-vencimiento-day .day-accounts-list {
+  border-top: 2px solid rgba(59, 130, 246, 0.48) !important;
+}
+#userLicenciasTableOuter .user-lic-account-sheet--vencimientos .user-lic-caducidad-split .license-split-editor__side {
+  border-left: 2px solid rgba(59, 130, 246, 0.48) !important;
+}
+#userLicenciasTableOuter .user-lic-account-sheet--vencimientos .user-lic-caducidad-split .license-split-editor__row.user-lic-readonly-row {
+  grid-template-columns: minmax(6.25rem, 1fr) !important;
+  border-bottom: 2px solid rgba(59, 130, 246, 0.48) !important;
+}
+#userLicenciasTableOuter
+  .user-lic-account-sheet--vencimientos
+  .user-lic-caducidad-split
+  .license-split-editor__row.user-lic-readonly-row:last-child {
+  border-bottom: 2px solid rgba(59, 130, 246, 0.48) !important;
+}
+#userLicenciasTableOuter
+  .user-lic-account-sheet--vencimientos
+  .user-lic-caducidad-split
+  .license-split-editor__row.user-lic-readonly-row:not(:last-child) {
+  border-bottom: 2px solid rgba(59, 130, 246, 0.48) !important;
+}
+#userLicenciasTableOuter .user-lic-account-sheet--vencimientos .user-lic-caducidad-split .license-split-editor__status-wrap {
+  border-right: none !important;
+}
+#userLicenciasTableOuter
+  .user-lic-account-sheet--vencimientos
+  .user-lic-caducidad-split
+  .license-split-editor__status-select-shell--good {
+  border-right: none !important;
+  flex: 1 1 auto !important;
+  width: 100% !important;
+  max-width: none !important;
+}
+#userLicenciasTableOuter
+  .user-lic-account-sheet--vencimientos
+  .user-lic-caducidad-split
+  .license-split-editor__status-select-shell--good
+  > select.license-split-editor__status-good {
+  width: 100% !important;
+  max-width: none !important;
+  box-sizing: border-box !important;
+}
+/* Columna licencias Caducidad: capa de líneas (el textarea .admin-licencias-notepad-textarea tapa el gradiente) */
+#userLicenciasTableOuter .user-lic-account-sheet--vencimientos .user-lic-caducidad-creds-cell {
+  position: relative !important;
+  display: flex !important;
+  flex-direction: column !important;
+  align-self: stretch !important;
+  min-height: calc(0.78rem * 1.45 + 2px) !important;
+  background: #000000 !important;
+  overflow: hidden !important;
+}
+#userLicenciasTableOuter .user-lic-account-sheet--vencimientos .user-lic-caducidad-creds-lines {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 0;
+  pointer-events: none;
+  background-color: #000000;
+  background-image: repeating-linear-gradient(
+    to bottom,
+    transparent 0,
+    transparent calc(0.78rem * 1.45),
+    rgba(59, 130, 246, 0.55) calc(0.78rem * 1.45),
+    rgba(59, 130, 246, 0.55) calc(0.78rem * 1.45 + 2px)
+  );
+  background-size: 100% calc(0.78rem * 1.45 + 2px);
+  background-repeat: repeat-y;
+}
+#userLicenciasTableOuter
+  .user-lic-account-sheet--vencimientos
+  .user-lic-caducidad-creds-cell
+  .license-split-editor__creds.user-lic-creds-ro,
+#userLicenciasTableOuter
+  .user-lic-account-sheet--vencimientos
+  .user-lic-caducidad-creds-cell
+  .admin-licencias-notepad-textarea.license-split-editor__creds {
+  position: relative !important;
+  z-index: 1 !important;
+  flex: 1 1 auto !important;
+  width: 100% !important;
+  min-height: calc(0.78rem * 1.45 + 2px) !important;
+  height: 100% !important;
+  line-height: calc(0.78rem * 1.45 + 2px) !important;
+  background: transparent !important;
+  background-color: transparent !important;
+  background-image: none !important;
+  border: none !important;
+  border-top: none !important;
+  padding: 0 0.08rem !important;
+  margin: 0 !important;
+  box-shadow: none !important;
+  resize: none !important;
+}
+#userLicenciasTableOuter
+  .user-lic-account-sheet--vencimientos
+  .user-lic-caducidad-split
+  .license-split-editor__row.user-lic-readonly-row {
+  min-height: var(--lic-row-stride) !important;
+}
+#userLicenciasTableOuter
+  .user-lic-account-sheet--vencimientos
+  .user-lic-caducidad-split
+  select.license-split-editor__status.license-split-editor__status-good {
+  border-color: rgba(34, 197, 94, 0.55) !important;
+}
+#userLicenciasTableOuter .user-lic-account-sheet--vencimientos .user-lic-vencimiento-day:not(:last-child) {
+  border-bottom: 2px solid rgba(59, 130, 246, 0.48) !important;
+  margin-bottom: 0.08rem !important;
+}
+
+/* Portal usuario: la regla global .license-card { margin: 0 } pega los chips al bloque «Día 1»; aquí sólo usuario (admin sigue igual). */
+.admin-licencias-page.user-licencias-shell .licenses-grid > .license-card {
+  margin: 0 0 0.7rem 0 !important;
+}
+.admin-licencias-page.user-licencias-shell .licencias-container.collapsed .licenses-grid > .license-card {
+  margin: 0 !important;
+}
+
+/* Chips de filtro de producto: sin banda inferior oscura del ::before global (parecía sombra pegada al bloque «Día 1») */
+.admin-licencias-page.user-licencias-shell .licenses-grid .license-card:not(.active)::before {
+  background: linear-gradient(
+    185deg,
+    rgba(255, 255, 255, 0.07) 0%,
+    rgba(147, 197, 253, 0.04) 38%,
+    transparent 72%
+  );
+  opacity: 1;
+}
+
+.admin-licencias-page.user-licencias-shell .licenses-grid .license-card.active::before {
+  background: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.25) 0%,
+    rgba(255, 255, 255, 0.1) 50%,
+    rgba(255, 255, 255, 0) 100%
+  );
+  opacity: 1.5;
+}
+
 /* Licencias usuario: «Todos» con mismo cromatismo que tarjetas de producto (servicios), no rojo admin */
 .admin-licencias-page.user-licencias-shell
   .licenses-grid
@@ -19920,7 +23236,12 @@ body .card.product-texture-bg::before,
 .admin-licencias-page.user-licencias-shell
   .licenses-grid
   .license-card.license-card--aggregate.user-lic-license-card--todos:not(.license-card--panel-toggle)::before {
-  background: linear-gradient(352deg, #0000007a 0%, rgb(37 7 87) 50%, #43141400 100%);
+  background: linear-gradient(
+    185deg,
+    rgba(255, 255, 255, 0.07) 0%,
+    rgba(147, 197, 253, 0.04) 38%,
+    transparent 72%
+  );
   opacity: 1;
 }
 .admin-licencias-page.user-licencias-shell
@@ -19986,7 +23307,6 @@ html.admin-licencias-license-support-mode .admin-licencias-shell #licenciasConta
   display: none !important;
 }
 
-html.admin-licencias-license-support-mode .admin-licencias-shell #adminLicenciasHistorialPanel,
 html.admin-licencias-license-support-mode .admin-licencias-shell #adminLicenciasReportesPanel {
   display: none !important;
 }
@@ -20118,7 +23438,7 @@ html.admin-lic-bulk-modal--lock body {
 .admin-lic-bulk-modal__panel {
   position: relative;
   z-index: 1;
-  width: min(28rem, 100%);
+  width: min(34rem, 100%);
   max-height: min(90vh, 40rem);
   overflow: auto;
   overscroll-behavior: contain;
@@ -20130,19 +23450,24 @@ html.admin-lic-bulk-modal--lock body {
   padding: 0.85rem 1rem 1rem;
 }
 .admin-lic-bulk-modal__head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
   gap: 0.5rem;
   margin-bottom: 0.35rem;
 }
 .admin-lic-bulk-modal__title {
+  grid-column: 2;
+  justify-self: center;
+  text-align: center;
   font-size: 1.05rem;
   font-weight: 600;
   margin: 0;
   color: #0f172a;
 }
 .admin-lic-bulk-modal__close {
+  grid-column: 3;
+  justify-self: end;
   background: transparent;
   border: none;
   color: #334155;
@@ -20164,8 +23489,74 @@ html.admin-lic-bulk-modal--lock body {
   flex-direction: column;
   gap: 0.25rem;
 }
-.admin-lic-bulk-modal__field--count {
+/* Usuario a la izquierda (etiqueta + campo en línea); estados verde/rojo agrupados a la derecha, misma banda */
+.admin-lic-bulk-modal__field--user-status-line {
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.5rem 0.75rem;
+}
+.admin-lic-bulk-modal__user-inline {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  flex-wrap: nowrap;
+  gap: 0.4rem;
+  flex: 1 1 11rem;
+  min-width: 0;
+}
+.admin-lic-bulk-modal__field--user-status-line .admin-lic-bulk-modal__label-plain {
+  margin: 0;
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+.admin-lic-bulk-modal__input--user-inline {
+  flex: 1 1 6.5rem;
+  min-width: 5rem;
+  width: auto !important;
+  max-width: none;
+}
+.admin-lic-bulk-modal__status-inline-group {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.4rem 0.6rem;
+  flex: 1 1 15rem;
+  justify-content: flex-end;
+  min-width: 0;
+}
+.admin-lic-bulk-modal__status-inline-block {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  flex: 1 1 7.5rem;
+  min-width: 6.5rem;
+  max-width: 11rem;
+}
+.admin-lic-bulk-modal__field--otro-follow:has(#adminLicBulkOtroWrap[hidden]) {
+  display: none;
+}
+.admin-lic-bulk-modal__field--qty-day-row {
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.3rem 0.42rem;
   margin-bottom: 0.1rem;
+}
+.admin-lic-bulk-modal__inline-pair {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  flex-wrap: nowrap;
+  gap: 0.09rem;
+  flex: 0 1 auto;
+  min-width: 0;
+}
+.admin-lic-bulk-modal__field--qty-day-row .admin-lic-bulk-modal__label-plain {
+  margin: 0;
+  flex: 0 0 auto;
+  min-width: 0;
 }
 /* Misma rejilla que estado/notas: etiqueta arriba, control a ancho completo (mismo límite derecho) */
 .admin-lic-bulk-modal__field--stack {
@@ -20184,6 +23575,9 @@ html.admin-lic-bulk-modal--lock body {
   margin: 0;
   flex: 0 0 auto;
   min-width: 6.5rem;
+}
+.admin-lic-bulk-modal__field--qty-day-row.admin-lic-bulk-modal__field--inline .admin-lic-bulk-modal__label-plain {
+  min-width: 0;
 }
 .admin-lic-bulk-modal__input--qty {
   max-width: 4.25rem !important;
@@ -20214,6 +23608,23 @@ html.admin-lic-bulk-modal--lock body {
   color: #0f172a !important;
   border: 1px solid #94a3b8 !important;
 }
+.admin-lic-bulk-modal__textarea {
+  min-height: 4.5rem;
+  resize: vertical;
+  line-height: 1.35;
+}
+.admin-lic-bulk-modal__field--add-creds {
+  align-items: center;
+  text-align: center;
+}
+.admin-lic-bulk-modal__field--add-creds .admin-lic-bulk-modal__label-plain--stack {
+  width: 100%;
+  text-align: center;
+}
+.admin-lic-bulk-modal__field--add-creds .admin-lic-bulk-modal__textarea {
+  width: 100%;
+  max-width: min(22rem, 100%);
+}
 .admin-lic-bulk-modal__footer {
   display: flex;
   flex-wrap: wrap;
@@ -20229,4 +23640,1204 @@ html.admin-lic-bulk-modal--lock body {
 .admin-lic-bulk-modal__otro-wrap label {
   font-size: 0.75rem;
   color: #334155;
+}
+
+/* Historial licencias: compacto (gana sobre .store-light table/th/td al final del archivo) */
+.purchase-history-container .admin-lic-pages-historial-shell table.tabla-licencias-actividad.admin-licencias-historial-table,
+.admin-lic-pages-historial-shell table.tabla-licencias-actividad.admin-licencias-historial-table {
+  font-size: 0.85rem !important;
+  line-height: 1.25 !important;
+  border-collapse: collapse !important;
+  border-spacing: 0 !important;
+  margin: 0 !important;
+}
+
+.purchase-history-container .admin-lic-pages-historial-shell table.tabla-licencias-actividad.admin-licencias-historial-table > thead > tr > th,
+.purchase-history-container .admin-lic-pages-historial-shell table.tabla-licencias-actividad.admin-licencias-historial-table > tbody > tr > td,
+.admin-lic-pages-historial-shell table.tabla-licencias-actividad.admin-licencias-historial-table > thead > tr > th,
+.admin-lic-pages-historial-shell table.tabla-licencias-actividad.admin-licencias-historial-table > tbody > tr > td {
+  font-size: 0.85rem !important;
+  line-height: 1.25 !important;
+  padding: 0.15rem 0.35rem !important;
+  vertical-align: middle !important;
+}
+
+.purchase-history-container.store-light .admin-lic-pages-historial-shell table.tabla-licencias-actividad.admin-licencias-historial-table > thead > tr > th,
+.purchase-history-container.store-light .admin-lic-pages-historial-shell table.tabla-licencias-actividad.admin-licencias-historial-table > tbody > tr > td {
+  font-size: 0.85rem !important;
+  line-height: 1.25 !important;
+  padding: 0.15rem 0.35rem !important;
+}
+
+.purchase-history-container .admin-lic-pages-historial-shell .admin-licencias-historial-col-date,
+.admin-lic-pages-historial-shell .admin-licencias-historial-col-date,
+.purchase-history-container .admin-lic-pages-historial-shell table.tabla-licencias-actividad.admin-licencias-historial-table > thead > tr > th:first-child,
+.admin-lic-pages-historial-shell table.tabla-licencias-actividad.admin-licencias-historial-table > thead > tr > th:first-child {
+  white-space: nowrap !important;
+  width: 1% !important;
+  min-width: 9.5rem !important;
+  line-height: 1.25 !important;
+  color: #111 !important;
+  word-break: keep-all !important;
+  overflow-wrap: normal !important;
+  text-overflow: clip !important;
+  overflow: visible !important;
+}
+
+.purchase-history-container .admin-lic-pages-historial-shell .admin-licencias-historial-col-user,
+.admin-lic-pages-historial-shell .admin-licencias-historial-col-user {
+  white-space: nowrap !important;
+  width: 1% !important;
+  max-width: 10rem !important;
+  line-height: 1.25 !important;
+}
+
+.purchase-history-container .admin-lic-pages-historial-shell .admin-licencias-historial-col-tipo,
+.admin-lic-pages-historial-shell .admin-licencias-historial-col-tipo {
+  white-space: normal !important;
+  max-width: 12rem !important;
+  line-height: 1.25 !important;
+}
+
+.purchase-history-container .admin-lic-pages-historial-shell .admin-licencias-historial-col-resumen,
+.admin-lic-pages-historial-shell .admin-licencias-historial-col-resumen {
+  white-space: normal !important;
+  word-break: break-word !important;
+  line-height: 1.25 !important;
+}
+
+.purchase-history-container .admin-lic-pages-historial-shell .admin-licencias-historial-detail-stack,
+.purchase-history-container .admin-lic-pages-historial-shell .admin-licencias-historial-detail-plain,
+.admin-lic-pages-historial-shell .admin-licencias-historial-detail-stack,
+.admin-lic-pages-historial-shell .admin-licencias-historial-detail-plain {
+  margin: 0 !important;
+  padding: 0 !important;
+  line-height: 1.25 !important;
+  font-size: inherit !important;
+}
+
+.purchase-history-container .admin-lic-pages-historial-shell tbody tr.admin-licencias-historial-row,
+.admin-lic-pages-historial-shell tbody tr.admin-licencias-historial-row {
+  height: auto !important;
+}
+
+/* Tienda pública — botón y modal de renovación */
+.store-front-main .store-search-actions {
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: stretch !important;
+  flex-wrap: nowrap !important;
+  gap: 0.5rem !important;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+.store-front-main .store-search-actions .search-input {
+  flex: 1 1 auto !important;
+  min-width: 0 !important;
+  max-width: none !important;
+  width: auto !important;
+  margin: 0 !important;
+  box-sizing: border-box !important;
+  line-height: 1.25 !important;
+}
+
+.store-front-main .store-search-actions .btn-renovacion-tienda {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  flex: 0 0 auto;
+  align-self: stretch;
+  min-height: 0;
+  height: auto;
+  padding: 0 0.9rem;
+  border: none;
+  border-radius: 8px !important;
+  font-size: 0.92rem;
+  font-weight: 600;
+  line-height: 1.2;
+  color: #fff;
+  background: linear-gradient(135deg, #059669 0%, #047857 55%, #065f46 100%);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12), 0 2px 8px rgba(5, 150, 105, 0.28);
+  cursor: pointer;
+  white-space: nowrap;
+  box-sizing: border-box;
+}
+
+.btn-renovacion-tienda {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.btn-renovacion-tienda:hover {
+  filter: brightness(1.06);
+}
+
+.btn-renovacion-tienda .fa-sync-alt {
+  font-size: 0.95rem;
+}
+
+#renovacionModal.renovacion-modal {
+  position: fixed !important;
+  inset: 0 !important;
+  top: 0 !important;
+  left: 0 !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  height: 100dvh !important;
+  margin: 0 !important;
+  padding: 1rem !important;
+  box-sizing: border-box !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  overflow-y: auto !important;
+  overscroll-behavior: contain;
+}
+
+#renovacionModal.renovacion-modal.modal-hidden {
+  display: none !important;
+}
+
+.renovacion-modal .desc-modal-content.renovacion-modal-panel {
+  position: relative !important;
+  width: min(760px, 94vw) !important;
+  max-width: min(760px, 94vw) !important;
+  min-height: 0;
+  max-height: min(88vh, 88dvh);
+  margin: auto !important;
+  flex-shrink: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  display: flex;
+  flex-direction: column;
+  padding: 1.25rem 1.35rem 1.1rem !important;
+  text-align: left;
+  box-sizing: border-box;
+}
+
+.renovacion-modal-panel {
+  text-align: left;
+}
+
+.renovacion-modal-panel .btn-close-desc-modal {
+  position: absolute !important;
+  top: 0.45rem !important;
+  right: 0.45rem !important;
+  left: auto !important;
+  bottom: auto !important;
+  z-index: 40;
+  width: 2.25rem;
+  height: 2.25rem;
+  margin: 0;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  font-size: 1.65rem;
+  line-height: 1;
+  background: #fff;
+  border: none;
+  border-radius: 6px;
+  color: #1976d2;
+  cursor: pointer;
+  box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.renovacion-modal-panel .btn-close-desc-modal:hover {
+  background: #f1f5f9;
+}
+
+.renovacion-modal-panel .btn-close-desc-modal:focus-visible {
+  outline: 2px solid rgba(25, 118, 210, 0.45);
+  outline-offset: 1px;
+}
+
+.renovacion-modal-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 0.2rem 0.35rem;
+  margin: 0 0 0.5rem;
+  padding: 0 2rem 0 0.5rem;
+  position: relative;
+  z-index: 2;
+  flex-shrink: 0;
+}
+
+.renovacion-modal-title {
+  margin: 0;
+  padding: 0;
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: #0f172a;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  text-align: center;
+}
+
+.renovacion-modal-title-text {
+  line-height: 1.25;
+}
+
+.renovacion-title-info-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.renovacion-info-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.35rem;
+  height: 1.35rem;
+  margin: 0;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: #2563eb;
+  font-size: 1.05rem;
+  line-height: 1;
+  cursor: pointer;
+  vertical-align: middle;
+}
+
+.renovacion-info-btn:hover,
+.renovacion-info-btn:focus-visible {
+  color: #1d4ed8;
+  outline: 2px solid rgba(37, 99, 235, 0.35);
+  outline-offset: 2px;
+}
+
+.renovacion-info-tip {
+  position: relative;
+  z-index: 50;
+  flex-shrink: 0;
+  width: 100%;
+  margin: -0.15rem 0 0.65rem;
+  padding: 0.6rem 0.75rem;
+  font-size: 0.76rem;
+  font-weight: 400;
+  line-height: 1.5;
+  color: #0f172a;
+  text-align: left;
+  background: #f8fafc;
+  border: 1px solid #93c5fd;
+  border-left: 4px solid #2563eb;
+  border-radius: 8px;
+  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.12);
+  box-sizing: border-box;
+  opacity: 1;
+}
+
+.renovacion-info-tip.hidden {
+  display: none !important;
+}
+
+.renovacion-modal-panel.renovacion-info-open .renovacion-info-tip:not(.hidden) {
+  display: block !important;
+}
+
+.renovacion-modal-panel.renovacion-info-open .renovacion-modal-hint,
+.renovacion-modal-panel.renovacion-info-open .renovacion-modal-search-row {
+  position: relative;
+  z-index: 1;
+}
+
+.renovacion-modal-title .fa-sync-alt {
+  color: #059669;
+}
+
+.renovacion-modal-hint {
+  margin: 0 0 0.65rem;
+  font-size: 0.82rem;
+  color: #475569;
+  line-height: 1.4;
+  text-align: center;
+}
+
+/* Misma fila buscar + acción que #searchEmailsForm (plantilla email.html) */
+.renovacion-modal-search-row {
+  display: flex;
+  align-items: center;
+  margin-bottom: 0.75rem;
+  flex-shrink: 0;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.renovacion-modal-search-row .renovacion-cuentas-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  width: auto;
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0.4rem 0.75rem;
+  border: 1px solid #111 !important;
+  border-radius: 16px !important;
+  background: #fff !important;
+  color: #111 !important;
+  font-size: 0.92rem;
+  font-family: inherit;
+  line-height: 1.35;
+  resize: vertical;
+}
+
+.renovacion-modal-search-row .btn-search {
+  flex: 0 0 auto;
+  margin-left: 0.35rem;
+  align-self: center;
+  white-space: nowrap;
+}
+
+.renovacion-modal-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 0.15rem;
+}
+
+.renovacion-results-wrap {
+  margin-bottom: 0.5rem;
+}
+
+.renovacion-results-wrap.hidden {
+  display: none !important;
+}
+
+.renovacion-results-heading {
+  margin: 0 0 0.25rem;
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: #0f172a;
+  text-align: center;
+}
+
+#renovacionRenewableWrap .renovacion-results-heading {
+  color: #059669;
+}
+
+.renovacion-results-heading--warn {
+  color: #b45309;
+}
+
+.renovacion-rejected-intro {
+  margin: 0 0 0.25rem;
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: #dc2626;
+  text-align: center;
+}
+
+.renovacion-results-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #fafbfc;
+}
+
+.renovacion-result-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0.2rem 0.4rem;
+  align-items: center;
+  padding: 0.22rem 0.45rem;
+  min-height: 0;
+  border-bottom: 1px solid #e2e8f0;
+  font-size: 0.8rem;
+  line-height: 1.25;
+}
+
+.renovacion-result-row:last-child {
+  border-bottom: none;
+}
+
+.renovacion-result-row--rejected {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
+  gap: 0.25rem 0.5rem;
+  padding: 0.22rem 0.45rem;
+}
+
+.renovacion-result-email {
+  font-weight: 500;
+  color: #111827;
+  word-break: break-all;
+  line-height: 1.25;
+}
+
+.renovacion-result-reason {
+  color: #92400e;
+  font-size: 0.74rem;
+  line-height: 1.2;
+}
+
+.btn-renovacion-agregar-one {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  margin: 0;
+  padding: 0 !important;
+  border: none;
+  border-radius: 6px;
+  font-size: 0.72rem;
+  color: #fff;
+  background: linear-gradient(135deg, #059669 0%, #047857 100%);
+  box-shadow: 0 1px 4px rgba(5, 150, 105, 0.35);
+  cursor: pointer;
+  justify-self: end;
+}
+
+.btn-renovacion-agregar-one:hover:not(:disabled) {
+  filter: brightness(1.06);
+}
+
+.btn-renovacion-agregar-one:disabled,
+.btn-renovacion-agregar-one.renovacion-agregada {
+  background: #94a3b8;
+  box-shadow: none;
+  cursor: default;
+}
+
+.renovacion-modal-msg {
+  margin: 0.5rem 0 0;
+  font-size: 0.8rem;
+  color: #334155;
+}
+
+.renovacion-modal-msg--error {
+  color: #b91c1c;
+}
+
+@media (max-width: 480px) {
+  .store-front-main .store-search-actions {
+    flex-wrap: nowrap !important;
+    align-items: stretch !important;
+    gap: 0.35rem !important;
+  }
+
+  .store-front-main .store-search-actions .btn-renovacion-tienda span {
+    display: none;
+  }
+
+  .store-front-main .store-search-actions .btn-renovacion-tienda {
+    min-width: 2.75rem;
+    padding: 0 0.55rem !important;
+  }
+
+  .renovacion-result-row:not(.renovacion-result-row--rejected) {
+    grid-template-columns: 1fr auto;
+    gap: 0.35rem;
+  }
+
+  .renovacion-result-row--rejected {
+    grid-template-columns: 1fr;
+  }
+
+  .renovacion-modal-search-row .btn-search {
+    margin-left: 0.25rem;
+    padding: 0.35rem 0.75rem !important;
+    font-size: 0.85rem !important;
+  }
+}
+
+@media (max-width: 360px) {
+  .store-front-main .search-form-container .store-search-actions {
+    flex-wrap: nowrap !important;
+    align-items: stretch !important;
+  }
+}
+
+/* —— Recargas de saldo (usuario) —— */
+.balance-recharge-page {
+  color: #0f172a;
+}
+
+.balance-recharge-title {
+  font-size: 1.35rem;
+  font-weight: 700;
+  margin: 0 0 0.35rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.balance-recharge-saldo-line {
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: #1d4ed8;
+  margin: 0 0 0.5rem;
+}
+
+.balance-recharge-intro {
+  font-size: 0.9rem;
+  color: #475569;
+  margin: 0;
+  line-height: 1.45;
+}
+
+.balance-recharge-form-card,
+.balance-recharge-list-card {
+  background: #fff;
+  border: 1px solid rgba(59, 130, 246, 0.35);
+  border-radius: 10px;
+  padding: 1rem 1.1rem;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.06);
+}
+
+.balance-recharge-section-title {
+  font-size: 1.05rem;
+  font-weight: 600;
+  margin: 0 0 0.85rem;
+}
+
+.balance-recharge-field {
+  margin-bottom: 0.85rem;
+}
+
+.balance-recharge-field label {
+  display: block;
+  font-size: 0.88rem;
+  font-weight: 600;
+  margin-bottom: 0.3rem;
+}
+
+.balance-recharge-optional {
+  font-weight: 400;
+  color: #64748b;
+}
+
+.balance-recharge-hint {
+  font-size: 0.78rem;
+  color: #64748b;
+  margin: 0.35rem 0 0;
+}
+
+.balance-recharge-preview {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  margin-top: 0.5rem;
+}
+
+.balance-recharge-preview-img {
+  width: 72px;
+  height: 72px;
+  object-fit: cover;
+  border-radius: 6px;
+  border: 1px solid #cbd5e1;
+}
+
+.balance-recharge-form-msg {
+  font-size: 0.88rem;
+  padding: 0.45rem 0.6rem;
+  border-radius: 6px;
+  margin-bottom: 0.65rem;
+}
+
+.balance-recharge-form-msg--ok {
+  background: #ecfdf5;
+  color: #047857;
+  border: 1px solid #6ee7b7;
+}
+
+.balance-recharge-form-msg--error {
+  background: #fef2f2;
+  color: #b91c1c;
+  border: 1px solid #fecaca;
+}
+
+.balance-recharge-submit {
+  width: 100%;
+  justify-content: center;
+}
+
+.balance-recharge-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.balance-recharge-item {
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 0.65rem 0.75rem;
+  background: #f8fafc;
+}
+
+.balance-recharge-item-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.balance-recharge-item-amount {
+  font-weight: 700;
+  font-size: 1rem;
+}
+
+.balance-recharge-status {
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 0.2rem 0.5rem;
+  border-radius: 999px;
+}
+
+.balance-recharge-status--pending {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.balance-recharge-status--approved {
+  background: #d1fae5;
+  color: #065f46;
+}
+
+.balance-recharge-status--rejected {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.balance-recharge-item-date {
+  font-size: 0.78rem;
+  color: #64748b;
+  margin: 0.25rem 0 0;
+}
+
+.balance-recharge-item-note,
+.balance-recharge-item-admin-note {
+  font-size: 0.82rem;
+  margin: 0.35rem 0 0;
+  color: #334155;
+}
+
+.balance-recharge-item-proofs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-top: 0.5rem;
+}
+
+.balance-recharge-proof-thumb {
+  width: 56px;
+  height: 56px;
+  object-fit: cover;
+  border-radius: 6px;
+  border: 1px solid #94a3b8;
+  display: block;
+}
+
+.balance-recharge-empty,
+.balance-recharge-loading {
+  font-size: 0.9rem;
+  margin: 0;
+}
+
+.balance-recharge-methods-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-top: 0.35rem;
+}
+
+.balance-recharge-method-option {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  padding: 0.55rem 0.65rem;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background: #fff;
+  cursor: pointer;
+}
+
+.balance-recharge-method-option:has(input:checked) {
+  border-color: #2563eb;
+  background: #eff6ff;
+}
+
+.balance-recharge-method-label {
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+
+.balance-recharge-method-details {
+  font-size: 0.82rem;
+  color: #475569;
+  line-height: 1.35;
+}
+
+.balance-recharge-field-label {
+  display: block;
+  font-weight: 600;
+  font-size: 0.9rem;
+  margin-bottom: 0.15rem;
+}
+
+/* —— Admin recargas y pagos —— */
+body .container > .purchase-history-page.purchase-history-admin {
+  margin-top: 0.35rem;
+}
+
+.purchase-history-page .admin-recargas-page.store-light.purchase-history-container {
+  max-width: 960px;
+  padding-top: 0.5rem;
+  padding-bottom: 1rem;
+}
+
+.purchase-history-page .admin-recargas-page .purchase-history-admin-toolbar {
+  margin-top: 0 !important;
+  margin-bottom: 0.45rem !important;
+}
+
+.admin-recargas-cleanup-panel {
+  margin-bottom: 1rem;
+}
+
+.admin-recargas-section-sep {
+  border: none;
+  border-top: 1px solid #cbd5e1;
+  margin: 1rem 0;
+}
+
+.admin-recargas-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  justify-content: center;
+  margin-bottom: 1rem;
+}
+
+.admin-recargas-tab {
+  border: 1px solid #94a3b8;
+  background: #f8fafc;
+  border-radius: 8px;
+  padding: 0.45rem 0.85rem;
+  font-size: 0.88rem;
+  cursor: pointer;
+}
+
+.admin-recargas-tab--active {
+  background: #2563eb;
+  color: #fff;
+  border-color: #2563eb;
+}
+
+.admin-recargas-hint {
+  font-size: 0.88rem;
+  color: #475569;
+  margin: 0 0 0.75rem;
+}
+
+.admin-recargas-review-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.65rem;
+  margin-bottom: 0.75rem;
+}
+
+.admin-recargas-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.admin-recarga-card {
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  padding: 0.75rem 0.85rem;
+  background: #fff;
+}
+
+.admin-recarga-card--pending {
+  border-left: 4px solid #f59e0b;
+}
+
+.admin-recarga-card--approved {
+  border-left: 4px solid #16a34a;
+}
+
+.admin-recarga-card--rejected {
+  border-left: 4px solid #dc2626;
+}
+
+.admin-recarga-card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.admin-recarga-user {
+  font-weight: 700;
+}
+
+.admin-recarga-meta {
+  font-size: 0.88rem;
+  color: #475569;
+  margin: 0.35rem 0;
+}
+
+.admin-recarga-proofs {
+  display: flex;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+  margin: 0.35rem 0;
+}
+
+.admin-recarga-proof-thumb {
+  width: 72px;
+  height: 72px;
+  object-fit: cover;
+  border-radius: 6px;
+  border: 1px solid #94a3b8;
+}
+
+.admin-pm-currency-title {
+  font-size: 1rem;
+  margin: 1rem 0 0.5rem;
+}
+
+.admin-pm-row {
+  display: grid;
+  grid-template-columns: auto 1fr 1fr auto;
+  gap: 0.4rem;
+  align-items: center;
+  margin-bottom: 0.45rem;
+  padding: 0.45rem;
+  border: 1px dashed #cbd5e1;
+  border-radius: 8px;
+}
+
+.admin-user-pm-checkboxes {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin-top: 0.5rem;
+}
+
+.admin-user-pm-check {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.92rem;
+}
+
+@media (max-width: 640px) {
+  .admin-pm-row {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* —— Chatbot respuestas-preguntas —— */
+.chatbot-rp-page {
+  color: #0f172a;
+}
+
+.chatbot-rp-title {
+  font-size: 1.3rem;
+  font-weight: 700;
+  margin: 0 0 0.35rem;
+}
+
+.chatbot-rp-intro,
+.chatbot-rp-engine-hint {
+  font-size: 0.88rem;
+  color: #475569;
+  margin: 0 0 0.4rem;
+  line-height: 1.45;
+}
+
+.chatbot-rp-badge {
+  display: inline-block;
+  font-size: 0.75rem;
+  padding: 0.15rem 0.45rem;
+  border-radius: 6px;
+  background: #f1f5f9;
+  margin-right: 0.25rem;
+}
+
+.chatbot-rp-badge--ok {
+  background: #d1fae5;
+  color: #065f46;
+}
+
+.chatbot-rp-layout {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1rem;
+}
+
+@media (min-width: 900px) {
+  .chatbot-rp-layout:has(.chatbot-rp-knowledge-card) {
+    grid-template-columns: 1.2fr 0.8fr;
+  }
+}
+
+.chatbot-rp-chat-card,
+.chatbot-rp-knowledge-card {
+  background: #fff;
+  border: 1px solid rgba(59, 130, 246, 0.35);
+  border-radius: 10px;
+  padding: 0.85rem 1rem;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.06);
+}
+
+.chatbot-rp-messages {
+  min-height: 280px;
+  max-height: 50vh;
+  overflow-y: auto;
+  margin-bottom: 0.65rem;
+  padding: 0.35rem;
+  background: #f8fafc;
+  border-radius: 8px;
+}
+
+.chatbot-rp-msg {
+  margin-bottom: 0.55rem;
+  padding: 0.45rem 0.55rem;
+  border-radius: 8px;
+  font-size: 0.9rem;
+}
+
+.chatbot-rp-msg--user {
+  background: #dbeafe;
+  margin-left: 1.5rem;
+}
+
+.chatbot-rp-msg--assistant {
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  margin-right: 1rem;
+}
+
+.chatbot-rp-msg-role {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #64748b;
+  margin-bottom: 0.2rem;
+}
+
+.chatbot-rp-msg-engine {
+  font-weight: 400;
+  margin-left: 0.35rem;
+  color: #94a3b8;
+}
+
+.chatbot-rp-input-row {
+  display: flex;
+  gap: 0.4rem;
+  align-items: flex-end;
+}
+
+.chatbot-rp-input {
+  flex: 1;
+  resize: vertical;
+  min-height: 2.5rem;
+}
+
+.chatbot-rp-mic,
+.chatbot-rp-send {
+  flex-shrink: 0;
+  min-width: 2.6rem;
+  padding: 0.4rem 0.55rem !important;
+}
+
+.chatbot-rp-mic.listening {
+  background: #dc2626 !important;
+  animation: chatbot-rp-mic-pulse 1.2s ease-in-out infinite;
+}
+
+.chatbot-rp-mic.processing {
+  background: #d97706 !important;
+}
+
+.chatbot-rp-mic.speaking {
+  background: #7c3aed !important;
+}
+
+@keyframes chatbot-rp-mic-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.45);
+  }
+  50% {
+    box-shadow: 0 0 0 8px rgba(220, 38, 38, 0);
+  }
+}
+
+.chatbot-rp-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+  margin-top: 0.45rem;
+  font-size: 0.8rem;
+  color: #64748b;
+}
+
+.chatbot-rp-check {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  cursor: pointer;
+}
+
+.chatbot-rp-section-title {
+  font-size: 1rem;
+  font-weight: 600;
+  margin: 0 0 0.5rem;
+}
+
+.chatbot-rp-knowledge-hint {
+  font-size: 0.82rem;
+  color: #64748b;
+  margin: 0 0 0.65rem;
+}
+
+.chatbot-rp-field {
+  margin-bottom: 0.55rem;
+}
+
+.chatbot-rp-field label {
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+.chatbot-rp-sources-list {
+  list-style: none;
+  padding: 0;
+  margin: 0.75rem 0 0;
+  font-size: 0.82rem;
+  max-height: 160px;
+  overflow-y: auto;
+}
+
+.chatbot-rp-sources-list li {
+  padding: 0.25rem 0;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.chatbot-rp-src-type {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  color: #64748b;
+  margin-right: 0.25rem;
+}
+
+.mobile-menu-btn--chatbot-hub {
+  background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%) !important;
+  border-color: #4338ca !important;
+  font-weight: 600;
+}
+
+.chatbot-rp-tabs {
+  display: flex;
+  gap: 0.35rem;
+  margin-bottom: 0.85rem;
+  flex-wrap: wrap;
+}
+
+.chatbot-rp-tab {
+  border: 1px solid rgba(79, 70, 229, 0.35);
+  background: #fff;
+  color: #4338ca;
+  border-radius: 8px;
+  padding: 0.4rem 0.85rem;
+  font-size: 0.88rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.chatbot-rp-tab--active {
+  background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+  color: #fff;
+  border-color: transparent;
+}
+
+.chatbot-rp-panel--hidden {
+  display: none !important;
+}
+
+.chatbot-rp-hub-intro {
+  font-size: 0.88rem;
+  color: #475569;
+  margin: 0 0 0.75rem;
+  line-height: 1.45;
+}
+
+.chatbot-rp-hub-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 0.55rem;
+  margin-bottom: 0.5rem;
+}
+
+.chatbot-rp-hub-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.2rem;
+  padding: 0.65rem 0.75rem;
+  border-radius: 10px;
+  border: 1px solid rgba(59, 130, 246, 0.3);
+  background: #f8fafc;
+  color: #0f172a;
+  text-decoration: none;
+  min-height: 88px;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.chatbot-rp-hub-card:hover {
+  border-color: #6366f1;
+  box-shadow: 0 2px 8px rgba(79, 70, 229, 0.15);
+  text-decoration: none;
+  color: #0f172a;
+}
+
+.chatbot-rp-hub-card--active {
+  border-color: #4f46e5;
+  background: #eef2ff;
+}
+
+.chatbot-rp-hub-card--soon {
+  opacity: 0.72;
+  cursor: default;
+  border-style: dashed;
+}
+
+.chatbot-rp-hub-card i {
+  font-size: 1.15rem;
+  color: #4f46e5;
+}
+
+.chatbot-rp-hub-card-title {
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.chatbot-rp-hub-card-desc {
+  font-size: 0.72rem;
+  color: #64748b;
+  line-height: 1.3;
 }

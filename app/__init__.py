@@ -181,10 +181,24 @@ def create_app(config_class_passed=None):
                         "(historial actividad licencias) añadida a users (%s)",
                         dialect,
                     )
+
+                ucols = _cols("users")
+                if "admin_licencias_ui_prefs" not in ucols:
+                    db.session.execute(
+                        text(
+                            "ALTER TABLE users ADD COLUMN admin_licencias_ui_prefs TEXT"
+                        )
+                    )
+                    db.session.commit()
+                    app.logger.info(
+                        "Esquema: columna admin_licencias_ui_prefs "
+                        "(JSON preferencias UI admin licencias) añadida a users (%s)",
+                        dialect,
+                    )
         except Exception as schema_users_patch_err:
             db.session.rollback()
             app.logger.warning(
-                "No se pudo aplicar parche columnas users (saldo / portal_license_activity_log): %s",
+                "No se pudo aplicar parche columnas users (saldo / portal_license_activity_log / admin_licencias_ui_prefs): %s",
                 schema_users_patch_err,
             )
 
@@ -337,10 +351,7 @@ def create_app(config_class_passed=None):
         if not session.get("logged_in"):
             return defaults
         try:
-            from app.store.routes import (
-                _eligible_tienda_user_licencias_portal,
-                catalog_products_for_store_user,
-            )
+            from app.store.routes import build_store_menu_saldo_display
         except ImportError:
             return defaults
 
@@ -350,35 +361,34 @@ def create_app(config_class_passed=None):
         user = User.query.get(uid)
         if not user:
             return defaults
+        result = build_store_menu_saldo_display(user)
+        if not result.get("show"):
+            return defaults
+        return {"store_menu_show_saldo": True, "store_menu_saldo_line": result.get("line")}
+
+    @app.context_processor
+    def inject_admin_archivados_count():
+        """Número de licencias archivadas para el botón Archivados del Menú2 admin."""
+        defaults = {"admin_archivados_count": 0}
+        if not session.get("logged_in"):
+            return defaults
         admin_username = app.config.get("ADMIN_USER", "admin")
-        if user.username == admin_username:
+        username = session.get("username")
+        user_id = session.get("user_id")
+        user = None
+        if username:
+            user = User.query.filter_by(username=username).first()
+        elif user_id:
+            user = User.query.get(user_id)
+        if not user or user.username != admin_username or user.parent_id is not None:
             return defaults
-        blocked = {"soporte", "soporte1", "soporte2", "soporte3"}
-        if user.username and user.username.lower() in blocked:
-            return defaults
-        if not _eligible_tienda_user_licencias_portal(user):
-            return defaults
-        _, tipo_precio = catalog_products_for_store_user(user)
+        try:
+            from app.store.models import License
 
-        def _fmt_num(n):
-            try:
-                x = float(n)
-            except (TypeError, ValueError):
-                x = 0.0
-            if abs(x - round(x)) < 1e-9:
-                return str(int(round(x)))
-            s = ("%.2f" % x).replace(".00", "").rstrip("0").rstrip(".")
-            return s
-
-        cop = float(user.saldo_cop or 0)
-        usd = float(user.saldo_usd or 0)
-        if tipo_precio == "COP":
-            line = "Saldo $%s COP" % _fmt_num(cop)
-        elif tipo_precio == "USD":
-            line = "Saldo $%s USD" % _fmt_num(usd)
-        else:
+            count = License.query.filter_by(enabled=False).count()
+            return {"admin_archivados_count": count}
+        except Exception:
             return defaults
-        return {"store_menu_show_saldo": True, "store_menu_saldo_line": line}
 
     # Aplicar exenciones de CSRF después de registrar todos los blueprints
     apply_csrf_exemptions()
@@ -459,6 +469,33 @@ def create_app(config_class_passed=None):
         start_simple_drive_loop()
     except Exception as e:
         # No fallar si hay error, solo continuar
+        pass
+
+    try:
+        from app.store.purchase_history_cleanup import start_purchase_history_cleanup_loop
+        start_purchase_history_cleanup_loop()
+        from app.store.license_history_cleanup import start_license_history_cleanup_loop
+        start_license_history_cleanup_loop()
+        from app.store.balance_recharge_cleanup import start_balance_recharge_cleanup_loop
+        start_balance_recharge_cleanup_loop()
+
+        def _startup_disk_orphan_scan():
+            import threading
+            import time
+            from app import create_app
+            from app.services.disk_orphan_maintenance import run_disk_orphan_maintenance
+
+            def worker():
+                time.sleep(45)
+                try:
+                    run_disk_orphan_maintenance(create_app())
+                except Exception:
+                    pass
+
+            threading.Thread(target=worker, daemon=True, name='disk-orphan-startup').start()
+
+        _startup_disk_orphan_scan()
+    except Exception:
         pass
 
     # ✅ CORREGIDO: Los eventos de SocketIO se cargan solo en socketio_server.py

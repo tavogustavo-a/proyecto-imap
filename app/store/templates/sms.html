@@ -4,35 +4,44 @@
 
 {% block head %}
   {{ super() }}
+  <link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}">
   <link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/sms.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='fontawesome/css/all.css') }}">
   <meta name="csrf_token" content="{{ csrf_token() }}">
-{% endblock %}
-
-{% block scripts %}
-  {{ super() }}
-  <script src="{{ url_for('store_bp.static', filename='js/sms_configs.js') }}" defer></script>
-  <script src="{{ url_for('store_bp.static', filename='js/sms_list.js') }}" defer></script>
-  <script src="{{ url_for('store_bp.static', filename='js/sms_numbers.js') }}" defer></script>
-  <script src="{{ url_for('store_bp.static', filename='js/twofa_configs.js') }}" defer></script>
 {% endblock %}
 
 {% block content %}
 
-<div id="sms-management-container" class="form-container-large">
-  <div class="admin-card">
-    <div class="d-flex align-items-center flex-wrap gap-1 mb-1 justify-content-between">
-      <h2 class="m-0 no-shrink">Consulta de SMS</h2>
-      <div>
-        <button 
-          id="btnVolverPanel" 
-          type="button" 
-          class="btn-blue"
-          data-url="{{ url_for('store_bp.admin_store') }}"
-        >
-          Volver
-        </button>
-      </div>
+<div id="sms-management-container" class="form-container-large sms-page container-max-width-900"
+     data-clear-trigger-log-url="{{ url_for('admin_bp.clear_trigger_log') }}"
+     data-logout-all-cookies-url="{{ url_for('admin_bp.logout_all_and_clear_cookies') }}">
+
+  <div id="mobileMenu" class="mobile-menu-store hidden">
+    <div class="menu-user-info-row menu-user-info-row--name-only menu-sidebar-heading-name">
+      <span class="menu-user-name">{{ session.get('username', 'Admin') }}</span>
     </div>
+    {% include 'includes/admin_menu_primary_links.html' %}
+    <button id="btnClearTriggerLogMenu" type="button" class="btn-panel btn-red mobile-menu-btn mb-04"><i class="fas fa-trash"></i> Limpiar Logs</button>
+    <a href="{{ url_for('auth_bp.logout') }}" class="btn-panel btn-red mobile-menu-btn mb-04"><i class="fas fa-sign-out-alt"></i> Cerrar Sesión</a>
+    <button id="btnLogoutAllAndClearCookies" type="button" class="btn-panel btn-red mobile-menu-btn mb-04" data-url="{{ url_for('admin_bp.logout_all_and_clear_cookies') }}"><i class="fas fa-cookie-bite"></i> Cerrar sesión y limpiar cookies</button>
+  </div>
+
+  <div id="mobileMenu2" class="mobile-menu-store hidden">
+    <div class="menu-user-info-row menu-user-info-row--name-only menu-sidebar-heading-name">
+      <span class="menu-user-name">Menú</span>
+    </div>
+    {% include 'includes/admin_menu_secondary_links.html' %}
+    {% include 'includes/admin_menu_licencias_extra_links.html' %}
+  </div>
+
+  <div id="menuOverlay" class="menu-overlay"></div>
+
+  <div class="admin-card">
+    <div class="d-flex gap-05 mb-1">
+      <button id="menuToggleBtn" type="button" class="btn-panel btn-blue menu-toggle-btn" title="Menú de navegación" aria-label="Abrir menú de navegación">&#9776; Menú</button>
+      <button id="menu2ToggleBtn" type="button" class="btn-panel btn-blue menu-toggle-btn" title="Menú secundario" aria-label="Abrir segundo menú">&#9776; Menú2</button>
+    </div>
+    <h2 class="m-0 mb-1 text-center w-100">Consulta de SMS</h2>
 
     <hr class="hr-margin-15">
     <h3 class="mb-05 text-center">Búsqueda y Eliminación de Correos</h3>
@@ -645,6 +654,17 @@
     </form>
   </div>
 </div>
+{% endblock %}
+
+{% block scripts %}
+  {{ super() }}
+  <script src="{{ url_for('store_bp.static', filename='js/menu_tienda.js') }}" defer></script>
+  <script src="{{ url_for('static', filename='js/clear_trigger_logs.js') }}" defer></script>
+  <script src="{{ url_for('static', filename='js/logout_all_cookies_btn.js') }}" defer></script>
+  <script src="{{ url_for('store_bp.static', filename='js/sms_configs.js') }}" defer></script>
+  <script src="{{ url_for('store_bp.static', filename='js/sms_list.js') }}" defer></script>
+  <script src="{{ url_for('store_bp.static', filename='js/sms_numbers.js') }}" defer></script>
+  <script src="{{ url_for('store_bp.static', filename='js/twofa_configs.js') }}" defer></script>
 {% endblock %}
 
 

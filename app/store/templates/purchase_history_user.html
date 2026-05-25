@@ -1,17 +1,35 @@
 {% extends "base.html" %}
 
-{% block title %}Historial de Compra{% endblock %}
+{% block title %}Mi Historial de Compras{% endblock %}
 
-{% block head %}{{ super() }}<link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}"><link rel="stylesheet" href="{{ url_for('static', filename='fontawesome/css/all.css') }}">{% endblock %}
+{% block head %}{{ super() }}<link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}?v=20260522-icon-stack"><link rel="stylesheet" href="{{ url_for('static', filename='fontawesome/css/all.css') }}">{% endblock %}
 {% block content %}
-<div class="container container-max-width-900 store-light store-front-main px-2 pb-3 purchase-history-container">
+<div class="purchase-history-page{% if mostrar_usuario_comprador %} purchase-history-admin{% endif %}"
+     data-show-user-column="{{ 'true' if mostrar_usuario_comprador else 'false' }}"
+     {% if mostrar_usuario_comprador %}
+     data-clear-trigger-log-url="{{ url_for('admin_bp.clear_trigger_log') }}"
+     data-logout-all-cookies-url="{{ url_for('admin_bp.logout_all_and_clear_cookies') }}"
+     {% endif %}>
   {% set blocked_users = ['soporte','soporte1','soporte2','soporte3'] %}
   {% if session.get('logged_in') and (not session.get('username') or session.get('username').lower() not in blocked_users) %}
-    <div class="d-flex justify-content-between align-items-center store-front-header gap-2 espaciado-responsive">
-      <button id="menuToggleBtn" class="btn-blue menu-btn-worksheet">&#9776; Menú</button>
-      <a href="{{ url_for('store_bp.user_licencias') }}" class="btn-panel btn-blue text-decoration-none" title="Volver a Licencias" aria-label="Volver a Licencias"><i class="fas fa-arrow-left" aria-hidden="true"></i> Volver</a>
+    {% if mostrar_usuario_comprador %}
+    <div id="mobileMenu" class="mobile-menu-store hidden">
+      <div class="menu-user-info-row menu-user-info-row--name-only menu-sidebar-heading-name">
+        <span class="menu-user-name">{{ session.get('username', 'Admin') }}</span>
+      </div>
+      {% include 'includes/admin_menu_primary_links.html' %}
+      <button id="btnClearTriggerLogMenu" type="button" class="btn-panel btn-red mobile-menu-btn mb-04"><i class="fas fa-trash"></i> Limpiar Logs</button>
+      <a href="{{ url_for('auth_bp.logout') }}" class="btn-panel btn-red mobile-menu-btn mb-04"><i class="fas fa-sign-out-alt"></i> Cerrar Sesión</a>
+      <button id="btnLogoutAllAndClearCookies" type="button" class="btn-panel btn-red mobile-menu-btn mb-04" data-url="{{ url_for('admin_bp.logout_all_and_clear_cookies') }}"><i class="fas fa-cookie-bite"></i> Cerrar sesión y limpiar cookies</button>
     </div>
-    <h2 class="mb-4 mt-3 text-center">Mi Historial de Compras</h2>
+    <div id="mobileMenu2" class="mobile-menu-store hidden">
+      <div class="menu-user-info-row menu-user-info-row--name-only menu-sidebar-heading-name">
+        <span class="menu-user-name">Menú</span>
+      </div>
+      {% include 'includes/admin_menu_secondary_links.html' %}
+      {% include 'includes/admin_menu_licencias_extra_links.html' %}
+    </div>
+    {% else %}
     <div id="mobileMenu" class="mobile-menu-store hidden">
       <div class="menu-user-info-row menu-user-info-row--name-only menu-sidebar-heading-name">
         <span class="menu-user-name">{{ session.get('username', 'Invitado') }}</span>
@@ -36,6 +54,8 @@
           <a href="{{ url_for('store_bp.store_front') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-store"></i> Tienda</a>
           <a href="{{ url_for('store_bp.user_licencias') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-link"></i> Licencias</a>
           <a href="{{ url_for('store_bp.historial_compras_usuario') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-receipt"></i> Mi Historial de Compras</a>
+          {% include 'includes/store_user_menu_recargas_link.html' %}
+          {% include 'includes/store_user_menu_chatbot_link.html' %}
         {% endif %}
       {% endif %}
       {% if current_user and current_user.has_public_tools_access() %}
@@ -54,10 +74,10 @@
       {% endif %}
       {% if is_user and not current_user.parent_id and user_has_worksheet_access(current_user) %}
   <a href="{{ url_for('store_bp.user_work_sheets') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-table"></i> Hojas de Cálculo</a>
-{% endif %}
+      {% endif %}
       {% if is_user and current_user and current_user.managed_imap2_pages|length > 0 %}
         <a href="{{ url_for('user_auth_bp.my_pages_list') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-file-alt"></i> Gestionar mi página</a>
-      {% endif %}
+{% endif %}
       {% if is_admin %}
         <a href="{{ url_for('admin_bp.dashboard') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-cogs"></i> Administración</a>
       {% endif %}
@@ -70,40 +90,404 @@
       {% endif %}
       {% include 'includes/store_user_menu_saldo_block.html' %}
     </div>
+    {% endif %}
     <div id="menuOverlay" class="menu-overlay"></div>
   {% endif %}
-  <div class="mt-4 mb-2 espaciado-responsive purchase-history-table-wrapper">
-    <form id="form-busqueda-compras" class="d-flex align-items-center gap-2 mb-2" autocomplete="off">
+
+  {% if mostrar_usuario_comprador %}
+  <div class="store-light purchase-history-container mx-auto">
+    <div class="purchase-history-admin-toolbar">
+      <button id="menuToggleBtn" type="button" class="btn-panel btn-blue menu-toggle-btn" title="Menú de navegación" aria-label="Abrir menú de navegación">&#9776; Menú</button>
+      <button id="menu2ToggleBtn" type="button" class="btn-panel btn-blue menu-toggle-btn" title="Menú secundario" aria-label="Abrir segundo menú">&#9776; Menú2</button>
+    </div>
+    <section class="purchase-history-cleanup-panel" id="purchaseHistoryCleanupPanel"
+             data-settings-url="{{ url_for('store_bp.api_purchase_history_cleanup_settings') }}"
+             data-purge-url="{{ url_for('store_bp.api_purchase_history_purge') }}"
+             data-preview-url="{{ url_for('store_bp.api_purchase_history_purge_preview') }}"
+             data-search-users-url="{{ url_for('admin_bp.search_users_ajax') }}">
+    <h4 class="text-center purchase-history-cleanup-heading">
+      <i class="fas fa-broom" aria-hidden="true"></i> Limpieza del historial de compra
+      <span class="purchase-history-cleanup-info-wrap">
+        <button type="button" id="phCleanupInfoBtn" class="purchase-history-cleanup-info-btn" aria-expanded="false" aria-controls="phCleanupInfoBox" title="Más información">
+          <i class="fas fa-info-circle" aria-hidden="true"></i>
+          <span class="sr-only">Más información sobre la limpieza del historial de compra</span>
+        </button>
+        <div id="phCleanupInfoBox" class="purchase-history-cleanup-info-box" hidden>
+          Elimina ventas antiguas del historial. Las licencias en inventario no se borran; solo se desvincula la venta.
+        </div>
+      </span>
+    </h4>
+    <div class="purchase-history-cleanup-grid">
+      <div class="purchase-history-cleanup-days-row">
+        <label for="phCleanupDays" class="form-label purchase-history-cleanup-days-label">Eliminar compras con más de (días)</label>
+        <input type="number" id="phCleanupDays" class="form-control purchase-history-cleanup-days-input" min="1" max="3650" value="{{ cleanup_settings.retention_days if cleanup_settings else 90 }}" autocomplete="off" aria-label="Días de antigüedad">
+      </div>
+      <div class="purchase-history-cleanup-field">
+        <label for="phCleanupScope" class="sr-only">Alcance de la limpieza</label>
+        <select id="phCleanupScope" class="form-select" autocomplete="off" title="Alcance de la limpieza" aria-label="Alcance de la limpieza">
+          <option value="all" {% if not cleanup_settings or cleanup_settings.scope != 'user' %}selected{% endif %}>Todos los usuarios</option>
+          <option value="user" {% if cleanup_settings and cleanup_settings.scope == 'user' %}selected{% endif %}>Solo un usuario</option>
+        </select>
+      </div>
+      <div class="purchase-history-cleanup-user-wrap" id="phCleanupUserWrap" {% if not cleanup_settings or cleanup_settings.scope != 'user' %}hidden{% endif %}>
+        <label for="phCleanupUserSearch" class="form-label">Usuario</label>
+        <input type="hidden" id="phCleanupUserId" value="{% if cleanup_selected_user %}{{ cleanup_selected_user.id }}{% endif %}">
+        <div class="purchase-history-cleanup-user-search-wrap">
+          <input type="search" id="phCleanupUserSearch" class="form-control" placeholder="Buscar por nombre o usuario…" autocomplete="off" aria-autocomplete="list" aria-controls="phCleanupUserResults">
+          <div id="phCleanupUserResults" class="purchase-history-cleanup-user-results" hidden role="listbox" aria-label="Resultados de usuarios"></div>
+        </div>
+        <p id="phCleanupUserSelected" class="purchase-history-cleanup-user-selected mb-0 mt-05"{% if not cleanup_selected_user %} hidden{% endif %}>
+          Seleccionado: <strong id="phCleanupUserSelectedLabel">{% if cleanup_selected_user %}{{ cleanup_selected_user.label }}{% endif %}</strong>
+          <button type="button" id="phCleanupUserClear" class="purchase-history-cleanup-user-clear">Quitar</button>
+        </p>
+      </div>
+      <div class="purchase-history-cleanup-actions-row">
+        <span class="purchase-history-cleanup-preview text-muted">
+          Coinciden: <strong id="phCleanupPreviewCount">—</strong> registro(s)
+        </span>
+        <button type="button" id="phCleanupPurgeBtn" class="btn-panel btn-red">Eliminar ahora</button>
+      </div>
+    </div>
+    <hr class="purchase-history-cleanup-separator" aria-hidden="true">
+    <h4 class="text-center purchase-history-cleanup-heading purchase-history-cleanup-heading-auto">
+      <i class="fas fa-clock" aria-hidden="true"></i> Limpieza automática programada
+    </h4>
+    <div class="purchase-history-cleanup-grid">
+      <div class="purchase-history-cleanup-auto-row">
+        <div class="form-check purchase-history-cleanup-auto-check mb-0">
+          <input class="form-check-input" type="checkbox" id="phCleanupAutoEnabled" {% if cleanup_settings and cleanup_settings.auto_enabled %}checked{% endif %} aria-label="Activar limpieza automática" title="Activar limpieza automática">
+          <label class="sr-only" for="phCleanupAutoEnabled">Activar limpieza automática</label>
+        </div>
+        <label for="phCleanupIntervalHours" class="sr-only">Ejecutar cada</label>
+        <select id="phCleanupIntervalHours" class="form-select purchase-history-cleanup-interval-select" autocomplete="off" title="Ejecutar cada" aria-label="Ejecutar cada"{% if not cleanup_settings or not cleanup_settings.auto_enabled %} disabled{% endif %}>
+          <option value="6" {% if cleanup_settings and cleanup_settings.run_interval_hours == 6 %}selected{% endif %}>Ejecutar cada 6 horas</option>
+          <option value="12" {% if cleanup_settings and cleanup_settings.run_interval_hours == 12 %}selected{% endif %}>Ejecutar cada 12 horas</option>
+          <option value="24" {% if not cleanup_settings or cleanup_settings.run_interval_hours == 24 %}selected{% endif %}>Ejecutar cada 24 horas (diario)</option>
+          <option value="48" {% if cleanup_settings and cleanup_settings.run_interval_hours == 48 %}selected{% endif %}>Ejecutar cada 48 horas</option>
+          <option value="168" {% if cleanup_settings and cleanup_settings.run_interval_hours == 168 %}selected{% endif %}>Ejecutar cada 168 horas (semanal)</option>
+          <option value="360" {% if cleanup_settings and cleanup_settings.run_interval_hours == 360 %}selected{% endif %}>Ejecutar cada 15 días</option>
+          <option value="720" {% if cleanup_settings and cleanup_settings.run_interval_hours == 720 %}selected{% endif %}>Ejecutar cada 30 días</option>
+          <option value="1440" {% if cleanup_settings and cleanup_settings.run_interval_hours == 1440 %}selected{% endif %}>Ejecutar cada 60 días</option>
+          <option value="2160" {% if cleanup_settings and cleanup_settings.run_interval_hours == 2160 %}selected{% endif %}>Ejecutar cada 90 días</option>
+          <option value="4320" {% if cleanup_settings and cleanup_settings.run_interval_hours == 4320 %}selected{% endif %}>Ejecutar cada 180 días</option>
+          <option value="8760" {% if cleanup_settings and cleanup_settings.run_interval_hours == 8760 %}selected{% endif %}>Ejecutar cada 365 días</option>
+        </select>
+        <button type="button" id="phCleanupSaveAutoBtn" class="btn-panel btn-green purchase-history-cleanup-save-btn">Guardar</button>
+      </div>
+    </div>
+      <div id="phCleanupStatus" class="mt-05" role="status" aria-live="polite"></div>
+    </section>
+  </div>
+
+  <div class="store-light purchase-history-container purchase-history-compras-wrap mx-auto" id="purchaseHistoryComprasSection">
+    <h2 class="m-0 text-center w-100 purchase-history-page-title"><i class="fas fa-receipt"></i> Historial de Compra</h2>
+    <div class="espaciado-responsive purchase-history-table-wrapper">
+  {% elif session.get('logged_in') and (not session.get('username') or session.get('username').lower() not in blocked_users) %}
+  <div class="store-light purchase-history-container purchase-history-compras-wrap mx-auto store-front-main px-2 pb-3" id="purchaseHistoryComprasSection">
+    <div class="store-front-header espaciado-responsive purchase-history-user-header">
+      <button id="menuToggleBtn" class="btn-blue menu-btn-worksheet">&#9776; Menú</button>
+    </div>
+    <h2 class="m-0 text-center w-100 purchase-history-page-title"><i class="fas fa-receipt"></i> Mi Historial de Compras</h2>
+    <div class="espaciado-responsive purchase-history-table-wrapper">
+  {% else %}
+    <div class="espaciado-responsive purchase-history-table-wrapper">
+  {% endif %}
+    <form id="form-busqueda-compras" class="purchase-history-controls" autocomplete="off">
       <label for="busquedaCompras" class="sr-only">Buscar en compras</label>
-      <input type="search" id="busquedaCompras" class="form-control" placeholder="Buscar en compras..." autocomplete="off">
+      <input type="search" id="busquedaCompras" class="form-control purchase-history-search" placeholder="Buscar en compras..." autocomplete="off">
+      <div class="purchase-history-controls-pagesize">
+        <select id="historialComprasPageSize" name="historialComprasPageSize" class="form-select purchase-history-pagesize" title="Cantidad de compras por página" aria-label="Cantidad de compras por página">
+          <option value="20" selected>20</option>
+          <option value="50">50</option>
+          <option value="100">100</option>
+          <option value="300">300</option>
+          <option value="all">Todo</option>
+        </select>
+      </div>
     </form>
     <table id="tabla-compras">
       <thead>
         <tr>
           <th>Fecha</th>
           <th><i class="fas fa-ticket-alt"></i> Producto</th>
-          <th>Cantidad</th>
+          <th scope="col" class="purchase-history-th-qty text-center" title="Cantidad" aria-label="Cantidad"><i class="fas fa-cubes" aria-hidden="true"></i><span class="sr-only"> Cantidad</span></th>
           <th>Total</th>
+          <th>Licencias</th>
+          {% if mostrar_usuario_comprador %}<th>Usuario</th>{% endif %}
         </tr>
       </thead>
       <tbody id="tbody-compras">
-        {% for compra in compras %}
-        <tr>
-          <td>{{ compra.fecha }}</td>
-          <td>{{ compra.producto }}</td>
-          <td>{{ compra.cantidad }}</td>
-          <td>${{ "{:,.2f}".format(compra.total|float) }}</td>
+      </tbody>
+    </table>
+    <div id="paginacion-compras" class="purchase-history-pagination"></div>
+    </div>
+  {% if mostrar_usuario_comprador or (session.get('logged_in') and (not session.get('username') or session.get('username').lower() not in blocked_users)) %}
+  </div>
+  {% endif %}
+
+  {% if mostrar_usuario_comprador or (session.get('logged_in') and (not session.get('username') or session.get('username').lower() not in blocked_users)) %}
+  <div class="store-light purchase-history-container purchase-history-stats-wrap{% if not mostrar_usuario_comprador %} purchase-history-user-stats-wrap{% endif %} mx-auto"
+       id="purchaseHistoryStatsPanel"
+       data-stats-url="{{ url_for('store_bp.api_purchase_history_stats') if mostrar_usuario_comprador else url_for('store_bp.api_purchase_history_my_stats') }}"
+       {% if not mostrar_usuario_comprador %}data-stats-self="1"{% endif %}
+       {% if mostrar_usuario_comprador %}data-search-users-url="{{ url_for('admin_bp.search_users_ajax') }}"{% endif %}>
+    <h2 class="m-0 text-center w-100 purchase-history-page-title"><i class="fas fa-chart-bar"></i> Estadísticas</h2>
+    <div class="purchase-history-stats-filters">
+      {% if mostrar_usuario_comprador %}
+      <div class="purchase-history-stats-filter-field">
+        <label for="phStatsScope" class="sr-only">Alcance</label>
+        <select id="phStatsScope" class="form-select" autocomplete="off" aria-label="Alcance estadísticas">
+          <option value="all" selected>Todos los usuarios</option>
+          <option value="user">Solo un usuario</option>
+        </select>
+      </div>
+      <div class="purchase-history-stats-user-wrap" id="phStatsUserWrap" hidden>
+        <label for="phStatsUserSearch" class="form-label">Usuario</label>
+        <input type="hidden" id="phStatsUserId" value="">
+        <div class="purchase-history-cleanup-user-search-wrap">
+          <input type="search" id="phStatsUserSearch" class="form-control" placeholder="Buscar por nombre o usuario…" autocomplete="off">
+          <div id="phStatsUserResults" class="purchase-history-cleanup-user-results" hidden role="listbox"></div>
+        </div>
+        <p id="phStatsUserSelected" class="purchase-history-cleanup-user-selected mb-0 mt-05" hidden>
+          Seleccionado: <strong id="phStatsUserSelectedLabel"></strong>
+          <button type="button" id="phStatsUserClear" class="purchase-history-cleanup-user-clear">Quitar</button>
+        </p>
+      </div>
+      {% endif %}
+      <div class="purchase-history-stats-period-row">
+        <div class="purchase-history-stats-period-apply-row">
+          <div class="purchase-history-stats-period-picker">
+            <button type="button" id="phStatsPeriodToggle" class="form-control purchase-history-stats-period-toggle text-start" aria-expanded="false" aria-haspopup="dialog" aria-controls="phStatsPeriodPopover" aria-label="Período, elegir rango de fechas">
+              <span id="phStatsPeriodLabelHeading" class="purchase-history-stats-period-inline-label">Período</span>
+              <span id="phStatsPeriodDisplay" class="purchase-history-stats-period-inline-value">Últimos 30 días</span>
+              <i class="fas fa-calendar-alt purchase-history-stats-period-inline-icon" aria-hidden="true"></i>
+            </button>
+            <div id="phStatsPeriodPopover" class="purchase-history-stats-period-popover" hidden role="dialog" aria-labelledby="phStatsPeriodLabelHeading">
+              <p class="purchase-history-stats-period-popover-title">Rango de fechas</p>
+              <div class="purchase-history-stats-period-presets">
+                <button type="button" class="btn-panel btn-blue btn-sm ph-stats-preset" data-days="7">7 días</button>
+                <button type="button" class="btn-panel btn-blue btn-sm ph-stats-preset" data-days="30">30 días</button>
+                <button type="button" class="btn-panel btn-blue btn-sm ph-stats-preset" data-days="90">90 días</button>
+                <button type="button" class="btn-panel btn-blue btn-sm ph-stats-preset" data-days="365">1 año</button>
+                <button type="button" class="btn-panel btn-blue btn-sm ph-stats-preset" data-days="all">Todo</button>
+              </div>
+              <div class="purchase-history-stats-period-dates">
+                <div class="purchase-history-stats-period-date-field">
+                  <label for="phStatsDateFrom" class="form-label">Desde</label>
+                  <input type="date" id="phStatsDateFrom" class="form-control" autocomplete="off">
+                </div>
+                <div class="purchase-history-stats-period-date-field">
+                  <label for="phStatsDateTo" class="form-label">Hasta</label>
+                  <input type="date" id="phStatsDateTo" class="form-control" autocomplete="off">
+                </div>
+              </div>
+              <button type="button" id="phStatsPeriodApplyPopover" class="btn-panel btn-green w-100">Usar estas fechas</button>
+            </div>
+          </div>
+          <button type="button" id="phStatsApplyBtn" class="btn-panel btn-green purchase-history-stats-apply-btn">Actualizar</button>
+        </div>
+      </div>
+      <p id="phStatsError" class="text-danger small mb-0 mt-05" hidden role="alert"></p>
+    </div>
+    <div id="phStatsContent" class="purchase-history-stats-content" hidden>
+      <div class="purchase-history-stats-cards" id="phStatsSummaryCards"></div>
+      <h4 class="purchase-history-stats-subtitle">Ventas por servicio</h4>
+      <div class="purchase-history-stats-table-wrap">
+        <table class="purchase-history-stats-table" id="phStatsSalesTable">
+          <thead><tr><th>Servicio</th><th>Moneda</th><th>Ventas</th><th>Renov.</th><th>Total</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <h4 class="purchase-history-stats-subtitle">Actividad de soporte</h4>
+      <div class="purchase-history-stats-table-wrap">
+        <table class="purchase-history-stats-table" id="phStatsActivityTable">
+          <thead><tr><th>Tipo</th><th>Cantidad</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+  {% if mostrar_historial_licencias and historial_licencias_es_admin and lic_cleanup_settings is not none %}
+  <div class="store-light purchase-history-container mx-auto">
+    <section class="purchase-history-cleanup-panel" id="purchaseHistoryLicenciasCleanupPanel"
+             data-settings-url="{{ url_for('store_bp.api_license_history_cleanup_settings') }}"
+             data-purge-url="{{ url_for('store_bp.api_license_history_purge') }}"
+             data-preview-url="{{ url_for('store_bp.api_license_history_purge_preview') }}"
+             data-search-users-url="{{ url_for('admin_bp.search_users_ajax') }}">
+      <h4 class="text-center purchase-history-cleanup-heading">
+        <i class="fas fa-broom" aria-hidden="true"></i> Limpieza del historial · Licencias
+        <span class="purchase-history-cleanup-info-wrap">
+          <button type="button" id="phLicCleanupInfoBtn" class="purchase-history-cleanup-info-btn" aria-expanded="false" aria-controls="phLicCleanupInfoBox" title="Más información">
+            <i class="fas fa-info-circle" aria-hidden="true"></i>
+            <span class="sr-only">Más información sobre la limpieza del historial · Licencias</span>
+          </button>
+          <div id="phLicCleanupInfoBox" class="purchase-history-cleanup-info-box" hidden>
+            Elimina entradas antiguas del registro portal (reportes, caídas, renovaciones de estado). No borra cuentas ni licencias del inventario; las filas «Entrega» vinculadas a asignaciones pueden seguir visibles.
+          </div>
+        </span>
+      </h4>
+      <div class="purchase-history-cleanup-grid">
+        <div class="purchase-history-cleanup-days-row">
+          <label for="phLicCleanupDays" class="form-label purchase-history-cleanup-days-label">Eliminar registros con más de (días)</label>
+          <input type="number" id="phLicCleanupDays" class="form-control purchase-history-cleanup-days-input" min="1" max="3650" value="{{ lic_cleanup_settings.retention_days if lic_cleanup_settings else 90 }}" autocomplete="off" aria-label="Días de antigüedad en historial licencias">
+        </div>
+        <div class="purchase-history-cleanup-field">
+          <label for="phLicCleanupScope" class="sr-only">Alcance de la limpieza</label>
+          <select id="phLicCleanupScope" class="form-select" autocomplete="off" title="Alcance de la limpieza" aria-label="Alcance de la limpieza">
+            <option value="all" {% if not lic_cleanup_settings or lic_cleanup_settings.scope != 'user' %}selected{% endif %}>Todos los usuarios</option>
+            <option value="user" {% if lic_cleanup_settings and lic_cleanup_settings.scope == 'user' %}selected{% endif %}>Solo un usuario</option>
+          </select>
+        </div>
+        <div class="purchase-history-cleanup-user-wrap" id="phLicCleanupUserWrap" {% if not lic_cleanup_settings or lic_cleanup_settings.scope != 'user' %}hidden{% endif %}>
+          <label for="phLicCleanupUserSearch" class="form-label">Usuario</label>
+          <input type="hidden" id="phLicCleanupUserId" value="{% if lic_cleanup_selected_user %}{{ lic_cleanup_selected_user.id }}{% endif %}">
+          <div class="purchase-history-cleanup-user-search-wrap">
+            <input type="search" id="phLicCleanupUserSearch" class="form-control" placeholder="Buscar por nombre o usuario…" autocomplete="off" aria-autocomplete="list" aria-controls="phLicCleanupUserResults">
+            <div id="phLicCleanupUserResults" class="purchase-history-cleanup-user-results" hidden role="listbox" aria-label="Resultados de usuarios"></div>
+          </div>
+          <p id="phLicCleanupUserSelected" class="purchase-history-cleanup-user-selected mb-0 mt-05"{% if not lic_cleanup_selected_user %} hidden{% endif %}>
+            Seleccionado: <strong id="phLicCleanupUserSelectedLabel">{% if lic_cleanup_selected_user %}{{ lic_cleanup_selected_user.label }}{% endif %}</strong>
+            <button type="button" id="phLicCleanupUserClear" class="purchase-history-cleanup-user-clear">Quitar</button>
+          </p>
+        </div>
+        <div class="purchase-history-cleanup-actions-row">
+          <span class="purchase-history-cleanup-preview text-muted">
+            Coinciden: <strong id="phLicCleanupPreviewCount">—</strong> registro(s)
+          </span>
+          <button type="button" id="phLicCleanupPurgeBtn" class="btn-panel btn-red">Eliminar ahora</button>
+        </div>
+      </div>
+      <hr class="purchase-history-cleanup-separator" aria-hidden="true">
+      <h4 class="text-center purchase-history-cleanup-heading purchase-history-cleanup-heading-auto">
+        <i class="fas fa-clock" aria-hidden="true"></i> Limpieza automática programada
+      </h4>
+      <div class="purchase-history-cleanup-grid">
+        <div class="purchase-history-cleanup-auto-row">
+          <div class="form-check purchase-history-cleanup-auto-check mb-0">
+            <input class="form-check-input" type="checkbox" id="phLicCleanupAutoEnabled" {% if lic_cleanup_settings and lic_cleanup_settings.auto_enabled %}checked{% endif %} aria-label="Activar limpieza automática del historial licencias" title="Activar limpieza automática">
+            <label class="sr-only" for="phLicCleanupAutoEnabled">Activar limpieza automática</label>
+          </div>
+          <label for="phLicCleanupIntervalHours" class="sr-only">Ejecutar cada</label>
+          <select id="phLicCleanupIntervalHours" class="form-select purchase-history-cleanup-interval-select" autocomplete="off" title="Ejecutar cada" aria-label="Ejecutar cada"{% if not lic_cleanup_settings or not lic_cleanup_settings.auto_enabled %} disabled{% endif %}>
+            <option value="6" {% if lic_cleanup_settings and lic_cleanup_settings.run_interval_hours == 6 %}selected{% endif %}>Ejecutar cada 6 horas</option>
+            <option value="12" {% if lic_cleanup_settings and lic_cleanup_settings.run_interval_hours == 12 %}selected{% endif %}>Ejecutar cada 12 horas</option>
+            <option value="24" {% if not lic_cleanup_settings or lic_cleanup_settings.run_interval_hours == 24 %}selected{% endif %}>Ejecutar cada 24 horas (diario)</option>
+            <option value="48" {% if lic_cleanup_settings and lic_cleanup_settings.run_interval_hours == 48 %}selected{% endif %}>Ejecutar cada 48 horas</option>
+            <option value="168" {% if lic_cleanup_settings and lic_cleanup_settings.run_interval_hours == 168 %}selected{% endif %}>Ejecutar cada 168 horas (semanal)</option>
+            <option value="360" {% if lic_cleanup_settings and lic_cleanup_settings.run_interval_hours == 360 %}selected{% endif %}>Ejecutar cada 15 días</option>
+            <option value="720" {% if lic_cleanup_settings and lic_cleanup_settings.run_interval_hours == 720 %}selected{% endif %}>Ejecutar cada 30 días</option>
+            <option value="1440" {% if lic_cleanup_settings and lic_cleanup_settings.run_interval_hours == 1440 %}selected{% endif %}>Ejecutar cada 60 días</option>
+            <option value="2160" {% if lic_cleanup_settings and lic_cleanup_settings.run_interval_hours == 2160 %}selected{% endif %}>Ejecutar cada 90 días</option>
+            <option value="4320" {% if lic_cleanup_settings and lic_cleanup_settings.run_interval_hours == 4320 %}selected{% endif %}>Ejecutar cada 180 días</option>
+            <option value="8760" {% if lic_cleanup_settings and lic_cleanup_settings.run_interval_hours == 8760 %}selected{% endif %}>Ejecutar cada 365 días</option>
+          </select>
+          <button type="button" id="phLicCleanupSaveAutoBtn" class="btn-panel btn-green purchase-history-cleanup-save-btn">Guardar</button>
+        </div>
+      </div>
+      <div id="phLicCleanupStatus" class="mt-05" role="status" aria-live="polite"></div>
+    </section>
+  </div>
+  {% endif %}
+
+  {% if mostrar_historial_licencias %}
+  <div class="store-light purchase-history-container purchase-history-licencias-wrap mx-auto{% if historial_licencias_es_admin %} purchase-history-licencias-wrap--admin{% endif %}" id="purchaseHistoryLicenciasSection">
+    <h2 class="m-0 text-center w-100 purchase-history-page-title"><i class="fas fa-stream"></i> Historial · Licencias</h2>
+    <div class="espaciado-responsive admin-lic-pages-historial-shell lic-historial-compact">
+      <div class="admin-licencias-historial-controls purchase-history-licencias-controls">
+        <div class="admin-licencias-historial-search-wrap">
+          <label for="userHistorialSearch" class="sr-only">Buscar en historial</label>
+          <input type="search" id="userHistorialSearch" class="form-control admin-licencias-historial-search purchase-history-licencias-search" placeholder="Buscar en historial…" autocomplete="off">
+        </div>
+        <div class="admin-licencias-historial-page-size">
+          <select id="userHistorialPageSize" class="form-control admin-licencias-historial-select purchase-history-licencias-pagesize" aria-label="Registros por página en historial">
+            <option value="30" selected>30</option>
+            <option value="50">50</option>
+            <option value="100">100</option>
+            <option value="500">500</option>
+            <option value="1000">1000</option>
+            <option value="all">Todos</option>
+          </select>
+        </div>
+      </div>
+      <div class="lic-actividad-plate admin-lic-pages-historial-table-plate">
+        <div class="purchase-history-table-wrapper admin-lic-pages-historial-table-wrap">
+          <div class="admin-lic-pages-historial-table-scroll-inner admin-licencias-historial-table-scroll">
+            <table id="tabla-actividad-licencias" class="admin-licencias-historial-table tabla-licencias-actividad w-100" role="grid" aria-label="Registros del historial de licencias">
+              <thead>
+                <tr>
+                  <th scope="col" class="admin-licencias-historial-col-date">Fecha</th>
+                  {% if historial_licencias_es_admin %}<th scope="col" class="admin-licencias-historial-col-user">Usuario</th>{% endif %}
+                  <th scope="col">Tipo</th>
+                  <th scope="col">Resumen</th>
+                </tr>
+              </thead>
+              <tbody id="userHistorialTableBody">
+                {% for row in license_timeline_rows %}
+                <tr class="admin-licencias-historial-row user-historial-row-item">
+                  <td class="admin-licencias-historial-col-date user-historial-fecha">{{ row.fecha_col }}</td>
+                  {% if historial_licencias_es_admin %}<td class="admin-licencias-historial-col-user user-historial-usuario">{{ row.usuario|default('—') }}</td>{% endif %}
+                  <td class="admin-licencias-historial-col-tipo user-historial-tipo">{{ row.tipo_label }}</td>
+                  <td class="admin-licencias-historial-col-resumen user-historial-resumen">{{ row.summary }}{% if row.detail and row.detail|trim and row.detail|trim != '.' %} · {{ row.detail }}{% endif %}</td>
         </tr>
         {% else %}
-        <tr><td colspan="4" class="text-center">No tienes compras registradas aún.</td></tr>
+                <tr class="admin-licencias-historial-row--empty user-historial-empty-msg"><td colspan="{% if historial_licencias_es_admin %}4{% else %}3{% endif %}" class="admin-lic-pages-historial-empty text-center py-2">{% if historial_licencias_es_admin %}Aún no hay actividad registrada en el portal.{% else %}Aún no hay actividad registrada. Cuando recibas una licencia o actualices estado en tus días aparecerá aquí.{% endif %}</td></tr>
         {% endfor %}
       </tbody>
     </table>
-    <div id="paginacion-compras" class="mt-3 d-flex justify-content-center"></div>
+          </div>
+        </div>
+      </div>
+      <div class="admin-lic-pages-historial-footer admin-licencias-historial-footer purchase-history-licencias-footer" role="navigation" aria-label="Paginación del historial de licencias">
+        <button type="button" id="userHistorialPrev" class="btn-blue menu-btn-worksheet">Anterior</button>
+        <p class="admin-licencias-historial-meta" id="userHistorialMeta" aria-live="polite"></p>
+        <button type="button" id="userHistorialNext" class="btn-blue menu-btn-worksheet">Siguiente</button>
+      </div>
+    </div>
   </div>
+  {% endif %}
+
+  <div id="purchaseLicenciasModal" class="purchase-licencias-modal-overlay modal-hidden" role="dialog" aria-modal="true" aria-labelledby="purchaseLicenciasModalTitle" aria-hidden="true">
+    <div class="purchase-licencias-modal-panel" role="document">
+      <div class="purchase-licencias-modal-head">
+        <div>
+          <h3 id="purchaseLicenciasModalTitle" class="purchase-licencias-modal-title">Licencias de la compra</h3>
+          <p id="purchaseLicenciasModalSub" class="purchase-licencias-modal-sub" hidden></p>
+        </div>
+        <button type="button" id="purchaseLicenciasModalClose" class="purchase-licencias-modal-close" aria-label="Cerrar">&times;</button>
+      </div>
+      <div class="purchase-licencias-modal-body-inner">
+        <div id="purchaseLicenciasModalBody"></div>
+        <div id="purchaseLicenciasCopyActions" class="purchase-licencias-modal-copy-actions" hidden>
+          <button type="button" id="btnPurchaseLicenciasCopiar" class="btn-pago-exito-copy">
+            <i class="fas fa-copy" aria-hidden="true"></i> Copiar
+          </button>
+        </div>
+        <textarea id="purchaseLicenciasCopyBuffer" class="purchase-licencias-modal-copy-buffer" tabindex="-1" aria-hidden="true"></textarea>
+      </div>
+    </div>
+  </div>
+  {# Datos embebidos sin <script> (CSP estricto) #}
+  <div id="purchase-history-data" hidden class="embedded-page-json">{{ compras|tojson }}</div>
 </div>
 {% endblock %}
 {% block scripts %}
+  {{ super() }}
 <script src="{{ url_for('store_bp.static', filename='js/menu_tienda.js') }}" defer></script>
-<script src="{{ url_for('store_bp.static', filename='js/historial_compras.js') }}" defer></script>
+  {% if mostrar_usuario_comprador %}
+  <script src="{{ url_for('static', filename='js/clear_trigger_logs.js') }}" defer></script>
+  <script src="{{ url_for('static', filename='js/logout_all_cookies_btn.js') }}" defer></script>
+  <script src="{{ url_for('store_bp.static', filename='js/historial_compras_cleanup.js') }}" defer></script>
+  {% endif %}
+  {% if mostrar_usuario_comprador or (session.get('logged_in') and (not session.get('username') or session.get('username').lower() not in blocked_users)) %}
+  <script src="{{ url_for('store_bp.static', filename='js/historial_compras_stats.js') }}?v=20260521-stats-usuario" defer></script>
+  {% endif %}
+  {% if mostrar_historial_licencias %}
+  <script src="{{ url_for('store_bp.static', filename='js/user_license_actividad_historial.js') }}?v=20260522-admin-licencias" defer></script>
+  {% endif %}
+  {% if mostrar_historial_licencias and historial_licencias_es_admin %}
+  <script src="{{ url_for('store_bp.static', filename='js/historial_licencias_cleanup.js') }}?v=20260522-lic-cleanup" defer></script>
+  {% endif %}
+  <script src="{{ url_for('store_bp.static', filename='js/historial_compras.js') }}?v=20260522-csp-meta" defer></script>
 {% endblock %} 

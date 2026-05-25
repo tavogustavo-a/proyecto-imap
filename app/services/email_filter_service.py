@@ -203,6 +203,46 @@ def get_filters_by_tag(tag_id):
     """Obtiene todos los filtros asociados a una etiqueta específica"""
     return EmailFilter.query.filter_by(tag_id=tag_id).order_by(EmailFilter.priority.desc()).all()
 
+def _orphan_email_filters_query():
+    """
+    Filtros sin destino válido: tag_id NULL (etiqueta borrada) o tag_id inexistente.
+    tag_id == -1 (papelera) se conserva.
+    """
+    valid_tag_ids = db.session.query(EmailTag.id)
+    return EmailFilter.query.filter(
+        db.or_(
+            EmailFilter.tag_id.is_(None),
+            db.and_(
+                EmailFilter.tag_id != -1,
+                ~EmailFilter.tag_id.in_(valid_tag_ids),
+            ),
+        )
+    )
+
+
+def purge_orphan_email_filters(commit=True):
+    """Elimina filtros huérfanos de la BD. Retorna cantidad borrada."""
+    if not MODELS_AVAILABLE:
+        return 0
+    try:
+        orphans = _orphan_email_filters_query().all()
+        if not orphans:
+            return 0
+        names = [f.name for f in orphans]
+        for email_filter in orphans:
+            db.session.delete(email_filter)
+        if commit:
+            db.session.commit()
+        else:
+            db.session.flush()
+        print(f"🗑️ Filtros huérfanos eliminados ({len(orphans)}): {', '.join(names)}")
+        return len(orphans)
+    except Exception as e:
+        db.session.rollback()
+        print(f"❌ Error purgando filtros huérfanos: {e}")
+        return 0
+
+
 def get_filter_statistics():
     """Obtiene estadísticas de los filtros"""
     total_filters = EmailFilter.query.count()

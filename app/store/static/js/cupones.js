@@ -63,6 +63,13 @@ function renderCouponPage() {
 }
 
 document.addEventListener('DOMContentLoaded', function() {
+  if (window.location.hash === '#admin-cupones') {
+    const cuponesSection = document.getElementById('admin-cupones');
+    if (cuponesSection) {
+      cuponesSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  }
+
   // Las declaraciones duplicadas de variables globales aquí
   // están definidas arriba
 

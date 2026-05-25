@@ -156,11 +156,11 @@ def start_scheduler_if_needed():
                 )
 
                 _scheduler.add_job(
-                    func=sync_month_to_month_changes_midnight_job,
+                    func=license_day_renewal_midnight_job,
                     trigger='cron',
                     hour=0,
-                    minute=0,
-                    id='sync_month_to_month_expired_to_changes',
+                    minute=5,
+                    id='license_day_renewal_midnight',
                     replace_existing=True,
                     timezone=ZoneInfo('America/Bogota'),
                 )
@@ -911,22 +911,33 @@ def scheduled_email_buzon_cleanup_tick_job():
             app.logger.warning("Buzón email: error en limpieza programada (tick): %s", e)
 
 
-def sync_month_to_month_changes_midnight_job():
-    """00:00 Colombia: vencidas mes a mes → bloc Cambios (cuentas con expires_at pasado + líneas en expired_notes)."""
+def license_day_renewal_midnight_job():
+    """
+    00:05 Colombia: renovar / dejar mes a mes en el día del calendario;
+    luego vencidas → Cambios (producto mes a mes) o Vencidas (no renovar / —).
+    """
     with app.app_context():
         try:
-            from app.store.month_to_month_changes_job import sync_month_to_month_expired_accounts_to_changes
+            from app.store.license_day_renewal_job import run_license_day_renewal_pipeline
 
-            r = sync_month_to_month_expired_accounts_to_changes()
-            if r.get('lines_added'):
+            r = run_license_day_renewal_pipeline()
+            ren = r.get('renewals') or {}
+            exp = r.get('expired') or {}
+            if ren.get('charged') or exp.get('lines_moved'):
                 app.logger.info(
-                    "Cambios mes a mes (medianoche CO): +%s líneas en %s licencias",
-                    r['lines_added'],
-                    r['licenses_touched'],
+                    "Licencias día %s (CO): cobradas=%s, movidas_vencidas=%s",
+                    r.get('calendar_day'),
+                    ren.get('charged', 0),
+                    exp.get('lines_moved', 0),
                 )
         except Exception as e:
             db.session.rollback()
-            app.logger.warning("Cambios mes a mes (medianoche CO): %s", e)
+            app.logger.warning("Licencias renovación día (medianoche CO): %s", e)
+
+
+def sync_month_to_month_changes_midnight_job():
+    """Alias: misma tubería que license_day_renewal_midnight_job (compatibilidad)."""
+    license_day_renewal_midnight_job()
 
 
 def hourly_sqlite_backup_job():
@@ -1062,11 +1073,11 @@ def main():
         )
 
         scheduler.add_job(
-            func=sync_month_to_month_changes_midnight_job,
+            func=license_day_renewal_midnight_job,
             trigger='cron',
             hour=0,
-            minute=0,
-            id='sync_month_to_month_expired_to_changes',
+            minute=5,
+            id='license_day_renewal_midnight',
             replace_existing=True,
             timezone=ZoneInfo('America/Bogota'),
         )

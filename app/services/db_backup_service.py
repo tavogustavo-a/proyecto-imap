@@ -316,6 +316,39 @@ def delete_backup_file(filename: str, app=None) -> tuple[bool, str]:
         return False, f'No se pudo eliminar: {e}'
 
 
+def delete_all_backups_except_latest(app=None) -> tuple[bool, str]:
+    """
+    Elimina todas las copias guardadas excepto la más reciente (por fecha de modificación).
+    Retorna (éxito, mensaje).
+    """
+    app = app or current_app
+    rows = list_backup_files(app)
+    if not rows:
+        return False, 'No hay copias para eliminar.'
+    if len(rows) == 1:
+        return True, f'Solo hay una copia ({rows[0]["name"]}); no se eliminó nada.'
+
+    keep_name = rows[0]['name']
+    deleted = 0
+    errors: list[str] = []
+    for row in rows[1:]:
+        ok, msg = delete_backup_file(row['name'], app)
+        if ok:
+            deleted += 1
+        else:
+            errors.append(f'{row["name"]}: {msg}')
+
+    if deleted == 0 and errors:
+        return False, 'No se pudo eliminar ninguna copia. ' + '; '.join(errors[:3])
+
+    out = f'Se eliminaron {deleted} copia(s). Se conservó la más reciente: {keep_name}.'
+    if errors:
+        out += ' Algunas copias no se pudieron borrar: ' + '; '.join(errors[:3])
+        if len(errors) > 3:
+            out += f' (+{len(errors) - 3} más)'
+    return True, out
+
+
 def scheduled_backup_tick(app=None):
     """Llamada desde APScheduler (hourly)."""
     create_auto_backup_now(app)

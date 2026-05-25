@@ -1,0 +1,121 @@
+{% extends "base.html" %}
+
+{% block title %}Chatbot respuestas-preguntas{% endblock %}
+
+{% block head %}{{ super() }}<link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}?v=20260519-chatbot-hub"><link rel="stylesheet" href="{{ url_for('static', filename='fontawesome/css/all.css') }}">{% endblock %}
+{% block content %}
+<div class="container container-max-width-900 store-light store-front-main px-2 pb-3 chatbot-rp-page"
+     {% if is_admin %}
+     data-clear-trigger-log-url="{{ url_for('admin_bp.clear_trigger_log') }}"
+     data-logout-all-cookies-url="{{ url_for('admin_bp.logout_all_and_clear_cookies') }}"
+     {% endif %}>
+  {% if session.get('logged_in') %}
+    <div class="d-flex align-items-center store-front-header gap-2 espaciado-responsive flex-wrap">
+      <button id="menuToggleBtn" class="btn-blue menu-btn-worksheet" type="button">&#9776; Menú</button>
+      {% if is_admin %}
+        <button id="menu2ToggleBtn" class="btn-blue menu-btn-worksheet" type="button">&#9776; Menú2</button>
+      {% endif %}
+    </div>
+    <div id="mobileMenu" class="mobile-menu-store hidden">
+      <div class="menu-user-info-row menu-user-info-row--name-only menu-sidebar-heading-name">
+        <span class="menu-user-name">{{ session.get('username', 'Usuario') }}</span>
+      </div>
+      {% if is_admin %}
+        {% include 'includes/admin_menu_primary_links.html' %}
+        <button id="btnClearTriggerLogMenu" type="button" class="btn-panel btn-red mobile-menu-btn mb-04"><i class="fas fa-trash"></i> Limpiar Logs</button>
+        <a href="{{ url_for('auth_bp.logout') }}" class="btn-panel btn-red mobile-menu-btn mb-04"><i class="fas fa-sign-out-alt"></i> Cerrar Sesión</a>
+        <button id="btnLogoutAllAndClearCookies" type="button" class="btn-panel btn-red mobile-menu-btn mb-04" data-url="{{ url_for('admin_bp.logout_all_and_clear_cookies') }}"><i class="fas fa-cookie-bite"></i> Cerrar sesión y limpiar cookies</button>
+        {% include 'includes/store_user_menu_saldo_block.html' %}
+      {% else %}
+        {% include 'includes/store_user_menu_sidebar_body.html' %}
+      {% endif %}
+    </div>
+    {% if is_admin %}
+    <div id="mobileMenu2" class="mobile-menu-store hidden">
+      <div class="menu-user-info-row menu-user-info-row--name-only menu-sidebar-heading-name">
+        <span class="menu-user-name">Menú</span>
+      </div>
+      {% include 'includes/admin_menu_secondary_links.html' %}
+      {% include 'includes/admin_menu_licencias_extra_links.html' %}
+      {% include 'includes/store_user_menu_saldo_block.html' %}
+    </div>
+    {% endif %}
+    <div id="menuOverlay" class="menu-overlay"></div>
+  {% endif %}
+
+  <header class="chatbot-rp-header mt-2 mb-2">
+    <h1 class="chatbot-rp-title"><i class="fas fa-robot" aria-hidden="true"></i> {% if is_admin %}Chatbot — centro de integraciones{% else %}Chatbot respuestas{% endif %}</h1>
+  </header>
+
+  {% if is_admin %}
+  <nav class="chatbot-rp-tabs" role="tablist" aria-label="Secciones del chatbot">
+    <button type="button" class="chatbot-rp-tab chatbot-rp-tab--active" role="tab" aria-selected="true" aria-controls="chatbotRpPanelAsistente" id="chatbotRpTabAsistente" data-chatbot-tab="asistente">Asistente</button>
+    <button type="button" class="chatbot-rp-tab" role="tab" aria-selected="false" aria-controls="chatbotRpPanelIntegraciones" id="chatbotRpTabIntegraciones" data-chatbot-tab="integraciones">Integraciones</button>
+  </nav>
+  {% endif %}
+
+  <div id="chatbotRpPanelAsistente" class="chatbot-rp-panel" role="tabpanel" aria-labelledby="chatbotRpTabAsistente">
+    <div class="chatbot-rp-layout{% if not is_admin %} chatbot-rp-layout--solo-chat{% endif %}">
+      <section class="chatbot-rp-chat-card" aria-label="Conversación">
+        <div id="chatbotRpMessages" class="chatbot-rp-messages" role="log" aria-live="polite"></div>
+        <form id="chatbotRpForm" class="chatbot-rp-input-row">
+          <button type="button" id="chatbotRpMicBtn" class="btn-panel btn-blue chatbot-rp-mic" title="Iniciar o detener conversación por voz en tiempo real" aria-label="Conversación por voz" aria-pressed="false">
+            <i class="fas fa-microphone" aria-hidden="true"></i>
+          </button>
+          <label for="chatbotRpInput" class="sr-only">Tu pregunta</label>
+          <textarea id="chatbotRpInput" class="form-control chatbot-rp-input" rows="2" placeholder="Escribe o pulsa el micrófono para hablar en vivo…" autocomplete="off"></textarea>
+          <button type="submit" id="chatbotRpSendBtn" class="btn-panel btn-blue chatbot-rp-send">
+            <i class="fas fa-paper-plane" aria-hidden="true"></i>
+          </button>
+        </form>
+        <div class="chatbot-rp-options">
+          <label class="chatbot-rp-check"><input type="checkbox" id="chatbotRpVoiceRealtime" checked> Escuchar respuestas del asistente (voz en tiempo real)</label>
+          <span id="chatbotRpMicStatus" class="chatbot-rp-mic-status" aria-live="polite"></span>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  {% if is_admin %}
+  <div id="chatbotRpPanelIntegraciones" class="chatbot-rp-panel chatbot-rp-panel--hidden" role="tabpanel" aria-labelledby="chatbotRpTabIntegraciones" hidden>
+    {% include 'includes/chatbot_hub_modules_panel.html' %}
+    <aside id="chatbotRpKnowledgeBlock" class="chatbot-rp-knowledge-card mt-3" aria-labelledby="chatbotRpKnowledgeTitle">
+      <h2 id="chatbotRpKnowledgeTitle" class="chatbot-rp-section-title">Base de conocimiento</h2>
+      <p class="chatbot-rp-knowledge-hint">Pega resúmenes de NotebookLM, guías o notas. El bot los usará al responder en «Asistente».</p>
+      <form id="chatbotRpKnowledgeForm" class="chatbot-rp-knowledge-form">
+        <div class="chatbot-rp-field">
+          <label for="chatbotRpKnowTitle">Título</label>
+          <input type="text" id="chatbotRpKnowTitle" class="form-control" maxlength="120" placeholder="Ej. Video capacitación renovaciones">
+        </div>
+        <div class="chatbot-rp-field">
+          <label for="chatbotRpKnowYoutube">Enlace YouTube (opcional)</label>
+          <input type="url" id="chatbotRpKnowYoutube" class="form-control" placeholder="https://www.youtube.com/watch?v=…">
+        </div>
+        <div class="chatbot-rp-field">
+          <label for="chatbotRpKnowContent">Contenido / resumen</label>
+          <textarea id="chatbotRpKnowContent" class="form-control" rows="6" required placeholder="Pega aquí el texto extraído del video o tus apuntes…"></textarea>
+        </div>
+        <button type="submit" class="btn-panel btn-blue w-100">Guardar en la base</button>
+      </form>
+      <ul id="chatbotRpSourcesList" class="chatbot-rp-sources-list">
+        {% for s in knowledge_sources %}
+        <li><span class="chatbot-rp-src-type">{{ s.type }}</span> {{ s.title }}</li>
+        {% endfor %}
+      </ul>
+    </aside>
+  </div>
+  {% endif %}
+  {# Meta embebida sin <script> (CSP estricto) #}
+  <div id="chatbot-rp-meta" hidden class="embedded-page-json"
+       data-chatbot-rp-meta="{{ {'askUrl': url_for('store_bp.api_chatbot_respuestas_ask'), 'knowledgeUrl': url_for('store_bp.api_chatbot_respuestas_knowledge'), 'isAdmin': is_admin}|tojson|e }}"></div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('store_bp.static', filename='js/menu_tienda.js') }}" defer></script>
+{% if is_admin %}
+<meta name="clear_trigger_log_url" content="{{ url_for('admin_bp.clear_trigger_log') }}">
+<script src="{{ url_for('static', filename='js/clear_trigger_logs.js') }}" defer></script>
+<script src="{{ url_for('static', filename='js/logout_all_cookies_btn.js') }}" defer></script>
+{% endif %}
+<script src="{{ url_for('store_bp.static', filename='js/chatbot_respuestas.js') }}?v=20260522-csp-meta" defer></script>
+{% endblock %}

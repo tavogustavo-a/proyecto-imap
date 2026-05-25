@@ -1532,6 +1532,13 @@ form {
   font-size: 1.4rem;
 }
 
+.filters-header-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
 .filters-list {
   display: flex;
   flex-direction: column;

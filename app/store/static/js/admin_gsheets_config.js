@@ -274,17 +274,6 @@ document.addEventListener('DOMContentLoaded', function() {
     .catch(() => showStatus('Error de red al guardar cambios.', false));
   });
 
-  // Botón Volver al Panel
-  const btnVolverPanel = document.getElementById('btnVolverPanel');
-  if (btnVolverPanel) {
-    btnVolverPanel.addEventListener('click', function() {
-      const url = this.getAttribute('data-url');
-      if (url) {
-        window.location.href = url;
-      }
-    });
-  }
-
   // Inicio
   loadLinksTable();
 }); 
