@@ -145,6 +145,49 @@ def create_app(config_class_passed=None):
             insp = inspect(db.engine)
             dialect = getattr(db.engine.dialect, "name", "") or ""
 
+            if insp.has_table("store_license_accounts"):
+                acc_cols = {c["name"].lower() for c in insp.get_columns("store_license_accounts")}
+                reserved_at_type = "TIMESTAMP" if dialect == "postgresql" else "DATETIME"
+                if "renewal_reserved_user_id" not in acc_cols:
+                    if dialect == "postgresql":
+                        db.session.execute(
+                            text(
+                                "ALTER TABLE store_license_accounts ADD COLUMN renewal_reserved_user_id INTEGER "
+                                "REFERENCES users(id) ON DELETE SET NULL"
+                            )
+                        )
+                    else:
+                        db.session.execute(
+                            text(
+                                "ALTER TABLE store_license_accounts ADD COLUMN renewal_reserved_user_id INTEGER"
+                            )
+                        )
+                    db.session.commit()
+                    app.logger.info(
+                        "Esquema: columna renewal_reserved_user_id añadida a store_license_accounts"
+                    )
+                    acc_cols.add("renewal_reserved_user_id")
+                if "renewal_reserved_at" not in acc_cols:
+                    db.session.execute(
+                        text(
+                            f"ALTER TABLE store_license_accounts ADD COLUMN renewal_reserved_at {reserved_at_type}"
+                        )
+                    )
+                    db.session.commit()
+                    app.logger.info(
+                        "Esquema: columna renewal_reserved_at añadida a store_license_accounts"
+                    )
+        except Exception as schema_acc_err:
+            db.session.rollback()
+            app.logger.warning(
+                "No se pudo aplicar parche store_license_accounts (renewal_reserved): %s",
+                schema_acc_err,
+            )
+
+        try:
+            insp = inspect(db.engine)
+            dialect = getattr(db.engine.dialect, "name", "") or ""
+
             def _cols(table):
                 raw = insp.get_columns(table)
                 # PostgreSQL devuelve nombres en minúsculas; el modelo suele usar minúsculas igual.

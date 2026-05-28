@@ -4491,17 +4491,33 @@ def _ensure_license_account_renewal_reserve_columns():
         inspector = inspect(db.engine)
         if 'store_license_accounts' not in inspector.get_table_names():
             return
-        cols = {c['name'] for c in inspector.get_columns('store_license_accounts')}
+        cols = {c['name'].lower() for c in inspector.get_columns('store_license_accounts')}
+        dialect = getattr(db.engine.dialect, 'name', '') or ''
+        reserved_at_type = 'TIMESTAMP' if dialect == 'postgresql' else 'DATETIME'
+
         if 'renewal_reserved_user_id' not in cols:
-            db.session.execute(
-                text('ALTER TABLE store_license_accounts ADD COLUMN renewal_reserved_user_id INTEGER')
-            )
+            if dialect == 'postgresql':
+                db.session.execute(
+                    text(
+                        'ALTER TABLE store_license_accounts ADD COLUMN renewal_reserved_user_id INTEGER '
+                        'REFERENCES users(id) ON DELETE SET NULL'
+                    )
+                )
+            else:
+                db.session.execute(
+                    text(
+                        'ALTER TABLE store_license_accounts ADD COLUMN renewal_reserved_user_id INTEGER'
+                    )
+                )
         if 'renewal_reserved_at' not in cols:
             db.session.execute(
-                text('ALTER TABLE store_license_accounts ADD COLUMN renewal_reserved_at DATETIME')
+                text(
+                    f'ALTER TABLE store_license_accounts ADD COLUMN renewal_reserved_at {reserved_at_type}'
+                )
             )
         db.session.commit()
     except Exception as e:
+        db.session.rollback()
         current_app.logger.warning(
             'No se pudo asegurar columnas renewal_reserved en cuentas: %s', e
         )
@@ -8107,6 +8123,7 @@ def api_get_licenses():
         _ensure_license_day_notepads_column()
         _ensure_license_portal_day_row_notes_column()
         _ensure_license_account_client_notes_column()
+        _ensure_license_account_renewal_reserve_columns()
         _ensure_license_warranty_days_column()
         _ensure_license_expired_notes_and_month_columns()
         _ensure_license_changes_notes_column()
