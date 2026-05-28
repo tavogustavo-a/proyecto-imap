@@ -9217,6 +9217,9 @@ function adminLicenseSplitCreateRow(
     n.setAttribute('aria-label', 'Notas de la licencia');
     n.placeholder = 'Notas';
     adminLicenseInitNoteField(n, row, initialExtra);
+    const lead = document.createElement('div');
+    lead.className = 'license-split-editor__lead';
+    lead.appendChild(daySellCell);
     lead.appendChild(userWrap);
     row.appendChild(lead);
     row.appendChild(statusWrap);
