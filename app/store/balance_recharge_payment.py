@@ -24,7 +24,7 @@ _DEFAULT_METHODS: Dict[str, List[Dict[str, Any]]] = {
         {
             'id': 'bancolombia',
             'label': 'Bancolombia / transferencia',
-            'details': 'Cuenta de ahorros (configura los datos en administración).',
+            'details': 'Cuenta destino: 72577661350 (configura el número en administración).',
             'enabled': True,
         },
     ],

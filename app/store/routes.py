@@ -5409,17 +5409,52 @@ def _ensure_balance_recharges_table():
             BalanceRecharge.__table__.create(db.engine)
         else:
             cols = {c['name'].lower() for c in inspect(db.engine).get_columns('store_balance_recharges')}
-            if 'payment_method_id' not in cols:
-                db.session.execute(
-                    text('ALTER TABLE store_balance_recharges ADD COLUMN payment_method_id VARCHAR(48)')
-                )
-                db.session.commit()
+            migrations = [
+                ('payment_method_id', 'ALTER TABLE store_balance_recharges ADD COLUMN payment_method_id VARCHAR(48)'),
+                ('auto_credited', 'ALTER TABLE store_balance_recharges ADD COLUMN auto_credited BOOLEAN DEFAULT FALSE'),
+                ('amount_credited', 'ALTER TABLE store_balance_recharges ADD COLUMN amount_credited NUMERIC(12, 2)'),
+                ('analyzer_json', 'ALTER TABLE store_balance_recharges ADD COLUMN analyzer_json TEXT'),
+                ('admin_verified', 'ALTER TABLE store_balance_recharges ADD COLUMN admin_verified BOOLEAN'),
+                ('receipt_number', 'ALTER TABLE store_balance_recharges ADD COLUMN receipt_number VARCHAR(32)'),
+                ('proof_image_hash', 'ALTER TABLE store_balance_recharges ADD COLUMN proof_image_hash VARCHAR(64)'),
+            ]
+            for col_name, ddl in migrations:
+                if col_name not in cols:
+                    db.session.execute(text(ddl))
+            db.session.commit()
     except Exception as e:
         current_app.logger.warning('No se pudo asegurar tabla store_balance_recharges: %s', e)
         try:
             db.session.rollback()
         except Exception:
             pass
+
+
+def _user_has_recarga_automatica(user):
+    if not user:
+        return False
+    billing = _balance_recharge_viewer_billing_user(user)
+    target = billing or user
+    up = target.user_prices if isinstance(getattr(target, 'user_prices', None), dict) else {}
+    return bool(up and up.get('recarga_automatica'))
+
+
+def _apply_balance_credit(target_user, currency, amount):
+    cur = (currency or 'COP').strip().upper()
+    amt = float(amount)
+    if cur == 'USD':
+        target_user.saldo_usd = float(getattr(target_user, 'saldo_usd', 0) or 0) + amt
+    else:
+        target_user.saldo_cop = float(getattr(target_user, 'saldo_cop', 0) or 0) + amt
+
+
+def _apply_balance_debit(target_user, currency, amount):
+    cur = (currency or 'COP').strip().upper()
+    amt = float(amount)
+    if cur == 'USD':
+        target_user.saldo_usd = float(getattr(target_user, 'saldo_usd', 0) or 0) - amt
+    else:
+        target_user.saldo_cop = float(getattr(target_user, 'saldo_cop', 0) or 0) - amt
 
 
 def _balance_recharge_upload_dir():
@@ -5437,6 +5472,35 @@ def _balance_recharge_files_list(recharge_row):
     except Exception:
         return []
     return data if isinstance(data, list) else []
+
+
+def _balance_recharge_proof_payload(recharge_row):
+    """URLs de comprobantes existentes en disco; marca si había referencia pero falta el archivo."""
+    import os
+
+    files = _balance_recharge_files_list(recharge_row)
+    upload_dir = _balance_recharge_upload_dir()
+    proof_urls = []
+    referenced = 0
+    for idx, entry in enumerate(files):
+        stored = entry.get('stored') if isinstance(entry, dict) else None
+        if not stored:
+            continue
+        referenced += 1
+        path = os.path.join(upload_dir, stored)
+        if os.path.isfile(path):
+            proof_urls.append(
+                url_for(
+                    'store_bp.api_user_balance_recharge_proof',
+                    recharge_id=recharge_row.id,
+                    file_index=idx,
+                )
+            )
+    return {
+        'proof_count': len(files),
+        'proof_urls': proof_urls,
+        'proof_missing': referenced > 0 and not proof_urls,
+    }
 
 
 def _balance_recharge_viewer_billing_user(viewer):
@@ -5482,13 +5546,29 @@ def _balance_recharge_row_accessible(recharge_row, viewer):
     return billing and recharge_row.user_id == billing.id
 
 
-def _balance_recharge_status_label(status):
+def _balance_recharge_status_label(status, recharge_row=None):
+    st = (status or '').lower()
+    if st == 'approved' and recharge_row and getattr(recharge_row, 'auto_credited', False):
+        return 'Aprobado/acreditado'
     labels = {
         'pending': 'Pendiente',
         'approved': 'Aprobada',
         'rejected': 'Rechazada',
+        'auto_credited': '',
     }
-    return labels.get((status or '').lower(), status or '—')
+    return labels.get(st, status or '—')
+
+
+def _balance_recharge_analyzer_payload(recharge_row):
+    import json as _json
+    raw = getattr(recharge_row, 'analyzer_json', None)
+    if not raw:
+        return None
+    try:
+        data = _json.loads(raw)
+        return data if isinstance(data, dict) else None
+    except Exception:
+        return None
 
 
 def _serialize_balance_recharge_row(recharge_row, viewer, *, include_username=False):
@@ -5497,22 +5577,13 @@ def _serialize_balance_recharge_row(recharge_row, viewer, *, include_username=Fa
         method_label_by_id,
     )
 
-    files = _balance_recharge_files_list(recharge_row)
     created = recharge_row.created_at
     if created:
         created = utc_to_colombia(created)
         fecha_str = created.strftime('%y/%m/%d %I:%M:%S %p')
     else:
         fecha_str = ''
-    proof_urls = []
-    for idx, _f in enumerate(files):
-        proof_urls.append(
-            url_for(
-                'store_bp.api_user_balance_recharge_proof',
-                recharge_id=recharge_row.id,
-                file_index=idx,
-            )
-        )
+    proof_payload = _balance_recharge_proof_payload(recharge_row)
     cur = (recharge_row.currency or 'COP').strip().upper()
     pm_id = getattr(recharge_row, 'payment_method_id', None) or ''
     row = {
@@ -5525,11 +5596,17 @@ def _serialize_balance_recharge_row(recharge_row, viewer, *, include_username=Fa
         'amount_claimed': float(recharge_row.amount_claimed) if recharge_row.amount_claimed is not None else None,
         'note': recharge_row.note or '',
         'status': recharge_row.status,
-        'status_label': _balance_recharge_status_label(recharge_row.status),
+        'status_label': _balance_recharge_status_label(recharge_row.status, recharge_row),
+        'auto_credited': bool(getattr(recharge_row, 'auto_credited', False)),
+        'amount_credited': float(recharge_row.amount_credited) if getattr(recharge_row, 'amount_credited', None) is not None else None,
+        'admin_verified': getattr(recharge_row, 'admin_verified', None),
+        'receipt_number': getattr(recharge_row, 'receipt_number', None),
+        'analyzer': _balance_recharge_analyzer_payload(recharge_row),
         'created_at': fecha_str,
         'admin_note': recharge_row.admin_note or '',
-        'proof_count': len(files),
-        'proof_urls': proof_urls,
+        'proof_count': proof_payload['proof_count'],
+        'proof_urls': proof_payload['proof_urls'],
+        'proof_missing': proof_payload['proof_missing'],
     }
     if include_username:
         u = User.query.get(recharge_row.user_id)
@@ -5604,6 +5681,7 @@ def api_user_balance_recharges():
 
 @store_bp.route('/api/user/balance-recharge', methods=['POST'])
 @store_access_required
+@csrf_exempt_route
 def api_user_balance_recharge_submit():
     import json as _json
     import os
@@ -5662,7 +5740,8 @@ def api_user_balance_recharge_submit():
             return jsonify({'success': False, 'message': 'Solo se permiten imágenes (JPG, PNG, WebP, GIF)'}), 400
 
         base = secure_filename(file.filename) or 'comprobante.jpg'
-        stored = f"{billing.id}_{timestamp}_{len(saved_files)}_{base}"
+        import uuid as _uuid
+        stored = f"{billing.id}_{timestamp}_{_uuid.uuid4().hex[:10]}_{base}"
         path = os.path.join(upload_dir, stored)
         file.save(path)
         if not os.path.exists(path) or os.path.getsize(path) == 0:
@@ -5685,6 +5764,54 @@ def api_user_balance_recharge_submit():
     if payment_method_id not in allowed_ids:
         return jsonify({'success': False, 'message': 'Selecciona un medio de pago válido'}), 400
 
+    selected_method = next((m for m in allowed if m.get('id') == payment_method_id), {})
+    pm_label = selected_method.get('label') or ''
+    pm_details = selected_method.get('details') or ''
+
+    auto_recharge = _user_has_recarga_automatica(user)
+    proof_path = os.path.join(upload_dir, saved_files[0]['stored'])
+
+    from app.store.balance_recharge_analyzer import (
+        analyze_recharge_proof,
+        find_duplicate_recharge,
+        proof_image_hash as compute_proof_hash,
+    )
+
+    img_hash = compute_proof_hash(proof_path)
+    upload_day = get_colombia_now().date()
+    analysis = analyze_recharge_proof(
+        proof_path,
+        amount_val,
+        currency,
+        payment_method_id,
+        payment_method_label=pm_label,
+        payment_method_details=pm_details,
+        upload_date=upload_day,
+    )
+    receipt_no = analysis.get('receipt_number')
+
+    duplicate = find_duplicate_recharge(
+        receipt_number=receipt_no,
+        proof_image_hash=img_hash,
+        user_id=billing.id,
+    )
+    if duplicate:
+        existing_stored = None
+        ex_id = duplicate.get('existing_id')
+        if ex_id:
+            ex_row = BalanceRecharge.query.get(int(ex_id))
+            if ex_row:
+                ex_files = _balance_recharge_files_list(ex_row)
+                if ex_files and isinstance(ex_files[0], dict):
+                    existing_stored = ex_files[0].get('stored')
+        new_stored = saved_files[0].get('stored')
+        if new_stored and new_stored != existing_stored:
+            try:
+                os.remove(proof_path)
+            except OSError:
+                pass
+        return jsonify({'success': False, 'message': duplicate['message']}), 409
+
     row = BalanceRecharge(
         user_id=billing.id,
         submitted_by_user_id=user.id,
@@ -5694,14 +5821,31 @@ def api_user_balance_recharge_submit():
         note=None,
         status='pending',
         proof_files_json=_json.dumps(saved_files),
+        auto_credited=False,
+        receipt_number=receipt_no,
+        proof_image_hash=img_hash,
     )
+
+    if auto_recharge:
+        row.analyzer_json = _json.dumps(analysis, ensure_ascii=False)
+        row.auto_credited = True
+        row.amount_credited = amount_val
+        row.status = 'auto_credited'
+        row.admin_verified = None
+        _apply_balance_credit(billing, currency, float(amount_val))
+        message = 'Saldo acreditado automáticamente. Un administrador verificará el comprobante.'
+    else:
+        row.analyzer_json = _json.dumps(analysis, ensure_ascii=False)
+        message = 'Solicitud enviada. Te avisaremos cuando se revise.'
+
     db.session.add(row)
     db.session.commit()
 
     return jsonify({
         'success': True,
-        'message': 'Solicitud enviada. Te avisaremos cuando se revise.',
+        'message': message,
         'item': _serialize_balance_recharge_row(row, user),
+        'auto_credited': auto_recharge,
     })
 
 
@@ -5956,13 +6100,23 @@ def api_admin_balance_recharges():
     _ensure_balance_recharges_table()
     status = (request.args.get('status') or 'pending').strip().lower()
     q = BalanceRecharge.query.order_by(BalanceRecharge.created_at.desc())
-    if status != 'all':
+    if status == 'auto_pending':
+        q = q.filter(
+            BalanceRecharge.status == 'auto_credited',
+            BalanceRecharge.admin_verified.is_(None),
+        )
+    elif status != 'all':
         q = q.filter(BalanceRecharge.status == status)
     rows = q.limit(200).all()
     pending_count = BalanceRecharge.query.filter_by(status='pending').count()
+    auto_pending_count = BalanceRecharge.query.filter(
+        BalanceRecharge.status == 'auto_credited',
+        BalanceRecharge.admin_verified.is_(None),
+    ).count()
     return jsonify({
         'success': True,
         'pending_count': pending_count,
+        'auto_pending_count': auto_pending_count,
         'items': [_serialize_balance_recharge_row(r, None, include_username=True) for r in rows],
     })
 
@@ -5979,12 +6133,54 @@ def api_admin_balance_recharge_review(recharge_id):
     row = BalanceRecharge.query.get(recharge_id)
     if not row:
         return jsonify({'success': False, 'message': 'Solicitud no encontrada'}), 404
-    if (row.status or '').lower() != 'pending':
-        return jsonify({'success': False, 'message': 'La solicitud ya fue revisada'}), 400
 
     data = request.get_json(silent=True) or {}
     action = (data.get('action') or '').strip().lower()
     admin_note = (data.get('admin_note') or '').strip()[:2000]
+    row_status = (row.status or '').lower()
+
+    if row_status == 'auto_credited' and row.admin_verified is None:
+        target = User.query.get(row.user_id)
+        if not target:
+            return jsonify({'success': False, 'message': 'Usuario no encontrado'}), 404
+        cur = (row.currency or 'COP').strip().upper()
+        credited = row.amount_credited if row.amount_credited is not None else row.amount_claimed
+        amt = float(credited) if credited is not None else 0.0
+
+        if action == 'confirm_auto':
+            row.status = 'approved'
+            row.admin_verified = True
+            row.admin_note = admin_note
+            row.reviewed_at = datetime.utcnow()
+            row.reviewed_by_user_id = admin_user.id if admin_user else None
+            db.session.commit()
+            return jsonify({
+                'success': True,
+                'message': 'Recarga automática confirmada.',
+                'item': _serialize_balance_recharge_row(row, None, include_username=True),
+            })
+
+        if action == 'reject_auto':
+            if amt > 0:
+                _apply_balance_debit(target, cur, amt)
+            row.status = 'rejected'
+            row.admin_verified = False
+            row.admin_note = admin_note
+            row.reviewed_at = datetime.utcnow()
+            row.reviewed_by_user_id = admin_user.id if admin_user else None
+            db.session.commit()
+            return jsonify({
+                'success': True,
+                'message': 'Recarga revertida y saldo descontado.',
+                'item': _serialize_balance_recharge_row(row, None, include_username=True),
+                'new_saldo_usd': float(target.saldo_usd or 0),
+                'new_saldo_cop': float(target.saldo_cop or 0),
+            })
+
+        return jsonify({'success': False, 'message': 'Acción no válida para recarga automática'}), 400
+
+    if row_status != 'pending':
+        return jsonify({'success': False, 'message': 'La solicitud ya fue revisada'}), 400
 
     if action == 'reject':
         row.status = 'rejected'
@@ -6018,10 +6214,7 @@ def api_admin_balance_recharge_review(recharge_id):
 
     cur = (row.currency or 'COP').strip().upper()
     amt = float(amount_val)
-    if cur == 'USD':
-        target.saldo_usd = float(getattr(target, 'saldo_usd', 0) or 0) + amt
-    else:
-        target.saldo_cop = float(getattr(target, 'saldo_cop', 0) or 0) + amt
+    _apply_balance_credit(target, cur, amt)
 
     row.status = 'approved'
     row.amount_claimed = amount_val
@@ -6036,6 +6229,166 @@ def api_admin_balance_recharge_review(recharge_id):
         'item': _serialize_balance_recharge_row(row, None, include_username=True),
         'new_saldo_usd': float(target.saldo_usd or 0),
         'new_saldo_cop': float(target.saldo_cop or 0),
+    })
+
+
+@store_bp.route('/api/admin/balance-recharge/analyzer-patterns', methods=['GET', 'POST'])
+@csrf_exempt_route
+@admin_required
+def api_admin_balance_recharge_analyzer_patterns():
+    from app.store.balance_recharge_analyzer import (
+        get_analyzer_patterns,
+        save_analyzer_patterns,
+        DEFAULT_PATTERNS,
+    )
+
+    if request.method == 'GET':
+        return jsonify({
+            'success': True,
+            'patterns': get_analyzer_patterns(),
+            'defaults': DEFAULT_PATTERNS,
+        })
+
+    data = request.get_json(silent=True) or {}
+    patterns = data.get('patterns')
+    if not isinstance(patterns, list):
+        return jsonify({'success': False, 'message': 'Se esperaba una lista de patrones'}), 400
+    try:
+        save_analyzer_patterns(patterns)
+    except ValueError as exc:
+        return jsonify({'success': False, 'message': str(exc)}), 400
+    except Exception as exc:
+        current_app.logger.error('Error guardando patrones analizador: %s', exc, exc_info=True)
+        return jsonify({'success': False, 'message': 'No se pudieron guardar los patrones'}), 500
+    return jsonify({'success': True, 'message': 'Patrones guardados.', 'patterns': get_analyzer_patterns()})
+
+
+@store_bp.route('/api/admin/balance-recharge/email-review/settings', methods=['GET', 'POST'])
+@csrf_exempt_route
+@admin_required
+def api_admin_balance_recharge_email_review_settings():
+    from app.store.balance_recharge_email_review import (
+        get_email_review_settings,
+        save_email_review_settings,
+        list_email_regex_entries,
+        create_email_regex_entry,
+        update_email_regex_entry,
+        delete_email_regex_entry,
+        list_imap_server_options,
+        buzon_enabled,
+    )
+
+    if request.method == 'GET':
+        settings = get_email_review_settings()
+        return jsonify({
+            'success': True,
+            'settings': settings,
+            'buzon_enabled': buzon_enabled(),
+            'regex_entries': list_email_regex_entries(),
+            'imap_options': list_imap_server_options(),
+        })
+
+    data = request.get_json(silent=True) or {}
+    settings = save_email_review_settings({
+        'imap_server_ids': data.get('imap_server_ids'),
+    })
+    return jsonify({
+        'success': True,
+        'message': 'Configuración de correo guardada.',
+        'settings': settings,
+        'buzon_enabled': buzon_enabled(),
+    })
+
+
+@store_bp.route('/api/admin/balance-recharge/email-review/regex', methods=['POST'])
+@csrf_exempt_route
+@admin_required
+def api_admin_balance_recharge_email_review_regex_create():
+    from app.store.balance_recharge_email_review import (
+        create_email_regex_entry,
+        list_email_regex_entries,
+    )
+
+    data = request.get_json(silent=True) or {}
+    try:
+        entry = create_email_regex_entry(
+            data.get('description', ''),
+            data.get('sender', ''),
+            data.get('pattern', ''),
+        )
+    except ValueError as exc:
+        return jsonify({'success': False, 'message': str(exc)}), 400
+    except Exception as exc:
+        current_app.logger.error('Error creando regex recarga: %s', exc, exc_info=True)
+        return jsonify({'success': False, 'message': 'No se pudo crear el regex.'}), 500
+    return jsonify({
+        'success': True,
+        'message': 'Regex creado.',
+        'regex': entry,
+        'regex_entries': list_email_regex_entries(),
+    })
+
+
+@store_bp.route('/api/admin/balance-recharge/email-review/regex/<int:entry_id>', methods=['PUT', 'DELETE'])
+@csrf_exempt_route
+@admin_required
+def api_admin_balance_recharge_email_review_regex_item(entry_id):
+    from app.store.balance_recharge_email_review import (
+        update_email_regex_entry,
+        delete_email_regex_entry,
+        list_email_regex_entries,
+    )
+
+    if request.method == 'DELETE':
+        try:
+            deleted = delete_email_regex_entry(entry_id)
+        except Exception as exc:
+            current_app.logger.error('Error eliminando regex recarga: %s', exc, exc_info=True)
+            return jsonify({'success': False, 'message': 'No se pudo eliminar el regex.'}), 500
+        if not deleted:
+            return jsonify({'success': False, 'message': 'Regex no encontrado.'}), 404
+        return jsonify({
+            'success': True,
+            'message': 'Regex eliminado.',
+            'regex_entries': list_email_regex_entries(),
+        })
+
+    data = request.get_json(silent=True) or {}
+    try:
+        entry = update_email_regex_entry(
+            entry_id,
+            data.get('description', ''),
+            data.get('sender', ''),
+            data.get('pattern', ''),
+        )
+    except ValueError as exc:
+        return jsonify({'success': False, 'message': str(exc)}), 400
+    except Exception as exc:
+        current_app.logger.error('Error actualizando regex recarga: %s', exc, exc_info=True)
+        return jsonify({'success': False, 'message': 'No se pudo actualizar el regex.'}), 500
+    return jsonify({
+        'success': True,
+        'message': 'Regex actualizado.',
+        'regex': entry,
+        'regex_entries': list_email_regex_entries(),
+    })
+
+
+@store_bp.route('/api/admin/balance-recharge/email-review/buzon', methods=['POST'])
+@csrf_exempt_route
+@admin_required
+def api_admin_balance_recharge_email_review_buzon():
+    from app.store.balance_recharge_email_review import set_buzon_enabled, buzon_enabled
+
+    data = request.get_json(silent=True) or {}
+    if 'enabled' not in data:
+        return jsonify({'success': False, 'message': 'Indica enabled true/false.'}), 400
+    enabled = bool(data.get('enabled'))
+    set_buzon_enabled(enabled)
+    return jsonify({
+        'success': True,
+        'buzon_enabled': buzon_enabled(),
+        'message': 'Buzón ' + ('activado' if enabled else 'desactivado') + '.',
     })
 
 
@@ -13290,10 +13643,10 @@ def execute_drive_transfer_now(transfer_id):
             return jsonify({'success': False, 'error': 'La transferencia no está activa'}), 400
         
         from .drive_manager import execute_transfer_simple
-        from app import create_app
         from .api import format_colombia_time
-        
-        app = create_app()
+        from flask import current_app
+
+        app = current_app._get_current_object()
         
         # Ejecutar transferencia (ahora maneja errores internamente y no lanza excepciones)
         result = execute_transfer_simple(transfer, app)

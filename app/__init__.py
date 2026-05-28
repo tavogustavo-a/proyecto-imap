@@ -447,54 +447,23 @@ def create_app(config_class_passed=None):
                     # Fallback: admin por defecto
                     return redirect(url_for("auth_bp.login"))
 
-    # ⭐ NUEVO: Inicializar sistema de limpieza automática de registros de conexión
+    # Mantenimiento de logs de conexión: un solo proceso por máquina.
     try:
-        from app.store.cleanup import initialize_cleanup_system
-        # Usar modo 'smart' para limpieza inteligente cada 28 días a las 5:00 AM
-        initialize_cleanup_system(mode='smart')
-    except Exception as e:
-        pass
-    
-    # ⭐ NUEVO: Inicializar sistema de registros de conexión
-    try:
-        from app.store.presence import initialize_connection_system
-        initialize_connection_system()
-    except Exception as e:
-        pass
-    
-    # ⭐ NUEVO: Inicializar loop de Drive Transfer (se ejecuta siempre, incluso con Gunicorn)
-    try:
-        from app.store.drive_manager import start_simple_drive_loop
-        # Iniciar el loop en un thread separado (solo se ejecuta una vez por proceso)
-        start_simple_drive_loop()
-    except Exception as e:
-        # No fallar si hay error, solo continuar
+        from app.store.connection_logs_maintenance import start_connection_logs_maintenance_loop
+        start_connection_logs_maintenance_loop(app)
+    except Exception:
         pass
 
     try:
         from app.store.purchase_history_cleanup import start_purchase_history_cleanup_loop
-        start_purchase_history_cleanup_loop()
+        start_purchase_history_cleanup_loop(app)
         from app.store.license_history_cleanup import start_license_history_cleanup_loop
-        start_license_history_cleanup_loop()
+        start_license_history_cleanup_loop(app)
         from app.store.balance_recharge_cleanup import start_balance_recharge_cleanup_loop
-        start_balance_recharge_cleanup_loop()
+        start_balance_recharge_cleanup_loop(app)
 
-        def _startup_disk_orphan_scan():
-            import threading
-            import time
-            from app import create_app
-            from app.services.disk_orphan_maintenance import run_disk_orphan_maintenance
-
-            def worker():
-                time.sleep(45)
-                try:
-                    run_disk_orphan_maintenance(create_app())
-                except Exception:
-                    pass
-
-            threading.Thread(target=worker, daemon=True, name='disk-orphan-startup').start()
-
-        _startup_disk_orphan_scan()
+        from app.services.disk_orphan_maintenance import start_disk_orphan_maintenance_loop
+        start_disk_orphan_maintenance_loop(app)
     except Exception:
         pass
 

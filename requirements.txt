@@ -30,6 +30,7 @@ beautifulsoup4==4.13.3
 qrcode==8.2
 Pillow==12.0.0
 pyzbar==0.1.9
+pytesseract==0.3.13
 gunicorn==23.0.0
 APScheduler==3.11.1
 regex==2025.11.3

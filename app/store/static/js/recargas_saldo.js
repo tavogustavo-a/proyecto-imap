@@ -2,15 +2,20 @@
   'use strict';
 
   function readMeta() {
-    var el = document.getElementById('balance-recharge-meta');
-    if (!el) return {};
-    var raw = el.getAttribute('data-balance-recharge-meta');
-    if (!raw) return {};
-    try {
-      return JSON.parse(raw);
-    } catch (e) {
-      return {};
-    }
+    var form = document.getElementById('balanceRechargeForm');
+    var currencyEl = document.getElementById('balanceRechargeCurrency');
+    var list = document.getElementById('balanceRechargeList');
+    return {
+      currency: currencyEl ? currencyEl.value : 'COP',
+      submitUrl: form ? form.getAttribute('data-submit-url') || form.getAttribute('action') || '' : '',
+      listUrl: form ? form.getAttribute('data-list-url') || (list ? list.getAttribute('data-list-url') : '') || '' : '',
+      methodsUrl: form ? form.getAttribute('data-methods-url') || '' : '',
+    };
+  }
+
+  function getCsrfToken() {
+    var meta = document.querySelector('meta[name="csrf_token"]');
+    return meta ? meta.getAttribute('content') || '' : '';
   }
 
   function fmtAmount(n, currency) {
@@ -24,6 +29,7 @@
     var s = (status || '').toLowerCase();
     if (s === 'approved') return 'balance-recharge-status--approved';
     if (s === 'rejected') return 'balance-recharge-status--rejected';
+    if (s === 'auto_credited') return 'balance-recharge-status--auto';
     return 'balance-recharge-status--pending';
   }
 
@@ -69,6 +75,11 @@
             return '<a href="' + u + '" target="_blank" rel="noopener" class="balance-recharge-proof-link" title="Ver comprobante ' + (i + 1) + '"><img src="' + u + '" alt="" class="balance-recharge-proof-thumb" loading="lazy"></a>';
           }).join('') +
           '</div>';
+      } else if (it.proof_missing) {
+        thumbs =
+          '<div class="balance-recharge-item-proofs">' +
+          '<span class="balance-recharge-proof-missing" title="El comprobante ya no está disponible">' +
+          '<i class="fas fa-image" aria-hidden="true"></i> Sin imagen</span></div>';
       }
       var adminNote = it.admin_note
         ? '<p class="balance-recharge-item-admin-note"><strong>Nota del administrador:</strong> ' + escapeHtml(it.admin_note) + '</p>'
@@ -76,17 +87,34 @@
       var userNote = it.note
         ? '<p class="balance-recharge-item-note">' + escapeHtml(it.note) + '</p>'
         : '';
+      var pmRow = '';
+      if (thumbs || it.payment_method_label) {
+        pmRow =
+          '<div class="balance-recharge-item-meta-row">' +
+            thumbs +
+            (it.payment_method_label
+              ? '<p class="balance-recharge-item-pm"><strong>Medio:</strong> ' + escapeHtml(it.payment_method_label) + '</p>'
+              : '') +
+          '</div>';
+      }
+      var statusBadge =
+        (it.status || '').toLowerCase() === 'auto_credited'
+          ? ''
+          : '<span class="balance-recharge-status ' +
+            statusClass(it.status) +
+            '">' +
+            escapeHtml(it.status_label || it.status) +
+            '</span>';
       return (
         '<article class="balance-recharge-item">' +
           '<div class="balance-recharge-item-head">' +
             '<span class="balance-recharge-item-amount">' + escapeHtml(fmtAmount(it.amount_claimed, it.currency)) + '</span>' +
-            '<span class="balance-recharge-status ' + statusClass(it.status) + '">' + escapeHtml(it.status_label || it.status) + '</span>' +
+            '<span class="balance-recharge-item-date">' + escapeHtml(it.created_at || '') + '</span>' +
+            statusBadge +
           '</div>' +
-          '<p class="balance-recharge-item-date">' + escapeHtml(it.created_at || '') + '</p>' +
-          (it.payment_method_label ? '<p class="balance-recharge-item-pm"><strong>Medio:</strong> ' + escapeHtml(it.payment_method_label) + '</p>' : '') +
+          pmRow +
           userNote +
           adminNote +
-          thumbs +
         '</article>'
       );
     }).join('');
@@ -221,7 +249,7 @@
     var form = document.getElementById('balanceRechargeForm');
     var fileInput = document.getElementById('balanceRechargeProofs');
     var submitBtn = document.getElementById('balanceRechargeSubmit');
-    if (!form || !meta.submitUrl) return;
+    if (!form) return;
 
     if (fileInput) {
       fileInput.addEventListener('change', function () {
@@ -232,6 +260,13 @@
     form.addEventListener('submit', function (ev) {
       ev.preventDefault();
       showFormMsg('', false);
+
+      var submitUrl = meta.submitUrl || form.getAttribute('data-submit-url') || form.getAttribute('action') || '';
+      if (!submitUrl) {
+        showFormMsg('No se pudo enviar la solicitud (configuración incompleta).', true);
+        return;
+      }
+
       var amountEl = document.getElementById('balanceRechargeAmount');
       var amount = amountEl ? amountEl.value : '';
       if (!amount || Number(amount) <= 0) {
@@ -253,13 +288,22 @@
       }
 
       var fd = new FormData(form);
+      var csrf = getCsrfToken();
+      if (csrf) {
+        fd.append('_csrf_token', csrf);
+      }
       if (submitBtn) submitBtn.disabled = true;
 
-      fetch(meta.submitUrl, {
+      var headers = { Accept: 'application/json' };
+      if (csrf) {
+        headers['X-CSRFToken'] = csrf;
+      }
+
+      fetch(submitUrl, {
         method: 'POST',
         body: fd,
         credentials: 'same-origin',
-        headers: { Accept: 'application/json' },
+        headers: headers,
       })
         .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, data: j }; }); })
         .then(function (res) {

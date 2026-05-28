@@ -2,7 +2,7 @@
 
 {% block title %}Recargas de saldo{% endblock %}
 
-{% block head %}{{ super() }}<link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}?v=20260523-recargas-main-card"><link rel="stylesheet" href="{{ url_for('static', filename='fontawesome/css/all.css') }}"><meta name="csrf_token" content="{{ csrf_token() }}">{% endblock %}
+{% block head %}{{ super() }}<link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}?v=20260526-recarga-auto"><link rel="stylesheet" href="{{ url_for('static', filename='fontawesome/css/all.css') }}"><meta name="csrf_token" content="{{ csrf_token() }}">{% endblock %}
 {% block content %}
 <div class="container container-max-width-900 px-2 pb-3 balance-recharge-page">
   {% set blocked_users = ['soporte','soporte1','soporte2','soporte3'] %}
@@ -92,7 +92,15 @@
         <h2 id="balanceRechargeFormTitle" class="balance-recharge-section-title balance-recharge-section-title--inline">Enviar solicitud</h2>
         <span class="balance-recharge-field-label balance-recharge-field-label--inline">Medio de pago</span>
       </div>
-      <form id="balanceRechargeForm" class="balance-recharge-form" enctype="multipart/form-data" novalidate>
+      <form id="balanceRechargeForm"
+            class="balance-recharge-form"
+            method="post"
+            action="{{ url_for('store_bp.api_user_balance_recharge_submit') }}"
+            enctype="multipart/form-data"
+            data-submit-url="{{ url_for('store_bp.api_user_balance_recharge_submit') }}"
+            data-list-url="{{ url_for('store_bp.api_user_balance_recharges') }}"
+            data-methods-url="{{ url_for('store_bp.api_user_balance_recharge_payment_methods') }}"
+            novalidate>
       <input type="hidden" name="currency" id="balanceRechargeCurrency" value="{{ tipo_precio|default('COP', true) }}">
       <div class="balance-recharge-field balance-recharge-field--methods" id="balanceRechargeMethodsWrap">
         <div id="balanceRechargeMethodsList" class="balance-recharge-methods-list" role="radiogroup" aria-label="Medio de pago">
@@ -139,12 +147,9 @@
       <p class="balance-recharge-empty text-muted">No hay solicitudes cargadas.</p>
     </div>
   </section>
-  {# Meta embebida sin <script> (CSP estricto) #}
-  <div id="balance-recharge-meta" hidden class="embedded-page-json"
-       data-balance-recharge-meta="{{ {'currency': tipo_precio|default('COP', true), 'listUrl': url_for('store_bp.api_user_balance_recharges'), 'submitUrl': url_for('store_bp.api_user_balance_recharge_submit'), 'methodsUrl': url_for('store_bp.api_user_balance_recharge_payment_methods')}|tojson|e }}"></div>
 </div>
 {% endblock %}
 {% block scripts %}
 <script src="{{ url_for('store_bp.static', filename='js/menu_tienda.js') }}" defer></script>
-<script src="{{ url_for('store_bp.static', filename='js/recargas_saldo.js') }}?v=20260523-recargas-submit-form" defer></script>
+<script src="{{ url_for('store_bp.static', filename='js/recargas_saldo.js') }}?v=20260526-recarga-auto" defer></script>
 {% endblock %}

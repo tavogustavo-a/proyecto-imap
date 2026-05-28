@@ -186,7 +186,7 @@ def start_scheduler_if_needed():
             
             # Iniciar Drive Transfer Scheduler
             from app.store.drive_manager import start_simple_drive_loop
-            start_simple_drive_loop()
+            start_simple_drive_loop(app)
             
         except Exception as e:
             # Si hay error, cerrar el archivo de bloqueo si existe
@@ -564,7 +564,7 @@ def check_observer_patterns_job():
     with app.app_context():
         try:
             # <<< --- NUEVA VERIFICACIÓN AL INICIO --- >>>
-            observer_enabled = get_site_setting("observer_enabled", "1")
+            observer_enabled = get_site_setting("observer_enabled", "0")
             if observer_enabled != "1":
                 # Solo imprimir si se quiere un log de que fue llamado pero no ejecutó
                 # print(f"[{datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")}] [JOB_OBSERVER] Tarea llamada, pero observador está OFF. Saliendo.")
@@ -957,11 +957,8 @@ def hourly_sqlite_backup_job():
 def main():
     scheduler = BackgroundScheduler(executors={"default": ThreadPoolExecutor(max_workers=5)})
 
-    # Iniciar Drive Transfer Scheduler (método simple del usuario) - FUERA del contexto
-    from app.store.drive_manager import start_simple_drive_loop
-    start_simple_drive_loop()
-
-    with app.app_context(): 
+    # Drive loop: start_scheduler_if_needed() ya lo inicia con lock de proceso.
+    with app.app_context():
         job_id = 'auto_rotate_imap_keys'
         scheduler.add_job(
             func=rotate_imap_keys_job,

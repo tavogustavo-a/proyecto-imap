@@ -1103,7 +1103,7 @@ def cleanup_worksheet_connection_logs():
             return jsonify({'error': 'Solo el administrador puede ejecutar limpieza manual'}), 403
         
         # Importar función de limpieza
-        from app.store.cleanup import manual_cleanup
+        from app.store.connection_logs_maintenance import manual_cleanup
         
         # Ejecutar limpieza manual
         result = manual_cleanup()

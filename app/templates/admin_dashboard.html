@@ -337,8 +337,8 @@
       <a href="{{ url_for('admin_email_buzon.manage_email_buzon') }}" class="btn-blue text-decoration-none">
         <i class="fas fa-envelope"></i> Gestionar Buzón
       </a>
-      <button type="button" id="toggleImapManagementBtn" class="{{ 'btn-green' if site_settings.get('observer_enabled', '1') == '1' else 'btn-red' }}" data-enabled="{{ 'false' if site_settings.get('observer_enabled', '1') == '1' else 'true' }}">
-        <i class="fas fa-power-off"></i> {{ 'OFF' if site_settings.get('observer_enabled', '1') == '1' else 'ON' }}
+      <button type="button" id="toggleImapManagementBtn" class="{{ 'btn-green' if site_settings.get('observer_enabled', '0') == '1' else 'btn-red' }}" data-enabled="{{ 'false' if site_settings.get('observer_enabled', '0') == '1' else 'true' }}">
+        <i class="fas fa-power-off"></i> {{ 'OFF' if site_settings.get('observer_enabled', '0') == '1' else 'ON' }}
       </button>
     </div>
   </div>
@@ -596,7 +596,7 @@
            </div>
            <div class="d-flex flex-column align-items-center admin-checkbox-container">
                <label for="observerEnabled" class="d-block mb-03">Observador:</label>
-               <input type="checkbox" id="observerEnabled" name="observer_enabled" value="1" {% if site_settings.get('observer_enabled', '1') == '1' %}checked{% endif %}>
+               <input type="checkbox" id="observerEnabled" name="observer_enabled" value="1" {% if site_settings.get('observer_enabled', '0') == '1' %}checked{% endif %}>
                <span class="admin-checkbox-text">ON/OFF</span>
            </div>
       </div>

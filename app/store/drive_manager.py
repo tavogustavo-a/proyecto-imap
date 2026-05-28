@@ -13,7 +13,7 @@ from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 
-from app import db, create_app
+from app import db
 from app.store.models import DriveTransfer
 
 logger = logging.getLogger(__name__)
@@ -702,11 +702,13 @@ class DriveAutoScheduler:
         self.thread = None
         self.scheduler = DriveScheduler()
     
-    def start(self):
-        """Inicia el scheduler en un thread separado"""
+    def start(self, app=None):
+        """Inicia el scheduler en un thread separado."""
         if self.running:
             return
-        
+        if app is None:
+            raise ValueError('DriveAutoScheduler.start requiere la instancia Flask existente')
+        self._app = app
         self.running = True
         self.thread = threading.Thread(target=self._run_loop, daemon=True)
         self.thread.start()
@@ -718,9 +720,11 @@ class DriveAutoScheduler:
             self.thread.join(timeout=5)
     
     def _run_loop(self):
-        """Loop principal del scheduler optimizado"""
-        app = create_app()
-        
+        """Loop principal del scheduler optimizado."""
+        app = getattr(self, '_app', None)
+        if app is None:
+            return
+
         with app.app_context():
             while self.running:
                 try:
@@ -1061,26 +1065,29 @@ def calculate_smart_wait_time(transfers):
 _drive_loop_started = False
 _drive_loop_lock = threading.Lock()
 
-def start_simple_drive_loop():
-    """Inicia el loop simple basado en tu código que funciona
-    Solo se ejecuta una vez, incluso si se llama múltiples veces"""
+def start_simple_drive_loop(app):
+    """Inicia el loop de Drive en un solo proceso por máquina (lock de archivo)."""
     global _drive_loop_started
-    
-    # Verificar si ya está iniciado (thread-safe)
+
+    if app is None:
+        return
+
     with _drive_loop_lock:
         if _drive_loop_started:
-            return  # Ya está corriendo, no hacer nada
+            return
+
+        from app.utils.process_lock import process_lock_acquired, try_acquire_process_lock
+
+        lock_fd = try_acquire_process_lock('/tmp/proyectoimap_drive_loop.lock')
+        if not process_lock_acquired(lock_fd):
+            return
+
         _drive_loop_started = True
-    
+
     import threading
     import time
-    from app import create_app
-    
+
     def simple_drive_loop():
-        """Loop simple como tu código que funciona"""
-        # Crear contexto de aplicación Flask
-        app = create_app()
-        
         while True:
             try:
                 with app.app_context():
@@ -1178,11 +1185,10 @@ def schedule_cleanup_task(transfer_id, days_old, scheduled_time):
         return None
 
 def check_scheduled_cleanups():
-    """Verifica si hay limpiezas programadas que deben ejecutarse"""
+    """Verifica si hay limpiezas programadas que deben ejecutarse."""
     try:
         from datetime import datetime, time as dt_time
-        from app import create_app
-        
+
         # Usar módulo centralizado de timezone
         now_colombia = get_colombia_datetime()
         current_time = now_colombia.time()
@@ -1245,47 +1251,42 @@ def cleanup_completed_tasks():
         pass
 
 def execute_scheduled_cleanup(task_id):
-    """Ejecuta una limpieza programada"""
+    """Ejecuta una limpieza programada (requiere app_context del llamador)."""
     try:
-        from app import create_app
-        
         if task_id not in scheduled_cleanup_tasks:
             return False
-            
+
         task_info = scheduled_cleanup_tasks[task_id]
         transfer_id = task_info['transfer_id']
         days_old = task_info['days_old']
-        
-        # Marcar tarea como ejecutándose
+
         scheduled_cleanup_tasks[task_id]['status'] = 'running'
-        
-        # Crear contexto de aplicación
-        app = create_app()
-        with app.app_context():
-            from app.store.models import DriveTransfer
-            from .drive_manager import DriveTransferService
-            
-            # Obtener transferencia
-            transfer = DriveTransfer.query.get(transfer_id)
-            if not transfer:
-                scheduled_cleanup_tasks[task_id]['status'] = 'failed'
-                return False
-            
-            # Ejecutar limpieza
-            service = DriveTransferService(transfer.credentials_json)
-            result = service.cleanup_old_files(transfer.drive_processed_id, days_old, transfer.drive_deleted_id)
-            
-            if result['success']:
-                scheduled_cleanup_tasks[task_id]['status'] = 'completed'
-                scheduled_cleanup_tasks[task_id]['result'] = result
-                scheduled_cleanup_tasks[task_id]['completed_at'] = datetime.utcnow()  # Siempre usar UTC
-            else:
-                scheduled_cleanup_tasks[task_id]['status'] = 'failed'
-                scheduled_cleanup_tasks[task_id]['error'] = result['message']
-                scheduled_cleanup_tasks[task_id]['failed_at'] = datetime.utcnow()  # Siempre usar UTC
-            
-            return result['success']
-            
+
+        from app.store.models import DriveTransfer
+
+        transfer = DriveTransfer.query.get(transfer_id)
+        if not transfer:
+            scheduled_cleanup_tasks[task_id]['status'] = 'failed'
+            return False
+
+        service = DriveTransferService(transfer.credentials_json)
+        result = service.cleanup_old_files(
+            transfer.drive_processed_id,
+            days_old,
+            transfer.drive_deleted_id,
+        )
+
+        if result['success']:
+            scheduled_cleanup_tasks[task_id]['status'] = 'completed'
+            scheduled_cleanup_tasks[task_id]['result'] = result
+            scheduled_cleanup_tasks[task_id]['completed_at'] = datetime.utcnow()
+        else:
+            scheduled_cleanup_tasks[task_id]['status'] = 'failed'
+            scheduled_cleanup_tasks[task_id]['error'] = result['message']
+            scheduled_cleanup_tasks[task_id]['failed_at'] = datetime.utcnow()
+
+        return result['success']
+
     except Exception as e:
         if task_id in scheduled_cleanup_tasks:
             scheduled_cleanup_tasks[task_id]['status'] = 'failed'

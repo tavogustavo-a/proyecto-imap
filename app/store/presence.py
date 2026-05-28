@@ -337,35 +337,11 @@ def auto_monthly_cleanup():
         return deleted_count
     return 0
 
-def schedule_daily_cleanup():
-    """Programar limpieza diaria a las 5:00 AM hora Colombia"""
-    import threading
-    import time
-    
-    def daily_cleanup_worker():
-        while True:
-            try:
-                # Obtener hora actual en zona horaria Colombia usando módulo centralizado
-                from app.utils.timezone import get_colombia_now
-                now = get_colombia_now()
-                
-                # Ejecutar limpieza a las 5:00 AM
-                if now.hour == 5 and now.minute < 30:
-                    # Limpiar sesiones inactivas (15+ minutos)
-                    cleanup_inactive_sessions()
-                    
-                    # Limpiar registros antiguos (28+ días)
-                    cleanup_old_logs(28)
-                
-                # Esperar 1 hora antes de verificar de nuevo
-                time.sleep(3600)
-                
-            except Exception as e:
-                time.sleep(3600)  # Esperar 1 hora en caso de error
-    
-    # Ejecutar en hilo separado
-    cleanup_thread = threading.Thread(target=daily_cleanup_worker, daemon=True)
-    cleanup_thread.start()
+def initialize_connection_system(app=None):
+    """Mantenimiento puntual (API admin). El loop de fondo se inicia en create_app."""
+    from app.store.connection_logs_maintenance import run_startup_maintenance
+
+    return run_startup_maintenance(app)
 
 def get_connection_logs(worksheet_id, limit=100, search_query=None):
     """Obtener registros de conexión de un worksheet"""
@@ -541,29 +517,6 @@ def consolidate_duplicate_logs(worksheet_id=None, hours_back=24):
         db.session.rollback()
         return 0 
 
-# ⭐ NUEVO: Función de inicialización automática del sistema
-def initialize_connection_system():
-    """Inicializar y optimizar el sistema de registros de conexión"""
-    try:
-        # Limpiar registros antiguos (más de 28 días)
-        deleted_count = cleanup_old_logs(28)
-        
-        # Consolidar registros duplicados de las últimas 48 horas
-        consolidated_count = consolidate_duplicate_logs(hours_back=48)
-        
-        # Programar limpieza diaria a las 5:00 AM hora Colombia
-        schedule_daily_cleanup()
-        
-        return {
-            'deleted_count': deleted_count,
-            'consolidated_count': consolidated_count
-        }
-        
-    except Exception as e:
-        return {
-            'deleted_count': 0,
-            'consolidated_count': 0
-        } 
 
 def cleanup_inactive_sessions(worksheet_id=None, max_inactive_minutes=15):
     """Finalizar automáticamente sesiones que han estado inactivas más de X minutos"""

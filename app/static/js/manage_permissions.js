@@ -758,7 +758,7 @@ document.addEventListener("DOMContentLoaded", function() {
   const searchUserPricesInput = document.getElementById("searchUserPricesInput");
   const clearUserPricesSearchBtn = document.getElementById("clearUserPricesSearchBtn");
   
-  let userPricesData = {}; // { userId: { tipo_precio, soporte_licencias, puede_tener_deuda, limite_deuda_usd, limite_deuda_cop } }
+  let userPricesData = {}; // { userId: { tipo_precio, soporte_licencias, puede_tener_deuda, recarga_automatica, limite_deuda_usd, limite_deuda_cop } }
   let allUsersForPrices = []; // Todos los usuarios cargados
   let filteredUsersForPrices = []; // Usuarios filtrados por búsqueda
 
@@ -936,6 +936,7 @@ document.addEventListener("DOMContentLoaded", function() {
         tipo_precio: user.tipo_precio || null,
         soporte_licencias: !!user.soporte_licencias,
         puede_tener_deuda: !!user.puede_tener_deuda,
+        recarga_automatica: !!user.recarga_automatica,
         limite_deuda_usd:
           user.limite_deuda_usd != null && user.limite_deuda_usd !== ''
             ? Number(user.limite_deuda_usd)
@@ -1048,10 +1049,35 @@ document.addEventListener("DOMContentLoaded", function() {
       deudaContainer.appendChild(deudaCheckbox);
       deudaContainer.appendChild(deudaLabel);
 
+      const autoRecargaContainer = document.createElement('div');
+      autoRecargaContainer.className = 'user-prices-tipo-row';
+
+      const autoRecargaCheckbox = document.createElement('input');
+      autoRecargaCheckbox.type = 'checkbox';
+      autoRecargaCheckbox.id = `recarga_auto_${userId}`;
+      autoRecargaCheckbox.name = `recarga_automatica_${userId}`;
+      autoRecargaCheckbox.className = 'user-recarga-automatica-checkbox';
+      autoRecargaCheckbox.checked = !!userData.recarga_automatica;
+      autoRecargaCheckbox.setAttribute('data-user-id', userId);
+
+      const autoRecargaLabel = document.createElement('label');
+      autoRecargaLabel.setAttribute('for', `recarga_auto_${userId}`);
+      autoRecargaLabel.textContent = 'Recarga en automático';
+      autoRecargaLabel.className = 'user-price-label';
+      autoRecargaLabel.style.setProperty('cursor', 'pointer');
+      autoRecargaLabel.setAttribute(
+        'title',
+        'Al subir comprobante se acredita el saldo al instante; tú revisas después.'
+      );
+
+      autoRecargaContainer.appendChild(autoRecargaCheckbox);
+      autoRecargaContainer.appendChild(autoRecargaLabel);
+
       tipoPrecioContainer.appendChild(usdContainer);
       tipoPrecioContainer.appendChild(copContainer);
       tipoPrecioContainer.appendChild(soporteContainer);
       tipoPrecioContainer.appendChild(deudaContainer);
+      tipoPrecioContainer.appendChild(autoRecargaContainer);
       tdTipoPrecio.appendChild(tipoPrecioContainer);
       tr.appendChild(tdTipoPrecio);
       
@@ -1162,6 +1188,7 @@ document.addEventListener("DOMContentLoaded", function() {
       
       userData.soporte_licencias = !!userData.soporte_licencias;
       userData.puede_tener_deuda = !!userData.puede_tener_deuda;
+      userData.recarga_automatica = !!userData.recarga_automatica;
       userData.tipo_precio = userData.tipo_precio || null;
       if (userData.limite_deuda_usd == null && user.limite_deuda_usd != null) {
         userData.limite_deuda_usd = Number(user.limite_deuda_usd);
@@ -1197,10 +1224,12 @@ document.addEventListener("DOMContentLoaded", function() {
           if (!userPricesData[userId]) {
             const sl = document.getElementById(`soporte_lic_${userId}`);
             const pd = document.getElementById(`puede_deuda_${userId}`);
+            const ra = document.getElementById(`recarga_auto_${userId}`);
             userPricesData[userId] = {
               tipo_precio: null,
               soporte_licencias: sl ? !!sl.checked : false,
-              puede_tener_deuda: pd ? !!pd.checked : false
+              puede_tener_deuda: pd ? !!pd.checked : false,
+              recarga_automatica: ra ? !!ra.checked : false
             };
           }
           userPricesData[userId].tipo_precio = tipo;
@@ -1226,10 +1255,12 @@ document.addEventListener("DOMContentLoaded", function() {
         const userId = this.getAttribute('data-user-id');
         if (!userPricesData[userId]) {
           const pd = document.getElementById(`puede_deuda_${userId}`);
+          const ra = document.getElementById(`recarga_auto_${userId}`);
           userPricesData[userId] = {
             tipo_precio: null,
             soporte_licencias: !!this.checked,
-            puede_tener_deuda: pd ? !!pd.checked : false
+            puede_tener_deuda: pd ? !!pd.checked : false,
+            recarga_automatica: ra ? !!ra.checked : false
           };
         } else {
           userPricesData[userId].soporte_licencias = !!this.checked;
@@ -1242,10 +1273,12 @@ document.addEventListener("DOMContentLoaded", function() {
         const userId = this.getAttribute('data-user-id');
         if (!userPricesData[userId]) {
           const sl = document.getElementById(`soporte_lic_${userId}`);
+          const ra = document.getElementById(`recarga_auto_${userId}`);
           userPricesData[userId] = {
             tipo_precio: null,
             soporte_licencias: sl ? !!sl.checked : false,
             puede_tener_deuda: !!this.checked,
+            recarga_automatica: ra ? !!ra.checked : false,
             limite_deuda_usd: null,
             limite_deuda_cop: null
           };
@@ -1269,6 +1302,24 @@ document.addEventListener("DOMContentLoaded", function() {
         syncUserDebtLimitButton(debtBtn, userId, userPricesData[userId], tp);
       });
     });
+
+    document.querySelectorAll('.user-recarga-automatica-checkbox').forEach(cb => {
+      cb.addEventListener('change', function() {
+        const userId = this.getAttribute('data-user-id');
+        if (!userPricesData[userId]) {
+          const sl = document.getElementById(`soporte_lic_${userId}`);
+          const pd = document.getElementById(`puede_deuda_${userId}`);
+          userPricesData[userId] = {
+            tipo_precio: null,
+            soporte_licencias: sl ? !!sl.checked : false,
+            puede_tener_deuda: pd ? !!pd.checked : false,
+            recarga_automatica: !!this.checked
+          };
+        } else {
+          userPricesData[userId].recarga_automatica = !!this.checked;
+        }
+      });
+    });
   }
   
   // Guardar cambios de precios
@@ -1285,7 +1336,8 @@ document.addEventListener("DOMContentLoaded", function() {
           user_id: parseInt(userId),
           tipo_precio: userData.tipo_precio || null,
           soporte_licencias: !!userData.soporte_licencias,
-          puede_tener_deuda: !!userData.puede_tener_deuda
+          puede_tener_deuda: !!userData.puede_tener_deuda,
+          recarga_automatica: !!userData.recarga_automatica
         };
         if (userData.puede_tener_deuda) {
           upd.limite_deuda_usd = userData.limite_deuda_usd;

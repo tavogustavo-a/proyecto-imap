@@ -16,7 +16,7 @@ SETTINGS_KEY = 'balance_recharge_cleanup'
 PURGE_BATCH_SIZE = 100
 PURGE_BATCH_PAUSE_SEC = 0.08
 
-_loop_started = False
+_loop_started = {'started': False}
 _loop_lock = threading.Lock()
 _purge_job_lock = threading.Lock()
 _purge_job_running = False
@@ -52,7 +52,8 @@ def get_cleanup_settings():
 
 
 def save_cleanup_settings(updates):
-    data = get_cleanup_settings()
+    prev = get_cleanup_settings()
+    data = prev.copy()
     data.update(updates)
     row = StoreSetting.query.filter_by(key=SETTINGS_KEY).first()
     payload = json.dumps(data, ensure_ascii=False)
@@ -61,7 +62,35 @@ def save_cleanup_settings(updates):
     else:
         db.session.add(StoreSetting(key=SETTINGS_KEY, value=payload))
     db.session.commit()
+    if data.get('auto_enabled') and not prev.get('auto_enabled'):
+        try:
+            from flask import current_app
+
+            _ensure_cleanup_loop_running(current_app._get_current_object())
+        except Exception:
+            pass
     return data
+
+
+def _ensure_cleanup_loop_running(app):
+    from app.store.cleanup_poll_schedule import maybe_start_cleanup_loop
+
+    def _start_thread():
+        thread = threading.Thread(
+            target=_cleanup_loop,
+            args=(app,),
+            daemon=True,
+            name='balance-recharge-cleanup',
+        )
+        thread.start()
+
+    maybe_start_cleanup_loop(
+        app,
+        _loop_started,
+        _loop_lock,
+        _start_thread,
+        get_cleanup_settings,
+    )
 
 
 def is_purge_running():
@@ -304,32 +333,11 @@ def run_scheduled_cleanup_if_due(app):
             return 0
 
 
-def _cleanup_loop():
-    from app import create_app
+def _cleanup_loop(app):
+    from app.store.cleanup_poll_schedule import run_adaptive_cleanup_loop
 
-    app = create_app()
-    time.sleep(20)
-    while True:
-        try:
-            with app.app_context():
-                run_scheduled_cleanup_if_due(app)
-                from app.services.disk_orphan_maintenance import run_disk_orphan_maintenance
-
-                run_disk_orphan_maintenance(app)
-        except Exception:
-            pass
-        time.sleep(300)
+    run_adaptive_cleanup_loop(app, get_cleanup_settings, run_scheduled_cleanup_if_due)
 
 
-def start_balance_recharge_cleanup_loop():
-    global _loop_started
-    with _loop_lock:
-        if _loop_started:
-            return
-        _loop_started = True
-    thread = threading.Thread(
-        target=_cleanup_loop,
-        daemon=True,
-        name='balance-recharge-cleanup',
-    )
-    thread.start()
+def start_balance_recharge_cleanup_loop(app):
+    _ensure_cleanup_loop_running(app)

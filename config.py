@@ -31,6 +31,14 @@ class Config:
     BACKUPS_DIR = os.path.join(basedir, 'instance', 'backups')
     AUTO_BACKUP_MAX_FILES = int(os.getenv('AUTO_BACKUP_MAX_FILES', '100'))
     SQLALCHEMY_TRACK_MODIFICATIONS = False
+    # Limitar conexiones por worker (evita saturar PostgreSQL con varios procesos Gunicorn).
+    if str(DATABASE_URI).startswith('postgresql'):
+        SQLALCHEMY_ENGINE_OPTIONS = {
+            'pool_size': int(os.getenv('SQLALCHEMY_POOL_SIZE', '2')),
+            'max_overflow': int(os.getenv('SQLALCHEMY_MAX_OVERFLOW', '2')),
+            'pool_pre_ping': True,
+            'pool_recycle': int(os.getenv('SQLALCHEMY_POOL_RECYCLE', '300')),
+        }
 
     TWOFA_KEY = os.getenv("TWOFA_KEY")
     if not TWOFA_KEY:

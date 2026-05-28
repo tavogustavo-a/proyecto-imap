@@ -18,6 +18,13 @@ body.theme-active {
 }
 
 /* LOG: Esta regla controla el ancho y margen general del contenedor principal. Si el layout se descuadra, revisa aquí. */
+body:has(.search-page-container) > .container {
+  width: 100%;
+  text-align: center;
+  padding: 0;
+  margin-top: 0;
+}
+
 /* Variable CSS para opacidad y colores */
 :root {
   --card-opacity: 0.8;

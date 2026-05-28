@@ -21,6 +21,41 @@
     return '$' + Number(n).toLocaleString('es-CO') + ' ' + label;
   }
 
+  function renderProofBlock(it, thumbClass, wrapClass) {
+    thumbClass = thumbClass || 'admin-recarga-proof-thumb';
+    wrapClass = wrapClass || 'admin-recarga-proofs';
+    if (it.proof_urls && it.proof_urls.length) {
+      return (
+        '<div class="' +
+        wrapClass +
+        '">' +
+        it.proof_urls
+          .map(function (u) {
+            return (
+              '<a href="' +
+              u +
+              '" target="_blank" rel="noopener"><img src="' +
+              u +
+              '" alt="" class="' +
+              thumbClass +
+              '" loading="lazy"></a>'
+            );
+          })
+          .join('') +
+        '</div>'
+      );
+    }
+    if (it.proof_missing) {
+      return (
+        '<div class="' +
+        wrapClass +
+        '"><span class="balance-recharge-proof-missing" title="El comprobante ya no está disponible en el servidor">' +
+        '<i class="fas fa-image" aria-hidden="true"></i> Sin imagen</span></div>'
+      );
+    }
+    return '';
+  }
+
   function showMsg(el, text, isError) {
     if (!el) return;
     el.textContent = text || '';
@@ -31,6 +66,7 @@
   var tabs = root.querySelectorAll('.admin-recargas-tab');
   var panels = {
     review: document.getElementById('adminRecargasPanelReview'),
+    auto: document.getElementById('adminRecargasPanelAuto'),
     methods: document.getElementById('adminRecargasPanelMethods'),
   };
   tabs.forEach(function (btn) {
@@ -46,6 +82,7 @@
       });
       if (key === 'methods' && !methodsLoaded) loadPaymentMethodsEditor();
       if (key === 'review') loadRecharges();
+      if (key === 'auto') loadAutoRecharges();
     });
   });
 
@@ -53,6 +90,8 @@
   var menu2ToggleReview = document.getElementById('menu2ToggleBtn');
   var menuToggleMethods = document.getElementById('menuToggleBtnMethods');
   var menu2ToggleMethods = document.getElementById('menu2ToggleBtnMethods');
+  var menuToggleAuto = document.getElementById('menuToggleBtnAuto');
+  var menu2ToggleAuto = document.getElementById('menu2ToggleBtnAuto');
   if (menuToggleMethods && menuToggleReview) {
     menuToggleMethods.addEventListener('click', function () {
       menuToggleReview.click();
@@ -60,6 +99,16 @@
   }
   if (menu2ToggleMethods && menu2ToggleReview) {
     menu2ToggleMethods.addEventListener('click', function () {
+      menu2ToggleReview.click();
+    });
+  }
+  if (menuToggleAuto && menuToggleReview) {
+    menuToggleAuto.addEventListener('click', function () {
+      menuToggleReview.click();
+    });
+  }
+  if (menu2ToggleAuto && menu2ToggleReview) {
+    menu2ToggleAuto.addEventListener('click', function () {
       menu2ToggleReview.click();
     });
   }
@@ -74,36 +123,36 @@
   }
 
   function renderRechargeCard(it) {
-    var proofs = '';
-    if (it.proof_urls && it.proof_urls.length) {
-      proofs =
-        '<div class="admin-recarga-proofs">' +
-        it.proof_urls
-          .map(function (u, i) {
-            return (
-              '<a href="' +
-              u +
-              '" target="_blank" rel="noopener"><img src="' +
-              u +
-              '" alt="" class="admin-recarga-proof-thumb" loading="lazy"></a>'
-            );
-          })
-          .join('') +
-        '</div>';
-    }
+    var proofs = renderProofBlock(it);
+    var amountFieldId = 'admin-recarga-amount-' + it.id;
+    var noteFieldId = 'admin-recarga-note-' + it.id;
     var actions =
       it.status === 'pending'
         ? '<div class="admin-recarga-actions">' +
-          '<label class="form-label">Monto a acreditar</label>' +
-          '<input type="number" class="form-control admin-recarga-amount-input" data-id="' +
+          '<div class="admin-recarga-review-fields">' +
+          '<div class="admin-recarga-review-field admin-recarga-review-field--amount">' +
+          '<label class="form-label" for="' +
+          amountFieldId +
+          '">Monto a acreditar</label>' +
+          '<input type="number" id="' +
+          amountFieldId +
+          '" name="amount_credited" class="form-control admin-recarga-amount-input" data-id="' +
           it.id +
           '" value="' +
           (it.amount_claimed != null ? it.amount_claimed : '') +
-          '" min="1" step="1">' +
-          '<label class="form-label mt-05">Nota admin (opcional)</label>' +
-          '<input type="text" class="form-control admin-recarga-note-input" data-id="' +
+          '" min="1" step="1" inputmode="numeric" autocomplete="off">' +
+          '</div>' +
+          '<div class="admin-recarga-review-field admin-recarga-review-field--note">' +
+          '<label class="form-label" for="' +
+          noteFieldId +
+          '">Nota admin (opcional)</label>' +
+          '<input type="text" id="' +
+          noteFieldId +
+          '" name="admin_note" class="form-control admin-recarga-note-input" data-id="' +
           it.id +
-          '" maxlength="500" placeholder="Motivo o referencia">' +
+          '" maxlength="500" placeholder="Motivo o referencia" autocomplete="off">' +
+          '</div>' +
+          '</div>' +
           '<div class="d-flex gap-2 mt-2 flex-wrap">' +
           '<button type="button" class="btn-panel btn-green btn-sm admin-recarga-approve" data-id="' +
           it.id +
@@ -211,6 +260,218 @@
   }
   document.getElementById('adminRecargasRefresh')?.addEventListener('click', loadRecharges);
   filterEl?.addEventListener('change', loadRecharges);
+
+  /* ——— Revisión automática ——— */
+  var autoListEl = document.getElementById('adminRecargasAutoList');
+  var autoPendingEl = document.getElementById('adminRecargasAutoPendingCount');
+
+  function renderAnalyzerBlock(analyzer) {
+    if (!analyzer) {
+      return '<p class="admin-recarga-analyzer-note text-muted">Sin datos del analizador.</p>';
+    }
+
+    var warnBadges = [];
+    if (analyzer.amount_matches_claimed === false) {
+      warnBadges.push('Monto no coincide');
+    }
+    if (analyzer.date_matches_upload === false) {
+      warnBadges.push('Fecha distinta');
+    }
+    if (analyzer.account_matches_configured === false) {
+      warnBadges.push('Cuenta no coincide');
+    }
+    if (analyzer.ocr_available === false) {
+      warnBadges.push('OCR no disponible');
+    }
+
+    var badgesHtml = '';
+    if (warnBadges.length) {
+      badgesHtml =
+        '<div class="admin-recarga-analyzer-badges">' +
+        warnBadges
+          .map(function (label) {
+            return (
+              '<span class="admin-recarga-analyzer-badge admin-recarga-analyzer-badge--warn">' +
+              escapeHtml(label) +
+              '</span>'
+            );
+          })
+          .join('') +
+        '</div>';
+    }
+
+    var receiptLine = '';
+    var hasReceipt =
+      analyzer.receipt_number || analyzer.receipt_number === 0;
+    var hasReceiptDate =
+      analyzer.receipt_date_raw || analyzer.receipt_date_parsed;
+    if (hasReceipt || hasReceiptDate) {
+      receiptLine =
+        '<p class="admin-recarga-analyzer-meta">' +
+        (hasReceipt
+          ? '<strong>Comprobante:</strong> ' +
+            escapeHtml(String(analyzer.receipt_number))
+          : '') +
+        (hasReceipt && hasReceiptDate ? ' · ' : '') +
+        (hasReceiptDate
+          ? '<strong>Fecha comprobante:</strong> ' +
+            escapeHtml(analyzer.receipt_date_raw || analyzer.receipt_date_parsed || '—')
+          : '') +
+        '</p>';
+    }
+
+    var detailLines = '';
+    if (analyzer.account_matches_configured === false) {
+      if (analyzer.account_expected_digits) {
+        detailLines +=
+          '<p class="admin-recarga-analyzer-meta"><strong>Cuenta configurada:</strong> ' +
+          escapeHtml(String(analyzer.account_expected_digits)) +
+          '</p>';
+      }
+      if (analyzer.account_numbers_detected && analyzer.account_numbers_detected.length) {
+        detailLines +=
+          '<p class="admin-recarga-analyzer-meta"><strong>Cuenta detectada:</strong> ' +
+          escapeHtml(analyzer.account_numbers_detected.join(', ')) +
+          '</p>';
+      }
+    }
+    if (
+      analyzer.amount_matches_claimed === false &&
+      analyzer.amounts_detected &&
+      analyzer.amounts_detected.length
+    ) {
+      detailLines +=
+        '<p class="admin-recarga-analyzer-meta"><strong>Montos detectados:</strong> ' +
+        analyzer.amounts_detected
+          .map(function (n) {
+            return '$' + Number(n).toLocaleString('es-CO');
+          })
+          .join(', ') +
+        '</p>';
+    }
+
+    if (!badgesHtml && !receiptLine && !detailLines) {
+      return '';
+    }
+
+    return badgesHtml + receiptLine + detailLines;
+  }
+
+  function renderAutoRechargeCard(it) {
+    var proofs = renderProofBlock(it);
+    var noteFieldId = 'admin-recarga-auto-note-' + it.id;
+    var credited = it.amount_credited != null ? it.amount_credited : it.amount_claimed;
+    var analyzerHtml = renderAnalyzerBlock(it.analyzer);
+    var actions =
+      '<div class="admin-recarga-actions">' +
+      '<div class="admin-recarga-review-fields">' +
+      '<div class="admin-recarga-review-field admin-recarga-review-field--note admin-recarga-review-field--full">' +
+      '<label class="form-label" for="' +
+      noteFieldId +
+      '">Nota admin (opcional)</label>' +
+      '<input type="text" id="' +
+      noteFieldId +
+      '" name="admin_note" class="form-control admin-recarga-auto-note-input" data-id="' +
+      it.id +
+      '" maxlength="500" placeholder="Observaciones de la verificación" autocomplete="off">' +
+      '</div></div>' +
+      '<div class="d-flex gap-2 mt-2 flex-wrap">' +
+      '<button type="button" class="btn-panel btn-green btn-sm admin-recarga-confirm-auto" data-id="' +
+      it.id +
+      '">Confirmar comprobante</button>' +
+      '<button type="button" class="btn-panel btn-red btn-sm admin-recarga-reject-auto" data-id="' +
+      it.id +
+      '">Rechazar y revertir saldo</button>' +
+      '</div></div>';
+
+    return (
+      '<article class="admin-recarga-card admin-recarga-card--auto_credited">' +
+      '<div class="admin-recarga-card-head">' +
+      '<span class="admin-recarga-user">' +
+      escapeHtml(it.username || '—') +
+      '</span>' +
+      '<span class="admin-recarga-status admin-recarga-status--pending">Pendiente</span>' +
+      '</div>' +
+      '<p class="admin-recarga-meta">' +
+      escapeHtml(it.created_at) +
+      ' · Acreditado: <strong>' +
+      escapeHtml(fmtAmount(credited, it.currency)) +
+      '</strong> · ' +
+      escapeHtml(it.payment_method_label || '—') +
+      '</p>' +
+      proofs +
+      (analyzerHtml
+        ? '<div class="admin-recarga-analyzer">' + analyzerHtml + '</div>'
+        : '') +
+      actions +
+      '</article>'
+    );
+  }
+
+  function loadAutoRecharges() {
+    if (!autoListEl) return;
+    autoListEl.innerHTML = '<p class="text-muted">Cargando…</p>';
+    fetch(listUrl + '?status=auto_pending', { credentials: 'same-origin' })
+      .then(function (r) {
+        return r.json();
+      })
+      .then(function (data) {
+        if (!data.success) {
+          autoListEl.innerHTML = '<p class="text-danger">Error al cargar.</p>';
+          return;
+        }
+        if (autoPendingEl) autoPendingEl.textContent = String(data.auto_pending_count || 0);
+        var items = data.items || [];
+        if (!items.length) {
+          autoListEl.innerHTML = '<p class="text-muted">No hay recargas automáticas pendientes de verificar.</p>';
+          return;
+        }
+        autoListEl.innerHTML = items.map(renderAutoRechargeCard).join('');
+      })
+      .catch(function () {
+        autoListEl.innerHTML = '<p class="text-danger">Error de red.</p>';
+      });
+  }
+
+  function doAutoReview(id, action) {
+    var noteInp = autoListEl && autoListEl.querySelector('.admin-recarga-auto-note-input[data-id="' + id + '"]');
+    var body = { action: action, admin_note: noteInp ? noteInp.value.trim() : '' };
+    return fetch(reviewUrl(id), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'same-origin',
+      body: JSON.stringify(body),
+    })
+      .then(function (r) {
+        return r.json();
+      })
+      .then(function (data) {
+        if (!data.success) {
+          alert(data.message || 'No se pudo completar.');
+          return;
+        }
+        loadAutoRecharges();
+        loadRecharges();
+      });
+  }
+
+  if (autoListEl) {
+    autoListEl.addEventListener('click', function (e) {
+      var confirmBtn = e.target.closest('.admin-recarga-confirm-auto');
+      var rejectBtn = e.target.closest('.admin-recarga-reject-auto');
+      if (confirmBtn) {
+        var id = parseInt(confirmBtn.getAttribute('data-id'), 10);
+        if (!window.confirm('¿Confirmar que el comprobante es correcto?')) return;
+        doAutoReview(id, 'confirm_auto');
+      }
+      if (rejectBtn) {
+        var id2 = parseInt(rejectBtn.getAttribute('data-id'), 10);
+        if (!window.confirm('¿Rechazar y descontar el saldo acreditado?')) return;
+        doAutoReview(id2, 'reject_auto');
+      }
+    });
+  }
+  document.getElementById('adminRecargasAutoRefresh')?.addEventListener('click', loadAutoRecharges);
 
   /* ——— Medios de pago ——— */
   var methodsPanel = document.getElementById('adminRecargasPanelMethods');
@@ -820,6 +1081,29 @@
     if (!pmMethodsInfoBox || pmMethodsInfoBox.hidden) return;
     if (pmMethodsInfoBtn?.contains(e.target) || pmMethodsInfoBox.contains(e.target)) return;
     closePmMethodsInfoBox();
+  });
+
+  var autoInfoBtn = document.getElementById('adminRecargasAutoInfoBtn');
+  var autoInfoBox = document.getElementById('adminRecargasAutoInfoBox');
+  function closeAutoInfoBox() {
+    if (!autoInfoBox || !autoInfoBtn) return;
+    autoInfoBox.hidden = true;
+    autoInfoBtn.setAttribute('aria-expanded', 'false');
+  }
+  function toggleAutoInfoBox() {
+    if (!autoInfoBox || !autoInfoBtn) return;
+    var open = autoInfoBox.hidden;
+    autoInfoBox.hidden = !open;
+    autoInfoBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+  }
+  autoInfoBtn?.addEventListener('click', function (e) {
+    e.stopPropagation();
+    toggleAutoInfoBox();
+  });
+  document.addEventListener('click', function (e) {
+    if (!autoInfoBox || autoInfoBox.hidden) return;
+    if (autoInfoBtn?.contains(e.target) || autoInfoBox.contains(e.target)) return;
+    closeAutoInfoBox();
   });
 
   loadRecharges();

@@ -135,6 +135,7 @@ def search_users_ajax():
             data[-1]["tipo_precio"] = precio_data.get("tipo_precio")
             data[-1]["soporte_licencias"] = bool(precio_data.get("soporte_licencias"))
             data[-1]["puede_tener_deuda"] = bool(precio_data.get("puede_tener_deuda"))
+            data[-1]["recarga_automatica"] = bool(precio_data.get("recarga_automatica"))
             data[-1]["limite_deuda_usd"] = precio_data.get("limite_deuda_usd")
             data[-1]["limite_deuda_cop"] = precio_data.get("limite_deuda_cop")
         else:
@@ -145,6 +146,7 @@ def search_users_ajax():
             data[-1]["tipo_precio"] = None
             data[-1]["soporte_licencias"] = False
             data[-1]["puede_tener_deuda"] = False
+            data[-1]["recarga_automatica"] = False
             data[-1]["limite_deuda_usd"] = None
             data[-1]["limite_deuda_cop"] = None
             
@@ -1460,7 +1462,7 @@ def update_tools_resources_permissions_ajax():
 def update_user_prices_ajax():
     """
     Actualiza los precios por usuario de forma masiva.
-    Recibe: { "updates": [{"user_id": 1, "tipo_precio": "USD", "soporte_licencias": true|false, "puede_tener_deuda": true|false }, ...] }
+    Recibe: { "updates": [{"user_id": 1, "tipo_precio": "USD", "soporte_licencias": true|false, "puede_tener_deuda": true|false, "recarga_automatica": true|false }, ...] }
     """
     try:
         # Obtener el user_id del admin actual ANTES de hacer cambios
@@ -1550,6 +1552,12 @@ def update_user_prices_ajax():
                     new_user_prices.pop('puede_tener_deuda', None)
                     new_user_prices.pop('limite_deuda_usd', None)
                     new_user_prices.pop('limite_deuda_cop', None)
+
+            if 'recarga_automatica' in update_data:
+                if update_data['recarga_automatica'] is True:
+                    new_user_prices['recarga_automatica'] = True
+                else:
+                    new_user_prices.pop('recarga_automatica', None)
 
             if 'limite_deuda_usd' in update_data:
                 lim_u = update_data.get('limite_deuda_usd')

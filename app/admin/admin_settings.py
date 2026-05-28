@@ -119,7 +119,7 @@ def dashboard():
 def toggle_imap_management_ajax():
     """Activa/desactiva el Observador IMAP (observer_enabled) usado por el job de Buzón/Conexiones."""
     try:
-        current = get_site_setting("observer_enabled", "1")
+        current = get_site_setting("observer_enabled", "0")
         new_val = "0" if current == "1" else "1"
         set_site_setting("observer_enabled", new_val)
         return jsonify({"success": True, "enabled": new_val == "1"})
