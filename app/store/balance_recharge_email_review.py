@@ -12,11 +12,24 @@ from app.store.models import StoreSetting
 
 SETTINGS_KEY = 'balance_recharge_email_review'
 
+DEFAULT_REGEX_TEMPLATES: list[dict[str, Any]] = [
+    {
+        'description': 'Bancolombia — notificación transferencia',
+        'sender': 'bancolombia',
+        'pattern': (
+            r'(?is)(?:transferencia\s+exitosa|abono|consignaci[oó]n|movimiento|'
+            r'notificaci[oó]n).*?(?:valor|monto|\$)'
+        ),
+        'payment_method_ids': ['bancolombia'],
+    },
+]
+
 
 def _default_settings() -> dict[str, Any]:
     return {
         'regex_entries': [],
         'imap_server_ids': [],
+        'buzon_enabled': False,
     }
 
 
@@ -37,12 +50,20 @@ def _normalize_regex_entry(raw: Any) -> dict[str, Any] | None:
     enabled = raw.get('enabled')
     if enabled is None:
         enabled = True
+    pm_ids_raw = raw.get('payment_method_ids') or []
+    payment_method_ids: list[str] = []
+    if isinstance(pm_ids_raw, list):
+        for x in pm_ids_raw:
+            s = str(x or '').strip().lower()
+            if s and s not in payment_method_ids:
+                payment_method_ids.append(s)
     return {
         'id': entry_id,
         'description': description,
         'sender': sender,
         'pattern': pattern,
         'enabled': bool(enabled),
+        'payment_method_ids': payment_method_ids,
     }
 
 
@@ -70,6 +91,8 @@ def _parse_settings_row(row: StoreSetting | None) -> dict[str, Any]:
             int(x) for x in stored['imap_server_ids']
             if str(x).strip().isdigit() or isinstance(x, int)
         ]
+
+    data['buzon_enabled'] = bool(stored.get('buzon_enabled', False))
     return data
 
 
@@ -116,10 +139,48 @@ def list_email_regex_entries() -> list[dict[str, Any]]:
     return list(get_email_review_settings().get('regex_entries') or [])
 
 
+def ensure_default_regex_entries() -> list[dict[str, Any]]:
+    """Crea plantillas por defecto (p. ej. Bancolombia) si aún no existen."""
+    data = get_email_review_settings()
+    entries = list(data.get('regex_entries') or [])
+    existing_keys = {
+        (
+            str(e.get('description') or '').strip().lower(),
+            str(e.get('sender') or '').strip().lower(),
+        )
+        for e in entries
+    }
+    changed = False
+    for tmpl in DEFAULT_REGEX_TEMPLATES:
+        key = (
+            str(tmpl.get('description') or '').strip().lower(),
+            str(tmpl.get('sender') or '').strip().lower(),
+        )
+        if key in existing_keys:
+            continue
+        entry = {
+            'id': _next_regex_id(entries),
+            'description': tmpl['description'],
+            'sender': tmpl.get('sender') or '',
+            'pattern': tmpl['pattern'],
+            'enabled': True,
+            'payment_method_ids': list(tmpl.get('payment_method_ids') or []),
+        }
+        entries.append(entry)
+        existing_keys.add(key)
+        changed = True
+    if changed:
+        data['regex_entries'] = entries
+        _persist_settings(data)
+    return entries
+
+
 def create_email_regex_entry(
     description: str,
     sender: str,
     pattern: str,
+    *,
+    payment_method_ids: list[str] | None = None,
 ) -> dict[str, Any]:
     description = (description or '').strip()
     sender = (sender or '').strip()
@@ -132,12 +193,19 @@ def create_email_regex_entry(
 
     data = get_email_review_settings()
     entries = list(data.get('regex_entries') or [])
+    pm_ids: list[str] = []
+    if payment_method_ids:
+        for x in payment_method_ids:
+            s = str(x or '').strip().lower()
+            if s and s not in pm_ids:
+                pm_ids.append(s)
     entry = {
         'id': _next_regex_id(entries),
         'description': description,
         'sender': sender,
         'pattern': pattern,
         'enabled': True,
+        'payment_method_ids': pm_ids,
     }
     entries.append(entry)
     data['regex_entries'] = entries
@@ -150,6 +218,8 @@ def update_email_regex_entry(
     description: str,
     sender: str,
     pattern: str,
+    *,
+    payment_method_ids: list[str] | None = None,
 ) -> dict[str, Any]:
     description = (description or '').strip()
     sender = (sender or '').strip()
@@ -168,6 +238,13 @@ def update_email_regex_entry(
             item['description'] = description
             item['sender'] = sender
             item['pattern'] = pattern
+            if payment_method_ids is not None:
+                pm_ids: list[str] = []
+                for x in payment_method_ids:
+                    s = str(x or '').strip().lower()
+                    if s and s not in pm_ids:
+                        pm_ids.append(s)
+                item['payment_method_ids'] = pm_ids
             found = item
             break
     if not found:
@@ -211,14 +288,12 @@ def list_imap_server_options() -> list[dict[str, Any]]:
 
 
 def buzon_enabled() -> bool:
-    """Lee el observador IMAP global (Admin Dashboard). Desactivado por defecto."""
-    from app.admin.site_settings import get_site_setting
-
-    return get_site_setting('observer_enabled', '0') == '1'
+    """True si la revisión de recargas debe consultar el buzón de mensajes (ReceivedEmail)."""
+    return bool(get_email_review_settings().get('buzon_enabled'))
 
 
 def set_buzon_enabled(enabled: bool) -> bool:
-    from app.admin.site_settings import set_site_setting
-
-    set_site_setting('observer_enabled', '1' if enabled else '0')
+    data = get_email_review_settings()
+    data['buzon_enabled'] = bool(enabled)
+    _persist_settings(data)
     return bool(enabled)

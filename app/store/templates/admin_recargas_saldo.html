@@ -12,6 +12,8 @@
      data-email-review-url="{{ url_for('store_bp.api_admin_balance_recharge_email_review_settings') }}"
      data-email-review-buzon-url="{{ url_for('store_bp.api_admin_balance_recharge_email_review_buzon') }}"
      data-email-review-regex-url="{{ url_for('store_bp.api_admin_balance_recharge_email_review_regex_create') }}"
+     data-email-verify-url-base="{{ url_for('store_bp.api_admin_balance_recharge_email_verify', recharge_id=0) }}"
+     data-email-verify-batch-url="{{ url_for('store_bp.api_admin_balance_recharge_email_verify_batch') }}"
      data-imap-admin-url="{{ url_for('admin_bp.dashboard') }}">
   <div id="mobileMenu" class="mobile-menu-store hidden">
     <div class="menu-user-info-row menu-user-info-row--name-only menu-sidebar-heading-name">
@@ -171,8 +173,8 @@
             <button type="button" id="adminRecargasEmailImapBtn" class="btn-panel btn-blue btn-sm" title="Servidores IMAP para consultar correo">
               <i class="fas fa-server" aria-hidden="true"></i> IMAP
             </button>
-            <label class="admin-recargas-buzon-check" title="Opcional: activa el buzón de Admin Dashboard para consultar correos">
-              <input type="checkbox" id="adminRecargasBuzonEnabled" aria-label="Activar buzón de administración">
+            <label class="admin-recargas-buzon-check" title="Consulta correos guardados en Gestionar Buzón (Admin Dashboard)">
+              <input type="checkbox" id="adminRecargasBuzonEnabled" aria-label="Consultar buzón de mensajes">
               <span>Buzón</span>
             </label>
           </div>
@@ -181,6 +183,7 @@
         <div class="admin-recargas-auto-box admin-recargas-auto-box--status">
           <div class="admin-recargas-review-toolbar admin-recargas-auto-toolbar">
             <span class="text-muted">Pendientes de verificación: <strong id="adminRecargasAutoPendingCount">—</strong></span>
+            <button type="button" id="adminRecargasEmailVerifyAll" class="btn-panel btn-purple btn-sm" title="Buscar correos bancarios (Bancolombia, etc.)">Verificar correos</button>
             <button type="button" id="adminRecargasAutoRefresh" class="btn-panel btn-blue btn-sm">Actualizar</button>
           </div>
         </div>
@@ -369,6 +372,6 @@
   <script src="{{ url_for('store_bp.static', filename='js/menu_tienda.js') }}" defer></script>
   <script src="{{ url_for('static', filename='js/clear_trigger_logs.js') }}" defer></script>
   <script src="{{ url_for('store_bp.static', filename='js/admin_recargas_cleanup.js') }}?v=20260522" defer></script>
-  <script src="{{ url_for('store_bp.static', filename='js/admin_recargas_saldo.js') }}?v=20260527-auto-email"></script>
-  <script src="{{ url_for('store_bp.static', filename='js/admin_recargas_auto_email.js') }}?v=20260527-regex-local" defer></script>
+  <script src="{{ url_for('store_bp.static', filename='js/admin_recargas_saldo.js') }}?v=20260528-bancolombia-email"></script>
+  <script src="{{ url_for('store_bp.static', filename='js/admin_recargas_auto_email.js') }}?v=20260528-bancolombia-email" defer></script>
 {% endblock %}

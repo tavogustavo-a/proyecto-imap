@@ -264,6 +264,144 @@
   /* ——— Revisión automática ——— */
   var autoListEl = document.getElementById('adminRecargasAutoList');
   var autoPendingEl = document.getElementById('adminRecargasAutoPendingCount');
+  var emailVerifyUrlBase = (root.dataset.emailVerifyUrlBase || '').replace(/\/0\/email-verify$/, '');
+  var emailVerifyBatchUrl = root.dataset.emailVerifyBatchUrl || '';
+  var emailVerifyCache = {};
+  var autoRechargeItems = [];
+
+  function emailVerifyUrl(id) {
+    return emailVerifyUrlBase + '/' + id + '/email-verify';
+  }
+
+  function renderEmailVerifyBlock(rechargeId) {
+    var ev = emailVerifyCache[String(rechargeId)];
+    if (!ev) {
+      return (
+        '<div class="admin-recarga-email-verify">' +
+        '<button type="button" class="btn-panel btn-purple btn-sm admin-recarga-email-verify-btn" data-id="' +
+        rechargeId +
+        '"><i class="fas fa-envelope" aria-hidden="true"></i> Verificar correo</button>' +
+        '</div>'
+      );
+    }
+
+    var badgeClass = 'admin-recarga-analyzer-badge--warn';
+    if (ev.status === 'matched') badgeClass = 'admin-recarga-analyzer-badge--ok';
+    else if (ev.status === 'not_found' || ev.status === 'no_source' || ev.status === 'no_regex') {
+      badgeClass = 'admin-recarga-analyzer-badge--warn';
+    }
+
+    var lines = '<p class="admin-recarga-analyzer-meta mb-05">' + escapeHtml(ev.message || '—') + '</p>';
+    if (ev.email) {
+      lines +=
+        '<p class="admin-recarga-analyzer-meta mb-05"><strong>Correo:</strong> ' +
+        escapeHtml(ev.email.from || '—') +
+        (ev.email.subject ? ' · ' + escapeHtml(ev.email.subject) : '') +
+        '</p>';
+      if (ev.email.amounts_detected && ev.email.amounts_detected.length) {
+        lines +=
+          '<p class="admin-recarga-analyzer-meta mb-05"><strong>Montos en correo:</strong> ' +
+          ev.email.amounts_detected
+            .map(function (n) {
+              return '$' + Number(n).toLocaleString('es-CO');
+            })
+            .join(', ') +
+          '</p>';
+      }
+      if (ev.email.receipt_numbers && ev.email.receipt_numbers.length) {
+        lines +=
+          '<p class="admin-recarga-analyzer-meta mb-0"><strong>Comprobante en correo:</strong> ' +
+          escapeHtml(ev.email.receipt_numbers.join(', ')) +
+          '</p>';
+      }
+    }
+
+    return (
+      '<div class="admin-recarga-email-verify">' +
+      '<div class="admin-recarga-analyzer-badges mb-05">' +
+      '<span class="admin-recarga-analyzer-badge ' +
+      badgeClass +
+      '">Correo: ' +
+      escapeHtml(ev.status || '—') +
+      '</span></div>' +
+      lines +
+      '<button type="button" class="btn-panel btn-purple btn-sm admin-recarga-email-verify-btn mt-05" data-id="' +
+      rechargeId +
+      '">Reverificar correo</button></div>'
+    );
+  }
+
+  function refreshAutoRechargeCards() {
+    if (!autoListEl) return;
+    if (!autoRechargeItems.length) {
+      autoListEl.innerHTML = '<p class="text-muted">No hay recargas automáticas pendientes de verificar.</p>';
+      return;
+    }
+    autoListEl.innerHTML = autoRechargeItems.map(renderAutoRechargeCard).join('');
+  }
+
+  function applyEmailVerifyResults(results) {
+    if (!results || typeof results !== 'object') return;
+    Object.keys(results).forEach(function (key) {
+      emailVerifyCache[key] = results[key];
+    });
+    refreshAutoRechargeCards();
+  }
+
+  function verifyEmailForRecharge(id) {
+    if (!emailVerifyUrlBase) return Promise.resolve();
+    var btn = autoListEl && autoListEl.querySelector('.admin-recarga-email-verify-btn[data-id="' + id + '"]');
+    if (btn) btn.disabled = true;
+    return fetch(emailVerifyUrl(id), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'same-origin',
+      body: '{}',
+    })
+      .then(function (r) {
+        return r.json();
+      })
+      .then(function (data) {
+        if (!data.success) throw new Error(data.message || 'No se pudo verificar.');
+        if (data.email_verify) {
+          emailVerifyCache[String(id)] = data.email_verify;
+          refreshAutoRechargeCards();
+        }
+        return data;
+      })
+      .catch(function (err) {
+        alert(err.message || 'Error al verificar correo.');
+      })
+      .finally(function () {
+        if (btn) btn.disabled = false;
+      });
+  }
+
+  function verifyAllEmails() {
+    if (!emailVerifyBatchUrl) return Promise.resolve();
+    var btn = document.getElementById('adminRecargasEmailVerifyAll');
+    if (btn) btn.disabled = true;
+    return fetch(emailVerifyBatchUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'same-origin',
+      body: JSON.stringify({}),
+    })
+      .then(function (r) {
+        return r.json();
+      })
+      .then(function (data) {
+        if (!data.success) throw new Error(data.message || 'No se pudo verificar.');
+        applyEmailVerifyResults(data.results || {});
+        return data;
+      })
+      .catch(function (err) {
+        alert(err.message || 'Error al verificar correos.');
+      })
+      .finally(function () {
+        if (btn) btn.disabled = false;
+      });
+  }
 
   function renderAnalyzerBlock(analyzer) {
     if (!analyzer) {
@@ -383,6 +521,7 @@
       it.id +
       '">Rechazar y revertir saldo</button>' +
       '</div></div>';
+    var emailVerifyHtml = renderEmailVerifyBlock(it.id);
 
     return (
       '<article class="admin-recarga-card admin-recarga-card--auto_credited">' +
@@ -403,6 +542,7 @@
       (analyzerHtml
         ? '<div class="admin-recarga-analyzer">' + analyzerHtml + '</div>'
         : '') +
+      emailVerifyHtml +
       actions +
       '</article>'
     );
@@ -421,12 +561,12 @@
           return;
         }
         if (autoPendingEl) autoPendingEl.textContent = String(data.auto_pending_count || 0);
-        var items = data.items || [];
-        if (!items.length) {
+        autoRechargeItems = data.items || [];
+        if (!autoRechargeItems.length) {
           autoListEl.innerHTML = '<p class="text-muted">No hay recargas automáticas pendientes de verificar.</p>';
           return;
         }
-        autoListEl.innerHTML = items.map(renderAutoRechargeCard).join('');
+        refreshAutoRechargeCards();
       })
       .catch(function () {
         autoListEl.innerHTML = '<p class="text-danger">Error de red.</p>';
@@ -457,6 +597,12 @@
 
   if (autoListEl) {
     autoListEl.addEventListener('click', function (e) {
+      var verifyBtn = e.target.closest('.admin-recarga-email-verify-btn');
+      if (verifyBtn) {
+        var vid = parseInt(verifyBtn.getAttribute('data-id'), 10);
+        if (vid) verifyEmailForRecharge(vid);
+        return;
+      }
       var confirmBtn = e.target.closest('.admin-recarga-confirm-auto');
       var rejectBtn = e.target.closest('.admin-recarga-reject-auto');
       if (confirmBtn) {
@@ -472,6 +618,7 @@
     });
   }
   document.getElementById('adminRecargasAutoRefresh')?.addEventListener('click', loadAutoRecharges);
+  document.getElementById('adminRecargasEmailVerifyAll')?.addEventListener('click', verifyAllEmails);
 
   /* ——— Medios de pago ——— */
   var methodsPanel = document.getElementById('adminRecargasPanelMethods');

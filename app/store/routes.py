@@ -6291,10 +6291,12 @@ def api_admin_balance_recharge_email_review_settings():
         update_email_regex_entry,
         delete_email_regex_entry,
         list_imap_server_options,
+        ensure_default_regex_entries,
         buzon_enabled,
     )
 
     if request.method == 'GET':
+        ensure_default_regex_entries()
         settings = get_email_review_settings()
         return jsonify({
             'success': True,
@@ -6331,6 +6333,7 @@ def api_admin_balance_recharge_email_review_regex_create():
             data.get('description', ''),
             data.get('sender', ''),
             data.get('pattern', ''),
+            payment_method_ids=data.get('payment_method_ids'),
         )
     except ValueError as exc:
         return jsonify({'success': False, 'message': str(exc)}), 400
@@ -6376,6 +6379,7 @@ def api_admin_balance_recharge_email_review_regex_item(entry_id):
             data.get('description', ''),
             data.get('sender', ''),
             data.get('pattern', ''),
+            payment_method_ids=data.get('payment_method_ids'),
         )
     except ValueError as exc:
         return jsonify({'success': False, 'message': str(exc)}), 400
@@ -6404,8 +6408,80 @@ def api_admin_balance_recharge_email_review_buzon():
     return jsonify({
         'success': True,
         'buzon_enabled': buzon_enabled(),
-        'message': 'Buzón ' + ('activado' if enabled else 'desactivado') + '.',
+        'message': 'Consulta al buzón de mensajes ' + ('activada' if enabled else 'desactivada') + '.',
     })
+
+
+@store_bp.route('/api/admin/balance-recharge/<int:recharge_id>/email-verify', methods=['POST'])
+@csrf_exempt_route
+@admin_required
+def api_admin_balance_recharge_email_verify(recharge_id):
+    from app.store.models import BalanceRecharge
+    from app.store.balance_recharge_email_verify import verify_recharge_by_email
+
+    _ensure_balance_recharges_table()
+    row = BalanceRecharge.query.get(recharge_id)
+    if not row:
+        return jsonify({'success': False, 'message': 'Solicitud no encontrada.'}), 404
+    if (row.status or '').lower() != 'auto_credited':
+        return jsonify({'success': False, 'message': 'Solo aplica a recargas auto-acreditadas.'}), 400
+
+    try:
+        result = verify_recharge_by_email(row)
+    except Exception as exc:
+        current_app.logger.error('Error verificando recarga por correo %s: %s', recharge_id, exc, exc_info=True)
+        return jsonify({'success': False, 'message': 'Error al consultar correos.'}), 500
+
+    return jsonify({
+        'success': True,
+        'recharge_id': recharge_id,
+        'email_verify': result,
+    })
+
+
+@store_bp.route('/api/admin/balance-recharge/email-verify-batch', methods=['POST'])
+@csrf_exempt_route
+@admin_required
+def api_admin_balance_recharge_email_verify_batch():
+    from app.store.models import BalanceRecharge
+    from app.store.balance_recharge_email_verify import verify_recharge_by_email
+
+    _ensure_balance_recharges_table()
+    data = request.get_json(silent=True) or {}
+    ids_raw = data.get('recharge_ids') or []
+    recharge_ids: list[int] = []
+    if isinstance(ids_raw, list):
+        for x in ids_raw:
+            try:
+                rid = int(x)
+            except (TypeError, ValueError):
+                continue
+            if rid > 0 and rid not in recharge_ids:
+                recharge_ids.append(rid)
+
+    if not recharge_ids:
+        rows = BalanceRecharge.query.filter(
+            BalanceRecharge.status == 'auto_credited',
+            BalanceRecharge.admin_verified.is_(None),
+        ).order_by(BalanceRecharge.created_at.desc()).limit(50).all()
+        recharge_ids = [r.id for r in rows]
+
+    results: dict[str, dict] = {}
+    for rid in recharge_ids:
+        row = BalanceRecharge.query.get(rid)
+        if not row:
+            continue
+        try:
+            results[str(rid)] = verify_recharge_by_email(row)
+        except Exception as exc:
+            current_app.logger.warning('Email verify falló recarga %s: %s', rid, exc)
+            results[str(rid)] = {
+                'status': 'error',
+                'message': 'Error al consultar correos.',
+                'checked': False,
+            }
+
+    return jsonify({'success': True, 'results': results})
 
 
 @store_bp.route('/api/admin/payment-methods/settings', methods=['GET', 'POST'])

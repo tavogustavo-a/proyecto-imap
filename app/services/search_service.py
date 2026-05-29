@@ -666,10 +666,35 @@ def search_imap2_server_dynamic(to_address, imap_server_id, user=None):
     return None
 
 
+def _mail_internal_date_utc(mail: dict) -> datetime:
+    """Normaliza internal_date del correo a UTC para comparar recencia."""
+    dt = mail.get("internal_date")
+    if dt is None:
+        return datetime.min.replace(tzinfo=timezone.utc)
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc)
+
+
+def _should_prefer_mail_over(current_best: dict, challenger: dict, *, challenger_has_filter: bool) -> bool:
+    """
+    True si challenger debe reemplazar current_best.
+    Gana el más reciente; a igual fecha, filtro > regex.
+    """
+    best_dt = _mail_internal_date_utc(current_best)
+    chall_dt = _mail_internal_date_utc(challenger)
+    if chall_dt > best_dt:
+        return True
+    if chall_dt < best_dt:
+        return False
+    best_has_filter = bool(current_best.get("filter_matched"))
+    return bool(challenger_has_filter) and not best_has_filter
+
+
 def _process_mails(all_mails, filters, regexes, user_searching, searched_address):
     """
-    Aplica los filters y regex a la lista de correos ordenada desc por fecha.
-    Retorna el primer mail que coincida con (filter || regex).
+    Aplica filters y regex a correos ordenados por fecha (desc).
+    Devuelve el match más reciente; si comparten fecha exacta, filtro > regex.
     """
     if not all_mails:
         return None
@@ -683,8 +708,7 @@ def _process_mails(all_mails, filters, regexes, user_searching, searched_address
         active_security_rules = []
 
     logs_to_commit = False
-    filter_candidate = None
-    regex_candidate = None
+    best_mail = None
 
     for mail in all_mails:
         _format_date(mail)
@@ -733,20 +757,20 @@ def _process_mails(all_mails, filters, regexes, user_searching, searched_address
             mail["html"] = ""
             mail["text"] = ""
 
-        if mail["filter_matched"] and filter_candidate is None:
-            filter_candidate = mail
-            if _maybe_log_security_triggers(
-                mail, body_raw, sender_lower, user_searching, searched_address, active_security_rules
-            ):
-                logs_to_commit = True
-        elif found_regex and regex_candidate is None:
-            regex_candidate = mail
+        has_match = mail["filter_matched"] or found_regex
+        if not has_match:
+            continue
+
+        if best_mail is None or _should_prefer_mail_over(
+            best_mail, mail, challenger_has_filter=mail["filter_matched"]
+        ):
+            best_mail = mail
             if _maybe_log_security_triggers(
                 mail, body_raw, sender_lower, user_searching, searched_address, active_security_rules
             ):
                 logs_to_commit = True
 
-    found_mail = filter_candidate or regex_candidate
+    found_mail = best_mail
 
     # Commit final (si corresponde) después de salir del bucle
     if logs_to_commit:

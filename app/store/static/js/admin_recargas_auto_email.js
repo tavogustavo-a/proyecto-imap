@@ -121,6 +121,12 @@
             escapeHtml(r.sender) +
             '</code></small>'
           : '';
+        var pmLine =
+          r.payment_method_ids && r.payment_method_ids.length
+            ? '<br><small class="text-muted">Medio: <code>' +
+              escapeHtml(r.payment_method_ids.join(', ')) +
+              '</code></small>'
+            : '';
         return (
           '<div class="admin-recarga-email-regex-item">' +
           '<div class="admin-recarga-email-regex-item__body">' +
@@ -128,6 +134,7 @@
           escapeHtml(r.description || 'Sin descripción') +
           '</strong>' +
           senderLine +
+          pmLine +
           '<br><small class="admin-recarga-email-regex-item__pattern"><code>' +
           escapeHtml(r.pattern || '') +
           '</code></small>' +
