@@ -245,6 +245,23 @@ def create_app(config_class_passed=None):
                 schema_users_patch_err,
             )
 
+        try:
+            from app.store.routes import _ensure_balance_recharges_table
+            from app.store.sale_purchase_snapshot import ensure_sale_schema, ensure_snapshot_table
+
+            _ensure_balance_recharges_table()
+            ensure_sale_schema()
+            ensure_snapshot_table()
+            app.logger.info(
+                "Esquema: tablas/columnas de recargas y ventas (historial) verificadas"
+            )
+        except Exception as store_schema_err:
+            db.session.rollback()
+            app.logger.warning(
+                "No se pudo aplicar parche esquema tienda (recargas / historial compras): %s",
+                store_schema_err,
+            )
+
     # === Registro de Blueprints ===
     from app.auth.routes import auth_bp
     app.register_blueprint(auth_bp, url_prefix="/auth")

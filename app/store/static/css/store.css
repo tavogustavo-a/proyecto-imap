@@ -13958,23 +13958,31 @@ html, body {
     content: attr(data-tip);
     position: absolute;
     left: 50%;
-    bottom: calc(100% + 6px);
+    top: calc(100% + 5px);
+    bottom: auto;
     transform: translateX(-50%);
     padding: 0.35rem 0.55rem;
-    background: #1e293b;
-    color: #fff;
+    background: #0f172a !important;
+    color: #ffffff !important;
     font-size: 0.72rem;
-    font-weight: 500;
+    font-weight: 600;
     font-family: Arial, sans-serif;
     line-height: 1.25;
     white-space: nowrap;
     border-radius: 6px;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.22);
+    border: 1px solid #334155;
+    box-shadow: 0 3px 10px rgba(0, 0, 0, 0.28);
     opacity: 0;
     visibility: hidden;
     transition: opacity 0.12s ease, visibility 0.12s ease;
-    z-index: 30;
+    z-index: 100;
     pointer-events: none;
+  }
+
+  .purchase-history-stats-table thead th:has(.purchase-history-stats-th-tip:hover),
+  .purchase-history-stats-table thead th:has(.purchase-history-stats-th-tip:focus-visible) {
+    z-index: 100;
+    overflow: visible !important;
   }
 
   .purchase-history-stats-table thead th .purchase-history-stats-th-tip:hover::after,
@@ -25461,6 +25469,28 @@ html.admin-lic-bulk-modal--lock body {
   .purchase-history-page .purchase-history-compras-wrap.purchase-history-container.store-front-main {
     padding: var(--ph-section-gap) !important;
   }
+}
+
+.purchase-history-stats-th-floater {
+  position: fixed;
+  z-index: 10050;
+  transform: translateX(-50%);
+  padding: 0.4rem 0.65rem;
+  background: #0f172a !important;
+  color: #ffffff !important;
+  font-size: 0.75rem;
+  font-weight: 600;
+  font-family: Arial, sans-serif;
+  line-height: 1.25;
+  white-space: nowrap;
+  border-radius: 6px;
+  border: 1px solid #475569;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+  pointer-events: none;
+}
+
+.purchase-history-stats-th-floater[hidden] {
+  display: none !important;
 }
 
 .purchase-history-page.admin-recargas-page #adminRecargasPanelMethods,

@@ -2,7 +2,7 @@
 
 {% block title %}Mi Historial de Compras{% endblock %}
 
-{% block head %}{{ super() }}<link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}?v=20260605-stats-tips-fix"><link rel="stylesheet" href="{{ url_for('static', filename='fontawesome/css/all.css') }}">{% endblock %}
+{% block head %}{{ super() }}<link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}?v=20260605-stats-tips-visible"><link rel="stylesheet" href="{{ url_for('static', filename='fontawesome/css/all.css') }}">{% endblock %}
 {% block content %}
 <div class="purchase-history-page{% if mostrar_usuario_comprador %} purchase-history-admin{% endif %}"
      data-show-user-column="{{ 'true' if mostrar_usuario_comprador else 'false' }}"
@@ -292,11 +292,11 @@
         <table class="purchase-history-stats-table" id="phStatsSalesTable">
           <thead>
             <tr>
-              <th scope="col"><span class="purchase-history-stats-th-tip" data-tip="Servicio o producto vendido" tabindex="0" role="img" aria-label="Servicio o producto vendido"><i class="fas fa-ticket-alt" aria-hidden="true"></i></span> Servicio</th>
-              <th scope="col" class="purchase-history-stats-th-icon text-center" aria-label="Moneda"><span class="purchase-history-stats-th-tip" data-tip="Moneda (COP o USD)" tabindex="0" role="img" aria-label="Moneda (COP o USD)"><i class="fas fa-coins" aria-hidden="true"></i></span><span class="sr-only"> Moneda</span></th>
-              <th scope="col" class="purchase-history-stats-th-icon text-center" aria-label="Ventas"><span class="purchase-history-stats-th-tip" data-tip="Ventas nuevas en el período" tabindex="0" role="img" aria-label="Ventas nuevas en el período"><i class="fas fa-shopping-cart" aria-hidden="true"></i></span><span class="sr-only"> Ventas</span></th>
-              <th scope="col" class="purchase-history-stats-th-icon text-center" aria-label="Renovaciones"><span class="purchase-history-stats-th-tip" data-tip="Renovaciones en el período" tabindex="0" role="img" aria-label="Renovaciones en el período"><i class="fas fa-sync-alt" aria-hidden="true"></i></span><span class="sr-only"> Renovaciones</span></th>
-              <th scope="col"><span class="purchase-history-stats-th-tip" data-tip="Monto total facturado" tabindex="0" role="img" aria-label="Monto total facturado"><i class="fas fa-money-bill-wave" aria-hidden="true"></i></span> Total</th>
+              <th scope="col"><span class="purchase-history-stats-th-tip" data-tip="Servicio o producto vendido" title="Servicio o producto vendido" tabindex="0" role="img" aria-label="Servicio o producto vendido"><i class="fas fa-ticket-alt" aria-hidden="true"></i></span> Servicio</th>
+              <th scope="col" class="purchase-history-stats-th-icon text-center" aria-label="Moneda"><span class="purchase-history-stats-th-tip" data-tip="Moneda (COP o USD)" title="Moneda (COP o USD)" tabindex="0" role="img" aria-label="Moneda (COP o USD)"><i class="fas fa-coins" aria-hidden="true"></i></span><span class="sr-only"> Moneda</span></th>
+              <th scope="col" class="purchase-history-stats-th-icon text-center" aria-label="Ventas"><span class="purchase-history-stats-th-tip" data-tip="Ventas nuevas en el período" title="Ventas nuevas en el período" tabindex="0" role="img" aria-label="Ventas nuevas en el período"><i class="fas fa-shopping-cart" aria-hidden="true"></i></span><span class="sr-only"> Ventas</span></th>
+              <th scope="col" class="purchase-history-stats-th-icon text-center" aria-label="Renovaciones"><span class="purchase-history-stats-th-tip" data-tip="Renovaciones en el período" title="Renovaciones en el período" tabindex="0" role="img" aria-label="Renovaciones en el período"><i class="fas fa-sync-alt" aria-hidden="true"></i></span><span class="sr-only"> Renovaciones</span></th>
+              <th scope="col"><span class="purchase-history-stats-th-tip" data-tip="Monto total facturado" title="Monto total facturado" tabindex="0" role="img" aria-label="Monto total facturado"><i class="fas fa-money-bill-wave" aria-hidden="true"></i></span> Total</th>
             </tr>
           </thead>
           <tbody></tbody>
@@ -479,7 +479,7 @@
   <script src="{{ url_for('store_bp.static', filename='js/historial_compras_cleanup.js') }}?v=20260604-scope-count" defer></script>
   {% endif %}
   {% if mostrar_usuario_comprador or (session.get('logged_in') and (not session.get('username') or session.get('username').lower() not in blocked_users)) %}
-  <script src="{{ url_for('store_bp.static', filename='js/historial_compras_stats.js') }}?v=20260521-stats-usuario" defer></script>
+  <script src="{{ url_for('store_bp.static', filename='js/historial_compras_stats.js') }}?v=20260605-stats-tips-visible" defer></script>
   {% endif %}
   {% if mostrar_historial_licencias %}
   <script src="{{ url_for('store_bp.static', filename='js/user_license_actividad_historial.js') }}?v=20260522-admin-licencias" defer></script>

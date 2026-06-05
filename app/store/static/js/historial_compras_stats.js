@@ -29,6 +29,49 @@ document.addEventListener('DOMContentLoaded', function () {
   const salesTable = document.querySelector('#phStatsSalesTable tbody');
   const activityTable = document.querySelector('#phStatsActivityTable tbody');
 
+  function initStatsSalesHeaderTips() {
+    const salesHead = document.getElementById('phStatsSalesTable');
+    if (!salesHead) return;
+    const tips = salesHead.querySelectorAll('.purchase-history-stats-th-tip');
+    if (!tips.length) return;
+
+    let floater = document.getElementById('phStatsHeaderTipFloater');
+    if (!floater) {
+      floater = document.createElement('div');
+      floater.id = 'phStatsHeaderTipFloater';
+      floater.className = 'purchase-history-stats-th-floater';
+      floater.hidden = true;
+      document.body.appendChild(floater);
+    }
+
+    function hideFloater() {
+      floater.hidden = true;
+    }
+
+    function showFloater(el) {
+      const text = (el.getAttribute('data-tip') || el.getAttribute('title') || '').trim();
+      if (!text) return;
+      floater.textContent = text;
+      floater.hidden = false;
+      const rect = el.getBoundingClientRect();
+      floater.style.left = rect.left + rect.width / 2 + 'px';
+      floater.style.top = rect.bottom + 6 + 'px';
+    }
+
+    tips.forEach(function (el) {
+      el.addEventListener('mouseenter', function () {
+        showFloater(el);
+      });
+      el.addEventListener('mouseleave', hideFloater);
+      el.addEventListener('focus', function () {
+        showFloater(el);
+      });
+      el.addEventListener('blur', hideFloater);
+    });
+  }
+
+  initStatsSalesHeaderTips();
+
   let userSearchDebounce = null;
 
   const ACTIVITY_LABELS = {

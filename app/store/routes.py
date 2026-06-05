@@ -5464,17 +5464,31 @@ _BALANCE_RECHARGE_MAX_MB = 30
 _BALANCE_RECHARGE_MAX_BYTES = _BALANCE_RECHARGE_MAX_MB * 1024 * 1024
 
 
+def _store_db_dialect():
+    return getattr(db.engine.dialect, 'name', '') or ''
+
+
 def _ensure_balance_recharges_table():
     try:
         from sqlalchemy import inspect, text
         from app.store.models import BalanceRecharge
-        if 'store_balance_recharges' not in inspect(db.engine).get_table_names():
+
+        dialect = _store_db_dialect()
+        dt_type = 'TIMESTAMP' if dialect == 'postgresql' else 'DATETIME'
+        bool_false = 'FALSE' if dialect == 'postgresql' else '0'
+
+        insp = inspect(db.engine)
+        if 'store_balance_recharges' not in insp.get_table_names():
             BalanceRecharge.__table__.create(db.engine)
         else:
-            cols = {c['name'].lower() for c in inspect(db.engine).get_columns('store_balance_recharges')}
+            cols = {c['name'].lower() for c in insp.get_columns('store_balance_recharges')}
             migrations = [
+                ('submitted_by_user_id', 'ALTER TABLE store_balance_recharges ADD COLUMN submitted_by_user_id INTEGER'),
                 ('payment_method_id', 'ALTER TABLE store_balance_recharges ADD COLUMN payment_method_id VARCHAR(48)'),
-                ('auto_credited', 'ALTER TABLE store_balance_recharges ADD COLUMN auto_credited BOOLEAN DEFAULT FALSE'),
+                (
+                    'auto_credited',
+                    f'ALTER TABLE store_balance_recharges ADD COLUMN auto_credited BOOLEAN DEFAULT {bool_false}',
+                ),
                 ('amount_credited', 'ALTER TABLE store_balance_recharges ADD COLUMN amount_credited NUMERIC(12, 2)'),
                 ('analyzer_json', 'ALTER TABLE store_balance_recharges ADD COLUMN analyzer_json TEXT'),
                 ('admin_verified', 'ALTER TABLE store_balance_recharges ADD COLUMN admin_verified BOOLEAN'),
@@ -5482,13 +5496,30 @@ def _ensure_balance_recharges_table():
                 ('proof_image_hash', 'ALTER TABLE store_balance_recharges ADD COLUMN proof_image_hash VARCHAR(64)'),
                 ('email_verify_status', 'ALTER TABLE store_balance_recharges ADD COLUMN email_verify_status VARCHAR(32)'),
                 ('email_verify_attempts', 'ALTER TABLE store_balance_recharges ADD COLUMN email_verify_attempts INTEGER DEFAULT 0'),
-                ('email_verify_next_at', 'ALTER TABLE store_balance_recharges ADD COLUMN email_verify_next_at DATETIME'),
+                (
+                    'email_verify_next_at',
+                    f'ALTER TABLE store_balance_recharges ADD COLUMN email_verify_next_at {dt_type}',
+                ),
                 ('email_verify_json', 'ALTER TABLE store_balance_recharges ADD COLUMN email_verify_json TEXT'),
             ]
             for col_name, ddl in migrations:
                 if col_name not in cols:
-                    db.session.execute(text(ddl))
-            db.session.commit()
+                    try:
+                        db.session.execute(text(ddl))
+                        db.session.commit()
+                        cols.add(col_name)
+                    except Exception as col_exc:
+                        db.session.rollback()
+                        current_app.logger.warning(
+                            'No se pudo añadir store_balance_recharges.%s (%s): %s',
+                            col_name,
+                            dialect,
+                            col_exc,
+                        )
+
+        from app.store.balance_recharge_historial_snapshot import ensure_snapshot_table as _ensure_br_hist_snap
+
+        _ensure_br_hist_snap()
     except Exception as e:
         current_app.logger.warning('No se pudo asegurar tabla store_balance_recharges: %s', e)
         try:

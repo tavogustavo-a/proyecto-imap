@@ -213,6 +213,14 @@ def _persist_inferred_renewal_kind(sale, snap, kind):
         logger.debug('No se pudo guardar renewal_kind inferido sale_id=%s: %s', getattr(sale, 'id', None), exc)
 
 
+def _db_dialect():
+    return getattr(db.engine.dialect, 'name', '') or ''
+
+
+def _bool_default_false():
+    return 'FALSE' if _db_dialect() == 'postgresql' else '0'
+
+
 def _ensure_column(table_name, column_name, ddl_fragment):
     try:
         insp = inspect(db.engine)
@@ -225,12 +233,19 @@ def _ensure_column(table_name, column_name, ddl_fragment):
         db.session.commit()
     except Exception as exc:
         db.session.rollback()
-        logger.warning('No se pudo añadir %s.%s: %s', table_name, column_name, exc)
+        logger.warning(
+            'No se pudo añadir %s.%s (%s): %s',
+            table_name,
+            column_name,
+            _db_dialect(),
+            exc,
+        )
 
 
 def ensure_sale_schema():
     """Columnas de renovación en ventas (tipo 1 mes / mes a mes)."""
-    _ensure_column('store_sales', 'is_renewal', 'is_renewal BOOLEAN DEFAULT 0 NOT NULL')
+    bool_false = _bool_default_false()
+    _ensure_column('store_sales', 'is_renewal', f'is_renewal BOOLEAN DEFAULT {bool_false} NOT NULL')
     _ensure_column('store_sales', 'renewal_kind', 'renewal_kind VARCHAR(24)')
 
 
@@ -241,10 +256,11 @@ def ensure_snapshot_table():
         if 'store_sale_purchase_snapshots' not in insp.get_table_names():
             SalePurchaseSnapshot.__table__.create(db.engine, checkfirst=True)
         else:
+            bool_false = _bool_default_false()
             _ensure_column(
                 'store_sale_purchase_snapshots',
                 'is_renewal',
-                'is_renewal BOOLEAN DEFAULT 0 NOT NULL',
+                f'is_renewal BOOLEAN DEFAULT {bool_false} NOT NULL',
             )
             _ensure_column(
                 'store_sale_purchase_snapshots',
