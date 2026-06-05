@@ -113,18 +113,26 @@ def dashboard():
         admin_user=admin_user
     )
 
+@admin_bp.route("/toggle_email_buzon_ajax", methods=["POST"])
+@csrf_exempt_route
+@admin_required
+def toggle_email_buzon_ajax():
+    """Activa/desactiva el buzón de mensajes (recepción SMTP / almacenamiento en ReceivedEmail)."""
+    try:
+        current = get_site_setting("email_buzon_enabled", "1")
+        new_val = "0" if current == "1" else "1"
+        set_site_setting("email_buzon_enabled", new_val)
+        return jsonify({"success": True, "enabled": new_val == "1"})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
 @admin_bp.route("/toggle_imap_management_ajax", methods=["POST"])
 @csrf_exempt_route
 @admin_required
 def toggle_imap_management_ajax():
-    """Activa/desactiva el Observador IMAP (observer_enabled) usado por el job de Buzón/Conexiones."""
-    try:
-        current = get_site_setting("observer_enabled", "0")
-        new_val = "0" if current == "1" else "1"
-        set_site_setting("observer_enabled", new_val)
-        return jsonify({"success": True, "enabled": new_val == "1"})
-    except Exception as e:
-        return jsonify({"success": False, "error": str(e)}), 500
+    """Compatibilidad: redirige al toggle del buzón (ya no controla el observador IMAP)."""
+    return toggle_email_buzon_ajax()
 
 @admin_bp.route("/filters")
 @admin_required

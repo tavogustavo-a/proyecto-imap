@@ -337,8 +337,8 @@
       <a href="{{ url_for('admin_email_buzon.manage_email_buzon') }}" class="btn-blue text-decoration-none">
         <i class="fas fa-envelope"></i> Gestionar Buzón
       </a>
-      <button type="button" id="toggleImapManagementBtn" class="{{ 'btn-green' if site_settings.get('observer_enabled', '0') == '1' else 'btn-red' }}" data-enabled="{{ 'false' if site_settings.get('observer_enabled', '0') == '1' else 'true' }}">
-        <i class="fas fa-power-off"></i> {{ 'OFF' if site_settings.get('observer_enabled', '0') == '1' else 'ON' }}
+      <button type="button" id="toggleEmailBuzonBtn" class="{{ 'btn-green' if site_settings.get('email_buzon_enabled', '1') == '1' else 'btn-red' }}" data-enabled="{{ 'false' if site_settings.get('email_buzon_enabled', '1') == '1' else 'true' }}" title="Encender o apagar recepción del buzón de mensajes">
+        <i class="fas fa-power-off"></i> {{ 'OFF' if site_settings.get('email_buzon_enabled', '1') == '1' else 'ON' }}
       </button>
     </div>
   </div>

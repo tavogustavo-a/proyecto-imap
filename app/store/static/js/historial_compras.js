@@ -60,6 +60,17 @@ document.addEventListener('DOMContentLoaded', function() {
     return '$' + x.toLocaleString('es-CO', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
   }
 
+  function renewalModalSubtitle(compraRow) {
+    if (!compraRow || !compraRow.is_renewal) return '';
+    if (compraRow.renewal_kind_label) return compraRow.renewal_kind_label;
+    if (compraRow.renewal_kind === 'renovar_1_mes') return 'Renovación: 1 mes más';
+    if (compraRow.renewal_kind === 'dejar_mes_a_mes') return 'Renovación: mes a mes';
+    if (compraRow.renewal_kind === 'mixto') {
+      return 'Renovación mixta (1 mes más y mes a mes)';
+    }
+    return 'Renovación de licencia';
+  }
+
   function openModal(compraRow, openerEl) {
     if (!modal || !modalBody) return;
     lastLicenciasOpenerBtn =
@@ -67,7 +78,7 @@ document.addEventListener('DOMContentLoaded', function() {
     modalTitle.textContent = compraRow.producto || 'Licencias';
     if (modalSub) {
       if (compraRow.is_renewal) {
-        modalSub.textContent = 'Renovación de licencia (1 mes o mes a mes).';
+        modalSub.textContent = renewalModalSubtitle(compraRow);
         modalSub.hidden = false;
       } else {
         modalSub.textContent = '';
@@ -270,12 +281,27 @@ document.addEventListener('DOMContentLoaded', function() {
         const tr = document.createElement('tr');
         if (row.is_cleanup_log) {
           tr.className = 'purchase-history-cleanup-log-row';
+        } else if (row.is_recharge_event) {
+          tr.className = 'purchase-history-recharge-row';
+          if (row.is_recharge_reverted || row.is_recharge_rejected) {
+            tr.className += ' purchase-history-recharge-row--failed';
+          } else {
+            tr.className += ' purchase-history-recharge-row--success';
+          }
         }
         const licBtnCell = document.createElement('td');
         if (row.is_cleanup_log) {
           const span = document.createElement('span');
           span.className = 'text-muted small';
           span.textContent = '—';
+          licBtnCell.appendChild(span);
+        } else if (row.is_recharge_event) {
+          const span = document.createElement('span');
+          const failed = !!(row.is_recharge_reverted || row.is_recharge_rejected);
+          span.className =
+            'purchase-history-recharge-status purchase-history-recharge-status--' +
+            (failed ? 'failed' : 'success');
+          span.textContent = failed ? 'Fallido' : 'Exitoso';
           licBtnCell.appendChild(span);
         } else if (
           (row.licencias && row.licencias.length) ||
@@ -298,17 +324,47 @@ document.addEventListener('DOMContentLoaded', function() {
 
         const totalCell = row.is_cleanup_log
           ? '—'
-          : escapeHtml(formatMoney(row.total));
-        const productoCell = row.is_cleanup_log
-          ? escapeHtml(row.producto)
-          : row.is_renewal
-            ? '<span class="purchase-history-product-icon-stack" title="Renovación" aria-hidden="true">' +
-              '<i class="fas fa-sync-alt purchase-history-renewal-icon"></i>' +
-              '<i class="fas fa-ticket-alt purchase-history-product-icon-base"></i>' +
-              '</span> ' +
-              escapeHtml(row.producto)
-            : '<i class="fas fa-ticket-alt" aria-hidden="true"></i> ' +
-              escapeHtml(row.producto);
+          : row.total_display
+            ? escapeHtml(row.total_display)
+            : escapeHtml(formatMoney(row.total));
+        let productoCell;
+        if (row.is_cleanup_log) {
+          productoCell = escapeHtml(row.producto);
+        } else if (row.is_recharge_event) {
+          var rechargeIcon = 'fa-wallet';
+          var rechargeTone = 'success';
+          if (row.is_recharge_reverted) {
+            rechargeIcon = 'fa-undo';
+            rechargeTone = 'failed';
+          } else if (row.is_recharge_rejected) {
+            rechargeIcon = 'fa-times-circle';
+            rechargeTone = 'failed';
+          } else if (row.is_recharge_conversion) {
+            rechargeIcon = 'fa-exchange-alt';
+          } else if (row.is_recharge_accumulated) {
+            rechargeIcon = 'fa-layer-group';
+          }
+          productoCell =
+            '<span class="purchase-history-recharge-product purchase-history-recharge-product--' +
+            rechargeTone +
+            '">' +
+            '<i class="fas ' +
+            rechargeIcon +
+            '" aria-hidden="true"></i> ' +
+            escapeHtml(row.producto) +
+            '</span>';
+        } else if (row.is_renewal) {
+          productoCell =
+            '<span class="purchase-history-product-icon-stack" title="Renovación" aria-hidden="true">' +
+            '<i class="fas fa-sync-alt purchase-history-renewal-icon"></i>' +
+            '<i class="fas fa-ticket-alt purchase-history-product-icon-base"></i>' +
+            '</span> ' +
+            escapeHtml(row.producto);
+        } else {
+          productoCell =
+            '<i class="fas fa-ticket-alt" aria-hidden="true"></i> ' +
+            escapeHtml(row.producto);
+        }
         tr.innerHTML =
           '<td>' +
           escapeHtml(row.fecha) +
@@ -381,6 +437,7 @@ document.addEventListener('DOMContentLoaded', function() {
       datosFiltrados = datos.filter(function (row) {
         const hay = [];
         hay.push(row.fecha, row.producto, row.cantidad, formatMoney(row.total));
+        if (row.total_display) hay.push(row.total_display);
         if (row.id != null) hay.push(String(row.id));
         if (row.product_id != null) hay.push(String(row.product_id));
         if (showUserColumn) {

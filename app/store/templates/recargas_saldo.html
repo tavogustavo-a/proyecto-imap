@@ -2,7 +2,7 @@
 
 {% block title %}Recargas de saldo{% endblock %}
 
-{% block head %}{{ super() }}<link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}?v=20260526-recarga-auto"><link rel="stylesheet" href="{{ url_for('static', filename='fontawesome/css/all.css') }}"><meta name="csrf_token" content="{{ csrf_token() }}">{% endblock %}
+{% block head %}{{ super() }}<link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}?v=20260604-saldo-icon-black"><link rel="stylesheet" href="{{ url_for('static', filename='fontawesome/css/all.css') }}"><meta name="csrf_token" content="{{ csrf_token() }}">{% endblock %}
 {% block content %}
 <div class="container container-max-width-900 px-2 pb-3 balance-recharge-page">
   {% set blocked_users = ['soporte','soporte1','soporte2','soporte3'] %}
@@ -81,17 +81,22 @@
             <i class="fas fa-hand-holding-usd" aria-hidden="true"></i>
           </span>
         </h1>
-        {% if saldo_line %}
-          <p class="balance-recharge-saldo-line">{{ saldo_line }}</p>
-        {% endif %}
+        <div class="balance-recharge-header-balances">
+          {% if accum_line %}
+            <p id="balanceRechargeAccumLine" class="balance-recharge-accum-line">{{ accum_line }}</p>
+          {% else %}
+            <p id="balanceRechargeAccumLine" class="balance-recharge-accum-line" hidden></p>
+          {% endif %}
+          {% if saldo_line %}
+            <p id="balanceRechargeSaldoLine" class="balance-recharge-saldo-line">{{ saldo_line }}</p>
+          {% else %}
+            <p id="balanceRechargeSaldoLine" class="balance-recharge-saldo-line" hidden></p>
+          {% endif %}
+        </div>
       </div>
     </div>
 
-    <div class="balance-recharge-form-section" aria-labelledby="balanceRechargeFormTitle">
-      <div class="balance-recharge-form-head-row">
-        <h2 id="balanceRechargeFormTitle" class="balance-recharge-section-title balance-recharge-section-title--inline">Enviar solicitud</h2>
-        <span class="balance-recharge-field-label balance-recharge-field-label--inline">Medio de pago</span>
-      </div>
+    <div class="balance-recharge-form-section">
       <form id="balanceRechargeForm"
             class="balance-recharge-form"
             method="post"
@@ -100,56 +105,114 @@
             data-submit-url="{{ url_for('store_bp.api_user_balance_recharge_submit') }}"
             data-list-url="{{ url_for('store_bp.api_user_balance_recharges') }}"
             data-methods-url="{{ url_for('store_bp.api_user_balance_recharge_payment_methods') }}"
+            data-saldo-url="{{ url_for('store_bp.api_user_balance_recharge_saldo') }}"
             novalidate>
       <input type="hidden" name="currency" id="balanceRechargeCurrency" value="{{ tipo_precio|default('COP', true) }}">
       <div class="balance-recharge-field balance-recharge-field--methods" id="balanceRechargeMethodsWrap">
         <div id="balanceRechargeMethodsList" class="balance-recharge-methods-list" role="radiogroup" aria-label="Medio de pago">
           {% if payment_methods %}
             {% for m in payment_methods %}
-            <label class="balance-recharge-method-option"{% if m.qr_url %} data-qr-url="{{ m.qr_url }}"{% endif %}>
+            <label class="balance-recharge-method-option"{% if m.qr_url %} data-qr-url="{{ m.qr_url }}"{% endif %}{% if m.payment_currency %} data-payment-currency="{{ m.payment_currency }}"{% endif %}{% if m.is_accumulator %} data-is-accumulator="1"{% endif %}>
               <input type="radio" name="payment_method_id" value="{{ m.id }}" {% if loop.first %}checked{% endif %} required>
-              <span class="balance-recharge-method-label">{{ m.label }}</span>
-              {% if m.details %}<span class="balance-recharge-method-details">{{ m.details }}</span>{% endif %}
+              <div class="balance-recharge-method-body">
+                <div class="balance-recharge-method-head">
+                  <span class="balance-recharge-method-label">{{ m.label }}{% if m.is_accumulator %} ({{ m.payment_currency_label|default('COP') }}){% endif %}</span>
+                  {% if m.is_breb_bancolombia and m.bre_b_llave %}
+                    <span class="balance-recharge-method-account-wrap">
+                      <span class="balance-recharge-method-account">{{ m.bre_b_llave }}</span>
+                      <button type="button" class="balance-recharge-method-copy" data-copy="{{ m.bre_b_llave }}" title="Copiar llave" aria-label="Copiar llave Bre-B">
+                        <i class="fas fa-copy" aria-hidden="true"></i>
+                      </button>
+                    </span>
+                  {% elif m.account_number %}
+                  <span class="balance-recharge-method-account-wrap">
+                    <span class="balance-recharge-method-account">{{ m.account_number }}</span>
+                    <button type="button" class="balance-recharge-method-copy" data-copy="{{ m.account_number }}" title="Copiar número" aria-label="Copiar número de cuenta">
+                      <i class="fas fa-copy" aria-hidden="true"></i>
+                    </button>
+                  </span>
+                  {% endif %}
+                </div>
+                {% if m.description %}<span class="balance-recharge-method-details">{{ m.description }}</span>{% endif %}
+                {% if m.is_accumulator %}<span class="balance-recharge-method-accum-hint"><span>Pago en {{ m.payment_currency_label|default('COP') }}</span><span class="balance-recharge-method-accum-sep" aria-hidden="true">·</span><span>se acumula hasta conversión</span></span>{% endif %}
+              </div>
             </label>
             {% endfor %}
           {% else %}
             <p class="balance-recharge-hint text-muted">Cargando medios de pago…</p>
           {% endif %}
         </div>
-        <div id="balanceRechargeMethodQr" class="balance-recharge-method-qr" hidden>
-          <p class="balance-recharge-method-qr-label"><i class="fas fa-qrcode" aria-hidden="true"></i> Escanea para pagar</p>
-          <img id="balanceRechargeMethodQrImg" src="" alt="Código QR del medio de pago" class="balance-recharge-method-qr-img">
-        </div>
       </div>
-      <div class="balance-recharge-field">
-        <label for="balanceRechargeAmount">Monto transferido ({{ currency_label|default('COP', true) }})</label>
-        <input type="number" id="balanceRechargeAmount" name="amount" class="form-control" min="1" step="1" required placeholder="Ej. 50000" inputmode="numeric" autocomplete="off">
-      </div>
-      <div class="balance-recharge-field balance-recharge-field--proof">
-        <div class="balance-recharge-proof-row">
-          <label for="balanceRechargeProofs" class="balance-recharge-proof-label">Pantallazo / comprobante</label>
-          <input type="file" id="balanceRechargeProofs" name="proofs" class="form-control balance-recharge-file-input" accept="image/jpeg,image/png,image/webp,image/gif" required>
+      <div class="balance-recharge-field balance-recharge-field--amount">
+        <div class="balance-recharge-amount-stack">
+          <div class="balance-recharge-amount-input-row">
+            <div class="balance-recharge-amount-input-wrap">
+              <label for="balanceRechargeAmount" class="sr-only">Monto transferido ({{ currency_label|default('COP', true) }})</label>
+              <input type="text" id="balanceRechargeAmount" name="amount" class="form-control balance-recharge-amount-input" required placeholder="Monto transferido ({{ currency_label|default('COP', true) }}) — ej. 50000 o 50.000" inputmode="numeric" autocomplete="off" aria-describedby="balanceRechargeAmountHint">
+              <span id="balanceRechargeAmountHint" class="sr-only">Puedes usar punto, coma o escribir el número sin separadores.</span>
+            </div>
+            <button type="submit" id="balanceRechargeSubmit" class="btn-panel btn-blue balance-recharge-submit" {% if not payment_methods %}disabled{% endif %} aria-label="Enviar solicitud de recarga">
+              <i class="fas fa-paper-plane" aria-hidden="true"></i><span class="balance-recharge-submit-text">Enviar solicitud</span>
+            </button>
+          </div>
+          <div class="balance-recharge-actions-row">
+            <div id="balanceRechargeMethodQr" class="balance-recharge-method-qr" hidden>
+              <button
+                type="button"
+                class="balance-recharge-method-qr-open"
+                id="balanceRechargeMethodQrOpen"
+                aria-label="Mostrar QR de pago del medio seleccionado">
+                <i class="fas fa-qrcode" aria-hidden="true"></i><span>Mostrar QR de pago</span>
+              </button>
+            </div>
+            <div class="balance-recharge-file-group">
+              <div class="balance-recharge-file-picker">
+                <input type="file" id="balanceRechargeProofs" name="proofs" class="balance-recharge-file-input-hidden" accept="image/jpeg,image/png,image/webp,image/gif" required aria-label="Pantallazo de la transferencia">
+                <label for="balanceRechargeProofs" class="balance-recharge-file-btn">
+                  <i class="fas fa-file-image" aria-hidden="true"></i><span>Seleccionar archivo</span>
+                </label>
+              </div>
+              <span id="balanceRechargeProofEmpty" class="balance-recharge-file-empty-hint">Ningún archivo seleccionado</span>
+              <div id="balanceRechargePreview" class="balance-recharge-preview balance-recharge-preview--inline" hidden></div>
+            </div>
+          </div>
         </div>
-        <p class="balance-recharge-hint">Sube la foto del pantallazo o transferencia. Una imagen (JPG, PNG o WebP). Máx. 30 MB.</p>
-        <div id="balanceRechargePreview" class="balance-recharge-preview" hidden></div>
       </div>
       <div id="balanceRechargeFormMsg" class="balance-recharge-form-msg" role="status" aria-live="polite" hidden></div>
-      <button type="submit" id="balanceRechargeSubmit" class="btn-panel btn-blue balance-recharge-submit" {% if not payment_methods %}disabled{% endif %}>
-        <i class="fas fa-paper-plane" aria-hidden="true"></i> Enviar solicitud
-      </button>
       </form>
     </div>
   </section>
 
   <section class="store-light balance-recharge-panel balance-recharge-list-card mx-auto" aria-labelledby="balanceRechargeListTitle">
-    <h2 id="balanceRechargeListTitle" class="balance-recharge-section-title">Mis solicitudes</h2>
+    <div class="balance-recharge-list-head">
+      <h2 id="balanceRechargeListTitle" class="balance-recharge-section-title">Mis solicitudes</h2>
+      <div class="balance-recharge-list-toolbar">
+        <label for="balanceRechargeListFilter" class="sr-only">Estado</label>
+        <select id="balanceRechargeListFilter" class="form-select balance-recharge-list-filter" aria-label="Filtrar solicitudes por estado">
+          <option value="all" selected>Todos (0)</option>
+          <option value="pending">Pendientes (0)</option>
+          <option value="accumulated">Acumulados (0)</option>
+          <option value="approved">Aprobados (0)</option>
+          <option value="rejected">Rechazados (0)</option>
+        </select>
+      </div>
+    </div>
     <div id="balanceRechargeList" class="balance-recharge-list" data-list-url="{{ url_for('store_bp.api_user_balance_recharges') }}">
       <p class="balance-recharge-empty text-muted">No hay solicitudes cargadas.</p>
     </div>
   </section>
 </div>
+
+<div id="balanceRechargeQrLightbox" class="balance-recharge-qr-lightbox" hidden aria-hidden="true">
+  <div class="balance-recharge-qr-lightbox__backdrop" data-qr-lightbox-close="1"></div>
+  <div class="balance-recharge-qr-lightbox__panel" role="dialog" aria-modal="true" aria-label="Imagen ampliada">
+    <button type="button" class="balance-recharge-qr-lightbox__close" data-qr-lightbox-close="1" aria-label="Cerrar">&times;</button>
+    <img id="balanceRechargeQrLightboxImg" src="" alt="" class="balance-recharge-qr-lightbox__img">
+    <p id="balanceRechargeLightboxError" class="balance-recharge-lightbox-error" hidden role="alert"></p>
+  </div>
+</div>
 {% endblock %}
 {% block scripts %}
 <script src="{{ url_for('store_bp.static', filename='js/menu_tienda.js') }}" defer></script>
-<script src="{{ url_for('store_bp.static', filename='js/recargas_saldo.js') }}?v=20260526-recarga-auto" defer></script>
+<script src="{{ url_for('store_bp.static', filename='js/recargas_saldo.js') }}?v=20260604-meta-date-sm" defer></script>
 {% endblock %}

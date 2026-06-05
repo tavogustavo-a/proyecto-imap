@@ -22,7 +22,6 @@ document.addEventListener('DOMContentLoaded', function () {
   let userSearchDebounce = null;
   const USER_SEARCH_MIN_CHARS = 1;
   const USER_SEARCH_MAX_RESULTS = 40;
-  const previewCount = document.getElementById('phLicCleanupPreviewCount');
   const purgeBtn = document.getElementById('phLicCleanupPurgeBtn');
   const autoEnabled = document.getElementById('phLicCleanupAutoEnabled');
   const intervalSelect = document.getElementById('phLicCleanupIntervalHours');
@@ -151,6 +150,20 @@ document.addEventListener('DOMContentLoaded', function () {
     }
   }
 
+  function updateScopePreviewCount(count) {
+    if (!scopeSelect) return;
+    const display =
+      count === null || count === undefined || Number.isNaN(count) ? '—' : String(count);
+    Array.from(scopeSelect.options).forEach(function (opt) {
+      const base = opt.dataset.label || opt.textContent.replace(/\s*\([^)]*\)\s*$/, '').trim();
+      opt.textContent = base + ' (' + display + ')';
+    });
+    scopeSelect.setAttribute(
+      'aria-label',
+      'Alcance de la limpieza, ' + display + ' registro(s)'
+    );
+  }
+
   async function refreshPreview() {
     const p = payloadFromForm();
     const params = new URLSearchParams({
@@ -161,13 +174,13 @@ document.addEventListener('DOMContentLoaded', function () {
     try {
       const res = await fetch(previewUrl + '?' + params.toString());
       const data = await res.json();
-      if (data.success && previewCount) {
-        previewCount.textContent = String(data.count);
-      } else if (previewCount) {
-        previewCount.textContent = '—';
+      if (data.success) {
+        updateScopePreviewCount(data.count);
+      } else {
+        updateScopePreviewCount(null);
       }
     } catch (_e) {
-      if (previewCount) previewCount.textContent = '—';
+      updateScopePreviewCount(null);
     }
   }
 
@@ -186,8 +199,8 @@ document.addEventListener('DOMContentLoaded', function () {
         showStatus(data.error || 'Error al guardar.', true);
         return;
       }
-      if (previewCount && typeof data.preview_count === 'number') {
-        previewCount.textContent = String(data.preview_count);
+      if (typeof data.preview_count === 'number') {
+        updateScopePreviewCount(data.preview_count);
       }
       showStatus(data.message || 'Guardado.', false);
     } catch (_e) {
@@ -218,13 +231,15 @@ document.addEventListener('DOMContentLoaded', function () {
       p.scope === 'user'
         ? 'del usuario seleccionado'
         : 'de todos los usuarios';
+    const daysLabel =
+      p.retention_days === 0
+        ? 'todo el registro portal (' + scopeLabel + ')'
+        : 'más de ' + p.retention_days + ' días, ' + scopeLabel;
     const ok = window.confirm(
       '¿Eliminar ' +
         n +
-        ' registro(s) del historial · Licencias (más de ' +
-        p.retention_days +
-        ' días, ' +
-        scopeLabel +
+        ' registro(s) del historial · Licencias (' +
+        daysLabel +
         ')?\n\nSolo se borran entradas del registro portal. Las licencias en inventario no se eliminan.\n\nEsta acción no se puede deshacer.'
     );
     if (!ok) return;
@@ -249,7 +264,7 @@ document.addEventListener('DOMContentLoaded', function () {
           window.location.reload();
         }, 4000);
       } else {
-        previewCount.textContent = '0';
+        updateScopePreviewCount(0);
         window.location.reload();
       }
     } catch (_e) {

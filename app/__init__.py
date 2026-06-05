@@ -504,6 +504,8 @@ def create_app(config_class_passed=None):
         start_license_history_cleanup_loop(app)
         from app.store.balance_recharge_cleanup import start_balance_recharge_cleanup_loop
         start_balance_recharge_cleanup_loop(app)
+        from app.store.balance_recharge_email_scheduler import start_balance_recharge_email_verify_loop
+        start_balance_recharge_email_verify_loop(app)
 
         from app.services.disk_orphan_maintenance import start_disk_orphan_maintenance_loop
         start_disk_orphan_maintenance_loop(app)

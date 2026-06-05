@@ -13161,8 +13161,10 @@ html, body {
   
   /* Clases para purchase_history_user.html */
   .purchase-history-container {
-    padding-left: 8px;
-    padding-right: 8px;
+    width: 100%;
+    box-sizing: border-box;
+    padding-left: 1rem;
+    padding-right: 1rem;
     padding-top: 0.75rem;
     padding-bottom: 18px;
   }
@@ -13200,11 +13202,6 @@ html, body {
     margin-top: 0.15rem;
   }
 
-  .purchase-history-page.purchase-history-admin
-    .purchase-history-container:has(#purchaseHistoryCleanupPanel) {
-    padding-top: 0.75rem;
-  }
-
   .purchase-history-cleanup-panel {
     padding: 0;
     border: none;
@@ -13224,11 +13221,10 @@ html, body {
     margin: 0 0 0.5rem;
   }
 
-  .purchase-history-cleanup-info-wrap {
-    position: relative;
-    display: inline-flex;
-    vertical-align: middle;
-  }
+.purchase-history-cleanup-info-wrap {
+  display: inline-flex;
+  vertical-align: middle;
+}
 
   .purchase-history-cleanup-info-btn {
     display: inline-flex;
@@ -13239,7 +13235,7 @@ html, body {
     border: none;
     background: transparent;
     color: #6c757d;
-    font-size: 0.95rem;
+    font-size: 1.5rem;
     cursor: pointer;
     line-height: 1;
   }
@@ -13286,28 +13282,41 @@ html, body {
     margin: 0 auto;
   }
 
-  .purchase-history-cleanup-days-row {
-    display: flex;
+  .purchase-history-cleanup-days-field {
+    display: inline-flex;
     align-items: center;
-    justify-content: space-between;
-    gap: 0.5rem;
-  }
-
-  .purchase-history-cleanup-days-label {
-    margin: 0;
-    flex: 1 1 auto;
-    min-width: 0;
-    font-size: 0.9rem;
-  }
-
-  .purchase-history-cleanup-days-input {
     flex: 0 0 auto;
-    width: 4.5rem;
-    max-width: 4.5rem;
-    min-width: 4.5rem;
+    gap: 0.3rem;
+    background: transparent;
+    border: none;
+  }
+
+  .purchase-history-cleanup-days-field__prefix {
+    display: inline-flex;
+    align-items: center;
+    flex: 0 0 auto;
+    padding: 0;
+    font-size: 0.8rem;
+    font-weight: 500;
+    color: #212529;
+    white-space: nowrap;
+    background: transparent;
+  }
+
+  .purchase-history-cleanup-days-field .purchase-history-cleanup-days-input {
+    width: 3rem;
+    min-width: 3rem;
+    max-width: 3rem;
+    height: var(--purchase-history-cleanup-scope-control-h);
+    border: 1px solid #ced4da;
+    border-radius: 0.375rem;
+    box-shadow: none;
     text-align: center;
-    padding-left: 0.35rem;
-    padding-right: 0.35rem;
+    padding: 0.1rem 0.25rem;
+    font-size: 0.8rem;
+    line-height: 1;
+    background-color: #fff;
+    color: #212529;
   }
 
   .purchase-history-cleanup-actions-row {
@@ -13316,6 +13325,114 @@ html, body {
     justify-content: space-between;
     gap: 0.5rem;
     flex-wrap: wrap;
+  }
+
+  .purchase-history-cleanup-actions-row--end {
+    justify-content: flex-end;
+  }
+
+  .purchase-history-cleanup-scope-row {
+    --purchase-history-cleanup-scope-control-h: 1.85rem;
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    width: 100%;
+  }
+
+  .purchase-history-cleanup-scope-field {
+    flex: 1 1 0%;
+    min-width: 0;
+  }
+
+  .purchase-history-cleanup-scope-field .form-select {
+    width: 100%;
+    height: var(--purchase-history-cleanup-scope-control-h);
+    padding: 0.1rem 1.45rem 0.1rem 0.4rem;
+    font-size: 0.8rem;
+    line-height: 1.1;
+    text-overflow: ellipsis;
+    overflow: hidden;
+    white-space: nowrap;
+  }
+
+  .purchase-history-cleanup-scope-row .purchase-history-cleanup-purge-btn {
+    flex: 0 0 auto;
+    height: var(--purchase-history-cleanup-scope-control-h);
+    min-height: 0;
+    max-height: var(--purchase-history-cleanup-scope-control-h);
+    padding: 0 0.5rem;
+    font-size: 0.8rem;
+    line-height: 1;
+    white-space: nowrap;
+    margin: 0;
+    box-sizing: border-box;
+  }
+
+  .purchase-history-cleanup-scope-row .purchase-history-cleanup-days-field .purchase-history-cleanup-days-input,
+  .purchase-history-cleanup-scope-row .purchase-history-cleanup-scope-field .form-select {
+    min-height: 0;
+    max-height: var(--purchase-history-cleanup-scope-control-h);
+    box-sizing: border-box;
+  }
+
+  @media (max-width: 700px) {
+    .purchase-history-cleanup-scope-row {
+      --purchase-history-cleanup-scope-control-h: 1.75rem;
+    }
+
+    .purchase-history-cleanup-scope-row .purchase-history-cleanup-days-field .purchase-history-cleanup-days-input,
+    .purchase-history-cleanup-scope-row .purchase-history-cleanup-scope-field .form-select,
+    .purchase-history-cleanup-scope-row .purchase-history-cleanup-purge-btn.btn-panel {
+      height: var(--purchase-history-cleanup-scope-control-h) !important;
+      min-height: 0 !important;
+      max-height: var(--purchase-history-cleanup-scope-control-h) !important;
+    }
+
+    .purchase-history-cleanup-scope-row .purchase-history-cleanup-scope-field .form-select {
+      padding: 0.1rem 1.35rem 0.1rem 0.35rem !important;
+      font-size: 0.78rem !important;
+      line-height: 1 !important;
+    }
+
+    .purchase-history-cleanup-scope-row .purchase-history-cleanup-purge-btn.btn-panel {
+      padding: 0 0.42rem !important;
+      font-size: 0.78rem !important;
+      line-height: 1 !important;
+    }
+  }
+
+  @media (max-width: 480px) {
+    .purchase-history-cleanup-scope-row {
+      --purchase-history-cleanup-scope-control-h: 1.65rem;
+      flex-wrap: nowrap;
+      gap: 0.3rem;
+    }
+
+    .purchase-history-cleanup-days-field {
+      gap: 0.2rem;
+    }
+
+    .purchase-history-cleanup-days-field__prefix {
+      font-size: 0.74rem;
+    }
+
+    .purchase-history-cleanup-scope-row .purchase-history-cleanup-days-field .purchase-history-cleanup-days-input {
+      width: 2.6rem;
+      min-width: 2.6rem;
+      max-width: 2.6rem;
+      font-size: 0.74rem !important;
+      padding: 0.08rem 0.2rem !important;
+    }
+
+    .purchase-history-cleanup-scope-row .purchase-history-cleanup-purge-btn.btn-panel {
+      font-size: 0.74rem !important;
+      padding: 0 0.38rem !important;
+    }
+
+    .purchase-history-cleanup-scope-row .purchase-history-cleanup-scope-field .form-select {
+      font-size: 0.74rem !important;
+      padding: 0.08rem 1.25rem 0.08rem 0.32rem !important;
+    }
   }
 
   .purchase-history-cleanup-preview {
@@ -13334,14 +13451,13 @@ html, body {
     opacity: 1;
   }
 
-  .purchase-history-cleanup-heading-auto {
-    margin-top: 0.25rem;
-  }
-
   .purchase-history-cleanup-auto-row {
+    --purchase-history-cleanup-scope-control-h: 1.85rem;
     display: flex;
+    flex-wrap: nowrap;
     align-items: center;
-    gap: 0.5rem;
+    gap: 0.45rem;
+    width: 100%;
   }
 
   .purchase-history-cleanup-auto-check {
@@ -13349,22 +13465,104 @@ html, body {
     margin: 0;
     white-space: nowrap;
     padding-left: 0;
+    display: inline-flex;
+    align-items: center;
+    min-height: var(--purchase-history-cleanup-scope-control-h);
   }
 
-  .purchase-history-cleanup-interval-select {
-    flex: 1 1 auto;
+  .purchase-history-cleanup-auto-check .form-check-input {
+    width: 1rem;
+    height: 1rem;
+    margin: 0;
+    float: none;
+  }
+
+  .purchase-history-cleanup-auto-row .purchase-history-cleanup-interval-select {
+    flex: 1 1 0%;
+    width: 100%;
     min-width: 0;
+    max-width: 100%;
+    height: var(--purchase-history-cleanup-scope-control-h);
+    min-height: 0;
+    max-height: var(--purchase-history-cleanup-scope-control-h);
+    font-size: 0.8rem;
+    line-height: 1.1;
+    padding: 0.1rem 1.45rem 0.1rem 0.45rem;
+    box-sizing: border-box;
+    text-overflow: ellipsis;
+    overflow: hidden;
+    white-space: nowrap;
   }
 
   .purchase-history-cleanup-auto-row .purchase-history-cleanup-save-btn {
     flex: 0 0 auto;
+    height: var(--purchase-history-cleanup-scope-control-h);
+    min-height: 0;
+    max-height: var(--purchase-history-cleanup-scope-control-h);
+    padding: 0 0.5rem;
+    font-size: 0.8rem;
+    line-height: 1;
+    white-space: nowrap;
     margin: 0;
+    box-sizing: border-box;
   }
 
   .purchase-history-cleanup-interval-select:disabled {
     opacity: 0.55;
     cursor: not-allowed;
     background-color: #e9ecef;
+  }
+
+  @media (max-width: 700px) {
+    .purchase-history-cleanup-auto-row {
+      --purchase-history-cleanup-scope-control-h: 1.75rem;
+    }
+
+    .purchase-history-cleanup-auto-row .purchase-history-cleanup-interval-select,
+    .purchase-history-cleanup-auto-row .purchase-history-cleanup-save-btn.btn-panel {
+      height: var(--purchase-history-cleanup-scope-control-h) !important;
+      min-height: 0 !important;
+      max-height: var(--purchase-history-cleanup-scope-control-h) !important;
+    }
+
+    .purchase-history-cleanup-auto-row .purchase-history-cleanup-interval-select {
+      padding: 0.1rem 1.35rem 0.1rem 0.35rem !important;
+      font-size: 0.78rem !important;
+      line-height: 1 !important;
+    }
+
+    .purchase-history-cleanup-auto-row .purchase-history-cleanup-save-btn.btn-panel {
+      padding: 0 0.42rem !important;
+      font-size: 0.78rem !important;
+      line-height: 1 !important;
+    }
+
+    .purchase-history-cleanup-auto-check .form-check-input {
+      width: 0.95rem;
+      height: 0.95rem;
+    }
+  }
+
+  @media (max-width: 480px) {
+    .purchase-history-cleanup-auto-row {
+      --purchase-history-cleanup-scope-control-h: 1.65rem;
+      gap: 0.3rem;
+    }
+
+    .purchase-history-cleanup-auto-row .purchase-history-cleanup-interval-select {
+      font-size: 0.74rem !important;
+      padding: 0.08rem 1.25rem 0.08rem 0.32rem !important;
+    }
+
+    .purchase-history-cleanup-auto-row .purchase-history-cleanup-save-btn.btn-panel {
+      font-size: 0.74rem !important;
+      padding: 0 0.38rem !important;
+    }
+
+    .purchase-history-cleanup-auto-check .form-check-input {
+      width: 0.9rem;
+      height: 0.9rem;
+    }
   }
 
   .purchase-history-cleanup-user-search-wrap {
@@ -13501,7 +13699,7 @@ html, body {
 
   .purchase-history-page .purchase-history-stats-wrap,
   .purchase-history-page .purchase-history-licencias-wrap {
-    margin-top: 1rem;
+    margin-top: 0;
   }
 
   .purchase-history-page .purchase-history-licencias-controls {
@@ -13538,7 +13736,7 @@ html, body {
   }
 
   .purchase-history-stats-period-apply-row .purchase-history-stats-period-picker {
-    flex: 1 1 auto;
+    flex: 1 1 0%;
     min-width: 0;
   }
 
@@ -13663,7 +13861,9 @@ html, body {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(7.5rem, 1fr));
     gap: 0.5rem;
-    margin-bottom: 0.75rem;
+    row-gap: 0.5rem;
+    column-gap: 0.5rem;
+    margin-bottom: 0.5rem;
   }
 
   .purchase-history-stats-card {
@@ -13706,6 +13906,7 @@ html, body {
 
   .purchase-history-stats-table-wrap {
     overflow-x: auto;
+    overflow-y: visible;
     margin-bottom: 0.5rem;
   }
 
@@ -13726,6 +13927,60 @@ html, body {
     background: #f3f4f6;
     font-weight: 600;
     text-align: center;
+    overflow: visible !important;
+    position: relative;
+  }
+
+  .purchase-history-stats-table thead th.purchase-history-stats-th-icon {
+    width: 1%;
+    white-space: nowrap;
+    padding-left: 0.2rem;
+    padding-right: 0.2rem;
+  }
+
+  .purchase-history-stats-table thead th .purchase-history-stats-th-tip {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: help;
+    position: relative;
+    pointer-events: auto;
+    vertical-align: middle;
+    outline: none;
+  }
+
+  .purchase-history-stats-table thead th .purchase-history-stats-th-tip i {
+    font-size: 0.95em;
+    pointer-events: none;
+  }
+
+  .purchase-history-stats-table thead th .purchase-history-stats-th-tip::after {
+    content: attr(data-tip);
+    position: absolute;
+    left: 50%;
+    bottom: calc(100% + 6px);
+    transform: translateX(-50%);
+    padding: 0.35rem 0.55rem;
+    background: #1e293b;
+    color: #fff;
+    font-size: 0.72rem;
+    font-weight: 500;
+    font-family: Arial, sans-serif;
+    line-height: 1.25;
+    white-space: nowrap;
+    border-radius: 6px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.22);
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.12s ease, visibility 0.12s ease;
+    z-index: 30;
+    pointer-events: none;
+  }
+
+  .purchase-history-stats-table thead th .purchase-history-stats-th-tip:hover::after,
+  .purchase-history-stats-table thead th .purchase-history-stats-th-tip:focus-visible::after {
+    opacity: 1;
+    visibility: visible;
   }
 
   .purchase-history-stats-table tbody tr.purchase-history-stats-table-total-row td {
@@ -13740,8 +13995,12 @@ html, body {
     margin-bottom: 0.5rem;
   }
 
-  .purchase-history-page .purchase-history-table-wrapper {
+  .purchase-history-page .purchase-history-compras-shell {
     margin-bottom: 0.5rem;
+  }
+
+  .purchase-history-page .purchase-history-compras-shell .purchase-history-table-wrapper {
+    margin-bottom: 0;
   }
 
   .purchase-history-page .purchase-history-controls {
@@ -13828,6 +14087,63 @@ html, body {
   .purchase-history-container .tabla-licencias-actividad tbody tr:nth-child(even) td {
     background: #e8eaed !important;
     color: #111827 !important;
+  }
+
+  .purchase-history-container .tabla-licencias-actividad tbody tr.purchase-history-recharge-row td {
+    background-color: #f5f3ff !important;
+  }
+
+  .purchase-history-container .tabla-licencias-actividad tbody tr.purchase-history-recharge-row:nth-child(even) td {
+    background-color: #ede9fe !important;
+  }
+
+  .purchase-history-container .tabla-licencias-actividad tbody tr.purchase-history-recharge-row--failed td,
+  .purchase-history-container .tabla-licencias-actividad tbody tr.purchase-history-recharge-row--rejected td {
+    background-color: #fef2f2 !important;
+  }
+
+  .purchase-history-container .tabla-licencias-actividad tbody tr.purchase-history-recharge-row--failed:nth-child(even) td,
+  .purchase-history-container .tabla-licencias-actividad tbody tr.purchase-history-recharge-row--rejected:nth-child(even) td {
+    background-color: #fee2e2 !important;
+  }
+
+  .purchase-history-container .tabla-licencias-actividad tbody tr.purchase-history-recharge-row--success td {
+    background-color: #f0fdf4 !important;
+  }
+
+  .purchase-history-container .tabla-licencias-actividad tbody tr.purchase-history-recharge-row--success:nth-child(even) td {
+    background-color: #dcfce7 !important;
+  }
+
+  .purchase-history-recharge-product {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-weight: 600;
+  }
+
+  .purchase-history-recharge-product--failed,
+  .purchase-history-recharge-product--failed .fas {
+    color: #dc2626 !important;
+  }
+
+  .purchase-history-recharge-product--success,
+  .purchase-history-recharge-product--success .fas {
+    color: #16a34a !important;
+  }
+
+  .purchase-history-recharge-status {
+    display: inline-block;
+    font-weight: 700;
+    font-size: 0.9rem;
+  }
+
+  .purchase-history-recharge-status--failed {
+    color: #dc2626 !important;
+  }
+
+  .purchase-history-recharge-status--success {
+    color: #16a34a !important;
   }
 
   .admin-lic-pages-historial-shell .tabla-licencias-actividad tbody tr:nth-child(odd) td,
@@ -14012,6 +14328,68 @@ html, body {
 
   table#tabla-compras td .btn-ver-licencias-compra {
     white-space: nowrap;
+  }
+
+  table#tabla-compras > thead > tr > th:first-child,
+  table#tabla-compras > tbody > tr > td:first-child {
+    font-size: 0.78rem !important;
+    line-height: 1.2;
+    white-space: nowrap;
+  }
+
+  @media (max-width: 768px) {
+    body .container:has(.purchase-history-page) {
+      max-width: none !important;
+      width: 100% !important;
+      padding-left: 0 !important;
+      padding-right: 0 !important;
+      margin-left: 0 !important;
+      margin-right: 0 !important;
+      box-sizing: border-box !important;
+    }
+
+    .purchase-history-page .store-light.purchase-history-container {
+      max-width: 100% !important;
+      width: 100%;
+      margin-left: 0;
+      margin-right: 0;
+      border-radius: 10px;
+    }
+
+    .purchase-history-page .purchase-history-compras-wrap.purchase-history-container,
+    .purchase-history-page .purchase-history-stats-wrap.purchase-history-container,
+    .purchase-history-page .purchase-history-licencias-wrap.purchase-history-container {
+      padding-left: var(--ph-section-gap, 0.5rem);
+      padding-right: var(--ph-section-gap, 0.5rem);
+    }
+
+    .purchase-history-page .purchase-history-compras-shell .purchase-history-table-wrapper,
+    .purchase-history-page .purchase-history-stats-wrap .purchase-history-stats-table-wrap,
+    .purchase-history-page .purchase-history-licencias-wrap .admin-lic-pages-historial-table-wrap,
+    .purchase-history-page .purchase-history-licencias-wrap .lic-actividad-plate.admin-lic-pages-historial-table-plate,
+    .purchase-history-page .purchase-history-licencias-wrap .admin-licencias-historial-table-scroll,
+    .purchase-history-page .purchase-history-licencias-wrap .admin-lic-pages-historial-table-scroll-inner {
+      margin-left: 0;
+      margin-right: 0;
+      width: 100%;
+      max-width: 100%;
+      box-sizing: border-box;
+    }
+
+    .purchase-history-page .purchase-history-licencias-wrap .admin-lic-pages-historial-shell {
+      padding-left: 0;
+      padding-right: 0;
+    }
+
+    table#tabla-compras th,
+    table#tabla-compras td,
+    .purchase-history-page .purchase-history-stats-wrap .purchase-history-stats-table th,
+    .purchase-history-page .purchase-history-stats-wrap .purchase-history-stats-table td,
+    .purchase-history-page .purchase-history-licencias-wrap .admin-lic-pages-historial-shell table#tabla-actividad-licencias > thead > tr > th,
+    .purchase-history-page .purchase-history-licencias-wrap .admin-lic-pages-historial-shell table#tabla-actividad-licencias > tbody > tr > td {
+      padding-left: 2px !important;
+      padding-right: 2px !important;
+    }
   }
   
   /* Clases para store_front.html */
@@ -23675,7 +24053,8 @@ html.admin-lic-bulk-modal--lock body {
 .admin-lic-pages-historial-shell table.tabla-licencias-actividad.admin-licencias-historial-table > thead > tr > th:first-child {
   white-space: nowrap !important;
   width: 1% !important;
-  min-width: 9.5rem !important;
+  min-width: 0 !important;
+  max-width: max-content !important;
   line-height: 1.25 !important;
   color: #111 !important;
   word-break: keep-all !important;
@@ -23719,6 +24098,50 @@ html.admin-lic-bulk-modal--lock body {
 .purchase-history-container .admin-lic-pages-historial-shell tbody tr.admin-licencias-historial-row,
 .admin-lic-pages-historial-shell tbody tr.admin-licencias-historial-row {
   height: auto !important;
+}
+
+/* Historial licencias en compras: mismo margen lateral que #tabla-compras (móvil) */
+@media (max-width: 768px) {
+  .purchase-history-page .purchase-history-licencias-wrap.purchase-history-container {
+    padding-left: 0.5rem !important;
+    padding-right: 0.5rem !important;
+  }
+
+  .purchase-history-page .purchase-history-licencias-wrap .admin-lic-pages-historial-shell {
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+  }
+
+  .purchase-history-page .purchase-history-licencias-wrap .lic-actividad-plate.admin-lic-pages-historial-table-plate,
+  .purchase-history-page .purchase-history-licencias-wrap .admin-lic-pages-historial-table-wrap,
+  .purchase-history-page .purchase-history-licencias-wrap .admin-licencias-historial-table-scroll,
+  .purchase-history-page .purchase-history-licencias-wrap .admin-lic-pages-historial-table-scroll-inner {
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    box-sizing: border-box !important;
+  }
+
+  .purchase-history-page .purchase-history-licencias-wrap .admin-lic-pages-historial-shell table#tabla-actividad-licencias.admin-licencias-historial-table > thead > tr > th,
+  .purchase-history-page .purchase-history-licencias-wrap .admin-lic-pages-historial-shell table#tabla-actividad-licencias.admin-licencias-historial-table > tbody > tr > td,
+  .purchase-history-page .purchase-history-licencias-wrap .admin-lic-pages-historial-shell .admin-licencias-historial-table-scroll table#tabla-actividad-licencias.admin-licencias-historial-table tbody td {
+    padding-left: 2px !important;
+    padding-right: 2px !important;
+  }
+
+  .purchase-history-page .purchase-history-licencias-wrap table#tabla-actividad-licencias.admin-licencias-historial-table {
+    table-layout: auto !important;
+  }
+
+  .purchase-history-page .purchase-history-licencias-wrap .admin-licencias-historial-col-date,
+  .purchase-history-page .purchase-history-licencias-wrap table#tabla-actividad-licencias.admin-licencias-historial-table > thead > tr > th:first-child {
+    width: 1% !important;
+    min-width: 0 !important;
+    max-width: max-content !important;
+    font-size: 0.78rem !important;
+    white-space: nowrap !important;
+  }
 }
 
 /* Tienda pública — botón y modal de renovación */
@@ -24185,15 +24608,12 @@ html.admin-lic-bulk-modal--lock body {
   margin-top: 1rem;
 }
 
-.balance-recharge-page .balance-recharge-header-card,
-.balance-recharge-page .balance-recharge-main-card {
-  margin-top: 0.5rem;
-}
-
 .balance-recharge-page .balance-recharge-main-card .balance-recharge-form-section {
   margin-top: 0.85rem;
   padding-top: 0.85rem;
   border-top: 1px solid #e2e8f0;
+  min-width: 0;
+  overflow-x: hidden;
 }
 
 .balance-recharge-page .balance-recharge-header-card-inner {
@@ -24224,6 +24644,24 @@ html.admin-lic-bulk-modal--lock body {
   width: 100%;
 }
 
+.balance-recharge-header-balances {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.15rem;
+  margin-left: auto;
+  text-align: right;
+}
+
+.balance-recharge-accum-line {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #7c3aed;
+  margin: 0;
+  line-height: 1.3;
+  white-space: nowrap;
+}
+
 .balance-recharge-title {
   font-size: 1.35rem;
   font-weight: 700;
@@ -24241,7 +24679,7 @@ html.admin-lic-bulk-modal--lock body {
   width: 1.85rem;
   height: 1.85rem;
   border-radius: 50%;
-  background: #65a30d;
+  background: #0f172a;
   color: #fff;
   font-size: 1rem;
   line-height: 1;
@@ -24274,6 +24712,31 @@ html.admin-lic-bulk-modal--lock body {
   margin: 0 0 0.85rem;
 }
 
+.balance-recharge-list-card .balance-recharge-section-title {
+  margin: 0;
+}
+
+.balance-recharge-list-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.65rem 1rem;
+  margin-bottom: 0.75rem;
+}
+
+.balance-recharge-list-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.balance-recharge-list-filter {
+  width: auto;
+  min-width: 9rem;
+  max-width: 11rem;
+}
+
 .balance-recharge-form-head-row {
   display: flex;
   flex-wrap: wrap;
@@ -24295,35 +24758,242 @@ html.admin-lic-bulk-modal--lock body {
   margin-top: 0;
 }
 
-.balance-recharge-proof-row {
-  display: flex;
-  flex-wrap: wrap;
+.balance-recharge-file-group {
+  display: inline-flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 0.5rem 1rem;
-}
-
-.balance-recharge-proof-row .balance-recharge-proof-label {
-  display: block;
-  font-size: 0.88rem;
-  font-weight: 600;
-  margin: 0;
-  flex-shrink: 0;
-  white-space: nowrap;
-}
-
-.balance-recharge-proof-row .balance-recharge-file-input {
   flex: 1 1 auto;
-  min-width: min(100%, 11rem);
+  min-width: 0;
+  gap: 0.2rem;
   max-width: 100%;
+}
+
+.balance-recharge-actions-row .balance-recharge-file-picker {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  flex-wrap: nowrap;
+  min-width: 0;
+  overflow: visible;
+}
+
+.balance-recharge-file-input-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.balance-recharge-file-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
   margin: 0;
+  padding: 0 0.6rem;
+  height: var(--br-action-height, 2.25rem);
+  min-height: var(--br-action-height, 2.25rem);
+  box-sizing: border-box;
+  font-size: 0.8rem;
+  font-weight: 600;
+  line-height: 1.2;
+  color: #1e40af;
+  background: #eff6ff;
+  border: 1px solid #93c5fd;
+  border-radius: 8px;
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.balance-recharge-file-btn:hover {
+  background: #dbeafe;
+  border-color: #60a5fa;
+}
+
+.balance-recharge-file-btn .fa-file-image {
+  font-size: 0.95em;
+  opacity: 0.92;
+  flex-shrink: 0;
+}
+
+.balance-recharge-file-empty-hint {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 0.75rem;
+  font-weight: 500;
+  line-height: 1.25;
+  color: #64748b;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.balance-recharge-file-empty-hint[hidden] {
+  display: none;
+}
+
+.balance-recharge-submit {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.22rem;
+  width: auto;
+  min-width: 0;
+  max-width: none;
+  height: var(--br-action-height, 2.25rem);
+  min-height: var(--br-action-height, 2.25rem);
+  margin: 0;
+  padding: 0 0.45rem;
+  font-size: 0.8rem;
+  white-space: nowrap;
+  line-height: 1;
+  box-sizing: border-box;
+}
+
+.balance-recharge-submit.btn-panel {
+  width: auto;
+}
+
+.balance-recharge-submit .balance-recharge-submit-text {
+  margin-left: 0;
+}
+
+@media (max-width: 767px) {
+  .balance-recharge-actions-row {
+    --br-action-height: 2.1rem;
+    flex-wrap: nowrap;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    gap: 0.22rem;
+  }
+
+  .balance-recharge-actions-row .balance-recharge-file-group {
+    flex: 1 1 0;
+    width: auto;
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .balance-recharge-actions-row .balance-recharge-file-btn {
+    font-size: 0.68rem;
+    padding: 0 0.38rem;
+    flex-shrink: 0;
+    max-width: none;
+  }
+
+  .balance-recharge-method-qr-open {
+    font-size: 0.65rem;
+    padding: 0 0.38rem;
+    gap: 0.2rem;
+  }
+
+  .balance-recharge-file-empty-hint {
+    font-size: 0.65rem;
+  }
+
+  .balance-recharge-amount-input-row {
+    --br-action-height: 2.1rem;
+  }
+
+  .balance-recharge-submit {
+    font-size: 0.68rem;
+    padding: 0 0.35rem;
+    gap: 0.18rem;
+  }
+
+  .balance-recharge-amount-input-wrap .balance-recharge-amount-input {
+    font-size: 0.72rem;
+  }
+
+  .balance-recharge-amount-input::placeholder {
+    font-size: 0.68rem;
+  }
+}
+
+.balance-recharge-field--amount {
+  margin-bottom: 0.65rem;
+}
+
+.balance-recharge-amount-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.balance-recharge-amount-input-row {
+  --br-action-height: 2.25rem;
+  display: flex;
+  align-items: center;
+  flex-wrap: nowrap;
+  gap: 0.28rem;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+.balance-recharge-amount-input-row .balance-recharge-amount-input-wrap {
+  flex: 1 1 0;
+  width: auto;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+}
+
+.balance-recharge-actions-row {
+  --br-action-height: 2.25rem;
+  display: flex;
+  align-items: center;
+  flex-wrap: nowrap;
+  gap: 0.28rem;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+.balance-recharge-amount-input-wrap {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+}
+
+.balance-recharge-amount-input-wrap .balance-recharge-amount-input {
+  width: 100%;
+  height: var(--br-action-height, 2.25rem);
+  min-height: var(--br-action-height, 2.25rem);
+  max-height: var(--br-action-height, 2.25rem);
+  margin: 0;
+  padding: 0 0.55rem;
+  font-size: 0.8rem;
+  line-height: 1.2;
+  border-radius: 8px;
+  box-sizing: border-box;
+}
+
+.balance-recharge-amount-input::placeholder {
+  color: #64748b;
+  font-size: 0.8rem;
 }
 
 .balance-recharge-field {
   margin-bottom: 0.85rem;
 }
 
-.balance-recharge-field label {
+.balance-recharge-field > label:not(.balance-recharge-method-option),
+.balance-recharge-field .balance-recharge-proof-label {
   display: block;
   font-size: 0.88rem;
   font-weight: 600;
@@ -24348,12 +25018,40 @@ html.admin-lic-bulk-modal--lock body {
   margin-top: 0.5rem;
 }
 
+.balance-recharge-actions-row .balance-recharge-preview--inline {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  margin: 0;
+  gap: 0;
+}
+
+.balance-recharge-actions-row .balance-recharge-preview--inline[hidden] {
+  display: none;
+}
+
 .balance-recharge-preview-img {
   width: 72px;
   height: 72px;
   object-fit: cover;
   border-radius: 6px;
   border: 1px solid #cbd5e1;
+  cursor: zoom-in;
+}
+
+.balance-recharge-actions-row .balance-recharge-preview-img {
+  width: var(--br-action-height, 2.25rem);
+  height: var(--br-action-height, 2.25rem);
+  min-width: var(--br-action-height, 2.25rem);
+  flex-shrink: 0;
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+.balance-recharge-actions-row .balance-recharge-preview-img:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 2px;
 }
 
 .balance-recharge-form-msg {
@@ -24375,9 +25073,13 @@ html.admin-lic-bulk-modal--lock body {
   border: 1px solid #fecaca;
 }
 
-.balance-recharge-submit {
-  width: 100%;
-  justify-content: center;
+.balance-recharge-field--proof {
+  margin-bottom: 0.5rem;
+}
+
+.balance-recharge-field--amount + .balance-recharge-form-msg,
+.balance-recharge-field--proof + .balance-recharge-form-msg {
+  margin-top: 0.35rem;
 }
 
 .balance-recharge-list {
@@ -24436,6 +25138,27 @@ html.admin-lic-bulk-modal--lock body {
   color: #1e40af;
 }
 
+.balance-recharge-status--accumulated {
+  background: #ede9fe;
+  color: #5b21b6;
+}
+
+.balance-recharge-method-accum-hint {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.2rem 0.35rem;
+  margin-top: 0.2rem;
+  font-size: 0.78rem;
+  color: #7c3aed;
+  line-height: 1.3;
+}
+
+.balance-recharge-method-accum-sep {
+  line-height: 1;
+  font-weight: 700;
+}
+
 .balance-recharge-item-date {
   font-size: 0.74rem;
   color: #64748b;
@@ -24475,6 +25198,58 @@ html.admin-lic-bulk-modal--lock body {
   flex-shrink: 0;
 }
 
+.balance-recharge-proof-open:not(.balance-recharge-proof-link) {
+  display: inline-block;
+  padding: 0;
+  margin: 0;
+  border: none;
+  background: none;
+  cursor: zoom-in;
+  line-height: 0;
+  vertical-align: top;
+}
+
+.balance-recharge-proof-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 1.65rem;
+  padding: 0 0.5rem;
+  margin: 0;
+  border: 1px solid #93c5fd;
+  border-radius: 6px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-size: 0.78rem;
+  font-weight: 600;
+  line-height: 1.2;
+  cursor: pointer;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
+.balance-recharge-proof-link:hover,
+.balance-recharge-proof-link:focus {
+  background: #dbeafe;
+  border-color: #60a5fa;
+  color: #1e40af;
+  outline: none;
+}
+
+.balance-recharge-proof-open:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+.balance-recharge-proof-missing-text {
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.78rem;
+  color: #64748b;
+  white-space: nowrap;
+}
+
 .balance-recharge-proof-thumb {
   width: 44px;
   height: 44px;
@@ -24482,6 +25257,17 @@ html.admin-lic-bulk-modal--lock body {
   border-radius: 5px;
   border: 1px solid #94a3b8;
   display: block;
+}
+
+.balance-recharge-lightbox-error {
+  margin: 0.75rem 0 0;
+  padding: 0.65rem 0.85rem;
+  max-width: min(90vw, 420px);
+  text-align: center;
+  font-size: 0.9rem;
+  color: #fef2f2;
+  background: rgba(127, 29, 29, 0.85);
+  border-radius: 8px;
 }
 
 .balance-recharge-proof-missing {
@@ -24523,13 +25309,80 @@ html.admin-lic-bulk-modal--lock body {
 
 .balance-recharge-method-option {
   display: flex;
-  flex-direction: column;
-  gap: 0.15rem;
-  padding: 0.55rem 0.65rem;
+  flex-direction: row;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.45rem 0.6rem;
   border: 1px solid #cbd5e1;
   border-radius: 8px;
   background: #fff;
   cursor: pointer;
+  margin-bottom: 0;
+  font-weight: inherit;
+}
+
+.balance-recharge-method-option > input[type='radio'] {
+  flex: 0 0 auto;
+  margin: 0;
+  width: 1.05rem;
+  height: 1.05rem;
+  align-self: center;
+}
+
+.balance-recharge-method-option:has(.balance-recharge-method-details),
+.balance-recharge-method-option:has(.balance-recharge-method-accum-hint) {
+  align-items: flex-start;
+}
+
+.balance-recharge-method-option:has(.balance-recharge-method-details) > input[type='radio'],
+.balance-recharge-method-option:has(.balance-recharge-method-accum-hint) > input[type='radio'] {
+  margin-top: 0.12rem;
+  align-self: flex-start;
+}
+
+.balance-recharge-method-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.balance-recharge-method-head {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 0.35rem 0.5rem;
+  min-width: 0;
+}
+
+.balance-recharge-method-account-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.balance-recharge-method-copy {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  color: #64748b;
+  padding: 0.1rem 0.2rem;
+  cursor: pointer;
+  font-size: 0.78rem;
+  line-height: 1;
+  border-radius: 4px;
+}
+
+.balance-recharge-method-copy:hover {
+  color: #2563eb;
+  background: rgba(37, 99, 235, 0.08);
+}
+
+.balance-recharge-method-copy.is-copied {
+  color: #16a34a;
 }
 
 .balance-recharge-method-option:has(input:checked) {
@@ -24539,7 +25392,23 @@ html.admin-lic-bulk-modal--lock body {
 
 .balance-recharge-method-label {
   font-weight: 600;
-  font-size: 0.95rem;
+  font-size: 0.9rem;
+  line-height: 1.3;
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+.balance-recharge-method-account {
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: #2563eb;
+  line-height: 1.3;
+  white-space: nowrap;
+}
+
+.balance-recharge-method-account--breb-suffix {
+  font-weight: 500;
+  color: #2563eb;
 }
 
 .balance-recharge-method-details {
@@ -24556,17 +25425,42 @@ html.admin-lic-bulk-modal--lock body {
 }
 
 /* —— Admin recargas y pagos —— */
-body .container > .purchase-history-page.purchase-history-admin {
-  margin-top: 0.35rem;
+.purchase-history-page {
+  --ph-section-gap: 0.5rem;
+  width: 100%;
+  max-width: 100vw;
+  overflow-x: hidden;
+  box-sizing: border-box;
 }
 
-.purchase-history-page.admin-recargas-page .store-light.purchase-history-container {
+@media (min-width: 769px) {
+  .purchase-history-page {
+    --ph-section-gap: 0.75rem;
+  }
+}
+
+.purchase-history-page .store-light.purchase-history-container + .store-light.purchase-history-container {
+  margin-top: var(--ph-section-gap);
+}
+
+.purchase-history-page .store-light.purchase-history-container {
   max-width: 960px !important;
   width: 100%;
   margin-left: auto;
   margin-right: auto;
   box-sizing: border-box;
-  padding-top: 0.35rem;
+  padding: var(--ph-section-gap) !important;
+}
+
+@media (max-width: 768px) {
+  .purchase-history-page {
+    padding-left: var(--ph-section-gap);
+    padding-right: var(--ph-section-gap);
+  }
+
+  .purchase-history-page .purchase-history-compras-wrap.purchase-history-container.store-front-main {
+    padding: var(--ph-section-gap) !important;
+  }
 }
 
 .purchase-history-page.admin-recargas-page #adminRecargasPanelMethods,
@@ -24586,20 +25480,19 @@ body .container > .purchase-history-page.purchase-history-admin {
   margin-right: 0;
 }
 
-.purchase-history-page .admin-recargas-cleanup-wrap {
-  margin-top: 0.65rem;
-}
-
 .purchase-history-page .admin-recargas-review-wrap,
 .purchase-history-page .admin-recargas-auto-wrap,
+.purchase-history-page .admin-recargas-accum-wrap,
 .purchase-history-page .admin-recargas-patterns-wrap,
 .purchase-history-page .admin-recargas-pm-cop-wrap,
-.purchase-history-page .admin-recargas-pm-usd-wrap {
+.purchase-history-page .admin-recargas-pm-usd-wrap,
+.purchase-history-page .admin-recargas-pm-accum-wrap {
   margin-top: 0.65rem;
 }
 
 .purchase-history-page .admin-recargas-cleanup-wrap .purchase-history-admin-toolbar,
 .purchase-history-page .admin-recargas-auto-wrap .purchase-history-admin-toolbar,
+.purchase-history-page .admin-recargas-accum-wrap .purchase-history-admin-toolbar,
 .purchase-history-page .admin-recargas-pm-cop-wrap .purchase-history-admin-toolbar {
   margin-top: 0 !important;
   margin-bottom: 0.35rem !important;
@@ -24607,26 +25500,57 @@ body .container > .purchase-history-page.purchase-history-admin {
 
 .purchase-history-page .admin-recargas-review-wrap .admin-recargas-tabs,
 .purchase-history-page .admin-recargas-auto-wrap .admin-recargas-tabs,
-.purchase-history-page .admin-recargas-pm-cop-wrap .admin-recargas-tabs {
+.purchase-history-page .admin-recargas-pm-cop-wrap .admin-recargas-tabs,
+.purchase-history-page .admin-recargas-accum-wrap .admin-recargas-tabs {
   margin-top: 0;
   margin-bottom: 0.5rem;
 }
 
-.purchase-history-page .admin-recargas-review-subtitle,
-.purchase-history-page .admin-recargas-auto-subtitle,
-.purchase-history-page .admin-recargas-methods-subtitle {
+.purchase-history-page .admin-recargas-methods-subtitle,
+.purchase-history-page .admin-recargas-accum-subtitle {
   margin-top: 0.15rem;
   margin-bottom: 0.5rem;
   font-size: 1.05rem;
   font-weight: 600;
 }
 
+.admin-recargas-accum-wrap > .admin-pm-accum-summary {
+  margin-bottom: 1rem;
+}
+
+.admin-pm-currency-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  margin-top: 0;
+  margin-bottom: 0.65rem;
+  text-align: center;
+  position: relative;
+}
+
+.admin-pm-currency-header .purchase-history-cleanup-info-wrap {
+  display: inline-flex;
+  vertical-align: middle;
+}
+
 .admin-recargas-pm-cop-wrap .admin-pm-currency-title,
-.admin-recargas-pm-usd-wrap .admin-pm-currency-title {
+.admin-recargas-pm-usd-wrap .admin-pm-currency-title,
+.admin-recargas-pm-accum-wrap .admin-pm-currency-title {
   margin-top: 0;
   margin-bottom: 0.65rem;
   text-align: center;
   padding-left: 0;
+}
+
+.admin-recargas-pm-accum-wrap .admin-pm-currency-hint {
+  margin: 0 0 0.75rem;
+  text-align: center;
+  font-size: 0.84rem;
+  line-height: 1.45;
+  color: #475569;
+  padding: 0 0.35rem;
 }
 
 .admin-recargas-cleanup-panel {
@@ -24636,14 +25560,19 @@ body .container > .purchase-history-page.purchase-history-admin {
 /* Filas de medio de pago — layout tipo tarjeta (pantallas grandes) */
 .purchase-history-page.admin-recargas-page .admin-pm-row {
   display: grid;
-  grid-template-columns: auto 1fr 1fr;
+  grid-template-columns: auto minmax(9.5rem, 0.95fr) 1fr 1fr 1fr;
   gap: 0.5rem;
   align-items: center;
   margin-bottom: 0.65rem;
   padding: 0.65rem;
-  border: 1px dashed #cbd5e1;
+  border: 2px solid #000000;
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.55);
+  background: rgb(255 255 255);
+}
+
+.purchase-history-page.admin-recargas-page .admin-pm-row--saved {
+  border-color: #22c55e;
+  box-shadow: 0 0 0 1px rgba(34, 197, 94, 0.35);
 }
 
 .purchase-history-page.admin-recargas-page .admin-pm-active {
@@ -24651,18 +25580,178 @@ body .container > .purchase-history-page.purchase-history-admin {
   grid-row: 1;
   align-self: center;
   padding-top: 0;
+  margin: 0;
 }
 
-.purchase-history-page.admin-recargas-page .admin-pm-field-label--name {
+.purchase-history-page.admin-recargas-page .admin-pm-field-label--brand {
   grid-column: 2;
   grid-row: 1;
   min-width: 0;
 }
 
-.purchase-history-page.admin-recargas-page .admin-pm-field-label--details {
+.purchase-history-page.admin-recargas-page .admin-pm-field-label--name {
   grid-column: 3;
   grid-row: 1;
   min-width: 0;
+}
+
+.purchase-history-page.admin-recargas-page .admin-pm-field-label--account {
+  grid-column: 4;
+  grid-row: 1;
+  min-width: 0;
+}
+
+.purchase-history-page.admin-recargas-page .admin-pm-field-label--description {
+  grid-column: 5;
+  grid-row: 1;
+  min-width: 0;
+}
+
+/* Bre-B: misma anchura total que el resto (6 columnas, sin hueco a la derecha) */
+.purchase-history-page.admin-recargas-page .admin-pm-row--breb {
+  grid-template-columns:
+    auto
+    minmax(9.5rem, 0.95fr)
+    minmax(0, 1fr)
+    minmax(0, 1.1fr)
+    minmax(5.25rem, 6.5rem)
+    minmax(0, 1fr);
+}
+
+.purchase-history-page.admin-recargas-page .admin-pm-row--breb .admin-pm-field-label--breb-llave {
+  grid-column: 4;
+  grid-row: 1;
+  min-width: 0;
+}
+
+.purchase-history-page.admin-recargas-page .admin-pm-row--breb .admin-pm-field-label--breb-suffix {
+  grid-column: 5;
+  grid-row: 1;
+  min-width: 0;
+  max-width: 6.5rem;
+}
+
+.purchase-history-page.admin-recargas-page .admin-pm-row--breb .admin-pm-field-label--description {
+  grid-column: 6;
+  grid-row: 1;
+  min-width: 0;
+}
+
+.purchase-history-page.admin-recargas-page .admin-pm-row--accum {
+  grid-template-columns: auto minmax(9.5rem, 0.95fr) 1fr 1fr 1fr;
+}
+
+.purchase-history-page.admin-recargas-page .admin-pm-accum-config {
+  grid-column: 1 / -1;
+  grid-row: 2;
+  display: grid;
+  grid-template-columns: minmax(7rem, 0.8fr) minmax(0, 1fr);
+  gap: 0.5rem 0.65rem;
+  padding: 0.35rem 0 0.15rem;
+}
+
+.purchase-history-page.admin-recargas-page .admin-pm-accum-mult-wrap[hidden] {
+  display: none !important;
+}
+
+.purchase-history-page.admin-recargas-page .admin-pm-accum-config-field {
+  display: block;
+  margin: 0;
+  min-width: 0;
+}
+
+.purchase-history-page.admin-recargas-page .admin-pm-accum-config-label {
+  display: block;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.72);
+  margin-bottom: 0.2rem;
+  line-height: 1.2;
+}
+
+.purchase-history-page.admin-recargas-page .admin-pm-row--accum .admin-pm-actions {
+  grid-row: 3;
+}
+
+.purchase-history-page.admin-recargas-page .admin-pm-users-table tbody tr.admin-pm-users-table-row--outside-filter {
+  background: #fff7ed;
+}
+
+.admin-pm-users-table tbody tr.admin-pm-users-table-row--outside-filter:hover {
+  background: #ffedd5;
+}
+
+.admin-pm-users-outside-hint {
+  color: #c2410c;
+  font-size: 0.85em;
+  margin-left: 0.15rem;
+}
+
+.admin-pm-users-table-col-price {
+  white-space: nowrap;
+  font-size: 0.85rem;
+}
+
+.purchase-history-page.admin-recargas-page .admin-pm-accum-summary {
+  margin-bottom: 1rem;
+  padding: 0.85rem 1rem;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 0.5rem;
+  background: rgba(0, 0, 0, 0.18);
+}
+
+.purchase-history-page.admin-recargas-page .admin-pm-accum-summary-title {
+  margin: 0 0 0.65rem;
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+.purchase-history-page.admin-recargas-page .admin-pm-accum-summary-scroll {
+  overflow-x: auto;
+}
+
+.purchase-history-page.admin-recargas-page .admin-pm-accum-summary-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.88rem;
+}
+
+.purchase-history-page.admin-recargas-page .admin-pm-accum-summary-table th,
+.purchase-history-page.admin-recargas-page .admin-pm-accum-summary-table td {
+  padding: 0.45rem 0.55rem;
+  text-align: left;
+  vertical-align: middle;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.purchase-history-page.admin-recargas-page .admin-pm-accum-summary-table th {
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.purchase-history-page.admin-recargas-page .admin-pm-accum-actions {
+  white-space: nowrap;
+}
+
+.purchase-history-page.admin-recargas-page .admin-pm-accum-error {
+  color: #ffb4b4;
+  font-size: 0.82rem;
+}
+
+.purchase-history-page.admin-recargas-page .admin-recarga-accum-hint {
+  font-size: 0.88rem;
+}
+
+.purchase-history-page.admin-recargas-page .admin-pm-field-label--percent {
+  grid-column: 5;
+  grid-row: 1;
+  min-width: 0;
+}
+
+.purchase-history-page.admin-recargas-page .admin-pm-field-label--percent .form-control {
+  text-align: center;
+  padding-left: 0.35rem;
+  padding-right: 0.35rem;
 }
 
 .purchase-history-page.admin-recargas-page .admin-pm-field-label {
@@ -24676,44 +25765,86 @@ body .container > .purchase-history-page.purchase-history-admin {
   box-sizing: border-box;
 }
 
-.purchase-history-page.admin-recargas-page .admin-pm-qr-wrap {
+.purchase-history-page.admin-recargas-page .admin-pm-actions {
   grid-column: 1 / -1;
   grid-row: 2;
   display: flex;
-  flex-direction: row;
+  flex-wrap: nowrap;
+  gap: 0.4rem;
   align-items: center;
-  gap: 0.5rem;
+  width: 100%;
 }
 
-.purchase-history-page.admin-recargas-page .admin-pm-actions {
-  grid-column: 1 / -1;
-  grid-row: 3;
+.purchase-history-page.admin-recargas-page .admin-pm-actions-primary {
+  flex: 1 1 0;
+  min-width: 0;
   display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
+  gap: 0.4rem;
   align-items: stretch;
 }
 
-.purchase-history-page.admin-recargas-page .admin-pm-actions .admin-pm-save,
-.purchase-history-page.admin-recargas-page .admin-pm-actions .admin-pm-users {
+.purchase-history-page.admin-recargas-page .admin-pm-actions-primary .admin-pm-save,
+.purchase-history-page.admin-recargas-page .admin-pm-actions-primary .admin-pm-users.btn-panel.btn-blue.btn-sm {
   flex: 1 1 0;
-  min-width: 0;
+  min-width: 0 !important;
+  max-width: none;
+  width: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  margin: 0 !important;
 }
 
-.purchase-history-page.admin-recargas-page .admin-pm-actions .admin-pm-remove {
+.purchase-history-page.admin-recargas-page .admin-pm-actions-primary .admin-pm-save.btn-panel.btn-green.btn-sm,
+.purchase-history-page.admin-recargas-page .admin-pm-actions-primary .admin-pm-users.btn-panel.btn-blue.btn-sm {
+  min-width: 0 !important;
+  max-width: none !important;
+}
+
+.purchase-history-page.admin-recargas-page .admin-pm-actions-primary .admin-pm-users.btn-panel.btn-blue.btn-sm {
+  white-space: nowrap;
+  font-size: 0.82rem;
+  line-height: 1.15;
+  padding: 0.32rem 0.4rem;
+}
+
+.purchase-history-page.admin-recargas-page .admin-pm-actions .admin-pm-qr-wrap {
   flex: 0 0 auto;
-  min-width: 2.35rem;
-  width: 2.35rem;
-  padding-left: 0.45rem;
-  padding-right: 0.45rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  position: relative;
+  margin-left: 0;
+}
+
+.purchase-history-page.admin-recargas-page .admin-pm-actions .admin-pm-users {
   display: inline-flex;
   align-items: center;
   justify-content: center;
 }
 
-.purchase-history-page.admin-recargas-page .admin-pm-actions .admin-pm-remove .fa-times {
-  font-size: 0.95rem;
+.purchase-history-page.admin-recargas-page .admin-pm-actions .admin-pm-remove.btn-panel.btn-red.btn-sm {
+  flex: 0 0 auto;
+  margin: 0 !important;
+  min-width: 0 !important;
+  width: 1.28rem !important;
+  max-width: 1.28rem !important;
+  height: 1.28rem !important;
+  padding: 0 !important;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 5px;
+  border-width: 1px !important;
+  box-sizing: border-box;
   line-height: 1;
+}
+
+.purchase-history-page.admin-recargas-page .admin-pm-actions .admin-pm-remove .fa-times {
+  font-size: 0.78rem;
+  line-height: 1;
+  margin: 0;
 }
 
 .purchase-history-page.admin-recargas-page .admin-pm-list .form-control {
@@ -24755,6 +25886,144 @@ body .container > .purchase-history-page.purchase-history-admin {
   align-items: center;
   gap: 0.65rem;
   margin-bottom: 0.75rem;
+}
+
+.admin-recargas-review-wrap > .admin-recargas-review-toolbar {
+  flex-wrap: nowrap;
+  justify-content: center;
+  gap: 0.5rem 0.75rem;
+}
+
+.admin-recargas-accum-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem 0.75rem;
+  margin: 0.15rem 0 0.75rem;
+}
+
+.admin-recargas-accum-head-tools {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  flex: 0 0 auto;
+  width: 100%;
+  position: relative;
+}
+
+.admin-recargas-accum-head-tools {
+  --admin-recargas-accum-control-h: 2.125rem;
+}
+
+.admin-recargas-accum-head-tools .admin-recargas-filter-badge-wrap {
+  order: 0;
+}
+
+.admin-recargas-accum-head-tools .admin-recargas-refresh-btn {
+  order: 1;
+}
+
+.admin-recargas-accum-head-tools .admin-recargas-accum-info-wrap {
+  flex: 0 0 auto;
+  order: 2;
+}
+
+.admin-recargas-review-wrap > .admin-recargas-review-toolbar .form-select,
+.admin-recargas-accum-head-tools .form-select,
+.admin-recargas-accum-head-tools .admin-recargas-filter-badge-wrap .form-select {
+  width: auto;
+  min-width: 9rem;
+  max-width: 11rem;
+  flex: 0 0 auto;
+  margin: 0;
+}
+
+.admin-recargas-accum-head-tools .form-select,
+.admin-recargas-accum-head-tools .admin-recargas-filter-badge-wrap .form-select {
+  height: var(--admin-recargas-accum-control-h);
+  padding: 0.2rem 1.65rem 0.2rem 0.55rem;
+  font-size: 0.875rem;
+  line-height: 1.2;
+}
+
+.purchase-history-page.admin-recargas-page .admin-recargas-accum-head-tools .admin-recargas-refresh-btn.btn-panel.btn-blue.btn-sm {
+  min-width: 0 !important;
+  width: var(--admin-recargas-accum-control-h);
+  height: var(--admin-recargas-accum-control-h);
+  padding: 0 !important;
+  margin: 0;
+  border-width: 1px !important;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  line-height: 1;
+  box-shadow: none !important;
+}
+
+.admin-recargas-review-wrap > .admin-recargas-review-toolbar .text-muted,
+.admin-recargas-review-wrap > .admin-recargas-review-toolbar .btn-panel,
+.admin-recargas-accum-head-tools .btn-panel,
+.admin-recargas-accum-head-tools .admin-recargas-filter-badge-wrap {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.admin-recargas-filter-badge-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  overflow: visible;
+}
+
+.admin-recargas-refresh-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 2.1rem;
+  width: 2.1rem;
+  height: 2.1rem;
+  padding: 0 !important;
+  margin: 0;
+  line-height: 1;
+}
+
+.admin-recargas-accum-head-tools .admin-recargas-refresh-btn {
+  min-width: 0;
+  width: var(--admin-recargas-accum-control-h, 2.125rem);
+  height: var(--admin-recargas-accum-control-h, 2.125rem);
+}
+
+.admin-recargas-refresh-btn .fa-sync-alt {
+  font-size: 0.9rem;
+}
+
+.admin-recargas-accum-head-tools .admin-recargas-refresh-btn .fa-sync-alt {
+  font-size: 1.05rem;
+}
+
+.admin-recargas-filter-badge-wrap .admin-recargas-pending-badge {
+  position: absolute;
+  top: -0.55rem;
+  right: -0.32rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.15rem;
+  height: 1.15rem;
+  padding: 0 0.2rem;
+  border-radius: 999px;
+  background: #fff;
+  border: 1px solid #cbd5e1;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.22);
+  color: #1d4ed8;
+  font-size: 0.68rem;
+  font-weight: 800;
+  line-height: 1;
+  text-align: center;
+  pointer-events: none;
+  box-sizing: border-box;
+  z-index: 1;
 }
 
 .admin-recargas-list {
@@ -24932,8 +26201,26 @@ body .container > .purchase-history-page.purchase-history-admin {
 }
 
 .admin-recarga-status--pending {
-  color: #92400e;
-  background: #fef3c7;
+  color: #b45309;
+  background: #ffedd5;
+}
+
+.admin-recarga-status--approved {
+  color: #065f46;
+  background: #d1fae5;
+}
+
+.admin-recarga-status--rejected {
+  color: #991b1b;
+  background: #fee2e2;
+}
+
+.admin-recarga-card--accumulated {
+  border-left: 4px solid #f59e0b;
+}
+
+.admin-recarga-card--accum_converted {
+  border-left: 4px solid #16a34a;
 }
 
 .admin-recarga-meta {
@@ -24942,11 +26229,96 @@ body .container > .purchase-history-page.purchase-history-admin {
   margin: 0.35rem 0;
 }
 
-.admin-recarga-proofs {
+.admin-recarga-meta-date {
+  color: inherit;
+  white-space: nowrap;
+}
+
+@media (max-width: 480px) {
+  .admin-recarga-meta-date {
+    font-size: 0.68rem;
+  }
+
+  .balance-recharge-item-date {
+    font-size: 0.65rem;
+  }
+}
+
+.admin-recarga-meta-row {
   display: flex;
-  gap: 0.4rem;
+  align-items: center;
   flex-wrap: wrap;
+  gap: 0.35rem 0.55rem;
   margin: 0.35rem 0;
+}
+
+.admin-recarga-meta-row .admin-recarga-meta {
+  margin: 0;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.admin-recarga-meta-proof,
+.admin-recarga-meta-row .admin-recarga-meta-proof {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  margin: 0;
+}
+
+.admin-recarga-meta-proof--inline {
+  display: inline;
+  vertical-align: baseline;
+  white-space: nowrap;
+}
+
+.admin-recarga-meta-proof--inline .admin-recarga-proof-open {
+  display: inline;
+  vertical-align: baseline;
+  margin: 0;
+  padding: 0.1rem 0.35rem;
+  font-size: inherit;
+  line-height: inherit;
+}
+
+.admin-recarga-meta-note {
+  flex: 1 1 100%;
+  min-width: 100%;
+}
+
+.admin-recarga-meta-note .admin-recarga-reviewed-note {
+  margin: 0;
+}
+
+.admin-recarga-proofs,
+.admin-recarga-proof-link-wrap {
+  display: flex;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+  margin: 0;
+  align-items: center;
+}
+
+.admin-recarga-proof-note-row {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  margin: 0.35rem 0;
+  flex-wrap: wrap;
+}
+
+.admin-recarga-proof-note-row .admin-recarga-proofs {
+  margin: 0;
+  flex: 0 0 auto;
+}
+
+.admin-recarga-proof-note-row .admin-recarga-reviewed-note {
+  flex: 1;
+  min-width: 12rem;
+  margin: 0;
+  font-size: 0.82rem;
+  color: #334155;
+  line-height: 1.35;
 }
 
 .admin-recarga-proof-thumb {
@@ -24957,12 +26329,34 @@ body .container > .purchase-history-page.purchase-history-admin {
   border: 1px solid #94a3b8;
 }
 
+.admin-recarga-actions {
+  margin-top: 0.35rem;
+}
+
+.admin-recarga-actions .admin-recarga-accum-hint {
+  margin: 0 0 0.35rem;
+  font-size: 0.82rem;
+}
+
 .admin-recarga-review-fields {
   display: flex;
-  align-items: flex-end;
+  align-items: center;
   gap: 0.45rem;
   flex-wrap: wrap;
-  margin-top: 0.15rem;
+  margin-top: 0;
+}
+
+.admin-recarga-review-field--buttons {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+}
+
+.admin-recarga-review-btns {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem;
 }
 
 .admin-recarga-review-field {
@@ -24972,6 +26366,52 @@ body .container > .purchase-history-page.purchase-history-admin {
 .admin-recarga-review-field .form-label {
   margin-bottom: 0.2rem;
   font-size: 0.82rem;
+}
+
+.admin-recarga-review-field--proof {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+}
+
+.admin-recarga-review-field--proof .admin-recarga-proof-link-wrap,
+.admin-recarga-review-field--proof .admin-recarga-proofs {
+  margin: 0;
+}
+
+.admin-recarga-proof-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: calc(1.5em + 0.75rem + 2px);
+  padding: 0 0.55rem;
+  margin: 0;
+  border: 1px solid #93c5fd;
+  border-radius: 6px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-size: 0.82rem;
+  font-weight: 600;
+  line-height: 1.2;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.admin-recarga-proof-link:hover,
+.admin-recarga-proof-link:focus {
+  background: #dbeafe;
+  border-color: #60a5fa;
+  color: #1e40af;
+  outline: none;
+}
+
+.admin-recarga-proof-missing-text {
+  display: inline-flex;
+  align-items: center;
+  min-height: calc(1.5em + 0.75rem + 2px);
+  font-size: 0.8rem;
+  color: #64748b;
+  white-space: nowrap;
 }
 
 .admin-recarga-review-field--amount {
@@ -24991,6 +26431,25 @@ body .container > .purchase-history-page.purchase-history-admin {
   width: 100%;
 }
 
+.admin-recarga-review-fields--auto {
+  align-items: center;
+  flex-wrap: nowrap;
+}
+
+.admin-recarga-review-field--email-btn {
+  flex: 0 0 auto;
+}
+
+.admin-recarga-review-field--email-btn .admin-recarga-email-verify-btn {
+  white-space: nowrap;
+  margin: 0;
+}
+
+.admin-recarga-review-fields--auto .admin-recarga-review-field--note {
+  flex: 1 1 12rem;
+  min-width: 0;
+}
+
 .admin-pm-currency-title {
   font-size: 1rem;
   margin: 0 0 0.65rem;
@@ -25005,44 +26464,38 @@ body .container > .purchase-history-page.purchase-history-admin {
 }
 
 .admin-pm-qr-wrap {
-  display: flex;
-  flex-direction: row;
+  display: inline-flex;
   align-items: center;
-  gap: 0.5rem;
-  min-width: 0;
+  gap: 0.35rem;
+  position: relative;
 }
 
-.admin-pm-qr-label {
-  flex-shrink: 0;
-  font-size: 0.78rem;
-  color: #475569;
-  margin: 0;
+.admin-pm-qr-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.35rem 0.55rem;
+  border: 1px solid #94a3b8;
+  border-radius: 6px;
+  background: #f8fafc;
+  color: #334155;
+  font-size: 0.82rem;
+  font-weight: 600;
+  line-height: 1;
+  cursor: pointer;
   white-space: nowrap;
 }
 
-.admin-pm-qr-wrap .admin-pm-qr-file,
-.admin-pm-qr-wrap .form-control {
-  flex: 1;
-  min-width: 0;
+.admin-pm-qr-trigger:hover,
+.admin-pm-qr-trigger:focus {
+  border-color: #0d6efd;
+  color: #0d6efd;
+  outline: none;
 }
 
-.admin-pm-qr-preview {
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-  flex: 1;
-  min-width: 0;
-}
-
-.admin-pm-qr-img {
-  width: 72px;
-  height: 72px;
-  object-fit: contain;
-  border: 1px solid #cbd5e1;
-  border-radius: 6px;
-  background: #fff;
+.purchase-history-page.admin-recargas-page .admin-pm-actions .admin-pm-qr-remove {
+  flex: 0 0 auto;
+  white-space: nowrap;
 }
 
 .admin-pm-users-modal {
@@ -25082,6 +26535,24 @@ body .container > .purchase-history-page.purchase-history-admin {
   margin-bottom: 0.35rem;
 }
 
+.admin-pm-users-modal__head--title-center {
+  position: relative;
+  justify-content: center;
+}
+
+.admin-pm-users-modal__head--title-center .admin-pm-users-modal__title {
+  flex: 1;
+  justify-content: center;
+  text-align: center;
+}
+
+.admin-pm-users-modal__head--title-center .admin-pm-users-modal__close {
+  position: absolute;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
 .admin-pm-users-modal__title {
   margin: 0;
   font-size: 1.05rem;
@@ -25090,6 +26561,7 @@ body .container > .purchase-history-page.purchase-history-admin {
   gap: 0.35rem;
   flex-wrap: wrap;
   min-width: 0;
+  position: relative;
 }
 
 .admin-pm-users-modal__info-wrap {
@@ -25196,6 +26668,20 @@ body .container > .purchase-history-page.purchase-history-admin {
   background: #f8fafc;
 }
 
+.admin-pm-users-table tbody tr.admin-pm-users-table-row--outside-filter {
+  background: #fff7ed;
+}
+
+.admin-pm-users-table tbody tr.admin-pm-users-table-row--outside-filter:hover {
+  background: #ffedd5;
+}
+
+.admin-pm-users-outside-hint {
+  color: #c2410c;
+  font-size: 0.85em;
+  margin-left: 0.15rem;
+}
+
 .admin-pm-users-table tbody tr:last-child td {
   border-bottom: none;
 }
@@ -25256,28 +26742,78 @@ body .container > .purchase-history-page.purchase-history-admin {
   background: #fff;
 }
 
-.admin-recargas-auto-box--email {
-  border-left: 4px solid #6366f1;
-}
-
-.admin-recargas-auto-box--status {
-  border-left: 4px solid #2563eb;
-}
-
-.admin-recargas-auto-box .admin-recargas-review-toolbar {
-  margin-bottom: 0;
-}
-
-.admin-recargas-auto-toolbar {
-  flex-wrap: wrap;
-  gap: 0.5rem 0.75rem;
-}
-
 .admin-recargas-auto-email-tools {
+  --admin-recargas-auto-control-h: 2.125rem;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
+  justify-content: center;
   gap: 0.45rem 0.65rem;
+}
+
+.admin-recargas-auto-pending {
+  white-space: nowrap;
+  font-size: 0.88rem;
+  line-height: 1.2;
+  margin: 0;
+}
+
+.admin-recargas-auto-email-tools .admin-recargas-auto-refresh-btn {
+  min-width: 0 !important;
+  width: var(--admin-recargas-auto-control-h);
+  height: var(--admin-recargas-auto-control-h);
+  padding: 0 !important;
+  margin: 0;
+  border-width: 1px !important;
+  border-radius: 6px;
+  box-shadow: none !important;
+}
+
+.admin-recargas-auto-email-tools .admin-recargas-auto-refresh-btn .fa-sync-alt {
+  font-size: 1.05rem;
+}
+
+.admin-recargas-auto-email-tools-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  flex: 0 0 auto;
+}
+
+.admin-recargas-auto-email-tools .admin-recargas-auto-info-wrap {
+  flex: 0 0 auto;
+  position: relative;
+}
+
+.admin-recargas-auto-email-tools .purchase-history-cleanup-info-btn {
+  font-size: 1.25rem;
+}
+
+@media (max-width: 480px) {
+  .admin-recargas-auto-box {
+    padding: 0.55rem 0.45rem;
+  }
+
+  .admin-recargas-auto-email-tools {
+    flex-wrap: nowrap;
+    justify-content: flex-start;
+    gap: 0.28rem 0.35rem;
+    width: 100%;
+  }
+
+  .admin-recargas-auto-email-tools .btn-panel.btn-sm {
+    padding: 0.2rem 0.42rem !important;
+    font-size: 0.8rem;
+    line-height: 1.2;
+  }
+
+  .admin-recargas-auto-pending {
+    font-size: 0.78rem;
+  }
+
+  .admin-recargas-auto-email-tools .purchase-history-cleanup-info-btn {
+    font-size: 1.1rem;
+  }
 }
 
 .admin-recargas-buzon-check {
@@ -25343,6 +26879,7 @@ body .container > .purchase-history-page.purchase-history-admin {
   font-weight: 700;
   color: #334155;
   margin-bottom: 0.45rem;
+  text-align: center;
 }
 
 .admin-recarga-email-regex-list {
@@ -25386,36 +26923,236 @@ body .container > .purchase-history-page.purchase-history-admin {
   margin-top: 0.45rem;
 }
 
+.admin-recarga-email-regex-modal-msg.text-danger,
+.admin-recargas-email-review-msg.text-danger {
+  color: #dc3545;
+  font-weight: 500;
+}
+
+.admin-recarga-email-regex-modal-msg.text-success,
+.admin-recargas-email-review-msg.text-success {
+  color: #16a34a;
+  font-weight: 500;
+}
+
 .admin-recarga-email-row--off {
   opacity: 0.72;
+}
+
+.admin-recarga-email-imap-panel {
+  max-width: min(720px, calc(100vw - 2rem));
+}
+
+.admin-recarga-email-imap-hint {
+  font-size: 0.84rem;
+  text-align: center;
+}
+
+.admin-recarga-email-imap-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  margin-bottom: 0.75rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.admin-recarga-email-imap-form__row-pair {
+  display: flex;
+  gap: 0.65rem;
+}
+
+.admin-recarga-email-imap-form__row-pair > .admin-recarga-email-imap-form__row {
+  flex: 1;
+  min-width: 0;
+}
+
+.admin-recarga-email-imap-form__row--port {
+  flex: 0 0 100px;
+  max-width: 100px;
+}
+
+.admin-recarga-email-imap-form__row-pair--folders {
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.45rem 0.65rem;
+}
+
+.admin-recarga-email-imap-form__row--folders {
+  flex: 1 1 10rem;
+  min-width: 0;
+}
+
+.admin-recarga-email-imap-form__row-pair--folders .admin-recarga-email-imap-form__actions {
+  display: flex;
+  flex: 0 0 auto;
+  justify-content: flex-end;
+  margin: 0;
+  align-self: flex-end;
+}
+
+.admin-recarga-email-imap-form__actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 0.15rem;
+}
+
+.admin-recarga-email-imap-actions {
+  display: inline-flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 0.25rem;
+  white-space: nowrap;
+}
+
+.admin-pm-users-table-col-actions {
+  width: 1%;
+  white-space: nowrap;
+}
+
+.admin-recarga-email-imap-actions .btn-panel {
+  flex-shrink: 0;
+  margin: 0;
 }
 
 body.admin-recarga-email-modal-open {
   overflow: hidden;
 }
 
+.balance-recharge-method-qr[hidden] {
+  display: none !important;
+}
+
 .balance-recharge-method-qr {
-  margin-top: 0.75rem;
-  padding: 0.75rem;
-  border: 1px solid #cbd5e1;
-  border-radius: 10px;
-  background: rgba(255, 255, 255, 0.65);
-  text-align: center;
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  margin: 0;
+  padding: 0;
 }
 
-.balance-recharge-method-qr-label {
-  margin: 0 0 0.5rem;
-  font-size: 0.9rem;
-  color: #334155;
-}
-
-.balance-recharge-method-qr-img {
-  max-width: 220px;
-  width: 100%;
-  height: auto;
-  border-radius: 8px;
+.balance-recharge-method-qr-open {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.28rem;
+  margin: 0;
+  padding: 0 0.55rem;
+  height: var(--br-action-height, 2.25rem);
+  min-height: var(--br-action-height, 2.25rem);
+  box-sizing: border-box;
   border: 1px solid #94a3b8;
+  border-radius: 8px;
+  background: #f8fafc;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #2563eb;
+  cursor: pointer;
+  white-space: nowrap;
+  line-height: 1;
+}
+
+.balance-recharge-method-qr-open:hover,
+.balance-recharge-method-qr-open:focus {
+  color: #1d4ed8;
+  border-color: #2563eb;
+  background: #eff6ff;
+  outline: none;
+}
+
+.balance-recharge-qr-lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 10050;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+}
+
+.balance-recharge-qr-lightbox[hidden] {
+  display: none !important;
+}
+
+.balance-recharge-qr-lightbox__backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.82);
+  backdrop-filter: blur(2px);
+}
+
+.balance-recharge-qr-lightbox__panel {
+  position: relative;
+  z-index: 1;
+  max-width: min(96vw, 560px);
+  max-height: 92vh;
+}
+
+.balance-recharge-qr-lightbox__img {
+  display: block;
+  max-width: 100%;
+  max-height: 88vh;
+  width: auto;
+  height: auto;
+  margin: 0 auto;
+  border-radius: 12px;
   background: #fff;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.45);
+}
+
+.balance-recharge-qr-lightbox__close {
+  position: absolute;
+  top: -0.65rem;
+  right: -0.65rem;
+  width: 2.1rem;
+  height: 2.1rem;
+  border: none;
+  border-radius: 999px;
+  background: #fff;
+  color: #0f172a;
+  font-size: 1.35rem;
+  line-height: 1;
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
+}
+
+.balance-recharge-qr-lightbox__close:hover {
+  background: #f1f5f9;
+}
+
+body.balance-recharge-qr-lightbox-open {
+  overflow: hidden;
+}
+
+.admin-recarga-proof-open:not(.admin-recarga-proof-link) {
+  display: inline-block;
+  padding: 0;
+  margin: 0;
+  border: none;
+  background: none;
+  cursor: zoom-in;
+  line-height: 0;
+  vertical-align: top;
+}
+
+.admin-recarga-proof-open.admin-recarga-proof-link {
+  cursor: pointer;
+  line-height: 1.2;
+  vertical-align: middle;
+}
+
+.admin-recarga-proof-open:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+.admin-recarga-proof-lightbox__panel {
+  max-width: min(96vw, 520px);
+}
+
+.admin-recarga-proof-lightbox__img {
+  max-height: 92vh;
 }
 
 .admin-user-pm-checkboxes {
@@ -25433,17 +27170,121 @@ body.admin-recarga-email-modal-open {
 }
 
 @media (max-width: 767px) {
-  .purchase-history-page.admin-recargas-page .admin-pm-row {
+  .purchase-history-page.admin-recargas-page .admin-pm-row,
+  .purchase-history-page.admin-recargas-page .admin-pm-row--accum {
     grid-template-columns: 1fr;
   }
 
-  .purchase-history-page.admin-recargas-page .admin-pm-active,
-  .purchase-history-page.admin-recargas-page .admin-pm-field-label--name,
-  .purchase-history-page.admin-recargas-page .admin-pm-field-label--details,
-  .purchase-history-page.admin-recargas-page .admin-pm-qr-wrap,
-  .purchase-history-page.admin-recargas-page .admin-pm-actions {
+  .purchase-history-page.admin-recargas-page .admin-pm-row > *,
+  .purchase-history-page.admin-recargas-page .admin-pm-row--accum > * {
     grid-column: 1;
     grid-row: auto;
+    max-width: 100%;
+    min-width: 0;
+  }
+
+  /* Bre-B: flex en móvil (el grid de escritorio gana especificidad sobre grid-column: 1) */
+  .purchase-history-page.admin-recargas-page .admin-pm-row--breb {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.5rem;
+  }
+
+  .purchase-history-page.admin-recargas-page .admin-pm-row--breb .admin-pm-active,
+  .purchase-history-page.admin-recargas-page .admin-pm-row--breb .admin-pm-field-label,
+  .purchase-history-page.admin-recargas-page .admin-pm-row--breb .admin-pm-actions {
+    grid-column: unset;
+    grid-row: unset;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+  }
+
+  .purchase-history-page.admin-recargas-page .admin-pm-row--breb .admin-pm-field-label--breb-llave,
+  .purchase-history-page.admin-recargas-page .admin-pm-row--breb .admin-pm-field-label--breb-suffix,
+  .purchase-history-page.admin-recargas-page .admin-pm-row--breb .admin-pm-field-label--description {
+    grid-column: unset;
+    grid-row: unset;
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .purchase-history-page.admin-recargas-page .admin-pm-row--breb .admin-pm-field-label--breb-suffix {
+    max-width: none;
+  }
+
+  .purchase-history-page.admin-recargas-page .admin-pm-row--breb .admin-pm-field-label .form-control {
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .purchase-history-page.admin-recargas-page .admin-pm-accum-config {
+    grid-template-columns: 1fr;
+  }
+
+  .purchase-history-page.admin-recargas-page .admin-pm-actions {
+    gap: 0.3rem;
+  }
+
+  .purchase-history-page.admin-recargas-page .admin-pm-actions-primary {
+    flex: 1 1 0;
+    min-width: 0;
+    gap: 0.3rem;
+  }
+
+  .purchase-history-page.admin-recargas-page .admin-pm-actions-primary .admin-pm-save,
+  .purchase-history-page.admin-recargas-page .admin-pm-actions-primary .admin-pm-users.btn-panel.btn-blue.btn-sm {
+    flex: 1 1 0;
+    min-width: 0 !important;
+    width: 0;
+    margin: 0 !important;
+    white-space: nowrap;
+  }
+
+  .purchase-history-page.admin-recargas-page .admin-pm-actions-primary .admin-pm-save.btn-panel {
+    font-size: 0.7rem !important;
+    padding: 0.3rem 0.35rem;
+    line-height: 1.12;
+  }
+
+  .purchase-history-page.admin-recargas-page .admin-pm-actions-primary .admin-pm-users.btn-panel.btn-blue.btn-sm {
+    font-size: 0.7rem !important;
+    padding: 0.3rem 0.35rem;
+  }
+
+  .purchase-history-page.admin-recargas-page .admin-pm-actions .admin-pm-qr-wrap {
+    flex-shrink: 0;
+  }
+
+  .purchase-history-page.admin-recargas-page .admin-pm-actions .admin-pm-qr-remove.btn-panel {
+    font-size: 0.58rem !important;
+    padding: 0.22rem 0.28rem;
+    white-space: nowrap;
+  }
+
+  .purchase-history-page.admin-recargas-page .admin-pm-actions .admin-pm-qr-trigger {
+    font-size: 0.62rem;
+    padding: 0.22rem 0.32rem;
+  }
+
+  .purchase-history-page.admin-recargas-page .admin-pm-actions .admin-pm-remove.btn-panel.btn-red.btn-sm {
+    flex: 0 0 1.22rem !important;
+    min-width: 0 !important;
+    width: 1.22rem !important;
+    max-width: 1.22rem !important;
+    height: 1.22rem !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    border-width: 1px !important;
+  }
+
+  .purchase-history-page.admin-recargas-page .admin-pm-actions .admin-pm-remove .fa-times {
+    font-size: 0.7rem;
+  }
+
+  .purchase-history-page.admin-recargas-page .admin-pm-actions .btn-panel {
+    margin: 0 !important;
   }
 }
 

@@ -28,6 +28,8 @@ class Sale(db.Model):
     quantity = db.Column(db.Integer, default=1)
     total_price = db.Column(db.Numeric(10, 2), nullable=False)
     is_renewal = db.Column(db.Boolean, default=False, nullable=False, index=True)
+    # renovar_1_mes | dejar_mes_a_mes | mixto (renovación pagada en tienda)
+    renewal_kind = db.Column(db.String(24), nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
 
 
@@ -44,6 +46,7 @@ class SalePurchaseSnapshot(db.Model):
     sale_created_at = db.Column(db.DateTime, nullable=False, index=True)
     licencias_json = db.Column(db.Text, nullable=False, default='[]')
     is_renewal = db.Column(db.Boolean, default=False, nullable=False)
+    renewal_kind = db.Column(db.String(24), nullable=True)
     is_reversed = db.Column(db.Boolean, default=False, nullable=False)
     reversed_at = db.Column(db.DateTime, nullable=True)
     purged_from_sales = db.Column(db.Boolean, default=False, nullable=False, index=True)
@@ -667,8 +670,33 @@ class BalanceRecharge(db.Model):
     reviewed_at = db.Column(db.DateTime, nullable=True)
     reviewed_by_user_id = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     admin_note = db.Column(db.Text, nullable=True)
+    email_verify_status = db.Column(db.String(32), nullable=True, index=True)
+    email_verify_attempts = db.Column(db.Integer, nullable=False, default=0)
+    email_verify_next_at = db.Column(db.DateTime, nullable=True, index=True)
+    email_verify_json = db.Column(db.Text, nullable=True)
 
     def __repr__(self):
         return f"<BalanceRecharge id={self.id} user_id={self.user_id} status={self.status}>"
+
+
+class BalanceRechargeHistorialSnapshot(db.Model):
+    """Copia permanente de recargas para historial de compras tras limpieza del panel admin."""
+    __tablename__ = 'store_balance_recharge_historial_snapshots'
+
+    id = db.Column(db.Integer, primary_key=True)
+    recharge_id = db.Column(db.Integer, nullable=True, index=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='CASCADE'), nullable=False, index=True)
+    currency = db.Column(db.String(3), nullable=False)
+    payment_method_id = db.Column(db.String(48), nullable=True)
+    amount_claimed = db.Column(db.Numeric(12, 2), nullable=True)
+    amount_credited = db.Column(db.Numeric(12, 2), nullable=True)
+    status = db.Column(db.String(20), nullable=False, index=True)
+    auto_credited = db.Column(db.Boolean, nullable=False, default=False)
+    admin_verified = db.Column(db.Boolean, nullable=True)
+    admin_note = db.Column(db.Text, nullable=True)
+    event_at = db.Column(db.DateTime, nullable=False, index=True)
+    purged_from_recharges = db.Column(db.Boolean, default=False, nullable=False, index=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
  

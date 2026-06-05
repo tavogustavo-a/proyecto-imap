@@ -5,10 +5,11 @@ import logging
 import os
 import threading
 import time
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, time as dt_time, timedelta, timezone
 
 from app.extensions import db
 from app.store.models import BalanceRecharge, StoreSetting
+from app.utils.timezone import COLOMBIA_TZ, get_colombia_now
 
 logger = logging.getLogger(__name__)
 
@@ -99,8 +100,17 @@ def is_purge_running():
 
 
 def _cutoff_utc(days):
-    days = max(1, int(days))
-    return datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=days)
+    """Antigüedad mínima en días calendario (Colombia). None = sin filtro de fecha."""
+    days = int(days)
+    if days <= 0:
+        return None
+    days = max(1, days)
+    today = get_colombia_now().date()
+    last_eligible_date = today - timedelta(days=days)
+    end_local = datetime.combine(last_eligible_date, dt_time.max)
+    if end_local.tzinfo is None:
+        end_local = COLOMBIA_TZ.localize(end_local)
+    return end_local.astimezone(timezone.utc).replace(tzinfo=None)
 
 
 def _upload_dir(app):
@@ -195,7 +205,9 @@ def delete_proof_files_for_user_ids(app, user_ids):
 
 
 def _recharges_query_before_cutoff(cutoff, user_id=None):
-    q = BalanceRecharge.query.filter(BalanceRecharge.created_at < cutoff)
+    q = BalanceRecharge.query
+    if cutoff is not None:
+        q = q.filter(BalanceRecharge.created_at <= cutoff)
     if user_id is not None:
         q = q.filter(BalanceRecharge.user_id == int(user_id))
     return q
@@ -225,7 +237,15 @@ def purge_recharges_batched(app, retention_days, user_id=None, batch_size=PURGE_
         for row in rows:
             _delete_proof_files(app, row)
 
+        from app.store.balance_recharge_historial_snapshot import (
+            archive_recharges_before_purge,
+            detach_snapshots_after_recharge_purge,
+            repair_stale_snapshot_recharge_ids,
+        )
+
+        archive_recharges_before_purge(rows)
         BalanceRecharge.query.filter(BalanceRecharge.id.in_(ids)).delete(synchronize_session=False)
+        detach_snapshots_after_recharge_purge(ids)
         db.session.commit()
         total_deleted += len(ids)
 
@@ -234,6 +254,12 @@ def purge_recharges_batched(app, retention_days, user_id=None, batch_size=PURGE_
         time.sleep(PURGE_BATCH_PAUSE_SEC)
 
     cleanup_orphan_proof_files(app)
+    try:
+        from app.store.balance_recharge_historial_snapshot import repair_stale_snapshot_recharge_ids
+
+        repair_stale_snapshot_recharge_ids()
+    except Exception:
+        pass
     return total_deleted
 
 

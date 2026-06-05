@@ -7,10 +7,11 @@ import json
 import logging
 import threading
 import time
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, time as dt_time, timedelta, timezone
 
 from app.extensions import db
 from app.store.models import Sale, StoreSetting
+from app.utils.timezone import COLOMBIA_TZ, get_colombia_now
 
 logger = logging.getLogger(__name__)
 
@@ -103,12 +104,23 @@ def is_purge_running():
 
 
 def _cutoff_utc(days):
-    days = max(1, int(days))
-    return datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=days)
+    """Antigüedad mínima en días calendario (Colombia). None = sin filtro de fecha (0 = todo)."""
+    days = int(days)
+    if days <= 0:
+        return None
+    days = max(1, days)
+    today = get_colombia_now().date()
+    last_eligible_date = today - timedelta(days=days)
+    end_local = datetime.combine(last_eligible_date, dt_time.max)
+    if end_local.tzinfo is None:
+        end_local = COLOMBIA_TZ.localize(end_local)
+    return end_local.astimezone(timezone.utc).replace(tzinfo=None)
 
 
 def _sales_query_before_cutoff(cutoff, user_id=None):
-    q = Sale.query.filter(Sale.created_at < cutoff)
+    q = Sale.query
+    if cutoff is not None:
+        q = q.filter(Sale.created_at <= cutoff)
     if user_id is not None:
         q = q.filter(Sale.user_id == int(user_id))
     return q
@@ -157,6 +169,11 @@ def purge_sales_batched(retention_days, user_id=None, batch_size=PURGE_BATCH_SIZ
     from app.store.sale_purchase_snapshot import repair_stale_snapshot_sale_ids
 
     repair_stale_snapshot_sale_ids()
+
+    from app.store.balance_recharge_historial_snapshot import purge_snapshots_batched
+
+    purge_snapshots_batched(retention_days, user_id=user_id)
+
     try:
         from flask import current_app
         from app.services.disk_orphan_maintenance import run_disk_orphan_maintenance

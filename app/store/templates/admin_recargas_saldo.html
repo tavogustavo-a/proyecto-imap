@@ -2,7 +2,7 @@
 
 {% block title %}{{ title }}{% endblock %}
 
-{% block head %}{{ super() }}<link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}?v=20260527-regex-local"><link rel="stylesheet" href="{{ url_for('static', filename='fontawesome/css/all.css') }}"><meta name="csrf_token" content="{{ csrf_token() }}">{% endblock %}
+{% block head %}{{ super() }}<link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}?v=20260605-layout-fix"><link rel="stylesheet" href="{{ url_for('static', filename='fontawesome/css/all.css') }}"><meta name="csrf_token" content="{{ csrf_token() }}">{% endblock %}
 {% block content %}
 <div class="purchase-history-page purchase-history-admin admin-recargas-page"
      data-list-url="{{ url_for('store_bp.api_admin_balance_recharges') }}"
@@ -12,9 +12,11 @@
      data-email-review-url="{{ url_for('store_bp.api_admin_balance_recharge_email_review_settings') }}"
      data-email-review-buzon-url="{{ url_for('store_bp.api_admin_balance_recharge_email_review_buzon') }}"
      data-email-review-regex-url="{{ url_for('store_bp.api_admin_balance_recharge_email_review_regex_create') }}"
+     data-email-review-imap-url="{{ url_for('store_bp.api_admin_balance_recharge_email_review_imap_create') }}"
      data-email-verify-url-base="{{ url_for('store_bp.api_admin_balance_recharge_email_verify', recharge_id=0) }}"
      data-email-verify-batch-url="{{ url_for('store_bp.api_admin_balance_recharge_email_verify_batch') }}"
-     data-imap-admin-url="{{ url_for('admin_bp.dashboard') }}">
+     data-accum-summary-url="{{ url_for('store_bp.api_admin_balance_recharge_accum_summary') }}"
+     data-accum-convert-url="{{ url_for('store_bp.api_admin_balance_recharge_accum_convert') }}">
   <div id="mobileMenu" class="mobile-menu-store hidden">
     <div class="menu-user-info-row menu-user-info-row--name-only menu-sidebar-heading-name">
       <span class="menu-user-name">{{ session.get('username', 'Admin') }}</span>
@@ -52,20 +54,25 @@
             </button>
             <div id="brCleanupInfoBox" class="purchase-history-cleanup-info-box" hidden>
               Borra solicitudes antiguas en la base de datos y sus comprobantes en disco. También elimina imágenes huérfanas sin registro asociado.
+              Usa días calendario (hora Colombia): con <strong>1</strong> se incluyen las de ayer; con <strong>0</strong> se eliminan todas.
             </div>
           </span>
         </h4>
         <div class="purchase-history-cleanup-grid">
-          <div class="purchase-history-cleanup-days-row">
-            <label for="brCleanupDays" class="form-label purchase-history-cleanup-days-label">Eliminar solicitudes con más de (días)</label>
-            <input type="number" id="brCleanupDays" class="form-control purchase-history-cleanup-days-input" min="1" max="3650" value="{{ cleanup_settings.retention_days if cleanup_settings else 90 }}" autocomplete="off" aria-label="Días de antigüedad">
-          </div>
-          <div class="purchase-history-cleanup-field">
-            <label for="brCleanupScope" class="sr-only">Alcance de la limpieza</label>
-            <select id="brCleanupScope" class="form-select" autocomplete="off" title="Alcance de la limpieza" aria-label="Alcance de la limpieza">
-              <option value="all" {% if not cleanup_settings or cleanup_settings.scope != 'user' %}selected{% endif %}>Todos los usuarios</option>
-              <option value="user" {% if cleanup_settings and cleanup_settings.scope == 'user' %}selected{% endif %}>Solo un usuario</option>
-            </select>
+          <div class="purchase-history-cleanup-scope-row">
+            <div class="purchase-history-cleanup-days-field" role="group" aria-labelledby="brCleanupDaysPrefix">
+              <span id="brCleanupDaysPrefix" class="purchase-history-cleanup-days-field__prefix">Días</span>
+              <label for="brCleanupDays" class="sr-only">Días de antigüedad</label>
+              <input type="number" id="brCleanupDays" class="form-control purchase-history-cleanup-days-input" min="0" max="3650" value="{{ cleanup_settings.retention_days if cleanup_settings else 90 }}" autocomplete="off" aria-labelledby="brCleanupDaysPrefix" title="0 = eliminar todas las solicitudes">
+            </div>
+            <div class="purchase-history-cleanup-field purchase-history-cleanup-scope-field">
+              <label for="brCleanupScope" class="sr-only">Alcance de la limpieza</label>
+              <select id="brCleanupScope" class="form-select" autocomplete="off" title="Alcance de la limpieza" aria-label="Alcance de la limpieza">
+                <option value="all" data-label="Todos los usuarios" {% if not cleanup_settings or cleanup_settings.scope != 'user' %}selected{% endif %}>Todos los usuarios (—)</option>
+                <option value="user" data-label="Solo un usuario" {% if cleanup_settings and cleanup_settings.scope == 'user' %}selected{% endif %}>Solo un usuario (—)</option>
+              </select>
+            </div>
+            <button type="button" id="brCleanupPurgeBtn" class="btn-panel btn-red purchase-history-cleanup-purge-btn">Eliminar ahora</button>
           </div>
           <div class="purchase-history-cleanup-user-wrap" id="brCleanupUserWrap" {% if not cleanup_settings or cleanup_settings.scope != 'user' %}hidden{% endif %}>
             <label for="brCleanupUserSearch" class="form-label">Usuario</label>
@@ -79,36 +86,26 @@
               <button type="button" id="brCleanupUserClear" class="purchase-history-cleanup-user-clear">Quitar</button>
             </p>
           </div>
-          <div class="purchase-history-cleanup-actions-row">
-            <span class="purchase-history-cleanup-preview text-muted">
-              Coinciden: <strong id="brCleanupPreviewCount">—</strong> solicitud(es)
-            </span>
-            <button type="button" id="brCleanupPurgeBtn" class="btn-panel btn-red">Eliminar ahora</button>
-          </div>
         </div>
         <hr class="purchase-history-cleanup-separator" aria-hidden="true">
-        <h4 class="text-center purchase-history-cleanup-heading purchase-history-cleanup-heading-auto">
-          <i class="fas fa-clock" aria-hidden="true"></i> Limpieza automática programada
-        </h4>
         <div class="purchase-history-cleanup-grid">
           <div class="purchase-history-cleanup-auto-row">
             <div class="form-check purchase-history-cleanup-auto-check mb-0">
               <input class="form-check-input" type="checkbox" id="brCleanupAutoEnabled" {% if cleanup_settings and cleanup_settings.auto_enabled %}checked{% endif %} aria-label="Activar limpieza automática" title="Activar limpieza automática">
               <label class="sr-only" for="brCleanupAutoEnabled">Activar limpieza automática</label>
             </div>
-            <label for="brCleanupIntervalHours" class="sr-only">Ejecutar cada</label>
-            <select id="brCleanupIntervalHours" class="form-select purchase-history-cleanup-interval-select" autocomplete="off" title="Ejecutar cada" aria-label="Ejecutar cada"{% if not cleanup_settings or not cleanup_settings.auto_enabled %} disabled{% endif %}>
-              <option value="6" {% if cleanup_settings and cleanup_settings.run_interval_hours == 6 %}selected{% endif %}>Ejecutar cada 6 horas</option>
-              <option value="12" {% if cleanup_settings and cleanup_settings.run_interval_hours == 12 %}selected{% endif %}>Ejecutar cada 12 horas</option>
-              <option value="24" {% if not cleanup_settings or cleanup_settings.run_interval_hours == 24 %}selected{% endif %}>Ejecutar cada 24 horas (diario)</option>
-              <option value="48" {% if cleanup_settings and cleanup_settings.run_interval_hours == 48 %}selected{% endif %}>Ejecutar cada 48 horas</option>
-              <option value="168" {% if cleanup_settings and cleanup_settings.run_interval_hours == 168 %}selected{% endif %}>Ejecutar cada 168 horas (semanal)</option>
-              <option value="360" {% if cleanup_settings and cleanup_settings.run_interval_hours == 360 %}selected{% endif %}>Ejecutar cada 15 días</option>
-              <option value="720" {% if cleanup_settings and cleanup_settings.run_interval_hours == 720 %}selected{% endif %}>Ejecutar cada 30 días</option>
-              <option value="1440" {% if cleanup_settings and cleanup_settings.run_interval_hours == 1440 %}selected{% endif %}>Ejecutar cada 60 días</option>
-              <option value="2160" {% if cleanup_settings and cleanup_settings.run_interval_hours == 2160 %}selected{% endif %}>Ejecutar cada 90 días</option>
-              <option value="4320" {% if cleanup_settings and cleanup_settings.run_interval_hours == 4320 %}selected{% endif %}>Ejecutar cada 180 días</option>
-              <option value="8760" {% if cleanup_settings and cleanup_settings.run_interval_hours == 8760 %}selected{% endif %}>Ejecutar cada 365 días</option>
+            <select id="brCleanupIntervalHours" class="form-select purchase-history-cleanup-interval-select" autocomplete="off" title="Limpieza automática programada" aria-label="Limpieza automática: intervalo de ejecución"{% if not cleanup_settings or not cleanup_settings.auto_enabled %} disabled{% endif %}>
+              <option value="6" {% if cleanup_settings and cleanup_settings.run_interval_hours == 6 %}selected{% endif %}>Limpieza automática: ejecutar cada 6 horas</option>
+              <option value="12" {% if cleanup_settings and cleanup_settings.run_interval_hours == 12 %}selected{% endif %}>Limpieza automática: ejecutar cada 12 horas</option>
+              <option value="24" {% if not cleanup_settings or cleanup_settings.run_interval_hours == 24 %}selected{% endif %}>Limpieza automática: ejecutar cada 24 horas (diario)</option>
+              <option value="48" {% if cleanup_settings and cleanup_settings.run_interval_hours == 48 %}selected{% endif %}>Limpieza automática: ejecutar cada 48 horas</option>
+              <option value="168" {% if cleanup_settings and cleanup_settings.run_interval_hours == 168 %}selected{% endif %}>Limpieza automática: ejecutar cada 168 horas (semanal)</option>
+              <option value="360" {% if cleanup_settings and cleanup_settings.run_interval_hours == 360 %}selected{% endif %}>Limpieza automática: ejecutar cada 15 días</option>
+              <option value="720" {% if cleanup_settings and cleanup_settings.run_interval_hours == 720 %}selected{% endif %}>Limpieza automática: ejecutar cada 30 días</option>
+              <option value="1440" {% if cleanup_settings and cleanup_settings.run_interval_hours == 1440 %}selected{% endif %}>Limpieza automática: ejecutar cada 60 días</option>
+              <option value="2160" {% if cleanup_settings and cleanup_settings.run_interval_hours == 2160 %}selected{% endif %}>Limpieza automática: ejecutar cada 90 días</option>
+              <option value="4320" {% if cleanup_settings and cleanup_settings.run_interval_hours == 4320 %}selected{% endif %}>Limpieza automática: ejecutar cada 180 días</option>
+              <option value="8760" {% if cleanup_settings and cleanup_settings.run_interval_hours == 8760 %}selected{% endif %}>Limpieza automática: ejecutar cada 365 días</option>
             </select>
             <button type="button" id="brCleanupSaveAutoBtn" class="btn-panel btn-green purchase-history-cleanup-save-btn">Guardar</button>
           </div>
@@ -119,21 +116,23 @@
 
     <div class="store-light purchase-history-container mx-auto admin-recargas-review-wrap">
       <div class="admin-recargas-tabs" role="tablist">
-        <button type="button" class="admin-recargas-tab admin-recargas-tab--active" data-tab="review" role="tab" aria-selected="true">Revisar consignaciones</button>
-        <button type="button" class="admin-recargas-tab" data-tab="auto" role="tab" aria-selected="false">Revisión automática</button>
-        <button type="button" class="admin-recargas-tab" data-tab="methods" role="tab" aria-selected="false">Medios de pago</button>
+        <button type="button" class="admin-recargas-tab admin-recargas-tab--active" data-tab="review" role="tab" aria-selected="true" aria-label="Revisar consignaciones"><i class="fas fa-clipboard-check" aria-hidden="true"></i> Consignaciones</button>
+        <button type="button" class="admin-recargas-tab" data-tab="auto" role="tab" aria-selected="false"><i class="fas fa-bolt" aria-hidden="true"></i> Recargas acreditadas</button>
+        <button type="button" class="admin-recargas-tab" data-tab="methods" role="tab" aria-selected="false"><i class="fas fa-credit-card" aria-hidden="true"></i> Medios de pago</button>
+        <button type="button" class="admin-recargas-tab" data-tab="accum" role="tab" aria-selected="false"><i class="fas fa-layer-group" aria-hidden="true"></i> Revisión acumulador</button>
       </div>
-      <h2 class="text-center purchase-history-page-title admin-recargas-review-subtitle"><i class="fas fa-inbox"></i> Consignaciones a revisar</h2>
       <div class="admin-recargas-review-toolbar">
         <label for="adminRecargasFilter" class="sr-only">Estado</label>
         <select id="adminRecargasFilter" class="form-select">
-          <option value="pending" selected>Pendientes</option>
+          <option value="pending">Pendientes</option>
           <option value="approved">Aprobadas</option>
           <option value="rejected">Rechazadas</option>
-          <option value="all">Todas</option>
+          <option value="all" selected>Todas</option>
         </select>
         <span class="text-muted">Pendientes: <strong id="adminRecargasPendingCount">—</strong></span>
-        <button type="button" id="adminRecargasRefresh" class="btn-panel btn-blue btn-sm">Actualizar</button>
+        <button type="button" id="adminRecargasRefresh" class="btn-panel btn-blue btn-sm admin-recargas-refresh-btn" title="Actualizar" aria-label="Actualizar">
+          <i class="fas fa-sync-alt" aria-hidden="true"></i><span class="sr-only">Actualizar</span>
+        </button>
       </div>
       <div id="adminRecargasList" class="admin-recargas-list">
         <p class="text-muted">Cargando solicitudes…</p>
@@ -148,44 +147,37 @@
         <button id="menu2ToggleBtnAuto" type="button" class="btn-panel btn-blue menu-toggle-btn" title="Menú secundario" aria-label="Abrir segundo menú">&#9776; Menú2</button>
       </div>
       <div class="admin-recargas-tabs" role="tablist">
-        <button type="button" class="admin-recargas-tab" data-tab="review" role="tab" aria-selected="false">Revisar consignaciones</button>
-        <button type="button" class="admin-recargas-tab admin-recargas-tab--active" data-tab="auto" role="tab" aria-selected="true">Revisión automática</button>
-        <button type="button" class="admin-recargas-tab" data-tab="methods" role="tab" aria-selected="false">Medios de pago</button>
+        <button type="button" class="admin-recargas-tab" data-tab="review" role="tab" aria-selected="false" aria-label="Revisar consignaciones"><i class="fas fa-clipboard-check" aria-hidden="true"></i> Consignaciones</button>
+        <button type="button" class="admin-recargas-tab admin-recargas-tab--active" data-tab="auto" role="tab" aria-selected="true"><i class="fas fa-bolt" aria-hidden="true"></i> Recargas acreditadas</button>
+        <button type="button" class="admin-recargas-tab" data-tab="methods" role="tab" aria-selected="false"><i class="fas fa-credit-card" aria-hidden="true"></i> Medios de pago</button>
+        <button type="button" class="admin-recargas-tab" data-tab="accum" role="tab" aria-selected="false"><i class="fas fa-layer-group" aria-hidden="true"></i> Revisión acumulador</button>
       </div>
-      <h2 class="text-center purchase-history-page-title admin-recargas-auto-subtitle purchase-history-cleanup-heading">
-        <i class="fas fa-robot" aria-hidden="true"></i> Recargas acreditadas automáticamente
-        <span class="purchase-history-cleanup-info-wrap">
-          <button type="button" id="adminRecargasAutoInfoBtn" class="purchase-history-cleanup-info-btn" aria-expanded="false" aria-controls="adminRecargasAutoInfoBox" title="Más información">
-            <i class="fas fa-info-circle" aria-hidden="true"></i>
-            <span class="sr-only">Más información sobre recargas acreditadas automáticamente</span>
-          </button>
-          <div id="adminRecargasAutoInfoBox" class="purchase-history-cleanup-info-box" hidden>
-            El saldo ya fue acreditado al usuario. Confirma si el comprobante es correcto o rechaza para revertir el saldo.
-          </div>
-        </span>
-      </h2>
       <div class="admin-recargas-auto-controls">
         <div class="admin-recargas-auto-box admin-recargas-auto-box--email">
-          <div class="admin-recargas-auto-email-tools" aria-label="Consulta por correo">
+          <div class="admin-recargas-auto-email-tools" aria-label="Herramientas de recargas acreditadas por correo">
             <button type="button" id="adminRecargasEmailRegexBtn" class="btn-panel btn-blue btn-sm" title="Regex para leer comprobantes en correo">
               <i class="fas fa-code" aria-hidden="true"></i> Regex
             </button>
-            <button type="button" id="adminRecargasEmailImapBtn" class="btn-panel btn-blue btn-sm" title="Servidores IMAP para consultar correo">
+            <button type="button" id="adminRecargasEmailImapBtn" class="btn-panel btn-blue btn-sm" title="Servidores IMAP y buzón de correos">
               <i class="fas fa-server" aria-hidden="true"></i> IMAP
             </button>
-            <label class="admin-recargas-buzon-check" title="Consulta correos guardados en Gestionar Buzón (Admin Dashboard)">
-              <input type="checkbox" id="adminRecargasBuzonEnabled" aria-label="Consultar buzón de mensajes">
-              <span>Buzón</span>
-            </label>
+            <span class="admin-recargas-auto-pending text-muted">Pendientes: <strong id="adminRecargasAutoPendingCount">—</strong></span>
+            <span class="admin-recargas-auto-email-tools-actions">
+              <button type="button" id="adminRecargasAutoRefresh" class="btn-panel btn-blue btn-sm admin-recargas-refresh-btn admin-recargas-auto-refresh-btn" title="Actualizar" aria-label="Actualizar">
+                <i class="fas fa-sync-alt" aria-hidden="true"></i><span class="sr-only">Actualizar</span>
+              </button>
+              <span class="purchase-history-cleanup-info-wrap admin-recargas-auto-info-wrap">
+                <button type="button" id="adminRecargasAutoInfoBtn" class="purchase-history-cleanup-info-btn" aria-expanded="false" aria-controls="adminRecargasAutoInfoBox" title="Más información">
+                  <i class="fas fa-info-circle" aria-hidden="true"></i>
+                  <span class="sr-only">Más información sobre recargas acreditadas</span>
+                </button>
+                <div id="adminRecargasAutoInfoBox" class="purchase-history-cleanup-info-box" hidden>
+                  El saldo ya fue acreditado al usuario. Confirma si el comprobante es correcto o rechaza para revertir el saldo.
+                </div>
+              </span>
+            </span>
           </div>
           <p id="adminRecargasEmailReviewMsg" class="admin-recargas-email-review-msg mb-0" role="status" aria-live="polite" hidden></p>
-        </div>
-        <div class="admin-recargas-auto-box admin-recargas-auto-box--status">
-          <div class="admin-recargas-review-toolbar admin-recargas-auto-toolbar">
-            <span class="text-muted">Pendientes de verificación: <strong id="adminRecargasAutoPendingCount">—</strong></span>
-            <button type="button" id="adminRecargasEmailVerifyAll" class="btn-panel btn-purple btn-sm" title="Buscar correos bancarios (Bancolombia, etc.)">Verificar correos</button>
-            <button type="button" id="adminRecargasAutoRefresh" class="btn-panel btn-blue btn-sm">Actualizar</button>
-          </div>
         </div>
       </div>
       <div id="adminRecargasAutoList" class="admin-recargas-list">
@@ -201,33 +193,117 @@
         <button id="menu2ToggleBtnMethods" type="button" class="btn-panel btn-blue menu-toggle-btn" title="Menú secundario" aria-label="Abrir segundo menú">&#9776; Menú2</button>
       </div>
       <div class="admin-recargas-tabs" role="tablist">
-        <button type="button" class="admin-recargas-tab" data-tab="review" role="tab" aria-selected="false">Revisar consignaciones</button>
-        <button type="button" class="admin-recargas-tab" data-tab="auto" role="tab" aria-selected="false">Revisión automática</button>
-        <button type="button" class="admin-recargas-tab admin-recargas-tab--active" data-tab="methods" role="tab" aria-selected="true">Medios de pago</button>
+        <button type="button" class="admin-recargas-tab" data-tab="review" role="tab" aria-selected="false" aria-label="Revisar consignaciones"><i class="fas fa-clipboard-check" aria-hidden="true"></i> Consignaciones</button>
+        <button type="button" class="admin-recargas-tab" data-tab="auto" role="tab" aria-selected="false"><i class="fas fa-bolt" aria-hidden="true"></i> Recargas acreditadas</button>
+        <button type="button" class="admin-recargas-tab admin-recargas-tab--active" data-tab="methods" role="tab" aria-selected="true"><i class="fas fa-credit-card" aria-hidden="true"></i> Medios de pago</button>
+        <button type="button" class="admin-recargas-tab" data-tab="accum" role="tab" aria-selected="false"><i class="fas fa-layer-group" aria-hidden="true"></i> Revisión acumulador</button>
       </div>
-      <h2 class="text-center purchase-history-page-title admin-recargas-methods-subtitle purchase-history-cleanup-heading">
-        <i class="fas fa-credit-card" aria-hidden="true"></i> Medios de pago
+      <h2 class="admin-pm-currency-header purchase-history-page-title admin-recargas-methods-subtitle">
+        Medios de pago $COP
         <span class="purchase-history-cleanup-info-wrap">
-          <button type="button" id="adminPmMethodsInfoBtn" class="purchase-history-cleanup-info-btn" aria-expanded="false" aria-controls="adminPmMethodsInfoBox" title="Más información">
+          <button type="button" id="adminPmMethodsCopInfoBtn" class="purchase-history-cleanup-info-btn" aria-expanded="false" aria-controls="adminPmMethodsCopInfoBox" title="Más información">
             <i class="fas fa-info-circle" aria-hidden="true"></i>
-            <span class="sr-only">Más información sobre medios de pago</span>
+            <span class="sr-only">Más información sobre medios de pago $COP</span>
           </button>
-          <div id="adminPmMethodsInfoBox" class="purchase-history-cleanup-info-box" hidden>
-            Configura los datos de pago que verán los clientes al recargar saldo. En moneda USD se muestra como USDT. Por defecto un medio es visible para todos; en Usuarios puedes limitarlo solo a algunos. Sube un QR opcional para mostrarlo al cliente.
+          <div id="adminPmMethodsCopInfoBox" class="purchase-history-cleanup-info-box" hidden>
+            En cada fila elige el <strong>medio</strong> (Nequi, Bancolombia, DaviPlata, Bre-B Bancolombia, etc.): el nombre visible se completa solo. Indica <strong>cuenta</strong> o <strong>llave Bre-B</strong> según el banco. En <strong>Usuarios</strong> marca quién puede verlo: sin marcar a nadie, ningún cliente lo ve. Pulsa <strong>Guardar</strong> en cada fila.
           </div>
         </span>
       </h2>
-      <h3 class="admin-pm-currency-title">COP</h3>
       <div class="admin-pm-list" data-currency="COP"></div>
       <button type="button" class="btn-panel btn-blue btn-sm admin-pm-add" data-currency="COP">+ Añadir medio</button>
     </div>
     <div class="store-light purchase-history-container mx-auto admin-recargas-pm-usd-wrap">
-      <h3 class="admin-pm-currency-title">USDT (USD)</h3>
+      <h2 class="admin-pm-currency-header purchase-history-page-title admin-recargas-methods-subtitle">
+        Medios de pago $USDT (USD)
+        <span class="purchase-history-cleanup-info-wrap">
+          <button type="button" id="adminPmMethodsUsdInfoBtn" class="purchase-history-cleanup-info-btn" aria-expanded="false" aria-controls="adminPmMethodsUsdInfoBox" title="Más información">
+            <i class="fas fa-info-circle" aria-hidden="true"></i>
+            <span class="sr-only">Más información sobre medios de pago $USDT (USD)</span>
+          </button>
+          <div id="adminPmMethodsUsdInfoBox" class="purchase-history-cleanup-info-box" hidden>
+            Medios para recargas en <strong>USDT (USD)</strong>: elige el tipo (USDT, red, billetera, etc.) y completa los datos visibles al cliente (dirección, red, instrucciones). En <strong>Usuarios</strong> marca quién puede verlo: sin marcar a nadie, ningún cliente lo ve. Pulsa <strong>Guardar</strong> en cada fila.
+          </div>
+        </span>
+      </h2>
       <div class="admin-pm-list" data-currency="USD"></div>
       <button type="button" class="btn-panel btn-blue btn-sm admin-pm-add" data-currency="USD">+ Añadir medio</button>
+    </div>
+    <div class="store-light purchase-history-container mx-auto admin-recargas-pm-accum-wrap">
+      <h2 class="admin-pm-currency-header admin-pm-currency-title purchase-history-page-title">
+        Acumulador — conversión manual
+        <span class="purchase-history-cleanup-info-wrap">
+          <button type="button" id="adminPmMethodsAccumInfoBtn" class="purchase-history-cleanup-info-btn" aria-expanded="false" aria-controls="adminPmMethodsAccumInfoBox" title="Más información">
+            <i class="fas fa-info-circle" aria-hidden="true"></i>
+            <span class="sr-only">Más información sobre acumulador y conversión manual</span>
+          </button>
+          <div id="adminPmMethodsAccumInfoBox" class="purchase-history-cleanup-info-box" hidden>
+            Medios para pagos en moneda distinta a la del cliente. Indica la <strong>moneda acumulada</strong> y los <strong>multiplicadores</strong>: USDT→COP (ej. 3650: 100 USDT → 365.000 COP) y COP→USDT (ej. 0.00026: 365.000 COP → ~94.9 USDT, con comisión incluida).
+          </div>
+        </span>
+      </h2>
+      <div class="admin-pm-list" data-currency="ACCUM"></div>
+      <button type="button" class="btn-panel btn-blue btn-sm admin-pm-add" data-currency="ACCUM">+ Añadir medio</button>
       <p id="adminPaymentMethodsMsg" class="admin-pm-methods-msg mt-05 mb-0" role="status" aria-live="polite"></p>
     </div>
   </section>
+
+  <section id="adminRecargasPanelAccum" class="admin-recargas-panel" hidden>
+    <div class="store-light purchase-history-container mx-auto admin-recargas-accum-wrap">
+      <div class="purchase-history-admin-toolbar">
+        <button id="menuToggleBtnAccum" type="button" class="btn-panel btn-blue menu-toggle-btn" title="Menú de navegación" aria-label="Abrir menú de navegación">&#9776; Menú</button>
+        <button id="menu2ToggleBtnAccum" type="button" class="btn-panel btn-blue menu-toggle-btn" title="Menú secundario" aria-label="Abrir segundo menú">&#9776; Menú2</button>
+      </div>
+      <div class="admin-recargas-tabs" role="tablist">
+        <button type="button" class="admin-recargas-tab" data-tab="review" role="tab" aria-selected="false" aria-label="Revisar consignaciones"><i class="fas fa-clipboard-check" aria-hidden="true"></i> Consignaciones</button>
+        <button type="button" class="admin-recargas-tab" data-tab="auto" role="tab" aria-selected="false"><i class="fas fa-bolt" aria-hidden="true"></i> Recargas acreditadas</button>
+        <button type="button" class="admin-recargas-tab" data-tab="methods" role="tab" aria-selected="false"><i class="fas fa-credit-card" aria-hidden="true"></i> Medios de pago</button>
+        <button type="button" class="admin-recargas-tab admin-recargas-tab--active" data-tab="accum" role="tab" aria-selected="true"><i class="fas fa-layer-group" aria-hidden="true"></i> Revisión acumulador</button>
+      </div>
+      <div class="admin-recargas-accum-head">
+        <div class="admin-recargas-accum-head-tools">
+          <div class="admin-recargas-filter-badge-wrap">
+            <label for="adminRecargasAccumFilter" class="sr-only">Estado</label>
+            <select id="adminRecargasAccumFilter" class="form-select" aria-describedby="adminRecargasAccumFilterHint">
+              <option value="pending">Pendientes (0)</option>
+              <option value="accumulated">Acumulados (0)</option>
+              <option value="rejected">Rechazadas (0)</option>
+              <option value="all" selected>Todas (0)</option>
+            </select>
+            <span id="adminRecargasAccumFilterHint" class="sr-only">Filtro de solicitudes del acumulador</span>
+          </div>
+          <button type="button" id="adminRecargasAccumRefresh" class="btn-panel btn-blue btn-sm admin-recargas-refresh-btn" title="Actualizar" aria-label="Actualizar">
+            <i class="fas fa-sync-alt" aria-hidden="true"></i><span class="sr-only">Actualizar</span>
+          </button>
+          <span class="purchase-history-cleanup-info-wrap admin-recargas-accum-info-wrap">
+            <button type="button" id="adminRecargasAccumInfoBtn" class="purchase-history-cleanup-info-btn" aria-expanded="false" aria-controls="adminRecargasAccumInfoBox" title="Más información">
+              <i class="fas fa-info-circle" aria-hidden="true"></i>
+              <span class="sr-only">Más información sobre revisión acumulador</span>
+            </button>
+            <div id="adminRecargasAccumInfoBox" class="purchase-history-cleanup-info-box" hidden>
+              Arriba conviertes saldos ya acumulados a saldo del cliente. Abajo apruebas comprobantes pendientes con <strong>Aprobar</strong>. Configura medios y multiplicadores en <strong>Medios de pago → Acumulador</strong>.
+            </div>
+          </span>
+        </div>
+      </div>
+      <div id="adminPmAccumSummary" class="admin-pm-accum-summary" hidden>
+        <h4 class="admin-pm-accum-summary-title">Saldos acumulados pendientes de conversión</h4>
+        <div id="adminPmAccumSummaryBody" class="admin-pm-accum-summary-body"></div>
+      </div>
+      <div id="adminRecargasAccumList" class="admin-recargas-list">
+        <p class="text-muted">Cargando solicitudes…</p>
+      </div>
+      <p id="adminRecargasAccumMsg" class="admin-pm-methods-msg mt-05 mb-0" role="status" aria-live="polite"></p>
+    </div>
+  </section>
+
+  <div id="adminRecargaProofLightbox" class="balance-recharge-qr-lightbox admin-recarga-proof-lightbox" hidden aria-hidden="true">
+    <div class="balance-recharge-qr-lightbox__backdrop" data-proof-lightbox-close="1"></div>
+    <div class="balance-recharge-qr-lightbox__panel admin-recarga-proof-lightbox__panel" role="dialog" aria-modal="true" aria-label="Imagen ampliada">
+      <button type="button" class="balance-recharge-qr-lightbox__close" data-proof-lightbox-close="1" aria-label="Cerrar">&times;</button>
+      <img id="adminRecargaProofLightboxImg" src="" alt="Comprobante de recarga ampliado" class="balance-recharge-qr-lightbox__img admin-recarga-proof-lightbox__img">
+    </div>
+  </div>
 
   <div id="adminPmUsersModal" class="admin-pm-users-modal d-none" role="dialog" aria-modal="true" aria-labelledby="adminPmUsersModalTitle" hidden>
     <div class="admin-pm-users-modal__backdrop" data-pm-modal-close="1"></div>
@@ -241,7 +317,7 @@
               <span class="sr-only">Más información sobre usuarios del medio</span>
             </button>
             <div id="adminPmUsersModalInfoBox" class="purchase-history-cleanup-info-box admin-pm-users-modal__info-box" hidden>
-              Elige qué usuarios pueden ver y usar este medio al recargar saldo. Si no marcas a nadie, el medio queda visible para todos. Si marcas usuarios, solo ellos lo verán. Cierra el modal y pulsa Guardar en la fila del medio.
+              Marca los clientes que podrán ver este medio. Si no marcas a nadie, ningún cliente lo verá. Usa «Seleccionar todos» solo si quieres abrirlo a todos. Guarda la fila al cerrar el modal.
             </div>
           </span>
         </h2>
@@ -267,6 +343,7 @@
               </th>
               <th scope="col">Usuario</th>
               <th scope="col">Nombre</th>
+              <th scope="col" id="adminPmUsersPriceHeader" hidden>Moneda</th>
             </tr>
           </thead>
           <tbody id="adminPmUsersTableBody">
@@ -280,17 +357,21 @@
   <div id="adminRecargasEmailRegexModal" class="admin-pm-users-modal admin-recarga-email-modal d-none" role="dialog" aria-modal="true" aria-labelledby="adminRecargasEmailRegexModalTitle" hidden>
     <div class="admin-pm-users-modal__backdrop" data-email-modal-close="1"></div>
     <div class="admin-pm-users-modal__panel admin-recarga-email-regex-panel">
-      <div class="admin-pm-users-modal__head">
+      <div class="admin-pm-users-modal__head admin-pm-users-modal__head--title-center">
         <h2 id="adminRecargasEmailRegexModalTitle" class="admin-pm-users-modal__title">Regex para comprobantes en correo</h2>
         <button type="button" class="admin-pm-users-modal__close" data-email-modal-close="1" aria-label="Cerrar">&times;</button>
       </div>
       <div class="admin-recarga-email-regex-form">
-        <label for="adminRecargasNewRegexDesc" class="sr-only">Descripción</label>
-        <input type="text" id="adminRecargasNewRegexDesc" class="form-control admin-recarga-email-regex-input" placeholder="Descripción" autocomplete="off">
-        <label for="adminRecargasNewRegexSender" class="sr-only">Remitente</label>
-        <input type="text" id="adminRecargasNewRegexSender" class="form-control admin-recarga-email-regex-input" placeholder="Remitente (email)" autocomplete="off">
+        <label for="adminRecargasNewRegexPm" class="sr-only">Medio de pago</label>
+        <select id="adminRecargasNewRegexPm" class="form-control admin-recarga-email-regex-input" aria-label="Medio de pago">
+          <option value="">— Selecciona —</option>
+        </select>
+        <label for="adminRecargasNewRegexNote" class="sr-only">Nota (opcional)</label>
+        <input type="text" id="adminRecargasNewRegexNote" class="form-control admin-recarga-email-regex-input" placeholder="Nota (opcional) — Ej. Aviso transferencia recibida" autocomplete="off" maxlength="120">
+        <label for="adminRecargasNewRegexSender" class="sr-only">Remitente (opcional, recomendado)</label>
+        <input type="text" id="adminRecargasNewRegexSender" class="form-control admin-recarga-email-regex-input" placeholder="Remitente (opcional, recomendado) — ej. bancolombia.com.co" autocomplete="off">
         <label for="adminRecargasNewRegexPattern" class="sr-only">Patrón regex</label>
-        <input type="text" id="adminRecargasNewRegexPattern" class="form-control admin-recarga-email-regex-input" placeholder="Patrón regex" autocomplete="off">
+        <input type="text" id="adminRecargasNewRegexPattern" class="form-control admin-recarga-email-regex-input" placeholder="Regex: grupo 1 = monto, grupo 2 = cuenta *1948 (Bre-B). Ver ayuda en nota." autocomplete="off">
         <div class="admin-recarga-email-regex-form__actions">
           <button type="button" class="btn-panel btn-green btn-sm" id="adminRecargasCreateRegexBtn">Crear regex</button>
         </div>
@@ -308,18 +389,22 @@
   <div id="adminRecargasEmailRegexEditModal" class="admin-pm-users-modal admin-recarga-email-modal d-none" role="dialog" aria-modal="true" aria-labelledby="adminRecargasEmailRegexEditModalTitle" hidden>
     <div class="admin-pm-users-modal__backdrop" data-email-regex-edit-close="1"></div>
     <div class="admin-pm-users-modal__panel admin-recarga-email-regex-panel">
-      <div class="admin-pm-users-modal__head">
+      <div class="admin-pm-users-modal__head admin-pm-users-modal__head--title-center">
         <h2 id="adminRecargasEmailRegexEditModalTitle" class="admin-pm-users-modal__title">Editar regex</h2>
         <button type="button" class="admin-pm-users-modal__close" data-email-regex-edit-close="1" aria-label="Cerrar">&times;</button>
       </div>
       <form id="adminRecargasEditRegexForm" class="admin-recarga-email-regex-form">
         <input type="hidden" id="adminRecargasEditRegexId" value="">
-        <label for="adminRecargasEditRegexDesc" class="sr-only">Descripción</label>
-        <input type="text" id="adminRecargasEditRegexDesc" class="form-control admin-recarga-email-regex-input" placeholder="Descripción" required autocomplete="off">
-        <label for="adminRecargasEditRegexSender" class="sr-only">Remitente</label>
-        <input type="text" id="adminRecargasEditRegexSender" class="form-control admin-recarga-email-regex-input" placeholder="Remitente (email)" autocomplete="off">
+        <label for="adminRecargasEditRegexPm" class="sr-only">Medio de pago</label>
+        <select id="adminRecargasEditRegexPm" class="form-control admin-recarga-email-regex-input" required aria-label="Medio de pago">
+          <option value="">— Selecciona —</option>
+        </select>
+        <label for="adminRecargasEditRegexNote" class="sr-only">Nota (opcional)</label>
+        <input type="text" id="adminRecargasEditRegexNote" class="form-control admin-recarga-email-regex-input" placeholder="Nota (opcional) — Ej. Segundo formato de correo" autocomplete="off" maxlength="120">
+        <label for="adminRecargasEditRegexSender" class="sr-only">Remitente (opcional, recomendado)</label>
+        <input type="text" id="adminRecargasEditRegexSender" class="form-control admin-recarga-email-regex-input" placeholder="Remitente (opcional, recomendado) — ej. bancolombia.com.co" autocomplete="off">
         <label for="adminRecargasEditRegexPattern" class="sr-only">Patrón regex</label>
-        <input type="text" id="adminRecargasEditRegexPattern" class="form-control admin-recarga-email-regex-input" placeholder="Patrón regex" required autocomplete="off">
+        <input type="text" id="adminRecargasEditRegexPattern" class="form-control admin-recarga-email-regex-input" placeholder="Regex: grupo 1 = monto, grupo 2 = cuenta *1948 (Bre-B)" autocomplete="off">
         <div class="admin-recarga-email-regex-form__actions">
           <button type="submit" class="btn-panel btn-green btn-sm" id="adminRecargasUpdateRegexBtn">Actualizar</button>
         </div>
@@ -330,29 +415,56 @@
 
   <div id="adminRecargasEmailImapModal" class="admin-pm-users-modal admin-recarga-email-modal d-none" role="dialog" aria-modal="true" aria-labelledby="adminRecargasEmailImapModalTitle" hidden>
     <div class="admin-pm-users-modal__backdrop" data-email-modal-close="1"></div>
-    <div class="admin-pm-users-modal__panel">
-      <div class="admin-pm-users-modal__head">
+    <div class="admin-pm-users-modal__panel admin-recarga-email-imap-panel">
+      <div class="admin-pm-users-modal__head admin-pm-users-modal__head--title-center">
         <h2 id="adminRecargasEmailImapModalTitle" class="admin-pm-users-modal__title">Servidores IMAP</h2>
         <button type="button" class="admin-pm-users-modal__close" data-email-modal-close="1" aria-label="Cerrar">&times;</button>
+      </div>
+      <div class="admin-recarga-email-imap-form">
+        <div class="admin-recarga-email-imap-form__row-pair">
+          <div class="admin-recarga-email-imap-form__row">
+            <label for="adminRecargasNewImapHost" class="form-label">Host</label>
+            <input type="text" id="adminRecargasNewImapHost" class="form-control" placeholder="imap.gmail.com" autocomplete="off">
+          </div>
+          <div class="admin-recarga-email-imap-form__row admin-recarga-email-imap-form__row--port">
+            <label for="adminRecargasNewImapPort" class="form-label">Puerto</label>
+            <input type="number" id="adminRecargasNewImapPort" class="form-control" value="993" min="1" max="65535" autocomplete="off">
+          </div>
+        </div>
+        <div class="admin-recarga-email-imap-form__row-pair">
+          <div class="admin-recarga-email-imap-form__row">
+            <label for="adminRecargasNewImapUser" class="form-label">Usuario</label>
+            <input type="text" id="adminRecargasNewImapUser" class="form-control" placeholder="correo@dominio.com" autocomplete="off">
+          </div>
+          <div class="admin-recarga-email-imap-form__row">
+            <label for="adminRecargasNewImapPass" class="form-label">Contraseña</label>
+            <input type="password" id="adminRecargasNewImapPass" class="form-control" placeholder="Contraseña IMAP" autocomplete="new-password">
+          </div>
+        </div>
+        <div class="admin-recarga-email-imap-form__row-pair admin-recarga-email-imap-form__row-pair--folders">
+          <div class="admin-recarga-email-imap-form__row admin-recarga-email-imap-form__row--folders">
+            <label for="adminRecargasNewImapFolders" class="form-label">Carpetas</label>
+            <input type="text" id="adminRecargasNewImapFolders" class="form-control" value="INBOX" placeholder="INBOX" autocomplete="off">
+          </div>
+          <div class="admin-recarga-email-imap-form__actions">
+            <button type="button" class="btn-panel btn-green btn-sm" id="adminRecargasCreateImapBtn">Agregar servidor</button>
+          </div>
+        </div>
       </div>
       <div class="admin-pm-users-modal__toolbar">
         <div class="admin-pm-users-modal__filters">
           <label for="adminRecargasEmailImapFilter" class="sr-only">Filtrar IMAP</label>
           <input type="search" id="adminRecargasEmailImapFilter" class="form-control admin-pm-users-modal__filter" placeholder="Buscar host o usuario…" autocomplete="off">
         </div>
-        <div class="admin-pm-users-modal__bulk-actions">
-          <button type="button" class="btn-panel btn-blue btn-sm" id="adminRecargasEmailImapSelectAll">Todos</button>
-          <button type="button" class="btn-panel btn-sm admin-pm-users-deselect-btn" id="adminRecargasEmailImapDeselectAll">Ninguno</button>
-        </div>
       </div>
       <div class="admin-pm-users-table-wrap admin-recarga-email-modal__table-wrap">
         <table class="admin-pm-users-table" aria-label="Servidores IMAP">
           <thead>
             <tr>
-              <th class="admin-pm-users-table-col-check" scope="col">Usar</th>
               <th scope="col">Host</th>
               <th scope="col">Usuario</th>
               <th scope="col">Carpetas</th>
+              <th scope="col">Acciones</th>
             </tr>
           </thead>
           <tbody id="adminRecargasEmailImapTableBody">
@@ -360,9 +472,48 @@
           </tbody>
         </table>
       </div>
-      <div class="admin-pm-users-modal__foot">
-        <button type="button" class="btn-panel btn-green" id="adminRecargasEmailImapSave">Guardar IMAP</button>
+      <p id="adminRecargasEmailImapModalMsg" class="admin-recarga-email-regex-modal-msg mb-0" role="status" aria-live="polite" hidden></p>
+    </div>
+  </div>
+
+  <div id="adminRecargasEmailImapEditModal" class="admin-pm-users-modal admin-recarga-email-modal d-none" role="dialog" aria-modal="true" aria-labelledby="adminRecargasEmailImapEditModalTitle" hidden>
+    <div class="admin-pm-users-modal__backdrop" data-email-imap-edit-close="1"></div>
+    <div class="admin-pm-users-modal__panel admin-recarga-email-imap-panel">
+      <div class="admin-pm-users-modal__head admin-pm-users-modal__head--title-center">
+        <h2 id="adminRecargasEmailImapEditModalTitle" class="admin-pm-users-modal__title">Editar servidor IMAP</h2>
+        <button type="button" class="admin-pm-users-modal__close" data-email-imap-edit-close="1" aria-label="Cerrar">&times;</button>
       </div>
+      <form id="adminRecargasEditImapForm" class="admin-recarga-email-imap-form">
+        <input type="hidden" id="adminRecargasEditImapId" value="">
+        <div class="admin-recarga-email-imap-form__row-pair">
+          <div class="admin-recarga-email-imap-form__row">
+            <label for="adminRecargasEditImapHost" class="form-label">Host</label>
+            <input type="text" id="adminRecargasEditImapHost" class="form-control" placeholder="imap.gmail.com" autocomplete="off" required>
+          </div>
+          <div class="admin-recarga-email-imap-form__row admin-recarga-email-imap-form__row--port">
+            <label for="adminRecargasEditImapPort" class="form-label">Puerto</label>
+            <input type="number" id="adminRecargasEditImapPort" class="form-control" value="993" min="1" max="65535" autocomplete="off" required>
+          </div>
+        </div>
+        <div class="admin-recarga-email-imap-form__row-pair">
+          <div class="admin-recarga-email-imap-form__row">
+            <label for="adminRecargasEditImapUser" class="form-label">Usuario</label>
+            <input type="text" id="adminRecargasEditImapUser" class="form-control" placeholder="correo@dominio.com" autocomplete="off" required>
+          </div>
+          <div class="admin-recarga-email-imap-form__row">
+            <label for="adminRecargasEditImapPass" class="form-label">Contraseña</label>
+            <input type="password" id="adminRecargasEditImapPass" class="form-control" placeholder="Dejar vacío para no cambiar" autocomplete="new-password">
+          </div>
+        </div>
+        <div class="admin-recarga-email-imap-form__row">
+          <label for="adminRecargasEditImapFolders" class="form-label">Carpetas</label>
+          <input type="text" id="adminRecargasEditImapFolders" class="form-control" value="INBOX" placeholder="INBOX" autocomplete="off" required>
+        </div>
+        <div class="admin-recarga-email-imap-form__actions">
+          <button type="submit" class="btn-panel btn-green btn-sm" id="adminRecargasUpdateImapBtn">Actualizar</button>
+        </div>
+      </form>
+      <p id="adminRecargasEmailImapEditMsg" class="admin-recarga-email-regex-modal-msg mb-0" role="status" aria-live="polite" hidden></p>
     </div>
   </div>
 </div>
@@ -371,7 +522,7 @@
   {{ super() }}
   <script src="{{ url_for('store_bp.static', filename='js/menu_tienda.js') }}" defer></script>
   <script src="{{ url_for('static', filename='js/clear_trigger_logs.js') }}" defer></script>
-  <script src="{{ url_for('store_bp.static', filename='js/admin_recargas_cleanup.js') }}?v=20260522" defer></script>
-  <script src="{{ url_for('store_bp.static', filename='js/admin_recargas_saldo.js') }}?v=20260528-bancolombia-email"></script>
-  <script src="{{ url_for('store_bp.static', filename='js/admin_recargas_auto_email.js') }}?v=20260528-bancolombia-email" defer></script>
+  <script src="{{ url_for('store_bp.static', filename='js/admin_recargas_cleanup.js') }}?v=20260604-scope-count" defer></script>
+  <script src="{{ url_for('store_bp.static', filename='js/admin_recargas_saldo.js') }}?v=20260604-pm-accum-info" defer></script>
+  <script src="{{ url_for('store_bp.static', filename='js/admin_recargas_auto_email.js') }}?v=20260604-buzon-row-slim" defer></script>
 {% endblock %}

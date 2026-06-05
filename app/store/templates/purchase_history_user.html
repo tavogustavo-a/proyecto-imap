@@ -2,7 +2,7 @@
 
 {% block title %}Mi Historial de Compras{% endblock %}
 
-{% block head %}{{ super() }}<link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}?v=20260522-icon-stack"><link rel="stylesheet" href="{{ url_for('static', filename='fontawesome/css/all.css') }}">{% endblock %}
+{% block head %}{{ super() }}<link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}?v=20260605-stats-tips-fix"><link rel="stylesheet" href="{{ url_for('static', filename='fontawesome/css/all.css') }}">{% endblock %}
 {% block content %}
 <div class="purchase-history-page{% if mostrar_usuario_comprador %} purchase-history-admin{% endif %}"
      data-show-user-column="{{ 'true' if mostrar_usuario_comprador else 'false' }}"
@@ -113,21 +113,25 @@
           <span class="sr-only">Más información sobre la limpieza del historial de compra</span>
         </button>
         <div id="phCleanupInfoBox" class="purchase-history-cleanup-info-box" hidden>
-          Elimina ventas antiguas del historial. Las licencias en inventario no se borran; solo se desvincula la venta.
+          Elimina ventas del historial. Las licencias en inventario no se borran; solo se desvincula la venta. Usa días calendario (Colombia): con <strong>0</strong> se incluyen todas las compras; con <strong>1</strong> las de ayer y anteriores.
         </div>
       </span>
     </h4>
     <div class="purchase-history-cleanup-grid">
-      <div class="purchase-history-cleanup-days-row">
-        <label for="phCleanupDays" class="form-label purchase-history-cleanup-days-label">Eliminar compras con más de (días)</label>
-        <input type="number" id="phCleanupDays" class="form-control purchase-history-cleanup-days-input" min="1" max="3650" value="{{ cleanup_settings.retention_days if cleanup_settings else 90 }}" autocomplete="off" aria-label="Días de antigüedad">
-      </div>
-      <div class="purchase-history-cleanup-field">
-        <label for="phCleanupScope" class="sr-only">Alcance de la limpieza</label>
-        <select id="phCleanupScope" class="form-select" autocomplete="off" title="Alcance de la limpieza" aria-label="Alcance de la limpieza">
-          <option value="all" {% if not cleanup_settings or cleanup_settings.scope != 'user' %}selected{% endif %}>Todos los usuarios</option>
-          <option value="user" {% if cleanup_settings and cleanup_settings.scope == 'user' %}selected{% endif %}>Solo un usuario</option>
-        </select>
+      <div class="purchase-history-cleanup-scope-row">
+        <div class="purchase-history-cleanup-days-field" role="group" aria-labelledby="phCleanupDaysPrefix">
+          <span id="phCleanupDaysPrefix" class="purchase-history-cleanup-days-field__prefix">Días</span>
+          <label for="phCleanupDays" class="sr-only">Días de antigüedad</label>
+          <input type="number" id="phCleanupDays" class="form-control purchase-history-cleanup-days-input" min="0" max="3650" value="{{ cleanup_settings.retention_days if cleanup_settings else 90 }}" autocomplete="off" aria-labelledby="phCleanupDaysPrefix" title="0 = eliminar todo el historial de compras">
+        </div>
+        <div class="purchase-history-cleanup-field purchase-history-cleanup-scope-field">
+          <label for="phCleanupScope" class="sr-only">Alcance de la limpieza</label>
+          <select id="phCleanupScope" class="form-select" autocomplete="off" title="Alcance de la limpieza" aria-label="Alcance de la limpieza">
+            <option value="all" data-label="Todos los usuarios" {% if not cleanup_settings or cleanup_settings.scope != 'user' %}selected{% endif %}>Todos los usuarios (—)</option>
+            <option value="user" data-label="Solo un usuario" {% if cleanup_settings and cleanup_settings.scope == 'user' %}selected{% endif %}>Solo un usuario (—)</option>
+          </select>
+        </div>
+        <button type="button" id="phCleanupPurgeBtn" class="btn-panel btn-red purchase-history-cleanup-purge-btn">Eliminar ahora</button>
       </div>
       <div class="purchase-history-cleanup-user-wrap" id="phCleanupUserWrap" {% if not cleanup_settings or cleanup_settings.scope != 'user' %}hidden{% endif %}>
         <label for="phCleanupUserSearch" class="form-label">Usuario</label>
@@ -141,36 +145,26 @@
           <button type="button" id="phCleanupUserClear" class="purchase-history-cleanup-user-clear">Quitar</button>
         </p>
       </div>
-      <div class="purchase-history-cleanup-actions-row">
-        <span class="purchase-history-cleanup-preview text-muted">
-          Coinciden: <strong id="phCleanupPreviewCount">—</strong> registro(s)
-        </span>
-        <button type="button" id="phCleanupPurgeBtn" class="btn-panel btn-red">Eliminar ahora</button>
-      </div>
     </div>
     <hr class="purchase-history-cleanup-separator" aria-hidden="true">
-    <h4 class="text-center purchase-history-cleanup-heading purchase-history-cleanup-heading-auto">
-      <i class="fas fa-clock" aria-hidden="true"></i> Limpieza automática programada
-    </h4>
     <div class="purchase-history-cleanup-grid">
       <div class="purchase-history-cleanup-auto-row">
         <div class="form-check purchase-history-cleanup-auto-check mb-0">
           <input class="form-check-input" type="checkbox" id="phCleanupAutoEnabled" {% if cleanup_settings and cleanup_settings.auto_enabled %}checked{% endif %} aria-label="Activar limpieza automática" title="Activar limpieza automática">
           <label class="sr-only" for="phCleanupAutoEnabled">Activar limpieza automática</label>
         </div>
-        <label for="phCleanupIntervalHours" class="sr-only">Ejecutar cada</label>
-        <select id="phCleanupIntervalHours" class="form-select purchase-history-cleanup-interval-select" autocomplete="off" title="Ejecutar cada" aria-label="Ejecutar cada"{% if not cleanup_settings or not cleanup_settings.auto_enabled %} disabled{% endif %}>
-          <option value="6" {% if cleanup_settings and cleanup_settings.run_interval_hours == 6 %}selected{% endif %}>Ejecutar cada 6 horas</option>
-          <option value="12" {% if cleanup_settings and cleanup_settings.run_interval_hours == 12 %}selected{% endif %}>Ejecutar cada 12 horas</option>
-          <option value="24" {% if not cleanup_settings or cleanup_settings.run_interval_hours == 24 %}selected{% endif %}>Ejecutar cada 24 horas (diario)</option>
-          <option value="48" {% if cleanup_settings and cleanup_settings.run_interval_hours == 48 %}selected{% endif %}>Ejecutar cada 48 horas</option>
-          <option value="168" {% if cleanup_settings and cleanup_settings.run_interval_hours == 168 %}selected{% endif %}>Ejecutar cada 168 horas (semanal)</option>
-          <option value="360" {% if cleanup_settings and cleanup_settings.run_interval_hours == 360 %}selected{% endif %}>Ejecutar cada 15 días</option>
-          <option value="720" {% if cleanup_settings and cleanup_settings.run_interval_hours == 720 %}selected{% endif %}>Ejecutar cada 30 días</option>
-          <option value="1440" {% if cleanup_settings and cleanup_settings.run_interval_hours == 1440 %}selected{% endif %}>Ejecutar cada 60 días</option>
-          <option value="2160" {% if cleanup_settings and cleanup_settings.run_interval_hours == 2160 %}selected{% endif %}>Ejecutar cada 90 días</option>
-          <option value="4320" {% if cleanup_settings and cleanup_settings.run_interval_hours == 4320 %}selected{% endif %}>Ejecutar cada 180 días</option>
-          <option value="8760" {% if cleanup_settings and cleanup_settings.run_interval_hours == 8760 %}selected{% endif %}>Ejecutar cada 365 días</option>
+        <select id="phCleanupIntervalHours" class="form-select purchase-history-cleanup-interval-select" autocomplete="off" title="Limpieza automática programada" aria-label="Limpieza automática: intervalo de ejecución"{% if not cleanup_settings or not cleanup_settings.auto_enabled %} disabled{% endif %}>
+          <option value="6" {% if cleanup_settings and cleanup_settings.run_interval_hours == 6 %}selected{% endif %}>Limpieza automática: ejecutar cada 6 horas</option>
+          <option value="12" {% if cleanup_settings and cleanup_settings.run_interval_hours == 12 %}selected{% endif %}>Limpieza automática: ejecutar cada 12 horas</option>
+          <option value="24" {% if not cleanup_settings or cleanup_settings.run_interval_hours == 24 %}selected{% endif %}>Limpieza automática: ejecutar cada 24 horas (diario)</option>
+          <option value="48" {% if cleanup_settings and cleanup_settings.run_interval_hours == 48 %}selected{% endif %}>Limpieza automática: ejecutar cada 48 horas</option>
+          <option value="168" {% if cleanup_settings and cleanup_settings.run_interval_hours == 168 %}selected{% endif %}>Limpieza automática: ejecutar cada 168 horas (semanal)</option>
+          <option value="360" {% if cleanup_settings and cleanup_settings.run_interval_hours == 360 %}selected{% endif %}>Limpieza automática: ejecutar cada 15 días</option>
+          <option value="720" {% if cleanup_settings and cleanup_settings.run_interval_hours == 720 %}selected{% endif %}>Limpieza automática: ejecutar cada 30 días</option>
+          <option value="1440" {% if cleanup_settings and cleanup_settings.run_interval_hours == 1440 %}selected{% endif %}>Limpieza automática: ejecutar cada 60 días</option>
+          <option value="2160" {% if cleanup_settings and cleanup_settings.run_interval_hours == 2160 %}selected{% endif %}>Limpieza automática: ejecutar cada 90 días</option>
+          <option value="4320" {% if cleanup_settings and cleanup_settings.run_interval_hours == 4320 %}selected{% endif %}>Limpieza automática: ejecutar cada 180 días</option>
+          <option value="8760" {% if cleanup_settings and cleanup_settings.run_interval_hours == 8760 %}selected{% endif %}>Limpieza automática: ejecutar cada 365 días</option>
         </select>
         <button type="button" id="phCleanupSaveAutoBtn" class="btn-panel btn-green purchase-history-cleanup-save-btn">Guardar</button>
       </div>
@@ -181,20 +175,20 @@
 
   <div class="store-light purchase-history-container purchase-history-compras-wrap mx-auto" id="purchaseHistoryComprasSection">
     <h2 class="m-0 text-center w-100 purchase-history-page-title"><i class="fas fa-receipt"></i> Historial de Compra</h2>
-    <div class="espaciado-responsive purchase-history-table-wrapper">
+    <div class="espaciado-responsive purchase-history-compras-shell">
   {% elif session.get('logged_in') and (not session.get('username') or session.get('username').lower() not in blocked_users) %}
   <div class="store-light purchase-history-container purchase-history-compras-wrap mx-auto store-front-main px-2 pb-3" id="purchaseHistoryComprasSection">
     <div class="store-front-header espaciado-responsive purchase-history-user-header">
       <button id="menuToggleBtn" class="btn-blue menu-btn-worksheet">&#9776; Menú</button>
     </div>
     <h2 class="m-0 text-center w-100 purchase-history-page-title"><i class="fas fa-receipt"></i> Mi Historial de Compras</h2>
-    <div class="espaciado-responsive purchase-history-table-wrapper">
+    <div class="espaciado-responsive purchase-history-compras-shell">
   {% else %}
-    <div class="espaciado-responsive purchase-history-table-wrapper">
+    <div class="espaciado-responsive purchase-history-compras-shell">
   {% endif %}
     <form id="form-busqueda-compras" class="purchase-history-controls" autocomplete="off">
       <label for="busquedaCompras" class="sr-only">Buscar en compras</label>
-      <input type="search" id="busquedaCompras" class="form-control purchase-history-search" placeholder="Buscar en compras..." autocomplete="off">
+      <input type="search" id="busquedaCompras" class="form-control purchase-history-search" placeholder="Buscar en compras y recargas..." autocomplete="off">
       <div class="purchase-history-controls-pagesize">
         <select id="historialComprasPageSize" name="historialComprasPageSize" class="form-select purchase-history-pagesize" title="Cantidad de compras por página" aria-label="Cantidad de compras por página">
           <option value="20" selected>20</option>
@@ -205,20 +199,22 @@
         </select>
       </div>
     </form>
-    <table id="tabla-compras">
-      <thead>
-        <tr>
-          <th>Fecha</th>
-          <th><i class="fas fa-ticket-alt"></i> Producto</th>
-          <th scope="col" class="purchase-history-th-qty text-center" title="Cantidad" aria-label="Cantidad"><i class="fas fa-cubes" aria-hidden="true"></i><span class="sr-only"> Cantidad</span></th>
-          <th>Total</th>
-          <th>Licencias</th>
-          {% if mostrar_usuario_comprador %}<th>Usuario</th>{% endif %}
-        </tr>
-      </thead>
-      <tbody id="tbody-compras">
-      </tbody>
-    </table>
+    <div class="purchase-history-table-wrapper">
+      <table id="tabla-compras">
+        <thead>
+          <tr>
+            <th>Fecha</th>
+            <th><i class="fas fa-ticket-alt"></i> Producto</th>
+            <th scope="col" class="purchase-history-th-qty text-center" title="Cantidad" aria-label="Cantidad"><i class="fas fa-cubes" aria-hidden="true"></i><span class="sr-only"> Cantidad</span></th>
+            <th>Total</th>
+            <th>Licencias</th>
+            {% if mostrar_usuario_comprador %}<th>Usuario</th>{% endif %}
+          </tr>
+        </thead>
+        <tbody id="tbody-compras">
+        </tbody>
+      </table>
+    </div>
     <div id="paginacion-compras" class="purchase-history-pagination"></div>
     </div>
   {% if mostrar_usuario_comprador or (session.get('logged_in') and (not session.get('username') or session.get('username').lower() not in blocked_users)) %}
@@ -294,7 +290,15 @@
       <h4 class="purchase-history-stats-subtitle">Ventas por servicio</h4>
       <div class="purchase-history-stats-table-wrap">
         <table class="purchase-history-stats-table" id="phStatsSalesTable">
-          <thead><tr><th>Servicio</th><th>Moneda</th><th>Ventas</th><th>Renov.</th><th>Total</th></tr></thead>
+          <thead>
+            <tr>
+              <th scope="col"><span class="purchase-history-stats-th-tip" data-tip="Servicio o producto vendido" tabindex="0" role="img" aria-label="Servicio o producto vendido"><i class="fas fa-ticket-alt" aria-hidden="true"></i></span> Servicio</th>
+              <th scope="col" class="purchase-history-stats-th-icon text-center" aria-label="Moneda"><span class="purchase-history-stats-th-tip" data-tip="Moneda (COP o USD)" tabindex="0" role="img" aria-label="Moneda (COP o USD)"><i class="fas fa-coins" aria-hidden="true"></i></span><span class="sr-only"> Moneda</span></th>
+              <th scope="col" class="purchase-history-stats-th-icon text-center" aria-label="Ventas"><span class="purchase-history-stats-th-tip" data-tip="Ventas nuevas en el período" tabindex="0" role="img" aria-label="Ventas nuevas en el período"><i class="fas fa-shopping-cart" aria-hidden="true"></i></span><span class="sr-only"> Ventas</span></th>
+              <th scope="col" class="purchase-history-stats-th-icon text-center" aria-label="Renovaciones"><span class="purchase-history-stats-th-tip" data-tip="Renovaciones en el período" tabindex="0" role="img" aria-label="Renovaciones en el período"><i class="fas fa-sync-alt" aria-hidden="true"></i></span><span class="sr-only"> Renovaciones</span></th>
+              <th scope="col"><span class="purchase-history-stats-th-tip" data-tip="Monto total facturado" tabindex="0" role="img" aria-label="Monto total facturado"><i class="fas fa-money-bill-wave" aria-hidden="true"></i></span> Total</th>
+            </tr>
+          </thead>
           <tbody></tbody>
         </table>
       </div>
@@ -324,21 +328,25 @@
             <span class="sr-only">Más información sobre la limpieza del historial · Licencias</span>
           </button>
           <div id="phLicCleanupInfoBox" class="purchase-history-cleanup-info-box" hidden>
-            Elimina entradas antiguas del registro portal (reportes, caídas, renovaciones de estado). No borra cuentas ni licencias del inventario; las filas «Entrega» vinculadas a asignaciones pueden seguir visibles.
+            Elimina entradas del registro portal (reportes, caídas, renovaciones de estado). No borra cuentas ni licencias del inventario. Con <strong>0</strong> días se borra todo el registro; con <strong>1</strong> las de ayer y anteriores (días calendario, Colombia).
           </div>
         </span>
       </h4>
       <div class="purchase-history-cleanup-grid">
-        <div class="purchase-history-cleanup-days-row">
-          <label for="phLicCleanupDays" class="form-label purchase-history-cleanup-days-label">Eliminar registros con más de (días)</label>
-          <input type="number" id="phLicCleanupDays" class="form-control purchase-history-cleanup-days-input" min="1" max="3650" value="{{ lic_cleanup_settings.retention_days if lic_cleanup_settings else 90 }}" autocomplete="off" aria-label="Días de antigüedad en historial licencias">
-        </div>
-        <div class="purchase-history-cleanup-field">
-          <label for="phLicCleanupScope" class="sr-only">Alcance de la limpieza</label>
-          <select id="phLicCleanupScope" class="form-select" autocomplete="off" title="Alcance de la limpieza" aria-label="Alcance de la limpieza">
-            <option value="all" {% if not lic_cleanup_settings or lic_cleanup_settings.scope != 'user' %}selected{% endif %}>Todos los usuarios</option>
-            <option value="user" {% if lic_cleanup_settings and lic_cleanup_settings.scope == 'user' %}selected{% endif %}>Solo un usuario</option>
-          </select>
+        <div class="purchase-history-cleanup-scope-row">
+          <div class="purchase-history-cleanup-days-field" role="group" aria-labelledby="phLicCleanupDaysPrefix">
+            <span id="phLicCleanupDaysPrefix" class="purchase-history-cleanup-days-field__prefix">Días</span>
+            <label for="phLicCleanupDays" class="sr-only">Días de antigüedad en historial licencias</label>
+            <input type="number" id="phLicCleanupDays" class="form-control purchase-history-cleanup-days-input" min="0" max="3650" value="{{ lic_cleanup_settings.retention_days if lic_cleanup_settings else 90 }}" autocomplete="off" aria-labelledby="phLicCleanupDaysPrefix" title="0 = eliminar todo el registro portal">
+          </div>
+          <div class="purchase-history-cleanup-field purchase-history-cleanup-scope-field">
+            <label for="phLicCleanupScope" class="sr-only">Alcance de la limpieza</label>
+            <select id="phLicCleanupScope" class="form-select" autocomplete="off" title="Alcance de la limpieza" aria-label="Alcance de la limpieza">
+              <option value="all" data-label="Todos los usuarios" {% if not lic_cleanup_settings or lic_cleanup_settings.scope != 'user' %}selected{% endif %}>Todos los usuarios (—)</option>
+              <option value="user" data-label="Solo un usuario" {% if lic_cleanup_settings and lic_cleanup_settings.scope == 'user' %}selected{% endif %}>Solo un usuario (—)</option>
+            </select>
+          </div>
+          <button type="button" id="phLicCleanupPurgeBtn" class="btn-panel btn-red purchase-history-cleanup-purge-btn">Eliminar ahora</button>
         </div>
         <div class="purchase-history-cleanup-user-wrap" id="phLicCleanupUserWrap" {% if not lic_cleanup_settings or lic_cleanup_settings.scope != 'user' %}hidden{% endif %}>
           <label for="phLicCleanupUserSearch" class="form-label">Usuario</label>
@@ -352,36 +360,26 @@
             <button type="button" id="phLicCleanupUserClear" class="purchase-history-cleanup-user-clear">Quitar</button>
           </p>
         </div>
-        <div class="purchase-history-cleanup-actions-row">
-          <span class="purchase-history-cleanup-preview text-muted">
-            Coinciden: <strong id="phLicCleanupPreviewCount">—</strong> registro(s)
-          </span>
-          <button type="button" id="phLicCleanupPurgeBtn" class="btn-panel btn-red">Eliminar ahora</button>
-        </div>
       </div>
       <hr class="purchase-history-cleanup-separator" aria-hidden="true">
-      <h4 class="text-center purchase-history-cleanup-heading purchase-history-cleanup-heading-auto">
-        <i class="fas fa-clock" aria-hidden="true"></i> Limpieza automática programada
-      </h4>
       <div class="purchase-history-cleanup-grid">
         <div class="purchase-history-cleanup-auto-row">
           <div class="form-check purchase-history-cleanup-auto-check mb-0">
             <input class="form-check-input" type="checkbox" id="phLicCleanupAutoEnabled" {% if lic_cleanup_settings and lic_cleanup_settings.auto_enabled %}checked{% endif %} aria-label="Activar limpieza automática del historial licencias" title="Activar limpieza automática">
             <label class="sr-only" for="phLicCleanupAutoEnabled">Activar limpieza automática</label>
           </div>
-          <label for="phLicCleanupIntervalHours" class="sr-only">Ejecutar cada</label>
-          <select id="phLicCleanupIntervalHours" class="form-select purchase-history-cleanup-interval-select" autocomplete="off" title="Ejecutar cada" aria-label="Ejecutar cada"{% if not lic_cleanup_settings or not lic_cleanup_settings.auto_enabled %} disabled{% endif %}>
-            <option value="6" {% if lic_cleanup_settings and lic_cleanup_settings.run_interval_hours == 6 %}selected{% endif %}>Ejecutar cada 6 horas</option>
-            <option value="12" {% if lic_cleanup_settings and lic_cleanup_settings.run_interval_hours == 12 %}selected{% endif %}>Ejecutar cada 12 horas</option>
-            <option value="24" {% if not lic_cleanup_settings or lic_cleanup_settings.run_interval_hours == 24 %}selected{% endif %}>Ejecutar cada 24 horas (diario)</option>
-            <option value="48" {% if lic_cleanup_settings and lic_cleanup_settings.run_interval_hours == 48 %}selected{% endif %}>Ejecutar cada 48 horas</option>
-            <option value="168" {% if lic_cleanup_settings and lic_cleanup_settings.run_interval_hours == 168 %}selected{% endif %}>Ejecutar cada 168 horas (semanal)</option>
-            <option value="360" {% if lic_cleanup_settings and lic_cleanup_settings.run_interval_hours == 360 %}selected{% endif %}>Ejecutar cada 15 días</option>
-            <option value="720" {% if lic_cleanup_settings and lic_cleanup_settings.run_interval_hours == 720 %}selected{% endif %}>Ejecutar cada 30 días</option>
-            <option value="1440" {% if lic_cleanup_settings and lic_cleanup_settings.run_interval_hours == 1440 %}selected{% endif %}>Ejecutar cada 60 días</option>
-            <option value="2160" {% if lic_cleanup_settings and lic_cleanup_settings.run_interval_hours == 2160 %}selected{% endif %}>Ejecutar cada 90 días</option>
-            <option value="4320" {% if lic_cleanup_settings and lic_cleanup_settings.run_interval_hours == 4320 %}selected{% endif %}>Ejecutar cada 180 días</option>
-            <option value="8760" {% if lic_cleanup_settings and lic_cleanup_settings.run_interval_hours == 8760 %}selected{% endif %}>Ejecutar cada 365 días</option>
+          <select id="phLicCleanupIntervalHours" class="form-select purchase-history-cleanup-interval-select" autocomplete="off" title="Limpieza automática programada" aria-label="Limpieza automática: intervalo de ejecución"{% if not lic_cleanup_settings or not lic_cleanup_settings.auto_enabled %} disabled{% endif %}>
+            <option value="6" {% if lic_cleanup_settings and lic_cleanup_settings.run_interval_hours == 6 %}selected{% endif %}>Limpieza automática: ejecutar cada 6 horas</option>
+            <option value="12" {% if lic_cleanup_settings and lic_cleanup_settings.run_interval_hours == 12 %}selected{% endif %}>Limpieza automática: ejecutar cada 12 horas</option>
+            <option value="24" {% if not lic_cleanup_settings or lic_cleanup_settings.run_interval_hours == 24 %}selected{% endif %}>Limpieza automática: ejecutar cada 24 horas (diario)</option>
+            <option value="48" {% if lic_cleanup_settings and lic_cleanup_settings.run_interval_hours == 48 %}selected{% endif %}>Limpieza automática: ejecutar cada 48 horas</option>
+            <option value="168" {% if lic_cleanup_settings and lic_cleanup_settings.run_interval_hours == 168 %}selected{% endif %}>Limpieza automática: ejecutar cada 168 horas (semanal)</option>
+            <option value="360" {% if lic_cleanup_settings and lic_cleanup_settings.run_interval_hours == 360 %}selected{% endif %}>Limpieza automática: ejecutar cada 15 días</option>
+            <option value="720" {% if lic_cleanup_settings and lic_cleanup_settings.run_interval_hours == 720 %}selected{% endif %}>Limpieza automática: ejecutar cada 30 días</option>
+            <option value="1440" {% if lic_cleanup_settings and lic_cleanup_settings.run_interval_hours == 1440 %}selected{% endif %}>Limpieza automática: ejecutar cada 60 días</option>
+            <option value="2160" {% if lic_cleanup_settings and lic_cleanup_settings.run_interval_hours == 2160 %}selected{% endif %}>Limpieza automática: ejecutar cada 90 días</option>
+            <option value="4320" {% if lic_cleanup_settings and lic_cleanup_settings.run_interval_hours == 4320 %}selected{% endif %}>Limpieza automática: ejecutar cada 180 días</option>
+            <option value="8760" {% if lic_cleanup_settings and lic_cleanup_settings.run_interval_hours == 8760 %}selected{% endif %}>Limpieza automática: ejecutar cada 365 días</option>
           </select>
           <button type="button" id="phLicCleanupSaveAutoBtn" class="btn-panel btn-green purchase-history-cleanup-save-btn">Guardar</button>
         </div>
@@ -478,7 +476,7 @@
   {% if mostrar_usuario_comprador %}
   <script src="{{ url_for('static', filename='js/clear_trigger_logs.js') }}" defer></script>
   <script src="{{ url_for('static', filename='js/logout_all_cookies_btn.js') }}" defer></script>
-  <script src="{{ url_for('store_bp.static', filename='js/historial_compras_cleanup.js') }}" defer></script>
+  <script src="{{ url_for('store_bp.static', filename='js/historial_compras_cleanup.js') }}?v=20260604-scope-count" defer></script>
   {% endif %}
   {% if mostrar_usuario_comprador or (session.get('logged_in') and (not session.get('username') or session.get('username').lower() not in blocked_users)) %}
   <script src="{{ url_for('store_bp.static', filename='js/historial_compras_stats.js') }}?v=20260521-stats-usuario" defer></script>
@@ -487,7 +485,7 @@
   <script src="{{ url_for('store_bp.static', filename='js/user_license_actividad_historial.js') }}?v=20260522-admin-licencias" defer></script>
   {% endif %}
   {% if mostrar_historial_licencias and historial_licencias_es_admin %}
-  <script src="{{ url_for('store_bp.static', filename='js/historial_licencias_cleanup.js') }}?v=20260522-lic-cleanup" defer></script>
+  <script src="{{ url_for('store_bp.static', filename='js/historial_licencias_cleanup.js') }}?v=20260604-scope-count" defer></script>
   {% endif %}
-  <script src="{{ url_for('store_bp.static', filename='js/historial_compras.js') }}?v=20260522-csp-meta" defer></script>
+  <script src="{{ url_for('store_bp.static', filename='js/historial_compras.js') }}?v=20260605-renewal-kind" defer></script>
 {% endblock %} 

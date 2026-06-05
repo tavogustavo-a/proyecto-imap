@@ -11,6 +11,207 @@ from app.store.models import LicenseAccount, Product, Sale, SalePurchaseSnapshot
 
 logger = logging.getLogger(__name__)
 
+RENEWAL_KIND_RENOVAR = 'renovar_1_mes'
+RENEWAL_KIND_MES_A_MES = 'dejar_mes_a_mes'
+RENEWAL_KIND_MIXTO = 'mixto'
+
+RENEWAL_KIND_LABELS = {
+    RENEWAL_KIND_RENOVAR: 'Renovación: 1 mes más',
+    RENEWAL_KIND_MES_A_MES: 'Renovación: mes a mes',
+    RENEWAL_KIND_MIXTO: 'Renovación mixta (1 mes más y mes a mes)',
+}
+
+
+def renewal_kind_display_label(kind):
+    k = str(kind or '').strip()
+    if not k:
+        return ''
+    return RENEWAL_KIND_LABELS.get(k, '')
+
+
+def _green_storage_to_renewal_kind(status_good):
+    from app.store.user_license_line_parse import normalize_status_key
+
+    nk = normalize_status_key(str(status_good or '').strip())
+    if nk == normalize_status_key('renovar 1 mes mas'):
+        return RENEWAL_KIND_RENOVAR
+    if nk == normalize_status_key('dejar mes a mes'):
+        return RENEWAL_KIND_MES_A_MES
+    return None
+
+
+def _renewal_kind_from_dual(dual, raw_line=None):
+    """Infiere renovar 1 mes / mes a mes desde una línea dual (portal o inventario)."""
+    from app.store.user_license_line_parse import resolve_portal_green_select_value
+
+    green = resolve_portal_green_select_value(dual or {}, raw_line=raw_line)
+    return _green_storage_to_renewal_kind(green)
+
+
+def detect_renewal_kind_for_account(
+    user_row,
+    license_row,
+    account,
+    allowed_usernames,
+    raw_inventory_line=None,
+    prefer_day_key=None,
+):
+    """Estado verde del portal (día N) o línea de inventario antes del checkout de renovación."""
+    from app.store.user_license_line_parse import (
+        line_visible_for_assignee_account,
+        parse_admin_license_line_to_split_parts,
+    )
+
+    if raw_inventory_line and str(raw_inventory_line).strip():
+        raw_inv = str(raw_inventory_line).strip()
+        dual_raw = parse_admin_license_line_to_split_parts(raw_inv)
+        kind_raw = _renewal_kind_from_dual(dual_raw, raw_line=raw_inv)
+        if kind_raw:
+            return kind_raw
+
+    names = [n for n in (allowed_usernames or []) if n]
+    if user_row and getattr(user_row, 'username', None):
+        un = str(user_row.username or '').strip()
+        if un and un not in names:
+            names.append(un)
+    email = str(getattr(account, 'email', '') or '').strip()
+    aid = str(getattr(account, 'account_identifier', '') or '').strip()
+    found = []
+
+    def _scan_day_text(day_text):
+        for line in str(day_text or '').replace('\r\n', '\n').replace('\r', '\n').split('\n'):
+            stripped = line.strip()
+            if not stripped:
+                continue
+            dual = parse_admin_license_line_to_split_parts(stripped)
+            if not line_visible_for_assignee_account(dual, names, email, aid):
+                continue
+            kind = _renewal_kind_from_dual(dual, raw_line=stripped)
+            if kind:
+                found.append(kind)
+
+    raw_dn = getattr(license_row, 'day_notepads_json', None) or ''
+    if str(raw_dn).strip():
+        try:
+            day_map = json.loads(raw_dn)
+        except (json.JSONDecodeError, TypeError):
+            day_map = {}
+        if isinstance(day_map, dict):
+            pref = str(prefer_day_key or '').strip()
+            if pref and pref in day_map:
+                _scan_day_text(day_map.get(pref))
+            for _day_key, day_text in day_map.items():
+                if pref and str(_day_key) == pref:
+                    continue
+                _scan_day_text(day_text)
+
+    slot = getattr(account, 'inventory_bloc_ord', None)
+    if slot is not None:
+        try:
+            sb = int(slot)
+        except (TypeError, ValueError):
+            sb = None
+        if sb is not None and sb >= 1:
+            notes = getattr(license_row, 'license_notes', None) or ''
+            lines = str(notes).replace('\r\n', '\n').replace('\r', '\n').split('\n')
+            idx = sb - 1
+            if 0 <= idx < len(lines):
+                raw_slot = lines[idx].strip()
+                dual = parse_admin_license_line_to_split_parts(raw_slot)
+                kind = _renewal_kind_from_dual(dual, raw_line=raw_slot)
+                if kind:
+                    found.append(kind)
+
+    if RENEWAL_KIND_MES_A_MES in found and RENEWAL_KIND_RENOVAR in found:
+        return RENEWAL_KIND_MIXTO
+    if found:
+        return found[-1]
+    return None
+
+
+def merge_sale_renewal_kind(sale, kind):
+    kind = str(kind or '').strip()
+    if not kind or not sale:
+        return
+    cur = str(getattr(sale, 'renewal_kind', None) or '').strip()
+    if not cur:
+        sale.renewal_kind = kind
+    elif cur == kind:
+        pass
+    else:
+        sale.renewal_kind = RENEWAL_KIND_MIXTO
+
+
+def resolve_renewal_kind_for_sale(sale, snap=None):
+    if not sale or not getattr(sale, 'is_renewal', False):
+        return None
+    stored = str(getattr(sale, 'renewal_kind', None) or '').strip()
+    if stored:
+        return stored
+    if snap is not None:
+        stored = str(getattr(snap, 'renewal_kind', None) or '').strip()
+        if stored:
+            return stored
+
+    from app.models.user import User
+    from app.store.models import License, LicenseAccount
+
+    user = User.query.get(sale.user_id)
+    if not user:
+        return None
+    names = [(user.username or '').strip()]
+    prefer_day = None
+    if sale.created_at:
+        try:
+            from app.utils.timezone import utc_to_colombia
+
+            prefer_day = str(int(utc_to_colombia(sale.created_at).day))
+        except (TypeError, ValueError, OSError, OverflowError):
+            prefer_day = None
+    accounts = LicenseAccount.query.filter_by(sale_id=sale.id).all()
+    kinds = set()
+    for acc in accounts:
+        lic = License.query.get(acc.license_id) if acc.license_id else None
+        if not lic:
+            continue
+        k = detect_renewal_kind_for_account(
+            user, lic, acc, names, prefer_day_key=prefer_day
+        )
+        if k == RENEWAL_KIND_MIXTO:
+            _persist_inferred_renewal_kind(sale, snap, RENEWAL_KIND_MIXTO)
+            return RENEWAL_KIND_MIXTO
+        if k:
+            kinds.add(k)
+    inferred = None
+    if len(kinds) == 1:
+        inferred = next(iter(kinds))
+    elif len(kinds) > 1:
+        inferred = RENEWAL_KIND_MIXTO
+    if inferred:
+        _persist_inferred_renewal_kind(sale, snap, inferred)
+    return inferred
+
+
+def _persist_inferred_renewal_kind(sale, snap, kind):
+    if not kind or not sale:
+        return
+    changed = False
+    if not str(getattr(sale, 'renewal_kind', None) or '').strip():
+        sale.renewal_kind = kind
+        db.session.add(sale)
+        changed = True
+    if snap is not None and not str(getattr(snap, 'renewal_kind', None) or '').strip():
+        snap.renewal_kind = kind
+        db.session.add(snap)
+        changed = True
+    if not changed:
+        return
+    try:
+        db.session.commit()
+    except Exception as exc:
+        db.session.rollback()
+        logger.debug('No se pudo guardar renewal_kind inferido sale_id=%s: %s', getattr(sale, 'id', None), exc)
+
 
 def _ensure_column(table_name, column_name, ddl_fragment):
     try:
@@ -28,8 +229,9 @@ def _ensure_column(table_name, column_name, ddl_fragment):
 
 
 def ensure_sale_schema():
-    """Columna is_renewal en ventas (renovación 1 mes / mes a mes)."""
+    """Columnas de renovación en ventas (tipo 1 mes / mes a mes)."""
     _ensure_column('store_sales', 'is_renewal', 'is_renewal BOOLEAN DEFAULT 0 NOT NULL')
+    _ensure_column('store_sales', 'renewal_kind', 'renewal_kind VARCHAR(24)')
 
 
 def ensure_snapshot_table():
@@ -43,6 +245,11 @@ def ensure_snapshot_table():
                 'store_sale_purchase_snapshots',
                 'is_renewal',
                 'is_renewal BOOLEAN DEFAULT 0 NOT NULL',
+            )
+            _ensure_column(
+                'store_sale_purchase_snapshots',
+                'renewal_kind',
+                'renewal_kind VARCHAR(24)',
             )
     except Exception as exc:
         logger.warning('No se pudo asegurar tabla store_sale_purchase_snapshots: %s', exc)
@@ -94,6 +301,7 @@ def upsert_snapshot_for_sale(sale, mark_purged=False):
     snap.total_price = sale.total_price
     snap.sale_created_at = sale.created_at or datetime.utcnow()
     snap.is_renewal = bool(getattr(sale, 'is_renewal', False))
+    snap.renewal_kind = getattr(sale, 'renewal_kind', None)
     if licencias or not snap.licencias_json:
         snap.licencias_json = json.dumps(licencias, ensure_ascii=False)
     if mark_purged:
@@ -214,6 +422,13 @@ def snapshot_to_historial_item(snap, username_by_id=None):
         producto = producto + ' (compra revertida)'
 
     is_renewal = bool(getattr(snap, 'is_renewal', False))
+    renewal_kind = None
+    if is_renewal:
+        renewal_kind = str(getattr(snap, 'renewal_kind', None) or '').strip() or None
+        if not renewal_kind and snap.sale_id:
+            sale_row = Sale.query.get(snap.sale_id)
+            if sale_row:
+                renewal_kind = resolve_renewal_kind_for_sale(sale_row, snap)
 
     usuario = None
     if username_by_id and snap.user_id in username_by_id:
@@ -232,6 +447,8 @@ def snapshot_to_historial_item(snap, username_by_id=None):
         'licencias': licencias,
         'is_archived_sale': True,
         'is_renewal': is_renewal,
+        'renewal_kind': renewal_kind,
+        'renewal_kind_label': renewal_kind_display_label(renewal_kind),
         'is_reversed': bool(snap.is_reversed),
         'has_licencias': len(licencias) > 0,
         'sort_ts': sort_ts,

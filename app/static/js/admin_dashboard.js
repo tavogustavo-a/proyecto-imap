@@ -2,18 +2,16 @@
 // Lógica del botón "Cerrar sesión y limpiar cookies": static/js/logout_all_cookies_btn.js
 
 document.addEventListener('DOMContentLoaded', function() {
-    // Funcionalidad del botón ON/OFF para gestión IMAP (Observador - observer_enabled)
-    const toggleBtn = document.getElementById('toggleImapManagementBtn');
+    // ON/OFF global del buzón de mensajes (no afecta al observador IMAP de seguridad)
+    const toggleBuzonBtn = document.getElementById('toggleEmailBuzonBtn');
     
-    if (toggleBtn) {
-        toggleBtn.addEventListener('click', function() {
+    if (toggleBuzonBtn) {
+        toggleBuzonBtn.addEventListener('click', function() {
             const btn = this;
             if (btn.disabled) return;
             btn.disabled = true;
-            const isActive = btn.getAttribute('data-enabled') === 'false'; // OFF = activo
-            const newEnabled = !isActive;
 
-            fetch('/admin/toggle_imap_management_ajax', {
+            fetch('/admin/toggle_email_buzon_ajax', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
                 body: JSON.stringify({}),
@@ -26,8 +24,6 @@ document.addEventListener('DOMContentLoaded', function() {
                     btn.setAttribute('data-enabled', active ? 'false' : 'true');
                     btn.className = active ? 'btn-green' : 'btn-red';
                     btn.innerHTML = '<i class="fas fa-power-off"></i> ' + (active ? 'OFF' : 'ON');
-                    const obsCheck = document.getElementById('observerEnabled');
-                    if (obsCheck) { obsCheck.checked = active; }
                 }
             })
             .catch(function() { })

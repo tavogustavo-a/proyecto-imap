@@ -261,6 +261,16 @@ def search_emails_for_observer(servers, since_date_utc, optional_sender_from_rul
                                 envelope_data = data.get(b'ENVELOPE')
                                 if not raw_email_bytes or not envelope_data:
                                     continue
+                                mail_dt_utc = None
+                                if internal_date_dt:
+                                    try:
+                                        mail_dt_utc = internal_date_dt
+                                        if internal_date_dt.tzinfo is not None:
+                                            mail_dt_utc = internal_date_dt.astimezone(timezone.utc)
+                                        else:
+                                            mail_dt_utc = internal_date_dt.replace(tzinfo=timezone.utc)
+                                    except Exception:
+                                        mail_dt_utc = None
                                 msg = email.message_from_bytes(raw_email_bytes)
                                 message_id_header = msg.get('Message-ID')
                                 message_id_cleaned = None
@@ -302,7 +312,8 @@ def search_emails_for_observer(servers, since_date_utc, optional_sender_from_rul
                                     'from': from_address_str,
                                     'to': list(set(to_addresses_list)),
                                     'subject': subject_str,
-                                    'body_raw': body_content_str.strip()
+                                    'body_raw': body_content_str.strip(),
+                                    'internal_date': mail_dt_utc.isoformat() if mail_dt_utc else None,
                                 })
                     except imap_exceptions.IMAPClientError as folder_err:
                         pass

@@ -7,12 +7,13 @@ import json
 import logging
 import threading
 import time
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, time as dt_time, timedelta, timezone
 
 from app.extensions import db
 from app.models.user import User
 from app.store.models import StoreSetting
 from app.store.user_license_activity import _parse_iso_ts_naive
+from app.utils.timezone import COLOMBIA_TZ, get_colombia_now
 
 logger = logging.getLogger(__name__)
 
@@ -103,8 +104,17 @@ def is_purge_running():
 
 
 def _cutoff_naive(days):
-    days = max(1, int(days))
-    return datetime.utcnow() - timedelta(days=days)
+    """Antigüedad mínima en días calendario (Colombia). None = sin filtro (0 = todo el registro)."""
+    days = int(days)
+    if days <= 0:
+        return None
+    days = max(1, days)
+    today = get_colombia_now().date()
+    last_eligible_date = today - timedelta(days=days)
+    end_local = datetime.combine(last_eligible_date, dt_time.max)
+    if end_local.tzinfo is None:
+        end_local = COLOMBIA_TZ.localize(end_local)
+    return end_local.astimezone(timezone.utc).replace(tzinfo=None)
 
 
 def _load_log_items(raw):
@@ -122,19 +132,24 @@ def _count_removable_in_items(items, cutoff):
     for it in items:
         if not isinstance(it, dict):
             continue
+        if cutoff is None:
+            n += 1
+            continue
         dt = _parse_iso_ts_naive(it.get('ts'))
-        if dt is not None and dt < cutoff:
+        if dt is not None and dt <= cutoff:
             n += 1
     return n
 
 
 def _filter_items_keep_newer(items, cutoff):
+    if cutoff is None:
+        return []
     kept = []
     for it in items:
         if not isinstance(it, dict):
             continue
         dt = _parse_iso_ts_naive(it.get('ts'))
-        if dt is None or dt >= cutoff:
+        if dt is None or dt > cutoff:
             kept.append(it)
     return kept
 

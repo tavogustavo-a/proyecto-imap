@@ -97,6 +97,14 @@ def get_enabled_buzon_servers():
     """Obtiene solo los servidores de buzón habilitados"""
     return EmailBuzonServer.query.filter(EmailBuzonServer.enabled == True).all()
 
+
+def is_email_buzon_globally_enabled() -> bool:
+    """Interruptor global del buzón (Admin Dashboard → Gestionar Buzón)."""
+    from app.admin.site_settings import get_site_setting
+
+    return get_site_setting('email_buzon_enabled', '1') == '1'
+
+
 def should_email_go_to_trash(email_data):
     """Verifica si un email debe ir directo a papelera (sin guardarse en BD)"""
     try:
@@ -125,6 +133,9 @@ def should_email_go_to_trash(email_data):
 
 def process_incoming_email(raw_email_data, buzon_server_id=None):
     """Procesa un email recibido y lo almacena en la base de datos"""
+    if not is_email_buzon_globally_enabled():
+        logger.warning('[buzón] process_incoming_email omitido: buzón global apagado')
+        return None
     try:
         # Parsear el email usando el parser existente
         parsed_email = parse_raw_email(raw_email_data)
@@ -185,6 +196,13 @@ def process_smtp_email(email_data):
     Returns:
         ReceivedEmail: Objeto del email guardado o None si falló
     """
+    if not is_email_buzon_globally_enabled():
+        logger.warning(
+            '[buzón] SMTP omitido: buzón global apagado (from=%s to=%s)',
+            (email_data or {}).get('from'),
+            (email_data or {}).get('to'),
+        )
+        return None
     try:
         from_email = email_data.get('from', '')
         to_email = email_data.get('to', '')

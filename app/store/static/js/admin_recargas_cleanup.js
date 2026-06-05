@@ -20,7 +20,6 @@ document.addEventListener('DOMContentLoaded', function () {
   const userSelectedLabel = document.getElementById('brCleanupUserSelectedLabel');
   const userClearBtn = document.getElementById('brCleanupUserClear');
   let userSearchDebounce = null;
-  const previewCount = document.getElementById('brCleanupPreviewCount');
   const purgeBtn = document.getElementById('brCleanupPurgeBtn');
   const autoEnabled = document.getElementById('brCleanupAutoEnabled');
   const intervalSelect = document.getElementById('brCleanupIntervalHours');
@@ -136,6 +135,20 @@ document.addEventListener('DOMContentLoaded', function () {
     }
   }
 
+  function updateScopePreviewCount(count) {
+    if (!scopeSelect) return;
+    const display =
+      count === null || count === undefined || Number.isNaN(count) ? '—' : String(count);
+    Array.from(scopeSelect.options).forEach(function (opt) {
+      const base = opt.dataset.label || opt.textContent.replace(/\s*\([^)]*\)\s*$/, '').trim();
+      opt.textContent = base + ' (' + display + ')';
+    });
+    scopeSelect.setAttribute(
+      'aria-label',
+      'Alcance de la limpieza, ' + display + ' solicitud(es)'
+    );
+  }
+
   async function refreshPreview() {
     const p = payloadFromForm();
     const params = new URLSearchParams({
@@ -148,13 +161,13 @@ document.addEventListener('DOMContentLoaded', function () {
         credentials: 'same-origin',
       });
       const data = await res.json();
-      if (data.success && previewCount) {
-        previewCount.textContent = String(data.count);
-      } else if (previewCount) {
-        previewCount.textContent = '—';
+      if (data.success) {
+        updateScopePreviewCount(data.count);
+      } else {
+        updateScopePreviewCount(null);
       }
     } catch (_e) {
-      if (previewCount) previewCount.textContent = '—';
+      updateScopePreviewCount(null);
     }
   }
 
@@ -174,8 +187,8 @@ document.addEventListener('DOMContentLoaded', function () {
         showStatus(data.error || 'Error al guardar.', true);
         return;
       }
-      if (previewCount && typeof data.preview_count === 'number') {
-        previewCount.textContent = String(data.preview_count);
+      if (typeof data.preview_count === 'number') {
+        updateScopePreviewCount(data.preview_count);
       }
       showStatus(data.message || 'Guardado.', false);
     } catch (_e) {
@@ -207,14 +220,16 @@ document.addEventListener('DOMContentLoaded', function () {
     }
     const scopeLabel =
       p.scope === 'user' ? 'del usuario seleccionado' : 'de todos los usuarios';
+    const daysLabel =
+      p.retention_days === 0
+        ? 'todas las solicitudes (sin filtro de fecha)'
+        : 'más de ' + p.retention_days + ' días, ' + scopeLabel;
     if (
       !window.confirm(
         '¿Eliminar ' +
           n +
-          ' solicitud(es) de recarga (más de ' +
-          p.retention_days +
-          ' días, ' +
-          scopeLabel +
+          ' solicitud(es) de recarga (' +
+          daysLabel +
           ')?\n\nSe borrarán también los comprobantes. Esta acción no se puede deshacer.'
       )
     ) {
@@ -239,7 +254,7 @@ document.addEventListener('DOMContentLoaded', function () {
           window.location.reload();
         }, 4000);
       } else {
-        if (previewCount) previewCount.textContent = '0';
+        updateScopePreviewCount(0);
         window.location.reload();
       }
     } catch (_e) {
