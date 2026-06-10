@@ -45,6 +45,20 @@
         return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;');
     }
 
+    /** Al copiar licencias: una línea por credencial, sin huecos por filas vacías del editor. */
+    function normalizeLicenseClipboardText(raw) {
+        return String(raw || '')
+            .replace(/\r\n/g, '\n')
+            .split('\n')
+            .map(function (line) {
+                return line.replace(/\s+$/g, '');
+            })
+            .filter(function (line) {
+                return line.length > 0;
+            })
+            .join('\n');
+    }
+
     /** Slugs internos: una combinación única por cuenta/virtual (textarea, scope DOM). No usar para la grilla visible. */
     function licenseFilterKey(acc) {
         if (acc.account_id != null && acc.account_id !== '') {
@@ -3161,7 +3175,7 @@
         if (!modal || !pre) return;
 
         function copyPlainToClipboard(plain) {
-            var t = plain != null ? String(plain) : '';
+            var t = normalizeLicenseClipboardText(plain != null ? String(plain) : '');
             if (!t) return;
             if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
                 navigator.clipboard.writeText(t).catch(function () {
@@ -3367,6 +3381,31 @@
         userLicRenewalNotifyRunCheck();
     }
 
+    function wireUserLicCredsCopyNormalize(outer) {
+        if (!outer || outer.getAttribute('data-lic-copy-normalize-wired') === '1') return;
+        outer.setAttribute('data-lic-copy-normalize-wired', '1');
+        outer.addEventListener(
+            'copy',
+            function (ev) {
+                var ta = ev.target;
+                if (!ta || !ta.classList || !ta.classList.contains('user-lic-creds-ro')) return;
+                var start = typeof ta.selectionStart === 'number' ? ta.selectionStart : 0;
+                var end = typeof ta.selectionEnd === 'number' ? ta.selectionEnd : 0;
+                var chunk =
+                    start !== end
+                        ? String(ta.value || '').slice(start, end)
+                        : String(ta.value || '');
+                var norm = normalizeLicenseClipboardText(chunk);
+                if (!norm) return;
+                ev.preventDefault();
+                if (ev.clipboardData) {
+                    ev.clipboardData.setData('text/plain', norm);
+                }
+            },
+            true
+        );
+    }
+
     function wireUserLicPortalStaticHost(host, outer, gridInner, gridHostEl) {
         if (userLicPortalStaticWired) return;
         userLicPortalStaticWired = true;
@@ -3374,6 +3413,7 @@
         wireScrollButtons(outer);
         wireSearchFilter(outer);
         wireLicenseStatusAutosave(outer);
+        wireUserLicCredsCopyNormalize(outer);
         wireUserLicWarrantyHistoryModal(host, outer);
         wireUserLicFullCredModal(host, outer);
         wireUserLicDaysToolbar(outer);

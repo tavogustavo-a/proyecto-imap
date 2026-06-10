@@ -2,10 +2,11 @@
 
 {% block title %}Mi Historial de Compras{% endblock %}
 
-{% block head %}{{ super() }}<link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}?v=20260605-stats-tips-visible"><link rel="stylesheet" href="{{ url_for('static', filename='fontawesome/css/all.css') }}">{% endblock %}
+{% block head %}{{ super() }}<link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}?v=20260609-ph-mobile-full"><link rel="stylesheet" href="{{ url_for('static', filename='fontawesome/css/all.css') }}">{% endblock %}
 {% block content %}
 <div class="purchase-history-page{% if mostrar_usuario_comprador %} purchase-history-admin{% endif %}"
      data-show-user-column="{{ 'true' if mostrar_usuario_comprador else 'false' }}"
+     data-recharges-url="{{ url_for('store_bp.api_historial_compras_recharges') }}"
      {% if mostrar_usuario_comprador %}
      data-clear-trigger-log-url="{{ url_for('admin_bp.clear_trigger_log') }}"
      data-logout-all-cookies-url="{{ url_for('admin_bp.logout_all_and_clear_cookies') }}"
@@ -487,5 +488,5 @@
   {% if mostrar_historial_licencias and historial_licencias_es_admin %}
   <script src="{{ url_for('store_bp.static', filename='js/historial_licencias_cleanup.js') }}?v=20260604-scope-count" defer></script>
   {% endif %}
-  <script src="{{ url_for('store_bp.static', filename='js/historial_compras.js') }}?v=20260605-renewal-kind" defer></script>
+  <script src="{{ url_for('store_bp.static', filename='js/historial_compras.js') }}?v=20260609-ph-nowrap" defer></script>
 {% endblock %} 

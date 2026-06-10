@@ -1,7 +1,36 @@
 (function () {
   'use strict';
 
-  var SALDO_POLL_MS = 10000;
+  var BINANCE_PAY_POLL_MS = 3000;
+  var BINANCE_PAY_POLL_MAX_MS = 15 * 60 * 1000;
+  var rechargeRealtimeConn = null;
+  var userRechargeItems = [];
+  var binancePayPollTimer = null;
+  var binancePayActiveTradeNo = '';
+  var binancePayPollStartedAt = 0;
+
+  function rechargeFetchJson(url, options) {
+    if (window.StoreFetchJson && window.StoreFetchJson.fetch) {
+      return window.StoreFetchJson.fetch(url, options);
+    }
+    options = options || {};
+    return fetch(url, {
+      method: options.method || 'GET',
+      credentials: options.credentials != null ? options.credentials : 'same-origin',
+      headers: Object.assign({ Accept: 'application/json' }, options.headers || {}),
+      body: options.body,
+    }).then(function (r) {
+      return r.json().then(function (data) {
+        if (!r.ok) {
+          var err = new Error((data && (data.message || data.error)) || 'Error HTTP ' + r.status);
+          err.status = r.status;
+          err.data = data;
+          throw err;
+        }
+        return data;
+      });
+    });
+  }
 
   function applyRechargeSaldoDisplay(data) {
     var el = document.getElementById('balanceRechargeSaldoLine');
@@ -40,13 +69,7 @@
     var form = document.getElementById('balanceRechargeForm');
     var url = form ? form.getAttribute('data-saldo-url') || '' : '';
     if (!url) return Promise.resolve();
-    return fetch(url, {
-      credentials: 'same-origin',
-      headers: { Accept: 'application/json' },
-    })
-      .then(function (r) {
-        return r.json();
-      })
+    return rechargeFetchJson(url)
       .then(function (data) {
         applyRechargeSaldoDisplay(data);
         try {
@@ -57,19 +80,45 @@
       .catch(function () {});
   }
 
-  function bindRechargeSaldoPolling() {
+  function bindRechargeRealtime(meta) {
+    meta = meta || {};
     refreshRechargeSaldoDisplay();
-    window.setInterval(function () {
-      if (document.visibilityState === 'visible') {
-        refreshRechargeSaldoDisplay();
-      }
-    }, SALDO_POLL_MS);
+    var streamUrl =
+      meta.eventsUrl ||
+      '/tienda/api/user/balance-recharges/events';
+
+    function onRealtimeUpdate(eventData) {
+      refreshRechargeSaldoDisplay();
+      patchUserRechargeFromRealtime(eventData, meta).catch(function () {
+        if (document.getElementById('balanceRechargeList')) {
+          loadList(meta);
+        }
+      });
+    }
+
+    function connectStream() {
+      if (rechargeRealtimeConn || !window.BalanceRechargeRealtime) return;
+      rechargeRealtimeConn = window.BalanceRechargeRealtime.connect(streamUrl, onRealtimeUpdate);
+    }
+
+    function disconnectStream() {
+      if (!rechargeRealtimeConn) return;
+      rechargeRealtimeConn.close();
+      rechargeRealtimeConn = null;
+    }
+
+    connectStream();
     document.addEventListener('visibilitychange', function () {
       if (document.visibilityState === 'visible') {
+        connectStream();
         refreshRechargeSaldoDisplay();
+        if (document.getElementById('balanceRechargeList')) {
+          loadList(meta);
+        }
+      } else {
+        disconnectStream();
       }
     });
-    window.addEventListener('focus', refreshRechargeSaldoDisplay);
   }
 
   function readMeta() {
@@ -81,7 +130,178 @@
       submitUrl: form ? form.getAttribute('data-submit-url') || form.getAttribute('action') || '' : '',
       listUrl: form ? form.getAttribute('data-list-url') || (list ? list.getAttribute('data-list-url') : '') || '' : '',
       methodsUrl: form ? form.getAttribute('data-methods-url') || '' : '',
+      binancePayOrderUrl: form ? form.getAttribute('data-binance-pay-order-url') || '' : '',
+      binancePayStatusUrlTemplate: form
+        ? form.getAttribute('data-binance-pay-status-url') || ''
+        : '',
+      eventsUrl:
+        (list ? list.getAttribute('data-events-url') : '') ||
+        '/tienda/api/user/balance-recharges/events',
     };
+  }
+
+  function binancePayStatusUrl(template, tradeNo) {
+    return String(template || '').replace('__TRADE__', encodeURIComponent(tradeNo || ''));
+  }
+
+  function selectedPaymentMethodOption() {
+    var checked = document.querySelector('input[name="payment_method_id"]:checked');
+    return checked ? checked.closest('.balance-recharge-method-option') : null;
+  }
+
+  function isBinancePaySelected() {
+    var label = selectedPaymentMethodOption();
+    return !!(label && label.getAttribute('data-is-binance-pay') === '1');
+  }
+
+  function stopBinancePayPolling() {
+    if (binancePayPollTimer) {
+      window.clearInterval(binancePayPollTimer);
+      binancePayPollTimer = null;
+    }
+    binancePayActiveTradeNo = '';
+  }
+
+  function setBinancePayStatus(text, isError) {
+    var el = document.getElementById('balanceRechargeBinancePayStatus');
+    if (!el) return;
+    el.textContent = text || '';
+    el.className =
+      'balance-recharge-binance-pay-status' +
+      (isError ? ' balance-recharge-binance-pay-status--error' : '');
+  }
+
+  function resetBinancePayCheckout() {
+    stopBinancePayPolling();
+    var checkout = document.getElementById('balanceRechargeBinancePayCheckout');
+    var qrWrap = document.getElementById('balanceRechargeBinancePayQrWrap');
+    var qrImg = document.getElementById('balanceRechargeBinancePayQr');
+    var submitBtn = document.getElementById('balanceRechargeSubmit');
+    if (checkout) checkout.hidden = true;
+    if (qrWrap) qrWrap.hidden = true;
+    if (qrImg) qrImg.removeAttribute('src');
+    if (submitBtn) submitBtn.hidden = false;
+    setBinancePayStatus('', false);
+  }
+
+  function syncSubmitButtonUi() {
+    var submitBtn = document.getElementById('balanceRechargeSubmit');
+    if (!submitBtn || submitBtn.getAttribute('aria-busy') === 'true') return;
+    var isBp = isBinancePaySelected();
+    var textEl = submitBtn.querySelector('.balance-recharge-submit-text');
+    var iconEl = submitBtn.querySelector('.balance-recharge-submit-icon');
+    var bpIconEl = submitBtn.querySelector('.balance-recharge-submit-bp-icon');
+    if (textEl) {
+      textEl.textContent = isBp ? 'Pagar' : 'Enviar solicitud';
+    }
+    if (iconEl) {
+      iconEl.className = 'balance-recharge-submit-icon fas fa-paper-plane';
+    }
+    if (bpIconEl) {
+      bpIconEl.hidden = !isBp;
+    }
+    submitBtn.setAttribute(
+      'aria-label',
+      isBp ? 'Pagar con Binance Pay' : 'Enviar solicitud de recarga'
+    );
+  }
+
+  function updateBinancePayUi() {
+    var panel = document.getElementById('balanceRechargeBinancePayPanel');
+    var proofGroup = document.getElementById('balanceRechargeProofGroup');
+    var fileInput = document.getElementById('balanceRechargeProofs');
+    var isBp = isBinancePaySelected();
+    if (panel) panel.hidden = !isBp;
+    if (proofGroup) proofGroup.hidden = isBp;
+    if (fileInput) {
+      if (isBp) {
+        fileInput.removeAttribute('required');
+        fileInput.value = '';
+        renderPreview(null);
+      } else {
+        fileInput.setAttribute('required', 'required');
+      }
+    }
+    if (isBp) {
+      hideMethodQrBlock();
+    }
+    syncSubmitButtonUi();
+    if (!isBp) {
+      resetBinancePayCheckout();
+    }
+  }
+
+  function showBinancePayCheckout(data) {
+    var checkout = document.getElementById('balanceRechargeBinancePayCheckout');
+    var qrWrap = document.getElementById('balanceRechargeBinancePayQrWrap');
+    var qrImg = document.getElementById('balanceRechargeBinancePayQr');
+    var submitBtn = document.getElementById('balanceRechargeSubmit');
+    if (checkout) checkout.hidden = false;
+    if (submitBtn) submitBtn.hidden = true;
+    var qr = String(data.qrcode_link || '').trim();
+    var checkoutUrl = String(data.checkout_url || data.universal_url || data.deeplink || '').trim();
+    if (qr && qrImg && qrWrap) {
+      qrImg.src = qr;
+      qrWrap.hidden = false;
+    }
+    if (checkoutUrl) {
+      try {
+        window.open(checkoutUrl, '_blank', 'noopener,noreferrer');
+      } catch (err) {
+        window.location.href = checkoutUrl;
+      }
+      setBinancePayStatus(
+        'Se abrió Binance Pay en otra pestaña. Si no se abrió, escanea el QR. Esperando confirmación…',
+        false
+      );
+      return;
+    }
+    setBinancePayStatus('Esperando confirmación de pago en Binance…', false);
+  }
+
+  function startBinancePayPolling(meta, tradeNo) {
+    stopBinancePayPolling();
+    if (!tradeNo) return;
+    binancePayActiveTradeNo = tradeNo;
+    binancePayPollStartedAt = Date.now();
+    var statusUrl = binancePayStatusUrl(meta.binancePayStatusUrlTemplate, tradeNo);
+    if (!statusUrl || statusUrl.indexOf('__TRADE__') >= 0) return;
+
+    function poll() {
+      if (Date.now() - binancePayPollStartedAt > BINANCE_PAY_POLL_MAX_MS) {
+        stopBinancePayPolling();
+        setBinancePayStatus(
+          'Tiempo de espera agotado. Si ya pagaste, el saldo se acreditará en breve; revisa la lista o espera unos segundos.',
+          false
+        );
+        return;
+      }
+      rechargeFetchJson(statusUrl)
+        .then(function (res) {
+          if (!res || !res.success) return;
+          if (res.paid) {
+            stopBinancePayPolling();
+            setBinancePayStatus('¡Pago confirmado! Saldo acreditado.', false);
+            showFormMsg('Saldo acreditado por Binance Pay.', false);
+            refreshRechargeSaldoDisplay();
+            loadList(meta);
+            var form = document.getElementById('balanceRechargeForm');
+            if (form) form.reset();
+            renderPreview(null);
+            resetBinancePayCheckout();
+            updateSelectedMethodQr();
+            updateAmountFieldForMethod();
+            return;
+          }
+          if ((res.status || '').toLowerCase() === 'rejected') {
+            stopBinancePayPolling();
+            setBinancePayStatus('El pago fue rechazado o cancelado.', true);
+          }
+        })
+        .catch(function () {});
+    }
+    poll();
+    binancePayPollTimer = window.setInterval(poll, BINANCE_PAY_POLL_MS);
   }
 
   function getCsrfToken() {
@@ -121,7 +341,7 @@
     (items || []).forEach(function (it) {
       tallies.all += 1;
       var st = (it.status || '').toLowerCase();
-      if (st === 'pending') tallies.pending += 1;
+      if (st === 'pending' || isPendingVerification(it)) tallies.pending += 1;
       else if (st === 'accumulated') tallies.accumulated += 1;
       else if (st === 'approved') tallies.approved += 1;
       else if (st === 'rejected') tallies.rejected += 1;
@@ -129,21 +349,103 @@
     return tallies;
   }
 
+  function isPendingVerification(it) {
+    var s = (it.status || '').toLowerCase();
+    if (s === 'pending_binance_pay') return true;
+    return (
+      (s === 'auto_credited' || s === 'auto_accumulated') &&
+      (it.admin_verified === null || it.admin_verified === undefined)
+    );
+  }
+
   function statusClass(status) {
     var s = (status || '').toLowerCase();
     if (s === 'approved' || s === 'accum_converted') return 'balance-recharge-status--approved';
     if (s === 'rejected') return 'balance-recharge-status--rejected';
-    if (s === 'auto_credited') return 'balance-recharge-status--auto';
+    if (s === 'auto_credited' || s === 'auto_accumulated') return 'balance-recharge-status--auto';
     if (s === 'accumulated') return 'balance-recharge-status--accumulated';
+    if (s === 'pending_binance_pay') return 'balance-recharge-status--pending';
     return 'balance-recharge-status--pending';
   }
 
-  function showFormMsg(text, isError) {
+  function displayStatusClass(it) {
+    if (isPendingVerification(it)) return 'balance-recharge-status--pending';
+    return statusClass(it.status);
+  }
+
+  function displayStatusLabel(it) {
+    if (isPendingVerification(it)) return 'Pendiente';
+    return it.status_label || it.status || '';
+  }
+
+  function showFormMsg(text, isError, opts) {
+    opts = opts || {};
     var box = document.getElementById('balanceRechargeFormMsg');
     if (!box) return;
-    box.hidden = !text;
-    box.textContent = text || '';
-    box.className = 'balance-recharge-form-msg' + (isError ? ' balance-recharge-form-msg--error' : ' balance-recharge-form-msg--ok');
+    if (!text && !opts.titleOnly) {
+      box.hidden = true;
+      box.innerHTML = '';
+      return;
+    }
+    box.hidden = false;
+    var detail = String(text || '').trim();
+    if (isError) {
+      box.className = 'balance-recharge-form-msg balance-recharge-form-msg--error';
+      var errTitle = opts.title || 'No se pudo completar la operación';
+      var errBody =
+        '<div class="balance-recharge-form-msg-inner">' +
+        '<span class="balance-recharge-form-msg-icon" aria-hidden="true">' +
+        '<i class="fas fa-circle-exclamation"></i></span>' +
+        '<div class="balance-recharge-form-msg-body">' +
+        '<strong class="balance-recharge-form-msg-title">' +
+        escapeHtml(errTitle) +
+        '</strong>';
+      if (!opts.titleOnly && detail) {
+        errBody +=
+          '<p class="balance-recharge-form-msg-text">' + escapeHtml(detail) + '</p>';
+      }
+      errBody += '</div></div>';
+      box.innerHTML = errBody;
+      return;
+    }
+    box.className = 'balance-recharge-form-msg balance-recharge-form-msg--ok';
+    box.innerHTML =
+      '<div class="balance-recharge-form-msg-inner">' +
+      '<span class="balance-recharge-form-msg-icon balance-recharge-form-msg-icon--ok" aria-hidden="true">' +
+      '<i class="fas fa-circle-check"></i></span>' +
+      '<div class="balance-recharge-form-msg-body">' +
+      '<p class="balance-recharge-form-msg-text">' +
+      escapeHtml(detail) +
+      '</p>' +
+      '</div></div>';
+  }
+
+  function setSubmitLoading(loading, opts) {
+    opts = opts || {};
+    var submitBtn = document.getElementById('balanceRechargeSubmit');
+    if (!submitBtn) return;
+    var textEl = submitBtn.querySelector('.balance-recharge-submit-text');
+    var iconEl = submitBtn.querySelector('.balance-recharge-submit-icon');
+    var bpIconEl = submitBtn.querySelector('.balance-recharge-submit-bp-icon');
+    if (loading) {
+      submitBtn.disabled = true;
+      submitBtn.setAttribute('aria-busy', 'true');
+      if (textEl) textEl.textContent = opts.label || 'Analizando…';
+      if (iconEl) iconEl.className = 'balance-recharge-submit-icon fas fa-spinner fa-spin';
+      if (bpIconEl) bpIconEl.hidden = true;
+      if (opts.message) {
+        showFormMsg(opts.message, false);
+      } else if (!opts.silent) {
+        showFormMsg(
+          'Analizando el comprobante (puede tardar hasta 1 minuto). No cierres esta página.',
+          false
+        );
+      }
+      return;
+    }
+    submitBtn.disabled = false;
+    submitBtn.removeAttribute('aria-busy');
+    syncSubmitButtonUi();
   }
 
   function hasProofImageFile(files) {
@@ -185,18 +487,33 @@
     });
   }
 
-  function renderList(items, meta) {
-    var list = document.getElementById('balanceRechargeList');
-    if (!list) return;
-    if (!items || !items.length) {
-      list.innerHTML = '<p class="balance-recharge-empty text-muted">No hay solicitudes cargadas.</p>';
-      return;
+  function userRechargeItemUrl(meta, rechargeId) {
+    var base = (meta && meta.listUrl) || '';
+    if (base.indexOf('balance-recharges') >= 0) {
+      return base.replace(/\/?balance-recharges\/?$/, '/balance-recharge/' + rechargeId);
     }
-    var html = items.map(function (it) {
-      var thumbs = '';
-      if (it.proof_urls && it.proof_urls.length) {
-        thumbs = '<div class="balance-recharge-item-proofs">' +
-          it.proof_urls.map(function (u, i) {
+    return '/tienda/api/user/balance-recharge/' + rechargeId;
+  }
+
+  function userItemMatchesFilter(it, filterValue) {
+    var st = (it.status || '').toLowerCase();
+    if (filterValue === 'all') return true;
+    if (filterValue === 'pending') {
+      return st === 'pending' || isPendingVerification(it);
+    }
+    if (filterValue === 'accumulated') {
+      return st === 'accumulated' || st === 'auto_accumulated';
+    }
+    return st === filterValue;
+  }
+
+  function renderUserRechargeItem(it) {
+    var thumbs = '';
+    if (it.proof_urls && it.proof_urls.length) {
+      thumbs =
+        '<div class="balance-recharge-item-proofs">' +
+        it.proof_urls
+          .map(function (u, i) {
             var safe = escapeHtml(u);
             var label = it.proof_urls.length > 1 ? 'foto ' + (i + 1) : 'foto';
             return (
@@ -206,50 +523,133 @@
               escapeHtml(label) +
               '</button>'
             );
-          }).join('') +
-          '</div>';
-      } else if (it.proof_missing) {
-        thumbs =
-          '<span class="balance-recharge-proof-missing-text" title="El comprobante ya no está disponible">Sin foto</span>';
+          })
+          .join('') +
+        '</div>';
+    } else if (it.proof_missing) {
+      thumbs =
+        '<span class="balance-recharge-proof-missing-text" title="El comprobante ya no está disponible">Sin foto</span>';
+    }
+    var adminNote = it.admin_note
+      ? '<p class="balance-recharge-item-admin-note"><strong>Nota del administrador:</strong> ' +
+        escapeHtml(it.admin_note) +
+        '</p>'
+      : '';
+    var userNote = it.note
+      ? '<p class="balance-recharge-item-note">' + escapeHtml(it.note) + '</p>'
+      : '';
+    var pmInline = it.payment_method_label
+      ? '<span class="balance-recharge-item-pm-inline">' + escapeHtml(it.payment_method_label) + '</span>'
+      : '';
+    var statusLabel = displayStatusLabel(it);
+    var statusBadge = statusLabel
+      ? '<span class="balance-recharge-status ' +
+        displayStatusClass(it) +
+        '">' +
+        escapeHtml(statusLabel) +
+        '</span>'
+      : '';
+    return (
+      '<article class="balance-recharge-item" data-recharge-id="' +
+      escapeHtml(String(it.id)) +
+      '">' +
+      '<div class="balance-recharge-item-head">' +
+      '<span class="balance-recharge-item-date">' +
+      escapeHtml(it.created_at || '') +
+      '</span>' +
+      thumbs +
+      pmInline +
+      statusBadge +
+      '</div>' +
+      userNote +
+      adminNote +
+      '</article>'
+    );
+  }
+
+  function upsertUserRechargeItem(it) {
+    var idx = -1;
+    for (var i = 0; i < userRechargeItems.length; i++) {
+      if (userRechargeItems[i] && userRechargeItems[i].id === it.id) {
+        idx = i;
+        break;
       }
-      var adminNote = it.admin_note
-        ? '<p class="balance-recharge-item-admin-note"><strong>Nota del administrador:</strong> ' + escapeHtml(it.admin_note) + '</p>'
-        : '';
-      var userNote = it.note
-        ? '<p class="balance-recharge-item-note">' + escapeHtml(it.note) + '</p>'
-        : '';
-      var pmRow = '';
-      if (thumbs || it.payment_method_label) {
-        pmRow =
-          '<div class="balance-recharge-item-meta-row">' +
-            thumbs +
-            (it.payment_method_label
-              ? '<p class="balance-recharge-item-pm"><strong>Medio:</strong> ' + escapeHtml(it.payment_method_label) + '</p>'
-              : '') +
-          '</div>';
+    }
+    if (idx >= 0) userRechargeItems[idx] = it;
+    else userRechargeItems.unshift(it);
+  }
+
+  function removeUserRechargeItem(rechargeId) {
+    userRechargeItems = userRechargeItems.filter(function (it) {
+      return it && it.id !== rechargeId;
+    });
+  }
+
+  function patchUserRechargeDom(it, meta) {
+    var list = document.getElementById('balanceRechargeList');
+    if (!list) return false;
+    var filterEl = document.getElementById('balanceRechargeListFilter');
+    var filterValue = filterEl ? filterEl.value : 'all';
+    var selector = '[data-recharge-id="' + it.id + '"]';
+    var existing = list.querySelector(selector);
+    var matches = userItemMatchesFilter(it, filterValue);
+
+    if (!matches) {
+      if (existing) existing.remove();
+      if (!list.querySelector('.balance-recharge-item')) {
+        list.innerHTML =
+          '<p class="balance-recharge-empty text-muted">No hay solicitudes en este filtro.</p>';
       }
-      var statusBadge =
-        (it.status || '').toLowerCase() === 'auto_credited'
-          ? ''
-          : '<span class="balance-recharge-status ' +
-            statusClass(it.status) +
-            '">' +
-            escapeHtml(it.status_label || it.status) +
-            '</span>';
-      return (
-        '<article class="balance-recharge-item">' +
-          '<div class="balance-recharge-item-head">' +
-            '<span class="balance-recharge-item-amount">' + escapeHtml(fmtAmount(it.amount_claimed, it.currency)) + '</span>' +
-            '<span class="balance-recharge-item-date">' + escapeHtml(it.created_at || '') + '</span>' +
-            statusBadge +
-          '</div>' +
-          pmRow +
-          userNote +
-          adminNote +
-        '</article>'
-      );
-    }).join('');
-    list.innerHTML = html;
+      return true;
+    }
+
+    var html = renderUserRechargeItem(it);
+    var emptyMsg = list.querySelector('.balance-recharge-empty, .balance-recharge-loading');
+    if (existing) {
+      existing.outerHTML = html;
+    } else if (emptyMsg) {
+      list.innerHTML = html;
+    } else {
+      list.insertAdjacentHTML('afterbegin', html);
+    }
+    return true;
+  }
+
+  function patchUserRechargeFromRealtime(eventData, meta) {
+    meta = meta || {};
+    var list = document.getElementById('balanceRechargeList');
+    if (!list) return Promise.resolve();
+
+    var rechargeId = eventData && eventData.recharge_id ? parseInt(eventData.recharge_id, 10) : 0;
+    if (!rechargeId) {
+      loadList(meta);
+      return Promise.resolve();
+    }
+
+    return rechargeFetchJson(userRechargeItemUrl(meta, rechargeId))
+      .then(function (data) {
+        if (!data || !data.success || !data.item) {
+          throw new Error('item');
+        }
+        if (data.filter_counts) {
+          updateUserFilterOptionLabels(data.filter_counts);
+        }
+        upsertUserRechargeItem(data.item);
+        if (!patchUserRechargeDom(data.item, meta)) {
+          throw new Error('dom');
+        }
+      });
+  }
+
+  function renderList(items, meta) {
+    var list = document.getElementById('balanceRechargeList');
+    if (!list) return;
+    userRechargeItems = items || [];
+    if (!items || !items.length) {
+      list.innerHTML = '<p class="balance-recharge-empty text-muted">No hay solicitudes cargadas.</p>';
+      return;
+    }
+    list.innerHTML = items.map(renderUserRechargeItem).join('');
   }
 
   function escapeHtml(s) {
@@ -275,10 +675,7 @@
     var url =
       listUrl + (listUrl.indexOf('?') >= 0 ? '&' : '?') + 'status=' + encodeURIComponent(st);
     list.innerHTML = '<p class="balance-recharge-loading text-muted">Cargando solicitudes…</p>';
-    fetch(url, { credentials: 'same-origin', headers: { Accept: 'application/json' } })
-      .then(function (r) {
-        return r.json();
-      })
+    rechargeFetchJson(url)
       .then(function (data) {
         if (!data || !data.success) {
           updateUserFilterOptionLabels({
@@ -297,6 +694,7 @@
         );
         var items = data.items || [];
         if (!items.length) {
+          userRechargeItems = [];
           list.innerHTML =
             '<p class="balance-recharge-empty text-muted">No hay solicitudes en este filtro.</p>';
           return;
@@ -326,11 +724,19 @@
 
   function methodAccountBlock(accountNumber, copyTitle, ariaLabel) {
     if (!accountNumber) return '';
-    var title = copyTitle || 'Copiar número';
+    var acct = String(accountNumber);
+    var isEmail = acct.indexOf('@') >= 0;
+    var isWallet = acct.indexOf('0x') === 0 || acct.indexOf('T') === 0;
+    var title = copyTitle || (isWallet ? 'Copiar wallet' : isEmail ? 'Copiar correo' : 'Copiar número');
     var label = ariaLabel || title;
+    var accountClass =
+      'balance-recharge-method-account' +
+      (isEmail || isWallet ? ' balance-recharge-method-account--email' : '');
     return (
       '<span class="balance-recharge-method-account-wrap">' +
-      '<span class="balance-recharge-method-account">' +
+      '<span class="' +
+      accountClass +
+      '">' +
       escapeHtml(accountNumber) +
       '</span>' +
       '<button type="button" class="balance-recharge-method-copy" data-copy="' +
@@ -346,13 +752,51 @@
 
   function methodPaymentAccountBlocks(m) {
     m = m || {};
-    if (m.is_breb_bancolombia || m.bre_b_llave) {
+    if (m.is_breb_bancolombia || m.is_breb_nequi || m.bre_b_llave) {
       if (m.bre_b_llave) {
         return methodAccountBlock(m.bre_b_llave, 'Copiar llave', 'Copiar llave Bre-B');
       }
       return '';
     }
-    return methodAccountBlock(m.account_number);
+    var acct = String(m.account_number || '');
+    if (m.is_crypto_wallet || acct.indexOf('0x') === 0 || acct.indexOf('T') === 0) {
+      var net = m.crypto_network ? ' (' + m.crypto_network + ')' : '';
+      return methodAccountBlock(acct, 'Copiar wallet' + net, 'Copiar dirección wallet' + net);
+    }
+    return methodAccountBlock(
+      m.account_number,
+      acct.indexOf('@') >= 0 ? 'Copiar correo' : 'Copiar número',
+      acct.indexOf('@') >= 0 ? 'Copiar correo electrónico' : 'Copiar número de cuenta'
+    );
+  }
+
+  function renderAccumHintHtml() {
+    return '<span class="balance-recharge-method-accum-hint">se acumula hasta conversión</span>';
+  }
+
+  function renderMethodHeadHtml(m, methodLabel, accountHtml) {
+    if (m.is_accumulator) {
+      return (
+        '<div class="balance-recharge-method-head balance-recharge-method-head--accum">' +
+        '<span class="balance-recharge-method-label">' +
+        escapeHtml(methodLabel) +
+        '</span>' +
+        (accountHtml
+          ? '<div class="balance-recharge-method-accum-account-row">' + accountHtml + '</div>'
+          : '') +
+        '<div class="balance-recharge-method-accum-hint-scroll">' +
+        renderAccumHintHtml() +
+        '</div></div>'
+      );
+    }
+    return (
+      '<div class="balance-recharge-method-head">' +
+      '<span class="balance-recharge-method-label">' +
+      escapeHtml(methodLabel) +
+      '</span>' +
+      accountHtml +
+      '</div>'
+    );
   }
 
   function copyAccountNumber(text, btn) {
@@ -444,6 +888,7 @@
     var checked = document.querySelector('input[name="payment_method_id"]:checked');
     var label = checked && checked.closest('.balance-recharge-method-option');
     var payCur = label ? String(label.getAttribute('data-payment-currency') || '').trim().toUpperCase() : '';
+    var isAccum = !!(label && label.getAttribute('data-is-accumulator') === '1');
     var amountEl = document.getElementById('balanceRechargeAmount');
     var currencyInput = document.getElementById('balanceRechargeCurrency');
     var targetCur = (currencyInput && currencyInput.value ? currencyInput.value : 'COP').toUpperCase();
@@ -453,17 +898,36 @@
     }
     if (amountEl) {
       var example = cur === 'USD' ? '333.64' : '50.000';
-      amountEl.placeholder =
-        'Monto transferido (' +
-        paymentCurrencyLabel(cur) +
-        ') — ej. ' +
-        example +
-        (cur === 'USD' ? ' (con centavos)' : ' o 50000');
+      var amountLabel =
+        amountEl.parentElement &&
+        amountEl.parentElement.querySelector('label[for="balanceRechargeAmount"]');
+      if (isBinancePaySelected()) {
+        amountEl.placeholder = 'Monto a recargar (USDT) — ej. ' + example;
+        if (amountLabel) amountLabel.textContent = 'Monto a recargar (USDT)';
+      } else if (isAccum) {
+        amountEl.placeholder =
+          'Monto transferido — ej. ' +
+          example +
+          (cur === 'USD' ? ' (con centavos)' : ' o 50000');
+        if (amountLabel) amountLabel.textContent = 'Monto transferido';
+      } else {
+        amountEl.placeholder =
+          'Monto transferido (' +
+          paymentCurrencyLabel(cur) +
+          ') — ej. ' +
+          example +
+          (cur === 'USD' ? ' (con centavos)' : ' o 50000');
+        if (amountLabel) {
+          amountLabel.textContent = 'Monto transferido (' + paymentCurrencyLabel(cur) + ')';
+        }
+      }
       var hint = document.getElementById('balanceRechargeAmountHint');
       if (hint) {
         hint.textContent =
           cur === 'USD'
-            ? 'En USDT escribe el monto exacto del comprobante, con dos decimales si aplica (ej. 333.64).'
+            ? isAccum
+              ? 'Escribe el monto exacto del comprobante, con dos decimales si aplica (ej. 333.64).'
+              : 'En USDT escribe el monto exacto del comprobante, con dos decimales si aplica (ej. 333.64).'
             : 'Puedes usar punto, coma o escribir el número sin separadores.';
       }
     }
@@ -486,26 +950,27 @@
         var qrAttr = m.qr_url ? ' data-qr-url="' + escapeHtml(m.qr_url) + '"' : '';
         var payCurAttr = payCur ? ' data-payment-currency="' + escapeHtml(payCur) + '"' : '';
         var accumAttr = m.is_accumulator ? ' data-is-accumulator="1"' : '';
+        var binanceAttr = m.is_binance_pay ? ' data-is-binance-pay="1"' : '';
         var checked = idx === 0 ? ' checked' : '';
         var accountNumber = methodPaymentAccountBlocks(m);
         var description = m.description
           ? '<span class="balance-recharge-method-details">' + escapeHtml(m.description) + '</span>'
           : '';
-        var accumHint = m.is_accumulator
-          ? '<span class="balance-recharge-method-accum-hint"><span>Pago en ' +
-            escapeHtml(paymentCurrencyLabel(payCur)) +
-            '</span><span class="balance-recharge-method-accum-sep" aria-hidden="true">·</span>' +
-            '<span>se acumula hasta conversión</span></span>'
-          : '';
         var methodLabel = m.label || 'Medio';
         if (m.is_accumulator && payCur) {
           methodLabel = methodLabel + ' (' + paymentCurrencyLabel(payCur) + ')';
         }
+        var optionClass =
+          'balance-recharge-method-option' +
+          (m.is_accumulator ? ' balance-recharge-method-option--accum' : '');
         return (
-          '<label class="balance-recharge-method-option"' +
+          '<label class="' +
+          optionClass +
+          '"' +
           qrAttr +
           payCurAttr +
           accumAttr +
+          binanceAttr +
           '>' +
           '<input type="radio" name="payment_method_id" value="' +
           escapeHtml(m.id || '') +
@@ -513,14 +978,8 @@
           checked +
           ' required>' +
           '<div class="balance-recharge-method-body">' +
-          '<div class="balance-recharge-method-head">' +
-          '<span class="balance-recharge-method-label">' +
-          escapeHtml(methodLabel) +
-          '</span>' +
-          accountNumber +
-          '</div>' +
+          renderMethodHeadHtml(m, methodLabel, accountNumber) +
           description +
-          accumHint +
           '</div></label>'
         );
       })
@@ -528,15 +987,13 @@
     if (submitBtn) submitBtn.disabled = false;
     updateSelectedMethodQr();
     updateAmountFieldForMethod();
+    updateBinancePayUi();
   }
 
   function loadPaymentMethods(meta) {
     var list = document.getElementById('balanceRechargeMethodsList');
     if (!list || !meta.methodsUrl) return Promise.resolve();
-    return fetch(meta.methodsUrl, { credentials: 'same-origin', headers: { Accept: 'application/json' } })
-      .then(function (r) {
-        return r.json();
-      })
+    return rechargeFetchJson(meta.methodsUrl)
       .then(function (data) {
         if (!data || !data.success) {
           list.innerHTML =
@@ -723,6 +1180,7 @@
     if (!wrap || !openBtn) return;
 
     hideMethodQrBlock();
+    if (isBinancePaySelected()) return;
 
     var label = checked && checked.closest('.balance-recharge-method-option');
     var qrUrl = label ? String(label.getAttribute('data-qr-url') || '').trim() : '';
@@ -758,9 +1216,11 @@
       if (e.target && e.target.name === 'payment_method_id') {
         updateSelectedMethodQr();
         updateAmountFieldForMethod();
+        updateBinancePayUi();
       }
     });
     updateSelectedMethodQr();
+    updateBinancePayUi();
   }
 
   function bindForm(meta) {
@@ -798,6 +1258,61 @@
         showFormMsg('Selecciona un medio de pago.', true);
         return;
       }
+
+      if (isBinancePaySelected()) {
+        var orderUrl = meta.binancePayOrderUrl || '';
+        if (!orderUrl) {
+          showFormMsg('Binance Pay no está configurado en el servidor.', true);
+          return;
+        }
+        setSubmitLoading(true, {
+          label: 'Creando orden…',
+          message: 'Conectando con Binance Pay…',
+        });
+        var csrfBp = getCsrfToken();
+        var headersBp = {
+          Accept: 'application/json',
+          'Content-Type': 'application/json',
+        };
+        if (csrfBp) headersBp['X-CSRFToken'] = csrfBp;
+        fetch(orderUrl, {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: headersBp,
+          body: JSON.stringify({
+            payment_method_id: pmRadio.value,
+            amount: String(amountParsed),
+          }),
+        })
+          .then(function (r) {
+            return r.json().then(function (j) {
+              return { ok: r.ok, data: j };
+            });
+          })
+          .then(function (res) {
+            setSubmitLoading(false);
+            if (!res.ok || !res.data || !res.data.success) {
+              showFormMsg('', true, {
+                title: 'Binance Pay no disponible',
+                titleOnly: true,
+              });
+              return;
+            }
+            showFormMsg(res.data.message || 'Orden creada. Completa el pago en Binance.', false);
+            showBinancePayCheckout(res.data);
+            startBinancePayPolling(meta, res.data.merchant_trade_no || '');
+            loadList(meta);
+          })
+          .catch(function () {
+            setSubmitLoading(false);
+            showFormMsg('', true, {
+              title: 'Binance Pay no disponible',
+              titleOnly: true,
+            });
+          });
+        return;
+      }
+
       if (!fileInput || !fileInput.files || !fileInput.files.length) {
         showFormMsg('Adjunta la foto del comprobante.', true);
         return;
@@ -818,22 +1333,34 @@
       if (csrf) {
         fd.append('_csrf_token', csrf);
       }
-      if (submitBtn) submitBtn.disabled = true;
+      setSubmitLoading(true);
 
       var headers = { Accept: 'application/json' };
       if (csrf) {
         headers['X-CSRFToken'] = csrf;
       }
 
+      var controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+      var timeoutId = controller
+        ? window.setTimeout(function () {
+            controller.abort();
+          }, 180000)
+        : null;
+
       fetch(submitUrl, {
         method: 'POST',
         body: fd,
         credentials: 'same-origin',
         headers: headers,
+        signal: controller ? controller.signal : undefined,
       })
-        .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, data: j }; }); })
+        .then(function (r) {
+          return r.json().then(function (j) {
+            return { ok: r.ok, data: j };
+          });
+        })
         .then(function (res) {
-          if (submitBtn) submitBtn.disabled = false;
+          setSubmitLoading(false);
           if (!res.ok || !res.data || !res.data.success) {
             showFormMsg((res.data && res.data.message) || 'No se pudo enviar la solicitud.', true);
             return;
@@ -847,9 +1374,19 @@
           refreshRechargeSaldoDisplay();
           loadList(meta);
         })
-        .catch(function () {
-          if (submitBtn) submitBtn.disabled = false;
+        .catch(function (err) {
+          setSubmitLoading(false);
+          if (err && err.name === 'AbortError') {
+            showFormMsg(
+              'La verificación tardó demasiado. Intenta de nuevo con una foto más nítida o más pequeña.',
+              true
+            );
+            return;
+          }
           showFormMsg('Error de conexión. Intenta de nuevo.', true);
+        })
+        .finally(function () {
+          if (timeoutId) window.clearTimeout(timeoutId);
         });
     });
   }
@@ -859,11 +1396,12 @@
     bindPaymentMethodQr();
     bindPaymentMethodCopy();
     bindImageLightbox();
-    bindRechargeSaldoPolling();
+    bindRechargeRealtime(meta);
     bindForm(meta);
     bindListFilter(meta);
     loadPaymentMethods(meta).then(function () {
       updateAmountFieldForMethod();
+      updateBinancePayUi();
     });
     loadList(meta);
   });

@@ -2,14 +2,20 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any, Callable, Dict, List, Optional
 
+from app.extensions import db
 from app.store.balance_recharge_payment import (
+    PAYMENT_BRAND_SPEC,
     currency_display_name,
+    get_accumulator_method,
     is_accumulator_method_id,
     method_label_by_id_any,
 )
 from app.store.models import BalanceRecharge, User
+
+logger = logging.getLogger(__name__)
 
 HISTORIAL_STATUSES = (
     'approved',
@@ -40,22 +46,165 @@ def _fmt_money_display(amount: float, currency: str) -> str:
     return f'${_fmt_amount(float(amount))} {cur}'
 
 
+def _accum_brand_tail(brand: str) -> str:
+    """Nombre corto del medio (PayPal, Nequi, TRC20, …)."""
+    key = (brand or '').strip().lower()
+    if key == 'usdt_trc20':
+        return 'TRC20'
+    if key == 'usdt_erc20':
+        return 'ERC20'
+    spec = PAYMENT_BRAND_SPEC.get(key) or {}
+    label = str(spec.get('label') or '').strip()
+    if label.upper().startswith('USDT '):
+        return label.split(' ', 1)[1].strip()
+    return label
+
+
+def _accum_pm_tail(pm_label: str) -> str:
+    """Respaldo desde la etiqueta configurada (sin «Acumulador » ni cuenta larga)."""
+    label = (pm_label or '').strip()
+    low = label.lower()
+    if low.startswith('acumulador '):
+        label = label[len('Acumulador '):].strip()
+    elif low == 'acumulador':
+        label = ''
+    for sep in (' / ', '/', ' — ', '—', ' · ', '·'):
+        if sep in label:
+            label = label.split(sep, 1)[0].strip()
+            break
+    parts = label.split()
+    if not parts:
+        return ''
+    if parts[0].upper() in ('USDT', 'USD') and len(parts) >= 2:
+        if parts[1].upper() in ('TRC20', 'ERC20'):
+            return parts[1].upper()
+        return ' '.join(parts[1:]).strip()
+    if parts[0].upper() == 'COP' and len(parts) >= 2:
+        return ' '.join(parts[1:]).strip()
+    return label
+
+
+def _accum_amount_currency(row, accum_method: dict | None) -> tuple[float, str]:
+    raw_cur = (row.currency or 'COP').strip().upper()
+    if accum_method:
+        raw_cur = (accum_method.get('payment_currency') or raw_cur).strip().upper()
+    cur = currency_display_name(raw_cur)
+    amt = row.amount_claimed
+    if amt is None:
+        amt = row.amount_credited
+    try:
+        return float(amt or 0), cur
+    except (TypeError, ValueError):
+        return 0.0, cur
+
+
+def _accum_product_short_label(row, pm_label: str) -> str:
+    """
+    Etiqueta corta para cualquier acumulador (sin «Conversión acumulador —»).
+    Ej.: Acumulador 10USDT TRC20 · Acumulador 15USDT PayPal · Acumulador 50000COP Nequi
+    """
+    pm_id = str(getattr(row, 'payment_method_id', '') or '').strip()
+    accum = get_accumulator_method(pm_id)
+    amount, cur = _accum_amount_currency(row, accum)
+    tail = ''
+    if accum:
+        tail = _accum_brand_tail(str(accum.get('payment_brand') or ''))
+    if not tail:
+        tail = _accum_pm_tail(pm_label)
+    core = f'Acumulador {_fmt_amount(amount)}{cur}'
+    if tail:
+        return f'{core} {tail}'
+    return core
+
+
+def compute_historial_producto(row) -> str:
+    pm_id = str(getattr(row, 'payment_method_id', '') or '').strip()
+    pm_label = method_label_by_id_any(pm_id) if pm_id else '—'
+    return _recharge_product_label(row, pm_label)
+
+
+def historial_producto_for_row(row) -> str:
+    """Usa historial_producto guardado en BD (editable por SQL); si está vacío, calcula."""
+    stored = getattr(row, 'historial_producto', None)
+    if stored and str(stored).strip():
+        return str(stored).strip()
+    return compute_historial_producto(row)
+
+
+def ensure_historial_producto_schema() -> None:
+    from sqlalchemy import inspect, text
+
+    from app.store.models import BalanceRechargeHistorialSnapshot
+
+    try:
+        insp = inspect(db.engine)
+        if 'store_balance_recharge_historial_snapshots' not in insp.get_table_names():
+            BalanceRechargeHistorialSnapshot.__table__.create(db.engine, checkfirst=True)
+        else:
+            cols = {c['name'].lower() for c in insp.get_columns('store_balance_recharge_historial_snapshots')}
+            if 'historial_producto' not in cols:
+                db.session.execute(
+                    text(
+                        'ALTER TABLE store_balance_recharge_historial_snapshots '
+                        'ADD COLUMN historial_producto VARCHAR(200)'
+                    )
+                )
+                db.session.commit()
+    except Exception as exc:
+        db.session.rollback()
+        logger.warning('No se pudo asegurar historial_producto en snapshots: %s', exc)
+
+
+def backfill_historial_producto(*, commit: bool = True, only_missing: bool = True) -> int:
+    """Rellena historial_producto vacío (no pisa valores editados por SQL)."""
+    ensure_historial_producto_schema()
+    updated = 0
+    rows = BalanceRecharge.query.filter(BalanceRecharge.status.in_(HISTORIAL_STATUSES)).all()
+    for row in rows:
+        if only_missing and str(getattr(row, 'historial_producto', None) or '').strip():
+            continue
+        row.historial_producto = compute_historial_producto(row)
+        updated += 1
+
+    from app.store.models import BalanceRechargeHistorialSnapshot
+
+    snaps = BalanceRechargeHistorialSnapshot.query.filter(
+        BalanceRechargeHistorialSnapshot.status.in_(HISTORIAL_STATUSES)
+    ).all()
+    for snap in snaps:
+        if only_missing and str(getattr(snap, 'historial_producto', None) or '').strip():
+            continue
+        snap.historial_producto = compute_historial_producto(snap)
+        updated += 1
+
+    if commit and updated:
+        db.session.commit()
+    return updated
+
+
 def _recharge_product_label(row, pm_label: str) -> str:
     st = (row.status or '').lower()
     is_accum = is_accumulator_method_id(row.payment_method_id or '')
+    if is_accum or st in ('accum_converted', 'accumulated'):
+        return _accum_product_short_label(row, pm_label)
     if st == 'rejected':
         if _is_recharge_reverted(row):
-            return f'Recarga revertida — {pm_label}'
-        if is_accum:
-            return f'Acumulación rechazada — {pm_label}'
-        return f'Recarga rechazada — {pm_label}'
-    if st == 'accum_converted':
-        return f'Conversión acumulador — {pm_label}'
-    if st == 'accumulated' or (is_accum and st in ('approved', 'auto_credited')):
-        return f'Acumulado — {pm_label}'
+            return f'Revertida — {pm_label}'
+        return f'Rechazada — {pm_label}'
     if st == 'auto_credited':
-        return f'Recarga automática — {pm_label}'
-    return f'Recarga de saldo — {pm_label}'
+        return f'Recarga — {pm_label}'
+    return f'Recarga — {pm_label}'
+
+
+def _accum_converted_credit_currency(row) -> str:
+    from app.store.balance_recharge_accum import _target_currency_for_user
+
+    cur = (row.currency or 'COP').strip().upper()
+    if row.user_id:
+        user = User.query.get(int(row.user_id))
+        if user:
+            return _target_currency_for_user(user)
+    return 'COP' if cur in ('USD', 'USDT') else cur
 
 
 def _recharge_amount_display(row) -> str:
@@ -63,7 +212,7 @@ def _recharge_amount_display(row) -> str:
     cur = (row.currency or 'COP').strip().upper()
     if st == 'accum_converted':
         credited = row.amount_credited if row.amount_credited is not None else row.amount_claimed
-        credit_cur = cur
+        credit_cur = _accum_converted_credit_currency(row)
         if row.admin_note and '→' in str(row.admin_note):
             tail = str(row.admin_note).split('→')[-1].strip()
             parts = tail.split()
@@ -123,14 +272,22 @@ def historial_item_from_row(
     except (TypeError, ValueError):
         total_num = 0.0
 
+    claimed_raw = row.amount_claimed
+    try:
+        amount_claimed_num = float(claimed_raw) if claimed_raw is not None else None
+    except (TypeError, ValueError):
+        amount_claimed_num = None
+
     rid = row_id_value if row_id_value is not None else getattr(row, 'id', 0)
     item: Dict[str, Any] = {
         'id': f'{row_id_prefix}-{rid}',
         'fecha': _row_fecha_str(row, utc_to_colombia_fn),
-        'producto': _recharge_product_label(row, pm_label),
+        'producto': historial_producto_for_row(row),
         'cantidad': '—',
         'total': total_num,
         'total_display': _recharge_amount_display(row),
+        'amount_claimed': amount_claimed_num,
+        'currency': currency_display_name((row.currency or 'COP').strip().upper()),
         'licencias': [],
         'has_licencias': False,
         'is_recharge_event': True,
@@ -152,8 +309,16 @@ def build_recharge_historial_items(
     user_id: Optional[int] = None,
     all_users: bool = False,
     utc_to_colombia_fn: Callable,
+    backfill_producto: bool = True,
 ) -> List[Dict[str, Any]]:
     """Filas compatibles con historial_compras (producto / total / fecha)."""
+    ensure_historial_producto_schema()
+    if backfill_producto:
+        try:
+            backfill_historial_producto(commit=True, only_missing=True)
+        except Exception as exc:
+            logger.warning('No se pudo rellenar historial_producto: %s', exc)
+            db.session.rollback()
     q = BalanceRecharge.query.filter(
         BalanceRecharge.status.in_(HISTORIAL_STATUSES)
     ).order_by(BalanceRecharge.created_at.desc())

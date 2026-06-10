@@ -27,6 +27,29 @@ document.addEventListener("DOMContentLoaded", function() {
     const meta = document.querySelector('meta[name="csrf_token"]');
     return meta ? meta.content : '';
   }
+
+  function permFetchJson(url, options) {
+    if (window.StoreFetchJson && window.StoreFetchJson.fetch) {
+      return window.StoreFetchJson.fetch(url, options);
+    }
+    options = options || {};
+    return fetch(url, {
+      method: options.method || 'GET',
+      credentials: options.credentials != null ? options.credentials : 'same-origin',
+      headers: Object.assign({ 'X-CSRFToken': getCsrfToken() }, options.headers || {}),
+      body: options.body,
+    }).then(function (res) {
+      return res.json().then(function (data) {
+        if (!res.ok) {
+          const err = new Error((data && (data.message || data.error)) || 'Error HTTP ' + res.status);
+          err.status = res.status;
+          err.data = data;
+          throw err;
+        }
+        return data;
+      });
+    });
+  }
   
   // Cargar usuarios al iniciar
   function loadUsers() {
@@ -1497,18 +1520,16 @@ document.addEventListener("DOMContentLoaded", function() {
       }
     }
     if (modalBalanceUsdInput) {
-      if (isSub && tp === 'usd' && ctx) {
-        modalBalanceUsdInput.setAttribute('max', String(Math.max(0, Number(ctx.saldoUsd) || 0)));
-      } else {
-        modalBalanceUsdInput.removeAttribute('max');
-      }
+      modalBalanceUsdInput.removeAttribute('max');
+      modalBalanceUsdInput.placeholder = isSub
+        ? 'Monto a descontar (puede quedar en negativo)'
+        : 'Monto (negativo = deuda)';
     }
     if (modalBalanceCopInput) {
-      if (isSub && tp === 'cop' && ctx) {
-        modalBalanceCopInput.setAttribute('max', String(Math.max(0, Math.floor(Number(ctx.saldoCop) || 0))));
-      } else {
-        modalBalanceCopInput.removeAttribute('max');
-      }
+      modalBalanceCopInput.removeAttribute('max');
+      modalBalanceCopInput.placeholder = isSub
+        ? 'Monto a descontar (puede quedar en negativo)'
+        : 'Monto (negativo = deuda)';
     }
   }
 
@@ -1585,27 +1606,37 @@ document.addEventListener("DOMContentLoaded", function() {
         }
       }
       
-      if (!user || (!amountUsd && !amountCop)) {
-        alert('Debes seleccionar un usuario y al menos un monto.');
+      const parsedUsd = amountUsd !== '' ? Number(String(amountUsd).replace(',', '.')) : 0;
+      const parsedCop = amountCop !== '' ? Number(String(amountCop).replace(',', '.')) : 0;
+      if (!user || (amountUsd === '' && amountCop === '') || (!Number.isFinite(parsedUsd) || !Number.isFinite(parsedCop))) {
+        alert('Debes seleccionar un usuario y un monto numérico válido.');
         return;
       }
-      
-      const subtract = currentBalanceModalMode === 'subtract';
+      if (parsedUsd === 0 && parsedCop === 0) {
+        alert('El monto no puede ser cero.');
+        return;
+      }
 
-      fetch('/tienda/admin/pagos/add_balance', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-CSRFToken': getCsrfToken()
-        },
-        body: JSON.stringify({
-          username: user.username,
-          amount_usd: amountUsd,
-          amount_cop: amountCop,
-          subtract: subtract
-        })
-      })
-      .then(r => r.json())
+      const subtract = currentBalanceModalMode === 'subtract';
+      if (subtract && parsedUsd <= 0 && parsedCop <= 0) {
+        alert('Al descontar, indica un monto mayor que cero.');
+        return;
+      }
+
+      const balanceReq = permFetchJson('/tienda/admin/pagos/add_balance', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                username: user.username,
+                amount_usd: subtract ? Math.abs(parsedUsd) : parsedUsd,
+                amount_cop: subtract ? Math.abs(parsedCop) : parsedCop,
+                subtract: subtract
+              })
+            });
+
+      balanceReq
       .then(data => {
         if (data.success) {
           const userRow = userPricesTableBody.querySelector(`tr[data-user-id="${user.id}"]`);
@@ -1751,4 +1782,112 @@ document.addEventListener("DOMContentLoaded", function() {
         });
     });
   }
+
+  /** SSE admin: actualiza columnas de saldo sin recargar la página (p. ej. recarga acreditada en otra pestaña). */
+  (function bindAdminBalanceRealtime() {
+    if (!userPricesTableBody || typeof window.BalanceRechargeRealtime === 'undefined') {
+      return;
+    }
+
+    var ADMIN_EVENTS_URL = '/tienda/api/admin/balance-recharges/events';
+    var adminBalanceRealtimeConn = null;
+
+    function patchUserPricesSaldoRow(user) {
+      if (!user || user.id == null) return;
+      var row = userPricesTableBody.querySelector('tr[data-user-id="' + user.id + '"]');
+      if (!row || !row.children[2]) return;
+      var saldoWrap = row.children[2].firstElementChild;
+      var tipoPrecio = userPricesData[user.id] && userPricesData[user.id].tipo_precio
+        ? String(userPricesData[user.id].tipo_precio).toLowerCase()
+        : (user.tipo_precio ? String(user.tipo_precio).toLowerCase() : null);
+      var main = saldoWrap && saldoWrap.querySelector('.user-saldo-principal');
+      if (main) {
+        if (tipoPrecio === 'usd') {
+          main.textContent = Math.floor(Number(user.saldo_usd) || 0) + ' USD';
+        } else if (tipoPrecio === 'cop') {
+          main.textContent = Math.floor(Number(user.saldo_cop) || 0) + ' COP';
+        } else {
+          main.textContent = '-';
+        }
+      }
+      if (saldoWrap && tipoPrecio) {
+        syncSaldoInactivoLine(saldoWrap, tipoPrecio, user.saldo_usd, user.saldo_cop);
+      }
+    }
+
+    function refreshUserPricesSaldos(eventData) {
+      var uid =
+        eventData && eventData.user_id != null ? Number(eventData.user_id) : NaN;
+      if (Number.isFinite(uid)) {
+        var singleUrl = '/tienda/api/admin/users/' + uid + '/store-prepaid-saldo';
+        permFetchJson(singleUrl)
+          .then(function (data) {
+            if (!data || !data.success) return;
+            var idx = allUsersForPrices.findIndex(function (u) {
+              return u && String(u.id) === String(uid);
+            });
+            if (idx < 0) return;
+            allUsersForPrices[idx].saldo_usd = data.saldo_usd;
+            allUsersForPrices[idx].saldo_cop = data.saldo_cop;
+            if (data.tipo_precio && !userPricesData[uid]) {
+              userPricesData[uid] = { tipo_precio: data.tipo_precio };
+            }
+            patchUserPricesSaldoRow(allUsersForPrices[idx]);
+          })
+          .catch(function () {
+            refreshUserPricesSaldosAll();
+          });
+        return;
+      }
+      refreshUserPricesSaldosAll();
+    }
+
+    function refreshUserPricesSaldosAll() {
+      permFetchJson('/admin/search_users_ajax?query=')
+        .then(function (data) {
+          if (!data || data.status !== 'ok' || !Array.isArray(data.users)) return;
+          var byId = {};
+          data.users.forEach(function (u) {
+            if (u && u.id != null) byId[u.id] = u;
+          });
+          allUsersForPrices.forEach(function (u, idx) {
+            var fresh = byId[u.id];
+            if (!fresh) return;
+            allUsersForPrices[idx].saldo_usd = fresh.saldo_usd;
+            allUsersForPrices[idx].saldo_cop = fresh.saldo_cop;
+            patchUserPricesSaldoRow(allUsersForPrices[idx]);
+          });
+        })
+        .catch(function () {});
+    }
+
+    function onAdminBalanceRealtime(eventData) {
+      refreshUserPricesSaldos(eventData);
+    }
+
+    function connectAdminBalanceStream() {
+      if (adminBalanceRealtimeConn) return;
+      adminBalanceRealtimeConn = window.BalanceRechargeRealtime.connect(
+        ADMIN_EVENTS_URL,
+        onAdminBalanceRealtime
+      );
+    }
+
+    function disconnectAdminBalanceStream() {
+      if (!adminBalanceRealtimeConn) return;
+      adminBalanceRealtimeConn.close();
+      adminBalanceRealtimeConn = null;
+    }
+
+    connectAdminBalanceStream();
+    document.addEventListener('visibilitychange', function () {
+      if (document.visibilityState === 'visible') {
+        connectAdminBalanceStream();
+        refreshUserPricesSaldosAll();
+      } else {
+        disconnectAdminBalanceStream();
+      }
+    });
+    window.addEventListener('focus', refreshUserPricesSaldosAll);
+  })();
 });

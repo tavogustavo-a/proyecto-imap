@@ -2,12 +2,15 @@
 
 import base64
 import json
+import logging
 import os
 import re
 import uuid
 from typing import Any, Dict, List, Optional
 
 from app.store.models import StoreSetting
+
+logger = logging.getLogger(__name__)
 
 SETTINGS_KEY = 'balance_recharge_payment_methods'
 QR_UPLOAD_SUBDIR = ('uploads', 'payment_method_qr')
@@ -26,8 +29,20 @@ PAYMENT_BRAND_SPEC: Dict[str, Dict[str, Any]] = {
         'label': 'Bre-B Bancolombia',
         'linked_brands': ['bre-b', 'breve', 'bancolombia', 'kamin'],
     },
+    'breb_nequi': {
+        'label': 'Bre-B Nequi',
+        'linked_brands': ['bre-b', 'breve', 'nequi'],
+    },
     'paypal': {'label': 'PayPal', 'linked_brands': ['paypal']},
     'usdt': {'label': 'USDT', 'linked_brands': ['usdt']},
+    'usdt_erc20': {
+        'label': 'USDT ERC20',
+        'linked_brands': ['usdt', 'erc20', 'ethereum'],
+    },
+    'usdt_trc20': {
+        'label': 'USDT TRC20',
+        'linked_brands': ['usdt', 'trc20', 'tron', 'trx'],
+    },
     'binance_pay': {
         'label': 'Binance Pay',
         'linked_brands': ['binance_pay', 'binance pay'],
@@ -44,6 +59,101 @@ PAYMENT_BRAND_SPEC: Dict[str, Dict[str, Any]] = {
 
 def is_generic_payment_brand(brand: str) -> bool:
     return (brand or '').strip().lower() == 'generico'
+
+
+def payment_method_is_binance_pay(method: Dict[str, Any] | None) -> bool:
+    if not method:
+        return False
+    return str(method.get('payment_brand') or '').strip().lower() == 'binance_pay'
+
+
+def payment_method_is_usdt_wallet(method: Dict[str, Any] | None) -> bool:
+    if not method:
+        return False
+    return str(method.get('payment_brand') or '').strip().lower() in ('usdt_erc20', 'usdt_trc20')
+
+
+def _normalize_crypto_wallet(value: str, brand: str = '') -> str:
+    raw = str(value or '').strip()
+    brand_key = str(brand or '').strip().lower()
+    if brand_key == 'usdt_erc20':
+        return raw.lower()[:64]
+    if brand_key == 'usdt_trc20':
+        return raw[:64]
+    if raw.lower().startswith('0x'):
+        return raw.lower()[:64]
+    if raw.startswith('T'):
+        return raw[:64]
+    return raw[:64]
+
+
+def _erc20_wallet_is_valid(value: str) -> bool:
+    wallet = str(value or '').strip().lower()
+    return bool(re.fullmatch(r'0x[a-f0-9]{40}', wallet))
+
+
+def _trc20_wallet_is_valid(value: str) -> bool:
+    wallet = str(value or '').strip()
+    return bool(re.fullmatch(r'T[1-9A-HJ-NP-Za-km-z]{33}', wallet))
+
+
+def _crypto_wallet_is_valid(value: str, brand: str) -> bool:
+    brand_key = str(brand or '').strip().lower()
+    if brand_key == 'usdt_erc20':
+        return _erc20_wallet_is_valid(value)
+    if brand_key == 'usdt_trc20':
+        return _trc20_wallet_is_valid(value)
+    return False
+
+
+def _infer_crypto_brand_from_wallet(wallet: str) -> str:
+    """Detecta ERC20/TRC20 por formato de dirección (0x… / T…)."""
+    raw = str(wallet or '').strip()
+    if not raw:
+        return ''
+    if _erc20_wallet_is_valid(_normalize_crypto_wallet(raw, 'usdt_erc20')):
+        return 'usdt_erc20'
+    if _trc20_wallet_is_valid(_normalize_crypto_wallet(raw, 'usdt_trc20')):
+        return 'usdt_trc20'
+    low = raw.lower()
+    if low.startswith('0x') and len(low) >= 10:
+        return 'usdt_erc20'
+    if raw.startswith('T') and len(raw) >= 10:
+        return 'usdt_trc20'
+    return ''
+
+
+def _resolve_crypto_payment_brand(
+    raw: Dict[str, Any],
+    label: str,
+    method_id: str,
+) -> str:
+    """Marca USDT ERC20/TRC20 aunque el admin aún tenga «usdt»/«binance» legacy."""
+    brand = _resolve_payment_brand(raw, label, method_id)
+    if brand in ('usdt_erc20', 'usdt_trc20'):
+        return brand
+    wallet = str(raw.get('account_number') or '').strip()
+    inferred = _infer_crypto_brand_from_wallet(wallet)
+    if not inferred:
+        return brand
+    if brand in ('', 'usdt', 'binance', 'criptomoneda', 'binance_pay'):
+        return inferred
+    if brand == 'usdt_erc20' and inferred == 'usdt_trc20':
+        return inferred
+    if brand == 'usdt_trc20' and inferred == 'usdt_erc20':
+        return inferred
+    return brand
+
+
+def _crypto_wallet_tail(ent: Dict[str, Any]) -> str:
+    brand = str(ent.get('payment_brand') or '').strip().lower()
+    wallet = _normalize_crypto_wallet(str(ent.get('account_number') or ''), brand)
+    if not wallet:
+        return ''
+    slug = re.sub(r'[^a-z0-9]', '', wallet.lower())
+    if len(slug) < 6:
+        return slug
+    return slug[-10:]
 
 
 def payment_method_is_generic(
@@ -119,8 +229,14 @@ def _infer_payment_brand(label: str, method_id: str, linked: Optional[List[str]]
         return 'generico'
     if ('bre-b' in combined or 'bre b' in combined) and 'bancolombia' in combined:
         return 'breb_bancolombia'
+    if ('bre-b' in combined or 'bre b' in combined) and 'nequi' in combined:
+        return 'breb_nequi'
     if 'binance pay' in combined or 'binancepay' in combined.replace(' ', ''):
         return 'binance_pay'
+    if 'erc20' in combined or ('usdt' in combined and 'ethereum' in combined):
+        return 'usdt_erc20'
+    if 'trc20' in combined or ('usdt' in combined and 'tron' in combined):
+        return 'usdt_trc20'
     for key, spec in PAYMENT_BRAND_SPEC.items():
         if key in ('criptomoneda', 'generico'):
             if key == 'criptomoneda' and (
@@ -139,18 +255,41 @@ def _infer_payment_brand(label: str, method_id: str, linked: Optional[List[str]]
             ('bre-b' in combined or 'bre b' in combined) and 'bancolombia' in combined
         ):
             return key
+        if key == 'breb_nequi' and (
+            ('bre-b' in combined or 'bre b' in combined) and 'nequi' in combined
+        ):
+            return key
         if key == 'breve' and ('bre-b' in combined or 'bre b' in combined):
             return key
     return ''
 
 
-def payment_method_is_breb_bancolombia(method: Dict[str, Any] | None) -> bool:
+def payment_method_is_breb_nequi(method: Dict[str, Any] | None) -> bool:
     if not method:
         return False
     brand = str(method.get('payment_brand') or '').strip().lower()
-    if brand == 'breb_bancolombia':
+    if brand == 'breb_nequi':
         return True
-    if str(method.get('bre_b_llave') or '').strip() or str(method.get('bre_b_account_suffix') or '').strip():
+    combined = _normalize_text_for_brand_match(
+        f"{method.get('id') or ''} {method.get('label') or ''}"
+    )
+    if ('bre-b' in combined or 'bre b' in combined) and 'nequi' in combined:
+        return True
+    if brand == 'breve':
+        linked = [str(x).lower() for x in (method.get('linked_brands') or [])]
+        label = _normalize_text_for_brand_match(str(method.get('label') or ''))
+        mid = str(method.get('id') or '').lower()
+        return 'nequi' in linked or 'nequi' in label or 'nequi' in mid
+    return False
+
+
+def payment_method_is_breb_bancolombia(method: Dict[str, Any] | None) -> bool:
+    if not method:
+        return False
+    if payment_method_is_breb_nequi(method):
+        return False
+    brand = str(method.get('payment_brand') or '').strip().lower()
+    if brand == 'breb_bancolombia':
         return True
     combined = _normalize_text_for_brand_match(
         f"{method.get('id') or ''} {method.get('label') or ''}"
@@ -165,20 +304,44 @@ def payment_method_is_breb_bancolombia(method: Dict[str, Any] | None) -> bool:
     return False
 
 
-def payment_method_breb_llave_normalized(method: Dict[str, Any] | None) -> str:
-    """Llave Bre-B sin @, mayúsculas (ej. GUSTAVOP8514)."""
+def payment_method_uses_breb_llave(method: Dict[str, Any] | None) -> bool:
+    return payment_method_is_breb_bancolombia(method) or payment_method_is_breb_nequi(method)
+
+
+def payment_method_breb_llave_stored(method: Dict[str, Any] | None) -> str:
+    """Llave Bre-B tal como la configuró el admin (puede llevar @, ser numérica, etc.)."""
     if not method:
         return ''
-    raw = str(method.get('bre_b_llave') or '').strip()
+    return str(method.get('bre_b_llave') or '').strip()[:32]
+
+
+def payment_method_breb_llave_normalized(method: Dict[str, Any] | None) -> str:
+    """Llave Bre-B para comparar con OCR (solo letras/números, mayúsculas)."""
+    if not method:
+        return ''
+    raw = payment_method_breb_llave_stored(method)
     if not raw:
+        acct = str(method.get('account_number') or '').strip()
+        if acct:
+            raw = acct
+    if not raw:
+        skip_tokens = {'nequi', 'bancolombia', 'daviplata', 'breb', 'breve', 'bogota'}
         for field in ('description', 'label'):
-            m = re.search(r'@([A-Za-z0-9]{4,32})', str(method.get(field) or ''))
-            if m:
-                raw = m.group(1)
+            for m in re.finditer(r'@?([A-Za-z0-9]{4,32})', str(method.get(field) or '')):
+                token = re.sub(r'[^A-Za-z0-9]', '', m.group(1)).lower()
+                if token and token not in skip_tokens:
+                    raw = m.group(1)
+                    break
+            if raw:
                 break
     if not raw:
         return ''
     return re.sub(r'[^A-Za-z0-9]', '', raw).upper()
+
+
+def payment_method_breb_llave_display(method: Dict[str, Any] | None) -> str:
+    """Texto visible al usuario; no se antepone @ si no estaba en la configuración."""
+    return payment_method_breb_llave_stored(method)
 
 
 def breb_llave_matches_expected(expected: str, detected: list[str]) -> bool:
@@ -273,27 +436,86 @@ def breb_method_id_from_llave(llave: str) -> str:
     return f'bre_b_{slug}'[:48]
 
 
+def breb_nequi_method_id_from_config(llave: str, phone: str = '') -> str:
+    """ID estable Bre-B Nequi a partir de la llave (número, @clave, etc.)."""
+    lslug = re.sub(r'[^a-z0-9]', '', str(llave or '').lower())[:32]
+    if not lslug:
+        lslug = 'sin_llave'
+    return f'bre_b_nequi_{lslug}'[:48]
+
+
 def _differentiate_breb_method_labels(lst: List[Dict[str, Any]]) -> None:
     """Nombre corto en lista; la llave @… se muestra aparte en recargas."""
     for ent in lst:
-        if not payment_method_is_breb_bancolombia(ent):
-            continue
-        if str(ent.get('bre_b_llave') or '').strip():
+        if payment_method_is_breb_bancolombia(ent) and str(ent.get('bre_b_llave') or '').strip():
             ent['label'] = 'Bre-B Bancolombia'
+        elif payment_method_is_breb_nequi(ent) and str(ent.get('bre_b_llave') or '').strip():
+            ent['label'] = 'Bre-B Nequi'
 
 
 def _method_account_tail_for_id(ent: Dict[str, Any]) -> str:
     """Sufijo numérico que distingue dos medios del mismo banco (cuenta, celular, etc.)."""
+    if payment_method_is_binance_pay(ent):
+        key = re.sub(r'[^a-zA-Z0-9]', '', str(ent.get('binance_pay_api_key') or ''))
+        if len(key) >= 4:
+            return key[-8:].lower()
+        return ''
+    if payment_method_is_usdt_wallet(ent):
+        return _crypto_wallet_tail(ent)
     if payment_method_is_breb_bancolombia(ent):
         suffix = _digits_only(str(ent.get('bre_b_account_suffix') or ''))
         if len(suffix) >= 4:
             return suffix[-4:]
+    brand = str(ent.get('payment_brand') or '').strip().lower()
+    if brand == 'paypal':
+        return _paypal_account_tail(ent)
     acct = _digits_only(str(ent.get('account_number') or ''))
     if len(acct) >= 4:
         return acct[-8:] if len(acct) > 8 else acct
     if acct:
         return acct
     return ''
+
+
+def payment_method_account_hint(method: Dict[str, Any]) -> str:
+    """Fragmento corto de cuenta/llave para distinguir medios con el mismo nombre."""
+    if payment_method_is_breb_nequi(method):
+        llave = _digits_only(payment_method_breb_llave_stored(method))
+        if len(llave) >= 4:
+            return f'*{llave[-4:]}'
+    if payment_method_is_breb_bancolombia(method):
+        llave = str(method.get('bre_b_llave') or '').strip()
+        if llave:
+            slug = re.sub(r'[^a-zA-Z0-9]', '', llave.lower())
+            return f'@{slug[:12]}' if slug else ''
+        suffix = _digits_only(str(method.get('bre_b_account_suffix') or ''))
+        if len(suffix) >= 4:
+            return f'*{suffix[-4:]}'
+    tail = _method_account_tail_for_id(method)
+    if not tail:
+        return ''
+    brand = str(method.get('payment_brand') or '').strip().lower()
+    if brand in ('usdt_erc20', 'usdt_trc20'):
+        return f'…{tail[-6:]}'
+    if payment_method_is_binance_pay(method):
+        return f'…{tail[-6:]}'
+    if brand == 'paypal':
+        email = _normalize_paypal_account(str(method.get('account_number') or ''))
+        local = email.split('@', 1)[0] if email and '@' in email else email
+        return (local[-10:] if local and len(local) > 10 else local) or ''
+    digits = _digits_only(tail)
+    if len(digits) >= 4:
+        return f'*{digits[-4:]}'
+    return tail[:12]
+
+
+def payment_method_option_display_label(method: Dict[str, Any]) -> str:
+    """Nombre del medio + pista de cuenta para selectores admin."""
+    label = str(method.get('label') or '').strip()
+    hint = payment_method_account_hint(method)
+    if label and hint:
+        return f'{label} · {hint}'
+    return label
 
 
 def _apply_currency_method_id_prefix(method_id: str, currency: str) -> str:
@@ -322,6 +544,12 @@ def canonical_method_id(ent: Dict[str, Any], idx: int = 0, *, currency: str = ''
         llave = str(ent.get('bre_b_llave') or '').strip()
         if llave:
             return _apply_currency_method_id_prefix(breb_method_id_from_llave(llave), cur)
+    if payment_method_is_breb_nequi(ent):
+        llave = payment_method_breb_llave_stored(ent)
+        if llave:
+            return _apply_currency_method_id_prefix(
+                breb_nequi_method_id_from_config(llave), cur
+            )
 
     tail = _method_account_tail_for_id(ent)
     if brand and tail:
@@ -379,13 +607,24 @@ def _ensure_unique_method_ids(cfg: Dict[str, List[Dict[str, Any]]]) -> Dict[str,
     return out
 
 
-def validate_payment_methods_payload(payload: Dict[str, Any]) -> Optional[str]:
+def validate_payment_methods_payload(
+    payload: Dict[str, Any],
+    *,
+    previous: Optional[Dict[str, List[Dict[str, Any]]]] = None,
+) -> Optional[str]:
     """Errores de validación antes de guardar medios (Bre-B, IDs duplicados)."""
     breb_err = validate_breb_methods_in_payload(payload)
     if breb_err:
         return breb_err
     if not isinstance(payload, dict):
         return None
+    prev_by_id: Dict[str, Dict[str, Any]] = {}
+    if previous:
+        for lst in previous.values():
+            for item in lst or []:
+                mid = str(item.get('id') or '')
+                if mid:
+                    prev_by_id[mid] = item
     seen: Dict[str, str] = {}
     for cur in _METHOD_BUCKETS:
         lst = payload.get(cur)
@@ -406,7 +645,58 @@ def validate_payment_methods_payload(payload: Dict[str, Any]) -> Optional[str]:
                 )
             seen[mid] = label
             brand = str(ent.get('payment_brand') or '').strip().lower()
-            if brand and brand not in ('generico', 'criptomoneda', 'breb_bancolombia', 'breve'):
+            wallet_brand = _infer_crypto_brand_from_wallet(
+                str(raw.get('account_number') or ent.get('account_number') or '')
+            )
+            if wallet_brand and brand in ('', 'usdt', 'binance', 'criptomoneda'):
+                brand = wallet_brand
+            if brand == 'binance_pay':
+                api_key = str(
+                    raw.get('binance_pay_api_key') or ent.get('binance_pay_api_key') or ''
+                ).strip()
+                if not api_key:
+                    return f'«{label}»: indica la API Key de Binance Pay.'
+                secret = str(raw.get('binance_pay_secret') or '').strip()
+                prev_secret = str((prev_by_id.get(mid) or {}).get('binance_pay_secret') or '').strip()
+                has_secret = bool(secret and secret != '********') or bool(prev_secret)
+                if not has_secret:
+                    return f'«{label}»: indica el API Secret de Binance Pay.'
+                continue
+            if brand == 'paypal':
+                email = _normalize_paypal_account(
+                    str(raw.get('account_number') or ent.get('account_number') or '')
+                )
+                if not _paypal_account_is_valid(email):
+                    return (
+                        f'PayPal ({_method_bucket_label(cur)}, fila {i + 1}): '
+                        'indica el correo electrónico de PayPal.'
+                    )
+                continue
+            if brand == 'usdt_erc20':
+                wallet = _normalize_crypto_wallet(
+                    str(raw.get('account_number') or ent.get('account_number') or ''),
+                    'usdt_erc20',
+                )
+                if not _erc20_wallet_is_valid(wallet):
+                    return (
+                        f'USDT ERC20 ({_method_bucket_label(cur)}, fila {i + 1}): '
+                        'indica una dirección wallet válida (0x + 40 caracteres hex).'
+                    )
+                continue
+            if brand == 'usdt_trc20':
+                wallet = _normalize_crypto_wallet(
+                    str(raw.get('account_number') or ent.get('account_number') or ''),
+                    'usdt_trc20',
+                )
+                if not _trc20_wallet_is_valid(wallet):
+                    return (
+                        f'USDT TRC20 ({_method_bucket_label(cur)}, fila {i + 1}): '
+                        'indica una dirección wallet Tron válida (empieza con T, 34 caracteres).'
+                    )
+                continue
+            if brand and brand not in (
+                'generico', 'criptomoneda', 'breb_bancolombia', 'breb_nequi', 'breve',
+            ):
                 if not _method_account_tail_for_id(ent):
                     return (
                         f'«{label}»: indica el número de cuenta (o celular) para generar '
@@ -445,6 +735,47 @@ def _digits_only(value: str) -> str:
     return re.sub(r'\D', '', str(value or ''))
 
 
+def _normalize_paypal_account(value: str) -> str:
+    return str(value or '').strip().lower()[:64]
+
+
+def _paypal_account_is_valid(value: str) -> bool:
+    email = _normalize_paypal_account(value)
+    return bool(email and '@' in email and email.index('@') >= 1)
+
+
+def _sanitize_paypal_method_for_admin(row: Dict[str, Any]) -> Dict[str, Any]:
+    """Limpia valores legacy (ej. «2») que no son correo; el admin debe reingresar el email."""
+    if str(row.get('payment_brand') or '').strip().lower() != 'paypal':
+        return row
+    acct = str(row.get('account_number') or '').strip()
+    if acct and not _paypal_account_is_valid(acct):
+        out = dict(row)
+        out['account_number'] = ''
+        return out
+    return row
+
+
+def _method_bucket_label(cur: str) -> str:
+    bucket = (cur or '').strip().upper()
+    if bucket == 'ACCUM':
+        return 'Acumulador'
+    if bucket == 'USD':
+        return 'USDT'
+    return bucket or 'COP'
+
+
+def _paypal_account_tail(ent: Dict[str, Any]) -> str:
+    email = _normalize_paypal_account(str(ent.get('account_number') or ''))
+    if not email:
+        return ''
+    local = email.split('@', 1)[0] if '@' in email else email
+    slug = re.sub(r'[^a-z0-9]', '', local.lower())
+    if not slug:
+        return ''
+    return slug[-12:] if len(slug) > 12 else slug
+
+
 def _migrate_legacy_method_fields(raw: Dict[str, Any]) -> tuple[str, str]:
     """Convierte el campo legacy `details` a número de cuenta y descripción."""
     account_number = str(raw.get('account_number') or '').strip()
@@ -464,9 +795,22 @@ def _migrate_legacy_method_fields(raw: Dict[str, Any]) -> tuple[str, str]:
 
 def payment_method_account_digits(method: Dict[str, Any]) -> str:
     """Dígitos de cuenta configurados en el medio (mín. 4 si es explícito, 8 si viene de legacy)."""
+    if payment_method_is_breb_nequi(method):
+        llave_digits = _digits_only(payment_method_breb_llave_stored(method))
+        if len(llave_digits) == 10:
+            return llave_digits
+        acct = _digits_only(str(method.get('account_number') or ''))
+        return acct if len(acct) == 10 else ''
     if payment_method_is_breb_bancolombia(method):
         suffix = payment_method_breb_account_suffix(method)
         return suffix if suffix else ''
+    brand = str(method.get('payment_brand') or '').strip().lower()
+    if brand == 'paypal':
+        email = _normalize_paypal_account(str(method.get('account_number') or ''))
+        return email if email else ''
+    if brand in ('usdt_erc20', 'usdt_trc20'):
+        wallet = _normalize_crypto_wallet(str(method.get('account_number') or ''), brand)
+        return wallet if wallet else ''
     acct = _digits_only(str(method.get('account_number') or ''))
     if acct:
         return acct if len(acct) >= 4 else ''
@@ -486,22 +830,38 @@ def payment_method_user_display(method: Dict[str, Any]) -> Dict[str, Any]:
         'account_number': (account_number or '')[:32],
         'description': (description or '')[:500],
         'is_breb_bancolombia': False,
+        'is_breb_nequi': False,
         'bre_b_llave': '',
     }
+    llave_display = payment_method_breb_llave_display(method)
+    if payment_method_is_breb_nequi(method):
+        out['is_breb_nequi'] = True
+        out['bre_b_llave'] = llave_display
+        out['account_number'] = llave_display
+        return out
+    if payment_method_is_binance_pay(method):
+        out['is_binance_pay'] = True
+        out['account_number'] = ''
+        return out
+    brand = str(method.get('payment_brand') or '').strip().lower()
+    if brand == 'paypal':
+        out['account_number'] = _normalize_paypal_account(account_number)
+        return out
+    if brand in ('usdt_erc20', 'usdt_trc20'):
+        out['is_crypto_wallet'] = True
+        out['crypto_network'] = 'ERC20' if brand == 'usdt_erc20' else 'TRC20'
+        out['account_number'] = _normalize_crypto_wallet(account_number, brand)
+        return out
     if not payment_method_is_breb_bancolombia(method):
         return out
     out['is_breb_bancolombia'] = True
-    llave = payment_method_breb_llave_normalized(method)
-    if llave:
-        out['bre_b_llave'] = f'@{llave}'
-        out['account_number'] = out['bre_b_llave']
-    else:
-        out['account_number'] = ''
+    out['bre_b_llave'] = llave_display
+    out['account_number'] = llave_display
     return out
 
 
 def validate_breb_methods_in_payload(payload: Dict[str, Any]) -> Optional[str]:
-    """Devuelve mensaje de error si un Bre-B activo no tiene llave configurada."""
+    """Devuelve mensaje de error si un Bre-B activo no tiene llave/cuenta configurada."""
     if not isinstance(payload, dict):
         return None
     for cur in _METHOD_BUCKETS:
@@ -514,27 +874,31 @@ def validate_breb_methods_in_payload(payload: Dict[str, Any]) -> Optional[str]:
             label = str(raw.get('label') or '').strip()
             mid = str(raw.get('id') or '').strip()
             brand = str(raw.get('payment_brand') or '').strip().lower()
-            if not payment_method_is_breb_bancolombia(
-                {'payment_brand': brand, 'label': label, 'id': mid, **raw}
-            ):
-                continue
+            probe = {'payment_brand': brand, 'label': label, 'id': mid, **raw}
             if raw.get('enabled') is False:
                 continue
-            llave = re.sub(r'[^@A-Za-z0-9]', '', str(raw.get('bre_b_llave') or '')).lstrip('@')
-            suffix = _digits_only(str(raw.get('bre_b_account_suffix') or ''))
-            if len(suffix) > 4:
-                suffix = suffix[-4:]
             nombre = label or mid or f'fila {i + 1}'
-            if not llave:
-                return (
-                    f'Bre-B Bancolombia («{nombre}»): indica la llave (ej. @GUSTAVOP8514) '
-                    f'antes de guardar.'
-                )
-            if len(suffix) < 4:
-                return (
-                    f'Bre-B Bancolombia («{nombre}»): indica los 4 dígitos de cuenta '
-                    f'(ej. 1948) antes de guardar.'
-                )
+            llave = re.sub(r'[^@A-Za-z0-9]', '', str(raw.get('bre_b_llave') or '')).lstrip('@')
+            if payment_method_is_breb_bancolombia(probe):
+                suffix = _digits_only(str(raw.get('bre_b_account_suffix') or ''))
+                if len(suffix) > 4:
+                    suffix = suffix[-4:]
+                if not llave:
+                    return (
+                        f'Bre-B Bancolombia («{nombre}»): indica la llave Bre-B '
+                        f'(número, @clave u otro identificador) antes de guardar.'
+                    )
+                if len(suffix) < 4:
+                    return (
+                        f'Bre-B Bancolombia («{nombre}»): indica los 4 dígitos de cuenta '
+                        f'(ej. 1948) antes de guardar.'
+                    )
+            if payment_method_is_breb_nequi(probe):
+                if not llave:
+                    return (
+                        f'Bre-B Nequi («{nombre}»): indica la llave Bre-B '
+                        f'(número, @clave u otro identificador) antes de guardar.'
+                    )
     return None
 
 
@@ -587,8 +951,54 @@ def _accum_multipliers_from_raw(raw: Dict[str, Any]) -> Dict[str, Optional[float
     }
 
 
+def _accum_payment_currency_key(method: Dict[str, Any]) -> str:
+    pc = (method.get('payment_currency') or 'COP').strip().upper()
+    return 'USD' if pc in ('USD', 'USDT') else 'COP'
+
+
+def _accum_multipliers_fallback(
+    method: Dict[str, Any],
+    *,
+    pool: Optional[List[Dict[str, Any]]] = None,
+) -> Dict[str, Optional[float]]:
+    """Hereda multiplicadores de otro acumulador con la misma moneda acumulada."""
+    want = _accum_payment_currency_key(method)
+    my_id = str(method.get('id') or '').strip()
+    sources = pool if pool is not None else (get_payment_methods_config().get('ACCUM') or [])
+    for m in sources:
+        if str(m.get('id') or '').strip() == my_id:
+            continue
+        if _accum_payment_currency_key(m) != want:
+            continue
+        mults = _accum_multipliers_from_raw(m)
+        if mults['mult_usd_to_cop'] is not None or mults['mult_cop_to_usd'] is not None:
+            return mults
+    return {'mult_usd_to_cop': None, 'mult_cop_to_usd': None}
+
+
 def accum_conversion_multipliers(method: Dict[str, Any]) -> Dict[str, Optional[float]]:
-    return _accum_multipliers_from_raw(method or {})
+    mults = dict(_accum_multipliers_from_raw(method or {}))
+    if mults['mult_usd_to_cop'] is not None and mults['mult_cop_to_usd'] is not None:
+        return mults
+    fallback = _accum_multipliers_fallback(method or {})
+    if mults['mult_usd_to_cop'] is None and fallback.get('mult_usd_to_cop') is not None:
+        mults['mult_usd_to_cop'] = fallback['mult_usd_to_cop']
+    if mults['mult_cop_to_usd'] is None and fallback.get('mult_cop_to_usd') is not None:
+        mults['mult_cop_to_usd'] = fallback['mult_cop_to_usd']
+    return mults
+
+
+def _apply_accum_multiplier_inheritance(entries: List[Dict[str, Any]]) -> None:
+    """Al guardar, copia multiplicadores entre acumuladores USDT/COP del mismo tipo."""
+    for ent in entries:
+        mults = _accum_multipliers_from_raw(ent)
+        if mults['mult_usd_to_cop'] is not None and mults['mult_cop_to_usd'] is not None:
+            continue
+        fallback = _accum_multipliers_fallback(ent, pool=entries)
+        if mults['mult_usd_to_cop'] is None and fallback.get('mult_usd_to_cop') is not None:
+            ent['mult_usd_to_cop'] = fallback['mult_usd_to_cop']
+        if mults['mult_cop_to_usd'] is None and fallback.get('mult_cop_to_usd') is not None:
+            ent['mult_cop_to_usd'] = fallback['mult_cop_to_usd']
 
 
 def _normalize_method_entry(raw: Dict[str, Any], currency: str, idx: int) -> Optional[Dict[str, Any]]:
@@ -596,7 +1006,7 @@ def _normalize_method_entry(raw: Dict[str, Any], currency: str, idx: int) -> Opt
         return None
     label = str(raw.get('label') or '').strip()
     mid = str(raw.get('id') or '').strip()
-    payment_brand = _resolve_payment_brand(raw, label, mid)
+    payment_brand = _resolve_crypto_payment_brand(raw, label, mid)
     if not label and payment_brand:
         label = _default_label_for_brand(payment_brand, currency)
     if not label:
@@ -607,10 +1017,18 @@ def _normalize_method_entry(raw: Dict[str, Any], currency: str, idx: int) -> Opt
     else:
         qr_filename = ''
     account_number, description = _migrate_legacy_method_fields(raw)
-    account_number = _digits_only(account_number)[:32]
-    bre_b_llave = re.sub(r'[^@A-Za-z0-9]', '', str(raw.get('bre_b_llave') or ''))[:32]
-    if bre_b_llave:
-        bre_b_llave = bre_b_llave.lstrip('@').upper()
+    if payment_brand == 'paypal':
+        account_number = _normalize_paypal_account(
+            account_number or str(raw.get('account_number') or '')
+        )
+    elif payment_brand in ('usdt_erc20', 'usdt_trc20'):
+        account_number = _normalize_crypto_wallet(
+            account_number or str(raw.get('account_number') or ''),
+            payment_brand,
+        )
+    else:
+        account_number = _digits_only(account_number)[:32]
+    bre_b_llave = payment_method_breb_llave_stored({'bre_b_llave': raw.get('bre_b_llave')})
     bre_b_suffix = _digits_only(str(raw.get('bre_b_account_suffix') or ''))[:4]
     if len(bre_b_suffix) > 4:
         bre_b_suffix = bre_b_suffix[-4:]
@@ -622,6 +1040,10 @@ def _normalize_method_entry(raw: Dict[str, Any], currency: str, idx: int) -> Opt
         'bre_b_llave': bre_b_llave,
         'bre_b_account_suffix': bre_b_suffix,
     }
+    if payment_brand == 'binance_pay':
+        api_key_draft = str(raw.get('binance_pay_api_key') or '').strip()[:128]
+        if api_key_draft:
+            draft['binance_pay_api_key'] = api_key_draft
     ent = {
         'id': canonical_method_id(draft, idx, currency=currency),
         'label': label[:80],
@@ -646,6 +1068,8 @@ def _normalize_method_entry(raw: Dict[str, Any], currency: str, idx: int) -> Opt
         ent['payment_brand'] = payment_brand
         if payment_brand == 'breb_bancolombia' and bre_b_suffix:
             ent['account_number'] = bre_b_suffix
+        elif payment_brand == 'breb_nequi':
+            ent['account_number'] = ''
         brands = _linked_brands_from_brand(payment_brand)
         if not brands:
             linked = raw.get('linked_brands') or raw.get('detect_brands')
@@ -672,6 +1096,13 @@ def _normalize_method_entry(raw: Dict[str, Any], currency: str, idx: int) -> Opt
             ent['linked_brands'] = brands
     if qr_filename:
         ent['qr_filename'] = qr_filename
+    if payment_brand == 'binance_pay':
+        api_key = str(raw.get('binance_pay_api_key') or '').strip()[:128]
+        secret = str(raw.get('binance_pay_secret') or '').strip()[:256]
+        if api_key:
+            ent['binance_pay_api_key'] = api_key
+        if secret and secret != '********':
+            ent['binance_pay_secret'] = secret
     return ent
 
 
@@ -945,7 +1376,12 @@ def save_payment_methods_config(payload: Dict[str, Any], app=None, previous: Opt
                 ent.pop('qr_filename', None)
             elif prev.get('qr_filename') and not ent.get('qr_filename'):
                 ent['qr_filename'] = prev['qr_filename']
+            from app.store.balance_recharge_binance_pay import merge_binance_pay_secret_on_save
+
+            merge_binance_pay_secret_on_save(ent, item, prev)
             normalized.append(ent)
+        if cur == 'ACCUM' and normalized:
+            _apply_accum_multiplier_inheritance(normalized)
         out[cur] = normalized
 
     _prune_all_accum_methods(out)
@@ -1041,10 +1477,81 @@ def _filter_methods_by_allowed_users(
     return filtered
 
 
+def _is_nequi_classic(method: Dict[str, Any]) -> bool:
+    """Nequi clásico (no Bre-B Nequi)."""
+    if payment_method_is_breb_nequi(method):
+        return False
+    brand = str(method.get('payment_brand') or '').strip().lower()
+    if brand == 'nequi':
+        return True
+    combined = _normalize_text_for_brand_match(
+        f"{method.get('id') or ''} {method.get('label') or ''}"
+    )
+    if 'nequi' not in combined:
+        return False
+    return not any(tok in combined for tok in ('bre-b', 'bre b', 'breb', 'breve'))
+
+
+def _is_bancolombia_classic(method: Dict[str, Any]) -> bool:
+    if payment_method_is_breb_bancolombia(method) or payment_method_is_breb_nequi(method):
+        return False
+    brand = str(method.get('payment_brand') or '').strip().lower()
+    if brand == 'bancolombia':
+        return True
+    combined = _normalize_text_for_brand_match(
+        f"{method.get('id') or ''} {method.get('label') or ''}"
+    )
+    return 'bancolombia' in combined and not any(
+        tok in combined for tok in ('bre-b', 'bre b', 'breb', 'breve')
+    )
+
+
+def _payment_method_user_display_sort_key(method: Dict[str, Any]) -> tuple:
+    """
+    Orden estable en recargas del usuario: agrupa por familia (Nequi, Bancolombia, etc.)
+    y dentro de cada una deja clásico antes que Bre-B.
+    """
+    label = str(method.get('label') or '').strip().lower()
+    mid = str(method.get('id') or '').strip().lower()
+    brand = str(method.get('payment_brand') or '').strip().lower()
+    if not brand:
+        brand = _resolve_payment_brand(method, label, mid)
+
+    if method.get('currency') == 'ACCUM':
+        family, sub = 90, 0
+    elif payment_method_is_breb_nequi(method):
+        family, sub = 10, 2
+    elif _is_nequi_classic(method):
+        family, sub = 10, 1
+    elif payment_method_is_breb_bancolombia(method):
+        family, sub = 20, 2
+    elif _is_bancolombia_classic(method):
+        family, sub = 20, 1
+    elif brand == 'daviplata' or 'daviplata' in label:
+        family, sub = 30, 0
+    elif brand in ('binance', 'usdt', 'usdt_erc20', 'usdt_trc20', 'binance_pay', 'criptomoneda'):
+        family, sub = 40, 0
+    elif brand == 'paypal' or 'paypal' in label:
+        family, sub = 50, 0
+    else:
+        family, sub = 80, 0
+
+    return (family, sub, label, mid)
+
+
+def sort_payment_methods_for_user_display(
+    methods: List[Dict[str, Any]],
+) -> List[Dict[str, Any]]:
+    if not methods:
+        return methods
+    return sorted(methods, key=_payment_method_user_display_sort_key)
+
+
 def methods_for_user(user_row, currency: str, viewer=None) -> List[Dict[str, Any]]:
     """Medios visibles por moneda. Si el medio tiene allowed_user_ids con IDs, solo esos usuarios."""
     all_methods = methods_for_currency(currency, enabled_only=True)
-    return _filter_methods_by_allowed_users(all_methods, user_row, viewer)
+    filtered = _filter_methods_by_allowed_users(all_methods, user_row, viewer)
+    return sort_payment_methods_for_user_display(filtered)
 
 
 def methods_accum_for_user(user_row, user_tipo_precio: str, viewer=None) -> List[Dict[str, Any]]:
@@ -1074,8 +1581,88 @@ def methods_for_user_with_accum(user_row, user_tipo_precio: str, viewer=None) ->
     """Medios COP/USD del cliente más acumuladores aplicables."""
     tp = (user_tipo_precio or 'COP').strip().upper()
     regular = methods_for_user(user_row, tp, viewer=viewer)
-    accum = methods_accum_for_user(user_row, tp, viewer=viewer)
+    accum = sort_payment_methods_for_user_display(
+        methods_accum_for_user(user_row, tp, viewer=viewer)
+    )
     return regular + accum
+
+
+def _collect_methods_by_id(method_id: str) -> List[Dict[str, Any]]:
+    mid = (method_id or '').strip()
+    if not mid:
+        return []
+    cfg = get_payment_methods_config()
+    matches: List[Dict[str, Any]] = []
+    mid_low = mid.lower()
+    for bucket in _METHOD_BUCKETS:
+        for m in cfg.get(bucket) or []:
+            if m.get('id') == mid:
+                ent = dict(m)
+                ent.setdefault('currency', bucket)
+                matches.append(ent)
+            elif mid_low in _BRAND_ONLY_METHOD_IDS and str(m.get('payment_brand') or '').lower() == mid_low:
+                ent = dict(m)
+                ent.setdefault('currency', bucket)
+                matches.append(ent)
+    return matches
+
+
+def _disambiguate_method_matches(
+    matches: List[Dict[str, Any]],
+    *,
+    bre_b_llave: str = '',
+    account_digits: str = '',
+    currency: str = '',
+) -> Optional[Dict[str, Any]]:
+    """Elige un único medio cuando hay varias coincidencias (legacy id de marca)."""
+    if not matches:
+        return None
+    if len(matches) == 1:
+        return matches[0]
+
+    pool = list(matches)
+    cur = (currency or '').strip().upper()
+    if cur:
+        by_cur = [m for m in pool if (m.get('currency') or '').strip().upper() == cur]
+        if len(by_cur) == 1:
+            return by_cur[0]
+        if by_cur:
+            pool = by_cur
+
+    hint = re.sub(r'[^A-Za-z0-9]', '', str(bre_b_llave or '')).upper()
+    if hint:
+        breb_hits = [
+            m for m in pool
+            if payment_method_breb_llave_normalized(m) == hint
+        ]
+        if len(breb_hits) == 1:
+            return breb_hits[0]
+        if breb_hits:
+            pool = breb_hits
+
+    acct_hint = _digits_only(account_digits)
+    if acct_hint:
+        acct_hits: List[Dict[str, Any]] = []
+        for m in pool:
+            configured = payment_method_account_digits(m)
+            if configured and (
+                acct_hint == configured
+                or configured.endswith(acct_hint)
+                or acct_hint.endswith(configured)
+            ):
+                acct_hits.append(m)
+                continue
+            tail = _method_account_tail_for_id(m)
+            if tail and (acct_hint.endswith(tail) or acct_hint == tail):
+                acct_hits.append(m)
+        if len(acct_hits) == 1:
+            return acct_hits[0]
+        if acct_hits:
+            pool = acct_hits
+
+    if len(pool) == 1:
+        return pool[0]
+    return None
 
 
 def _find_method_by_id(
@@ -1083,41 +1670,204 @@ def _find_method_by_id(
     *,
     bre_b_llave: str = '',
     account_digits: str = '',
+    currency: str = '',
 ) -> Optional[Dict[str, Any]]:
     mid = (method_id or '').strip()
     if not mid:
         return None
-    cfg = get_payment_methods_config()
-    matches: List[Dict[str, Any]] = []
-    mid_low = mid.lower()
-    for bucket in _METHOD_BUCKETS:
-        for m in cfg.get(bucket) or []:
-            if m.get('id') == mid:
-                matches.append(dict(m))
-            elif mid_low in _BRAND_ONLY_METHOD_IDS and str(m.get('payment_brand') or '').lower() == mid_low:
-                matches.append(dict(m))
+    matches = _collect_methods_by_id(mid)
     if not matches:
         return None
-    if len(matches) == 1:
-        return matches[0]
+    resolved = _disambiguate_method_matches(
+        matches,
+        bre_b_llave=bre_b_llave,
+        account_digits=account_digits,
+        currency=currency,
+    )
+    if resolved:
+        return resolved
+    if len(matches) > 1:
+        logger.warning(
+            'Medio de pago ambiguo para id=%r (%d coincidencias); use id canónico o revise cuenta/llave.',
+            mid,
+            len(matches),
+        )
+    return None
 
-    hint = re.sub(r'[^A-Za-z0-9]', '', str(bre_b_llave or '')).upper()
-    if hint:
-        for m in matches:
-            if payment_method_breb_llave_normalized(m) == hint:
-                return m
 
-    acct_hint = _digits_only(account_digits)
-    if acct_hint:
-        for m in matches:
-            configured = payment_method_account_digits(m)
-            if configured and (acct_hint == configured or acct_hint.endswith(configured)):
-                return m
-            tail = _method_account_tail_for_id(m)
-            if tail and (acct_hint.endswith(tail) or tail in acct_hint):
-                return m
+def _parse_recharge_analyzer(
+    recharge_row,
+    analyzer: Optional[Dict[str, Any]] = None,
+) -> Optional[Dict[str, Any]]:
+    if isinstance(analyzer, dict):
+        return analyzer
+    raw = getattr(recharge_row, 'analyzer_json', None)
+    if not raw:
+        return None
+    try:
+        data = json.loads(raw) if isinstance(raw, str) else raw
+    except (json.JSONDecodeError, TypeError):
+        return None
+    return data if isinstance(data, dict) else None
 
-    return matches[0]
+
+def build_payment_method_snapshot(
+    *,
+    payment_method_id: str,
+    payment_method_label: str,
+    payment_method: Optional[Dict[str, Any]],
+    currency: str,
+    expected_account: str,
+    breb_llave_expected: str,
+    is_breb_bancolombia: bool,
+    is_breb_nequi: bool = False,
+) -> Dict[str, Any]:
+    """Congela cuenta/llave/marca del medio al enviar la solicitud (paso 7)."""
+    pm_id = str(payment_method_id or '').strip()
+    label = str(payment_method_label or '').strip()
+    brand = str((payment_method or {}).get('payment_brand') or '').strip().lower()
+    if not brand:
+        brand = _resolve_payment_brand(payment_method or {}, label, pm_id)
+    return {
+        'frozen_at_submit': True,
+        'payment_method_id': pm_id or None,
+        'label': label or None,
+        'payment_brand': brand or None,
+        'currency': (currency or 'COP').strip().upper(),
+        'account_expected_digits': _digits_only(expected_account) or None,
+        'bre_b_llave_expected': str(breb_llave_expected or '').strip() or None,
+        'is_breb_bancolombia': bool(is_breb_bancolombia),
+        'is_breb_nequi': bool(is_breb_nequi),
+        'is_generic': payment_method_is_generic(payment_method, pm_id, label),
+    }
+
+
+def recharge_frozen_payment_context(
+    recharge_row,
+    analyzer: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    """Contexto del medio al enviar; no usa la configuración admin actual si hay snapshot."""
+    data = _parse_recharge_analyzer(recharge_row, analyzer)
+    pm_id = str(getattr(recharge_row, 'payment_method_id', '') or '').strip()
+    currency = str(getattr(recharge_row, 'currency', '') or 'COP').strip().upper()
+
+    if isinstance(data, dict):
+        snap = data.get('payment_method_snapshot')
+        if isinstance(snap, dict) and snap.get('payment_method_id'):
+            return dict(snap)
+        if data.get('account_expected_digits') is not None or data.get('payment_method_label'):
+            label = str(data.get('payment_method_label') or '').strip()
+            brand = str(data.get('payment_brand') or '').strip().lower()
+            if not brand:
+                brand = _resolve_payment_brand({}, label, pm_id)
+            return {
+                'frozen_at_submit': True,
+                'payment_method_id': pm_id or None,
+                'label': label or None,
+                'payment_brand': brand or None,
+                'currency': currency,
+                'account_expected_digits': _digits_only(
+                    str(data.get('account_expected_digits') or '')
+                )
+                or None,
+                'bre_b_llave_expected': str(data.get('bre_b_llave_expected') or '').strip() or None,
+                'is_breb_bancolombia': bool(data.get('is_breb_bancolombia')),
+                'is_breb_nequi': bool(data.get('is_breb_nequi')),
+                'is_generic': bool(data.get('payment_method_is_generic')),
+            }
+
+    method = find_payment_method_for_recharge(recharge_row, data)
+    if method:
+        return build_payment_method_snapshot(
+            payment_method_id=pm_id,
+            payment_method_label=str(method.get('label') or ''),
+            payment_method=method,
+            currency=currency,
+            expected_account=payment_method_account_digits(method),
+            breb_llave_expected=payment_method_breb_llave_normalized(method),
+            is_breb_bancolombia=payment_method_is_breb_bancolombia(method),
+            is_breb_nequi=payment_method_is_breb_nequi(method),
+        )
+    return {
+        'frozen_at_submit': False,
+        'payment_method_id': pm_id or None,
+        'label': None,
+        'payment_brand': None,
+        'currency': currency,
+        'account_expected_digits': None,
+        'bre_b_llave_expected': None,
+        'is_breb_bancolombia': False,
+        'is_breb_nequi': False,
+        'is_generic': False,
+    }
+
+
+def frozen_payment_method_dict(ctx: Dict[str, Any]) -> Dict[str, Any]:
+    """Dict compatible con helpers de medio a partir del snapshot congelado."""
+    acct = _digits_only(str(ctx.get('account_expected_digits') or ''))
+    llave = str(ctx.get('bre_b_llave_expected') or '').strip()
+    out: Dict[str, Any] = {
+        'id': str(ctx.get('payment_method_id') or ''),
+        'label': str(ctx.get('label') or ''),
+        'payment_brand': str(ctx.get('payment_brand') or ''),
+        'currency': str(ctx.get('currency') or ''),
+        'account_number': acct,
+        'bre_b_llave': llave,
+    }
+    if ctx.get('is_breb_nequi'):
+        out['payment_brand'] = out.get('payment_brand') or 'breb_nequi'
+    elif ctx.get('is_breb_bancolombia'):
+        out['payment_brand'] = out.get('payment_brand') or 'breb_bancolombia'
+        if len(acct) >= 4:
+            out['bre_b_account_suffix'] = acct[-4:]
+    return out
+
+
+def expected_account_digits_for_recharge(
+    recharge_row,
+    analyzer: Optional[Dict[str, Any]] = None,
+) -> str:
+    ctx = recharge_frozen_payment_context(recharge_row, analyzer)
+    return _digits_only(str(ctx.get('account_expected_digits') or ''))
+
+
+def payment_context_is_binance(ctx: Dict[str, Any]) -> bool:
+    brand = str(ctx.get('payment_brand') or '').strip().lower()
+    if brand in ('usdt_erc20', 'usdt_trc20'):
+        return False
+    if brand in ('binance', 'usdt', 'binance_pay'):
+        return True
+    pm_id = str(ctx.get('payment_method_id') or '').strip().lower()
+    if 'erc20' in pm_id or 'trc20' in pm_id:
+        return False
+    return any(token in pm_id for token in ('binance', 'binanse', 'usdt'))
+
+
+def payment_context_uses_relaxed_email_rules(ctx: Dict[str, Any]) -> bool:
+    """
+    Solo Binance: Pay y wallets USDT on-chain (ERC20/TRC20, incl. acumulador).
+    El resto de medios (Nequi, Bre-B, bancos, PayPal…) mantiene verificación estricta por correo.
+    """
+    if payment_context_is_binance(ctx):
+        return True
+    brand = str(ctx.get('payment_brand') or '').strip().lower()
+    if brand in ('usdt_erc20', 'usdt_trc20'):
+        return True
+    pm_id = str(ctx.get('payment_method_id') or '').strip().lower()
+    if 'erc20' in pm_id or 'trc20' in pm_id:
+        return True
+    return False
+
+
+def payment_method_for_recharge_validation(
+    recharge_row,
+    analyzer: Optional[Dict[str, Any]] = None,
+) -> Optional[Dict[str, Any]]:
+    """Medio para validar correo/OCR: prioriza snapshot del envío."""
+    ctx = recharge_frozen_payment_context(recharge_row, analyzer)
+    if ctx.get('frozen_at_submit'):
+        return frozen_payment_method_dict(ctx)
+    return find_payment_method_for_recharge(recharge_row, analyzer)
 
 
 def find_payment_method_for_recharge(
@@ -1146,7 +1896,13 @@ def find_payment_method_for_recharge(
         acct_hint = str(analyzer.get('account_expected_digits') or '').strip()
     else:
         llave_hint = ''
-    method = _find_method_by_id(pm_id, bre_b_llave=llave_hint, account_digits=acct_hint)
+    currency_hint = str(getattr(recharge_row, 'currency', '') or '').strip()
+    method = _find_method_by_id(
+        pm_id,
+        bre_b_llave=llave_hint,
+        account_digits=acct_hint,
+        currency=currency_hint,
+    )
     if method:
         return method
     hint = re.sub(r'[^A-Za-z0-9]', '', llave_hint).upper()

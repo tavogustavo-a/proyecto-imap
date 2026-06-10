@@ -14,6 +14,15 @@ SETTINGS_KEY = 'balance_recharge_email_review'
 # Los regex de correo se configuran solo en admin (Revisión automática → Regex).
 # No hay patrones integrados en código: así puedes cambiarlos sin desplegar.
 
+# Aviso Bancolombia clásico: monto + *XXXX + fecha + hora (sin comprobante de la app).
+BANCOLOMBIA_TRANSFER_EMAIL_REGEX = (
+    r'bancolombia\s*:\s*recibiste\s+una\s+transferencia\s+por\s+\$\s*'
+    r'([\d][\d,.\s]*)\s+de\s+'
+    r'[\s\S]{0,400}?'
+    r'en\s+tu\s+cuenta\s*\*+(\d{2,4}),\s*'
+    r'el\s+(\d{1,2}/\d{1,2}/\d{2,4})\s+a\s+las\s+(\d{1,2}:\d{2})'
+)
+
 
 def _default_settings() -> dict[str, Any]:
     return {
@@ -23,16 +32,32 @@ def _default_settings() -> dict[str, Any]:
     }
 
 
+def _payment_method_option_currency_label(currency: str) -> str:
+    cur = str(currency or '').strip().upper()
+    if cur == 'ACCUM':
+        return 'Acumulador'
+    return cur
+
+
+def _payment_method_option_sort_key(option: dict[str, Any]) -> tuple:
+    cur = str(option.get('currency_bucket') or option.get('currency') or '').upper()
+    order = {'COP': 0, 'USD': 1, 'ACCUM': 2}
+    return (order.get(cur, 9), str(option.get('label') or ''))
+
+
 def list_payment_method_options() -> list[dict[str, Any]]:
     """Medios de pago configurados (mismo Nombre que en Medios de pago)."""
-    from app.store.balance_recharge_payment import get_payment_methods_config
+    from app.store.balance_recharge_payment import (
+        get_payment_methods_config,
+        payment_method_option_display_label,
+    )
 
     config = get_payment_methods_config()
     out: list[dict[str, Any]] = []
     seen_ids: set[str] = set()
     for currency, methods in config.items():
         cur = str(currency or '').strip().upper()
-        if cur == 'ACCUM':
+        if cur not in ('COP', 'USD', 'ACCUM'):
             continue
         for m in methods or []:
             label = str(m.get('label') or '').strip()
@@ -42,13 +67,31 @@ def list_payment_method_options() -> list[dict[str, Any]]:
             if m.get('enabled') is False:
                 continue
             seen_ids.add(mid)
+            display_label = payment_method_option_display_label(m)
             out.append({
                 'id': mid,
                 'label': label,
-                'currency': cur,
+                'display_label': display_label or label,
+                'currency': _payment_method_option_currency_label(cur),
+                'currency_bucket': cur,
             })
-    out.sort(key=lambda x: (x.get('currency') or '', x.get('label') or ''))
+    out.sort(key=_payment_method_option_sort_key)
     return out
+
+
+def _resolve_payment_method_option(
+    payment_method_label: str = '',
+    payment_method_id: str = '',
+) -> dict[str, Any] | None:
+    pm_id = (payment_method_id or '').strip()
+    if pm_id:
+        pm = resolve_payment_method_by_id(pm_id)
+        if pm:
+            return pm
+    label = (payment_method_label or '').strip()
+    if label:
+        return resolve_payment_method_by_label(label)
+    return None
 
 
 def resolve_payment_method_by_label(label: str) -> dict[str, Any] | None:
@@ -120,14 +163,51 @@ def _repair_regex_entry_ids(raw_list: list[Any]) -> tuple[list[dict[str, Any]], 
     return out, changed
 
 
+def _is_bancolombia_classic_regex_entry(entry: dict[str, Any]) -> bool:
+    pm_id = str(entry.get('payment_method_id') or '').strip().lower()
+    label = str(entry.get('payment_method_label') or entry.get('description') or '').strip().lower()
+    haystack = f'{pm_id} {label}'
+    if not any(tok in haystack for tok in ('bancolombia', 'cuenta de ahorros')):
+        return False
+    return not any(tok in haystack for tok in ('bre-b', 'bre_b', 'breb', 'breve', 'kamin'))
+
+
+def _upgrade_bancolombia_regex_pattern(entry: dict[str, Any]) -> dict[str, Any]:
+    """Regex canónico: grupo 1 monto, 2 sufijo *XXXX, 3 fecha, 4 hora (sin comprobante)."""
+    if not _is_bancolombia_classic_regex_entry(entry):
+        return entry
+    pattern = str(entry.get('pattern') or '').strip()
+    if not pattern:
+        entry['pattern'] = BANCOLOMBIA_TRANSFER_EMAIL_REGEX
+        return entry
+    low = pattern.lower()
+    if 'recibiste' not in low or 'cuenta' not in low:
+        return entry
+    if pattern == BANCOLOMBIA_TRANSFER_EMAIL_REGEX:
+        return entry
+    entry['pattern'] = BANCOLOMBIA_TRANSFER_EMAIL_REGEX
+    return entry
+
+
 def _sync_regex_entry_payment_method(entry: dict[str, Any]) -> dict[str, Any]:
-    """Alinea etiqueta con el medio actual (por id); conserva etiqueta si el medio ya no está."""
+    """Alinea id y etiqueta con el medio actual (ids legados como bancolombia_cuenta_de_ahorros)."""
+    label = str(entry.get('payment_method_label') or entry.get('description') or '').strip()
     pm_id = str(entry.get('payment_method_id') or '').strip()
+    pm = _resolve_payment_method_option(label, pm_id)
+    if pm:
+        canonical_id = str(pm.get('id') or '').strip()
+        canonical_label = str(pm.get('label') or '').strip()
+        if canonical_id:
+            entry['payment_method_id'] = canonical_id
+        if canonical_label:
+            entry['payment_method_label'] = canonical_label
+            entry['description'] = canonical_label
+        return entry
     if pm_id:
-        pm = resolve_payment_method_by_id(pm_id)
-        if pm and pm.get('label'):
-            entry['payment_method_label'] = pm['label']
-            entry['description'] = pm['label']
+        pm_by_id = resolve_payment_method_by_id(pm_id)
+        if pm_by_id and pm_by_id.get('label'):
+            entry['payment_method_label'] = pm_by_id['label']
+            entry['description'] = pm_by_id['label']
     return entry
 
 
@@ -181,7 +261,20 @@ def _normalize_regex_entry(raw: Any) -> dict[str, Any] | None:
         # Alias legado para UI antigua
         'description': payment_method_label,
     }
-    return _sync_regex_entry_payment_method(out)
+    out = _sync_regex_entry_payment_method(out)
+    out = _upgrade_bancolombia_regex_pattern(out)
+    pm = _resolve_payment_method_option(
+        str(out.get('payment_method_label') or ''),
+        str(out.get('payment_method_id') or ''),
+    )
+    if pm:
+        display = str(pm.get('display_label') or pm.get('label') or payment_method_label).strip()
+        cur = str(pm.get('currency') or '').strip()
+        if display and cur:
+            display = f'{display} ({cur})'
+        if display:
+            out['display_label'] = display
+    return out
 
 
 def _parse_settings_row(row: StoreSetting | None) -> dict[str, Any]:
@@ -195,14 +288,31 @@ def _parse_settings_row(row: StoreSetting | None) -> dict[str, Any]:
     entries: list[dict[str, Any]] = []
     if isinstance(stored.get('regex_entries'), list):
         repaired, fixed_ids = _repair_regex_entry_ids(stored['regex_entries'])
-        if fixed_ids:
+        repaired_pm_ids = False
+        repaired_patterns = False
+        for item in repaired:
+            before_id = str(item.get('payment_method_id') or '').strip()
+            before_pattern = str(item.get('pattern') or '').strip()
+            item = _upgrade_bancolombia_regex_pattern(item)
+            if str(item.get('pattern') or '').strip() != before_pattern:
+                repaired_patterns = True
+            normalized = _normalize_regex_entry(item)
+            if not normalized:
+                continue
+            after_id = str(normalized.get('payment_method_id') or '').strip()
+            if after_id and after_id != before_id:
+                item['payment_method_id'] = after_id
+                item['payment_method_label'] = normalized.get('payment_method_label') or item.get(
+                    'payment_method_label'
+                )
+                item['description'] = item['payment_method_label']
+                repaired_pm_ids = True
+            if not any(x['id'] == normalized['id'] for x in entries):
+                entries.append(normalized)
+        if fixed_ids or repaired_pm_ids or repaired_patterns:
             stored['regex_entries'] = repaired
             row.value = json.dumps(stored, ensure_ascii=False)
             db.session.commit()
-        for item in repaired:
-            normalized = _normalize_regex_entry(item)
-            if normalized and not any(x['id'] == normalized['id'] for x in entries):
-                entries.append(normalized)
     data['regex_entries'] = entries
 
     imap_servers: list[dict[str, Any]] = []
@@ -278,16 +388,16 @@ def create_email_regex_entry(
     sender: str = '',
     pattern: str = '',
     note: str = '',
+    payment_method_id: str = '',
 ) -> dict[str, Any]:
     payment_method_label = (payment_method_label or '').strip()
     sender = (sender or '').strip()
     pattern = (pattern or '').strip()
     note = (note or '').strip()
-    if not payment_method_label:
-        raise ValueError('Selecciona el medio de pago.')
-    pm = resolve_payment_method_by_label(payment_method_label)
+    pm = _resolve_payment_method_option(payment_method_label, payment_method_id)
     if not pm:
-        raise ValueError('El medio de pago no existe. Usa el mismo Nombre que en Medios de pago.')
+        raise ValueError('Selecciona el medio de pago.')
+    payment_method_label = str(pm.get('label') or payment_method_label).strip()
     if pattern:
         _validate_pattern(pattern)
 
@@ -318,16 +428,16 @@ def update_email_regex_entry(
     sender: str = '',
     pattern: str = '',
     note: str = '',
+    payment_method_id: str = '',
 ) -> dict[str, Any]:
     payment_method_label = (payment_method_label or '').strip()
     sender = (sender or '').strip()
     pattern = (pattern or '').strip()
     note = (note or '').strip()
-    if not payment_method_label:
-        raise ValueError('Selecciona el medio de pago.')
-    pm = resolve_payment_method_by_label(payment_method_label)
+    pm = _resolve_payment_method_option(payment_method_label, payment_method_id)
     if not pm:
-        raise ValueError('El medio de pago no existe. Usa el mismo Nombre que en Medios de pago.')
+        raise ValueError('Selecciona el medio de pago.')
+    payment_method_label = str(pm.get('label') or payment_method_label).strip()
     if pattern:
         _validate_pattern(pattern)
 

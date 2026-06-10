@@ -7,9 +7,15 @@ import threading
 import time
 from datetime import datetime, time as dt_time, timedelta, timezone
 
+from sqlalchemy import or_
+
 from app.extensions import db
 from app.store.models import BalanceRecharge, StoreSetting
 from app.utils.timezone import COLOMBIA_TZ, get_colombia_now
+
+# Nunca purgar solicitudes en cola de revisión / acumulación activa / auto sin verificar.
+_PURGE_PROTECTED_STATUSES = frozenset({'pending', 'accumulated'})
+_VALID_PURGE_CATEGORIES = frozenset({'all', 'review', 'auto', 'accum'})
 
 logger = logging.getLogger(__name__)
 
@@ -29,6 +35,7 @@ def _default_settings():
         'retention_days': 90,
         'run_interval_hours': 24,
         'scope': 'all',
+        'purge_category': 'all',
         'user_id': None,
         'last_run_at': None,
         'last_deleted_count': 0,
@@ -204,8 +211,62 @@ def delete_proof_files_for_user_ids(app, user_ids):
     return total
 
 
-def _recharges_query_before_cutoff(cutoff, user_id=None):
+def _accumulator_method_ids():
+    from app.store.balance_recharge_payment import accumulator_method_ids
+
+    return accumulator_method_ids() or []
+
+
+def _normalize_purge_category(raw) -> str:
+    cat = (raw or 'all').strip().lower()
+    return cat if cat in _VALID_PURGE_CATEGORIES else 'all'
+
+
+def _apply_purge_safety_filter(q):
+    """Excluye pendientes, acumulados activos y automáticas sin verificar."""
+    q = q.filter(~BalanceRecharge.status.in_(tuple(_PURGE_PROTECTED_STATUSES)))
+    q = q.filter(
+        or_(
+            BalanceRecharge.status != 'auto_credited',
+            BalanceRecharge.admin_verified.isnot(None),
+        )
+    )
+    return q.filter(
+        or_(
+            BalanceRecharge.status != 'auto_accumulated',
+            BalanceRecharge.admin_verified.isnot(None),
+        )
+    )
+
+
+def _apply_purge_category_filter(q, purge_category: str | None):
+    """Limita la limpieza a Consignaciones, Recargas acreditadas o Revisión acumulador."""
+    cat = _normalize_purge_category(purge_category)
+    if cat == 'all':
+        return q
+
+    accum_ids = _accumulator_method_ids()
+    if cat == 'review':
+        if accum_ids:
+            q = q.filter(~BalanceRecharge.payment_method_id.in_(accum_ids))
+        return q
+    if cat == 'auto':
+        q = q.filter(BalanceRecharge.status == 'auto_credited')
+        if accum_ids:
+            q = q.filter(~BalanceRecharge.payment_method_id.in_(accum_ids))
+        return q
+    if cat == 'accum':
+        if accum_ids:
+            q = q.filter(BalanceRecharge.payment_method_id.in_(accum_ids))
+        else:
+            q = q.filter(BalanceRecharge.id < 0)
+    return q
+
+
+def _recharges_query_before_cutoff(cutoff, user_id=None, purge_category: str | None = 'all'):
     q = BalanceRecharge.query
+    q = _apply_purge_safety_filter(q)
+    q = _apply_purge_category_filter(q, purge_category)
     if cutoff is not None:
         q = q.filter(BalanceRecharge.created_at <= cutoff)
     if user_id is not None:
@@ -213,19 +274,25 @@ def _recharges_query_before_cutoff(cutoff, user_id=None):
     return q
 
 
-def count_recharges_to_purge(retention_days, user_id=None):
+def count_recharges_to_purge(retention_days, user_id=None, purge_category: str | None = 'all'):
     cutoff = _cutoff_utc(retention_days)
-    return _recharges_query_before_cutoff(cutoff, user_id).count()
+    return _recharges_query_before_cutoff(cutoff, user_id, purge_category).count()
 
 
-def purge_recharges_batched(app, retention_days, user_id=None, batch_size=PURGE_BATCH_SIZE):
+def purge_recharges_batched(
+    app,
+    retention_days,
+    user_id=None,
+    purge_category: str | None = 'all',
+    batch_size=PURGE_BATCH_SIZE,
+):
     cutoff = _cutoff_utc(retention_days)
     total_deleted = 0
     batch_size = max(25, int(batch_size or PURGE_BATCH_SIZE))
 
     while True:
         rows = (
-            _recharges_query_before_cutoff(cutoff, user_id)
+            _recharges_query_before_cutoff(cutoff, user_id, purge_category)
             .order_by(BalanceRecharge.id.asc())
             .limit(batch_size)
             .all()
@@ -267,6 +334,7 @@ def enqueue_purge_background(
     app,
     retention_days,
     user_id=None,
+    purge_category: str | None = 'all',
     mark_auto_run=False,
 ):
     global _purge_job_running
@@ -281,7 +349,12 @@ def enqueue_purge_background(
         deleted = 0
         try:
             with app.app_context():
-                deleted = purge_recharges_batched(app, retention_days, user_id=user_id)
+                deleted = purge_recharges_batched(
+                    app,
+                    retention_days,
+                    user_id=user_id,
+                    purge_category=purge_category,
+                )
                 if mark_auto_run:
                     now = datetime.now(timezone.utc).replace(tzinfo=None)
                     settings = get_cleanup_settings()
@@ -294,6 +367,12 @@ def enqueue_purge_background(
                         deleted,
                         retention_days,
                     )
+                    try:
+                        from app.store.balance_recharge_events import notify_balance_recharge_updated
+
+                        notify_balance_recharge_updated(None, reason='purge_cleanup')
+                    except Exception:
+                        pass
         except Exception as exc:
             logger.exception('Error en limpieza del historial de recargas: %s', exc)
             try:
@@ -340,6 +419,7 @@ def run_scheduled_cleanup_if_due(app):
             user_id = None
             if settings.get('scope') == 'user' and settings.get('user_id'):
                 user_id = int(settings['user_id'])
+            purge_category = _normalize_purge_category(settings.get('purge_category'))
 
             settings['last_run_at'] = now.isoformat()
             save_cleanup_settings(settings)
@@ -348,6 +428,7 @@ def run_scheduled_cleanup_if_due(app):
                 app,
                 retention,
                 user_id=user_id,
+                purge_category=purge_category,
                 mark_auto_run=True,
             )
             if not started:

@@ -3907,21 +3907,31 @@ def add_balance():
         if tipo_precio_raw and tipo_precio_raw in ['USD', 'COP']:
             tipo_precio = tipo_precio_raw.lower()
     if tipo_precio == 'usd':
-        cur = user.saldo_usd or 0
+        cur = float(user.saldo_usd or 0)
         if subtract:
-            user.saldo_usd = max(0.0, cur - amount_usd)
+            if amount_usd <= 0:
+                return jsonify({'success': False, 'error': 'El monto a descontar debe ser mayor que cero'}), 400
+            user.saldo_usd = cur - amount_usd
         else:
             user.saldo_usd = cur + amount_usd
     elif tipo_precio == 'cop':
-        cur = user.saldo_cop or 0
+        cur = float(user.saldo_cop or 0)
         if subtract:
-            user.saldo_cop = max(0.0, cur - amount_cop)
+            if amount_cop <= 0:
+                return jsonify({'success': False, 'error': 'El monto a descontar debe ser mayor que cero'}), 400
+            user.saldo_cop = cur - amount_cop
         else:
             user.saldo_cop = cur + amount_cop
     else:
         return jsonify({'success': False, 'error': 'El usuario no tiene tipo de precio configurado (USD o COP).'}), 400
     from app import db
     db.session.commit()
+    try:
+        from app.store.balance_recharge_events import notify_balance_recharge_updated
+
+        notify_balance_recharge_updated(int(user.id), reason='admin_balance_adjust')
+    except Exception:
+        pass
     return jsonify({'success': True, 'new_saldo_usd': user.saldo_usd, 'new_saldo_cop': user.saldo_cop})
 
 
@@ -4242,6 +4252,19 @@ def procesar_pago():
             total_cop += p.get('cantidad', 1) * p.get('precio_unitario', 0)
         elif p.get('moneda') == 'USD':
             total_usd += p.get('cantidad', 1) * p.get('precio_unitario', 0)
+
+    from decimal import Decimal
+    from app.store.transaction_amount_limits import (
+        MAX_TRANSACTION_AMOUNT_COP,
+        MAX_TRANSACTION_AMOUNT_USD,
+        TRANSACTION_AMOUNT_LIMIT_MESSAGE,
+    )
+
+    if Decimal(str(total_cop or 0)) > MAX_TRANSACTION_AMOUNT_COP:
+        return jsonify({'success': False, 'error': TRANSACTION_AMOUNT_LIMIT_MESSAGE}), 400
+    if Decimal(str(total_usd or 0)) > MAX_TRANSACTION_AMOUNT_USD:
+        return jsonify({'success': False, 'error': TRANSACTION_AMOUNT_LIMIT_MESSAGE}), 400
+
     if user.saldo_cop is None:
         user.saldo_cop = 0
     if user.saldo_usd is None:
@@ -4439,6 +4462,12 @@ def procesar_pago():
         user.saldo_cop -= total_cop
         user.saldo_usd -= total_usd
         db.session.commit()
+        try:
+            from app.store.balance_recharge_events import notify_balance_recharge_updated
+
+            notify_balance_recharge_updated(int(user.id), reason='store_checkout')
+        except Exception:
+            pass
         if checkout_sale_ids:
             from app.store.sale_purchase_snapshot import (
                 ensure_sale_schema,
@@ -5057,6 +5086,36 @@ def historial_compras_usuario():
     )
 
 
+@store_bp.route('/api/historial_compras/recharges')
+@store_access_required
+def api_historial_compras_recharges():
+    """Etiquetas actuales de recargas/acumulador (corrige filas ya guardadas sin recargar toda la página)."""
+    user = None
+    username = session.get('username')
+    user_id = session.get('user_id')
+    if username:
+        user = User.query.filter_by(username=username).first()
+    elif user_id:
+        user = User.query.get(user_id)
+    if not user:
+        return jsonify({'ok': False, 'error': 'no_auth'}), 401
+
+    _ensure_balance_recharges_table()
+    from app.store.balance_recharge_historial_snapshot import ensure_snapshot_table
+    from app.store.balance_recharge_historial import build_recharge_historial_items
+
+    ensure_snapshot_table()
+    admin_username = current_app.config.get('ADMIN_USER', 'admin')
+    mostrar_usuario_comprador = username == admin_username
+    if mostrar_usuario_comprador:
+        items = build_recharge_historial_items(all_users=True, utc_to_colombia_fn=utc_to_colombia)
+    else:
+        billing = _balance_recharge_viewer_billing_user(user)
+        uid = int(billing.id) if billing else int(user.id)
+        items = build_recharge_historial_items(user_id=uid, utc_to_colombia_fn=utc_to_colombia)
+    return jsonify({'ok': True, 'items': items})
+
+
 @store_bp.route('/api/purchase-history/cleanup-settings', methods=['GET', 'POST'])
 @csrf_exempt_route
 @admin_required
@@ -5492,7 +5551,7 @@ def _ensure_balance_recharges_table():
                 ('amount_credited', 'ALTER TABLE store_balance_recharges ADD COLUMN amount_credited NUMERIC(12, 2)'),
                 ('analyzer_json', 'ALTER TABLE store_balance_recharges ADD COLUMN analyzer_json TEXT'),
                 ('admin_verified', 'ALTER TABLE store_balance_recharges ADD COLUMN admin_verified BOOLEAN'),
-                ('receipt_number', 'ALTER TABLE store_balance_recharges ADD COLUMN receipt_number VARCHAR(32)'),
+                ('receipt_number', 'ALTER TABLE store_balance_recharges ADD COLUMN receipt_number VARCHAR(64)'),
                 ('proof_image_hash', 'ALTER TABLE store_balance_recharges ADD COLUMN proof_image_hash VARCHAR(64)'),
                 ('email_verify_status', 'ALTER TABLE store_balance_recharges ADD COLUMN email_verify_status VARCHAR(32)'),
                 ('email_verify_attempts', 'ALTER TABLE store_balance_recharges ADD COLUMN email_verify_attempts INTEGER DEFAULT 0'),
@@ -5501,6 +5560,7 @@ def _ensure_balance_recharges_table():
                     f'ALTER TABLE store_balance_recharges ADD COLUMN email_verify_next_at {dt_type}',
                 ),
                 ('email_verify_json', 'ALTER TABLE store_balance_recharges ADD COLUMN email_verify_json TEXT'),
+                ('historial_producto', 'ALTER TABLE store_balance_recharges ADD COLUMN historial_producto VARCHAR(200)'),
             ]
             for col_name, ddl in migrations:
                 if col_name not in cols:
@@ -5516,6 +5576,45 @@ def _ensure_balance_recharges_table():
                             dialect,
                             col_exc,
                         )
+            if 'receipt_number' in cols and dialect == 'postgresql':
+                try:
+                    db.session.execute(
+                        text(
+                            'ALTER TABLE store_balance_recharges '
+                            'ALTER COLUMN receipt_number TYPE VARCHAR(64)'
+                        )
+                    )
+                    db.session.commit()
+                except Exception as widen_exc:
+                    db.session.rollback()
+                    current_app.logger.warning(
+                        'No se pudo ampliar receipt_number a VARCHAR(64) (%s): %s',
+                        dialect,
+                        widen_exc,
+                    )
+
+        index_names = {
+            (idx.get('name') or '').lower()
+            for idx in insp.get_indexes('store_balance_recharges')
+        }
+        uq_name = 'uq_store_balance_recharges_proof_image_hash'
+        if uq_name not in index_names:
+            try:
+                db.session.execute(
+                    text(
+                        'CREATE UNIQUE INDEX uq_store_balance_recharges_proof_image_hash '
+                        'ON store_balance_recharges (proof_image_hash) '
+                        'WHERE proof_image_hash IS NOT NULL'
+                    )
+                )
+                db.session.commit()
+            except Exception as idx_exc:
+                db.session.rollback()
+                current_app.logger.warning(
+                    'No se pudo crear índice único proof_image_hash (%s): %s',
+                    dialect,
+                    idx_exc,
+                )
 
         from app.store.balance_recharge_historial_snapshot import ensure_snapshot_table as _ensure_br_hist_snap
 
@@ -5630,6 +5729,8 @@ def _recharge_payment_methods_payload(viewer):
             'account_number': display.get('account_number') or '',
             'description': display.get('description') or '',
             'is_breb_bancolombia': bool(display.get('is_breb_bancolombia')),
+            'is_breb_nequi': bool(display.get('is_breb_nequi')),
+            'is_binance_pay': bool(display.get('is_binance_pay')),
             'bre_b_llave': display.get('bre_b_llave') or '',
             'enabled': bool(m.get('enabled', True)),
             'is_accumulator': is_accum,
@@ -5665,10 +5766,26 @@ def _user_balance_recharge_filter_counts(user_id):
     from app.store.models import BalanceRecharge
 
     base = BalanceRecharge.query.filter_by(user_id=user_id)
+    from sqlalchemy import and_, or_
+
+    pending_filter = or_(
+        BalanceRecharge.status == 'pending',
+        BalanceRecharge.status == 'pending_binance_pay',
+        and_(
+            BalanceRecharge.status == 'auto_credited',
+            BalanceRecharge.admin_verified.is_(None),
+        ),
+        and_(
+            BalanceRecharge.status == 'auto_accumulated',
+            BalanceRecharge.admin_verified.is_(None),
+        ),
+    )
     return {
         'all': base.count(),
-        'pending': base.filter(BalanceRecharge.status == 'pending').count(),
-        'accumulated': base.filter(BalanceRecharge.status == 'accumulated').count(),
+        'pending': base.filter(pending_filter).count(),
+        'accumulated': base.filter(
+            BalanceRecharge.status.in_(('accumulated', 'auto_accumulated'))
+        ).count(),
         'approved': base.filter(BalanceRecharge.status == 'approved').count(),
         'rejected': base.filter(BalanceRecharge.status == 'rejected').count(),
     }
@@ -5678,29 +5795,66 @@ def _balance_recharge_accum_filter_counts(accum_ids):
     """Conteos por estado para el filtro del panel Revisión acumulador."""
     from app.store.models import BalanceRecharge
 
-    empty = {'pending': 0, 'accumulated': 0, 'rejected': 0, 'all': 0}
+    empty = {
+        'pending': 0,
+        'accumulated': 0,
+        'rejected': 0,
+        'accum_converted': 0,
+        'all': 0,
+    }
     if not accum_ids:
         return empty
+    from sqlalchemy import and_, or_
+
     base = BalanceRecharge.query.filter(BalanceRecharge.payment_method_id.in_(accum_ids))
+    accum_pending_filter = or_(
+        BalanceRecharge.status == 'pending',
+        and_(
+            BalanceRecharge.status == 'auto_accumulated',
+            BalanceRecharge.admin_verified.is_(None),
+        ),
+    )
     return {
-        'pending': base.filter(BalanceRecharge.status == 'pending').count(),
+        'pending': base.filter(accum_pending_filter).count(),
         'accumulated': base.filter(BalanceRecharge.status == 'accumulated').count(),
         'rejected': base.filter(BalanceRecharge.status == 'rejected').count(),
+        'accum_converted': base.filter(BalanceRecharge.status == 'accum_converted').count(),
         'all': base.count(),
     }
 
 
+def _recharge_was_resubmitted_after_reject(recharge_row) -> bool:
+    import json as _json
+
+    raw = getattr(recharge_row, 'analyzer_json', None)
+    if not raw:
+        return False
+    try:
+        data = _json.loads(raw)
+        return bool(isinstance(data, dict) and data.get('resubmitted_after_reject'))
+    except Exception:
+        return False
+
+
 def _balance_recharge_status_label(status, recharge_row=None):
     st = (status or '').lower()
-    if st == 'auto_credited' and recharge_row and getattr(recharge_row, 'admin_verified', None) is None:
+    if st in ('auto_credited', 'auto_accumulated') and recharge_row and getattr(
+        recharge_row, 'admin_verified', None
+    ) is None:
+        if _recharge_was_resubmitted_after_reject(recharge_row):
+            return 'Pendiente reenviado'
         return 'Pendiente verificación'
     if st == 'approved' and recharge_row and getattr(recharge_row, 'auto_credited', False):
-        return 'Aprobado/acreditado'
+        return 'Aprobado'
+    if st == 'pending' and recharge_row and _recharge_was_resubmitted_after_reject(recharge_row):
+        return 'Pendiente reenviado'
     labels = {
         'pending': 'Pendiente',
+        'pending_binance_pay': 'Esperando pago Binance',
         'approved': 'Aprobada',
         'rejected': 'Rechazada',
         'auto_credited': '',
+        'auto_accumulated': '',
         'accumulated': 'Acumulado',
         'accum_converted': 'Convertido',
     }
@@ -5709,12 +5863,20 @@ def _balance_recharge_status_label(status, recharge_row=None):
 
 def _balance_recharge_analyzer_payload(recharge_row):
     import json as _json
+
+    from app.store.balance_recharge_analyzer import supplement_analyzer_display_fields
+
     raw = getattr(recharge_row, 'analyzer_json', None)
     if not raw:
         return None
     try:
         data = _json.loads(raw)
-        return data if isinstance(data, dict) else None
+        if not isinstance(data, dict):
+            return None
+        row_receipt = str(getattr(recharge_row, 'receipt_number', None) or '').strip()
+        if row_receipt and not str(data.get('receipt_number') or '').strip():
+            data['receipt_number'] = row_receipt
+        return supplement_analyzer_display_fields(data)
     except Exception:
         return None
 
@@ -5758,9 +5920,23 @@ def _recharge_account_suffix_masked(recharge_row) -> str:
         masked = _mask(analyzer.get('account_expected_digits'))
         if masked:
             return masked
+        snap = analyzer.get('payment_method_snapshot')
+        if isinstance(snap, dict):
+            masked = _mask(snap.get('account_expected_digits'))
+            if masked:
+                return masked
 
     pm_id = getattr(recharge_row, 'payment_method_id', None) or ''
-    from app.store.balance_recharge_payment import find_payment_method_for_recharge
+    from app.store.balance_recharge_payment import (
+        find_payment_method_for_recharge,
+        recharge_frozen_payment_context,
+    )
+
+    ctx = recharge_frozen_payment_context(recharge_row, analyzer if isinstance(analyzer, dict) else None)
+    if ctx.get('frozen_at_submit') and ctx.get('is_breb_bancolombia'):
+        masked = _mask(ctx.get('account_expected_digits'))
+        if masked:
+            return masked
 
     method = find_payment_method_for_recharge(recharge_row) or _find_method_by_id(pm_id)
     if payment_method_is_breb_bancolombia(method):
@@ -5771,7 +5947,10 @@ def _recharge_account_suffix_masked(recharge_row) -> str:
 
 
 def _serialize_balance_recharge_row(recharge_row, viewer, *, include_username=False):
-    from app.store.balance_recharge_email_scheduler import admin_note_for_end_user
+    from app.store.balance_recharge_email_scheduler import (
+        admin_note_for_end_user,
+        normalize_admin_note_display,
+    )
     from app.store.balance_recharge_payment import (
         currency_display_name,
         find_payment_method_for_recharge,
@@ -5813,7 +5992,7 @@ def _serialize_balance_recharge_row(recharge_row, viewer, *, include_username=Fa
         'analyzer': _balance_recharge_analyzer_payload(recharge_row),
         'created_at': fecha_str,
         'admin_note': (
-            (recharge_row.admin_note or '')
+            normalize_admin_note_display(recharge_row.admin_note)
             if viewer is None
             else admin_note_for_end_user(recharge_row.admin_note)
         ),
@@ -5830,9 +6009,13 @@ def _serialize_balance_recharge_row(recharge_row, viewer, *, include_username=Fa
         sub = User.query.get(recharge_row.submitted_by_user_id) if recharge_row.submitted_by_user_id else None
         if sub and sub.id != recharge_row.user_id:
             row['submitted_by'] = sub.username
-    from app.store.balance_recharge_email_scheduler import email_verify_display_for_row
+    from app.store.balance_recharge_email_scheduler import (
+        email_verify_can_reverify,
+        email_verify_display_for_row,
+    )
 
     row['email_verify'] = email_verify_display_for_row(recharge_row)
+    row['email_verify_can_reverify'] = email_verify_can_reverify(recharge_row)
     row['email_verify_status'] = getattr(recharge_row, 'email_verify_status', None)
     return row
 
@@ -5906,13 +6089,58 @@ def api_user_balance_recharges():
     q = BalanceRecharge.query.filter_by(user_id=billing.id).order_by(
         BalanceRecharge.created_at.desc()
     )
-    if status != 'all':
+    if status == 'pending':
+        from sqlalchemy import and_, or_
+
+        q = q.filter(
+            or_(
+                BalanceRecharge.status == 'pending',
+                and_(
+                    BalanceRecharge.status == 'auto_credited',
+                    BalanceRecharge.admin_verified.is_(None),
+                ),
+                and_(
+                    BalanceRecharge.status == 'auto_accumulated',
+                    BalanceRecharge.admin_verified.is_(None),
+                ),
+            )
+        )
+    elif status != 'all':
         q = q.filter(BalanceRecharge.status == status)
     rows = q.limit(100).all()
     return jsonify({
         'success': True,
         'filter_counts': _user_balance_recharge_filter_counts(billing.id),
         'items': [_serialize_balance_recharge_row(r, user) for r in rows],
+    })
+
+
+@store_bp.route('/api/user/balance-recharge/<int:recharge_id>', methods=['GET'])
+@store_access_required
+def api_user_balance_recharge_one(recharge_id):
+    """Una solicitud para actualización incremental (SSE + AJAX)."""
+    from app.store.models import BalanceRecharge
+
+    _ensure_balance_recharges_table()
+    user_id = session.get('user_id')
+    user = User.query.get(user_id) if user_id else None
+    if not user:
+        return jsonify({'success': False, 'message': 'No autenticado'}), 401
+    billing = _balance_recharge_viewer_billing_user(user)
+    if not billing:
+        return jsonify({'success': False, 'message': 'Sin acceso'}), 403
+
+    row = BalanceRecharge.query.filter_by(
+        id=int(recharge_id),
+        user_id=int(billing.id),
+    ).first()
+    if not row:
+        return jsonify({'success': False, 'message': 'Solicitud no encontrada'}), 404
+
+    return jsonify({
+        'success': True,
+        'item': _serialize_balance_recharge_row(row, user),
+        'filter_counts': _user_balance_recharge_filter_counts(billing.id),
     })
 
 
@@ -5975,6 +6203,15 @@ def api_user_balance_recharge_submit():
     if amount_val <= 0:
         return jsonify({'success': False, 'message': 'El monto debe ser mayor que cero'}), 400
 
+    selected_method_early = next((m for m in allowed if m.get('id') == payment_method_id), {})
+    from app.store.transaction_amount_limits import transaction_amount_limit_error_message
+
+    amount_limit_msg = transaction_amount_limit_error_message(
+        amount_val, currency, selected_method_early
+    )
+    if amount_limit_msg:
+        return jsonify({'success': False, 'message': amount_limit_msg}), 400
+
     files = request.files.getlist('proofs') or []
     files = [f for f in files if f and f.filename]
     if not files:
@@ -6027,22 +6264,34 @@ def api_user_balance_recharge_submit():
             'success': False,
             'message': (
                 f'El medio «{pm_label or payment_method_id}» no está listo para recargas: '
-                'en admin debe elegirse un Medio (Binance, Nequi, etc.), no «— Medio —».'
+                'en admin debe elegirse un medio de pago (Binance, Nequi, etc.), no «— Medio de pago —».'
             ),
         }), 400
 
-    auto_recharge = _user_has_recarga_automatica(user) and not is_accum
+    auto_recharge = _user_has_recarga_automatica(user)
     proof_path = os.path.join(upload_dir, saved_files[0]['stored'])
 
     from app.store.balance_recharge_analyzer import (
         analyze_recharge_proof,
         find_duplicate_recharge,
+        proof_account_config_invalid_message,
+        proof_account_missing_config_message,
         proof_account_mismatch_message,
+        proof_account_not_recognized_message,
         proof_amount_mismatch_message,
         proof_breb_llave_mismatch_message,
+        proof_bancolombia_to_nequi_wrong_method_message,
+        proof_breb_nequi_wrong_method_message,
+        proof_daviplata_breb_wrong_method_message,
+        proof_nequi_envio_bancolombia_wrong_method_message,
+        proof_nequi_llave_bancolombia_wrong_method_message,
+        proof_nequi_corresponsal_wrong_method_message,
+        proof_crypto_wallet_wrong_method_message,
+        proof_binance_id_wrong_method_message,
         proof_payment_brand_mismatch_message,
         proof_image_hash as compute_proof_hash,
     )
+    from app.store.transaction_amount_limits import proof_transaction_amount_limit_message
 
     img_hash = compute_proof_hash(proof_path)
     upload_day = get_colombia_now().date()
@@ -6055,6 +6304,133 @@ def api_user_balance_recharge_submit():
         payment_method=selected_method,
         upload_date=upload_day,
     )
+
+    amount_limit_proof_msg = proof_transaction_amount_limit_message(
+        analysis, currency, selected_method
+    )
+    if amount_limit_proof_msg:
+        try:
+            os.remove(proof_path)
+        except OSError:
+            pass
+        return jsonify({'success': False, 'message': amount_limit_proof_msg}), 400
+
+    nequi_corr_method_msg = proof_nequi_corresponsal_wrong_method_message(
+        analysis,
+        selected_method,
+        payment_method_id,
+        pm_label,
+    )
+    if nequi_corr_method_msg:
+        try:
+            os.remove(proof_path)
+        except OSError:
+            pass
+        return jsonify({'success': False, 'message': nequi_corr_method_msg}), 400
+
+    bancolombia_nequi_method_msg = proof_bancolombia_to_nequi_wrong_method_message(
+        analysis,
+        selected_method,
+        payment_method_id,
+        pm_label,
+    )
+    if bancolombia_nequi_method_msg:
+        try:
+            os.remove(proof_path)
+        except OSError:
+            pass
+        return jsonify({'success': False, 'message': bancolombia_nequi_method_msg}), 400
+
+    nequi_llave_banco_method_msg = proof_nequi_llave_bancolombia_wrong_method_message(
+        analysis,
+        selected_method,
+        payment_method_id,
+        pm_label,
+    )
+    if nequi_llave_banco_method_msg:
+        try:
+            os.remove(proof_path)
+        except OSError:
+            pass
+        return jsonify({'success': False, 'message': nequi_llave_banco_method_msg}), 400
+
+    nequi_banco_method_msg = proof_nequi_envio_bancolombia_wrong_method_message(
+        analysis,
+        selected_method,
+        payment_method_id,
+        pm_label,
+    )
+    if nequi_banco_method_msg:
+        try:
+            os.remove(proof_path)
+        except OSError:
+            pass
+        return jsonify({'success': False, 'message': nequi_banco_method_msg}), 400
+
+    breb_nequi_method_msg = proof_breb_nequi_wrong_method_message(
+        analysis,
+        selected_method,
+        payment_method_id,
+        pm_label,
+    )
+    if breb_nequi_method_msg:
+        try:
+            os.remove(proof_path)
+        except OSError:
+            pass
+        return jsonify({'success': False, 'message': breb_nequi_method_msg}), 400
+
+    davi_breb_method_msg = proof_daviplata_breb_wrong_method_message(
+        analysis,
+        selected_method,
+        payment_method_id,
+        pm_label,
+    )
+    if davi_breb_method_msg:
+        try:
+            os.remove(proof_path)
+        except OSError:
+            pass
+        return jsonify({'success': False, 'message': davi_breb_method_msg}), 400
+
+    crypto_wallet_method_msg = proof_crypto_wallet_wrong_method_message(
+        analysis,
+        selected_method,
+        payment_method_id,
+        pm_label,
+    )
+    if crypto_wallet_method_msg:
+        try:
+            os.remove(proof_path)
+        except OSError:
+            pass
+        return jsonify({'success': False, 'message': crypto_wallet_method_msg}), 400
+
+    binance_id_method_msg = proof_binance_id_wrong_method_message(
+        analysis,
+        selected_method,
+        payment_method_id,
+        pm_label,
+    )
+    if binance_id_method_msg:
+        try:
+            os.remove(proof_path)
+        except OSError:
+            pass
+        return jsonify({'success': False, 'message': binance_id_method_msg}), 400
+
+    brand_mismatch_msg = proof_payment_brand_mismatch_message(
+        analysis,
+        payment_method_id,
+        pm_label,
+        selected_method,
+    )
+    if brand_mismatch_msg:
+        try:
+            os.remove(proof_path)
+        except OSError:
+            pass
+        return jsonify({'success': False, 'message': brand_mismatch_msg}), 400
 
     mismatch_msg = proof_amount_mismatch_message(analysis, currency)
     if mismatch_msg:
@@ -6072,18 +6448,21 @@ def api_user_balance_recharge_submit():
             pass
         return jsonify({'success': False, 'message': breb_llave_mismatch_msg}), 400
 
-    brand_mismatch_msg = proof_payment_brand_mismatch_message(
-        analysis,
-        payment_method_id,
-        pm_label,
-        selected_method,
-    )
-    if brand_mismatch_msg:
+    account_config_invalid_msg = proof_account_config_invalid_message(analysis)
+    if account_config_invalid_msg:
         try:
             os.remove(proof_path)
         except OSError:
             pass
-        return jsonify({'success': False, 'message': brand_mismatch_msg}), 400
+        return jsonify({'success': False, 'message': account_config_invalid_msg}), 400
+
+    account_missing_config_msg = proof_account_missing_config_message(analysis)
+    if account_missing_config_msg:
+        try:
+            os.remove(proof_path)
+        except OSError:
+            pass
+        return jsonify({'success': False, 'message': account_missing_config_msg}), 400
 
     account_mismatch_msg = proof_account_mismatch_message(analysis)
     if account_mismatch_msg:
@@ -6093,14 +6472,25 @@ def api_user_balance_recharge_submit():
             pass
         return jsonify({'success': False, 'message': account_mismatch_msg}), 400
 
-    receipt_no = analysis.get('receipt_number')
+    account_not_recognized_msg = proof_account_not_recognized_message(analysis)
+    if account_not_recognized_msg:
+        try:
+            os.remove(proof_path)
+        except OSError:
+            pass
+        return jsonify({'success': False, 'message': account_not_recognized_msg}), 400
+
+    receipt_no = str(analysis.get('receipt_number') or '').strip()[:64] or None
+
+    from app.store.balance_recharge_analyzer import free_recharge_proof_identifiers
 
     duplicate = find_duplicate_recharge(
         receipt_number=receipt_no,
         proof_image_hash=img_hash,
         user_id=billing.id,
     )
-    if duplicate:
+    resubmit_after_reject = bool(duplicate and duplicate.get('resubmit_after_reject'))
+    if duplicate and duplicate.get('blocks', True):
         existing_stored = None
         ex_id = duplicate.get('existing_id')
         ex_row = None
@@ -6159,6 +6549,14 @@ def api_user_balance_recharge_submit():
             )
         return jsonify({'success': False, 'message': dup_message}), 409
 
+    if resubmit_after_reject and duplicate.get('existing_id'):
+        prior_row = BalanceRecharge.query.get(int(duplicate['existing_id']))
+        if prior_row and (prior_row.status or '').lower() == 'rejected':
+            free_recharge_proof_identifiers(prior_row)
+            db.session.flush()
+        analysis['resubmitted_after_reject'] = True
+        analysis['resubmitted_from_recharge_id'] = int(duplicate['existing_id'])
+
     row = BalanceRecharge(
         user_id=billing.id,
         submitted_by_user_id=user.id,
@@ -6173,32 +6571,55 @@ def api_user_balance_recharge_submit():
         proof_image_hash=img_hash,
     )
 
+    resubmit_note = (
+        ' Solicitud reenviada: la anterior había sido rechazada y se revisará de nuevo.'
+        if resubmit_after_reject
+        else ''
+    )
+    ready_auto = bool(analysis.get('ready_for_auto'))
     if is_accum:
         row.analyzer_json = _json.dumps(analysis, ensure_ascii=False)
-        message = (
-            'Solicitud enviada. Un administrador revisará el comprobante y, '
-            'si es correcto, lo acumulará para convertirlo a tu saldo cuando corresponda.'
-        )
-    elif auto_recharge and analysis.get('ready_for_auto'):
+        if auto_recharge and ready_auto:
+            row.status = 'auto_accumulated'
+            row.admin_verified = None
+            row.amount_credited = amount_val
+            message = 'Saldo acumulado.' + resubmit_note
+        else:
+            message = 'Solicitud enviada. Te avisaremos cuando se revise.' + resubmit_note
+    elif auto_recharge and ready_auto:
         row.analyzer_json = _json.dumps(analysis, ensure_ascii=False)
         row.auto_credited = True
         row.amount_credited = amount_val
         row.status = 'auto_credited'
         row.admin_verified = None
         _apply_balance_credit(billing, currency, float(amount_val))
-        message = 'Saldo acreditado automáticamente. Un administrador verificará el comprobante.'
+        message = 'Saldo acreditado.' + resubmit_note
     else:
         row.analyzer_json = _json.dumps(analysis, ensure_ascii=False)
-        if auto_recharge and not analysis.get('ready_for_auto'):
-            message = (
-                'Solicitud enviada. El comprobante no cumple todas las validaciones '
-                'automáticas; un administrador lo revisará.'
-            )
-        else:
-            message = 'Solicitud enviada. Te avisaremos cuando se revise.'
+        message = 'Solicitud enviada. Te avisaremos cuando se revise.' + resubmit_note
+
+    from sqlalchemy.exc import IntegrityError
 
     db.session.add(row)
-    db.session.commit()
+    try:
+        db.session.commit()
+    except IntegrityError:
+        db.session.rollback()
+        try:
+            os.remove(proof_path)
+        except OSError:
+            pass
+        dup_after = find_duplicate_recharge(
+            receipt_number=receipt_no,
+            proof_image_hash=img_hash,
+            user_id=billing.id,
+        )
+        dup_message = (
+            dup_after['message']
+            if dup_after
+            else 'Esta imagen ya se envió. No puedes reutilizar el mismo comprobante.'
+        )
+        return jsonify({'success': False, 'message': dup_message}), 409
 
     try:
         from app.store.balance_recharge_email_scheduler import ensure_email_verification_scheduled
@@ -6209,13 +6630,398 @@ def api_user_balance_recharge_submit():
         current_app.logger.warning('No se pudo programar verificación por correo recarga %s: %s', row.id, exc)
         db.session.rollback()
 
+    from app.store.balance_recharge_events import notify_from_recharge_row
+
+    notify_from_recharge_row(row, reason='submitted')
+
     return jsonify({
         'success': True,
         'message': message,
         'item': _serialize_balance_recharge_row(row, user),
-        'auto_credited': auto_recharge,
+        'auto_credited': auto_recharge and ready_auto and not is_accum,
         'accumulated': is_accum,
+        'auto_accumulated': is_accum and auto_recharge and ready_auto,
     })
+
+
+@store_bp.route('/api/user/balance-recharges/events')
+@store_access_required
+def api_user_balance_recharge_events():
+    """SSE: avisa al usuario solo cuando cambia una recarga (sin polling)."""
+    import queue as queue_mod
+
+    from app.store.balance_recharge_events import (
+        recharge_events_heartbeat_seconds,
+        subscribe_user_recharge_events,
+        unsubscribe_user_recharge_events,
+    )
+
+    user_id = session.get('user_id')
+    user = User.query.get(user_id) if user_id else None
+    if not user:
+        return jsonify({'success': False, 'message': 'No autenticado'}), 401
+    if user.username != current_app.config.get('ADMIN_USER', 'admin') and not _eligible_tienda_user_licencias_portal(user):
+        return jsonify({'success': False, 'message': 'Sin acceso'}), 403
+    billing = _balance_recharge_viewer_billing_user(user)
+    if not billing:
+        return jsonify({'success': False, 'message': 'Sin acceso'}), 403
+
+    def generate():
+        q = subscribe_user_recharge_events(int(billing.id))
+        try:
+            yield f"data: {json.dumps({'type': 'connected'})}\n\n"
+            while True:
+                try:
+                    line = q.get(timeout=recharge_events_heartbeat_seconds())
+                    yield f"data: {line}\n\n"
+                except queue_mod.Empty:
+                    yield ": heartbeat\n\n"
+        finally:
+            unsubscribe_user_recharge_events(int(billing.id), q)
+
+    return Response(
+        stream_with_context(generate()),
+        mimetype='text/event-stream',
+        headers={
+            'Cache-Control': 'no-cache',
+            'Connection': 'keep-alive',
+            'X-Accel-Buffering': 'no',
+        },
+    )
+
+
+@store_bp.route('/api/admin/balance-recharges/events')
+@csrf_exempt_route
+@admin_required
+def api_admin_balance_recharge_events():
+    """SSE: avisa al admin cuando cambia cualquier recarga (sin polling)."""
+    import queue as queue_mod
+
+    from app.store.balance_recharge_events import (
+        recharge_events_heartbeat_seconds,
+        subscribe_admin_recharge_events,
+        unsubscribe_admin_recharge_events,
+    )
+
+    def generate():
+        q = subscribe_admin_recharge_events()
+        try:
+            yield f"data: {json.dumps({'type': 'connected'})}\n\n"
+            while True:
+                try:
+                    line = q.get(timeout=recharge_events_heartbeat_seconds())
+                    yield f"data: {line}\n\n"
+                except queue_mod.Empty:
+                    yield ": heartbeat\n\n"
+        finally:
+            unsubscribe_admin_recharge_events(q)
+
+    return Response(
+        stream_with_context(generate()),
+        mimetype='text/event-stream',
+        headers={
+            'Cache-Control': 'no-cache',
+            'Connection': 'keep-alive',
+            'X-Accel-Buffering': 'no',
+        },
+    )
+
+
+@store_bp.route('/api/user/balance-recharge/binance-pay/order', methods=['POST'])
+@store_access_required
+@csrf_exempt_route
+def api_user_balance_recharge_binance_pay_order():
+    import json as _json
+    from decimal import Decimal, InvalidOperation
+
+    from app.store.balance_recharge_binance_pay import (
+        binance_pay_credentials_configured,
+        build_order_analyzer_snapshot,
+        create_binance_pay_order,
+        friendly_binance_pay_error_message,
+        make_merchant_trade_no,
+        payment_method_binance_pay_api_key,
+        payment_method_binance_pay_secret,
+        proof_hash_for_binance_pay_order,
+    )
+    from app.store.balance_recharge_payment import (
+        methods_for_user_with_accum,
+        payment_method_is_binance_pay,
+    )
+    from app.store.models import BalanceRecharge
+
+    user_id = session.get('user_id')
+    user = User.query.get(user_id) if user_id else None
+    if not user:
+        return jsonify({'success': False, 'message': 'No autenticado'}), 401
+    if user.username != current_app.config.get('ADMIN_USER', 'admin') and not _eligible_tienda_user_licencias_portal(user):
+        return jsonify({'success': False, 'message': 'Sin acceso'}), 403
+
+    _ensure_balance_recharges_table()
+    billing = _balance_recharge_viewer_billing_user(user)
+    _, tipo_precio = catalog_products_for_store_user(billing or user)
+    tp = (tipo_precio or 'COP').upper()
+    if tp != 'USD':
+        return jsonify({
+            'success': False,
+            'message': 'Binance Pay solo está disponible para cuentas en USDT.',
+        }), 400
+
+    data = request.get_json(silent=True) or {}
+    payment_method_id = str(data.get('payment_method_id') or '').strip()
+    amount_raw = data.get('amount')
+    if not payment_method_id:
+        return jsonify({'success': False, 'message': 'Selecciona un medio de pago.'}), 400
+
+    from app.store.balance_recharge_analyzer import parse_recharge_amount
+
+    if isinstance(amount_raw, (int, float)):
+        amount_val = Decimal(str(amount_raw))
+    else:
+        parsed = parse_recharge_amount(str(amount_raw or ''))
+        if parsed is None:
+            return jsonify({'success': False, 'message': 'Indica un monto válido en USDT.'}), 400
+        try:
+            amount_val = Decimal(str(parsed))
+        except (InvalidOperation, ValueError):
+            return jsonify({'success': False, 'message': 'Indica un monto válido en USDT.'}), 400
+    if amount_val <= 0:
+        return jsonify({'success': False, 'message': 'El monto debe ser mayor que cero.'}), 400
+    if amount_val < Decimal('0.01'):
+        return jsonify({'success': False, 'message': 'El monto mínimo es 0.01 USDT.'}), 400
+
+    allowed = methods_for_user_with_accum(billing or user, tp, viewer=user)
+    selected = next((m for m in allowed if m.get('id') == payment_method_id), None)
+    if not selected:
+        return jsonify({'success': False, 'message': 'Medio de pago no válido.'}), 400
+
+    from app.store.transaction_amount_limits import transaction_amount_limit_error_message
+
+    binance_limit_msg = transaction_amount_limit_error_message(amount_val, 'USD', selected)
+    if binance_limit_msg:
+        return jsonify({'success': False, 'message': binance_limit_msg}), 400
+
+    if not payment_method_is_binance_pay(selected):
+        return jsonify({'success': False, 'message': 'Este medio no es Binance Pay.'}), 400
+    if not binance_pay_credentials_configured(selected):
+        return jsonify({
+            'success': False,
+            'message': 'Binance Pay no está configurado (falta API Key o Secret en admin).',
+        }), 400
+
+    currency = 'USD'
+    merchant_trade_no = make_merchant_trade_no(0)
+    row = BalanceRecharge(
+        user_id=billing.id,
+        submitted_by_user_id=user.id,
+        currency=currency,
+        payment_method_id=payment_method_id,
+        amount_claimed=amount_val,
+        note=None,
+        status='pending_binance_pay',
+        proof_files_json='[]',
+        proof_image_hash=proof_hash_for_binance_pay_order(merchant_trade_no),
+        receipt_number=merchant_trade_no,
+    )
+    db.session.add(row)
+    db.session.flush()
+    merchant_trade_no = make_merchant_trade_no(row.id)
+    row.receipt_number = merchant_trade_no
+    row.proof_image_hash = proof_hash_for_binance_pay_order(merchant_trade_no)
+
+    api_key = payment_method_binance_pay_api_key(selected)
+    secret = payment_method_binance_pay_secret(selected)
+    webhook_url = url_for('store_bp.api_binance_pay_webhook', _external=True)
+    pm_label = selected.get('label') or payment_method_id
+    description = f'Recarga saldo {pm_label}'[:256]
+
+    try:
+        order_resp = create_binance_pay_order(
+            api_key=api_key,
+            secret=secret,
+            merchant_trade_no=merchant_trade_no,
+            amount=amount_val,
+            currency='USDT',
+            description=description,
+            webhook_url=webhook_url,
+        )
+    except Exception as exc:
+        db.session.rollback()
+        current_app.logger.exception('Binance Pay create order failed: %s', exc)
+        return jsonify({
+            'success': False,
+            'message': 'No se pudo conectar con Binance Pay. Intenta de nuevo.',
+        }), 502
+
+    if str(order_resp.get('status') or '').upper() != 'SUCCESS':
+        db.session.rollback()
+        err = (
+            order_resp.get('errorMessage')
+            or order_resp.get('msg')
+            or order_resp.get('message')
+            or 'Binance rechazó la orden.'
+        )
+        return jsonify({
+            'success': False,
+            'message': friendly_binance_pay_error_message(str(err)),
+        }), 400
+
+    analyzer = build_order_analyzer_snapshot(
+        merchant_trade_no=merchant_trade_no,
+        payment_method_id=payment_method_id,
+        payment_method_label=pm_label,
+        amount=float(amount_val),
+        currency=currency,
+        order_response=order_resp,
+    )
+    row.analyzer_json = _json.dumps(analyzer, ensure_ascii=False)
+    db.session.commit()
+
+    try:
+        from app.store.balance_recharge_events import notify_from_recharge_row
+
+        notify_from_recharge_row(row, reason='binance_pay_order_created')
+    except Exception:
+        pass
+
+    data_out = order_resp.get('data') if isinstance(order_resp.get('data'), dict) else {}
+    return jsonify({
+        'success': True,
+        'message': 'Orden creada. Completa el pago en Binance.',
+        'merchant_trade_no': merchant_trade_no,
+        'recharge_id': row.id,
+        'checkout_url': data_out.get('checkoutUrl') or '',
+        'qrcode_link': data_out.get('qrcodeLink') or '',
+        'qr_content': data_out.get('qrContent') or '',
+        'deeplink': data_out.get('deeplink') or '',
+        'universal_url': data_out.get('universalUrl') or '',
+        'amount': float(amount_val),
+        'currency': 'USDT',
+        'item': _serialize_balance_recharge_row(row, user),
+    })
+
+
+@store_bp.route('/api/user/balance-recharge/binance-pay/status/<merchant_trade_no>')
+@store_access_required
+def api_user_balance_recharge_binance_pay_status(merchant_trade_no):
+    from app.store.models import BalanceRecharge
+
+    user_id = session.get('user_id')
+    user = User.query.get(user_id) if user_id else None
+    if not user:
+        return jsonify({'success': False, 'message': 'No autenticado'}), 401
+
+    _ensure_balance_recharges_table()
+    trade_no = re.sub(r'[^A-Za-z0-9]', '', str(merchant_trade_no or ''))[:32]
+    if not trade_no:
+        return jsonify({'success': False, 'message': 'Orden inválida.'}), 400
+
+    row = BalanceRecharge.query.filter_by(receipt_number=trade_no).first()
+    if not row or not _balance_recharge_row_accessible(row, user):
+        return jsonify({'success': False, 'message': 'No encontrado'}), 404
+
+    st = (row.status or '').lower()
+    paid = st == 'approved'
+    return jsonify({
+        'success': True,
+        'status': st,
+        'paid': paid,
+        'amount': float(row.amount_claimed) if row.amount_claimed is not None else None,
+        'currency': row.currency,
+        'recharge_id': row.id,
+        'item': _serialize_balance_recharge_row(row, user),
+    })
+
+
+@store_bp.route('/api/binance-pay/webhook', methods=['POST'])
+@csrf_exempt_route
+def api_binance_pay_webhook():
+    import json as _json
+
+    from app.store.balance_recharge_binance_pay import (
+        amounts_match_claimed,
+        parse_webhook_notification,
+        payment_method_binance_pay_api_key,
+        payment_method_binance_pay_secret,
+        verify_webhook_signature,
+    )
+    from app.store.balance_recharge_credit import try_binance_pay_webhook_finalize
+    from app.store.balance_recharge_payment import _find_method_by_id
+    from app.store.models import BalanceRecharge
+
+    raw_body = request.get_data(as_text=True) or ''
+    if not raw_body.strip():
+        return jsonify({'returnCode': 'FAIL', 'returnMessage': 'empty body'}), 400
+
+    parsed = parse_webhook_notification(raw_body)
+    if not parsed:
+        return jsonify({'returnCode': 'FAIL', 'returnMessage': 'invalid json'}), 400
+
+    trade_no = parsed.get('merchant_trade_no') or ''
+    if not trade_no:
+        return jsonify({'returnCode': 'SUCCESS', 'returnMessage': None})
+
+    _ensure_balance_recharges_table()
+    row = BalanceRecharge.query.filter_by(receipt_number=trade_no).first()
+    if not row:
+        current_app.logger.warning('Binance Pay webhook: orden desconocida %s', trade_no)
+        return jsonify({'returnCode': 'SUCCESS', 'returnMessage': None})
+
+    method = _find_method_by_id(row.payment_method_id or '') or {}
+    api_key = payment_method_binance_pay_api_key(method)
+    secret = payment_method_binance_pay_secret(method)
+    if api_key and secret:
+        ok_sig = verify_webhook_signature(
+            api_key=api_key,
+            secret=secret,
+            timestamp=request.headers.get('BinancePay-Timestamp', ''),
+            nonce=request.headers.get('BinancePay-Nonce', ''),
+            signature_b64=request.headers.get('BinancePay-Signature', ''),
+            raw_body=raw_body,
+        )
+        if not ok_sig:
+            current_app.logger.warning('Binance Pay webhook: firma inválida orden %s', trade_no)
+            return jsonify({'returnCode': 'FAIL', 'returnMessage': 'invalid signature'}), 401
+
+    biz_status = str(parsed.get('biz_status') or '').upper()
+    if biz_status != 'PAY_SUCCESS':
+        return jsonify({'returnCode': 'SUCCESS', 'returnMessage': None})
+
+    if row.amount_claimed is not None and not amounts_match_claimed(
+        row.amount_claimed,
+        parsed.get('total_fee'),
+        parsed.get('currency') or row.currency,
+    ):
+        current_app.logger.warning(
+            'Binance Pay webhook: monto no coincide orden %s (esperado %s, recibido %s)',
+            trade_no,
+            row.amount_claimed,
+            parsed.get('total_fee'),
+        )
+        return jsonify({'returnCode': 'FAIL', 'returnMessage': 'amount mismatch'}), 400
+
+    try:
+        applied, sse_reason = try_binance_pay_webhook_finalize(
+            row.id,
+            transaction_id=parsed.get('transaction_id') or '',
+            webhook_payload=parsed,
+        )
+        if applied:
+            db.session.commit()
+            if sse_reason:
+                row = BalanceRecharge.query.get(row.id)
+                if row:
+                    from app.store.balance_recharge_events import notify_from_recharge_row
+
+                    notify_from_recharge_row(row, reason=sse_reason)
+        else:
+            db.session.rollback()
+    except Exception as exc:
+        db.session.rollback()
+        current_app.logger.exception('Binance Pay webhook finalize failed: %s', exc)
+        return jsonify({'returnCode': 'FAIL', 'returnMessage': 'processing error'}), 500
+
+    return jsonify({'returnCode': 'SUCCESS', 'returnMessage': None})
 
 
 @store_bp.route('/api/user/balance-recharge/<int:recharge_id>/proof/<int:file_index>')
@@ -6325,6 +7131,7 @@ def api_balance_recharge_cleanup_settings():
         preview = count_recharges_to_purge(
             settings.get('retention_days', 90),
             user_id=user_id,
+            purge_category=settings.get('purge_category', 'all'),
         )
         return jsonify({
             'success': True,
@@ -6342,6 +7149,10 @@ def api_balance_recharge_cleanup_settings():
     scope = (data.get('scope') or 'all').strip().lower()
     if scope not in ('all', 'user'):
         scope = 'all'
+
+    from app.store.balance_recharge_cleanup import _normalize_purge_category
+
+    purge_category = _normalize_purge_category(data.get('purge_category'))
 
     user_id = data.get('user_id')
     if scope == 'user':
@@ -6365,9 +7176,14 @@ def api_balance_recharge_cleanup_settings():
         'retention_days': retention_days,
         'run_interval_hours': run_interval_hours,
         'scope': scope,
+        'purge_category': purge_category,
         'user_id': user_id,
     })
-    preview = count_recharges_to_purge(retention_days, user_id=user_id)
+    preview = count_recharges_to_purge(
+        retention_days,
+        user_id=user_id,
+        purge_category=purge_category,
+    )
     return jsonify({
         'success': True,
         'message': 'Configuración de limpieza guardada.',
@@ -6395,6 +7211,9 @@ def api_balance_recharge_purge():
         return jsonify({'success': False, 'error': 'Antigüedad en días inválida.'}), 400
 
     scope = (data.get('scope') or 'all').strip().lower()
+    from app.store.balance_recharge_cleanup import _normalize_purge_category
+
+    purge_category = _normalize_purge_category(data.get('purge_category'))
     user_id = None
     if scope == 'user':
         uid = data.get('user_id')
@@ -6410,7 +7229,11 @@ def api_balance_recharge_purge():
             'error': 'Ya hay una limpieza en curso. Espera a que termine.',
         }), 409
 
-    count = count_recharges_to_purge(retention_days, user_id=user_id)
+    count = count_recharges_to_purge(
+        retention_days,
+        user_id=user_id,
+        purge_category=purge_category,
+    )
     if count == 0:
         return jsonify({
             'success': False,
@@ -6423,7 +7246,12 @@ def api_balance_recharge_purge():
     from app.store.balance_recharge_cleanup import cleanup_orphan_proof_files
 
     app_obj = current_app._get_current_object()
-    started = enqueue_purge_background(app_obj, retention_days, user_id=user_id)
+    started = enqueue_purge_background(
+        app_obj,
+        retention_days,
+        user_id=user_id,
+        purge_category=purge_category,
+    )
     if not started:
         return jsonify({
             'success': False,
@@ -6431,7 +7259,10 @@ def api_balance_recharge_purge():
         }), 409
 
     orphan_files = cleanup_orphan_proof_files(app_obj)
-    msg = f'Se eliminarán {count} solicitud(es) en segundo plano.'
+    msg = (
+        f'Se eliminarán {count} solicitud(es) en segundo plano '
+        f'(copia previa al historial de compras cuando aplica).'
+    )
     if orphan_files:
         msg += f' También se quitaron {orphan_files} comprobante(s) huérfano(s) en disco.'
 
@@ -6458,14 +7289,38 @@ def api_balance_recharge_purge_preview():
         return jsonify({'success': False, 'error': 'Antigüedad inválida.'}), 400
 
     scope = (request.args.get('scope') or 'all').strip().lower()
+    from app.store.balance_recharge_cleanup import _normalize_purge_category
+
+    purge_category = _normalize_purge_category(request.args.get('purge_category'))
     user_id = None
     if scope == 'user':
         uid = request.args.get('user_id')
         if uid:
             user_id = int(uid)
 
-    count = count_recharges_to_purge(retention_days, user_id=user_id)
+    count = count_recharges_to_purge(
+        retention_days,
+        user_id=user_id,
+        purge_category=purge_category,
+    )
     return jsonify({'success': True, 'count': count})
+
+
+_ADMIN_RECHARGE_LIST_LIMITS = frozenset({10, 20, 50, 100, 300})
+
+
+def _parse_admin_recharge_list_limit(raw: str | None) -> int | None:
+    """Límite de filas en listas admin; None = sin tope (todos)."""
+    val = (raw or '50').strip().lower()
+    if val in ('all', 'todos'):
+        return None
+    try:
+        n = int(val)
+    except (TypeError, ValueError):
+        return 50
+    if n <= 0:
+        return None
+    return n if n in _ADMIN_RECHARGE_LIST_LIMITS else 50
 
 
 @store_bp.route('/api/admin/balance-recharges')
@@ -6479,6 +7334,7 @@ def api_admin_balance_recharges():
     normalize_unreviewed_accumulations()
     from app.store.balance_recharge_payment import accumulator_method_ids
 
+    list_limit = _parse_admin_recharge_list_limit(request.args.get('limit'))
     status = (request.args.get('status') or 'pending').strip().lower()
     accum_filter = (request.args.get('accumulator') or 'all').strip().lower()
     accum_ids = accumulator_method_ids()
@@ -6500,6 +7356,18 @@ def api_admin_balance_recharges():
                 ),
             )
         )
+    elif status == 'pending' and accum_filter == 'only':
+        from sqlalchemy import and_
+
+        q = q.filter(
+            or_(
+                BalanceRecharge.status == 'pending',
+                and_(
+                    BalanceRecharge.status == 'auto_accumulated',
+                    BalanceRecharge.admin_verified.is_(None),
+                ),
+            )
+        )
     elif status != 'all':
         q = q.filter(BalanceRecharge.status == status)
     if accum_filter == 'only':
@@ -6510,11 +7378,22 @@ def api_admin_balance_recharges():
     elif accum_filter == 'exclude':
         if accum_ids:
             q = q.filter(~BalanceRecharge.payment_method_id.in_(accum_ids))
-    rows = q.limit(200).all()
+    rows = q.limit(list_limit).all() if list_limit is not None else q.all()
+    from sqlalchemy import and_
+
     pending_q = BalanceRecharge.query.filter_by(status='pending')
+    accum_auto_pending_q = BalanceRecharge.query.filter(
+        BalanceRecharge.status == 'auto_accumulated',
+        BalanceRecharge.admin_verified.is_(None),
+    )
     if accum_ids:
         pending_count = pending_q.filter(~BalanceRecharge.payment_method_id.in_(accum_ids)).count()
-        accum_pending_count = pending_q.filter(BalanceRecharge.payment_method_id.in_(accum_ids)).count()
+        accum_pending_count = (
+            pending_q.filter(BalanceRecharge.payment_method_id.in_(accum_ids)).count()
+            + accum_auto_pending_q.filter(
+                BalanceRecharge.payment_method_id.in_(accum_ids)
+            ).count()
+        )
     else:
         pending_count = pending_q.count()
         accum_pending_count = 0
@@ -6544,6 +7423,89 @@ def api_admin_balance_recharges():
     return jsonify(payload)
 
 
+def _admin_balance_recharge_list_meta(accum_ids):
+    from app.store.models import BalanceRecharge
+    from sqlalchemy import and_
+
+    pending_q = BalanceRecharge.query.filter_by(status='pending')
+    accum_auto_pending_q = BalanceRecharge.query.filter(
+        BalanceRecharge.status == 'auto_accumulated',
+        BalanceRecharge.admin_verified.is_(None),
+    )
+    if accum_ids:
+        pending_count = pending_q.filter(~BalanceRecharge.payment_method_id.in_(accum_ids)).count()
+        accum_pending_count = (
+            pending_q.filter(BalanceRecharge.payment_method_id.in_(accum_ids)).count()
+            + accum_auto_pending_q.filter(
+                BalanceRecharge.payment_method_id.in_(accum_ids)
+            ).count()
+        )
+        auto_pending_non_accum = BalanceRecharge.query.filter(
+            BalanceRecharge.status == 'auto_credited',
+            BalanceRecharge.admin_verified.is_(None),
+            ~BalanceRecharge.payment_method_id.in_(accum_ids),
+        ).count()
+        review_pending_count = pending_count + auto_pending_non_accum
+    else:
+        pending_count = pending_q.count()
+        accum_pending_count = 0
+        review_pending_count = pending_count
+    auto_pending_count = BalanceRecharge.query.filter(
+        BalanceRecharge.status == 'auto_credited',
+        BalanceRecharge.admin_verified.is_(None),
+    ).count()
+    meta = {
+        'pending_count': pending_count,
+        'review_pending_count': review_pending_count,
+        'accum_pending_count': accum_pending_count,
+        'auto_pending_count': auto_pending_count,
+    }
+    if accum_ids:
+        meta['accum_filter_counts'] = _balance_recharge_accum_filter_counts(accum_ids)
+    return meta
+
+
+@store_bp.route('/api/admin/balance-recharge/<int:recharge_id>', methods=['GET'])
+@csrf_exempt_route
+@admin_required
+def api_admin_balance_recharge_one(recharge_id):
+    """Una solicitud para actualización incremental (SSE + AJAX)."""
+    from app.store.balance_recharge_accum import normalize_unreviewed_accumulations
+    from app.store.models import BalanceRecharge
+
+    _ensure_balance_recharges_table()
+    normalize_unreviewed_accumulations()
+    from app.store.balance_recharge_payment import accumulator_method_ids
+
+    row = BalanceRecharge.query.get(int(recharge_id))
+    if not row:
+        return jsonify({'success': False, 'message': 'Solicitud no encontrada'}), 404
+
+    accum_ids = accumulator_method_ids()
+    item = _serialize_balance_recharge_row(row, None, include_username=True)
+    payload = {
+        'success': True,
+        'item': item,
+    }
+    payload.update(_admin_balance_recharge_list_meta(accum_ids))
+    return jsonify(payload)
+
+
+def _json_admin_recharge_review_success(row, message, *, extra=None):
+    """Respuesta AJAX de aprobar/rechazar con ítem actualizado y contadores de pestañas."""
+    from app.store.balance_recharge_payment import accumulator_method_ids
+
+    payload = {
+        'success': True,
+        'message': message,
+        'item': _serialize_balance_recharge_row(row, None, include_username=True),
+    }
+    payload.update(_admin_balance_recharge_list_meta(accumulator_method_ids()))
+    if extra:
+        payload.update(extra)
+    return jsonify(payload)
+
+
 @store_bp.route('/api/admin/balance-recharge/<int:recharge_id>/review', methods=['POST'])
 @csrf_exempt_route
 @admin_required
@@ -6563,21 +7525,16 @@ def api_admin_balance_recharge_review(recharge_id):
     row_status = (row.status or '').lower()
 
     if row_status == 'auto_credited' and row.admin_verified is None:
-        target = User.query.get(row.user_id)
-        if not target:
-            return jsonify({'success': False, 'message': 'Usuario no encontrado'}), 404
-        cur = (row.currency or 'COP').strip().upper()
-        credited = row.amount_credited if row.amount_credited is not None else row.amount_claimed
-        amt = float(credited) if credited is not None else 0.0
-
         if action == 'confirm_auto':
             import json as _json
 
             from app.store.balance_recharge_analyzer import proof_breb_llave_mismatch_message
+            from app.store.balance_recharge_credit import try_confirm_auto_credited
             from app.store.balance_recharge_payment import (
-                _find_method_by_id,
+                find_payment_method_for_recharge,
                 payment_method_breb_llave_normalized,
                 payment_method_is_breb_bancolombia,
+                payment_method_is_breb_nequi,
             )
 
             try:
@@ -6586,8 +7543,14 @@ def api_admin_balance_recharge_review(recharge_id):
                 analysis_auto = {}
             if not isinstance(analysis_auto, dict):
                 analysis_auto = {}
-            pm_auto = _find_method_by_id(row.payment_method_id or '')
-            if payment_method_is_breb_bancolombia(pm_auto):
+            pm_auto = find_payment_method_for_recharge(row, analysis_auto) or {}
+            if payment_method_is_breb_nequi(pm_auto):
+                analysis_auto.setdefault('is_breb_nequi', True)
+                if not analysis_auto.get('bre_b_llave_expected'):
+                    analysis_auto['bre_b_llave_expected'] = payment_method_breb_llave_normalized(
+                        pm_auto
+                    )
+            elif payment_method_is_breb_bancolombia(pm_auto):
                 analysis_auto.setdefault('is_breb_bancolombia', True)
                 if not analysis_auto.get('bre_b_llave_expected'):
                     analysis_auto['bre_b_llave_expected'] = payment_method_breb_llave_normalized(
@@ -6597,64 +7560,146 @@ def api_admin_balance_recharge_review(recharge_id):
             if breb_block_auto:
                 return jsonify({'success': False, 'message': breb_block_auto}), 400
 
-            row.status = 'approved'
-            row.admin_verified = True
-            row.admin_note = admin_note
-            row.reviewed_at = datetime.utcnow()
-            row.reviewed_by_user_id = admin_user.id if admin_user else None
+            applied, reason = try_confirm_auto_credited(
+                row.id,
+                admin_note=admin_note,
+                reviewed_by_user_id=admin_user.id if admin_user else None,
+            )
+            if not applied:
+                db.session.rollback()
+                if reason == 'already_processed':
+                    return jsonify({'success': False, 'message': 'La solicitud ya fue revisada'}), 400
+                return jsonify({'success': False, 'message': 'Solicitud no encontrada'}), 404
             db.session.commit()
-            return jsonify({
-                'success': True,
-                'message': 'Recarga automática confirmada.',
-                'item': _serialize_balance_recharge_row(row, None, include_username=True),
-            })
+            row = BalanceRecharge.query.get(recharge_id)
+            from app.store.balance_recharge_events import notify_from_recharge_row
+
+            if row:
+                notify_from_recharge_row(row, reason='admin_confirm_auto')
+            return _json_admin_recharge_review_success(
+                row,
+                'Recarga automática confirmada.',
+            )
 
         if action == 'reject_auto':
-            if amt > 0:
-                _apply_balance_debit(target, cur, amt)
-            row.status = 'rejected'
-            row.admin_verified = False
-            row.admin_note = admin_note
-            row.reviewed_at = datetime.utcnow()
-            row.reviewed_by_user_id = admin_user.id if admin_user else None
+            from app.store.balance_recharge_credit import try_admin_reject_auto_credited
+
+            applied, reason, saldo_extra = try_admin_reject_auto_credited(
+                row.id,
+                admin_note=admin_note,
+                reviewed_by_user_id=admin_user.id if admin_user else None,
+            )
+            if not applied:
+                db.session.rollback()
+                if reason == 'already_processed':
+                    return jsonify({'success': False, 'message': 'La solicitud ya fue revisada'}), 400
+                if reason == 'user_not_found':
+                    return jsonify({'success': False, 'message': 'Usuario no encontrado'}), 404
+                return jsonify({'success': False, 'message': 'Solicitud no encontrada'}), 404
             db.session.commit()
-            return jsonify({
-                'success': True,
-                'message': 'Recarga revertida y saldo descontado.',
-                'item': _serialize_balance_recharge_row(row, None, include_username=True),
-                'new_saldo_usd': float(target.saldo_usd or 0),
-                'new_saldo_cop': float(target.saldo_cop or 0),
-            })
+            row = BalanceRecharge.query.get(recharge_id)
+            from app.store.balance_recharge_events import notify_from_recharge_row
+
+            if row:
+                notify_from_recharge_row(row, reason='admin_reject_auto')
+            return _json_admin_recharge_review_success(
+                row,
+                'Recarga revertida y saldo descontado.',
+                extra=saldo_extra or {},
+            )
 
         return jsonify({'success': False, 'message': 'Acción no válida para recarga automática'}), 400
 
+    if row_status == 'auto_accumulated' and row.admin_verified is None:
+        if action == 'confirm_auto':
+            from app.store.balance_recharge_credit import try_confirm_auto_accumulated
+
+            applied, reason = try_confirm_auto_accumulated(
+                row.id,
+                admin_note=admin_note,
+                reviewed_by_user_id=admin_user.id if admin_user else None,
+            )
+            if not applied:
+                db.session.rollback()
+                if reason == 'already_processed':
+                    return jsonify({'success': False, 'message': 'La solicitud ya fue revisada'}), 400
+                return jsonify({'success': False, 'message': 'Solicitud no encontrada'}), 404
+            db.session.commit()
+            row = BalanceRecharge.query.get(recharge_id)
+            from app.store.balance_recharge_events import notify_from_recharge_row
+
+            if row:
+                notify_from_recharge_row(row, reason='admin_confirm_auto_accum')
+            return _json_admin_recharge_review_success(row, 'Acumulación confirmada.')
+
+        if action == 'reject_auto':
+            from app.store.balance_recharge_credit import try_admin_reject_auto_accumulated
+
+            applied, reason = try_admin_reject_auto_accumulated(
+                row.id,
+                admin_note=admin_note,
+                reviewed_by_user_id=admin_user.id if admin_user else None,
+            )
+            if not applied:
+                db.session.rollback()
+                if reason == 'already_processed':
+                    return jsonify({'success': False, 'message': 'La solicitud ya fue revisada'}), 400
+                return jsonify({'success': False, 'message': 'Solicitud no encontrada'}), 404
+            db.session.commit()
+            row = BalanceRecharge.query.get(recharge_id)
+            from app.store.balance_recharge_events import notify_from_recharge_row
+
+            if row:
+                notify_from_recharge_row(row, reason='admin_reject_auto_accum')
+            return _json_admin_recharge_review_success(row, 'Acumulación rechazada.')
+
+        return jsonify({'success': False, 'message': 'Acción no válida para acumulación automática'}), 400
+
     if row_status != 'pending':
         if row_status == 'accumulated' and action == 'reject':
-            row.status = 'rejected'
-            row.admin_note = admin_note
-            row.reviewed_at = datetime.utcnow()
-            row.reviewed_by_user_id = admin_user.id if admin_user else None
+            from app.store.balance_recharge_credit import try_admin_reject_accumulated
+
+            applied, reason = try_admin_reject_accumulated(
+                row.id,
+                admin_note=admin_note,
+                reviewed_by_user_id=admin_user.id if admin_user else None,
+            )
+            if not applied:
+                db.session.rollback()
+                if reason == 'already_processed':
+                    return jsonify({'success': False, 'message': 'La solicitud ya fue revisada'}), 400
+                return jsonify({'success': False, 'message': 'Solicitud no encontrada'}), 404
             db.session.commit()
-            return jsonify({
-                'success': True,
-                'message': 'Acumulación rechazada.',
-                'item': _serialize_balance_recharge_row(row, None, include_username=True),
-            })
+            row = BalanceRecharge.query.get(recharge_id)
+            from app.store.balance_recharge_events import notify_from_recharge_row
+
+            if row:
+                notify_from_recharge_row(row, reason='admin_reject_accumulated')
+            return _json_admin_recharge_review_success(row, 'Acumulación rechazada.')
         return jsonify({'success': False, 'message': 'La solicitud ya fue revisada'}), 400
 
     from app.store.balance_recharge_payment import is_accumulator_method_id
 
     if action == 'reject':
-        row.status = 'rejected'
-        row.admin_note = admin_note
-        row.reviewed_at = datetime.utcnow()
-        row.reviewed_by_user_id = admin_user.id if admin_user else None
+        from app.store.balance_recharge_credit import try_admin_reject_pending
+
+        applied, reason = try_admin_reject_pending(
+            row.id,
+            admin_note=admin_note,
+            reviewed_by_user_id=admin_user.id if admin_user else None,
+        )
+        if not applied:
+            db.session.rollback()
+            if reason == 'already_processed':
+                return jsonify({'success': False, 'message': 'La solicitud ya fue revisada'}), 400
+            return jsonify({'success': False, 'message': 'Solicitud no encontrada'}), 404
         db.session.commit()
-        return jsonify({
-            'success': True,
-            'message': 'Solicitud rechazada.',
-            'item': _serialize_balance_recharge_row(row, None, include_username=True),
-        })
+        row = BalanceRecharge.query.get(recharge_id)
+        from app.store.balance_recharge_events import notify_from_recharge_row
+
+        if row:
+            notify_from_recharge_row(row, reason='admin_rejected')
+        return _json_admin_recharge_review_success(row, 'Solicitud rechazada.')
 
     if action != 'approve':
         return jsonify({'success': False, 'message': 'Acción no válida'}), 400
@@ -6666,6 +7711,7 @@ def api_admin_balance_recharge_review(recharge_id):
         find_payment_method_for_recharge,
         payment_method_breb_llave_normalized,
         payment_method_is_breb_bancolombia,
+        payment_method_is_breb_nequi,
     )
 
     try:
@@ -6675,7 +7721,11 @@ def api_admin_balance_recharge_review(recharge_id):
     if not isinstance(analysis, dict):
         analysis = {}
     pm_review = find_payment_method_for_recharge(row, analysis) or {}
-    if payment_method_is_breb_bancolombia(pm_review):
+    if payment_method_is_breb_nequi(pm_review):
+        analysis.setdefault('is_breb_nequi', True)
+        if not analysis.get('bre_b_llave_expected'):
+            analysis['bre_b_llave_expected'] = payment_method_breb_llave_normalized(pm_review)
+    elif payment_method_is_breb_bancolombia(pm_review):
         analysis.setdefault('is_breb_bancolombia', True)
         if not analysis.get('bre_b_llave_expected'):
             analysis['bre_b_llave_expected'] = payment_method_breb_llave_normalized(pm_review)
@@ -6694,41 +7744,56 @@ def api_admin_balance_recharge_review(recharge_id):
     if amount_val is None or amount_val <= 0:
         return jsonify({'success': False, 'message': 'Indica un monto válido para acreditar'}), 400
 
-    target = User.query.get(row.user_id)
-    if not target:
-        return jsonify({'success': False, 'message': 'Usuario no encontrado'}), 404
+    from app.store.balance_recharge_credit import (
+        admin_approve_sse_reason,
+        try_admin_approve_finalize,
+    )
 
-    if is_accumulator_method_id(row.payment_method_id or ''):
-        row.status = 'accumulated'
-        row.amount_claimed = amount_val
-        row.admin_note = admin_note
-        row.reviewed_at = datetime.utcnow()
-        row.reviewed_by_user_id = admin_user.id if admin_user else None
-        db.session.commit()
-        return jsonify({
-            'success': True,
-            'message': 'Pago acumulado. Conviértelo desde el panel Acumulador cuando corresponda.',
-            'item': _serialize_balance_recharge_row(row, None, include_username=True),
-        })
+    to_accumulated = is_accumulator_method_id(row.payment_method_id or '')
+    applied, reason = try_admin_approve_finalize(
+        row.id,
+        amount_val=amount_val,
+        admin_note=admin_note,
+        reviewed_by_user_id=admin_user.id if admin_user else None,
+        to_accumulated=to_accumulated,
+    )
+    if not applied:
+        db.session.rollback()
+        if reason == 'already_processed':
+            return jsonify({'success': False, 'message': 'La solicitud ya fue revisada'}), 400
+        if reason == 'user_not_found':
+            return jsonify({'success': False, 'message': 'Usuario no encontrado'}), 404
+        if reason == 'invalid_amount':
+            return jsonify({'success': False, 'message': 'Indica un monto válido para acreditar'}), 400
+        return jsonify({'success': False, 'message': 'Solicitud no encontrada'}), 404
+
+    db.session.commit()
+    row = BalanceRecharge.query.get(recharge_id)
+    target = User.query.get(row.user_id) if row else None
+    if row:
+        from app.store.balance_recharge_events import notify_from_recharge_row
+
+        notify_from_recharge_row(
+            row,
+            reason=admin_approve_sse_reason(to_accumulated=to_accumulated),
+        )
+
+    if to_accumulated:
+        return _json_admin_recharge_review_success(
+            row,
+            'Pago acumulado. Conviértelo desde el panel Acumulador cuando corresponda.',
+        )
 
     cur = (row.currency or 'COP').strip().upper()
     amt = float(amount_val)
-    _apply_balance_credit(target, cur, amt)
-
-    row.status = 'approved'
-    row.amount_claimed = amount_val
-    row.admin_note = admin_note
-    row.reviewed_at = datetime.utcnow()
-    row.reviewed_by_user_id = admin_user.id if admin_user else None
-    db.session.commit()
-
-    return jsonify({
-        'success': True,
-        'message': f'Saldo acreditado ({amt:g} {cur}).',
-        'item': _serialize_balance_recharge_row(row, None, include_username=True),
-        'new_saldo_usd': float(target.saldo_usd or 0),
-        'new_saldo_cop': float(target.saldo_cop or 0),
-    })
+    return _json_admin_recharge_review_success(
+        row,
+        f'Saldo acreditado ({amt:g} {cur}).',
+        extra={
+            'new_saldo_usd': float(target.saldo_usd or 0) if target else 0,
+            'new_saldo_cop': float(target.saldo_cop or 0) if target else 0,
+        },
+    )
 
 
 @store_bp.route('/api/admin/balance-recharge/analyzer-patterns', methods=['GET', 'POST'])
@@ -6801,6 +7866,7 @@ def api_admin_balance_recharge_email_review_regex_create():
             data.get('sender', ''),
             data.get('pattern', ''),
             data.get('note', ''),
+            payment_method_id=data.get('payment_method_id', ''),
         )
     except ValueError as exc:
         return jsonify({'success': False, 'message': str(exc)}), 400
@@ -6854,6 +7920,7 @@ def api_admin_balance_recharge_email_review_regex_item(entry_id):
             data.get('sender', ''),
             data.get('pattern', ''),
             data.get('note', ''),
+            payment_method_id=data.get('payment_method_id', ''),
         )
     except ValueError as exc:
         return jsonify({'success': False, 'message': str(exc)}), 400
@@ -7020,9 +8087,9 @@ def api_admin_balance_recharge_email_verify(recharge_id):
     if not row:
         return jsonify({'success': False, 'message': 'Solicitud no encontrada.'}), 404
     row_status = (row.status or '').lower()
-    if row_status not in ('pending', 'auto_credited'):
+    if row_status not in ('pending', 'auto_credited', 'auto_accumulated'):
         return jsonify({'success': False, 'message': 'La solicitud ya fue revisada.'}), 400
-    if row_status == 'auto_credited' and row.admin_verified is not None:
+    if row_status in ('auto_credited', 'auto_accumulated') and row.admin_verified is not None:
         return jsonify({'success': False, 'message': 'La recarga automática ya fue verificada.'}), 400
 
     try:
@@ -7081,6 +8148,10 @@ def api_admin_balance_recharge_email_verify_batch():
                     BalanceRecharge.status == 'auto_credited',
                     BalanceRecharge.admin_verified.is_(None),
                 ),
+                and_(
+                    BalanceRecharge.status == 'auto_accumulated',
+                    BalanceRecharge.admin_verified.is_(None),
+                ),
             )
         ).order_by(BalanceRecharge.created_at.desc()).limit(50).all()
         recharge_ids = [r.id for r in rows]
@@ -7092,9 +8163,9 @@ def api_admin_balance_recharge_email_verify_batch():
         if not row:
             continue
         row_status = (row.status or '').lower()
-        if row_status not in ('pending', 'auto_credited'):
+        if row_status not in ('pending', 'auto_credited', 'auto_accumulated'):
             continue
-        if row_status == 'auto_credited' and row.admin_verified is not None:
+        if row_status in ('auto_credited', 'auto_accumulated') and row.admin_verified is not None:
             continue
         if processed >= 1:
             break
@@ -7181,6 +8252,7 @@ def _enrich_payment_methods_for_admin_api(cfg):
         _infer_payment_brand,
         payment_brand_choices,
         payment_method_qr_public_filename,
+        sort_payment_methods_for_user_display,
     )
 
     user_ids = set()
@@ -7198,8 +8270,25 @@ def _enrich_payment_methods_for_admin_api(cfg):
     enriched = {}
     for cur, lst in cfg.items():
         enriched[cur] = []
-        for m in lst:
+        bucket_methods = []
+        for m in lst or []:
             row = dict(m)
+            row.setdefault('currency', cur)
+            bucket_methods.append(row)
+        for m in sort_payment_methods_for_user_display(bucket_methods):
+            from app.store.balance_recharge_binance_pay import mask_binance_pay_secret_for_admin
+            from app.store.balance_recharge_payment import (
+                _sanitize_paypal_method_for_admin,
+                accum_conversion_multipliers,
+            )
+
+            row = _sanitize_paypal_method_for_admin(mask_binance_pay_secret_for_admin(dict(m)))
+            if cur == 'ACCUM':
+                eff_mults = accum_conversion_multipliers(row)
+                if eff_mults.get('mult_usd_to_cop') is not None:
+                    row['mult_usd_to_cop'] = eff_mults['mult_usd_to_cop']
+                if eff_mults.get('mult_cop_to_usd') is not None:
+                    row['mult_cop_to_usd'] = eff_mults['mult_cop_to_usd']
             fn = row.get('qr_filename')
             if fn:
                 row['qr_url'] = url_for(
@@ -7245,10 +8334,10 @@ def api_admin_payment_methods_settings():
     payload = data.get('methods') or data
     from app.store.balance_recharge_payment import validate_payment_methods_payload
 
-    pm_err = validate_payment_methods_payload(payload)
+    previous = get_payment_methods_config()
+    pm_err = validate_payment_methods_payload(payload, previous=previous)
     if pm_err:
         return jsonify({'success': False, 'message': pm_err}), 400
-    previous = get_payment_methods_config()
     methods = save_payment_methods_config(
         payload,
         app=current_app._get_current_object(),
@@ -9948,6 +11037,28 @@ def api_admin_store_clients_license_saldo():
     except Exception as e:
         current_app.logger.exception('api_admin_store_clients_license_saldo')
         return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@store_bp.route('/api/admin/users/<int:user_id>/store-prepaid-saldo', methods=['GET'])
+@admin_required
+def api_admin_user_store_prepaid_saldo(user_id):
+    """Saldo prepago tienda (USD/COP) de un usuario — para actualizaciones SSE puntuales."""
+    user = User.query.get(user_id)
+    if not user:
+        return jsonify({'success': False, 'error': 'Usuario no encontrado.'}), 404
+    tipo_precio = None
+    if user.user_prices and isinstance(user.user_prices, dict):
+        tp_raw = user.user_prices.get('tipo_precio')
+        if tp_raw in ('USD', 'COP'):
+            tipo_precio = tp_raw.lower()
+    return jsonify({
+        'success': True,
+        'user_id': int(user.id),
+        'username': user.username,
+        'saldo_usd': float(getattr(user, 'saldo_usd', 0) or 0),
+        'saldo_cop': float(getattr(user, 'saldo_cop', 0) or 0),
+        'tipo_precio': tipo_precio,
+    })
 
 
 @store_bp.route('/api/admin/users/<int:user_id>/license-account-saldo-adjust', methods=['POST'])

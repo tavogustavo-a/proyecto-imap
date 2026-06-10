@@ -9,7 +9,12 @@ from typing import Any, Iterable, List, Optional
 from sqlalchemy import inspect
 
 from app.extensions import db
-from app.store.balance_recharge_historial import HISTORIAL_STATUSES, historial_item_from_row
+from app.store.balance_recharge_historial import (
+    HISTORIAL_STATUSES,
+    compute_historial_producto,
+    ensure_historial_producto_schema,
+    historial_item_from_row,
+)
 from app.store.models import BalanceRecharge, BalanceRechargeHistorialSnapshot
 
 logger = logging.getLogger(__name__)
@@ -20,6 +25,7 @@ def ensure_snapshot_table():
         insp = inspect(db.engine)
         if 'store_balance_recharge_historial_snapshots' not in insp.get_table_names():
             BalanceRechargeHistorialSnapshot.__table__.create(db.engine, checkfirst=True)
+        ensure_historial_producto_schema()
     except Exception as exc:
         logger.warning(
             'No se pudo asegurar tabla store_balance_recharge_historial_snapshots: %s',
@@ -52,6 +58,7 @@ def upsert_snapshot_for_recharge(row: BalanceRecharge, *, mark_purged: bool = Fa
     snap.auto_credited = bool(getattr(row, 'auto_credited', False))
     snap.admin_verified = getattr(row, 'admin_verified', None)
     snap.admin_note = row.admin_note
+    snap.historial_producto = getattr(row, 'historial_producto', None) or compute_historial_producto(row)
     snap.event_at = _event_at_from_recharge(row)
     if mark_purged:
         snap.purged_from_recharges = True

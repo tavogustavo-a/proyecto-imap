@@ -17,7 +17,9 @@ from app.store.balance_recharge_payment import (
 from app.store.models import BalanceRecharge, User
 
 ACCUMULATED_STATUS = 'accumulated'
+AUTO_ACCUMULATED_STATUS = 'auto_accumulated'
 CONVERTED_STATUS = 'accum_converted'
+USER_ACCUM_DISPLAY_STATUSES = (ACCUMULATED_STATUS, AUTO_ACCUMULATED_STATUS)
 
 
 def normalize_unreviewed_accumulations() -> int:
@@ -46,10 +48,13 @@ def _fmt_balance_amount(n: float) -> str:
 
 
 def user_accumulated_totals_by_currency(user_id: int) -> Dict[str, float]:
-    """Suma recargas en estado accumulated del acumulador, agrupadas por moneda del pago."""
-    rows = BalanceRecharge.query.filter_by(
-        user_id=int(user_id), status=ACCUMULATED_STATUS
-    ).all()
+    """Suma acumulado confirmado y provisional (auto_accumulated), por moneda del pago."""
+    rows = (
+        BalanceRecharge.query.filter(
+            BalanceRecharge.user_id == int(user_id),
+            BalanceRecharge.status.in_(USER_ACCUM_DISPLAY_STATUSES),
+        ).all()
+    )
     totals: Dict[str, float] = {}
     for row in rows:
         if not is_accumulator_method_id(row.payment_method_id or ''):
@@ -91,14 +96,6 @@ def _target_currency_for_user(user_row) -> str:
     _, tipo_precio = catalog_products_for_store_user(user_row)
     tp = (tipo_precio or 'COP').strip().upper()
     return tp if tp in ('COP', 'USD') else 'COP'
-
-
-def _format_multiplier(value: Optional[float]) -> str:
-    if value is None:
-        return '—'
-    v = float(value)
-    s = f'{v:.8f}'.rstrip('0').rstrip('.')
-    return s or '0'
 
 
 def compute_conversion_amounts(
@@ -216,29 +213,31 @@ def list_accumulated_summary() -> List[Dict[str, Any]]:
 
 
 def convert_accumulation(user_id: int, payment_method_id: str, admin_user_id: Optional[int] = None) -> Dict[str, Any]:
-    """Convierte saldo acumulado y acredita al usuario."""
-    from app.store.routes import _apply_balance_credit
+    """Convierte saldo acumulado y acredita al usuario (filas bloqueadas con FOR UPDATE)."""
+    from app.store.balance_recharge_credit import apply_user_balance_credit
 
     pm_id = (payment_method_id or '').strip()
     method = get_accumulator_method(pm_id)
     if not method:
         raise ValueError('Medio acumulador no encontrado.')
 
-    target_user = User.query.get(int(user_id))
+    uid = int(user_id)
+    target_user = User.query.filter_by(id=uid).with_for_update().first()
     if not target_user:
         raise ValueError('Usuario no encontrado.')
 
     rows = (
-        BalanceRecharge.query.filter_by(
-            user_id=int(user_id),
-            payment_method_id=pm_id,
-            status=ACCUMULATED_STATUS,
+        BalanceRecharge.query.filter(
+            BalanceRecharge.user_id == uid,
+            BalanceRecharge.payment_method_id == pm_id,
+            BalanceRecharge.status == ACCUMULATED_STATUS,
         )
         .order_by(BalanceRecharge.created_at.asc())
+        .with_for_update()
         .all()
     )
     if not rows:
-        raise ValueError('No hay saldo acumulado para convertir.')
+        raise ValueError('No hay saldo acumulado para convertir (ya convertido o en proceso).')
 
     total_source = sum(float(r.amount_claimed or 0) for r in rows)
     if total_source <= 0:
@@ -257,16 +256,11 @@ def convert_accumulation(user_id: int, payment_method_id: str, admin_user_id: Op
     if credit_amount <= 0:
         raise ValueError('El monto convertido resulta en cero.')
 
-    _apply_balance_credit(target_user, credit_currency, credit_amount)
+    apply_user_balance_credit(target_user, credit_currency, credit_amount)
 
     now = datetime.utcnow()
     credit_dec = _quantize_amount(credit_amount)
     remaining = credit_dec
-    mult_note = (
-        f' × {_format_multiplier(applied_mult)}'
-        if applied_mult is not None
-        else ''
-    )
     for i, row in enumerate(rows):
         share = Decimal(str(float(row.amount_claimed or 0) / total_source))
         if i == len(rows) - 1:
@@ -278,15 +272,19 @@ def convert_accumulation(user_id: int, payment_method_id: str, admin_user_id: Op
         row.amount_credited = row_credit
         row.reviewed_at = now
         row.reviewed_by_user_id = admin_user_id
-        row.admin_note = (
-            f'Convertido: {total_source:g} {source}{mult_note} → '
-            f'{float(credit_dec):g} {credit_currency}.'
-        )[:2000]
+        row.admin_note = None
 
     db.session.commit()
 
+    try:
+        from app.store.balance_recharge_events import notify_balance_recharge_updated
+
+        notify_balance_recharge_updated(uid, reason='accum_converted')
+    except Exception:
+        pass
+
     return {
-        'user_id': int(user_id),
+        'user_id': uid,
         'username': target_user.username,
         'payment_method_id': pm_id,
         'payment_method_label': method.get('label') or pm_id,

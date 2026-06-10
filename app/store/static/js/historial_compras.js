@@ -39,6 +39,19 @@ document.addEventListener('DOMContentLoaded', function() {
     return p;
   }
 
+  function normalizeLicenseClipboardText(raw) {
+    return String(raw || '')
+      .replace(/\r\n/g, '\n')
+      .split('\n')
+      .map(function (line) {
+        return line.replace(/\s+$/g, '');
+      })
+      .filter(function (line) {
+        return line.length > 0;
+      })
+      .join('\n');
+  }
+
   function historialLineaLicenciaCliente(lic) {
     const em = String(lic.email || '').trim();
     const pw = historialPasswordParaMostrar(lic.password);
@@ -60,6 +73,28 @@ document.addEventListener('DOMContentLoaded', function() {
     return '$' + x.toLocaleString('es-CO', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
   }
 
+  function formatTotalDisplayHtml(raw) {
+    const text = String(raw == null ? '' : raw).trim();
+    if (!text || text === '—') return escapeHtml(text);
+    const match = text.match(/^(\$[\d.,]+)\s+(COP|USD|USDT)$/i);
+    if (!match) return escapeHtml(text);
+    const amount = match[1];
+    let currency = match[2].toUpperCase();
+    if (currency === 'USD') currency = 'USDT';
+    return (
+      escapeHtml(amount) +
+      ' <span class="purchase-history-total-currency">' +
+      escapeHtml(currency) +
+      '</span>'
+    );
+  }
+
+  function totalCellHtml(row) {
+    if (row.is_cleanup_log) return '—';
+    if (row.total_display) return formatTotalDisplayHtml(row.total_display);
+    return escapeHtml(formatMoney(row.total));
+  }
+
   function renewalModalSubtitle(compraRow) {
     if (!compraRow || !compraRow.is_renewal) return '';
     if (compraRow.renewal_kind_label) return compraRow.renewal_kind_label;
@@ -71,19 +106,30 @@ document.addEventListener('DOMContentLoaded', function() {
     return 'Renovación de licencia';
   }
 
+  /** Subtítulo del modal: venta, renovación, archivada o revertida. */
+  function purchaseModalSubtitle(compraRow) {
+    if (!compraRow) return '';
+    if (compraRow.is_renewal) {
+      return renewalModalSubtitle(compraRow) || 'Renovación de licencia';
+    }
+    if (compraRow.is_reversed) {
+      return 'Compra revertida';
+    }
+    if (compraRow.is_archived_sale) {
+      return 'Compra archivada';
+    }
+    return 'Venta';
+  }
+
   function openModal(compraRow, openerEl) {
     if (!modal || !modalBody) return;
     lastLicenciasOpenerBtn =
       openerEl && openerEl.nodeType === 1 ? openerEl : null;
     modalTitle.textContent = compraRow.producto || 'Licencias';
     if (modalSub) {
-      if (compraRow.is_renewal) {
-        modalSub.textContent = renewalModalSubtitle(compraRow);
-        modalSub.hidden = false;
-      } else {
-        modalSub.textContent = '';
-        modalSub.hidden = true;
-      }
+      const sub = purchaseModalSubtitle(compraRow);
+      modalSub.textContent = sub;
+      modalSub.hidden = !sub;
     }
 
     modalBody.innerHTML = '';
@@ -95,12 +141,6 @@ document.addEventListener('DOMContentLoaded', function() {
       rev.textContent =
         'Esta compra fue revertida. Las credenciales mostradas son las que se entregaron en esa fecha (historial conservado).';
       modalBody.appendChild(rev);
-    } else if (compraRow.is_archived_sale) {
-      const arch = document.createElement('p');
-      arch.className = 'purchase-licencias-archived-note';
-      arch.textContent =
-        'Compra archivada del historial. Las credenciales se conservan para consulta por fecha.';
-      modalBody.appendChild(arch);
     }
 
     if (!list.length) {
@@ -114,7 +154,7 @@ document.addEventListener('DOMContentLoaded', function() {
     } else {
       if (copyActions) copyActions.removeAttribute('hidden');
       if (copyBuf) {
-        copyBuf.value = list.map(historialLineaLicenciaCliente).join('\n\n');
+        copyBuf.value = list.map(historialLineaLicenciaCliente).join('\n');
       }
       const grid = document.createElement('div');
       grid.className = 'purchase-licencias-modal-grid';
@@ -178,8 +218,8 @@ document.addEventListener('DOMContentLoaded', function() {
 
   if (copyBtn && copyBuf) {
     copyBtn.addEventListener('click', function () {
-      const txt = copyBuf.value;
-      if (!String(txt || '').trim()) return;
+      const txt = normalizeLicenseClipboardText(copyBuf.value);
+      if (!txt) return;
       const btn = copyBtn;
       const okFeedback = function () {
         btn.classList.add('copiado');
@@ -256,6 +296,90 @@ document.addEventListener('DOMContentLoaded', function() {
     return d.innerHTML;
   }
 
+  function formatAccumAmount(n) {
+    const x = Number(n);
+    if (!Number.isFinite(x)) return '0';
+    if (Math.abs(x - Math.round(x)) < 1e-9) return String(Math.round(x));
+    return String(x)
+      .replace(/\.0+$/, '')
+      .replace(/(\.\d*?)0+$/, '$1')
+      .replace(/\.$/, '');
+  }
+
+  function accumTailFromLegacyProducto(producto) {
+    let label = String(producto || '').trim();
+    const dash = label.search(/\s[—-]\s/);
+    if (dash >= 0) label = label.slice(dash).replace(/^\s*[—-]\s*/, '').trim();
+    if (/^acumulador\s/i.test(label)) label = label.replace(/^acumulador\s+/i, '').trim();
+    label = label.split('/')[0].trim();
+    const parts = label.split(/\s+/).filter(Boolean);
+    if (!parts.length) return '';
+    if (['USDT', 'USD'].includes(parts[0].toUpperCase())) {
+      if (parts.length >= 2 && ['TRC20', 'ERC20'].includes(parts[1].toUpperCase())) {
+        return parts[1].toUpperCase();
+      }
+      return parts.slice(1).join(' ');
+    }
+    if (parts[0].toUpperCase() === 'COP' && parts.length >= 2) {
+      return parts.slice(1).join(' ');
+    }
+    return label;
+  }
+
+  function normalizeRechargeProductoLabel(text) {
+    return String(text || '')
+      .replace(/^Recarga de saldo\s*[—-]\s*/i, 'Recarga — ')
+      .replace(/^Recarga automática\s*[—-]\s*/i, 'Recarga — ')
+      .replace(/^Recarga rechazada\s*[—-]\s*/i, 'Rechazada — ')
+      .replace(/^Recarga revertida\s*[—-]\s*/i, 'Revertida — ');
+  }
+
+  function rechargeProductoDisplay(row) {
+    if (!row || !row.is_recharge_event) return row.producto || '';
+    const legacy = String(row.producto || '');
+    const needsAccumShort =
+      row.is_recharge_conversion ||
+      row.is_recharge_accumulated ||
+      /^Conversión acumulador/i.test(legacy) ||
+      /^Acumulado\s*[—-]/i.test(legacy) ||
+      /^Acumulación rechazada/i.test(legacy);
+    if (!needsAccumShort) return normalizeRechargeProductoLabel(legacy);
+    if (/^Acumulador\s+\d/i.test(legacy) && !/^Conversión/i.test(legacy)) return legacy;
+    const hasClaimed = row.amount_claimed != null && row.amount_claimed !== '';
+    if (!hasClaimed && row.is_recharge_conversion) {
+      const tailOnly = accumTailFromLegacyProducto(legacy);
+      if (/^Conversión|^Acumulado/i.test(legacy)) {
+        return tailOnly ? 'Acumulador ' + tailOnly : legacy.replace(/^Conversión acumulador\s*[—-]\s*/i, '').trim();
+      }
+    }
+    const amount = hasClaimed ? row.amount_claimed : row.total;
+    let cur = String(row.currency || 'USDT').trim().toUpperCase();
+    if (cur === 'USD') cur = 'USDT';
+    const tail = accumTailFromLegacyProducto(legacy);
+    const core = 'Acumulador ' + formatAccumAmount(amount) + cur;
+    return tail ? core + ' ' + tail : core;
+  }
+
+  function mergeFreshRechargeHistorial(freshItems) {
+    if (!Array.isArray(freshItems) || !freshItems.length) return;
+    const byId = {};
+    freshItems.forEach(function (r) {
+      byId[String(r.id)] = r;
+    });
+    datos = datos.map(function (d) {
+      const fresh = byId[String(d.id)];
+      if (!fresh || !d.is_recharge_event) return d;
+      return Object.assign({}, d, {
+        producto: fresh.producto || d.producto,
+        total_display: fresh.total_display != null ? fresh.total_display : d.total_display,
+        amount_claimed: fresh.amount_claimed != null ? fresh.amount_claimed : d.amount_claimed,
+        currency: fresh.currency || d.currency,
+        is_recharge_conversion: fresh.is_recharge_conversion,
+        is_recharge_accumulated: fresh.is_recharge_accumulated,
+      });
+    });
+  }
+
   function renderTabla() {
     tbody.innerHTML = '';
     const fp = filasPorPaginaActual();
@@ -322,22 +446,16 @@ document.addEventListener('DOMContentLoaded', function() {
           licBtnCell.appendChild(span);
         }
 
-        const totalCell = row.is_cleanup_log
-          ? '—'
-          : row.total_display
-            ? escapeHtml(row.total_display)
-            : escapeHtml(formatMoney(row.total));
+        const totalCell = totalCellHtml(row);
+        const productoTexto = rechargeProductoDisplay(row);
         let productoCell;
         if (row.is_cleanup_log) {
-          productoCell = escapeHtml(row.producto);
+          productoCell = escapeHtml(productoTexto);
         } else if (row.is_recharge_event) {
           var rechargeIcon = 'fa-wallet';
           var rechargeTone = 'success';
-          if (row.is_recharge_reverted) {
-            rechargeIcon = 'fa-undo';
-            rechargeTone = 'failed';
-          } else if (row.is_recharge_rejected) {
-            rechargeIcon = 'fa-times-circle';
+          if (row.is_recharge_reverted || row.is_recharge_rejected) {
+            rechargeIcon = 'fa-wallet';
             rechargeTone = 'failed';
           } else if (row.is_recharge_conversion) {
             rechargeIcon = 'fa-exchange-alt';
@@ -351,7 +469,7 @@ document.addEventListener('DOMContentLoaded', function() {
             '<i class="fas ' +
             rechargeIcon +
             '" aria-hidden="true"></i> ' +
-            escapeHtml(row.producto) +
+            escapeHtml(productoTexto) +
             '</span>';
         } else if (row.is_renewal) {
           productoCell =
@@ -359,22 +477,23 @@ document.addEventListener('DOMContentLoaded', function() {
             '<i class="fas fa-sync-alt purchase-history-renewal-icon"></i>' +
             '<i class="fas fa-ticket-alt purchase-history-product-icon-base"></i>' +
             '</span> ' +
-            escapeHtml(row.producto);
+            escapeHtml(productoTexto);
         } else {
           productoCell =
             '<i class="fas fa-ticket-alt" aria-hidden="true"></i> ' +
-            escapeHtml(row.producto);
+            escapeHtml(productoTexto);
         }
         tr.innerHTML =
-          '<td>' +
+          '<td class="purchase-history-td-fecha text-nowrap">' +
           escapeHtml(row.fecha) +
-          '</td><td>' +
+          '</td><td class="purchase-history-td-producto text-nowrap">' +
           productoCell +
-          '</td><td class="text-center text-nowrap">' +
+          '</td><td class="purchase-history-td-qty text-center text-nowrap">' +
           escapeHtml(row.cantidad) +
-          '</td><td>' +
+          '</td><td class="purchase-history-td-total text-nowrap">' +
           totalCell +
           '</td>';
+        licBtnCell.className = 'purchase-history-td-licencias text-nowrap';
         tr.appendChild(licBtnCell);
         if (showUserColumn) {
           const tdUser = document.createElement('td');
@@ -436,7 +555,7 @@ document.addEventListener('DOMContentLoaded', function() {
     } else {
       datosFiltrados = datos.filter(function (row) {
         const hay = [];
-        hay.push(row.fecha, row.producto, row.cantidad, formatMoney(row.total));
+        hay.push(row.fecha, rechargeProductoDisplay(row), row.cantidad, formatMoney(row.total));
         if (row.total_display) hay.push(row.total_display);
         if (row.id != null) hay.push(String(row.id));
         if (row.product_id != null) hay.push(String(row.product_id));
@@ -473,5 +592,37 @@ document.addEventListener('DOMContentLoaded', function() {
     });
   }
 
+  function refreshRechargeHistorialLabels() {
+    const url = pageRoot && pageRoot.getAttribute('data-recharges-url');
+    if (!url) {
+      actualizar();
+      return;
+    }
+    const req =
+      window.StoreFetchJson && window.StoreFetchJson.fetch
+        ? window.StoreFetchJson.fetch(url)
+        : fetch(url, { credentials: 'same-origin', headers: { Accept: 'application/json' } }).then(
+            function (res) {
+              if (!res.ok) throw new Error('refresh_failed');
+              return res.json();
+            }
+          );
+    req
+      .then(function (data) {
+        if (data && data.ok && Array.isArray(data.items)) {
+          mergeFreshRechargeHistorial(data.items);
+        }
+      })
+      .catch(function () {})
+      .finally(function () {
+        filtrar();
+      });
+  }
+
   actualizar();
+  refreshRechargeHistorialLabels();
+
+  window.addEventListener('balance-recharge-realtime', function () {
+    refreshRechargeHistorialLabels();
+  });
 });

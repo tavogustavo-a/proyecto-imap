@@ -20,6 +20,8 @@ from app.store.balance_recharge_analyzer import (
     _normalize_amount,
     _parse_receipt_date,
     _parse_receipt_time,
+    _patterns_for_payment_method,
+    _scan_account_numbers_in_text,
     _scan_breb_llaves_in_text,
     _text_contains_all,
     _time_to_minute,
@@ -291,16 +293,92 @@ def _is_binance_style_payment_method(payment_method_id: str) -> bool:
     return False
 
 
+def _is_binance_style_recharge(recharge_row, payment_method_id: str = '') -> bool:
+    """Binance según snapshot del envío; evita que un cambio en admin altere la regla."""
+    from app.store.balance_recharge_payment import (
+        payment_context_is_binance,
+        recharge_frozen_payment_context,
+    )
+
+    ctx = recharge_frozen_payment_context(recharge_row)
+    if ctx.get('frozen_at_submit'):
+        return payment_context_is_binance(ctx)
+    pm_id = payment_method_id or str(getattr(recharge_row, 'payment_method_id', '') or '')
+    return _is_binance_style_payment_method(pm_id)
+
+
+def _email_uses_relaxed_correo_rules(recharge_row, payment_method_id: str = '') -> bool:
+    """
+    Solo Binance Pay y wallets USDT on-chain (ERC20/TRC20).
+    Nequi, Bre-B, bancos, PayPal, etc. siguen exigiendo comprobante y cuenta en el correo.
+    """
+    from app.store.balance_recharge_payment import (
+        payment_context_uses_relaxed_email_rules,
+        recharge_frozen_payment_context,
+    )
+
+    ctx = recharge_frozen_payment_context(recharge_row)
+    return payment_context_uses_relaxed_email_rules(ctx)
+
+
+def _is_bancolombia_classic_email_verify(
+    recharge_row,
+    payment_method_id: str = '',
+) -> bool:
+    """Cuenta Bancolombia tradicional: el correo no trae el Comprobante No. de la app."""
+    from app.store.balance_recharge_analyzer import payment_method_brand_token
+    from app.store.balance_recharge_payment import (
+        payment_method_is_breb_bancolombia,
+        payment_method_is_breb_nequi,
+    )
+
+    pm_id = (
+        payment_method_id
+        or str(getattr(recharge_row, 'payment_method_id', '') or '')
+    ).strip()
+    method = _payment_method_for_recharge_row(recharge_row) if recharge_row is not None else None
+    if payment_method_is_breb_bancolombia(method) or payment_method_is_breb_nequi(method):
+        return False
+    brand = payment_method_brand_token(
+        method,
+        payment_method_id=pm_id,
+        payment_method_label=str((method or {}).get('label') or ''),
+    )
+    return brand == 'bancolombia'
+
+
+def _email_skips_receipt_crosscheck(recharge_row, payment_method_id: str = '') -> bool:
+    """Correo sin el mismo comprobante que el pantallazo (Binance, app Bancolombia, etc.)."""
+    if recharge_row is not None and _email_uses_relaxed_correo_rules(recharge_row, payment_method_id):
+        return True
+    analyzer = _analyzer_payload(recharge_row) if recharge_row is not None else None
+    if isinstance(analyzer, dict) and analyzer.get('is_bancolombia_app_transfer_exitosa_receipt'):
+        return True
+    if recharge_row is not None and _is_bancolombia_classic_email_verify(recharge_row, payment_method_id):
+        return True
+    return False
+
+
 def _email_receipt_matches(
     receipt_expected: str,
     extracted_receipts: list[str],
+    *,
+    payment_method_id: str = '',
+    recharge_row=None,
 ) -> bool:
-    """El aviso por correo a menudo no trae el mismo ID que el pantallazo (ej. Binance)."""
+    """Cruza el comprobante OCR con IDs extraídos del correo bancario."""
+    if recharge_row is not None and _email_skips_receipt_crosscheck(recharge_row, payment_method_id):
+        return True
     if not receipt_expected:
         return True
     found = [digits_only(r) for r in (extracted_receipts or []) if digits_only(r)]
     if not found:
-        return True
+        if recharge_row is not None:
+            if _is_binance_style_recharge(recharge_row, payment_method_id):
+                return True
+        elif _is_binance_style_payment_method(payment_method_id):
+            return True
+        return False
     return receipt_expected in found
 
 
@@ -397,6 +475,89 @@ def _upload_date_colombia(recharge_row) -> date | None:
     return utc_to_colombia(created).date()
 
 
+def _uses_email_window_scan(recharge_row, payment_method_id: str = '') -> bool:
+    """Binance Pay y wallets USDT: ventana de 2 días, sin filtrar por un solo día del comprobante."""
+    return _is_binance_style_recharge(recharge_row, payment_method_id) or _email_uses_relaxed_correo_rules(
+        recharge_row, payment_method_id
+    )
+
+
+def _email_window_since_date(today: date, limit_days: int = _EMAIL_SCAN_DAYS) -> date:
+    """Primer día incluido en la ventana (hoy + hasta limit_days-1 días hacia atrás)."""
+    return today - timedelta(days=max(0, int(limit_days) - 1))
+
+
+def _scan_receipt_date_for_row(recharge_row, *, binance_style: bool = False) -> date | None:
+    """Fecha del comprobante para acotar el buzón (solo medios bancarios estrictos)."""
+    if binance_style or _email_uses_relaxed_correo_rules(recharge_row):
+        return None
+    return _receipt_date_from_row(recharge_row)
+
+
+def _receipt_match_reference_datetime(recharge_row) -> datetime | None:
+    """Instante de referencia para emparejar correos del mismo día (no el más reciente del buzón)."""
+    pm_id = str(getattr(recharge_row, 'payment_method_id', '') or '').strip()
+    if _uses_email_window_scan(recharge_row, pm_id):
+        created = getattr(recharge_row, 'created_at', None)
+        if created is None:
+            return None
+        if created.tzinfo is None:
+            created = created.replace(tzinfo=timezone.utc)
+        return utc_to_colombia(created)
+    receipt_day = _receipt_date_from_row(recharge_row)
+    receipt_time = _receipt_time_from_row(recharge_row)
+    if receipt_day and receipt_time:
+        return COLOMBIA_TZ.localize(datetime.combine(receipt_day, receipt_time))
+    created = getattr(recharge_row, 'created_at', None)
+    if created is None:
+        if receipt_day:
+            return COLOMBIA_TZ.localize(datetime.combine(receipt_day, time(12, 0)))
+        return None
+    if created.tzinfo is None:
+        created = created.replace(tzinfo=timezone.utc)
+    created_co = utc_to_colombia(created)
+    if receipt_day:
+        return COLOMBIA_TZ.localize(datetime.combine(receipt_day, created_co.time()))
+    return created_co
+
+
+def _mail_time_distance_seconds(mail: dict[str, Any], reference: datetime | None) -> float:
+    mail_dt = _mail_datetime_colombia(mail.get('date') or mail.get('internal_date'))
+    if mail_dt is None:
+        return float('inf')
+    if reference is None:
+        return mail_dt.timestamp()
+    ref = reference
+    if ref.tzinfo is None:
+        ref = COLOMBIA_TZ.localize(ref)
+    else:
+        ref = utc_to_colombia(ref.astimezone(timezone.utc))
+    return abs((mail_dt - ref).total_seconds())
+
+
+def _sort_emails_for_recharge_match(
+    emails: list[dict[str, Any]],
+    reference: datetime | None,
+) -> list[dict[str, Any]]:
+    """Ordena por cercanía al comprobante/envío, no por el correo más nuevo del buzón."""
+    return sorted(
+        emails,
+        key=lambda mail: (
+            _mail_time_distance_seconds(mail, reference),
+            str(mail.get('message_id') or ''),
+        ),
+    )
+
+
+def _mail_matches_receipt_day(mail: dict[str, Any], receipt_day: date | None) -> bool:
+    if not receipt_day:
+        return True
+    mail_day = _mail_colombia_date(mail)
+    if mail_day is None:
+        return True
+    return mail_day == receipt_day
+
+
 def _needs_single_email_check(
     receipt_date: date | None,
     upload_day: date | None,
@@ -423,11 +584,28 @@ def resolve_email_scan_plan(recharge_row) -> dict[str, Any]:
     today = get_colombia_now().date()
     analyzer = _analyzer_payload(recharge_row) or {}
     pm_id = str(getattr(recharge_row, 'payment_method_id', '') or '').strip()
-    binance_style = _is_binance_style_payment_method(pm_id)
-    receipt_date = None if binance_style else _receipt_date_from_row(recharge_row)
+    email_window_mode = _uses_email_window_scan(recharge_row, pm_id)
+    binance_style = email_window_mode
     upload_day = _upload_date_colombia(recharge_row)
     date_matches_upload = analyzer.get('date_matches_upload')
 
+    if email_window_mode:
+        limit_days = _EMAIL_SCAN_DAYS
+        window_since = _email_window_since_date(today, limit_days)
+        return {
+            'skip': False,
+            'single_check_only': False,
+            'limit_days': limit_days,
+            'since_date': window_since.isoformat(),
+            'receipt_date': None,
+            'upload_date': upload_day.isoformat() if upload_day else None,
+            'date_matches_upload': date_matches_upload,
+            'email_window_mode': True,
+            'binance_style': True,
+            'message': None,
+        }
+
+    receipt_date = _scan_receipt_date_for_row(recharge_row, binance_style=False)
     if receipt_date and upload_day and date_matches_upload is None:
         from app.store.balance_recharge_analyzer import receipt_date_matches_upload_day
 
@@ -663,14 +841,18 @@ def collect_review_emails(
     limit_days: int = _EMAIL_SCAN_DAYS,
     since_date: date | None = None,
     receipt_date: date | None = None,
+    match_reference_dt: datetime | None = None,
 ) -> list[dict[str, Any]]:
     sender_filters = _collect_sender_filters(regex_entries)
     emails: list[dict[str, Any]] = []
     seen: set[str] = set()
-    filter_from = receipt_date or since_date
+    filter_from = since_date if since_date and not receipt_date else None
 
     def _add(mail: dict[str, Any]) -> None:
-        if not _mail_on_or_after_receipt(mail, filter_from):
+        if receipt_date:
+            if not _mail_matches_receipt_day(mail, receipt_date):
+                return
+        elif filter_from and not _mail_on_or_after_receipt(mail, filter_from):
             return
         key = (mail.get('message_id') or '') + '|' + (mail.get('from') or '') + '|' + (mail.get('subject') or '')
         if key in seen:
@@ -685,7 +867,7 @@ def collect_review_emails(
     for mail in _fetch_imap_emails(limit_days, sender_filters, since_date=since_date):
         _add(mail)
 
-    return emails
+    return _sort_emails_for_recharge_match(emails, match_reference_dt)
 
 
 _MASKED_ACCOUNT_SUFFIX_RX = re.compile(
@@ -703,17 +885,22 @@ def _extract_masked_account_suffixes(body_text: str) -> list[str]:
     return found
 
 
-def _expected_account_digits_for_recharge(recharge_row) -> str:
-    from app.store.balance_recharge_payment import (
-        _find_method_by_id,
-        payment_method_account_digits,
-    )
+def _payment_method_for_recharge_row(recharge_row):
+    from app.store.balance_recharge_payment import payment_method_for_recharge_validation
 
-    pm_id = str(getattr(recharge_row, 'payment_method_id', '') or '').strip()
-    method = _find_method_by_id(pm_id) if pm_id else None
-    if not method:
-        return ''
-    return payment_method_account_digits(method)
+    return payment_method_for_recharge_validation(recharge_row)
+
+
+def _expected_account_digits_for_recharge(recharge_row) -> str:
+    from app.store.balance_recharge_payment import expected_account_digits_for_recharge
+
+    return expected_account_digits_for_recharge(recharge_row)
+
+
+def _frozen_payment_context_for_recharge(recharge_row):
+    from app.store.balance_recharge_payment import recharge_frozen_payment_context
+
+    return recharge_frozen_payment_context(recharge_row)
 
 
 def _receipt_account_ok_from_analyzer(recharge_row) -> bool | None:
@@ -725,23 +912,14 @@ def _receipt_account_ok_from_analyzer(recharge_row) -> bool | None:
     return analyzer.get('account_matches_configured')
 
 
-def _email_accounts_match_expected(
-    expected_digits: str,
-    full_accounts: list[str],
-    suffixes: list[str],
-) -> bool:
-    exp = digits_only(expected_digits)
-    if not exp:
-        return True
-    for acc in full_accounts or []:
-        det = digits_only(acc)
-        if len(det) >= 8 and det == exp:
-            return True
-    for suf in suffixes or []:
-        det = digits_only(suf)
-        if len(det) >= 2 and exp.endswith(det):
-            return True
-    return False
+def _receipt_amount_ok_from_analyzer(recharge_row) -> bool | None:
+    """True solo si el OCR del comprobante confirmó el monto declarado."""
+    analyzer = _analyzer_payload(recharge_row)
+    if not analyzer:
+        return None
+    if 'amount_matches_claimed' not in analyzer:
+        return None
+    return analyzer.get('amount_matches_claimed')
 
 
 def _receipt_breb_llaves_from_row(recharge_row) -> list[str]:
@@ -762,16 +940,20 @@ def _receipt_breb_llaves_from_row(recharge_row) -> list[str]:
 def _email_breb_llave_matches(recharge_row, body_text: str, extracted: dict[str, Any]) -> bool:
     """La llave del comprobante (OCR) debe coincidir exactamente con la del medio Bre-B."""
     from app.store.balance_recharge_payment import (
-        _find_method_by_id,
         payment_method_breb_llave_normalized,
-        payment_method_is_breb_bancolombia,
+        payment_method_uses_breb_llave,
     )
 
-    pm_id = str(getattr(recharge_row, 'payment_method_id', '') or '').strip()
-    method = _find_method_by_id(pm_id) if pm_id else None
-    if not payment_method_is_breb_bancolombia(method):
-        return True
-    expected = payment_method_breb_llave_normalized(method)
+    ctx = _frozen_payment_context_for_recharge(recharge_row)
+    if ctx.get('frozen_at_submit'):
+        if not ctx.get('is_breb_bancolombia') and not ctx.get('is_breb_nequi'):
+            return True
+        expected = str(ctx.get('bre_b_llave_expected') or '').strip()
+    else:
+        method = _payment_method_for_recharge_row(recharge_row)
+        if not payment_method_uses_breb_llave(method):
+            return True
+        expected = payment_method_breb_llave_normalized(method)
     if not expected:
         return True
 
@@ -793,28 +975,75 @@ def _resolve_account_match(
     extracted: dict[str, Any],
 ) -> tuple[bool, bool]:
     """(coincide, revisión requerida). Si no coincide, queda aprobación manual."""
+    from app.store.balance_recharge_payment import (
+        payment_method_breb_llave_normalized,
+        payment_method_is_breb_bancolombia,
+        payment_method_is_breb_nequi,
+        payment_method_is_generic,
+    )
+
+    ctx = _frozen_payment_context_for_recharge(recharge_row)
+    pm_id = str(ctx.get('payment_method_id') or getattr(recharge_row, 'payment_method_id', '') or '').strip()
+    method = _payment_method_for_recharge_row(recharge_row)
+    pm_label = str(ctx.get('label') or (method or {}).get('label') or '')
     expected = _expected_account_digits_for_recharge(recharge_row)
+    frozen = bool(ctx.get('frozen_at_submit'))
+    is_breb_nequi = bool(ctx.get('is_breb_nequi')) if frozen else payment_method_is_breb_nequi(method)
+    is_breb = bool(ctx.get('is_breb_bancolombia')) if frozen else payment_method_is_breb_bancolombia(method)
+    is_generic = bool(ctx.get('is_generic')) if frozen else payment_method_is_generic(method, pm_id, pm_label)
+    breb_llave = (
+        str(ctx.get('bre_b_llave_expected') or '').strip()
+        if frozen
+        else payment_method_breb_llave_normalized(method)
+    )
+
     if not expected:
+        if is_breb and not is_breb_nequi:
+            if not breb_llave:
+                return False, True
+            ocr_ok = _receipt_account_ok_from_analyzer(recharge_row)
+            if ocr_ok is False:
+                return False, True
+            return True, False
+        if is_generic:
+            ocr_ok = _receipt_account_ok_from_analyzer(recharge_row)
+            if ocr_ok is False:
+                return False, True
+            return True, False
+        return False, True
+
+    # Binance Pay / depósito USDT: el correo no trae wallet; no cruzar cuenta del email.
+    if _email_uses_relaxed_correo_rules(recharge_row, pm_id):
+        ocr_ok = _receipt_account_ok_from_analyzer(recharge_row)
+        if ocr_ok is False:
+            return False, True
         return True, False
 
-    pm_id = str(getattr(recharge_row, 'payment_method_id', '') or '').strip()
     full_accounts = list(extracted.get('account_numbers') or [])
     suffixes = list(extracted.get('account_suffixes') or [])
     has_email_account = bool(full_accounts or suffixes)
 
-    # Binance Pay: el aviso por correo no trae ID de cuenta; no bloquear si el mail no la incluye.
-    if _is_binance_style_payment_method(pm_id) and not has_email_account:
-        return True, False
+    # Nequi / bancos: el correo debe mencionar la cuenta o los últimos dígitos configurados.
+    if not has_email_account:
+        ocr_ok = _receipt_account_ok_from_analyzer(recharge_row)
+        if ocr_ok is True:
+            return True, True
+        return False, True
 
     ocr_ok = _receipt_account_ok_from_analyzer(recharge_row)
     if ocr_ok is False:
         return False, True
 
     if has_email_account:
-        email_ok = _email_accounts_match_expected(expected, full_accounts, suffixes)
-        if not email_ok:
+        from app.store.balance_recharge_analyzer import resolve_account_match
+
+        # Misma regla que OCR del comprobante (paso 12).
+        email_match = resolve_account_match(expected, full_accounts, suffixes)
+        if email_match is not True:
             return False, True
-        return True, True
+        if ocr_ok is True:
+            return True, True
+        return False, True
 
     if ocr_ok is True:
         return True, True
@@ -823,28 +1052,12 @@ def _resolve_account_match(
 
 
 def _regex_entry_matches_payment_method(entry: dict[str, Any], pm: str) -> bool:
+    """Solo el regex del mismo medio de pago (id exacto); sin mezclar Nequi con Binance."""
     entry_pm_id = str(entry.get('payment_method_id') or '').strip().lower()
+    pm = (pm or '').strip().lower()
     if not entry_pm_id or not pm:
         return False
-    if entry_pm_id == pm:
-        return True
-    if entry_pm_id in pm or pm in entry_pm_id:
-        return True
-    for token in (
-        'usdt',
-        'binance',
-        'binanse',
-        'bancolombia',
-        'breb',
-        'bre-b',
-        'breve',
-        'kamin',
-        'nequi',
-        'daviplata',
-    ):
-        if token in entry_pm_id and token in pm:
-            return True
-    return False
+    return entry_pm_id == pm
 
 
 def _regex_entries_for_payment_method(payment_method_id: str) -> list[dict[str, Any]]:
@@ -858,37 +1071,30 @@ def _regex_entries_for_payment_method(payment_method_id: str) -> list[dict[str, 
     return [e for e in entries if _regex_entry_matches_payment_method(e, pm)]
 
 
-def _extract_payment_fields(body_text: str, payment_method_id: str) -> dict[str, Any]:
-    patterns = get_analyzer_patterns()
-    pm = (payment_method_id or '').strip().lower()
-    applicable = [
-        p for p in patterns
-        if pm in [str(x).lower() for x in (p.get('payment_method_ids') or [])]
-    ]
-    if not applicable and (pm == 'bancolombia' or pm.startswith('bancolombia')):
-        applicable = [
-            p for p in patterns
-            if 'bancolombia' in str(p.get('id') or '').lower()
-            or 'nequi_envio' in str(p.get('id') or '').lower()
-        ]
-    if not applicable and (pm == 'daviplata' or pm.startswith('daviplata') or 'daviplata' in pm):
-        applicable = [p for p in patterns if 'daviplata' in str(p.get('id') or '').lower()]
-    if not applicable and ('usdt' in pm or 'binance' in pm or 'binanse' in pm):
-        applicable = [p for p in patterns if 'binance' in str(p.get('id') or '').lower()]
-    if not applicable and any(
-        t in pm for t in ('breb', 'bre-b', 'breve', 'kamin')
-    ) and 'bancolombia' in pm:
-        applicable = [
-            p for p in patterns
-            if 'breb' in str(p.get('id') or '').lower()
-            or 'kamin' in str(p.get('id') or '').lower()
-            or 'bancolombia_email' in str(p.get('id') or '').lower()
-        ]
+def _extract_payment_fields(
+    body_text: str,
+    payment_method_id: str,
+    *,
+    payment_method_label: str = '',
+    currency: str = 'COP',
+) -> dict[str, Any]:
+    from app.store.balance_recharge_payment import _find_method_by_id
 
+    pm = (payment_method_id or '').strip().lower()
+    label = (payment_method_label or '').strip()
+    method = _find_method_by_id(pm) if pm else None
+    if method and not label:
+        label = str(method.get('label') or '')
+
+    patterns = get_analyzer_patterns()
+    applicable = _patterns_for_payment_method(patterns, currency, pm, label)
     narrowed = [
-        p for p in applicable
-        if not [str(x) for x in (p.get('text_must_contain') or []) if str(x).strip()]
-        or _text_contains_all(body_text, [str(x) for x in (p.get('text_must_contain') or []) if str(x).strip()])
+        pat for pat in applicable
+        if not [str(x) for x in (pat.get('text_must_contain') or []) if str(x).strip()]
+        or _text_contains_all(
+            body_text,
+            [str(x) for x in (pat.get('text_must_contain') or []) if str(x).strip()],
+        )
     ]
     if narrowed:
         applicable = narrowed
@@ -897,6 +1103,15 @@ def _extract_payment_fields(body_text: str, payment_method_id: str) -> dict[str,
     for llave in _scan_breb_llaves_in_text(body_text):
         if llave not in extracted['account_numbers']:
             extracted['account_numbers'].append(llave)
+    for norm in _scan_account_numbers_in_text(
+        body_text,
+        payment_method=method,
+        payment_method_id=pm,
+        payment_method_label=label,
+    ):
+        if norm not in extracted['account_numbers']:
+            extracted['account_numbers'].append(norm)
+
     amounts: list[float] = []
     for pat in applicable:
         for amt in _find_amounts_in_text(body_text, pat.get('amount_regexes') or []):
@@ -904,11 +1119,17 @@ def _extract_payment_fields(body_text: str, payment_method_id: str) -> dict[str,
             if fv not in amounts:
                 amounts.append(fv)
 
+    suffixes = _extract_masked_account_suffixes(body_text)
+    for acct in extracted.get('account_numbers') or []:
+        d = digits_only(str(acct))
+        if len(d) >= 2 and len(d) <= 4 and d not in suffixes:
+            suffixes.append(d)
+
     return {
         'amounts': amounts,
         'receipt_numbers': extracted.get('receipt_numbers') or [],
         'account_numbers': extracted.get('account_numbers') or [],
-        'account_suffixes': _extract_masked_account_suffixes(body_text),
+        'account_suffixes': suffixes,
         'receipt_dates_raw': extracted.get('receipt_dates_raw') or [],
         'receipt_dates_parsed': extracted.get('receipt_dates_parsed') or [],
         'receipt_times_raw': extracted.get('receipt_times_raw') or [],
@@ -936,21 +1157,23 @@ def _capture_from_regex_pattern(
     body_text: str,
     subject: str,
     pattern: str,
-) -> tuple[list[float], list[str]]:
-    """Grupos del regex admin: 1 = monto, 2 = sufijo cuenta *XXXX (opcional)."""
+) -> tuple[list[float], list[str], list[str], list[str]]:
+    """Grupos admin: 1 monto, 2 sufijo *XXXX, 3 fecha dd/mm/yyyy, 4 hora HH:MM."""
     pattern = (pattern or '').strip()
     if not pattern:
-        return [], []
+        return [], [], [], []
     haystack = f'{subject}\n{body_text}' if subject else body_text
     try:
         match = re.search(pattern, haystack, re.IGNORECASE | re.DOTALL)
     except re.error:
-        return [], []
+        return [], [], [], []
     if not match or not match.lastindex:
-        return [], []
+        return [], [], [], []
 
     amounts: list[float] = []
     suffixes: list[str] = []
+    dates_raw: list[str] = []
+    times_raw: list[str] = []
 
     raw_amt = match.group(1)
     if raw_amt is not None:
@@ -967,7 +1190,21 @@ def _capture_from_regex_pattern(
             if len(suf) >= 2 and suf not in suffixes:
                 suffixes.append(suf)
 
-    return amounts, suffixes
+    if match.lastindex and match.lastindex >= 3:
+        raw_date = match.group(3)
+        if raw_date is not None:
+            d = str(raw_date).strip()
+            if d and d not in dates_raw:
+                dates_raw.append(d)
+
+    if match.lastindex and match.lastindex >= 4:
+        raw_time = match.group(4)
+        if raw_time is not None:
+            t = str(raw_time).strip()
+            if t and t not in times_raw:
+                times_raw.append(t)
+
+    return amounts, suffixes, dates_raw, times_raw
 
 
 def _amounts_from_regex_pattern(
@@ -975,7 +1212,7 @@ def _amounts_from_regex_pattern(
     subject: str,
     pattern: str,
 ) -> list[float]:
-    amounts, _ = _capture_from_regex_pattern(body_text, subject, pattern)
+    amounts, _, _, _ = _capture_from_regex_pattern(body_text, subject, pattern)
     return amounts
 
 
@@ -989,17 +1226,29 @@ def _merge_amounts_from_matched_regex(
     subject = str(mail.get('subject') or '').strip()
     amounts = list(extracted.get('amounts') or [])
     suffixes = list(extracted.get('account_suffixes') or [])
+    dates_raw = list(extracted.get('receipt_dates_raw') or [])
+    times_raw = list(extracted.get('receipt_times_raw') or [])
     for entry in matched_entries:
         pattern = str(entry.get('pattern') or '').strip()
-        cap_amounts, cap_suffixes = _capture_from_regex_pattern(body_text, subject, pattern)
+        cap_amounts, cap_suffixes, cap_dates, cap_times = _capture_from_regex_pattern(
+            body_text, subject, pattern
+        )
         for amt in cap_amounts:
             if amt not in amounts:
                 amounts.append(amt)
         for suf in cap_suffixes:
             if suf not in suffixes:
                 suffixes.append(suf)
+        for d in cap_dates:
+            if d not in dates_raw:
+                dates_raw.append(d)
+        for t in cap_times:
+            if t not in times_raw:
+                times_raw.append(t)
     extracted['amounts'] = amounts
     extracted['account_suffixes'] = suffixes
+    extracted['receipt_dates_raw'] = dates_raw
+    extracted['receipt_times_raw'] = times_raw
     return extracted
 
 
@@ -1068,12 +1317,15 @@ def verify_recharge_by_email(recharge_row) -> dict[str, Any]:
         except ValueError:
             receipt_date = None
 
+    match_reference_dt = _receipt_match_reference_datetime(recharge_row)
+
     emails = collect_review_emails(
         use_buzon=use_buzon,
         regex_entries=regex_entries,
         limit_days=int(scan_plan.get('limit_days') or _EMAIL_SCAN_DAYS),
         since_date=since_date,
         receipt_date=receipt_date,
+        match_reference_dt=match_reference_dt,
     )
 
     currency = (recharge_row.currency or 'COP').strip().upper()
@@ -1082,12 +1334,15 @@ def verify_recharge_by_email(recharge_row) -> dict[str, Any]:
         claimed = recharge_row.amount_claimed
     claimed_f = float(claimed) if claimed is not None else 0.0
     receipt_expected = digits_only(getattr(recharge_row, 'receipt_number', None) or '')
-    if _is_binance_style_payment_method(pm_id):
+    if _email_uses_relaxed_correo_rules(recharge_row, pm_id):
         receipt_date_expected = None
         receipt_time_expected = None
     else:
         receipt_date_expected = _receipt_date_from_row(recharge_row)
         receipt_time_expected = _receipt_time_from_row(recharge_row)
+
+    pm_method = _payment_method_for_recharge_row(recharge_row)
+    pm_label = str((pm_method or {}).get('label') or '')
 
     best_partial: dict[str, Any] | None = None
 
@@ -1102,7 +1357,12 @@ def verify_recharge_by_email(recharge_row) -> dict[str, Any]:
         if not matched_entries:
             continue
 
-        extracted = _extract_payment_fields(body_text, pm_id)
+        extracted = _extract_payment_fields(
+            body_text,
+            pm_id,
+            payment_method_label=pm_label,
+            currency=currency,
+        )
         extracted = _merge_amounts_from_matched_regex(
             extracted,
             body_text=body_text,
@@ -1113,9 +1373,17 @@ def verify_recharge_by_email(recharge_row) -> dict[str, Any]:
             _amounts_equivalent(claimed_f, Decimal(str(a)), currency)
             for a in extracted['amounts']
         )
+        ocr_amount_ok = _receipt_amount_ok_from_analyzer(recharge_row)
+        if ocr_amount_ok is not True:
+            amount_match = False
 
         receipt_digits = [digits_only(r) for r in extracted['receipt_numbers']]
-        receipt_match = _email_receipt_matches(receipt_expected, receipt_digits)
+        receipt_match = _email_receipt_matches(
+            receipt_expected,
+            receipt_digits,
+            payment_method_id=pm_id,
+            recharge_row=recharge_row,
+        )
         receipt_found = receipt_digits[0] if receipt_digits else ''
 
         date_match, time_match = _email_datetime_matches_receipt(
@@ -1126,8 +1394,9 @@ def verify_recharge_by_email(recharge_row) -> dict[str, Any]:
             body_text=body_text,
         )
         account_match, _account_check = _resolve_account_match(recharge_row, extracted)
-        if not _email_breb_llave_matches(recharge_row, body_text, extracted):
-            account_match = False
+        if not _email_uses_relaxed_correo_rules(recharge_row, pm_id):
+            if not _email_breb_llave_matches(recharge_row, body_text, extracted):
+                account_match = False
         expected_account = _expected_account_digits_for_recharge(recharge_row)
 
         email_summary = {
@@ -1155,9 +1424,14 @@ def verify_recharge_by_email(recharge_row) -> dict[str, Any]:
             expected_date=receipt_date_expected,
             expected_time=receipt_time_expected,
         ):
+            match_msg = 'Correo bancario encontrado y coincide con la recarga.'
+            if _is_bancolombia_classic_email_verify(recharge_row, pm_id):
+                match_msg = (
+                    'Correo Bancolombia coincide (monto, cuenta *XXXX, fecha y hora).'
+                )
             return {
                 'status': 'matched',
-                'message': 'Correo bancario encontrado y coincide con la recarga.',
+                'message': match_msg,
                 'checked': True,
                 'amount_match': True,
                 'receipt_match': receipt_match,
@@ -1197,26 +1471,46 @@ def verify_recharge_by_email(recharge_row) -> dict[str, Any]:
 
     if best_partial:
         if not best_partial.get('amount_match'):
-            best_partial['message'] = 'Hay correo del banco pero el monto no coincide.'
+            ocr_amount_ok = _receipt_amount_ok_from_analyzer(recharge_row)
+            if ocr_amount_ok is False:
+                best_partial['message'] = (
+                    'El monto de la foto del comprobante no coincide con lo declarado; '
+                    'queda aprobación manual.'
+                )
+            elif ocr_amount_ok is None:
+                best_partial['message'] = (
+                    'No se confirmó el monto en la foto del comprobante; '
+                    'queda aprobación manual.'
+                )
+            else:
+                best_partial['message'] = 'Hay correo del banco pero el monto no coincide.'
         elif receipt_expected and not best_partial.get('receipt_match'):
-            best_partial['message'] = 'Hay correo del banco pero el comprobante no coincide.'
+            if not _email_skips_receipt_crosscheck(recharge_row, pm_id):
+                best_partial['message'] = 'Hay correo del banco pero el comprobante no coincide.'
         elif receipt_date_expected and not best_partial.get('date_match'):
-            best_partial['message'] = 'Hay correo del banco pero la fecha no coincide con el comprobante.'
+            best_partial['message'] = (
+                'Hay correo del banco pero la fecha no coincide con el comprobante.'
+            )
         elif receipt_time_expected and not best_partial.get('time_match'):
-            best_partial['message'] = 'Hay correo del banco pero la hora no coincide con el comprobante.'
+            best_partial['message'] = (
+                'Hay correo del banco pero la hora no coincide con el comprobante.'
+            )
         elif not best_partial.get('account_match'):
             analyzer = _analyzer_payload(recharge_row) or {}
             if analyzer.get('bre_b_llave_matches_configured') is False:
-                expected = str(analyzer.get('bre_b_llave_expected') or '').strip().upper()
-                detected = [
-                    str(x).upper()
-                    for x in (analyzer.get('bre_b_llaves_detected') or [])
-                    if str(x).strip()
-                ]
-                det_label = ', '.join(f'@{k}' for k in detected) if detected else 'no detectada en la foto'
+                from app.store.balance_recharge_analyzer import (
+                    _breb_llave_expected_display_from_analysis,
+                    _breb_llaves_detected_labels,
+                )
+
+                expected = _breb_llave_expected_display_from_analysis(analyzer)
+                detected = _breb_llaves_detected_labels(
+                    analyzer.get('bre_b_llaves_detected')
+                )
+                det_label = ', '.join(detected) if detected else 'no detectada en la foto'
                 best_partial['message'] = (
                     'La llave Bre-B del comprobante no coincide con el medio elegido '
-                    f'(en foto: {det_label}; medio: @{expected}); aprobación manual.'
+                    f'(en foto: {det_label}; medio: {expected}); aprobación manual.'
                 )
             else:
                 ocr_ok = _receipt_account_ok_from_analyzer(recharge_row)
@@ -1234,7 +1528,13 @@ def verify_recharge_by_email(recharge_row) -> dict[str, Any]:
         return best_partial
 
     not_found_msg = 'No se encontró correo del banco en el buzón/IMAP configurado.'
-    if scan_plan.get('single_check_only') and receipt_date:
+    if scan_plan.get('email_window_mode'):
+        days = int(scan_plan.get('limit_days') or _EMAIL_SCAN_DAYS)
+        not_found_msg = (
+            f'No se encontró aviso en los últimos {days} días del buzón/IMAP configurado. '
+            'Queda revisión manual.'
+        )
+    elif scan_plan.get('single_check_only') and receipt_date:
         not_found_msg = (
             f'No se encontró aviso bancario desde el {receipt_date.strftime("%d/%m/%Y")}. '
             'Se hizo una sola consulta automática; queda revisión manual.'

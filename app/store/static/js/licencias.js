@@ -16485,9 +16485,23 @@ function adminSaldoClientesFindCachedClient(userId) {
 
 async function adminSaldoClientesReloadFromApi() {
     try {
-        const resp = await fetch('/tienda/api/admin/store-clients-license-saldo');
-        const data = await resp.json().catch(() => ({}));
-        if (!resp.ok || !data.success || !Array.isArray(data.clients)) {
+        const req =
+            window.StoreFetchJson && window.StoreFetchJson.fetch
+                ? window.StoreFetchJson.fetch('/tienda/api/admin/store-clients-license-saldo')
+                : fetch('/tienda/api/admin/store-clients-license-saldo').then(function (resp) {
+                      return resp.json().then(function (data) {
+                          if (!resp.ok) {
+                              const err = new Error(
+                                  (data && data.error) ? String(data.error) : 'Error'
+                              );
+                              err.data = data;
+                              throw err;
+                          }
+                          return data;
+                      });
+                  });
+        const data = await req;
+        if (!data.success || !Array.isArray(data.clients)) {
             return false;
         }
         window.__saldoClientesListCache = data.clients;
@@ -16498,14 +16512,20 @@ async function adminSaldoClientesReloadFromApi() {
     }
 }
 
-function adminSaldoClientesPromptPositiveAmount(title) {
+function adminSaldoClientesPromptAmount(title, opts) {
+    opts = opts || {};
+    const allowSigned = !!opts.allowSigned;
     const raw =
         typeof window.prompt === 'function' ? window.prompt(title, '') : null;
     if (raw === null || raw === undefined) return null;
     const t = String(raw).trim().replace(',', '.');
     if (!t) return null;
     const x = Number(t);
-    if (!Number.isFinite(x) || x <= 0) {
+    if (!Number.isFinite(x) || x === 0) {
+        showError('Indica un importe numérico distinto de cero.');
+        return null;
+    }
+    if (!allowSigned && x <= 0) {
         showError('Indica un importe numérico mayor que cero.');
         return null;
     }
@@ -16535,22 +16555,35 @@ async function adminSaldoClientesAdjust(userId, delta) {
         amount_cop: tp === 'cop' ? amt : 0
     };
     try {
-        const resp = await fetch('/tienda/admin/pagos/add_balance', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRFToken': typeof getCSRFToken === 'function' ? getCSRFToken() : ''
-            },
-            body: JSON.stringify(body)
-        });
-        const data = await resp.json().catch(() => ({}));
-        if (!resp.ok || !data.success) {
-            showError((data && data.error) ? String(data.error) : 'No se pudo actualizar el saldo.');
-            return;
-        }
+        const req =
+            window.StoreFetchJson && window.StoreFetchJson.fetch
+                ? window.StoreFetchJson.fetch('/tienda/admin/pagos/add_balance', {
+                      method: 'POST',
+                      headers: {
+                          'Content-Type': 'application/json',
+                          'X-CSRFToken': typeof getCSRFToken === 'function' ? getCSRFToken() : ''
+                      },
+                      body: JSON.stringify(body)
+                  })
+                : fetch('/tienda/admin/pagos/add_balance', {
+                      method: 'POST',
+                      headers: {
+                          'Content-Type': 'application/json',
+                          'X-CSRFToken': typeof getCSRFToken === 'function' ? getCSRFToken() : ''
+                      },
+                      body: JSON.stringify(body)
+                  }).then(function (resp) {
+                      return resp.json().then(function (data) {
+                          if (!resp.ok || !data.success) {
+                              throw new Error((data && data.error) ? String(data.error) : 'Error');
+                          }
+                          return data;
+                      });
+                  });
+        await req;
         await adminSaldoClientesReloadFromApi();
-    } catch (_e) {
-        showError('Error de red al actualizar saldo.');
+    } catch (e) {
+        showError((e && e.message) ? String(e.message) : 'Error de red al actualizar saldo.');
     }
 }
 
@@ -16659,8 +16692,8 @@ async function showSaldoClientesModal() {
         '<div id="saldoClientesInfoTip" class="saldo-clientes-info-tip hidden" role="tooltip">' +
         '<p class="saldo-clientes-info-tip__lead">Mismo saldo que en <strong>Gestión de permisos</strong> (prepago tienda en USD o COP según el tipo de precio del cliente).</p>' +
         '<ul class="saldo-clientes-info-tip__list">' +
-        '<li><strong>+ Sumar</strong> — acredita saldo al cliente.</li>' +
-        '<li><strong>− Restar</strong> — descuenta saldo prepago.</li>' +
+        '<li><strong>+ Sumar</strong> — acredita saldo al cliente (también negativo, ej. -10 = deuda).</li>' +
+        '<li><strong>− Restar</strong> — descuenta saldo; puede quedar en negativo (deuda).</li>' +
         '<li>Si el usuario no tiene USD/COP configurado, edítalo primero en Gestión de permisos.</li>' +
         '</ul>' +
         '</div>' +
@@ -16750,11 +16783,14 @@ async function showSaldoClientesModal() {
             const act = btn.getAttribute('data-action');
             if (!Number.isFinite(uid)) return;
             if (act === 'saldo-add') {
-                const amt = adminSaldoClientesPromptPositiveAmount('Importe a AÑADIR al saldo:');
+                const amt = adminSaldoClientesPromptAmount(
+                    'Importe a AÑADIR (negativo = deuda, ej. -10):',
+                    { allowSigned: true }
+                );
                 if (amt == null) return;
                 void adminSaldoClientesAdjust(uid, amt);
             } else if (act === 'saldo-sub') {
-                const amt = adminSaldoClientesPromptPositiveAmount('Importe a DESCONTAR del saldo:');
+                const amt = adminSaldoClientesPromptAmount('Importe a DESCONTAR del saldo:');
                 if (amt == null) return;
                 void adminSaldoClientesAdjust(uid, -amt);
             }
@@ -16786,6 +16822,42 @@ async function showSaldoClientesModal() {
         closeSaldoClientesModal();
     }
 }
+
+/** SSE admin: refresca «Saldo clientes» en tiempo real (misma fuente que Gestión de permisos). */
+(function bindSaldoClientesRealtime() {
+    var conn = null;
+    var ADMIN_EVENTS_URL = '/tienda/api/admin/balance-recharges/events';
+
+    function onBalanceRealtimeUpdate() {
+        void adminSaldoClientesReloadFromApi();
+    }
+
+    function connectSaldoClientesStream() {
+        if (conn || typeof window.BalanceRechargeRealtime === 'undefined') return;
+        conn = window.BalanceRechargeRealtime.connect(ADMIN_EVENTS_URL, onBalanceRealtimeUpdate);
+    }
+
+    function disconnectSaldoClientesStream() {
+        if (!conn) return;
+        conn.close();
+        conn = null;
+    }
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', connectSaldoClientesStream);
+    } else {
+        connectSaldoClientesStream();
+    }
+
+    document.addEventListener('visibilitychange', function () {
+        if (document.visibilityState === 'visible') {
+            connectSaldoClientesStream();
+            onBalanceRealtimeUpdate();
+        } else {
+            disconnectSaldoClientesStream();
+        }
+    });
+})();
 
 /** Modal en plantilla Archivados: lista servicios archivados y restaurarlos en Licencias. Mismo estilo que Gestionar productos. */
 async function showRestaurarArchivadosModal() {

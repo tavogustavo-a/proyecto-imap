@@ -14127,7 +14127,8 @@ html, body {
     display: inline-flex;
     align-items: center;
     gap: 0.35rem;
-    font-weight: 600;
+    font-weight: 500;
+    font-size: inherit;
   }
 
   .purchase-history-recharge-product--failed,
@@ -19946,11 +19947,6 @@ body.shared-mode .connection-logs-btn {
 
 /* Responsive para editar cupón */
 @media (max-width: 700px) {
-    .store-light.maxw-800 {
-        width: 100% !important;
-        margin: 0.5rem auto !important;
-    }
-    
     .store-light.maxw-800 .editar-cupon-form {
         max-width: 100% !important;
         padding: 0 1rem !important;
@@ -19964,11 +19960,6 @@ body.shared-mode .connection-logs-btn {
 }
 
 @media (max-width: 500px) {
-    .store-light.maxw-800 {
-        width: 98% !important;
-        margin: 0.3rem auto !important;
-    }
-    
     .store-light.maxw-800 .editar-cupon-form {
         padding: 0 0.5rem !important;
     }
@@ -24028,6 +24019,74 @@ html.admin-lic-bulk-modal--lock body {
   color: #334155;
 }
 
+/* Historial compras: tabla compacta (gana sobre .store-light th/td 18px) */
+.purchase-history-container.store-light table#tabla-compras {
+  font-size: 0.85rem !important;
+  line-height: 1.25 !important;
+  border-collapse: collapse !important;
+}
+
+.purchase-history-container.store-light table#tabla-compras > thead > tr > th,
+.purchase-history-container.store-light table#tabla-compras > tbody > tr > td {
+  font-size: 0.85rem !important;
+  line-height: 1.25 !important;
+  padding: 0.15rem 0.35rem !important;
+  vertical-align: middle !important;
+}
+
+.purchase-history-container.store-light table#tabla-compras > thead > tr > th:first-child,
+.purchase-history-container.store-light table#tabla-compras > tbody > tr > td:first-child {
+  font-size: 0.78rem !important;
+}
+
+.purchase-history-container.store-light table#tabla-compras > thead > tr > th:nth-child(2),
+.purchase-history-container.store-light table#tabla-compras > tbody > tr > td:nth-child(2) {
+  font-size: 0.8rem !important;
+  font-weight: 400 !important;
+  text-align: left;
+}
+
+.purchase-history-page table#tabla-compras .purchase-history-total-currency {
+  font-size: 0.72em;
+  font-weight: 500;
+  opacity: 0.82;
+  letter-spacing: 0.02em;
+}
+
+.purchase-history-page .purchase-history-compras-shell,
+.purchase-history-page .purchase-history-table-wrapper {
+  min-width: 0;
+  max-width: 100%;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.purchase-history-page .purchase-history-table-wrapper {
+  display: block;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.purchase-history-page table#tabla-compras {
+  width: max-content;
+  min-width: 100%;
+  table-layout: auto;
+}
+
+.purchase-history-page table#tabla-compras > thead > tr > th,
+.purchase-history-page table#tabla-compras > tbody > tr > td {
+  white-space: nowrap !important;
+  word-break: keep-all !important;
+  overflow-wrap: normal !important;
+}
+
+.purchase-history-page table#tabla-compras .purchase-history-recharge-product {
+  display: inline-flex;
+  flex-wrap: nowrap !important;
+  white-space: nowrap !important;
+  max-width: none;
+}
+
 /* Historial licencias: compacto (gana sobre .store-light table/th/td al final del archivo) */
 .purchase-history-container .admin-lic-pages-historial-shell table.tabla-licencias-actividad.admin-licencias-historial-table,
 .admin-lic-pages-historial-shell table.tabla-licencias-actividad.admin-licencias-historial-table {
@@ -24599,6 +24658,11 @@ html.admin-lic-bulk-modal--lock body {
 /* —— Recargas de saldo (usuario) —— */
 .balance-recharge-page {
   color: #0f172a;
+  width: 100%;
+  max-width: 100%;
+  margin: 0 auto;
+  padding: 0;
+  box-sizing: border-box;
 }
 
 .balance-recharge-page .balance-recharge-panel {
@@ -24662,7 +24726,7 @@ html.admin-lic-bulk-modal--lock body {
 }
 
 .balance-recharge-accum-line {
-  font-size: 0.95rem;
+  font-size: 0.82rem;
   font-weight: 600;
   color: #7c3aed;
   margin: 0;
@@ -24671,25 +24735,25 @@ html.admin-lic-bulk-modal--lock body {
 }
 
 .balance-recharge-title {
-  font-size: 1.35rem;
+  font-size: 1.1rem;
   font-weight: 700;
   margin: 0;
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 0.35rem;
+  gap: 0.3rem;
 }
 
 .balance-recharge-saldo-icon {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 1.85rem;
-  height: 1.85rem;
+  width: 1.45rem;
+  height: 1.45rem;
   border-radius: 50%;
   background: #0f172a;
   color: #fff;
-  font-size: 1rem;
+  font-size: 0.78rem;
   line-height: 1;
   flex-shrink: 0;
   box-shadow: 0 1px 3px rgba(15, 23, 42, 0.12);
@@ -24700,7 +24764,7 @@ html.admin-lic-bulk-modal--lock body {
 }
 
 .balance-recharge-saldo-line {
-  font-size: 1.05rem;
+  font-size: 0.88rem;
   font-weight: 600;
   color: #1d4ed8;
   margin: 0;
@@ -24766,13 +24830,17 @@ html.admin-lic-bulk-modal--lock body {
   margin-top: 0;
 }
 
-.balance-recharge-file-group {
+.balance-recharge-file-group:not([hidden]) {
   display: inline-flex;
   align-items: center;
   flex: 1 1 auto;
   min-width: 0;
   gap: 0.2rem;
   max-width: 100%;
+}
+
+.balance-recharge-file-group[hidden] {
+  display: none !important;
 }
 
 .balance-recharge-actions-row .balance-recharge-file-picker {
@@ -24871,6 +24939,26 @@ html.admin-lic-bulk-modal--lock body {
 
 .balance-recharge-submit .balance-recharge-submit-text {
   margin-left: 0;
+}
+
+.balance-recharge-submit-bp-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1rem;
+  height: 1rem;
+  margin-left: 0.12rem;
+  color: #f0b90b;
+}
+
+.balance-recharge-submit-bp-icon[hidden] {
+  display: none !important;
+}
+
+.balance-recharge-submit-bp-svg {
+  width: 1rem;
+  height: 1rem;
+  display: block;
 }
 
 @media (max-width: 767px) {
@@ -25063,22 +25151,220 @@ html.admin-lic-bulk-modal--lock body {
 }
 
 .balance-recharge-form-msg {
-  font-size: 0.88rem;
-  padding: 0.45rem 0.6rem;
-  border-radius: 6px;
-  margin-bottom: 0.65rem;
+  margin: 0.55rem 0 0.65rem;
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.balance-recharge-form-msg[hidden] {
+  display: none !important;
+}
+
+.balance-recharge-form-msg-inner {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.65rem;
+  padding: 0.75rem 0.85rem;
+}
+
+.balance-recharge-form-msg-icon {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  margin-top: 0.05rem;
+  border-radius: 999px;
+  background: #fee2e2;
+  color: #dc2626;
+  font-size: 0.82rem;
+}
+
+.balance-recharge-form-msg-icon--ok {
+  background: #d1fae5;
+  color: #059669;
+}
+
+.balance-recharge-form-msg-body {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.balance-recharge-form-msg-title {
+  display: block;
+  margin: 0 0 0.22rem;
+  font-size: 0.86rem;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.balance-recharge-form-msg-text {
+  margin: 0;
+  font-size: 0.8rem;
+  line-height: 1.45;
 }
 
 .balance-recharge-form-msg--ok {
   background: #ecfdf5;
   color: #047857;
-  border: 1px solid #6ee7b7;
+  border: 1px solid #a7f3d0;
+  box-shadow: 0 1px 2px rgba(5, 150, 105, 0.06);
+}
+
+.balance-recharge-form-msg--ok .balance-recharge-form-msg-text {
+  color: #047857;
+  font-weight: 500;
+}
+
+.balance-recharge-binance-pay-panel {
+  width: 100%;
+  margin-top: 0.5rem;
+  padding: 0.65rem 0.75rem;
+  border: 1px dashed #c4b5fd;
+  border-radius: 8px;
+  background: #faf5ff;
+}
+
+.balance-recharge-binance-pay-hint {
+  margin: 0 0 0.55rem;
+  font-size: 0.82rem;
+  color: #5b21b6;
+  line-height: 1.4;
+}
+
+.balance-recharge-binance-pay-checkout:not([hidden]) {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.55rem;
+}
+
+.balance-recharge-binance-pay-checkout[hidden],
+.balance-recharge-binance-pay-qr-wrap[hidden],
+.balance-recharge-binance-pay-link[hidden] {
+  display: none !important;
+}
+
+.balance-recharge-binance-pay-qr {
+  width: 160px;
+  height: 160px;
+  object-fit: contain;
+  border-radius: 8px;
+  border: 1px solid #ddd6fe;
+  background: #fff;
+}
+
+.balance-recharge-binance-pay-link {
+  text-decoration: none;
+}
+
+.balance-recharge-binance-pay-status {
+  margin: 0;
+  font-size: 0.84rem;
+  color: #047857;
+}
+
+.balance-recharge-binance-pay-status--error {
+  color: #b91c1c;
+}
+
+/* Binance Pay: misma cuadrícula de 5 columnas; descripción en fila 2; acciones en fila 3 */
+.purchase-history-page.admin-recargas-page .admin-pm-row--binance-pay {
+  grid-template-columns: auto minmax(9.5rem, 0.95fr) 1fr 1fr 1fr;
+}
+
+.purchase-history-page.admin-recargas-page .admin-pm-row--binance-pay .admin-pm-field-label--binance-api {
+  grid-column: 4;
+  grid-row: 1;
+}
+
+.purchase-history-page.admin-recargas-page .admin-pm-row--binance-pay .admin-pm-field-label--binance-secret {
+  grid-column: 5;
+  grid-row: 1;
+}
+
+.purchase-history-page.admin-recargas-page .admin-pm-row--binance-pay .admin-pm-field-label--description {
+  grid-column: 1 / -1;
+  grid-row: 2;
+}
+
+.purchase-history-page.admin-recargas-page .admin-pm-row--binance-pay .admin-pm-accum-config {
+  grid-column: 1 / -1;
+  grid-row: 2;
+}
+
+.purchase-history-page.admin-recargas-page .admin-pm-row--binance-pay .admin-pm-actions {
+  grid-row: 3;
+}
+
+.purchase-history-page.admin-recargas-page .admin-pm-row--binance-pay.admin-pm-row--accum .admin-pm-field-label--description {
+  grid-row: 2;
+}
+
+.purchase-history-page.admin-recargas-page .admin-pm-row--binance-pay.admin-pm-row--accum .admin-pm-accum-config {
+  grid-row: 3;
+}
+
+.purchase-history-page.admin-recargas-page .admin-pm-row--binance-pay.admin-pm-row--accum .admin-pm-actions {
+  grid-row: 4;
+}
+
+.purchase-history-page.admin-recargas-page .admin-pm-row--binance-pay .admin-pm-actions-primary {
+  flex: 1 1 0;
+  min-width: 0;
+  max-width: none;
+}
+
+.purchase-history-page.admin-recargas-page .admin-pm-methods-msg {
+  margin: 0 0 1rem;
+  padding: 0.65rem 0.85rem;
+  border-radius: 8px;
+  font-size: 0.92rem;
+  line-height: 1.4;
+  min-height: 1.25rem;
+}
+
+.purchase-history-page.admin-recargas-page .admin-pm-methods-msg.text-danger {
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #b91c1c;
+}
+
+.purchase-history-page.admin-recargas-page .admin-pm-methods-msg.text-success {
+  background: #ecfdf5;
+  border: 1px solid #a7f3d0;
+  color: #047857;
+}
+
+.purchase-history-page.admin-recargas-page .admin-pm-row--invalid {
+  outline: 2px solid #ef4444;
+  outline-offset: 2px;
+  border-radius: 10px;
+}
+
+.purchase-history-page.admin-recargas-page .admin-pm-binance-pay-hint {
+  grid-column: 1 / -1;
+  margin: 0;
+  padding: 0.15rem 0 0;
+  font-size: 0.78rem;
+  color: #6b7280;
+  line-height: 1.35;
 }
 
 .balance-recharge-form-msg--error {
-  background: #fef2f2;
+  background: linear-gradient(135deg, #fff7f7 0%, #fef2f2 100%);
+  color: #991b1b;
+  border: 1px solid #fca5a5;
+  box-shadow: 0 1px 3px rgba(185, 28, 28, 0.08);
+}
+
+.balance-recharge-form-msg--error .balance-recharge-form-msg-title {
+  color: #991b1b;
+}
+
+.balance-recharge-form-msg--error .balance-recharge-form-msg-text {
   color: #b91c1c;
-  border: 1px solid #fecaca;
 }
 
 .balance-recharge-field--proof {
@@ -25106,21 +25392,37 @@ html.admin-lic-bulk-modal--lock body {
 .balance-recharge-item-head {
   display: flex;
   align-items: center;
-  gap: 0.35rem;
-  flex-wrap: wrap;
+  gap: 0.3rem 0.4rem;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+}
+
+.balance-recharge-item-head .balance-recharge-status {
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+.balance-recharge-item-pm-inline {
+  font-size: 0.68rem;
+  color: #334155;
+  line-height: 1.2;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .balance-recharge-item-amount {
-  font-weight: 700;
-  font-size: 0.95rem;
+  font-weight: 600;
+  font-size: 0.68rem;
+  color: #0f172a;
   white-space: nowrap;
   line-height: 1.2;
+  flex-shrink: 0;
 }
 
 .balance-recharge-status {
-  font-size: 0.72rem;
+  font-size: 0.62rem;
   font-weight: 600;
-  padding: 0.12rem 0.4rem;
+  padding: 0.1rem 0.35rem;
   border-radius: 999px;
   line-height: 1.2;
   white-space: nowrap;
@@ -25154,12 +25456,13 @@ html.admin-lic-bulk-modal--lock body {
 .balance-recharge-method-accum-hint {
   display: inline-flex;
   align-items: center;
-  flex-wrap: wrap;
-  gap: 0.2rem 0.35rem;
-  margin-top: 0.2rem;
-  font-size: 0.78rem;
+  flex: 0 1 auto;
+  gap: 0.15rem;
+  margin: 0;
+  font-size: 0.68rem;
   color: #7c3aed;
-  line-height: 1.3;
+  line-height: 1.25;
+  white-space: nowrap;
 }
 
 .balance-recharge-method-accum-sep {
@@ -25168,11 +25471,12 @@ html.admin-lic-bulk-modal--lock body {
 }
 
 .balance-recharge-item-date {
-  font-size: 0.74rem;
+  font-size: 0.68rem;
   color: #64748b;
   margin: 0;
   white-space: nowrap;
   line-height: 1.2;
+  flex-shrink: 0;
 }
 
 .balance-recharge-item-meta-row {
@@ -25221,19 +25525,20 @@ html.admin-lic-bulk-modal--lock body {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-height: 1.65rem;
-  padding: 0 0.5rem;
+  min-height: 1.45rem;
+  padding: 0 0.4rem;
   margin: 0;
   border: 1px solid #93c5fd;
   border-radius: 6px;
   background: #eff6ff;
   color: #1d4ed8;
-  font-size: 0.78rem;
+  font-size: 0.65rem;
   font-weight: 600;
   line-height: 1.2;
   cursor: pointer;
   white-space: nowrap;
   vertical-align: middle;
+  flex-shrink: 0;
 }
 
 .balance-recharge-proof-link:hover,
@@ -25337,13 +25642,11 @@ html.admin-lic-bulk-modal--lock body {
   align-self: center;
 }
 
-.balance-recharge-method-option:has(.balance-recharge-method-details),
-.balance-recharge-method-option:has(.balance-recharge-method-accum-hint) {
+.balance-recharge-method-option:has(.balance-recharge-method-details) {
   align-items: flex-start;
 }
 
-.balance-recharge-method-option:has(.balance-recharge-method-details) > input[type='radio'],
-.balance-recharge-method-option:has(.balance-recharge-method-accum-hint) > input[type='radio'] {
+.balance-recharge-method-option:has(.balance-recharge-method-details) > input[type='radio'] {
   margin-top: 0.12rem;
   align-self: flex-start;
 }
@@ -25364,10 +25667,99 @@ html.admin-lic-bulk-modal--lock body {
   min-width: 0;
 }
 
+.balance-recharge-method-head--accum {
+  flex-direction: column;
+  align-items: stretch;
+  flex-wrap: nowrap;
+  gap: 0.22rem;
+}
+
+.balance-recharge-method-head--accum .balance-recharge-method-label {
+  flex: none;
+  width: 100%;
+}
+
+.balance-recharge-method-accum-account-row,
+.balance-recharge-method-accum-hint-scroll {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+  scrollbar-color: #c4b5fd transparent;
+}
+
+.balance-recharge-method-accum-account-row {
+  padding-bottom: 0.05rem;
+}
+
+.balance-recharge-method-accum-hint-scroll {
+  padding-bottom: 0.1rem;
+}
+
+.balance-recharge-method-head--accum .balance-recharge-method-account-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  white-space: nowrap;
+}
+
+.balance-recharge-method-head--accum .balance-recharge-method-accum-hint {
+  display: inline-block;
+  white-space: nowrap;
+}
+
+@media (min-width: 640px) {
+  .balance-recharge-method-head--accum {
+    flex-direction: row;
+    align-items: center;
+    flex-wrap: nowrap;
+    gap: 0.35rem 0.5rem;
+  }
+
+  .balance-recharge-method-head--accum .balance-recharge-method-label {
+    flex: 0 0 auto;
+    width: auto;
+    max-width: none;
+    white-space: nowrap;
+  }
+
+  .balance-recharge-method-accum-account-row {
+    display: flex;
+    flex: 1 1 auto;
+    width: auto;
+    max-width: none;
+    min-width: 0;
+    padding-bottom: 0;
+  }
+
+  .balance-recharge-method-accum-hint-scroll {
+    display: flex;
+    flex: 0 0 auto;
+    width: auto;
+    max-width: none;
+    min-width: 0;
+    padding-bottom: 0;
+    overflow: visible;
+  }
+}
+
+.balance-recharge-method-option--accum:has(input:checked) {
+  align-items: flex-start;
+}
+
+.balance-recharge-method-option--accum > input[type='radio'] {
+  margin-top: 0.15rem;
+  align-self: flex-start;
+}
+
 .balance-recharge-method-account-wrap {
   display: inline-flex;
   align-items: center;
-  gap: 0.3rem;
+  gap: 0.1rem;
 }
 
 .balance-recharge-method-copy {
@@ -25377,7 +25769,7 @@ html.admin-lic-bulk-modal--lock body {
   border: none;
   background: transparent;
   color: #64748b;
-  padding: 0.1rem 0.2rem;
+  padding: 0.1rem 0.05rem;
   cursor: pointer;
   font-size: 0.78rem;
   line-height: 1;
@@ -25400,7 +25792,7 @@ html.admin-lic-bulk-modal--lock body {
 
 .balance-recharge-method-label {
   font-weight: 600;
-  font-size: 0.9rem;
+  font-size: 0.82rem;
   line-height: 1.3;
   flex: 0 1 auto;
   min-width: 0;
@@ -25412,6 +25804,11 @@ html.admin-lic-bulk-modal--lock body {
   color: #2563eb;
   line-height: 1.3;
   white-space: nowrap;
+}
+
+.balance-recharge-method-account--email {
+  font-size: 0.8rem;
+  font-weight: 600;
 }
 
 .balance-recharge-method-account--breb-suffix {
@@ -25436,8 +25833,8 @@ html.admin-lic-bulk-modal--lock body {
 .purchase-history-page {
   --ph-section-gap: 0.5rem;
   width: 100%;
-  max-width: 100vw;
-  overflow-x: hidden;
+  max-width: 100%;
+  overflow-x: visible;
   box-sizing: border-box;
 }
 
@@ -25461,13 +25858,73 @@ html.admin-lic-bulk-modal--lock body {
 }
 
 @media (max-width: 768px) {
+  body:has(.purchase-history-page) {
+    overflow-x: hidden;
+  }
+
+  body .container:has(.purchase-history-page) {
+    width: 100% !important;
+    max-width: 100% !important;
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+    box-sizing: border-box !important;
+    overflow-x: hidden;
+  }
+
   .purchase-history-page {
-    padding-left: var(--ph-section-gap);
-    padding-right: var(--ph-section-gap);
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow-x: hidden;
+  }
+
+  .purchase-history-page .store-light.purchase-history-container,
+  .purchase-history-page .store-light.purchase-history-container.store-front-main {
+    width: 100% !important;
+    max-width: 100% !important;
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+    box-sizing: border-box !important;
+    border-radius: 0;
+  }
+
+  .purchase-history-page .purchase-history-compras-wrap.purchase-history-container,
+  .purchase-history-page .purchase-history-stats-wrap.purchase-history-container,
+  .purchase-history-page .purchase-history-licencias-wrap.purchase-history-container {
+    padding-left: 0.5rem !important;
+    padding-right: 0.5rem !important;
   }
 
   .purchase-history-page .purchase-history-compras-wrap.purchase-history-container.store-front-main {
-    padding: var(--ph-section-gap) !important;
+    padding-top: 0.5rem !important;
+    padding-bottom: 0.75rem !important;
+  }
+
+  .purchase-history-page .purchase-history-compras-shell,
+  .purchase-history-page .purchase-history-table-wrapper {
+    width: 100% !important;
+    max-width: 100% !important;
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+  }
+}
+
+@media (min-width: 769px) {
+  .purchase-history-stats-cards {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    align-items: stretch;
+    gap: 0.5rem;
+  }
+
+  .purchase-history-stats-card {
+    flex: 0 1 8rem;
+    width: 8rem;
+    max-width: 9.5rem;
   }
 }
 
@@ -25508,16 +25965,6 @@ html.admin-lic-bulk-modal--lock body {
   width: 100%;
   margin-left: 0;
   margin-right: 0;
-}
-
-.purchase-history-page .admin-recargas-review-wrap,
-.purchase-history-page .admin-recargas-auto-wrap,
-.purchase-history-page .admin-recargas-accum-wrap,
-.purchase-history-page .admin-recargas-patterns-wrap,
-.purchase-history-page .admin-recargas-pm-cop-wrap,
-.purchase-history-page .admin-recargas-pm-usd-wrap,
-.purchase-history-page .admin-recargas-pm-accum-wrap {
-  margin-top: 0.65rem;
 }
 
 .purchase-history-page .admin-recargas-cleanup-wrap .purchase-history-admin-toolbar,
@@ -25605,6 +26052,17 @@ html.admin-lic-bulk-modal--lock body {
   box-shadow: 0 0 0 1px rgba(34, 197, 94, 0.35);
 }
 
+.purchase-history-page.admin-recargas-page .admin-pm-row--focused {
+  border-color: #6366f1;
+  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.35);
+}
+
+.purchase-history-page.admin-recargas-page .admin-pm-row--draft {
+  border-style: dashed;
+  border-color: #6366f1;
+  background: rgb(248 250 252);
+}
+
 .purchase-history-page.admin-recargas-page .admin-pm-active {
   grid-column: 1;
   grid-row: 1;
@@ -25659,6 +26117,11 @@ html.admin-lic-bulk-modal--lock body {
   grid-row: 1;
   min-width: 0;
   max-width: 6.5rem;
+}
+
+.purchase-history-page.admin-recargas-page .admin-pm-row--breb-nequi .admin-pm-field-label--breb-suffix {
+  max-width: none;
+  min-width: 6.5rem;
 }
 
 .purchase-history-page.admin-recargas-page .admin-pm-row--breb .admin-pm-field-label--description {
@@ -25723,17 +26186,10 @@ html.admin-lic-bulk-modal--lock body {
 }
 
 .purchase-history-page.admin-recargas-page .admin-pm-accum-summary {
-  margin-bottom: 1rem;
-  padding: 0.85rem 1rem;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 0.5rem;
-  background: rgba(0, 0, 0, 0.18);
-}
-
-.purchase-history-page.admin-recargas-page .admin-pm-accum-summary-title {
   margin: 0 0 0.65rem;
-  font-size: 0.95rem;
-  font-weight: 600;
+  padding: 0;
+  border: none;
+  background: none;
 }
 
 .purchase-history-page.admin-recargas-page .admin-pm-accum-summary-scroll {
@@ -25741,9 +26197,13 @@ html.admin-lic-bulk-modal--lock body {
 }
 
 .purchase-history-page.admin-recargas-page .admin-pm-accum-summary-table {
-  width: 100%;
+  width: max-content;
+  min-width: 100%;
   border-collapse: collapse;
   font-size: 0.88rem;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
 }
 
 .purchase-history-page.admin-recargas-page .admin-pm-accum-summary-table th,
@@ -25751,7 +26211,7 @@ html.admin-lic-bulk-modal--lock body {
   padding: 0.45rem 0.55rem;
   text-align: left;
   vertical-align: middle;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  border-bottom: 1px solid #e2e8f0;
 }
 
 .purchase-history-page.admin-recargas-page .admin-pm-accum-summary-table th {
@@ -25759,8 +26219,59 @@ html.admin-lic-bulk-modal--lock body {
   white-space: nowrap;
 }
 
-.purchase-history-page.admin-recargas-page .admin-pm-accum-actions {
+.purchase-history-page.admin-recargas-page .admin-pm-accum-col-mult {
+  width: 1%;
+  max-width: 5.5rem;
+  padding-left: 0.35rem;
+  padding-right: 0.35rem;
+  font-size: 0.68rem;
+  line-height: 1.25;
   white-space: nowrap;
+  text-align: center;
+}
+
+.purchase-history-page.admin-recargas-page .admin-pm-accum-summary-table th.admin-pm-accum-col-mult {
+  font-weight: 600;
+  font-size: 0.62rem;
+  letter-spacing: -0.01em;
+}
+
+.purchase-history-page.admin-recargas-page .admin-pm-accum-credit-cell {
+  white-space: nowrap;
+}
+
+.purchase-history-page.admin-recargas-page .admin-pm-accum-credit-row {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: nowrap;
+  gap: 0.45rem;
+  white-space: nowrap;
+}
+
+.purchase-history-page.admin-recargas-page .admin-pm-accum-preview {
+  white-space: nowrap;
+  flex-shrink: 0;
+  font-size: 0.72rem;
+  line-height: 1.3;
+}
+
+.purchase-history-page.admin-recargas-page .admin-pm-accum-preview strong {
+  font-size: inherit;
+  font-weight: 600;
+}
+
+.purchase-history-page.admin-recargas-page .admin-pm-accum-convert--icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 2rem;
+  padding: 0.28rem 0.5rem;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.purchase-history-page.admin-recargas-page .admin-pm-accum-convert--icon .fa-exchange-alt {
+  font-size: 0.82rem;
 }
 
 .purchase-history-page.admin-recargas-page .admin-pm-accum-error {
@@ -25768,8 +26279,14 @@ html.admin-lic-bulk-modal--lock body {
   font-size: 0.82rem;
 }
 
-.purchase-history-page.admin-recargas-page .admin-recarga-accum-hint {
-  font-size: 0.88rem;
+.admin-recarga-accum-hint-inline {
+  font-size: 0.68rem;
+  line-height: 1.35;
+  color: #92400e;
+  background: #fef9c3;
+  padding: 0.12rem 0.35rem;
+  border-radius: 4px;
+  white-space: nowrap;
 }
 
 .purchase-history-page.admin-recargas-page .admin-pm-field-label--percent {
@@ -25912,16 +26429,148 @@ html.admin-lic-bulk-modal--lock body {
 
 .admin-recargas-review-toolbar {
   display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.65rem;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.45rem;
   margin-bottom: 0.75rem;
 }
 
-.admin-recargas-review-wrap > .admin-recargas-review-toolbar {
+.admin-recargas-review-toolbar__search {
+  min-width: 0;
+  width: 100%;
+}
+
+.admin-recargas-review-toolbar__meta {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 0.4rem 0.5rem;
   flex-wrap: nowrap;
-  justify-content: center;
-  gap: 0.5rem 0.75rem;
+  min-width: 0;
+  width: 100%;
+}
+
+.admin-recargas-review-wrap > .admin-recargas-review-toolbar {
+  gap: 0.45rem;
+}
+
+.admin-recargas-review-toolbar .admin-recargas-search-input {
+  width: 100%;
+  max-width: none;
+  height: 2.1rem;
+  margin: 0;
+  padding: 0.2rem 0.55rem;
+  font-size: 0.875rem;
+  line-height: 1.2;
+}
+
+.admin-recargas-review-toolbar__meta .admin-recargas-review-status-select {
+  flex: 0 1 auto;
+  min-width: 6.5rem;
+  max-width: 9.5rem;
+  width: auto;
+  margin: 0;
+  height: 2.1rem;
+  padding: 0.2rem 1.65rem 0.2rem 0.55rem;
+  font-size: 0.875rem;
+  line-height: 1.2;
+}
+
+.admin-recargas-limit-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.28rem;
+  flex: 0 0 auto;
+  min-width: 0;
+}
+
+.admin-recargas-limit-label {
+  margin: 0;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #475569;
+  white-space: nowrap;
+}
+
+.admin-recargas-limit-select {
+  width: auto;
+  min-width: 4.1rem;
+  max-width: 5.5rem;
+  height: 2.1rem;
+  margin: 0;
+  padding: 0.2rem 1.45rem 0.2rem 0.45rem;
+  font-size: 0.82rem;
+  line-height: 1.2;
+}
+
+.admin-recargas-limit-wrap--compact .admin-recargas-limit-label {
+  font-size: 0.74rem;
+}
+
+.admin-recargas-auto-email-tools .admin-recargas-limit-wrap--compact .admin-recargas-limit-select {
+  min-width: 3.1rem;
+  max-width: 4rem;
+  height: auto !important;
+  min-height: 0;
+  font-size: 0.72rem;
+  line-height: 1.15;
+  padding: 0.18rem 1rem 0.18rem 0.28rem !important;
+  border-radius: 6px;
+}
+
+.admin-recargas-auto-email-tools .admin-recargas-limit-wrap--compact {
+  flex: 0 0 auto;
+}
+
+.admin-recargas-accum-head-tools .admin-recargas-limit-wrap {
+  order: -1;
+}
+
+.admin-recargas-review-toolbar__meta .admin-recargas-review-pending {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 0.82rem;
+  white-space: nowrap;
+}
+
+@media (min-width: 640px) {
+  .admin-recargas-review-toolbar {
+    flex-direction: row;
+    flex-wrap: nowrap;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 0.5rem 0.75rem;
+    width: 100%;
+  }
+
+  .admin-recargas-review-toolbar__search {
+    flex: 1 1 0;
+    width: auto;
+    min-width: 8rem;
+    max-width: none;
+  }
+
+  .admin-recargas-review-toolbar .admin-recargas-search-input {
+    width: 100%;
+    max-width: none;
+  }
+
+  .admin-recargas-review-toolbar__meta {
+    flex: 0 0 auto;
+    width: auto;
+    flex-shrink: 0;
+  }
+
+  .admin-recargas-review-toolbar__meta .admin-recargas-review-status-select {
+    min-width: 9rem;
+    max-width: 11rem;
+    flex: 0 0 auto;
+  }
+
+  .admin-recargas-review-toolbar__meta .admin-recargas-review-pending {
+    flex: 0 0 auto;
+    font-size: inherit;
+  }
 }
 
 .admin-recargas-accum-head {
@@ -25960,7 +26609,6 @@ html.admin-lic-bulk-modal--lock body {
   order: 2;
 }
 
-.admin-recargas-review-wrap > .admin-recargas-review-toolbar .form-select,
 .admin-recargas-accum-head-tools .form-select,
 .admin-recargas-accum-head-tools .admin-recargas-filter-badge-wrap .form-select {
   width: auto;
@@ -25991,8 +26639,8 @@ html.admin-lic-bulk-modal--lock body {
   box-shadow: none !important;
 }
 
-.admin-recargas-review-wrap > .admin-recargas-review-toolbar .text-muted,
-.admin-recargas-review-wrap > .admin-recargas-review-toolbar .btn-panel,
+.admin-recargas-review-wrap > .admin-recargas-review-toolbar .admin-recargas-review-toolbar__meta .text-muted,
+.admin-recargas-review-wrap > .admin-recargas-review-toolbar .admin-recargas-review-toolbar__meta .btn-panel,
 .admin-recargas-accum-head-tools .btn-panel,
 .admin-recargas-accum-head-tools .admin-recargas-filter-badge-wrap {
   flex: 0 0 auto;
@@ -26059,30 +26707,30 @@ html.admin-lic-bulk-modal--lock body {
 .admin-recargas-list {
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
+  gap: 0.5rem;
 }
 
 .admin-recarga-card {
   border: 1px solid #cbd5e1;
-  border-radius: 10px;
-  padding: 0.75rem 0.85rem;
+  border-radius: 8px;
+  padding: 0.5rem 0.6rem;
   background: #fff;
 }
 
 .admin-recarga-card--pending {
-  border-left: 4px solid #f59e0b;
+  border-left: 3px solid #f59e0b;
 }
 
 .admin-recarga-card--approved {
-  border-left: 4px solid #16a34a;
+  border-left: 3px solid #16a34a;
 }
 
 .admin-recarga-card--rejected {
-  border-left: 4px solid #dc2626;
+  border-left: 3px solid #dc2626;
 }
 
 .admin-recarga-card--auto_credited {
-  border-left: 4px solid #2563eb;
+  border-left: 3px solid #2563eb;
 }
 
 .admin-recarga-analyzer {
@@ -26114,6 +26762,12 @@ html.admin-lic-bulk-modal--lock body {
   color: #065f46;
 }
 
+.admin-recarga-analyzer-badge--resubmit {
+  background: #e8f4fd;
+  color: #0b5cab;
+  border: 1px solid #9ec5eb;
+}
+
 .admin-recarga-analyzer-badge--warn {
   background: #fef3c7;
   color: #92400e;
@@ -26126,6 +26780,16 @@ html.admin-lic-bulk-modal--lock body {
 
 .admin-recarga-analyzer-meta--warn {
   color: #b45309;
+}
+
+.admin-recarga-email-verify-notice {
+  margin: 0.15rem 0;
+  font-size: 0.68rem;
+  line-height: 1.35;
+  color: #92400e;
+  background: #fef9c3;
+  padding: 0.25rem 0.4rem;
+  border-radius: 4px;
 }
 
 .admin-recarga-analyzer-note {
@@ -26215,24 +26879,33 @@ html.admin-lic-bulk-modal--lock body {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 0.5rem;
+  gap: 0.35rem;
 }
 
 .admin-recarga-user {
   font-weight: 700;
+  font-size: 0.88rem;
+  line-height: 1.25;
 }
 
 .admin-recarga-status {
-  font-size: 0.78rem;
+  font-size: 0.7rem;
   font-weight: 600;
-  padding: 0.15rem 0.45rem;
+  padding: 0.1rem 0.38rem;
   border-radius: 999px;
   white-space: nowrap;
+  line-height: 1.25;
 }
 
 .admin-recarga-status--pending {
   color: #b45309;
   background: #ffedd5;
+}
+
+.admin-recarga-status--resubmit {
+  color: #0b5cab;
+  background: #e8f4fd;
+  border: 1px solid #9ec5eb;
 }
 
 .admin-recarga-status--approved {
@@ -26246,27 +26919,39 @@ html.admin-lic-bulk-modal--lock body {
 }
 
 .admin-recarga-card--accumulated {
-  border-left: 4px solid #f59e0b;
+  border-left: 3px solid #f59e0b;
 }
 
 .admin-recarga-card--accum_converted {
-  border-left: 4px solid #16a34a;
+  border-left: 3px solid #16a34a;
 }
 
 .admin-recarga-meta {
-  font-size: 0.88rem;
+  font-size: 0.8rem;
   color: #475569;
-  margin: 0.35rem 0;
+  margin: 0.2rem 0;
+  line-height: 1.35;
 }
 
 .admin-recarga-meta-date {
   color: inherit;
   white-space: nowrap;
+  font-size: 0.68rem;
+}
+
+.admin-recarga-meta--receipt {
+  font-size: 0.82rem;
+  color: #334155;
+  line-height: 1.45;
+}
+
+.admin-recarga-meta--receipt .admin-recarga-meta-receipt-no {
+  word-break: break-all;
 }
 
 @media (max-width: 480px) {
   .admin-recarga-meta-date {
-    font-size: 0.68rem;
+    font-size: 0.65rem;
   }
 
   .balance-recharge-item-date {
@@ -26278,8 +26963,8 @@ html.admin-lic-bulk-modal--lock body {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 0.35rem 0.55rem;
-  margin: 0.35rem 0;
+  gap: 0.25rem 0.45rem;
+  margin: 0.2rem 0;
 }
 
 .admin-recarga-meta-row .admin-recarga-meta {
@@ -26316,6 +27001,13 @@ html.admin-lic-bulk-modal--lock body {
   min-width: 100%;
 }
 
+.admin-recarga-reviewed-note {
+  margin: 0;
+  font-size: 0.76rem;
+  line-height: 1.3;
+  color: #334155;
+}
+
 .admin-recarga-meta-note .admin-recarga-reviewed-note {
   margin: 0;
 }
@@ -26346,9 +27038,9 @@ html.admin-lic-bulk-modal--lock body {
   flex: 1;
   min-width: 12rem;
   margin: 0;
-  font-size: 0.82rem;
+  font-size: 0.76rem;
   color: #334155;
-  line-height: 1.35;
+  line-height: 1.3;
 }
 
 .admin-recarga-proof-thumb {
@@ -26360,12 +27052,7 @@ html.admin-lic-bulk-modal--lock body {
 }
 
 .admin-recarga-actions {
-  margin-top: 0.35rem;
-}
-
-.admin-recarga-actions .admin-recarga-accum-hint {
-  margin: 0 0 0.35rem;
-  font-size: 0.82rem;
+  margin-top: 0.25rem;
 }
 
 .admin-recarga-review-fields {
@@ -26383,10 +27070,20 @@ html.admin-lic-bulk-modal--lock body {
 }
 
 .admin-recarga-review-btns {
-  display: inline-flex;
+  display: flex;
   flex-wrap: wrap;
-  align-items: center;
+  align-items: stretch;
   gap: 0.45rem;
+}
+
+.admin-recarga-review-btns > .btn-panel {
+  flex: 1 1 0;
+  min-width: 5.5rem;
+  margin: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  white-space: nowrap;
 }
 
 .admin-recarga-review-field {
@@ -26463,7 +27160,7 @@ html.admin-lic-bulk-modal--lock body {
 
 .admin-recarga-review-fields--auto {
   align-items: center;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
 }
 
 .admin-recarga-review-field--email-btn {
@@ -26475,9 +27172,45 @@ html.admin-lic-bulk-modal--lock body {
   margin: 0;
 }
 
+.admin-recarga-email-verify-btn .fa-envelope {
+  margin-left: 0.3rem;
+  font-size: 0.9em;
+}
+
 .admin-recarga-review-fields--auto .admin-recarga-review-field--note {
-  flex: 1 1 12rem;
+  flex: 1 1 8rem;
+  min-width: 5rem;
+  max-width: 11rem;
+}
+
+.admin-recarga-review-fields--auto .admin-recarga-review-field--buttons {
+  flex: 0 0 auto;
+}
+
+.admin-recarga-review-fields--auto .admin-recarga-review-btns {
+  flex-wrap: nowrap;
+}
+
+.admin-recarga-review-fields--auto .admin-recarga-review-btns > .btn-panel {
+  flex: 0 0 auto;
+  width: auto;
   min-width: 0;
+  max-width: none;
+  box-sizing: border-box;
+}
+
+@media (min-width: 768px) {
+  .admin-recarga-card--auto_credited .admin-recarga-actions {
+    display: flex;
+    justify-content: center;
+  }
+
+  .admin-recarga-card--auto_credited .admin-recarga-review-fields--auto {
+    justify-content: center;
+    flex-wrap: nowrap;
+    width: auto;
+    max-width: 100%;
+  }
 }
 
 .admin-pm-currency-title {
@@ -26810,6 +27543,15 @@ html.admin-lic-bulk-modal--lock body {
   flex: 0 0 auto;
 }
 
+.admin-recargas-auto-email-tools {
+  position: relative;
+  overflow: visible;
+}
+
+.admin-recargas-auto-box--email {
+  overflow: visible;
+}
+
 .admin-recargas-auto-email-tools .admin-recargas-auto-info-wrap {
   flex: 0 0 auto;
   position: relative;
@@ -26819,30 +27561,83 @@ html.admin-lic-bulk-modal--lock body {
   font-size: 1.25rem;
 }
 
-@media (max-width: 480px) {
+@media (max-width: 639px) {
   .admin-recargas-auto-box {
-    padding: 0.55rem 0.45rem;
+    padding: 0.5rem 0.4rem;
   }
 
   .admin-recargas-auto-email-tools {
+    --admin-recargas-auto-control-h: 1.9rem;
+    flex-direction: row;
     flex-wrap: nowrap;
+    align-items: center;
     justify-content: flex-start;
     gap: 0.28rem 0.35rem;
     width: 100%;
+    min-width: 0;
   }
 
-  .admin-recargas-auto-email-tools .btn-panel.btn-sm {
-    padding: 0.2rem 0.42rem !important;
-    font-size: 0.8rem;
-    line-height: 1.2;
+  .admin-recargas-auto-email-tools > .btn-panel.btn-sm {
+    align-self: center;
+    flex: 0 0 auto;
   }
 
   .admin-recargas-auto-pending {
-    font-size: 0.78rem;
+    width: auto;
+    flex: 1 1 auto;
+    min-width: 0;
+    font-size: 0.74rem;
+    order: 0;
+    text-align: left;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .admin-recargas-auto-pending strong {
+    font-weight: 700;
+  }
+
+  .admin-recargas-auto-email-tools-actions {
+    width: auto;
+    flex: 0 0 auto;
+    justify-content: flex-end;
+    order: 0;
+    margin-left: auto;
+  }
+
+  .admin-recargas-auto-email-tools .btn-panel.btn-sm {
+    padding: 0.18rem 0.34rem !important;
+    font-size: 0.72rem;
+    line-height: 1.15;
+  }
+
+  .admin-recargas-auto-email-tools .admin-recargas-limit-wrap--compact .admin-recargas-limit-select {
+    min-width: 2.85rem;
+    max-width: 3.6rem;
+    font-size: 0.72rem !important;
+    line-height: 1.15 !important;
+    padding: 0.18rem 0.85rem 0.18rem 0.25rem !important;
   }
 
   .admin-recargas-auto-email-tools .purchase-history-cleanup-info-btn {
-    font-size: 1.1rem;
+    font-size: 1rem;
+    padding: 0;
+  }
+
+  .admin-recargas-auto-email-tools .admin-recargas-auto-info-wrap,
+  .admin-recargas-accum-head-tools .admin-recargas-accum-info-wrap {
+    position: static;
+  }
+
+  .admin-recargas-auto-email-tools .purchase-history-cleanup-info-box,
+  .admin-recargas-accum-head-tools .purchase-history-cleanup-info-box {
+    left: 50%;
+    right: auto;
+    transform: translateX(-50%);
+    width: calc(100% - 0.6rem);
+    max-width: calc(100% - 0.6rem);
+    text-align: center;
+    box-sizing: border-box;
   }
 }
 
@@ -27200,6 +27995,37 @@ body.balance-recharge-qr-lightbox-open {
 }
 
 @media (max-width: 767px) {
+  .admin-recarga-review-fields--auto .admin-recarga-review-field--note {
+    flex: 1 1 6rem;
+    max-width: 100%;
+  }
+
+  .admin-recarga-review-fields--auto .admin-recarga-review-field--buttons {
+    flex: 1 1 100%;
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .admin-recarga-review-fields--auto .admin-recarga-review-btns {
+    width: 100%;
+    flex-wrap: wrap;
+  }
+
+  .admin-recarga-review-fields--auto .admin-recarga-review-btns > .btn-panel {
+    flex: 1 1 0;
+    min-width: 5.5rem;
+  }
+
+  .admin-recarga-review-fields:not(.admin-recarga-review-fields--auto) .admin-recarga-review-field--buttons {
+    flex: 1 1 100%;
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .admin-recarga-review-fields:not(.admin-recarga-review-fields--auto) .admin-recarga-review-btns {
+    width: 100%;
+  }
+
   .purchase-history-page.admin-recargas-page .admin-pm-row,
   .purchase-history-page.admin-recargas-page .admin-pm-row--accum {
     grid-template-columns: 1fr;
@@ -27240,11 +28066,36 @@ body.balance-recharge-qr-lightbox-open {
     max-width: 100%;
   }
 
-  .purchase-history-page.admin-recargas-page .admin-pm-row--breb .admin-pm-field-label--breb-suffix {
+  .purchase-history-page.admin-recargas-page .admin-pm-row--breb .admin-pm-field-label--breb-suffix,
+  .purchase-history-page.admin-recargas-page .admin-pm-row--breb-nequi .admin-pm-field-label--breb-suffix {
     max-width: none;
   }
 
   .purchase-history-page.admin-recargas-page .admin-pm-row--breb .admin-pm-field-label .form-control {
+    width: 100%;
+    max-width: 100%;
+  }
+
+  /* Binance Pay: apilar como Bre-B (el grid de 6 columnas rompe en móvil) */
+  .purchase-history-page.admin-recargas-page .admin-pm-row--binance-pay {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.5rem;
+  }
+
+  .purchase-history-page.admin-recargas-page .admin-pm-row--binance-pay .admin-pm-active,
+  .purchase-history-page.admin-recargas-page .admin-pm-row--binance-pay .admin-pm-field-label,
+  .purchase-history-page.admin-recargas-page .admin-pm-row--binance-pay .admin-pm-binance-pay-hint,
+  .purchase-history-page.admin-recargas-page .admin-pm-row--binance-pay .admin-pm-actions {
+    grid-column: unset;
+    grid-row: unset;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+  }
+
+  .purchase-history-page.admin-recargas-page .admin-pm-row--binance-pay .admin-pm-field-label .form-control {
     width: 100%;
     max-width: 100%;
   }

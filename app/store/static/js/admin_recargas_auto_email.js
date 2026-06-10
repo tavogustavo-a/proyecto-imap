@@ -122,6 +122,18 @@
   }
 
   /** Etiqueta actual del medio (por id guardado), o la guardada en el regex. */
+  function paymentMethodDisplayLabel(pm) {
+    if (!pm) return '';
+    return (pm.display_label || pm.label || '').trim();
+  }
+
+  function paymentMethodOptionWithCurrency(pm) {
+    if (!pm) return '';
+    var displayLabel = paymentMethodDisplayLabel(pm);
+    if (!displayLabel) return '';
+    return pm.currency ? displayLabel + ' (' + pm.currency + ')' : displayLabel;
+  }
+
   function resolvePaymentMethodLabel(entry) {
     if (!entry) return '';
     var pmId = String(entry.payment_method_id || '').trim();
@@ -130,18 +142,27 @@
     if (pmId) {
       for (i = 0; i < opts.length; i++) {
         if (String(opts[i].id || '') === pmId) {
-          return opts[i].label || entryLabel(entry);
+          return paymentMethodOptionWithCurrency(opts[i]) || entryLabel(entry);
         }
       }
     }
     var stored = (entry.payment_method_label || entry.description || '').trim();
     if (stored) {
       for (i = 0; i < opts.length; i++) {
-        if ((opts[i].label || '').trim() === stored) return opts[i].label || stored;
+        if ((opts[i].label || '').trim() === stored) {
+          return paymentMethodOptionWithCurrency(opts[i]) || stored;
+        }
       }
       return stored;
     }
     return '';
+  }
+
+  function regexEntryDisplayLabel(entry) {
+    if (!entry) return '';
+    var fromApi = (entry.display_label || '').trim();
+    if (fromApi) return fromApi;
+    return resolvePaymentMethodLabel(entry) || entryLabel(entry);
   }
 
   function renderPaymentMethodSelect(selectEl, selectedLabelOrEntry) {
@@ -161,26 +182,28 @@
     var matchedInList = false;
     opts.forEach(function (pm) {
       var label = (pm.label || '').trim();
-      if (!label) return;
+      var displayLabel = paymentMethodOptionWithCurrency(pm) || paymentMethodDisplayLabel(pm) || label;
+      if (!label || !displayLabel) return;
       var id = String(pm.id || '');
-      var cur = pm.currency ? ' (' + pm.currency + ')' : '';
       var sel =
-        (selectedId && id === selectedId) || (selectedLabel && label === selectedLabel);
+        (selectedId && id === selectedId) ||
+        (selectedLabel &&
+          (displayLabel === selectedLabel || label === selectedLabel));
       if (sel) matchedInList = true;
       html +=
         '<option value="' +
-        escapeAttr(label) +
-        '" data-pm-id="' +
         escapeAttr(id) +
+        '" data-pm-label="' +
+        escapeAttr(label) +
         '"' +
         (sel ? ' selected' : '') +
         '>' +
-        escapeHtml(label + cur) +
+        escapeHtml(displayLabel) +
         '</option>';
     });
     if (selectedLabel && !matchedInList) {
       html +=
-        '<option value="' +
+        '<option value="" data-pm-label="' +
         escapeAttr(selectedLabel) +
         '" selected>' +
         escapeHtml(selectedLabel) +
@@ -189,15 +212,21 @@
     }
     selectEl.innerHTML = html;
     if (selectedId && matchedInList) {
-      var optById = selectEl.querySelector(
-        'option[data-pm-id="' + CSS.escape(selectedId) + '"]'
-      );
+      var optById = selectEl.querySelector('option[value="' + CSS.escape(selectedId) + '"]');
       if (optById) {
         selectEl.value = optById.value;
         return;
       }
     }
-    if (selectedLabel) selectEl.value = selectedLabel;
+    if (selectedLabel) {
+      var optsAll = selectEl.querySelectorAll('option[data-pm-label]');
+      for (var j = 0; j < optsAll.length; j++) {
+        if ((optsAll[j].getAttribute('data-pm-label') || '').trim() === selectedLabel) {
+          selectEl.value = optsAll[j].value;
+          return;
+        }
+      }
+    }
   }
 
   function showInlineMsg(el, text, isError) {
@@ -267,7 +296,7 @@
       .map(function (r) {
         var rid = regexEntryId(r);
         if (!rid) return '';
-        var label = entryLabel(r);
+        var label = regexEntryDisplayLabel(r);
         var noteLine = (r.note || '').trim()
           ? '<br><small class="text-muted">Nota: ' + escapeHtml(r.note) + '</small>'
           : '';
@@ -316,7 +345,7 @@
       btn.addEventListener('click', function () {
         var id = parseInt(btn.getAttribute('data-regex-id'), 10);
         var entry = findRegexEntryById(id);
-        var label = entry ? entryLabel(entry) : 'este regex';
+        var label = entry ? regexEntryDisplayLabel(entry) : 'este regex';
         if (!Number.isFinite(id) || id <= 0) {
           showInlineMsg(
             regexModalMsg,
@@ -596,13 +625,25 @@
       });
   }
 
+  function selectedPaymentMethodPayload(selectEl) {
+    if (!selectEl) return null;
+    var pmId = (selectEl.value || '').trim();
+    if (!pmId) return null;
+    var opt = selectEl.options[selectEl.selectedIndex];
+    var pmLabel = opt ? (opt.getAttribute('data-pm-label') || '').trim() : '';
+    return {
+      payment_method_id: pmId,
+      payment_method_label: pmLabel,
+    };
+  }
+
   function createRegexEntry() {
     if (!regexCreateUrl || !newRegexPm) return;
-    var paymentMethodLabel = newRegexPm.value.trim();
+    var pmPayload = selectedPaymentMethodPayload(newRegexPm);
     var note = newRegexNote ? newRegexNote.value.trim() : '';
     var sender = newRegexSender ? newRegexSender.value.trim() : '';
     var pattern = newRegexPattern ? newRegexPattern.value.trim() : '';
-    if (!paymentMethodLabel) {
+    if (!pmPayload) {
       showInlineMsg(regexModalMsg, 'Selecciona el medio de pago.', true);
       return;
     }
@@ -612,7 +653,8 @@
       headers: { 'Content-Type': 'application/json' },
       credentials: 'same-origin',
       body: JSON.stringify({
-        payment_method_label: paymentMethodLabel,
+        payment_method_id: pmPayload.payment_method_id,
+        payment_method_label: pmPayload.payment_method_label,
         note: note,
         sender: sender,
         pattern: pattern,
@@ -903,13 +945,15 @@
       if (!editRegexId || !editRegexPm) return;
       var entryId = parseInt(editRegexId.value, 10);
       if (!entryId) return;
+      var pmPayload = selectedPaymentMethodPayload(editRegexPm);
       var payload = {
-        payment_method_label: editRegexPm.value.trim(),
+        payment_method_id: pmPayload ? pmPayload.payment_method_id : '',
+        payment_method_label: pmPayload ? pmPayload.payment_method_label : '',
         note: editRegexNote ? editRegexNote.value.trim() : '',
         sender: editRegexSender ? editRegexSender.value.trim() : '',
         pattern: editRegexPattern ? editRegexPattern.value.trim() : '',
       };
-      if (!payload.payment_method_label) {
+      if (!payload.payment_method_id) {
         showInlineMsg(regexEditMsg, 'Selecciona el medio de pago.', true);
         return;
       }

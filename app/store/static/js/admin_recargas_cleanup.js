@@ -11,6 +11,7 @@ document.addEventListener('DOMContentLoaded', function () {
   const searchUsersUrl = panel.dataset.searchUsersUrl || '/admin/search_users_ajax';
 
   const daysInput = document.getElementById('brCleanupDays');
+  const categorySelect = document.getElementById('brCleanupCategory');
   const scopeSelect = document.getElementById('brCleanupScope');
   const userWrap = document.getElementById('brCleanupUserWrap');
   const userIdInput = document.getElementById('brCleanupUserId');
@@ -28,6 +29,29 @@ document.addEventListener('DOMContentLoaded', function () {
   const infoBtn = document.getElementById('brCleanupInfoBtn');
   const infoBox = document.getElementById('brCleanupInfoBox');
 
+  function cleanupFetchJson(url, options) {
+    if (window.StoreFetchJson && window.StoreFetchJson.fetch) {
+      return window.StoreFetchJson.fetch(url, options);
+    }
+    options = options || {};
+    return fetch(url, {
+      method: options.method || 'GET',
+      credentials: options.credentials != null ? options.credentials : 'same-origin',
+      headers: Object.assign({ Accept: 'application/json' }, options.headers || {}),
+      body: options.body,
+    }).then(function (res) {
+      return res.json().then(function (data) {
+        if (!res.ok) {
+          const err = new Error((data && (data.error || data.message)) || 'Error HTTP ' + res.status);
+          err.status = res.status;
+          err.data = data;
+          throw err;
+        }
+        return data;
+      });
+    });
+  }
+
   function showStatus(msg, isError) {
     if (!statusEl) return;
     statusEl.textContent = msg;
@@ -36,9 +60,11 @@ document.addEventListener('DOMContentLoaded', function () {
 
   function payloadFromForm() {
     const scope = scopeSelect ? scopeSelect.value : 'all';
+    const purgeCategory = categorySelect ? categorySelect.value : 'all';
     const body = {
       retention_days: parseInt(daysInput?.value || '90', 10),
       scope: scope,
+      purge_category: purgeCategory,
     };
     if (scope === 'user' && userIdInput?.value) {
       body.user_id = parseInt(userIdInput.value, 10);
@@ -103,11 +129,9 @@ document.addEventListener('DOMContentLoaded', function () {
       return;
     }
     try {
-      const res = await fetch(
-        searchUsersUrl + '?query=' + encodeURIComponent(q),
-        { credentials: 'same-origin' }
+      const data = await cleanupFetchJson(
+        searchUsersUrl + '?query=' + encodeURIComponent(q)
       );
-      const data = await res.json();
       if (data.status === 'ok' && Array.isArray(data.users)) {
         renderUserResults(data.users);
       } else {
@@ -135,18 +159,22 @@ document.addEventListener('DOMContentLoaded', function () {
     }
   }
 
-  function updateScopePreviewCount(count) {
-    if (!scopeSelect) return;
+  function updateOptionPreviewCounts(selectEl, count, ariaBase) {
+    if (!selectEl) return;
     const display =
       count === null || count === undefined || Number.isNaN(count) ? '—' : String(count);
-    Array.from(scopeSelect.options).forEach(function (opt) {
+    Array.from(selectEl.options).forEach(function (opt) {
       const base = opt.dataset.label || opt.textContent.replace(/\s*\([^)]*\)\s*$/, '').trim();
       opt.textContent = base + ' (' + display + ')';
     });
-    scopeSelect.setAttribute(
-      'aria-label',
-      'Alcance de la limpieza, ' + display + ' solicitud(es)'
-    );
+    if (ariaBase) {
+      selectEl.setAttribute('aria-label', ariaBase + ', ' + display + ' solicitud(es)');
+    }
+  }
+
+  function updateScopePreviewCount(count) {
+    updateOptionPreviewCounts(categorySelect, count, 'Sección a limpiar');
+    updateOptionPreviewCounts(scopeSelect, count, 'Usuarios afectados');
   }
 
   async function refreshPreview() {
@@ -154,13 +182,11 @@ document.addEventListener('DOMContentLoaded', function () {
     const params = new URLSearchParams({
       retention_days: String(p.retention_days),
       scope: p.scope,
+      purge_category: p.purge_category || 'all',
     });
     if (p.user_id) params.set('user_id', String(p.user_id));
     try {
-      const res = await fetch(previewUrl + '?' + params.toString(), {
-        credentials: 'same-origin',
-      });
-      const data = await res.json();
+      const data = await cleanupFetchJson(previewUrl + '?' + params.toString());
       if (data.success) {
         updateScopePreviewCount(data.count);
       } else {
@@ -176,13 +202,11 @@ document.addEventListener('DOMContentLoaded', function () {
     p.auto_enabled = !!(autoEnabled && autoEnabled.checked);
     p.run_interval_hours = parseInt(intervalSelect?.value || '24', 10);
     try {
-      const res = await fetch(settingsUrl, {
+      const data = await cleanupFetchJson(settingsUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        credentials: 'same-origin',
         body: JSON.stringify(p),
       });
-      const data = await res.json();
       if (!data.success) {
         showStatus(data.error || 'Error al guardar.', true);
         return;
@@ -202,17 +226,16 @@ document.addEventListener('DOMContentLoaded', function () {
       showStatus('Selecciona un usuario.', true);
       return;
     }
-    const countRes = await fetch(
+    const countData = await cleanupFetchJson(
       previewUrl +
         '?' +
         new URLSearchParams({
           retention_days: String(p.retention_days),
           scope: p.scope,
+          purge_category: p.purge_category || 'all',
           ...(p.user_id ? { user_id: String(p.user_id) } : {}),
-        }).toString(),
-      { credentials: 'same-origin' }
+        }).toString()
     );
-    const countData = await countRes.json();
     const n = countData.count || 0;
     if (n === 0) {
       showStatus('No hay solicitudes que coincidan con esos criterios.', true);
@@ -236,13 +259,11 @@ document.addEventListener('DOMContentLoaded', function () {
       return;
     }
     try {
-      const res = await fetch(purgeUrl, {
+      const data = await cleanupFetchJson(purgeUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        credentials: 'same-origin',
         body: JSON.stringify({ ...p, confirm: true }),
       });
-      const data = await res.json();
       if (!data.success) {
         showStatus(data.error || 'No se pudo eliminar.', true);
         return;
@@ -286,6 +307,7 @@ document.addEventListener('DOMContentLoaded', function () {
     closeInfoBox();
   });
 
+  categorySelect?.addEventListener('change', refreshPreview);
   scopeSelect?.addEventListener('change', function () {
     toggleUserWrap();
     refreshPreview();

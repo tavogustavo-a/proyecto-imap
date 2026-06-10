@@ -2,9 +2,9 @@
 
 {% block title %}Recargas de saldo{% endblock %}
 
-{% block head %}{{ super() }}<link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}?v=20260604-saldo-icon-black"><link rel="stylesheet" href="{{ url_for('static', filename='fontawesome/css/all.css') }}"><meta name="csrf_token" content="{{ csrf_token() }}">{% endblock %}
+{% block head %}{{ super() }}<link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}?v=20260607-accum-inline-lg"><link rel="stylesheet" href="{{ url_for('static', filename='fontawesome/css/all.css') }}"><meta name="csrf_token" content="{{ csrf_token() }}">{% endblock %}
 {% block content %}
-<div class="container container-max-width-900 px-2 pb-3 balance-recharge-page">
+<div class="balance-recharge-page">
   {% set blocked_users = ['soporte','soporte1','soporte2','soporte3'] %}
   {% if session.get('logged_in') and (not session.get('username') or session.get('username').lower() not in blocked_users) %}
     <div id="mobileMenu" class="mobile-menu-store hidden">
@@ -106,35 +106,61 @@
             data-list-url="{{ url_for('store_bp.api_user_balance_recharges') }}"
             data-methods-url="{{ url_for('store_bp.api_user_balance_recharge_payment_methods') }}"
             data-saldo-url="{{ url_for('store_bp.api_user_balance_recharge_saldo') }}"
+            data-binance-pay-order-url="{{ url_for('store_bp.api_user_balance_recharge_binance_pay_order') }}"
+            data-binance-pay-status-url="{{ url_for('store_bp.api_user_balance_recharge_binance_pay_status', merchant_trade_no='__TRADE__') }}"
             novalidate>
       <input type="hidden" name="currency" id="balanceRechargeCurrency" value="{{ tipo_precio|default('COP', true) }}">
       <div class="balance-recharge-field balance-recharge-field--methods" id="balanceRechargeMethodsWrap">
         <div id="balanceRechargeMethodsList" class="balance-recharge-methods-list" role="radiogroup" aria-label="Medio de pago">
           {% if payment_methods %}
             {% for m in payment_methods %}
-            <label class="balance-recharge-method-option"{% if m.qr_url %} data-qr-url="{{ m.qr_url }}"{% endif %}{% if m.payment_currency %} data-payment-currency="{{ m.payment_currency }}"{% endif %}{% if m.is_accumulator %} data-is-accumulator="1"{% endif %}>
+            <label class="balance-recharge-method-option{% if m.is_accumulator %} balance-recharge-method-option--accum{% endif %}"{% if m.qr_url %} data-qr-url="{{ m.qr_url }}"{% endif %}{% if m.payment_currency %} data-payment-currency="{{ m.payment_currency }}"{% endif %}{% if m.is_accumulator %} data-is-accumulator="1"{% endif %}>
               <input type="radio" name="payment_method_id" value="{{ m.id }}" {% if loop.first %}checked{% endif %} required>
               <div class="balance-recharge-method-body">
-                <div class="balance-recharge-method-head">
+                <div class="balance-recharge-method-head{% if m.is_accumulator %} balance-recharge-method-head--accum{% endif %}">
                   <span class="balance-recharge-method-label">{{ m.label }}{% if m.is_accumulator %} ({{ m.payment_currency_label|default('COP') }}){% endif %}</span>
-                  {% if m.is_breb_bancolombia and m.bre_b_llave %}
+                  {% if m.is_accumulator %}
+                    {% if (m.is_breb_bancolombia or m.is_breb_nequi) and m.bre_b_llave %}
+                    <div class="balance-recharge-method-accum-account-row">
+                      <span class="balance-recharge-method-account-wrap">
+                        <span class="balance-recharge-method-account">{{ m.bre_b_llave }}</span>
+                        <button type="button" class="balance-recharge-method-copy" data-copy="{{ m.bre_b_llave }}" title="Copiar llave" aria-label="Copiar llave Bre-B">
+                          <i class="fas fa-copy" aria-hidden="true"></i>
+                        </button>
+                      </span>
+                    </div>
+                    {% elif m.account_number %}
+                    <div class="balance-recharge-method-accum-account-row">
+                      <span class="balance-recharge-method-account-wrap">
+                        <span class="balance-recharge-method-account{% if '@' in m.account_number %} balance-recharge-method-account--email{% endif %}">{{ m.account_number }}</span>
+                        <button type="button" class="balance-recharge-method-copy" data-copy="{{ m.account_number }}" title="{% if '@' in m.account_number %}Copiar correo{% else %}Copiar número{% endif %}" aria-label="{% if '@' in m.account_number %}Copiar correo electrónico{% else %}Copiar número de cuenta{% endif %}">
+                          <i class="fas fa-copy" aria-hidden="true"></i>
+                        </button>
+                      </span>
+                    </div>
+                    {% endif %}
+                    <div class="balance-recharge-method-accum-hint-scroll">
+                      <span class="balance-recharge-method-accum-hint">se acumula hasta conversión</span>
+                    </div>
+                  {% else %}
+                    {% if (m.is_breb_bancolombia or m.is_breb_nequi) and m.bre_b_llave %}
                     <span class="balance-recharge-method-account-wrap">
                       <span class="balance-recharge-method-account">{{ m.bre_b_llave }}</span>
                       <button type="button" class="balance-recharge-method-copy" data-copy="{{ m.bre_b_llave }}" title="Copiar llave" aria-label="Copiar llave Bre-B">
                         <i class="fas fa-copy" aria-hidden="true"></i>
                       </button>
                     </span>
-                  {% elif m.account_number %}
-                  <span class="balance-recharge-method-account-wrap">
-                    <span class="balance-recharge-method-account">{{ m.account_number }}</span>
-                    <button type="button" class="balance-recharge-method-copy" data-copy="{{ m.account_number }}" title="Copiar número" aria-label="Copiar número de cuenta">
-                      <i class="fas fa-copy" aria-hidden="true"></i>
-                    </button>
-                  </span>
+                    {% elif m.account_number %}
+                    <span class="balance-recharge-method-account-wrap">
+                      <span class="balance-recharge-method-account{% if '@' in m.account_number %} balance-recharge-method-account--email{% endif %}">{{ m.account_number }}</span>
+                      <button type="button" class="balance-recharge-method-copy" data-copy="{{ m.account_number }}" title="{% if '@' in m.account_number %}Copiar correo{% else %}Copiar número{% endif %}" aria-label="{% if '@' in m.account_number %}Copiar correo electrónico{% else %}Copiar número de cuenta{% endif %}">
+                        <i class="fas fa-copy" aria-hidden="true"></i>
+                      </button>
+                    </span>
+                    {% endif %}
                   {% endif %}
                 </div>
                 {% if m.description %}<span class="balance-recharge-method-details">{{ m.description }}</span>{% endif %}
-                {% if m.is_accumulator %}<span class="balance-recharge-method-accum-hint"><span>Pago en {{ m.payment_currency_label|default('COP') }}</span><span class="balance-recharge-method-accum-sep" aria-hidden="true">·</span><span>se acumula hasta conversión</span></span>{% endif %}
               </div>
             </label>
             {% endfor %}
@@ -147,12 +173,18 @@
         <div class="balance-recharge-amount-stack">
           <div class="balance-recharge-amount-input-row">
             <div class="balance-recharge-amount-input-wrap">
-              <label for="balanceRechargeAmount" class="sr-only">Monto transferido ({{ currency_label|default('COP', true) }})</label>
-              <input type="text" id="balanceRechargeAmount" name="amount" class="form-control balance-recharge-amount-input" required placeholder="Monto transferido ({{ currency_label|default('COP', true) }}) — ej. 50000 o 50.000" inputmode="numeric" autocomplete="off" aria-describedby="balanceRechargeAmountHint">
+              <label for="balanceRechargeAmount" class="sr-only">Monto transferido</label>
+              <input type="text" id="balanceRechargeAmount" name="amount" class="form-control balance-recharge-amount-input" required placeholder="Monto transferido — ej. 50.000 o 50000" inputmode="decimal" autocomplete="off" aria-describedby="balanceRechargeAmountHint">
               <span id="balanceRechargeAmountHint" class="sr-only">Puedes usar punto, coma o escribir el número sin separadores.</span>
             </div>
             <button type="submit" id="balanceRechargeSubmit" class="btn-panel btn-blue balance-recharge-submit" {% if not payment_methods %}disabled{% endif %} aria-label="Enviar solicitud de recarga">
-              <i class="fas fa-paper-plane" aria-hidden="true"></i><span class="balance-recharge-submit-text">Enviar solicitud</span>
+              <i class="balance-recharge-submit-icon fas fa-paper-plane" aria-hidden="true"></i>
+              <span class="balance-recharge-submit-text">Enviar solicitud</span>
+              <span class="balance-recharge-submit-bp-icon" hidden aria-hidden="true">
+                <svg class="balance-recharge-submit-bp-svg" viewBox="0 0 126.61 126.61" xmlns="http://www.w3.org/2000/svg" focusable="false" aria-hidden="true">
+                  <path fill="currentColor" d="M38.73 53.2H24.77L63.3 14.67l38.54 38.53H87.88L63.3 38.61 38.73 53.2zm0 20.21L63.31 88l24.57-14.59h14.46L63.3 111.94 24.77 73.41h13.96z"/>
+                </svg>
+              </span>
             </button>
           </div>
           <div class="balance-recharge-actions-row">
@@ -165,7 +197,16 @@
                 <i class="fas fa-qrcode" aria-hidden="true"></i><span>Mostrar QR de pago</span>
               </button>
             </div>
-            <div class="balance-recharge-file-group">
+            <div id="balanceRechargeBinancePayPanel" class="balance-recharge-binance-pay-panel" hidden>
+              <p class="balance-recharge-binance-pay-hint">Indica el monto en USDT y pulsa «Pagar». Se abrirá Binance Pay en otra pestaña (o usa el QR); al confirmar el pago se acreditará tu saldo.</p>
+              <div id="balanceRechargeBinancePayCheckout" class="balance-recharge-binance-pay-checkout" hidden>
+                <div id="balanceRechargeBinancePayQrWrap" class="balance-recharge-binance-pay-qr-wrap" hidden>
+                  <img id="balanceRechargeBinancePayQr" src="" alt="QR Binance Pay" class="balance-recharge-binance-pay-qr">
+                </div>
+                <p id="balanceRechargeBinancePayStatus" class="balance-recharge-binance-pay-status" role="status" aria-live="polite"></p>
+              </div>
+            </div>
+            <div id="balanceRechargeProofGroup" class="balance-recharge-file-group">
               <div class="balance-recharge-file-picker">
                 <input type="file" id="balanceRechargeProofs" name="proofs" class="balance-recharge-file-input-hidden" accept="image/jpeg,image/png,image/webp,image/gif" required aria-label="Pantallazo de la transferencia">
                 <label for="balanceRechargeProofs" class="balance-recharge-file-btn">
@@ -197,7 +238,9 @@
         </select>
       </div>
     </div>
-    <div id="balanceRechargeList" class="balance-recharge-list" data-list-url="{{ url_for('store_bp.api_user_balance_recharges') }}">
+    <div id="balanceRechargeList" class="balance-recharge-list"
+         data-list-url="{{ url_for('store_bp.api_user_balance_recharges') }}"
+         data-events-url="{{ url_for('store_bp.api_user_balance_recharge_events') }}">
       <p class="balance-recharge-empty text-muted">No hay solicitudes cargadas.</p>
     </div>
   </section>
@@ -214,5 +257,5 @@
 {% endblock %}
 {% block scripts %}
 <script src="{{ url_for('store_bp.static', filename='js/menu_tienda.js') }}" defer></script>
-<script src="{{ url_for('store_bp.static', filename='js/recargas_saldo.js') }}?v=20260604-meta-date-sm" defer></script>
+<script src="{{ url_for('store_bp.static', filename='js/recargas_saldo.js') }}?v=20260607-sse-patch" defer></script>
 {% endblock %}

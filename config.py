@@ -64,6 +64,9 @@ class Config:
     # Para sesión permanente de 15 días
     PERMANENT_SESSION_LIFETIME = timedelta(days=15)
 
+    # SSE recargas multi-worker (Gunicorn): pub/sub Redis opcional.
+    BALANCE_RECHARGE_EVENTS_REDIS_URL = (os.getenv('BALANCE_RECHARGE_EVENTS_REDIS_URL') or '').strip() or None
+
     # Si estás en producción, setea estas variables en .env
     SESSION_COOKIE_SECURE_ENV = os.getenv("SESSION_COOKIE_SECURE")
     if SESSION_COOKIE_SECURE_ENV is not None:

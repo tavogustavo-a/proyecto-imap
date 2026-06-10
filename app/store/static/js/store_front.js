@@ -458,6 +458,19 @@ document.addEventListener('DOMContentLoaded', function() {
     return '—';
   }
 
+  function normalizeLicenseClipboardText(raw) {
+    return String(raw || '')
+      .replace(/\r\n/g, '\n')
+      .split('\n')
+      .map(function (line) {
+        return line.replace(/\s+$/g, '');
+      })
+      .filter(function (line) {
+        return line.length > 0;
+      })
+      .join('\n');
+  }
+
   function tiendaConstruirTextoPlanoEntregaPorProductos(agr) {
     const blocks = [];
     Object.keys(agr).forEach(function (producto) {
@@ -467,7 +480,7 @@ document.addEventListener('DOMContentLoaded', function() {
       });
       blocks.push(b.replace(/\n+$/, ''));
     });
-    return blocks.join('\n\n').trim();
+    return blocks.join('\n').trim();
   }
 
   /** @param {{ producto:string, email:string, password:string }[]} cuentasRaw */
@@ -508,7 +521,8 @@ document.addEventListener('DOMContentLoaded', function() {
 
     if (btnCopiar) {
       btnCopiar.onclick = function () {
-        const txt = buf.value;
+        const txt = normalizeLicenseClipboardText(buf.value);
+        if (!txt) return;
         const okFeedback = function () {
           btnCopiar.classList.add('copiado');
           btnCopiar.innerHTML = '<i class="fas fa-check"></i> ¡Copiado!';
@@ -1143,14 +1157,18 @@ document.addEventListener('DOMContentLoaded', function() {
   }
 
   function refreshStoreFrontSaldoFromApi() {
-    return fetch('/tienda/api/user/store-menu-balance', {
-      method: 'GET',
-      credentials: 'same-origin',
-      headers: { Accept: 'application/json' },
-    })
-      .then(function (r) {
-        return r.json();
-      })
+    var req =
+      window.StoreFetchJson && window.StoreFetchJson.fetch
+        ? window.StoreFetchJson.fetch('/tienda/api/user/store-menu-balance')
+        : fetch('/tienda/api/user/store-menu-balance', {
+            method: 'GET',
+            credentials: 'same-origin',
+            headers: { Accept: 'application/json' },
+          }).then(function (r) {
+            if (!r.ok) throw new Error('HTTP ' + r.status);
+            return r.json();
+          });
+    return req
       .then(function (data) {
         if (!data || !data.show) return data;
         applyStoreSaldoFromApi(data);
@@ -1907,6 +1925,16 @@ document.addEventListener('DOMContentLoaded', function() {
     applyStoreSaldoFromApi(ev && ev.detail ? ev.detail : null);
     if (typeof renderizarCarrito === 'function') {
       renderizarCarrito();
+    }
+  });
+
+  window.addEventListener('balance-recharge-realtime', function () {
+    refreshStoreFrontSaldoFromApi();
+  });
+
+  document.addEventListener('visibilitychange', function () {
+    if (document.visibilityState === 'visible') {
+      refreshStoreFrontSaldoFromApi();
     }
   });
 

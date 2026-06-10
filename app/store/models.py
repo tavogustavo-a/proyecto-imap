@@ -664,8 +664,8 @@ class BalanceRecharge(db.Model):
     amount_credited = db.Column(db.Numeric(12, 2), nullable=True)
     analyzer_json = db.Column(db.Text, nullable=True)
     admin_verified = db.Column(db.Boolean, nullable=True)
-    receipt_number = db.Column(db.String(32), nullable=True, index=True)
-    proof_image_hash = db.Column(db.String(64), nullable=True, index=True)
+    receipt_number = db.Column(db.String(64), nullable=True, index=True)
+    proof_image_hash = db.Column(db.String(64), nullable=True, unique=True, index=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
     reviewed_at = db.Column(db.DateTime, nullable=True)
     reviewed_by_user_id = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
@@ -674,6 +674,7 @@ class BalanceRecharge(db.Model):
     email_verify_attempts = db.Column(db.Integer, nullable=False, default=0)
     email_verify_next_at = db.Column(db.DateTime, nullable=True, index=True)
     email_verify_json = db.Column(db.Text, nullable=True)
+    historial_producto = db.Column(db.String(200), nullable=True)
 
     def __repr__(self):
         return f"<BalanceRecharge id={self.id} user_id={self.user_id} status={self.status}>"
@@ -696,6 +697,7 @@ class BalanceRechargeHistorialSnapshot(db.Model):
     admin_note = db.Column(db.Text, nullable=True)
     event_at = db.Column(db.DateTime, nullable=False, index=True)
     purged_from_recharges = db.Column(db.Boolean, default=False, nullable=False, index=True)
+    historial_producto = db.Column(db.String(200), nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 

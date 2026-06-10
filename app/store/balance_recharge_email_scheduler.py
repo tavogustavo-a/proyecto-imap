@@ -23,12 +23,39 @@ from app.store.balance_recharge_email_verify import (
 from app.store.balance_recharge_imap import get_reachable_recarga_imap_adapters
 from app.store.models import BalanceRecharge
 
-EMAIL_VERIFY_AUTO_ADMIN_NOTE = 'Verificado automáticamente por correo bancario.'
+from app.store.balance_recharge_credit import EMAIL_VERIFY_AUTO_ADMIN_NOTE
+
+_LEGACY_EMAIL_VERIFY_AUTO_ADMIN_NOTES = frozenset({
+    'Verificado automáticamente por correo bancario.',
+})
+
+# Motivos de omisión que no deben mostrarse en el admin (no hay nada que revisar por correo).
+_EMAIL_VERIFY_SILENT_SKIP_MARKERS = (
+    'no hay regex con patrón activo',
+    'no hay regex con patrón configurado',
+)
+
+
+def _email_verify_skip_should_hide(message: str) -> bool:
+    low = (message or '').strip().lower()
+    if not low:
+        return False
+    return any(marker in low for marker in _EMAIL_VERIFY_SILENT_SKIP_MARKERS)
+
+
+def normalize_admin_note_display(note: str | None) -> str:
+    """Texto corto para notas automáticas (incluye registros guardados con el texto largo)."""
+    n = (note or '').strip()
+    if not n:
+        return ''
+    if n in _LEGACY_EMAIL_VERIFY_AUTO_ADMIN_NOTES:
+        return EMAIL_VERIFY_AUTO_ADMIN_NOTE
+    return n
 
 
 def admin_note_for_end_user(note: str | None) -> str:
     """Notas internas de verificación por correo no se muestran al usuario."""
-    n = (note or '').strip()
+    n = normalize_admin_note_display(note)
     if not n:
         return ''
     if n == EMAIL_VERIFY_AUTO_ADMIN_NOTE:
@@ -45,10 +72,22 @@ SINGLE_CHECK_DELAY_SECONDS = 45
 SECOND_DELAY_MINUTES = 10
 THIRD_DELAY_MINUTES = 30
 MAX_DUE_BATCH = 50
+EMAIL_VERIFY_ACTIVE_STATUSES = ('pending', 'auto_credited', 'auto_accumulated')
+EMAIL_VERIFY_PROVISIONAL_STATUSES = ('auto_credited', 'auto_accumulated')
 
 _loop_started = {'started': False}
 _loop_lock = threading.Lock()
 _verify_run_lock = threading.Lock()
+
+
+def _format_email_verify_next_at_colombia_12h(next_at: datetime) -> str:
+    """Instante UTC guardado en BD → fecha/hora Colombia, formato 12 h con segundos."""
+    from app.utils.timezone import utc_to_colombia
+
+    co = utc_to_colombia(next_at)
+    h12 = co.hour % 12 or 12
+    am_pm = 'p.\u00a0m.' if co.hour >= 12 else 'a.\u00a0m.'
+    return f'{co.day:02d}/{co.month:02d}/{co.year % 100:02d} {h12}:{co.strftime("%M:%S")} {am_pm}'
 
 
 def email_verify_sources_available() -> bool:
@@ -72,9 +111,9 @@ def can_schedule_email_verify(recharge_row) -> bool:
     if not email_verify_sources_available():
         return False
     status = (recharge_row.status or '').lower()
-    if status not in ('pending', 'auto_credited'):
+    if status not in EMAIL_VERIFY_ACTIVE_STATUSES:
         return False
-    if status == 'auto_credited' and recharge_row.admin_verified is not None:
+    if status in EMAIL_VERIFY_PROVISIONAL_STATUSES and recharge_row.admin_verified is not None:
         return False
     return True
 
@@ -122,9 +161,9 @@ def _email_verify_skip_reason(recharge_row) -> str:
     if not email_verify_sources_available():
         return 'Sin buzón activo ni IMAP operativo.'
     status = (recharge_row.status or '').lower()
-    if status not in ('pending', 'auto_credited'):
+    if status not in EMAIL_VERIFY_ACTIVE_STATUSES:
         return f'Estado «{status}» no admite verificación por correo.'
-    if status == 'auto_credited' and recharge_row.admin_verified is not None:
+    if status in EMAIL_VERIFY_PROVISIONAL_STATUSES and recharge_row.admin_verified is not None:
         return 'La recarga ya fue revisada por un administrador.'
     return 'No se pudo programar la verificación por correo.'
 
@@ -175,64 +214,23 @@ def ensure_email_verification_scheduled(recharge_row) -> bool:
     return False
 
 
-def _credit_user_balance(user: User, currency: str, amount: float) -> None:
-    cur = (currency or 'COP').strip().upper()
-    amt = float(amount)
-    if cur == 'USD':
-        user.saldo_usd = float(getattr(user, 'saldo_usd', 0) or 0) + amt
-    else:
-        user.saldo_cop = float(getattr(user, 'saldo_cop', 0) or 0) + amt
+def _notify_recharge_realtime(recharge_row, *, reason: str = 'email_verify') -> None:
+    try:
+        from app.store.balance_recharge_events import notify_from_recharge_row
+
+        notify_from_recharge_row(recharge_row, reason=reason)
+    except Exception:
+        pass
 
 
-def apply_email_match_to_recharge(recharge_row, result: dict[str, Any] | None = None) -> bool:
-    """Acredita o confirma la recarga cuando el correo bancario coincide."""
-    status = (recharge_row.status or '').lower()
-    now = datetime.utcnow()
-    note = EMAIL_VERIFY_AUTO_ADMIN_NOTE
+def apply_email_match_to_recharge(recharge_row, result: dict[str, Any] | None = None) -> tuple[bool, str | None]:
+    """Acredita o confirma la recarga cuando el correo bancario coincide (con bloqueo de fila)."""
+    from app.store.balance_recharge_credit import try_email_match_finalize
 
-    if status == 'pending':
-        from app.store.balance_recharge_payment import is_accumulator_method_id
-
-        amount = recharge_row.amount_claimed
-        if amount is None or float(amount) <= 0:
-            return False
-        if is_accumulator_method_id(recharge_row.payment_method_id or ''):
-            recharge_row.status = 'accumulated'
-            recharge_row.amount_claimed = amount
-            recharge_row.reviewed_at = now
-            recharge_row.admin_note = note
-            recharge_row.email_verify_status = 'matched'
-            recharge_row.email_verify_next_at = None
-            if result is not None:
-                recharge_row.email_verify_json = dumps_email_verify_result(result)
-            return True
-        target = User.query.get(recharge_row.user_id)
-        if not target:
-            return False
-        cur = (recharge_row.currency or 'COP').strip().upper()
-        _credit_user_balance(target, cur, float(amount))
-        recharge_row.status = 'approved'
-        recharge_row.amount_claimed = amount
-        recharge_row.reviewed_at = now
-        recharge_row.admin_note = note
-        recharge_row.email_verify_status = 'matched'
-        recharge_row.email_verify_next_at = None
-        if result is not None:
-            recharge_row.email_verify_json = dumps_email_verify_result(result)
-        return True
-
-    if status == 'auto_credited' and recharge_row.admin_verified is None:
-        recharge_row.status = 'approved'
-        recharge_row.admin_verified = True
-        recharge_row.reviewed_at = now
-        recharge_row.admin_note = note
-        recharge_row.email_verify_status = 'matched'
-        recharge_row.email_verify_next_at = None
-        if result is not None:
-            recharge_row.email_verify_json = dumps_email_verify_result(result)
-        return True
-
-    return False
+    recharge_id = getattr(recharge_row, 'id', None)
+    if not recharge_id:
+        return False, None
+    return try_email_match_finalize(int(recharge_id), result)
 
 
 def process_email_verification_for_recharge(
@@ -257,13 +255,15 @@ def process_email_verification_for_recharge(
             recharge_row.email_verify_attempts = attempts
             _apply_failed_verify_schedule(recharge_row, attempts)
             db.session.commit()
+            _notify_recharge_realtime(recharge_row, reason='email_verify_error')
         return error_result
 
     recharge_row.email_verify_json = dumps_email_verify_result(result)
 
     if result.get('status') == 'matched':
+        match_sse_reason = None
         if apply_match:
-            apply_email_match_to_recharge(recharge_row, result)
+            _applied, match_sse_reason = apply_email_match_to_recharge(recharge_row, result)
         elif update_schedule:
             recharge_row.email_verify_status = 'matched'
             recharge_row.email_verify_next_at = None
@@ -277,22 +277,29 @@ def process_email_verification_for_recharge(
             )
             recharge_row.email_verify_json = dumps_email_verify_result(result)
         db.session.commit()
+        if match_sse_reason:
+            _notify_recharge_realtime(recharge_row, reason=match_sse_reason)
+        elif not apply_match:
+            _notify_recharge_realtime(recharge_row, reason='email_matched')
         return result
 
     if result.get('status') == 'skipped':
         recharge_row.email_verify_status = 'skipped'
         recharge_row.email_verify_next_at = None
         db.session.commit()
+        _notify_recharge_realtime(recharge_row, reason='email_verify_skipped')
         return result
 
     if not update_schedule:
         db.session.commit()
+        _notify_recharge_realtime(recharge_row, reason='email_verify_checked')
         return result
 
     if result.get('status') in ('no_regex', 'no_source'):
         recharge_row.email_verify_status = 'skipped'
         recharge_row.email_verify_next_at = None
         db.session.commit()
+        _notify_recharge_realtime(recharge_row, reason='email_verify_skipped')
         return result
 
     attempts = int(recharge_row.email_verify_attempts or 0) + 1
@@ -312,6 +319,7 @@ def process_email_verification_for_recharge(
             recharge_row.email_verify_json = dumps_email_verify_result(result)
 
     db.session.commit()
+    _notify_recharge_realtime(recharge_row, reason='email_verify_progress')
     return result
 
 
@@ -354,10 +362,10 @@ def _ensure_recharge_email_verify_schema() -> None:
 
 
 def _repair_unscheduled_auto_recharges() -> int:
-    """Recargas auto-acreditadas sin cola de correo (p. ej. fallo al guardar tras el submit)."""
+    """Recargas auto-acreditadas/acumuladas sin cola de correo (p. ej. fallo al guardar tras el submit)."""
     rows = (
         BalanceRecharge.query.filter(
-            BalanceRecharge.status == 'auto_credited',
+            BalanceRecharge.status.in_(EMAIL_VERIFY_PROVISIONAL_STATUSES),
             BalanceRecharge.admin_verified.is_(None),
             db.or_(
                 BalanceRecharge.email_verify_status.is_(None),
@@ -379,6 +387,20 @@ def _repair_unscheduled_auto_recharges() -> int:
     return fixed
 
 
+def email_verify_can_reverify(recharge_row) -> bool:
+    """True si el medio tiene al menos un regex de correo habilitado con patrón."""
+    pm_id = str(getattr(recharge_row, 'payment_method_id', '') or '').strip().lower()
+    if not pm_id:
+        return False
+    return bool(_regex_entries_for_payment_method(pm_id))
+
+
+def _email_verify_payload_with_flags(data: dict[str, Any], recharge_row) -> dict[str, Any]:
+    payload = dict(data)
+    payload['can_reverify'] = email_verify_can_reverify(recharge_row)
+    return payload
+
+
 def email_verify_display_for_row(recharge_row) -> dict[str, Any] | None:
     """Payload para el admin aunque aún no se haya ejecutado la primera consulta."""
     raw = getattr(recharge_row, 'email_verify_json', None)
@@ -386,7 +408,13 @@ def email_verify_display_for_row(recharge_row) -> dict[str, Any] | None:
         try:
             data = json.loads(raw)
             if isinstance(data, dict):
-                return data
+                payload = _email_verify_payload_with_flags(data, recharge_row)
+                if (
+                    (payload.get('status') or '').strip().lower() == 'skipped'
+                    and _email_verify_skip_should_hide(str(payload.get('message') or ''))
+                ):
+                    return None
+                return payload
         except (json.JSONDecodeError, TypeError):
             pass
 
@@ -400,14 +428,20 @@ def email_verify_display_for_row(recharge_row) -> dict[str, Any] | None:
         if next_at:
             message = (
                 'Verificación por correo programada; '
-                f'próximo intento ~{next_at.strftime("%H:%M:%S")} UTC.'
+                f'próximo intento ~{_format_email_verify_next_at_colombia_12h(next_at)} (hora Colombia).'
             )
         else:
             message = 'Verificación por correo programada (en cola).'
     elif status == 'pending_admin':
+        tail = (
+            ' Revisión manual o Reverificar.'
+            if email_verify_can_reverify(recharge_row)
+            else ' Revisión manual.'
+        )
         message = (
             'No se confirmó por correo tras los intentos automáticos '
-            f'({EMAIL_VERIFY_MAX_ATTEMPTS} en total: 1 min, 10 min y 30 min). Revisión manual o Reverificar.'
+            f'({EMAIL_VERIFY_MAX_ATTEMPTS} en total: 1 min, 10 min y 30 min).'
+            + tail
         )
     elif status == 'skipped':
         if raw:
@@ -422,11 +456,20 @@ def email_verify_display_for_row(recharge_row) -> dict[str, Any] | None:
     elif status == 'matched':
         message = 'Correo verificado (coincide con la recarga).'
 
-    return {
-        'status': status,
-        'message': message,
-        'checked': status in ('matched', 'partial', 'not_found', 'pending_admin'),
-    }
+    payload = _email_verify_payload_with_flags(
+        {
+            'status': status,
+            'message': message,
+            'checked': status in ('matched', 'partial', 'not_found', 'pending_admin'),
+        },
+        recharge_row,
+    )
+    if (
+        (payload.get('status') or '').strip().lower() == 'skipped'
+        and _email_verify_skip_should_hide(str(payload.get('message') or ''))
+    ):
+        return None
+    return payload
 
 
 def process_due_email_verifications() -> int:
@@ -439,7 +482,7 @@ def process_due_email_verifications() -> int:
             BalanceRecharge.email_verify_status == 'scheduled',
             BalanceRecharge.email_verify_next_at.isnot(None),
             BalanceRecharge.email_verify_next_at <= now,
-            BalanceRecharge.status.in_(('pending', 'auto_credited')),
+            BalanceRecharge.status.in_(EMAIL_VERIFY_ACTIVE_STATUSES),
         )
         .order_by(BalanceRecharge.email_verify_next_at.asc(), BalanceRecharge.id.asc())
         .limit(MAX_DUE_BATCH)
@@ -450,7 +493,7 @@ def process_due_email_verifications() -> int:
 
     eligible: list[BalanceRecharge] = []
     for row in due_rows:
-        if row.status == 'auto_credited' and row.admin_verified is not None:
+        if row.status in EMAIL_VERIFY_PROVISIONAL_STATUSES and row.admin_verified is not None:
             row.email_verify_status = 'skipped'
             row.email_verify_next_at = None
             continue
