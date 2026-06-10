@@ -147,6 +147,18 @@ def _local_deliver(
         _hub.publish_admin(payload)
 
 
+def _redis_client(url: str, *, pubsub_listener: bool = False):
+    """Cliente Redis; en pub/sub el socket no debe tener timeout de lectura."""
+    import redis
+
+    return redis.from_url(
+        url,
+        decode_responses=True,
+        socket_connect_timeout=5,
+        socket_timeout=None if pubsub_listener else 5,
+    )
+
+
 def _redis_publish_envelope(
     payload: dict[str, Any],
     user_id: int | None,
@@ -157,9 +169,7 @@ def _redis_publish_envelope(
     if not url:
         return False
     try:
-        import redis
-
-        client = redis.from_url(url, decode_responses=True)
+        client = _redis_client(url, pubsub_listener=False)
         envelope = {
             'user_id': int(user_id) if user_id is not None else None,
             'broadcast_admin': bool(broadcast_admin),
@@ -173,12 +183,11 @@ def _redis_publish_envelope(
 
 
 def _redis_listener_loop(app, url: str) -> None:
-    import redis
-
     while True:
         pubsub = None
+        client = None
         try:
-            client = redis.from_url(url, decode_responses=True)
+            client = _redis_client(url, pubsub_listener=True)
             pubsub = client.pubsub(ignore_subscribe_messages=True)
             pubsub.subscribe(_REDIS_CHANNEL)
             for raw in pubsub.listen():
@@ -210,6 +219,11 @@ def _redis_listener_loop(app, url: str) -> None:
             if pubsub is not None:
                 try:
                     pubsub.close()
+                except Exception:
+                    pass
+            if client is not None:
+                try:
+                    client.close()
                 except Exception:
                     pass
         time.sleep(3.0)
