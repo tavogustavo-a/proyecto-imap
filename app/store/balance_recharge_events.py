@@ -148,15 +148,20 @@ def _local_deliver(
 
 
 def _redis_client(url: str, *, pubsub_listener: bool = False):
-    """Cliente Redis; en pub/sub el socket no debe tener timeout de lectura."""
+    """Cliente Redis; en pub/sub evitar listen() bloqueante (gevent + timeout)."""
     import redis
 
-    return redis.from_url(
-        url,
-        decode_responses=True,
-        socket_connect_timeout=5,
-        socket_timeout=None if pubsub_listener else 5,
-    )
+    kwargs: dict[str, Any] = {
+        'decode_responses': True,
+        'socket_connect_timeout': 5,
+        'socket_keepalive': True,
+        'health_check_interval': 30,
+    }
+    if pubsub_listener:
+        kwargs['socket_timeout'] = None
+    else:
+        kwargs['socket_timeout'] = 5
+    return redis.from_url(url, **kwargs)
 
 
 def _redis_publish_envelope(
@@ -170,19 +175,26 @@ def _redis_publish_envelope(
         return False
     try:
         client = _redis_client(url, pubsub_listener=False)
-        envelope = {
-            'user_id': int(user_id) if user_id is not None else None,
-            'broadcast_admin': bool(broadcast_admin),
-            'payload': payload,
-        }
-        client.publish(_REDIS_CHANNEL, json.dumps(envelope, ensure_ascii=False))
-        return True
+        try:
+            envelope = {
+                'user_id': int(user_id) if user_id is not None else None,
+                'broadcast_admin': bool(broadcast_admin),
+                'payload': payload,
+            }
+            client.publish(_REDIS_CHANNEL, json.dumps(envelope, ensure_ascii=False))
+            return True
+        finally:
+            try:
+                client.close()
+            except Exception:
+                pass
     except Exception as exc:
         _log_redis_unavailable_once(exc)
         return False
 
 
 def _redis_listener_loop(app, url: str) -> None:
+    """Escucha pub/sub con get_message (no listen) — estable con gevent/Gunicorn."""
     while True:
         pubsub = None
         client = None
@@ -190,8 +202,11 @@ def _redis_listener_loop(app, url: str) -> None:
             client = _redis_client(url, pubsub_listener=True)
             pubsub = client.pubsub(ignore_subscribe_messages=True)
             pubsub.subscribe(_REDIS_CHANNEL)
-            for raw in pubsub.listen():
-                if not raw or raw.get('type') != 'message':
+            while True:
+                raw = pubsub.get_message(timeout=30.0)
+                if raw is None:
+                    continue
+                if raw.get('type') != 'message':
                     continue
                 data = raw.get('data')
                 if not data:
@@ -218,6 +233,7 @@ def _redis_listener_loop(app, url: str) -> None:
         finally:
             if pubsub is not None:
                 try:
+                    pubsub.unsubscribe(_REDIS_CHANNEL)
                     pubsub.close()
                 except Exception:
                     pass
