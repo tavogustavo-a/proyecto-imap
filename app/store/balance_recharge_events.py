@@ -147,6 +147,10 @@ def _local_deliver(
         _hub.publish_admin(payload)
 
 
+_REDIS_LISTENER_RETRY_SEC = 1.0
+_REDIS_LISTENER_MAX_ATTEMPTS = 20
+
+
 def _redis_client(url: str, *, pubsub_listener: bool = False):
     """Cliente Redis; en pub/sub evitar listen() bloqueante (gevent + timeout)."""
     import redis
@@ -162,6 +166,41 @@ def _redis_client(url: str, *, pubsub_listener: bool = False):
     else:
         kwargs['socket_timeout'] = 5
     return redis.from_url(url, **kwargs)
+
+
+def _redis_open_pubsub(url: str):
+    """Conecta pub/sub con reintentos (Gunicorn puede arrancar antes que Redis acepte TCP)."""
+    last_exc: Exception | None = None
+    for attempt in range(1, _REDIS_LISTENER_MAX_ATTEMPTS + 1):
+        client = None
+        pubsub = None
+        try:
+            client = _redis_client(url, pubsub_listener=True)
+            client.ping()
+            pubsub = client.pubsub(ignore_subscribe_messages=True)
+            pubsub.subscribe(_REDIS_CHANNEL)
+            return client, pubsub
+        except Exception as exc:
+            last_exc = exc
+            if pubsub is not None:
+                try:
+                    pubsub.close()
+                except Exception:
+                    pass
+            if client is not None:
+                try:
+                    client.close()
+                except Exception:
+                    pass
+            if attempt < _REDIS_LISTENER_MAX_ATTEMPTS:
+                logger.info(
+                    'SSE recargas: esperando Redis (%s); reintento %s/%s',
+                    exc,
+                    attempt,
+                    _REDIS_LISTENER_MAX_ATTEMPTS,
+                )
+                time.sleep(_REDIS_LISTENER_RETRY_SEC)
+    raise last_exc or RuntimeError('Redis no disponible para SSE')
 
 
 def _redis_publish_envelope(
@@ -199,9 +238,7 @@ def _redis_listener_loop(app, url: str) -> None:
         pubsub = None
         client = None
         try:
-            client = _redis_client(url, pubsub_listener=True)
-            pubsub = client.pubsub(ignore_subscribe_messages=True)
-            pubsub.subscribe(_REDIS_CHANNEL)
+            client, pubsub = _redis_open_pubsub(url)
             while True:
                 raw = pubsub.get_message(timeout=30.0)
                 if raw is None:
