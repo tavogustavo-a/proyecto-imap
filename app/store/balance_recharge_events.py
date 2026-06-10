@@ -239,6 +239,7 @@ def _redis_listener_loop(app, url: str) -> None:
         client = None
         try:
             client, pubsub = _redis_open_pubsub(url)
+            logger.info('SSE recargas: listener Redis conectado (%s).', _REDIS_CHANNEL)
             while True:
                 raw = pubsub.get_message(timeout=30.0)
                 if raw is None:
@@ -282,6 +283,16 @@ def _redis_listener_loop(app, url: str) -> None:
         time.sleep(3.0)
 
 
+_REDIS_LISTENER_START_DELAY_SEC = 2.0
+
+
+def _redis_listener_loop_entry(app, url: str) -> None:
+    """Espera un poco tras fork de Gunicorn antes de abrir pub/sub."""
+    if _REDIS_LISTENER_START_DELAY_SEC > 0:
+        time.sleep(_REDIS_LISTENER_START_DELAY_SEC)
+    _redis_listener_loop(app, url)
+
+
 def start_balance_recharge_events_redis_listener(app) -> None:
     """Suscriptor Redis por worker (opcional). Sin URL configurada, no hace nada."""
     global _redis_listener_started
@@ -293,13 +304,17 @@ def start_balance_recharge_events_redis_listener(app) -> None:
             return
         _redis_listener_started = True
     thread = threading.Thread(
-        target=_redis_listener_loop,
+        target=_redis_listener_loop_entry,
         args=(app, url),
         daemon=True,
         name='balance-recharge-events-redis',
     )
     thread.start()
-    logger.info('SSE recargas: listener Redis activo (%s).', _REDIS_CHANNEL)
+    logger.info(
+        'SSE recargas: listener Redis programado (canal %s, delay %.0fs).',
+        _REDIS_CHANNEL,
+        _REDIS_LISTENER_START_DELAY_SEC,
+    )
 
 
 def subscribe_admin_recharge_events() -> queue.Queue[str]:
