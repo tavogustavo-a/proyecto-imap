@@ -19,6 +19,9 @@ _REDIS_CHANNEL = 'balance_recharge:sse'
 _redis_listener_started = False
 _redis_listener_lock = threading.Lock()
 _redis_unavailable_logged = False
+_REDIS_LISTENER_RETRY_SEC = 1.0
+_REDIS_LISTENER_MAX_ATTEMPTS = 20
+_REDIS_LISTENER_START_DELAY_SEC = 3.0
 
 
 class _RechargeEventHub:
@@ -105,6 +108,17 @@ class _RechargeEventHub:
 _hub = _RechargeEventHub()
 
 
+def _cooperative_sleep(seconds: float) -> None:
+    if seconds <= 0:
+        return
+    try:
+        import gevent
+
+        gevent.sleep(seconds)
+    except ImportError:
+        time.sleep(seconds)
+
+
 def _redis_url_from_env() -> str | None:
     url = (os.environ.get('BALANCE_RECHARGE_EVENTS_REDIS_URL') or '').strip()
     return url or None
@@ -147,29 +161,24 @@ def _local_deliver(
         _hub.publish_admin(payload)
 
 
-_REDIS_LISTENER_RETRY_SEC = 1.0
-_REDIS_LISTENER_MAX_ATTEMPTS = 20
-
-
 def _redis_client(url: str, *, pubsub_listener: bool = False):
-    """Cliente Redis; en pub/sub evitar listen() bloqueante (gevent + timeout)."""
     import redis
 
     kwargs: dict[str, Any] = {
         'decode_responses': True,
-        'socket_connect_timeout': 5,
+        'socket_connect_timeout': 10,
         'socket_keepalive': True,
         'health_check_interval': 30,
     }
     if pubsub_listener:
         kwargs['socket_timeout'] = None
     else:
-        kwargs['socket_timeout'] = 5
+        kwargs['socket_timeout'] = 10
     return redis.from_url(url, **kwargs)
 
 
 def _redis_open_pubsub(url: str):
-    """Conecta pub/sub con reintentos (Gunicorn puede arrancar antes que Redis acepte TCP)."""
+    """Conecta pub/sub con reintentos."""
     last_exc: Exception | None = None
     for attempt in range(1, _REDIS_LISTENER_MAX_ATTEMPTS + 1):
         client = None
@@ -193,13 +202,13 @@ def _redis_open_pubsub(url: str):
                 except Exception:
                     pass
             if attempt < _REDIS_LISTENER_MAX_ATTEMPTS:
-                logger.info(
+                logger.warning(
                     'SSE recargas: esperando Redis (%s); reintento %s/%s',
                     exc,
                     attempt,
                     _REDIS_LISTENER_MAX_ATTEMPTS,
                 )
-                time.sleep(_REDIS_LISTENER_RETRY_SEC)
+                _cooperative_sleep(_REDIS_LISTENER_RETRY_SEC)
     raise last_exc or RuntimeError('Redis no disponible para SSE')
 
 
@@ -208,6 +217,7 @@ def _redis_publish_envelope(
     user_id: int | None,
     *,
     broadcast_admin: bool,
+    origin_pid: int,
 ) -> bool:
     url = recharge_events_redis_url()
     if not url:
@@ -218,6 +228,7 @@ def _redis_publish_envelope(
             envelope = {
                 'user_id': int(user_id) if user_id is not None else None,
                 'broadcast_admin': bool(broadcast_admin),
+                'origin_pid': int(origin_pid),
                 'payload': payload,
             }
             client.publish(_REDIS_CHANNEL, json.dumps(envelope, ensure_ascii=False))
@@ -233,13 +244,18 @@ def _redis_publish_envelope(
 
 
 def _redis_listener_loop(app, url: str) -> None:
-    """Escucha pub/sub con get_message (no listen) — estable con gevent/Gunicorn."""
+    """Escucha pub/sub en greenlet (compatible con gevent/Gunicorn)."""
+    worker_pid = os.getpid()
     while True:
         pubsub = None
         client = None
         try:
             client, pubsub = _redis_open_pubsub(url)
-            logger.info('SSE recargas: listener Redis conectado (%s).', _REDIS_CHANNEL)
+            logger.warning(
+                'SSE recargas: listener Redis conectado (worker pid=%s, canal %s).',
+                worker_pid,
+                _REDIS_CHANNEL,
+            )
             while True:
                 raw = pubsub.get_message(timeout=30.0)
                 if raw is None:
@@ -255,6 +271,9 @@ def _redis_listener_loop(app, url: str) -> None:
                     continue
                 if not isinstance(envelope, dict):
                     continue
+                origin_pid = envelope.get('origin_pid')
+                if origin_pid is not None and int(origin_pid) == worker_pid:
+                    continue
                 payload = envelope.get('payload')
                 if not isinstance(payload, dict):
                     continue
@@ -267,7 +286,11 @@ def _redis_listener_loop(app, url: str) -> None:
                         broadcast_admin=broadcast_admin,
                     )
         except Exception as exc:
-            logger.warning('SSE recargas: listener Redis interrumpido (%s); reconectando…', exc)
+            logger.warning(
+                'SSE recargas: listener Redis interrumpido en pid=%s (%s); reconectando…',
+                worker_pid,
+                exc,
+            )
         finally:
             if pubsub is not None:
                 try:
@@ -280,21 +303,17 @@ def _redis_listener_loop(app, url: str) -> None:
                     client.close()
                 except Exception:
                     pass
-        time.sleep(3.0)
-
-
-_REDIS_LISTENER_START_DELAY_SEC = 2.0
+        _cooperative_sleep(3.0)
 
 
 def _redis_listener_loop_entry(app, url: str) -> None:
-    """Espera un poco tras fork de Gunicorn antes de abrir pub/sub."""
     if _REDIS_LISTENER_START_DELAY_SEC > 0:
-        time.sleep(_REDIS_LISTENER_START_DELAY_SEC)
+        _cooperative_sleep(_REDIS_LISTENER_START_DELAY_SEC)
     _redis_listener_loop(app, url)
 
 
 def start_balance_recharge_events_redis_listener(app) -> None:
-    """Suscriptor Redis por worker (opcional). Sin URL configurada, no hace nada."""
+    """Suscriptor Redis por worker (greenlet gevent, no thread)."""
     global _redis_listener_started
     url = (app.config.get('BALANCE_RECHARGE_EVENTS_REDIS_URL') or '').strip()
     if not url:
@@ -303,16 +322,26 @@ def start_balance_recharge_events_redis_listener(app) -> None:
         if _redis_listener_started:
             return
         _redis_listener_started = True
-    thread = threading.Thread(
-        target=_redis_listener_loop_entry,
-        args=(app, url),
-        daemon=True,
-        name='balance-recharge-events-redis',
-    )
-    thread.start()
-    logger.info(
-        'SSE recargas: listener Redis programado (canal %s, delay %.0fs).',
-        _REDIS_CHANNEL,
+
+    try:
+        import gevent
+
+        gevent.spawn(_redis_listener_loop_entry, app, url)
+        backend = 'gevent'
+    except ImportError:
+        thread = threading.Thread(
+            target=_redis_listener_loop_entry,
+            args=(app, url),
+            daemon=True,
+            name='balance-recharge-events-redis',
+        )
+        thread.start()
+        backend = 'thread'
+
+    logger.warning(
+        'SSE recargas: listener Redis programado via %s (pid=%s, delay %.0fs).',
+        backend,
+        os.getpid(),
         _REDIS_LISTENER_START_DELAY_SEC,
     )
 
@@ -349,8 +378,22 @@ def notify_balance_recharge_updated(
         payload['user_id'] = int(user_id)
     if recharge_id is not None:
         payload['recharge_id'] = int(recharge_id)
+
+    origin_pid = os.getpid()
     try:
-        if _redis_publish_envelope(payload, user_id, broadcast_admin=broadcast_admin):
+        redis_url = recharge_events_redis_url()
+        if redis_url:
+            _local_deliver(payload, user_id, broadcast_admin=broadcast_admin)
+            if not _redis_publish_envelope(
+                payload,
+                user_id,
+                broadcast_admin=broadcast_admin,
+                origin_pid=origin_pid,
+            ):
+                logger.warning(
+                    'SSE recargas: publish Redis falló en pid=%s; otros workers no verán el evento.',
+                    origin_pid,
+                )
             return
         _local_deliver(payload, user_id, broadcast_admin=broadcast_admin)
     except Exception as exc:
