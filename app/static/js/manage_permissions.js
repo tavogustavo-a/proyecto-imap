@@ -22,10 +22,12 @@ document.addEventListener("DOMContentLoaded", function() {
     { key: 'is_support', label: 'Soporte', group: 'general' }
   ];
   
-  // Función para obtener el token CSRF
+  // Función para obtener el token CSRF (meta + cookie _csrf de SeaSurf)
   function getCsrfToken() {
     const meta = document.querySelector('meta[name="csrf_token"]');
-    return meta ? meta.content : '';
+    if (meta && meta.content) return meta.content;
+    const match = document.cookie.match(/(?:^|;\s*)_csrf=([^;]+)/);
+    return match ? decodeURIComponent(match[1]) : '';
   }
 
   function permFetchJson(url, options) {
@@ -1625,18 +1627,30 @@ document.addEventListener("DOMContentLoaded", function() {
         return;
       }
 
-      const balanceReq = permFetchJson('/tienda/admin/pagos/add_balance', {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-              },
-              body: JSON.stringify({
-                username: user.username,
-                amount_usd: subtract ? Math.abs(parsedUsd) : parsedUsd,
-                amount_cop: subtract ? Math.abs(parsedCop) : parsedCop,
-                subtract: subtract
-              })
-            });
+      const balanceReq = fetch('/tienda/admin/pagos/add_balance', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRFToken': getCsrfToken(),
+        },
+        body: JSON.stringify({
+          username: user.username,
+          amount_usd: subtract ? Math.abs(parsedUsd) : parsedUsd,
+          amount_cop: subtract ? Math.abs(parsedCop) : parsedCop,
+          subtract: subtract,
+        }),
+      }).then(function (res) {
+        return res.json().then(function (data) {
+          if (!res.ok) {
+            const err = new Error((data && (data.message || data.error)) || 'Error HTTP ' + res.status);
+            err.status = res.status;
+            err.data = data;
+            throw err;
+          }
+          return data;
+        });
+      });
 
       balanceReq
       .then(data => {
