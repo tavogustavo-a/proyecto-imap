@@ -29,15 +29,17 @@ document.addEventListener("DOMContentLoaded", function() {
   }
 
   function permFetchJson(url, options) {
-    if (window.StoreFetchJson && window.StoreFetchJson.fetch) {
-      return window.StoreFetchJson.fetch(url, options);
-    }
     options = options || {};
+    const headers = Object.assign({ 'X-CSRFToken': getCsrfToken() }, options.headers || {});
+    const init = Object.assign({}, options, { headers });
+    if (window.StoreFetchJson && window.StoreFetchJson.fetch) {
+      return window.StoreFetchJson.fetch(url, init);
+    }
     return fetch(url, {
-      method: options.method || 'GET',
-      credentials: options.credentials != null ? options.credentials : 'same-origin',
-      headers: Object.assign({ 'X-CSRFToken': getCsrfToken() }, options.headers || {}),
-      body: options.body,
+      method: init.method || 'GET',
+      credentials: init.credentials != null ? init.credentials : 'same-origin',
+      headers: headers,
+      body: init.body,
     }).then(function (res) {
       return res.json().then(function (data) {
         if (!res.ok) {
