@@ -1,6 +1,8 @@
 document.addEventListener('DOMContentLoaded', function() {
   const searchInput = document.getElementById('searchStoreInput');
   const productCards = document.querySelectorAll('.card.product-texture-bg');
+  var pendingReservationProductIds = Object.create(null);
+  var storeNotifSeenIds = Object.create(null);
 
   function resolveProductPurchaseShell(fromEl) {
     if (!fromEl) return null;
@@ -1749,6 +1751,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
   hydrateProductStockFromSSR();
   syncAllProductStockBadgesFromDom();
+  syncAllProductReserveUi();
   if (typeof window.storeFrontFilterProducts === 'function') {
     window.storeFrontFilterProducts();
   }
@@ -2253,9 +2256,6 @@ document.addEventListener('DOMContentLoaded', function() {
     }
   });
 
-  var pendingReservationProductIds = Object.create(null);
-  var storeNotifSeenIds = Object.create(null);
-
   function productShellAllowsReservation(root) {
     if (!root) return false;
     return String(root.getAttribute('data-allow-reservation') || '') === '1';
@@ -2274,14 +2274,15 @@ document.addEventListener('DOMContentLoaded', function() {
     var stock = getSellableStockForProduct(pid);
     var reservable = productShellAllowsReservation(root);
     var renewCustomer = productShellAllowsRenewCustomerAccount(root);
-    var qtyRow = root.querySelector('.input-group-cantidad');
+    var qtyRow = root.querySelector('.product-card-qty-add-row, .store-catalog-full-table__buy-row');
+    var renewBlock = root.querySelector('.product-renovar-cuenta-block');
     var addBtn = root.querySelector('.btn-anadir-producto-tienda');
     var resBtn = root.querySelector('.btn-reservar-producto-tienda');
-    var renewBtn = root.querySelector('.btn-renovar-cuenta-cliente-tienda');
     var pending = !!pendingReservationProductIds[pid];
     var showRenewCustomer = renewCustomer;
     var showReserve = !showRenewCustomer && reservable && stock !== null && stock <= 0;
     if (qtyRow) qtyRow.style.display = showRenewCustomer || showReserve ? 'none' : '';
+    if (renewBlock) renewBlock.style.display = showRenewCustomer ? '' : 'none';
     if (addBtn) {
       addBtn.hidden = showRenewCustomer || showReserve;
       addBtn.style.display = showRenewCustomer || showReserve ? 'none' : '';
@@ -2292,10 +2293,6 @@ document.addEventListener('DOMContentLoaded', function() {
       resBtn.disabled = pending;
       resBtn.textContent = pending ? 'Reservado' : 'Reservar';
       resBtn.classList.toggle('btn-reservar-producto-tienda--pending', pending);
-    }
-    if (renewBtn) {
-      renewBtn.hidden = !showRenewCustomer;
-      renewBtn.style.display = showRenewCustomer ? '' : 'none';
     }
     var stockEls = root.querySelectorAll('.product-stock-info');
     stockEls.forEach(function (el) {
@@ -2508,6 +2505,26 @@ document.addEventListener('DOMContentLoaded', function() {
       if (!shell) return;
       if (!productShellAllowsRenewCustomerAccount(shell.root)) {
         alert('Este producto no admite renovar con cuenta del cliente.');
+        return;
+      }
+      var emailEl = shell.root.querySelector('.product-renovar-cuenta-email');
+      var passEl = shell.root.querySelector('.product-renovar-cuenta-password');
+      if (emailEl && passEl) {
+        var email = (emailEl.value || '').trim();
+        var password = (passEl.value || '').trim();
+        if (!email || email.indexOf('@') < 1) {
+          alert('Indica el correo de la cuenta que quieres renovar.');
+          emailEl.focus();
+          return;
+        }
+        if (!password) {
+          alert('Indica la contraseña de la cuenta que quieres renovar.');
+          passEl.focus();
+          return;
+        }
+        addRenovarCuentaClienteToCart(shell, email, password);
+        emailEl.value = '';
+        passEl.value = '';
         return;
       }
       openRenovarCuentaClienteModal(shell);
