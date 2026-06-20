@@ -9155,6 +9155,11 @@ def _store_bp_ensure_license_feature_columns_schema():
     if _STORE_LICENSE_FEATURE_COLUMNS_ENSURED:
         return
     _ensure_license_expired_notes_and_month_columns()
+    _ensure_license_changes_notes_column()
+    _ensure_license_day_notepads_column()
+    _ensure_license_portal_day_row_notes_column()
+    _ensure_license_account_client_notes_column()
+    _ensure_license_account_renewal_reserve_columns()
     try:
         from app.store.customer_account_renewals import ensure_customer_account_renewal_schema
         from app.store.product_reservations import ensure_product_reservation_schema
