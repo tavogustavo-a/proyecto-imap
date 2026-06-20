@@ -9045,7 +9045,7 @@ def _ensure_license_changes_notes_column():
     try:
         from sqlalchemy import inspect, text
         inspector = inspect(db.engine)
-        cols = {c['name'] for c in inspector.get_columns('store_licenses')}
+        cols = {c['name'].lower() for c in inspector.get_columns('store_licenses')}
         if 'changes_notes' not in cols:
             db.session.execute(text('ALTER TABLE store_licenses ADD COLUMN changes_notes TEXT'))
             db.session.commit()
@@ -9145,6 +9145,27 @@ def _ensure_user_portal_license_activity_log_column():
 
 _STORE_USER_PORTAL_ACTIVITY_SCHEMA_ENSURED = False
 _STORE_LICENSE_ACCOUNT_SALE_ID_SCHEMA_ENSURED = False
+_STORE_LICENSE_FEATURE_COLUMNS_ENSURED = False
+
+
+@store_bp.before_request
+def _store_bp_ensure_license_feature_columns_schema():
+    """Evita 500: columnas/tablas de reservas y renovar cuenta del cliente."""
+    global _STORE_LICENSE_FEATURE_COLUMNS_ENSURED
+    if _STORE_LICENSE_FEATURE_COLUMNS_ENSURED:
+        return
+    _ensure_license_expired_notes_and_month_columns()
+    try:
+        from app.store.customer_account_renewals import ensure_customer_account_renewal_schema
+        from app.store.product_reservations import ensure_product_reservation_schema
+
+        ensure_product_reservation_schema()
+        ensure_customer_account_renewal_schema()
+    except Exception as ex:
+        current_app.logger.warning(
+            'No se pudo asegurar esquema reservas/renovar cuenta cliente: %s', ex
+        )
+    _STORE_LICENSE_FEATURE_COLUMNS_ENSURED = True
 
 
 @store_bp.before_request
@@ -12183,13 +12204,24 @@ def api_put_license_notes(license_id):
 def api_archived_licenses_count():
     """Contador de licencias archivadas para el menú admin (Menú2)."""
     try:
-        from app.store.models import License
+        _ensure_license_expired_notes_and_month_columns()
+        from sqlalchemy import text
 
-        count = License.query.filter_by(enabled=False).count()
+        dialect = getattr(db.engine.dialect, 'name', '') or ''
+        if dialect == 'postgresql':
+            count_sql = text(
+                'SELECT COUNT(*) FROM store_licenses WHERE enabled IS NOT TRUE'
+            )
+        else:
+            count_sql = text(
+                'SELECT COUNT(*) FROM store_licenses WHERE enabled = 0 OR enabled IS NULL'
+            )
+        count = int(db.session.execute(count_sql).scalar() or 0)
         ok = jsonify({'success': True, 'count': count})
         _attach_private_no_cache_headers(ok)
         return ok
     except Exception as e:
+        current_app.logger.exception('api_archived_licenses_count: %s', e)
         err = jsonify({'success': False, 'error': str(e), 'count': 0})
         _attach_private_no_cache_headers(err)
         return err, 500
