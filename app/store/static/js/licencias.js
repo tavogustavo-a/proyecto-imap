@@ -7,29 +7,9 @@
  * - Gestión de cuentas mensuales
  */
 
-(function initArchivedLicensesModeFromMeta() {
-    try {
-        var meta = document.querySelector('meta[name="licenses-archive-mode"]');
-        if (meta && meta.getAttribute('content') === '1') {
-            window.IS_ARCHIVED_MODE = true;
-        }
-    } catch (e) {}
-})();
-
-/** Modo soporte restricciones: marcador en servidor en `.admin-licencias-shell` (sin script inline/CSP). */
-(function initLicenseSupportRestrictedFromDataAttribute() {
-    try {
-        var el = document.querySelector('.admin-licencias-shell[data-license-support-restricted="true"]');
-        if (!el) return;
-        window.LICENSE_SUPPORT_RESTRICTED = true;
-        document.documentElement.classList.add('admin-licencias-license-support-mode');
-    } catch (_eLicSupDom) {}
-})();
-
 // Variables globales
 let licenses = [];
 let currentLicenseId = null;
-const MAX_HEAVY_NOTEPAD_CHARS = 200000;
 
 /** Mapa correo→línea del bloc Licencias (por producto); se invalida al recargar o guardar notas. */
 let _licenseNotesCredentialLineCache = null;
@@ -39,7 +19,6 @@ function invalidateLicenseNotesCredentialLineCache() {
 }
 
 /** Vista global: combina cuentas vendidas por día de todas las licencias (no existe en la API). */
-const AGGREGATE_LICENSE_ID = 0;
 
 /**
  * Raíces «Día N» solo dentro de #licenseAllDaysContainer.
@@ -64,218 +43,116 @@ function adminLicCollectDaySplitRootsForActiveUi() {
 }
 
 /** Listado Cambios: solo productos con líneas vs todos los «mes a mes» (añadir manualmente). */
-const ADMIN_LICENCIAS_CHANGES_LIST_MODE_KEY = 'admin_licencias_changes_list_mode_v1';
-const CHANGES_LIST_MODE_ONLY = 'only_with_lines';
-const CHANGES_LIST_MODE_ALL = 'all_month_to_month';
 
 /** Panel lateral en admin licencias: restaurar Reportes o Cambios tras recarga o re-render del grid. */
-const ADMIN_LICENCIAS_SIDEBAR_MODE_KEY = 'adminLicenciasSidebarMode';
-
-/** Bloque UI Admin Licencias persistido en BD (`users.admin_licencias_ui_prefs`), bootstrap `#adminLicenciasUiPrefsJson` (div oculto, CSP). */
-let adminLicenciasUiPrefs = null;
-let __adminLicUiPrefsSaveTimer = null;
-
-function adminLicEnsurePrefsObject() {
-    if (!adminLicenciasUiPrefs) {
-        adminLicenciasUiPrefs = {
-            main_grid_collapsed: null,
-            admin_days: {},
-            personal_collapsed: {},
-            suspended_collapsed: {},
-            expired_collapsed: {},
-        };
-    }
-    return adminLicenciasUiPrefs;
-}
-
-function adminLicBootstrapUiPrefsFromDom() {
-    adminLicEnsurePrefsObject();
-    const el = document.getElementById('adminLicenciasUiPrefsJson');
-    if (!el) return;
-    const raw = String(el.textContent || '').trim();
-    if (!raw) return;
-    try {
-        const parsed = JSON.parse(raw);
-        if (!parsed || typeof parsed !== 'object') return;
-        if (parsed.main_grid_collapsed === true || parsed.main_grid_collapsed === false) {
-            adminLicenciasUiPrefs.main_grid_collapsed = parsed.main_grid_collapsed;
-        }
-        if (parsed.admin_days && typeof parsed.admin_days === 'object') {
-            adminLicenciasUiPrefs.admin_days = parsed.admin_days;
-        }
-        const blocKeys = ['personal_collapsed', 'suspended_collapsed', 'expired_collapsed'];
-        let bi;
-        for (bi = 0; bi < blocKeys.length; bi += 1) {
-            const bk = blocKeys[bi];
-            if (parsed[bk] && typeof parsed[bk] === 'object') {
-                adminLicenciasUiPrefs[bk] = parsed[bk];
-            }
-        }
-    } catch (_e) {}
-}
-
-function scheduleAdminLicenciasUiPrefsSave() {
-    if (!document.getElementById('adminLicenciasUiPrefsJson')) return;
-    if (typeof window !== 'undefined' && window.IS_ARCHIVED_MODE) return;
-    if (__adminLicUiPrefsSaveTimer) window.clearTimeout(__adminLicUiPrefsSaveTimer);
-    __adminLicUiPrefsSaveTimer = window.setTimeout(function () {
-        __adminLicUiPrefsSaveTimer = null;
-        void flushAdminLicenciasUiPrefsSave();
-    }, 420);
-}
-
-async function flushAdminLicenciasUiPrefsSave() {
-    if (!document.getElementById('adminLicenciasUiPrefsJson')) return;
-    adminLicEnsurePrefsObject();
-    const url = '/tienda/api/admin-licencias-ui-prefs';
-    try {
-        const headers = { 'Content-Type': 'application/json' };
-        if (typeof getCSRFToken === 'function') headers['X-CSRFToken'] = getCSRFToken();
-        await fetch(url, {
-            method: 'PUT',
-            credentials: 'same-origin',
-            headers,
-            body: JSON.stringify({ prefs: adminLicenciasUiPrefs }),
-        });
-    } catch (_e) {}
-}
-
-function adminLicGetBlocPrefCollapsed(mapKey, licenseId, lsKeyFn) {
-    adminLicEnsurePrefsObject();
-    const lid = String(licenseId);
-    const m = adminLicenciasUiPrefs[mapKey];
-    if (m && Object.prototype.hasOwnProperty.call(m, lid)) {
-        return m[lid] ? 'true' : 'false';
-    }
-    try {
-        return localStorage.getItem(lsKeyFn(licenseId));
-    } catch (_e) {
-        return null;
-    }
-}
-
-function adminLicSetBlocPrefCollapsed(mapKey, licenseId, isCollapsed, lsKeyFn) {
-    adminLicEnsurePrefsObject();
-    const lid = String(licenseId);
-    adminLicenciasUiPrefs[mapKey] = adminLicenciasUiPrefs[mapKey] || {};
-    adminLicenciasUiPrefs[mapKey][lid] = !!isCollapsed;
-    scheduleAdminLicenciasUiPrefsSave();
-    try {
-        localStorage.setItem(lsKeyFn(licenseId), isCollapsed ? 'true' : 'false');
-    } catch (_e) {}
-}
-
-/** Plegados (días / fila de tarjetas): localStorage con ámbito por usuario (`data-licencias-persist-scope`). */
-function licenciasUiScopeSlug() {
-    try {
-        const el = document.querySelector('[data-licencias-persist-scope]');
-        const raw = el && el.getAttribute('data-licencias-persist-scope');
-        if (raw == null || String(raw).trim() === '') return 'anon';
-        const s = String(raw)
-            .trim()
-            .toLowerCase()
-            .replace(/[^a-z0-9]+/g, '_')
-            .replace(/^_+|_+$/g, '')
-            .slice(0, 48);
-        return s || 'anon';
-    } catch (_e) {
-        return 'anon';
-    }
-}
-
-function licenciasUiAdminDayStorageKeys(licenseId, day) {
-    const slug = licenciasUiScopeSlug();
-    const lid =
-        licenseId === AGGREGATE_LICENSE_ID || licenseId === '0' || licenseId === 0 ? '0' : String(licenseId);
-    const d = String(day);
-    return {
-        scoped: `licencias_ui_${slug}_admin_day_${lid}_${d}_collapsed`,
-        legacy: `daySection_${licenseId}_${day}_collapsed`,
-    };
-}
-
-function licenciasUiAdminDayCollapsedRead(licenseId, day) {
-    const lid =
-        licenseId === AGGREGATE_LICENSE_ID || licenseId === '0' || licenseId === 0 ? '0' : String(licenseId);
-    const d = String(day);
-    adminLicEnsurePrefsObject();
-    const byLic = adminLicenciasUiPrefs.admin_days[lid];
-    if (byLic && Object.prototype.hasOwnProperty.call(byLic, d)) {
-        return byLic[d] ? 'true' : 'false';
-    }
-    const { scoped, legacy } = licenciasUiAdminDayStorageKeys(licenseId, day);
-    try {
-        let v = localStorage.getItem(scoped);
-        if (v == null || v === '') v = localStorage.getItem(legacy);
-        if (v !== null && v !== '') {
-            try {
-                localStorage.setItem(scoped, v);
-            } catch (_e2) {}
-        }
-        return v;
-    } catch (_e) {
-        return null;
-    }
-}
-
-function licenciasUiAdminDayCollapsedWrite(licenseId, day, isCollapsed) {
-    const lid =
-        licenseId === AGGREGATE_LICENSE_ID || licenseId === '0' || licenseId === 0 ? '0' : String(licenseId);
-    const d = String(day);
-    adminLicEnsurePrefsObject();
-    adminLicenciasUiPrefs.admin_days[lid] = adminLicenciasUiPrefs.admin_days[lid] || {};
-    adminLicenciasUiPrefs.admin_days[lid][d] = !!isCollapsed;
-    scheduleAdminLicenciasUiPrefsSave();
-    const { scoped } = licenciasUiAdminDayStorageKeys(licenseId, day);
-    try {
-        localStorage.setItem(scoped, isCollapsed ? 'true' : 'false');
-    } catch (_e) {}
-}
-
-function licenciasUiMainGridStorageKeys() {
-    const slug = licenciasUiScopeSlug();
-    return {
-        scoped: `licencias_ui_${slug}_lic_cards_row_collapsed`,
-        legacyAdmin: 'licenciasContainerCollapsed',
-        legacyPortal: 'userLicenciasContainerCollapsed',
-    };
-}
-
-function licenciasUiMainGridCollapsedRead() {
-    adminLicEnsurePrefsObject();
-    if (adminLicenciasUiPrefs.main_grid_collapsed === true) return 'true';
-    if (adminLicenciasUiPrefs.main_grid_collapsed === false) return 'false';
-    const { scoped, legacyAdmin, legacyPortal } = licenciasUiMainGridStorageKeys();
-    try {
-        let v = localStorage.getItem(scoped);
-        if (v == null || v === '') v = localStorage.getItem(legacyAdmin);
-        if (v == null || v === '') v = localStorage.getItem(legacyPortal);
-        if (v !== null && v !== '') {
-            try {
-                localStorage.setItem(scoped, v);
-            } catch (_e2) {}
-        }
-        return v;
-    } catch (_e) {
-        return null;
-    }
-}
-
-function licenciasUiMainGridCollapsedWrite(isCollapsed) {
-    adminLicEnsurePrefsObject();
-    adminLicenciasUiPrefs.main_grid_collapsed = !!isCollapsed;
-    scheduleAdminLicenciasUiPrefsSave();
-    const { scoped } = licenciasUiMainGridStorageKeys();
-    try {
-        localStorage.setItem(scoped, isCollapsed ? 'true' : 'false');
-    } catch (_e) {}
-}
 
 /** Evita re-pintar el listado Cambios al activar la tarjeta del producto desde «devolver» (mantiene estable el DOM de la fila). */
 let _adminLicSkipNextChangesProductsRefreshOnce = false;
 
 /** Días aplazados mientras hay un bloc-día enfocado para no pisar texto al vuelo. */
 let _pendingLoadAllDaysLicenseId = null;
+
+/** Evita re-render completo de Días mientras el usuario hace scroll (poll ~1.2s). */
+let __adminLicDaysScrollQuietUntil = 0;
+/** Tras clic/edición en el panel de licencias: no refrescar layout ni poll de días. */
+let __adminLicInteractionQuietUntil = 0;
+let __adminLicLastDaysRenderKey = '';
+let __adminLicLastDaysRenderLicenseId = null;
+
+function adminLicMarkDaysAreaScrolling() {
+    __adminLicDaysScrollQuietUntil = Date.now() + 900;
+}
+
+function adminLicMarkLicensePanelInteraction(msOpt) {
+    const ms = Number.isFinite(msOpt) ? msOpt : 2800;
+    __adminLicInteractionQuietUntil = Date.now() + ms;
+    adminLicMarkDaysAreaScrolling();
+}
+
+function adminLicLicensePanelInteractionQuiet() {
+    return Date.now() < __adminLicInteractionQuietUntil;
+}
+
+function adminLicCaptureDaysScrollAnchor() {
+    const base = {
+        scrollY: window.scrollY != null ? window.scrollY : document.documentElement.scrollTop || 0,
+        scrollX: window.scrollX != null ? window.scrollX : document.documentElement.scrollLeft || 0
+    };
+    const container = document.getElementById('licenseAllDaysContainer');
+    if (!container || container.classList.contains('d-none')) return base;
+    const sections = container.querySelectorAll('.day-section');
+    let best = null;
+    let bestDist = Infinity;
+    const viewRef = window.innerHeight * 0.3;
+    sections.forEach(function (sec) {
+        const r = sec.getBoundingClientRect();
+        if (r.bottom < -40 || r.top > window.innerHeight + 40) return;
+        const dist = Math.abs(r.top - viewRef);
+        if (dist < bestDist) {
+            bestDist = dist;
+            best = { day: sec.dataset.day, top: r.top };
+        }
+    });
+    if (best) {
+        base.day = best.day;
+        base.top = best.top;
+    }
+    return base;
+}
+
+function adminLicRestoreDaysScrollAnchor(anchor) {
+    if (!anchor) return;
+    if (anchor.day != null && anchor.top != null) {
+        const container = document.getElementById('licenseAllDaysContainer');
+        if (container) {
+            const sec = container.querySelector('.day-section[data-day="' + String(anchor.day) + '"]');
+            if (sec) {
+                const r = sec.getBoundingClientRect();
+                const delta = r.top - anchor.top;
+                if (Math.abs(delta) > 1) {
+                    window.scrollBy(0, delta);
+                    return;
+                }
+            }
+        }
+    }
+    if (Number.isFinite(anchor.scrollY)) {
+        window.scrollTo(anchor.scrollX || 0, anchor.scrollY);
+    }
+}
+
+function adminLicBuildDaysRenderKey(licenseId, accountsByDay) {
+    const parts = [String(licenseId)];
+    let d;
+    for (d = 1; d <= 31; d += 1) {
+        const arr = accountsByDay[d] || [];
+        parts.push(
+            String(d) +
+                ':' +
+                arr
+                    .map(function (a) {
+                        return String(a.id != null ? a.id : '') + '@' + normalizeAccountEmailKey(a.email || '');
+                    })
+                    .join(',')
+        );
+    }
+    return parts.join('|');
+}
+
+function adminLicDaysCanSkipFullRerender(licenseId, renderKey, container) {
+    if (!container || container.classList.contains('d-none')) return false;
+    if (!renderKey || renderKey !== __adminLicLastDaysRenderKey) return false;
+    if (__adminLicLastDaysRenderLicenseId !== licenseId) return false;
+    if (container.querySelectorAll('.day-section').length !== 31) return false;
+    return !!container.querySelector(
+        '.day-license-split-root[data-license-id="' + String(licenseId) + '"]'
+    );
+}
+
+function adminLicRefreshDaysUiLight(licenseId) {
+    refreshDuplicateEmailHighlights(licenseId);
+    scheduleRefreshAdminLicenciasReportCounts();
+}
 
 /** Intervalo (~s): compras/asignaciones y notas tras pago sin recargar página. */
 /** Refresco de «Días» en admin tras nuevas cuentas (compras, etc.). Menos intervalo → más cercano al “tiempo real”. */
@@ -313,6 +190,14 @@ function scheduleLoadAllDaysSoldAccounts(licenseId) {
     const lid = Number(licenseId);
     if (Number.isNaN(lid)) return;
     if (isAnyDayNotepadActivelyEditing()) {
+        _pendingLoadAllDaysLicenseId = lid;
+        return;
+    }
+    if (Date.now() < __adminLicDaysScrollQuietUntil) {
+        _pendingLoadAllDaysLicenseId = lid;
+        return;
+    }
+    if (Date.now() < __adminLicInteractionQuietUntil) {
         _pendingLoadAllDaysLicenseId = lid;
         return;
     }
@@ -385,6 +270,7 @@ function adminLicenciasUserEditingMainLicenseSplit() {
 /** Tras cada fetch `/api/licenses`: alinear bloc con servidor si el admin no está editando. */
 function adminPollRefreshOpenLicenseViews() {
     if (window.IS_ARCHIVED_MODE) return;
+    if (adminLicLicensePanelInteractionQuiet()) return;
     const ic = document.getElementById('licenseAccountsInputContainer');
     if (!ic || ic.classList.contains('d-none')) {
         refreshExpandedDaysAndAccountsFromLatestLicenses();
@@ -546,19 +432,62 @@ function setupContentEditableSpaceKeyFix() {
     );
 }
 
+function setupAdminLicInteractionScrollGuard() {
+    if (typeof document === 'undefined') return;
+    if (document.documentElement.dataset.adminLicInteractionScrollGuard === '1') return;
+    document.documentElement.dataset.adminLicInteractionScrollGuard = '1';
+
+    document.addEventListener(
+        'mousedown',
+        function (ev) {
+            const ic = document.getElementById('licenseAccountsInputContainer');
+            if (!ic || ic.classList.contains('d-none') || !ic.contains(ev.target)) return;
+            adminLicMarkLicensePanelInteraction();
+        },
+        true
+    );
+
+    document.addEventListener(
+        'focusin',
+        function (ev) {
+            const t = ev.target;
+            if (!t || !t.closest) return;
+            const ic = document.getElementById('licenseAccountsInputContainer');
+            if (!ic || ic.classList.contains('d-none') || !ic.contains(t)) return;
+            if (t.closest('.user-lic-expiry-countdown--editable')) return;
+            adminLicMarkLicensePanelInteraction(1800);
+        },
+        true
+    );
+}
+
 // Inicialización
 document.addEventListener('DOMContentLoaded', function() {
     // Asegurar que la página quede en la parte superior al cargar
     window.scrollTo(0, 0);
 
     adminLicBootstrapUiPrefsFromDom();
+    if (typeof adminLicMigrateLegacyLocalStoragePrefsToBd === 'function') {
+        adminLicMigrateLegacyLocalStoragePrefsToBd();
+    }
 
     setupContentEditableSpaceKeyFix();
     initializeLicenses();
     setupAdminLicWarrantyHistoryUi();
+    setupAdminLicExpiryAdjustModal();
+    setupAdminLicInteractionScrollGuard();
     setupEventListeners();
     startAdminLicenciasDaysRealtimePoll();
     startAdminLicenciasPendingDaysFlushTicker();
+    window.addEventListener(
+        'scroll',
+        function adminLicDaysScrollQuietGuard() {
+            const c = document.getElementById('licenseAllDaysContainer');
+            if (!c || c.classList.contains('d-none')) return;
+            adminLicMarkDaysAreaScrolling();
+        },
+        { passive: true, capture: true }
+    );
     document.addEventListener('visibilitychange', function adminLicenciasDaysOnVisible() {
         if (typeof document.visibilityState !== 'undefined' && document.visibilityState !== 'visible') return;
         if (window.IS_ARCHIVED_MODE || __adminLicDaysRealtimeRefreshBusy) return;
@@ -569,8 +498,6 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     });
 });
-
-const LICENSES_FETCH_TIMEOUT_MS = 28000;
 
 async function initializeLicenses() {
     try {
@@ -1281,13 +1208,13 @@ function refreshAdminDuplicateHighlightsIfActive() {
                 highlightEmailsAndPasswords(root);
             }
         } catch (err) {
-            console.error('Duplicados: error al resaltar líneas', err);
+            adminLicLogError('Duplicados: error al resaltar líneas', err);
         }
     });
     try {
         markCredentialDuplicateLineRowsAcrossRoots(roots);
     } catch (err2) {
-        console.error('Duplicados: error al marcar filas', err2);
+        adminLicLogError('Duplicados: error al marcar filas', err2);
     }
 }
 
@@ -1323,13 +1250,13 @@ function scanAdminDuplicateLines() {
                 highlightEmailsAndPasswords(root);
             }
         } catch (err) {
-            console.error('Duplicados: error al resaltar líneas', err);
+            adminLicLogError('Duplicados: error al resaltar líneas', err);
         }
     });
     try {
         markCredentialDuplicateLineRowsAcrossRoots(roots);
     } catch (err) {
-        console.error('Duplicados: error al marcar filas', err);
+        adminLicLogError('Duplicados: error al marcar filas', err);
         adminDupHighlightSetActive(false);
         return;
     }
@@ -2052,7 +1979,7 @@ async function adminLicenseReportesApplyBuenaResolved(entry, selEl) {
             window.refreshAdminDuplicateHighlightsIfActive();
         }
     } catch (err) {
-        console.error('adminLicenseReportesApplyBuenaResolved', err);
+        adminLicLogError('adminLicenseReportesApplyBuenaResolved', err);
         showError('Error al marcar como buena.');
         adminLicenseReportesUndoSelect(selEl, sigK);
     } finally {
@@ -2181,16 +2108,16 @@ async function adminLicenseReportesMoveLicenseRowToSuspended(entry, selEl) {
             suspRoot.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
         }
     } catch (err) {
-        console.error('adminLicenseReportesMoveLicenseRowToSuspended', err);
+        adminLicLogError('adminLicenseReportesMoveLicenseRowToSuspended', err);
         try {
             adminLicenseSplitApplyMergedText(oldLicMerged);
         } catch (e2) {
-            console.error(e2);
+            adminLicLogError('detalle', e2);
         }
         try {
             suspendedLicenseSplitApplyMergedText(suspRoot, oldSuspMerged);
         } catch (e3) {
-            console.error(e3);
+            adminLicLogError('detalle', e3);
         }
         showError('Error al enviar la cuenta a Caídas.');
         adminLicenseReportesUndoSelect(selEl, sigK);
@@ -2417,7 +2344,7 @@ async function licenseSplitBuenaRevisadaMoveRowToSuspended(row) {
             suspRoot.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
         }
     } catch (err) {
-        console.error('licenseSplitBuenaRevisadaMoveRowToSuspended', err);
+        adminLicLogError('licenseSplitBuenaRevisadaMoveRowToSuspended', err);
         try {
             if (inMain) {
                 adminLicenseSplitApplyMergedText(oldLicMerged);
@@ -2425,12 +2352,12 @@ async function licenseSplitBuenaRevisadaMoveRowToSuspended(row) {
                 dayLicenseSplitApplyMergedText(dayRoot, oldDayMerged);
             }
         } catch (e2) {
-            console.error(e2);
+            adminLicLogError('detalle', e2);
         }
         try {
             suspendedLicenseSplitApplyMergedText(suspRoot, oldSuspMerged);
         } catch (e3) {
-            console.error(e3);
+            adminLicLogError('detalle', e3);
         }
         showError('No se pudo completar el traslado a Caídas.');
     } finally {
@@ -2630,7 +2557,7 @@ async function adminLicenseReportesApplyWarrantyReplace(entry, selEl) {
             window.refreshAdminDuplicateHighlightsIfActive();
         }
     } catch (err) {
-        console.error('adminLicenseReportesApplyWarrantyReplace', err);
+        adminLicLogError('adminLicenseReportesApplyWarrantyReplace', err);
         showError('Error al aplicar el reemplazo por garantía.');
         adminLicenseReportesUndoSelect(selEl, sigK);
     } finally {
@@ -2989,13 +2916,33 @@ function setupEventListeners() {
 
 // Cargar licencias desde el servidor
 // options.skipGridRender: solo actualiza `licenses` en memoria (p. ej. tras guardar varios días al cambiar de producto).
+async function adminLicEnsureLicenseAccountsHydrated(licenseId) {
+    if (window.IS_ARCHIVED_MODE) return;
+    const id = parseInt(licenseId, 10);
+    if (!Number.isFinite(id) || id <= 0) return;
+    const lic = licenses.find(function (l) {
+        return l.id === id;
+    });
+    if (lic && Array.isArray(lic.accounts) && lic.accounts.length > 0) {
+        const counts = lic.account_counts;
+        const total =
+            counts && counts.total != null ? parseInt(counts.total, 10) : null;
+        if (total == null || lic.accounts.length >= total) return;
+    }
+    await loadLicenses({
+        includeAccounts: LICENSES_INCLUDE_ACCOUNTS_SELECTED,
+        licenseIds: [id],
+        skipGridRender: true,
+    });
+}
+
 async function loadLicenses(options) {
+    options = options || {};
+    const includeMode = adminLicResolveLicensesIncludeMode(options);
     const ac = new AbortController();
     const t = setTimeout(() => ac.abort(), LICENSES_FETCH_TIMEOUT_MS);
     try {
-        let endpoint = window.IS_ARCHIVED_MODE ? '/tienda/api/licenses/archived' : '/tienda/api/licenses';
-        const sep = endpoint.indexOf('?') === -1 ? '?' : '&';
-        endpoint += sep + '_t=' + Date.now();
+        const endpoint = adminLicBuildLicensesFetchUrl(includeMode);
         const response = await fetch(endpoint, { signal: ac.signal, cache: 'no-store' });
         
         if (response.redirected || response.status === 302) {
@@ -3023,7 +2970,14 @@ async function loadLicenses(options) {
         }
         
         if (data.success) {
-            licenses = data.licenses || [];
+            const prevLicenses = licenses;
+            licenses = adminLicMergeLicensesFromApi(
+                prevLicenses,
+                data.licenses || [],
+                includeMode.mode,
+                includeMode.licenseIds
+            );
+            adminLicWarnHeavyLicensePayload(data, includeMode);
             invalidateLicenseNotesCredentialLineCache();
 
             const skipGrid = options && options.skipGridRender;
@@ -3081,7 +3035,7 @@ function renderLicensesGrid() {
             window.AdminLicenciasNotepad.flushLicense();
         }
     } catch (flushGridErr) {
-        console.error('Error al guardar notas antes de re-render del grid:', flushGridErr);
+        adminLicLogError('Error al guardar notas antes de re-render del grid:', flushGridErr);
     }
     
     if (licenses.length === 0) {
@@ -3095,11 +3049,21 @@ function renderLicensesGrid() {
             `;
         } else {
         grid.innerHTML = `
-            <div class="licenses-loading-state">
-                <i class="fas fa-spinner fa-spin licenses-loading-spinner"></i>
-                <p>Inicializando licencias desde productos...</p>
+            <div class="licenses-empty-state text-center mt-5">
+                <i class="fas fa-layer-group fa-3x mb-3 text-muted"></i>
+                <h3 class="text-muted">No hay licencias</h3>
+                <p class="text-muted">Cada producto activo necesita una licencia. Sincroniza desde productos o crea uno nuevo.</p>
+                <button type="button" class="btn-panel btn-green mt-2" data-action="open-add-license-modal">
+                    <i class="fas fa-plus" aria-hidden="true"></i> Agregar licencias
+                </button>
             </div>
         `;
+        const addBtn = grid.querySelector('[data-action="open-add-license-modal"]');
+        if (addBtn) {
+            addBtn.addEventListener('click', function () {
+                void showAddLicenseModal();
+            });
+        }
         }
         return;
     }
@@ -3159,6 +3123,9 @@ function renderLicensesGrid() {
                     <div class="admin-licencias-bloc-header">
                         <span class="admin-licencias-bloc-title"><span id="adminLicenciasLicenciasHeading">Licencias</span></span>
                         <div class="admin-licencias-bloc-header-actions">
+                            <button type="button" id="adminLicenciasToggleStatusColBtn" class="admin-licencias-toggle-notes-col-btn" title="Ocultar columna Estado verde" aria-label="Ocultar columna Estado verde de cada fila" aria-pressed="false">
+                                <i class="fas fa-eye-slash" aria-hidden="true"></i>
+                            </button>
                             <button type="button" id="adminLicenciasBulkEditBtn" class="admin-lic-bulk-toolbar-btn" title="Editar varias filas a la vez (usuario, estados, notas, día de venta)" aria-label="Edición masiva de licencias seleccionadas">
                                 Masivo
                             </button>
@@ -3170,9 +3137,6 @@ function renderLicensesGrid() {
                                     <option value="300">300</option>
                                     <option value="all" selected>Todos</option>
                                 </select>
-                                <button type="button" id="adminLicenciasToggleStatusColBtn" class="admin-licencias-toggle-notes-col-btn" title="Ocultar columnas Estado (verde y rojo)" aria-label="Ocultar columnas Estado verde y rojo de cada fila" aria-pressed="false">
-                                    <i class="fas fa-eye-slash" aria-hidden="true"></i>
-                                </button>
                                 <button type="button" id="adminLicenciasToggleNotesColBtn" class="admin-licencias-toggle-notes-col-btn" title="Ocultar columna Notas" aria-label="Ocultar columna Notas de cada fila" aria-pressed="false">
                                     <i class="fas fa-eye-slash" aria-hidden="true"></i>
                                 </button>
@@ -3305,7 +3269,7 @@ function renderLicensesGrid() {
         window.initAdminLicenciasNotepad();
     }
     } catch (notepadErr) {
-        console.error('Error al inicializar bloc de notas (admin):', notepadErr);
+        adminLicLogError('Error al inicializar bloc de notas (admin):', notepadErr);
     }
 
     try {
@@ -3313,7 +3277,7 @@ function renderLicensesGrid() {
             window.adminLicenseShowLimitSyncUi();
         }
     } catch (showLimErr) {
-        console.error('adminLicenseShowLimitSyncUi:', showLimErr);
+        adminLicLogError('adminLicenseShowLimitSyncUi:', showLimErr);
     }
 
     try {
@@ -3321,7 +3285,7 @@ function renderLicensesGrid() {
             window.adminLicenseHideNotesColSyncUi();
         }
     } catch (hideNotesErr) {
-        console.error('adminLicenseHideNotesColSyncUi:', hideNotesErr);
+        adminLicLogError('adminLicenseHideNotesColSyncUi:', hideNotesErr);
     }
 
     try {
@@ -3329,7 +3293,7 @@ function renderLicensesGrid() {
             window.adminSuspendedHideNotesColSyncUi();
         }
     } catch (suspHideNotesErr) {
-        console.error('adminSuspendedHideNotesColSyncUi:', suspHideNotesErr);
+        adminLicLogError('adminSuspendedHideNotesColSyncUi:', suspHideNotesErr);
     }
 
     try {
@@ -3337,7 +3301,7 @@ function renderLicensesGrid() {
             window.adminSuspendedHideRestoreColSyncUi();
         }
     } catch (suspHideRestoreErr) {
-        console.error('adminSuspendedHideRestoreColSyncUi:', suspHideRestoreErr);
+        adminLicLogError('adminSuspendedHideRestoreColSyncUi:', suspHideRestoreErr);
     }
 
     try {
@@ -3345,7 +3309,7 @@ function renderLicensesGrid() {
             window.adminExpiredHideNotesColSyncUi();
         }
     } catch (expHideNotesErr) {
-        console.error('adminExpiredHideNotesColSyncUi:', expHideNotesErr);
+        adminLicLogError('adminExpiredHideNotesColSyncUi:', expHideNotesErr);
     }
 
     try {
@@ -3353,7 +3317,7 @@ function renderLicensesGrid() {
             window.adminExpiredHideRestoreColSyncUi();
         }
     } catch (expHideRestoreErr) {
-        console.error('adminExpiredHideRestoreColSyncUi:', expHideRestoreErr);
+        adminLicLogError('adminExpiredHideRestoreColSyncUi:', expHideRestoreErr);
     }
 
     try {
@@ -3361,43 +3325,43 @@ function renderLicensesGrid() {
             window.adminLicenseHideStatusColSyncUi();
         }
     } catch (hideStatusErr) {
-        console.error('adminLicenseHideStatusColSyncUi:', hideStatusErr);
+        adminLicLogError('adminLicenseHideStatusColSyncUi:', hideStatusErr);
     }
 
     try {
     setupSuspendedSectionCollapse();
     } catch (suspErr) {
-        console.error('setupSuspendedSectionCollapse:', suspErr);
+        adminLicLogError('setupSuspendedSectionCollapse:', suspErr);
     }
 
     try {
         setupExpiredSectionCollapse();
     } catch (expCollErr) {
-        console.error('setupExpiredSectionCollapse:', expCollErr);
+        adminLicLogError('setupExpiredSectionCollapse:', expCollErr);
     }
 
     try {
         wireLicenseChangesProductsCollapseOnce();
     } catch (chCollErr) {
-        console.error('wireLicenseChangesProductsCollapseOnce:', chCollErr);
+        adminLicLogError('wireLicenseChangesProductsCollapseOnce:', chCollErr);
     }
 
     try {
         wireLicenseChangesModeToolbarOnce();
     } catch (chModeErr) {
-        console.error('wireLicenseChangesModeToolbarOnce:', chModeErr);
+        adminLicLogError('wireLicenseChangesModeToolbarOnce:', chModeErr);
     }
 
     try {
         setupPersonalBlocCollapse();
     } catch (personalCollErr) {
-        console.error('setupPersonalBlocCollapse:', personalCollErr);
+        adminLicLogError('setupPersonalBlocCollapse:', personalCollErr);
     }
 
     try {
         restoreAdminLicenciasUiAfterGridRender();
     } catch (restoreErr) {
-        console.error('restoreAdminLicenciasUiAfterGridRender:', restoreErr);
+        adminLicLogError('restoreAdminLicenciasUiAfterGridRender:', restoreErr);
     }
 
     const reportesBtnAfterRender = document.getElementById('adminLicenciasReportesBtn');
@@ -3439,6 +3403,16 @@ function renderLicensesGrid() {
 }
 
 // Crear tarjeta de licencia
+function adminLicCompactProductLabel(name) {
+    const s = String(name != null ? name : '').trim();
+    if (!s) return '?';
+    const words = s.split(/\s+/).filter(Boolean);
+    if (words.length >= 2) {
+        return (words[0].charAt(0) + words[1].charAt(0)).toUpperCase().slice(0, 3);
+    }
+    return s.slice(0, 3);
+}
+
 function createLicenseCard(license) {
     if (!license || license.id == null) {
         return '';
@@ -3452,12 +3426,14 @@ function createLicenseCard(license) {
                 <h3 class="license-name">
                     <span class="full-text">${productNameSafe}</span>
                     <span class="first-letter">T</span>
+                    <span class="compact-label">Tod</span>
                 </h3>
             </div>
         </div>`;
     }
 
     const firstLetter = productNameSafe ? productNameSafe.charAt(0).toUpperCase() : '?';
+    const compactLabel = adminLicCompactProductLabel(productNameSafe);
     
     return `
         <div class="license-card" data-license-id="${license.id}">
@@ -3465,6 +3441,7 @@ function createLicenseCard(license) {
                 <h3 class="license-name">
                     <span class="full-text">${productNameSafe}</span>
                     <span class="first-letter">${firstLetter}</span>
+                    <span class="compact-label">${compactLabel}</span>
                 </h3>
             </div>
         </div>
@@ -3485,6 +3462,7 @@ function createReportesGridButtonHtml() {
                 <h3 class="license-name">
                     <span class="full-text">Reportes<span id="adminLicenciasReportesTotalBadge" class="license-card-report-total-badge" hidden role="status" aria-live="polite" aria-label="Sin reportes pendientes"><span class="license-card-report-total-badge__num">0</span></span></span>
                     <span class="first-letter">R</span>
+                    <span class="compact-label">Rep</span>
                 </h3>
             </div>
         </button>`;
@@ -3517,7 +3495,7 @@ function addLicenseCardListeners() {
                 const isActive = card.classList.contains('active');
                 if (!isActive) {
                     void activateLicenseCard(card, licenseId, true).catch(function (err) {
-                        console.error('Error al activar licencia:', err);
+                        adminLicLogError('Error al activar licencia:', err);
                     });
                 }
             });
@@ -3543,7 +3521,7 @@ function addLicenseCardListeners() {
             // Si la tarjeta no estaba activa, activarla y mostrar las cuentas
             if (!isActive && license) {
                 void activateLicenseCard(card, licenseId, true).catch(function (err) {
-                    console.error('Error al activar licencia:', err);
+                    adminLicLogError('Error al activar licencia:', err);
                 });
             } else {
                 const prevRaw = inputContainer && inputContainer.dataset.activeLicenseId;
@@ -3554,7 +3532,7 @@ function addLicenseCardListeners() {
                             await flushDayNotepadsBeforeLicenseSwitch(prevId);
                         }
                     } catch (err) {
-                        console.error('Error al guardar blocs del día:', err);
+                        adminLicLogError('Error al guardar blocs del día:', err);
                     }
                     if (window.AdminLicenciasNotepad && typeof window.AdminLicenciasNotepad.flushLicense === 'function') {
                         window.AdminLicenciasNotepad.flushLicense();
@@ -3642,7 +3620,7 @@ async function activateLicenseCard(card, licenseId, skipScroll = false, options)
         }
         const dayTextsSnapshot = captureDayTextsForLicense(prevId);
         void flushDayNotepadsForLicenseWithTexts(prevId, dayTextsSnapshot).catch(function (e) {
-            console.error('Error al guardar blocs del día antes de cambiar de licencia:', e);
+            adminLicLogError('Error al guardar blocs del día antes de cambiar de licencia:', e);
         });
     }
 
@@ -3676,12 +3654,14 @@ async function activateLicenseCard(card, licenseId, skipScroll = false, options)
             __adminLicInjectedAssignedAccountIds.clear();
         } catch (_injClear) {}
 
+        await adminLicEnsureLicenseAccountsHydrated(licenseId);
+
         // Cargar y mostrar las cuentas guardadas (editables)
         loadAndDisplaySavedAccounts(licenseId);
         
         // Cargar y mostrar todos los días con sus correos vendidos
         _pendingLoadAllDaysLicenseId = null;
-        loadAllDaysSoldAccounts(licenseId);
+        await loadAllDaysSoldAccounts(licenseId);
         
         if (window.AdminLicenciasNotepad && typeof window.AdminLicenciasNotepad.bindLicense === 'function') {
             const lic = licenses.find(function (l) { return l.id === licenseId; });
@@ -3695,6 +3675,23 @@ async function activateLicenseCard(card, licenseId, skipScroll = false, options)
 
         updateNotepadsVisibilityForLicense(licenseId);
 
+        try {
+            if (typeof adminLicenseHideStatusColSyncUi === 'function') {
+                adminLicenseHideStatusColSyncUi(licenseId);
+            }
+            if (typeof adminLicenseHideNotesColSyncUi === 'function') {
+                adminLicenseHideNotesColSyncUi();
+            }
+            if (typeof adminDaysHideRestoreColSyncUi === 'function') {
+                adminDaysHideRestoreColSyncUi();
+            }
+            if (typeof adminDaysHideNotesColSyncUi === 'function') {
+                adminDaysHideNotesColSyncUi();
+            }
+        } catch (hideStatusOnActivateErr) {
+            adminLicLogError('admin license eye sync on activate:', hideStatusOnActivateErr);
+        }
+
         refreshDuplicateEmailHighlights(licenseId);
         
         // Aplicar resaltado de búsqueda si hay un término activo
@@ -3705,9 +3702,16 @@ async function activateLicenseCard(card, licenseId, skipScroll = false, options)
         
         // Solo hacer scroll si no se especifica skipScroll (cuando es un clic del usuario)
         if (!skipScroll) {
-            // Hacer scroll suave hasta el contenedor (sin animación, solo scroll instantáneo)
+            const prevY = window.scrollY != null ? window.scrollY : document.documentElement.scrollTop || 0;
             setTimeout(() => {
-                inputContainer.scrollIntoView({ behavior: 'auto', block: 'nearest' });
+                const rect = inputContainer.getBoundingClientRect();
+                const nearViewport =
+                    rect.top >= -80 && rect.top <= window.innerHeight * 0.65;
+                if (!nearViewport) {
+                    inputContainer.scrollIntoView({ behavior: 'auto', block: 'nearest' });
+                } else {
+                    window.scrollTo(window.scrollX || 0, prevY);
+                }
             }, 100);
         }
     }
@@ -3812,7 +3816,7 @@ function restoreSelectedLicense(options) {
                 });
 
                 void activateLicenseCard(savedCard, savedId, true, opts).catch(function (err) {
-                    console.error('Error al restaurar licencia:', err);
+                    adminLicLogError('Error al restaurar licencia:', err);
                 });
                 return;
             }
@@ -3835,7 +3839,7 @@ function restoreSelectedLicense(options) {
                 c.classList.remove('active');
             });
             void activateLicenseCard(firstCard, firstLicenseId, true, opts).catch(function (err) {
-                console.error('Error al seleccionar primera licencia:', err);
+                adminLicLogError('Error al seleccionar primera licencia:', err);
             });
         }
     }
@@ -4647,6 +4651,7 @@ function setupAdminLicWarrantyHistoryUi() {
             const shellDoc = document.querySelector('.admin-licencias-shell:not(.user-licencias-shell)');
             if (!shellDoc || !shellDoc.contains(btn)) return;
             ev.preventDefault();
+            adminLicMarkLicensePanelInteraction();
             fetchAndRenderFromButton(btn);
         },
         false
@@ -5310,8 +5315,8 @@ async function updateLicensePosition(event) {
             showError(data.error || 'Error al actualizar posición');
         }
     } catch (error) {
-        console.error('Error:', error);
-        showError('Error de conexión al actualizar posición');
+        adminLicLogError('Error:', error);
+        showError(adminLicFormatFetchError(error, 'Error de conexión al actualizar posición'));
     }
 }
 
@@ -5339,8 +5344,8 @@ async function toggleLicenseVisibility(licenseId) {
             showError(data.error || 'Error al cambiar visibilidad');
         }
     } catch (error) {
-        console.error('Error:', error);
-        showError('Error de conexión al cambiar visibilidad');
+        adminLicLogError('Error:', error);
+        showError(adminLicFormatFetchError(error, 'Error de conexión al cambiar visibilidad'));
     }
 }
 
@@ -5441,8 +5446,8 @@ async function addAccount(event, licenseId) {
             showError(data.error || 'Error al agregar cuenta');
         }
     } catch (error) {
-        console.error('Error:', error);
-        showError('Error de conexión al agregar cuenta');
+        adminLicLogError('Error:', error);
+        showError(adminLicFormatFetchError(error, 'Error de conexión al agregar cuenta'));
     }
 }
 
@@ -5479,8 +5484,8 @@ async function removeAccount(accountId) {
             showError(data.error || 'Error al eliminar cuenta');
         }
     } catch (error) {
-        console.error('Error:', error);
-        showError('Error de conexión al eliminar cuenta');
+        adminLicLogError('Error:', error);
+        showError(adminLicFormatFetchError(error, 'Error de conexión al eliminar cuenta'));
     }
 }
 
@@ -5950,14 +5955,14 @@ async function saveBulkAccounts(licenseId, text) {
                     successCount++;
                 } catch (error) {
                     errorCount++;
-                    console.error('Error al marcar como vendida:', error);
+                    adminLicLogError('Error al marcar como vendida:', error);
                 }
             } else {
                 errorCount++;
             }
         } catch (error) {
             errorCount++;
-            console.error('Error:', error);
+            adminLicLogError('Error:', error);
         }
     }
     
@@ -6063,7 +6068,7 @@ async function saveBulkAccountsFromEditable(licenseId, text) {
                 successCount++;
             }
         } catch (error) {
-            console.error('Error:', error);
+            adminLicLogError('Error:', error);
         }
     }
     
@@ -6132,11 +6137,11 @@ async function saveBulkAccountsForDay(licenseId, text, day) {
                     });
                     successCount++;
                 } catch (error) {
-                    console.error('Error al marcar como vendida:', error);
+                    adminLicLogError('Error al marcar como vendida:', error);
                 }
             }
         } catch (error) {
-            console.error('Error:', error);
+            adminLicLogError('Error:', error);
         }
     }
     
@@ -6165,7 +6170,7 @@ async function updateOrCreateMultipleAccountsImproved(licenseId, accountId, text
     const parsed = parseEmailAndPassword(firstLine, originalAccount, licenseId);
     
     if (!parsed.email && !originalAccount) {
-        console.error('No se pudo extraer email de la línea editada');
+        adminLicLogError('No se pudo extraer email de la línea editada');
         return;
     }
     
@@ -6187,7 +6192,7 @@ async function updateOrCreateMultipleAccountsImproved(licenseId, accountId, text
         // Verificar el status de la respuesta primero
         if (!response.ok) {
             const textResponse = await response.text();
-            console.error(`Error HTTP ${response.status}:`, textResponse);
+            adminLicLogError(`Error HTTP ${response.status}:`, textResponse);
             throw new Error(`Error del servidor: ${response.status} ${response.statusText}`);
         }
         
@@ -6195,7 +6200,7 @@ async function updateOrCreateMultipleAccountsImproved(licenseId, accountId, text
         const contentType = response.headers.get('content-type');
         if (!contentType || !contentType.includes('application/json')) {
             const textResponse = await response.text();
-            console.error('Respuesta no es JSON:', textResponse);
+            adminLicLogError('Respuesta no es JSON:', textResponse);
             throw new Error('El servidor no devolvió una respuesta JSON válida');
         }
         
@@ -6213,10 +6218,10 @@ async function updateOrCreateMultipleAccountsImproved(licenseId, accountId, text
             loadAndDisplaySavedAccounts(licenseId);
             loadAllDaysSoldAccounts(licenseId);
         } else {
-            console.error('Error al actualizar cuenta:', data.error);
+            adminLicLogError('Error al actualizar cuenta:', data.error);
         }
     } catch (error) {
-        console.error('Error al actualizar cuenta:', error);
+        adminLicLogError('Error al actualizar cuenta:', error);
     }
 }
 
@@ -6300,7 +6305,7 @@ async function updateExistingAccountImproved(licenseId, accountId, text, origina
     const parsed = parseEmailAndPassword(firstLine, originalAccount, licenseId);
     
     if (!parsed.email && !originalAccount) {
-        console.error('No se pudo extraer email de la línea editada');
+        adminLicLogError('No se pudo extraer email de la línea editada');
         return;
     }
     
@@ -6323,7 +6328,7 @@ async function updateExistingAccountImproved(licenseId, accountId, text, origina
         const contentType = response.headers.get('content-type');
         if (!contentType || !contentType.includes('application/json')) {
             const textResponse = await response.text();
-            console.error('Respuesta no es JSON:', textResponse);
+            adminLicLogError('Respuesta no es JSON:', textResponse);
             throw new Error('El servidor no devolvió una respuesta JSON válida');
         }
         
@@ -6341,10 +6346,10 @@ async function updateExistingAccountImproved(licenseId, accountId, text, origina
             loadAndDisplaySavedAccounts(licenseId);
             loadAllDaysSoldAccounts(licenseId);
         } else {
-            console.error('Error al actualizar cuenta:', data.error);
+            adminLicLogError('Error al actualizar cuenta:', data.error);
         }
     } catch (error) {
-        console.error('Error al actualizar cuenta:', error);
+        adminLicLogError('Error al actualizar cuenta:', error);
         // No mostrar error al usuario para mantener la experiencia fluida
     }
 }
@@ -6576,8 +6581,639 @@ function adminLicWarrantySetButtonAttrs(btn, ctx) {
     }
 }
 
-function adminLicWarrantyEnsureButton(row) {
-    const shell = row.querySelector('.license-split-editor__status-select-shell--good');
+function adminLicDaysRemainingFromExpiresIso(iso) {
+    if (!iso) return null;
+    try {
+        const exp = new Date(String(iso));
+        if (Number.isNaN(exp.getTime())) return null;
+        const msDay = 24 * 60 * 60 * 1000;
+        return Math.max(0, Math.ceil((exp.getTime() - Date.now()) / msDay));
+    } catch (_eExp) {
+        return null;
+    }
+}
+
+function adminLicDaysRemainingFromAssignedTerm(assignedIso, termDays) {
+    if (!assignedIso || termDays == null || termDays === '') return null;
+    try {
+        const term = Number(termDays);
+        if (!Number.isFinite(term) || term < 1) return null;
+        const start = new Date(String(assignedIso));
+        if (Number.isNaN(start.getTime())) return null;
+        const expMs = start.getTime() + term * 24 * 60 * 60 * 1000;
+        const msDay = 24 * 60 * 60 * 1000;
+        return Math.max(0, Math.ceil((expMs - Date.now()) / msDay));
+    } catch (_eAsg) {
+        return null;
+    }
+}
+
+function adminLicExpiryLookupAccount(ctx, parts) {
+    if (!ctx || ctx.disabled === true || !ctx.ok || !Number.isFinite(ctx.licenseId)) {
+        return null;
+    }
+    const lid = ctx.licenseId;
+    const L = licenses.find(function (lic) {
+        return lic.id === lid;
+    });
+    if (!L) {
+        return null;
+    }
+    const accs = Array.isArray(L.accounts) ? L.accounts : [];
+    let acc = null;
+
+    if (ctx.accountIdStr) {
+        acc = accs.find(function (a) {
+            return a && String(a.id) === String(ctx.accountIdStr);
+        });
+        if (!acc && lid === AGGREGATE_LICENSE_ID) {
+            acc = adminLicExpiryFindAccountInAllLicensesById(ctx.accountIdStr);
+        }
+    }
+
+    if (!acc && parts) {
+        const pk = adminMainBlocCredEmailKeyFromParsedLine(parts);
+        if (pk) {
+            acc = accs.find(function (a) {
+                return a && normalizeAccountEmailKey(a.email) === pk;
+            });
+            if (!acc && lid === AGGREGATE_LICENSE_ID) {
+                acc = adminLicExpiryFindAccountInAllLicensesByEmail(pk);
+            }
+        }
+    }
+
+    if (!acc && parts && Number.isFinite(ctx.calendarDay)) {
+        const credRaw = String(parts.cred != null ? parts.cred : '').trim();
+        if (credRaw) {
+            const probeLine = buildAdminLicenseStorageLine(
+                credRaw,
+                ctx.clientUsername || '',
+                parts.statusGood != null ? parts.statusGood : '',
+                parts.statusBad != null ? parts.statusBad : '',
+                parts.extra != null ? parts.extra : ''
+            );
+            const finger = dayBlocLineCredentialFinger(probeLine, lid);
+            if (finger) {
+                const dayAccs = getSoldAccountsForDayNumber(lid, ctx.calendarDay);
+                for (let di = 0; di < dayAccs.length; di += 1) {
+                    const cand = dayAccs[di];
+                    const built = buildDayNotepadTextFromAccounts([cand], lid === AGGREGATE_LICENSE_ID ? cand._sourceLicenseId : lid);
+                    const builtLine = built.split(/\r?\n/)[0] || '';
+                    if (builtLine && dayBlocLineCredentialFinger(builtLine, lid) === finger) {
+                        acc = cand;
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+    if (!acc && Number.isFinite(ctx.calendarDay) && ctx.rowOrdinal != null && ctx.rowOrdinal >= 0) {
+        const dayAccs = getSoldAccountsForDayNumber(lid, ctx.calendarDay);
+        if (ctx.rowOrdinal < dayAccs.length) {
+            acc = dayAccs[ctx.rowOrdinal];
+        }
+    }
+
+    if (!acc && ctx.clientUsername && Number.isFinite(ctx.calendarDay)) {
+        const un = String(ctx.clientUsername).trim().toLowerCase();
+        if (un && un !== 'anonimo') {
+            const dayAccs = getSoldAccountsForDayNumber(lid, ctx.calendarDay);
+            for (let ui = 0; ui < dayAccs.length; ui += 1) {
+                const candU = dayAccs[ui];
+                if (resolveAccountAssignedUsername(candU).trim().toLowerCase() === un) {
+                    acc = candU;
+                    break;
+                }
+            }
+        }
+    }
+
+    if (!acc) {
+        return null;
+    }
+    let licForTerm = L;
+    if (acc._sourceLicenseId != null && Number.isFinite(Number(acc._sourceLicenseId))) {
+        const srcLic = licenses.find(function (lic) {
+            return lic.id === Number(acc._sourceLicenseId);
+        });
+        if (srcLic) {
+            licForTerm = srcLic;
+        }
+    }
+    return { account: acc, license: licForTerm };
+}
+
+function adminLicExpiryFindAccountInAllLicensesById(accountIdStr) {
+    const want = String(accountIdStr).trim();
+    if (!want) return null;
+    for (let li = 0; li < licenses.length; li += 1) {
+        const lic = licenses[li];
+        if (!lic || !Array.isArray(lic.accounts)) continue;
+        for (let ai = 0; ai < lic.accounts.length; ai += 1) {
+            const a = lic.accounts[ai];
+            if (a && String(a.id) === want) {
+                return Object.assign({}, a, { _sourceLicenseId: lic.id });
+            }
+        }
+    }
+    return null;
+}
+
+function adminLicExpiryFindAccountInAllLicensesByEmail(emailKey) {
+    const pk = normalizeAccountEmailKey(emailKey);
+    if (!pk) return null;
+    for (let li = 0; li < licenses.length; li += 1) {
+        const lic = licenses[li];
+        if (!lic || !Array.isArray(lic.accounts)) continue;
+        for (let ai = 0; ai < lic.accounts.length; ai += 1) {
+            const a = lic.accounts[ai];
+            if (a && normalizeAccountEmailKey(a.email) === pk) {
+                return Object.assign({}, a, { _sourceLicenseId: lic.id });
+            }
+        }
+    }
+    return null;
+}
+
+function adminLicExpiryCountdownInfo(meta) {
+    if (!meta) return null;
+    let daysLeft = meta.days_until_expiry;
+    if (meta.expires_at) {
+        const computed = adminLicDaysRemainingFromExpiresIso(meta.expires_at);
+        if (computed != null) daysLeft = computed;
+    }
+    if ((daysLeft == null || daysLeft === '') && meta.assigned_at && meta.license_term_days) {
+        const fromAssigned = adminLicDaysRemainingFromAssignedTerm(
+            meta.assigned_at,
+            meta.license_term_days
+        );
+        if (fromAssigned != null) daysLeft = fromAssigned;
+    }
+    if (daysLeft == null || daysLeft === '') return null;
+    const n = Number(daysLeft);
+    if (!Number.isFinite(n) || n < 0) return null;
+    let title;
+    let label;
+    if (n === 0) {
+        title = 'Vence hoy';
+        label = '0d';
+    } else if (n === 1) {
+        title = 'Queda 1 día';
+        label = '1d';
+    } else {
+        title = 'Quedan ' + n + ' días';
+        label = String(n) + 'd';
+    }
+    if (meta.license_term_days != null && Number.isFinite(Number(meta.license_term_days))) {
+        title += ' (periodo ' + meta.license_term_days + ' días)';
+    }
+    return { label: label, title: title, urgent: n <= 5 };
+}
+
+function adminLicExpiryMetaFromContext(ctx, parts) {
+    const hit = adminLicExpiryLookupAccount(ctx, parts);
+    if (!hit) return null;
+    const acc = hit.account;
+    return {
+        days_until_expiry: acc.days_until_expiry,
+        expires_at: acc.expires_at,
+        assigned_at: acc.assigned_at,
+        license_term_days: licenseTermDaysUi(hit.license)
+    };
+}
+
+function adminLicExpiryDaysLabelFromNumber(n) {
+    const num = Number(n);
+    if (!Number.isFinite(num) || num < 0) return '—';
+    if (num === 0) return '0d';
+    if (num === 1) return '1d';
+    return String(num) + 'd';
+}
+
+function adminLicExpiryUpdateModalDaysDisplay(modal, daysNum) {
+    if (!modal) return;
+    const daysEl = document.getElementById('adminLicExpiryAdjustDays');
+    if (!daysEl) return;
+    const n = Number(daysNum);
+    daysEl.textContent = adminLicExpiryDaysLabelFromNumber(n);
+    daysEl.classList.toggle('admin-lic-expiry-adjust-modal__days--urgent', Number.isFinite(n) && n <= 5);
+    const original = Number(modal._expiryOriginalDays);
+    daysEl.classList.toggle(
+        'admin-lic-expiry-adjust-modal__days--dirty',
+        Number.isFinite(original) && Number.isFinite(n) && n !== original
+    );
+}
+
+function adminLicExpiryUpdateModalSaveState(modal) {
+    const saveBtn = document.getElementById('adminLicExpiryAdjustSave');
+    if (!saveBtn || !modal) return;
+    const orig = Number(modal._expiryOriginalDays);
+    const pending = Number(modal._expiryPendingDays);
+    const hasChanges =
+        Number.isFinite(orig) && Number.isFinite(pending) && pending !== orig;
+    saveBtn.disabled = !hasChanges || modal.dataset.expiryBusy === '1';
+}
+
+function adminLicExpiryAdjustPendingDelta(modal, delta) {
+    if (!modal) return;
+    const d = Number(delta);
+    if (!Number.isFinite(d) || d === 0) return;
+    let pending = Number(modal._expiryPendingDays);
+    if (!Number.isFinite(pending)) {
+        pending = Number(modal._expiryOriginalDays);
+    }
+    if (!Number.isFinite(pending)) pending = 0;
+    const next = Math.max(0, pending + d);
+    if (d < 0 && next === pending) {
+        alert('No puede quedar en menos de 0 días.');
+        return;
+    }
+    modal._expiryPendingDays = next;
+    adminLicExpiryUpdateModalDaysDisplay(modal, next);
+    adminLicExpiryUpdateModalSaveState(modal);
+}
+
+function adminLicExpiryCloseQtyPanel(modal) {
+    const panel = document.getElementById('adminLicExpiryAdjustQtyPanel');
+    if (panel) {
+        panel.classList.add('d-none');
+        panel.setAttribute('aria-hidden', 'true');
+    }
+    if (modal) delete modal._expiryQtySign;
+}
+
+function adminLicExpirySanitizeQtyInput(input) {
+    if (!input) return;
+    const digits = String(input.value || '').replace(/\D/g, '');
+    if (digits === '') {
+        input.value = '';
+        return;
+    }
+    let n = parseInt(digits, 10);
+    if (!Number.isFinite(n) || n < 1) n = 1;
+    if (n > 3650) n = 3650;
+    input.value = String(n);
+}
+
+function adminLicExpiryReadQtyInputValue(input) {
+    if (!input) return null;
+    adminLicExpirySanitizeQtyInput(input);
+    const raw = String(input.value || '').trim();
+    if (raw === '') {
+        alert('Indica un número entre 1 y 3650.');
+        return null;
+    }
+    const n = parseInt(raw, 10);
+    if (!Number.isFinite(n) || n < 1 || n > 3650) {
+        alert('Indica un número entre 1 y 3650.');
+        return null;
+    }
+    return n;
+}
+
+function adminLicExpiryOpenQtyPanel(modal, sign) {
+    const panel = document.getElementById('adminLicExpiryAdjustQtyPanel');
+    const label = document.getElementById('adminLicExpiryAdjustQtyLabel');
+    const input = document.getElementById('adminLicExpiryAdjustQtyInput');
+    if (!modal || !panel || !input) return;
+    modal._expiryQtySign = sign < 0 ? -1 : 1;
+    if (label) {
+        label.textContent =
+            modal._expiryQtySign < 0
+                ? '¿Cuántos días quieres restar?'
+                : '¿Cuántos días quieres sumar?';
+    }
+    input.value = '1';
+    panel.classList.remove('d-none');
+    panel.setAttribute('aria-hidden', 'false');
+    input.focus();
+    input.select();
+}
+
+function adminLicExpiryConfirmQtyPanel(modal) {
+    if (!modal) return;
+    const input = document.getElementById('adminLicExpiryAdjustQtyInput');
+    const sign = modal._expiryQtySign;
+    if (sign == null) return;
+    const qty = adminLicExpiryReadQtyInputValue(input);
+    if (qty == null) return;
+    adminLicExpiryCloseQtyPanel(modal);
+    adminLicExpiryAdjustPendingDelta(modal, sign < 0 ? -qty : qty);
+}
+
+function adminLicExpiryQtyPanelIsOpen() {
+    const panel = document.getElementById('adminLicExpiryAdjustQtyPanel');
+    return !!(panel && !panel.classList.contains('d-none'));
+}
+
+function closeAdminLicExpiryAdjustModal() {
+    const modal = document.getElementById('adminLicExpiryAdjustModal');
+    if (!modal) return;
+    adminLicExpiryCloseQtyPanel(modal);
+    modal.classList.add('d-none');
+    modal.setAttribute('aria-hidden', 'true');
+    modal._expiryCtx = null;
+    modal._expiryMeta = null;
+    modal._expiryOriginalDays = null;
+    modal._expiryPendingDays = null;
+    delete modal.dataset.expiryBusy;
+    adminLicExpiryUpdateModalSaveState(modal);
+}
+
+function openAdminLicExpiryAdjustModal(ctx, meta) {
+    const modal = document.getElementById('adminLicExpiryAdjustModal');
+    const subEl = document.getElementById('adminLicExpiryAdjustSub');
+    if (!modal || !ctx || !ctx.accountIdStr) return;
+    const info = adminLicExpiryCountdownInfo(meta);
+    if (!info) return;
+
+    modal._expiryCtx = ctx;
+    modal._expiryMeta = meta;
+
+    if (subEl) {
+        let sub = info.title || 'Días restantes';
+        if (ctx.clientUsername && String(ctx.clientUsername).trim().toLowerCase() !== 'anonimo') {
+            sub = String(ctx.clientUsername).trim() + ' · ' + sub;
+        }
+        if (Number.isFinite(ctx.calendarDay)) {
+            sub += ' · Día ' + ctx.calendarDay;
+        }
+        subEl.textContent = sub;
+    }
+
+    let currentDays = 0;
+    const m = String(info.label || '').match(/^(\d+)d$/);
+    if (m) currentDays = parseInt(m[1], 10);
+    modal._expiryOriginalDays = currentDays;
+    modal._expiryPendingDays = currentDays;
+    adminLicExpiryUpdateModalDaysDisplay(modal, currentDays);
+    adminLicExpiryUpdateModalSaveState(modal);
+    adminLicExpiryCloseQtyPanel(modal);
+
+    modal.classList.remove('d-none');
+    modal.setAttribute('aria-hidden', 'false');
+}
+
+function setupAdminLicExpiryAdjustModal() {
+    if (typeof document === 'undefined') return;
+    if (document.documentElement.dataset.adminLicExpiryModalInit === '1') return;
+    if (!document.querySelector('.admin-licencias-shell:not(.user-licencias-shell)')) return;
+
+    const modal = document.getElementById('adminLicExpiryAdjustModal');
+    const btnMinus = document.getElementById('adminLicExpiryAdjustMinus');
+    const btnPlus = document.getElementById('adminLicExpiryAdjustPlus');
+    const closeBtn = document.getElementById('adminLicExpiryAdjustModalClose');
+    const cancelBtn = document.getElementById('adminLicExpiryAdjustCancel');
+    const saveBtn = document.getElementById('adminLicExpiryAdjustSave');
+    const qtyInput = document.getElementById('adminLicExpiryAdjustQtyInput');
+    const qtyOkBtn = document.getElementById('adminLicExpiryAdjustQtyOk');
+    const qtyCancelBtn = document.getElementById('adminLicExpiryAdjustQtyCancel');
+    const backdrop = document.getElementById('adminLicExpiryAdjustModalBackdrop');
+    if (!modal || !btnMinus || !btnPlus) return;
+
+    document.documentElement.dataset.adminLicExpiryModalInit = '1';
+
+    if (closeBtn) closeBtn.addEventListener('click', closeAdminLicExpiryAdjustModal);
+    if (cancelBtn) cancelBtn.addEventListener('click', closeAdminLicExpiryAdjustModal);
+    if (backdrop) backdrop.addEventListener('click', closeAdminLicExpiryAdjustModal);
+    document.addEventListener('keydown', function (ev) {
+        if (ev.key === 'Escape' && modal && !modal.classList.contains('d-none')) {
+            if (adminLicExpiryQtyPanelIsOpen()) {
+                ev.preventDefault();
+                adminLicExpiryCloseQtyPanel(modal);
+                return;
+            }
+            closeAdminLicExpiryAdjustModal();
+        }
+    });
+
+    btnMinus.addEventListener('click', function (ev) {
+        ev.preventDefault();
+        if (modal.dataset.expiryBusy === '1') return;
+        adminLicExpiryOpenQtyPanel(modal, -1);
+    });
+    btnPlus.addEventListener('click', function (ev) {
+        ev.preventDefault();
+        if (modal.dataset.expiryBusy === '1') return;
+        adminLicExpiryOpenQtyPanel(modal, 1);
+    });
+    if (qtyCancelBtn) {
+        qtyCancelBtn.addEventListener('click', function (ev) {
+            ev.preventDefault();
+            adminLicExpiryCloseQtyPanel(modal);
+        });
+    }
+    if (qtyOkBtn) {
+        qtyOkBtn.addEventListener('click', function (ev) {
+            ev.preventDefault();
+            adminLicExpiryConfirmQtyPanel(modal);
+        });
+    }
+    if (qtyInput) {
+        qtyInput.addEventListener('input', function () {
+            adminLicExpirySanitizeQtyInput(qtyInput);
+        });
+        qtyInput.addEventListener('keydown', function (ev) {
+            if (ev.key === 'Enter') {
+                ev.preventDefault();
+                adminLicExpiryConfirmQtyPanel(modal);
+            } else if (ev.key === 'Escape') {
+                ev.preventDefault();
+                ev.stopPropagation();
+                adminLicExpiryCloseQtyPanel(modal);
+            } else if (
+                ev.key.length === 1 &&
+                !/[0-9]/.test(ev.key) &&
+                !ev.ctrlKey &&
+                !ev.metaKey &&
+                !ev.altKey
+            ) {
+                ev.preventDefault();
+            }
+        });
+        qtyInput.addEventListener('paste', function (ev) {
+            ev.preventDefault();
+            const text = (ev.clipboardData || window.clipboardData).getData('text') || '';
+            const digits = text.replace(/\D/g, '');
+            if (digits) {
+                qtyInput.value = digits.slice(0, 4);
+                adminLicExpirySanitizeQtyInput(qtyInput);
+            }
+        });
+    }
+    if (saveBtn) {
+        saveBtn.addEventListener('click', function (ev) {
+            ev.preventDefault();
+            adminLicExpirySaveModal(modal);
+        });
+    }
+}
+
+function adminLicExpiryApplyToShell(shell, meta, ctx) {
+    if (!shell) return;
+    shell.querySelectorAll('.user-lic-expiry-stepper').forEach(function (node) {
+        node.remove();
+    });
+    const info = adminLicExpiryCountdownInfo(meta);
+    let el = shell.querySelector('.user-lic-expiry-countdown');
+    if (!info) {
+        if (el) el.remove();
+        return;
+    }
+
+    const editable = !!(ctx && ctx.accountIdStr);
+    if (!el) {
+        el = document.createElement('span');
+        el.className = 'user-lic-expiry-countdown';
+        const anchor =
+            shell.querySelector('.admin-lic-admin-warranty-btn') ||
+            shell.querySelector('.user-lic-warranty-history-btn');
+        const redTools = shell.querySelector('.admin-lic-day-red-tools');
+        const selBad = shell.querySelector('.license-split-editor__status-bad');
+        const selGood = shell.querySelector('.license-split-editor__status-good');
+        if (anchor) {
+            anchor.insertAdjacentElement('afterend', el);
+        } else if (redTools) {
+            shell.insertBefore(el, redTools);
+        } else if (selBad) {
+            shell.insertBefore(el, selBad);
+        } else if (selGood) {
+            shell.insertBefore(el, selGood);
+        } else {
+            shell.appendChild(el);
+        }
+    }
+
+    el.className =
+        'user-lic-expiry-countdown' +
+        (info.urgent ? ' user-lic-expiry-countdown--urgent' : '') +
+        (editable ? ' user-lic-expiry-countdown--editable' : '');
+    el.textContent = info.label;
+    el.title = editable
+        ? info.title + ' — Clic para abrir ajuste de días'
+        : info.title;
+    el.setAttribute('aria-label', el.title);
+
+    if (editable) {
+        el.setAttribute('role', 'button');
+        el.tabIndex = 0;
+        el._expiryOpenCtx = ctx;
+        el._expiryOpenMeta = meta;
+        if (!el.dataset.expiryOpenWired) {
+            el.dataset.expiryOpenWired = '1';
+            el.addEventListener('mousedown', function (ev) {
+                ev.preventDefault();
+            });
+            el.addEventListener('click', function (ev) {
+                ev.preventDefault();
+                ev.stopPropagation();
+                adminLicMarkLicensePanelInteraction();
+                openAdminLicExpiryAdjustModal(el._expiryOpenCtx, el._expiryOpenMeta);
+            });
+            el.addEventListener('keydown', function (ev) {
+                if (ev.key === 'Enter' || ev.key === ' ') {
+                    ev.preventDefault();
+                    ev.stopPropagation();
+                    adminLicMarkLicensePanelInteraction();
+                    openAdminLicExpiryAdjustModal(el._expiryOpenCtx, el._expiryOpenMeta);
+                }
+            });
+        }
+    } else {
+        el.removeAttribute('role');
+        el.removeAttribute('tabindex');
+    }
+}
+
+async function adminLicExpirySaveModal(modal) {
+    if (!modal || modal.dataset.expiryBusy === '1') return;
+    const ctx = modal._expiryCtx;
+    if (!ctx || !ctx.accountIdStr) return;
+    const orig = Number(modal._expiryOriginalDays);
+    const pending = Number(modal._expiryPendingDays);
+    const delta = pending - orig;
+    if (!Number.isFinite(delta) || delta === 0) return;
+
+    const btnMinus = document.getElementById('adminLicExpiryAdjustMinus');
+    const btnPlus = document.getElementById('adminLicExpiryAdjustPlus');
+    const saveBtn = document.getElementById('adminLicExpiryAdjustSave');
+    const cancelBtn = document.getElementById('adminLicExpiryAdjustCancel');
+
+    modal.dataset.expiryBusy = '1';
+    if (btnMinus) btnMinus.disabled = true;
+    if (btnPlus) btnPlus.disabled = true;
+    if (saveBtn) saveBtn.disabled = true;
+    if (cancelBtn) cancelBtn.disabled = true;
+
+    try {
+        const response = await fetch(
+            '/tienda/api/accounts/' + encodeURIComponent(ctx.accountIdStr) + '/adjust-expiry',
+            {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': getCSRFToken()
+                },
+                body: JSON.stringify({ days_delta: delta })
+            }
+        );
+        const data = await response.json();
+        if (!data.success) {
+            alert(data.error || 'No se pudo ajustar el vencimiento.');
+            return;
+        }
+        await loadLicenses();
+        const lid = ctx.licenseId;
+        if (Number.isFinite(lid)) {
+            if (typeof loadAndDisplaySavedAccounts === 'function') {
+                loadAndDisplaySavedAccounts(lid);
+            }
+            if (typeof scheduleLoadAllDaysSoldAccounts === 'function') {
+                scheduleLoadAllDaysSoldAccounts(lid);
+            }
+        }
+        closeAdminLicExpiryAdjustModal();
+    } catch (err) {
+        adminLicLogError('Error al ajustar vencimiento:', err);
+        alert('Error de red al ajustar el vencimiento.');
+    } finally {
+        delete modal.dataset.expiryBusy;
+        if (btnMinus) btnMinus.disabled = false;
+        if (btnPlus) btnPlus.disabled = false;
+        if (cancelBtn) cancelBtn.disabled = false;
+        adminLicExpiryUpdateModalSaveState(modal);
+    }
+}
+
+function adminLicExpiryRefreshAllVisibleDayRows() {
+    document.querySelectorAll('.day-license-split-root').forEach(function (dayRoot) {
+        const rows = dayLicenseSplitGetRowElements(dayRoot);
+        rows.forEach(function (row, idx) {
+            adminLicWarrantyApplyAttrsToDayRow(row, dayRoot, idx);
+        });
+    });
+}
+
+function adminLicenseEnsureDayRowToolsShell(row, dayRoot) {
+    const statusWrap = row && row.querySelector ? row.querySelector('.license-split-editor__status-wrap') : null;
+    if (!statusWrap) return null;
+    let shell = statusWrap.querySelector('.license-split-editor__status-select-shell--good');
+    if (shell) return shell;
+    shell = document.createElement('div');
+    shell.className =
+        'license-split-editor__status-select-shell license-split-editor__status-select-shell--good admin-lic-day-tools-shell';
+    const badShell = statusWrap.querySelector('.license-split-editor__status-select-shell--bad');
+    if (badShell) {
+        statusWrap.insertBefore(shell, badShell);
+    } else {
+        statusWrap.appendChild(shell);
+    }
+    return shell;
+}
+
+function adminLicWarrantyEnsureButtonInShell(shell) {
     if (!shell) return null;
     let btn = shell.querySelector('.admin-lic-admin-warranty-btn');
     if (!btn) {
@@ -6587,14 +7223,26 @@ function adminLicWarrantyEnsureButton(row) {
         btn.title = 'Historial de caídas y garantías';
         btn.setAttribute('aria-label', 'Ver historial de caídas y garantías de esta fila');
         btn.innerHTML = '<i class="fas fa-exclamation-triangle" aria-hidden="true"></i>';
-        const selGood = shell.querySelector('.license-split-editor__status-good');
-        if (selGood) {
-            shell.insertBefore(btn, selGood);
+        const redTools = shell.querySelector('.admin-lic-day-red-tools');
+        const selBad = shell.querySelector('.license-split-editor__status-bad');
+        if (redTools) {
+            shell.insertBefore(btn, redTools);
+        } else if (selBad) {
+            shell.insertBefore(btn, selBad);
         } else {
             shell.appendChild(btn);
         }
     }
     return btn;
+}
+
+function adminLicWarrantyEnsureButton(row, dayRootOpt) {
+    let shell = row.querySelector('.license-split-editor__status-select-shell--good');
+    if (!shell && dayRootOpt) {
+        shell = adminLicenseEnsureDayRowToolsShell(row, dayRootOpt);
+    }
+    if (!shell) return null;
+    return adminLicWarrantyEnsureButtonInShell(shell);
 }
 
 function adminLicWarrantyApplyAttrsToStructuredRow(row, _rowOrdinalZeroBased) {
@@ -6606,10 +7254,383 @@ function adminLicWarrantyApplyAttrsToStructuredRow(row, _rowOrdinalZeroBased) {
 }
 
 function adminLicWarrantyApplyAttrsToDayRow(row, dayRoot, rowOrdinalZeroBased) {
-    const btn = adminLicWarrantyEnsureButton(row);
-    if (!btn) return;
+    if (!row || !dayRoot) return;
     const ctx = adminLicWarrantyDayBlocContext(row, dayRoot, rowOrdinalZeroBased);
-    adminLicWarrantySetButtonAttrs(btn, ctx);
+    const parts = adminLicWarrantyDayRowLineParts(dayRoot, rowOrdinalZeroBased);
+    const hit = adminLicExpiryLookupAccount(ctx, parts);
+    const meta = adminLicExpiryMetaFromContext(ctx, parts);
+    const ctxUse = Object.assign({}, ctx);
+    if (hit && hit.account && hit.account.id != null) {
+        ctxUse.accountIdStr = String(hit.account.id);
+    }
+
+    adminLicDayToolsCleanupMisplaced(row);
+
+    const goodShell = row.querySelector('.license-split-editor__status-select-shell--good');
+    let toolsShell = goodShell;
+    if (!toolsShell && adminLicIsAdminDayToolsPage()) {
+        toolsShell = adminLicenseEnsureDayRowToolsShell(row, dayRoot);
+    }
+
+    if (toolsShell) {
+        const btn = adminLicWarrantyEnsureButton(row, dayRoot);
+        if (btn) {
+            adminLicWarrantySetButtonAttrs(btn, ctxUse);
+        }
+        adminLicExpiryApplyToShell(toolsShell, meta, ctxUse);
+    }
+
+    adminLicDayEnsureBadSelectActions(row, dayRoot);
+}
+
+function adminLicDayToolsCleanupMisplaced(row) {
+    if (!row || !adminLicIsAdminDayToolsPage()) return;
+    row.querySelectorAll('.admin-lic-day-red-tools, .admin-lic-day-give-warranty-btn, .admin-lic-day-new-password-input').forEach(function (node) {
+        node.remove();
+    });
+    const badShell = row.querySelector('.license-split-editor__status-select-shell--bad');
+    if (badShell) {
+        badShell.querySelectorAll('.admin-lic-admin-warranty-btn, .user-lic-expiry-countdown').forEach(function (node) {
+            node.remove();
+        });
+    }
+}
+
+function adminLicIsAdminDayToolsPage() {
+    return !!(
+        typeof document !== 'undefined' &&
+        document.querySelector('.admin-licencias-shell:not(.user-licencias-shell)')
+    );
+}
+
+const ADMIN_LICENSE_DAY_BAD_ACTION_DAR_GARANTIA = '__admin_dar_garantia__';
+const ADMIN_LICENSE_DAY_BAD_ACTION_NUEVA_CONTRASENA = '__admin_nueva_contrasena__';
+
+function adminLicDayIsBadSelectActionValue(v) {
+    const k = String(v || '').trim();
+    return k === ADMIN_LICENSE_DAY_BAD_ACTION_DAR_GARANTIA || k === ADMIN_LICENSE_DAY_BAD_ACTION_NUEVA_CONTRASENA;
+}
+
+function adminLicDayAppendBadSelectActionOptions(selBad) {
+    if (!selBad || !adminLicIsAdminDayToolsPage()) return;
+    const actions = [
+        { v: ADMIN_LICENSE_DAY_BAD_ACTION_DAR_GARANTIA, label: 'Dar garantía inmediatamente' },
+        { v: ADMIN_LICENSE_DAY_BAD_ACTION_NUEVA_CONTRASENA, label: 'Nueva contraseña' }
+    ];
+    actions.forEach(function (opt) {
+        if (selBad.querySelector('option[value="' + opt.v + '"]')) return;
+        const o = document.createElement('option');
+        o.value = opt.v;
+        o.textContent = opt.label;
+        o.className = 'admin-lic-day-bad-action-option';
+        selBad.appendChild(o);
+    });
+}
+
+function adminLicDayWireBadSelectActions(row, dayRoot) {
+    if (!row || !dayRoot || !adminLicIsAdminDayToolsPage()) return;
+    const selBad = row.querySelector('.license-split-editor__status-bad');
+    if (!selBad || selBad.dataset.adminLicDayActionsWired === '1') return;
+    selBad.dataset.adminLicDayActionsWired = '1';
+    adminLicDayAppendBadSelectActionOptions(selBad);
+    selBad.addEventListener('focusin', function () {
+        selBad.setAttribute('data-lic-sel-bad-prev', selBad.value != null ? String(selBad.value) : '');
+    });
+    selBad.addEventListener('change', function () {
+        const v = String(selBad.value || '').trim();
+        if (!adminLicDayIsBadSelectActionValue(v)) return;
+        selBad.value = '';
+        const rows = dayLicenseSplitGetRowElements(dayRoot);
+        const ord = rows.indexOf(row);
+        if (ord < 0) return;
+        if (v === ADMIN_LICENSE_DAY_BAD_ACTION_DAR_GARANTIA) {
+            void adminLicDayApplyImmediateWarranty(dayRoot, ord);
+            return;
+        }
+        if (v === ADMIN_LICENSE_DAY_BAD_ACTION_NUEVA_CONTRASENA) {
+            void adminLicDayPromptAndApplyNewPassword(dayRoot, ord);
+        }
+    });
+}
+
+function adminLicDayEnsureBadSelectActions(row, dayRoot) {
+    if (!row || !dayRoot || !adminLicIsAdminDayToolsPage()) return;
+    adminLicDayToolsCleanupMisplaced(row);
+    adminLicDayWireBadSelectActions(row, dayRoot);
+}
+
+async function adminLicDayPromptAndApplyNewPassword(dayRoot, rowOrdinalZeroBased) {
+    const rows = dayLicenseSplitGetRowElements(dayRoot);
+    const row = rows[rowOrdinalZeroBased];
+    const ctx = adminLicWarrantyDayBlocContext(row, dayRoot, rowOrdinalZeroBased);
+    const parts = adminLicWarrantyDayRowLineParts(dayRoot, rowOrdinalZeroBased);
+    const cred = String(parts.cred || '').trim();
+    if (!adminLicCredentialPlainHasPasswordPart(cred, ctx && ctx.ok ? ctx.licenseId : NaN)) {
+        showError('Esta fila solo tiene correo en el bloc; no se puede cambiar la contraseña aquí.');
+        return;
+    }
+    const pwd = window.prompt('Nueva contraseña:', '');
+    if (pwd == null) return;
+    const trimmed = String(pwd).trim();
+    if (!trimmed) {
+        showError('Indica la nueva contraseña.');
+        return;
+    }
+    await adminLicDayApplyNewPassword(dayRoot, rowOrdinalZeroBased, trimmed);
+}
+
+function adminLicCredentialPlainHasPasswordPart(credPlain, licenseId) {
+    const line = String(credPlain || '').trim();
+    if (!line) return false;
+    const license = Number.isFinite(licenseId)
+        ? licenses.find(function (l) {
+              return l.id === licenseId;
+          })
+        : null;
+    const isNetflix = license && isNetflixProductName(license.product_name);
+    const parsed = parseLineAccountFields(line, { isNetflix: isNetflix });
+    if (!parsed || !parsed.email) return false;
+    const pwd = String(parsed.password || '').trim();
+    if (!pwd) return false;
+    const credOnly =
+        line.indexOf(LICENSE_LINE_FIELD_SEP) !== -1 ? String(line.split(LICENSE_LINE_FIELD_SEP)[0] || '').trim() : line;
+    const emailOnly = String(parsed.email).trim().toLowerCase();
+    const credNorm = credOnly.replace(/\s+/g, ' ').trim().toLowerCase();
+    if (credNorm === emailOnly) return false;
+    if (parsed.netflixSlot != null) return true;
+    const emailIdx = credOnly.toLowerCase().indexOf(emailOnly);
+    if (emailIdx < 0) return true;
+    const rest = credOnly.slice(emailIdx + String(parsed.email).length).trim();
+    return rest.length > 0;
+}
+
+function adminLicCredUsesColonSeparator(credPlain) {
+    const c = String(credPlain || '').trim();
+    const at = c.indexOf('@');
+    const col = c.indexOf(':');
+    return at >= 0 && col > at;
+}
+
+function adminLicRebuildCredWithNewPassword(credPlain, licenseId, newPassword) {
+    const pwd = String(newPassword || '').trim();
+    if (!pwd) return null;
+    const license = Number.isFinite(licenseId)
+        ? licenses.find(function (l) {
+              return l.id === licenseId;
+          })
+        : null;
+    const isNetflix = license && isNetflixProductName(license.product_name);
+    const parsed = parseLineAccountFields(String(credPlain || '').trim(), { isNetflix: isNetflix });
+    if (!parsed || !parsed.email) return null;
+    const updated = Object.assign({}, parsed, { password: pwd });
+    return serializeCredentialLine(updated, adminLicCredUsesColonSeparator(credPlain));
+}
+
+async function adminLicDayApplyImmediateWarranty(dayRoot, rowOrdinalZeroBased) {
+    if (window.__adminLicDayWarrantyInFlight) return;
+    const rows = dayLicenseSplitGetRowElements(dayRoot);
+    const row = rows[rowOrdinalZeroBased];
+    const ctx = adminLicWarrantyDayBlocContext(row, dayRoot, rowOrdinalZeroBased);
+    if (!ctx || !ctx.ok || !ctx.accountIdStr) {
+        showError('No hay cuenta vendida enlazada a esta fila.');
+        return;
+    }
+    if (!window.confirm('¿Se confirma se da garantía de esta cuenta?')) return;
+
+    const licenseId = ctx.licenseId;
+    const dayNum = ctx.calendarDay;
+    const ic = document.getElementById('licenseAccountsInputContainer');
+    const activeRaw = ic && ic.dataset.activeLicenseId;
+    const active = activeRaw != null && activeRaw !== '' ? parseInt(activeRaw, 10) : NaN;
+    if (active !== licenseId) {
+        showError('Activa en el grid la misma licencia a la que pertenece esta fila.');
+        return;
+    }
+    const taS = document.getElementById('adminLicenciasSuspendedNotepad');
+    const suspRoot = document.getElementById('adminLicenciasSuspendedSplitRoot');
+    if (!taS || !suspRoot || parseInt(taS.dataset.licenseId, 10) !== licenseId) {
+        showError('Abre el bloc Caídas del mismo producto para registrar la cuenta mala.');
+        return;
+    }
+
+    const dayMergedStr = dayLicenseSplitGetMergedText(dayRoot);
+    const dayLines = dayMergedStr === '' ? [] : dayMergedStr.split('\n');
+    const bIdx = rowOrdinalZeroBased;
+    if (bIdx < 0 || bIdx >= dayLines.length) {
+        showError('Índice de fila fuera de rango.');
+        return;
+    }
+    const badP = parseAdminLicenseLineToSplitParts(dayLines[bIdx]);
+    const oldFullLine = dayLines[bIdx];
+    const credHint = String(badP.cred || '').trim();
+    if (!credHint) {
+        showError('La fila no tiene credencial.');
+        return;
+    }
+
+    window.__adminLicDayWarrantyInFlight = true;
+    try {
+        const resp = await fetch('/tienda/api/licenses/' + encodeURIComponent(licenseId) + '/deliver-warranty-replacement', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': typeof getCSRFToken === 'function' ? getCSRFToken() : ''
+            },
+            body: JSON.stringify({
+                bad_account_id: parseInt(ctx.accountIdStr, 10),
+                credential_hint: credHint
+            }),
+            credentials: 'same-origin'
+        });
+        const data = await resp.json().catch(function () {
+            return {};
+        });
+        if (!resp.ok || !data.success) {
+            showError(data.error || 'No se pudo entregar la cuenta de garantía.');
+            return;
+        }
+
+        const newCred = String(data.new_cred_plain != null ? data.new_cred_plain : '')
+            .replace(/\r\n/g, ' ')
+            .replace(/\n/g, ' ')
+            .trim();
+        const reporter = String(data.reporter_username != null ? data.reporter_username : '').trim() || 'anonimo';
+        const prevFromBad = adminLicensePackPrevGoodBad(badP.statusGood || badP.prevGoodRestore);
+        const replacedLine = buildAdminLicenseStorageLine(newCred, reporter, 'ok', prevFromBad, badP.extra);
+        const newDayLines = dayLines.slice();
+        newDayLines[bIdx] = replacedLine;
+
+        const oldSuspMerged = suspendedLicenseSplitGetMergedText(suspRoot);
+        const suspLines = oldSuspMerged === '' ? [] : oldSuspMerged.split('\n');
+        while (suspLines.length && suspLines[suspLines.length - 1] === '') {
+            suspLines.pop();
+        }
+        suspLines.push(oldFullLine);
+        const newSuspMerged = suspLines.join('\n');
+
+        const oldDayMerged = dayMergedStr;
+        dayLicenseSplitApplyMergedText(dayRoot, newDayLines.join('\n'));
+        suspendedLicenseSplitApplyMergedText(suspRoot, newSuspMerged);
+
+        const saveRes =
+            typeof window.adminLicenciasSaveCurrentLicenseNotesImmediate === 'function'
+                ? await window.adminLicenciasSaveCurrentLicenseNotesImmediate()
+                : { success: false };
+        if (!saveRes || !saveRes.success) {
+            dayLicenseSplitApplyMergedText(dayRoot, oldDayMerged);
+            suspendedLicenseSplitApplyMergedText(suspRoot, oldSuspMerged);
+            showError('No se pudo guardar tras la garantía. Recarga Licencias.');
+            return;
+        }
+        await syncDayNotepad(licenseId, dayNum, dayLicenseSplitGetMergedText(dayRoot), {});
+
+        await loadLicenses();
+        showSuccess('Garantía entregada: repuesto en el día y cuenta mala en Caídas.');
+        scheduleRefreshAdminLicenciasReportCounts();
+        if (typeof refreshDuplicateEmailHighlights === 'function') {
+            refreshDuplicateEmailHighlights(licenseId);
+        }
+        if (typeof window.refreshAdminDuplicateHighlightsIfActive === 'function') {
+            window.refreshAdminDuplicateHighlightsIfActive();
+        }
+        if (typeof window.updateSuspendedBlocLineCountBadge === 'function') {
+            window.updateSuspendedBlocLineCountBadge();
+        }
+    } catch (err) {
+        adminLicLogError('adminLicDayApplyImmediateWarranty', err);
+        showError('Error al aplicar la garantía.');
+    } finally {
+        window.__adminLicDayWarrantyInFlight = false;
+    }
+}
+
+async function adminLicDayApplyNewPassword(dayRoot, rowOrdinalZeroBased, newPassword) {
+    if (window.__adminLicDayPasswordInFlight) return;
+    const rows = dayLicenseSplitGetRowElements(dayRoot);
+    const row = rows[rowOrdinalZeroBased];
+    const ctx = adminLicWarrantyDayBlocContext(row, dayRoot, rowOrdinalZeroBased);
+    if (!ctx || !ctx.ok) {
+        showError('Fila no válida.');
+        return;
+    }
+    const parts = adminLicWarrantyDayRowLineParts(dayRoot, rowOrdinalZeroBased);
+    const cred = String(parts.cred || '').trim();
+    if (!adminLicCredentialPlainHasPasswordPart(cred, ctx.licenseId)) {
+        showError('Esta licencia solo tiene correo en el bloc; no se puede cambiar la contraseña aquí.');
+        return;
+    }
+    const newCred = adminLicRebuildCredWithNewPassword(cred, ctx.licenseId, newPassword);
+    if (!newCred) {
+        showError('No se pudo construir la credencial con la nueva contraseña.');
+        return;
+    }
+
+    const dayMergedStr = dayLicenseSplitGetMergedText(dayRoot);
+    const dayLines = dayMergedStr === '' ? [] : dayMergedStr.split('\n');
+    if (rowOrdinalZeroBased < 0 || rowOrdinalZeroBased >= dayLines.length) {
+        showError('Índice de fila fuera de rango.');
+        return;
+    }
+    const lineParts = parseAdminLicenseLineToSplitParts(dayLines[rowOrdinalZeroBased]);
+    const newLine = buildAdminLicenseStorageLine(
+        newCred,
+        lineParts.user,
+        lineParts.statusGood,
+        lineParts.statusBad,
+        lineParts.extra
+    );
+    const newDayLines = dayLines.slice();
+    newDayLines[rowOrdinalZeroBased] = newLine;
+    const oldDayMerged = dayMergedStr;
+
+    window.__adminLicDayPasswordInFlight = true;
+    try {
+        dayLicenseSplitApplyMergedText(dayRoot, newDayLines.join('\n'));
+
+        if (ctx.accountIdStr) {
+            const accResp = await fetch('/tienda/api/accounts/' + encodeURIComponent(ctx.accountIdStr), {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': typeof getCSRFToken === 'function' ? getCSRFToken() : ''
+                },
+                body: JSON.stringify({ password: String(newPassword).trim() })
+            });
+            const accData = await accResp.json().catch(function () {
+                return {};
+            });
+            if (!accResp.ok || !accData.success) {
+                dayLicenseSplitApplyMergedText(dayRoot, oldDayMerged);
+                showError(accData.error || 'No se pudo actualizar la contraseña en inventario.');
+                return;
+            }
+        }
+
+        const saveRes =
+            typeof window.adminLicenciasSaveCurrentLicenseNotesImmediate === 'function'
+                ? await window.adminLicenciasSaveCurrentLicenseNotesImmediate()
+                : { success: false };
+        if (!saveRes || !saveRes.success) {
+            dayLicenseSplitApplyMergedText(dayRoot, oldDayMerged);
+            showError('No se pudo guardar el bloc. Revisa la conexión.');
+            return;
+        }
+        await syncDayNotepad(ctx.licenseId, ctx.calendarDay, dayLicenseSplitGetMergedText(dayRoot), {});
+
+        const pwdInp = row && row.querySelector ? row.querySelector('.admin-lic-day-new-password-input') : null;
+        if (pwdInp) pwdInp.value = '';
+        adminLicExpiryRefreshAllVisibleDayRows();
+        showSuccess('Contraseña actualizada en el bloc.');
+        if (typeof refreshDuplicateEmailHighlights === 'function') {
+            refreshDuplicateEmailHighlights(ctx.licenseId);
+        }
+    } catch (err) {
+        adminLicLogError('adminLicDayApplyNewPassword', err);
+        dayLicenseSplitApplyMergedText(dayRoot, oldDayMerged);
+        showError('Error al actualizar la contraseña.');
+    } finally {
+        window.__adminLicDayPasswordInFlight = false;
+    }
 }
 
 /** Día del mes 1–31 en America/Bogota (mismo criterio que get_colombia_datetime en el servidor). */
@@ -7077,6 +8098,169 @@ const ADMIN_LICENSE_STATUS_GOOD_KEYS = new Set(
         adminLicenseNormalizeStatusKey
     )
 );
+
+/** Solo ofrecibles si el producto tiene «Mes a mes» activo en Gestionar productos. */
+const ADMIN_LICENSE_RENEWAL_GOOD_KEYS = new Set(
+    ['renovar 1 mes mas', 'dejar mes a mes'].map(adminLicenseNormalizeStatusKey)
+);
+
+function licenseAllowsMonthToMonthRenewalOptions(licenseOrId) {
+    if (licenseOrId == null) return false;
+    let lic = licenseOrId;
+    if (typeof licenseOrId === 'number' || (typeof licenseOrId === 'string' && String(licenseOrId).trim() !== '')) {
+        const id = parseInt(licenseOrId, 10);
+        if (!Number.isFinite(id) || id === AGGREGATE_LICENSE_ID) return false;
+        lic = licenses.find(function (l) {
+            return l.id === id;
+        });
+    }
+    return licenseMonthToMonthUiChecked(lic);
+}
+
+/** Columna verde (renovación / no renovar): solo productos «mes a mes». */
+function adminLicenseShouldShowGoodStatusCol(licenseOrId) {
+    return licenseAllowsMonthToMonthRenewalOptions(licenseOrId);
+}
+
+function adminLicenseAppendGoodStatusShell(statusWrap, licenseId, initialStatusGood) {
+    if (!statusWrap || !adminLicenseShouldShowGoodStatusCol(licenseId)) {
+        return null;
+    }
+    const selGood = document.createElement('select');
+    selGood.className = 'license-split-editor__status license-split-editor__status-good';
+    selGood.title = 'Estado favorable (al día, renovación, etc.)';
+    selGood.setAttribute('aria-label', 'Estado favorable de la licencia');
+    const sg = initialStatusGood != null ? String(initialStatusGood).trim() : '';
+    adminLicenseSplitFillGoodStatusSelect(selGood, licenseId, sg);
+    const goodShell = document.createElement('div');
+    goodShell.className = 'license-split-editor__status-select-shell license-split-editor__status-select-shell--good';
+    goodShell.appendChild(selGood);
+    statusWrap.appendChild(goodShell);
+    return selGood;
+}
+
+function adminLicenseEnsureGoodStatusShellsInRoot(root, licenseId) {
+    if (!root || !Number.isFinite(licenseId) || licenseId === AGGREGATE_LICENSE_ID) return;
+    if (!adminLicenseShouldShowGoodStatusCol(licenseId)) return;
+    const rows = root.querySelectorAll('.license-split-editor__row');
+    rows.forEach(function (row) {
+        const statusWrap = row.querySelector('.license-split-editor__status-wrap');
+        if (!statusWrap) return;
+        if (statusWrap.querySelector('.license-split-editor__status-select-shell--good .license-split-editor__status-good')) {
+            return;
+        }
+        const sg = String(row.dataset.licOrigGood || '').trim();
+        adminLicenseAppendGoodStatusShell(statusWrap, licenseId, sg);
+    });
+}
+
+function adminLicenseEnsureGoodStatusShellsForLicense(licenseId) {
+    if (!Number.isFinite(licenseId) || licenseId === AGGREGATE_LICENSE_ID) return;
+    const licenseRoot = document.getElementById('adminLicenciasLicenseSplitRoot');
+    adminLicenseEnsureGoodStatusShellsInRoot(licenseRoot, licenseId);
+    const daysContainer = document.getElementById('licenseAllDaysContainer');
+    if (!daysContainer) return;
+    daysContainer
+        .querySelectorAll('.day-license-split-root[data-license-id="' + String(licenseId) + '"]')
+        .forEach(function (root) {
+            adminLicenseEnsureGoodStatusShellsInRoot(root, licenseId);
+        });
+}
+
+function adminLicenseResolveLicenseIdForStatusSelect(contextEl) {
+    if (contextEl && contextEl.closest) {
+        const dayRoot = contextEl.closest('.day-license-split-root[data-license-id]');
+        if (dayRoot && dayRoot.dataset.licenseId != null) {
+            const lid = parseInt(dayRoot.dataset.licenseId, 10);
+            if (Number.isFinite(lid) && lid !== AGGREGATE_LICENSE_ID) return lid;
+        }
+    }
+    const ic = document.getElementById('licenseAccountsInputContainer');
+    if (ic && ic.dataset.activeLicenseId != null) {
+        const lid = parseInt(ic.dataset.activeLicenseId, 10);
+        if (Number.isFinite(lid) && lid !== AGGREGATE_LICENSE_ID) return lid;
+    }
+    if (currentLicenseId != null && currentLicenseId !== AGGREGATE_LICENSE_ID) {
+        return currentLicenseId;
+    }
+    return null;
+}
+
+function adminLicenseStatusOptionsGoodForLicense(licenseOrId) {
+    if (licenseAllowsMonthToMonthRenewalOptions(licenseOrId)) {
+        return ADMIN_LICENSE_STATUS_OPTIONS_GOOD;
+    }
+    return ADMIN_LICENSE_STATUS_OPTIONS_GOOD.filter(function (opt) {
+        const k = adminLicenseNormalizeStatusKey(opt.v);
+        return (
+            !ADMIN_LICENSE_RENEWAL_GOOD_KEYS.has(k) &&
+            k !== adminLicenseNormalizeStatusKey('no renovar')
+        );
+    });
+}
+
+function adminLicenseSplitFillGoodStatusSelect(selGood, licenseOrId, storedGoodRaw) {
+    if (!selGood) return;
+    const sg = storedGoodRaw != null ? String(storedGoodRaw).trim() : '';
+    const options = adminLicenseStatusOptionsGoodForLicense(licenseOrId);
+    selGood.innerHTML = '';
+    options.forEach(function (opt) {
+        const o = document.createElement('option');
+        o.value = opt.v;
+        o.textContent = opt.label;
+        selGood.appendChild(o);
+    });
+    adminLicenseSplitEnsureBuenaRevisadaOptionForSelect(selGood, sg);
+    const canon = adminLicenseSplitCanonicalGoodFromStored(sg);
+    const canonK = adminLicenseNormalizeStatusKey(canon);
+    if (
+        canonK &&
+        !licenseAllowsMonthToMonthRenewalOptions(licenseOrId) &&
+        ADMIN_LICENSE_RENEWAL_GOOD_KEYS.has(canonK)
+    ) {
+        const meta = ADMIN_LICENSE_STATUS_OPTIONS_GOOD.find(function (o) {
+            return o.v && adminLicenseNormalizeStatusKey(o.v) === canonK;
+        });
+        const o = document.createElement('option');
+        o.value = meta ? meta.v : canon;
+        o.textContent = meta ? meta.label : canon;
+        selGood.appendChild(o);
+    } else if (sg && !adminLicenseStatusIsKnownGoodOption(sg)) {
+        const o = document.createElement('option');
+        o.value = sg;
+        o.textContent = sg;
+        selGood.appendChild(o);
+    }
+    const nextVal = canon || '';
+    selGood.value = nextVal;
+    if (selGood.value !== nextVal && nextVal) {
+        selGood.value = sg;
+    }
+}
+
+function adminLicenseRefreshGoodStatusSelectsForLicense(licenseId) {
+    if (!Number.isFinite(licenseId) || licenseId === AGGREGATE_LICENSE_ID) return;
+    const ic = document.getElementById('licenseAccountsInputContainer');
+    const activeRaw = ic && ic.dataset.activeLicenseId != null ? ic.dataset.activeLicenseId : '';
+    const active = parseInt(activeRaw, 10);
+    if (active === licenseId) {
+        document
+            .querySelectorAll('#adminLicenciasStructuredRows .license-split-editor__status-good')
+            .forEach(function (selGood) {
+                adminLicenseSplitFillGoodStatusSelect(selGood, licenseId, selGood.value);
+            });
+    }
+    document
+        .querySelectorAll(
+            '.day-license-split-root[data-license-id="' +
+                String(licenseId) +
+                '"] .license-split-editor__status-good'
+        )
+        .forEach(function (selGood) {
+            adminLicenseSplitFillGoodStatusSelect(selGood, licenseId, selGood.value);
+        });
+    adminLicenseBulkModalEnsureSelects(true);
+}
 /* Incluye «repetida» solo para colorear datos viejos; ya no está en el desplegable. */
 const ADMIN_LICENSE_STATUS_BAD_KEYS = new Set(
     [
@@ -7304,7 +8488,7 @@ function refreshAdminLicenciasReportCounts() {
             window.__adminReportesRenderIfVisible();
         }
     } catch (repLiveErr) {
-        console.error('__adminReportesRenderIfVisible:', repLiveErr);
+        adminLicLogError('__adminReportesRenderIfVisible:', repLiveErr);
     }
 
     syncAdminHistorialShellMode();
@@ -7366,6 +8550,7 @@ function adminLicenseSplitCanonicalGoodFromStored(st) {
 function adminLicenseSplitCanonicalBadFromStored(st) {
     const raw = String(st != null ? st : '').trim();
     if (!raw) return '';
+    if (adminLicDayIsBadSelectActionValue(raw)) return '';
     const k = adminLicenseNormalizeStatusKey(raw);
     if (k === 'caida' || k === 'suspendida') {
         return 'caida o suspendida';
@@ -7916,10 +9101,14 @@ function adminLicenseSplitReadRow(row) {
     const selBad = row.querySelector('.license-split-editor__status-bad');
     const c = row.querySelector('.license-split-editor__otro-combined');
     const n = row.querySelector('.license-split-editor__note');
-    const goodVal = selGood ? String(selGood.value || '').trim() : '';
+    const goodVal = selGood
+        ? String(selGood.value || '').trim()
+        : String(row.dataset.licOrigGood || '').trim();
     let statusBad = '';
     const selBadVal = selBad ? String(selBad.value || '').trim() : '';
-    if (adminLicenseNormalizeStatusKey(selBadVal) === 'otro') {
+    if (adminLicDayIsBadSelectActionValue(selBadVal)) {
+        statusBad = '';
+    } else if (adminLicenseNormalizeStatusKey(selBadVal) === 'otro') {
         const d = c && !c.hidden ? String(c.value || '').trim() : '';
         const detail = d.replace(/^otro-?/i, '');
         statusBad = detail ? 'otro-' + detail : 'otro-';
@@ -7971,8 +9160,9 @@ window.adminLicenseSplitApplyUserToAllLicensedRows = adminLicenseSplitApplyUserT
 /** Modal de edición masiva: filas seleccionadas con casilla + mismos campos que cada línea. */
 var __adminLicBulkCtx = { mode: 'main', dayRoot: null, dayNum: null };
 
-function adminLicenseBulkFillStatusSelect(sel, optionsList) {
-    if (!sel || sel.dataset.licBulkFilled === '1') return;
+function adminLicenseBulkFillStatusSelect(sel, optionsList, forceOpt) {
+    if (!sel) return;
+    if (!forceOpt && sel.dataset.licBulkFilled === '1') return;
     sel.dataset.licBulkFilled = '1';
     sel.innerHTML = '';
     optionsList.forEach(function (opt) {
@@ -7983,14 +9173,18 @@ function adminLicenseBulkFillStatusSelect(sel, optionsList) {
     });
 }
 
-function adminLicenseBulkModalEnsureSelects() {
+function adminLicenseBulkModalEnsureSelects(forceOpt) {
     const g = document.getElementById('adminLicBulkSelGood');
     const b = document.getElementById('adminLicBulkSelBad');
+    const ic = document.getElementById('licenseAccountsInputContainer');
+    const lid = ic && ic.dataset.activeLicenseId != null ? parseInt(ic.dataset.activeLicenseId, 10) : NaN;
     if (g) {
-        adminLicenseBulkFillStatusSelect(g, ADMIN_LICENSE_STATUS_OPTIONS_GOOD);
+        if (forceOpt) g.dataset.licBulkFilled = '';
+        adminLicenseBulkFillStatusSelect(g, adminLicenseStatusOptionsGoodForLicense(lid), forceOpt);
     }
     if (b) {
-        adminLicenseBulkFillStatusSelect(b, ADMIN_LICENSE_STATUS_OPTIONS_BAD);
+        if (forceOpt) b.dataset.licBulkFilled = '';
+        adminLicenseBulkFillStatusSelect(b, ADMIN_LICENSE_STATUS_OPTIONS_BAD, forceOpt);
     }
 }
 
@@ -9148,25 +10342,9 @@ function adminLicenseSplitCreateRow(
     adminLicenseSplitWireUserField(u, sugBox);
     const statusWrap = document.createElement('div');
     statusWrap.className = 'license-split-editor__status-wrap';
-    const selGood = document.createElement('select');
-    selGood.className = 'license-split-editor__status license-split-editor__status-good';
-    selGood.title = 'Estado favorable (al día, renovación, etc.)';
-    selGood.setAttribute('aria-label', 'Estado favorable de la licencia');
-    ADMIN_LICENSE_STATUS_OPTIONS_GOOD.forEach(function (opt) {
-        const o = document.createElement('option');
-        o.value = opt.v;
-        o.textContent = opt.label;
-        selGood.appendChild(o);
-    });
+    const licenseIdForGood = adminLicenseResolveLicenseIdForStatusSelect(null);
     const sg = initialStatusGood != null ? String(initialStatusGood).trim() : '';
-    adminLicenseSplitEnsureBuenaRevisadaOptionForSelect(selGood, sg);
-    if (sg && !adminLicenseStatusIsKnownGoodOption(sg)) {
-        const o = document.createElement('option');
-        o.value = sg;
-        o.textContent = sg;
-        selGood.appendChild(o);
-    }
-    selGood.value = adminLicenseSplitCanonicalGoodFromStored(sg) || '';
+    const selGood = adminLicenseAppendGoodStatusShell(statusWrap, licenseIdForGood, sg);
     const selBad = document.createElement('select');
     selBad.className = 'license-split-editor__status license-split-editor__status-bad';
     selBad.title =
@@ -9201,13 +10379,9 @@ function adminLicenseSplitCreateRow(
     }
     otroCombined.hidden = true;
     otroCombined.style.display = 'none';
-    const goodShell = document.createElement('div');
-    goodShell.className = 'license-split-editor__status-select-shell license-split-editor__status-select-shell--good';
-    goodShell.appendChild(selGood);
     const badShell = document.createElement('div');
     badShell.className = 'license-split-editor__status-select-shell license-split-editor__status-select-shell--bad';
     badShell.appendChild(selBad);
-    statusWrap.appendChild(goodShell);
     statusWrap.appendChild(badShell);
     statusWrap.appendChild(otroCombined);
     const n = document.createElement('input');
@@ -9224,7 +10398,14 @@ function adminLicenseSplitCreateRow(
     row.appendChild(lead);
     row.appendChild(statusWrap);
     row.appendChild(n);
-    adminLicenseSplitWireDualStatusNoteLink(selGood, selBad, n, otroCombined);
+    if (!selGood && sg) {
+        row.dataset.licOrigGood = sg;
+    }
+    if (selGood) {
+        adminLicenseSplitWireDualStatusNoteLink(selGood, selBad, n, otroCombined);
+    } else {
+        adminLicenseSplitWireBadOnlyStatusNoteLink(selBad, n, otroCombined);
+    }
     return row;
 }
 
@@ -9428,7 +10609,7 @@ function adminLicenseSplitApplyMergedText(text) {
     const ta = document.getElementById('adminLicenciasNotepadByLicense');
     const wrap = document.getElementById('adminLicenciasStructuredRows');
     if (!ta || !wrap) return;
-    let t = text != null ? String(text).replace(/\r\n/g, '\n') : '';
+    const t = text != null ? String(text).replace(/\r\n/g, '\n') : '';
     /** Misma idea que Cambios/Días: no crear 4–5 filas sólo por datos guardados como \n\n\n… sin contenido útil */
     let lines = [];
     if (t.trim() !== '') {
@@ -9608,7 +10789,7 @@ async function adminLicenseSplitSellRowToDay(row, opts) {
         }
         return true;
     } catch (err) {
-        console.error('adminLicenseSplitSellRowToDay', err);
+        adminLicLogError('adminLicenseSplitSellRowToDay', err);
         adminLicenseSplitApplyMergedText(oldMerged);
         if (typeof window.adminLicenciasSaveCurrentLicenseNotesImmediate === 'function') {
             await window.adminLicenciasSaveCurrentLicenseNotesImmediate();
@@ -9648,7 +10829,8 @@ function dayLicenseSplitCreateRow(
     initialStatusGood,
     initialStatusBad,
     initialExtra,
-    initialOtroDetail
+    initialOtroDetail,
+    rootOpt
 ) {
     const row = document.createElement('div');
     row.className = 'license-split-editor__row';
@@ -9681,25 +10863,15 @@ function dayLicenseSplitCreateRow(
     adminLicenseSplitWireUserField(u, sugBox);
     const statusWrap = document.createElement('div');
     statusWrap.className = 'license-split-editor__status-wrap';
-    const selGood = document.createElement('select');
-    selGood.className = 'license-split-editor__status license-split-editor__status-good';
-    selGood.title = 'Estado favorable (al día, renovación, etc.)';
-    selGood.setAttribute('aria-label', 'Estado favorable de la licencia');
-    ADMIN_LICENSE_STATUS_OPTIONS_GOOD.forEach(function (opt) {
-        const o = document.createElement('option');
-        o.value = opt.v;
-        o.textContent = opt.label;
-        selGood.appendChild(o);
-    });
     const sg = initialStatusGood != null ? String(initialStatusGood).trim() : '';
-    adminLicenseSplitEnsureBuenaRevisadaOptionForSelect(selGood, sg);
-    if (sg && !adminLicenseStatusIsKnownGoodOption(sg)) {
-        const o = document.createElement('option');
-        o.value = sg;
-        o.textContent = sg;
-        selGood.appendChild(o);
+    let dayLicenseId = null;
+    if (rootOpt && rootOpt.dataset && rootOpt.dataset.licenseId != null) {
+        dayLicenseId = parseInt(rootOpt.dataset.licenseId, 10);
     }
-    selGood.value = adminLicenseSplitCanonicalGoodFromStored(sg) || '';
+    if (!Number.isFinite(dayLicenseId)) {
+        dayLicenseId = adminLicenseResolveLicenseIdForStatusSelect(row);
+    }
+    const selGood = adminLicenseAppendGoodStatusShell(statusWrap, dayLicenseId, sg);
     const selBad = document.createElement('select');
     selBad.className = 'license-split-editor__status license-split-editor__status-bad';
     selBad.title =
@@ -9719,6 +10891,9 @@ function dayLicenseSplitCreateRow(
         selBad.appendChild(o);
     }
     selBad.value = adminLicenseSplitCanonicalBadFromStored(sb) || '';
+    if (adminLicIsAdminDayToolsPage()) {
+        adminLicDayAppendBadSelectActionOptions(selBad);
+    }
     const od = initialOtroDetail != null ? String(initialOtroDetail) : '';
     const otroCombined = document.createElement('input');
     otroCombined.type = 'text';
@@ -9734,13 +10909,9 @@ function dayLicenseSplitCreateRow(
     }
     otroCombined.hidden = true;
     otroCombined.style.display = 'none';
-    const goodShell = document.createElement('div');
-    goodShell.className = 'license-split-editor__status-select-shell license-split-editor__status-select-shell--good';
-    goodShell.appendChild(selGood);
     const badShell = document.createElement('div');
     badShell.className = 'license-split-editor__status-select-shell license-split-editor__status-select-shell--bad';
     badShell.appendChild(selBad);
-    statusWrap.appendChild(goodShell);
     statusWrap.appendChild(badShell);
     statusWrap.appendChild(otroCombined);
     const n = document.createElement('input');
@@ -9757,7 +10928,17 @@ function dayLicenseSplitCreateRow(
     row.appendChild(lead);
     row.appendChild(statusWrap);
     row.appendChild(n);
-    adminLicenseSplitWireDualStatusNoteLink(selGood, selBad, n, otroCombined);
+    if (!selGood && sg) {
+        row.dataset.licOrigGood = sg;
+    }
+    if (selGood) {
+        adminLicenseSplitWireDualStatusNoteLink(selGood, selBad, n, otroCombined);
+    } else {
+        adminLicenseSplitWireBadOnlyStatusNoteLink(selBad, n, otroCombined);
+    }
+    if (rootOpt && adminLicIsAdminDayToolsPage()) {
+        adminLicDayWireBadSelectActions(row, rootOpt);
+    }
     return row;
 }
 
@@ -9831,7 +11012,7 @@ function dayLicenseSplitSyncRowCount(root, credLineCount) {
     if (!wrap) return;
     let n = Math.max(0, parseInt(credLineCount, 10) || 0);
     while (wrap.children.length < n) {
-        wrap.appendChild(dayLicenseSplitCreateRow('', '', '', '', undefined));
+        wrap.appendChild(dayLicenseSplitCreateRow('', '', '', '', undefined, root));
     }
     while (wrap.children.length > n) {
         wrap.removeChild(wrap.lastChild);
@@ -9947,7 +11128,8 @@ function dayLicenseSplitApplyMergedText(root, text) {
                 p.statusGood != null ? p.statusGood : '',
                 p.statusBad != null ? p.statusBad : '',
                 p.extra,
-                p.otroDetail != null ? p.otroDetail : ''
+                p.otroDetail != null ? p.otroDetail : '',
+                root
             )
         );
     });
@@ -10695,16 +11877,16 @@ async function suspendedLicenseSplitRestoreRowToLicense(row) {
         }
         adminLicenciasReturnToLicenseEditorAfterRestoreUi(licenseId);
     } catch (err) {
-        console.error('suspendedLicenseSplitRestoreRowToLicense', err);
+        adminLicLogError('suspendedLicenseSplitRestoreRowToLicense', err);
         try {
             adminLicenseSplitApplyMergedText(oldLicenseMerged);
         } catch (e2) {
-            console.error(e2);
+            adminLicLogError('detalle', e2);
         }
         try {
             suspendedLicenseSplitApplyMergedText(root, oldSuspendedMerged);
         } catch (e3) {
-            console.error(e3);
+            adminLicLogError('detalle', e3);
         }
         showError('No se pudo completar. Revisa los blocs o recarga la página si hace falta.');
     } finally {
@@ -11225,16 +12407,16 @@ async function expiredLicenseSplitRestoreRowToLicense(row) {
         }
         adminLicenciasReturnToLicenseEditorAfterRestoreUi(licenseId);
     } catch (err) {
-        console.error('expiredLicenseSplitRestoreRowToLicense', err);
+        adminLicLogError('expiredLicenseSplitRestoreRowToLicense', err);
         try {
             adminLicenseSplitApplyMergedText(oldLicenseMerged);
         } catch (e2) {
-            console.error(e2);
+            adminLicLogError('detalle', e2);
         }
         try {
             expiredLicenseSplitApplyMergedText(root, oldSuspendedMerged);
         } catch (e3) {
-            console.error(e3);
+            adminLicLogError('detalle', e3);
         }
         showError('No se pudo completar. Revisa los blocs o recarga la página si hace falta.');
     } finally {
@@ -11772,7 +12954,7 @@ async function changesLicenseSplitFinalizeIncidentToSuspended(row) {
         try {
             await activateLicenseCard(card, licenseId, true, { preserveSidebar: true });
         } catch (activateErr) {
-            console.error('changesLicenseSplitFinalizeIncidentToSuspended: activateLicenseCard', activateErr);
+            adminLicLogError('changesLicenseSplitFinalizeIncidentToSuspended: activateLicenseCard', activateErr);
             _adminLicSkipNextChangesProductsRefreshOnce = false;
             showError('No se pudo preparar los blocs de este producto.');
             return;
@@ -11890,12 +13072,12 @@ async function changesLicenseSplitFinalizeIncidentToSuspended(row) {
             }
         });
     } catch (err) {
-        console.error('changesLicenseSplitFinalizeIncidentToSuspended', err);
+        adminLicLogError('changesLicenseSplitFinalizeIncidentToSuspended', err);
         try {
             suspendedLicenseSplitApplyMergedText(suspRoot, oldSuspMerged);
             changesLicenseSplitApplyMergedText(root, oldChangesMerged);
         } catch (e2) {
-            console.error(e2);
+            adminLicLogError('detalle', e2);
         }
         showError('No se pudo completar el traslado a Caídas.');
     } finally {
@@ -11996,7 +13178,7 @@ async function changesLicenseSplitRestoreRowToLicense(row) {
         try {
             await activateLicenseCard(card, licenseId, true, { preserveSidebar: true });
         } catch (activateErr) {
-            console.error('changesLicenseSplitRestoreRowToLicense: activateLicenseCard', activateErr);
+            adminLicLogError('changesLicenseSplitRestoreRowToLicense: activateLicenseCard', activateErr);
             _adminLicSkipNextChangesProductsRefreshOnce = false;
             showError('No se pudo preparar el bloc Licencias de este producto.');
             return;
@@ -12109,16 +13291,16 @@ async function changesLicenseSplitRestoreRowToLicense(row) {
             }
         });
     } catch (err) {
-        console.error('changesLicenseSplitRestoreRowToLicense', err);
+        adminLicLogError('changesLicenseSplitRestoreRowToLicense', err);
         try {
             adminLicenseSplitApplyMergedText(oldLicenseMerged);
         } catch (e2) {
-            console.error(e2);
+            adminLicLogError('detalle', e2);
         }
         try {
             changesLicenseSplitApplyMergedText(root, oldChangesMerged);
         } catch (e3) {
-            console.error(e3);
+            adminLicLogError('detalle', e3);
         }
         showError('No se pudo completar. Revisa los blocs o recarga la página si hace falta.');
     } finally {
@@ -12275,7 +13457,7 @@ async function adminLicenseSplitMoveRowToChanges(row) {
             chSection.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
         }
     } catch (err) {
-        console.error('adminLicenseSplitMoveRowToChanges', err);
+        adminLicLogError('adminLicenseSplitMoveRowToChanges', err);
         adminLicenseSplitApplyMergedText(oldLicMerged);
         try {
             if (typeof patchLicenseChangesNotesInCacheOnly === 'function') {
@@ -12293,7 +13475,7 @@ async function adminLicenseSplitMoveRowToChanges(row) {
                 changesLicenseSplitApplyMergedText(rrb, oldCh);
             }
         } catch (e2) {
-            console.error(e2);
+            adminLicLogError('detalle', e2);
         }
         showError('No se pudo enviar a Cambios.');
     } finally {
@@ -12393,7 +13575,7 @@ async function dayLicenseSplitRestoreRowToLicense(row) {
         try {
             await syncDayNotepad(licenseId, day, dayLicenseSplitGetMergedText(root));
         } catch (errDay) {
-            console.error(errDay);
+            adminLicLogError(errDay);
             dayLicenseSplitApplyMergedText(root, oldDayMerged);
             showError('No se pudo guardar el día. Revisa la conexión.');
             return;
@@ -12409,7 +13591,7 @@ async function dayLicenseSplitRestoreRowToLicense(row) {
             try {
                 await syncDayNotepad(licenseId, day, oldDayMerged);
             } catch (revErr) {
-                console.error(revErr);
+                adminLicLogError(revErr);
             }
             showError('No se pudo guardar el bloc Licencias. El día se restauró en el servidor.');
             return;
@@ -12435,16 +13617,16 @@ async function dayLicenseSplitRestoreRowToLicense(row) {
             licSplit.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
         }
     } catch (err) {
-        console.error('dayLicenseSplitRestoreRowToLicense', err);
+        adminLicLogError('dayLicenseSplitRestoreRowToLicense', err);
         try {
             adminLicenseSplitApplyMergedText(oldLicenseMerged);
         } catch (e2) {
-            console.error(e2);
+            adminLicLogError('detalle', e2);
         }
         try {
             await syncDayNotepad(licenseId, day, oldDayMerged);
         } catch (e3) {
-            console.error(e3);
+            adminLicLogError('detalle', e3);
         }
         showError('No se pudo completar. Revisa los blocs o recarga la página si hace falta.');
     } finally {
@@ -12717,6 +13899,10 @@ function adminLicenseHideNotesColApply(hidden) {
             btn.setAttribute('aria-pressed', 'false');
         }
     }
+    root.querySelectorAll('.license-split-editor__note').forEach(function (noteEl) {
+        noteEl.hidden = hid;
+        noteEl.setAttribute('aria-hidden', hid ? 'true' : 'false');
+    });
     if (typeof window.adminLicenseSplitScheduleAutosizeCreds === 'function') {
         window.adminLicenseSplitScheduleAutosizeCreds();
     }
@@ -13074,69 +14260,23 @@ window.adminDaysHideRestoreColApply = adminDaysHideRestoreColApply;
 window.adminDaysHideRestoreColSyncUi = adminDaysHideRestoreColSyncUi;
 window.adminDaysHideRestoreColToggle = adminDaysHideRestoreColToggle;
 
-var ADMIN_DAYS_HIDE_STATUS_COL_KEY = 'admin_licencias_days_hide_status_col_v1';
-
-function adminDaysHideStatusColReadStored() {
-    try {
-        var v = localStorage.getItem(ADMIN_DAYS_HIDE_STATUS_COL_KEY);
-        if (v === '1' || v === 'true') {
-            return true;
-        }
-    } catch (e) {
-        /* ignore */
-    }
-    return false;
+function adminDaysHideStatusColReadStored(licenseId) {
+    return adminLicenseHideStatusColReadStored(licenseId);
 }
 
-function adminDaysHideStatusColApply(hidden) {
-    var container = document.getElementById('licenseAllDaysContainer');
-    var btn = document.getElementById('adminLicenciasToggleDaysStatusColBtn');
-    if (!container) return;
-    var roots = container.querySelectorAll('.day-license-split-root');
-    var hid = !!hidden;
-    roots.forEach(function (root) {
-        if (hid) {
-            root.classList.add('license-split-editor--status-hidden');
-        } else {
-            root.classList.remove('license-split-editor--status-hidden');
-        }
-    });
-    try {
-        localStorage.setItem(ADMIN_DAYS_HIDE_STATUS_COL_KEY, hid ? '1' : '0');
-    } catch (e) {
-        /* ignore */
-    }
-    if (btn) {
-        var icon = btn.querySelector('i');
-        if (hid) {
-            if (icon) {
-                icon.className = 'fas fa-eye';
-            }
-            btn.title = 'Mostrar columnas Estado (verde y rojo) en días';
-            btn.setAttribute('aria-label', 'Mostrar columnas Estado verde y rojo en cada día');
-            btn.setAttribute('aria-pressed', 'true');
-        } else {
-            if (icon) {
-                icon.className = 'fas fa-eye-slash';
-            }
-            btn.title = 'Ocultar columnas Estado (verde y rojo) en días';
-            btn.setAttribute('aria-label', 'Ocultar columnas Estado verde y rojo en cada día');
-            btn.setAttribute('aria-pressed', 'false');
-        }
-    }
-    roots.forEach(function (root) {
-        if (typeof dayLicenseSplitScheduleAutosize === 'function') {
-            dayLicenseSplitScheduleAutosize(root);
-        }
-    });
+function adminDaysHideStatusColApply(hidden, licenseId) {
+    adminLicenseHideStatusColApply(hidden, licenseId);
 }
 
 function adminDaysHideStatusColToggle() {
-    adminDaysHideStatusColApply(!adminDaysHideStatusColReadStored());
+    var licenseId = adminLicenseHideStatusColGetActiveLicenseId();
+    if (!Number.isFinite(licenseId)) return;
+    var hid = adminLicenseHideStatusColReadStored(licenseId);
+    adminLicenseHideStatusColApply(!hid, licenseId);
 }
 
-function adminDaysHideStatusColSyncUi() {
-    adminDaysHideStatusColApply(adminDaysHideStatusColReadStored());
+function adminDaysHideStatusColSyncUi(licenseId) {
+    adminLicenseHideStatusColSyncUi(licenseId);
 }
 
 window.adminDaysHideStatusColApply = adminDaysHideStatusColApply;
@@ -13193,6 +14333,12 @@ function adminDaysHideNotesColApply(hidden) {
             btn.setAttribute('aria-pressed', 'false');
         }
     }
+    roots.forEach(function (root) {
+        root.querySelectorAll('.license-split-editor__note').forEach(function (noteEl) {
+            noteEl.hidden = hid;
+            noteEl.setAttribute('aria-hidden', hid ? 'true' : 'false');
+        });
+    });
     roots.forEach(function (root) {
         if (typeof dayLicenseSplitScheduleAutosize === 'function') {
             dayLicenseSplitScheduleAutosize(root);
@@ -13418,67 +14564,198 @@ window.adminChangesHideRestoreColApply = adminChangesHideRestoreColApply;
 window.adminChangesHideRestoreColSyncUi = adminChangesHideRestoreColSyncUi;
 window.adminChangesHideRestoreColToggle = adminChangesHideRestoreColToggle;
 
-var ADMIN_LICENSE_HIDE_STATUS_COL_KEY = 'admin_licencias_license_hide_status_col_v1';
+var ADMIN_LICENSE_HIDE_STATUS_COL_KEY = 'admin_licencias_license_hide_good_status_col_v1';
 
-function adminLicenseHideStatusColReadStored() {
+function adminLicenseHideStatusColGetActiveLicenseId() {
+    var ic = document.getElementById('licenseAccountsInputContainer');
+    if (!ic || ic.dataset.activeLicenseId == null || ic.dataset.activeLicenseId === '') {
+        return NaN;
+    }
+    return parseInt(ic.dataset.activeLicenseId, 10);
+}
+
+function adminLicenseHideStatusColDefaultHidden(licenseId) {
+    var id = parseInt(licenseId, 10);
+    if (!Number.isFinite(id) || id === AGGREGATE_LICENSE_ID) {
+        return false;
+    }
+    var lic = licenses.find(function (l) {
+        return l.id === id;
+    });
+    return !!lic && !licenseMonthToMonthUiChecked(lic);
+}
+
+function adminLicenseHideStatusColReadMap() {
     try {
-        var v = localStorage.getItem(ADMIN_LICENSE_HIDE_STATUS_COL_KEY);
-        if (v === '1' || v === 'true') {
-            return true;
+        var raw = localStorage.getItem(ADMIN_LICENSE_HIDE_STATUS_COL_KEY);
+        if (raw) {
+            var parsed = JSON.parse(raw);
+            if (parsed && typeof parsed === 'object') {
+                return parsed;
+            }
         }
     } catch (e) {
         /* ignore */
+    }
+    return {};
+}
+
+function adminLicenseHideStatusColReadStored(licenseId) {
+    var id = parseInt(licenseId, 10);
+    if (!Number.isFinite(id) || id === AGGREGATE_LICENSE_ID) {
+        return false;
+    }
+    if (!adminLicenseShouldShowGoodStatusCol(id)) {
+        return true;
+    }
+    var map = adminLicenseHideStatusColReadMap();
+    if (Object.prototype.hasOwnProperty.call(map, String(id))) {
+        return map[String(id)] === true || map[String(id)] === '1';
     }
     return false;
 }
 
-function adminLicenseHideStatusColApply(hidden) {
-    var root = document.getElementById('adminLicenciasLicenseSplitRoot');
-    var btn = document.getElementById('adminLicenciasToggleStatusColBtn');
-    if (!root) return;
-    var hid = !!hidden;
-    if (hid) {
-        root.classList.add('license-split-editor--status-hidden');
-    } else {
-        root.classList.remove('license-split-editor--status-hidden');
+function adminLicenseHideStatusColWriteStored(licenseId, hidden) {
+    var id = parseInt(licenseId, 10);
+    if (!Number.isFinite(id) || id === AGGREGATE_LICENSE_ID) {
+        return;
     }
     try {
-        localStorage.setItem(ADMIN_LICENSE_HIDE_STATUS_COL_KEY, hid ? '1' : '0');
+        var map = adminLicenseHideStatusColReadMap();
+        map[String(id)] = !!hidden;
+        localStorage.setItem(ADMIN_LICENSE_HIDE_STATUS_COL_KEY, JSON.stringify(map));
     } catch (e) {
         /* ignore */
     }
-    if (btn) {
-        var icon = btn.querySelector('i');
-        if (hid) {
-            if (icon) {
-                icon.className = 'fas fa-eye';
-            }
-            btn.title = 'Mostrar columnas Estado (verde y rojo)';
-            btn.setAttribute('aria-label', 'Mostrar columnas Estado verde y rojo de cada fila');
-            btn.setAttribute('aria-pressed', 'true');
+}
+
+function adminLicenseHideStatusColClearStoredOverride(licenseId) {
+    var id = parseInt(licenseId, 10);
+    if (!Number.isFinite(id) || id === AGGREGATE_LICENSE_ID) {
+        return;
+    }
+    try {
+        var map = adminLicenseHideStatusColReadMap();
+        if (!Object.prototype.hasOwnProperty.call(map, String(id))) {
+            return;
+        }
+        delete map[String(id)];
+        localStorage.setItem(ADMIN_LICENSE_HIDE_STATUS_COL_KEY, JSON.stringify(map));
+    } catch (e) {
+        /* ignore */
+    }
+}
+
+function adminLicenseHideStatusColSyncButtonUi(btn, hid, inDays) {
+    if (!btn) return;
+    btn.hidden = false;
+    btn.style.display = '';
+    var icon = btn.querySelector('i');
+    if (hid) {
+        if (icon) {
+            icon.className = 'fas fa-eye';
+        }
+        if (inDays) {
+            btn.title = 'Mostrar columna Estado verde en días';
+            btn.setAttribute('aria-label', 'Mostrar columna Estado verde en cada día');
         } else {
-            if (icon) {
-                icon.className = 'fas fa-eye-slash';
-            }
-            btn.title = 'Ocultar columnas Estado (verde y rojo)';
-            btn.setAttribute('aria-label', 'Ocultar columnas Estado verde y rojo de cada fila');
-            btn.setAttribute('aria-pressed', 'false');
+            btn.title = 'Mostrar columna Estado verde';
+            btn.setAttribute('aria-label', 'Mostrar columna Estado verde de cada fila');
+        }
+        btn.setAttribute('aria-pressed', 'true');
+    } else {
+        if (icon) {
+            icon.className = 'fas fa-eye-slash';
+        }
+        if (inDays) {
+            btn.title = 'Ocultar columna Estado verde en días';
+            btn.setAttribute('aria-label', 'Ocultar columna Estado verde en cada día');
+        } else {
+            btn.title = 'Ocultar columna Estado verde';
+            btn.setAttribute('aria-label', 'Ocultar columna Estado verde de cada fila');
+        }
+        btn.setAttribute('aria-pressed', 'false');
+    }
+}
+
+function adminLicenseHideStatusColApply(hidden, licenseId) {
+    var id = licenseId != null ? parseInt(licenseId, 10) : adminLicenseHideStatusColGetActiveLicenseId();
+    var showGoodCol = Number.isFinite(id) && adminLicenseShouldShowGoodStatusCol(id);
+    var hid = showGoodCol ? !!hidden : true;
+    var licenseRoot = document.getElementById('adminLicenciasLicenseSplitRoot');
+    var daysContainer = document.getElementById('licenseAllDaysContainer');
+    var dayRoots = daysContainer ? daysContainer.querySelectorAll('.day-license-split-root') : [];
+
+    if (showGoodCol && Number.isFinite(id)) {
+        adminLicenseEnsureGoodStatusShellsForLicense(id);
+    }
+
+    function applyGoodOnlyHide(root) {
+        if (!root) return;
+        root.classList.remove('license-split-editor--status-hidden');
+        if (hid) {
+            root.classList.add('license-split-editor--good-status-hidden');
+        } else {
+            root.classList.remove('license-split-editor--good-status-hidden');
+        }
+        if (!showGoodCol) {
+            root.querySelectorAll('.license-split-editor__status-select-shell--good').forEach(function (el) {
+                var shellRow = el.closest('.license-split-editor__row');
+                var sel = el.querySelector('.license-split-editor__status-good');
+                if (shellRow && sel && String(sel.value || '').trim() !== '') {
+                    shellRow.dataset.licOrigGood = String(sel.value || '').trim();
+                }
+                el.remove();
+            });
         }
     }
+
+    applyGoodOnlyHide(licenseRoot);
+    dayRoots.forEach(function (root) {
+        applyGoodOnlyHide(root);
+        if (typeof dayLicenseSplitScheduleAutosize === 'function') {
+            dayLicenseSplitScheduleAutosize(root);
+        }
+    });
+
+    if (Number.isFinite(id) && id !== AGGREGATE_LICENSE_ID && showGoodCol) {
+        adminLicenseHideStatusColWriteStored(id, hid);
+    }
+
+    var btnLicense = document.getElementById('adminLicenciasToggleStatusColBtn');
+    var btnDays = document.getElementById('adminLicenciasToggleDaysStatusColBtn');
+    if (btnLicense) {
+        btnLicense.hidden = !showGoodCol;
+        btnLicense.style.display = showGoodCol ? '' : 'none';
+    }
+    if (btnDays) {
+        btnDays.hidden = !showGoodCol;
+        btnDays.style.display = showGoodCol ? '' : 'none';
+    }
+
+    if (showGoodCol) {
+        adminLicenseHideStatusColSyncButtonUi(btnLicense, hid, false);
+        adminLicenseHideStatusColSyncButtonUi(btnDays, hid, true);
+    }
+
     if (typeof window.adminLicenseSplitScheduleAutosizeCreds === 'function') {
         window.adminLicenseSplitScheduleAutosizeCreds();
     }
 }
 
 function adminLicenseHideStatusColToggle() {
-    var root = document.getElementById('adminLicenciasLicenseSplitRoot');
-    if (!root) return;
-    var now = root.classList.contains('license-split-editor--status-hidden');
-    adminLicenseHideStatusColApply(!now);
+    var licenseId = adminLicenseHideStatusColGetActiveLicenseId();
+    if (!Number.isFinite(licenseId)) return;
+    var hid = adminLicenseHideStatusColReadStored(licenseId);
+    adminLicenseHideStatusColApply(!hid, licenseId);
 }
 
-function adminLicenseHideStatusColSyncUi() {
-    adminLicenseHideStatusColApply(adminLicenseHideStatusColReadStored());
+function adminLicenseHideStatusColSyncUi(licenseId) {
+    var id = licenseId != null ? parseInt(licenseId, 10) : adminLicenseHideStatusColGetActiveLicenseId();
+    if (!Number.isFinite(id) || id === AGGREGATE_LICENSE_ID) {
+        return;
+    }
+    adminLicenseHideStatusColApply(adminLicenseHideStatusColReadStored(id), id);
 }
 
 window.adminLicenseHideStatusColApply = adminLicenseHideStatusColApply;
@@ -13715,17 +14992,13 @@ async function persistDayNotepadRawText(licenseId, day, rawText) {
     if (licenseId === AGGREGATE_LICENSE_ID) return;
     const text = rawText != null ? String(rawText) : '';
     try {
-        const response = await fetch(`/tienda/api/licenses/${licenseId}/notes`, {
+        const data = await adminLicFetchJson(`/tienda/api/licenses/${licenseId}/notes`, {
             method: 'PUT',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRFToken': getCSRFToken()
-            },
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 day_notepads: { [String(day)]: text }
             })
         });
-        const data = await response.json();
         if (data.success) {
             const L = licenses.find(l => l.id === licenseId);
             if (L) {
@@ -13734,7 +15007,10 @@ async function persistDayNotepadRawText(licenseId, day, rawText) {
             }
         }
     } catch (e) {
-        console.error('Error al guardar texto del bloc del día:', e);
+        adminLicLogError('Error al guardar texto del bloc del día:', e);
+        if (typeof showError === 'function') {
+            showError(adminLicFormatFetchError(e, 'Error al guardar el bloc del día'));
+        }
     }
 }
 
@@ -13766,7 +15042,7 @@ async function syncDayNotepad(licenseId, day, rawText, options) {
                     adminLicRemoveAccountFromCache(acc.id);
                 }
             } catch (e) {
-                console.error('Error al eliminar cuenta del día:', e);
+                adminLicLogError('Error al eliminar cuenta del día:', e);
             }
         }
         clearDayDraftLocal(licenseId, day);
@@ -13807,7 +15083,7 @@ async function syncDayNotepad(licenseId, day, rawText, options) {
                 adminLicRemoveAccountFromCache(acc.id);
             }
         } catch (e) {
-            console.error('Error al eliminar cuenta del día:', e);
+            adminLicLogError('Error al eliminar cuenta del día:', e);
         }
     }
 
@@ -13846,7 +15122,7 @@ async function syncDayNotepad(licenseId, day, rawText, options) {
                     });
                     const data = await response.json();
                     if (!data.success) {
-                        console.error('Error al actualizar cuenta:', data.error);
+                        adminLicLogError('Error al actualizar cuenta:', data.error);
                     } else if (skipReload && L && Array.isArray(L.accounts)) {
                         const accRow = L.accounts.find(a => a && a.id === match.id);
                         if (accRow) {
@@ -13857,13 +15133,13 @@ async function syncDayNotepad(licenseId, day, rawText, options) {
                         }
                     }
                 } catch (e) {
-                    console.error('Error al actualizar cuenta:', e);
+                    adminLicLogError('Error al actualizar cuenta:', e);
                 }
             }
             try {
                 await apiSyncAccountAssigneeFromDayLine(match.id, p.assignUsername);
             } catch (e) {
-                console.error('Error al asignar cuenta del día:', e);
+                adminLicLogError('Error al asignar cuenta del día:', e);
             }
         } else {
             try {
@@ -13900,7 +15176,7 @@ async function syncDayNotepad(licenseId, day, rawText, options) {
                     }
                 }
             } catch (e) {
-                console.error('Error al crear cuenta del día:', e);
+                adminLicLogError('Error al crear cuenta del día:', e);
             }
         }
     }
@@ -13947,7 +15223,7 @@ async function syncAggregateDayNotepad(day, rawText, options) {
                     adminLicRemoveAccountFromCache(acc.id);
                 }
             } catch (e) {
-                console.error('Error al eliminar cuenta del día:', e);
+                adminLicLogError('Error al eliminar cuenta del día:', e);
             }
         }
         clearDayDraftLocal(AGGREGATE_LICENSE_ID, day);
@@ -13989,7 +15265,7 @@ async function syncAggregateDayNotepad(day, rawText, options) {
                 adminLicRemoveAccountFromCache(acc.id);
             }
         } catch (e) {
-            console.error('Error al eliminar cuenta del día:', e);
+            adminLicLogError('Error al eliminar cuenta del día:', e);
         }
     }
 
@@ -14027,7 +15303,7 @@ async function syncAggregateDayNotepad(day, rawText, options) {
                     });
                     const data = await response.json();
                     if (!data.success) {
-                        console.error('Error al actualizar cuenta:', data.error);
+                        adminLicLogError('Error al actualizar cuenta:', data.error);
                     } else if (skipReload) {
                         const ownerId = match._sourceLicenseId;
                         const Lown = ownerId != null ? licenses.find(l => l.id === ownerId) : null;
@@ -14042,13 +15318,13 @@ async function syncAggregateDayNotepad(day, rawText, options) {
                         }
                     }
                 } catch (e) {
-                    console.error('Error al actualizar cuenta:', e);
+                    adminLicLogError('Error al actualizar cuenta:', e);
                 }
             }
             try {
                 await apiSyncAccountAssigneeFromDayLine(match.id, p.assignUsername);
             } catch (e) {
-                console.error('Error al asignar cuenta del día:', e);
+                adminLicLogError('Error al asignar cuenta del día:', e);
             }
         } else if (targetCreateLicenseId != null) {
             try {
@@ -14088,7 +15364,7 @@ async function syncAggregateDayNotepad(day, rawText, options) {
                     }
                 }
             } catch (e) {
-                console.error('Error al crear cuenta del día:', e);
+                adminLicLogError('Error al crear cuenta del día:', e);
             }
         }
     }
@@ -14212,6 +15488,35 @@ async function loadAllDaysSoldAccounts(licenseId) {
             accountsByDay[day].push(Object.assign({}, account, { _sourceLicenseId: licenseId }));
         });
     }
+
+    if (__adminLicLastDaysRenderLicenseId !== licenseId) {
+        __adminLicLastDaysRenderKey = '';
+    }
+
+    const daysRenderKey = adminLicBuildDaysRenderKey(licenseId, accountsByDay);
+    if (adminLicDaysCanSkipFullRerender(licenseId, daysRenderKey, allDaysContainer)) {
+        adminLicRefreshDaysUiLight(licenseId);
+        return;
+    }
+
+    const daysScrollAnchor = adminLicCaptureDaysScrollAnchor();
+
+    const daysToolbarD1ExpandHtml =
+        '<button type="button" id="adminLicenciasToggleAllDaysSectionsBtn" class="admin-licencias-toggle-notes-col-btn admin-licencias-days-expand-all-btn admin-licencias-days-expand-all-btn--leading" title="Plegar todos los días" aria-label="Plegar todas las secciones de días" aria-expanded="true">' +
+        '<i class="fas fa-chevron-up" aria-hidden="true"></i>' +
+        '</button>';
+    const daysToolbarD1EyesHtml =
+        '<div class="license-days-notes-toggle-bar license-days-notes-toggle-bar--in-day-header license-days-notes-toggle-bar--eyes-only" role="toolbar" aria-label="Días: ocultar flecha subir a Licencias y columnas Estado y Notas">' +
+        '<button type="button" id="adminLicenciasToggleDaysRestoreColBtn" class="admin-licencias-toggle-notes-col-btn" title="Ocultar flecha subir a Licencias en días" aria-label="Ocultar botón subir a Licencias en cada día" aria-pressed="false">' +
+        '<i class="fas fa-eye-slash" aria-hidden="true"></i>' +
+        '</button>' +
+        '<button type="button" id="adminLicenciasToggleDaysStatusColBtn" class="admin-licencias-toggle-notes-col-btn" title="Ocultar columna Estado verde en días" aria-label="Ocultar columna Estado verde en cada día" aria-pressed="false">' +
+        '<i class="fas fa-eye-slash" aria-hidden="true"></i>' +
+        '</button>' +
+        '<button type="button" id="adminLicenciasToggleDaysNotesColBtn" class="admin-licencias-toggle-notes-col-btn" title="Ocultar columna Notas en días" aria-label="Ocultar columna Notas en cada día" aria-pressed="false">' +
+        '<i class="fas fa-eye-slash" aria-hidden="true"></i>' +
+        '</button>' +
+        '</div>';
     
     // Generar HTML para todos los días del 1 al 31 (siempre mostrar todos)
     let allDaysHtml = '';
@@ -14231,33 +15536,19 @@ async function loadAllDaysSoldAccounts(licenseId) {
         const lineCount = countNonEmptyLinesInText(textForBadge);
         const badgeText =
             lineCount > 0 ? `${lineCount} ${lineCount === 1 ? 'línea' : 'líneas'}` : '';
-        const toolbarD1 =
+        const day1LeadingHtml =
             day === 1
-                ? '<div class="license-days-notes-toggle-bar license-days-notes-toggle-bar--in-day-header" role="toolbar" aria-label="Días: plegar todos; flecha subir a Licencias y columnas Estado y Notas">' +
-                  '<button type="button" id="adminLicenciasToggleAllDaysSectionsBtn" class="admin-licencias-toggle-notes-col-btn admin-licencias-days-expand-all-btn" title="Plegar todos los días" aria-label="Plegar todas las secciones de días" aria-expanded="true">' +
-                  '<i class="fas fa-chevron-up" aria-hidden="true"></i>' +
-                  '</button>' +
-                  '<button type="button" id="adminLicenciasToggleDaysRestoreColBtn" class="admin-licencias-toggle-notes-col-btn" title="Ocultar flecha subir a Licencias en días" aria-label="Ocultar botón subir a Licencias en cada día" aria-pressed="false">' +
-                  '<i class="fas fa-eye-slash" aria-hidden="true"></i>' +
-                  '</button>' +
-                  '<button type="button" id="adminLicenciasToggleDaysStatusColBtn" class="admin-licencias-toggle-notes-col-btn" title="Ocultar columnas Estado (verde y rojo) en días" aria-label="Ocultar columnas Estado verde y rojo en cada día" aria-pressed="false">' +
-                  '<i class="fas fa-eye-slash" aria-hidden="true"></i>' +
-                  '</button>' +
-                  '<button type="button" id="adminLicenciasToggleDaysNotesColBtn" class="admin-licencias-toggle-notes-col-btn" title="Ocultar columna Notas en días" aria-label="Ocultar columna Notas en cada día" aria-pressed="false">' +
-                  '<i class="fas fa-eye-slash" aria-hidden="true"></i>' +
-                  '</button>' +
-                  '</div>'
+                ? '<div class="admin-licencias-day-header-leading">' + daysToolbarD1ExpandHtml + '</div>'
                 : '';
-        const dayHeaderActionsClass =
-            day === 1
-                ? 'admin-licencias-bloc-header-actions admin-licencias-bloc-header-actions--with-d1-toolbar'
-                : 'admin-licencias-bloc-header-actions';
+        const day1EyesHtml = day === 1 ? daysToolbarD1EyesHtml : '';
+        const dayHeaderExtraClass = day === 1 ? ' admin-licencias-bloc-header--day-toolbar' : '';
         allDaysHtml += `
             <section class="day-section admin-licencias-bloc admin-licencias-bloc--day" data-day="${day}" aria-label="Día ${day}">
-                <div class="day-section-header admin-licencias-bloc-header">
+                <div class="day-section-header admin-licencias-bloc-header${dayHeaderExtraClass}">
+                    ${day1LeadingHtml}
                     <span class="admin-licencias-bloc-title"><i class="fas fa-calendar-day" aria-hidden="true"></i> <span>Día ${day}</span></span>
-                    <div class="${dayHeaderActionsClass}">
-                        ${toolbarD1}
+                    <div class="admin-licencias-bloc-header-actions">
+                        ${day1EyesHtml}
                         <div class="admin-bloc-undo-toolbar admin-bloc-undo-toolbar--in-header admin-bloc-undo-toolbar--day" role="toolbar" aria-label="Deshacer y rehacer (día ${day})">
                             <button type="button" class="admin-bloc-undo-btn js-day-undo" data-day="${day}" title="Deshacer (Ctrl+Z)" aria-label="Deshacer"><i class="fas fa-undo" aria-hidden="true"></i></button>
                             <button type="button" class="admin-bloc-undo-btn js-day-redo" data-day="${day}" title="Rehacer (Ctrl+Y)" aria-label="Rehacer"><i class="fas fa-redo" aria-hidden="true"></i></button>
@@ -14317,7 +15608,7 @@ async function loadAllDaysSoldAccounts(licenseId) {
             adminDaysSyncExpandAllToolbarBtn();
         }
     } catch (expandBtnErr) {
-        console.error('adminDaysSyncExpandAllToolbarBtn:', expandBtnErr);
+        adminLicLogError('adminDaysSyncExpandAllToolbarBtn:', expandBtnErr);
     }
     if (licenseId !== AGGREGATE_LICENSE_ID) {
     restoreSuspendedSectionState(licenseId);
@@ -14333,15 +15624,15 @@ async function loadAllDaysSoldAccounts(licenseId) {
             adminDaysHideRestoreColSyncUi();
         }
     } catch (daysRestoreErr) {
-        console.error('adminDaysHideRestoreColSyncUi:', daysRestoreErr);
+        adminLicLogError('adminDaysHideRestoreColSyncUi:', daysRestoreErr);
     }
 
     try {
         if (typeof adminDaysHideStatusColSyncUi === 'function') {
-            adminDaysHideStatusColSyncUi();
+            adminDaysHideStatusColSyncUi(licenseId);
         }
     } catch (daysStatusErr) {
-        console.error('adminDaysHideStatusColSyncUi:', daysStatusErr);
+        adminLicLogError('adminDaysHideStatusColSyncUi:', daysStatusErr);
     }
 
     try {
@@ -14349,7 +15640,7 @@ async function loadAllDaysSoldAccounts(licenseId) {
             adminDaysHideNotesColSyncUi();
         }
     } catch (daysNotesErr) {
-        console.error('adminDaysHideNotesColSyncUi:', daysNotesErr);
+        adminLicLogError('adminDaysHideNotesColSyncUi:', daysNotesErr);
     }
     
     // Un bloc por día (como notas): borrar línea = borrar cuenta al guardar
@@ -14368,6 +15659,20 @@ async function loadAllDaysSoldAccounts(licenseId) {
     }
 
     scheduleRefreshAdminLicenciasReportCounts();
+
+    adminLicExpiryRefreshAllVisibleDayRows();
+
+    __adminLicLastDaysRenderKey = daysRenderKey;
+    __adminLicLastDaysRenderLicenseId = licenseId;
+
+    if (daysScrollAnchor) {
+        window.requestAnimationFrame(function () {
+            adminLicRestoreDaysScrollAnchor(daysScrollAnchor);
+            window.requestAnimationFrame(function () {
+                adminLicRestoreDaysScrollAnchor(daysScrollAnchor);
+            });
+        });
+    }
 }
 
 // Configurar el toggle de contraer/expandir para secciones de días
@@ -14697,7 +16002,7 @@ function setupEditableDayAccounts(licenseId) {
                 await syncDayNotepad(licenseId, day, text);
                 lastSyncedText = t;
             } catch (err) {
-                console.error('Error al sincronizar día:', err);
+                adminLicLogError('Error al sincronizar día:', err);
             } finally {
                 isSaving = false;
             }
@@ -14722,7 +16027,7 @@ function setupEditableDayAccounts(licenseId) {
                     lastSyncedText = text.trim();
                     clearTimeout(saveTimeout);
                     syncDayNotepad(licenseId, day, text).catch(function (err) {
-                        console.error('Error al sincronizar día (undo/redo):', err);
+                        adminLicLogError('Error al sincronizar día (undo/redo):', err);
                     });
                 },
                 afterVisual: function () {
@@ -14972,7 +16277,7 @@ async function saveSoldAccounts(licenseId, text, day) {
                 });
             }
         } catch (error) {
-            console.error('Error:', error);
+            adminLicLogError('Error:', error);
         }
     }
     
@@ -15029,6 +16334,26 @@ function licenseMatchesSearchTerm(license, searchTerm) {
     return false;
 }
 
+let __licensesSearchFullLoadTimer = null;
+
+function scheduleLicensesFullAccountsForSearch() {
+    clearTimeout(__licensesSearchFullLoadTimer);
+    __licensesSearchFullLoadTimer = setTimeout(function () {
+        const si = document.getElementById('adminStoreSearch');
+        const term = si && si.value ? si.value.trim() : '';
+        if (!term) return;
+        void loadLicenses({
+            includeAccounts: LICENSES_INCLUDE_ACCOUNTS_ALL,
+            skipGridRender: true,
+        }).then(function () {
+            const si2 = document.getElementById('adminStoreSearch');
+            if (!si2 || !si2.value.trim()) return;
+            filterLicenses();
+            highlightMatchingEmails(si2.value.toLowerCase().trim());
+        });
+    }, 350);
+}
+
 // Filtrar licencias (producto, notas, licencias, caídas, días/cuentas; sin distinguir mayúsculas)
 function filterLicenses() {
     const searchInput = document.getElementById('adminStoreSearch');
@@ -15067,6 +16392,8 @@ function filterLicenses() {
     if (inputContainer) {
         inputContainer.classList.add('search-active');
     }
+
+    scheduleLicensesFullAccountsForSearch();
     
     cards.forEach(card => {
         if (
@@ -15445,24 +16772,20 @@ function removeEmailHighlights() {
 // Inicializar licencias desde productos existentes
 async function initializeLicensesFromProducts() {
     try {
-        const response = await fetch('/tienda/api/licenses/initialize', {
+        const data = await adminLicFetchJson('/tienda/api/licenses/initialize', {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRFToken': getCSRFToken()
-            }
+            headers: { 'Content-Type': 'application/json' },
         });
-        
-        const data = await response.json();
-        
         if (data.success) {
-            // Recargar las licencias para mostrar las nuevas
             await loadLicenses();
         } else {
             console.error('Error al inicializar licencias:', data.error);
         }
     } catch (error) {
-        console.error('Error:', error);
+        adminLicLogError('Error:', error);
+        if (typeof showError === 'function') {
+            showError(adminLicFormatFetchError(error, 'Error al inicializar licencias'));
+        }
     }
 }
 
@@ -15486,7 +16809,7 @@ async function checkAndFixDuplicates() {
         await reorganizeAllLicenses();
         
     } catch (error) {
-        console.error('Error al verificar duplicados:', error);
+        adminLicLogError('Error al verificar duplicados:', error);
     }
 }
 
@@ -15521,10 +16844,10 @@ async function reorganizeAllLicenses() {
                     
                     const data = await response.json();
                     if (!data.success) {
-                        console.error(`Error al reorganizar licencia ${license.id}:`, data.error);
+                        adminLicLogError(`Error al reorganizar licencia ${license.id}:`, data.error);
                     }
                 } catch (error) {
-                    console.error(`Error al reorganizar licencia ${license.id}:`, error);
+                    adminLicLogError(`Error al reorganizar licencia ${license.id}:`, error);
                 }
             }
         }
@@ -15533,7 +16856,7 @@ async function reorganizeAllLicenses() {
         await loadLicenses();
         
     } catch (error) {
-        console.error('Error al reorganizar licencias:', error);
+        adminLicLogError('Error al reorganizar licencias:', error);
     }
 }
 
@@ -15627,8 +16950,8 @@ async function restoreLicense(licenseId) {
             showError('Error del servidor al restaurar la licencia');
         }
     } catch (error) {
-        console.error('Error al restaurar licencia:', error);
-        showError('Error de conexión al restaurar la licencia');
+        adminLicLogError('Error al restaurar licencia:', error);
+        showError(adminLicFormatFetchError(error, 'Error de conexión al restaurar la licencia'));
     }
 }
 
@@ -15664,8 +16987,8 @@ async function deleteLicense(licenseId) {
             showError('Error del servidor al eliminar la licencia');
         }
     } catch (error) {
-        console.error('Error al eliminar licencia:', error);
-        showError('Error de conexión al eliminar la licencia');
+        adminLicLogError('Error al eliminar licencia:', error);
+        showError(adminLicFormatFetchError(error, 'Error de conexión al eliminar la licencia'));
     }
 }
 
@@ -15774,8 +17097,8 @@ async function archiveLicense(licenseId) {
             showError('Error del servidor al archivar la licencia');
         }
     } catch (error) {
-        console.error('Error al archivar licencia:', error);
-        showError('Error de conexión al archivar la licencia');
+        adminLicLogError('Error al archivar licencia:', error);
+        showError(adminLicFormatFetchError(error, 'Error de conexión al archivar la licencia'));
     }
 }
 
@@ -15820,8 +17143,8 @@ async function changeLicensePosition(licenseId) {
             showError(data.error || 'Error al actualizar posición');
         }
     } catch (error) {
-        console.error('Error:', error);
-        showError('Error de conexión al actualizar posición');
+        adminLicLogError('Error:', error);
+        showError(adminLicFormatFetchError(error, 'Error de conexión al actualizar posición'));
     }
     
     // Ocultar menú
@@ -15851,8 +17174,8 @@ async function toggleLicenseVisibility(licenseId) {
             showError(data.error || 'Error al ocultar licencia');
         }
     } catch (error) {
-        console.error('Error:', error);
-        showError('Error de conexión al ocultar licencia');
+        adminLicLogError('Error:', error);
+        showError(adminLicFormatFetchError(error, 'Error de conexión al ocultar licencia'));
     }
     
     // Ocultar menú
@@ -15882,8 +17205,8 @@ async function restoreLicenseVisibility(licenseId) {
             showError(data.error || 'Error al mostrar licencia');
         }
     } catch (error) {
-        console.error('Error:', error);
-        showError('Error de conexión al mostrar licencia');
+        adminLicLogError('Error:', error);
+        showError(adminLicFormatFetchError(error, 'Error de conexión al mostrar licencia'));
     }
     
     // Ocultar menú
@@ -15893,16 +17216,135 @@ async function restoreLicenseVisibility(licenseId) {
     }
 }
 
-// Mostrar modal para agregar licencia
-function showAddLicenseModal() {
-    // Implementar modal para crear nueva licencia
+function closeAddLicenseModal() {
+    const modal = document.querySelector('.add-license-modal');
+    if (modal) {
+        modal.remove();
+    }
 }
 
-// Utilidades
-function getCSRFToken() {
-    const token = document.querySelector('meta[name="csrf_token"]');
-    return token ? token.getAttribute('content') : '';
+async function fetchMissingLicenseProducts() {
+    const data = await adminLicFetchJson('/tienda/api/licenses/missing-products');
+    if (!data.success) {
+        throw new Error(data.error || 'No se pudieron cargar los productos pendientes');
+    }
+    return Array.isArray(data.products) ? data.products : [];
 }
+
+function renderAddLicenseModalContent(modal, products) {
+    const productosUrl = '/tienda/admin/productos';
+    const listHtml =
+        products.length > 0
+            ? `<ul class="add-license-product-list">
+                ${products
+                    .map(function (p) {
+                        return '<li>' + escapeHtml(p.name || 'Producto #' + p.id) + '</li>';
+                    })
+                    .join('')}
+               </ul>`
+            : '<p class="add-license-empty-note text-muted">Todos los productos activos ya tienen licencia.</p>';
+
+    const syncDisabled = products.length === 0 ? ' disabled' : '';
+    const syncLabel =
+        products.length === 1
+            ? 'Crear 1 licencia'
+            : products.length > 1
+              ? 'Crear ' + products.length + ' licencias'
+              : 'Sincronizar productos';
+
+    modal.innerHTML = `
+        <div class="license-position-content add-license-modal-content">
+            <h3>Agregar licencias</h3>
+            <p class="add-license-modal-lead">
+                En este panel cada licencia corresponde a un producto de la tienda.
+                ${products.length > 0 ? 'Estos productos activos aún no tienen licencia:' : ''}
+            </p>
+            ${listHtml}
+            <div class="license-position-buttons add-license-modal-actions">
+                <button type="button" class="btn-panel btn-red" data-action="close-add-license-modal">Cancelar</button>
+                <a href="${productosUrl}" class="btn-panel btn-blue">Ir a Productos</a>
+                <button type="button" class="btn-panel btn-green" data-action="sync-missing-licenses"${syncDisabled}>
+                    <i class="fas fa-sync-alt" aria-hidden="true"></i> ${syncLabel}
+                </button>
+            </div>
+        </div>
+    `;
+
+    const closeBtn = modal.querySelector('[data-action="close-add-license-modal"]');
+    if (closeBtn) {
+        closeBtn.addEventListener('click', closeAddLicenseModal);
+    }
+
+    const syncBtn = modal.querySelector('[data-action="sync-missing-licenses"]');
+    if (syncBtn) {
+        syncBtn.addEventListener('click', function () {
+            void syncMissingLicensesFromModal(syncBtn);
+        });
+    }
+}
+
+async function syncMissingLicensesFromModal(syncBtn) {
+    if (!syncBtn || syncBtn.disabled) return;
+    syncBtn.disabled = true;
+    const prevHtml = syncBtn.innerHTML;
+    syncBtn.innerHTML = '<i class="fas fa-spinner fa-spin" aria-hidden="true"></i> Sincronizando…';
+
+    try {
+        const data = await adminLicFetchJson('/tienda/api/licenses/initialize', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+        });
+        const created = Array.isArray(data.licenses) ? data.licenses.length : 0;
+        if (created > 0) {
+            showSuccess('Se crearon ' + created + ' licencia(s) desde productos.');
+        } else {
+            showSuccess('Todos los productos activos ya tenían licencia.');
+        }
+        closeAddLicenseModal();
+        await loadLicenses();
+    } catch (error) {
+        adminLicLogError('Error:', error);
+        showError(adminLicFormatFetchError(error, 'Error al crear licencias'));
+        syncBtn.disabled = false;
+        syncBtn.innerHTML = prevHtml;
+    }
+}
+
+async function showAddLicenseModal() {
+    if (window.IS_ARCHIVED_MODE) {
+        showError('Las licencias nuevas se crean desde Admin Licencias, no desde Archivados.');
+        return;
+    }
+
+    closeAddLicenseModal();
+
+    const modal = document.createElement('div');
+    modal.className = 'license-position-modal add-license-modal show';
+    modal.innerHTML = `
+        <div class="license-position-content add-license-modal-content">
+            <h3>Agregar licencias</h3>
+            <p class="text-muted"><i class="fas fa-spinner fa-spin" aria-hidden="true"></i> Cargando productos…</p>
+        </div>
+    `;
+    document.body.appendChild(modal);
+
+    modal.addEventListener('click', function (e) {
+        if (e.target === modal) {
+            closeAddLicenseModal();
+        }
+    });
+
+    try {
+        const products = await fetchMissingLicenseProducts();
+        renderAddLicenseModalContent(modal, products);
+    } catch (error) {
+        adminLicLogError('Error:', error);
+        showError(adminLicFormatFetchError(error, 'Error al cargar productos pendientes'));
+        closeAddLicenseModal();
+    }
+}
+
+window.showAddLicenseModal = showAddLicenseModal;
 
 var _licenseDayRenewalConfirmResolver = null;
 var _licenseDayRenewalConfirmReturnFocus = null;
@@ -16112,7 +17554,7 @@ async function adminLicenseRunDayRenewalManual(btnEl) {
         }
     } catch (err) {
         showError('Error de red al ejecutar la renovación del día.');
-        console.error(err);
+        adminLicLogError('detalle', err);
     } finally {
         if (btnEl) {
             btnEl.disabled = false;
@@ -16212,60 +17654,23 @@ function handleAdminLicenciasMenuDeepLink() {
             if (renewBtn && typeof adminLicenseRunDayRenewalManual === 'function') {
                 void adminLicenseRunDayRenewalManual(renewBtn);
             }
+        } else if (open === 'agregar-licencia' && typeof showAddLicenseModal === 'function') {
+            void showAddLicenseModal();
         }
         stripOpenParam();
     }
 
-    if (open === 'historial' || open === 'gestionar-productos' || open === 'saldo-clientes' || open === 'renovar-dia') {
+    if (
+        open === 'historial' ||
+        open === 'gestionar-productos' ||
+        open === 'saldo-clientes' ||
+        open === 'renovar-dia' ||
+        open === 'agregar-licencia'
+    ) {
         window.setTimeout(runAction, 600);
     }
 }
 
-/** Cuentas con status disponible cargadas en el admin (coincide con el conteo BD del servidor). */
-function licenseAvailableCountFromAccountsUi(license) {
-    if (!license || !Array.isArray(license.accounts)) return 0;
-    return license.accounts.filter(function (a) {
-        return String(a && a.status != null ? a.status : '').toLowerCase() === 'available';
-    }).length;
-}
-
-/** Tooltip: misma idea que `_sellable_license_accounts_public` / tienda (~ existencias públicas). */
-function licensePublicSellablePreviewTitle(license) {
-    const avail = licenseAvailableCountFromAccountsUi(license);
-    const gar = licenseWarrantyDaysUi(license);
-    const sell = Math.max(0, avail - gar);
-    return (
-        'Existencias públicas (~' +
-        sell +
-        '): en BD hay ' +
-        avail +
-        ' cuenta(s) con estado disponible; se resta la gar. (' +
-        gar +
-        '). Las líneas del bloc Licencias no suman inventario hasta que existan cuentas disponibles en BD.'
-    );
-}
-
-function licensePublicSellableBadgeHtml(license) {
-    const avail = licenseAvailableCountFromAccountsUi(license);
-    const gar = licenseWarrantyDaysUi(license);
-    const sell = Math.max(0, avail - gar);
-    const title = escapeHtml(licensePublicSellablePreviewTitle(license));
-    const aria = escapeHtml('Tienda muestra unas ' + sell + ' existencias (~disponibles menos gar.).');
-    const zeroCls = sell === 0 ? ' gestion-productos-tienda-prev--zero' : '';
-    return (
-        '<span class="gestion-productos-tienda-prev' +
-        zeroCls +
-        '" title="' +
-        title +
-        '" tabindex="0" role="note" aria-label="' +
-        aria +
-        '">tienda&nbsp;~' +
-        sell +
-        '</span>'
-    );
-}
-
-/** Reserva garantía «gar.» (# cuentas no vendibles) para UI; por defecto 5 si no hay valor. */
 function licenseWarrantyDaysUi(license) {
     if (!license) return 5;
     const v = license.warranty_days;
@@ -16273,10 +17678,70 @@ function licenseWarrantyDaysUi(license) {
     return Number.isFinite(n) && n >= 0 ? n : 5;
 }
 
+function licenseTermDaysUi(license) {
+    if (!license) return 30;
+    const v = license.license_term_days;
+    const n = v != null && v !== '' ? Number(v) : 30;
+    return Number.isFinite(n) && n >= 1 ? n : 30;
+}
+
+function licenseTermUiLabel(license) {
+    if (license && license.term_ui_label) {
+        return String(license.term_ui_label);
+    }
+    const days = licenseTermDaysUi(license);
+    if (days === 30) return 'mes';
+    if (days === 365) return '1 año';
+    if (days === 730) return '2 años';
+    if (days % 30 === 0 && days >= 60 && days <= 330) {
+        return String(days / 30) + ' meses';
+    }
+    return String(days) + 'd';
+}
+
+var LICENSE_TERM_PRESET_OPTIONS = [
+    { key: 'mes', days: 30, label: 'mes' },
+    { key: '2_meses', days: 60, label: '2 meses' },
+    { key: '3_meses', days: 90, label: '3 meses' },
+    { key: '4_meses', days: 120, label: '4 meses' },
+    { key: '5_meses', days: 150, label: '5 meses' },
+    { key: '6_meses', days: 180, label: '6 meses' },
+    { key: '7_meses', days: 210, label: '7 meses' },
+    { key: '8_meses', days: 240, label: '8 meses' },
+    { key: '9_meses', days: 270, label: '9 meses' },
+    { key: '10_meses', days: 300, label: '10 meses' },
+    { key: '11_meses', days: 330, label: '11 meses' },
+    { key: '1_ano', days: 365, label: '1 año' },
+    { key: '2_anos', days: 730, label: '2 años' },
+    { key: 'personalizado', days: null, label: 'Personalizado' }
+];
+
 /** Checkbox «mes a mes» en Gestionar productos; el backend puede enviar month_to_month más adelante. */
 function licenseMonthToMonthUiChecked(license) {
     if (!license || license.month_to_month == null) return false;
     const v = license.month_to_month;
+    if (v === true || v === 1) return true;
+    if (typeof v === 'string') {
+        const s = v.trim().toLowerCase();
+        return s === '1' || s === 'true' || s === 'yes';
+    }
+    return false;
+}
+
+function licenseAllowReservationUiChecked(license) {
+    if (!license || license.allow_reservation == null) return false;
+    const v = license.allow_reservation;
+    if (v === true || v === 1) return true;
+    if (typeof v === 'string') {
+        const s = v.trim().toLowerCase();
+        return s === '1' || s === 'true' || s === 'yes';
+    }
+    return false;
+}
+
+function licenseRenewCustomerAccountUiChecked(license) {
+    if (!license || license.renew_customer_account == null) return false;
+    const v = license.renew_customer_account;
     if (v === true || v === 1) return true;
     if (typeof v === 'string') {
         const s = v.trim().toLowerCase();
@@ -16320,27 +17785,42 @@ function showGestionarProductosModal() {
                         <button type="button" class="gestion-productos-modal-close" aria-label="Cerrar">&times;</button>
                     </div>
                     <div class="gestion-productos-list" id="productosList">
-                        ${sortedLicenses.map((license) => `
+                        ${sortedLicenses.map((license) => {
+                            const name = escapeHtml(license.product_name || 'Producto');
+                            return `
                             <div class="producto-item gestion-productos-item" data-license-id="${license.id}">
                                 <div class="gestion-productos-item-name">
-                                    <strong>${license.product_name}</strong>
+                                    <strong title="${name}">${name}</strong>
                                 </div>
                                 <div class="gestion-productos-item-actions">
                                     <label class="gestion-productos-mes-a-mes" title="Renovación mes a mes: si lo activas, se oculta el bloc Vencidas en la cuadrícula. Lo que ya guardaste en Vencidas no se borra; al desmarcar, vuelve a verse. Solo se elimina si tú borras el contenido en ese bloc.">
                                         <span class="gestion-productos-mes-icon" aria-hidden="true"><i class="fas fa-calendar-alt"></i></span>
                                         <input type="checkbox" class="gestion-productos-mes-checkbox" data-license-id="${license.id}" aria-label="Mes a mes: oculta Vencidas sin borrar lo guardado; desmarcar lo vuelve a mostrar" ${licenseMonthToMonthUiChecked(license) ? 'checked' : ''} />
                                     </label>
+                                    <label class="gestion-productos-reservar" title="Permite reservar en la tienda pública cuando el producto esté agotado (0 existencias). Al reponer stock se asigna cuenta automáticamente y se avisa al cliente.">
+                                        <span class="gestion-productos-reservar-icon" aria-hidden="true"><i class="fas fa-bookmark"></i></span>
+                                        <span class="gestion-productos-reservar-text">Reservar</span>
+                                        <input type="checkbox" class="gestion-productos-reservar-checkbox" data-license-id="${license.id}" aria-label="Permitir reservas en tienda cuando esté agotado" ${licenseAllowReservationUiChecked(license) ? 'checked' : ''} />
+                                    </label>
+                                    <label class="gestion-productos-renovar-cuenta" title="En la tienda pública no se vende inventario: el cliente envía su correo y contraseña para que ustedes enlacen o renueven la cuenta.">
+                                        <span class="gestion-productos-renovar-cuenta-icon" aria-hidden="true"><i class="fas fa-user-check"></i></span>
+                                        <span class="gestion-productos-renovar-cuenta-text">Renovar su cuenta</span>
+                                        <input type="checkbox" class="gestion-productos-renovar-cuenta-checkbox" data-license-id="${license.id}" aria-label="Permitir renovar con cuenta del cliente en tienda" ${licenseRenewCustomerAccountUiChecked(license) ? 'checked' : ''} />
+                                    </label>
                                     <button type="button" class="gestion-productos-btn" data-action="change-product-position" data-license-id="${license.id}" title="Cambiar posición">
                                         Pos. <span class="gestion-productos-position-span">${license.position}</span>
+                                    </button>
+                                    <button type="button" class="gestion-productos-btn gestion-productos-btn--term" data-action="change-product-term" data-license-id="${license.id}" title="Duración de la licencia (contador de días hasta vencer)">
+                                        <span class="gestion-productos-term-label">${licenseTermUiLabel(license)}</span>
                                     </button>
                                     <button type="button" class="gestion-productos-btn" data-action="change-product-warranty" data-license-id="${license.id}" title="Cambiar reserva de garantía (gar.: cuentas no vendibles)">
                                         gar. <span class="gestion-productos-position-span">${licenseWarrantyDaysUi(license)}</span>
                                     </button>
-                                    ${licensePublicSellableBadgeHtml(license)}
                                     ${actionBtn.replace(/\$\{license\.id\}/g, license.id)}
                                 </div>
                             </div>
-                        `).join('')}
+                        `;
+                        }).join('')}
                     </div>
                 </div>
             </div>
@@ -16368,17 +17848,26 @@ function showGestionarProductosModal() {
     if (productosList) {
         productosList.addEventListener('change', function (e) {
             const t = e.target;
-            if (!t || !t.classList || !t.classList.contains('gestion-productos-mes-checkbox')) return;
+            if (!t || !t.classList) return;
+            const isMes = t.classList.contains('gestion-productos-mes-checkbox');
+            const isReservar = t.classList.contains('gestion-productos-reservar-checkbox');
+            const isRenovarCuenta = t.classList.contains('gestion-productos-renovar-cuenta-checkbox');
+            if (!isMes && !isReservar && !isRenovarCuenta) return;
             const id = parseInt(t.getAttribute('data-license-id'), 10);
             if (!Number.isFinite(id)) return;
             const checked = !!t.checked;
+            const payload = isMes
+                ? { month_to_month: checked }
+                : isReservar
+                  ? { allow_reservation: checked }
+                  : { renew_customer_account: checked };
             fetch('/tienda/api/licenses/' + id + '/notes', {
                 method: 'PUT',
                 headers: {
                     'Content-Type': 'application/json',
                     'X-CSRFToken': typeof getCSRFToken === 'function' ? getCSRFToken() : ''
                 },
-                body: JSON.stringify({ month_to_month: checked })
+                body: JSON.stringify(payload)
             })
                 .then(function (r) {
                     return r.json();
@@ -16386,27 +17875,61 @@ function showGestionarProductosModal() {
                 .then(function (data) {
                     if (!data.success) {
                         t.checked = !checked;
-                        showError(data && data.error ? String(data.error) : 'No se pudo guardar mes a mes.');
+                        showError(
+                            data && data.error
+                                ? String(data.error)
+                                : isMes
+                                  ? 'No se pudo guardar mes a mes.'
+                                  : isReservar
+                                    ? 'No se pudo guardar reservar.'
+                                    : 'No se pudo guardar renovar su cuenta.'
+                        );
                         return;
                     }
                     const L = licenses.find(function (l) {
                         return l.id === id;
                     });
-                    if (L) L.month_to_month = checked;
-                    const inputContainer = document.getElementById('licenseAccountsInputContainer');
-                    const activeRaw =
-                        inputContainer && inputContainer.dataset.activeLicenseId != null
-                            ? inputContainer.dataset.activeLicenseId
-                            : '';
-                    const active = parseInt(activeRaw, 10);
-                    if (Number.isFinite(active) && active === id) {
-                        refreshExpiredNotepadWrapVisibilityForLicense(id);
-                        refreshChangesNotepadWrapVisibilityForLicense(id);
+                    if (L) {
+                        if (isMes) L.month_to_month = checked;
+                        else if (isReservar) L.allow_reservation = checked;
+                        else L.renew_customer_account = checked;
+                    }
+                    if (isMes) {
+                        adminLicenseRefreshGoodStatusSelectsForLicense(id);
+                        const inputContainer = document.getElementById('licenseAccountsInputContainer');
+                        const activeRaw =
+                            inputContainer && inputContainer.dataset.activeLicenseId != null
+                                ? inputContainer.dataset.activeLicenseId
+                                : '';
+                        const active = parseInt(activeRaw, 10);
+                        if (Number.isFinite(active) && active === id) {
+                            refreshExpiredNotepadWrapVisibilityForLicense(id);
+                            refreshChangesNotepadWrapVisibilityForLicense(id);
+                            adminLicenseHideStatusColClearStoredOverride(id);
+                            if (typeof adminLicenseHideStatusColSyncUi === 'function') {
+                                adminLicenseHideStatusColSyncUi(id);
+                            }
+                            if (typeof adminDaysHideStatusColSyncUi === 'function') {
+                                adminDaysHideStatusColSyncUi(id);
+                            }
+                            if (L && typeof adminLicenseSplitApplyMergedText === 'function') {
+                                adminLicenseSplitApplyMergedText(L.license_notes || '');
+                            }
+                            if (typeof loadAllDaysSoldAccounts === 'function') {
+                                loadAllDaysSoldAccounts(id);
+                            }
+                        }
                     }
                 })
                 .catch(function () {
                     t.checked = !checked;
-                    showError('No se pudo guardar mes a mes.');
+                    showError(
+                        isMes
+                            ? 'No se pudo guardar mes a mes.'
+                            : isReservar
+                              ? 'No se pudo guardar reservar.'
+                              : 'No se pudo guardar renovar su cuenta.'
+                    );
                 });
         });
     }
@@ -16865,7 +18388,7 @@ async function showRestaurarArchivadosModal() {
     try {
         await loadLicenses({ skipGridRender: true });
     } catch (e) {
-        console.warn('No se pudo refrescar licencias antes del modal de archivados:', e);
+        adminLicLogWarn('No se pudo refrescar licencias antes del modal de archivados:', e);
     }
 
     const archivedLicenses = licenses
@@ -17018,9 +18541,164 @@ async function changeProductPosition(licenseId) {
         closeGestionarProductosModal();
         showGestionarProductosModal();
     } catch (error) {
-        console.error('Error:', error);
+        adminLicLogError('Error:', error);
         showError('Error al reorganizar posiciones');
     }
+}
+
+// Cambiar duración del periodo de licencia (días) desde Gestionar productos
+async function changeProductTerm(licenseId) {
+    const license = licenses.find(function (l) {
+        return l.id === licenseId;
+    });
+    if (!license) {
+        showError('Producto no encontrado');
+        return;
+    }
+    const currentDays = licenseTermDaysUi(license);
+    let presetKey = 'mes';
+    let pi;
+    for (pi = 0; pi < LICENSE_TERM_PRESET_OPTIONS.length; pi += 1) {
+        const opt = LICENSE_TERM_PRESET_OPTIONS[pi];
+        if (opt.days === currentDays) {
+            presetKey = opt.key;
+            break;
+        }
+    }
+    if (presetKey === 'mes' && currentDays !== 30) {
+        presetKey = 'personalizado';
+    }
+
+    closeLicenseTermPickerModal();
+    const optsHtml = LICENSE_TERM_PRESET_OPTIONS.map(function (opt) {
+        const sel = opt.key === presetKey ? ' selected' : '';
+        return '<option value="' + opt.key + '"' + sel + '>' + opt.label + '</option>';
+    }).join('');
+
+    const modalHtml =
+        '<div class="modal-overlay" id="licenseTermPickerModal">' +
+        '<div class="gestion-productos-modal-inner gestion-productos-term-picker" role="dialog" aria-modal="true" aria-labelledby="licenseTermPickerTitulo">' +
+        '<div class="gestion-productos-modal-content">' +
+        '<div class="gestion-productos-modal-header">' +
+        '<h3 id="licenseTermPickerTitulo"><i class="fas fa-hourglass-half"></i> Duración — ' +
+        escapeHtml(license.product_name || 'Producto') +
+        '</h3>' +
+        '<button type="button" class="gestion-productos-modal-close license-term-picker-close" aria-label="Cerrar">&times;</button>' +
+        '</div>' +
+        '<div class="gestion-productos-term-picker-body">' +
+        '<p class="gestion-productos-term-picker-hint">Contador de días hasta vencer. Se refleja en la tienda como periodo de facturación.</p>' +
+        '<label class="gestion-productos-term-picker-label" for="licenseTermPresetSelect">Periodo</label>' +
+        '<select id="licenseTermPresetSelect" class="gestion-productos-term-picker-select">' +
+        optsHtml +
+        '</select>' +
+        '<div id="licenseTermCustomWrap" class="gestion-productos-term-custom-wrap' +
+        (presetKey === 'personalizado' ? '' : ' gestion-productos-term-custom-wrap--hidden') +
+        '">' +
+        '<label class="gestion-productos-term-picker-label" for="licenseTermCustomDays">Días (personalizado)</label>' +
+        '<input type="number" id="licenseTermCustomDays" class="gestion-productos-term-picker-input" min="1" max="3650" value="' +
+        String(currentDays) +
+        '" autocomplete="off" />' +
+        '</div>' +
+        '<div class="gestion-productos-term-picker-actions">' +
+        '<button type="button" class="gestion-productos-term-picker-btn gestion-productos-term-picker-btn--save" id="licenseTermPickerSave">Guardar</button>' +
+        '<button type="button" class="gestion-productos-term-picker-btn gestion-productos-term-picker-btn--cancel" id="licenseTermPickerCancel">Cancelar</button>' +
+        '</div></div></div></div></div>';
+
+    document.body.insertAdjacentHTML('beforeend', modalHtml);
+    const overlay = document.getElementById('licenseTermPickerModal');
+    const selectEl = document.getElementById('licenseTermPresetSelect');
+    const customWrap = document.getElementById('licenseTermCustomWrap');
+    const customEl = document.getElementById('licenseTermCustomDays');
+
+    function syncCustomEnabled() {
+        if (!selectEl) return;
+        const isCustom = selectEl.value === 'personalizado';
+        if (customWrap) {
+            customWrap.classList.toggle('gestion-productos-term-custom-wrap--hidden', !isCustom);
+        }
+        if (!isCustom && customEl) {
+            let oi;
+            for (oi = 0; oi < LICENSE_TERM_PRESET_OPTIONS.length; oi += 1) {
+                if (LICENSE_TERM_PRESET_OPTIONS[oi].key === selectEl.value) {
+                    if (LICENSE_TERM_PRESET_OPTIONS[oi].days != null) {
+                        customEl.value = String(LICENSE_TERM_PRESET_OPTIONS[oi].days);
+                    }
+                    break;
+                }
+            }
+        }
+    }
+
+    if (selectEl) {
+        selectEl.addEventListener('change', syncCustomEnabled);
+        syncCustomEnabled();
+    }
+
+    function closePicker() {
+        closeLicenseTermPickerModal();
+    }
+
+    overlay.addEventListener('click', function (e) {
+        if (e.target === overlay) closePicker();
+    });
+    const btnClose = overlay.querySelector('.license-term-picker-close');
+    if (btnClose) btnClose.addEventListener('click', closePicker);
+    const btnCancel = document.getElementById('licenseTermPickerCancel');
+    if (btnCancel) btnCancel.addEventListener('click', closePicker);
+
+    const btnSave = document.getElementById('licenseTermPickerSave');
+    if (btnSave) {
+        btnSave.addEventListener('click', async function () {
+            let termDays = 30;
+            if (selectEl && selectEl.value === 'personalizado') {
+                termDays = parseInt(String(customEl && customEl.value), 10);
+            } else if (selectEl) {
+                let oj;
+                for (oj = 0; oj < LICENSE_TERM_PRESET_OPTIONS.length; oj += 1) {
+                    if (LICENSE_TERM_PRESET_OPTIONS[oj].key === selectEl.value) {
+                        termDays = LICENSE_TERM_PRESET_OPTIONS[oj].days;
+                        break;
+                    }
+                }
+            }
+            if (!Number.isFinite(termDays) || termDays < 1 || termDays > 3650) {
+                showError('Introduce entre 1 y 3650 días.');
+                return;
+            }
+            try {
+                const response = await fetch('/tienda/api/licenses/' + licenseId + '/term', {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': typeof getCSRFToken === 'function' ? getCSRFToken() : ''
+                    },
+                    body: JSON.stringify({ term_days: termDays })
+                });
+                const data = await response.json().catch(function () {
+                    return {};
+                });
+                if (response.ok && data.success) {
+                    license.license_term_days = termDays;
+                    if (data.term_ui_label) license.term_ui_label = data.term_ui_label;
+                    if (data.billing_period_label) license.billing_period_label = data.billing_period_label;
+                    showSuccess('Duración actualizada (' + (data.billing_period_label || termDays + ' días') + ')');
+                    closePicker();
+                    closeGestionarProductosModal();
+                    showGestionarProductosModal();
+                } else {
+                    showError((data && data.error) || 'Error al guardar la duración');
+                }
+            } catch (err) {
+                adminLicLogError('changeProductTerm:', err);
+                showError('Error al guardar la duración');
+            }
+        });
+    }
+}
+
+function closeLicenseTermPickerModal() {
+    const el = document.getElementById('licenseTermPickerModal');
+    if (el) el.remove();
 }
 
 // Cambiar reserva gar. (cuentas no vendibles) desde el modal Gestionar productos
@@ -17062,8 +18740,8 @@ async function changeProductWarranty(licenseId) {
             showError(data.error || 'Error al guardar la garantía');
         }
     } catch (err) {
-        console.error(err);
-        showError('Error de conexión al guardar la garantía');
+        adminLicLogError('detalle', err);
+        showError(adminLicFormatFetchError(error, 'Error de conexión al guardar la garantía'));
     }
 }
 
@@ -17121,7 +18799,7 @@ async function archiveProductFromModal(licenseId) {
                     });
                     
                     if (!updateResponse.ok) {
-                        console.error(`Error al actualizar posición ${update.position}`);
+                        adminLicLogError(`Error al actualizar posición ${update.position}`);
                     }
                 }
                 
@@ -17136,8 +18814,8 @@ async function archiveProductFromModal(licenseId) {
             showError('Error del servidor al archivar el producto');
         }
     } catch (error) {
-        console.error('Error:', error);
-        showError('Error de conexión al archivar el producto');
+        adminLicLogError('Error:', error);
+        showError(adminLicFormatFetchError(error, 'Error de conexión al archivar el producto'));
     }
 }
 
@@ -17194,7 +18872,7 @@ async function restoreProductFromModal(licenseId) {
                     });
                     
                     if (!updateResponse.ok) {
-                        console.error(`Error al actualizar posición ${update.position}`);
+                        adminLicLogError(`Error al actualizar posición ${update.position}`);
                     }
                 }
                 
@@ -17214,8 +18892,8 @@ async function restoreProductFromModal(licenseId) {
             showError('Error del servidor al restaurar el producto');
         }
     } catch (error) {
-        console.error('Error:', error);
-        showError('Error de conexión al restaurar el producto');
+        adminLicLogError('Error:', error);
+        showError(adminLicFormatFetchError(error, 'Error de conexión al restaurar el producto'));
     }
 }
 
@@ -17274,6 +18952,11 @@ document.addEventListener('click', function(e) {
         case 'change-product-warranty':
             const changeWarrantyId = parseInt(target.getAttribute('data-license-id'));
             void changeProductWarranty(changeWarrantyId);
+            break;
+
+        case 'change-product-term':
+            const changeTermId = parseInt(target.getAttribute('data-license-id'));
+            void changeProductTerm(changeTermId);
             break;
             
         case 'archive-product-from-modal':
@@ -17536,6 +19219,7 @@ document.addEventListener('click', function(e) {
                 e.target && e.target.closest ? e.target.closest('#adminLicenciasToggleStatusColBtn') : null;
             if (tNotes) {
                 e.preventDefault();
+                adminLicMarkLicensePanelInteraction();
                 if (typeof adminLicenseHideNotesColToggle === 'function') {
                     adminLicenseHideNotesColToggle();
                 }
@@ -17592,6 +19276,7 @@ document.addEventListener('click', function(e) {
             }
             if (tDaysNotes) {
                 e.preventDefault();
+                adminLicMarkLicensePanelInteraction();
                 if (typeof adminDaysHideNotesColToggle === 'function') {
                     adminDaysHideNotesColToggle();
                 }
@@ -17627,9 +19312,11 @@ document.addEventListener('click', function(e) {
             }
             if (tStatus) {
                 e.preventDefault();
+                adminLicMarkLicensePanelInteraction();
                 if (typeof adminLicenseHideStatusColToggle === 'function') {
                     adminLicenseHideStatusColToggle();
                 }
+                return;
             }
         },
         false

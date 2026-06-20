@@ -2,7 +2,7 @@
 
 {% block title %}Tienda Pública{% endblock %}
 
-{% block head %}{{ super() }}<link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}?v=20260520-buena-revisada"><link rel="stylesheet" href="{{ url_for('static', filename='fontawesome/css/all.css') }}"><link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/chat_soporte.css') }}"><meta name="csrf_token" content="{{ csrf_token() }}">{% endblock %}
+{% block head %}{{ super() }}<link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}?v=20260611-store-cuentas-precios-center"><link rel="stylesheet" href="{{ url_for('static', filename='fontawesome/css/all.css') }}"><link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/chat_soporte.css') }}"><meta name="csrf_token" content="{{ csrf_token() }}">{% endblock %}
 {% block content %}
 <div class="container container-max-width-900 store-light store-front-main">
   {% set blocked_users = ['soporte','soporte1','soporte2','soporte3'] %}
@@ -135,6 +135,10 @@
           autocomplete="off"
         >
         {% if current_user and not current_user.parent_id %}
+        <button type="button" class="btn-configuracion-tienda" id="btnStoreConfiguracion" title="Configuración" aria-label="Configuración">
+          <i class="fas fa-cog" aria-hidden="true"></i>
+          <span class="btn-configuracion-tienda__label">Config</span>
+        </button>
         <button type="button" class="btn-renovacion-tienda" id="btnStoreRenovacion" title="Buscar cuentas en licencias para venta y renovar">
           <i class="fas fa-sync-alt" aria-hidden="true"></i>
           <span>Renovación</span>
@@ -144,7 +148,101 @@
     </form>
   </div>
 
-  <div class="d-flex flex-wrap gap-1">
+  {% if products and current_user and not current_user.parent_id %}
+  {% set tipo_precio_table = 'usd' %}
+  {% if current_user.user_prices and current_user.user_prices is mapping %}
+    {% set tipo_precio_table_raw = current_user.user_prices.get('tipo_precio') %}
+    {% if tipo_precio_table_raw %}
+      {% set tipo_precio_table = tipo_precio_table_raw.lower() %}
+    {% endif %}
+  {% endif %}
+  <div id="storePriceTablePanel" class="store-price-table-panel" hidden>
+    <div class="store-price-table-panel__toolbar">
+      <span class="store-price-table-panel__title">Cuentas y precios</span>
+      <button
+        type="button"
+        id="storePriceTableToggleBtn"
+        class="store-price-table-panel__toggle"
+        aria-expanded="true"
+        aria-controls="storePriceTableBody"
+        title="Contraer tabla"
+        aria-label="Contraer tabla de precios"
+      >
+        <i class="fas fa-chevron-up" aria-hidden="true"></i>
+      </button>
+    </div>
+    <div id="storePriceTableBody" class="store-price-table-panel__body">
+    <div class="store-price-table-panel__scroll" tabindex="0" role="region" aria-label="Tabla de precios desplazable horizontalmente">
+    <table id="storeProductsTable" class="store-products-table" aria-label="Listado de cuentas y precios">
+      <thead>
+        <tr>
+          <th scope="col" class="store-products-table__th store-products-table__th--name">Cuenta</th>
+          <th scope="col" class="store-products-table__th store-products-table__th--period">Periodo</th>
+          <th scope="col" class="store-products-table__th store-products-table__th--m2m">Mes a mes</th>
+          {% if is_admin %}
+            <th scope="col" class="store-products-table__th store-products-table__th--price">COP</th>
+            <th scope="col" class="store-products-table__th store-products-table__th--price">USD</th>
+          {% else %}
+            <th scope="col" class="store-products-table__th store-products-table__th--price">Precio</th>
+          {% endif %}
+        </tr>
+      </thead>
+      <tbody>
+        {% for p in products %}
+          {% set discount_cop = p.discount_cop_extra|default(0)|float %}
+          {% set discount_usd = p.discount_usd_extra|default(0)|float %}
+          {% set calculated_price_cop = p.price_cop|float - discount_cop %}
+          {% set calculated_price_usd = p.price_usd|float - discount_usd %}
+          {% set final_price_cop = [calculated_price_cop, 0]|max %}
+          {% set final_price_usd = [calculated_price_usd, 0]|max %}
+          {% set ps = product_stock_initial|default({}) %}
+          {% set _sock = ps.get(p.id, 0) %}
+          {% set m2m_map = product_month_to_month|default({}) %}
+          {% set billing_map = product_billing_period|default({}) %}
+          {% set product_m2m = m2m_map.get(p.id, false) %}
+          {% set product_billing_period = billing_map.get(p.id, 'mensual') %}
+          <tr class="store-products-table__row{% if _sock <= 0 %} store-products-table__row--no-stock{% endif %}"
+              data-product-id="{{ p.id }}"
+              data-stock="{{ _sock }}"
+              data-search-name="{{ p.name|lower|e }}"
+              data-billing-period="{{ product_billing_period }}"
+              data-month-to-month="{{ '1' if product_m2m else '0' }}">
+            <td class="store-products-table__name">{{ p.name }}</td>
+            <td class="store-products-table__period">{{ product_billing_period }}</td>
+            <td class="store-products-table__m2m{% if product_m2m %} store-products-table__m2m--yes{% else %} store-products-table__m2m--no{% endif %}">
+              {% if product_m2m %}Sí{% else %}No{% endif %}
+            </td>
+            {% if is_admin %}
+              <td class="store-products-table__price">${{ p.price_cop|int }} COP</td>
+              <td class="store-products-table__price">${{ p.price_usd|int }} USD</td>
+            {% elif tipo_precio_table == 'cop' %}
+              <td class="store-products-table__price">${{ final_price_cop|int }} COP</td>
+            {% else %}
+              <td class="store-products-table__price">${{ final_price_usd|int }} USD</td>
+            {% endif %}
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    </div>
+    </div>
+  </div>
+  {% endif %}
+
+  <div id="storeProductsWrap" class="store-products-wrap store-products-wrap--view-grid d-flex flex-wrap gap-1">
+    {% set m2m_map_catalog = product_month_to_month|default({}) %}
+    {% set billing_map_catalog = product_billing_period|default({}) %}
+    {% set reserve_map_catalog = product_allow_reservation|default({}) %}
+    {% set renew_customer_map_catalog = product_renew_customer_account|default({}) %}
+    <div id="storeCatalogTableHeader" class="store-catalog-table-header" hidden aria-hidden="true">
+      <span class="store-catalog-table-header__cell store-catalog-table-header__cell--thumb" aria-hidden="true"></span>
+      <span class="store-catalog-table-header__cell store-catalog-table-header__cell--name">Cuenta</span>
+      <span class="store-catalog-table-header__cell store-catalog-table-header__cell--period">Periodo</span>
+      <span class="store-catalog-table-header__cell store-catalog-table-header__cell--m2m">Mes a mes</span>
+      <span class="store-catalog-table-header__cell store-catalog-table-header__cell--price">Precio</span>
+      <span class="store-catalog-table-header__cell store-catalog-table-header__cell--stock">Existencias</span>
+      <span class="store-catalog-table-header__cell store-catalog-table-header__cell--actions">Comprar</span>
+    </div>
     {# is_admin ya está disponible desde el context processor #}
     {% set tipo_precio = 'usd' %}
     {% if current_user %}
@@ -163,6 +261,94 @@
         {% endif %}
       {% endif %}
     {% endif %}
+    <div id="storeCatalogFullTableWrap" class="store-catalog-full-table-wrap" hidden aria-hidden="true">
+      <div class="store-catalog-full-table-scroll" tabindex="0" role="region" aria-label="Catálogo en tabla desplazable horizontalmente">
+        <table id="storeCatalogFullTable" class="store-products-table store-catalog-full-table" aria-label="Catálogo de cuentas y precios">
+          <thead>
+            <tr>
+              <th scope="col" class="store-products-table__th store-products-table__th--name">Cuenta</th>
+              <th scope="col" class="store-products-table__th store-products-table__th--period">Periodo</th>
+              <th scope="col" class="store-products-table__th store-products-table__th--m2m">Mes a mes</th>
+              {% if current_user and not current_user.parent_id %}
+                {% if is_admin %}
+                  <th scope="col" class="store-products-table__th store-products-table__th--price">COP</th>
+                  <th scope="col" class="store-products-table__th store-products-table__th--price">USD</th>
+                {% else %}
+                  <th scope="col" class="store-products-table__th store-products-table__th--price">Precio</th>
+                {% endif %}
+                <th scope="col" class="store-products-table__th store-products-table__th--stock">Existencias</th>
+                <th scope="col" class="store-products-table__th store-products-table__th--buy">Comprar</th>
+              {% elif current_user %}
+                <th scope="col" class="store-products-table__th store-products-table__th--stock">Existencias</th>
+              {% endif %}
+            </tr>
+          </thead>
+          <tbody>
+            {% for p in products %}
+              {% set discount_cop_v6 = p.discount_cop_extra|default(0)|float %}
+              {% set discount_usd_v6 = p.discount_usd_extra|default(0)|float %}
+              {% set calculated_price_cop_v6 = p.price_cop|float - discount_cop_v6 %}
+              {% set calculated_price_usd_v6 = p.price_usd|float - discount_usd_v6 %}
+              {% set final_price_cop_v6 = [calculated_price_cop_v6, 0]|max %}
+              {% set final_price_usd_v6 = [calculated_price_usd_v6, 0]|max %}
+              {% set ps_v6 = product_stock_initial|default({}) %}
+              {% set _sock_v6 = ps_v6.get(p.id, 0) %}
+              {% set product_m2m_v6 = m2m_map_catalog.get(p.id, false) %}
+              {% set product_billing_period_v6 = billing_map_catalog.get(p.id, 'mensual') %}
+              {% set product_reservable_v6 = reserve_map_catalog.get(p.id, false) %}
+              {% set product_renew_customer_v6 = renew_customer_map_catalog.get(p.id, false) %}
+              <tr class="store-products-table__row store-catalog-full-table__row{% if _sock_v6 <= 0 and not product_renew_customer_v6 %} store-products-table__row--no-stock{% endif %}"
+                  data-product-id="{{ p.id }}"
+                  data-price-cop="{{ final_price_cop_v6 }}"
+                  data-price-usd="{{ final_price_usd_v6 }}"
+                  data-img="{{ url_for('static', filename='images/' + p.image_filename) }}"
+                  data-stock="{{ _sock_v6 }}"
+                  data-search-name="{{ p.name|lower|e }}"
+                  data-billing-period="{{ product_billing_period_v6 }}"
+                  data-month-to-month="{{ '1' if product_m2m_v6 else '0' }}"
+                  data-allow-reservation="{{ '1' if product_reservable_v6 else '0' }}"
+                  data-renew-customer-account="{{ '1' if product_renew_customer_v6 else '0' }}">
+                <td class="store-products-table__name">{{ p.name }}</td>
+                <td class="store-products-table__period">{{ product_billing_period_v6 }}</td>
+                <td class="store-products-table__m2m{% if product_m2m_v6 %} store-products-table__m2m--yes{% else %} store-products-table__m2m--no{% endif %}">
+                  {% if product_m2m_v6 %}Sí{% else %}No{% endif %}
+                </td>
+                {% if current_user and not current_user.parent_id %}
+                  {% if is_admin %}
+                    <td class="store-products-table__price">${{ p.price_cop|int }} COP</td>
+                    <td class="store-products-table__price">${{ p.price_usd|int }} USD</td>
+                  {% elif tipo_precio == 'cop' %}
+                    <td class="store-products-table__price">${{ final_price_cop_v6|int }} COP</td>
+                  {% else %}
+                    <td class="store-products-table__price">${{ final_price_usd_v6|int }} USD</td>
+                  {% endif %}
+                  <td class="store-products-table__stock">
+                    <span class="product-stock-info{% if _sock_v6 <= 0 %} product-stock-info--zero{% endif %}" data-product-id="{{ p.id }}" data-initial-stock="{{ _sock_v6 }}">{{ _sock_v6 }} existencias</span>
+                  </td>
+                  <td class="store-products-table__buy">
+                    <div class="store-catalog-full-table__buy-row d-flex align-items-center justify-content-center">
+                      <div class="input-group-cantidad">
+                        <button type="button" class="btn-agregar-licencia btn-restar" aria-label="Restar cantidad">-</button>
+                        <label for="cantidad-v6-{{ p.id }}" class="sr-only">Cantidad de {{ p.name }}</label>
+                        <input type="number" min="1" value="1" class="input-cantidad-licencia" name="cantidad-v6" id="cantidad-v6-{{ p.id }}" autocomplete="off">
+                        <button type="button" class="btn-agregar-licencia btn-sumar" aria-label="Sumar cantidad">+</button>
+                      </div>
+                      <button type="button" class="btn-anadir-producto-tienda">Añadir</button>
+                      <button type="button" class="btn-reservar-producto-tienda" hidden>Reservar</button>
+                      <button type="button" class="btn-renovar-cuenta-cliente-tienda" hidden>Renovar</button>
+                    </div>
+                  </td>
+                {% elif current_user %}
+                  <td class="store-products-table__stock">
+                    <span class="product-stock-info{% if _sock_v6 <= 0 %} product-stock-info--zero{% endif %}" data-product-id="{{ p.id }}" data-initial-stock="{{ _sock_v6 }}">{{ _sock_v6 }} existencias</span>
+                  </td>
+                {% endif %}
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
     {% for p in products %}
       {% set discount_cop = p.discount_cop_extra|default(0)|float %}
       {% set discount_usd = p.discount_usd_extra|default(0)|float %}
@@ -170,36 +356,48 @@
       {% set calculated_price_usd = p.price_usd|float - discount_usd %}
       {% set final_price_cop = [calculated_price_cop, 0]|max %}
       {% set final_price_usd = [calculated_price_usd, 0]|max %}
-      <div class="card product-texture-bg product-card" data-img="{{ url_for('static', filename='images/' + p.image_filename) }}" data-id="{{ p.id }}" data-price-cop="{{ final_price_cop }}" data-price-usd="{{ final_price_usd }}">
+      {% set ps = product_stock_initial|default({}) %}
+      {% set _sock = ps.get(p.id, 0) %}
+      {% set product_m2m = m2m_map_catalog.get(p.id, false) %}
+      {% set product_billing_period = billing_map_catalog.get(p.id, 'mensual') %}
+      {% set product_reservable = reserve_map_catalog.get(p.id, false) %}
+      {% set product_renew_customer = renew_customer_map_catalog.get(p.id, false) %}
+      <div class="card product-texture-bg product-card{% if _sock <= 0 and not product_renew_customer %} store-front-product-card--no-stock{% endif %}" data-img="{{ url_for('static', filename='images/' + p.image_filename) }}" data-id="{{ p.id }}" data-price-cop="{{ final_price_cop }}" data-price-usd="{{ final_price_usd }}" data-search-name="{{ p.name|lower|e }}" data-billing-period="{{ product_billing_period }}" data-month-to-month="{{ '1' if product_m2m else '0' }}" data-allow-reservation="{{ '1' if product_reservable else '0' }}" data-renew-customer-account="{{ '1' if product_renew_customer else '0' }}" data-stock="{{ _sock }}">
         <div class="product-img-container">
           <img src="{{ url_for('static', filename='images/' + p.image_filename) }}" alt="{{ p.name }}" class="product-img">
+          {% if p.description %}
+            <span class="info-icon info-icon-square btn-show-desc product-card-info-icon" data-desc="{{ p.description|e }}" title="Ver descripción" aria-label="Ver descripción del producto">i</span>
+          {% endif %}
         </div>
-        <div class="product-name mt-05">
+        <div class="product-name">
           {{ p.name }}
         </div>
+        <span class="product-card-meta product-card-meta--period">{{ product_billing_period }}</span>
+        <span class="product-card-meta product-card-meta--m2m{% if product_m2m %} product-card-meta--m2m-yes{% else %} product-card-meta--m2m-no{% endif %}">{% if product_m2m %}Sí{% else %}No{% endif %}</span>
         {% if current_user and not current_user.parent_id %}
-          <!-- Campo de cantidad y botones + y - integrados -->
-          <div class="d-flex align-items-center justify-content-center mt-05">
+          <!-- Cantidad (+/−) y Añadir en la misma línea -->
+          <div class="product-card-qty-add-row d-flex align-items-center justify-content-center mt-05">
             <div class="input-group-cantidad">
               <button type="button" class="btn-agregar-licencia btn-restar">-</button>
               <label for="cantidad-{{ p.id }}" class="sr-only">Cantidad de {{ p.name }}</label>
               <input type="number" min="1" value="1" class="input-cantidad-licencia" name="cantidad" id="cantidad-{{ p.id }}" autocomplete="off">
               <button type="button" class="btn-agregar-licencia btn-sumar">+</button>
             </div>
-          </div>
-          <div class="d-flex align-items-center justify-content-center mt-03">
             <button type="button" class="btn-anadir-producto-tienda">Añadir</button>
+            <button type="button" class="btn-reservar-producto-tienda" hidden>Reservar</button>
+            <button type="button" class="btn-renovar-cuenta-cliente-tienda" hidden>Renovar</button>
           </div>
         {% endif %}
         {% if current_user %}
-          {% set ps = product_stock_initial|default({}) %}
-          {% set _sock = ps.get(p.id, 0) %}
-          <div class="d-flex align-items-center justify-content-center mt-02">
+          <div class="d-flex align-items-center justify-content-center mt-02 product-card-stock-row">
             <span class="product-stock-info" data-product-id="{{ p.id }}" data-initial-stock="{{ _sock }}">{{ _sock }} existencias</span>
+            {% if not current_user.parent_id %}
+            <span class="product-price-period product-price-period--with-stock">{{ product_billing_period }}</span>
+            {% endif %}
           </div>
         {% endif %}
         <!-- Fin campo de cantidad y botones + y - integrados -->
-        <div class="d-flex align-items-center justify-content-between mt-05">
+        <div class="d-flex align-items-center justify-content-center mt-05 product-card-price-row">
           {% if current_user and not current_user.parent_id %}
             <div class="product-price-col">
               {% if is_admin %}
@@ -216,10 +414,8 @@
                 {% set final_price_usd = [calculated_price_usd, 0]|max %}
                 <span class="product-price-usd">${{ final_price_usd|int }} USD</span>
               {% endif %}
+              <span class="product-price-period product-price-period--with-price">{{ product_billing_period }}</span>
             </div>
-          {% endif %}
-          {% if p.description %}
-            <span class="info-icon info-icon-square btn-show-desc" data-desc="{{ p.description|e }}">i</span>
           {% endif %}
         </div>
       </div>
@@ -320,6 +516,102 @@
   </div>
 </div>
 
+<!-- Modal configuración tienda -->
+{% if current_user and not current_user.parent_id %}
+<div id="storeFrontPrefsScope" hidden data-user-id="{{ current_user.id }}"></div>
+<div id="storeConfigModal" class="desc-modal store-config-modal modal-hidden" role="dialog" aria-labelledby="storeConfigModalTitle" aria-modal="true">
+  <div class="desc-modal-content store-config-modal-panel">
+    <button type="button" id="closeStoreConfigModalBtn" class="btn-close-desc-modal" aria-label="Cerrar">&times;</button>
+    <h3 id="storeConfigModalTitle" class="store-config-modal-title">
+      <i class="fas fa-cog" aria-hidden="true"></i>
+      <span>Configuración de la tienda</span>
+    </h3>
+    <div class="store-config-options">
+      <label class="store-config-option store-config-option--has-info">
+        <input type="checkbox" id="storeConfigHideZeroStock" class="store-config-option__input">
+        <span class="store-config-option__label">Quitar sin existencias</span>
+        <button
+          type="button"
+          class="store-config-option-info info-icon info-icon-square btn-show-desc"
+          data-desc="Oculta los productos sin existencia de la tienda."
+          aria-label="Información: Oculta los productos sin existencia de la tienda."
+        >i</button>
+      </label>
+      <label class="store-config-option store-config-option--has-info">
+        <input type="checkbox" id="storeConfigShowPriceTable" class="store-config-option__input">
+        <span class="store-config-option__label">Ver nombre y precio en tabla</span>
+        <button
+          type="button"
+          class="store-config-option-info info-icon info-icon-square btn-show-desc"
+          data-desc="Listado aparte de cuentas, periodo, renovación mes a mes y precios (solo consulta). Puedes usarlo junto con cualquier vista, incluida Lista columnas. Sin existencia aparecen tachadas."
+          aria-label="Información: Listado de cuentas, periodo, renovación mes a mes y precios. Sin existencia aparecen tachadas."
+        >i</button>
+      </label>
+    </div>
+    <fieldset class="store-config-fieldset">
+      <legend class="store-config-fieldset__legend">
+        <span class="store-config-fieldset__legend-inner">
+          Vista de la tienda
+          <button
+            type="button"
+            class="store-config-fieldset-info info-icon info-icon-square btn-show-desc"
+            data-desc="Elige cómo se muestran los productos. Vista 1 — Tarjetas: formato grande con foto. Vista 2 — Lista: cada producto en una fila. Vista 3 — Compacta: tarjetas más pequeñas. Vista 4 — Lista columnas: catálogo en columnas con compra. Vista 5 — Rápida: filas sin foto, solo texto. Vista 6 — Tabla cuentas y precios: catálogo completo en tabla."
+            aria-label="Información sobre las vistas de la tienda"
+          >i</button>
+        </span>
+      </legend>
+      <label class="store-config-view-option">
+        <input type="radio" name="storeConfigView" class="store-config-view-option__input" value="grid" checked>
+        <span class="store-config-view-option__label">Vista 1 — Tarjetas <span class="store-config-view-option__badge">Predeterminada</span></span>
+      </label>
+      <label class="store-config-view-option">
+        <input type="radio" name="storeConfigView" class="store-config-view-option__input" value="list">
+        <span class="store-config-view-option__label">Vista 2 — Lista</span>
+      </label>
+      <label class="store-config-view-option">
+        <input type="radio" name="storeConfigView" class="store-config-view-option__input" value="compact">
+        <span class="store-config-view-option__label">Vista 3 — Compacta</span>
+      </label>
+      <label class="store-config-view-option">
+        <input type="radio" name="storeConfigView" class="store-config-view-option__input" value="table">
+        <span class="store-config-view-option__label">Vista 4 — Lista columnas</span>
+      </label>
+      <label class="store-config-view-option">
+        <input type="radio" name="storeConfigView" class="store-config-view-option__input" value="text">
+        <span class="store-config-view-option__label">Vista 5 — Rápida (sin foto)</span>
+      </label>
+      <label class="store-config-view-option">
+        <input type="radio" name="storeConfigView" class="store-config-view-option__input" value="view6">
+        <span class="store-config-view-option__label">Vista 6 — Tabla cuentas y precios</span>
+      </label>
+    </fieldset>
+  </div>
+</div>
+{% endif %}
+
+<!-- Modal renovación cuenta del cliente (envía credenciales para enlazar) -->
+<div id="renovarCuentaClienteModal" class="desc-modal renovar-cuenta-cliente-modal modal-hidden" role="dialog" aria-labelledby="renovarCuentaClienteModalTitle" aria-modal="true">
+  <div class="desc-modal-content renovar-cuenta-cliente-modal-panel">
+    <button type="button" id="closeRenovarCuentaClienteModalBtn" class="btn-close-desc-modal" aria-label="Cerrar">&times;</button>
+    <h3 id="renovarCuentaClienteModalTitle" class="renovar-cuenta-cliente-modal-title">
+      <i class="fas fa-user-check" aria-hidden="true"></i>
+      Renovar su cuenta
+    </h3>
+    <p id="renovarCuentaClienteProductName" class="renovar-cuenta-cliente-product-name"></p>
+    <p class="renovar-cuenta-cliente-hint">Envía el correo y la contraseña de la cuenta que quieres renovar o enlazar.</p>
+    <form id="renovarCuentaClienteForm" class="renovar-cuenta-cliente-form" autocomplete="off">
+      <label for="renovarCuentaClienteEmail">Correo de la cuenta</label>
+      <input type="email" id="renovarCuentaClienteEmail" name="email" class="renovar-cuenta-cliente-input" placeholder="correo@ejemplo.com" autocomplete="off" required>
+      <label for="renovarCuentaClientePassword">Contraseña</label>
+      <input type="text" id="renovarCuentaClientePassword" name="password" class="renovar-cuenta-cliente-input" placeholder="Contraseña de la cuenta" autocomplete="off" required>
+      <div class="renovar-cuenta-cliente-actions">
+        <button type="button" id="btnRenovarCuentaClienteCancel" class="btn-panel btn-muted">Cancelar</button>
+        <button type="submit" id="btnRenovarCuentaClienteSubmit" class="btn-panel btn-green">Añadir al carrito</button>
+      </div>
+    </form>
+  </div>
+</div>
+
 <!-- Modal renovación (cuentas en licencias para venta) -->
 <div id="renovacionModal" class="desc-modal renovacion-modal modal-hidden" role="dialog" aria-labelledby="renovacionModalTitle" aria-modal="true" data-buscar-url="{{ url_for('store_bp.api_store_renovacion_buscar') }}" data-reservar-url="{{ url_for('store_bp.api_store_renovacion_reservar') }}" data-liberar-url="{{ url_for('store_bp.api_store_renovacion_liberar') }}">
   <div class="desc-modal-content renovacion-modal-panel">
@@ -385,7 +677,8 @@
 
 {% block scripts %}
 <meta name="clear_trigger_log_url" content="{{ url_for('admin_bp.clear_trigger_log') }}">
-<script src="{{ url_for('store_bp.static', filename='js/store_front.js') }}?v=20260605-lic-copy-nl" defer></script>
+<script src="{{ url_for('store_bp.static', filename='js/store_config.js') }}?v=20260611-store-cuentas-precios-center" defer></script>
+<script src="{{ url_for('store_bp.static', filename='js/store_front.js') }}?v=20260611-store-renovar-cuenta-v1" defer></script>
 <script src="{{ url_for('store_bp.static', filename='js/store_renovacion.js') }}?v=20260520-buena-revisada" defer></script>
 <script src="{{ url_for('store_bp.static', filename='js/menu_tienda.js') }}" defer></script>
 <script src="{{ url_for('static', filename='js/admin_imap.js') }}" defer></script>

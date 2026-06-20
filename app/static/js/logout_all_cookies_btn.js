@@ -46,10 +46,25 @@
     }
   }
 
+  function formatLogoutCookiesButtonLabel(btn) {
+    if (!btn || btn.dataset.logoutLabelFormatted === '1') return;
+    const icon = btn.querySelector('i');
+    btn.dataset.logoutLabelFormatted = '1';
+    btn.replaceChildren();
+    if (icon) btn.appendChild(icon);
+    btn.appendChild(document.createTextNode(' Cerrar sesión y '));
+    const small = document.createElement('span');
+    small.className = 'logout-clear-cookies-label';
+    small.textContent = 'limpiar cookies';
+    btn.appendChild(small);
+  }
+
   document.addEventListener('DOMContentLoaded', function () {
     const btnLogoutAllAndClearCookies = document.getElementById('btnLogoutAllAndClearCookies');
     let isProcessingLogout = false;
     if (!btnLogoutAllAndClearCookies) return;
+
+    formatLogoutCookiesButtonLabel(btnLogoutAllAndClearCookies);
 
     btnLogoutAllAndClearCookies.addEventListener('click', function (e) {
       if (isProcessingLogout) {

@@ -5,6 +5,8 @@
   var BINANCE_PAY_POLL_MAX_MS = 15 * 60 * 1000;
   var rechargeRealtimeConn = null;
   var userRechargeItems = [];
+  var userListMeta = { offset: 0, limit: 50, has_more: false, filter_total: 0, shown_count: 0 };
+  var userListLoadingMore = false;
   var binancePayPollTimer = null;
   var binancePayActiveTradeNo = '';
   var binancePayPollStartedAt = 0;
@@ -641,7 +643,73 @@
       });
   }
 
-  function renderList(items, meta) {
+  function removeUserListFooter(list) {
+    if (!list) return;
+    list.querySelectorAll('.balance-recharge-list-truncation, .balance-recharge-list-more-wrap').forEach(function (el) {
+      el.remove();
+    });
+  }
+
+  function mergeUserRechargeItems(newItems) {
+    var seen = {};
+    userRechargeItems.forEach(function (it) {
+      if (it && it.id != null) seen[it.id] = true;
+    });
+    (newItems || []).forEach(function (it) {
+      if (it && it.id != null && !seen[it.id]) {
+        userRechargeItems.push(it);
+        seen[it.id] = true;
+      }
+    });
+  }
+
+  function updateUserListMeta(data) {
+    data = data || {};
+    userListMeta = {
+      offset: parseInt(data.offset, 10) || 0,
+      limit: parseInt(data.list_limit, 10) || 50,
+      has_more: !!data.has_more,
+      filter_total: parseInt(data.filter_total, 10) || 0,
+      shown_count: parseInt(data.shown_count, 10) || (userRechargeItems ? userRechargeItems.length : 0),
+      next_offset:
+        data.next_offset != null
+          ? parseInt(data.next_offset, 10)
+          : (parseInt(data.offset, 10) || 0) + ((data.items && data.items.length) || 0),
+    };
+  }
+
+  function renderListFooter(data) {
+    data = data || {};
+    var parts = [];
+    var shown = parseInt(data.shown_count, 10);
+    if (isNaN(shown)) shown = userRechargeItems.length;
+    var total = parseInt(data.filter_total, 10);
+    if (!isNaN(total) && total > shown) {
+      parts.push(
+        '<p class="balance-recharge-list-truncation text-muted" role="status">Mostrando ' +
+          shown +
+          ' de ' +
+          total +
+          ' en este filtro.</p>'
+      );
+    } else if (data.has_more) {
+      parts.push(
+        '<p class="balance-recharge-list-truncation text-muted" role="status">Hay más solicitudes en este filtro.</p>'
+      );
+    }
+    if (data.has_more) {
+      parts.push(
+        '<div class="balance-recharge-list-more-wrap">' +
+          '<button type="button" class="btn-panel btn-blue balance-recharge-list-more-btn"' +
+          (userListLoadingMore ? ' disabled' : '') +
+          '>Cargar más solicitudes</button>' +
+          '</div>'
+      );
+    }
+    return parts.join('');
+  }
+
+  function renderList(items, meta, listMeta) {
     var list = document.getElementById('balanceRechargeList');
     if (!list) return;
     userRechargeItems = items || [];
@@ -649,7 +717,39 @@
       list.innerHTML = '<p class="balance-recharge-empty text-muted">No hay solicitudes cargadas.</p>';
       return;
     }
-    list.innerHTML = items.map(renderUserRechargeItem).join('');
+    updateUserListMeta(listMeta || {});
+    list.innerHTML = items.map(renderUserRechargeItem).join('') + renderListFooter(listMeta || {});
+  }
+
+  function appendListItems(newItems, listMeta) {
+    var list = document.getElementById('balanceRechargeList');
+    if (!list || !newItems || !newItems.length) return;
+    removeUserListFooter(list);
+    mergeUserRechargeItems(newItems);
+    updateUserListMeta(
+      Object.assign({}, listMeta || {}, { shown_count: userRechargeItems.length })
+    );
+    list.insertAdjacentHTML('beforeend', newItems.map(renderUserRechargeItem).join(''));
+    list.insertAdjacentHTML('beforeend', renderListFooter(userListMeta));
+  }
+
+  function buildUserListUrl(meta, offset) {
+    meta = meta || {};
+    var list = document.getElementById('balanceRechargeList');
+    var listUrl = meta.listUrl || (list ? list.getAttribute('data-list-url') : '') || '';
+    var filterEl = document.getElementById('balanceRechargeListFilter');
+    var st = filterEl ? filterEl.value : 'all';
+    var limit = userListMeta.limit || 50;
+    return (
+      listUrl +
+      (listUrl.indexOf('?') >= 0 ? '&' : '?') +
+      'status=' +
+      encodeURIComponent(st) +
+      '&offset=' +
+      encodeURIComponent(String(offset || 0)) +
+      '&limit=' +
+      encodeURIComponent(String(limit))
+    );
   }
 
   function escapeHtml(s) {
@@ -670,10 +770,8 @@
       renderList([], meta);
       return;
     }
-    var filterEl = document.getElementById('balanceRechargeListFilter');
-    var st = filterEl ? filterEl.value : 'all';
-    var url =
-      listUrl + (listUrl.indexOf('?') >= 0 ? '&' : '?') + 'status=' + encodeURIComponent(st);
+    userListMeta.offset = 0;
+    var url = buildUserListUrl(meta, 0);
     list.innerHTML = '<p class="balance-recharge-loading text-muted">Cargando solicitudes…</p>';
     rechargeFetchJson(url)
       .then(function (data) {
@@ -699,7 +797,7 @@
             '<p class="balance-recharge-empty text-muted">No hay solicitudes en este filtro.</p>';
           return;
         }
-        renderList(items, meta);
+        renderList(items, meta, data);
       })
       .catch(function () {
         updateUserFilterOptionLabels({
@@ -714,11 +812,53 @@
       });
   }
 
+  function loadMoreList(meta) {
+    meta = meta || {};
+    if (userListLoadingMore || !userListMeta.has_more) return;
+    var list = document.getElementById('balanceRechargeList');
+    if (!list) return;
+    var nextOffset =
+      userListMeta.next_offset != null ? userListMeta.next_offset : userRechargeItems.length;
+    userListLoadingMore = true;
+    var btn = list.querySelector('.balance-recharge-list-more-btn');
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = 'Cargando…';
+    }
+    rechargeFetchJson(buildUserListUrl(meta, nextOffset))
+      .then(function (data) {
+        if (!data || !data.success) {
+          throw new Error('load-more');
+        }
+        appendListItems(data.items || [], data);
+      })
+      .catch(function () {
+        var retryBtn = list.querySelector('.balance-recharge-list-more-btn');
+        if (retryBtn) {
+          retryBtn.disabled = false;
+          retryBtn.textContent = 'Cargar más solicitudes';
+        }
+      })
+      .finally(function () {
+        userListLoadingMore = false;
+      });
+  }
+
   function bindListFilter(meta) {
     var filterEl = document.getElementById('balanceRechargeListFilter');
     if (!filterEl) return;
     filterEl.addEventListener('change', function () {
       loadList(meta);
+    });
+  }
+
+  function bindListLoadMore(meta) {
+    var list = document.getElementById('balanceRechargeList');
+    if (!list) return;
+    list.addEventListener('click', function (ev) {
+      var btn = ev.target && ev.target.closest ? ev.target.closest('.balance-recharge-list-more-btn') : null;
+      if (!btn || btn.disabled) return;
+      loadMoreList(meta);
     });
   }
 
@@ -1399,6 +1539,7 @@
     bindRechargeRealtime(meta);
     bindForm(meta);
     bindListFilter(meta);
+    bindListLoadMore(meta);
     loadPaymentMethods(meta).then(function () {
       updateAmountFieldForMethod();
       updateBinancePayUi();

@@ -553,6 +553,160 @@ def proof_image_hash(image_path: str) -> str:
     return h.hexdigest()
 
 
+_RECHARGE_PROOF_PIL_FORMATS = frozenset({'JPEG', 'PNG', 'GIF', 'WEBP', 'MPO'})
+_RECHARGE_PROOF_FORMAT_TO_MIME = {
+    'JPEG': 'image/jpeg',
+    'MPO': 'image/jpeg',
+    'PNG': 'image/png',
+    'GIF': 'image/gif',
+    'WEBP': 'image/webp',
+}
+_RECHARGE_PROOF_MIN_DIMENSION = 20
+_RECHARGE_PROOF_MAX_DIMENSION = 20000
+
+
+def validate_recharge_proof_image(path: str, declared_mime: str | None = None) -> str | None:
+    """Valida contenido real del archivo (PIL), no solo Content-Type. None = OK."""
+    if not path or not os.path.isfile(path):
+        return 'El comprobante no se pudo leer.'
+    try:
+        from PIL import Image
+
+        with Image.open(path) as img:
+            img.verify()
+        with Image.open(path) as img:
+            fmt = (img.format or '').upper()
+            if fmt not in _RECHARGE_PROOF_PIL_FORMATS:
+                return 'Solo se permiten imágenes JPG, PNG, WebP o GIF.'
+            w, h = img.size
+            if w < _RECHARGE_PROOF_MIN_DIMENSION or h < _RECHARGE_PROOF_MIN_DIMENSION:
+                return 'La imagen del comprobante es demasiado pequeña.'
+            if w > _RECHARGE_PROOF_MAX_DIMENSION or h > _RECHARGE_PROOF_MAX_DIMENSION:
+                return 'La imagen del comprobante es demasiado grande.'
+            detected_mime = _RECHARGE_PROOF_FORMAT_TO_MIME.get(fmt)
+            declared = (declared_mime or '').strip().lower()
+            if declared and detected_mime and declared != detected_mime:
+                return 'El tipo de archivo no coincide con el contenido real de la imagen.'
+    except Exception:
+        return 'El archivo no es una imagen válida (JPG, PNG, WebP o GIF).'
+    return None
+
+
+def recharge_analysis_blockers(
+    analysis: dict[str, Any],
+    *,
+    currency: str,
+    payment_method_id: str,
+    payment_method_label: str,
+    selected_method: dict[str, Any],
+    amount_claimed: float,
+) -> str | None:
+    """Validaciones OCR/comprobante compartidas (submit y aprobación admin)."""
+    from app.store.transaction_amount_limits import (
+        proof_transaction_amount_limit_message,
+        transaction_amount_limit_error_message,
+    )
+
+    cur = (currency or 'COP').strip().upper()
+    pm_id = payment_method_id or ''
+    pm_label = payment_method_label or ''
+    method = selected_method or {}
+
+    amt_msg = transaction_amount_limit_error_message(amount_claimed, cur, method)
+    if amt_msg:
+        return amt_msg
+
+    limit_msg = proof_transaction_amount_limit_message(analysis, cur, method)
+    if limit_msg:
+        return limit_msg
+
+    checks = (
+        lambda: proof_nequi_corresponsal_wrong_method_message(analysis, method, pm_id, pm_label),
+        lambda: proof_bancolombia_to_nequi_wrong_method_message(analysis, method, pm_id, pm_label),
+        lambda: proof_nequi_llave_bancolombia_wrong_method_message(analysis, method, pm_id, pm_label),
+        lambda: proof_nequi_envio_bancolombia_wrong_method_message(analysis, method, pm_id, pm_label),
+        lambda: proof_breb_nequi_wrong_method_message(analysis, method, pm_id, pm_label),
+        lambda: proof_daviplata_breb_wrong_method_message(analysis, method, pm_id, pm_label),
+        lambda: proof_crypto_wallet_wrong_method_message(analysis, method, pm_id, pm_label),
+        lambda: proof_binance_id_wrong_method_message(analysis, method, pm_id, pm_label),
+        lambda: proof_payment_brand_mismatch_message(analysis, method, pm_id, pm_label),
+        lambda: proof_amount_mismatch_message(analysis, cur),
+        lambda: proof_account_config_invalid_message(analysis),
+        lambda: proof_account_missing_config_message(analysis),
+        lambda: proof_account_not_recognized_message(analysis),
+        lambda: proof_account_mismatch_message(analysis),
+        lambda: proof_breb_llave_mismatch_message(analysis),
+    )
+    for check in checks:
+        msg = check()
+        if msg:
+            return msg
+    return None
+
+
+def admin_approve_pending_recharge_blockers(
+    row,
+    *,
+    proof_upload_dir: str,
+    amount_claimed: float,
+) -> str | None:
+    """Revalida comprobante antes de aprobar manualmente una solicitud pending."""
+    from app.store.balance_recharge_payment import find_payment_method_for_recharge
+
+    try:
+        stored_analysis = json.loads(getattr(row, 'analyzer_json', None) or '{}')
+    except (json.JSONDecodeError, TypeError):
+        stored_analysis = {}
+    if not isinstance(stored_analysis, dict):
+        stored_analysis = {}
+
+    currency = (getattr(row, 'currency', None) or 'COP').strip().upper()
+    pm_id = str(getattr(row, 'payment_method_id', None) or '').strip()
+    pm_review = find_payment_method_for_recharge(row, stored_analysis) or {}
+    pm_label = str(pm_review.get('label') or pm_id)
+
+    proof_path = None
+    try:
+        files = json.loads(getattr(row, 'proof_files_json', None) or '[]')
+    except (json.JSONDecodeError, TypeError):
+        files = []
+    if isinstance(files, list) and files:
+        entry = files[0] if isinstance(files[0], dict) else {}
+        stored_name = str(entry.get('stored') or '').strip()
+        if stored_name:
+            candidate = os.path.join(proof_upload_dir, stored_name)
+            if os.path.isfile(candidate):
+                proof_path = candidate
+
+    analysis = stored_analysis
+    if proof_path:
+        from app.utils.timezone import get_colombia_now
+
+        upload_day = getattr(row, 'created_at', None)
+        if upload_day is not None and hasattr(upload_day, 'date'):
+            upload_day = upload_day.date()
+        else:
+            upload_day = get_colombia_now().date()
+        analysis = analyze_recharge_proof(
+            proof_path,
+            float(amount_claimed),
+            currency,
+            pm_id,
+            payment_method_label=pm_label,
+            payment_method=pm_review,
+            upload_date=upload_day,
+        )
+
+    return recharge_analysis_blockers(
+        analysis,
+        currency=currency,
+        payment_method_id=pm_id,
+        payment_method_label=pm_label,
+        selected_method=pm_review,
+        amount_claimed=float(amount_claimed),
+    )
+
+
 def digits_only(value: str) -> str:
     return re.sub(r'\D', '', str(value or ''))
 

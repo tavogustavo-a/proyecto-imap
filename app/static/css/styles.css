@@ -867,6 +867,16 @@ noscript p {
 .mt-3 { margin-top: 3rem; }
 .mt-4 { margin-top: 4rem; }
 .mb-04 { margin-bottom: 0.4rem; }
+
+/* Botón menú admin: "Cerrar sesión y limpiar cookies" (todas las plantillas) */
+#btnLogoutAllAndClearCookies.mobile-menu-btn {
+  white-space: nowrap;
+}
+
+#btnLogoutAllAndClearCookies .logout-clear-cookies-label {
+  font-size: 0.88em;
+}
+
 .mb-05 { margin-bottom: 0.5rem; }
 .mb-1 { margin-bottom: 1rem; }
 .mb-1-5 { margin-bottom: 1.5rem; }
@@ -1899,7 +1909,6 @@ noscript p {
   box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
   cursor: pointer;
   color: #fff;
-  transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
   outline: none;
   display: inline-flex;
   align-items: center;
@@ -1946,7 +1955,6 @@ noscript p {
 .service-btn:active {
   transform: translateY(0) scale(0.98);
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.15);
-  transition: all 0.1s ease;
 }
 
 /* Estilo para botón de servicio seleccionado (persistente) */
@@ -2202,7 +2210,6 @@ body .edit-service-page #aliasPopup {
   
   .service-btn:active {
     transform: translateY(0) scale(0.99);
-    transition: all 0.1s ease;
   }
   
   .service-btn:hover img {
@@ -3523,10 +3530,6 @@ a.btn-search.btn-rounded:hover {
   border-radius: 8px !important;
 }
 
-.menu-toggle-btn {
-  margin-left: 0.7rem;
-}
-
 .admin-select {
   border: 2px solid #111;
   border-radius: 6px;
@@ -4338,7 +4341,6 @@ a.btn-search.btn-rounded:hover {
   align-items: center !important;
   gap: 0.1rem !important;
   cursor: pointer !important;
-  transition: opacity 0.2s ease !important;
 }
 
 /* Asegurar que el texto dentro de alias-popup-item también sea blanco */
@@ -4364,7 +4366,6 @@ a.btn-search.btn-rounded:hover {
     align-items: center !important;
     gap: 0.1rem !important;
     cursor: pointer !important;
-    transition: opacity 0.2s ease !important;
   }
   
   /* Asegurar que el texto dentro de alias-popup-item también sea blanco en pantallas grandes */

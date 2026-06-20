@@ -52,17 +52,19 @@
 
     {% if p1_mode == 'guests' and not session.get("logged_in") %}
       <div class="main-message-wrapper mb-1">
-        {{ p1_text|safe }}
+        {{ p1_text|sanitize_message_html }}
       </div>
     {% endif %}
 
     {% if p2_mode == 'users' and session.get("logged_in") %}
       <div class="main-message-wrapper mb-1">
-        {{ p2_text|safe }}
+        {{ p2_text|sanitize_message_html }}
       </div>
     {% endif %}
 
     {% if services_in_rows %}
+    <div id="codigosViewPrefsScope" hidden data-user-id="{{ current_user_id if current_user_id else 'anon' }}"></div>
+    <div id="codigosServicesWrap" class="codigos-services-wrap codigos-services-wrap--view-cards">
       {% if is_admin %}
         {# ADMIN TAMBIÉN RESPETA VISIBILITY_MODE (solo ve servicios visibles) #}
         {% for row in services_in_rows %}
@@ -312,6 +314,7 @@
           </div>
         {% endfor %}
       {% endif %}
+    </div>
     {% endif %}
 
     <!-- Form de búsqueda IMAP -->
@@ -388,7 +391,14 @@
     {% if user_object and user_object.has_public_tools_access() %}
       <a href="{{ url_for('store_bp.tools_public') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-tools"></i> Herramientas</a>
     {% endif %}
+    {% if services_in_rows %}
+    <div class="codigos-sidebar-codigos-row">
+      <a href="{{ url_for('main_bp.home') }}" class="btn-panel btn-blue mobile-menu-btn"><i class="fas fa-code"></i> Códigos</a>
+      <button type="button" class="btn-panel btn-blue mobile-menu-btn btn-codigos-editar-vista">Editar vista</button>
+    </div>
+    {% else %}
     <a href="{{ url_for('main_bp.home') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-code"></i> Códigos</a>
+    {% endif %}
     {% if is_user and current_user %}
       {% if current_user.is_support %}
         <a href="{{ url_for('store_bp.support_dashboard') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-headset"></i> Chat de Soporte Admin</a>
@@ -429,6 +439,44 @@
   <div id="menuOverlay" class="menu-overlay"></div>
   </div>
   
+  <!-- Modal editar vista códigos -->
+  {% if services_in_rows %}
+  <div id="codigosViewModal" class="desc-modal store-config-modal modal-hidden" role="dialog" aria-labelledby="codigosViewModalTitle" aria-modal="true">
+    <div class="desc-modal-content store-config-modal-panel codigos-view-modal-panel">
+      <button type="button" id="closeCodigosViewModalBtn" class="btn-close-desc-modal" aria-label="Cerrar">&times;</button>
+      <h3 id="codigosViewModalTitle" class="store-config-modal-title">
+        <i class="fas fa-th-large" aria-hidden="true"></i>
+        <span>Editar vista de códigos</span>
+      </h3>
+      <fieldset class="store-config-fieldset">
+        <legend class="store-config-fieldset__legend">
+          <span class="store-config-fieldset__legend-inner">Vista de los botones</span>
+        </legend>
+        <label class="store-config-view-option">
+          <input type="radio" name="codigosConfigView" class="store-config-view-option__input" value="cards" checked>
+          <span class="store-config-view-option__label">Vista 1 — Tarjetas <span class="store-config-view-option__badge">Predeterminada</span></span>
+        </label>
+        <label class="store-config-view-option">
+          <input type="radio" name="codigosConfigView" class="store-config-view-option__input" value="compact">
+          <span class="store-config-view-option__label">Vista 2 — Lista compacta</span>
+        </label>
+        <label class="store-config-view-option">
+          <input type="radio" name="codigosConfigView" class="store-config-view-option__input" value="grid">
+          <span class="store-config-view-option__label">Vista 3 — Cuadrícula (icono arriba)</span>
+        </label>
+        <label class="store-config-view-option">
+          <input type="radio" name="codigosConfigView" class="store-config-view-option__input" value="table">
+          <span class="store-config-view-option__label">Vista 4 — Tabla (filas)</span>
+        </label>
+        <label class="store-config-view-option">
+          <input type="radio" name="codigosConfigView" class="store-config-view-option__input" value="icons">
+          <span class="store-config-view-option__label">Vista 5 — Solo iconos</span>
+        </label>
+      </fieldset>
+    </div>
+  </div>
+  {% endif %}
+
   <!-- Overlay opaco para el modal de alias -->
   <div id="aliasPopupOverlay"></div>
   
@@ -444,6 +492,7 @@
 
 {% block head %}{{ super() }}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/store.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/codigos_view.css') }}?v=20260611-codigos-a11y-layout">
 <link rel="stylesheet" href="{{ url_for('static', filename='fontawesome/css/all.css') }}">
 <link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/chat_soporte.css') }}">
 <meta name="csrf_token" content="{{ csrf_token() }}">
@@ -451,6 +500,7 @@
 
 {% block scripts %}
 {{ super() }}
+<script src="{{ url_for('static', filename='js/codigos_view_config.js') }}?v=20260611-codigos-a11y-layout" defer></script>
 <script src="{{ url_for('static', filename='js/menu_busqueda.js') }}" defer></script>
 <script src="{{ url_for('static', filename='js/admin_imap.js') }}" defer></script>
 

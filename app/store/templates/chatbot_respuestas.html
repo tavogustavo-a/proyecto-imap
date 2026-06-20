@@ -2,7 +2,7 @@
 
 {% block title %}Chatbot respuestas-preguntas{% endblock %}
 
-{% block head %}{{ super() }}<link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}?v=20260519-chatbot-hub"><link rel="stylesheet" href="{{ url_for('static', filename='fontawesome/css/all.css') }}">{% endblock %}
+{% block head %}{{ super() }}<link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}?v=20260611-logout-cookies-label"><link rel="stylesheet" href="{{ url_for('static', filename='fontawesome/css/all.css') }}">{% endblock %}
 {% block content %}
 <div class="container container-max-width-900 store-light store-front-main px-2 pb-3 chatbot-rp-page"
      {% if is_admin %}
@@ -113,9 +113,8 @@
 {% block scripts %}
 <script src="{{ url_for('store_bp.static', filename='js/menu_tienda.js') }}" defer></script>
 {% if is_admin %}
-<meta name="clear_trigger_log_url" content="{{ url_for('admin_bp.clear_trigger_log') }}">
 <script src="{{ url_for('static', filename='js/clear_trigger_logs.js') }}" defer></script>
-<script src="{{ url_for('static', filename='js/logout_all_cookies_btn.js') }}" defer></script>
+<script src="{{ url_for('static', filename='js/logout_all_cookies_btn.js') }}?v=20260611-logout-cookies-label" defer></script>
 {% endif %}
 <script src="{{ url_for('store_bp.static', filename='js/chatbot_respuestas.js') }}?v=20260522-csp-meta" defer></script>
 {% endblock %}

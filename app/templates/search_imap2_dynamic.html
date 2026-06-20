@@ -47,7 +47,7 @@
     {# Mostrar párrafo personalizado del servidor IMAP2 si existe #}
     {% if paragraph %}
       <div class="main-message-wrapper mb-1">
-        {{ paragraph|safe }}
+        {{ paragraph|sanitize_message_html }}
       </div>
     {% endif %}
 

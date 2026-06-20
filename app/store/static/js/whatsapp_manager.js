@@ -1,411 +1,964 @@
 /**
- * WhatsApp Manager - JavaScript para configuración de WhatsApp
- * Maneja: configuración, tabla, modal y acciones de WhatsApp
+ * WhatsApp Web (Evolution API) — configuración única, salud, QR y pruebas.
  */
 
-// ==================== CONFIGURACIÓN DE WHATSAPP ====================
+var whatsappActiveConfigId = null;
+var whatsappHealthPollTimer = null;
+var whatsappNotifyDailyLogCache = [];
+var whatsappQrModalTrigger = null;
+var whatsappNotifyAttemptsModalTrigger = null;
 
-document.addEventListener('DOMContentLoaded', function() {
-    const whatsappForm = document.getElementById('whatsapp-config-form');
-    const testWhatsAppBtn = document.getElementById('test-whatsapp-connection');
-    const whatsappStatusDiv = document.getElementById('whatsapp-status');
-    
-    if (!whatsappForm || !testWhatsAppBtn || !whatsappStatusDiv) {
-        console.error('Elementos del formulario WhatsApp no encontrados');
-        return;
-    }
-    
-    // Manejar envío del formulario
-    whatsappForm.addEventListener('submit', async function(e) {
-        e.preventDefault();
-        
-        const formData = new FormData(whatsappForm);
-        
-        try {
-            showWhatsAppStatus('Guardando configuración...', 'info');
-            
-            const csrfToken = document.querySelector('meta[name="csrf_token"]')?.content || '';
-            
-            const response = await fetch('/tienda/admin/whatsapp_configs', {
-                method: 'POST',
-                headers: {
-                    'X-CSRFToken': csrfToken
-                },
-                body: formData
-            });
-            
-            const result = await response.json();
-            
-            if (result.success) {
-                showWhatsAppStatus(result.message, 'success');
-                whatsappForm.reset();
-                loadWhatsAppConfigsTable();
-            } else {
-                showWhatsAppStatus(result.error || 'Error desconocido', 'error');
-            }
-            
-        } catch (error) {
-            console.error('Error:', error);
-            showWhatsAppStatus('Error de conexión', 'error');
-        }
+var WHATSAPP_LICENSE_TEMPLATE_EXAMPLE =
+    'Hola {{customer_name}}, tus licencias vencen pronto ({{days_left}} días): ' +
+    '{{product_names}}. Renová en la tienda.';
+
+function syncWhatsAppTemplateExampleField() {
+    var field = document.querySelector('.whatsapp-template-field');
+    var tplInp = document.getElementById('whatsapp-template-message');
+    if (!field || !tplInp) return;
+    var hasValue = String(tplInp.value || '').trim().length > 0;
+    field.classList.toggle('is-filled', hasValue);
+}
+
+function setupWhatsAppTemplateField() {
+    var tplInp = document.getElementById('whatsapp-template-message');
+    var field = document.querySelector('.whatsapp-template-field');
+    if (!tplInp || !field) return;
+    tplInp.addEventListener('input', syncWhatsAppTemplateExampleField);
+    tplInp.addEventListener('focus', function () {
+        field.classList.add('is-focused');
     });
-    
-    // Manejar prueba de conexión
-    testWhatsAppBtn.addEventListener('click', async function() {
-        const apiKey = document.getElementById('whatsapp-api-key').value;
-        const phoneNumber = document.getElementById('whatsapp-phone-number').value;
-        
-        if (!apiKey.trim() || !phoneNumber.trim()) {
-            showWhatsAppStatus('Por favor ingresa la API Key y número de teléfono', 'error');
-            return;
-        }
-        
-        try {
-            showWhatsAppStatus('Probando conexión...', 'info');
-            
-            const csrfToken = document.querySelector('meta[name="csrf_token"]')?.content || '';
-            const formData = new FormData();
-            formData.append('whatsapp_api_key', apiKey);
-            formData.append('whatsapp_phone_number', phoneNumber);
-            
-            const response = await fetch('/tienda/admin/whatsapp_configs/test', {
-                method: 'POST',
-                headers: {
-                    'X-CSRFToken': csrfToken
-                },
-                body: formData
-            });
-            
-            const result = await response.json();
-            
-            if (result.success) {
-                showWhatsAppStatus(result.message, 'success');
-            } else {
-                showWhatsAppStatus(result.error || 'Error de conexión', 'error');
-            }
-            
-        } catch (error) {
-            console.error('Error:', error);
-            showWhatsAppStatus('Error de conexión', 'error');
-        }
+    tplInp.addEventListener('blur', function () {
+        field.classList.remove('is-focused');
+        syncWhatsAppTemplateExampleField();
     });
-    
-    // Cargar configuraciones existentes al cargar la página
-    loadWhatsAppConfigsTable();
-    
-    // Configurar modal de edición
-    setupWhatsAppModal();
-    
-    // Función para mostrar estado
-    function showWhatsAppStatus(message, type) {
-        whatsappStatusDiv.innerHTML = `<div class="alert alert-${type === 'success' ? 'success' : type === 'error' ? 'danger' : 'info'}">${message}</div>`;
-        
-        // Auto-ocultar después de 5 segundos para mensajes de éxito
-        if (type === 'success') {
-            setTimeout(() => {
-                whatsappStatusDiv.innerHTML = '';
-            }, 5000);
-        }
-    }
-});
-
-// ==================== FUNCIONES GLOBALES PARA WHATSAPP ====================
-
-// Función global para cargar la tabla de configuraciones de WhatsApp
-async function loadWhatsAppConfigsTable() {
-    try {
-        const response = await fetch('/tienda/admin/whatsapp_configs');
-        const result = await response.json();
-        
-        const tableContainer = document.getElementById('whatsapp-configs-table-container');
-        
-        if (result.configs && result.configs.length > 0) {
-            const tableHtml = `
-                <div class="table-responsive">
-                    <table class="table table-striped">
-                        <thead>
-                            <tr>
-                                <th>Número</th>
-                                <th>Hora</th>
-                                <th>Estado</th>
-                                <th>Último envío</th>
-                                <th>Acciones</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            ${result.configs.map(config => `
-                                <tr>
-                                    <td>${config.phone_number}</td>
-                                    <td>${config.notification_time || '--:--'}</td>
-                                    <td>
-                                        <button class="action-btn ${config.is_enabled ? 'action-red' : 'action-green'}" 
-                                                data-action="toggle-whatsapp-config" data-config-id="${config.id}">
-                                            ${config.is_enabled ? 'OFF' : 'ON'}
-                                        </button>
-                                    </td>
-                                    <td>${config.last_sent ? new Date(config.last_sent).toLocaleString() : 'Nunca'}</td>
-                                    <td>
-                                        <button class="btn-panel btn-blue btn-table-action" data-action="test-whatsapp-connection" data-config-id="${config.id}" title="Probar conexión">
-                                            <i class="fas fa-plug"></i>
-                                        </button>
-                                        <button class="btn-panel btn-orange btn-table-action" data-action="edit-whatsapp-config" data-config-id="${config.id}" title="Editar">
-                                            <i class="fas fa-edit"></i>
-                                        </button>
-                                        <button class="btn-panel btn-red btn-table-action" data-action="delete-whatsapp-config" data-config-id="${config.id}" title="Eliminar">
-                                            <i class="fas fa-trash"></i>
-                                        </button>
-                                    </td>
-                                </tr>
-                            `).join('')}
-                        </tbody>
-                    </table>
-                </div>
-            `;
-            tableContainer.innerHTML = tableHtml;
-        } else {
-            tableContainer.innerHTML = '<div class="text-center my-3">No hay configuraciones de WhatsApp.</div>';
-        }
-        
-    } catch (error) {
-        console.error('Error cargando tabla de WhatsApp:', error);
-        document.getElementById('whatsapp-configs-table-container').innerHTML = 
-            '<div class="text-danger text-center my-3">Error al cargar las configuraciones.</div>';
-    }
+    syncWhatsAppTemplateExampleField();
 }
 
-// Función para alternar ON/OFF de WhatsApp
-async function toggleWhatsAppConfig(configId) {
-    try {
-        const csrfToken = document.querySelector('meta[name="csrf_token"]')?.content || '';
-        const response = await fetch(`/tienda/admin/whatsapp_configs/${configId}/toggle`, {
-            method: 'POST',
-            headers: {
-                'X-CSRFToken': csrfToken
-            }
-        });
-        
-        const result = await response.json();
-        
-        if (result.success) {
-            showWhatsAppStatus(result.message, 'success');
-            loadWhatsAppConfigsTable();
-        } else {
-            showWhatsAppStatus(result.error || 'Error al cambiar estado', 'error');
-        }
-        
-    } catch (error) {
-        console.error('Error:', error);
-        showWhatsAppStatus('Error de conexión', 'error');
-    }
+function whatsappStoredTemplateForForm(stored) {
+    var raw = String(stored || '').trim();
+    if (!raw || raw === WHATSAPP_LICENSE_TEMPLATE_EXAMPLE) return '';
+    return raw;
 }
 
-// Función para probar conexión de WhatsApp
-async function testWhatsAppConnection(configId) {
-    try {
-        showWhatsAppStatus('Probando conexión...', 'info');
-        
-        const response = await fetch(`/tienda/admin/whatsapp_configs`);
-        const result = await response.json();
-        
-        const config = result.configs.find(c => c.id === configId);
-        if (!config) {
-            showWhatsAppStatus('Configuración no encontrada', 'error');
-            return;
-        }
-        
-        const csrfToken = document.querySelector('meta[name="csrf_token"]')?.content || '';
-        const formData = new FormData();
-        formData.append('whatsapp_api_key', config.api_key);
-        formData.append('whatsapp_phone_number', config.phone_number);
-        
-        const testResponse = await fetch('/tienda/admin/whatsapp_configs/test', {
-            method: 'POST',
-            headers: {
-                'X-CSRFToken': csrfToken
-            },
-            body: formData
-        });
-        
-        const testResult = await testResponse.json();
-        
-        if (testResult.success) {
-            showWhatsAppStatus(`Conexión exitosa para WhatsApp ${configId}`, 'success');
-        } else {
-            showWhatsAppStatus(`Error de conexión para WhatsApp ${configId}: ${testResult.error}`, 'error');
-        }
-        
-    } catch (error) {
-        console.error('Error:', error);
-        showWhatsAppStatus('Error de conexión', 'error');
-    }
+function whatsappCsrfToken() {
+    return document.querySelector('meta[name="csrf_token"]')?.content || '';
 }
 
-// Función para editar configuración de WhatsApp
-async function editWhatsAppConfig(configId) {
-    try {
-        const response = await fetch(`/tienda/admin/whatsapp_configs`);
-        const result = await response.json();
-        
-        const config = result.configs.find(c => c.id === configId);
-        if (!config) {
-            showWhatsAppStatus('Configuración no encontrada', 'error');
-            return;
-        }
-        
-        // Llenar el modal
-        document.getElementById('edit-whatsapp-id').value = config.id;
-        document.getElementById('edit-whatsapp-api-key').value = config.api_key || '';
-        document.getElementById('edit-whatsapp-phone-number').value = config.phone_number || '';
-        document.getElementById('edit-whatsapp-webhook-verify-token').value = config.webhook_verify_token || '';
-        document.getElementById('edit-whatsapp-template-message').value = config.template_message || '';
-        document.getElementById('edit-whatsapp-notification-time').value = config.notification_time || '';
-        document.getElementById('edit-whatsapp-enabled').checked = config.is_enabled;
-        
-        // Mostrar modal
-        document.getElementById('whatsapp-edit-modal').classList.remove('d-none');
-        
-    } catch (error) {
-        console.error('Error:', error);
-        showWhatsAppStatus('Error al cargar configuración', 'error');
-    }
-}
-
-// Función para eliminar configuración de WhatsApp
-async function deleteWhatsAppConfig(configId) {
-    if (!confirm('¿Estás seguro de que quieres eliminar esta configuración de WhatsApp?')) {
-        return;
-    }
-    
-    try {
-        const csrfToken = document.querySelector('meta[name="csrf_token"]')?.content || '';
-        const response = await fetch(`/tienda/admin/whatsapp_configs/${configId}`, {
-            method: 'DELETE',
-            headers: {
-                'X-CSRFToken': csrfToken
-            }
-        });
-        
-        const result = await response.json();
-        
-        if (result.success) {
-            showWhatsAppStatus(result.message, 'success');
-            loadWhatsAppConfigsTable();
-        } else {
-            showWhatsAppStatus(result.error || 'Error al eliminar', 'error');
-        }
-        
-    } catch (error) {
-        console.error('Error:', error);
-        showWhatsAppStatus('Error de conexión', 'error');
-    }
-}
-
-// Función para mostrar estado (específica para WhatsApp)
 function showWhatsAppStatus(message, type) {
-    const statusDiv = document.getElementById('whatsapp-status');
-    if (statusDiv) {
-        statusDiv.innerHTML = `<div class="alert alert-${type === 'success' ? 'success' : type === 'error' ? 'danger' : 'info'}">${message}</div>`;
-        
-        // Auto-ocultar después de 5 segundos para mensajes de éxito
-        if (type === 'success') {
-            setTimeout(() => {
-                statusDiv.innerHTML = '';
-            }, 5000);
-        }
+    var statusDiv = document.getElementById('whatsapp-status');
+    if (!statusDiv) return;
+    if (!message) {
+        statusDiv.textContent = '';
+        statusDiv.className = 'whatsapp-status-msg';
+        return;
+    }
+    var cls =
+        type === 'success'
+            ? 'whatsapp-status-msg--success'
+            : type === 'error'
+              ? 'whatsapp-status-msg--error'
+              : 'whatsapp-status-msg--info';
+    statusDiv.className = 'whatsapp-status-msg ' + cls;
+    statusDiv.textContent = message;
+    if (type === 'success') {
+        setTimeout(function () {
+            if (statusDiv.textContent === message) {
+                statusDiv.textContent = '';
+                statusDiv.className = 'whatsapp-status-msg';
+            }
+        }, 6000);
     }
 }
 
-// Configurar modal de edición de WhatsApp
-function setupWhatsAppModal() {
-    const modal = document.getElementById('whatsapp-edit-modal');
-    const closeBtn = document.getElementById('close-whatsapp-edit-modal');
-    const editForm = document.getElementById('whatsapp-edit-form');
-    
-    // Cerrar modal
-    closeBtn.addEventListener('click', () => {
-        modal.classList.add('d-none');
+function whatsappHealthUiState(config) {
+    if (!config) {
+        return { css: 'whatsapp-health-status--no-configurado', label: 'No configurado' };
+    }
+    var status = String(config.connection_status || 'unknown').toLowerCase();
+    if (status === 'connected') {
+        return { css: 'whatsapp-health-status--conectado', label: 'Conectado' };
+    }
+    if (!config.last_health_at) {
+        return { css: 'whatsapp-health-status--no-configurado', label: 'No configurado' };
+    }
+    return { css: 'whatsapp-health-status--desconectado', label: 'Desconectado' };
+}
+
+function updateWhatsAppHealthBanner(config) {
+    var statusEl = document.getElementById('whatsapp-health-status');
+    var valueEl = document.getElementById('whatsapp-health-value');
+    if (!statusEl || !valueEl) return;
+
+    var ui = whatsappHealthUiState(config);
+    statusEl.className = 'whatsapp-health-status ' + ui.css;
+    valueEl.textContent = ui.label;
+
+    var parts = [];
+    if (config && config.linked_phone) parts.push('Vinculado: ' + config.linked_phone);
+    if (config && config.last_health_at) {
+        try {
+            parts.push('Check: ' + new Date(config.last_health_at).toLocaleString());
+        } catch (_e) {
+            parts.push('Check: ' + config.last_health_at);
+        }
+    }
+    if (config && config.last_health_error) parts.push(config.last_health_error);
+    statusEl.title = parts.length ? parts.join(' · ') : '';
+}
+
+function populateWhatsAppForm(config) {
+    var phoneInp = document.getElementById('whatsapp-phone-number');
+    var tplInp = document.getElementById('whatsapp-template-message');
+    var timeInp = document.getElementById('whatsapp-notification-time');
+    var enabledInp = document.getElementById('whatsapp-enabled');
+    if (!config) {
+        if (phoneInp) phoneInp.value = '';
+        if (tplInp) tplInp.value = '';
+        if (timeInp) timeInp.value = '00:00';
+        if (enabledInp) enabledInp.checked = true;
+        syncWhatsAppTemplateExampleField();
+        return;
+    }
+    if (phoneInp) {
+        phoneInp.value =
+            config.phone_number && String(config.phone_number) !== '0' ? config.phone_number : '';
+    }
+    if (tplInp) tplInp.value = whatsappStoredTemplateForForm(config.template_message);
+    if (timeInp) timeInp.value = config.notification_time || '00:00';
+    if (enabledInp) enabledInp.checked = config.is_enabled !== false;
+    syncWhatsAppTemplateExampleField();
+}
+
+function whatsappNotifyTriggerLabel(trigger) {
+    var t = String(trigger || '').toLowerCase();
+    if (t === 'scheduled') return 'Programado';
+    if (t === 'reconnect_catchup') return 'Reconexión (+10 min)';
+    if (t === 'manual') return 'Manual';
+    return trigger || '—';
+}
+
+function whatsappDeliveryKindLabel(kind) {
+    var k = String(kind || '').toLowerCase();
+    if (k === 'aviso') return 'Aviso licencia';
+    if (k === 'resumen') return 'Resumen diario';
+    return kind || '—';
+}
+
+function whatsappDeliveryOutcomeLabel(outcome) {
+    var o = String(outcome || '').toLowerCase();
+    if (o === 'ok') return 'OK';
+    if (o === 'error') return 'Falló';
+    if (o === 'sin_telefono') return 'Sin teléfono';
+    return outcome || '—';
+}
+
+function whatsappDeliveryOutcomeClass(outcome) {
+    var o = String(outcome || '').toLowerCase();
+    if (o === 'error') return 'text-danger';
+    if (o === 'sin_telefono') return 'text-warning';
+    if (o === 'ok') return 'text-success';
+    return 'text-muted';
+}
+
+function collectWhatsAppDeliveryDetailsForDay(attempts) {
+    var rows = [];
+    (attempts || []).forEach(function (att) {
+        var when = formatWhatsAppColombiaDateTime12(null, att.co_time, att.at_utc);
+        (att.delivery_details || []).forEach(function (item) {
+            rows.push({
+                when: when,
+                username: item.username || '—',
+                phone: item.phone || '—',
+                kind: item.kind || '',
+                outcome: item.outcome || '',
+                reason: item.reason || '',
+            });
+        });
     });
-    
-    // Cerrar modal al hacer clic fuera
-    modal.addEventListener('click', (e) => {
-        if (e.target === modal) {
-            modal.classList.add('d-none');
+    return rows;
+}
+
+function whatsappNotifyStatusClass(status) {
+    var s = String(status || '').toLowerCase();
+    if (s === 'success') return 'text-success';
+    if (s === 'partial') return 'text-warning';
+    if (s === 'failed') return 'text-danger';
+    return 'text-muted';
+}
+
+function whatsappNotifyStatusLabel(status) {
+    var s = String(status || '').toLowerCase();
+    if (s === 'success') return 'OK';
+    if (s === 'partial') return 'Parcial';
+    if (s === 'failed') return 'Falló';
+    if (s === 'skipped') return 'Omitido';
+    return status || '—';
+}
+
+var WHATSAPP_NOTIFY_STATUS_RANK = { success: 4, partial: 3, failed: 2, skipped: 1 };
+
+function whatsappAttemptFromFlat(item) {
+    return {
+        at_utc: item.at_utc,
+        co_time: item.co_time,
+        trigger: item.trigger,
+        status: item.status,
+        sent: item.sent != null ? item.sent : 0,
+        errors: item.errors != null ? item.errors : 0,
+        skipped_no_phone: item.skipped_no_phone != null ? item.skipped_no_phone : 0,
+        daily_sent: item.daily_sent != null ? item.daily_sent : 0,
+        daily_errors: item.daily_errors != null ? item.daily_errors : 0,
+        reason: item.reason || '',
+    };
+}
+
+function whatsappRecomputeDailyNotifySummary(daily) {
+    var attempts = daily.attempts || [];
+    if (!attempts.length) {
+        daily.attempt_count = 0;
+        return;
+    }
+
+    var latest = attempts[0];
+    daily.co_time = latest.co_time || '';
+    daily.at_utc = latest.at_utc || '';
+    daily.trigger = latest.trigger || '';
+    daily.reason = latest.reason || '';
+    daily.attempt_count = attempts.length;
+
+    var best = attempts[0];
+    attempts.forEach(function (att) {
+        var rank = WHATSAPP_NOTIFY_STATUS_RANK[String(att.status || '').toLowerCase()] || 0;
+        var bestRank = WHATSAPP_NOTIFY_STATUS_RANK[String(best.status || '').toLowerCase()] || 0;
+        if (rank > bestRank) best = att;
+    });
+    daily.status = best.status || 'skipped';
+
+    daily.sent = attempts.reduce(function (sum, att) {
+        return sum + Number(att.sent || 0);
+    }, 0);
+    daily.errors = attempts.reduce(function (sum, att) {
+        return sum + Number(att.errors || 0);
+    }, 0);
+    daily.skipped_no_phone = attempts.reduce(function (sum, att) {
+        return sum + Number(att.skipped_no_phone || 0);
+    }, 0);
+    daily.daily_sent = attempts.reduce(function (sum, att) {
+        return sum + Number(att.daily_sent || 0);
+    }, 0);
+    daily.daily_errors = attempts.reduce(function (sum, att) {
+        return sum + Number(att.daily_errors || 0);
+    }, 0);
+}
+
+function normalizeWhatsAppNotifyDailyLog(log) {
+    if (!Array.isArray(log) || !log.length) return [];
+
+    var byDate = {};
+    log.forEach(function (item) {
+        if (!item || typeof item !== 'object') return;
+        var coDate = String(item.co_date || '').trim();
+        if (!coDate) return;
+
+        if (!byDate[coDate]) {
+            byDate[coDate] = { co_date: coDate, attempts: [] };
+        }
+        var daily = byDate[coDate];
+        var attempts = item.attempts;
+
+        if (Array.isArray(attempts)) {
+            if (attempts.length) {
+                attempts.forEach(function (att) {
+                    if (att && typeof att === 'object') daily.attempts.push(att);
+                });
+            } else if (item.co_time || item.at_utc || item.status) {
+                daily.attempts.push(whatsappAttemptFromFlat(item));
+            }
+        } else {
+            daily.attempts.push(whatsappAttemptFromFlat(item));
         }
     });
-    
-    // Manejar envío del formulario de edición
-    editForm.addEventListener('submit', async (e) => {
-        e.preventDefault();
-        
-        const formData = new FormData(editForm);
-        const data = Object.fromEntries(formData.entries());
-        const configId = data.edit_whatsapp_id;
-        
-        try {
-            showWhatsAppStatus('Actualizando configuración...', 'info');
-            
-            const csrfToken = document.querySelector('meta[name="csrf_token"]')?.content || '';
-            
-            const response = await fetch(`/tienda/admin/whatsapp_configs/${configId}`, {
-                method: 'PUT',
-                headers: {
-                    'X-CSRFToken': csrfToken
-                },
-                body: formData
+
+    return Object.keys(byDate)
+        .sort(function (a, b) {
+            return b.localeCompare(a);
+        })
+        .map(function (coDate) {
+            var daily = byDate[coDate];
+            daily.attempts.sort(function (a, b) {
+                var aKey = String(a.at_utc || '') + String(a.co_time || '');
+                var bKey = String(b.at_utc || '') + String(b.co_time || '');
+                return bKey.localeCompare(aKey);
             });
-            
-            const result = await response.json();
-            
+            whatsappRecomputeDailyNotifySummary(daily);
+            return daily;
+        });
+}
+
+function formatWhatsAppColombiaDateTime12(coDate, coTime, atUtc) {
+    if (atUtc) {
+        try {
+            var fromUtc = new Date(atUtc);
+            if (!isNaN(fromUtc.getTime())) {
+                return fromUtc.toLocaleString('es-CO', {
+                    timeZone: 'America/Bogota',
+                    day: '2-digit',
+                    month: '2-digit',
+                    year: 'numeric',
+                    hour: 'numeric',
+                    minute: '2-digit',
+                    hour12: true,
+                });
+            }
+        } catch (_e) {
+            /* fallback abajo */
+        }
+    }
+    if (!coDate) return '—';
+    var timePart = coTime || '00:00:00';
+    if (String(timePart).length === 5) {
+        timePart = timePart + ':00';
+    }
+    try {
+        var iso = coDate + 'T' + timePart + '-05:00';
+        var dt = new Date(iso);
+        if (!isNaN(dt.getTime())) {
+            return dt.toLocaleString('es-CO', {
+                timeZone: 'America/Bogota',
+                day: '2-digit',
+                month: '2-digit',
+                year: 'numeric',
+                hour: 'numeric',
+                minute: '2-digit',
+                hour12: true,
+            });
+        }
+    } catch (_e2) {
+        /* fallback abajo */
+    }
+    return coDate + ' ' + (coTime || '');
+}
+
+function renderWhatsAppNotifyRunLog(config) {
+    var wrap = document.getElementById('whatsapp-notify-run-log-container');
+    if (!wrap) return;
+    var log = normalizeWhatsAppNotifyDailyLog((config && config.notify_run_log) || []);
+    whatsappNotifyDailyLogCache = log;
+    if (!log.length) {
+        wrap.innerHTML = '<div class="text-muted small text-center">Sin ejecuciones registradas aún.</div>';
+        return;
+    }
+    wrap.innerHTML =
+        '<div class="table-responsive whatsapp-notify-run-log-table">' +
+        '<table class="table table-sm table-striped mb-0">' +
+        '<thead><tr>' +
+        '<th>Fecha y hora (CO)</th><th>Estado</th><th>Avisos</th><th>Resúmenes</th><th>Errores</th><th>Intentos</th><th>Detalle</th>' +
+        '</tr></thead><tbody>' +
+        log
+            .map(function (row, idx) {
+                var attemptCount = row.attempt_count != null ? row.attempt_count : (row.attempts || []).length;
+                return (
+                    '<tr>' +
+                    '<td class="whatsapp-notify-datetime-cell">' +
+                    formatWhatsAppColombiaDateTime12(row.co_date, row.co_time, row.at_utc) +
+                    '</td>' +
+                    '<td class="' +
+                    whatsappNotifyStatusClass(row.status) +
+                    ' fw-bold">' +
+                    whatsappNotifyStatusLabel(row.status) +
+                    '</td>' +
+                    '<td>' +
+                    (row.sent != null ? row.sent : '0') +
+                    '</td>' +
+                    '<td>' +
+                    (row.daily_sent != null ? row.daily_sent : '0') +
+                    '</td>' +
+                    '<td>' +
+                    (row.errors != null ? row.errors : '0') +
+                    '</td>' +
+                    '<td>' +
+                    attemptCount +
+                    '</td>' +
+                    '<td class="text-center">' +
+                    '<button type="button" class="btn-panel btn-blue whatsapp-notify-day-detail-btn" data-day-index="' +
+                    idx +
+                    '" title="Ver intentos del día" aria-label="Ver intentos del ' +
+                    (row.co_date || 'día') +
+                    '">' +
+                    '<i class="fas fa-list-ul" aria-hidden="true"></i>' +
+                    '</button>' +
+                    '</td>' +
+                    '</tr>'
+                );
+            })
+            .join('') +
+        '</tbody></table></div>';
+
+    wrap.querySelectorAll('.whatsapp-notify-day-detail-btn').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            var idx = parseInt(btn.getAttribute('data-day-index'), 10);
+            showWhatsAppNotifyAttemptsModal(idx, btn);
+        });
+    });
+}
+
+function closeWhatsAppNotifyAttemptsModal() {
+    var modal = document.getElementById('whatsapp-notify-attempts-modal');
+    if (!modal) return;
+    var trigger =
+        whatsappNotifyAttemptsModalTrigger && typeof whatsappNotifyAttemptsModalTrigger.focus === 'function'
+            ? whatsappNotifyAttemptsModalTrigger
+            : null;
+    modal.classList.add('d-none');
+    modal.setAttribute('hidden', '');
+    modal.setAttribute('aria-hidden', 'true');
+    whatsappNotifyAttemptsModalTrigger = null;
+    if (trigger && typeof trigger.focus === 'function') {
+        trigger.focus({ preventScroll: true });
+    }
+}
+
+function openWhatsAppNotifyAttemptsModal(triggerEl) {
+    var modal = document.getElementById('whatsapp-notify-attempts-modal');
+    if (!modal) return;
+    whatsappNotifyAttemptsModalTrigger = triggerEl || document.activeElement;
+    modal.classList.remove('d-none');
+    modal.removeAttribute('hidden');
+    modal.setAttribute('aria-hidden', 'false');
+    var closeBtn = document.getElementById('whatsapp-notify-attempts-close-btn');
+    if (closeBtn) {
+        closeBtn.focus();
+    } else {
+        modal.focus();
+    }
+}
+
+function showWhatsAppNotifyAttemptsModal(dayIndex, triggerEl) {
+    var modal = document.getElementById('whatsapp-notify-attempts-modal');
+    var titleDate = document.getElementById('whatsapp-notify-attempts-modal-date');
+    var body = document.getElementById('whatsapp-notify-attempts-modal-body');
+    if (!modal || !body) return;
+
+    var day = whatsappNotifyDailyLogCache[dayIndex];
+    if (!day) return;
+
+    var attempts = day.attempts || [];
+    if (titleDate) {
+        titleDate.textContent =
+            'Último intento: ' +
+            formatWhatsAppColombiaDateTime12(day.co_date, day.co_time, day.at_utc);
+    }
+
+    if (!attempts.length) {
+        body.innerHTML = '<div class="text-muted small text-center">Sin intentos registrados.</div>';
+    } else {
+        var clientDetails = collectWhatsAppDeliveryDetailsForDay(attempts);
+        var attemptsHtml =
+            '<div class="table-responsive">' +
+            '<table class="table table-sm table-striped mb-0">' +
+            '<thead><tr>' +
+            '<th>Fecha y hora (CO)</th><th>Origen</th><th>Estado</th><th>Avisos</th><th>Resúmenes</th><th>Errores</th><th>Sin tel.</th><th>Motivo</th>' +
+            '</tr></thead><tbody>' +
+            attempts
+                .map(function (att) {
+                    var skipped =
+                        Number(att.skipped_no_phone || 0) +
+                        Number(att.daily_skipped_no_phone || att.daily_skipped || 0);
+                    return (
+                        '<tr>' +
+                        '<td class="whatsapp-notify-datetime-cell">' +
+                        formatWhatsAppColombiaDateTime12(
+                            day.co_date,
+                            att.co_time,
+                            att.at_utc
+                        ) +
+                        '</td>' +
+                        '<td>' +
+                        whatsappNotifyTriggerLabel(att.trigger) +
+                        '</td>' +
+                        '<td class="' +
+                        whatsappNotifyStatusClass(att.status) +
+                        ' fw-bold">' +
+                        whatsappNotifyStatusLabel(att.status) +
+                        '</td>' +
+                        '<td>' +
+                        (att.sent != null ? att.sent : '0') +
+                        '</td>' +
+                        '<td>' +
+                        (att.daily_sent != null ? att.daily_sent : '0') +
+                        '</td>' +
+                        '<td>' +
+                        (att.errors != null ? att.errors : '0') +
+                        '</td>' +
+                        '<td>' +
+                        skipped +
+                        '</td>' +
+                        '<td class="small text-muted">' +
+                        (att.reason || '—') +
+                        '</td>' +
+                        '</tr>'
+                    );
+                })
+                .join('') +
+            '</tbody></table></div>';
+
+        var clientsHtml = '';
+        if (clientDetails.length) {
+            clientsHtml =
+                '<h6 class="text-center mt-3 mb-2">Detalle por cliente</h6>' +
+                '<div class="table-responsive">' +
+                '<table class="table table-sm table-striped mb-0">' +
+                '<thead><tr>' +
+                '<th>Intento</th><th>Usuario</th><th>Teléfono</th><th>Tipo</th><th>Resultado</th><th>Motivo</th>' +
+                '</tr></thead><tbody>' +
+                clientDetails
+                    .map(function (row) {
+                        return (
+                            '<tr>' +
+                            '<td class="whatsapp-notify-datetime-cell">' +
+                            row.when +
+                            '</td>' +
+                            '<td>' +
+                            row.username +
+                            '</td>' +
+                            '<td class="whatsapp-notify-phone-cell">' +
+                            row.phone +
+                            '</td>' +
+                            '<td>' +
+                            whatsappDeliveryKindLabel(row.kind) +
+                            '</td>' +
+                            '<td class="' +
+                            whatsappDeliveryOutcomeClass(row.outcome) +
+                            ' fw-bold">' +
+                            whatsappDeliveryOutcomeLabel(row.outcome) +
+                            '</td>' +
+                            '<td class="small text-muted">' +
+                            (row.reason || '—') +
+                            '</td>' +
+                            '</tr>'
+                        );
+                    })
+                    .join('') +
+                '</tbody></table></div>';
+        } else {
+            clientsHtml =
+                '<p class="text-muted small text-center mt-3 mb-0">Sin incidencias por cliente en este día (fallos o teléfonos faltantes).</p>';
+        }
+
+        body.innerHTML = attemptsHtml + clientsHtml;
+    }
+
+    openWhatsAppNotifyAttemptsModal(triggerEl);
+}
+
+async function loadWhatsAppConfig() {
+    try {
+        var response = await fetch('/tienda/admin/whatsapp_configs');
+        var result = await response.json();
+        var config = result.configs && result.configs.length ? result.configs[0] : null;
+
+        whatsappActiveConfigId = config ? config.id : null;
+        populateWhatsAppForm(config);
+        updateWhatsAppHealthBanner(config);
+        renderWhatsAppNotifyRunLog(config);
+    } catch (error) {
+        console.error('Error cargando WhatsApp:', error);
+        whatsappActiveConfigId = null;
+        populateWhatsAppForm(null);
+        updateWhatsAppHealthBanner(null);
+        renderWhatsAppNotifyRunLog(null);
+        showWhatsAppStatus('Error al cargar la configuración', 'error');
+    }
+}
+
+async function testWhatsAppConnectionFromForm() {
+    if (!whatsappActiveConfigId) {
+        showWhatsAppStatus('Guardá la configuración primero', 'error');
+        return;
+    }
+    await refreshWhatsAppHealth(whatsappActiveConfigId, false);
+}
+
+async function refreshWhatsAppHealth(configId, silent) {
+    if (!configId) return;
+    if (!silent) showWhatsAppStatus('Verificando salud…', 'info');
+    try {
+        var response = await fetch('/tienda/admin/whatsapp_configs/' + configId + '/health', {
+            method: 'POST',
+            headers: { 'X-CSRFToken': whatsappCsrfToken() },
+        });
+        var result = await response.json();
+        if (result.success) {
+            if (!silent) showWhatsAppStatus(result.message, 'success');
+            if (result.config) {
+                updateWhatsAppHealthBanner(result.config);
+                renderWhatsAppNotifyRunLog(result.config);
+            } else {
+                loadWhatsAppConfig();
+            }
+        } else if (!silent) {
+            showWhatsAppStatus(result.error || 'Error', 'error');
+        }
+    } catch (e) {
+        if (!silent) showWhatsAppStatus('Error de red', 'error');
+    }
+}
+
+function openWhatsAppQrModal(triggerEl) {
+    var modal = document.getElementById('whatsapp-qr-modal');
+    if (!modal) return;
+    whatsappQrModalTrigger = triggerEl || document.activeElement;
+    modal.classList.remove('d-none');
+    modal.removeAttribute('hidden');
+    modal.setAttribute('aria-hidden', 'false');
+    var closeBtn = document.getElementById('whatsapp-qr-close-btn');
+    if (closeBtn) {
+        closeBtn.focus();
+    } else {
+        modal.focus();
+    }
+}
+
+async function closeWhatsAppQrModal() {
+    var modal = document.getElementById('whatsapp-qr-modal');
+    if (!modal) return;
+    var trigger =
+        whatsappQrModalTrigger && typeof whatsappQrModalTrigger.focus === 'function'
+            ? whatsappQrModalTrigger
+            : document.getElementById('whatsapp-show-qr-btn');
+    modal.classList.add('d-none');
+    modal.setAttribute('hidden', '');
+    modal.setAttribute('aria-hidden', 'true');
+    setWhatsAppQrDisconnectVisible(false);
+    whatsappQrModalTrigger = null;
+    if (trigger && typeof trigger.focus === 'function') {
+        trigger.focus({ preventScroll: true });
+    }
+}
+
+function setWhatsAppQrDisconnectVisible(visible) {
+    var btn = document.getElementById('whatsapp-qr-disconnect-btn');
+    if (!btn) return;
+    if (visible) {
+        btn.classList.remove('d-none');
+        btn.hidden = false;
+    } else {
+        btn.classList.add('d-none');
+        btn.hidden = true;
+    }
+}
+
+async function disconnectWhatsAppInstance(configId) {
+    var id = configId || whatsappActiveConfigId;
+    if (!id) {
+        showWhatsAppStatus('Guardá la configuración primero', 'error');
+        return;
+    }
+    if (
+        !window.confirm(
+            '¿Desconectar WhatsApp Web de esta instancia? Tendrás que escanear el QR de nuevo para volver a enviar mensajes.'
+        )
+    ) {
+        return;
+    }
+
+    var wrap = document.getElementById('whatsapp-qr-image-wrap');
+    var disconnectBtn = document.getElementById('whatsapp-qr-disconnect-btn');
+    if (disconnectBtn) disconnectBtn.disabled = true;
+
+    showWhatsAppStatus('Desconectando…', 'info');
+    try {
+        var response = await fetch('/tienda/admin/whatsapp_configs/' + id + '/logout', {
+            method: 'POST',
+            headers: { 'X-CSRFToken': whatsappCsrfToken() },
+        });
+        var result = await response.json();
+        if (result.success) {
+            showWhatsAppStatus(result.message || 'Desconectado', 'success');
+            if (result.config) {
+                updateWhatsAppHealthBanner(result.config);
+                renderWhatsAppNotifyRunLog(result.config);
+            } else {
+                loadWhatsAppConfig();
+            }
+            if (wrap) {
+                wrap.innerHTML =
+                    '<p class="text-muted small mb-0">Sesión cerrada. Cerrá y volvé a abrir el QR para vincular otra línea.</p>';
+            }
+            setWhatsAppQrDisconnectVisible(false);
+        } else {
+            showWhatsAppStatus(result.error || 'No se pudo desconectar', 'error');
+        }
+    } catch (e) {
+        showWhatsAppStatus('Error de red', 'error');
+    } finally {
+        if (disconnectBtn) disconnectBtn.disabled = false;
+    }
+}
+
+async function showWhatsAppQr(configId) {
+    var id = configId || whatsappActiveConfigId;
+    if (!id) {
+        showWhatsAppStatus('Guardá la configuración primero', 'error');
+        return;
+    }
+    var modal = document.getElementById('whatsapp-qr-modal');
+    var wrap = document.getElementById('whatsapp-qr-image-wrap');
+    if (!modal || !wrap) return;
+
+    wrap.innerHTML = '<p class="text-muted">Generando QR… puede tardar unos segundos.</p>';
+    setWhatsAppQrDisconnectVisible(false);
+    openWhatsAppQrModal(document.getElementById('whatsapp-show-qr-btn'));
+
+    try {
+        var response = await fetch('/tienda/admin/whatsapp_configs/' + id + '/qr');
+        var result = await response.json();
+        if (result.success && result.qr_base64) {
+            wrap.innerHTML =
+                '<img src="' +
+                result.qr_base64 +
+                '" alt="QR WhatsApp Web" class="whatsapp-qr-image" width="280" height="280" />';
+            setWhatsAppQrDisconnectVisible(true);
+        } else {
+            wrap.innerHTML =
+                '<p class="text-danger">' +
+                (result.error || 'QR no disponible. Guardá con WhatsApp activo e intentá de nuevo.') +
+                '</p>';
+            if (whatsappActiveConfigId) {
+                try {
+                    var healthResp = await fetch(
+                        '/tienda/admin/whatsapp_configs/' + id + '/health',
+                        {
+                            method: 'POST',
+                            headers: { 'X-CSRFToken': whatsappCsrfToken() },
+                        }
+                    );
+                    var healthResult = await healthResp.json();
+                    if (
+                        healthResult.success &&
+                        healthResult.config &&
+                        String(healthResult.config.connection_status || '').toLowerCase() === 'connected'
+                    ) {
+                        wrap.innerHTML =
+                            '<p class="text-success small mb-0">WhatsApp ya está conectado. Podés desconectar para cambiar de línea.</p>';
+                        setWhatsAppQrDisconnectVisible(true);
+                        updateWhatsAppHealthBanner(healthResult.config);
+                    }
+                } catch (_healthErr) {
+                    /* ignore */
+                }
+            }
+        }
+    } catch (e) {
+        wrap.innerHTML = '<p class="text-danger">Error al cargar QR</p>';
+    }
+}
+
+async function sendWhatsAppTestMessage(configId) {
+    var id = configId || whatsappActiveConfigId;
+    if (!id) {
+        showWhatsAppStatus('Guardá la configuración primero', 'error');
+        return;
+    }
+    var numInp = document.getElementById('whatsapp-phone-number');
+    var toNum = numInp ? String(numInp.value || '').trim() : '';
+    if (!toNum) {
+        showWhatsAppStatus('Indicá un número para la prueba', 'error');
+        return;
+    }
+    showWhatsAppStatus('Enviando mensaje de prueba…', 'info');
+    try {
+        var response = await fetch('/tienda/admin/whatsapp_configs/' + id + '/send-test', {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': whatsappCsrfToken(),
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ to_number: toNum }),
+        });
+        var result = await response.json();
+        if (result.success) {
+            showWhatsAppStatus(result.message, 'success');
+            loadWhatsAppConfig();
+        } else {
+            showWhatsAppStatus(result.error || 'Envío fallido', 'error');
+        }
+    } catch (e) {
+        showWhatsAppStatus('Error de red', 'error');
+    }
+}
+
+async function runWhatsAppLicenseNotify(configId) {
+    var id = configId || whatsappActiveConfigId;
+    if (!id) {
+        showWhatsAppStatus('Guardá la configuración primero', 'error');
+        return;
+    }
+    if (
+        !window.confirm(
+            '¿Enviar avisos de licencias por vencer a todos los clientes con teléfono? (ignora la hora programada)'
+        )
+    ) {
+        return;
+    }
+    showWhatsAppStatus('Ejecutando job de avisos…', 'info');
+    try {
+        var response = await fetch('/tienda/admin/whatsapp_configs/' + id + '/run-notify', {
+            method: 'POST',
+            headers: { 'X-CSRFToken': whatsappCsrfToken() },
+        });
+        var result = await response.json();
+        if (result.success) {
+            var detail = result.result || {};
+            showWhatsAppStatus(
+                (result.message || 'Listo') +
+                    ' (sin tel: ' +
+                    (detail.skipped_no_phone || 0) +
+                    ', errores: ' +
+                    (detail.errors || 0) +
+                    ')',
+                'success'
+            );
+            loadWhatsAppConfig();
+        } else {
+            showWhatsAppStatus(result.error || 'Job omitido', 'error');
+        }
+    } catch (e) {
+        showWhatsAppStatus('Error de red', 'error');
+    }
+}
+
+function startWhatsAppHealthPolling() {
+    if (whatsappHealthPollTimer) clearInterval(whatsappHealthPollTimer);
+    whatsappHealthPollTimer = setInterval(function () {
+        if (whatsappActiveConfigId && document.visibilityState === 'visible') {
+            refreshWhatsAppHealth(whatsappActiveConfigId, true);
+        }
+    }, 90000);
+}
+
+var whatsappInfoTogglePairs = [];
+
+function bindWhatsAppInfoToggle(infoBtn, infoBox) {
+    if (!infoBtn || !infoBox) return;
+    whatsappInfoTogglePairs.push({ btn: infoBtn, box: infoBox });
+    infoBtn.addEventListener('click', function (e) {
+        e.stopPropagation();
+        var open = infoBox.hidden;
+        whatsappInfoTogglePairs.forEach(function (pair) {
+            if (pair.box !== infoBox) {
+                pair.box.hidden = true;
+                pair.btn.setAttribute('aria-expanded', 'false');
+            }
+        });
+        infoBox.hidden = !open;
+        infoBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+    });
+}
+
+function setupWhatsAppInfoToggle() {
+    whatsappInfoTogglePairs = [];
+    bindWhatsAppInfoToggle(
+        document.getElementById('whatsappWebInfoBtn'),
+        document.getElementById('whatsappWebInfoBox')
+    );
+    bindWhatsAppInfoToggle(
+        document.getElementById('whatsappPhoneInfoBtn'),
+        document.getElementById('whatsappPhoneInfoBox')
+    );
+
+    document.addEventListener('click', function (e) {
+        whatsappInfoTogglePairs.forEach(function (pair) {
+            if (pair.box.hidden) return;
+            if (pair.btn.contains(e.target) || pair.box.contains(e.target)) return;
+            pair.box.hidden = true;
+            pair.btn.setAttribute('aria-expanded', 'false');
+        });
+    });
+}
+
+document.addEventListener('DOMContentLoaded', function () {
+    var whatsappForm = document.getElementById('whatsapp-config-form');
+    if (!whatsappForm) return;
+
+    whatsappForm.addEventListener('submit', async function (e) {
+        e.preventDefault();
+        var fd = new FormData(whatsappForm);
+        fd.append('whatsapp_enabled', document.getElementById('whatsapp-enabled').checked ? 'on' : 'off');
+        try {
+            showWhatsAppStatus('Guardando…', 'info');
+            var response = await fetch('/tienda/admin/whatsapp_configs', {
+                method: 'POST',
+                headers: { 'X-CSRFToken': whatsappCsrfToken() },
+                body: fd,
+            });
+            var result = await response.json();
             if (result.success) {
                 showWhatsAppStatus(result.message, 'success');
-                modal.classList.add('d-none');
-                loadWhatsAppConfigsTable();
+                if (result.id) whatsappActiveConfigId = result.id;
+                loadWhatsAppConfig();
             } else {
-                showWhatsAppStatus(result.error || 'Error al actualizar', 'error');
+                showWhatsAppStatus(result.error || 'Error', 'error');
             }
-            
-        } catch (error) {
-            console.error('Error:', error);
-            showWhatsAppStatus('Error de conexión', 'error');
+        } catch (err) {
+            showWhatsAppStatus('Error de red', 'error');
         }
     });
-}
 
-// ============================================================================
-// EVENT LISTENERS DELEGADOS PARA CSP COMPLIANCE
-// ============================================================================
+    var testBtn = document.getElementById('test-whatsapp-connection');
+    if (testBtn) testBtn.addEventListener('click', testWhatsAppConnectionFromForm);
 
-// Event listener delegado para acciones de WhatsApp (CSP compliant)
-document.addEventListener('click', function(e) {
-    const target = e.target.closest('[data-action]');
-    if (!target) return;
-    
-    const action = target.getAttribute('data-action');
-    const configId = parseInt(target.getAttribute('data-config-id'));
-    
-    switch(action) {
-        case 'toggle-whatsapp-config':
-            if (typeof window.toggleWhatsAppConfig === 'function') {
-                window.toggleWhatsAppConfig(configId);
-            }
-            break;
-            
-        case 'test-whatsapp-connection':
-            if (typeof window.testWhatsAppConnection === 'function') {
-                window.testWhatsAppConnection(configId);
-            }
-            break;
-            
-        case 'edit-whatsapp-config':
-            if (typeof window.editWhatsAppConfig === 'function') {
-                window.editWhatsAppConfig(configId);
-            }
-            break;
-            
-        case 'delete-whatsapp-config':
-            if (typeof window.deleteWhatsAppConfig === 'function') {
-                window.deleteWhatsAppConfig(configId);
-            }
-            break;
+    var qrBtn = document.getElementById('whatsapp-show-qr-btn');
+    if (qrBtn) {
+        qrBtn.addEventListener('click', function () {
+            showWhatsAppQr(whatsappActiveConfigId);
+        });
     }
+    var sendBtn = document.getElementById('whatsapp-send-test-btn');
+    if (sendBtn) {
+        sendBtn.addEventListener('click', function () {
+            sendWhatsAppTestMessage(whatsappActiveConfigId);
+        });
+    }
+    var notifyBtn = document.getElementById('whatsapp-run-notify-btn');
+    if (notifyBtn) {
+        notifyBtn.addEventListener('click', function () {
+            runWhatsAppLicenseNotify(whatsappActiveConfigId);
+        });
+    }
+    var qrClose = document.getElementById('whatsapp-qr-close-btn');
+    var qrDisconnect = document.getElementById('whatsapp-qr-disconnect-btn');
+    var qrModal = document.getElementById('whatsapp-qr-modal');
+    if (qrClose) {
+        qrClose.addEventListener('click', closeWhatsAppQrModal);
+    }
+    if (qrDisconnect) {
+        qrDisconnect.addEventListener('click', function () {
+            disconnectWhatsAppInstance(whatsappActiveConfigId);
+        });
+    }
+    if (qrModal) {
+        qrModal.addEventListener('click', function (e) {
+            if (e.target === qrModal) closeWhatsAppQrModal();
+        });
+    }
+
+    var notifyAttemptsClose = document.getElementById('whatsapp-notify-attempts-close-btn');
+    var notifyAttemptsModal = document.getElementById('whatsapp-notify-attempts-modal');
+    if (notifyAttemptsClose) {
+        notifyAttemptsClose.addEventListener('click', closeWhatsAppNotifyAttemptsModal);
+    }
+    if (notifyAttemptsModal) {
+        notifyAttemptsModal.addEventListener('click', function (e) {
+            if (e.target === notifyAttemptsModal) closeWhatsAppNotifyAttemptsModal();
+        });
+    }
+
+    loadWhatsAppConfig();
+    setupWhatsAppInfoToggle();
+    setupWhatsAppTemplateField();
+    startWhatsAppHealthPolling();
 });
+
+window.testWhatsAppConnection = testWhatsAppConnectionFromForm;

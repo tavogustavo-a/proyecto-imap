@@ -178,6 +178,193 @@
         { v: 'otro', label: 'Otro' },
     ];
 
+    var USER_LICENSE_DAY_BAD_ACTION_NUEVA_CONTRASENA = '__user_nueva_contrasena__';
+
+    function userLicIsBadSelectActionValue(v) {
+        var k = String(v || '').trim();
+        return k === USER_LICENSE_DAY_BAD_ACTION_NUEVA_CONTRASENA;
+    }
+
+    function userLicAppendBadSelectActionOptions(selBad) {
+        if (!selBad) return;
+        var opt = selBad.querySelector('option[value="' + USER_LICENSE_DAY_BAD_ACTION_NUEVA_CONTRASENA + '"]');
+        if (opt) return;
+        var o = document.createElement('option');
+        o.value = USER_LICENSE_DAY_BAD_ACTION_NUEVA_CONTRASENA;
+        o.textContent = 'Nueva contraseña';
+        o.className = 'user-lic-day-bad-action-option';
+        selBad.appendChild(o);
+    }
+
+    function userLicEnsureBadSelectActions(row) {
+        if (!row) return;
+        var selBad = row.querySelector('select.license-split-editor__status-bad');
+        if (selBad) userLicAppendBadSelectActionOptions(selBad);
+    }
+
+    function userLicGetRowStorageLine(row) {
+        var root = row.closest('.day-license-split-root');
+        var ta = root && root.querySelector('textarea.user-lic-creds-ro');
+        if (!ta) return '';
+        var li = Number(row.getAttribute('data-lic-creds-line-index'));
+        if (!Number.isFinite(li) || li < 0) li = 0;
+        var lines = String(ta.value || '').split(/\r?\n/);
+        return lines[li] !== undefined ? String(lines[li]) : '';
+    }
+
+    function userLicGetRowCredPlain(row) {
+        var line = userLicGetRowStorageLine(row);
+        var sepIdx = line.indexOf('\x1f');
+        return sepIdx >= 0 ? line.slice(0, sepIdx).trim() : line.trim();
+    }
+
+    function userLicCredentialPlainHasPasswordPart(credPlain) {
+        var line = String(credPlain || '').trim();
+        if (!line) return false;
+        var emailMatch = line.match(/\S+@\S+\.\S+/);
+        if (!emailMatch) return false;
+        var emailOnly = emailMatch[0].trim().toLowerCase();
+        var credNorm = line.replace(/\s+/g, ' ').trim().toLowerCase();
+        if (credNorm === emailOnly) return false;
+        if (/\(\d+\)\s+\S+/.test(line)) return true;
+        var emailIdx = line.toLowerCase().indexOf(emailOnly);
+        if (emailIdx < 0) return true;
+        return line.slice(emailIdx + emailMatch[0].length).trim().length > 0;
+    }
+
+    function userLicUpdateRowStorageCred(row, newCredPlain) {
+        var root = row.closest('.day-license-split-root');
+        var ta = root && root.querySelector('textarea.user-lic-creds-ro');
+        if (!ta) return;
+        var li = Number(row.getAttribute('data-lic-creds-line-index'));
+        if (!Number.isFinite(li) || li < 0) li = 0;
+        var lines = String(ta.value || '').split(/\r?\n/);
+        var oldLine = lines[li] !== undefined ? String(lines[li]) : '';
+        var sepIdx = oldLine.indexOf('\x1f');
+        lines[li] = sepIdx >= 0 ? newCredPlain + oldLine.slice(sepIdx) : newCredPlain;
+        ta.value = lines.join('\n');
+        userLicSyncDayBundleCredsStripes(root);
+    }
+
+    function userLicPromptAndApplyNewPassword(row) {
+        if (!row || window.__userLicDayPasswordInFlight) return;
+        var cred = userLicGetRowCredPlain(row);
+        if (!userLicCredentialPlainHasPasswordPart(cred)) {
+            window.alert('Esta fila solo tiene correo en el bloc; no se puede cambiar la contraseña aquí.');
+            return;
+        }
+        var pwd = window.prompt('Nueva contraseña:', '');
+        if (pwd == null) return;
+        var trimmed = String(pwd).trim();
+        if (!trimmed) {
+            window.alert('Indica la nueva contraseña.');
+            return;
+        }
+
+        var lid = Number(row.getAttribute('data-lic-row-license-id'));
+        var dayNum = Number(row.getAttribute('data-lic-row-day'));
+        var ordinal = Number(row.getAttribute('data-lic-row-ordinal'));
+        var aidRaw = row.getAttribute('data-lic-row-account-id');
+        var virt = row.getAttribute('data-lic-row-virtual') === '1';
+        if (!Number.isFinite(lid) || lid <= 0 || !Number.isFinite(dayNum) || !Number.isFinite(ordinal)) {
+            return;
+        }
+
+        var patchUrl =
+            (row.closest('[data-day-status-url]') &&
+                row.closest('[data-day-status-url]').getAttribute('data-day-status-url')) ||
+            '/tienda/api/user/license-day-row-status';
+
+        window.__userLicDayPasswordInFlight = true;
+        row.classList.remove('user-lic-save-err');
+
+        fetch(patchUrl, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'same-origin',
+            body: JSON.stringify({
+                license_id: lid,
+                calendar_day: dayNum,
+                row_ordinal: ordinal,
+                account_id:
+                    aidRaw != null && String(aidRaw).trim() !== '' ? Number(String(aidRaw).trim()) : null,
+                virtual: virt,
+                new_password: trimmed,
+            }),
+        })
+            .then(function (r) {
+                return r
+                    .text()
+                    .then(function (txt) {
+                        var data = {};
+                        try {
+                            data = txt ? JSON.parse(txt) : {};
+                        } catch (eJ) {
+                            data = {};
+                        }
+                        return { ok: r.ok, data: data };
+                    })
+                    .catch(function () {
+                        return { ok: false, data: {} };
+                    });
+            })
+            .then(function (res) {
+                if (res.ok && res.data && res.data.success && res.data.new_cred) {
+                    userLicUpdateRowStorageCred(row, String(res.data.new_cred));
+                    row.style.outline = '1px solid rgba(74, 222, 128, 0.55)';
+                    window.setTimeout(function () {
+                        row.style.outline = '';
+                    }, 1200);
+                } else {
+                    var errMsg =
+                        (res.data && res.data.error) ||
+                        'No se pudo actualizar la contraseña. Intenta de nuevo.';
+                    window.alert(errMsg);
+                    row.classList.add('user-lic-save-err');
+                    row.style.outline = '2px solid rgba(248, 113, 113, 0.92)';
+                    window.setTimeout(function () {
+                        row.style.outline = '';
+                    }, 2400);
+                }
+            })
+            .catch(function () {
+                row.classList.add('user-lic-save-err');
+                row.style.outline = '2px solid rgba(248, 113, 113, 0.92)';
+                window.alert('Error de conexión al actualizar la contraseña.');
+            })
+            .finally(function () {
+                window.__userLicDayPasswordInFlight = false;
+            });
+    }
+
+    function userLicPortalMonthToMonthChecked(lm) {
+        if (!lm) return false;
+        var v = lm.month_to_month;
+        if (v === true || v === 1) return true;
+        if (typeof v === 'string') {
+            var s = String(v).trim().toLowerCase();
+            return s === '1' || s === 'true' || s === 'yes';
+        }
+        return false;
+    }
+
+    /** Columna verde (renovación): solo si el producto tiene «mes a mes» activo en admin. */
+    function userLicPortalShouldShowGoodCol(lm) {
+        return userLicPortalMonthToMonthChecked(lm);
+    }
+
+    function userLicPortalGoodOptionsForLicense(lm) {
+        if (userLicPortalShouldShowGoodCol(lm)) return OPT_LICENSE_GOOD;
+        return OPT_LICENSE_GOOD.filter(function (opt) {
+            var k = normalizeStatusKey(opt.v);
+            return (
+                k !== normalizeStatusKey('renovar 1 mes mas') &&
+                k !== normalizeStatusKey('dejar mes a mes') &&
+                k !== normalizeStatusKey('no renovar')
+            );
+        });
+    }
+
     /** Texto junto a «Día N» en el modal de credencial, según el estado verde de la fila. */
     function userLicPortalGoodHintForModal(rawSg) {
         var k = normalizeStatusKey(rawSg != null ? String(rawSg).trim() : '');
@@ -318,6 +505,7 @@
             sbSel.setAttribute('autocomplete', 'off');
             sbSel.setAttribute('aria-label', 'Reportar problema o incidencia');
             sbSel.innerHTML = statusOptionsInnerHtml(OPT_LICENSE_BAD, sbRestored || '');
+            userLicAppendBadSelectActionOptions(sbSel);
             badge.replaceWith(sbSel);
         }
         if (goodSel) {
@@ -342,6 +530,7 @@
         container.querySelectorAll('.user-lic-license-row-edit').forEach(function (row) {
             syncOtroShell(row);
             applyDualTierUi(row);
+            userLicEnsureBadSelectActions(row);
         });
         container.querySelectorAll('.day-section.user-lic-readonly-day').forEach(function (section) {
             userLicSyncDayBundleLineSignals(section);
@@ -435,6 +624,8 @@
                     prevBadAttr = badgeEl.getAttribute('data-user-lic-prev-bad') || '';
                 }
                 if (prevBadAttr) payload.status_bad = prevBadAttr;
+            } else if (row.getAttribute('data-user-lic-hide-good') === '1') {
+                /* Sin columna verde (producto no mes a mes): no enviar renovación. */
             } else {
                 payload.status_good = statusGoodVal;
             }
@@ -579,6 +770,14 @@
                     ev.target.classList.contains('license-split-editor__status-bad')
                 ) {
                     if (ev.target.classList.contains('license-split-editor__status-bad')) {
+                        var badActionVal = String(ev.target.value || '').trim();
+                        if (userLicIsBadSelectActionValue(badActionVal)) {
+                            ev.target.value = '';
+                            if (badActionVal === USER_LICENSE_DAY_BAD_ACTION_NUEVA_CONTRASENA) {
+                                userLicPromptAndApplyNewPassword(row);
+                            }
+                            return;
+                        }
                         syncOtroShell(row);
                     }
                     applyDualTierUi(row);
@@ -712,9 +911,39 @@
                   '</button>'
                 : '';
 
+        var showGoodCol = userLicPortalShouldShowGoodCol(lm);
+        var goodShellClass =
+            'license-split-editor__status-select-shell license-split-editor__status-select-shell--good' +
+            (showGoodCol ? '' : ' user-lic-good-shell--tools-only');
+        var goodSelectOrBadgeHtml = '';
+        if (showGoodCol) {
+            goodSelectOrBadgeHtml = isGarantia
+                ? '<span class="user-lic-garantia-badge license-split-editor__status license-split-editor__status-good license-split-editor__status--tier-good" title="Cuenta repuesta por garantía (soporte).">' +
+                  '<i class="fas fa-shield-alt" aria-hidden="true"></i> Garantía</span>'
+                : '<select id="' +
+                  gid +
+                  '" name="' +
+                  gid +
+                  '" class="license-split-editor__status license-split-editor__status-good license-split-editor__status--tier-' +
+                  gTier +
+                  (isBuenaRevisada ? ' user-lic-status-good--buena-locked' : '') +
+                  '" autocomplete="off" aria-label="Estado favorable (renovación)"' +
+                  (isBuenaRevisada
+                      ? ' disabled aria-disabled="true" title="Renovación guardada. Pulsa «Buena» en la columna de reportes para editar."'
+                      : '') +
+                  '>' +
+                  statusOptionsInnerHtml(userLicPortalGoodOptionsForLicense(lm), goodSelectValue) +
+                  '</select>';
+        } else if (isGarantia) {
+            goodSelectOrBadgeHtml =
+                '<span class="user-lic-garantia-badge license-split-editor__status license-split-editor__status-good license-split-editor__status--tier-good" title="Cuenta repuesta por garantía (soporte).">' +
+                '<i class="fas fa-shield-alt" aria-hidden="true"></i> Garantía</span>';
+        }
+
         return (
             '<div class="license-split-editor__row user-lic-readonly-row user-lic-license-row-edit' +
             (userLicRowSignalClassFromRow(row) ? ' ' + userLicRowSignalClassFromRow(row) : '') +
+            (showGoodCol ? '' : ' user-lic-row-hide-good-select') +
             '"' +
             ' data-user-lic-save-key="' +
             escAttr(saveKeyParts) +
@@ -746,32 +975,21 @@
             '"' +
             ' data-user-lic-bad-select-id="' +
             escAttr(bid) +
-            '">' +
+            '"' +
+            (showGoodCol ? '' : ' data-user-lic-hide-good="1"') +
+            '>' +
             '<div class="license-split-editor__status-wrap' +
             (shellIsOtro ? ' license-split-editor__status-wrap--otro' : '') +
             '">' +
-            '<div class="license-split-editor__status-select-shell license-split-editor__status-select-shell--good">' +
+            '<div class="' +
+            goodShellClass +
+            '">' +
             fullCredBtnHtml +
             '<button type="button" class="user-lic-warranty-history-btn" title="Historial de caídas y garantías" aria-label="Ver historial de caídas y garantías de esta fila">' +
             '<i class="fas fa-exclamation-triangle" aria-hidden="true"></i>' +
             '</button>' +
-            (isGarantia
-                ? '<span class="user-lic-garantia-badge license-split-editor__status license-split-editor__status-good license-split-editor__status--tier-good" title="Cuenta repuesta por garantía (soporte).">' +
-                  '<i class="fas fa-shield-alt" aria-hidden="true"></i> Garantía</span>'
-                : '<select id="' +
-                  gid +
-                  '" name="' +
-                  gid +
-                  '" class="license-split-editor__status license-split-editor__status-good license-split-editor__status--tier-' +
-                  gTier +
-                  (isBuenaRevisada ? ' user-lic-status-good--buena-locked' : '') +
-                  '" autocomplete="off" aria-label="Estado favorable (renovación)"' +
-                  (isBuenaRevisada
-                      ? ' disabled aria-disabled="true" title="Renovación guardada. Pulsa «Buena» en la columna de reportes para editar."'
-                      : '') +
-                  '>' +
-                  statusOptionsInnerHtml(OPT_LICENSE_GOOD, goodSelectValue) +
-                  '</select>') +
+            userLicExpiryCountdownHtml(lm) +
+            goodSelectOrBadgeHtml +
             '</div>' +
             '<div class="license-split-editor__status-select-shell license-split-editor__status-select-shell--bad">' +
             (isBuenaRevisada
@@ -830,6 +1048,7 @@
         var fkey = licenseFilterKey(acc);
         var pn = String(acc.product_name || '').trim();
         if (pn === '—' || pn === '-') pn = '';
+        var daysLeft = accountDaysUntilExpiryUi(acc);
         return {
             license_id: acc.license_id,
             account_id: acc.account_id != null ? acc.account_id : null,
@@ -837,7 +1056,88 @@
             credSlug: fkey,
             billing_saldo: acc.billing_saldo != null ? Number(acc.billing_saldo) : 0,
             product_name: pn,
+            month_to_month: userLicPortalMonthToMonthChecked(acc),
+            days_until_expiry: daysLeft,
+            expires_at_iso: acc.expires_at_iso || null,
+            assigned_at_iso: acc.assigned_at_iso || null,
+            license_term_days:
+                acc.license_term_days != null && acc.license_term_days !== ''
+                    ? Number(acc.license_term_days)
+                    : null,
         };
+    }
+
+    function userLicDaysRemainingFromExpiresIso(iso) {
+        if (!iso) return null;
+        try {
+            var exp = new Date(String(iso));
+            if (Number.isNaN(exp.getTime())) return null;
+            var msDay = 24 * 60 * 60 * 1000;
+            return Math.max(0, Math.ceil((exp.getTime() - Date.now()) / msDay));
+        } catch (_eExp) {
+            return null;
+        }
+    }
+
+    function userLicDaysRemainingFromAssignedTerm(assignedIso, termDays) {
+        if (!assignedIso || termDays == null || termDays === '') return null;
+        try {
+            var term = Number(termDays);
+            if (!Number.isFinite(term) || term < 1) return null;
+            var start = new Date(String(assignedIso));
+            if (Number.isNaN(start.getTime())) return null;
+            var expMs = start.getTime() + term * 24 * 60 * 60 * 1000;
+            var msDay = 24 * 60 * 60 * 1000;
+            return Math.max(0, Math.ceil((expMs - Date.now()) / msDay));
+        } catch (_eAsg) {
+            return null;
+        }
+    }
+
+    function userLicExpiryCountdownHtml(lm) {
+        if (!lm) return '';
+        var daysLeft = lm.days_until_expiry;
+        if (lm.expires_at_iso) {
+            var computed = userLicDaysRemainingFromExpiresIso(lm.expires_at_iso);
+            if (computed != null) daysLeft = computed;
+        }
+        if ((daysLeft == null || daysLeft === '') && lm.assigned_at_iso && lm.license_term_days) {
+            var fromAssigned = userLicDaysRemainingFromAssignedTerm(
+                lm.assigned_at_iso,
+                lm.license_term_days
+            );
+            if (fromAssigned != null) daysLeft = fromAssigned;
+        }
+        if (daysLeft == null || daysLeft === '') return '';
+        var n = Number(daysLeft);
+        if (!Number.isFinite(n) || n < 0) return '';
+        var title;
+        var label;
+        if (n === 0) {
+            title = 'Vence hoy';
+            label = '0d';
+        } else if (n === 1) {
+            title = 'Queda 1 día';
+            label = '1d';
+        } else {
+            title = 'Quedan ' + n + ' días';
+            label = String(n) + 'd';
+        }
+        if (lm.license_term_days != null && Number.isFinite(Number(lm.license_term_days))) {
+            title += ' (periodo ' + lm.license_term_days + ' días)';
+        }
+        var urgent = n <= 5;
+        return (
+            '<span class="user-lic-expiry-countdown' +
+            (urgent ? ' user-lic-expiry-countdown--urgent' : '') +
+            '" title="' +
+            escAttr(title) +
+            '" aria-label="' +
+            escAttr(title) +
+            '">' +
+            escHtml(label) +
+            '</span>'
+        );
     }
 
     function portalDayRowDedupeKey(row, day) {
@@ -906,14 +1206,84 @@
         var co = clock || userLicPortalColombiaClock || userLicPortalColombiaClockFromBrowser();
         if (!co || co.day == null) return null;
         var today = Number(co.day);
+        var y = Number(co.year);
+        var m = Number(co.month);
         var dim = Number(co.days_in_month);
         if (!Number.isFinite(today) || !Number.isFinite(dim) || dim < 28) return null;
-        if (cal >= today) return cal - today;
-        return dim - today + cal;
+        if (!Number.isFinite(y) || !Number.isFinite(m)) return null;
+
+        function prevMonthDays(year, month) {
+            var pm = month - 1;
+            var py = year;
+            if (pm < 1) {
+                pm = 12;
+                py -= 1;
+            }
+            return new Date(py, pm, 0).getDate();
+        }
+
+        function dateKey(dObj) {
+            return (
+                dObj.getFullYear() +
+                '-' +
+                String(dObj.getMonth() + 1).padStart(2, '0') +
+                '-' +
+                String(dObj.getDate()).padStart(2, '0')
+            );
+        }
+
+        var todayDate = new Date(y, m - 1, today);
+        var candidates = [];
+
+        if (cal <= dim && cal >= today) {
+            candidates.push(new Date(y, m - 1, cal));
+        }
+        if (today === 1) {
+            var prevDim = prevMonthDays(y, m);
+            if (cal > prevDim) {
+                candidates.push(new Date(y, m - 1, 1));
+            }
+        }
+        var nm = m + 1;
+        var ny = y;
+        if (nm > 12) {
+            nm = 1;
+            ny += 1;
+        }
+        var ndim = new Date(ny, nm, 0).getDate();
+        if (cal > dim) {
+            candidates.push(new Date(ny, nm - 1, 1));
+        } else if (cal <= ndim) {
+            candidates.push(new Date(ny, nm - 1, cal));
+        } else {
+            var nnm = nm + 1;
+            var nny = ny;
+            if (nnm > 12) {
+                nnm = 1;
+                nny += 1;
+            }
+            candidates.push(new Date(nny, nnm - 1, 1));
+        }
+
+        var todayKey = dateKey(todayDate);
+        var best = null;
+        var ci;
+        for (ci = 0; ci < candidates.length; ci += 1) {
+            var c = candidates[ci];
+            if (dateKey(c) < todayKey) continue;
+            if (!best || dateKey(c) < dateKey(best)) best = c;
+        }
+        if (!best) return null;
+        var msDay = 24 * 60 * 60 * 1000;
+        return Math.max(0, Math.round((best.getTime() - todayDate.getTime()) / msDay));
     }
 
     function accountDaysUntilExpiryUi(acc, clock) {
         if (!acc) return null;
+        if (acc.days_until_expiry != null && acc.days_until_expiry !== '') {
+            var expSrv = Number(acc.days_until_expiry);
+            if (Number.isFinite(expSrv) && expSrv >= 0) return Math.trunc(expSrv);
+        }
         if (acc.days_until_calendar_sale != null && acc.days_until_calendar_sale !== '') {
             var calSrv = Number(acc.days_until_calendar_sale);
             if (Number.isFinite(calSrv) && calSrv >= 0) return Math.trunc(calSrv);
@@ -1003,8 +1373,10 @@
             var lm = licenseMetaFromAccount(acc);
             var ri;
             for (ri = 0; ri < entries.length; ri += 1) {
-                var entryLeft = daysUntilCalendarSaleDay(entries[ri].saleDay, co);
-                if (entryLeft == null) entryLeft = accountDaysUntilExpiryUi(acc, co);
+                var entryLeft = accountDaysUntilExpiryUi(acc, co);
+                if (entryLeft == null) {
+                    entryLeft = daysUntilCalendarSaleDay(entries[ri].saleDay, co);
+                }
                 if (entryLeft == null || entryLeft > maxD) continue;
                 if (!buckets[entryLeft]) buckets[entryLeft] = [];
                 buckets[entryLeft].push({
@@ -2697,6 +3069,8 @@
             escAttr(accIdStr) +
             '" data-license-id="' +
             escAttr(gridFkey) +
+            '" data-month-to-month="' +
+            (userLicPortalMonthToMonthChecked(acc) ? '1' : '0') +
             '" data-default-scroll-day="' +
             scrollDay +
             '">' +

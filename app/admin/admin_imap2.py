@@ -138,7 +138,11 @@ def manage_imap2():
     folders = request.form.get("folders", "INBOX")
     route_path = request.form.get("route_path", "").strip()
     # paragraph solo se obtiene al crear nuevos servidores (no se usa al editar)
-    paragraph = request.form.get("paragraph", "").strip() if not server_id else ""
+    paragraph_raw = request.form.get("paragraph", "").strip() if not server_id else ""
+    paragraph = ""
+    if paragraph_raw:
+        from app.utils.html_sanitize import sanitize_admin_message_html_str
+        paragraph = sanitize_admin_message_html_str(paragraph_raw)
 
     if server_id:
         srv = IMAPServer2.query.get_or_404(server_id)
@@ -434,7 +438,9 @@ def update_imap2_paragraph(server_id):
     """Actualiza el párrafo personalizado de un servidor IMAP2"""
     try:
         srv = IMAPServer2.query.get_or_404(server_id)
-        paragraph = request.form.get("paragraph", "").strip()
+        from app.utils.html_sanitize import sanitize_admin_message_html_str
+
+        paragraph = sanitize_admin_message_html_str(request.form.get("paragraph", ""))
         srv.paragraph = paragraph if paragraph else None
         db.session.commit()
         flash("Párrafo actualizado correctamente.", "success")

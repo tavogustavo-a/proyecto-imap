@@ -91,6 +91,9 @@ document.addEventListener('DOMContentLoaded', function() {
 
   function totalCellHtml(row) {
     if (row.is_cleanup_log) return '—';
+    if (row.is_daily_summary && (!row.total || Number(row.total) === 0)) {
+      return '—';
+    }
     if (row.total_display) return formatTotalDisplayHtml(row.total_display);
     return escapeHtml(formatMoney(row.total));
   }
@@ -125,6 +128,33 @@ document.addEventListener('DOMContentLoaded', function() {
     if (!modal || !modalBody) return;
     lastLicenciasOpenerBtn =
       openerEl && openerEl.nodeType === 1 ? openerEl : null;
+
+    if (compraRow.is_daily_summary) {
+      modalTitle.textContent = compraRow.producto || 'Resumen diario';
+      if (modalSub) {
+        modalSub.textContent = 'Resumen del día';
+        modalSub.hidden = false;
+      }
+      modalBody.innerHTML = '';
+      const text = String(compraRow.daily_summary_text || '').trim();
+      if (copyActions) copyActions.removeAttribute('hidden');
+      if (copyBuf) copyBuf.value = text;
+      if (!text) {
+        const p = document.createElement('p');
+        p.className = 'purchase-licencias-empty';
+        p.textContent = 'No hay detalle para este resumen.';
+        modalBody.appendChild(p);
+      } else {
+        const pre = document.createElement('pre');
+        pre.className = 'purchase-daily-summary-pre lic-block';
+        pre.textContent = text;
+        modalBody.appendChild(pre);
+      }
+      modal.classList.remove('modal-hidden');
+      modal.setAttribute('aria-hidden', 'false');
+      return;
+    }
+
     modalTitle.textContent = compraRow.producto || 'Licencias';
     if (modalSub) {
       const sub = purchaseModalSubtitle(compraRow);
@@ -405,6 +435,8 @@ document.addEventListener('DOMContentLoaded', function() {
         const tr = document.createElement('tr');
         if (row.is_cleanup_log) {
           tr.className = 'purchase-history-cleanup-log-row';
+        } else if (row.is_daily_summary) {
+          tr.className = 'purchase-history-daily-summary-row';
         } else if (row.is_recharge_event) {
           tr.className = 'purchase-history-recharge-row';
           if (row.is_recharge_reverted || row.is_recharge_rejected) {
@@ -419,6 +451,13 @@ document.addEventListener('DOMContentLoaded', function() {
           span.className = 'text-muted small';
           span.textContent = '—';
           licBtnCell.appendChild(span);
+        } else if (row.is_daily_summary) {
+          const btn = document.createElement('button');
+          btn.type = 'button';
+          btn.className = 'btn-panel btn-blue btn-sm btn-ver-resumen-compra';
+          btn.setAttribute('data-row-id', String(row.id));
+          btn.textContent = 'Ver resumen';
+          licBtnCell.appendChild(btn);
         } else if (row.is_recharge_event) {
           const span = document.createElement('span');
           const failed = !!(row.is_recharge_reverted || row.is_recharge_rejected);
@@ -451,6 +490,12 @@ document.addEventListener('DOMContentLoaded', function() {
         let productoCell;
         if (row.is_cleanup_log) {
           productoCell = escapeHtml(productoTexto);
+        } else if (row.is_daily_summary) {
+          productoCell =
+            '<span class="purchase-history-daily-summary-product">' +
+            '<i class="fas fa-clipboard-list" aria-hidden="true"></i> ' +
+            escapeHtml(productoTexto) +
+            '</span>';
         } else if (row.is_recharge_event) {
           var rechargeIcon = 'fa-wallet';
           var rechargeTone = 'success';
@@ -504,7 +549,7 @@ document.addEventListener('DOMContentLoaded', function() {
         tbody.appendChild(tr);
       });
 
-      tbody.querySelectorAll('.btn-ver-licencias-compra').forEach(btn => {
+      tbody.querySelectorAll('.btn-ver-licencias-compra, .btn-ver-resumen-compra').forEach(btn => {
         btn.addEventListener('click', function () {
           const rid = this.getAttribute('data-row-id');
           const row = datos.find(function (r) {

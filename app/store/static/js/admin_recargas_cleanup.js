@@ -159,17 +159,95 @@ document.addEventListener('DOMContentLoaded', function () {
     }
   }
 
+  function syncCleanupSelectTitle(selectEl) {
+    if (!selectEl || !selectEl.options.length) return;
+    const opt = selectEl.options[selectEl.selectedIndex];
+    if (!opt) return;
+    const base = (opt.dataset.label || opt.dataset.fullLabel || opt.textContent || '')
+      .replace(/\s*\([^)]*\)\s*$/, '')
+      .trim();
+    const countMatch = String(opt.textContent || '').match(/\(([^)]*)\)\s*$/);
+    selectEl.title = countMatch ? base + ' (' + countMatch[1] + ')' : String(opt.textContent || '').trim();
+  }
+
+  function cleanupCompactLabel(fullLabel) {
+    const text = String(fullLabel || '').trim();
+    if (text.length <= 14) return text;
+    return text.slice(0, 12).trimEnd() + '..';
+  }
+
+  function cleanupSelectUsesCompactLabels() {
+    return window.matchMedia('(max-width: 480px)').matches;
+  }
+
+  function ensureCleanupOptionFullLabels(selectEl) {
+    if (!selectEl) return;
+    Array.from(selectEl.options).forEach(function (opt) {
+      const fromData = (opt.dataset.label || '').trim();
+      if (fromData) {
+        opt.dataset.fullLabel = fromData;
+        return;
+      }
+      const parsed = String(opt.textContent || '')
+        .replace(/\s*\([^)]*\)\s*$/, '')
+        .trim();
+      if (parsed) opt.dataset.fullLabel = parsed;
+    });
+  }
+
+  function applyCleanupSelectDisplayLabels(selectEl, compact) {
+    if (!selectEl) return;
+    ensureCleanupOptionFullLabels(selectEl);
+    Array.from(selectEl.options).forEach(function (opt) {
+      const full = (opt.dataset.fullLabel || opt.dataset.label || '').trim();
+      const countMatch = String(opt.textContent || '').match(/\(([^)]*)\)\s*$/);
+      const suffix = countMatch ? ' (' + countMatch[1] + ')' : '';
+      const base = compact ? cleanupCompactLabel(full) : full;
+      opt.textContent = base + suffix;
+    });
+    syncCleanupSelectTitle(selectEl);
+  }
+
+  function syncCleanupSelectCompactMode() {
+    const compact = cleanupSelectUsesCompactLabels();
+    applyCleanupSelectDisplayLabels(categorySelect, compact);
+    applyCleanupSelectDisplayLabels(scopeSelect, compact);
+  }
+
+  function bindCleanupSelectCompactExpand(selectEl) {
+    if (!selectEl) return;
+    function expandLabels() {
+      applyCleanupSelectDisplayLabels(selectEl, false);
+    }
+    function maybeCompactLabels() {
+      if (cleanupSelectUsesCompactLabels()) {
+        applyCleanupSelectDisplayLabels(selectEl, true);
+      }
+    }
+    selectEl.addEventListener('mousedown', expandLabels);
+    selectEl.addEventListener('touchstart', expandLabels, { passive: true });
+    selectEl.addEventListener('focus', expandLabels);
+    selectEl.addEventListener('change', maybeCompactLabels);
+    selectEl.addEventListener('blur', maybeCompactLabels);
+  }
+
   function updateOptionPreviewCounts(selectEl, count, ariaBase) {
     if (!selectEl) return;
     const display =
       count === null || count === undefined || Number.isNaN(count) ? '—' : String(count);
     Array.from(selectEl.options).forEach(function (opt) {
-      const base = opt.dataset.label || opt.textContent.replace(/\s*\([^)]*\)\s*$/, '').trim();
+      const base = (
+        opt.dataset.label ||
+        opt.dataset.fullLabel ||
+        opt.textContent.replace(/\s*\([^)]*\)\s*$/, '').trim()
+      );
+      if (base) opt.dataset.fullLabel = base;
       opt.textContent = base + ' (' + display + ')';
     });
     if (ariaBase) {
       selectEl.setAttribute('aria-label', ariaBase + ', ' + display + ' solicitud(es)');
     }
+    syncCleanupSelectCompactMode();
   }
 
   function updateScopePreviewCount(count) {
@@ -270,13 +348,23 @@ document.addEventListener('DOMContentLoaded', function () {
       }
       showStatus(data.message || 'Limpieza en segundo plano.', false);
       if (purgeBtn) purgeBtn.disabled = true;
+      const refreshLists = function () {
+        if (purgeBtn) purgeBtn.disabled = false;
+        refreshPreview();
+        if (
+          window.AdminRecargasSaldo &&
+          typeof window.AdminRecargasSaldo.reloadAllLists === 'function'
+        ) {
+          window.AdminRecargasSaldo.reloadAllLists();
+          return;
+        }
+        window.location.reload();
+      };
       if (data.background) {
-        window.setTimeout(function () {
-          window.location.reload();
-        }, 4000);
+        window.setTimeout(refreshLists, 4000);
       } else {
         updateScopePreviewCount(0);
-        window.location.reload();
+        refreshLists();
       }
     } catch (_e) {
       showStatus('Error de red al eliminar.', true);
@@ -307,8 +395,12 @@ document.addEventListener('DOMContentLoaded', function () {
     closeInfoBox();
   });
 
-  categorySelect?.addEventListener('change', refreshPreview);
+  categorySelect?.addEventListener('change', function () {
+    syncCleanupSelectTitle(categorySelect);
+    refreshPreview();
+  });
   scopeSelect?.addEventListener('change', function () {
+    syncCleanupSelectTitle(scopeSelect);
     toggleUserWrap();
     refreshPreview();
   });
@@ -329,5 +421,11 @@ document.addEventListener('DOMContentLoaded', function () {
 
   toggleUserWrap();
   syncAutoIntervalControls();
+  bindCleanupSelectCompactExpand(categorySelect);
+  bindCleanupSelectCompactExpand(scopeSelect);
+  syncCleanupSelectCompactMode();
+  window.addEventListener('resize', function () {
+    syncCleanupSelectCompactMode();
+  });
   refreshPreview();
 });

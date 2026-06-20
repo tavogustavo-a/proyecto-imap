@@ -50,6 +50,8 @@ class SalePurchaseSnapshot(db.Model):
     is_reversed = db.Column(db.Boolean, default=False, nullable=False)
     reversed_at = db.Column(db.DateTime, nullable=True)
     purged_from_sales = db.Column(db.Boolean, default=False, nullable=False, index=True)
+    whatsapp_daily_co_date = db.Column(db.Date, nullable=True, index=True)
+    whatsapp_daily_sent_at = db.Column(db.DateTime, nullable=True, index=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -379,16 +381,32 @@ class DriveTransfer(db.Model):
 class WhatsAppConfig(db.Model):
     __tablename__ = "whatsapp_configs"
     id = db.Column(db.Integer, primary_key=True)
+    # Evolution API key (AUTHENTICATION_API_KEY del servicio)
     api_key = db.Column(db.String(255), nullable=False)
+    # Número esperado / etiqueta (opcional, sin +)
     phone_number = db.Column(db.String(20), nullable=False)
-    webhook_verify_token = db.Column(db.String(255), nullable=False)
+    webhook_verify_token = db.Column(db.String(255), nullable=False, default='')
     template_message = db.Column(db.Text, nullable=False)
     notification_time = db.Column(db.Time, nullable=False)  # Hora colombiana
     is_enabled = db.Column(db.Boolean, default=True, nullable=False)
     last_sent = db.Column(db.DateTime, nullable=True)
+    last_notify_at = db.Column(db.DateTime, nullable=True)
+    notify_run_log_json = db.Column(db.Text, nullable=True)
+    notify_catchup_after = db.Column(db.DateTime, nullable=True)
+    last_notify_fail_alert_at = db.Column(db.DateTime, nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    
+    # WhatsApp Web (Evolution API)
+    base_url = db.Column(db.String(512), nullable=True)
+    instance_name = db.Column(db.String(120), nullable=True)
+    connection_status = db.Column(db.String(40), nullable=True, default='unknown')
+    linked_phone = db.Column(db.String(40), nullable=True)
+    last_health_at = db.Column(db.DateTime, nullable=True)
+    last_health_error = db.Column(db.Text, nullable=True)
+    last_disconnect_alert_at = db.Column(db.DateTime, nullable=True)
+    alert_email = db.Column(db.String(255), nullable=True)
+    health_alert_enabled = db.Column(db.Boolean, default=True, nullable=False)
+
     def __repr__(self):
         return f'<WhatsAppConfig {self.phone_number}>'
 
@@ -511,6 +529,8 @@ class License(db.Model):
     position = db.Column(db.Integer, default=0, index=True)  # Posición para ordenar
     # Reserva de garantía (admin «gar.»): n.º de cuentas disponibles que no se venden; por defecto 5
     warranty_days = db.Column(db.Integer, default=5, nullable=False)
+    # Duración de cada periodo de licencia (días); default 30 = «mes» / mensual en tienda
+    license_term_days = db.Column(db.Integer, default=30, nullable=False)
     enabled = db.Column(db.Boolean, default=True, index=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -523,6 +543,10 @@ class License(db.Model):
     expired_notes = db.Column(db.Text, nullable=True)
     # Si True, el producto se renueva mes a mes (oculta bloc Vencidas en admin)
     month_to_month = db.Column(db.Boolean, default=False, nullable=False)
+    # Si True y stock=0 en tienda pública, el cliente puede reservar hasta que haya existencias.
+    allow_reservation = db.Column(db.Boolean, default=False, nullable=False)
+    # Si True, la tienda no vende inventario: el cliente envía su cuenta para que la enlacen/renueven.
+    renew_customer_account = db.Column(db.Boolean, default=False, nullable=False)
     # Bloc «Cambios» (mes a mes): correo, terminado / problemas; mismo formato pipe que license_notes
     changes_notes = db.Column(db.Text, nullable=True)
     # JSON {"1":"texto bloc día 1", ...} — texto exacto del bloc por día (persiste aunque falle el parseo a cuentas)
@@ -602,6 +626,63 @@ class LicenseAccount(db.Model):
         exp = _license_account_expiry_as_utc_aware(self.expires_at)
         delta = exp - datetime.now(timezone.utc)
         return delta.days if delta.days > 0 else 0
+
+
+class ProductReservation(db.Model):
+    """Cola de reserva cuando un producto está agotado pero admite reservas (allow_reservation)."""
+    __tablename__ = 'store_product_reservations'
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='CASCADE'), nullable=False, index=True)
+    product_id = db.Column(db.Integer, db.ForeignKey('store_products.id', ondelete='CASCADE'), nullable=False, index=True)
+    license_id = db.Column(db.Integer, db.ForeignKey('store_licenses.id', ondelete='SET NULL'), nullable=True)
+    status = db.Column(db.String(20), default='pending', nullable=False, index=True)
+    sale_id = db.Column(db.Integer, db.ForeignKey('store_sales.id', ondelete='SET NULL'), nullable=True)
+    license_account_id = db.Column(db.Integer, nullable=True)
+    price_cop = db.Column(db.Numeric(10, 2), nullable=False, server_default='0')
+    price_usd = db.Column(db.Numeric(10, 2), nullable=False, server_default='0')
+    currency = db.Column(db.String(3), default='USD', nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
+    fulfilled_at = db.Column(db.DateTime, nullable=True)
+    cancelled_at = db.Column(db.DateTime, nullable=True)
+    last_error = db.Column(db.String(500), nullable=True)
+
+    user = db.relationship('User', foreign_keys=[user_id])
+    product = db.relationship('Product', foreign_keys=[product_id])
+
+
+class CustomerAccountRenewalOrder(db.Model):
+    """Pedido pagado: cuenta enviada por el cliente para renovar/enlazar (sin inventario)."""
+    __tablename__ = 'store_customer_account_renewals'
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='CASCADE'), nullable=False, index=True)
+    product_id = db.Column(db.Integer, db.ForeignKey('store_products.id', ondelete='CASCADE'), nullable=False, index=True)
+    license_id = db.Column(db.Integer, db.ForeignKey('store_licenses.id', ondelete='SET NULL'), nullable=True)
+    sale_id = db.Column(db.Integer, db.ForeignKey('store_sales.id', ondelete='SET NULL'), nullable=True, index=True)
+    customer_email = db.Column(db.String(255), nullable=False)
+    customer_password = db.Column(db.String(255), nullable=False)
+    status = db.Column(db.String(20), default='pending', nullable=False, index=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
+    processed_at = db.Column(db.DateTime, nullable=True)
+    admin_notes = db.Column(db.Text, nullable=True)
+
+    user = db.relationship('User', foreign_keys=[user_id])
+    product = db.relationship('Product', foreign_keys=[product_id])
+
+
+class StoreUserNotification(db.Model):
+    """Notificaciones in-app para usuarios de tienda (p. ej. reserva cumplida)."""
+    __tablename__ = 'store_user_notifications'
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='CASCADE'), nullable=False, index=True)
+    kind = db.Column(db.String(40), nullable=False, index=True)
+    title = db.Column(db.String(200), nullable=False)
+    body = db.Column(db.Text, nullable=False, default='')
+    payload_json = db.Column(db.Text, nullable=True)
+    read_at = db.Column(db.DateTime, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
+
+    user = db.relationship('User', foreign_keys=[user_id])
+
 
 class AllowedSMSNumber(db.Model):
     """Modelo para almacenar números de teléfono permitidos para recibir SMS vinculados a un número SMS específico"""

@@ -482,3 +482,9 @@ def sync_snapshots_for_sale_ids(sale_ids):
         if sale:
             upsert_snapshot_for_sale(sale)
     db.session.commit()
+    try:
+        from app.store.whatsapp_daily_sales import queue_snapshots_for_whatsapp_daily
+
+        queue_snapshots_for_whatsapp_daily(sale_ids)
+    except Exception as exc:
+        logger.warning('Cola WhatsApp resumen diario tras checkout: %s', exc)

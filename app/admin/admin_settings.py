@@ -200,7 +200,9 @@ def parrafos_page():
 @admin_bp.route("/update_paragraph/<int:num_paragraph>", methods=["POST"])
 @admin_required
 def update_paragraph(num_paragraph):
-    new_paragraph = request.form.get("paragraph", "")
+    from app.utils.html_sanitize import sanitize_admin_message_html_str
+
+    new_paragraph = sanitize_admin_message_html_str(request.form.get("paragraph", ""))
     if num_paragraph == 1:
         key = "search_message"
     elif num_paragraph == 2:

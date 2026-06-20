@@ -1,0 +1,501 @@
+/* Códigos — fila Códigos + Editar vista (mismo espaciado que un mobile-menu-btn) */
+.codigos-sidebar-codigos-row {
+  display: flex;
+  gap: 0.35rem;
+  align-items: stretch;
+  margin: 0.18rem 1rem !important;
+}
+
+.codigos-sidebar-codigos-row .mobile-menu-btn {
+  flex: 1 1 0;
+  min-width: 0;
+  width: auto !important;
+  margin: 0 !important;
+  font-size: 0.92rem;
+  padding: 10px 18px;
+  text-align: left;
+}
+
+/* Modal editar vista (mismos patrones que tienda) */
+#codigosViewModal.store-config-modal {
+  position: fixed !important;
+  inset: 0 !important;
+  z-index: 12050 !important;
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  background: rgba(15, 23, 42, 0.55);
+  box-sizing: border-box;
+}
+
+#codigosViewModal.store-config-modal.modal-hidden {
+  display: none !important;
+}
+
+#codigosViewModal .desc-modal-content.store-config-modal-panel {
+  position: relative;
+  width: min(100%, 22rem);
+  max-height: min(88vh, 32rem);
+  overflow: auto;
+  margin: 0;
+  padding: 1rem 1rem 1.1rem;
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 12px 40px rgba(15, 23, 42, 0.28);
+  box-sizing: border-box;
+}
+
+#codigosViewModal .store-config-modal-title {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  margin: 0 0 0.85rem;
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: #1e293b;
+  text-align: center;
+}
+
+#codigosViewModal .btn-close-desc-modal {
+  position: absolute;
+  top: 2px;
+  right: 12px;
+  background: none;
+  border: none;
+  font-size: 1.7em;
+  color: #1976d2;
+  cursor: pointer;
+  line-height: 1;
+}
+
+#codigosViewModal .store-config-fieldset {
+  margin: 0.85rem 0 0;
+  padding: 0.65rem 0.55rem 0.55rem;
+  border: 1px solid rgba(148, 163, 184, 0.45);
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+#codigosViewModal .store-config-fieldset__legend {
+  padding: 0 0.35rem;
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: #334155;
+  display: block;
+  width: 100%;
+  text-align: center;
+  box-sizing: border-box;
+}
+
+#codigosViewModal .store-config-fieldset__legend-inner {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.32rem;
+}
+
+#codigosViewModal .store-config-view-option {
+  display: flex;
+  flex-direction: column;
+  gap: 0.12rem;
+  margin: 0.45rem 0 0;
+  padding: 0.45rem 0.5rem;
+  border-radius: 7px;
+  background: #fff;
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  cursor: pointer;
+}
+
+#codigosViewModal .store-config-view-option:first-of-type {
+  margin-top: 0.35rem;
+}
+
+#codigosViewModal .store-config-view-option__input {
+  margin: 0 0 0.12rem;
+  accent-color: #334155;
+  cursor: pointer;
+}
+
+#codigosViewModal .store-config-view-option__label {
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: #0f172a;
+  line-height: 1.25;
+}
+
+#codigosViewModal .store-config-view-option__badge {
+  font-size: 0.68rem;
+  font-weight: 600;
+  color: #475569;
+  background: #e2e8f0;
+  border-radius: 4px;
+  padding: 0.06rem 0.32rem;
+  margin-left: 0.2rem;
+  vertical-align: middle;
+}
+
+#codigosViewModal .store-config-view-coming {
+  margin-top: 0.55rem;
+  padding: 0.5rem 0.55rem;
+  border-radius: 7px;
+  background: rgba(226, 232, 240, 0.55);
+  border: 1px dashed rgba(100, 116, 139, 0.45);
+}
+
+#codigosViewModal .store-config-view-coming__title {
+  margin: 0 0 0.35rem;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #475569;
+}
+
+#codigosViewModal .store-config-view-coming__list {
+  margin: 0;
+  padding-left: 1.05rem;
+  font-size: 0.72rem;
+  line-height: 1.35;
+  color: #64748b;
+}
+
+#codigosViewModal .store-config-view-coming__list li + li {
+  margin-top: 0.2rem;
+}
+
+/* Vista 1 — Tarjetas: estilos base en styles.css (.service-btn) */
+
+/* Vista 2 — Lista compacta */
+.codigos-services-wrap--view-compact .services-row {
+  flex-direction: column;
+  align-items: stretch;
+  width: 100%;
+}
+
+.codigos-services-wrap--view-compact .service-btn-container {
+  flex: 1 1 100%;
+  max-width: 100%;
+  padding: 0.2rem 0;
+  margin-bottom: 0;
+}
+
+.codigos-services-wrap--view-compact .service-btn {
+  height: 2.65rem;
+  border-radius: 10px;
+  font-size: 0.9rem;
+  padding: 0 0.75rem;
+  gap: 0.35rem;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.codigos-services-wrap--view-compact .service-btn:hover {
+  transform: translateY(-1px) scale(1.01);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.15);
+}
+
+.codigos-services-wrap--view-compact .service-btn img {
+  height: 1.55rem;
+}
+
+.codigos-services-wrap--view-compact .info-icon {
+  font-size: 1.15rem;
+}
+
+/* Vista 3 — Cuadrícula (icono arriba) */
+.codigos-services-wrap--view-grid {
+  width: 100%;
+}
+
+.codigos-services-wrap--view-grid .codigos-services-layout-host {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: stretch;
+  gap: 0.6rem;
+  width: 100%;
+}
+
+.codigos-services-wrap--view-grid .services-row[hidden] {
+  display: none !important;
+}
+
+.codigos-services-wrap--view-grid .service-btn-container {
+  flex: 0 1 calc(50% - 0.35rem);
+  max-width: calc(50% - 0.35rem);
+  min-width: 6.75rem;
+  width: auto;
+  padding: 0;
+  margin-bottom: 0;
+  align-items: stretch;
+  box-sizing: border-box;
+}
+
+.codigos-services-wrap--view-grid .service-btn {
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+  height: auto;
+  min-height: 5.25rem;
+  padding: 0.6rem 0.35rem 0.5rem;
+  border-radius: 14px;
+  font-size: 0.76rem;
+  gap: 0.3rem;
+  line-height: 1.2;
+  word-break: break-word;
+}
+
+.codigos-services-wrap--view-grid .service-btn img {
+  height: 2rem;
+  margin: 0;
+}
+
+.codigos-services-wrap--view-grid .info-icon {
+  position: absolute;
+  top: 4px;
+  right: 6px;
+  margin-left: 0;
+  font-size: 0.85rem;
+}
+
+@media (min-width: 601px) {
+  .codigos-services-wrap--view-grid .codigos-services-layout-host {
+    gap: 0.75rem;
+  }
+
+  .codigos-services-wrap--view-grid .service-btn-container {
+    flex: 0 1 calc(33.333% - 0.5rem);
+    max-width: calc(33.333% - 0.5rem);
+    min-width: 7.25rem;
+  }
+
+  .codigos-services-wrap--view-compact .service-btn-container {
+    flex: 1 1 100%;
+    max-width: 100%;
+  }
+}
+
+/* Vista 4 — Tabla (filas limpias, sin cabecera) */
+.codigos-services-wrap--view-table {
+  width: 100%;
+  border: 1px solid rgba(148, 163, 184, 0.45);
+  border-radius: 10px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.35);
+  box-sizing: border-box;
+}
+
+.codigos-services-wrap--view-table .codigos-services-layout-host {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+}
+
+.codigos-services-wrap--view-table .services-row[hidden] {
+  display: none !important;
+}
+
+.codigos-services-wrap--view-table .service-btn-container {
+  width: 100%;
+  max-width: 100%;
+  flex: none;
+  padding: 0;
+  margin: 0;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.25);
+}
+
+.codigos-services-wrap--view-table .service-btn-container.codigos-table-row-last {
+  border-bottom: none;
+}
+
+.codigos-services-wrap--view-table .service-btn {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  height: auto;
+  min-height: 2.85rem;
+  padding: 0.45rem 0.75rem;
+  border-radius: 0;
+  box-shadow: none;
+  text-align: left;
+  font-size: 0.88rem;
+}
+
+.codigos-services-wrap--view-table .service-btn::before {
+  display: none;
+}
+
+.codigos-services-wrap--view-table .service-btn:hover {
+  transform: none;
+  filter: brightness(1.06) saturate(1.05);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.25);
+}
+
+.codigos-services-wrap--view-table .service-btn img {
+  flex: 0 0 auto;
+  height: 1.65rem;
+  width: auto;
+}
+
+.codigos-services-wrap--view-table .codigos-service-btn-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.codigos-services-wrap--view-table .info-icon {
+  flex: 0 0 auto;
+  margin-left: auto;
+  font-size: 1.05rem;
+}
+
+/* Vista 5 — Solo iconos (nombre al hover o selección) */
+.codigos-services-wrap--view-icons {
+  width: 100%;
+}
+
+.codigos-services-wrap--view-icons .codigos-services-layout-host {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: flex-start;
+  gap: 0.65rem;
+  width: 100%;
+}
+
+.codigos-services-wrap--view-icons .services-row[hidden] {
+  display: none !important;
+}
+
+.codigos-services-wrap--view-icons .service-btn-container {
+  flex: 0 1 auto;
+  width: auto;
+  max-width: none;
+  padding: 0;
+  margin: 0;
+}
+
+.codigos-services-wrap--view-icons .service-btn {
+  position: relative;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  width: 5rem;
+  height: 5rem;
+  min-height: 5rem;
+  padding: 0.45rem;
+  border-radius: 14px;
+  font-size: 0;
+  gap: 0;
+  overflow: visible;
+}
+
+.codigos-services-wrap--view-icons .service-btn img {
+  height: 2.85rem;
+  width: auto;
+  margin: 0;
+}
+
+/* Sin animación/transform al hover — evita el “salto” raro */
+.codigos-services-wrap--view-icons .service-btn:hover,
+.codigos-services-wrap--view-icons .service-btn:active {
+  transform: none;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+  filter: none;
+}
+
+.codigos-services-wrap--view-icons .service-btn:hover::before,
+.codigos-services-wrap--view-icons .service-btn:active::before {
+  transform: translateX(-100%) translateY(-100%) rotate(45deg);
+}
+
+.codigos-services-wrap--view-icons .service-btn:hover img,
+.codigos-services-wrap--view-icons .service-btn:active img {
+  transform: none;
+  filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.3));
+}
+
+.codigos-services-wrap--view-icons .service-btn.service-btn-selected,
+.codigos-services-wrap--view-icons .service-btn.selected-service {
+  transform: none !important;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.18) !important;
+}
+
+.codigos-services-wrap--view-icons .codigos-service-btn-name {
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 0.45rem);
+  transform: translateX(-50%);
+  z-index: 5;
+  min-width: 7.5rem;
+  max-width: 13rem;
+  padding: 0.38rem 0.55rem;
+  border-radius: 8px;
+  background: rgba(15, 23, 42, 0.92);
+  color: #fff;
+  font-size: 0.78rem;
+  font-weight: 600;
+  line-height: 1.3;
+  text-align: center;
+  white-space: normal;
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.28);
+}
+
+.codigos-services-wrap--view-icons .service-btn:hover .codigos-service-btn-name,
+.codigos-services-wrap--view-icons .service-btn:focus-visible .codigos-service-btn-name {
+  opacity: 1;
+  visibility: visible;
+}
+
+.codigos-services-wrap--view-icons .service-btn.service-btn-selected .codigos-service-btn-name,
+.codigos-services-wrap--view-icons .service-btn.selected-service .codigos-service-btn-name {
+  opacity: 1;
+  visibility: visible;
+  min-width: 9rem;
+  max-width: 16rem;
+  padding: 0.5rem 0.7rem;
+  font-size: 0.92rem;
+  font-weight: 700;
+  line-height: 1.35;
+  bottom: calc(100% + 0.55rem);
+  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.35);
+}
+
+.codigos-services-wrap--view-icons .info-icon {
+  position: absolute;
+  top: 3px;
+  right: 4px;
+  margin: 0;
+  font-size: 0.78rem;
+  line-height: 1;
+}
+
+@media (min-width: 601px) {
+  .codigos-services-wrap--view-icons .codigos-services-layout-host {
+    gap: 0.75rem;
+  }
+
+  .codigos-services-wrap--view-icons .service-btn {
+    width: 5.5rem;
+    height: 5.5rem;
+    min-height: 5.5rem;
+    padding: 0.5rem;
+  }
+
+  .codigos-services-wrap--view-icons .service-btn img {
+    height: 3.25rem;
+  }
+
+  .codigos-services-wrap--view-icons .service-btn.service-btn-selected .codigos-service-btn-name,
+  .codigos-services-wrap--view-icons .service-btn.selected-service .codigos-service-btn-name {
+    font-size: 1rem;
+    max-width: 18rem;
+  }
+}

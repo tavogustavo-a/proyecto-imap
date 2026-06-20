@@ -11,7 +11,7 @@
   {% endblock %}
 
   <link rel="icon" href="{{ url_for('static', filename='images/favicon.svg') }}?v=20241220" type="image/svg+xml">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}?v=20260523-codigos2-container">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}?v=20260611-logout-cookies-label">
   {% if is_admin %}
   <meta name="archived-licenses-count-url" content="{{ url_for('store_bp.api_archived_licenses_count') }}">
   <meta name="archived-licenses-list-url" content="{{ url_for('store_bp.api_get_archived_licenses') }}">
@@ -46,7 +46,7 @@
   <script src="{{ url_for('static', filename='js/code_protection.js') }}" defer></script>
   {% endif %} #}
   
-  <script src="{{ url_for('static', filename='js/main.js') }}?v=20260525-netflix-filter-code"></script>
+  <script src="{{ url_for('static', filename='js/main.js') }}?v=20260611-mail-field-names"></script>
   <script src="{{ url_for('static', filename='js/loading_overlay.js') }}" defer></script>
   <script src="{{ url_for('store_bp.static', filename='js/store_fetch_json.js') }}?v=20260610" defer></script>
   <script src="{{ url_for('store_bp.static', filename='js/balance_recharge_realtime.js') }}?v=20260609-sse-backoff" defer></script>

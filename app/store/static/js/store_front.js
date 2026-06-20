@@ -2,18 +2,181 @@ document.addEventListener('DOMContentLoaded', function() {
   const searchInput = document.getElementById('searchStoreInput');
   const productCards = document.querySelectorAll('.card.product-texture-bg');
 
+  function resolveProductPurchaseShell(fromEl) {
+    if (!fromEl) return null;
+    const card = fromEl.closest('.card.product-texture-bg.product-card');
+    if (card) {
+      return {
+        root: card,
+        id: function () {
+          return parseInt(card.getAttribute('data-id'), 10);
+        },
+        name: function () {
+          const nameEl = card.querySelector('.product-name');
+          return nameEl ? nameEl.textContent.trim() : '';
+        },
+        input: function () {
+          return card.querySelector('.input-cantidad-licencia');
+        },
+        priceCop: function () {
+          return parseFloat(card.getAttribute('data-price-cop')) || 0;
+        },
+        priceUsd: function () {
+          return parseFloat(card.getAttribute('data-price-usd')) || 0;
+        },
+        img: function () {
+          return card.getAttribute('data-img') || '';
+        },
+      };
+    }
+    const row = fromEl.closest('#storeCatalogFullTable .store-products-table__row[data-product-id]');
+    if (row) {
+      return {
+        root: row,
+        id: function () {
+          return parseInt(row.getAttribute('data-product-id'), 10);
+        },
+        name: function () {
+          const nameEl = row.querySelector('.store-products-table__name');
+          return nameEl ? nameEl.textContent.trim() : '';
+        },
+        input: function () {
+          return row.querySelector('.input-cantidad-licencia');
+        },
+        priceCop: function () {
+          return parseFloat(row.getAttribute('data-price-cop')) || 0;
+        },
+        priceUsd: function () {
+          return parseFloat(row.getAttribute('data-price-usd')) || 0;
+        },
+        img: function () {
+          return row.getAttribute('data-img') || '';
+        },
+      };
+    }
+    return null;
+  }
+
+  function catalogTableRowHasNoStock(row) {
+    if (!row) return false;
+    const raw = row.getAttribute('data-stock');
+    if (raw !== null && raw !== '') {
+      return (parseInt(raw, 10) || 0) <= 0;
+    }
+    return row.classList.contains('store-products-table__row--no-stock');
+  }
+
+  function setFilteredRowVisible(row, visible) {
+    row.classList.toggle('store-front-product--hidden', !visible);
+    if (visible) {
+      row.removeAttribute('hidden');
+      row.removeAttribute('aria-hidden');
+    } else {
+      row.setAttribute('hidden', '');
+      row.setAttribute('aria-hidden', 'true');
+    }
+  }
+
+  function parseStockFromBadge(badge) {
+    if (!badge) return null;
+    const text = (badge.textContent || '').trim();
+    const m = /(\d+)\s*existencias/i.exec(text);
+    if (m) return parseInt(m[1], 10) || 0;
+    const raw = badge.getAttribute('data-initial-stock');
+    if (raw !== null && raw !== '') {
+      return Math.max(0, parseInt(raw, 10) || 0);
+    }
+    return null;
+  }
+
+  function parseStockFromCard(card) {
+    if (!card) return null;
+    const rawStock = card.getAttribute('data-stock');
+    if (rawStock !== null && rawStock !== '') {
+      return Math.max(0, parseInt(rawStock, 10) || 0);
+    }
+    const badge = card.querySelector('.product-stock-info[data-product-id]');
+    return parseStockFromBadge(badge);
+  }
+
+  function rowSearchName(row) {
+    const fromAttr = row.getAttribute('data-search-name');
+    if (fromAttr) return fromAttr.trim().toLowerCase();
+    const nameCell = row.querySelector('.store-products-table__name');
+    return nameCell ? nameCell.textContent.trim().toLowerCase() : '';
+  }
+
+  function cardHasNoStock(card) {
+    if (!card) return false;
+    const stock = parseStockFromCard(card);
+    if (stock !== null) return stock <= 0;
+    if (card.classList.contains('store-front-product-card--no-stock')) return true;
+    return false;
+  }
+
+  function setCatalogCardFilteredVisible(card, visible) {
+    card.classList.toggle('store-front-product--hidden', !visible);
+    if (visible) {
+      card.removeAttribute('hidden');
+      card.removeAttribute('aria-hidden');
+    } else {
+      card.setAttribute('hidden', '');
+      card.setAttribute('aria-hidden', 'true');
+    }
+  }
+
+  function applyProductFilters(term, hideZero) {
+    document.querySelectorAll('.card.product-texture-bg.product-card').forEach(function (card) {
+      const nameEl = card.querySelector('.product-name');
+      const name = nameEl ? nameEl.textContent.trim().toLowerCase() : '';
+      const searchAttr = card.getAttribute('data-search-name');
+      const haystack = searchAttr ? searchAttr.trim().toLowerCase() : name;
+      const matchesSearch = !term || haystack.includes(term);
+      let matchesStock = true;
+      if (hideZero && cardHasNoStock(card)) {
+        matchesStock = false;
+      }
+      setCatalogCardFilteredVisible(card, matchesSearch && matchesStock);
+    });
+
+    document.querySelectorAll('#storeCatalogFullTable .store-products-table__row[data-product-id]').forEach(function (row) {
+      const matchesSearch = !term || rowSearchName(row).includes(term);
+      let matchesStock = true;
+      if (hideZero && catalogTableRowHasNoStock(row)) {
+        matchesStock = false;
+      }
+      setFilteredRowVisible(row, matchesSearch && matchesStock);
+    });
+
+    document.querySelectorAll('#storePriceTablePanel .store-products-table__row[data-product-id]').forEach(function (row) {
+      const matchesSearch = !term || rowSearchName(row).includes(term);
+      setFilteredRowVisible(row, matchesSearch);
+    });
+
+    const wrap = document.getElementById('storeProductsWrap');
+    const hdr = document.getElementById('storeCatalogTableHeader');
+    if (wrap && hdr && wrap.classList.contains('store-products-wrap--view-table')) {
+      const anyVisible = wrap.querySelector(
+        '.card.product-card:not(.store-front-product--hidden)'
+      );
+      hdr.hidden = !anyVisible;
+      hdr.setAttribute('aria-hidden', anyVisible ? 'false' : 'true');
+    }
+  }
+
+  window.storeFrontApplyProductFilters = function () {
+    const term = searchInput ? searchInput.value.trim().toLowerCase() : '';
+    const hideZero =
+      typeof window.storeFrontGetHideZeroStock === 'function' &&
+      window.storeFrontGetHideZeroStock();
+    applyProductFilters(term, hideZero);
+  };
+
   if (searchInput && productCards.length) {
     function filterProducts() {
-      const term = searchInput.value.trim().toLowerCase();
-      productCards.forEach(card => {
-        const name = card.querySelector('.mt-05').textContent.trim().toLowerCase();
-        if (!term || name.includes(term)) {
-          card.style.display = '';
-        } else {
-          card.style.display = 'none';
-        }
-      });
+      window.storeFrontApplyProductFilters();
     }
+    window.storeFrontFilterProducts = filterProducts;
     searchInput.addEventListener('input', filterProducts);
     
     // Event listener para la 'x' nativa de limpiar
@@ -24,16 +187,24 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Inicial
     filterProducts();
+  } else if (productCards.length) {
+    function filterProductsNoSearch() {
+      window.storeFrontApplyProductFilters();
+    }
+    window.storeFrontFilterProducts = filterProductsNoSearch;
+    filterProductsNoSearch();
   }
 
-  // Cantidad
-  productCards.forEach(function(card) {
-    const input = card.querySelector('.input-cantidad-licencia');
-    const btnSumar = card.querySelector('.btn-sumar');
-    const btnRestar = card.querySelector('.btn-restar');
+  // Cantidad — tarjetas y filas vista 6
+  document.querySelectorAll('.card.product-texture-bg.product-card, #storeCatalogFullTable .store-products-table__row').forEach(function (root) {
+    const input = root.querySelector('.input-cantidad-licencia');
+    const btnSumar = root.querySelector('.btn-sumar');
+    const btnRestar = root.querySelector('.btn-restar');
     if (input && btnSumar && btnRestar) {
       btnSumar.addEventListener('click', function() {
-        const pid = parseInt(card.getAttribute('data-id'), 10);
+        const shell = resolveProductPurchaseShell(btnSumar);
+        if (!shell) return;
+        const pid = shell.id();
         const stock = getSellableStockForProduct(pid);
         let cur = parseInt(input.value, 10) || 1;
         if (stock !== null && cur >= stock) {
@@ -50,9 +221,9 @@ document.addEventListener('DOMContentLoaded', function() {
         input.value = String(cur);
       });
       btnRestar.addEventListener('click', function() {
-        if (parseInt(input.value) > 1) {
-          input.value = parseInt(input.value) - 1;
-        }
+        const shell = resolveProductPurchaseShell(btnRestar);
+        if (!shell) return;
+        decrementarProductoDesdeShell(shell);
       });
     }
   });
@@ -72,6 +243,46 @@ document.addEventListener('DOMContentLoaded', function() {
   let stockByProductId = {};
   /** Tras una respuesta de /stock, cualquier producto sin fila ya no está a la venta (se trata como 0). */
   let stockPollLoadedOnce = false;
+
+  /** Actualiza texto y color de «N existencias» en la tarjeta. */
+  function applyStockBadgeVisual(stockElement, count) {
+    if (!stockElement) return;
+    const n = Math.max(0, parseInt(count, 10) || 0);
+    stockElement.textContent = n + ' existencias';
+    stockElement.classList.toggle('product-stock-info--zero', n <= 0);
+  }
+
+  function applyTableRowStockVisual(productId, count) {
+    const n = Math.max(0, parseInt(count, 10) || 0);
+    document.querySelectorAll('.store-products-table__row[data-product-id="' + productId + '"]').forEach(function (row) {
+      row.setAttribute('data-stock', String(n));
+      row.classList.toggle('store-products-table__row--no-stock', n <= 0);
+      const stockEl = row.querySelector('.product-stock-info[data-product-id]');
+      if (stockEl) {
+        applyStockBadgeVisual(stockEl, n);
+      }
+    });
+    const card = document.querySelector('.card.product-card[data-id="' + productId + '"]');
+    if (card) {
+      card.setAttribute('data-stock', String(n));
+      card.classList.toggle('store-front-product-card--no-stock', n <= 0);
+    }
+  }
+
+  function syncAllProductStockBadgesFromDom() {
+    document.querySelectorAll('.product-stock-info[data-product-id]').forEach(function (el) {
+      const raw = el.getAttribute('data-initial-stock');
+      let n = raw !== null && raw !== '' ? parseInt(raw, 10) : NaN;
+      if (!Number.isFinite(n)) {
+        const pid = el.getAttribute('data-product-id');
+        const fromDom = pid ? parseStockNumFromBadge(pid) : null;
+        n = fromDom !== null ? fromDom : 0;
+      }
+      applyStockBadgeVisual(el, n);
+      const pid = el.getAttribute('data-product-id');
+      if (pid) applyTableRowStockVisual(pid, n);
+    });
+  }
 
   function hydrateProductStockFromSSR() {
     let any = false;
@@ -136,7 +347,7 @@ document.addEventListener('DOMContentLoaded', function() {
     let touched = false;
 
     carritoPago = carritoPago.filter(function (item) {
-      if (item.es_renovacion) {
+      if (item.es_renovacion || item.es_renovar_cuenta_cliente) {
         return true;
       }
       let qty = parseInt(item.cantidad, 10);
@@ -182,10 +393,13 @@ document.addEventListener('DOMContentLoaded', function() {
     }
   }
 
-  function capCardQuantityInput(card, preferredMax) {
-    const input = card.querySelector('.input-cantidad-licencia');
+  function capPurchaseQuantityInput(rootEl, preferredMax) {
+    if (!rootEl) return;
+    const input = rootEl.querySelector('.input-cantidad-licencia');
     if (!input) return;
-    let maxVal = preferredMax != null ? preferredMax : getSellableStockForProduct(parseInt(card.getAttribute('data-id'), 10));
+    const idRaw = rootEl.getAttribute('data-id') || rootEl.getAttribute('data-product-id');
+    const pid = parseInt(idRaw, 10);
+    let maxVal = preferredMax != null ? preferredMax : getSellableStockForProduct(pid);
     if (maxVal === null) return;
     let v = parseInt(input.value, 10) || 1;
     if (maxVal <= 0) {
@@ -197,6 +411,19 @@ document.addEventListener('DOMContentLoaded', function() {
     if (v > maxVal) v = maxVal;
     input.setAttribute('max', String(maxVal));
     input.value = String(v);
+  }
+
+  function capCardQuantityInput(card, preferredMax) {
+    capPurchaseQuantityInput(card, preferredMax);
+  }
+
+  function capAllPurchaseQuantityInputs(productId, preferredMax) {
+    document.querySelectorAll('.card.product-card[data-id="' + productId + '"]').forEach(function (card) {
+      capPurchaseQuantityInput(card, preferredMax);
+    });
+    document.querySelectorAll('#storeCatalogFullTable .store-products-table__row[data-product-id="' + productId + '"]').forEach(function (row) {
+      capPurchaseQuantityInput(row, preferredMax);
+    });
   }
 
   function applyStockPayload(data) {
@@ -214,14 +441,20 @@ document.addEventListener('DOMContentLoaded', function() {
       if (!Object.prototype.hasOwnProperty.call(stockByProductId, key)) {
         stockByProductId[key] = 0;
       }
-      stockElement.textContent = stockByProductId[key] + ' existencias';
+      applyStockBadgeVisual(stockElement, stockByProductId[key]);
+      applyTableRowStockVisual(key, stockByProductId[key]);
     });
     syncCartToInventory();
-    document.querySelectorAll('.card.product-texture-bg').forEach(function (card) {
-      const pid = parseInt(card.getAttribute('data-id'), 10);
+    document.querySelectorAll('.card.product-texture-bg, #storeCatalogFullTable .store-products-table__row[data-product-id]').forEach(function (root) {
+      const pidRaw = root.getAttribute('data-id') || root.getAttribute('data-product-id');
+      const pid = parseInt(pidRaw, 10);
       if (!pid) return;
-      capCardQuantityInput(card, getSellableStockForProduct(pid));
+      capPurchaseQuantityInput(root, getSellableStockForProduct(pid));
     });
+    if (typeof window.storeFrontFilterProducts === 'function') {
+      window.storeFrontFilterProducts();
+    }
+    syncAllProductReserveUi();
     return true;
   }
 
@@ -409,6 +642,11 @@ document.addEventListener('DOMContentLoaded', function() {
         row.es_renovacion = true;
         row.renovacion_account_ids = p.renovacion_account_ids.slice();
       }
+      if (p.es_renovar_cuenta_cliente) {
+        row.es_renovar_cuenta_cliente = true;
+        row.customer_email = p.customer_email || '';
+        row.customer_password = p.customer_password || '';
+      }
       return row;
     });
   }
@@ -508,7 +746,11 @@ document.addEventListener('DOMContentLoaded', function() {
       agr[prod].forEach(function (cuenta) {
         html +=
           '<div class="pago-exito-line">' +
-          tiendaEscapeHtmlParaModal(tiendaLineaEntregaCredencial(cuenta)) +
+          tiendaEscapeHtmlParaModal(
+            cuenta.es_renovar_cuenta_cliente && cuenta.mensaje
+              ? cuenta.mensaje
+              : tiendaLineaEntregaCredencial(cuenta)
+          ) +
           '</div>';
       });
     });
@@ -602,7 +844,10 @@ document.addEventListener('DOMContentLoaded', function() {
       // Calcular precio total del producto
       const precioTotal = producto.cantidad * producto.precio_unitario;
       const esRen = producto.es_renovacion ? '1' : '0';
-      const cantidadBtns = producto.es_renovacion
+      const esRenCuenta = producto.es_renovar_cuenta_cliente ? '1' : '0';
+      const lineUid = producto.line_uid ? String(producto.line_uid) : '';
+      const cantidadBtns =
+        producto.es_renovacion || producto.es_renovar_cuenta_cliente
         ? '<span class="carrito-cantidad-num">' + producto.cantidad + '</span>'
         : '<button class="btn-carrito-menos" data-id="' +
           producto.id +
@@ -616,10 +861,19 @@ document.addEventListener('DOMContentLoaded', function() {
 
       const logoBadge = producto.es_renovacion
         ? '<span class="renovacion-logo-badge" title="Renovación"><i class="fas fa-sync-alt"></i></span>'
-        : '';
+        : producto.es_renovar_cuenta_cliente
+          ? '<span class="renovacion-logo-badge renovacion-logo-badge--cuenta-cliente" title="Renovar su cuenta"><i class="fas fa-user-check"></i></span>'
+          : '';
+
+      const cuentaClienteSub =
+        producto.es_renovar_cuenta_cliente && producto.customer_email
+          ? '<div class="carrito-cuenta-cliente-email">' +
+            tiendaEscapeHtmlParaModal(producto.customer_email) +
+            '</div>'
+          : '';
 
       div.innerHTML = `
-        <button class="btn-eliminar-producto" title="Eliminar producto" data-id="${producto.id}" data-es-renovacion="${esRen}">×</button>
+        <button class="btn-eliminar-producto" title="Eliminar producto" data-id="${producto.id}" data-es-renovacion="${esRen}" data-es-renovar-cuenta="${esRenCuenta}" data-line-uid="${lineUid}">×</button>
         <div class="carrito-producto-superior">
           <div class="carrito-producto-logo-wrap">
             <img src="${producto.logo}" alt="logo" class="carrito-producto-logo">
@@ -627,6 +881,7 @@ document.addEventListener('DOMContentLoaded', function() {
           </div>
           <span class="carrito-producto-nombre">${producto.nombre}</span>
         </div>
+        ${cuentaClienteSub}
         <div class="carrito-producto-inferior">
           <div class="carrito-producto-cantidad-btns">
             ${cantidadBtns}
@@ -898,6 +1153,17 @@ document.addEventListener('DOMContentLoaded', function() {
       btn.addEventListener('click', function() {
         const id = parseInt(this.getAttribute('data-id'), 10);
         const esRen = this.getAttribute('data-es-renovacion') === '1';
+        const lineUid = this.getAttribute('data-line-uid') || '';
+        if (lineUid) {
+          carritoPago = carritoPago.filter(function (p) {
+            return String(p.line_uid || '') !== lineUid;
+          });
+          actualizarDescuento();
+          renderResumenPago();
+          renderizarCarrito();
+          validarCuponAutomatico();
+          return;
+        }
         eliminarProductoDelCarrito(id, esRen).then(function () {
           validarCuponAutomatico();
         });
@@ -908,16 +1174,19 @@ document.addEventListener('DOMContentLoaded', function() {
 
   document.querySelectorAll('.btn-anadir-producto-tienda').forEach((btn) => {
     btn.addEventListener('click', function() {
-      const card = btn.closest('.card.product-texture-bg');
-      const nombre = card.querySelector('.mt-05').textContent.trim();
-      const input = card.querySelector('.input-cantidad-licencia');
-      let cantidadPedida = parseInt(input.value, 10) || 1;
-      // Obtener precios por texto
-      // Obtener precios desde los atributos data (ya incluyen descuentos aplicados)
-      let precioCop = parseFloat(card.getAttribute('data-price-cop')) || 0;
-      let precioUsd = parseFloat(card.getAttribute('data-price-usd')) || 0;
-      const id = parseInt(card.getAttribute('data-id'), 10);
-      const img = card.getAttribute('data-img') || '';
+      const shell = resolveProductPurchaseShell(btn);
+      if (!shell) return;
+      if (productShellAllowsRenewCustomerAccount(shell.root)) {
+        alert('Este producto usa «Renovar»: envía tu cuenta con el botón azul Renovar.');
+        return;
+      }
+      const nombre = shell.name();
+      const input = shell.input();
+      let cantidadPedida = input ? parseInt(input.value, 10) || 1 : 1;
+      let precioCop = shell.priceCop();
+      let precioUsd = shell.priceUsd();
+      const id = shell.id();
+      const img = shell.img();
       const existe = carritoPago.find(p => p.id === id);
       const yaEnCarrito = existe ? existe.cantidad : 0;
       const stock = getSellableStockForProduct(id);
@@ -925,7 +1194,7 @@ document.addEventListener('DOMContentLoaded', function() {
       if (stock !== null) {
         if (stock <= 0) {
           alert('No hay existencias disponibles para «' + nombre + '».');
-          capCardQuantityInput(card, stock);
+          capAllPurchaseQuantityInputs(id, stock);
           return;
         }
         const hueco = stock - yaEnCarrito;
@@ -937,7 +1206,7 @@ document.addEventListener('DOMContentLoaded', function() {
               yaEnCarrito +
               ' en el carrito.'
           );
-          capCardQuantityInput(card, stock);
+          capAllPurchaseQuantityInputs(id, stock);
           return;
         }
         if (cantidadPedida > hueco) {
@@ -973,7 +1242,7 @@ document.addEventListener('DOMContentLoaded', function() {
         carritoPago.push({ id, nombre, logo: img, cantidad: cantidadPedida, precio_unitario, moneda });
       }
 
-      capCardQuantityInput(card, stock);
+      capAllPurchaseQuantityInputs(id, stock);
       renderResumenPago();
       renderizarCarrito();
       validarCuponAutomatico();
@@ -1411,6 +1680,47 @@ document.addEventListener('DOMContentLoaded', function() {
     renderizarCarrito();
   }
 
+  // Quitar 1 unidad del carrito desde tarjeta o fila tabla (botón −).
+  function decrementarProductoDesdeShell(shell) {
+    if (!shell) return;
+    const input = shell.input();
+    const id = shell.id();
+    if (!input || !id) return;
+
+    const prod = carritoPago.find(function (p) {
+      return p.id === id && !p.es_renovacion;
+    });
+
+    if (prod) {
+      if (prod.cantidad > 1) {
+        prod.cantidad--;
+        delete prod.descuento_cop;
+        delete prod.descuento_usd;
+        delete prod.descuento_aplicado;
+      } else {
+        carritoPago = carritoPago.filter(function (p) {
+          return !(p.id === id && !p.es_renovacion);
+        });
+      }
+      if (cuponAplicado) {
+        cuponAplicado = null;
+        descuentoCupon = 0;
+        ocultarCuponAplicado();
+      }
+      actualizarCarritoContador();
+      actualizarDescuento();
+      renderResumenPago();
+      renderizarCarrito();
+      validarCuponAutomatico();
+    }
+
+    let cur = parseInt(input.value, 10) || 1;
+    if (cur > 1) {
+      input.value = String(cur - 1);
+    }
+    capAllPurchaseQuantityInputs(id, getSellableStockForProduct(id));
+  }
+
   // Función para eliminar producto del carrito
   function eliminarProductoDelCarrito(id, esRenovacion) {
     let idsLiberar = [];
@@ -1438,6 +1748,10 @@ document.addEventListener('DOMContentLoaded', function() {
   }
 
   hydrateProductStockFromSSR();
+  syncAllProductStockBadgesFromDom();
+  if (typeof window.storeFrontFilterProducts === 'function') {
+    window.storeFrontFilterProducts();
+  }
   sincronizarReservasRenovacionCarrito();
   document.querySelectorAll('.card.product-texture-bg').forEach(function (card) {
     const pid = parseInt(card.getAttribute('data-id'), 10);
@@ -1935,8 +2249,302 @@ document.addEventListener('DOMContentLoaded', function() {
   document.addEventListener('visibilitychange', function () {
     if (document.visibilityState === 'visible') {
       refreshStoreFrontSaldoFromApi();
+      pollStoreNotifications();
     }
   });
+
+  var pendingReservationProductIds = Object.create(null);
+  var storeNotifSeenIds = Object.create(null);
+
+  function productShellAllowsReservation(root) {
+    if (!root) return false;
+    return String(root.getAttribute('data-allow-reservation') || '') === '1';
+  }
+
+  function productShellAllowsRenewCustomerAccount(root) {
+    if (!root) return false;
+    return String(root.getAttribute('data-renew-customer-account') || '') === '1';
+  }
+
+  function syncProductReserveUiForRoot(root) {
+    if (!root) return;
+    var pidRaw = root.getAttribute('data-id') || root.getAttribute('data-product-id');
+    var pid = parseInt(pidRaw, 10);
+    if (!Number.isFinite(pid)) return;
+    var stock = getSellableStockForProduct(pid);
+    var reservable = productShellAllowsReservation(root);
+    var renewCustomer = productShellAllowsRenewCustomerAccount(root);
+    var qtyRow = root.querySelector('.input-group-cantidad');
+    var addBtn = root.querySelector('.btn-anadir-producto-tienda');
+    var resBtn = root.querySelector('.btn-reservar-producto-tienda');
+    var renewBtn = root.querySelector('.btn-renovar-cuenta-cliente-tienda');
+    var pending = !!pendingReservationProductIds[pid];
+    var showRenewCustomer = renewCustomer;
+    var showReserve = !showRenewCustomer && reservable && stock !== null && stock <= 0;
+    if (qtyRow) qtyRow.style.display = showRenewCustomer || showReserve ? 'none' : '';
+    if (addBtn) {
+      addBtn.hidden = showRenewCustomer || showReserve;
+      addBtn.style.display = showRenewCustomer || showReserve ? 'none' : '';
+    }
+    if (resBtn) {
+      resBtn.hidden = !showReserve;
+      resBtn.style.display = showReserve ? '' : 'none';
+      resBtn.disabled = pending;
+      resBtn.textContent = pending ? 'Reservado' : 'Reservar';
+      resBtn.classList.toggle('btn-reservar-producto-tienda--pending', pending);
+    }
+    if (renewBtn) {
+      renewBtn.hidden = !showRenewCustomer;
+      renewBtn.style.display = showRenewCustomer ? '' : 'none';
+    }
+    var stockEls = root.querySelectorAll('.product-stock-info');
+    stockEls.forEach(function (el) {
+      if (showRenewCustomer) {
+        el.textContent = 'Renovar su cuenta';
+        el.classList.remove('product-stock-info--zero');
+      }
+    });
+  }
+
+  function syncAllProductReserveUi() {
+    document
+      .querySelectorAll(
+        '.card.product-texture-bg.product-card, #storeCatalogFullTable .store-products-table__row[data-product-id]'
+      )
+      .forEach(syncProductReserveUiForRoot);
+  }
+
+  function loadPendingProductReservations() {
+    return fetch('/tienda/api/user/product-reservations/pending', {
+      credentials: 'same-origin',
+      cache: 'no-store',
+    })
+      .then(function (r) {
+        return r.json().catch(function () {
+          return { success: false };
+        });
+      })
+      .then(function (data) {
+        pendingReservationProductIds = Object.create(null);
+        if (data && data.success && Array.isArray(data.product_ids)) {
+          data.product_ids.forEach(function (pid) {
+            var n = parseInt(pid, 10);
+            if (Number.isFinite(n)) pendingReservationProductIds[n] = true;
+          });
+        }
+        syncAllProductReserveUi();
+      })
+      .catch(function () {
+        syncAllProductReserveUi();
+      });
+  }
+
+  function showStoreReservationNotification(notif) {
+    if (!notif || notif.id == null) return;
+    if (storeNotifSeenIds[notif.id]) return;
+    storeNotifSeenIds[notif.id] = true;
+    var isMobile = window.matchMedia && window.matchMedia('(max-width: 768px)').matches;
+    var node = document.createElement('div');
+    node.className =
+      'in-page-notification push-notification store-reservation-notify ' +
+      (isMobile ? 'push-notification-mobile' : 'push-notification-desktop');
+    var bodyText = String(notif.body || '').trim();
+    if (bodyText.length > 220) bodyText = bodyText.slice(0, 217) + '…';
+    node.innerHTML =
+      '<div class="push-notification-title">' +
+      (notif.title ? String(notif.title) : 'Reserva completada') +
+      '</div>' +
+      '<div class="push-notification-body">' +
+      bodyText.replace(/\n/g, '<br>') +
+      '</div>' +
+      (isMobile ? '<div class="push-notification-hint">Toca para cerrar</div>' : '');
+    node.addEventListener('click', function () {
+      node.classList.add('push-notification-closing');
+      window.setTimeout(function () {
+        if (node.parentNode) node.parentNode.removeChild(node);
+      }, 280);
+      fetch('/tienda/api/user/store-notifications/' + encodeURIComponent(String(notif.id)) + '/read', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: {
+          'X-CSRFToken': getCsrfToken(),
+          'X-Requested-With': 'XMLHttpRequest',
+        },
+      }).catch(function () {});
+    });
+    document.body.appendChild(node);
+    window.setTimeout(function () {
+      if (!node.parentNode) return;
+      node.classList.add('push-notification-closing');
+      window.setTimeout(function () {
+        if (node.parentNode) node.parentNode.removeChild(node);
+      }, 280);
+    }, 12000);
+  }
+
+  function pollStoreNotifications() {
+    return fetch('/tienda/api/user/store-notifications', {
+      credentials: 'same-origin',
+      cache: 'no-store',
+    })
+      .then(function (r) {
+        return r.json().catch(function () {
+          return { success: false };
+        });
+      })
+      .then(function (data) {
+        if (!data || !data.success || !Array.isArray(data.notifications)) return;
+        data.notifications.slice().reverse().forEach(showStoreReservationNotification);
+        refreshStoreFrontSaldoFromApi();
+        loadPendingProductReservations();
+      })
+      .catch(function () {});
+  }
+
+  document.querySelectorAll('.btn-reservar-producto-tienda').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var shell = resolveProductPurchaseShell(btn);
+      if (!shell) return;
+      var pid = shell.id();
+      if (!Number.isFinite(pid)) return;
+      if (pendingReservationProductIds[pid]) return;
+      var stock = getSellableStockForProduct(pid);
+      if (stock !== null && stock > 0) {
+        alert('Ya hay existencias; usa «Añadir» para comprar.');
+        syncAllProductReserveUi();
+        return;
+      }
+      btn.disabled = true;
+      fetch('/tienda/api/products/' + encodeURIComponent(String(pid)) + '/reservar', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+          'X-CSRFToken': getCsrfToken(),
+          'X-Requested-With': 'XMLHttpRequest',
+        },
+        body: '{}',
+      })
+        .then(function (r) {
+          return r.json().catch(function () {
+            return { success: false };
+          });
+        })
+        .then(function (data) {
+          if (!data || !data.success) {
+            alert((data && data.error) || 'No se pudo crear la reserva.');
+            btn.disabled = false;
+            return;
+          }
+          pendingReservationProductIds[pid] = true;
+          syncAllProductReserveUi();
+          alert(
+            'Reserva registrada. Cuando haya stock se te asignará la cuenta automáticamente (se debitará tu saldo) y recibirás aviso aquí y por correo.'
+          );
+        })
+        .catch(function () {
+          alert('Error de conexión al reservar.');
+          btn.disabled = false;
+        });
+    });
+  });
+
+  var renovarCuentaClientePendingShell = null;
+
+  function closeRenovarCuentaClienteModal() {
+    var modal = document.getElementById('renovarCuentaClienteModal');
+    if (modal) modal.classList.add('modal-hidden');
+    renovarCuentaClientePendingShell = null;
+    var form = document.getElementById('renovarCuentaClienteForm');
+    if (form) form.reset();
+  }
+
+  function openRenovarCuentaClienteModal(shell) {
+    if (!shell) return;
+    var modal = document.getElementById('renovarCuentaClienteModal');
+    var nameEl = document.getElementById('renovarCuentaClienteProductName');
+    if (!modal) return;
+    renovarCuentaClientePendingShell = shell;
+    if (nameEl) nameEl.textContent = shell.name() || 'Producto';
+    modal.classList.remove('modal-hidden');
+    var emailInput = document.getElementById('renovarCuentaClienteEmail');
+    if (emailInput) window.setTimeout(function () { emailInput.focus(); }, 80);
+  }
+
+  function addRenovarCuentaClienteToCart(shell, email, password) {
+    var pid = shell.id();
+    var nombre = shell.name();
+    var img = shell.img();
+    var precioCop = shell.priceCop();
+    var precioUsd = shell.priceUsd();
+    var precio_unitario = precioCop || precioUsd;
+    var moneda = precioCop ? 'COP' : 'USD';
+    if (cuponAplicado) {
+      cuponAplicado = null;
+      descuentoCupon = 0;
+      ocultarCuponAplicado();
+    }
+    carritoPago.push({
+      id: pid,
+      nombre: nombre,
+      logo: img,
+      cantidad: 1,
+      precio_unitario: precio_unitario,
+      moneda: moneda,
+      es_renovar_cuenta_cliente: true,
+      customer_email: email,
+      customer_password: password,
+      line_uid: 'rc_' + Date.now() + '_' + Math.random().toString(36).slice(2, 9),
+    });
+    renderResumenPago();
+    renderizarCarrito();
+    validarCuponAutomatico();
+  }
+
+  document.querySelectorAll('.btn-renovar-cuenta-cliente-tienda').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var shell = resolveProductPurchaseShell(btn);
+      if (!shell) return;
+      if (!productShellAllowsRenewCustomerAccount(shell.root)) {
+        alert('Este producto no admite renovar con cuenta del cliente.');
+        return;
+      }
+      openRenovarCuentaClienteModal(shell);
+    });
+  });
+
+  var closeRenovarCuentaBtn = document.getElementById('closeRenovarCuentaClienteModalBtn');
+  if (closeRenovarCuentaBtn) {
+    closeRenovarCuentaBtn.addEventListener('click', closeRenovarCuentaClienteModal);
+  }
+  var cancelRenovarCuentaBtn = document.getElementById('btnRenovarCuentaClienteCancel');
+  if (cancelRenovarCuentaBtn) {
+    cancelRenovarCuentaBtn.addEventListener('click', closeRenovarCuentaClienteModal);
+  }
+  var renovarCuentaForm = document.getElementById('renovarCuentaClienteForm');
+  if (renovarCuentaForm) {
+    renovarCuentaForm.addEventListener('submit', function (e) {
+      e.preventDefault();
+      if (!renovarCuentaClientePendingShell) return;
+      var email = (document.getElementById('renovarCuentaClienteEmail').value || '').trim();
+      var password = (document.getElementById('renovarCuentaClientePassword').value || '').trim();
+      if (!email || email.indexOf('@') < 1) {
+        alert('Indica un correo válido de la cuenta a renovar.');
+        return;
+      }
+      if (!password) {
+        alert('Indica la contraseña de la cuenta a renovar.');
+        return;
+      }
+      addRenovarCuentaClienteToCart(renovarCuentaClientePendingShell, email, password);
+      closeRenovarCuentaClienteModal();
+    });
+  }
+
+  loadPendingProductReservations();
+  window.setInterval(pollStoreNotifications, 15000);
+  pollStoreNotifications();
 
   window.TiendaRenovacion = {
     getCart: function () {

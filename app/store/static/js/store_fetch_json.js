@@ -4,11 +4,34 @@
 (function (global) {
   'use strict';
 
+  function getCsrfToken() {
+    var meta = global.document && global.document.querySelector('meta[name="csrf_token"]');
+    if (meta && meta.getAttribute('content')) {
+      return meta.getAttribute('content');
+    }
+    var match = global.document && global.document.cookie
+      ? global.document.cookie.match(/(?:^|;\s*)_csrf=([^;]+)/)
+      : null;
+    return match ? decodeURIComponent(match[1]) : '';
+  }
+
+  function methodNeedsCsrf(method) {
+    var m = String(method || 'GET').toUpperCase();
+    return m !== 'GET' && m !== 'HEAD' && m !== 'OPTIONS';
+  }
+
   function fetchJson(url, options) {
     options = options || {};
     var headers = Object.assign({ Accept: 'application/json' }, options.headers || {});
+    var method = options.method || 'GET';
+    if (methodNeedsCsrf(method)) {
+      var csrf = getCsrfToken();
+      if (csrf) {
+        headers['X-CSRFToken'] = csrf;
+      }
+    }
     var init = {
-      method: options.method || 'GET',
+      method: method,
       credentials:
         options.credentials != null ? options.credentials : 'same-origin',
       headers: headers,
@@ -36,7 +59,9 @@
           if (!res.ok) {
             var msg =
               (data && (data.message || data.error)) ||
-              'Error HTTP ' + res.status;
+              (res.status === 400
+                ? 'Sesión de seguridad expirada. Recarga la página (F5) e intenta de nuevo.'
+                : 'Error HTTP ' + res.status);
             var httpErr = new Error(String(msg));
             httpErr.status = res.status;
             httpErr.data = data;

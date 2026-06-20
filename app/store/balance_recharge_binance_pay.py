@@ -22,6 +22,7 @@ logger = logging.getLogger(__name__)
 
 BINANCE_PAY_API_BASE = 'https://bpay.binanceapi.com'
 CREATE_ORDER_PATH = '/binancepay/openapi/v3/order'
+QUERY_ORDER_PATH = '/binancepay/openapi/v2/order/query'
 CERTIFICATES_PATH = '/binancepay/openapi/certificates'
 
 _CERT_CACHE: dict[str, tuple[float, dict[str, str]]] = {}
@@ -198,6 +199,39 @@ def verify_webhook_signature(
     except Exception as exc:
         logger.warning('Binance Pay webhook signature verify failed: %s', exc)
     return False
+
+
+def query_binance_pay_order(
+    *,
+    api_key: str,
+    secret: str,
+    merchant_trade_no: str,
+) -> dict[str, Any]:
+    trade_no = re.sub(r'[^A-Za-z0-9]', '', str(merchant_trade_no or ''))[:32]
+    if not trade_no:
+        raise ValueError('Orden inválida')
+    body_obj: dict[str, Any] = {'merchantTradeNo': trade_no}
+    body = json.dumps(body_obj, separators=(',', ':'), ensure_ascii=False)
+    headers = _build_signed_headers(api_key, secret, body)
+    url = f'{BINANCE_PAY_API_BASE}{QUERY_ORDER_PATH}'
+    resp = requests.post(url, data=body.encode('utf-8'), headers=headers, timeout=45)
+    try:
+        payload = resp.json()
+    except ValueError:
+        payload = {'status': 'FAIL', 'errorMessage': resp.text[:500]}
+    if resp.status_code >= 400:
+        payload.setdefault('status', 'FAIL')
+        payload.setdefault('http_status', resp.status_code)
+    return payload
+
+
+def binance_pay_order_status_from_query(payload: dict[str, Any]) -> str:
+    if not isinstance(payload, dict):
+        return ''
+    data = payload.get('data')
+    if isinstance(data, dict):
+        return str(data.get('status') or '').strip().upper()
+    return ''
 
 
 def create_binance_pay_order(

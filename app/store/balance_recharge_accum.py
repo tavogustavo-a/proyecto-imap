@@ -21,9 +21,18 @@ AUTO_ACCUMULATED_STATUS = 'auto_accumulated'
 CONVERTED_STATUS = 'accum_converted'
 USER_ACCUM_DISPLAY_STATUSES = (ACCUMULATED_STATUS, AUTO_ACCUMULATED_STATUS)
 
+_normalize_unreviewed_accumulations_done = False
 
-def normalize_unreviewed_accumulations() -> int:
-    """Recargas acumulador que quedaron acumuladas sin revisión admin previa."""
+
+def normalize_unreviewed_accumulations(*, force: bool = False) -> int:
+    """Repara datos legacy: accumulated sin reviewed_at vuelve a pending.
+
+    Solo debe ejecutarse al arranque (o con force=True). No llamar en listados GET.
+    """
+    global _normalize_unreviewed_accumulations_done
+    if _normalize_unreviewed_accumulations_done and not force:
+        return 0
+
     rows = (
         BalanceRecharge.query.filter_by(status=ACCUMULATED_STATUS)
         .filter(BalanceRecharge.reviewed_at.is_(None))
@@ -37,6 +46,7 @@ def normalize_unreviewed_accumulations() -> int:
         changed += 1
     if changed:
         db.session.commit()
+    _normalize_unreviewed_accumulations_done = True
     return changed
 
 

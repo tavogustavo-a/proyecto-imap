@@ -84,6 +84,18 @@
     else if (key === 'accum') loadAccumRecharges();
   }
 
+  function reloadAllRecargasLists() {
+    loadRecharges();
+    if (typeof loadAutoRecharges === 'function') loadAutoRecharges();
+    if (typeof loadAccumRecharges === 'function') loadAccumRecharges();
+    if (typeof loadAccumSummary === 'function') loadAccumSummary();
+  }
+
+  window.AdminRecargasSaldo = {
+    reloadActiveLists: reloadListForActiveTab,
+    reloadAllLists: reloadAllRecargasLists,
+  };
+
   function initListLimitSelects() {
     setListLimitValue(getListLimitValue());
     document.querySelectorAll('.admin-recargas-limit-select').forEach(function (sel) {

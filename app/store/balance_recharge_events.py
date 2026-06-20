@@ -119,9 +119,24 @@ def _cooperative_sleep(seconds: float) -> None:
         time.sleep(seconds)
 
 
+def _resolve_redis_url_from_environ() -> str | None:
+    for key in ('BALANCE_RECHARGE_EVENTS_REDIS_URL', 'REDIS_URL'):
+        url = (os.environ.get(key) or '').strip()
+        if url:
+            return url
+    host = (os.environ.get('REDIS_HOST') or '').strip()
+    if not host:
+        return None
+    port = (os.environ.get('REDIS_PORT') or '6379').strip()
+    db = (os.environ.get('REDIS_DB') or '0').strip()
+    password = (os.environ.get('REDIS_PASSWORD') or '').strip()
+    if password:
+        return f'redis://:{password}@{host}:{port}/{db}'
+    return f'redis://{host}:{port}/{db}'
+
+
 def _redis_url_from_env() -> str | None:
-    url = (os.environ.get('BALANCE_RECHARGE_EVENTS_REDIS_URL') or '').strip()
-    return url or None
+    return _resolve_redis_url_from_environ()
 
 
 def _redis_url_from_app() -> str | None:
@@ -135,7 +150,11 @@ def _redis_url_from_app() -> str | None:
 
 
 def recharge_events_redis_url() -> str | None:
-    return _redis_url_from_app() or _redis_url_from_env()
+    return _redis_url_from_app() or _resolve_redis_url_from_environ()
+
+
+def balance_recharge_events_redis_enabled() -> bool:
+    return bool(recharge_events_redis_url())
 
 
 def _log_redis_unavailable_once(exc: Exception) -> None:
@@ -317,11 +336,35 @@ def start_balance_recharge_events_redis_listener(app) -> None:
     global _redis_listener_started
     url = (app.config.get('BALANCE_RECHARGE_EVENTS_REDIS_URL') or '').strip()
     if not url:
+        url = (_resolve_redis_url_from_environ() or '').strip()
+    if url and not (app.config.get('BALANCE_RECHARGE_EVENTS_REDIS_URL') or '').strip():
+        app.config['BALANCE_RECHARGE_EVENTS_REDIS_URL'] = url
+    if not url:
+        env = (
+            (app.config.get('FLASK_ENV') or os.environ.get('FLASK_ENV') or 'development')
+            .strip()
+            .lower()
+        )
+        if env == 'production':
+            logger.warning(
+                'SSE recargas: sin Redis (BALANCE_RECHARGE_EVENTS_REDIS_URL, REDIS_URL o REDIS_HOST). '
+                'Con varios workers Gunicorn las actualizaciones en tiempo real solo llegan al worker '
+                'que procesó la acción.'
+            )
+        else:
+            logger.debug(
+                'SSE recargas: modo solo worker local; configure Redis para repartir eventos entre workers.'
+            )
         return
     with _redis_listener_lock:
         if _redis_listener_started:
             return
         _redis_listener_started = True
+
+    logger.info(
+        'SSE recargas: Redis activo para repartir eventos entre workers (pid=%s).',
+        os.getpid(),
+    )
 
     try:
         import gevent

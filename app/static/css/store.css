@@ -51,6 +51,14 @@
   background: #9e9e9e !important;
   border-color: #9e9e9e !important;
 }
+
+#btnLogoutAllAndClearCookies.mobile-menu-btn {
+  white-space: nowrap;
+}
+
+#btnLogoutAllAndClearCookies .logout-clear-cookies-label {
+  font-size: 0.88em;
+}
 #closeMenuBtn {
   background: none;
   border: none;

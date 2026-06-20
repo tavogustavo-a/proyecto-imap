@@ -6,6 +6,8 @@ Renovación automática por día de calendario (Colombia) y enrutado al vencer.
 - «dejar mes a mes»: cobra cada mes el día vinculado; mantiene el modo hasta cambio manual.
 - «no renovar» o verde vacío (—): al cerrar el día N → Cambios si month_to_month; si no → Vencidas.
   Las cobradas como «renovar 1 mes más» quedan en — pero siguen en el día N.
+- Días 29–31 en meses cortos (feb, abr, jun, sep, nov): se procesan el **día 1** del mes
+  siguiente; las filas siguen en su bloc «Día N» (también Cambios / mes a mes).
 - «renovar» / «mes a mes» sin saldo o superando límite de deuda → Cambios (mes a mes) o Vencidas.
 """
 from __future__ import annotations
@@ -19,6 +21,11 @@ from typing import Any, Dict, List, Optional, Tuple
 from sqlalchemy import func as sa_func
 
 from app.extensions import db
+from app.store.license_calendar_days import (
+    calendar_days_to_process,
+    is_overflow_renewal_run,
+    renewal_ym_tag,
+)
 from app.utils.timezone import get_colombia_datetime, utc_to_colombia
 
 logger = logging.getLogger(__name__)
@@ -98,13 +105,28 @@ def run_license_day_renewal_pipeline() -> Dict[str, Any]:
     """Ejecutar renovaciones del día y luego enrutar vencidas (medianoche Colombia)."""
     _ensure_schema_columns()
     co_now = get_colombia_datetime()
+    days_to_run = calendar_days_to_process(co_now)
     calendar_day = int(co_now.day)
-    if calendar_day < 1 or calendar_day > 31:
-        calendar_day = 1
-    renew_stats = process_day_renewals_for_calendar_day(calendar_day, co_now)
-    charged_keys = _normalize_charged_keys(renew_stats.get('charged_keys'))
-    route_stats = route_unrenewed_day_lines_on_renewal_day(calendar_day, charged_keys)
-    stripped = strip_day_bloc_lines_present_in_side_blocs_for_calendar_day(calendar_day)
+
+    renew_stats = _empty_renew_stats()
+    route_stats = {'lines_moved': 0, 'license_ids': []}
+    stripped = {'lines_removed': 0, 'license_ids': []}
+    charged_keys: set = set()
+
+    for day_num in days_to_run:
+        overflow_run = is_overflow_renewal_run(co_now, day_num)
+        day_renew = process_day_renewals_for_calendar_day(
+            day_num, co_now, overflow_run=overflow_run
+        )
+        renew_stats = _merge_renew_stats(renew_stats, day_renew)
+        charged_keys |= _normalize_charged_keys(day_renew.get('charged_keys'))
+
+        day_route = route_unrenewed_day_lines_on_renewal_day(day_num, charged_keys)
+        route_stats = _merge_route_stats(route_stats, day_route)
+
+        day_strip = strip_day_bloc_lines_present_in_side_blocs_for_calendar_day(day_num)
+        stripped = _merge_strip_stats(stripped, day_strip)
+
     expired_stats = sync_expired_accounts_by_renewal_policy()
     touched_license_ids = (
         renew_stats.get('license_ids', [])
@@ -132,6 +154,7 @@ def run_license_day_renewal_pipeline() -> Dict[str, Any]:
         _sync_allowed_emails_for_touched_licenses(touched_license_ids)
     return {
         'calendar_day': calendar_day,
+        'calendar_days_processed': days_to_run,
         'renewals': renew_stats,
         'routed_day_lines': route_stats,
         'expired': expired_stats,
@@ -139,7 +162,49 @@ def run_license_day_renewal_pipeline() -> Dict[str, Any]:
     }
 
 
-def process_day_renewals_for_calendar_day(calendar_day: int, co_now: datetime) -> Dict[str, Any]:
+def _empty_renew_stats() -> Dict[str, Any]:
+    return {
+        'charged': 0,
+        'skipped_mes_a_mes_idempotent': 0,
+        'errors': 0,
+        'routed_charge_failed': 0,
+        'license_ids': [],
+        'charged_keys': [],
+    }
+
+
+def _merge_renew_stats(acc: Dict[str, Any], nxt: Dict[str, Any]) -> Dict[str, Any]:
+    out = dict(acc)
+    out['charged'] = int(acc.get('charged') or 0) + int(nxt.get('charged') or 0)
+    out['skipped_mes_a_mes_idempotent'] = int(acc.get('skipped_mes_a_mes_idempotent') or 0) + int(
+        nxt.get('skipped_mes_a_mes_idempotent') or 0
+    )
+    out['errors'] = int(acc.get('errors') or 0) + int(nxt.get('errors') or 0)
+    out['routed_charge_failed'] = int(acc.get('routed_charge_failed') or 0) + int(
+        nxt.get('routed_charge_failed') or 0
+    )
+    out['license_ids'] = list(set((acc.get('license_ids') or []) + (nxt.get('license_ids') or [])))
+    out['charged_keys'] = (acc.get('charged_keys') or []) + (nxt.get('charged_keys') or [])
+    return out
+
+
+def _merge_route_stats(acc: Dict[str, Any], nxt: Dict[str, Any]) -> Dict[str, Any]:
+    return {
+        'lines_moved': int(acc.get('lines_moved') or 0) + int(nxt.get('lines_moved') or 0),
+        'license_ids': list(set((acc.get('license_ids') or []) + (nxt.get('license_ids') or []))),
+    }
+
+
+def _merge_strip_stats(acc: Dict[str, Any], nxt: Dict[str, Any]) -> Dict[str, Any]:
+    return {
+        'lines_removed': int(acc.get('lines_removed') or 0) + int(nxt.get('lines_removed') or 0),
+        'license_ids': list(set((acc.get('license_ids') or []) + (nxt.get('license_ids') or []))),
+    }
+
+
+def process_day_renewals_for_calendar_day(
+    calendar_day: int, co_now: datetime, *, overflow_run: bool = False
+) -> Dict[str, Any]:
     from sqlalchemy.orm import joinedload
 
     from app.store.models import License, LicenseAccount
@@ -150,7 +215,7 @@ def process_day_renewals_for_calendar_day(calendar_day: int, co_now: datetime) -
     )
 
     day_key = str(int(calendar_day))
-    ym_tag = co_now.strftime('%Y-%m')
+    ym_tag = renewal_ym_tag(co_now, int(calendar_day), overflow_run=overflow_run)
     now_utc = datetime.utcnow()
     charged = 0
     skipped = 0
@@ -563,7 +628,7 @@ def _try_renew_line(
     if not charged:
         return False, charge_msg or 'cobro_fallido'
 
-    _extend_account_one_month(acc, now_utc)
+    _extend_account_one_month(acc, now_utc, lic)
     _log_auto_renewal_activity(acc, lic, dual)
     _ = (renew_once, ym_tag, co_now, raw_line)
     return True, ''
@@ -645,9 +710,12 @@ def _charge_one_month_debt(lic, username: str, acc=None) -> Tuple[bool, str]:
     return True, ''
 
 
-def _extend_account_one_month(acc, now_utc: datetime) -> None:
+def _extend_account_one_month(acc, now_utc: datetime, lic=None) -> None:
+    from app.store.license_term_utils import DEFAULT_LICENSE_TERM_DAYS, license_term_days_public
+
+    term = license_term_days_public(lic) if lic is not None else DEFAULT_LICENSE_TERM_DAYS
     base = acc.expires_at if acc.expires_at and acc.expires_at > now_utc else now_utc
-    acc.expires_at = base + timedelta(days=RENEWAL_DAYS)
+    acc.expires_at = base + timedelta(days=term)
     acc.updated_at = now_utc
 
 

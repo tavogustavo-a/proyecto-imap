@@ -6,7 +6,7 @@
 {% block head %}
 <meta name="csrf_token" content="{{ csrf_token() }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/store.css') }}">
-<link rel="stylesheet" href="{{ url_for('static', filename='css/manage_permissions.css') }}?v=5">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/manage_permissions.css') }}?v=20260611-pm-restrict">
 <link rel="stylesheet" href="{{ url_for('static', filename='fontawesome/css/all.css') }}">
 {% endblock %}
 
@@ -191,7 +191,7 @@
         <thead>
           <tr>
             <th>Usuario</th>
-            <th class="user-prices-th-tipo">Tipo precio <span class="user-prices-th-tipo-sub text-muted">USD · COP · Soporte licencias · Recarga automática</span></th>
+            <th class="user-prices-th-tipo">Tipo precio <span class="user-prices-th-tipo-sub text-muted">USD · COP · Soporte licencias · Recarga automática · Medios recarga</span></th>
             <th>Saldo</th>
             <th>Productos Asociados</th>
           </tr>
@@ -235,6 +235,31 @@
   </div>
 </div>
 
+<!-- Modal: medios de pago permitidos para recargas de saldo -->
+<div id="user-pm-restrict-modal-overlay" class="modal-overlay d-none">
+  <div class="modal-balance-content modal-user-pm-restrict-content">
+    <input type="hidden" id="userPmRestrictUserId" name="user_id">
+    <p id="userPmRestrictUserLabel" class="modal-balance-current text-center" aria-live="polite"></p>
+    <h4 class="text-center mb-2">Medios de pago para recargas</h4>
+    <p class="user-pm-restrict-hint text-center text-muted mb-2">
+      Restringe qué medios ve el usuario al recargar saldo. Si no hay restricción, aplican los medios globales y el filtro por usuario del admin de recargas.
+    </p>
+    <div class="form-check user-pm-restrict-all-check mb-2">
+      <input class="form-check-input" type="checkbox" id="userPmRestrictAll" name="user_pm_restrict_all">
+      <label class="form-check-label" for="userPmRestrictAll">Sin restricción (todos los medios asignables)</label>
+    </div>
+    <div id="userPmRestrictMethodsWrap" class="user-pm-restrict-methods-wrap">
+      <p class="user-pm-restrict-methods-title mb-1">Solo estos medios:</p>
+      <div id="userPmRestrictMethodsList" class="user-pm-restrict-methods-list" role="group" aria-label="Medios de pago permitidos"></div>
+    </div>
+    <p id="userPmRestrictStatus" class="user-pm-restrict-status text-center mb-0" role="status" aria-live="polite"></p>
+    <div class="d-flex justify-content-between mt-2">
+      <button type="button" id="closeUserPmRestrictModalBtn" class="btn-panel btn-red">Cancelar</button>
+      <button type="button" id="saveUserPmRestrictBtn" class="btn-panel btn-green">Guardar medios</button>
+    </div>
+  </div>
+</div>
+
 <!-- Modal para añadir o descontar saldo -->
 <div id="balance-modal-overlay" class="modal-overlay d-none">
   <div class="modal-balance-content">
@@ -263,5 +288,5 @@
 <script src="{{ url_for('store_bp.static', filename='js/menu_tienda.js') }}" defer></script>
 <script src="{{ url_for('static', filename='js/clear_trigger_logs.js') }}" defer></script>
 <script src="{{ url_for('static', filename='js/logout_all_cookies_btn.js') }}" defer></script>
-<script src="{{ url_for('static', filename='js/manage_permissions.js') }}?v=20260611-csrf" defer></script>
+<script src="{{ url_for('static', filename='js/manage_permissions.js') }}?v=20260611-pm-restrict" defer></script>
 {% endblock %}

@@ -250,10 +250,25 @@ def create_app(config_class_passed=None):
             from app.store.sale_purchase_snapshot import ensure_sale_schema, ensure_snapshot_table
 
             _ensure_balance_recharges_table()
+            from app.store.balance_recharge_accum import normalize_unreviewed_accumulations
+
+            repaired_accum = normalize_unreviewed_accumulations()
             ensure_sale_schema()
             ensure_snapshot_table()
-            app.logger.info(
+            from app.store.customer_account_renewals import ensure_customer_account_renewal_schema
+            from app.store.product_reservations import ensure_product_reservation_schema
+            from app.store.routes import _ensure_license_expired_notes_and_month_columns
+
+            _ensure_license_expired_notes_and_month_columns()
+            ensure_product_reservation_schema()
+            ensure_customer_account_renewal_schema()
+            app.logger.debug(
                 "Esquema: tablas/columnas de recargas y ventas (historial) verificadas"
+                + (
+                    f"; {repaired_accum} acumulación(es) legacy reparada(s)"
+                    if repaired_accum
+                    else ""
+                )
             )
         except Exception as store_schema_err:
             db.session.rollback()
@@ -523,6 +538,10 @@ def create_app(config_class_passed=None):
         start_balance_recharge_cleanup_loop(app)
         from app.store.balance_recharge_email_scheduler import start_balance_recharge_email_verify_loop
         start_balance_recharge_email_verify_loop(app)
+        from app.store.whatsapp_health_scheduler import start_whatsapp_health_loop
+        start_whatsapp_health_loop(app)
+        from app.store.whatsapp_license_notify_scheduler import start_whatsapp_license_notify_loop
+        start_whatsapp_license_notify_loop(app)
         from app.store.balance_recharge_events import start_balance_recharge_events_redis_listener
         start_balance_recharge_events_redis_listener(app)
 
@@ -533,5 +552,11 @@ def create_app(config_class_passed=None):
 
     # ✅ CORREGIDO: Los eventos de SocketIO se cargan solo en socketio_server.py
     # No se cargan aquí para evitar conflictos con la aplicación principal IMAP
+
+    from app.utils.html_sanitize import sanitize_admin_message_html
+
+    @app.template_filter("sanitize_message_html")
+    def sanitize_message_html_filter(value):
+        return sanitize_admin_message_html(value)
 
     return app

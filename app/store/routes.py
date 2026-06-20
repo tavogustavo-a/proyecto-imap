@@ -398,6 +398,9 @@ def _record_portal_renewal_blocked_activity(
 # Misma ventana que caducidad en portal (user_licencias.js)
 USER_LIC_CADUCIDAD_VIEW_MAX_DAYS = 5
 
+# Cache bust único: Admin Licencias + portal /licencias (evita CSS/JS mezclados en producción).
+LICENCIAS_STATIC_VERSION = '20260611-gestion-productos-mobile-v6'
+
 
 def _portal_renewal_balance_warnings_for_accounts(billing_user, accounts_list):
     """
@@ -709,6 +712,7 @@ def admin_store():
             license_support_restricted_mode=restricted,
             admin_licencias_ui_prefs=admin_ui_prefs,
             current_user=current_user,
+            licencias_static_version=LICENCIAS_STATIC_VERSION,
         )
     )
     _attach_document_no_store_headers(resp)
@@ -766,7 +770,12 @@ def api_admin_license_activity_timeline():
 @admin_required
 def admin_archivados():
     """Página de licencias archivadas"""
-    resp = make_response(render_template('admin_archivados.html'))
+    resp = make_response(
+        render_template(
+            'admin_archivados.html',
+            licencias_static_version=LICENCIAS_STATIC_VERSION,
+        )
+    )
     _attach_document_no_store_headers(resp)
     return resp
 
@@ -1114,10 +1123,18 @@ def store_front():
         if products
         else {}
     )
+    product_month_to_month = _product_month_to_month_map(products)
+    product_billing_period = _product_billing_period_map(products)
+    product_allow_reservation = _product_allow_reservation_map(products)
+    product_renew_customer_account = _product_renew_customer_account_map(products)
     resp = make_response(render_template(
         'store_front.html',
         products=products,
         product_stock_initial=product_stock_initial,
+        product_month_to_month=product_month_to_month,
+        product_billing_period=product_billing_period,
+        product_allow_reservation=product_allow_reservation,
+        product_renew_customer_account=product_renew_customer_account,
         coupons=coupons,
         ADMIN_USER=admin_user,
         current_user=user,
@@ -1164,6 +1181,7 @@ def user_licencias():
         saldo_usd=saldo_usd,
         saldo_cop=saldo_cop,
         soporte_licencias_nav=soporte_licencias_nav,
+        licencias_static_version=LICENCIAS_STATIC_VERSION,
     ))
     _attach_document_no_store_headers(resp)
     return resp
@@ -4067,10 +4085,18 @@ def tienda_alias():
         if products
         else {}
     )
+    product_month_to_month = _product_month_to_month_map(products)
+    product_billing_period = _product_billing_period_map(products)
+    product_allow_reservation = _product_allow_reservation_map(products)
+    product_renew_customer_account = _product_renew_customer_account_map(products)
     return render_template(
         'store_front.html',
         products=products,
         product_stock_initial=product_stock_initial,
+        product_month_to_month=product_month_to_month,
+        product_billing_period=product_billing_period,
+        product_allow_reservation=product_allow_reservation,
+        product_renew_customer_account=product_renew_customer_account,
         coupons=coupons,
         ADMIN_USER=admin_user,
         current_user=user,
@@ -4103,10 +4129,18 @@ def store_front_alias():
         if products
         else {}
     )
+    product_month_to_month = _product_month_to_month_map(products)
+    product_billing_period = _product_billing_period_map(products)
+    product_allow_reservation = _product_allow_reservation_map(products)
+    product_renew_customer_account = _product_renew_customer_account_map(products)
     return render_template(
         'store_front.html',
         products=products,
         product_stock_initial=product_stock_initial,
+        product_month_to_month=product_month_to_month,
+        product_billing_period=product_billing_period,
+        product_allow_reservation=product_allow_reservation,
+        product_renew_customer_account=product_renew_customer_account,
         coupons=coupons,
         ADMIN_USER=admin_user,
         current_user=user,
@@ -4141,6 +4175,9 @@ def procesar_pago():
     _ensure_license_account_sale_id_column()
     _ensure_license_day_notepads_column()
     _ensure_license_account_renewal_reserve_columns()
+    from app.store.customer_account_renewals import ensure_customer_account_renewal_schema
+
+    ensure_customer_account_renewal_schema()
 
     user = None
     username = session.get("username")
@@ -4151,6 +4188,13 @@ def procesar_pago():
         user = User.query.get(user_id)
     if not user:
         return jsonify({'success': False, 'error': 'Usuario no autenticado'}), 401
+
+    from app.store.whatsapp_daily_sales import check_whatsapp_daily_sales_block
+
+    block_msg = check_whatsapp_daily_sales_block(user)
+    if block_msg:
+        return jsonify({'success': False, 'error': block_msg, 'whatsapp_daily_blocked': True}), 423
+
     data = request.get_json()
     productos = data.get('productos', [])
     if not productos:
@@ -4177,6 +4221,28 @@ def procesar_pago():
             _pid = int(_p.get('id'))
         except (TypeError, ValueError):
             continue
+        if _p.get('es_renovar_cuenta_cliente'):
+            from app.store.customer_account_renewals import (
+                product_allows_customer_account_renewal,
+                validate_customer_renewal_credentials,
+            )
+
+            _prod = Product.query.get(_pid)
+            if not _prod or not product_allows_customer_account_renewal(_prod):
+                _name = _prod.name if _prod else str(_pid)
+                return jsonify(
+                    {
+                        'success': False,
+                        'error': f'«{_name}» no admite renovar con cuenta del cliente.',
+                    }
+                ), 400
+            _em, _pw, _verr = validate_customer_renewal_credentials(
+                _p.get('customer_email'), _p.get('customer_password')
+            )
+            if _verr:
+                return jsonify({'success': False, 'error': _verr}), 400
+            cantidad_por_producto[_pid] += 1
+            continue
         raw_ren = _p.get('renovacion_account_ids') or []
         if raw_ren and isinstance(raw_ren, list):
             ren_ids = []
@@ -4199,6 +4265,10 @@ def procesar_pago():
         _prod = Product.query.get(_pid)
         if not _prod:
             return jsonify({'success': False, 'error': 'Producto no válido en el pedido'}), 400
+        from app.store.customer_account_renewals import product_allows_customer_account_renewal
+
+        if product_allows_customer_account_renewal(_prod):
+            continue
         if _pid in renewal_ids_por_producto:
             continue
         _sellable = _compute_public_sellable_stock_for_product(_prod)
@@ -4302,6 +4372,8 @@ def procesar_pago():
 
             if renewal_account_ids:
                 cantidad = len(renewal_account_ids)
+            elif p.get('es_renovar_cuenta_cliente'):
+                cantidad = 1
             else:
                 try:
                     cantidad = int(p.get('cantidad', 1) or 1)
@@ -4322,6 +4394,49 @@ def procesar_pago():
 
             cuentas_necesarias = cantidad
             cuentas_asignadas_producto = 0
+
+            if p.get('es_renovar_cuenta_cliente'):
+                from app.store.customer_account_renewals import (
+                    create_customer_account_renewal_order,
+                    notify_customer_account_renewal_received,
+                    product_allows_customer_account_renewal,
+                    validate_customer_renewal_credentials,
+                )
+
+                if not product_allows_customer_account_renewal(producto):
+                    db.session.rollback()
+                    return jsonify(
+                        {
+                            'success': False,
+                            'error': f'«{producto.name}» no admite renovar con cuenta del cliente.',
+                        }
+                    ), 400
+                em, pw, verr = validate_customer_renewal_credentials(
+                    p.get('customer_email'), p.get('customer_password')
+                )
+                if verr:
+                    db.session.rollback()
+                    return jsonify({'success': False, 'error': verr}), 400
+                venta.is_renewal = True
+                venta.renewal_kind = 'customer_account'
+                create_customer_account_renewal_order(user, producto, venta, em, pw)
+                notify_customer_account_renewal_received(user, producto, em)
+                cuentas_asignadas.append(
+                    {
+                        'producto': producto.name,
+                        'email': em,
+                        'password': '',
+                        'identifier': '',
+                        'es_renovar_cuenta_cliente': True,
+                        'mensaje': (
+                            f'Recibimos la cuenta {em} para renovar. '
+                            f'Te avisaremos cuando esté lista.'
+                        ),
+                    }
+                )
+                cuentas_asignadas_producto = 1
+                asignadas_por_producto[producto.id] += cuentas_asignadas_producto
+                continue
 
             if renewal_account_ids:
                 seen_ren = set()
@@ -4494,6 +4609,83 @@ def procesar_pago():
             'cuentas_asignadas': cuentas_asignadas,
         }
     )
+
+
+@store_bp.route('/api/products/<int:product_id>/reservar', methods=['POST'])
+@store_access_required
+def api_product_reservar(product_id):
+    """Reservar producto agotado si la licencia tiene allow_reservation activo."""
+    from app.store.models import Product
+    from app.store.product_reservations import create_product_reservation, ensure_product_reservation_schema
+
+    ensure_product_reservation_schema()
+    user = None
+    username = session.get('username')
+    user_id = session.get('user_id')
+    if username:
+        user = User.query.filter_by(username=username).first()
+    elif user_id:
+        user = User.query.get(user_id)
+    if not user:
+        return jsonify({'success': False, 'error': 'Debes iniciar sesión.'}), 401
+
+    product = Product.query.get(product_id)
+    if not product or not product.enabled:
+        return jsonify({'success': False, 'error': 'Producto no disponible.'}), 404
+
+    archived = _product_ids_with_archived_license()
+    if int(product_id) in archived:
+        return jsonify({'success': False, 'error': 'Producto no disponible.'}), 404
+
+    products, _tipo = catalog_products_for_store_user(user)
+    allowed_ids = {p.id for p in (products or [])}
+    if int(product_id) not in allowed_ids:
+        return jsonify({'success': False, 'error': 'No tienes acceso a este producto.'}), 403
+
+    reservation, err = create_product_reservation(user, product)
+    if err:
+        return jsonify({'success': False, 'error': err}), 400
+    return jsonify({'success': True, 'reservation': reservation})
+
+
+@store_bp.route('/api/user/product-reservations/pending', methods=['GET'])
+@store_access_required
+def api_user_pending_product_reservations():
+    from app.store.product_reservations import ensure_product_reservation_schema, list_user_pending_reservation_product_ids
+
+    ensure_product_reservation_schema()
+    user = User.query.get(session.get('user_id'))
+    if not user:
+        return jsonify({'success': False, 'error': 'Usuario no autenticado.'}), 401
+    ids = sorted(list_user_pending_reservation_product_ids(user.id))
+    return jsonify({'success': True, 'product_ids': ids})
+
+
+@store_bp.route('/api/user/store-notifications', methods=['GET'])
+@store_access_required
+def api_user_store_notifications():
+    from app.store.product_reservations import ensure_product_reservation_schema, list_unread_notifications
+
+    ensure_product_reservation_schema()
+    user = User.query.get(session.get('user_id'))
+    if not user:
+        return jsonify({'success': False, 'error': 'Usuario no autenticado.'}), 401
+    items = list_unread_notifications(user.id, limit=30)
+    return jsonify({'success': True, 'notifications': items})
+
+
+@store_bp.route('/api/user/store-notifications/<int:notif_id>/read', methods=['POST'])
+@store_access_required
+def api_user_store_notification_read(notif_id):
+    from app.store.product_reservations import ensure_product_reservation_schema, mark_notification_read
+
+    ensure_product_reservation_schema()
+    user = User.query.get(session.get('user_id'))
+    if not user:
+        return jsonify({'success': False, 'error': 'Usuario no autenticado.'}), 401
+    if not mark_notification_read(user.id, notif_id):
+        return jsonify({'success': False, 'error': 'Notificación no encontrada.'}), 404
+    return jsonify({'success': True})
 
 
 _RENEWAL_EMAIL_RE = re.compile(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$', re.ASCII)
@@ -5008,6 +5200,26 @@ def historial_compras_usuario():
 
     compras_info.sort(key=lambda x: x.get('sort_ts', 0), reverse=True)
 
+    try:
+        from app.store.whatsapp_daily_sales import build_purchase_history_daily_summary_items
+
+        if mostrar_usuario_comprador:
+            daily_rows = build_purchase_history_daily_summary_items(
+                all_users=True,
+                utc_to_colombia_fn=utc_to_colombia,
+            )
+        else:
+            billing = _balance_recharge_viewer_billing_user(user)
+            uid = int(billing.id) if billing else int(user.id)
+            daily_rows = build_purchase_history_daily_summary_items(
+                viewer_billing_user_id=uid,
+                utc_to_colombia_fn=utc_to_colombia,
+            )
+        compras_info.extend(daily_rows)
+        compras_info.sort(key=lambda x: x.get('sort_ts', 0), reverse=True)
+    except Exception as daily_exc:
+        current_app.logger.warning('Resúmenes diarios en historial compras: %s', daily_exc)
+
     for row in compras_info:
         row.pop('sort_ts', None)
 
@@ -5521,6 +5733,30 @@ _BALANCE_RECHARGE_ALLOWED_MIME = frozenset({
 _BALANCE_RECHARGE_MAX_FILES = 1
 _BALANCE_RECHARGE_MAX_MB = 30
 _BALANCE_RECHARGE_MAX_BYTES = _BALANCE_RECHARGE_MAX_MB * 1024 * 1024
+_USER_RECHARGE_LIST_LIMIT_DEFAULT = 50
+_USER_RECHARGE_LIST_LIMIT_MAX = 100
+
+
+def _parse_user_recharge_list_limit(raw) -> int:
+    if raw in (None, ''):
+        return _USER_RECHARGE_LIST_LIMIT_DEFAULT
+    try:
+        n = int(raw)
+    except (TypeError, ValueError):
+        return _USER_RECHARGE_LIST_LIMIT_DEFAULT
+    if n <= 0:
+        return _USER_RECHARGE_LIST_LIMIT_DEFAULT
+    return min(n, _USER_RECHARGE_LIST_LIMIT_MAX)
+
+
+def _parse_user_recharge_list_offset(raw) -> int:
+    if raw in (None, ''):
+        return 0
+    try:
+        n = int(raw)
+    except (TypeError, ValueError):
+        return 0
+    return max(0, n)
 
 
 def _store_db_dialect():
@@ -5634,24 +5870,6 @@ def _user_has_recarga_automatica(user):
     target = billing or user
     up = target.user_prices if isinstance(getattr(target, 'user_prices', None), dict) else {}
     return bool(up and up.get('recarga_automatica'))
-
-
-def _apply_balance_credit(target_user, currency, amount):
-    cur = (currency or 'COP').strip().upper()
-    amt = float(amount)
-    if cur == 'USD':
-        target_user.saldo_usd = float(getattr(target_user, 'saldo_usd', 0) or 0) + amt
-    else:
-        target_user.saldo_cop = float(getattr(target_user, 'saldo_cop', 0) or 0) + amt
-
-
-def _apply_balance_debit(target_user, currency, amount):
-    cur = (currency or 'COP').strip().upper()
-    amt = float(amount)
-    if cur == 'USD':
-        target_user.saldo_usd = float(getattr(target_user, 'saldo_usd', 0) or 0) - amt
-    else:
-        target_user.saldo_cop = float(getattr(target_user, 'saldo_cop', 0) or 0) - amt
 
 
 def _balance_recharge_upload_dir():
@@ -6095,6 +6313,7 @@ def api_user_balance_recharges():
         q = q.filter(
             or_(
                 BalanceRecharge.status == 'pending',
+                BalanceRecharge.status == 'pending_binance_pay',
                 and_(
                     BalanceRecharge.status == 'auto_credited',
                     BalanceRecharge.admin_verified.is_(None),
@@ -6105,12 +6324,32 @@ def api_user_balance_recharges():
                 ),
             )
         )
+    elif status == 'accumulated':
+        q = q.filter(
+            BalanceRecharge.status.in_(('accumulated', 'auto_accumulated'))
+        )
     elif status != 'all':
         q = q.filter(BalanceRecharge.status == status)
-    rows = q.limit(100).all()
+    list_limit = _parse_user_recharge_list_limit(request.args.get('limit'))
+    list_offset = _parse_user_recharge_list_offset(request.args.get('offset'))
+    filter_counts = _user_balance_recharge_filter_counts(billing.id)
+    status_key = status if status in filter_counts else 'all'
+    filter_total = int(filter_counts.get(status_key) or 0)
+    rows = q.offset(list_offset).limit(list_limit + 1).all()
+    has_more = len(rows) > list_limit
+    if has_more:
+        rows = rows[:list_limit]
+    shown_count = list_offset + len(rows)
     return jsonify({
         'success': True,
-        'filter_counts': _user_balance_recharge_filter_counts(billing.id),
+        'filter_counts': filter_counts,
+        'list_limit': list_limit,
+        'offset': list_offset,
+        'filter_total': filter_total,
+        'shown_count': shown_count,
+        'has_more': has_more,
+        'next_offset': list_offset + list_limit if has_more else None,
+        'truncated': has_more,
         'items': [_serialize_balance_recharge_row(r, user) for r in rows],
     })
 
@@ -6146,7 +6385,6 @@ def api_user_balance_recharge_one(recharge_id):
 
 @store_bp.route('/api/user/balance-recharge', methods=['POST'])
 @store_access_required
-@csrf_exempt_route
 def api_user_balance_recharge_submit():
     import json as _json
     import os
@@ -6166,6 +6404,15 @@ def api_user_balance_recharge_submit():
     billing = _balance_recharge_viewer_billing_user(user)
     _, tipo_precio = catalog_products_for_store_user(billing or user)
     tp = (tipo_precio or 'COP').upper()
+
+    from app.store.balance_recharge_rate_limit import balance_recharge_submit_rate_limit_error
+
+    rl_msg = balance_recharge_submit_rate_limit_error(
+        int(billing.id),
+        (request.remote_addr or '').strip(),
+    )
+    if rl_msg:
+        return jsonify({'success': False, 'message': rl_msg}), 429
 
     payment_method_id = (request.form.get('payment_method_id') or '').strip()
     from app.store.balance_recharge_analyzer import parse_recharge_amount
@@ -6242,6 +6489,15 @@ def api_user_balance_recharge_submit():
         file.save(path)
         if not os.path.exists(path) or os.path.getsize(path) == 0:
             return jsonify({'success': False, 'message': 'Error al guardar una imagen'}), 500
+        from app.store.balance_recharge_analyzer import validate_recharge_proof_image
+
+        image_err = validate_recharge_proof_image(path, mime)
+        if image_err:
+            try:
+                os.remove(path)
+            except OSError:
+                pass
+            return jsonify({'success': False, 'message': image_err}), 400
         saved_files.append({'stored': stored, 'original': file.filename})
 
     if not saved_files:
@@ -6592,7 +6848,9 @@ def api_user_balance_recharge_submit():
         row.amount_credited = amount_val
         row.status = 'auto_credited'
         row.admin_verified = None
-        _apply_balance_credit(billing, currency, float(amount_val))
+        from app.store.balance_recharge_credit import apply_user_balance_credit
+
+        apply_user_balance_credit(billing, currency, float(amount_val))
         message = 'Saldo acreditado.' + resubmit_note
     else:
         row.analyzer_json = _json.dumps(analysis, ensure_ascii=False)
@@ -6729,7 +6987,6 @@ def api_admin_balance_recharge_events():
 
 @store_bp.route('/api/user/balance-recharge/binance-pay/order', methods=['POST'])
 @store_access_required
-@csrf_exempt_route
 def api_user_balance_recharge_binance_pay_order():
     import json as _json
     from decimal import Decimal, InvalidOperation
@@ -6922,6 +7179,69 @@ def api_user_balance_recharge_binance_pay_status(merchant_trade_no):
 
     st = (row.status or '').lower()
     paid = st == 'approved'
+    if st == 'pending_binance_pay':
+        from app.store.balance_recharge_binance_pay import (
+            amounts_match_claimed,
+            binance_pay_credentials_configured,
+            payment_method_binance_pay_api_key,
+            payment_method_binance_pay_secret,
+            query_binance_pay_order,
+        )
+        from app.store.balance_recharge_credit import try_binance_pay_webhook_finalize
+        from app.store.balance_recharge_payment import _find_method_by_id
+
+        method = _find_method_by_id(row.payment_method_id or '') or {}
+        if binance_pay_credentials_configured(method):
+            try:
+                query_resp = query_binance_pay_order(
+                    api_key=payment_method_binance_pay_api_key(method),
+                    secret=payment_method_binance_pay_secret(method),
+                    merchant_trade_no=trade_no,
+                )
+                if str(query_resp.get('status') or '').upper() == 'SUCCESS':
+                    data = query_resp.get('data') if isinstance(query_resp.get('data'), dict) else {}
+                    order_status = str(data.get('status') or '').strip().upper()
+                    if order_status == 'PAID':
+                        total_fee = data.get('totalFee')
+                        pay_info = data.get('paymentInfo') if isinstance(data.get('paymentInfo'), dict) else {}
+                        if total_fee is None and pay_info:
+                            total_fee = pay_info.get('totalFee')
+                        if amounts_match_claimed(
+                            row.amount_claimed,
+                            total_fee,
+                            data.get('currency') or row.currency,
+                        ):
+                            applied, sse_reason = try_binance_pay_webhook_finalize(
+                                row.id,
+                                transaction_id=str(data.get('transactionId') or ''),
+                                webhook_payload={
+                                    'biz_status': 'PAY_SUCCESS',
+                                    'merchant_trade_no': trade_no,
+                                    'total_fee': total_fee,
+                                    'currency': data.get('currency') or row.currency,
+                                    'transaction_id': data.get('transactionId') or '',
+                                    'query_sync': data,
+                                },
+                            )
+                            if applied:
+                                db.session.commit()
+                                if sse_reason:
+                                    from app.store.balance_recharge_events import notify_from_recharge_row
+
+                                    row = BalanceRecharge.query.get(row.id)
+                                    if row:
+                                        notify_from_recharge_row(row, reason=sse_reason)
+                            else:
+                                db.session.rollback()
+                        row = BalanceRecharge.query.filter_by(receipt_number=trade_no).first()
+                        if row:
+                            st = (row.status or '').lower()
+                            paid = st == 'approved'
+            except Exception as exc:
+                current_app.logger.warning(
+                    'Binance Pay status poll failed for %s: %s', trade_no, exc
+                )
+
     return jsonify({
         'success': True,
         'status': st,
@@ -6940,6 +7260,7 @@ def api_binance_pay_webhook():
 
     from app.store.balance_recharge_binance_pay import (
         amounts_match_claimed,
+        binance_pay_credentials_configured,
         parse_webhook_notification,
         payment_method_binance_pay_api_key,
         payment_method_binance_pay_secret,
@@ -6968,20 +7289,27 @@ def api_binance_pay_webhook():
         return jsonify({'returnCode': 'SUCCESS', 'returnMessage': None})
 
     method = _find_method_by_id(row.payment_method_id or '') or {}
+    if not binance_pay_credentials_configured(method):
+        current_app.logger.warning(
+            'Binance Pay webhook: credenciales no configuradas para orden %s (medio %s)',
+            trade_no,
+            row.payment_method_id,
+        )
+        return jsonify({'returnCode': 'FAIL', 'returnMessage': 'credentials not configured'}), 401
+
     api_key = payment_method_binance_pay_api_key(method)
     secret = payment_method_binance_pay_secret(method)
-    if api_key and secret:
-        ok_sig = verify_webhook_signature(
-            api_key=api_key,
-            secret=secret,
-            timestamp=request.headers.get('BinancePay-Timestamp', ''),
-            nonce=request.headers.get('BinancePay-Nonce', ''),
-            signature_b64=request.headers.get('BinancePay-Signature', ''),
-            raw_body=raw_body,
-        )
-        if not ok_sig:
-            current_app.logger.warning('Binance Pay webhook: firma inválida orden %s', trade_no)
-            return jsonify({'returnCode': 'FAIL', 'returnMessage': 'invalid signature'}), 401
+    ok_sig = verify_webhook_signature(
+        api_key=api_key,
+        secret=secret,
+        timestamp=request.headers.get('BinancePay-Timestamp', ''),
+        nonce=request.headers.get('BinancePay-Nonce', ''),
+        signature_b64=request.headers.get('BinancePay-Signature', ''),
+        raw_body=raw_body,
+    )
+    if not ok_sig:
+        current_app.logger.warning('Binance Pay webhook: firma inválida orden %s', trade_no)
+        return jsonify({'returnCode': 'FAIL', 'returnMessage': 'invalid signature'}), 401
 
     biz_status = str(parsed.get('biz_status') or '').upper()
     if biz_status != 'PAY_SUCCESS':
@@ -7114,7 +7442,6 @@ def admin_recargas_saldo():
 
 
 @store_bp.route('/api/admin/balance-recharges/cleanup-settings', methods=['GET', 'POST'])
-@csrf_exempt_route
 @admin_required
 def api_balance_recharge_cleanup_settings():
     from app.store.balance_recharge_cleanup import (
@@ -7193,7 +7520,6 @@ def api_balance_recharge_cleanup_settings():
 
 
 @store_bp.route('/api/admin/balance-recharges/purge', methods=['POST'])
-@csrf_exempt_route
 @admin_required
 def api_balance_recharge_purge():
     from app.store.balance_recharge_cleanup import (
@@ -7276,7 +7602,6 @@ def api_balance_recharge_purge():
 
 
 @store_bp.route('/api/admin/balance-recharges/purge-preview', methods=['GET'])
-@csrf_exempt_route
 @admin_required
 def api_balance_recharge_purge_preview():
     from app.store.balance_recharge_cleanup import count_recharges_to_purge
@@ -7324,14 +7649,11 @@ def _parse_admin_recharge_list_limit(raw: str | None) -> int | None:
 
 
 @store_bp.route('/api/admin/balance-recharges')
-@csrf_exempt_route
 @admin_required
 def api_admin_balance_recharges():
     from app.store.models import BalanceRecharge
-    from app.store.balance_recharge_accum import normalize_unreviewed_accumulations
 
     _ensure_balance_recharges_table()
-    normalize_unreviewed_accumulations()
     from app.store.balance_recharge_payment import accumulator_method_ids
 
     list_limit = _parse_admin_recharge_list_limit(request.args.get('limit'))
@@ -7466,15 +7788,12 @@ def _admin_balance_recharge_list_meta(accum_ids):
 
 
 @store_bp.route('/api/admin/balance-recharge/<int:recharge_id>', methods=['GET'])
-@csrf_exempt_route
 @admin_required
 def api_admin_balance_recharge_one(recharge_id):
     """Una solicitud para actualización incremental (SSE + AJAX)."""
-    from app.store.balance_recharge_accum import normalize_unreviewed_accumulations
     from app.store.models import BalanceRecharge
 
     _ensure_balance_recharges_table()
-    normalize_unreviewed_accumulations()
     from app.store.balance_recharge_payment import accumulator_method_ids
 
     row = BalanceRecharge.query.get(int(recharge_id))
@@ -7507,7 +7826,6 @@ def _json_admin_recharge_review_success(row, message, *, extra=None):
 
 
 @store_bp.route('/api/admin/balance-recharge/<int:recharge_id>/review', methods=['POST'])
-@csrf_exempt_route
 @admin_required
 def api_admin_balance_recharge_review(recharge_id):
     from decimal import Decimal, InvalidOperation
@@ -7744,6 +8062,16 @@ def api_admin_balance_recharge_review(recharge_id):
     if amount_val is None or amount_val <= 0:
         return jsonify({'success': False, 'message': 'Indica un monto válido para acreditar'}), 400
 
+    from app.store.balance_recharge_analyzer import admin_approve_pending_recharge_blockers
+
+    approve_block = admin_approve_pending_recharge_blockers(
+        row,
+        proof_upload_dir=_balance_recharge_upload_dir(),
+        amount_claimed=float(amount_val),
+    )
+    if approve_block:
+        return jsonify({'success': False, 'message': approve_block}), 400
+
     from app.store.balance_recharge_credit import (
         admin_approve_sse_reason,
         try_admin_approve_finalize,
@@ -7797,7 +8125,6 @@ def api_admin_balance_recharge_review(recharge_id):
 
 
 @store_bp.route('/api/admin/balance-recharge/analyzer-patterns', methods=['GET', 'POST'])
-@csrf_exempt_route
 @admin_required
 def api_admin_balance_recharge_analyzer_patterns():
     from app.store.balance_recharge_analyzer import (
@@ -7828,7 +8155,6 @@ def api_admin_balance_recharge_analyzer_patterns():
 
 
 @store_bp.route('/api/admin/balance-recharge/email-review/settings', methods=['GET'])
-@csrf_exempt_route
 @admin_required
 def api_admin_balance_recharge_email_review_settings():
     from app.store.balance_recharge_email_review import (
@@ -7851,7 +8177,6 @@ def api_admin_balance_recharge_email_review_settings():
 
 
 @store_bp.route('/api/admin/balance-recharge/email-review/regex', methods=['POST'])
-@csrf_exempt_route
 @admin_required
 def api_admin_balance_recharge_email_review_regex_create():
     from app.store.balance_recharge_email_review import (
@@ -7882,7 +8207,6 @@ def api_admin_balance_recharge_email_review_regex_create():
 
 
 @store_bp.route('/api/admin/balance-recharge/email-review/regex/<entry_id>', methods=['PUT', 'DELETE'])
-@csrf_exempt_route
 @admin_required
 def api_admin_balance_recharge_email_review_regex_item(entry_id):
     from app.store.balance_recharge_email_review import (
@@ -7936,7 +8260,6 @@ def api_admin_balance_recharge_email_review_regex_item(entry_id):
 
 
 @store_bp.route('/api/admin/balance-recharge/email-review/buzon', methods=['POST'])
-@csrf_exempt_route
 @admin_required
 def api_admin_balance_recharge_email_review_buzon():
     from app.store.balance_recharge_email_review import set_buzon_enabled, buzon_enabled
@@ -7954,7 +8277,6 @@ def api_admin_balance_recharge_email_review_buzon():
 
 
 @store_bp.route('/api/admin/balance-recharge/email-review/imap', methods=['POST'])
-@csrf_exempt_route
 @admin_required
 def api_admin_balance_recharge_email_review_imap_create():
     from app.store.balance_recharge_imap import (
@@ -7986,7 +8308,6 @@ def api_admin_balance_recharge_email_review_imap_create():
 
 
 @store_bp.route('/api/admin/balance-recharge/email-review/imap/<int:server_id>', methods=['PUT', 'DELETE'])
-@csrf_exempt_route
 @admin_required
 def api_admin_balance_recharge_email_review_imap_item(server_id):
     from app.store.balance_recharge_imap import (
@@ -8034,7 +8355,6 @@ def api_admin_balance_recharge_email_review_imap_item(server_id):
 
 
 @store_bp.route('/api/admin/balance-recharge/email-review/imap/<int:server_id>/test', methods=['POST'])
-@csrf_exempt_route
 @admin_required
 def api_admin_balance_recharge_email_review_imap_test(server_id):
     from app.store.balance_recharge_imap import test_recarga_imap_server
@@ -8047,7 +8367,6 @@ def api_admin_balance_recharge_email_review_imap_test(server_id):
 
 
 @store_bp.route('/api/admin/balance-recharge/email-review/imap/<int:server_id>/toggle', methods=['POST'])
-@csrf_exempt_route
 @admin_required
 def api_admin_balance_recharge_email_review_imap_toggle(server_id):
     from app.store.balance_recharge_imap import (
@@ -8075,7 +8394,6 @@ def api_admin_balance_recharge_email_review_imap_toggle(server_id):
 
 
 @store_bp.route('/api/admin/balance-recharge/<int:recharge_id>/email-verify', methods=['POST'])
-@csrf_exempt_route
 @admin_required
 def api_admin_balance_recharge_email_verify(recharge_id):
     from app.store.models import BalanceRecharge
@@ -8119,7 +8437,6 @@ def api_admin_balance_recharge_email_verify(recharge_id):
 
 
 @store_bp.route('/api/admin/balance-recharge/email-verify-batch', methods=['POST'])
-@csrf_exempt_route
 @admin_required
 def api_admin_balance_recharge_email_verify_batch():
     from app.store.models import BalanceRecharge
@@ -8197,7 +8514,6 @@ def api_admin_balance_recharge_email_verify_batch():
 
 
 @store_bp.route('/api/admin/balance-recharge/accum-summary', methods=['GET'])
-@csrf_exempt_route
 @admin_required
 def api_admin_balance_recharge_accum_summary():
     from app.store.balance_recharge_accum import list_accumulated_summary
@@ -8208,7 +8524,6 @@ def api_admin_balance_recharge_accum_summary():
 
 
 @store_bp.route('/api/admin/balance-recharge/accum-convert', methods=['POST'])
-@csrf_exempt_route
 @admin_required
 def api_admin_balance_recharge_accum_convert():
     from app.store.balance_recharge_accum import convert_accumulation
@@ -8313,7 +8628,6 @@ def _enrich_payment_methods_for_admin_api(cfg):
 
 
 @store_bp.route('/api/admin/payment-methods/settings', methods=['GET', 'POST'])
-@csrf_exempt_route
 @admin_required
 def api_admin_payment_methods_settings():
     from app.store.balance_recharge_payment import (
@@ -8372,12 +8686,12 @@ def api_payment_method_qr_image(filename):
 
 
 @store_bp.route('/api/admin/users/payment-methods', methods=['GET', 'POST'])
-@csrf_exempt_route
 @admin_required
 def api_admin_user_payment_methods():
     from app.store.balance_recharge_payment import (
+        assignable_payment_method_ids,
         get_payment_methods_config,
-        methods_for_currency,
+        methods_accumulator_bucket,
         set_user_payment_method_ids,
     )
 
@@ -8395,19 +8709,21 @@ def api_admin_user_payment_methods():
         if tp not in ('USD', 'COP'):
             tp = 'COP'
         cfg = get_payment_methods_config()
-        all_ids = [m['id'] for m in methods_for_currency(tp, enabled_only=False)]
+        all_ids = assignable_payment_method_ids(tp)
+        all_ids_set = set(all_ids)
         allowed = None
         if u.user_prices and isinstance(u.user_prices, dict):
             raw = u.user_prices.get('payment_method_ids')
             if isinstance(raw, list):
-                allowed = [str(x) for x in raw if str(x) in all_ids]
+                allowed = [str(x) for x in raw if str(x) in all_ids_set]
+        all_methods = list(cfg.get(tp) or []) + list(methods_accumulator_bucket(enabled_only=False))
         return jsonify({
             'success': True,
             'user_id': u.id,
             'username': u.username,
             'tipo_precio': tp,
             'payment_method_ids': allowed,
-            'all_methods': cfg.get(tp) or [],
+            'all_methods': all_methods,
         })
 
     data = request.get_json(silent=True) or {}
@@ -8424,7 +8740,22 @@ def api_admin_user_payment_methods():
     ids = data.get('payment_method_ids')
     if ids is not None and not isinstance(ids, list):
         return jsonify({'success': False, 'message': 'payment_method_ids debe ser una lista'}), 400
-    set_user_payment_method_ids(u, ids if isinstance(ids, list) else None)
+    if isinstance(ids, list):
+        tp = 'COP'
+        if u.user_prices and isinstance(u.user_prices, dict):
+            tp = (u.user_prices.get('tipo_precio') or 'COP').strip().upper()
+        if tp not in ('USD', 'COP'):
+            tp = 'COP'
+        all_ids_set = set(assignable_payment_method_ids(tp))
+        clean = [str(x).strip() for x in ids if str(x).strip() in all_ids_set]
+        if len(ids) > 0 and not clean:
+            return jsonify({
+                'success': False,
+                'message': 'Ningún ID de medio de pago es válido para este usuario.',
+            }), 400
+        set_user_payment_method_ids(u, clean)
+    else:
+        set_user_payment_method_ids(u, None)
     return jsonify({
         'success': True,
         'message': 'Restricción de medios de pago guardada para el usuario.',
@@ -8656,6 +8987,22 @@ def _ensure_license_warranty_days_column():
             db.session.commit()
     except Exception as e:
         current_app.logger.warning('No se pudo asegurar columna warranty_days: %s', e)
+    _ensure_license_term_days_column()
+
+
+def _ensure_license_term_days_column():
+    """Añade license_term_days (duración vigencia, default 30) si la tabla existía sin esa columna."""
+    try:
+        from sqlalchemy import inspect, text
+        inspector = inspect(db.engine)
+        cols = {c['name'] for c in inspector.get_columns('store_licenses')}
+        if 'license_term_days' not in cols:
+            db.session.execute(
+                text('ALTER TABLE store_licenses ADD COLUMN license_term_days INTEGER DEFAULT 30 NOT NULL')
+            )
+            db.session.commit()
+    except Exception as e:
+        current_app.logger.warning('No se pudo asegurar columna license_term_days: %s', e)
 
 
 def _ensure_license_expired_notes_and_month_columns():
@@ -8673,8 +9020,25 @@ def _ensure_license_expired_notes_and_month_columns():
                 text('ALTER TABLE store_licenses ADD COLUMN month_to_month INTEGER DEFAULT 0 NOT NULL')
             )
             db.session.commit()
+        cols = {c['name'] for c in inspector.get_columns('store_licenses')}
+        if 'allow_reservation' not in cols:
+            db.session.execute(
+                text('ALTER TABLE store_licenses ADD COLUMN allow_reservation INTEGER DEFAULT 0 NOT NULL')
+            )
+            db.session.commit()
+        cols = {c['name'] for c in inspector.get_columns('store_licenses')}
+        if 'renew_customer_account' not in cols:
+            db.session.execute(
+                text(
+                    'ALTER TABLE store_licenses ADD COLUMN renew_customer_account INTEGER DEFAULT 0 NOT NULL'
+                )
+            )
+            db.session.commit()
     except Exception as e:
-        current_app.logger.warning('No se pudo asegurar columnas expired_notes/month_to_month: %s', e)
+        current_app.logger.warning(
+            'No se pudo asegurar columnas expired_notes/month_to_month/allow_reservation/renew_customer_account: %s',
+            e,
+        )
 
 
 def _ensure_license_changes_notes_column():
@@ -8855,7 +9219,8 @@ def _apply_portal_assignee_from_line_username(account, username_raw):
         account.assigned_to_user_id = uid
         stamp = account.assigned_at or datetime.utcnow()
         if account.expires_at is None:
-            account.expires_at = stamp + timedelta(days=30)
+            lic_row = getattr(account, 'license', None)
+            account.expires_at = stamp + _license_account_term_timedelta(lic_row)
         return True
     if getattr(account, 'sale_id', None) is None:
         account.assigned_to_user_id = None
@@ -8878,19 +9243,131 @@ def _mask_license_cred_preview(identifier: str, email_val: str) -> str:
 def _license_warranty_days_public(license_row):
     """Reserva «gar.» (# cuentas no vendibles) para API/UI; por defecto 5 si falta o es inválido."""
     v = getattr(license_row, 'warranty_days', None)
-    if v is None:
-        return 5
     try:
-        iv = int(v)
-        return iv if iv >= 0 else 5
+        n = int(v)
     except (TypeError, ValueError):
         return 5
+    if n < 0:
+        return 0
+    if n > 3650:
+        return 3650
+    return n
+
+
+def _license_term_days_public(license_row):
+    from app.store.license_term_utils import license_term_days_public
+
+    return license_term_days_public(license_row)
+
+
+def _license_account_term_timedelta(license_row):
+    from datetime import timedelta
+
+    return timedelta(days=_license_term_days_public(license_row))
+
+
+def _license_billing_period_label(license_row):
+    from app.store.license_term_utils import license_billing_period_label
+
+    return license_billing_period_label(_license_term_days_public(license_row))
+
+
+def _license_term_ui_label(license_row):
+    from app.store.license_term_utils import license_term_ui_label
+
+    return license_term_ui_label(_license_term_days_public(license_row))
 
 
 def _reject_user_licencias_api(message, code=403):
     resp = jsonify({'success': False, 'error': message})
     _attach_private_no_cache_headers(resp)
     return resp, code
+
+
+def _portal_expiry_fields_for_account(acc, lic):
+    """expires_at / días restantes para portal (incluye fallback assigned_at + term)."""
+    from app.store.models import _license_account_expiry_as_utc_aware
+
+    at = getattr(acc, 'assigned_at', None) if acc is not None else None
+    exp_at = getattr(acc, 'expires_at', None) if acc is not None else None
+    term = _license_term_days_public(lic) if lic is not None else 30
+
+    if exp_at is None and at is not None and term:
+        try:
+            exp_at = at + _license_account_term_timedelta(lic)
+        except Exception:
+            pass
+
+    days_left = None
+    if exp_at is not None:
+        try:
+            exp_aware = _license_account_expiry_as_utc_aware(exp_at)
+            now_u = datetime.now(timezone.utc)
+            delta = exp_aware - now_u
+            days_left = max(0, int(delta.days))
+        except Exception:
+            days_left = None
+    if days_left is None and acc is not None:
+        try:
+            days_left = acc.days_until_expiry
+        except Exception:
+            days_left = None
+
+    return {
+        'assigned_at_iso': at.isoformat() if at is not None else None,
+        'expires_at_iso': exp_at.isoformat() if exp_at is not None else None,
+        'days_until_expiry': days_left,
+        'license_term_days': term,
+    }
+
+
+def _portal_match_account_for_day_lines(lic, user_obj, day_lines):
+    """Intenta vincular filas del bloc a una cuenta inventario asignada (para tarjetas virtuales)."""
+    from app.store.models import LicenseAccount
+
+    if not lic or not user_obj or not day_lines:
+        return None
+    uid = getattr(user_obj, 'id', None)
+    if not uid:
+        return None
+
+    cred_keys = set()
+    for d_cal in range(1, 32):
+        for row in day_lines.get(str(d_cal)) or []:
+            if not isinstance(row, dict):
+                continue
+            cred = str(row.get('cred') or '').strip()
+            if not cred:
+                continue
+            email_k = _credential_email_normalized_from_plain(cred)
+            if email_k:
+                cred_keys.add(email_k)
+            ident = cred.split()[0].strip().lower() if cred else ''
+            if ident:
+                cred_keys.add(ident)
+
+    if not cred_keys:
+        return None
+
+    accounts = (
+        LicenseAccount.query.filter(
+            LicenseAccount.license_id == lic.id,
+            LicenseAccount.assigned_to_user_id == uid,
+            LicenseAccount.status.in_(('assigned', 'sold')),
+        )
+        .order_by(LicenseAccount.expires_at.desc(), LicenseAccount.id.desc())
+        .all()
+    )
+    for acc in accounts:
+        em = (getattr(acc, 'email', None) or '').strip().lower()
+        ident = (getattr(acc, 'account_identifier', None) or '').strip().lower()
+        if em and em in cred_keys:
+            return acc
+        if ident and ident in cred_keys:
+            return acc
+    if len(accounts) == 1:
+        return accounts[0]
+    return None
 
 
 def _portal_colombia_clock_payload():
@@ -8907,7 +9384,34 @@ def _portal_colombia_clock_payload():
 
 
 def _portal_apply_caducidad_days_on_row(row_dict):
-    """Días hasta vencer por día de calendario (mes a mes); sustituye expires_at en el portal."""
+    """Días hasta vencer: contador desde expires_at (duración configurada del producto)."""
+    exp_iso = row_dict.get('expires_at_iso')
+    if exp_iso:
+        try:
+            from app.store.models import _license_account_expiry_as_utc_aware
+
+            exp_raw = str(exp_iso).replace('Z', '+00:00')
+            exp_dt = datetime.fromisoformat(exp_raw)
+            exp_aware = _license_account_expiry_as_utc_aware(exp_dt)
+            now_u = datetime.now(timezone.utc)
+            delta = exp_aware - now_u
+            row_dict['days_until_expiry'] = max(0, int(delta.days))
+        except Exception:
+            pass
+    elif row_dict.get('assigned_at_iso') and row_dict.get('license_term_days'):
+        try:
+            at_raw = str(row_dict['assigned_at_iso']).replace('Z', '+00:00')
+            at_dt = datetime.fromisoformat(at_raw)
+            if at_dt.tzinfo is None:
+                at_dt = at_dt.replace(tzinfo=timezone.utc)
+            term = int(row_dict['license_term_days'])
+            exp_dt = at_dt + timedelta(days=term)
+            now_u = datetime.now(timezone.utc)
+            row_dict['expires_at_iso'] = exp_dt.isoformat()
+            row_dict['days_until_expiry'] = max(0, int((exp_dt - now_u).days))
+        except Exception:
+            pass
+
     cal_left = None
     linked = row_dict.get('linked_sale_day')
     if linked is not None:
@@ -8923,11 +9427,7 @@ def _portal_apply_caducidad_days_on_row(row_dict):
     if min_cal is not None:
         if cal_left is None or min_cal < cal_left:
             cal_left = min_cal
-    if cal_left is not None:
-        row_dict['days_until_calendar_sale'] = cal_left
-        row_dict['days_until_expiry'] = cal_left
-    else:
-        row_dict['days_until_calendar_sale'] = None
+    row_dict['days_until_calendar_sale'] = cal_left
 
 
 def _days_until_calendar_sale_day(calendar_day_int, ref_co=None):
@@ -8935,20 +9435,9 @@ def _days_until_calendar_sale_day(calendar_day_int, ref_co=None):
     Días hasta la próxima ocurrencia del día N del mes (Colombia).
     Mismo criterio que la renovación automática «mes a mes» por día de calendario.
     """
-    import calendar as pycalendar
+    from app.store.license_calendar_days import days_until_calendar_sale_day
 
-    co = ref_co or get_colombia_datetime()
-    try:
-        cal = int(calendar_day_int)
-    except (TypeError, ValueError):
-        return None
-    if cal < 1 or cal > 31:
-        return None
-    today = int(co.day)
-    dim = pycalendar.monthrange(co.year, co.month)[1]
-    if cal >= today:
-        return cal - today
-    return (dim - today) + cal
+    return days_until_calendar_sale_day(calendar_day_int, ref_co)
 
 
 def _portal_accounts_revision_hash(out_list):
@@ -8985,7 +9474,7 @@ def _portal_merge_day_rows_deduped(existing_rows, extra_rows):
     return out
 
 
-def _portal_append_virtual_license_bundle(out, lic, day_lines_uo, billing_saldo):
+def _portal_append_virtual_license_bundle(out, lic, day_lines_uo, billing_saldo, user_obj):
     """Tarjeta virtual cuando no hay cuenta inventario pero sí líneas con nombre de cliente."""
     if not any(day_lines_uo.get(str(dv)) for dv in range(1, 32)):
         return
@@ -9019,10 +9508,13 @@ def _portal_append_virtual_license_bundle(out, lic, day_lines_uo, billing_saldo)
     except Exception:
         product_image_url_v = ''
 
+    matched_acc = _portal_match_account_for_day_lines(lic, user_obj, day_lines_uo)
+    expiry_payload = _portal_expiry_fields_for_account(matched_acc, lic)
+
     out.append(
         {
-            'account_id': None,
-            'virtual': True,
+            'account_id': getattr(matched_acc, 'id', None) if matched_acc is not None else None,
+            'virtual': matched_acc is None,
             'license_id': lic.id,
             'product_id': getattr(lic, 'product_id', None),
             'product_name': pname_v,
@@ -9034,12 +9526,15 @@ def _portal_append_virtual_license_bundle(out, lic, day_lines_uo, billing_saldo)
             'client_notes': '',
             'day_lines': day_lines_uo,
             'linked_sale_day': None,
-            'assigned_at_iso': None,
-            'expires_at_iso': None,
-            'days_until_expiry': None,
+            'assigned_at_iso': expiry_payload.get('assigned_at_iso'),
+            'expires_at_iso': expiry_payload.get('expires_at_iso'),
+            'days_until_expiry': expiry_payload.get('days_until_expiry'),
             'account_expired': False,
             'warranty_days': warranty_days_v,
+            'license_term_days': expiry_payload.get('license_term_days') or _license_term_days_public(lic),
+            'billing_period_label': _license_billing_period_label(lic),
             'billing_saldo': billing_saldo,
+            'month_to_month': bool(getattr(lic, 'month_to_month', False)),
         }
     )
 
@@ -9101,8 +9596,19 @@ def _portal_merge_username_only_lines_for_license(out, lic, allowed_names, user_
                 if _portal_day_row_merge_key(row) not in claimed_keys
             ]
             primary['day_lines'][k_v] = _portal_merge_day_rows_deduped(existing, extras)
+        if primary.get('days_until_expiry') is None or not primary.get('expires_at_iso'):
+            matched = _portal_match_account_for_day_lines(lic, user_obj, primary.get('day_lines') or {})
+            exp_payload = _portal_expiry_fields_for_account(matched, lic)
+            if exp_payload.get('expires_at_iso') or exp_payload.get('days_until_expiry') is not None:
+                primary['assigned_at_iso'] = exp_payload.get('assigned_at_iso')
+                primary['expires_at_iso'] = exp_payload.get('expires_at_iso')
+                primary['days_until_expiry'] = exp_payload.get('days_until_expiry')
+                primary['license_term_days'] = exp_payload.get('license_term_days')
+                if matched is not None and primary.get('account_id') is None:
+                    primary['account_id'] = matched.id
+                    primary['virtual'] = False
     else:
-        _portal_append_virtual_license_bundle(out, lic, day_lines_uo, billing_saldo)
+        _portal_append_virtual_license_bundle(out, lic, day_lines_uo, billing_saldo, user_obj)
 
 
 def _day_account_inventory_sync_key(email, identifier):
@@ -9223,7 +9729,7 @@ def _sync_license_day_notepad_accounts(license_row, day_num, day_text):
             password=p['password'],
             status='sold',
             assigned_at=assigned_at,
-            expires_at=assigned_at + timedelta(days=30),
+            expires_at=assigned_at + _license_account_term_timedelta(license_row),
         )
         db.session.add(acc)
         db.session.flush()
@@ -9306,8 +9812,9 @@ def _user_my_license_accounts_list_for_portal(user_obj):
             except Exception:
                 linked_sale_day = int(at.day)
         exp_at = getattr(acc, 'expires_at', None)
+        expiry_payload = _portal_expiry_fields_for_account(acc, lic)
         try:
-            days_left = acc.days_until_expiry
+            days_left = expiry_payload.get('days_until_expiry')
         except Exception:
             days_left = None
         lic_id_eff = getattr(acc, 'license_id', None)
@@ -9374,13 +9881,16 @@ def _user_my_license_accounts_list_for_portal(user_obj):
             'client_notes': cn,
             'day_lines': day_lines,
             'linked_sale_day': linked_sale_day,
-            'assigned_at_iso': at.isoformat() if at is not None else None,
-            'expires_at_iso': exp_at.isoformat() if exp_at is not None else None,
+            'assigned_at_iso': expiry_payload.get('assigned_at_iso'),
+            'expires_at_iso': expiry_payload.get('expires_at_iso'),
             'days_until_expiry': days_left,
             'days_until_calendar_sale': None,
             'account_expired': bool(acc.is_expired),
             'warranty_days': warranty_days_pub,
+            'license_term_days': expiry_payload.get('license_term_days') or 30,
+            'billing_period_label': _license_billing_period_label(lic) if lic else 'mensual',
             'billing_saldo': billing_saldo,
+            'month_to_month': bool(getattr(lic, 'month_to_month', False)) if lic else False,
         })
 
     cand_lics = (
@@ -9692,8 +10202,83 @@ def api_user_license_day_row_status():
 
         phys_idx, _orig_ln, dual_base = visible[row_ordinal]
 
+        if 'new_password' in data:
+            from app.store.user_license_line_parse import (
+                cred_plain_has_password_part,
+                dual_to_storage_line,
+                rebuild_cred_with_new_password,
+                rebuild_day_notepad_lines_with_physical_index,
+            )
+
+            new_password = str(data.get('new_password') or '').strip()
+            if not new_password:
+                return jsonify({'success': False, 'error': 'Indica la nueva contraseña.'}), 400
+
+            lic_prod = getattr(license_row, 'product', None)
+            is_netflix = _product_name_is_netflix(lic_prod.name if lic_prod else '')
+            cred_old = str(dual_base.get('cred') or '').strip()
+            if not cred_old:
+                return jsonify({'success': False, 'error': 'La fila no tiene credencial.'}), 400
+            if not cred_plain_has_password_part(cred_old, is_netflix):
+                return jsonify(
+                    {
+                        'success': False,
+                        'error': 'Esta fila solo tiene correo en el bloc; no se puede cambiar la contraseña aquí.',
+                    }
+                ), 400
+
+            new_cred = rebuild_cred_with_new_password(cred_old, is_netflix, new_password)
+            if not new_cred:
+                return jsonify(
+                    {
+                        'success': False,
+                        'error': 'No se pudo construir la credencial con la nueva contraseña.',
+                    }
+                ), 400
+
+            dual_updated = dict(dual_base)
+            dual_updated['cred'] = new_cred
+            new_line = dual_to_storage_line(dual_updated)
+            new_day_text = rebuild_day_notepad_lines_with_physical_index(raw_lines, phys_idx, new_line)
+
+            if str(new_day_text).strip():
+                day_map[dk] = new_day_text
+            else:
+                day_map.pop(dk, None)
+
+            license_row.day_notepads_json = _json.dumps(day_map, ensure_ascii=False)
+
+            if account is not None:
+                account.password = new_password[:200]
+
+            texts_for_sync = [
+                license_row.license_notes or '',
+                getattr(license_row, 'suspended_notes', None) or '',
+                getattr(license_row, 'expired_notes', None) or '',
+                getattr(license_row, 'changes_notes', None) or '',
+            ]
+            raw_day_sy = getattr(license_row, 'day_notepads_json', None)
+            if raw_day_sy and str(raw_day_sy).strip():
+                try:
+                    dm_sy = _json.loads(raw_day_sy)
+                    if isinstance(dm_sy, dict):
+                        for v_sy in dm_sy.values():
+                            if v_sy:
+                                texts_for_sync.append(str(v_sy))
+                except Exception:
+                    pass
+            _sync_allowed_emails_from_license_admin_texts(texts_for_sync)
+
+            db.session.commit()
+            return jsonify({'success': True, 'new_cred': new_cred})
+
+        m2m = bool(getattr(license_row, 'month_to_month', False))
         revert_buena = bool(data.get('revert_buena_revisada'))
         preserve_buena = bool(data.get('preserve_buena_revisada'))
+        if not m2m and 'status_good' in data and not revert_buena and not preserve_buena:
+            data = dict(data)
+            data.pop('status_good', None)
+
         try:
             if preserve_buena and normalize_status_key(
                 str(dual_base.get('statusGood') or '')
@@ -10001,13 +10586,113 @@ def _assigned_usernames_map_for_accounts(accounts_iter):
     }
 
 
+def _parse_licenses_include_accounts_mode(raw):
+    v = (raw or 'all').strip().lower()
+    if v in ('all', 'none', 'selected'):
+        return v
+    return 'all'
+
+
+def _parse_license_ids_csv(raw):
+    if raw is None or not str(raw).strip():
+        return []
+    out = []
+    seen = set()
+    for part in str(raw).split(','):
+        part = part.strip()
+        if not part:
+            continue
+        try:
+            n = int(part)
+        except (TypeError, ValueError):
+            continue
+        if n <= 0 or n in seen:
+            continue
+        seen.add(n)
+        out.append(n)
+    return out
+
+
+def _license_account_counts_map(license_ids):
+    """Conteos por licencia sin cargar filas completas de cuentas."""
+    from app.store.models import LicenseAccount
+    from sqlalchemy import func
+
+    if not license_ids:
+        return {}
+    ids = [int(x) for x in license_ids]
+    rows = (
+        db.session.query(
+            LicenseAccount.license_id,
+            LicenseAccount.status,
+            func.count(LicenseAccount.id),
+        )
+        .filter(LicenseAccount.license_id.in_(ids))
+        .group_by(LicenseAccount.license_id, LicenseAccount.status)
+        .all()
+    )
+    out = {}
+    for lid, status, cnt in rows:
+        lid = int(lid)
+        st = (status or '').strip() or 'unknown'
+        bucket = out.setdefault(lid, {'total': 0, 'by_status': {}})
+        bucket['total'] += int(cnt)
+        bucket['by_status'][st] = int(cnt)
+    for lid in ids:
+        out.setdefault(lid, {'total': 0, 'by_status': {}})
+    return out
+
+
+def _license_day_notepads_dict(license_row):
+    import json as _json
+
+    raw = getattr(license_row, 'day_notepads_json', None)
+    if not raw or not str(raw).strip():
+        return {}
+    try:
+        day_map = _json.loads(raw)
+        return day_map if isinstance(day_map, dict) else {}
+    except Exception:
+        return {}
+
+
+def _serialize_license_account_admin(account, assigned_username_map):
+    uid = account.assigned_to_user_id
+    return {
+        'id': account.id,
+        'account_identifier': account.account_identifier,
+        'email': account.email,
+        'password': account.password,
+        'status': account.status,
+        'assigned_to_user_id': uid,
+        'assigned_username': assigned_username_map.get(int(uid)) if uid else None,
+        'assigned_at': _store_dt_iso_utc_z(account.assigned_at),
+        'expires_at': _store_dt_iso_utc_z(account.expires_at),
+        'is_expired': account.is_expired,
+        'days_until_expiry': account.days_until_expiry,
+    }
+
+
 @store_bp.route('/api/licenses')
 @admin_or_soporte_licencias_required
 def api_get_licenses():
-    """Obtener todas las licencias con sus cuentas"""
+    """Obtener licencias admin.
+
+    Query:
+      include_accounts=all|none|selected  (default all, retrocompatible)
+      license_ids=1,2,3  — con selected, cuentas completas solo de esos IDs
+    """
     try:
         from app.store.models import License, LicenseAccount, Product
-        import json as _json
+
+        include_accounts = _parse_licenses_include_accounts_mode(
+            request.args.get('include_accounts')
+        )
+        selected_license_ids = (
+            set(_parse_license_ids_csv(request.args.get('license_ids')))
+            if include_accounts == 'selected'
+            else set()
+        )
 
         db.session.expire_all()
 
@@ -10019,10 +10704,10 @@ def api_get_licenses():
         _ensure_license_expired_notes_and_month_columns()
         _ensure_license_changes_notes_column()
 
-        # Todas las licencias (incluso si el producto fue eliminado). Antes: .join(Product) excluía filas huérfanas.
-        licenses = License.query.options(
-            joinedload(License.product), selectinload(License.accounts)
-        ).all()
+        license_query_opts = [joinedload(License.product)]
+        if include_accounts == 'all':
+            license_query_opts.append(selectinload(License.accounts))
+        licenses = License.query.options(*license_query_opts).all()
 
         # Autocura: texto en license_notes pero 0 cuentas available suele venir de drift o guardados
         # que no alcanzaron a sincronizar; al abrir Admin se alinea igual que PUT license_notes.
@@ -10048,26 +10733,53 @@ def api_get_licenses():
                 heal_commit = True
         if heal_commit:
             db.session.commit()
-            licenses = License.query.options(
-                joinedload(License.product), selectinload(License.accounts)
-            ).all()
-        
-        all_license_accounts = []
-        for license in licenses:
-            all_license_accounts.extend(license.accounts or [])
-        assigned_username_map = _assigned_usernames_map_for_accounts(all_license_accounts)
+            licenses = License.query.options(*license_query_opts).all()
+            try:
+                from app.store.product_reservations import process_pending_reservations_for_product
+
+                seen_pids = set()
+                for lic_row in licenses:
+                    pid = int(lic_row.product_id)
+                    if pid in seen_pids:
+                        continue
+                    seen_pids.add(pid)
+                    process_pending_reservations_for_product(pid)
+            except Exception as res_heal_ex:
+                current_app.logger.warning('reservas tras heal inventario: %s', res_heal_ex)
+
+        license_ids = [int(lic.id) for lic in licenses]
+        account_counts_map = (
+            _license_account_counts_map(license_ids)
+            if include_accounts != 'all'
+            else {}
+        )
+
+        accounts_by_license = {}
+        accounts_for_username_lookup = []
+        if include_accounts == 'all':
+            for lic_row in licenses:
+                accs = list(lic_row.accounts or [])
+                accounts_by_license[int(lic_row.id)] = accs
+                accounts_for_username_lookup.extend(accs)
+        elif include_accounts == 'selected' and selected_license_ids:
+            valid_selected = [
+                lid for lid in selected_license_ids if lid in license_ids
+            ]
+            if valid_selected:
+                acc_rows = LicenseAccount.query.filter(
+                    LicenseAccount.license_id.in_(valid_selected)
+                ).all()
+                for acc in acc_rows:
+                    accounts_by_license.setdefault(int(acc.license_id), []).append(acc)
+                accounts_for_username_lookup = acc_rows
+
+        assigned_username_map = _assigned_usernames_map_for_accounts(
+            accounts_for_username_lookup
+        )
 
         licenses_data = []
         for license in licenses:
-            day_map = {}
-            raw = getattr(license, 'day_notepads_json', None)
-            if raw and str(raw).strip():
-                try:
-                    day_map = _json.loads(raw)
-                    if not isinstance(day_map, dict):
-                        day_map = {}
-                except Exception:
-                    day_map = {}
+            day_map = _license_day_notepads_dict(license)
             license_notes_val = license.license_notes or ''
             suspended_notes_val = getattr(license, 'suspended_notes', None) or ''
             expired_notes_val = getattr(license, 'expired_notes', None) or ''
@@ -10080,6 +10792,9 @@ def api_get_licenses():
                 'product_name': license.product.name if license.product else 'Producto eliminado',
                 'position': license.position,
                 'warranty_days': _license_warranty_days_public(license),
+                'license_term_days': _license_term_days_public(license),
+                'billing_period_label': _license_billing_period_label(license),
+                'term_ui_label': _license_term_ui_label(license),
                 'enabled': license.enabled,
                 'created_at': _store_dt_iso_utc_z(license.created_at),
                 'personal_notes': personal_notes_val,
@@ -10088,30 +10803,48 @@ def api_get_licenses():
                 'expired_notes': expired_notes_val,
                 'changes_notes': changes_notes_val,
                 'month_to_month': m2m,
+                'allow_reservation': bool(getattr(license, 'allow_reservation', False)),
+                'renew_customer_account': bool(getattr(license, 'renew_customer_account', False)),
                 'day_notepads': day_map,
-                'accounts': []
+                'accounts': [],
             }
-            
-            # Agregar cuentas de la licencia
-            for account in license.accounts:
-                uid = account.assigned_to_user_id
-                account_data = {
-                    'id': account.id,
-                    'account_identifier': account.account_identifier,
-                    'email': account.email,
-                    'password': account.password,
-                    'status': account.status,
-                    'assigned_to_user_id': uid,
-                    'assigned_username': assigned_username_map.get(int(uid)) if uid else None,
-                    'assigned_at': _store_dt_iso_utc_z(account.assigned_at),
-                    'expires_at': _store_dt_iso_utc_z(account.expires_at),
-                    'is_expired': account.is_expired,
-                    'days_until_expiry': account.days_until_expiry
-                }
-                license_data['accounts'].append(account_data)
-            
+
+            if include_accounts == 'all':
+                acc_list = accounts_by_license.get(int(license.id), [])
+            elif include_accounts == 'selected' and int(license.id) in selected_license_ids:
+                acc_list = accounts_by_license.get(int(license.id), [])
+            else:
+                acc_list = []
+
+            license_data['accounts'] = [
+                _serialize_license_account_admin(account, assigned_username_map)
+                for account in acc_list
+            ]
+            if include_accounts != 'all':
+                license_data['account_counts'] = account_counts_map.get(
+                    int(license.id),
+                    {'total': 0, 'by_status': {}},
+                )
+
             licenses_data.append(license_data)
-        ok = jsonify({'success': True, 'licenses': licenses_data})
+
+        if include_accounts == 'all':
+            total_accounts = sum(len(ld.get('accounts') or []) for ld in licenses_data)
+        else:
+            total_accounts = sum(
+                int((account_counts_map.get(int(ld['id'])) or {}).get('total') or 0)
+                for ld in licenses_data
+            )
+        ok = jsonify({
+            'success': True,
+            'licenses': licenses_data,
+            'stats': {
+                'total_licenses': len(licenses_data),
+                'total_accounts': total_accounts,
+            },
+            'include_accounts': include_accounts,
+            'license_ids': sorted(selected_license_ids) if include_accounts == 'selected' else None,
+        })
         _attach_private_no_cache_headers(ok)
         return ok
 
@@ -10386,7 +11119,7 @@ def _sync_inventory_accounts_from_license_notes(license_row):
 
     created = updated = skipped = lines_seen = removed = 0
     now = datetime.utcnow()
-    expires_at = now + timedelta(days=30)
+    expires_at = now + _license_account_term_timedelta(license_row)
 
     notes = getattr(license_row, 'license_notes', None) or ''
     lines_list = []
@@ -10679,6 +11412,226 @@ def _remove_first_matching_line_from_license_day_notepads(license_row, fp_triple
             )
             return True
     return False
+
+
+def _extract_line_from_license_day_notepad(license_row, day_int, fp_triple, is_netflix):
+    """Quita y devuelve la primera línea del bloc Día N que coincide con la cuenta."""
+    import json as _json
+
+    if not fp_triple or fp_triple == ('', '', ''):
+        return None
+    if license_row is None:
+        return None
+    try:
+        day_i = int(day_int)
+    except (TypeError, ValueError):
+        return None
+    if day_i < 1 or day_i > 31:
+        return None
+
+    fp_norm = _normalize_inventory_fingerprint(fp_triple[0], fp_triple[1], fp_triple[2])
+    raw = getattr(license_row, 'day_notepads_json', None)
+    dm = {}
+    if raw and str(raw).strip():
+        try:
+            dm = _json.loads(raw)
+            if not isinstance(dm, dict):
+                dm = {}
+        except Exception:
+            dm = {}
+
+    dk = str(day_i)
+    cur = dm.get(dk)
+    cur_s = str(cur).strip() if cur is not None else ''
+    if not cur_s:
+        return None
+
+    lid = getattr(license_row, 'id', None)
+    if lid is None:
+        return None
+
+    lines = [ln for ln in str(cur_s).replace('\r\n', '\n').split('\n') if str(ln).strip()]
+    if not lines:
+        return None
+
+    removed_line = None
+    new_lines = []
+    for ln in lines:
+        if removed_line is None:
+            tup = _inventory_tuple_from_license_notes_line(ln, lid, is_netflix)
+            if tup:
+                tnorm = _normalize_inventory_fingerprint(tup[0], tup[1], tup[2])
+                if tnorm == fp_norm:
+                    removed_line = ln
+                    continue
+        new_lines.append(ln)
+
+    if removed_line is None:
+        return None
+
+    if new_lines:
+        dm[dk] = '\n'.join(new_lines).strip()
+    else:
+        dm.pop(dk, None)
+    license_row.day_notepads_json = _json.dumps(dm, ensure_ascii=False) if dm else None
+    return removed_line
+
+
+def _account_expiry_utc_naive(account, license_row):
+    """expires_at efectivo (naive UTC) a partir de cuenta o assigned_at + plazo."""
+    from app.store.models import _license_account_expiry_as_utc_aware
+
+    term = _license_account_term_timedelta(license_row)
+    if getattr(account, 'expires_at', None):
+        exp = _license_account_expiry_as_utc_aware(account.expires_at)
+        return exp.astimezone(timezone.utc).replace(tzinfo=None)
+    if getattr(account, 'assigned_at', None):
+        at = account.assigned_at
+        if at.tzinfo is not None:
+            at = at.astimezone(timezone.utc).replace(tzinfo=None)
+        return at + term
+    return datetime.utcnow() + term
+
+
+def _adjust_license_account_expiry(
+    account,
+    license_row,
+    *,
+    days_remaining=None,
+    days_delta=None,
+):
+    """
+    Ajusta vencimiento de una cuenta vendida.
+    Presets mensuales (30, 60, 90…): recalcula assigned_at → puede cambiar el día del mes.
+    Plazo personalizado: solo mueve expires_at; el día de compra no cambia.
+    """
+    from app.store.license_term_utils import license_term_days_public, license_term_preset_key
+
+    term_days = license_term_days_public(license_row)
+    is_preset = license_term_preset_key(term_days) != 'personalizado'
+
+    if days_remaining is None and days_delta is None:
+        raise ValueError('Indica days_remaining o days_delta')
+
+    old_day = None
+    if getattr(account, 'assigned_at', None):
+        try:
+            old_day = int(utc_to_colombia(account.assigned_at).day)
+        except Exception:
+            old_day = None
+
+    cur_exp = _account_expiry_utc_naive(account, license_row)
+    now_u = datetime.now(timezone.utc).replace(tzinfo=None)
+
+    if days_remaining is not None:
+        try:
+            rem = int(days_remaining)
+        except (TypeError, ValueError):
+            raise ValueError('days_remaining inválido')
+        if rem < 0 or rem > 3650:
+            raise ValueError('days_remaining debe estar entre 0 y 3650')
+        new_exp = now_u + timedelta(days=rem)
+    else:
+        try:
+            delta = int(days_delta)
+        except (TypeError, ValueError):
+            raise ValueError('days_delta inválido')
+        if abs(delta) > 3650:
+            raise ValueError('days_delta fuera de rango')
+        new_exp = cur_exp + timedelta(days=delta)
+        if new_exp < now_u:
+            new_exp = now_u
+
+    account.expires_at = new_exp
+    new_day = old_day
+    moved_day = False
+
+    if is_preset:
+        new_assigned = new_exp - timedelta(days=term_days)
+        account.assigned_at = new_assigned
+        try:
+            new_day = int(utc_to_colombia(new_assigned).day)
+        except Exception:
+            new_day = old_day
+        if old_day and new_day and old_day != new_day:
+            moved_day = True
+            product = getattr(license_row, 'product', None)
+            if product is None and getattr(license_row, 'product_id', None):
+                from app.store.models import Product as _Product
+
+                product = _Product.query.get(license_row.product_id)
+            is_nf = _product_name_is_netflix(getattr(product, 'name', None) if product else None)
+            fp = (
+                (account.email or '').strip().lower(),
+                (account.password or '').strip(),
+                (account.account_identifier or '').strip(),
+            )
+            line = _extract_line_from_license_day_notepad(
+                license_row, old_day, fp, is_nf
+            )
+            if line:
+                _append_line_to_license_day_notepad(license_row, new_day, line)
+
+    delta_days = max(0, int((new_exp - now_u).total_seconds() // 86400))
+    return {
+        'days_until_expiry': delta_days,
+        'calendar_day_before': old_day,
+        'calendar_day_after': new_day,
+        'moved_day': moved_day,
+        'is_preset_term': is_preset,
+        'expires_at': _store_dt_iso_utc_z(new_exp),
+        'assigned_at': _store_dt_iso_utc_z(getattr(account, 'assigned_at', None)),
+    }
+
+
+@store_bp.route('/api/accounts/<int:account_id>/adjust-expiry', methods=['PUT'])
+@admin_or_soporte_licencias_required
+def api_adjust_license_account_expiry(account_id):
+    """Admin: sumar/restar días al vencimiento; presets mensuales mueven el día del calendario."""
+    try:
+        from app.store.models import License, LicenseAccount
+
+        account = LicenseAccount.query.get(account_id)
+        if not account:
+            return jsonify({'success': False, 'error': 'Cuenta no encontrada'}), 404
+
+        status = str(getattr(account, 'status', '') or '').lower()
+        if status not in ('sold', 'assigned'):
+            return jsonify(
+                {'success': False, 'error': 'Solo cuentas vendidas o asignadas.'}
+            ), 400
+
+        license_row = License.query.get(account.license_id)
+        if not license_row:
+            return jsonify({'success': False, 'error': 'Licencia no encontrada'}), 404
+
+        data = request.get_json() or {}
+        days_remaining = data.get('days_remaining')
+        days_delta = data.get('days_delta')
+        if days_remaining is None and days_delta is None:
+            return jsonify(
+                {'success': False, 'error': 'Indica days_remaining o days_delta'}
+            ), 400
+        if days_remaining is not None and days_delta is not None:
+            return jsonify(
+                {'success': False, 'error': 'Usa solo days_remaining o days_delta'}
+            ), 400
+
+        result = _adjust_license_account_expiry(
+            account,
+            license_row,
+            days_remaining=days_remaining,
+            days_delta=days_delta,
+        )
+        db.session.commit()
+        return jsonify({'success': True, **result})
+    except ValueError as ve:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': str(ve)}), 400
+    except Exception as exc:
+        db.session.rollback()
+        current_app.logger.exception('api_adjust_license_account_expiry: %s', exc)
+        return jsonify({'success': False, 'error': str(exc)}), 500
 
 
 def _dual_storage_line_public_checkout_sale(buyer_username, raw_inventory_line, account_fallback):
@@ -11120,7 +12073,7 @@ def api_put_license_notes(license_id):
         license_obj = License.query.get_or_404(license_id)
         data = request.get_json(silent=True) or {}
         if getattr(g, 'license_support_restricted_mode', False):
-            allowed_keys = {'changes_notes', 'month_to_month', 'license_notes'}
+            allowed_keys = {'changes_notes', 'month_to_month', 'allow_reservation', 'renew_customer_account', 'license_notes'}
             data = {k: v for k, v in data.items() if k in allowed_keys}
         if 'personal_notes' in data:
             license_obj.personal_notes = (
@@ -11141,6 +12094,12 @@ def api_put_license_notes(license_id):
         if 'month_to_month' in data:
             v = data['month_to_month']
             license_obj.month_to_month = bool(v) if v is not None else False
+        if 'allow_reservation' in data:
+            v = data['allow_reservation']
+            license_obj.allow_reservation = bool(v) if v is not None else False
+        if 'renew_customer_account' in data:
+            v = data['renew_customer_account']
+            license_obj.renew_customer_account = bool(v) if v is not None else False
         if 'changes_notes' in data:
             license_obj.changes_notes = (
                 data['changes_notes'] if data['changes_notes'] is not None else ''
@@ -11200,7 +12159,17 @@ def api_put_license_notes(license_id):
         if 'license_notes' in data:
             inv_sync_result = _sync_inventory_accounts_from_license_notes(license_obj)
 
+        product_id_for_res = int(license_obj.product_id)
         db.session.commit()
+        if inv_sync_result and (
+            inv_sync_result.get('created') or inv_sync_result.get('updated')
+        ):
+            try:
+                from app.store.product_reservations import process_pending_reservations_for_product
+
+                process_pending_reservations_for_product(product_id_for_res)
+            except Exception as res_ex:
+                current_app.logger.warning('process_pending_reservations_for_product: %s', res_ex)
         body = {'success': True}
         if inv_sync_result is not None:
             body['inventory_sync'] = inv_sync_result
@@ -11285,6 +12254,9 @@ def api_get_archived_licenses():
                 'product_name': license.product.name if license.product else 'Producto eliminado',
                 'position': license.position,
                 'warranty_days': _license_warranty_days_public(license),
+                'license_term_days': _license_term_days_public(license),
+                'billing_period_label': _license_billing_period_label(license),
+                'term_ui_label': _license_term_ui_label(license),
                 'enabled': license.enabled,
                 'created_at': _store_dt_iso_utc_z(license.created_at),
                 'updated_at': _store_dt_iso_utc_z(license.updated_at),
@@ -11294,6 +12266,8 @@ def api_get_archived_licenses():
                 'expired_notes': getattr(license, 'expired_notes', None) or '',
                 'changes_notes': getattr(license, 'changes_notes', None) or '',
                 'month_to_month': bool(getattr(license, 'month_to_month', False)),
+                'allow_reservation': bool(getattr(license, 'allow_reservation', False)),
+                'renew_customer_account': bool(getattr(license, 'renew_customer_account', False)),
                 'day_notepads': day_map,
                 'accounts': accounts_data
             })
@@ -11374,6 +12348,50 @@ def api_update_license_warranty(license_id):
     except Exception as e:
         db.session.rollback()
         return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@store_bp.route('/api/licenses/<int:license_id>/term', methods=['PUT'])
+@admin_required
+def api_update_license_term(license_id):
+    """Actualizar duración del periodo de licencia (días): «mes», presets o personalizado."""
+    from app.store.license_term_utils import (
+        license_billing_period_label,
+        license_term_ui_label,
+        normalize_license_term_days,
+    )
+    from app.store.models import License
+
+    try:
+        _ensure_license_term_days_column()
+        data = request.get_json(silent=True) or {}
+        raw = data.get('term_days')
+        if raw is None:
+            return jsonify({'success': False, 'error': 'term_days requerido'}), 400
+        try:
+            td = normalize_license_term_days(raw)
+        except ValueError as ve:
+            return jsonify({'success': False, 'error': str(ve)}), 400
+        lic = License.query.get_or_404(license_id)
+        lic.license_term_days = td
+        db.session.commit()
+        return jsonify({
+            'success': True,
+            'license_term_days': td,
+            'billing_period_label': license_billing_period_label(td),
+            'term_ui_label': license_term_ui_label(td),
+        })
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@store_bp.route('/api/licenses/term-presets', methods=['GET'])
+@admin_required
+def api_license_term_presets():
+    """Opciones predefinidas para el selector «mes» en Gestionar productos."""
+    from app.store.license_term_utils import license_term_preset_options
+
+    return jsonify({'success': True, 'presets': license_term_preset_options()})
 
 
 @store_bp.route('/api/licenses/<int:license_id>', methods=['DELETE'])
@@ -11568,6 +12586,7 @@ def _compute_public_sellable_stock_for_product(product):
     Existencias en tienda y tope de venta por producto: suma, por cada licencia activa, las
     unidades vendibles reales ``max(0, available - gar.)``. Debe igualar lo que puede asignar ``procesar_pago``.
     """
+    _ensure_license_expired_notes_and_month_columns()
     from app.store.models import License
 
     lic_rows = License.query.filter_by(product_id=product.id, enabled=True).all()
@@ -11577,6 +12596,64 @@ def _compute_public_sellable_stock_for_product(product):
     for lic in lic_rows:
         total += _sellable_license_accounts_public(lic)
     return total
+
+
+def _product_month_to_month_map(products):
+    """
+    Mapa product_id -> True si alguna licencia activa tiene month_to_month
+    (checkbox «Mes a mes» en Gestionar productos / lógica de Renovar día).
+    """
+    from app.store.models import License
+
+    if not products:
+        return {}
+    ids = [p.id for p in products if getattr(p, 'id', None) is not None]
+    if not ids:
+        return {}
+    flags = {pid: False for pid in ids}
+    rows = (
+        License.query
+        .filter(License.product_id.in_(ids), License.enabled.is_(True))
+        .all()
+    )
+    for lic in rows:
+        if bool(getattr(lic, 'month_to_month', False)):
+            flags[lic.product_id] = True
+    return flags
+
+
+def _product_allow_reservation_map(products):
+    from app.store.product_reservations import _product_allow_reservation_map as _map
+
+    return _map(products)
+
+
+def _product_renew_customer_account_map(products):
+    _ensure_license_expired_notes_and_month_columns()
+    from app.store.customer_account_renewals import _product_renew_customer_account_map as _map
+
+    return _map(products)
+
+
+def _product_billing_period_map(products):
+    """Mapa product_id -> etiqueta periodo («mensual», «2 meses», «60 días», …)."""
+    from app.store.models import License
+
+    if not products:
+        return {}
+    ids = [p.id for p in products if getattr(p, 'id', None) is not None]
+    if not ids:
+        return {}
+    labels = {pid: 'mensual' for pid in ids}
+    rows = (
+        License.query
+        .filter(License.product_id.in_(ids), License.enabled.is_(True))
+        .order_by(License.position.asc(), License.id.asc())
+        .all()
+    )
+    for lic in rows:
+        labels[lic.product_id] = _license_billing_period_label(lic)
+    return labels
 
 
 def _credential_email_normalized_from_plain(cred_plain):
@@ -11730,7 +12807,7 @@ def api_deliver_warranty_replacement(license_id):
         replacement.status = 'assigned'
         replacement.assigned_to_user_id = uid
         replacement.assigned_at = old_at or datetime.utcnow()
-        replacement.expires_at = old_ex or (datetime.utcnow() + timedelta(days=30))
+        replacement.expires_at = old_ex or (datetime.utcnow() + _license_account_term_timedelta(license_obj))
         replacement.updated_at = datetime.utcnow()
         db.session.commit()
 
@@ -11831,7 +12908,7 @@ def _public_checkout_assign_license_account(
     account.sale_id = venta.id
     assigned_stamp = datetime.utcnow()
     account.assigned_at = assigned_stamp
-    account.expires_at = assigned_stamp + timedelta(days=30)
+    account.expires_at = assigned_stamp + _license_account_term_timedelta(license_row)
     account.inventory_bloc_ord = None
 
     try:
@@ -11982,7 +13059,7 @@ def api_add_license_account(license_id):
             return jsonify({'success': False, 'error': 'Licencia no encontrada'}), 404
         
         # Crear nueva cuenta con expiración de 1 mes
-        expires_at = datetime.utcnow() + timedelta(days=30)
+        expires_at = datetime.utcnow() + _license_account_term_timedelta(license)
         
         new_account = LicenseAccount(
             license_id=license_id,
@@ -12094,6 +13171,32 @@ def api_mark_account_sold(account_id):
         
     except Exception as e:
         db.session.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@store_bp.route('/api/licenses/missing-products', methods=['GET'])
+@admin_required
+def api_licenses_missing_products():
+    """Productos habilitados que aún no tienen fila en License."""
+    try:
+        from app.store.models import License, Product
+
+        products = Product.query.filter_by(enabled=True).order_by(Product.name).all()
+        missing = []
+        for product in products:
+            if not License.query.filter_by(product_id=product.id).first():
+                missing.append({
+                    'id': product.id,
+                    'name': product.name,
+                })
+
+        return jsonify({
+            'success': True,
+            'products': missing,
+            'count': len(missing),
+        })
+
+    except Exception as e:
+        current_app.logger.exception('api_licenses_missing_products')
         return jsonify({'success': False, 'error': str(e)}), 500
 
 @store_bp.route('/api/licenses/initialize', methods=['POST'])
@@ -15769,71 +16872,138 @@ def cleanup_drive_files(transfer_id):
     except Exception as e:
         return jsonify({'success': False, 'error': f'Error en limpieza: {str(e)}'}), 500
 
-# ==================== RUTAS PARA WHATSAPP ====================
+# ==================== RUTAS PARA WHATSAPP WEB (EVOLUTION API) ====================
+
+def _whatsapp_ensure_schema():
+    from app.store.whatsapp_web_db import ensure_whatsapp_web_columns
+    from app.store.whatsapp_daily_sales import ensure_whatsapp_daily_sales_columns
+
+    ensure_whatsapp_web_columns()
+    ensure_whatsapp_daily_sales_columns()
+
+
+def _whatsapp_try_activate_evolution(config) -> str | None:
+    """Activa instancia Evolution si WhatsApp Web está habilitado. Devuelve aviso opcional."""
+    if not config or not config.is_enabled:
+        return None
+    from app.store.whatsapp_web_service import ensure_config_evolution_instance
+
+    try:
+        result = ensure_config_evolution_instance(config)
+        if result.get('success'):
+            return None
+        return 'Guardado, pero Evolution no pudo activar la instancia. Revisá el servicio y usá «Mostrar QR».'
+    except Exception as exc:
+        current_app.logger.warning('WhatsApp Evolution activate on save: %s', exc)
+        return 'Guardado, pero no se pudo contactar Evolution. Revisá que el servicio esté corriendo.'
+
 
 @store_bp.route('/admin/whatsapp_configs', methods=['GET'])
 @admin_required
 def list_whatsapp_configs():
-    configs = WhatsAppConfig.query.all()
+    _whatsapp_ensure_schema()
+    from app.store.whatsapp_web_service import (
+        consolidate_extra_whatsapp_configs,
+        get_whatsapp_singleton_config,
+        serialize_whatsapp_config,
+    )
+
+    config = get_whatsapp_singleton_config()
+    if config:
+        from app.store.whatsapp_web_service import (
+            apply_whatsapp_config_env_secrets,
+            whatsapp_using_default_api_key,
+        )
+
+        apply_whatsapp_config_env_secrets(config)
+        if whatsapp_using_default_api_key(config):
+            current_app.logger.warning(
+                'WhatsApp Web: API key por defecto; definí EVOLUTION_API_KEY en producción.'
+            )
+        consolidate_extra_whatsapp_configs(config)
+        from app.store.whatsapp_license_notify_log import compact_notify_run_log
+
+        compact_notify_run_log(config, persist=True)
+        db.session.commit()
+    configs = [config] if config else []
     return jsonify({
-        'configs': [
-            {
-                'id': c.id,
-                'api_key': c.api_key,
-                'phone_number': c.phone_number,
-                'webhook_verify_token': c.webhook_verify_token,
-                'template_message': c.template_message,
-                'notification_time': c.notification_time.strftime('%H:%M') if c.notification_time else None,
-                'is_enabled': c.is_enabled,
-                'last_sent': c.last_sent.isoformat() if c.last_sent else None,
-                'created_at': c.created_at.isoformat()
-            } for c in configs
-        ]
+        'configs': [serialize_whatsapp_config(c, include_secrets=True) for c in configs]
     })
+
 
 @store_bp.route('/admin/whatsapp_configs', methods=['POST'])
 @admin_required
 def create_whatsapp_config():
+    _whatsapp_ensure_schema()
+    from app.store.whatsapp_web_service import (
+        DEFAULT_INSTANCE,
+        apply_whatsapp_config_env_secrets,
+        consolidate_extra_whatsapp_configs,
+        default_evolution_api_key,
+        default_evolution_base_url,
+        get_whatsapp_singleton_config,
+        new_whatsapp_webhook_token,
+    )
+
     data = request.form if request.form else request.json
-    api_key = data.get('whatsapp_api_key')
-    phone_number = data.get('whatsapp_phone_number')
-    webhook_verify_token = data.get('whatsapp_webhook_verify_token')
-    template_message = data.get('whatsapp_template_message')
-    notification_time_str = data.get('whatsapp_notification_time')
+    phone_number = (data.get('whatsapp_phone_number') or '').strip()
+
+    base_url = (data.get('whatsapp_base_url') or '').strip() or default_evolution_base_url()
+    api_key = (data.get('whatsapp_api_key') or '').strip() or default_evolution_api_key()
+    template_message = (data.get('whatsapp_template_message') or '').strip()
+    notification_time_str = data.get('whatsapp_notification_time') or '00:00'
     is_enabled = data.get('whatsapp_enabled', 'on') == 'on'
-    
-    if not all([api_key, phone_number, webhook_verify_token, template_message, notification_time_str]):
-        return jsonify({'success': False, 'error': 'Faltan datos requeridos'}), 400
-    
+
+    if not api_key:
+        return jsonify({'success': False, 'error': 'Falta API Key de Evolution (EVOLUTION_API_KEY)'}), 400
+
     try:
-        # Convertir string de tiempo a objeto Time
         from datetime import time
         if ':' in notification_time_str:
             time_parts = notification_time_str.split(':')
-            if len(time_parts) >= 2:
-                hour = int(time_parts[0])
-                minute = int(time_parts[1])
-                notification_time = time(hour, minute)
-            else:
-                raise ValueError("Formato de tiempo inválido")
+            hour = int(time_parts[0])
+            minute = int(time_parts[1])
+            notification_time = time(hour, minute)
         else:
-            raise ValueError("Formato de tiempo inválido")
-        
-        config = WhatsAppConfig(
-            api_key=api_key,
-            phone_number=phone_number,
-            webhook_verify_token=webhook_verify_token,
-            template_message=template_message,
-            notification_time=notification_time,
-            is_enabled=is_enabled
-        )
-        db.session.add(config)
+            raise ValueError('Formato de hora inválido')
+
+        existing = get_whatsapp_singleton_config()
+        if existing:
+            config = existing
+            apply_whatsapp_config_env_secrets(config)
+            config.phone_number = phone_number or config.phone_number or '0'
+            config.template_message = template_message
+            config.notification_time = notification_time
+            config.is_enabled = is_enabled
+            config.health_alert_enabled = True
+            config.updated_at = datetime.utcnow()
+            consolidate_extra_whatsapp_configs(config)
+        else:
+            config = WhatsAppConfig(
+                api_key=api_key,
+                phone_number=phone_number or '0',
+                webhook_verify_token=new_whatsapp_webhook_token(),
+                template_message=template_message,
+                notification_time=notification_time,
+                is_enabled=is_enabled,
+                base_url=base_url,
+                instance_name=DEFAULT_INSTANCE,
+                health_alert_enabled=True,
+                connection_status='unknown',
+            )
+            apply_whatsapp_config_env_secrets(config)
+            db.session.add(config)
+
         db.session.commit()
-        return jsonify({'success': True, 'message': 'Configuración de WhatsApp guardada correctamente.'})
-        
+        msg = 'Configuración WhatsApp Web guardada.'
+        evolution_note = _whatsapp_try_activate_evolution(config)
+        if evolution_note:
+            msg += ' ' + evolution_note
+        return jsonify({'success': True, 'message': msg, 'id': config.id})
     except Exception as e:
         db.session.rollback()
         return jsonify({'success': False, 'error': f'Error al guardar: {str(e)}'}), 500
+
 
 @store_bp.route('/admin/whatsapp_configs/<int:config_id>', methods=['DELETE'])
 @admin_required
@@ -15841,48 +17011,49 @@ def delete_whatsapp_config(config_id):
     config = WhatsAppConfig.query.get_or_404(config_id)
     db.session.delete(config)
     db.session.commit()
-    return jsonify({'success': True, 'message': 'Configuración de WhatsApp eliminada.'})
+    return jsonify({'success': True, 'message': 'Configuración eliminada.'})
+
 
 @store_bp.route('/admin/whatsapp_configs/<int:config_id>', methods=['PUT'])
 @admin_required
 def update_whatsapp_config(config_id):
+    _whatsapp_ensure_schema()
     data = request.form if request.form else request.json
     config = WhatsAppConfig.query.get_or_404(config_id)
-    
+
     try:
-        # Actualizar campos
-        if 'whatsapp_api_key' in data:
-            config.api_key = data['whatsapp_api_key']
+        from app.store.whatsapp_web_service import apply_whatsapp_config_env_secrets
+
+        apply_whatsapp_config_env_secrets(config)
+        if 'whatsapp_api_key' in data and str(data.get('whatsapp_api_key') or '').strip():
+            config.api_key = str(data['whatsapp_api_key']).strip()
         if 'whatsapp_phone_number' in data:
-            config.phone_number = data['whatsapp_phone_number']
-        if 'whatsapp_webhook_verify_token' in data:
-            config.webhook_verify_token = data['whatsapp_webhook_verify_token']
+            config.phone_number = str(data.get('whatsapp_phone_number') or '').strip() or config.phone_number
+        if 'whatsapp_base_url' in data:
+            config.base_url = str(data.get('whatsapp_base_url') or '').strip() or config.base_url
         if 'whatsapp_template_message' in data:
-            config.template_message = data['whatsapp_template_message']
+            raw_tpl = str(data.get('whatsapp_template_message') or '').strip()
+            config.template_message = raw_tpl
         if 'whatsapp_notification_time' in data:
             from datetime import time
             notification_time_str = data['whatsapp_notification_time']
-            if ':' in notification_time_str:
-                time_parts = notification_time_str.split(':')
-                if len(time_parts) >= 2:
-                    hour = int(time_parts[0])
-                    minute = int(time_parts[1])
-                    config.notification_time = time(hour, minute)
-                else:
-                    raise ValueError("Formato de tiempo inválido")
-            else:
-                raise ValueError("Formato de tiempo inválido")
+            time_parts = str(notification_time_str).split(':')
+            config.notification_time = time(int(time_parts[0]), int(time_parts[1]))
         if 'whatsapp_enabled' in data:
             config.is_enabled = data['whatsapp_enabled'] == 'on'
-        
+        config.health_alert_enabled = True
+
         config.updated_at = datetime.utcnow()
         db.session.commit()
-        
-        return jsonify({'success': True, 'message': 'Configuración de WhatsApp actualizada correctamente.'})
-        
+        msg = 'Configuración actualizada.'
+        evolution_note = _whatsapp_try_activate_evolution(config)
+        if evolution_note:
+            msg += ' ' + evolution_note
+        return jsonify({'success': True, 'message': msg})
     except Exception as e:
         db.session.rollback()
         return jsonify({'success': False, 'error': f'Error al actualizar: {str(e)}'}), 500
+
 
 @store_bp.route('/admin/whatsapp_configs/<int:config_id>/toggle', methods=['POST'])
 @admin_required
@@ -15890,36 +17061,222 @@ def toggle_whatsapp_config(config_id):
     config = WhatsAppConfig.query.get_or_404(config_id)
     config.is_enabled = not config.is_enabled
     db.session.commit()
-    
     status = 'activada' if config.is_enabled else 'desactivada'
-    return jsonify({'success': True, 'message': f'Configuración de WhatsApp {status}.', 'is_enabled': config.is_enabled})
+    msg = f'WhatsApp Web {status}.'
+    evolution_note = _whatsapp_try_activate_evolution(config)
+    if evolution_note:
+        msg += ' ' + evolution_note
+    return jsonify({'success': True, 'message': msg, 'is_enabled': config.is_enabled})
+
 
 @store_bp.route('/admin/whatsapp_configs/test', methods=['POST'])
 @admin_required
 def test_whatsapp_connection():
+    """Prueba reachability + estado de conexión Evolution."""
+    _whatsapp_ensure_schema()
     data = request.form if request.form else request.json
-    api_key = data.get('whatsapp_api_key')
-    phone_number = data.get('whatsapp_phone_number')
-    
-    if not api_key or not phone_number:
-        return jsonify({'success': False, 'error': 'Faltan API Key o número de teléfono'}), 400
-    
-    try:
-        # Simular prueba de conexión (en el futuro se implementará la conexión real)
-        # Por ahora solo validamos el formato
-        if len(api_key) < 10:
-            return jsonify({'success': False, 'error': 'API Key muy corta'}), 400
-        
-        if not phone_number.isdigit() or len(phone_number) < 10:
-            return jsonify({'success': False, 'error': 'Número de teléfono inválido'}), 400
-        
+    api_key = (data.get('whatsapp_api_key') or '').strip()
+    base_url = (data.get('whatsapp_base_url') or data.get('base_url') or '').strip()
+    config_id = data.get('config_id')
+    from app.store.whatsapp_web_service import (
+        DEFAULT_INSTANCE,
+        config_evolution_instance,
+        default_evolution_api_key,
+        default_evolution_base_url,
+        fetch_connection_state,
+        resolve_config_api_key,
+        resolve_config_base_url,
+        status_label_es,
+    )
+
+    cfg = None
+    if config_id:
+        cfg = WhatsAppConfig.query.get(int(config_id))
+        if cfg:
+            api_key = api_key or resolve_config_api_key(cfg)
+            base_url = base_url or resolve_config_base_url(cfg)
+
+    api_key = api_key or default_evolution_api_key()
+    base_url = (base_url or '').strip() or default_evolution_base_url()
+
+    if not api_key:
+        return jsonify({'success': False, 'error': 'Falta API Key de Evolution'}), 400
+
+    instance_name = config_evolution_instance(cfg) if cfg else DEFAULT_INSTANCE
+
+    health = fetch_connection_state(base_url, api_key, instance_name)
+    st = health.get('status')
+    label = status_label_es(st)
+    if st == 'unreachable':
         return jsonify({
-            'success': True, 
-            'message': f'Conexión de prueba exitosa. API Key válida para número {phone_number}'
+            'success': False,
+            'error': health.get('error') or 'Evolution API no responde',
+            'health': health,
+        }), 502
+    return jsonify({
+        'success': True,
+        'message': f'Evolution API responde. Estado: {label}',
+        'health': health,
+    })
+
+
+@store_bp.route('/admin/whatsapp_configs/<int:config_id>/health', methods=['POST'])
+@admin_required
+def refresh_whatsapp_health(config_id):
+    _whatsapp_ensure_schema()
+    config = WhatsAppConfig.query.get_or_404(config_id)
+    from app.store.whatsapp_web_service import refresh_config_health, serialize_whatsapp_config
+    payload = refresh_config_health(config, send_alerts=False)
+    return jsonify({
+        'success': True,
+        'message': f"Salud actualizada: {payload.get('status_label')}",
+        'health': payload,
+        'config': serialize_whatsapp_config(config, include_secrets=True),
+    })
+
+
+@store_bp.route('/admin/whatsapp_configs/<int:config_id>/instance', methods=['POST'])
+@admin_required
+def create_whatsapp_instance(config_id):
+    _whatsapp_ensure_schema()
+    config = WhatsAppConfig.query.get_or_404(config_id)
+    from app.store.whatsapp_web_service import ensure_config_evolution_instance
+
+    result = ensure_config_evolution_instance(config)
+    if not result.get('success'):
+        return jsonify({'success': False, 'error': 'No se pudo preparar la conexión', 'detail': result}), 502
+    return jsonify({'success': True, 'message': 'Listo. Escaneá el QR para vincular tu número.', 'detail': result})
+
+
+@store_bp.route('/admin/whatsapp_configs/<int:config_id>/qr', methods=['GET'])
+@admin_required
+def get_whatsapp_qr(config_id):
+    _whatsapp_ensure_schema()
+    config = WhatsAppConfig.query.get_or_404(config_id)
+    from app.store.whatsapp_web_service import (
+        config_evolution_instance,
+        ensure_config_evolution_instance,
+        fetch_qr_code,
+        resolve_config_api_key,
+        resolve_config_base_url,
+    )
+    ensure_config_evolution_instance(config)
+    result = fetch_qr_code(
+        resolve_config_base_url(config),
+        resolve_config_api_key(config),
+        config_evolution_instance(config),
+    )
+    if not result.get('success'):
+        return jsonify({'success': False, 'error': result.get('error') or 'QR no disponible', 'detail': result}), 502
+    return jsonify({'success': True, 'qr_base64': result.get('qr_base64')})
+
+
+@store_bp.route('/admin/whatsapp_configs/<int:config_id>/logout', methods=['POST'])
+@admin_required
+def logout_whatsapp_instance(config_id):
+    _whatsapp_ensure_schema()
+    config = WhatsAppConfig.query.get_or_404(config_id)
+    from app.store.whatsapp_web_service import logout_config_evolution_instance
+
+    result = logout_config_evolution_instance(config, send_alerts=False)
+    if not result.get('success'):
+        return jsonify(
+            {
+                'success': False,
+                'error': result.get('error') or 'No se pudo desconectar',
+                'detail': result,
+            }
+        ), 502
+
+    health = result.get('health') or {}
+    return jsonify(
+        {
+            'success': True,
+            'message': 'WhatsApp Web desconectado. Podés escanear un nuevo QR.',
+            'health': health,
+            'config': serialize_whatsapp_config(config, include_secrets=True),
+        }
+    )
+
+
+@store_bp.route('/admin/whatsapp_configs/<int:config_id>/send-test', methods=['POST'])
+@admin_required
+def send_whatsapp_test_message(config_id):
+    _whatsapp_ensure_schema()
+    config = WhatsAppConfig.query.get_or_404(config_id)
+    data = request.get_json(silent=True) or {}
+    to_number = (data.get('to_number') or config.phone_number or '').strip()
+    text = (data.get('text') or 'Prueba WhatsApp Web — IMAP tienda').strip()
+    from app.store.whatsapp_web_service import (
+        STATUS_CONNECTED,
+        config_evolution_instance,
+        refresh_config_health,
+        resolve_config_api_key,
+        resolve_config_base_url,
+        send_text_message,
+    )
+
+    health = refresh_config_health(config, send_alerts=False)
+    if health.get('status') != STATUS_CONNECTED:
+        return jsonify({
+            'success': False,
+            'error': f"WhatsApp no conectado ({health.get('status_label')}). Escaneá el QR primero.",
+        }), 409
+
+    result = send_text_message(
+        resolve_config_base_url(config),
+        resolve_config_api_key(config),
+        config_evolution_instance(config),
+        to_number,
+        text,
+    )
+    if not result.get('success'):
+        return jsonify({'success': False, 'error': result.get('error') or 'Envío fallido', 'detail': result}), 502
+    return jsonify({'success': True, 'message': f'Mensaje de prueba enviado a {to_number}.'})
+
+
+@store_bp.route('/admin/whatsapp_configs/<int:config_id>/run-notify', methods=['POST'])
+@admin_required
+def whatsapp_run_license_notify(config_id):
+    """Ejecuta manualmente el job de avisos de licencias (ignora hora del día)."""
+    _whatsapp_ensure_schema()
+    config = WhatsAppConfig.query.get_or_404(config_id)
+    try:
+        from app.store.whatsapp_license_notify_job import run_whatsapp_license_notify_for_config
+
+        result = run_whatsapp_license_notify_for_config(config, force=True)
+        if result.get('skipped'):
+            return jsonify({
+                'success': False,
+                'error': result.get('reason') or 'Job omitido',
+                'result': result,
+            }), 409
+        return jsonify({
+            'success': True,
+            'message': f"Avisos enviados: {result.get('sent', 0)}",
+            'result': result,
         })
-        
     except Exception as e:
-        return jsonify({'success': False, 'error': f'Error de conexión: {str(e)}'}), 500
+        db.session.rollback()
+        current_app.logger.exception('whatsapp_run_license_notify')
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@store_bp.route('/webhooks/whatsapp/evolution/<int:config_id>', methods=['POST'])
+def whatsapp_evolution_webhook(config_id):
+    """Webhook opcional Evolution (connection.update). Token en header o query."""
+    _whatsapp_ensure_schema()
+    config = WhatsAppConfig.query.get_or_404(config_id)
+    token = request.headers.get('X-Webhook-Token') or request.args.get('token') or ''
+    if config.webhook_verify_token and token != config.webhook_verify_token:
+        return jsonify({'success': False, 'error': 'Token inválido'}), 403
+
+    payload = request.get_json(silent=True) or {}
+    event = str(payload.get('event') or payload.get('type') or '').lower()
+    if 'connection' in event or 'state' in event:
+        from app.store.whatsapp_web_service import refresh_config_health
+        refresh_config_health(config, send_alerts=True)
+    return jsonify({'success': True})
 
 
 # ==================== RUTAS PARA SMS (TWILIO) ====================

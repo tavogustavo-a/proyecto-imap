@@ -6,7 +6,7 @@ import logging
 import os
 import re
 import uuid
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Set
 
 from app.store.models import StoreSetting
 
@@ -1435,6 +1435,26 @@ def set_user_payment_method_ids(user_row, method_ids: Optional[List[str]]) -> No
     db.session.commit()
 
 
+def assignable_payment_method_ids(user_tipo_precio: str) -> List[str]:
+    """IDs configurados en admin (moneda del cliente + acumuladores), sin restricción por usuario."""
+    tp = (user_tipo_precio or 'COP').strip().upper()
+    if tp not in _USER_CURRENCIES:
+        tp = 'COP'
+    ids: List[str] = []
+    seen: Set[str] = set()
+    for m in methods_for_currency(tp, enabled_only=False):
+        mid = str(m.get('id') or '').strip()
+        if mid and mid not in seen:
+            seen.add(mid)
+            ids.append(mid)
+    for m in methods_accumulator_bucket(enabled_only=False):
+        mid = str(m.get('id') or '').strip()
+        if mid and mid not in seen:
+            seen.add(mid)
+            ids.append(mid)
+    return ids
+
+
 def methods_for_currency(currency: str, enabled_only: bool = True) -> List[Dict[str, Any]]:
     cur = (currency or 'COP').strip().upper()
     if cur not in _USER_CURRENCIES:
@@ -1448,6 +1468,17 @@ def methods_for_currency(currency: str, enabled_only: bool = True) -> List[Dict[
             if m.get('enabled') and payment_method_brand_configured(m)
         ]
     return rows
+
+
+def _filter_methods_by_user_payment_method_ids(
+    methods: List[Dict[str, Any]], user_row
+) -> List[Dict[str, Any]]:
+    """Si user_prices.payment_method_ids está definido, limita a esos IDs (lista vacía = ninguno)."""
+    restricted = _user_payment_method_ids(user_row)
+    if restricted is None:
+        return methods
+    allowed = {str(x).strip() for x in restricted if str(x).strip()}
+    return [m for m in methods if str(m.get('id') or '').strip() in allowed]
 
 
 def _filter_methods_by_allowed_users(
@@ -1548,9 +1579,10 @@ def sort_payment_methods_for_user_display(
 
 
 def methods_for_user(user_row, currency: str, viewer=None) -> List[Dict[str, Any]]:
-    """Medios visibles por moneda. Si el medio tiene allowed_user_ids con IDs, solo esos usuarios."""
+    """Medios visibles por moneda (allowed_user_ids del medio + payment_method_ids del usuario)."""
     all_methods = methods_for_currency(currency, enabled_only=True)
     filtered = _filter_methods_by_allowed_users(all_methods, user_row, viewer)
+    filtered = _filter_methods_by_user_payment_method_ids(filtered, user_row)
     return sort_payment_methods_for_user_display(filtered)
 
 
@@ -1561,6 +1593,7 @@ def methods_accum_for_user(user_row, user_tipo_precio: str, viewer=None) -> List
         user_tp = 'COP'
     all_accum = methods_accumulator_bucket(enabled_only=True)
     filtered = _filter_methods_by_allowed_users(all_accum, user_row, viewer)
+    filtered = _filter_methods_by_user_payment_method_ids(filtered, user_row)
     out: List[Dict[str, Any]] = []
     for m in filtered:
         pc = (m.get('payment_currency') or 'COP').strip().upper()

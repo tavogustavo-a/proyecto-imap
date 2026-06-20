@@ -11,6 +11,17 @@ function escapeHtml(text) {
     .replace(/'/g, '&#039;');
 }
 
+/** Campos embebidos en HTML de correos suelen venir sin id/name; DevTools lo marca como violación. */
+function ensureEmbeddedFormFieldNames(container) {
+  if (!container) return;
+  container.querySelectorAll('input, select, textarea').forEach(function (field, index) {
+    if (field.getAttribute('id') || field.getAttribute('name')) return;
+    const tag = field.tagName.toLowerCase();
+    const type = (field.getAttribute('type') || 'text').toLowerCase();
+    field.setAttribute('name', 'mail_embedded_' + tag + '_' + type + '_' + index);
+  });
+}
+
 // Función auxiliar para obtener el estado de login desde data-* attributes
 function getIsUserLoggedIn() {
   // Buscar en el contenedor principal o en cualquier elemento con el atributo
@@ -664,6 +675,7 @@ document.addEventListener("DOMContentLoaded", function () {
         
         if (mail.html) {
           mailContentContainer.innerHTML = mail.html;
+          ensureEmbeddedFormFieldNames(mailContentContainer);
           mailContentContainer.classList.add('mail-content');
           mailContentContainer.classList.add('scaled-content');
           hasMailContent = true;

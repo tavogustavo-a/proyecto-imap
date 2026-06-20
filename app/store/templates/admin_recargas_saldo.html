@@ -2,7 +2,7 @@
 
 {% block title %}{{ title }}{% endblock %}
 
-{% block head %}{{ super() }}<link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}?v=20260607-auto-limit-h"><link rel="stylesheet" href="{{ url_for('static', filename='fontawesome/css/all.css') }}"><meta name="csrf_token" content="{{ csrf_token() }}">{% endblock %}
+{% block head %}{{ super() }}<link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}?v=20260611-cleanup-mobile"><link rel="stylesheet" href="{{ url_for('static', filename='fontawesome/css/all.css') }}"><meta name="csrf_token" content="{{ csrf_token() }}">{% endblock %}
 {% block content %}
 <div class="purchase-history-page purchase-history-admin admin-recargas-page"
      data-list-url="{{ url_for('store_bp.api_admin_balance_recharges') }}"
@@ -47,43 +47,34 @@
                data-purge-url="{{ url_for('store_bp.api_balance_recharge_purge') }}"
                data-preview-url="{{ url_for('store_bp.api_balance_recharge_purge_preview') }}"
                data-search-users-url="{{ url_for('admin_bp.search_users_ajax') }}">
-        <h4 class="text-center purchase-history-cleanup-heading">
-          <i class="fas fa-broom" aria-hidden="true"></i> Limpieza del historial de recargas
-          <span class="purchase-history-cleanup-info-wrap">
-            <button type="button" id="brCleanupInfoBtn" class="purchase-history-cleanup-info-btn" aria-expanded="false" aria-controls="brCleanupInfoBox" title="Más información">
-              <i class="fas fa-info-circle" aria-hidden="true"></i>
-              <span class="sr-only">Más información sobre la limpieza de recargas</span>
-            </button>
-            <div id="brCleanupInfoBox" class="purchase-history-cleanup-info-box" hidden>
-              Borra solicitudes antiguas en la base de datos y sus comprobantes en disco. También elimina imágenes huérfanas sin registro asociado.
-              Antes de borrar, copia al <strong>historial de compras</strong> las recargas finalizadas (aprobadas, rechazadas, convertidas del acumulador, etc.).
-              No elimina <strong>pendientes</strong>, <strong>acumulados activos</strong> ni automáticas sin verificar.
-              Usa días calendario (hora Colombia): con <strong>1</strong> se incluyen las de ayer; con <strong>0</strong> se eliminan todas las demás elegibles.
-            </div>
-          </span>
-        </h4>
+        <div class="admin-recargas-cleanup-details-wrap">
+        <details class="admin-recargas-cleanup-details">
+          <summary class="purchase-history-cleanup-heading admin-recargas-cleanup-summary">
+            <i class="fas fa-broom" aria-hidden="true"></i> Limpieza del historial de recargas
+          </summary>
+          <div class="admin-recargas-cleanup-details__body">
         <div class="purchase-history-cleanup-grid">
           <div class="purchase-history-cleanup-scope-row">
             <div class="purchase-history-cleanup-days-field" role="group" aria-labelledby="brCleanupDaysPrefix">
               <span id="brCleanupDaysPrefix" class="purchase-history-cleanup-days-field__prefix">Días</span>
               <label for="brCleanupDays" class="sr-only">Días de antigüedad</label>
-              <input type="number" id="brCleanupDays" name="br_cleanup_days" class="form-control purchase-history-cleanup-days-input" min="0" max="3650" value="{{ cleanup_settings.retention_days if cleanup_settings else 90 }}" autocomplete="off" aria-labelledby="brCleanupDaysPrefix" title="0 = eliminar todas las solicitudes elegibles (no pendientes ni acumulados)">
+              <input type="number" id="brCleanupDays" name="br_cleanup_days" class="form-control purchase-history-cleanup-days-input" min="0" max="3650" value="{{ cleanup_settings.retention_days if cleanup_settings else 90 }}" autocomplete="off" aria-labelledby="brCleanupDaysPrefix" title="0 = eliminar todas las solicitudes elegibles (no pendientes, Binance sin pagar ni acumulados)">
             </div>
             <div class="purchase-history-cleanup-field purchase-history-cleanup-scope-field">
               <label for="brCleanupCategory" class="sr-only">Sección a limpiar</label>
               <select id="brCleanupCategory" name="br_cleanup_category" class="form-select" autocomplete="off" title="Sección del panel a limpiar" aria-label="Sección a limpiar">
                 {% set br_cat = cleanup_settings.purge_category if cleanup_settings and cleanup_settings.purge_category else 'all' %}
-                <option value="all" data-label="Todas las secciones" {% if br_cat == 'all' %}selected{% endif %}>Todas las secciones (—)</option>
-                <option value="review" data-label="Consignaciones" {% if br_cat == 'review' %}selected{% endif %}>Consignaciones (—)</option>
-                <option value="auto" data-label="Recargas acreditadas" {% if br_cat == 'auto' %}selected{% endif %}>Recargas acreditadas (—)</option>
-                <option value="accum" data-label="Revisión acumulador" {% if br_cat == 'accum' %}selected{% endif %}>Revisión acumulador (—)</option>
+                <option value="all" data-label="Todas las secciones" {% if br_cat == 'all' %}selected{% endif %}>Todas las secciones</option>
+                <option value="review" data-label="Consignaciones" {% if br_cat == 'review' %}selected{% endif %}>Consignaciones</option>
+                <option value="auto" data-label="Recargas acreditadas" {% if br_cat == 'auto' %}selected{% endif %}>Recargas acreditadas</option>
+                <option value="accum" data-label="Revisión acumulador" {% if br_cat == 'accum' %}selected{% endif %}>Revisión acumulador</option>
               </select>
             </div>
             <div class="purchase-history-cleanup-field purchase-history-cleanup-scope-field">
               <label for="brCleanupScope" class="sr-only">Usuarios</label>
               <select id="brCleanupScope" name="br_cleanup_scope" class="form-select" autocomplete="off" title="Usuarios afectados" aria-label="Usuarios afectados">
-                <option value="all" data-label="Todos los usuarios" {% if not cleanup_settings or cleanup_settings.scope != 'user' %}selected{% endif %}>Todos los usuarios (—)</option>
-                <option value="user" data-label="Solo un usuario" {% if cleanup_settings and cleanup_settings.scope == 'user' %}selected{% endif %}>Solo un usuario (—)</option>
+                <option value="all" data-label="Todos los usuarios" {% if not cleanup_settings or cleanup_settings.scope != 'user' %}selected{% endif %}>Todos los usuarios</option>
+                <option value="user" data-label="Solo un usuario" {% if cleanup_settings and cleanup_settings.scope == 'user' %}selected{% endif %}>Solo un usuario</option>
               </select>
             </div>
             <button type="button" id="brCleanupPurgeBtn" class="btn-panel btn-red purchase-history-cleanup-purge-btn">Eliminar ahora</button>
@@ -125,6 +116,21 @@
           </div>
         </div>
         <div id="brCleanupStatus" class="mt-05" role="status" aria-live="polite"></div>
+          </div>
+        </details>
+        <span class="purchase-history-cleanup-info-wrap admin-recargas-cleanup-info-wrap">
+          <button type="button" id="brCleanupInfoBtn" class="purchase-history-cleanup-info-btn" aria-expanded="false" aria-controls="brCleanupInfoBox" title="Más información">
+            <i class="fas fa-info-circle" aria-hidden="true"></i>
+            <span class="sr-only">Más información sobre la limpieza de recargas</span>
+          </button>
+          <div id="brCleanupInfoBox" class="purchase-history-cleanup-info-box" hidden>
+            Borra solicitudes antiguas en la base de datos y sus comprobantes en disco. También elimina imágenes huérfanas sin registro asociado.
+            Antes de borrar, copia al <strong>historial de compras</strong> las recargas finalizadas (aprobadas, rechazadas, convertidas del acumulador, etc.).
+            No elimina <strong>pendientes</strong>, <strong>órdenes Binance sin pagar</strong>, <strong>acumulados activos</strong> ni automáticas sin verificar.
+            Usa días calendario (hora Colombia): con <strong>1</strong> se incluyen las de ayer; con <strong>0</strong> se eliminan todas las demás elegibles.
+          </div>
+        </span>
+        </div>
       </section>
     </div>
 
@@ -576,7 +582,7 @@
   <script src="{{ url_for('store_bp.static', filename='js/menu_tienda.js') }}" defer></script>
   <script src="{{ url_for('static', filename='js/clear_trigger_logs.js') }}" defer></script>
   <script src="{{ url_for('static', filename='js/logout_all_cookies_btn.js') }}" defer></script>
-  <script src="{{ url_for('store_bp.static', filename='js/admin_recargas_cleanup.js') }}?v=20260607-purge-accum" defer></script>
-  <script src="{{ url_for('store_bp.static', filename='js/admin_recargas_saldo.js') }}?v=20260609-ajax-patch" defer></script>
+  <script src="{{ url_for('store_bp.static', filename='js/admin_recargas_cleanup.js') }}?v=20260611-cleanup-mobile" defer></script>
+  <script src="{{ url_for('store_bp.static', filename='js/admin_recargas_saldo.js') }}?v=20260611-purge-refresh" defer></script>
   <script src="{{ url_for('store_bp.static', filename='js/admin_recargas_auto_email.js') }}?v=20260607-regex-display-label" defer></script>
 {% endblock %}

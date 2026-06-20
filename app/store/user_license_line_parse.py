@@ -207,6 +207,118 @@ def dual_to_storage_line(dual: Dict[str, Any]) -> str:
     return LICENSE_LINE_FIELD_SEP.join([c, uu, sg, bad_seg, extra])
 
 
+_NETFLIX_CRED_PLAIN_RE = re.compile(r'^(\S+@\S+\.\S+)\s+\((\d+)\)\s+(\S+)(?:\s+(.*))?$')
+
+
+def _cred_work_part(cred_plain: str) -> str:
+    w = str(cred_plain or '').strip()
+    if LICENSE_LINE_FIELD_SEP in w:
+        w = w.split(LICENSE_LINE_FIELD_SEP, 1)[0].strip()
+    return w
+
+
+def parse_cred_part_plain(cred_plain: str, is_netflix: bool) -> Optional[Dict[str, Any]]:
+    """Parte credencial (sin segmentos \\x1f) → email, password, etc."""
+    w = _cred_work_part(cred_plain)
+    if not w:
+        return None
+    if is_netflix:
+        m = _NETFLIX_CRED_PLAIN_RE.match(w)
+        if m:
+            base = m.group(1).strip().lower()
+            slot = m.group(2)
+            password = m.group(3).strip()
+            return {
+                'email': f'{base} ({slot})',
+                'email_base': base,
+                'password': password,
+                'identifier': base.split('@')[0],
+                'netflix_slot': int(slot),
+            }
+    colon = re.match(r'^([^\s:]+@[^\s:]+\.\S+):(\S+)(?:\s+(.*))?$', w)
+    if colon:
+        return {
+            'email': colon.group(1).strip().lower(),
+            'password': colon.group(2).strip(),
+            'identifier': colon.group(1).strip().lower().split('@')[0],
+        }
+    space = re.match(r'^([^\s]+@[^\s]+\.\S+)\s+(\S+)(?:\s+(.*))?$', w)
+    if space:
+        return {
+            'email': space.group(1).strip().lower(),
+            'password': space.group(2).strip(),
+            'identifier': space.group(1).strip().lower().split('@')[0],
+        }
+    em_match = re.search(r'(\S+@\S+\.\S+)', w)
+    if em_match:
+        em = em_match.group(1).strip().lower()
+        rest = w[w.index(em_match.group(1)) + len(em_match.group(1)) :].strip()
+        rest = re.sub(r'^[:;\s]+', '', rest)
+        rm = re.match(r'^(\S+)(?:\s+(.*))?$', rest)
+        if rm:
+            password = (rm.group(1) or '').strip()
+        else:
+            password = rest.strip()
+        if not password:
+            password = '.'
+        return {
+            'email': em,
+            'password': password,
+            'identifier': em.split('@')[0],
+        }
+    return None
+
+
+def cred_plain_uses_colon_separator(cred_plain: str) -> bool:
+    c = _cred_work_part(cred_plain)
+    at = c.find('@')
+    col = c.find(':')
+    return at >= 0 and col > at
+
+
+def serialize_cred_part_plain(parsed: Dict[str, Any], use_colon: bool) -> str:
+    if parsed.get('netflix_slot') is not None and parsed.get('email_base'):
+        return f"{parsed['email_base']} ({parsed['netflix_slot']}) {parsed['password']}".strip()
+    if use_colon:
+        return f"{parsed['email']}:{parsed['password']}"
+    return f"{parsed['email']} {parsed['password']}"
+
+
+def cred_plain_has_password_part(cred_plain: str, is_netflix: bool) -> bool:
+    parsed = parse_cred_part_plain(cred_plain, is_netflix)
+    if not parsed or not parsed.get('email'):
+        return False
+    pwd = str(parsed.get('password') or '').strip()
+    if not pwd:
+        return False
+    cred_only = _cred_work_part(cred_plain)
+    email_only = str(parsed['email']).strip().lower()
+    cred_norm = re.sub(r'\s+', ' ', cred_only).strip().lower()
+    if cred_norm == email_only:
+        return False
+    if parsed.get('netflix_slot') is not None:
+        return True
+    email_idx = cred_only.lower().find(email_only)
+    if email_idx < 0:
+        return True
+    rest = cred_only[email_idx + len(str(parsed['email'])) :].strip()
+    return len(rest) > 0
+
+
+def rebuild_cred_with_new_password(
+    cred_plain: str, is_netflix: bool, new_password: str
+) -> Optional[str]:
+    pwd = str(new_password or '').strip()
+    if not pwd:
+        return None
+    parsed = parse_cred_part_plain(cred_plain, is_netflix)
+    if not parsed or not parsed.get('email'):
+        return None
+    updated = dict(parsed)
+    updated['password'] = pwd
+    return serialize_cred_part_plain(updated, cred_plain_uses_colon_separator(cred_plain))
+
+
 def collect_visible_day_line_targets_assigned(
     day_text: Optional[str],
     allowed_usernames: List[str],

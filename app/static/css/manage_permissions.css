@@ -675,3 +675,52 @@
   background-color: #ca6f1d;
   color: white;
 }
+
+.user-pm-restrict-btn {
+  font-size: 0.78rem;
+  padding: 0.2rem 0.45rem;
+  white-space: nowrap;
+}
+
+.modal-user-pm-restrict-content {
+  max-width: 520px;
+  width: min(96vw, 520px);
+}
+
+.user-pm-restrict-hint {
+  font-size: 0.88rem;
+  line-height: 1.35;
+}
+
+.user-pm-restrict-methods-wrap {
+  max-height: 280px;
+  overflow-y: auto;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 0.65rem 0.75rem;
+  background: #fafafa;
+}
+
+.user-pm-restrict-methods-title {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #444;
+}
+
+.user-pm-restrict-method-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.45rem;
+  margin-bottom: 0.35rem;
+  font-size: 0.88rem;
+  cursor: pointer;
+}
+
+.user-pm-restrict-method-item:last-child {
+  margin-bottom: 0;
+}
+
+.user-pm-restrict-status {
+  min-height: 1.25rem;
+  font-size: 0.88rem;
+}

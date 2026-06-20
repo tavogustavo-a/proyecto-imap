@@ -13,8 +13,8 @@ from app.extensions import db
 from app.store.models import BalanceRecharge, StoreSetting
 from app.utils.timezone import COLOMBIA_TZ, get_colombia_now
 
-# Nunca purgar solicitudes en cola de revisión / acumulación activa / auto sin verificar.
-_PURGE_PROTECTED_STATUSES = frozenset({'pending', 'accumulated'})
+# Nunca purgar solicitudes en cola de revisión / acumulación activa / auto sin verificar / Binance sin pagar.
+_PURGE_PROTECTED_STATUSES = frozenset({'pending', 'accumulated', 'pending_binance_pay'})
 _VALID_PURGE_CATEGORIES = frozenset({'all', 'review', 'auto', 'accum'})
 
 logger = logging.getLogger(__name__)
@@ -223,7 +223,7 @@ def _normalize_purge_category(raw) -> str:
 
 
 def _apply_purge_safety_filter(q):
-    """Excluye pendientes, acumulados activos y automáticas sin verificar."""
+    """Excluye pendientes, órdenes Binance sin pagar, acumulados activos y automáticas sin verificar."""
     q = q.filter(~BalanceRecharge.status.in_(tuple(_PURGE_PROTECTED_STATUSES)))
     q = q.filter(
         or_(

@@ -37,17 +37,14 @@
   function saveChangesNotesImmediateForId(licenseId) {
     if (String(licenseId) === '0') return Promise.resolve({ success: false, error: 'aggregate' });
     var text = getChangesNotesMergedForLicenseId(licenseId);
-    return fetch('/tienda/api/licenses/' + licenseId + '/notes', {
+    if (typeof adminLicFetchJson !== 'function') {
+      return Promise.resolve({ success: false, error: 'fetch_unavailable' });
+    }
+    return adminLicFetchJson('/tienda/api/licenses/' + licenseId + '/notes', {
       method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-CSRFToken': csrf()
-      },
-      body: JSON.stringify({ changes_notes: text })
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ changes_notes: text }),
     })
-      .then(function (r) {
-        return r.json();
-      })
       .then(function (data) {
         if (data.success && typeof window.patchLicenseChangesNotesInCacheOnly === 'function') {
           window.patchLicenseChangesNotesInCacheOnly(licenseId, text);
@@ -64,7 +61,10 @@
         }
         return data;
       })
-      .catch(function () {
+      .catch(function (err) {
+        if (typeof showError === 'function') {
+          showError(adminLicFormatFetchError(err, 'Error al guardar Cambios'));
+        }
         return { success: false, error: 'network' };
       });
   }
@@ -521,17 +521,12 @@
       expired_notes: licenseBlockText(taE),
       changes_notes: getChangesNotesMergedForLicenseId(licenseId)
     });
-    fetch('/tienda/api/licenses/' + licenseId + '/notes', {
+    if (typeof adminLicFetchJson !== 'function') return;
+    adminLicFetchJson('/tienda/api/licenses/' + licenseId + '/notes', {
       method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-CSRFToken': csrf()
-      },
-      body: body
+      headers: { 'Content-Type': 'application/json' },
+      body: body,
     })
-      .then(function (r) {
-        return r.json();
-      })
       .then(function (data) {
         if (data.success && typeof window.patchLicenseNotesCache === 'function') {
           window.patchLicenseNotesCache(
@@ -545,7 +540,11 @@
           );
         }
       })
-      .catch(function () {});
+      .catch(function (err) {
+        if (typeof showError === 'function') {
+          showError(adminLicFormatFetchError(err, 'Error al guardar notas'));
+        }
+      });
   }
 
   /** Guarda notas al servidor de inmediato (p. ej. antes de syncDayNotepad tras quitar una línea). */
@@ -573,17 +572,14 @@
       expired_notes: licenseBlockText(taE),
       changes_notes: getChangesNotesMergedForLicenseId(licenseId)
     });
-    return fetch('/tienda/api/licenses/' + licenseId + '/notes', {
+    if (typeof adminLicFetchJson !== 'function') {
+      return Promise.resolve({ success: false, error: 'fetch_unavailable' });
+    }
+    return adminLicFetchJson('/tienda/api/licenses/' + licenseId + '/notes', {
       method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-CSRFToken': csrf()
-      },
-      body: body
+      headers: { 'Content-Type': 'application/json' },
+      body: body,
     })
-      .then(function (r) {
-        return r.json();
-      })
       .then(function (data) {
         if (data.success && typeof window.patchLicenseNotesCache === 'function') {
           window.patchLicenseNotesCache(
@@ -598,7 +594,10 @@
         }
         return data;
       })
-      .catch(function () {
+      .catch(function (err) {
+        if (typeof showError === 'function') {
+          showError(adminLicFormatFetchError(err, 'Error al guardar notas'));
+        }
         return { success: false, error: 'network' };
       });
   }

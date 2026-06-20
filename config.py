@@ -64,8 +64,23 @@ class Config:
     # Para sesión permanente de 15 días
     PERMANENT_SESSION_LIFETIME = timedelta(days=15)
 
-    # SSE recargas multi-worker (Gunicorn): pub/sub Redis opcional.
-    BALANCE_RECHARGE_EVENTS_REDIS_URL = (os.getenv('BALANCE_RECHARGE_EVENTS_REDIS_URL') or '').strip() or None
+    # SSE recargas multi-worker (Gunicorn): pub/sub Redis (BALANCE_RECHARGE_EVENTS_REDIS_URL, REDIS_URL o REDIS_HOST).
+    _br_events_redis = (
+        (os.getenv('BALANCE_RECHARGE_EVENTS_REDIS_URL') or os.getenv('REDIS_URL') or '').strip()
+    )
+    if not _br_events_redis:
+        _redis_host = (os.getenv('REDIS_HOST') or '').strip()
+        if _redis_host:
+            _redis_port = (os.getenv('REDIS_PORT') or '6379').strip()
+            _redis_db = (os.getenv('REDIS_DB') or '0').strip()
+            _redis_password = (os.getenv('REDIS_PASSWORD') or '').strip()
+            if _redis_password:
+                _br_events_redis = (
+                    f'redis://:{_redis_password}@{_redis_host}:{_redis_port}/{_redis_db}'
+                )
+            else:
+                _br_events_redis = f'redis://{_redis_host}:{_redis_port}/{_redis_db}'
+    BALANCE_RECHARGE_EVENTS_REDIS_URL = _br_events_redis or None
 
     # Si estás en producción, setea estas variables en .env
     SESSION_COOKIE_SECURE_ENV = os.getenv("SESSION_COOKIE_SECURE")

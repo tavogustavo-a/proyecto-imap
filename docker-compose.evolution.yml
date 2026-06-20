@@ -1,0 +1,54 @@
+# Evolution API — WhatsApp Web para IMAP
+# Uso: docker compose -f docker-compose.evolution.yml up -d
+# Secretos: definir en .env (ver .env.example → sección Evolution).
+# Panel Flask: Configuraciones → WhatsApp Web
+
+services:
+  evolution-postgres:
+    container_name: imap_evolution_postgres
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${EVOLUTION_POSTGRES_USER:-evolution}
+      POSTGRES_PASSWORD: ${EVOLUTION_POSTGRES_PASSWORD:-evolution}
+      POSTGRES_DB: ${EVOLUTION_POSTGRES_DB:-evolution}
+    volumes:
+      - evolution_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${EVOLUTION_POSTGRES_USER:-evolution} -d ${EVOLUTION_POSTGRES_DB:-evolution}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  evolution-api:
+    container_name: imap_evolution_api
+    # v2.1.1 (atendai) devuelve {"count":0} sin QR; v2.3.7 lo corrige.
+    image: evoapicloud/evolution-api:v2.3.7
+    restart: unless-stopped
+    depends_on:
+      evolution-postgres:
+        condition: service_healthy
+    ports:
+      - "${EVOLUTION_API_PORT:-8080}:8080"
+    environment:
+      AUTHENTICATION_API_KEY: ${EVOLUTION_API_KEY:-imap-evolution-change-me}
+      SERVER_URL: ${EVOLUTION_SERVER_URL:-http://127.0.0.1:8080}
+      LOG_LEVEL: ERROR
+      DEL_INSTANCE: false
+      DATABASE_ENABLED: "true"
+      DATABASE_PROVIDER: postgresql
+      DATABASE_CONNECTION_URI: postgresql://${EVOLUTION_POSTGRES_USER:-evolution}:${EVOLUTION_POSTGRES_PASSWORD:-evolution}@evolution-postgres:5432/${EVOLUTION_POSTGRES_DB:-evolution}?schema=public
+      DATABASE_CONNECTION_CLIENT_NAME: evolution_imap
+      CACHE_REDIS_ENABLED: "false"
+      CACHE_LOCAL_ENABLED: "true"
+      QRCODE_LIMIT: "30"
+      QRCODE_COLOR: "#175197"
+      CONFIG_SESSION_PHONE_CLIENT: Chrome
+      CONFIG_SESSION_PHONE_NAME: Chrome
+      CONFIG_SESSION_PHONE_VERSION: "2.3000.1030831524"
+    volumes:
+      - evolution_instances:/evolution/instances
+
+volumes:
+  evolution_instances:
+  evolution_postgres_data:

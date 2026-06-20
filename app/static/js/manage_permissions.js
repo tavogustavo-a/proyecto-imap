@@ -788,6 +788,185 @@ document.addEventListener("DOMContentLoaded", function() {
   let userPricesData = {}; // { userId: { tipo_precio, soporte_licencias, puede_tener_deuda, recarga_automatica, limite_deuda_usd, limite_deuda_cop } }
   let allUsersForPrices = []; // Todos los usuarios cargados
   let filteredUsersForPrices = []; // Usuarios filtrados por búsqueda
+  const userPaymentMethodsState = {}; // userId -> { unrestricted, count, total }
+
+  const userPmRestrictOverlay = document.getElementById('user-pm-restrict-modal-overlay');
+  const userPmRestrictUserIdInput = document.getElementById('userPmRestrictUserId');
+  const userPmRestrictUserLabel = document.getElementById('userPmRestrictUserLabel');
+  const userPmRestrictAllCheckbox = document.getElementById('userPmRestrictAll');
+  const userPmRestrictMethodsWrap = document.getElementById('userPmRestrictMethodsWrap');
+  const userPmRestrictMethodsList = document.getElementById('userPmRestrictMethodsList');
+  const userPmRestrictStatus = document.getElementById('userPmRestrictStatus');
+  const closeUserPmRestrictModalBtn = document.getElementById('closeUserPmRestrictModalBtn');
+  const saveUserPmRestrictBtn = document.getElementById('saveUserPmRestrictBtn');
+
+  let userPmRestrictModalMethods = [];
+  let userPmRestrictModalLoading = false;
+
+  function formatUserPmRestrictBtnLabel(state) {
+    if (!state) return 'Medios recarga';
+    if (state.unrestricted) return 'Medios: todos';
+    if (!state.count) return 'Medios: ninguno';
+    if (state.total && state.count === state.total) return 'Medios: todos';
+    return 'Medios: ' + state.count;
+  }
+
+  function syncUserPmRestrictBtn(userId) {
+    const btn = document.getElementById('pm_restrict_btn_' + userId);
+    if (!btn) return;
+    btn.textContent = formatUserPmRestrictBtnLabel(userPaymentMethodsState[userId]);
+  }
+
+  function setUserPmRestrictModalStatus(message, isError) {
+    if (!userPmRestrictStatus) return;
+    userPmRestrictStatus.textContent = message || '';
+    userPmRestrictStatus.className =
+      'user-pm-restrict-status text-center mb-0' + (isError ? ' text-danger' : message ? ' text-success' : '');
+  }
+
+  function syncUserPmRestrictMethodsDisabled() {
+    const unrestricted = !!(userPmRestrictAllCheckbox && userPmRestrictAllCheckbox.checked);
+    if (userPmRestrictMethodsWrap) {
+      userPmRestrictMethodsWrap.hidden = unrestricted;
+    }
+    if (userPmRestrictMethodsList) {
+      userPmRestrictMethodsList.querySelectorAll('input[type="checkbox"]').forEach(function (cb) {
+        cb.disabled = unrestricted;
+      });
+    }
+  }
+
+  function renderUserPmRestrictMethodsList(methods, selectedIds, unrestricted) {
+    if (!userPmRestrictMethodsList) return;
+    while (userPmRestrictMethodsList.firstChild) {
+      userPmRestrictMethodsList.removeChild(userPmRestrictMethodsList.firstChild);
+    }
+    const selectedSet = new Set((selectedIds || []).map(String));
+    (methods || []).forEach(function (m) {
+      const id = String((m && m.id) || '').trim();
+      if (!id) return;
+      const row = document.createElement('label');
+      row.className = 'user-pm-restrict-method-item';
+      const cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.className = 'user-pm-restrict-method-cb';
+      cb.value = id;
+      cb.checked = unrestricted || selectedSet.has(id);
+      cb.disabled = !!unrestricted;
+      const label = (m && (m.label || m.name)) || id;
+      const cur = (m && (m.payment_currency || m.currency)) || '';
+      const span = document.createElement('span');
+      span.textContent = cur ? label + ' (' + cur + ')' : label;
+      row.appendChild(cb);
+      row.appendChild(span);
+      userPmRestrictMethodsList.appendChild(row);
+    });
+    syncUserPmRestrictMethodsDisabled();
+  }
+
+  function closeUserPmRestrictModal() {
+    if (!userPmRestrictOverlay) return;
+    userPmRestrictOverlay.classList.add('d-none');
+    setUserPmRestrictModalStatus('');
+    userPmRestrictModalMethods = [];
+  }
+
+  function openUserPmRestrictModal(userId, username) {
+    if (!userPmRestrictOverlay || userPmRestrictModalLoading) return;
+    userPmRestrictModalLoading = true;
+    if (userPmRestrictUserIdInput) userPmRestrictUserIdInput.value = String(userId);
+    if (userPmRestrictUserLabel) {
+      userPmRestrictUserLabel.textContent = 'Usuario: ' + (username || userId);
+    }
+    setUserPmRestrictModalStatus('Cargando medios…', false);
+    userPmRestrictOverlay.classList.remove('d-none');
+
+    const url =
+      '/tienda/api/admin/users/payment-methods?username=' + encodeURIComponent(username || '');
+    permFetchJson(url)
+      .then(function (data) {
+        if (!data || !data.success) {
+          throw new Error((data && data.message) || 'No se pudieron cargar los medios');
+        }
+        userPmRestrictModalMethods = Array.isArray(data.all_methods) ? data.all_methods : [];
+        const unrestricted = data.payment_method_ids == null;
+        const selected = Array.isArray(data.payment_method_ids) ? data.payment_method_ids : [];
+        if (userPmRestrictAllCheckbox) {
+          userPmRestrictAllCheckbox.checked = unrestricted;
+        }
+        renderUserPmRestrictMethodsList(userPmRestrictModalMethods, selected, unrestricted);
+        userPaymentMethodsState[userId] = {
+          unrestricted: unrestricted,
+          count: unrestricted ? userPmRestrictModalMethods.length : selected.length,
+          total: userPmRestrictModalMethods.length,
+        };
+        syncUserPmRestrictBtn(userId);
+        setUserPmRestrictModalStatus('');
+      })
+      .catch(function (err) {
+        setUserPmRestrictModalStatus(
+          (err && err.message) || 'Error al cargar medios de pago',
+          true
+        );
+      })
+      .finally(function () {
+        userPmRestrictModalLoading = false;
+      });
+  }
+
+  function saveUserPmRestrictModal() {
+    if (!userPmRestrictUserIdInput || userPmRestrictModalLoading) return;
+    const userId = parseInt(userPmRestrictUserIdInput.value, 10);
+    if (!Number.isFinite(userId)) return;
+    const unrestricted = !!(userPmRestrictAllCheckbox && userPmRestrictAllCheckbox.checked);
+    let payload = { user_id: userId };
+    if (!unrestricted) {
+      const ids = [];
+      if (userPmRestrictMethodsList) {
+        userPmRestrictMethodsList.querySelectorAll('input.user-pm-restrict-method-cb:checked').forEach(function (cb) {
+          if (cb.value) ids.push(cb.value);
+        });
+      }
+      payload.payment_method_ids = ids;
+    } else {
+      payload.payment_method_ids = null;
+    }
+    userPmRestrictModalLoading = true;
+    setUserPmRestrictModalStatus('Guardando…', false);
+    permFetchJson('/tienda/api/admin/users/payment-methods', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify(payload),
+    })
+      .then(function (data) {
+        if (!data || !data.success) {
+          throw new Error((data && data.message) || 'No se pudo guardar');
+        }
+        userPaymentMethodsState[userId] = {
+          unrestricted: unrestricted,
+          count: unrestricted ? userPmRestrictModalMethods.length : (payload.payment_method_ids || []).length,
+          total: userPmRestrictModalMethods.length,
+        };
+        syncUserPmRestrictBtn(userId);
+        setUserPmRestrictModalStatus(data.message || 'Guardado', false);
+        window.setTimeout(closeUserPmRestrictModal, 500);
+      })
+      .catch(function (err) {
+        setUserPmRestrictModalStatus((err && err.message) || 'Error al guardar', true);
+      })
+      .finally(function () {
+        userPmRestrictModalLoading = false;
+      });
+  }
+
+  if (userPmRestrictAllCheckbox) {
+    userPmRestrictAllCheckbox.addEventListener('change', syncUserPmRestrictMethodsDisabled);
+  }
+  closeUserPmRestrictModalBtn?.addEventListener('click', closeUserPmRestrictModal);
+  saveUserPmRestrictBtn?.addEventListener('click', saveUserPmRestrictModal);
+  userPmRestrictOverlay?.addEventListener('click', function (ev) {
+    if (ev.target === userPmRestrictOverlay) closeUserPmRestrictModal();
+  });
 
   function debtLimitForUserData(userData, tipoPrecioLower) {
     if (!userData || !tipoPrecioLower) return null;
@@ -1100,11 +1279,32 @@ document.addEventListener("DOMContentLoaded", function() {
       autoRecargaContainer.appendChild(autoRecargaCheckbox);
       autoRecargaContainer.appendChild(autoRecargaLabel);
 
+      const pmRestrictContainer = document.createElement('div');
+      pmRestrictContainer.className = 'user-prices-tipo-row user-pm-restrict-row';
+
+      const pmRestrictBtn = document.createElement('button');
+      pmRestrictBtn.type = 'button';
+      pmRestrictBtn.id = `pm_restrict_btn_${userId}`;
+      pmRestrictBtn.className = 'btn-panel btn-blue btn-sm user-pm-restrict-btn';
+      pmRestrictBtn.textContent = formatUserPmRestrictBtnLabel(userPaymentMethodsState[userId]);
+      pmRestrictBtn.setAttribute('data-user-id', String(userId));
+      pmRestrictBtn.setAttribute('data-username', user.username);
+      pmRestrictBtn.setAttribute(
+        'title',
+        'Configurar medios de pago visibles al recargar saldo'
+      );
+      pmRestrictBtn.addEventListener('click', function () {
+        openUserPmRestrictModal(userId, user.username);
+      });
+
+      pmRestrictContainer.appendChild(pmRestrictBtn);
+
       tipoPrecioContainer.appendChild(usdContainer);
       tipoPrecioContainer.appendChild(copContainer);
       tipoPrecioContainer.appendChild(soporteContainer);
       tipoPrecioContainer.appendChild(deudaContainer);
       tipoPrecioContainer.appendChild(autoRecargaContainer);
+      tipoPrecioContainer.appendChild(pmRestrictContainer);
       tdTipoPrecio.appendChild(tipoPrecioContainer);
       tr.appendChild(tdTipoPrecio);
       
