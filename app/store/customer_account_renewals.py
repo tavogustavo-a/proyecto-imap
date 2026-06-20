@@ -20,10 +20,16 @@ def ensure_customer_account_renewal_schema():
 
         if 'store_licenses' in tables:
             cols = {c['name'].lower() for c in insp.get_columns('store_licenses')}
+            dialect = getattr(db.engine.dialect, 'name', '') or ''
+            bool_col_sql = (
+                'BOOLEAN NOT NULL DEFAULT FALSE'
+                if dialect == 'postgresql'
+                else 'INTEGER DEFAULT 0 NOT NULL'
+            )
             if 'renew_customer_account' not in cols:
                 db.session.execute(
                     text(
-                        'ALTER TABLE store_licenses ADD COLUMN renew_customer_account INTEGER DEFAULT 0 NOT NULL'
+                        f'ALTER TABLE store_licenses ADD COLUMN renew_customer_account {bool_col_sql}'
                     )
                 )
                 db.session.commit()

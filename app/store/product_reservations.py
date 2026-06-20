@@ -22,10 +22,16 @@ def ensure_product_reservation_schema():
 
         if 'store_licenses' in tables:
             cols = {c['name'].lower() for c in insp.get_columns('store_licenses')}
+            dialect = getattr(db.engine.dialect, 'name', '') or ''
+            bool_col_sql = (
+                'BOOLEAN NOT NULL DEFAULT FALSE'
+                if dialect == 'postgresql'
+                else 'INTEGER DEFAULT 0 NOT NULL'
+            )
             if 'allow_reservation' not in cols:
                 db.session.execute(
                     text(
-                        'ALTER TABLE store_licenses ADD COLUMN allow_reservation INTEGER DEFAULT 0 NOT NULL'
+                        f'ALTER TABLE store_licenses ADD COLUMN allow_reservation {bool_col_sql}'
                     )
                 )
                 db.session.commit()

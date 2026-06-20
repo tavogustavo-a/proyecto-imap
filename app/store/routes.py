@@ -9006,35 +9006,34 @@ def _ensure_license_term_days_column():
 
 
 def _ensure_license_expired_notes_and_month_columns():
-    """Añade expired_notes y month_to_month en SQLite si la tabla ya existía sin ellas."""
+    """Añade expired_notes, month_to_month, allow_reservation y renew_customer_account si faltan."""
     try:
         from sqlalchemy import inspect, text
         inspector = inspect(db.engine)
-        cols = {c['name'] for c in inspector.get_columns('store_licenses')}
+        dialect = getattr(db.engine.dialect, 'name', '') or ''
+        bool_col_sql = (
+            'BOOLEAN NOT NULL DEFAULT FALSE'
+            if dialect == 'postgresql'
+            else 'INTEGER DEFAULT 0 NOT NULL'
+        )
+
+        def _cols():
+            return {c['name'].lower() for c in inspector.get_columns('store_licenses')}
+
+        cols = _cols()
         if 'expired_notes' not in cols:
             db.session.execute(text('ALTER TABLE store_licenses ADD COLUMN expired_notes TEXT'))
             db.session.commit()
-        cols = {c['name'] for c in inspector.get_columns('store_licenses')}
-        if 'month_to_month' not in cols:
-            db.session.execute(
-                text('ALTER TABLE store_licenses ADD COLUMN month_to_month INTEGER DEFAULT 0 NOT NULL')
-            )
-            db.session.commit()
-        cols = {c['name'] for c in inspector.get_columns('store_licenses')}
-        if 'allow_reservation' not in cols:
-            db.session.execute(
-                text('ALTER TABLE store_licenses ADD COLUMN allow_reservation INTEGER DEFAULT 0 NOT NULL')
-            )
-            db.session.commit()
-        cols = {c['name'] for c in inspector.get_columns('store_licenses')}
-        if 'renew_customer_account' not in cols:
-            db.session.execute(
-                text(
-                    'ALTER TABLE store_licenses ADD COLUMN renew_customer_account INTEGER DEFAULT 0 NOT NULL'
+        cols = _cols()
+        for flag_col in ('month_to_month', 'allow_reservation', 'renew_customer_account'):
+            if flag_col not in cols:
+                db.session.execute(
+                    text(f'ALTER TABLE store_licenses ADD COLUMN {flag_col} {bool_col_sql}')
                 )
-            )
-            db.session.commit()
+                db.session.commit()
+                cols = _cols()
     except Exception as e:
+        db.session.rollback()
         current_app.logger.warning(
             'No se pudo asegurar columnas expired_notes/month_to_month/allow_reservation/renew_customer_account: %s',
             e,

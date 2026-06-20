@@ -108,7 +108,7 @@ def create_app(config_class_passed=None):
         try:
             insp = inspect(db.engine)
             if insp.has_table("store_licenses"):
-                col_names = {c["name"] for c in insp.get_columns("store_licenses")}
+                col_names = {c["name"].lower() for c in insp.get_columns("store_licenses")}
                 if "personal_notes" not in col_names:
                     db.session.execute(
                         text("ALTER TABLE store_licenses ADD COLUMN personal_notes TEXT")
@@ -117,7 +117,7 @@ def create_app(config_class_passed=None):
                     app.logger.info(
                         "Esquema: columna personal_notes añadida a store_licenses"
                     )
-                col_names = {c["name"] for c in insp.get_columns("store_licenses")}
+                col_names = {c["name"].lower() for c in insp.get_columns("store_licenses")}
                 if "license_notes" not in col_names:
                     db.session.execute(
                         text("ALTER TABLE store_licenses ADD COLUMN license_notes TEXT")
@@ -126,7 +126,7 @@ def create_app(config_class_passed=None):
                     app.logger.info(
                         "Esquema: columna license_notes añadida a store_licenses"
                     )
-                col_names = {c["name"] for c in insp.get_columns("store_licenses")}
+                col_names = {c["name"].lower() for c in insp.get_columns("store_licenses")}
                 if "suspended_notes" not in col_names:
                     db.session.execute(
                         text("ALTER TABLE store_licenses ADD COLUMN suspended_notes TEXT")
@@ -135,10 +135,68 @@ def create_app(config_class_passed=None):
                     app.logger.info(
                         "Esquema: columna suspended_notes añadida a store_licenses"
                     )
+                dialect = getattr(db.engine.dialect, "name", "") or ""
+                bool_col_sql = (
+                    "BOOLEAN NOT NULL DEFAULT FALSE"
+                    if dialect == "postgresql"
+                    else "INTEGER DEFAULT 0 NOT NULL"
+                )
+                for flag_col in (
+                    "month_to_month",
+                    "allow_reservation",
+                    "renew_customer_account",
+                ):
+                    col_names = {c["name"].lower() for c in insp.get_columns("store_licenses")}
+                    if flag_col not in col_names:
+                        db.session.execute(
+                            text(
+                                f"ALTER TABLE store_licenses ADD COLUMN {flag_col} {bool_col_sql}"
+                            )
+                        )
+                        db.session.commit()
+                        app.logger.info(
+                            "Esquema: columna %s añadida a store_licenses (%s)",
+                            flag_col,
+                            dialect or "db",
+                        )
+                col_names = {c["name"].lower() for c in insp.get_columns("store_licenses")}
+                if "expired_notes" not in col_names:
+                    db.session.execute(
+                        text("ALTER TABLE store_licenses ADD COLUMN expired_notes TEXT")
+                    )
+                    db.session.commit()
+                    app.logger.info(
+                        "Esquema: columna expired_notes añadida a store_licenses"
+                    )
         except Exception as schema_err:
             db.session.rollback()
             app.logger.warning(
                 "No se pudo aplicar parche store_licenses (notas): %s", schema_err
+            )
+
+        try:
+            from app.store.models import (
+                CustomerAccountRenewalOrder,
+                ProductReservation,
+                StoreUserNotification,
+            )
+
+            insp = inspect(db.engine)
+            tables = {t.lower() for t in insp.get_table_names()}
+            for model in (
+                ProductReservation,
+                StoreUserNotification,
+                CustomerAccountRenewalOrder,
+            ):
+                tname = model.__tablename__.lower()
+                if tname not in tables:
+                    model.__table__.create(db.engine, checkfirst=True)
+                    app.logger.info("Esquema: tabla %s creada", model.__tablename__)
+        except Exception as schema_store_tables_err:
+            db.session.rollback()
+            app.logger.warning(
+                "No se pudo crear tablas tienda (reservas / renovación cliente): %s",
+                schema_store_tables_err,
             )
 
         try:
