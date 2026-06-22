@@ -1,0 +1,303 @@
+/* Modal informativo ventas por servicio (Menú2 → Proveedores) — sin tocar estilos del menú lateral. */
+
+.admin-lic-bulk-info-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 10900;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  box-sizing: border-box;
+  overscroll-behavior: contain;
+}
+.admin-lic-bulk-info-modal[hidden] {
+  display: none !important;
+}
+.admin-lic-bulk-info-modal__backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  cursor: pointer;
+}
+.admin-lic-bulk-info-modal__panel {
+  position: relative;
+  z-index: 1;
+  width: min(28rem, 100%);
+  max-height: min(85vh, 32rem);
+  overflow: auto;
+  overscroll-behavior: contain;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 0.5rem;
+  box-shadow: 0 0.5rem 1.75rem rgba(15, 23, 42, 0.2);
+  color: #0f172a;
+  padding: 0.85rem 1rem 1rem;
+}
+.admin-lic-bulk-info-modal__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.55rem;
+}
+.admin-lic-bulk-info-modal__title {
+  margin: 0;
+  font-size: 0.98rem;
+  font-weight: 600;
+  line-height: 1.35;
+  color: #1e40af;
+  display: flex;
+  align-items: flex-start;
+  gap: 0.35rem;
+}
+.admin-lic-bulk-info-modal__title .fa-info-circle {
+  margin-top: 0.12rem;
+  flex: 0 0 auto;
+}
+.admin-lic-bulk-info-modal__close {
+  flex: 0 0 auto;
+  background: transparent;
+  border: none;
+  color: #334155;
+  cursor: pointer;
+  padding: 0.15rem 0.35rem;
+  font-size: 1.1rem;
+  line-height: 1;
+}
+.admin-lic-bulk-info-modal__close:hover {
+  color: #0f172a;
+}
+.admin-lic-bulk-info-modal__body {
+  font-size: 0.86rem;
+  line-height: 1.45;
+  color: #334155;
+}
+.admin-lic-bulk-info-modal__lead {
+  margin: 0 0 0.55rem;
+}
+.admin-lic-bulk-info-modal__footer {
+  display: flex;
+  justify-content: center;
+  margin-top: 0.85rem;
+  padding-top: 0.65rem;
+  border-top: 1px solid #e2e8f0;
+}
+
+.admin-lic-proveedor-ventas-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 10960;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  box-sizing: border-box;
+  overscroll-behavior: contain;
+}
+.admin-lic-proveedor-ventas-modal[hidden] {
+  display: none !important;
+}
+.admin-lic-proveedor-ventas-modal__backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  cursor: pointer;
+}
+.admin-lic-proveedor-ventas-modal__panel {
+  position: relative;
+  z-index: 1;
+  width: min(36rem, 100%);
+  max-height: min(88vh, 34rem);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  overscroll-behavior: contain;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 0.5rem;
+  box-shadow: 0 0.5rem 1.75rem rgba(15, 23, 42, 0.2);
+  color: #0f172a;
+  padding: 0.85rem 1rem 1rem;
+}
+.admin-lic-proveedor-ventas-modal__head {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.35rem;
+  flex: 0 0 auto;
+}
+.admin-lic-proveedor-ventas-modal__title-wrap {
+  grid-column: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  text-align: center;
+}
+.admin-lic-proveedor-ventas-modal__title {
+  margin: 0;
+  font-size: 0.98rem;
+  font-weight: 600;
+  line-height: 1.35;
+  color: #1e40af;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 0.28rem;
+}
+.admin-lic-proveedor-ventas-info-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: #2563eb;
+  font-size: 0.82rem;
+  line-height: 1;
+  cursor: pointer;
+  vertical-align: middle;
+}
+.admin-lic-proveedor-ventas-info-btn:hover,
+.admin-lic-proveedor-ventas-info-btn:focus-visible {
+  color: #1d4ed8;
+  outline: none;
+}
+.admin-lic-proveedor-ventas-info-btn:focus-visible {
+  outline: 2px solid rgba(37, 99, 235, 0.45);
+  outline-offset: 2px;
+  border-radius: 999px;
+}
+.admin-lic-proveedor-ventas-modal__close {
+  grid-column: 3;
+  justify-self: end;
+  flex: 0 0 auto;
+  background: transparent;
+  border: none;
+  color: #334155;
+  cursor: pointer;
+  padding: 0.15rem 0.35rem;
+  font-size: 1.1rem;
+  line-height: 1;
+}
+.admin-lic-proveedor-ventas-modal__close:hover {
+  color: #0f172a;
+}
+.admin-lic-proveedor-ventas-modal__controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  margin-bottom: 0.55rem;
+  flex: 0 0 auto;
+}
+.admin-lic-proveedor-ventas-modal__provider-select {
+  flex: 1 1 9rem;
+  min-width: 8rem;
+  font-size: 0.86rem;
+}
+.admin-lic-proveedor-ventas-modal__search {
+  flex: 1 1 10rem;
+  min-width: 8rem;
+  font-size: 0.86rem;
+}
+.admin-lic-proveedor-ventas-modal__list-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.35rem;
+  background: #f8fafc;
+}
+.admin-lic-proveedor-ventas-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+.admin-lic-proveedor-ventas-list__empty {
+  margin: 0;
+  padding: 0.85rem 0.65rem;
+  font-size: 0.82rem;
+  color: #64748b;
+  text-align: center;
+}
+.admin-lic-proveedor-ventas-item {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0.42rem 0.55rem;
+  border-bottom: 1px solid #e2e8f0;
+  background: #ffffff;
+}
+.admin-lic-proveedor-ventas-item:last-child {
+  border-bottom: none;
+}
+.admin-lic-proveedor-ventas-item__name {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 0.86rem;
+  font-weight: 500;
+  color: #0f172a;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.admin-lic-proveedor-ventas-item__count {
+  flex: 0 0 auto;
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 2rem;
+  height: 1.65rem;
+  padding: 0 0.45rem;
+  border-radius: 999px;
+  background: #dbeafe;
+  color: #1d4ed8;
+  font-size: 0.82rem;
+  font-weight: 700;
+  text-align: center;
+  line-height: 1;
+}
+.admin-lic-proveedor-ventas-reset-btn {
+  flex: 0 0 auto;
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 2rem;
+  width: 2rem;
+  height: 1.65rem;
+  margin: 0;
+  padding: 0;
+  border: 1px solid #fecaca;
+  border-radius: 999px;
+  background: #fff1f2;
+  color: #dc2626;
+  cursor: pointer;
+  font-size: 0.82rem;
+  line-height: 1;
+}
+.admin-lic-proveedor-ventas-reset-btn:hover,
+.admin-lic-proveedor-ventas-reset-btn:focus-visible {
+  background: #fee2e2;
+  color: #b91c1c;
+  outline: none;
+}
+.admin-lic-proveedor-ventas-reset-btn:focus-visible {
+  outline: 2px solid rgba(220, 38, 38, 0.35);
+  outline-offset: 1px;
+}
+.admin-lic-proveedor-ventas-reset-btn:disabled {
+  opacity: 0.55;
+  cursor: wait;
+}
+.admin-lic-proveedor-ventas-modal__meta {
+  margin-top: 0.45rem;
+  font-size: 0.74rem;
+  color: #64748b;
+  text-align: right;
+}

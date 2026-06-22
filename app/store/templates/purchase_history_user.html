@@ -226,9 +226,9 @@
   <div class="store-light purchase-history-container purchase-history-stats-wrap{% if not mostrar_usuario_comprador %} purchase-history-user-stats-wrap{% endif %} mx-auto"
        id="purchaseHistoryStatsPanel"
        data-stats-url="{{ url_for('store_bp.api_purchase_history_stats') if mostrar_usuario_comprador else url_for('store_bp.api_purchase_history_my_stats') }}"
-       {% if not mostrar_usuario_comprador %}data-stats-self="1"{% endif %}
+       {% if not mostrar_usuario_comprador %}data-stats-self="1" data-viewer-is-proveedor="{{ '1' if viewer_is_proveedor else '0' }}"{% endif %}
        {% if mostrar_usuario_comprador %}data-search-users-url="{{ url_for('admin_bp.search_users_ajax') }}"{% endif %}>
-    <h2 class="m-0 text-center w-100 purchase-history-page-title"><i class="fas fa-chart-bar"></i> Estadísticas</h2>
+    <h2 class="m-0 text-center w-100 purchase-history-page-title"><i class="fas fa-chart-bar"></i> {% if viewer_is_proveedor and not mostrar_usuario_comprador %}Estadísticas proveedor{% else %}Estadísticas{% endif %}</h2>
     <div class="purchase-history-stats-filters">
       {% if mostrar_usuario_comprador %}
       <div class="purchase-history-stats-filter-field">
@@ -236,6 +236,14 @@
         <select id="phStatsScope" class="form-select" autocomplete="off" aria-label="Alcance estadísticas">
           <option value="all" selected>Todos los usuarios</option>
           <option value="user">Solo un usuario</option>
+          <option value="proveedor">Proveedores</option>
+        </select>
+      </div>
+      <div class="purchase-history-stats-filter-field" id="phStatsProveedorScopeWrap" hidden>
+        <label for="phStatsProveedorScope" class="sr-only">Alcance proveedores</label>
+        <select id="phStatsProveedorScope" class="form-select" autocomplete="off" aria-label="Alcance proveedores">
+          <option value="all" selected>Todos los proveedores</option>
+          <option value="user">Solo un proveedor</option>
         </select>
       </div>
       <div class="purchase-history-stats-user-wrap" id="phStatsUserWrap" hidden>
@@ -248,6 +256,18 @@
         <p id="phStatsUserSelected" class="purchase-history-cleanup-user-selected mb-0 mt-05" hidden>
           Seleccionado: <strong id="phStatsUserSelectedLabel"></strong>
           <button type="button" id="phStatsUserClear" class="purchase-history-cleanup-user-clear">Quitar</button>
+        </p>
+      </div>
+      <div class="purchase-history-stats-user-wrap" id="phStatsProveedorUserWrap" hidden>
+        <label for="phStatsProveedorUserSearch" class="form-label">Proveedor</label>
+        <input type="hidden" id="phStatsProveedorUserId" value="">
+        <div class="purchase-history-cleanup-user-search-wrap">
+          <input type="search" id="phStatsProveedorUserSearch" class="form-control" placeholder="Buscar proveedor por nombre o usuario…" autocomplete="off">
+          <div id="phStatsProveedorUserResults" class="purchase-history-cleanup-user-results" hidden role="listbox"></div>
+        </div>
+        <p id="phStatsProveedorUserSelected" class="purchase-history-cleanup-user-selected mb-0 mt-05" hidden>
+          Seleccionado: <strong id="phStatsProveedorUserSelectedLabel"></strong>
+          <button type="button" id="phStatsProveedorUserClear" class="purchase-history-cleanup-user-clear">Quitar</button>
         </p>
       </div>
       {% endif %}
@@ -288,21 +308,23 @@
     </div>
     <div id="phStatsContent" class="purchase-history-stats-content" hidden>
       <div class="purchase-history-stats-cards" id="phStatsSummaryCards"></div>
-      <h4 class="purchase-history-stats-subtitle">Ventas por servicio</h4>
-      <div class="purchase-history-stats-table-wrap">
+      <h4 class="purchase-history-stats-subtitle" id="phStatsSalesSubtitle">Ventas por servicio</h4>
+      <div class="purchase-history-stats-table-wrap" id="phStatsSalesTableWrap">
         <table class="purchase-history-stats-table" id="phStatsSalesTable">
           <thead>
             <tr>
               <th scope="col"><span class="purchase-history-stats-th-tip" data-tip="Servicio o producto vendido" title="Servicio o producto vendido" tabindex="0" role="img" aria-label="Servicio o producto vendido"><i class="fas fa-ticket-alt" aria-hidden="true"></i></span> Servicio</th>
-              <th scope="col" class="purchase-history-stats-th-icon text-center" aria-label="Moneda"><span class="purchase-history-stats-th-tip" data-tip="Moneda (COP o USD)" title="Moneda (COP o USD)" tabindex="0" role="img" aria-label="Moneda (COP o USD)"><i class="fas fa-coins" aria-hidden="true"></i></span><span class="sr-only"> Moneda</span></th>
-              <th scope="col" class="purchase-history-stats-th-icon text-center" aria-label="Ventas"><span class="purchase-history-stats-th-tip" data-tip="Ventas nuevas en el período" title="Ventas nuevas en el período" tabindex="0" role="img" aria-label="Ventas nuevas en el período"><i class="fas fa-shopping-cart" aria-hidden="true"></i></span><span class="sr-only"> Ventas</span></th>
-              <th scope="col" class="purchase-history-stats-th-icon text-center" aria-label="Renovaciones"><span class="purchase-history-stats-th-tip" data-tip="Renovaciones en el período" title="Renovaciones en el período" tabindex="0" role="img" aria-label="Renovaciones en el período"><i class="fas fa-sync-alt" aria-hidden="true"></i></span><span class="sr-only"> Renovaciones</span></th>
-              <th scope="col"><span class="purchase-history-stats-th-tip" data-tip="Monto total facturado" title="Monto total facturado" tabindex="0" role="img" aria-label="Monto total facturado"><i class="fas fa-money-bill-wave" aria-hidden="true"></i></span> Total</th>
+              <th scope="col" class="purchase-history-stats-th-icon text-center ph-stats-col-general" aria-label="Moneda"><span class="purchase-history-stats-th-tip" data-tip="Moneda (COP o USD)" title="Moneda (COP o USD)" tabindex="0" role="img" aria-label="Moneda (COP o USD)"><i class="fas fa-coins" aria-hidden="true"></i></span><span class="sr-only"> Moneda</span></th>
+              <th scope="col" class="purchase-history-stats-th-icon text-center ph-stats-col-general" id="phStatsSalesColVentas" aria-label="Ventas"><span class="purchase-history-stats-th-tip" data-tip="Ventas nuevas en el período" title="Ventas nuevas en el período" tabindex="0" role="img" aria-label="Ventas nuevas en el período"><i class="fas fa-shopping-cart" aria-hidden="true"></i></span><span class="sr-only"> Ventas</span></th>
+              <th scope="col" class="purchase-history-stats-th-icon text-center ph-stats-col-general" id="phStatsSalesColRenovaciones" aria-label="Renovaciones"><span class="purchase-history-stats-th-tip" data-tip="Renovaciones en el período" title="Renovaciones en el período" tabindex="0" role="img" aria-label="Renovaciones en el período"><i class="fas fa-sync-alt" aria-hidden="true"></i></span><span class="sr-only"> Renovaciones</span></th>
+              <th scope="col" class="purchase-history-stats-th-icon text-center ph-stats-col-proveedor" id="phStatsSalesColProveedor" hidden aria-label="Proveedores"><span class="purchase-history-stats-th-tip" data-tip="Ventas de servicios de proveedor en el período" title="Ventas de servicios de proveedor en el período" tabindex="0" role="img" aria-label="Ventas de servicios de proveedor en el período"><i class="fas fa-truck-loading" aria-hidden="true"></i></span><span class="sr-only"> Proveedores</span></th>
+              <th scope="col" class="ph-stats-col-general" id="phStatsSalesColTotal"><span class="purchase-history-stats-th-tip" data-tip="Monto total facturado" title="Monto total facturado" tabindex="0" role="img" aria-label="Monto total facturado"><i class="fas fa-money-bill-wave" aria-hidden="true"></i></span> Total</th>
             </tr>
           </thead>
           <tbody></tbody>
         </table>
       </div>
+      <div id="phStatsActivityBlock">
       <h4 class="purchase-history-stats-subtitle">Actividad de soporte</h4>
       <div class="purchase-history-stats-table-wrap">
         <table class="purchase-history-stats-table" id="phStatsActivityTable">
@@ -310,8 +332,80 @@
           <tbody></tbody>
         </table>
       </div>
+      </div>
     </div>
   </div>
+  {% if viewer_is_proveedor and not mostrar_usuario_comprador %}
+  <div class="store-light purchase-history-container purchase-history-stats-wrap purchase-history-user-stats-wrap purchase-history-proveedor-stats-wrap mx-auto mt-3"
+       id="purchaseHistoryProveedorStatsPanel"
+       data-stats-url="{{ url_for('store_bp.api_purchase_history_my_stats') }}"
+       data-stats-self="1"
+       data-stats-scope="proveedor">
+    <h2 class="m-0 text-center w-100 purchase-history-page-title"><i class="fas fa-truck-loading"></i> Ventas proveedor</h2>
+    <div class="purchase-history-stats-filters">
+      <div class="purchase-history-stats-period-row">
+        <div class="purchase-history-stats-period-apply-row">
+          <div class="purchase-history-stats-period-picker">
+            <button type="button" id="phProvStatsPeriodToggle" class="form-control purchase-history-stats-period-toggle text-start" aria-expanded="false" aria-haspopup="dialog" aria-controls="phProvStatsPeriodPopover" aria-label="Período ventas proveedor">
+              <span id="phProvStatsPeriodLabelHeading" class="purchase-history-stats-period-inline-label">Período</span>
+              <span id="phProvStatsPeriodDisplay" class="purchase-history-stats-period-inline-value">Últimos 30 días</span>
+              <i class="fas fa-calendar-alt purchase-history-stats-period-inline-icon" aria-hidden="true"></i>
+            </button>
+            <div id="phProvStatsPeriodPopover" class="purchase-history-stats-period-popover" hidden role="dialog" aria-labelledby="phProvStatsPeriodLabelHeading">
+              <p class="purchase-history-stats-period-popover-title">Rango de fechas</p>
+              <div class="purchase-history-stats-period-presets">
+                <button type="button" class="btn-panel btn-blue btn-sm ph-prov-stats-preset" data-days="7">7 días</button>
+                <button type="button" class="btn-panel btn-blue btn-sm ph-prov-stats-preset" data-days="30">30 días</button>
+                <button type="button" class="btn-panel btn-blue btn-sm ph-prov-stats-preset" data-days="90">90 días</button>
+                <button type="button" class="btn-panel btn-blue btn-sm ph-prov-stats-preset" data-days="365">1 año</button>
+                <button type="button" class="btn-panel btn-blue btn-sm ph-prov-stats-preset" data-days="all">Todo</button>
+              </div>
+              <div class="purchase-history-stats-period-dates">
+                <div class="purchase-history-stats-period-date-field">
+                  <label for="phProvStatsDateFrom" class="form-label">Desde</label>
+                  <input type="date" id="phProvStatsDateFrom" class="form-control" autocomplete="off">
+                </div>
+                <div class="purchase-history-stats-period-date-field">
+                  <label for="phProvStatsDateTo" class="form-label">Hasta</label>
+                  <input type="date" id="phProvStatsDateTo" class="form-control" autocomplete="off">
+                </div>
+              </div>
+              <button type="button" id="phProvStatsPeriodApplyPopover" class="btn-panel btn-green w-100">Usar estas fechas</button>
+            </div>
+          </div>
+          <button type="button" id="phProvStatsApplyBtn" class="btn-panel btn-green purchase-history-stats-apply-btn">Actualizar</button>
+        </div>
+      </div>
+      <p id="phProvStatsError" class="text-danger small mb-0 mt-05" hidden role="alert"></p>
+    </div>
+    <div id="phProvStatsContent" class="purchase-history-stats-content" hidden>
+      <div class="purchase-history-stats-cards" id="phProvStatsSummaryCards"></div>
+      <h4 class="purchase-history-stats-subtitle">Ventas por servicio proveedor</h4>
+      <div class="purchase-history-stats-table-wrap">
+        <table class="purchase-history-stats-table" id="phProvStatsSalesTable">
+          <thead>
+            <tr>
+              <th scope="col"><i class="fas fa-ticket-alt" aria-hidden="true"></i> Servicio</th>
+              <th scope="col" class="text-center"><i class="fas fa-coins" aria-hidden="true"></i><span class="sr-only"> Moneda</span></th>
+              <th scope="col" class="text-center"><i class="fas fa-shopping-cart" aria-hidden="true"></i><span class="sr-only"> Ventas</span></th>
+              <th scope="col" class="text-center"><i class="fas fa-sync-alt" aria-hidden="true"></i><span class="sr-only"> Renovaciones</span></th>
+              <th scope="col" class="text-center"><i class="fas fa-truck-loading" aria-hidden="true"></i><span class="sr-only"> Proveedores</span></th>
+              <th scope="col"><i class="fas fa-money-bill-wave" aria-hidden="true"></i> Total</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <h4 class="purchase-history-stats-subtitle">Actividad de soporte</h4>
+      <div class="purchase-history-stats-table-wrap">
+        <table class="purchase-history-stats-table" id="phProvStatsActivityTable">
+          <thead><tr><th>Tipo</th><th>Cantidad</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+  {% endif %}
   {% endif %}
 
   {% if mostrar_historial_licencias and historial_licencias_es_admin and lic_cleanup_settings is not none %}
@@ -480,7 +574,10 @@
   <script src="{{ url_for('store_bp.static', filename='js/historial_compras_cleanup.js') }}?v=20260604-scope-count" defer></script>
   {% endif %}
   {% if mostrar_usuario_comprador or (session.get('logged_in') and (not session.get('username') or session.get('username').lower() not in blocked_users)) %}
-  <script src="{{ url_for('store_bp.static', filename='js/historial_compras_stats.js') }}?v=20260605-stats-tips-visible" defer></script>
+  <script src="{{ url_for('store_bp.static', filename='js/historial_compras_stats.js') }}?v=20260621-ph-stats-single-proveedor" defer></script>
+  {% endif %}
+  {% if viewer_is_proveedor and not mostrar_usuario_comprador %}
+  <script src="{{ url_for('store_bp.static', filename='js/historial_compras_proveedor_stats.js') }}?v=20260621-ph-proveedor-col" defer></script>
   {% endif %}
   {% if mostrar_historial_licencias %}
   <script src="{{ url_for('store_bp.static', filename='js/user_license_actividad_historial.js') }}?v=20260522-admin-licencias" defer></script>
@@ -488,5 +585,5 @@
   {% if mostrar_historial_licencias and historial_licencias_es_admin %}
   <script src="{{ url_for('store_bp.static', filename='js/historial_licencias_cleanup.js') }}?v=20260604-scope-count" defer></script>
   {% endif %}
-  <script src="{{ url_for('store_bp.static', filename='js/historial_compras.js') }}?v=20260609-ph-nowrap" defer></script>
+  <script src="{{ url_for('store_bp.static', filename='js/historial_compras.js') }}?v=20260621-ph-proveedor-daily" defer></script>
 {% endblock %} 

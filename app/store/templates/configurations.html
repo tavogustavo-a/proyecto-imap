@@ -252,7 +252,54 @@
       </div>
     </form>
 
-    <h6 class="mb-2 mt-4 text-center w-100">Últimas ejecuciones — avisos licencias</h6>
+    <h6 class="mb-2 mt-4 text-center w-100">Usuarios — envío WhatsApp</h6>
+    <p class="text-muted small text-center mb-2 whatsapp-user-notify-hint">
+      Solo cuentas principales. El icono <i class="fab fa-whatsapp" aria-hidden="true"></i> activo = recibe avisos y resúmenes (todos marcados por defecto). Los sub-usuarios nunca reciben WhatsApp.
+    </p>
+    <div class="d-flex flex-column align-items-center whatsapp-user-notify-panel mb-4">
+      <div class="d-flex flex-wrap align-items-center mb-1 productos-buscar-mostrar">
+        <div class="search-container">
+          <label for="whatsappUserNotifySearch" class="sr-only">Buscar usuarios</label>
+          <input type="search" id="whatsappUserNotifySearch" placeholder="Buscar..." autocomplete="off">
+        </div>
+        <div class="d-flex align-items-center">
+          <label for="whatsappUserNotifyShowCount" class="sr-only">Mostrar cantidad</label>
+          <select id="whatsappUserNotifyShowCount" autocomplete="off">
+            <option value="5">5</option>
+            <option value="10">10</option>
+            <option value="20">20</option>
+            <option value="30">30</option>
+            <option value="40">40</option>
+            <option value="50">50</option>
+            <option value="100">100</option>
+            <option value="all" selected>Todos</option>
+          </select>
+        </div>
+      </div>
+      <div class="table-wrapper-store whatsapp-user-notify-table-wrap">
+        <table class="table table-sm table-striped mb-1 whatsapp-user-notify-table">
+          <thead>
+            <tr>
+              <th class="whatsapp-user-notify-user-col">Usuario</th>
+              <th class="whatsapp-user-notify-phone-col">Teléfono</th>
+              <th class="text-center whatsapp-user-notify-icon-col" title="Enviar WhatsApp">
+                <span class="sr-only">Enviar WhatsApp</span>
+                <i class="fab fa-whatsapp whatsapp-user-notify-col-icon" aria-hidden="true"></i>
+              </th>
+            </tr>
+          </thead>
+          <tbody id="whatsapp-user-notify-table-body">
+            <tr><td colspan="3" class="text-center text-muted">Cargando usuarios…</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="d-flex justify-content-center mt-2 mb-05 pagination-buttons whatsapp-user-notify-pagination">
+        <button id="whatsappUserNotifyPrevBtn" type="button" class="btn-blue btn-panel">&lt; Anterior</button>
+        <button id="whatsappUserNotifyNextBtn" type="button" class="btn-blue btn-panel">Siguiente &gt;</button>
+      </div>
+    </div>
+
+    <h6 class="mb-2 mt-2 text-center w-100">Últimas ejecuciones — avisos licencias</h6>
     <div id="whatsapp-notify-run-log-container" class="mb-4"></div>
 
     <div class="mb-5"></div>
@@ -279,6 +326,20 @@
     <div id="whatsapp-notify-attempts-modal-body" class="whatsapp-notify-attempts-modal-body"></div>
     <div class="text-center mt-2">
       <button type="button" id="whatsapp-notify-attempts-close-btn" class="btn-panel btn-red">Cerrar</button>
+    </div>
+  </div>
+</div>
+
+<div id="whatsapp-user-phone-modal" class="modal d-none whatsapp-user-phone-modal" tabindex="-1" role="dialog" aria-labelledby="whatsappUserPhoneModalTitle" aria-modal="true" aria-hidden="true" hidden>
+  <div class="modal-content bg-white mx-auto p-20 w-90 maxw-400 br-8 rel">
+    <h4 id="whatsappUserPhoneModalTitle">Editar teléfono</h4>
+    <p id="whatsapp-user-phone-modal-user" class="text-muted small mb-2"></p>
+    <label for="whatsapp-user-phone-modal-input" class="form-label">Teléfono WhatsApp</label>
+    <input type="text" id="whatsapp-user-phone-modal-input" class="form-control" placeholder="573001234567" autocomplete="off">
+    <p class="text-muted small mb-0 mt-1">Incluí código de país, por ejemplo 573001234567.</p>
+    <div class="d-flex gap-05 justify-content-end flex-wrap mt-3">
+      <button type="button" id="whatsapp-user-phone-modal-cancel-btn" class="btn-panel btn-gray">Cancelar</button>
+      <button type="button" id="whatsapp-user-phone-modal-save-btn" class="btn-panel btn-green">Guardar</button>
     </div>
   </div>
 </div>

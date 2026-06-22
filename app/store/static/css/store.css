@@ -979,6 +979,13 @@ html, body {
   .license-notepads-wrap .admin-licencias-bloc--personal.collapsed .admin-licencias-bloc-header {
     border-radius: 5px !important;
   }
+  .license-notepads-wrap .admin-licencias-bloc--proveedor-merged.collapsed .admin-licencias-bloc-header {
+    border-radius: 5px !important;
+  }
+  .admin-lic-proveedor-panel .admin-lic-proveedor-user-section.collapsed .admin-lic-proveedor-user-header,
+  .admin-lic-proveedor-panel .admin-lic-proveedor-day.collapsed .admin-licencias-bloc-header {
+    border-radius: 5px !important;
+  }
   .license-notepads-wrap .admin-licencias-personal-body {
     margin: 0;
     padding: 0;
@@ -990,6 +997,39 @@ html, body {
     margin-top: 0.15rem !important;
     border: none !important;
     outline: none !important;
+  }
+  .license-notepads-wrap .admin-licencias-bloc--customer-renewal {
+    margin-top: 0.15rem !important;
+  }
+  .license-notepads-wrap .admin-licencias-bloc--proveedor-merged {
+    padding: 0 !important;
+    margin-top: 0.15rem !important;
+    border: none !important;
+    outline: none !important;
+    background: transparent !important;
+  }
+  .license-notepads-wrap .admin-lic-proveedor-panel-lic {
+    padding: 0 !important;
+    margin-top: 0.15rem !important;
+    border: none !important;
+    outline: none !important;
+    background: transparent !important;
+  }
+  .license-notepads-wrap .admin-licencias-bloc--proveedor-product {
+    padding: 0 !important;
+    margin-top: 0.12rem !important;
+    border: none !important;
+    outline: none !important;
+    background: transparent !important;
+  }
+  .license-notepads-wrap .admin-lic-proveedor-user-section {
+    padding: 0 !important;
+    margin-top: 0.15rem !important;
+    border: none !important;
+    outline: none !important;
+    background: transparent !important;
+    width: 100% !important;
+    max-width: 100% !important;
   }
   /* Días 1–31: mismo bloque que Licencias (cabecera + cuerpo negro), dentro de .license-notepads-wrap */
   .license-notepads-wrap #licenseAllDaysContainer .admin-licencias-bloc--day {
@@ -1192,6 +1232,14 @@ html, body {
   .admin-licencias-page.admin-licencias-shell
     .license-notepads-wrap
     .admin-licencias-bloc--license
+    .admin-licencias-bloc-header,
+  .admin-licencias-page.admin-licencias-shell
+    .license-notepads-wrap
+    .admin-licencias-bloc--proveedor-merged
+    .admin-licencias-bloc-header,
+  .admin-licencias-page.admin-licencias-shell
+    .license-notepads-wrap
+    .admin-lic-proveedor-panel-lic
     .admin-licencias-bloc-header {
     padding-top: 0.03rem !important;
     padding-bottom: 0.03rem !important;
@@ -1265,7 +1313,13 @@ html, body {
 
   /* Título + deshacer/rehacer / acciones: solo Admin Licencias (.admin-licencias-shell), no vista usuario */
   .admin-licencias-page.admin-licencias-shell .license-notepads-wrap .admin-licencias-bloc--personal .admin-licencias-bloc-header,
-  .admin-licencias-page.admin-licencias-shell .license-notepads-wrap .admin-licencias-bloc--license .admin-licencias-bloc-header {
+  .admin-licencias-page.admin-licencias-shell .license-notepads-wrap .admin-licencias-bloc--license .admin-licencias-bloc-header,
+  .admin-licencias-page.admin-licencias-shell .license-notepads-wrap .admin-licencias-bloc--customer-renewal .admin-licencias-bloc-header,
+  .admin-licencias-page.admin-licencias-shell .license-notepads-wrap .admin-licencias-bloc--proveedor-merged .admin-licencias-bloc-header,
+  .admin-licencias-page.admin-licencias-shell .license-notepads-wrap .admin-lic-proveedor-panel-lic .admin-licencias-bloc-header,
+  .admin-licencias-page.admin-licencias-shell .license-notepads-wrap .admin-licencias-bloc--proveedor-product .admin-licencias-bloc-header,
+  .admin-licencias-page.admin-licencias-shell .admin-lic-proveedor-panel .admin-lic-proveedor-user-header,
+  .admin-licencias-page.admin-licencias-shell .admin-lic-proveedor-panel .admin-lic-proveedor-day .admin-licencias-bloc-header {
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -1273,7 +1327,12 @@ html, body {
     flex-wrap: nowrap;
   }
   .admin-licencias-page.admin-licencias-shell .license-notepads-wrap .admin-licencias-bloc--personal .admin-licencias-bloc-title,
-  .admin-licencias-page.admin-licencias-shell .license-notepads-wrap .admin-licencias-bloc--license .admin-licencias-bloc-title {
+  .admin-licencias-page.admin-licencias-shell .license-notepads-wrap .admin-licencias-bloc--license .admin-licencias-bloc-title,
+  .admin-licencias-page.admin-licencias-shell .license-notepads-wrap .admin-licencias-bloc--customer-renewal .admin-licencias-bloc-title,
+  .admin-licencias-page.admin-licencias-shell .license-notepads-wrap .admin-licencias-bloc--proveedor-merged .admin-licencias-bloc-title,
+  .admin-licencias-page.admin-licencias-shell .license-notepads-wrap .admin-lic-proveedor-panel-lic .admin-licencias-bloc-title,
+  .admin-licencias-page.admin-licencias-shell .license-notepads-wrap .admin-licencias-bloc--proveedor-product .admin-licencias-bloc-title,
+  .admin-licencias-page.admin-licencias-shell .admin-lic-proveedor-panel .admin-lic-proveedor-user-header .admin-licencias-bloc-title {
     flex: 1;
     min-width: 0;
     text-align: center;
@@ -1717,8 +1776,13 @@ html, body {
    * que tiene min-height 7rem arriba — eso fuerza ~5 “líneas” vacías por el repeating-gradient.
    * Cambios ya pisa con min-height: var(--lic-line-box); mismo criterio que Días.
    */
-  .license-notepads-wrap #adminLicenciasLicenseSplitRoot .license-split-editor__creds.admin-licencias-notepad-textarea {
+  .license-notepads-wrap #adminLicenciasLicenseSplitRoot .license-split-editor__creds.admin-licencias-notepad-textarea,
+  .license-notepads-wrap #adminLicenciasCustomerRenewalSplitRoot .license-split-editor__creds.admin-licencias-notepad-textarea,
+  .license-notepads-wrap .admin-lic-proveedor-readonly-creds.admin-licencias-notepad-textarea,
+  .license-notepads-wrap .admin-lic-proveedor-merged-creds.admin-licencias-notepad-textarea {
     min-height: var(--lic-line-box) !important;
+    flex: 0 0 auto !important;
+    height: auto !important;
   }
   .license-notepads-wrap .license-split-editor__side {
     display: flex;
@@ -1868,6 +1932,21 @@ html, body {
     width: 100% !important;
     min-width: 0 !important;
     background: #000 !important;
+  }
+  /* Cuentas para renovar: día+vender+usuario | notas (sin estados verde/rojo) */
+  .license-notepads-wrap .license-split-editor__row.license-split-editor__row--customer-renewal {
+    grid-template-columns: auto minmax(5rem, 1fr);
+    min-width: 0;
+  }
+  .license-notepads-wrap .license-split-editor__row.license-split-editor__row--customer-renewal .license-split-editor__lead {
+    flex: 0 0 auto;
+    min-width: 0;
+    width: auto;
+  }
+  .license-notepads-wrap
+    .license-split-editor.license-split-editor--notes-hidden
+    .license-split-editor__row.license-split-editor__row--customer-renewal {
+    grid-template-columns: auto;
   }
   /* Caídas: con notas ocultas solo queda la columna del botón subir */
   .license-suspended-notepad-wrap
@@ -2024,6 +2103,45 @@ html, body {
     outline-offset: 1px;
   }
   .license-notepads-wrap .license-split-editor__sell-btn:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+  .license-notepads-wrap .license-split-editor__reject-btn {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    align-self: stretch;
+    min-width: 0;
+    width: auto;
+    height: auto !important;
+    min-height: var(--lic-line-box);
+    max-height: none !important;
+    padding: 0 0.18rem;
+    margin: 0;
+    border: var(--lic-border-w) solid rgba(239, 68, 68, 0.55);
+    border-radius: 3px;
+    background: rgba(239, 68, 68, 0.22);
+    color: rgba(254, 226, 226, 0.98);
+    cursor: pointer;
+    font-size: 0.62rem;
+    line-height: 1;
+    box-sizing: border-box;
+  }
+  .license-notepads-wrap .license-split-editor__reject-btn i {
+    font-size: 0.62rem;
+    line-height: 1;
+    vertical-align: 0;
+  }
+  .license-notepads-wrap .license-split-editor__reject-btn:hover {
+    background: rgba(239, 68, 68, 0.38);
+    border-color: rgba(252, 165, 165, 0.7);
+  }
+  .license-notepads-wrap .license-split-editor__reject-btn:focus-visible {
+    outline: 2px solid rgba(252, 165, 165, 0.55);
+    outline-offset: 1px;
+  }
+  .license-notepads-wrap .license-split-editor__reject-btn:disabled {
     opacity: 0.45;
     cursor: not-allowed;
   }
@@ -3946,6 +4064,7 @@ html, body {
    * Franja negra gruesa encima (Licencias + Días) para tapar esa última raya sin quitar las de entre líneas.
    */
   .admin-licencias-page .license-notepads-wrap #adminLicenciasLicenseSplitRoot .license-split-editor__creds,
+  .admin-licencias-page .license-notepads-wrap #adminLicenciasCustomerRenewalSplitRoot .license-split-editor__creds,
   .admin-licencias-page .license-notepads-wrap #licenseAllDaysContainer .license-split-editor__creds {
     background-image:
       linear-gradient(to top, #000000 0px, #000000 8px, rgba(0, 0, 0, 0) 8px),
@@ -3961,6 +4080,7 @@ html, body {
   /* Licencias / Días / Caídas: separación lateral credenciales | estado y notas (sin bandas horizontales verde/roja entre filas). */
   .admin-licencias-page .license-notepads-wrap #licenseAllDaysContainer .license-split-editor__side,
   .admin-licencias-page .license-notepads-wrap #adminLicenciasLicenseSplitRoot .license-split-editor__side,
+  .admin-licencias-page .license-notepads-wrap #adminLicenciasCustomerRenewalSplitRoot .license-split-editor__side,
   .admin-licencias-page .license-suspended-notepad-wrap .license-split-editor__side,
   .admin-licencias-page .license-expired-notepad-wrap .license-split-editor__side {
     border-left-width: max(3px, var(--lic-border-w));
@@ -4041,8 +4161,8 @@ html, body {
   }
 
   /*
-   * Escritorio admin: igual criterio que portal usuario — ancho fluido sin max-content gigante ni columna derecha clampada a 22rem.
-   * Así las credenciales usan bien el hueco hasta la columna día/usuario sin barra inferior de scroll perpetua (móvil ≤768 no toca).
+   * Escritorio admin: mismo criterio que móvil — no recortar filas/credenciales con overflow-x:hidden.
+   * Si el contenido es más ancho que el panel, scroll horizontal en el viewport (no columnas a 0 px).
    */
   @media (min-width: 769px) {
     .admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
@@ -4056,6 +4176,9 @@ html, body {
       .license-split-editor__viewport {
       min-width: 0 !important;
       max-width: 100% !important;
+      overflow-x: auto !important;
+      box-sizing: border-box !important;
+      -webkit-overflow-scrolling: touch;
     }
 
     .admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
@@ -4067,10 +4190,10 @@ html, body {
     .admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
       .license-expired-notepad-wrap
       .license-split-editor__rows {
-      width: 100% !important;
-      max-width: 100% !important;
-      min-width: 0 !important;
-      overflow-x: hidden !important;
+      width: max-content !important;
+      min-width: 100% !important;
+      max-width: none !important;
+      overflow-x: visible !important;
     }
 
     .admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
@@ -4079,11 +4202,15 @@ html, body {
       .license-split-editor__grid,
     .admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
       .license-notepads-wrap
+      #adminLicenciasCustomerRenewalSplitRoot
+      .license-split-editor__grid,
+    .admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+      .license-notepads-wrap
       #licenseAllDaysContainer
       .license-split-editor__grid {
-      width: 100% !important;
-      max-width: 100% !important;
-      min-width: 0 !important;
+      width: max-content !important;
+      min-width: 100% !important;
+      max-width: none !important;
     }
 
     .admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
@@ -4092,15 +4219,19 @@ html, body {
     .admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
       .license-expired-notepad-wrap
       .license-split-editor__grid {
-      width: 100% !important;
-      max-width: 100% !important;
-      min-width: 0 !important;
+      width: max-content !important;
+      min-width: 100% !important;
+      max-width: none !important;
       grid-template-columns: minmax(min(45%, 15rem), 1fr) minmax(13.5rem, 1.2fr) !important;
     }
 
     .admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
       .license-notepads-wrap
       #adminLicenciasLicenseSplitRoot
+      .license-split-editor__creds-cell,
+    .admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+      .license-notepads-wrap
+      #adminLicenciasCustomerRenewalSplitRoot
       .license-split-editor__creds-cell,
     .admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
       .license-notepads-wrap
@@ -4112,12 +4243,17 @@ html, body {
     .admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
       .license-expired-notepad-wrap
       .license-split-editor__creds-cell {
-      min-width: 0 !important;
+      min-width: min(11rem, 100%) !important;
+      width: auto !important;
     }
 
     .admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
       .license-notepads-wrap
       #adminLicenciasLicenseSplitRoot
+      .license-split-editor__creds,
+    .admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+      .license-notepads-wrap
+      #adminLicenciasCustomerRenewalSplitRoot
       .license-split-editor__creds,
     .admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
       .license-notepads-wrap
@@ -4129,16 +4265,23 @@ html, body {
     .admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
       .license-expired-notepad-wrap
       .license-split-editor__creds {
-      min-width: 0 !important;
-      white-space: pre-wrap !important;
-      overflow-wrap: anywhere !important;
-      word-break: break-word !important;
-      overflow-x: hidden !important;
+      white-space: pre !important;
+      overflow-wrap: normal !important;
+      word-break: normal !important;
+      overflow-x: visible !important;
+      overflow-y: visible !important;
+      max-width: none !important;
+      width: auto !important;
+      field-sizing: content !important;
     }
 
     .admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
       .license-notepads-wrap
       #adminLicenciasLicenseSplitRoot
+      .license-split-editor__side,
+    .admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+      .license-notepads-wrap
+      #adminLicenciasCustomerRenewalSplitRoot
       .license-split-editor__side,
     .admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
       .license-notepads-wrap
@@ -4150,16 +4293,17 @@ html, body {
     .admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
       .license-expired-notepad-wrap
       .license-split-editor__side {
-      min-width: 0 !important;
-      max-width: 100% !important;
-      overflow-x: hidden !important;
+      min-width: 13.5rem !important;
+      max-width: none !important;
+      overflow-x: visible !important;
     }
 
     .admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
       .license-notepads-wrap
       .license-split-editor__row:not(.license-split-editor__row--suspended):not(.license-split-editor__row--expired):not(.license-split-editor__row--changes) {
-      min-width: 0 !important;
-      grid-template-columns: auto minmax(0, 1.35fr) minmax(0, 1fr) !important;
+      min-width: max-content !important;
+      max-width: none !important;
+      grid-template-columns: minmax(0, max-content) minmax(var(--lic-user-field-min, 6.25rem), 1.35fr) minmax(5rem, 1fr) !important;
     }
   }
 
@@ -4249,6 +4393,10 @@ html, body {
       .license-split-editor__grid,
     .admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
       .license-notepads-wrap
+      #adminLicenciasCustomerRenewalSplitRoot
+      .license-split-editor__grid,
+    .admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+      .license-notepads-wrap
       #licenseAllDaysContainer
       .license-split-editor__grid,
     .admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
@@ -4269,6 +4417,10 @@ html, body {
     .admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
       .license-notepads-wrap
       #adminLicenciasLicenseSplitRoot
+      .license-split-editor__creds-cell,
+    .admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+      .license-notepads-wrap
+      #adminLicenciasCustomerRenewalSplitRoot
       .license-split-editor__creds-cell,
     .admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
       .license-notepads-wrap
@@ -6039,11 +6191,12 @@ html, body {
     font-weight: 700;
     cursor: pointer;
     box-shadow: 0 4px 14px rgba(59, 130, 246, 0.35);
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    padding: 0.35rem 0.65rem;
+    text-transform: none;
+    letter-spacing: 0.01em;
+    padding: 0.35rem 0.55rem;
     border-radius: 6px;
-    font-size: 0.72rem;
+    font-size: 0.68rem;
+    line-height: 1.2;
     margin-left: 0.25rem;
   }
 
@@ -6078,6 +6231,35 @@ html, body {
     text-align: center;
     font-weight: 700;
     margin: 0 0 0.5rem;
+  }
+
+  .renovar-cuenta-cliente-about {
+    margin: 0 0 0.75rem;
+    padding: 0.55rem 0.65rem;
+    border-radius: 8px;
+    border: 1px solid rgba(59, 130, 246, 0.35);
+    background: rgba(59, 130, 246, 0.12);
+    font-size: 0.82rem;
+    line-height: 1.45;
+  }
+
+  .renovar-cuenta-cliente-about__title {
+    margin: 0 0 0.35rem;
+    font-weight: 600;
+    font-size: 0.84rem;
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    color: #60a5fa;
+  }
+
+  .renovar-cuenta-cliente-about__title .fa-info-circle {
+    font-size: 0.95rem;
+  }
+
+  .renovar-cuenta-cliente-about__text {
+    margin: 0;
+    opacity: 0.95;
   }
 
   .renovar-cuenta-cliente-hint {
@@ -6146,7 +6328,7 @@ html, body {
   }
 
   .product-renovar-cuenta-block--table {
-    max-width: 11rem;
+    max-width: 13.5rem;
     margin: 0 auto;
   }
 
@@ -11242,6 +11424,16 @@ html, body {
   .admin-licencias-page.admin-licencias-shell #licenseAllDaysContainer .admin-licencias-bloc--day.day-section.collapsed > .day-accounts-list {
     display: none !important;
   }
+  .admin-licencias-page.admin-licencias-shell .admin-licencias-bloc--proveedor-merged.collapsed > .admin-lic-proveedor-merged-body {
+    display: none !important;
+  }
+  .admin-licencias-page.admin-licencias-shell .admin-lic-proveedor-user-section.collapsed > .admin-lic-proveedor-panel-user-body {
+    display: none !important;
+  }
+  .admin-licencias-page.admin-licencias-shell .admin-lic-proveedor-user-header,
+  .admin-licencias-page.admin-licencias-shell .admin-lic-proveedor-panel .admin-lic-proveedor-day .admin-licencias-bloc-header {
+    cursor: pointer;
+  }
   .admin-licencias-page .license-suspended-notepad-wrap .suspended-section-body.day-accounts-list {
     padding: 0 !important;
   }
@@ -12069,6 +12261,180 @@ html, body {
     display: flex;
     justify-content: flex-end;
     padding-top: 0.25rem;
+  }
+
+  /* Modal: rechazar renovación cuenta cliente (botón X en admin) */
+  .admin-customer-renewal-reject-modal {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.55);
+    z-index: 11055;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .admin-customer-renewal-reject-modal.show {
+    display: flex;
+  }
+
+  .admin-customer-renewal-reject-modal__content {
+    background: #f8fafc;
+    padding: 1.25rem 1.5rem;
+    border-radius: 10px;
+    max-width: 480px;
+    width: 92%;
+    display: flex;
+    flex-direction: column;
+    gap: 0.65rem;
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
+    border: 1px solid rgba(185, 28, 28, 0.35);
+  }
+
+  .admin-customer-renewal-reject-modal__content h3 {
+    margin: 0;
+    font-size: 1.15rem;
+    color: #991b1b;
+  }
+
+  .admin-customer-renewal-reject-modal__hint {
+    margin: 0;
+    font-size: 0.82rem;
+    color: #64748b;
+    line-height: 1.35;
+  }
+
+  .admin-customer-renewal-reject-modal__textarea {
+    width: 100%;
+    min-height: 6.5rem;
+    resize: vertical;
+    padding: 0.55rem 0.65rem;
+    border: 1px solid #cbd5e1;
+    border-radius: 6px;
+    font: inherit;
+    color: #0f172a;
+    box-sizing: border-box;
+  }
+
+  .admin-customer-renewal-reject-modal__footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.5rem;
+    padding-top: 0.25rem;
+  }
+
+  .whatsapp-web-config-panel .whatsapp-user-notify-hint {
+    max-width: 42rem;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  .whatsapp-web-config-panel .whatsapp-user-notify-panel {
+    width: 100%;
+    max-width: 52rem;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  .whatsapp-web-config-panel .whatsapp-user-notify-panel .productos-buscar-mostrar {
+    width: 100%;
+    max-width: 98%;
+  }
+
+  .whatsapp-web-config-panel .whatsapp-user-notify-table-wrap {
+    width: 100%;
+    max-width: 100%;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  .whatsapp-web-config-panel .whatsapp-user-notify-pagination.pagination-buttons {
+    width: 100%;
+    max-width: 98%;
+  }
+
+  .whatsapp-web-config-panel .whatsapp-user-notify-table th,
+  .whatsapp-web-config-panel .whatsapp-user-notify-table td {
+    vertical-align: middle;
+  }
+
+  .whatsapp-web-config-panel .whatsapp-user-notify-check-cell .form-check-input {
+    float: none;
+    margin: 0;
+    cursor: pointer;
+  }
+
+  .whatsapp-web-config-panel .whatsapp-user-notify-table .whatsapp-user-notify-user-col,
+  .whatsapp-web-config-panel .whatsapp-user-notify-table td:first-child {
+    width: 99%;
+  }
+
+  .whatsapp-web-config-panel .whatsapp-user-notify-table .whatsapp-notify-phone-cell {
+    width: 1%;
+    white-space: nowrap;
+    overflow: visible;
+    text-overflow: clip;
+  }
+
+  .whatsapp-web-config-panel .whatsapp-user-notify-table .whatsapp-user-notify-phone-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 1.35rem;
+    align-items: center;
+    column-gap: 0.35rem;
+    width: 100%;
+    min-width: max-content;
+  }
+
+  .whatsapp-web-config-panel .whatsapp-user-notify-phone-col {
+    width: 1%;
+    white-space: nowrap;
+  }
+
+  .whatsapp-web-config-panel .whatsapp-user-notify-phone-text {
+    font-size: inherit;
+    font-weight: inherit;
+    line-height: inherit;
+    white-space: nowrap;
+    overflow: visible;
+    text-overflow: clip;
+    min-width: 0;
+  }
+
+  .whatsapp-web-config-panel .whatsapp-user-notify-phone-edit-btn {
+    flex-shrink: 0;
+    justify-self: end;
+    width: 1.35rem;
+    height: 1.35rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: none;
+    background: transparent;
+    color: #5a6268;
+    padding: 0;
+    line-height: 1;
+    cursor: pointer;
+    border-radius: 4px;
+  }
+
+  .whatsapp-web-config-panel .whatsapp-user-notify-phone-edit-btn:hover,
+  .whatsapp-web-config-panel .whatsapp-user-notify-phone-edit-btn:focus-visible {
+    color: #0d6efd;
+    background: rgba(13, 110, 253, 0.08);
+  }
+
+  .whatsapp-web-config-panel .whatsapp-user-notify-icon-col {
+    width: 3.25rem;
+    white-space: nowrap;
+  }
+
+  .whatsapp-web-config-panel .whatsapp-user-notify-col-icon {
+    color: #25d366;
+    font-size: 1.05rem;
+    vertical-align: middle;
   }
   
   .license-position-content {
@@ -14529,12 +14895,18 @@ html, body {
     font-size: inherit;
   }
 
-  .purchase-history-recharge-product--failed,
+  .purchase-history-recharge-product--failed {
+    color: #111827 !important;
+  }
+
   .purchase-history-recharge-product--failed .fas {
     color: #dc2626 !important;
   }
 
-  .purchase-history-recharge-product--success,
+  .purchase-history-recharge-product--success {
+    color: #111827 !important;
+  }
+
   .purchase-history-recharge-product--success .fas {
     color: #16a34a !important;
   }
@@ -14567,6 +14939,32 @@ html, body {
     gap: 0.35rem;
     font-weight: 600;
     color: #1d4ed8;
+  }
+
+  .purchase-history-proveedor-daily-summary-product {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-weight: 600;
+    color: #111827;
+  }
+
+  .purchase-history-proveedor-daily-summary-product .fas {
+    color: #ea580c;
+  }
+
+  .purchase-history-stats-proveedor-tip {
+    color: #ea580c;
+  }
+
+  .purchase-history-container .tabla-licencias-actividad tbody tr.purchase-history-proveedor-daily-summary-row td,
+  .purchase-history-container table#tabla-compras tbody tr.purchase-history-proveedor-daily-summary-row td {
+    background-color: #fff7ed !important;
+  }
+
+  .purchase-history-container .tabla-licencias-actividad tbody tr.purchase-history-proveedor-daily-summary-row:nth-child(even) td,
+  .purchase-history-container table#tabla-compras tbody tr.purchase-history-proveedor-daily-summary-row:nth-child(even) td {
+    background-color: #ffedd5 !important;
   }
 
   .purchase-daily-summary-pre {
@@ -23546,6 +23944,7 @@ body .card.product-texture-bg::before,
   flex-direction: column;
   background: #000000;
   box-sizing: border-box;
+  overflow: hidden;
 }
 .admin-licencias-page.user-licencias-shell .user-lic-bundle-wrap .license-split-editor__side {
   display: flex;
@@ -23588,12 +23987,6 @@ body .card.product-texture-bg::before,
   padding-right: var(--lic-pad-x) !important;
   font-size: var(--lic-line-fs) !important;
   line-height: var(--lic-row-stride) !important;
-  /* pre-wrap + quiebre: el texto largo no ensancha la columna ni queda detrás del panel derecho */
-  white-space: pre-wrap !important;
-  overflow-wrap: anywhere !important;
-  word-break: break-word !important;
-  overflow-x: hidden !important;
-  overflow-y: visible !important;
   outline: none !important;
 }
 .admin-licencias-page.user-licencias-shell .user-lic-bundle-wrap .license-split-editor__rows {
@@ -24691,27 +25084,61 @@ body .card.product-texture-bg::before,
   resize: vertical;
 }
 
+/* Portal usuario: scroll horizontal fino en bloc credenciales (días, proveedor, vencidas/caidas). */
+.admin-licencias-page.user-licencias-shell .user-lic-proveedor-wrap .license-split-editor__creds-cell {
+  overflow: hidden;
+  min-width: 0;
+}
+.admin-licencias-page.user-licencias-shell .user-lic-bundle-wrap .license-split-editor__creds.user-lic-creds-ro,
+.admin-licencias-page.user-licencias-shell .user-lic-proveedor-wrap .user-lic-proveedor-creds-ta,
+.admin-licencias-page.user-licencias-shell .user-lic-proveedor-lic-extra .user-lic-proveedor-extra-creds,
+.admin-licencias-page.user-licencias-shell .user-lic-proveedor-lic-extra .user-lic-proveedor-extra-creds.expired-license-split__creds,
+.admin-licencias-page.user-licencias-shell .user-lic-proveedor-lic-extra .user-lic-proveedor-extra-creds.suspended-license-split__creds {
+  white-space: pre !important;
+  overflow-wrap: normal !important;
+  word-break: normal !important;
+  overflow-x: auto !important;
+  overflow-y: hidden !important;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(147, 197, 253, 0.42) transparent;
+}
+.admin-licencias-page.user-licencias-shell .user-lic-bundle-wrap .license-split-editor__viewport,
+.admin-licencias-page.user-licencias-shell .user-lic-proveedor-wrap .license-split-editor__viewport,
+.admin-licencias-page.user-licencias-shell .user-lic-proveedor-lic-extra .user-lic-proveedor-extra-viewport {
+  overflow-x: hidden;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+}
+
 /* Pantallas angostas (móvil): credenciales largas sin partir en mil pedazos; scroll horizontal dentro del bloc / viewport. */
 @media (max-width: 768px) {
-  .admin-licencias-page.user-licencias-shell .user-lic-readonly-day .day-accounts-list {
+  .admin-licencias-page.user-licencias-shell .user-lic-readonly-day .day-accounts-list,
+  .admin-licencias-page.user-licencias-shell .user-lic-proveedor-wrap .user-lic-proveedor-day .day-accounts-list {
     overflow-x: auto !important;
     -webkit-overflow-scrolling: touch;
   }
 
-  .admin-licencias-page.user-licencias-shell .user-lic-bundle-wrap .license-split-editor__viewport {
-    overflow-x: auto !important;
-    -webkit-overflow-scrolling: touch;
+  .admin-licencias-page.user-licencias-shell .user-lic-bundle-wrap .license-split-editor__viewport,
+  .admin-licencias-page.user-licencias-shell .user-lic-proveedor-wrap .license-split-editor__viewport {
+    max-width: 100% !important;
   }
 
-  .admin-licencias-page.user-licencias-shell .user-lic-bundle-wrap .license-split-editor__side {
+  .admin-licencias-page.user-licencias-shell .user-lic-bundle-wrap .license-split-editor__side,
+  .admin-licencias-page.user-licencias-shell .user-lic-proveedor-wrap .license-split-editor__side {
     overflow-x: visible !important;
+    min-width: max-content !important;
   }
 
-  .admin-licencias-page.user-licencias-shell .user-lic-bundle-wrap .license-split-editor__rows {
+  .admin-licencias-page.user-licencias-shell .user-lic-bundle-wrap .license-split-editor__rows,
+  .admin-licencias-page.user-licencias-shell .user-lic-proveedor-wrap .license-split-editor__rows {
     overflow-x: visible !important;
+    min-width: max-content !important;
   }
 
-  .admin-licencias-page.user-licencias-shell .user-lic-bundle-wrap .license-split-editor__grid {
+  .admin-licencias-page.user-licencias-shell .user-lic-bundle-wrap .license-split-editor__grid,
+  .admin-licencias-page.user-licencias-shell .user-lic-proveedor-wrap .license-split-editor__grid {
     grid-template-columns: minmax(min(240px, 72vw), max-content) minmax(13.5rem, 1fr) !important;
     width: max-content !important;
     max-width: none !important;
@@ -24719,12 +25146,14 @@ body .card.product-texture-bg::before,
     box-sizing: border-box !important;
   }
 
-  .admin-licencias-page.user-licencias-shell .user-lic-bundle-wrap .license-split-editor__creds-cell {
+  .admin-licencias-page.user-licencias-shell .user-lic-bundle-wrap .license-split-editor__creds-cell,
+  .admin-licencias-page.user-licencias-shell .user-lic-proveedor-wrap .license-split-editor__creds-cell {
     min-width: min(72vw, 22rem) !important;
     max-width: none !important;
   }
 
-  .admin-licencias-page.user-licencias-shell .user-lic-bundle-wrap .license-split-editor__creds.user-lic-creds-ro {
+  .admin-licencias-page.user-licencias-shell .user-lic-bundle-wrap .license-split-editor__creds.user-lic-creds-ro,
+  .admin-licencias-page.user-licencias-shell .user-lic-proveedor-wrap .user-lic-proveedor-creds-ta {
     white-space: pre !important;
     overflow-wrap: normal !important;
     word-break: normal !important;
@@ -24732,9 +25161,56 @@ body .card.product-texture-bg::before,
     max-width: none !important;
   }
 
-  .admin-licencias-page.user-licencias-shell .user-lic-bundle-wrap .license-split-editor__row {
+  .admin-licencias-page.user-licencias-shell .user-lic-bundle-wrap .license-split-editor__row,
+  .admin-licencias-page.user-licencias-shell .user-lic-proveedor-wrap .license-split-editor__row {
     min-width: max-content !important;
     max-width: none !important;
+  }
+
+  /* Panel derecho: cada columna conserva ancho mínimo; scroll horizontal, sin encimar campos */
+  .admin-licencias-page.user-licencias-shell .user-lic-bundle-wrap .license-split-editor__row.user-lic-readonly-row {
+    grid-template-columns: minmax(6.25rem, max-content) minmax(3.75rem, max-content) minmax(5rem, max-content) !important;
+    width: max-content !important;
+    min-width: 100% !important;
+  }
+
+  .admin-licencias-page.user-licencias-shell .user-lic-bundle-wrap .license-split-editor__status-wrap {
+    min-width: max-content !important;
+    max-width: none !important;
+    flex-shrink: 0 !important;
+  }
+
+  .admin-licencias-page.user-licencias-shell .user-lic-bundle-wrap .license-split-editor__saldo-cell {
+    min-width: 3.75rem !important;
+    max-width: none !important;
+    flex-shrink: 0 !important;
+  }
+
+  .admin-licencias-page.user-licencias-shell
+    .user-lic-bundle-wrap
+    .license-split-editor__row
+    input.user-lic-note-client.license-split-editor__note {
+    min-width: 5rem !important;
+    max-width: none !important;
+    width: auto !important;
+    flex-shrink: 0 !important;
+  }
+
+  .admin-licencias-page.user-licencias-shell .user-lic-bundle-wrap .license-split-editor__status-select-shell--good,
+  .admin-licencias-page.user-licencias-shell .user-lic-bundle-wrap .license-split-editor__status-select-shell--bad,
+  .admin-licencias-page.user-licencias-shell .user-lic-bundle-wrap .user-lic-full-cred-trigger,
+  .admin-licencias-page.user-licencias-shell .user-lic-bundle-wrap .user-lic-warranty-history-btn,
+  .admin-licencias-page.user-licencias-shell .user-lic-bundle-wrap .user-lic-expiry-countdown,
+  .admin-licencias-page.user-licencias-shell .user-lic-bundle-wrap .user-lic-garantia-badge,
+  .admin-licencias-page.user-licencias-shell .user-lic-bundle-wrap .license-split-editor__status-wrap .license-split-editor__status,
+  .admin-licencias-page.user-licencias-shell .user-lic-bundle-wrap .license-split-editor__status-wrap .license-split-editor__otro-combined {
+    flex-shrink: 0 !important;
+  }
+
+  .admin-licencias-page.user-licencias-shell .user-lic-proveedor-wrap .license-split-editor__row.user-lic-proveedor-service-row {
+    grid-template-columns: minmax(6.25rem, 1fr) !important;
+    min-width: 100% !important;
+    width: 100% !important;
   }
 }
 
@@ -25058,9 +25534,16 @@ body .card.product-texture-bg::before,
   margin-bottom: 0.08rem !important;
 }
 
-/* Portal usuario: la regla global .license-card { margin: 0 } pega los chips al bloque «Día 1»; aquí sólo usuario (admin sigue igual). */
-.admin-licencias-page.user-licencias-shell .licenses-grid > .license-card {
-  margin: 0 0 0.7rem 0 !important;
+/* Portal usuario: mismo gap del grid que admin (sin margin extra por tarjeta). */
+.admin-licencias-page.user-licencias-shell .licencias-container:not(.collapsed) .licenses-grid {
+  gap: 0.4rem !important;
+  row-gap: 0.4rem !important;
+  column-gap: 0.4rem !important;
+}
+.admin-licencias-page.user-licencias-shell .licencias-container:not(.collapsed) .licenses-grid > .license-card {
+  margin: 0 !important;
+  width: 100% !important;
+  max-width: 100% !important;
 }
 .admin-licencias-page.user-licencias-shell .licencias-container.collapsed .licenses-grid > .license-card {
   margin: 0 !important;
@@ -25119,6 +25602,729 @@ body .card.product-texture-bg::before,
   opacity: 1.5;
   background: linear-gradient(135deg, rgba(255, 255, 255, 0.25) 0%, rgba(255, 255, 255, 0.1) 50%, rgba(255, 255, 255, 0) 100%);
 }
+
+/* Portal proveedor / reportes: misma tarjeta roja oscura (normal y activa) */
+.admin-licencias-page.user-licencias-shell .licenses-grid .license-card.user-lic-license-card--proveedor,
+.admin-licencias-page.user-licencias-shell .licenses-grid .license-card.user-lic-license-card--reportes {
+  background: linear-gradient(189deg, #4a1010 0%, #1c0808 100%) !important;
+  border: 1px solid rgba(200, 72, 72, 0.45) !important;
+}
+.admin-licencias-page.user-licencias-shell .licenses-grid .license-card.user-lic-license-card--proveedor::before,
+.admin-licencias-page.user-licencias-shell .licenses-grid .license-card.user-lic-license-card--reportes::before {
+  background: linear-gradient(
+    352deg,
+    #0000008c 0%,
+    rgb(72 10 10) 50%,
+    rgba(90, 20, 20, 0) 100%
+  );
+}
+.admin-licencias-page.user-licencias-shell .licenses-grid .license-card.user-lic-license-card--proveedor.active,
+.admin-licencias-page.user-licencias-shell .licenses-grid .license-card.user-lic-license-card--reportes.active,
+.admin-licencias-page.user-licencias-shell .licenses-grid .license-card.user-lic-license-card--reportes.user-lic-reportes-toggle--open {
+  background: linear-gradient(176deg, #9b2828 0%, #6b1818 100%) !important;
+  border: 1px solid rgba(255, 200, 200, 0.4) !important;
+  color: #ffffff !important;
+  transform: translateY(-1px);
+}
+.admin-licencias-page.user-licencias-shell .licenses-grid .license-card.user-lic-license-card--proveedor.active::before,
+.admin-licencias-page.user-licencias-shell .licenses-grid .license-card.user-lic-license-card--reportes.active::before,
+.admin-licencias-page.user-licencias-shell .licenses-grid .license-card.user-lic-license-card--reportes.user-lic-reportes-toggle--open::before {
+  opacity: 1.5;
+  background: linear-gradient(
+    135deg,
+    rgba(255, 220, 220, 0.22) 0%,
+    rgba(255, 120, 120, 0.1) 50%,
+    rgba(255, 255, 255, 0) 100%
+  );
+}
+.admin-licencias-page.user-licencias-shell .licenses-grid .license-card.user-lic-license-card--proveedor.active .license-name,
+.admin-licencias-page.user-licencias-shell .licenses-grid .license-card.user-lic-license-card--reportes.active .license-name,
+.admin-licencias-page.user-licencias-shell .licenses-grid .license-card.user-lic-license-card--reportes.user-lic-reportes-toggle--open .license-name {
+  color: #ffffff !important;
+}
+
+/* Portal proveedor: mismo ancho completo y rejilla que Admin Licencias (#licenseAllDaysContainer) */
+.admin-licencias-page.user-licencias-shell .user-lic-proveedor-wrap {
+  width: 100% !important;
+  max-width: 100% !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  box-sizing: border-box;
+}
+.admin-licencias-page.user-licencias-shell .user-lic-proveedor-wrap #userLicProveedorDaysContainer,
+.admin-licencias-page.user-licencias-shell .user-lic-proveedor-wrap .user-lic-proveedor-days {
+  width: 100% !important;
+  max-width: 100% !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  box-sizing: border-box;
+}
+.admin-licencias-page.user-licencias-shell .user-lic-proveedor-wrap .user-lic-proveedor-lic-bloc,
+.admin-licencias-page.user-licencias-shell .user-lic-proveedor-wrap #userLicProveedorDaysContainer .admin-licencias-bloc--day,
+.admin-licencias-page.user-licencias-shell .user-lic-proveedor-wrap .user-lic-proveedor-days > .admin-licencias-bloc--day {
+  padding: 0 !important;
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  border: none !important;
+  outline: none !important;
+  box-shadow: none !important;
+  border-radius: 0 !important;
+  box-sizing: border-box;
+}
+.admin-licencias-page.user-licencias-shell .user-lic-proveedor-wrap .user-lic-proveedor-lic-bloc {
+  margin-top: 0.15rem !important;
+  margin-bottom: 0.12rem !important;
+}
+.admin-licencias-page.user-licencias-shell .user-lic-proveedor-wrap .user-lic-proveedor-days > .admin-licencias-bloc--day:first-child {
+  margin-top: 0.12rem !important;
+}
+.admin-licencias-page.user-licencias-shell .user-lic-proveedor-wrap .user-lic-proveedor-days > .admin-licencias-bloc--day ~ .admin-licencias-bloc--day {
+  margin-top: 0.08rem !important;
+}
+.admin-licencias-page.user-licencias-shell .user-lic-proveedor-wrap .user-lic-proveedor-day .day-accounts-list,
+.admin-licencias-page.user-licencias-shell .user-lic-proveedor-wrap .user-lic-readonly-day .day-accounts-list {
+  padding: 0 !important;
+  margin: 0 !important;
+  background: transparent !important;
+  border: none !important;
+  border-top: none !important;
+  max-width: 100% !important;
+  overflow-x: hidden !important;
+  box-sizing: border-box !important;
+}
+.admin-licencias-page.user-licencias-shell .user-lic-proveedor-wrap .admin-licencias-bloc-header,
+.admin-licencias-page.user-licencias-shell .user-lic-proveedor-wrap .day-section-header.admin-licencias-bloc-header {
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  width: 100% !important;
+  max-width: 100% !important;
+}
+.admin-licencias-page.user-licencias-shell .user-lic-proveedor-wrap .license-split-editor {
+  --lic-pad-y: 0;
+  --lic-pad-x: 0.22rem;
+  width: 100% !important;
+  max-width: 100% !important;
+}
+.admin-licencias-page.user-licencias-shell .user-lic-proveedor-wrap .license-split-editor__grid {
+  grid-template-columns: minmax(min(48%, 18rem), 1.15fr) minmax(13.5rem, 1fr) !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  min-width: 0 !important;
+}
+.admin-licencias-page.user-licencias-shell .user-lic-proveedor-wrap .license-split-editor__creds-cell,
+.admin-licencias-page.user-licencias-shell .user-lic-proveedor-wrap .license-split-editor__side {
+  min-width: 0 !important;
+  max-width: 100% !important;
+}
+.admin-licencias-page.user-licencias-shell .user-lic-proveedor-wrap .license-split-editor__row:first-child {
+  margin-top: 0 !important;
+  border-top: none;
+}
+.admin-licencias-page.user-licencias-shell .user-lic-proveedor-wrap .license-split-editor__row:last-child {
+  margin-bottom: 0 !important;
+  border-bottom: none !important;
+}
+.admin-licencias-page.user-licencias-shell .user-lic-proveedor-wrap .license-split-editor__row:not(:last-child) {
+  border-bottom: var(--lic-border-w) solid rgba(59, 130, 246, 0.48);
+}
+.admin-licencias-page.user-licencias-shell .user-lic-proveedor-wrap .license-split-editor--proveedor-service .license-split-editor__row.user-lic-proveedor-service-row {
+  display: grid !important;
+  grid-template-columns: minmax(6.25rem, 1fr) !important;
+  min-width: 0 !important;
+  max-width: 100% !important;
+}
+.admin-licencias-page.user-licencias-shell .user-lic-proveedor-wrap .user-lic-proveedor-status-wrap {
+  grid-column: 1 / -1;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  border-right: none !important;
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: stretch !important;
+}
+.admin-licencias-page.user-licencias-shell .user-lic-proveedor-wrap .user-lic-proveedor-service-shell,
+.admin-licencias-page.user-licencias-shell .user-lic-proveedor-wrap .user-lic-proveedor-service-row .license-split-editor__status-select-shell--bad {
+  flex: 1 1 auto !important;
+  width: 100% !important;
+  max-width: none !important;
+  min-width: 0 !important;
+  display: flex !important;
+  align-items: stretch !important;
+  border-right: none !important;
+}
+.admin-licencias-page.user-licencias-shell .user-lic-proveedor-wrap .user-lic-proveedor-service-rows {
+  width: 100% !important;
+  min-width: 100% !important;
+  max-width: 100% !important;
+}
+.admin-licencias-page.user-licencias-shell .user-lic-proveedor-wrap .user-lic-proveedor-service-select {
+  flex: 1 1 auto !important;
+  width: 100% !important;
+  max-width: none !important;
+  min-width: 0 !important;
+  box-sizing: border-box !important;
+}
+.admin-licencias-page.user-licencias-shell .user-lic-proveedor-wrap .user-lic-proveedor-creds-ta {
+  min-height: var(--lic-line-box) !important;
+  min-width: 0 !important;
+  max-width: 100% !important;
+  flex: 1 1 auto !important;
+  margin: 0 !important;
+  padding-top: 0 !important;
+  padding-bottom: 0 !important;
+  padding-left: var(--lic-pad-x) !important;
+  padding-right: var(--lic-pad-x) !important;
+  font-size: var(--lic-line-fs) !important;
+  line-height: var(--lic-row-stride) !important;
+  white-space: pre !important;
+  overflow-wrap: normal !important;
+  word-break: normal !important;
+  resize: none !important;
+  overflow-x: auto !important;
+  overflow-y: hidden !important;
+  border: none !important;
+  box-shadow: none !important;
+  background-color: #000000 !important;
+  background-image:
+    linear-gradient(to top, #000000 0px, #000000 8px, rgba(0, 0, 0, 0) 8px),
+    linear-gradient(to top, #000000 0, #000000 calc(var(--lic-border-w) + 2px), transparent calc(var(--lic-border-w) + 2px)),
+    repeating-linear-gradient(
+      to bottom,
+      transparent 0,
+      transparent calc(var(--lic-row-stride) - var(--lic-border-w)),
+      rgba(59, 130, 246, 0.48) calc(var(--lic-row-stride) - var(--lic-border-w)),
+      rgba(59, 130, 246, 0.48) var(--lic-row-stride)
+    ) !important;
+  background-attachment: local !important;
+  background-origin: padding-box !important;
+  background-clip: padding-box !important;
+}
+.admin-licencias-page.user-licencias-shell .user-lic-proveedor-wrap .user-lic-proveedor-split.license-notepad--locked .user-lic-proveedor-creds-ta,
+.admin-licencias-page.user-licencias-shell .user-lic-proveedor-wrap .user-lic-proveedor-split.license-notepad--locked .user-lic-proveedor-service-select {
+  pointer-events: auto !important;
+  opacity: 1 !important;
+}
+.admin-licencias-page.user-licencias-shell .user-lic-proveedor-wrap .user-lic-proveedor-split.license-notepad--locked .user-lic-proveedor-creds-ta {
+  cursor: text;
+}
+.admin-licencias-page.user-licencias-shell .user-lic-proveedor-wrap .user-lic-proveedor-split.license-notepad--locked .user-lic-proveedor-service-select {
+  cursor: pointer;
+}
+.admin-licencias-page.user-licencias-shell .user-lic-proveedor-days > .day-section.user-lic-readonly-day:first-of-type,
+.admin-licencias-page.user-licencias-shell .user-lic-proveedor-wrap .user-lic-proveedor-days > .admin-licencias-bloc--day:first-of-type {
+  margin-top: 0.12rem !important;
+}
+.admin-licencias-page.user-licencias-shell .user-lic-proveedor-days > .day-section.user-lic-readonly-day ~ .day-section.user-lic-readonly-day,
+.admin-licencias-page.user-licencias-shell .user-lic-proveedor-wrap .user-lic-proveedor-days > .admin-licencias-bloc--day ~ .admin-licencias-bloc--day {
+  margin-top: 0.08rem !important;
+}
+.admin-licencias-page.user-licencias-shell .user-lic-proveedor-days > .day-section.user-lic-readonly-day,
+.admin-licencias-page.user-licencias-shell .user-lic-proveedor-wrap .user-lic-proveedor-days > .admin-licencias-bloc--day {
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+  margin-bottom: 0 !important;
+  border: none !important;
+  outline: none !important;
+  box-shadow: none !important;
+  border-radius: 0 !important;
+}
+.admin-licencias-page.user-licencias-shell .user-lic-proveedor-wrap .user-lic-proveedor-split.user-lic-proveedor-day-empty {
+  display: none !important;
+}
+.admin-licencias-page.user-licencias-shell .user-lic-proveedor-days .user-lic-proveedor-day.collapsed .day-accounts-list {
+  display: none;
+}
+.admin-licencias-page.user-licencias-shell .user-lic-account-sheet--proveedor {
+  width: 100%;
+}
+
+/* Proveedor + portal: en móvil pisar reglas de ancho fijo del escritorio (scroll, no encimar) */
+@media (max-width: 768px) {
+  .admin-licencias-page.user-licencias-shell .user-lic-proveedor-wrap .license-split-editor,
+  .admin-licencias-page.user-licencias-shell .user-lic-proveedor-wrap .license-split-editor__creds-cell,
+  .admin-licencias-page.user-licencias-shell .user-lic-proveedor-wrap .license-split-editor__side,
+  .admin-licencias-page.user-licencias-shell .user-lic-proveedor-wrap .user-lic-proveedor-service-rows {
+    max-width: none !important;
+  }
+
+  .admin-licencias-page.user-licencias-shell .user-lic-proveedor-wrap .license-split-editor {
+    width: 100% !important;
+    overflow-x: visible !important;
+  }
+
+  .admin-licencias-page.user-licencias-shell .user-lic-proveedor-wrap .license-split-editor__viewport {
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch;
+    max-width: 100% !important;
+  }
+
+  .admin-licencias-page.user-licencias-shell .user-lic-proveedor-wrap .license-split-editor__grid {
+    grid-template-columns: minmax(min(240px, 72vw), max-content) minmax(13.5rem, 1fr) !important;
+    width: max-content !important;
+    max-width: none !important;
+    min-width: 100% !important;
+  }
+
+  .admin-licencias-page.user-licencias-shell .user-lic-proveedor-wrap .license-split-editor__creds-cell {
+    min-width: min(72vw, 22rem) !important;
+  }
+
+  .admin-licencias-page.user-licencias-shell .user-lic-proveedor-wrap .user-lic-proveedor-creds-ta {
+    max-width: none !important;
+  }
+
+  .admin-licencias-page.user-licencias-shell .user-lic-proveedor-wrap .license-split-editor__row {
+    min-width: max-content !important;
+    max-width: none !important;
+  }
+
+  .admin-licencias-page.user-licencias-shell .user-lic-proveedor-wrap .user-lic-proveedor-day .day-accounts-list {
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .admin-licencias-page.user-licencias-shell .user-lic-proveedor-wrap .user-lic-proveedor-service-select {
+    min-width: 6.25rem !important;
+  }
+}
+
+/* Admin Licencias: tarjeta Proveedores (misma clase base que «Todos» / Reportes) */
+.admin-licencias-page.admin-licencias-shell .licenses-grid .license-card.admin-lic-license-card--proveedor.active .license-name {
+  color: #ffffff !important;
+}
+.admin-licencias-page.admin-licencias-shell .admin-lic-proveedor-panel {
+  width: 100%;
+  max-width: 100%;
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+.admin-licencias-page.admin-licencias-shell .admin-lic-proveedor-panel-body {
+  width: 100%;
+  max-width: 100%;
+  margin: 0;
+  padding: 0;
+}
+.admin-licencias-page.admin-licencias-shell .admin-lic-proveedor-panel .admin-lic-proveedor-panel-user,
+.admin-licencias-page.admin-licencias-shell .admin-lic-proveedor-panel .admin-lic-proveedor-user-section {
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+.admin-licencias-page.admin-licencias-shell .admin-lic-proveedor-panel .admin-lic-proveedor-panel-user-body,
+.admin-licencias-page.admin-licencias-shell .admin-lic-proveedor-panel .admin-lic-proveedor-lic-body,
+.admin-licencias-page.admin-licencias-shell .admin-lic-proveedor-panel .admin-lic-proveedor-product-body {
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+.admin-licencias-page.admin-licencias-shell .admin-lic-proveedor-panel .admin-licencias-bloc--proveedor-product,
+.admin-licencias-page.admin-licencias-shell .admin-lic-proveedor-panel .admin-lic-proveedor-panel-lic,
+.admin-licencias-page.admin-licencias-shell .admin-lic-proveedor-panel .admin-lic-proveedor-day {
+  width: 100% !important;
+  max-width: 100% !important;
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+}
+.admin-licencias-page.admin-licencias-shell .admin-lic-proveedor-panel .admin-lic-proveedor-days {
+  width: 100%;
+  max-width: 100%;
+}
+.admin-licencias-page.admin-licencias-shell .admin-lic-proveedor-panel-user + .admin-lic-proveedor-panel-user {
+  margin-top: 0.12rem;
+}
+.admin-licencias-page.admin-licencias-shell .admin-lic-proveedor-panel .admin-lic-proveedor-readonly-creds,
+.admin-licencias-page.admin-licencias-shell .license-notepads-wrap .admin-lic-proveedor-merged-creds {
+  width: 100% !important;
+  min-width: 100% !important;
+  max-width: none !important;
+  box-sizing: border-box !important;
+}
+.admin-licencias-page.admin-licencias-shell .admin-lic-proveedor-panel .license-split-editor--proveedor-readonly,
+.admin-licencias-page.admin-licencias-shell .license-notepads-wrap .license-split-editor--proveedor-merged {
+  width: 100%;
+  max-width: 100%;
+}
+.admin-licencias-page.admin-licencias-shell .admin-lic-proveedor-panel .license-split-editor--proveedor-readonly .license-split-editor__viewport,
+.admin-licencias-page.admin-licencias-shell .license-notepads-wrap .license-split-editor--proveedor-merged .license-split-editor__viewport,
+.admin-licencias-page.admin-licencias-shell .admin-lic-proveedor-panel .license-split-editor--proveedor-readonly .license-split-editor__grid,
+.admin-licencias-page.admin-licencias-shell .license-notepads-wrap .license-split-editor--proveedor-merged .license-split-editor__grid,
+.admin-licencias-page.admin-licencias-shell .admin-lic-proveedor-panel .license-split-editor--proveedor-readonly .license-split-editor__creds-cell,
+.admin-licencias-page.admin-licencias-shell .license-notepads-wrap .license-split-editor--proveedor-merged .license-split-editor__creds-cell {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  align-self: start;
+}
+.admin-licencias-page.admin-licencias-shell .admin-lic-proveedor-panel .license-split-editor--proveedor-readonly {
+  margin: 0;
+}
+.admin-licencias-page.admin-licencias-shell .admin-lic-proveedor-days > .admin-lic-proveedor-day {
+  margin-top: 0.12rem;
+}
+.admin-licencias-page.admin-licencias-shell .admin-lic-proveedor-days > .admin-lic-proveedor-day ~ .admin-lic-proveedor-day {
+  margin-top: 0.08rem;
+}
+.admin-licencias-page.admin-licencias-shell .admin-lic-proveedor-day.collapsed .day-accounts-list,
+.admin-licencias-page.admin-licencias-shell .admin-lic-proveedor-day.collapsed .admin-lic-proveedor-day-body {
+  display: none !important;
+}
+.admin-licencias-page.admin-licencias-shell .admin-lic-proveedor-panel .admin-lic-proveedor-readonly-creds,
+.admin-licencias-page.admin-licencias-shell .license-notepads-wrap .admin-lic-proveedor-merged-creds {
+  resize: none;
+  cursor: default;
+  min-height: var(--lic-line-box, 1.27rem) !important;
+  flex: 0 0 auto !important;
+  height: auto !important;
+}
+.admin-licencias-page.admin-licencias-shell .admin-lic-proveedor-panel .license-split-editor--proveedor-readonly .license-split-editor__creds-cell,
+.admin-licencias-page.admin-licencias-shell .license-notepads-wrap .license-split-editor--proveedor-merged .license-split-editor__creds-cell {
+  align-self: start;
+}
+.admin-licencias-page.admin-licencias-shell .admin-lic-proveedor-merged-body,
+.admin-licencias-page.admin-licencias-shell .admin-licencias-bloc--proveedor-merged {
+  width: 100% !important;
+  max-width: 100% !important;
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+}
+.admin-licencias-page.admin-licencias-shell .license-notepads-wrap .license-split-editor--proveedor-merged {
+  margin: 0;
+}
+.admin-licencias-page.admin-licencias-shell .admin-lic-proveedor-merged-grid--creds-only {
+  grid-template-columns: minmax(0, 1fr) !important;
+}
+.admin-licencias-page.admin-licencias-shell .license-split-editor--proveedor-merged .admin-lic-proveedor-merged-creds {
+  resize: none;
+  cursor: default;
+}
+.admin-licencias-page.admin-licencias-shell .admin-licencias-bloc-title--proveedor,
+.admin-licencias-page.admin-licencias-shell .admin-licencias-bloc-title--proveedor-user-only {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.5rem;
+}
+.admin-licencias-page.admin-licencias-shell .admin-lic-proveedor-info-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  padding: 0 0.12rem;
+  border: none;
+  background: transparent;
+  color: rgba(255, 237, 213, 0.88);
+  font-size: 0.72rem;
+  line-height: 1;
+  cursor: pointer;
+  vertical-align: middle;
+}
+.admin-licencias-page.admin-licencias-shell .admin-lic-proveedor-info-btn:hover,
+.admin-licencias-page.admin-licencias-shell .admin-lic-proveedor-info-btn:focus-visible {
+  color: #fff7ed;
+  outline: none;
+}
+.admin-licencias-page.admin-licencias-shell .admin-lic-proveedor-info-btn:focus-visible {
+  outline: 2px solid rgba(255, 247, 237, 0.45);
+  outline-offset: 2px;
+  border-radius: 999px;
+}
+.admin-licencias-page.admin-licencias-shell .admin-lic-proveedor-header-user-wrap {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.28rem;
+  font-size: 0.62rem;
+  font-weight: 500;
+  line-height: 1.2;
+  color: rgba(255, 237, 213, 0.92);
+}
+.admin-licencias-page.admin-licencias-shell .admin-lic-proveedor-header-user-wrap .admin-lic-proveedor-info-btn {
+  font-size: 0.68rem;
+}
+.admin-licencias-page.admin-licencias-shell .admin-lic-proveedor-header-user-static {
+  opacity: 0.95;
+  white-space: nowrap;
+}
+.admin-licencias-page.admin-licencias-shell .admin-lic-proveedor-header-user-btn {
+  display: inline-block;
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: rgba(255, 237, 213, 0.88);
+  font: inherit;
+  line-height: 1.2;
+  cursor: pointer;
+  white-space: nowrap;
+  opacity: 0.92;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  text-decoration-color: rgba(255, 237, 213, 0.45);
+}
+.admin-licencias-page.admin-licencias-shell .admin-lic-proveedor-header-user-btn:hover,
+.admin-licencias-page.admin-licencias-shell .admin-lic-proveedor-header-user-btn:focus-visible {
+  opacity: 1;
+  color: #fff7ed;
+  text-decoration-color: rgba(255, 247, 237, 0.85);
+  outline: none;
+}
+.admin-licencias-page.admin-licencias-shell .admin-lic-proveedor-header-user-picker {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.22rem;
+}
+.admin-licencias-page.admin-licencias-shell .admin-lic-proveedor-header-user-tab {
+  display: inline-block;
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: rgba(255, 237, 213, 0.78);
+  font: inherit;
+  line-height: 1.2;
+  cursor: pointer;
+  white-space: nowrap;
+  opacity: 0.82;
+}
+.admin-licencias-page.admin-licencias-shell .admin-lic-proveedor-header-user-tab:hover {
+  opacity: 1;
+  color: #fff7ed;
+}
+.admin-licencias-page.admin-licencias-shell .admin-lic-proveedor-header-user-tab.active,
+.admin-licencias-page.admin-licencias-shell .admin-lic-proveedor-header-user-tab[aria-selected="true"] {
+  opacity: 1;
+  color: #fff7ed;
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.admin-licencias-page.admin-licencias-shell .admin-licencias-bloc--proveedor-merged {
+  border: none;
+  background: transparent;
+}
+.admin-licencias-page.admin-licencias-shell .admin-lic-proveedor-merged-body {
+  padding: 0 !important;
+  margin: 0;
+}
+.admin-licencias-page.user-licencias-shell.user-lic-reportes-mode .user-licencias-view-wrap {
+  display: none !important;
+}
+.admin-licencias-page.user-licencias-shell.user-lic-reportes-mode #userLicReportesPanel {
+  display: block !important;
+}
+.admin-licencias-page.user-licencias-shell .user-lic-reportes-section {
+  margin-top: 1.25rem;
+}
+.admin-licencias-page.user-licencias-shell .user-lic-reportes-section__title {
+  margin: 0 0 0.5rem;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #e2e8f0;
+  letter-spacing: 0.02em;
+}
+.admin-licencias-page.user-licencias-shell .user-lic-reportes-panel .user-lic-reportes-section .admin-licencias-reportes-meta {
+  margin-bottom: 0;
+}
+.admin-licencias-page.user-licencias-shell .user-lic-reportes-panel .user-lic-reportes-section + .user-lic-reportes-section {
+  padding-top: 0.15rem;
+  border-top: 1px solid rgba(59, 130, 246, 0.18);
+}
+.admin-licencias-page.user-licencias-shell .user-lic-reportes-panel .admin-licencias-reportes-table-scroll {
+  max-height: min(42vh, 22rem);
+  overflow: auto;
+}
+.admin-licencias-page.user-licencias-shell .user-lic-proveedor-lic-extra .user-lic-proveedor-extra-split-wrap {
+  margin: 0;
+  border: none;
+  border-radius: 0;
+  background: transparent !important;
+}
+.admin-licencias-page.user-licencias-shell .user-lic-proveedor-lic-extra .user-lic-proveedor-extra-viewport {
+  max-height: min(42vh, 22rem);
+}
+.admin-licencias-page.user-licencias-shell .user-lic-proveedor-lic-extra .user-lic-proveedor-extra-creds-cell {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  width: 100%;
+  align-self: stretch;
+  overflow: hidden;
+}
+.admin-licencias-page.user-licencias-shell .user-lic-proveedor-lic-extra .user-lic-proveedor-extra-creds {
+  cursor: text;
+  pointer-events: auto !important;
+  max-height: none !important;
+  resize: none !important;
+  box-sizing: border-box !important;
+  color: #ffffff !important;
+  padding: 0 var(--lic-pad-x, 0.45rem) !important;
+  line-height: var(--lic-row-stride, 1.85rem) !important;
+  width: 100% !important;
+  min-width: 100% !important;
+  max-width: none !important;
+  flex: 1 1 auto;
+}
+.admin-licencias-page.user-licencias-shell .user-lic-proveedor-lic-extra .user-lic-proveedor-extra-split .license-split-editor__grid {
+  grid-template-columns: minmax(0, 1fr) minmax(8.5rem, 13rem);
+  width: 100%;
+  min-width: 100%;
+}
+.admin-licencias-page.user-licencias-shell .user-lic-proveedor-lic-extra .user-lic-proveedor-extra-split--editable.license-notepad--locked .user-lic-proveedor-extra-creds {
+  opacity: 1 !important;
+}
+.admin-licencias-page.user-licencias-shell .user-lic-proveedor-lic-extra .user-lic-proveedor-extra-side {
+  min-width: 8.5rem !important;
+  width: 100%;
+  max-width: 13rem;
+  align-self: stretch;
+  border-left: var(--lic-border-w, 2px) solid rgba(59, 130, 246, 0.48);
+  flex-shrink: 0;
+}
+.admin-licencias-page.user-licencias-shell .user-lic-proveedor-lic-extra .user-lic-proveedor-extra-rows {
+  overflow: visible !important;
+  max-height: none !important;
+  padding: 0 !important;
+  min-width: 100%;
+  width: 100%;
+}
+.admin-licencias-page.user-licencias-shell .user-lic-proveedor-lic-extra .user-lic-proveedor-extra-rows .license-split-editor__row:first-child,
+.admin-licencias-page.user-licencias-shell .user-lic-proveedor-lic-extra .user-lic-proveedor-extra-rows .license-split-editor__row:last-child {
+  margin-top: 0 !important;
+  margin-bottom: 0 !important;
+}
+.admin-licencias-page.user-licencias-shell .user-lic-proveedor-lic-extra .user-lic-proveedor-extra-row {
+  height: var(--lic-row-stride, 1.85rem);
+  min-height: var(--lic-row-stride, 1.85rem);
+  max-height: var(--lic-row-stride, 1.85rem);
+  margin: 0 !important;
+  padding: 0 !important;
+  align-items: stretch !important;
+  box-sizing: border-box;
+  width: 100%;
+}
+.admin-licencias-page.user-licencias-shell .user-lic-proveedor-lic-extra .user-lic-proveedor-extra-row .license-split-editor__status-wrap.user-lic-proveedor-extra-side-row {
+  display: flex !important;
+  flex-direction: row !important;
+  flex-wrap: nowrap !important;
+  align-items: stretch !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  height: 100%;
+  gap: 0 !important;
+  border: none !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+}
+.admin-licencias-page.user-licencias-shell .user-lic-proveedor-lic-extra .user-lic-proveedor-extra-service-wrap {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  padding: 0 0.35rem;
+  overflow: hidden;
+  box-sizing: border-box;
+  border-right: var(--lic-border-w, 2px) solid rgba(59, 130, 246, 0.48);
+}
+.admin-licencias-page.user-licencias-shell .user-lic-proveedor-lic-extra .user-lic-proveedor-extra-service {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  font-size: var(--lic-line-fs, 0.875rem);
+  font-weight: 500;
+  color: rgba(186, 230, 253, 0.96);
+  line-height: var(--lic-line-box, 1.27rem);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.admin-licencias-page.user-licencias-shell .user-lic-proveedor-lic-extra .user-lic-proveedor-extra-day-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 2.15rem;
+  width: 2.15rem;
+  min-width: 2.15rem;
+  max-width: 2.15rem;
+  height: 100%;
+  padding: 0;
+  box-sizing: border-box;
+  border: none !important;
+  background: transparent !important;
+}
+.admin-licencias-page.user-licencias-shell .user-lic-proveedor-lic-extra .user-lic-proveedor-extra-day {
+  display: block;
+  font-weight: 600;
+  font-size: var(--lic-line-fs, 0.875rem);
+  color: rgba(251, 191, 36, 0.98);
+  line-height: var(--lic-line-box, 1.27rem);
+  text-align: center;
+  min-width: 0;
+  padding: 0;
+}
+.admin-licencias-page.user-licencias-shell .user-lic-proveedor-lic-extra .user-lic-proveedor-extra-row--link {
+  cursor: pointer;
+}
+.admin-licencias-page.user-licencias-shell .user-lic-proveedor-lic-extra .user-lic-proveedor-extra-row--link:hover .user-lic-proveedor-extra-side-row {
+  background: rgba(59, 130, 246, 0.14);
+}
+.admin-licencias-page.user-licencias-shell .license-expired-notepad-wrap .user-lic-proveedor-extra-split.license-split-editor--expired-restore-hidden.license-split-editor--notes-hidden .license-split-editor__row--expired,
+.admin-licencias-page.user-licencias-shell .license-suspended-notepad-wrap .user-lic-proveedor-extra-split.license-split-editor--suspended-restore-hidden.license-split-editor--notes-hidden .license-split-editor__row--suspended {
+  grid-template-columns: minmax(0, 1fr) !important;
+  min-height: var(--lic-row-stride, 1.85rem);
+  width: 100%;
+}
+.admin-licencias-page.user-licencias-shell .user-lic-proveedor-lic-extra .user-lic-proveedor-lic-extra-hint {
+  padding: 0.5rem 0.75rem 0.65rem;
+  font-size: 0.82rem;
+  color: rgba(203, 213, 225, 0.88);
+  text-align: center;
+}
+.admin-licencias-page.user-licencias-shell .user-lic-proveedor-lic-extra.collapsed .day-accounts-list {
+  display: none;
+}
+.admin-licencias-page.user-licencias-shell .user-lic-proveedor-wrap .license-expired-notepad-wrap,
+.admin-licencias-page.user-licencias-shell .user-lic-proveedor-wrap .license-suspended-notepad-wrap {
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  padding: 0.12rem 0 0;
+  margin: 0;
+}
+.admin-licencias-page.user-licencias-shell .user-lic-proveedor-vencidas .admin-licencias-bloc-title i {
+  color: rgba(251, 191, 36, 0.95);
+}
+.admin-licencias-page.user-licencias-shell .user-lic-proveedor-caidas .admin-licencias-bloc-title i {
+  color: rgba(248, 113, 113, 0.95);
+}
+.admin-licencias-page.user-licencias-shell .user-proveedor-gestion-productos-btn.d-none {
+  display: none !important;
+}
+.admin-licencias-page.user-licencias-shell .user-proveedor-gestion-productos-hint {
+  padding: 0 0.75rem;
+  text-align: center;
+}
+#userProveedorGestionarProductosModal .user-proveedor-gestion-productos-item .gestion-productos-item-actions {
+  justify-content: flex-end;
+}
+#userProveedorGestionarProductosModal .user-proveedor-gestion-productos-item .gestion-productos-item-name {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.admin-licencias-page.user-licencias-shell .user-lic-reportes-panel .admin-licencias-reportes-row--link {
+  cursor: pointer;
+}
+.admin-licencias-page.user-licencias-shell .user-lic-reportes-panel .admin-licencias-reportes-row--link:hover td {
+  background: rgba(59, 130, 246, 0.12);
+}
+
 .admin-licencias-page.user-licencias-shell .user-lic-grid-acc-badge--todos {
   border-color: rgba(147, 197, 253, 0.35);
 }
@@ -25317,14 +26523,40 @@ html.admin-lic-bulk-modal--lock body {
   gap: 0.5rem;
   margin-bottom: 0.35rem;
 }
-.admin-lic-bulk-modal__title {
+.admin-lic-bulk-modal__title-row {
   grid-column: 2;
   justify-self: center;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  max-width: 100%;
+}
+.admin-lic-bulk-modal__title {
   text-align: center;
   font-size: 1.05rem;
   font-weight: 600;
   margin: 0;
   color: #0f172a;
+}
+.admin-lic-bulk-modal__info-btn {
+  flex: 0 0 auto;
+  background: transparent;
+  border: none;
+  color: #2563eb;
+  cursor: pointer;
+  padding: 0.1rem 0.2rem;
+  font-size: 1rem;
+  line-height: 1;
+}
+.admin-lic-bulk-modal__info-btn:hover,
+.admin-lic-bulk-modal__info-btn:focus {
+  color: #1d4ed8;
+  outline: none;
+}
+.admin-lic-bulk-modal__info-btn:focus-visible {
+  outline: 2px solid rgba(37, 99, 235, 0.45);
+  outline-offset: 2px;
+  border-radius: 999px;
 }
 .admin-lic-bulk-modal__close {
   grid-column: 3;
@@ -25503,6 +26735,454 @@ html.admin-lic-bulk-modal--lock body {
   color: #334155;
 }
 
+/* Modal informativo (encima de edición masiva) */
+.admin-lic-bulk-info-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 10900;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  box-sizing: border-box;
+  overscroll-behavior: contain;
+}
+.admin-lic-bulk-info-modal[hidden] {
+  display: none !important;
+}
+.admin-lic-bulk-info-modal__backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  cursor: pointer;
+}
+.admin-lic-bulk-info-modal__panel {
+  position: relative;
+  z-index: 1;
+  width: min(28rem, 100%);
+  max-height: min(85vh, 32rem);
+  overflow: auto;
+  overscroll-behavior: contain;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 0.5rem;
+  box-shadow: 0 0.5rem 1.75rem rgba(15, 23, 42, 0.2);
+  color: #0f172a;
+  padding: 0.85rem 1rem 1rem;
+}
+.admin-lic-bulk-info-modal__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.55rem;
+}
+.admin-lic-bulk-info-modal__title {
+  margin: 0;
+  font-size: 0.98rem;
+  font-weight: 600;
+  line-height: 1.35;
+  color: #1e40af;
+  display: flex;
+  align-items: flex-start;
+  gap: 0.35rem;
+}
+.admin-lic-bulk-info-modal__title .fa-info-circle {
+  margin-top: 0.12rem;
+  flex: 0 0 auto;
+}
+.admin-lic-bulk-info-modal__close {
+  flex: 0 0 auto;
+  background: transparent;
+  border: none;
+  color: #334155;
+  cursor: pointer;
+  padding: 0.15rem 0.35rem;
+  font-size: 1.1rem;
+  line-height: 1;
+}
+.admin-lic-bulk-info-modal__close:hover {
+  color: #0f172a;
+}
+.admin-lic-bulk-info-modal__body {
+  font-size: 0.86rem;
+  line-height: 1.45;
+  color: #334155;
+}
+.admin-lic-bulk-info-modal__lead {
+  margin: 0 0 0.55rem;
+}
+.admin-lic-bulk-info-modal__list {
+  margin: 0 0 0.55rem;
+  padding-left: 1.1rem;
+}
+.admin-lic-bulk-info-modal__list li {
+  margin-bottom: 0.35rem;
+}
+.admin-lic-bulk-info-modal__list li:last-child {
+  margin-bottom: 0;
+}
+.admin-lic-bulk-info-modal__note {
+  margin: 0;
+  font-size: 0.82rem;
+  color: #475569;
+}
+.admin-lic-bulk-info-modal__footer {
+  display: flex;
+  justify-content: center;
+  margin-top: 0.85rem;
+  padding-top: 0.65rem;
+  border-top: 1px solid #e2e8f0;
+}
+
+/* Modal elegir proveedor (bloc Proveedores) */
+.admin-lic-proveedor-user-pick-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 10950;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  box-sizing: border-box;
+  overscroll-behavior: contain;
+}
+.admin-lic-proveedor-user-pick-modal[hidden] {
+  display: none !important;
+}
+.admin-lic-proveedor-user-pick-modal__backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  cursor: pointer;
+}
+.admin-lic-proveedor-user-pick-modal__panel {
+  position: relative;
+  z-index: 1;
+  width: min(22rem, 100%);
+  max-height: min(85vh, 28rem);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  overscroll-behavior: contain;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 0.5rem;
+  box-shadow: 0 0.5rem 1.75rem rgba(15, 23, 42, 0.2);
+  color: #0f172a;
+  padding: 0.85rem 1rem 1rem;
+}
+.admin-lic-proveedor-user-pick-modal__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.55rem;
+  flex: 0 0 auto;
+}
+.admin-lic-proveedor-user-pick-modal__title {
+  margin: 0;
+  font-size: 0.98rem;
+  font-weight: 600;
+  line-height: 1.35;
+  color: #1e40af;
+}
+.admin-lic-proveedor-user-pick-modal__close {
+  flex: 0 0 auto;
+  background: transparent;
+  border: none;
+  color: #334155;
+  cursor: pointer;
+  padding: 0.15rem 0.35rem;
+  font-size: 1.1rem;
+  line-height: 1;
+}
+.admin-lic-proveedor-user-pick-modal__close:hover {
+  color: #0f172a;
+}
+.admin-lic-proveedor-user-pick-modal__search {
+  flex: 0 0 auto;
+  margin-bottom: 0.55rem;
+  font-size: 0.86rem;
+}
+.admin-lic-proveedor-user-pick-modal__list {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.28rem;
+}
+.admin-lic-proveedor-user-pick-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  width: 100%;
+  margin: 0;
+  padding: 0.45rem 0.55rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.35rem;
+  background: #f8fafc;
+  color: #0f172a;
+  font-size: 0.86rem;
+  line-height: 1.3;
+  text-align: left;
+  cursor: pointer;
+}
+.admin-lic-proveedor-user-pick-item:hover {
+  background: #eff6ff;
+  border-color: #bfdbfe;
+}
+.admin-lic-proveedor-user-pick-item.active,
+.admin-lic-proveedor-user-pick-item[aria-selected="true"] {
+  background: #dbeafe;
+  border-color: #3b82f6;
+  font-weight: 600;
+}
+.admin-lic-proveedor-user-pick-item__name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.admin-lic-proveedor-user-pick-item__meta {
+  flex: 0 0 auto;
+  font-size: 0.75rem;
+  color: #64748b;
+  white-space: nowrap;
+}
+.admin-lic-proveedor-user-pick-empty {
+  margin: 0.35rem 0 0;
+  font-size: 0.84rem;
+  color: #64748b;
+  text-align: center;
+}
+
+/* Modal ventas por servicio (botón Proveedores en grid admin) */
+.admin-lic-proveedor-ventas-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 10960;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  box-sizing: border-box;
+  overscroll-behavior: contain;
+}
+.admin-lic-proveedor-ventas-modal[hidden] {
+  display: none !important;
+}
+.admin-lic-proveedor-ventas-modal__backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  cursor: pointer;
+}
+.admin-lic-proveedor-ventas-modal__panel {
+  position: relative;
+  z-index: 1;
+  width: min(36rem, 100%);
+  max-height: min(88vh, 34rem);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  overscroll-behavior: contain;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 0.5rem;
+  box-shadow: 0 0.5rem 1.75rem rgba(15, 23, 42, 0.2);
+  color: #0f172a;
+  padding: 0.85rem 1rem 1rem;
+}
+.admin-lic-proveedor-ventas-modal__head {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.35rem;
+  flex: 0 0 auto;
+}
+.admin-lic-proveedor-ventas-modal__title-wrap {
+  grid-column: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  text-align: center;
+}
+.admin-lic-proveedor-ventas-modal__title {
+  margin: 0;
+  font-size: 0.98rem;
+  font-weight: 600;
+  line-height: 1.35;
+  color: #1e40af;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 0.28rem;
+}
+.admin-lic-proveedor-ventas-info-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: #2563eb;
+  font-size: 0.82rem;
+  line-height: 1;
+  cursor: pointer;
+  vertical-align: middle;
+}
+.admin-lic-proveedor-ventas-info-btn:hover,
+.admin-lic-proveedor-ventas-info-btn:focus-visible {
+  color: #1d4ed8;
+  outline: none;
+}
+.admin-lic-proveedor-ventas-info-btn:focus-visible {
+  outline: 2px solid rgba(37, 99, 235, 0.45);
+  outline-offset: 2px;
+  border-radius: 999px;
+}
+.admin-lic-proveedor-ventas-modal__close {
+  grid-column: 3;
+  justify-self: end;
+  flex: 0 0 auto;
+  background: transparent;
+  border: none;
+  color: #334155;
+  cursor: pointer;
+  padding: 0.15rem 0.35rem;
+  font-size: 1.1rem;
+  line-height: 1;
+}
+.admin-lic-proveedor-ventas-modal__close:hover {
+  color: #0f172a;
+}
+.admin-lic-proveedor-ventas-modal__hint {
+  font-size: 0.78rem;
+  color: #64748b;
+  line-height: 1.35;
+}
+.admin-lic-proveedor-ventas-modal__controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  margin-bottom: 0.55rem;
+  flex: 0 0 auto;
+}
+.admin-lic-proveedor-ventas-modal__provider-select {
+  flex: 1 1 9rem;
+  min-width: 8rem;
+  font-size: 0.86rem;
+}
+.admin-lic-proveedor-ventas-modal__search {
+  flex: 1 1 10rem;
+  min-width: 8rem;
+  font-size: 0.86rem;
+}
+.admin-lic-proveedor-ventas-modal__list-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.35rem;
+  background: #f8fafc;
+}
+.admin-lic-proveedor-ventas-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+.admin-lic-proveedor-ventas-list__empty {
+  margin: 0;
+  padding: 0.85rem 0.65rem;
+  font-size: 0.82rem;
+  color: #64748b;
+  text-align: center;
+}
+.admin-lic-proveedor-ventas-item {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0.42rem 0.55rem;
+  border-bottom: 1px solid #e2e8f0;
+  background: #ffffff;
+}
+.admin-lic-proveedor-ventas-item:last-child {
+  border-bottom: none;
+}
+.admin-lic-proveedor-ventas-item__name {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 0.86rem;
+  font-weight: 500;
+  color: #0f172a;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.admin-lic-proveedor-ventas-item__count {
+  flex: 0 0 auto;
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 2rem;
+  height: 1.65rem;
+  padding: 0 0.45rem;
+  border-radius: 999px;
+  background: #dbeafe;
+  color: #1d4ed8;
+  font-size: 0.82rem;
+  font-weight: 700;
+  text-align: center;
+  line-height: 1;
+}
+.admin-lic-proveedor-ventas-reset-btn {
+  flex: 0 0 auto;
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 2rem;
+  width: 2rem;
+  height: 1.65rem;
+  margin: 0;
+  padding: 0;
+  border: 1px solid #fecaca;
+  border-radius: 999px;
+  background: #fff1f2;
+  color: #dc2626;
+  cursor: pointer;
+  font-size: 0.82rem;
+  line-height: 1;
+}
+.admin-lic-proveedor-ventas-reset-btn:hover,
+.admin-lic-proveedor-ventas-reset-btn:focus-visible {
+  background: #fee2e2;
+  color: #b91c1c;
+  outline: none;
+}
+.admin-lic-proveedor-ventas-reset-btn:focus-visible {
+  outline: 2px solid rgba(220, 38, 38, 0.35);
+  outline-offset: 1px;
+}
+.admin-lic-proveedor-ventas-reset-btn:disabled {
+  opacity: 0.55;
+  cursor: wait;
+}
+.admin-lic-proveedor-ventas-modal__meta {
+  margin-top: 0.45rem;
+  font-size: 0.74rem;
+  color: #64748b;
+  text-align: right;
+}
 /* Historial compras: tabla compacta (gana sobre .store-light th/td 18px) */
 .purchase-history-container.store-light table#tabla-compras {
   font-size: 0.85rem !important;
@@ -25569,6 +27249,22 @@ html.admin-lic-bulk-modal--lock body {
   flex-wrap: nowrap !important;
   white-space: nowrap !important;
   max-width: none;
+}
+
+.purchase-history-page table#tabla-compras .purchase-history-recharge-product--success {
+  color: #111827 !important;
+}
+
+.purchase-history-page table#tabla-compras .purchase-history-recharge-product--success .fas {
+  color: #16a34a !important;
+}
+
+.purchase-history-page table#tabla-compras .purchase-history-recharge-product--failed {
+  color: #111827 !important;
+}
+
+.purchase-history-page table#tabla-compras .purchase-history-recharge-product--failed .fas {
+  color: #dc2626 !important;
 }
 
 /* Historial licencias: compacto (gana sobre .store-light table/th/td al final del archivo) */
@@ -32048,6 +33744,29 @@ body.balance-recharge-qr-lightbox-open {
     .license-card.active {
     box-shadow: 0 0 0 2px rgba(96, 165, 250, 0.95), 0 2px 8px rgba(37, 99, 235, 0.35) !important;
   }
+
+  /* Portal usuario: mismo grid compacto que admin en móvil */
+  .admin-licencias-page.user-licencias-shell .licencias-container:not(.collapsed) .licenses-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+    gap: 0.35rem !important;
+    row-gap: 0.35rem !important;
+    column-gap: 0.35rem !important;
+  }
+
+  .admin-licencias-page.user-licencias-shell .licencias-container:not(.collapsed) .license-card {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-height: 2.45rem;
+    padding: 0.35rem 0.45rem !important;
+    margin: 0 !important;
+  }
+
+  .admin-licencias-page.user-licencias-shell .licencias-container:not(.collapsed) .license-name {
+    font-size: 0.75rem !important;
+    line-height: 1.2 !important;
+    text-align: center !important;
+    -webkit-line-clamp: 2;
+  }
 }
 
 /* ================== ADMIN LICENCIAS — alineación columnas Licencias ↔ Día N (paso 6) ================== */
@@ -32063,6 +33782,10 @@ body.balance-recharge-qr-lightbox-open {
 .admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
   .license-notepads-wrap
   #adminLicenciasLicenseSplitRoot
+  .license-split-editor__grid,
+.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+  .license-notepads-wrap
+  #adminLicenciasCustomerRenewalSplitRoot
   .license-split-editor__grid,
 .admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
   .license-notepads-wrap
@@ -32214,6 +33937,10 @@ body.balance-recharge-qr-lightbox-open {
     .license-split-editor__grid,
   .admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
     .license-notepads-wrap
+    #adminLicenciasCustomerRenewalSplitRoot
+    .license-split-editor__grid,
+  .admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+    .license-notepads-wrap
     #licenseAllDaysContainer
     .license-split-editor__grid {
     grid-template-columns: var(--lic-creds-col-px, minmax(min(168px, 42vw), max-content))
@@ -32243,6 +33970,7 @@ body.balance-recharge-qr-lightbox-open {
   }
 
   .admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell) .license-notepads-wrap #adminLicenciasLicenseSplitRoot .license-split-editor__grid,
+  .admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell) .license-notepads-wrap #adminLicenciasCustomerRenewalSplitRoot .license-split-editor__grid,
   .admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell) .license-suspended-notepad-wrap .license-split-editor__grid,
   .admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell) .license-expired-notepad-wrap .license-split-editor__grid,
   .admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell) .license-changes-products-container .license-split-editor__grid {
@@ -32253,6 +33981,7 @@ body.balance-recharge-qr-lightbox-open {
   }
 
   .admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell) .license-notepads-wrap #adminLicenciasLicenseSplitRoot .license-split-editor__creds,
+  .admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell) .license-notepads-wrap #adminLicenciasCustomerRenewalSplitRoot .license-split-editor__creds,
   .admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell) .license-suspended-notepad-wrap .license-split-editor__creds,
   .admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell) .license-expired-notepad-wrap .license-split-editor__creds,
   .admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell) .license-changes-products-container .license-split-editor__creds {
@@ -32264,6 +33993,7 @@ body.balance-recharge-qr-lightbox-open {
   }
 
   .admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell) .license-notepads-wrap #adminLicenciasLicenseSplitRoot .license-split-editor__row:not(.license-split-editor__row--suspended):not(.license-split-editor__row--expired):not(.license-split-editor__row--changes),
+  .admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell) .license-notepads-wrap #adminLicenciasCustomerRenewalSplitRoot .license-split-editor__row:not(.license-split-editor__row--suspended):not(.license-split-editor__row--expired):not(.license-split-editor__row--changes),
   .admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell) .license-suspended-notepad-wrap .license-split-editor__row:not(.license-split-editor__row--suspended):not(.license-split-editor__row--expired):not(.license-split-editor__row--changes),
   .admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell) .license-expired-notepad-wrap .license-split-editor__row:not(.license-split-editor__row--suspended):not(.license-split-editor__row--expired):not(.license-split-editor__row--changes),
   .admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell) .license-changes-products-container .license-split-editor__row:not(.license-split-editor__row--suspended):not(.license-split-editor__row--expired):not(.license-split-editor__row--changes) {
@@ -32833,7 +34563,7 @@ body.balance-recharge-qr-lightbox-open {
   font-size: 0.82rem;
 }
 
-.whatsapp-notify-phone-cell {
+.whatsapp-notify-attempts-modal-body .whatsapp-notify-phone-cell {
   white-space: nowrap;
   font-size: 0.82rem;
 }

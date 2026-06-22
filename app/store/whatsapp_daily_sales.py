@@ -16,12 +16,6 @@ from app.utils.timezone import COLOMBIA_TZ, get_colombia_datetime, utc_to_colomb
 
 logger = logging.getLogger(__name__)
 
-WHATSAPP_DAILY_BLOCK_MESSAGE = (
-    'Tienes compras o renovaciones pendientes de envío por WhatsApp. '
-    'Podrás volver a comprar cuando se envíe el resumen del día '
-    '(según la hora configurada en Configuraciones → WhatsApp Web).'
-)
-
 
 def ensure_whatsapp_daily_sales_columns():
     """Añade columnas de cola diaria en snapshots si faltan."""
@@ -132,18 +126,9 @@ def user_has_pending_whatsapp_daily_sales(user: User) -> bool:
 
 
 def check_whatsapp_daily_sales_block(user: User) -> str | None:
-    """Mensaje de error si las ventas están pausadas; None si puede comprar."""
-    if not user_has_pending_whatsapp_daily_sales(user):
-        return None
-    from app.store.whatsapp_license_notify_job import _resolve_user_whatsapp_phone
-
-    billing = user
-    from app.store.routes import _billing_user_for_store_debt_limit
-
-    billing = _billing_user_for_store_debt_limit(user) or user
-    if not _resolve_user_whatsapp_phone(billing):
-        return None
-    return WHATSAPP_DAILY_BLOCK_MESSAGE
+    """Checkout no se bloquea por resúmenes WhatsApp pendientes; siguen en cola para envío."""
+    del user
+    return None
 
 
 def has_pending_daily_digests_ready(config: WhatsAppConfig, co_now=None) -> bool:
@@ -289,6 +274,14 @@ def _section_summary_line(
         return None
     parts = [f'{qty} {name}' for name, qty in items]
     return f'{label}: ' + ', '.join(parts)
+
+
+def _day_has_commerce_snapshots(snapshots: list[SalePurchaseSnapshot]) -> bool:
+    """True si el día tiene al menos una compra o renovación en tienda."""
+    return bool(
+        _section_summary_line('Renovaciones', snapshots, is_renewal=True)
+        or _section_summary_line('Compras', snapshots, is_renewal=False)
+    )
 
 
 def _email_es_credencial_interna(email: str) -> bool:
@@ -463,12 +456,13 @@ def build_daily_summary_lines(
 ) -> list[str] | None:
     renewals_summary = _section_summary_line('Renovaciones', snapshots, is_renewal=True)
     purchases_summary = _section_summary_line('Compras', snapshots, is_renewal=False)
+
+    if not renewals_summary and not purchases_summary:
+        return None
+
     failed_lines: list[str] = []
     if include_failed_renewals and billing_user and co_date:
         failed_lines = _failed_renewal_historial_lines(billing_user, co_date)
-
-    if not renewals_summary and not purchases_summary and not failed_lines:
-        return None
 
     day_total = _snapshot_day_total(snapshots)
     saldo_before = 0.0
@@ -546,36 +540,6 @@ def _daily_summary_sort_ts(snaps: list[SalePurchaseSnapshot], co_date: date) -> 
         return datetime.combine(co_date, time(23, 59, 59)).timestamp()
 
 
-def _eligible_billing_users_for_daily_history(
-    *,
-    viewer_billing_user_id: int | None,
-    all_users: bool,
-) -> list[User]:
-    from app.store.routes import _eligible_tienda_user_licencias_portal
-
-    if all_users:
-        users = User.query.filter_by(enabled=True).order_by(User.id.asc()).all()
-        out: list[User] = []
-        seen: set[int] = set()
-        for user in users:
-            if not _eligible_tienda_user_licencias_portal(user):
-                continue
-            from app.store.routes import _billing_user_for_store_debt_limit
-
-            billing = _billing_user_for_store_debt_limit(user) or user
-            bid = int(billing.id)
-            if bid in seen:
-                continue
-            seen.add(bid)
-            out.append(billing)
-        return out
-
-    if not viewer_billing_user_id:
-        return []
-    billing = User.query.get(int(viewer_billing_user_id))
-    return [billing] if billing else []
-
-
 def build_purchase_history_daily_summary_items(
     *,
     viewer_billing_user_id: int | None = None,
@@ -586,7 +550,6 @@ def build_purchase_history_daily_summary_items(
     del utc_to_colombia_fn
 
     ensure_whatsapp_daily_sales_columns()
-    from app.store.routes import _eligible_tienda_user_licencias_portal
 
     q = SalePurchaseSnapshot.query.filter(
         SalePurchaseSnapshot.is_reversed.is_(False),
@@ -603,57 +566,15 @@ def build_purchase_history_daily_summary_items(
     snapshots = q.order_by(SalePurchaseSnapshot.id.asc()).all()
     groups = _group_all_snapshots_by_billing_and_date(snapshots)
 
-    blocked_by_billing: dict[int, dict[date, list[str]]] = {}
-    for billing in _eligible_billing_users_for_daily_history(
-        viewer_billing_user_id=viewer_billing_user_id,
-        all_users=all_users,
-    ):
-        bid = int(billing.id)
-        if not all_users and account_ids and bid not in account_ids:
-            continue
-        raw = getattr(billing, 'portal_license_activity_log', None) or ''
-        if not str(raw).strip():
-            continue
-        try:
-            items = json.loads(raw)
-        except (json.JSONDecodeError, TypeError):
-            continue
-        if not isinstance(items, list):
-            continue
-        for item in items:
-            if not isinstance(item, dict):
-                continue
-            if str(item.get('tipo') or '').strip().lower() != 'renovacion_saldo':
-                continue
-            ts_raw = item.get('ts')
-            if not ts_raw:
-                continue
-            try:
-                ts = datetime.fromisoformat(str(ts_raw).replace('Z', '')[:26])
-                item_co = utc_to_colombia(ts).date()
-            except (ValueError, TypeError):
-                continue
-            line = _renewal_blocked_account_line(item)
-            if not line:
-                continue
-            blocked_by_billing.setdefault(bid, {}).setdefault(item_co, [])
-            if line not in blocked_by_billing[bid][item_co]:
-                blocked_by_billing[bid][item_co].append(line)
-
-    keys: set[tuple[int, date]] = set(groups.keys())
-    for bid, by_date in blocked_by_billing.items():
-        if not all_users and account_ids and bid not in account_ids:
-            continue
-        for co_date in by_date:
-            keys.add((bid, co_date))
-
     items_out: list[dict[str, Any]] = []
-    for billing_id, co_date in sorted(keys, key=lambda k: (k[1], k[0]), reverse=True):
+    for billing_id, co_date in sorted(groups.keys(), key=lambda k: (k[1], k[0]), reverse=True):
         billing_user = User.query.get(int(billing_id))
         if not billing_user:
             continue
 
         snaps = groups.get((billing_id, co_date), [])
+        if not snaps or not _day_has_commerce_snapshots(snaps):
+            continue
         summary_lines = build_daily_summary_lines(
             snaps,
             billing_user,
@@ -763,6 +684,17 @@ def send_pending_daily_digests_for_config(
     for (billing_user_id, co_date), snaps in groups.items():
         billing_user = User.query.get(billing_user_id)
         if not billing_user:
+            continue
+        from app.store.whatsapp_user_notify_prefs import user_receives_whatsapp_notifications
+
+        if not user_receives_whatsapp_notifications(billing_user):
+            stats['daily_skipped_no_phone'] += 1
+            _append_detail(
+                username=billing_user.username or '',
+                phone=None,
+                outcome='deshabilitado',
+                reason='WhatsApp desactivado para este usuario',
+            )
             continue
         phone = resolve_phone(billing_user)
         if not phone:

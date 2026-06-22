@@ -58,6 +58,10 @@ def _append_delivery_detail(
 
 
 def _resolve_user_whatsapp_phone(user: User) -> str | None:
+    from app.store.whatsapp_user_notify_prefs import user_receives_whatsapp_notifications
+
+    if not user_receives_whatsapp_notifications(user):
+        return None
     raw = (getattr(user, 'phone', None) or '').strip()
     digits = ''.join(ch for ch in raw if ch.isdigit())
     if len(digits) >= 10:
@@ -293,8 +297,12 @@ def run_whatsapp_license_notify_for_config(
     }
 
     if run_expiry or force:
+        from app.store.whatsapp_user_notify_prefs import user_receives_whatsapp_notifications
+
         users = User.query.filter_by(enabled=True).order_by(User.id.asc()).all()
         for user in users:
+            if not user_receives_whatsapp_notifications(user):
+                continue
             phone = _resolve_user_whatsapp_phone(user)
             payload = _build_user_notify_payload(user)
             if not payload:

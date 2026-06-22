@@ -14,11 +14,13 @@ logger = logging.getLogger(__name__)
 RENEWAL_KIND_RENOVAR = 'renovar_1_mes'
 RENEWAL_KIND_MES_A_MES = 'dejar_mes_a_mes'
 RENEWAL_KIND_MIXTO = 'mixto'
+RENEWAL_KIND_CUSTOMER_ACCOUNT = 'customer_account'
 
 RENEWAL_KIND_LABELS = {
     RENEWAL_KIND_RENOVAR: 'Renovación: 1 mes más',
     RENEWAL_KIND_MES_A_MES: 'Renovación: mes a mes',
     RENEWAL_KIND_MIXTO: 'Renovación mixta (1 mes más y mes a mes)',
+    RENEWAL_KIND_CUSTOMER_ACCOUNT: 'Renovar tu cuenta',
 }
 
 
@@ -379,8 +381,8 @@ def repair_stale_snapshot_sale_ids():
     return updated
 
 
-def mark_sale_reversed(sale_id):
-    """Marca la compra como revertida pero conserva credenciales en el historial."""
+def mark_sale_reversed_in_session(sale_id):
+    """Marca snapshot revertido sin commit (p. ej. devolución de saldo en la misma transacción)."""
     ensure_snapshot_table()
     sale = Sale.query.get(int(sale_id))
     if not sale:
@@ -390,12 +392,21 @@ def mark_sale_reversed(sale_id):
     if not snap:
         snap = SalePurchaseSnapshot.query.filter_by(sale_id=int(sale_id)).first()
     if not snap:
-        return None
+        return None, False
+    if bool(getattr(snap, 'is_reversed', False)):
+        return snap, False
     snap.is_reversed = True
     snap.reversed_at = datetime.utcnow()
     snap.updated_at = datetime.utcnow()
     db.session.add(snap)
-    db.session.commit()
+    return snap, True
+
+
+def mark_sale_reversed(sale_id):
+    """Marca la compra como revertida pero conserva credenciales en el historial."""
+    snap, _changed = mark_sale_reversed_in_session(sale_id)
+    if snap:
+        db.session.commit()
     return snap
 
 
@@ -471,6 +482,10 @@ def snapshot_to_historial_item(snap, username_by_id=None):
         'user_id': snap.user_id,
         'usuario': usuario,
     }
+    if renewal_kind == 'customer_account' and snap.sale_id:
+        from app.store.customer_account_renewals import enrich_historial_item_customer_renewal
+
+        enrich_historial_item_customer_renewal(item, sale_id=snap.sale_id)
     return item
 
 

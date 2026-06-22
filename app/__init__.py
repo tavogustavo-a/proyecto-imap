@@ -296,6 +296,25 @@ def create_app(config_class_passed=None):
                         "(JSON preferencias UI admin licencias) añadida a users (%s)",
                         dialect,
                     )
+
+                ucols = _cols("users")
+                if "whatsapp_notify_enabled" not in ucols:
+                    if dialect == "postgresql":
+                        wa_sql = (
+                            "ALTER TABLE users ADD COLUMN whatsapp_notify_enabled "
+                            "BOOLEAN NOT NULL DEFAULT TRUE"
+                        )
+                    else:
+                        wa_sql = (
+                            "ALTER TABLE users ADD COLUMN whatsapp_notify_enabled "
+                            "INTEGER NOT NULL DEFAULT 1"
+                        )
+                    db.session.execute(text(wa_sql))
+                    db.session.commit()
+                    app.logger.info(
+                        "Esquema: columna whatsapp_notify_enabled añadida a users (%s)",
+                        dialect,
+                    )
         except Exception as schema_users_patch_err:
             db.session.rollback()
             app.logger.warning(
@@ -498,6 +517,15 @@ def create_app(config_class_passed=None):
         if not result.get("show"):
             return defaults
         return {"store_menu_show_saldo": True, "store_menu_saldo_line": result.get("line")}
+
+    @app.context_processor
+    def inject_licencias_static_version():
+        try:
+            from app.store.routes import LICENCIAS_STATIC_VERSION
+
+            return {"licencias_static_version": LICENCIAS_STATIC_VERSION}
+        except Exception:
+            return {"licencias_static_version": "1"}
 
     @app.context_processor
     def inject_admin_archivados_count():

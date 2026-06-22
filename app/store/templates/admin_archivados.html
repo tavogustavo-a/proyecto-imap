@@ -71,7 +71,10 @@
     <div class="admin-lic-bulk-modal__backdrop" data-admin-lic-bulk-dismiss="1"></div>
     <div class="admin-lic-bulk-modal__panel" role="dialog" aria-modal="true" aria-labelledby="adminLicenciasBulkModalTitle">
       <div class="admin-lic-bulk-modal__head">
-        <h2 id="adminLicenciasBulkModalTitle" class="admin-lic-bulk-modal__title">Edición masiva</h2>
+        <div class="admin-lic-bulk-modal__title-row">
+          <h2 id="adminLicenciasBulkModalTitle" class="admin-lic-bulk-modal__title">Edición masiva</h2>
+          <button type="button" class="admin-lic-bulk-modal__info-btn" id="adminLicBulkInfoBtn" title="Qué hace la edición masiva" aria-label="Información sobre edición masiva"><i class="fas fa-info-circle" aria-hidden="true"></i></button>
+        </div>
         <button type="button" class="admin-lic-bulk-modal__close" data-admin-lic-bulk-dismiss="1" title="Cerrar" aria-label="Cerrar"><i class="fas fa-times" aria-hidden="true"></i></button>
       </div>
       <div class="admin-lic-bulk-modal__rows" id="adminLicBulkModalFields">
@@ -116,6 +119,60 @@
       <div class="admin-lic-bulk-modal__footer">
         <button type="button" class="btn-blue menu-btn-worksheet" id="adminLicBulkApplyBtn">Aplicar a selección</button>
       </div>
+    </div>
+  </div>
+
+  <div id="adminLicBulkInfoModal" class="admin-lic-bulk-info-modal" hidden aria-hidden="true">
+    <div class="admin-lic-bulk-info-modal__backdrop" data-admin-lic-bulk-info-dismiss="1"></div>
+    <div class="admin-lic-bulk-info-modal__panel" role="dialog" aria-modal="true" aria-labelledby="adminLicBulkInfoModalTitle">
+      <div class="admin-lic-bulk-info-modal__head">
+        <h2 id="adminLicBulkInfoModalTitle" class="admin-lic-bulk-info-modal__title"><i class="fas fa-info-circle" aria-hidden="true"></i> ¿Qué hace la edición masiva?</h2>
+        <button type="button" class="admin-lic-bulk-info-modal__close" data-admin-lic-bulk-info-dismiss="1" title="Cerrar" aria-label="Cerrar"><i class="fas fa-times" aria-hidden="true"></i></button>
+      </div>
+      <div class="admin-lic-bulk-info-modal__body">
+        <p class="admin-lic-bulk-info-modal__lead">Aplica los mismos cambios a varias filas que ya tengan credencial (correo y contraseña), empezando desde arriba del bloc.</p>
+        <ul class="admin-lic-bulk-info-modal__list">
+          <li><strong>Cantidad</strong> — cuántas filas con credencial quieres modificar.</li>
+          <li><strong>Día</strong> (solo bloc Licencias) — al aplicar, mueve las vendidas al día del mes indicado.</li>
+          <li><strong>Usuario/cliente</strong> — asigna el cliente a esas filas. Si no es «anonimo» y vendes desde Licencias, se registra cobro en la cuenta del cliente.</li>
+          <li><strong>Estados verde/rojo</strong> — opcionales; déjalos en «---» si no quieres cambiarlos.</li>
+          <li><strong>Notas</strong> — texto opcional que se añade a cada fila editada.</li>
+          <li><strong>Agregar licencias</strong> — añade nuevas líneas al final del bloc (una credencial por línea), sin editar filas existentes.</li>
+        </ul>
+        <p class="admin-lic-bulk-info-modal__note">En el bloc <strong>Licencias</strong> debes tener un producto concreto seleccionado (no «Todos»).</p>
+      </div>
+      <div class="admin-lic-bulk-info-modal__footer">
+        <button type="button" class="btn-blue menu-btn-worksheet" id="adminLicBulkInfoOkBtn" data-admin-lic-bulk-info-dismiss="1">Entendido</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="adminLicProveedorInfoModal" class="admin-lic-bulk-info-modal" hidden aria-hidden="true">
+    <div class="admin-lic-bulk-info-modal__backdrop" data-admin-lic-proveedor-info-dismiss="1"></div>
+    <div class="admin-lic-bulk-info-modal__panel" role="dialog" aria-modal="true" aria-labelledby="adminLicProveedorInfoModalTitle">
+      <div class="admin-lic-bulk-info-modal__head">
+        <h2 id="adminLicProveedorInfoModalTitle" class="admin-lic-bulk-info-modal__title"><i class="fas fa-info-circle" aria-hidden="true"></i> Proveedores</h2>
+        <button type="button" class="admin-lic-bulk-info-modal__close" data-admin-lic-proveedor-info-dismiss="1" title="Cerrar" aria-label="Cerrar"><i class="fas fa-times" aria-hidden="true"></i></button>
+      </div>
+      <div class="admin-lic-bulk-info-modal__body">
+        <p class="admin-lic-bulk-info-modal__lead">Inventario de usuarios con permiso <strong>Proveedor</strong>. Junto a tus licencias del producto, estas líneas suman al total disponible para vender.</p>
+      </div>
+      <div class="admin-lic-bulk-info-modal__footer">
+        <button type="button" class="btn-blue menu-btn-worksheet" id="adminLicProveedorInfoOkBtn" data-admin-lic-proveedor-info-dismiss="1">Entendido</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="adminLicProveedorUserPickModal" class="admin-lic-proveedor-user-pick-modal" hidden aria-hidden="true">
+    <div class="admin-lic-proveedor-user-pick-modal__backdrop" data-admin-lic-proveedor-user-pick-dismiss="1"></div>
+    <div class="admin-lic-proveedor-user-pick-modal__panel" role="dialog" aria-modal="true" aria-labelledby="adminLicProveedorUserPickModalTitle">
+      <div class="admin-lic-proveedor-user-pick-modal__head">
+        <h2 id="adminLicProveedorUserPickModalTitle" class="admin-lic-proveedor-user-pick-modal__title">Elegir proveedor</h2>
+        <button type="button" class="admin-lic-proveedor-user-pick-modal__close" data-admin-lic-proveedor-user-pick-dismiss="1" title="Cerrar" aria-label="Cerrar"><i class="fas fa-times" aria-hidden="true"></i></button>
+      </div>
+      <label for="adminLicProveedorUserPickSearch" class="sr-only">Buscar proveedor</label>
+      <input type="search" id="adminLicProveedorUserPickSearch" class="form-control admin-lic-proveedor-user-pick-modal__search" placeholder="Buscar proveedor…" autocomplete="off">
+      <div id="adminLicProveedorUserPickList" class="admin-lic-proveedor-user-pick-modal__list" role="listbox" aria-label="Proveedores disponibles"></div>
     </div>
   </div>
 

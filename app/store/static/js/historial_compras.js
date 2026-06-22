@@ -100,6 +100,9 @@ document.addEventListener('DOMContentLoaded', function() {
 
   function renewalModalSubtitle(compraRow) {
     if (!compraRow || !compraRow.is_renewal) return '';
+    if (compraRow.is_customer_account_renewal || compraRow.renewal_kind === 'customer_account') {
+      return compraRow.customer_renewal_status_label || 'Renovar tu cuenta';
+    }
     if (compraRow.renewal_kind_label) return compraRow.renewal_kind_label;
     if (compraRow.renewal_kind === 'renovar_1_mes') return 'Renovación: 1 mes más';
     if (compraRow.renewal_kind === 'dejar_mes_a_mes') return 'Renovación: mes a mes';
@@ -124,15 +127,100 @@ document.addEventListener('DOMContentLoaded', function() {
     return 'Venta';
   }
 
-  function openModal(compraRow, openerEl) {
+  function customerRenewalLineForCopy(compraRow) {
+    if (!compraRow) return '';
+    const em = String(compraRow.customer_renewal_email || '').trim();
+    const pw = historialPasswordParaMostrar(compraRow.customer_renewal_password);
+    if (em && pw) return em + ' · ' + pw;
+    if (em) return em;
+    if (pw) return pw;
+    return '';
+  }
+
+  function openCustomerRenewalModal(compraRow, openerEl) {
     if (!modal || !modalBody) return;
     lastLicenciasOpenerBtn =
       openerEl && openerEl.nodeType === 1 ? openerEl : null;
 
-    if (compraRow.is_daily_summary) {
+    modalTitle.textContent = compraRow.producto || 'Renovar tu cuenta';
+    if (modalSub) {
+      const sub = renewalModalSubtitle(compraRow) || 'Renovar tu cuenta';
+      modalSub.textContent = sub;
+      modalSub.hidden = !sub;
+    }
+
+    modalBody.innerHTML = '';
+    const status = String(compraRow.customer_renewal_status || 'pending').toLowerCase();
+    const em = String(compraRow.customer_renewal_email || '').trim();
+    const pw = historialPasswordParaMostrar(compraRow.customer_renewal_password);
+    const copyLine = customerRenewalLineForCopy(compraRow);
+
+    if (status === 'rejected') {
+      const note = document.createElement('p');
+      note.className = 'purchase-licencias-reversed-note';
+      const reason = String(compraRow.customer_renewal_reason || '').trim();
+      note.textContent = reason
+        ? 'No se pudo renovar esta cuenta. Motivo: ' + reason
+        : 'No se pudo renovar esta cuenta.';
+      modalBody.appendChild(note);
+    } else if (status === 'completed') {
+      const note = document.createElement('p');
+      note.className = 'purchase-licencias-empty';
+      note.textContent =
+        'Tu renovación fue procesada. Revisa tus licencias en la tienda si ya tienes acceso.';
+      modalBody.appendChild(note);
+    } else {
+      const note = document.createElement('p');
+      note.className = 'purchase-licencias-empty';
+      note.textContent =
+        'Recibimos tu cuenta para renovar. Te avisaremos cuando esté lista.';
+      modalBody.appendChild(note);
+    }
+
+    const grid = document.createElement('div');
+    grid.className = 'purchase-licencias-modal-grid';
+    const card = document.createElement('div');
+    card.className = 'purchase-licencia-card';
+    const pre = document.createElement('pre');
+    pre.className = 'lic-block';
+    if (em && pw) {
+      pre.textContent = em + ' · ' + pw;
+    } else if (em) {
+      pre.textContent = em;
+    } else if (pw) {
+      pre.textContent = pw;
+    } else {
+      pre.textContent = '—';
+    }
+    card.appendChild(pre);
+    grid.appendChild(card);
+    modalBody.appendChild(grid);
+
+    if (copyActions) {
+      if (copyLine) copyActions.removeAttribute('hidden');
+      else copyActions.setAttribute('hidden', '');
+    }
+    if (copyBuf) copyBuf.value = copyLine;
+
+    modal.classList.remove('modal-hidden');
+    modal.setAttribute('aria-hidden', 'false');
+  }
+
+  function openModal(compraRow, openerEl) {
+    if (!modal || !modalBody) return;
+    if (compraRow && (compraRow.is_customer_account_renewal || compraRow.has_customer_renewal_detail)) {
+      openCustomerRenewalModal(compraRow, openerEl);
+      return;
+    }
+    lastLicenciasOpenerBtn =
+      openerEl && openerEl.nodeType === 1 ? openerEl : null;
+
+    if (compraRow.is_daily_summary || compraRow.is_proveedor_daily_summary) {
       modalTitle.textContent = compraRow.producto || 'Resumen diario';
       if (modalSub) {
-        modalSub.textContent = 'Resumen del día';
+        modalSub.textContent = compraRow.is_proveedor_daily_summary
+          ? 'Resumen ventas proveedor'
+          : 'Resumen del día';
         modalSub.hidden = false;
       }
       modalBody.innerHTML = '';
@@ -436,7 +524,9 @@ document.addEventListener('DOMContentLoaded', function() {
         if (row.is_cleanup_log) {
           tr.className = 'purchase-history-cleanup-log-row';
         } else if (row.is_daily_summary) {
-          tr.className = 'purchase-history-daily-summary-row';
+          tr.className = row.is_proveedor_daily_summary
+            ? 'purchase-history-proveedor-daily-summary-row'
+            : 'purchase-history-daily-summary-row';
         } else if (row.is_recharge_event) {
           tr.className = 'purchase-history-recharge-row';
           if (row.is_recharge_reverted || row.is_recharge_rejected) {
@@ -466,6 +556,13 @@ document.addEventListener('DOMContentLoaded', function() {
             (failed ? 'failed' : 'success');
           span.textContent = failed ? 'Fallido' : 'Exitoso';
           licBtnCell.appendChild(span);
+        } else if (row.is_customer_account_renewal || row.has_customer_renewal_detail) {
+          const btn = document.createElement('button');
+          btn.type = 'button';
+          btn.className = 'btn-panel btn-blue btn-sm btn-ver-cuenta-renovacion-compra';
+          btn.setAttribute('data-row-id', String(row.id));
+          btn.textContent = 'Ver cuenta';
+          licBtnCell.appendChild(btn);
         } else if (
           (row.licencias && row.licencias.length) ||
           row.has_licencias
@@ -490,6 +587,12 @@ document.addEventListener('DOMContentLoaded', function() {
         let productoCell;
         if (row.is_cleanup_log) {
           productoCell = escapeHtml(productoTexto);
+        } else if (row.is_proveedor_daily_summary) {
+          productoCell =
+            '<span class="purchase-history-proveedor-daily-summary-product">' +
+            '<i class="fas fa-truck-loading" aria-hidden="true"></i> ' +
+            escapeHtml(productoTexto) +
+            '</span>';
         } else if (row.is_daily_summary) {
           productoCell =
             '<span class="purchase-history-daily-summary-product">' +
@@ -517,8 +620,14 @@ document.addEventListener('DOMContentLoaded', function() {
             escapeHtml(productoTexto) +
             '</span>';
         } else if (row.is_renewal) {
+          var renewalTitle = 'Renovación';
+          if (row.is_customer_account_renewal || row.renewal_kind === 'customer_account') {
+            renewalTitle = 'Renovar tu cuenta';
+          }
           productoCell =
-            '<span class="purchase-history-product-icon-stack" title="Renovación" aria-hidden="true">' +
+            '<span class="purchase-history-product-icon-stack" title="' +
+            escapeHtml(renewalTitle) +
+            '" aria-hidden="true">' +
             '<i class="fas fa-sync-alt purchase-history-renewal-icon"></i>' +
             '<i class="fas fa-ticket-alt purchase-history-product-icon-base"></i>' +
             '</span> ' +
@@ -549,7 +658,7 @@ document.addEventListener('DOMContentLoaded', function() {
         tbody.appendChild(tr);
       });
 
-      tbody.querySelectorAll('.btn-ver-licencias-compra, .btn-ver-resumen-compra').forEach(btn => {
+      tbody.querySelectorAll('.btn-ver-licencias-compra, .btn-ver-resumen-compra, .btn-ver-cuenta-renovacion-compra').forEach(btn => {
         btn.addEventListener('click', function () {
           const rid = this.getAttribute('data-row-id');
           const row = datos.find(function (r) {
@@ -607,6 +716,10 @@ document.addEventListener('DOMContentLoaded', function() {
         if (showUserColumn) {
           if (row.usuario != null) hay.push(String(row.usuario));
           if (row.user_id != null) hay.push(String(row.user_id));
+        }
+        if (row.is_customer_account_renewal || row.has_customer_renewal_detail) {
+          if (row.customer_renewal_email) hay.push(row.customer_renewal_email);
+          if (row.customer_renewal_status_label) hay.push(row.customer_renewal_status_label);
         }
         if (Array.isArray(row.licencias)) {
           row.licencias.forEach(function (lic) {
@@ -670,4 +783,74 @@ document.addEventListener('DOMContentLoaded', function() {
   window.addEventListener('balance-recharge-realtime', function () {
     refreshRechargeHistorialLabels();
   });
+
+  var storeNotifSeenIds = Object.create(null);
+
+  function historialCsrfToken() {
+    var meta = document.querySelector('meta[name="csrf_token"]');
+    return meta ? meta.getAttribute('content') || '' : '';
+  }
+
+  function showHistorialStoreNotification(notif) {
+    if (!notif || notif.id == null) return;
+    if (storeNotifSeenIds[notif.id]) return;
+    storeNotifSeenIds[notif.id] = true;
+    var isMobile = window.matchMedia && window.matchMedia('(max-width: 768px)').matches;
+    var node = document.createElement('div');
+    node.className =
+      'in-page-notification push-notification store-reservation-notify ' +
+      (isMobile ? 'push-notification-mobile' : 'push-notification-desktop');
+    var bodyText = String(notif.body || '').trim();
+    if (bodyText.length > 220) bodyText = bodyText.slice(0, 217) + '…';
+    node.innerHTML =
+      '<div class="push-notification-title">' +
+      (notif.title ? String(notif.title) : 'Aviso de la tienda') +
+      '</div>' +
+      '<div class="push-notification-body">' +
+      bodyText.replace(/\n/g, '<br>') +
+      '</div>' +
+      (isMobile ? '<div class="push-notification-hint">Toca para cerrar</div>' : '');
+    node.addEventListener('click', function () {
+      node.classList.add('push-notification-closing');
+      window.setTimeout(function () {
+        if (node.parentNode) node.parentNode.removeChild(node);
+      }, 280);
+      fetch('/tienda/api/user/store-notifications/' + encodeURIComponent(String(notif.id)) + '/read', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: {
+          'X-CSRFToken': historialCsrfToken(),
+          'X-Requested-With': 'XMLHttpRequest',
+        },
+      }).catch(function () {});
+    });
+    document.body.appendChild(node);
+    window.setTimeout(function () {
+      if (!node.parentNode) return;
+      node.classList.add('push-notification-closing');
+      window.setTimeout(function () {
+        if (node.parentNode) node.parentNode.removeChild(node);
+      }, 280);
+    }, 12000);
+  }
+
+  function pollHistorialStoreNotifications() {
+    fetch('/tienda/api/user/store-notifications', {
+      credentials: 'same-origin',
+      cache: 'no-store',
+    })
+      .then(function (r) {
+        return r.json().catch(function () {
+          return { success: false };
+        });
+      })
+      .then(function (data) {
+        if (!data || !data.success || !Array.isArray(data.notifications)) return;
+        data.notifications.slice().reverse().forEach(showHistorialStoreNotification);
+      })
+      .catch(function () {});
+  }
+
+  pollHistorialStoreNotifications();
+  window.setInterval(pollHistorialStoreNotifications, 15000);
 });

@@ -229,11 +229,17 @@
   </div>
   {% endif %}
 
+  {% set m2m_map_catalog = product_month_to_month|default({}) %}
+  {% set billing_map_catalog = product_billing_period|default({}) %}
+  {% set reserve_map_catalog = product_allow_reservation|default({}) %}
+  {% set renew_customer_map_catalog = product_renew_customer_account|default({}) %}
+  {% set renew_customer_help_text = "Renueva tu propia cuenta del servicio (correo y contraseña que ya tienes). No te vendemos una cuenta de nuestro inventario: pagas la renovación o el enlace del plan y nos envías tus datos para gestionarlo." %}
+  {% macro product_renew_customer_button() -%}
+<button type="button" class="btn-renovar-cuenta-cliente-tienda">Renovar tu cuenta</button>
+  {%- endmacro %}
+  <span id="storeRenewCustomerHelp" class="sr-only" hidden>{{ renew_customer_help_text }}</span>
+
   <div id="storeProductsWrap" class="store-products-wrap store-products-wrap--view-grid d-flex flex-wrap gap-1">
-    {% set m2m_map_catalog = product_month_to_month|default({}) %}
-    {% set billing_map_catalog = product_billing_period|default({}) %}
-    {% set reserve_map_catalog = product_allow_reservation|default({}) %}
-    {% set renew_customer_map_catalog = product_renew_customer_account|default({}) %}
     <div id="storeCatalogTableHeader" class="store-catalog-table-header" hidden aria-hidden="true">
       <span class="store-catalog-table-header__cell store-catalog-table-header__cell--thumb" aria-hidden="true"></span>
       <span class="store-catalog-table-header__cell store-catalog-table-header__cell--name">Cuenta</span>
@@ -323,16 +329,9 @@
                     <td class="store-products-table__price">${{ final_price_usd_v6|int }} USD</td>
                   {% endif %}
                   <td class="store-products-table__stock">
-                    <span class="product-stock-info{% if _sock_v6 <= 0 and not product_renew_customer_v6 %} product-stock-info--zero{% endif %}" data-product-id="{{ p.id }}" data-initial-stock="{{ _sock_v6 }}">{% if product_renew_customer_v6 %}Renovar su cuenta{% else %}{{ _sock_v6 }} existencias{% endif %}</span>
+                    <span class="product-stock-info{% if _sock_v6 <= 0 %} product-stock-info--zero{% endif %}" data-product-id="{{ p.id }}" data-initial-stock="{{ _sock_v6 }}">{{ _sock_v6 }} existencias</span>
                   </td>
                   <td class="store-products-table__buy">
-                    {% if product_renew_customer_v6 %}
-                    <div class="product-renovar-cuenta-block product-renovar-cuenta-block--table">
-                      <input type="email" class="product-renovar-cuenta-email" placeholder="Correo de tu cuenta" autocomplete="off" aria-label="Correo de la cuenta a renovar">
-                      <input type="text" class="product-renovar-cuenta-password" placeholder="Contraseña" autocomplete="off" aria-label="Contraseña de la cuenta a renovar">
-                      <button type="button" class="btn-renovar-cuenta-cliente-tienda">Renovar</button>
-                    </div>
-                    {% else %}
                     <div class="store-catalog-full-table__buy-row d-flex align-items-center justify-content-center product-card-qty-add-row">
                       <div class="input-group-cantidad">
                         <button type="button" class="btn-agregar-licencia btn-restar" aria-label="Restar cantidad">-</button>
@@ -343,11 +342,15 @@
                       <button type="button" class="btn-anadir-producto-tienda">Añadir</button>
                       <button type="button" class="btn-reservar-producto-tienda" hidden>Reservar</button>
                     </div>
+                    {% if product_renew_customer_v6 %}
+                    <div class="product-renovar-cuenta-block product-renovar-cuenta-block--table">
+                      {{ product_renew_customer_button() }}
+                    </div>
                     {% endif %}
                   </td>
                 {% elif current_user %}
                   <td class="store-products-table__stock">
-                    <span class="product-stock-info{% if _sock_v6 <= 0 and not product_renew_customer_v6 %} product-stock-info--zero{% endif %}" data-product-id="{{ p.id }}" data-initial-stock="{{ _sock_v6 }}">{% if product_renew_customer_v6 %}Renovar su cuenta{% else %}{{ _sock_v6 }} existencias{% endif %}</span>
+                    <span class="product-stock-info{% if _sock_v6 <= 0 %} product-stock-info--zero{% endif %}" data-product-id="{{ p.id }}" data-initial-stock="{{ _sock_v6 }}">{{ _sock_v6 }} existencias</span>
                   </td>
                 {% endif %}
               </tr>
@@ -382,13 +385,6 @@
         <span class="product-card-meta product-card-meta--period">{{ product_billing_period }}</span>
         <span class="product-card-meta product-card-meta--m2m{% if product_m2m %} product-card-meta--m2m-yes{% else %} product-card-meta--m2m-no{% endif %}">{% if product_m2m %}Sí{% else %}No{% endif %}</span>
         {% if current_user and not current_user.parent_id %}
-          {% if product_renew_customer %}
-          <div class="product-renovar-cuenta-block">
-            <input type="email" class="product-renovar-cuenta-email" placeholder="Correo de tu cuenta" autocomplete="off" aria-label="Correo de la cuenta a renovar">
-            <input type="text" class="product-renovar-cuenta-password" placeholder="Contraseña" autocomplete="off" aria-label="Contraseña de la cuenta a renovar">
-            <button type="button" class="btn-renovar-cuenta-cliente-tienda">Renovar</button>
-          </div>
-          {% else %}
           <div class="product-card-qty-add-row d-flex align-items-center justify-content-center mt-05">
             <div class="input-group-cantidad">
               <button type="button" class="btn-agregar-licencia btn-restar">-</button>
@@ -399,11 +395,15 @@
             <button type="button" class="btn-anadir-producto-tienda">Añadir</button>
             <button type="button" class="btn-reservar-producto-tienda" hidden>Reservar</button>
           </div>
+          {% if product_renew_customer %}
+          <div class="product-renovar-cuenta-block">
+            {{ product_renew_customer_button() }}
+          </div>
           {% endif %}
         {% endif %}
         {% if current_user %}
           <div class="d-flex align-items-center justify-content-center mt-02 product-card-stock-row">
-            <span class="product-stock-info{% if _sock <= 0 and not product_renew_customer %} product-stock-info--zero{% endif %}" data-product-id="{{ p.id }}" data-initial-stock="{{ _sock }}">{% if product_renew_customer %}Renovar su cuenta{% else %}{{ _sock }} existencias{% endif %}</span>
+            <span class="product-stock-info{% if _sock <= 0 %} product-stock-info--zero{% endif %}" data-product-id="{{ p.id }}" data-initial-stock="{{ _sock }}">{{ _sock }} existencias</span>
             {% if not current_user.parent_id %}
             <span class="product-price-period product-price-period--with-stock">{{ product_billing_period }}</span>
             {% endif %}
@@ -608,15 +608,16 @@
     <button type="button" id="closeRenovarCuentaClienteModalBtn" class="btn-close-desc-modal" aria-label="Cerrar">&times;</button>
     <h3 id="renovarCuentaClienteModalTitle" class="renovar-cuenta-cliente-modal-title">
       <i class="fas fa-user-check" aria-hidden="true"></i>
-      Renovar su cuenta
+      Renovar tu cuenta
     </h3>
     <p id="renovarCuentaClienteProductName" class="renovar-cuenta-cliente-product-name"></p>
-    <p class="renovar-cuenta-cliente-hint">Envía el correo y la contraseña de la cuenta que quieres renovar o enlazar.</p>
+    <div class="renovar-cuenta-cliente-about" role="note" aria-labelledby="renovarCuentaClienteAboutTitle">
+      <p id="renovarCuentaClienteAboutTitle" class="renovar-cuenta-cliente-about__title"><i class="fas fa-info-circle" aria-hidden="true"></i> ¿Qué es renovar tu cuenta?</p>
+      <p class="renovar-cuenta-cliente-about__text">{{ renew_customer_help_text }}</p>
+    </div>
+    <p class="renovar-cuenta-cliente-hint">Escribe el correo de tu cuenta (debe tener @ y punto). La contraseña es opcional en la misma línea (ej: correo@ejemplo.com contraseña).</p>
     <form id="renovarCuentaClienteForm" class="renovar-cuenta-cliente-form" autocomplete="off">
-      <label for="renovarCuentaClienteEmail">Correo de la cuenta</label>
-      <input type="email" id="renovarCuentaClienteEmail" name="email" class="renovar-cuenta-cliente-input" placeholder="correo@ejemplo.com" autocomplete="off" required>
-      <label for="renovarCuentaClientePassword">Contraseña</label>
-      <input type="text" id="renovarCuentaClientePassword" name="password" class="renovar-cuenta-cliente-input" placeholder="Contraseña de la cuenta" autocomplete="off" required>
+      <input type="text" id="renovarCuentaClienteCred" name="credential" class="renovar-cuenta-cliente-input" placeholder="correo@ejemplo.com" autocomplete="off" required aria-label="Correo de la cuenta (contraseña opcional en la misma línea)">
       <div class="renovar-cuenta-cliente-actions">
         <button type="button" id="btnRenovarCuentaClienteCancel" class="btn-panel btn-muted">Cancelar</button>
         <button type="submit" id="btnRenovarCuentaClienteSubmit" class="btn-panel btn-green">Añadir al carrito</button>

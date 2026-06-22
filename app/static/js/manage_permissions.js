@@ -785,188 +785,10 @@ document.addEventListener("DOMContentLoaded", function() {
   const searchUserPricesInput = document.getElementById("searchUserPricesInput");
   const clearUserPricesSearchBtn = document.getElementById("clearUserPricesSearchBtn");
   
-  let userPricesData = {}; // { userId: { tipo_precio, soporte_licencias, puede_tener_deuda, recarga_automatica, limite_deuda_usd, limite_deuda_cop } }
+  let userPricesData = {}; // { userId: { tipo_precio, soporte_licencias, puede_tener_deuda, recarga_automatica, proveedor, limite_deuda_usd, limite_deuda_cop } }
+  let userPricesBaseline = {}; // Snapshot inicial por userId para detectar cambios reales
   let allUsersForPrices = []; // Todos los usuarios cargados
   let filteredUsersForPrices = []; // Usuarios filtrados por búsqueda
-  const userPaymentMethodsState = {}; // userId -> { unrestricted, count, total }
-
-  const userPmRestrictOverlay = document.getElementById('user-pm-restrict-modal-overlay');
-  const userPmRestrictUserIdInput = document.getElementById('userPmRestrictUserId');
-  const userPmRestrictUserLabel = document.getElementById('userPmRestrictUserLabel');
-  const userPmRestrictAllCheckbox = document.getElementById('userPmRestrictAll');
-  const userPmRestrictMethodsWrap = document.getElementById('userPmRestrictMethodsWrap');
-  const userPmRestrictMethodsList = document.getElementById('userPmRestrictMethodsList');
-  const userPmRestrictStatus = document.getElementById('userPmRestrictStatus');
-  const closeUserPmRestrictModalBtn = document.getElementById('closeUserPmRestrictModalBtn');
-  const saveUserPmRestrictBtn = document.getElementById('saveUserPmRestrictBtn');
-
-  let userPmRestrictModalMethods = [];
-  let userPmRestrictModalLoading = false;
-
-  function formatUserPmRestrictBtnLabel(state) {
-    if (!state) return 'Medios recarga';
-    if (state.unrestricted) return 'Medios: todos';
-    if (!state.count) return 'Medios: ninguno';
-    if (state.total && state.count === state.total) return 'Medios: todos';
-    return 'Medios: ' + state.count;
-  }
-
-  function syncUserPmRestrictBtn(userId) {
-    const btn = document.getElementById('pm_restrict_btn_' + userId);
-    if (!btn) return;
-    btn.textContent = formatUserPmRestrictBtnLabel(userPaymentMethodsState[userId]);
-  }
-
-  function setUserPmRestrictModalStatus(message, isError) {
-    if (!userPmRestrictStatus) return;
-    userPmRestrictStatus.textContent = message || '';
-    userPmRestrictStatus.className =
-      'user-pm-restrict-status text-center mb-0' + (isError ? ' text-danger' : message ? ' text-success' : '');
-  }
-
-  function syncUserPmRestrictMethodsDisabled() {
-    const unrestricted = !!(userPmRestrictAllCheckbox && userPmRestrictAllCheckbox.checked);
-    if (userPmRestrictMethodsWrap) {
-      userPmRestrictMethodsWrap.hidden = unrestricted;
-    }
-    if (userPmRestrictMethodsList) {
-      userPmRestrictMethodsList.querySelectorAll('input[type="checkbox"]').forEach(function (cb) {
-        cb.disabled = unrestricted;
-      });
-    }
-  }
-
-  function renderUserPmRestrictMethodsList(methods, selectedIds, unrestricted) {
-    if (!userPmRestrictMethodsList) return;
-    while (userPmRestrictMethodsList.firstChild) {
-      userPmRestrictMethodsList.removeChild(userPmRestrictMethodsList.firstChild);
-    }
-    const selectedSet = new Set((selectedIds || []).map(String));
-    (methods || []).forEach(function (m) {
-      const id = String((m && m.id) || '').trim();
-      if (!id) return;
-      const row = document.createElement('label');
-      row.className = 'user-pm-restrict-method-item';
-      const cb = document.createElement('input');
-      cb.type = 'checkbox';
-      cb.className = 'user-pm-restrict-method-cb';
-      cb.value = id;
-      cb.checked = unrestricted || selectedSet.has(id);
-      cb.disabled = !!unrestricted;
-      const label = (m && (m.label || m.name)) || id;
-      const cur = (m && (m.payment_currency || m.currency)) || '';
-      const span = document.createElement('span');
-      span.textContent = cur ? label + ' (' + cur + ')' : label;
-      row.appendChild(cb);
-      row.appendChild(span);
-      userPmRestrictMethodsList.appendChild(row);
-    });
-    syncUserPmRestrictMethodsDisabled();
-  }
-
-  function closeUserPmRestrictModal() {
-    if (!userPmRestrictOverlay) return;
-    userPmRestrictOverlay.classList.add('d-none');
-    setUserPmRestrictModalStatus('');
-    userPmRestrictModalMethods = [];
-  }
-
-  function openUserPmRestrictModal(userId, username) {
-    if (!userPmRestrictOverlay || userPmRestrictModalLoading) return;
-    userPmRestrictModalLoading = true;
-    if (userPmRestrictUserIdInput) userPmRestrictUserIdInput.value = String(userId);
-    if (userPmRestrictUserLabel) {
-      userPmRestrictUserLabel.textContent = 'Usuario: ' + (username || userId);
-    }
-    setUserPmRestrictModalStatus('Cargando medios…', false);
-    userPmRestrictOverlay.classList.remove('d-none');
-
-    const url =
-      '/tienda/api/admin/users/payment-methods?username=' + encodeURIComponent(username || '');
-    permFetchJson(url)
-      .then(function (data) {
-        if (!data || !data.success) {
-          throw new Error((data && data.message) || 'No se pudieron cargar los medios');
-        }
-        userPmRestrictModalMethods = Array.isArray(data.all_methods) ? data.all_methods : [];
-        const unrestricted = data.payment_method_ids == null;
-        const selected = Array.isArray(data.payment_method_ids) ? data.payment_method_ids : [];
-        if (userPmRestrictAllCheckbox) {
-          userPmRestrictAllCheckbox.checked = unrestricted;
-        }
-        renderUserPmRestrictMethodsList(userPmRestrictModalMethods, selected, unrestricted);
-        userPaymentMethodsState[userId] = {
-          unrestricted: unrestricted,
-          count: unrestricted ? userPmRestrictModalMethods.length : selected.length,
-          total: userPmRestrictModalMethods.length,
-        };
-        syncUserPmRestrictBtn(userId);
-        setUserPmRestrictModalStatus('');
-      })
-      .catch(function (err) {
-        setUserPmRestrictModalStatus(
-          (err && err.message) || 'Error al cargar medios de pago',
-          true
-        );
-      })
-      .finally(function () {
-        userPmRestrictModalLoading = false;
-      });
-  }
-
-  function saveUserPmRestrictModal() {
-    if (!userPmRestrictUserIdInput || userPmRestrictModalLoading) return;
-    const userId = parseInt(userPmRestrictUserIdInput.value, 10);
-    if (!Number.isFinite(userId)) return;
-    const unrestricted = !!(userPmRestrictAllCheckbox && userPmRestrictAllCheckbox.checked);
-    let payload = { user_id: userId };
-    if (!unrestricted) {
-      const ids = [];
-      if (userPmRestrictMethodsList) {
-        userPmRestrictMethodsList.querySelectorAll('input.user-pm-restrict-method-cb:checked').forEach(function (cb) {
-          if (cb.value) ids.push(cb.value);
-        });
-      }
-      payload.payment_method_ids = ids;
-    } else {
-      payload.payment_method_ids = null;
-    }
-    userPmRestrictModalLoading = true;
-    setUserPmRestrictModalStatus('Guardando…', false);
-    permFetchJson('/tienda/api/admin/users/payment-methods', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-      body: JSON.stringify(payload),
-    })
-      .then(function (data) {
-        if (!data || !data.success) {
-          throw new Error((data && data.message) || 'No se pudo guardar');
-        }
-        userPaymentMethodsState[userId] = {
-          unrestricted: unrestricted,
-          count: unrestricted ? userPmRestrictModalMethods.length : (payload.payment_method_ids || []).length,
-          total: userPmRestrictModalMethods.length,
-        };
-        syncUserPmRestrictBtn(userId);
-        setUserPmRestrictModalStatus(data.message || 'Guardado', false);
-        window.setTimeout(closeUserPmRestrictModal, 500);
-      })
-      .catch(function (err) {
-        setUserPmRestrictModalStatus((err && err.message) || 'Error al guardar', true);
-      })
-      .finally(function () {
-        userPmRestrictModalLoading = false;
-      });
-  }
-
-  if (userPmRestrictAllCheckbox) {
-    userPmRestrictAllCheckbox.addEventListener('change', syncUserPmRestrictMethodsDisabled);
-  }
-  closeUserPmRestrictModalBtn?.addEventListener('click', closeUserPmRestrictModal);
-  saveUserPmRestrictBtn?.addEventListener('click', saveUserPmRestrictModal);
-  userPmRestrictOverlay?.addEventListener('click', function (ev) {
-    if (ev.target === userPmRestrictOverlay) closeUserPmRestrictModal();
-  });
 
   function debtLimitForUserData(userData, tipoPrecioLower) {
     if (!userData || !tipoPrecioLower) return null;
@@ -1014,6 +836,250 @@ document.addEventListener("DOMContentLoaded", function() {
     btn.setAttribute('data-tipo-precio', tp);
   }
 
+  function syncUserProveedorEditButton(btn, userData) {
+    if (!btn) return;
+    const activo = !!(userData && userData.proveedor);
+    btn.disabled = !activo;
+    btn.setAttribute(
+      'title',
+      activo ? 'Editar configuración de proveedor' : 'Activa «Proveedor» para configurar'
+    );
+  }
+
+  function openUserProveedorModal(userId, username) {
+    openUserProveedorServicesModal(userId, username);
+  }
+
+  function closeUserProveedorModal() {
+    closeUserProveedorServicesModal();
+  }
+
+  let userProveedorModalServices = [];
+  let userProveedorModalLoading = false;
+
+  const userProveedorServicesSearch = document.getElementById('userProveedorServicesSearch');
+  const userProveedorServicesList = document.getElementById('userProveedorServicesList');
+  const userProveedorModalStatus = document.getElementById('userProveedorModalStatus');
+  const saveUserProveedorModalBtn = document.getElementById('saveUserProveedorModalBtn');
+
+  function setUserProveedorModalStatus(message, isError) {
+    if (!userProveedorModalStatus) return;
+    userProveedorModalStatus.textContent = message || '';
+    userProveedorModalStatus.className =
+      'user-proveedor-modal-status text-center mb-0' +
+      (isError ? ' text-danger' : message ? ' text-success' : '');
+  }
+
+  function syncUserProveedorServiceRowLimit(row) {
+    if (!row) return;
+    const cb = row.querySelector('.user-proveedor-service-cb');
+    const limitInp = row.querySelector('.user-proveedor-service-limit');
+    if (!limitInp) return;
+    const on = !!(cb && cb.checked);
+    limitInp.disabled = !on;
+    if (!on) {
+      limitInp.value = '';
+      limitInp.placeholder = 'Ilimitado';
+    } else if (!String(limitInp.value || '').trim()) {
+      limitInp.placeholder = 'Ilimitado';
+    }
+  }
+
+  function filterUserProveedorServicesList() {
+    if (!userProveedorServicesList || !userProveedorServicesSearch) return;
+    const q = String(userProveedorServicesSearch.value || '')
+      .trim()
+      .toLowerCase();
+    userProveedorServicesList.querySelectorAll('.user-proveedor-service-row').forEach(function (row) {
+      const name = String(row.getAttribute('data-service-name') || '').toLowerCase();
+      row.classList.toggle('is-hidden-by-search', !!q && name.indexOf(q) === -1);
+    });
+  }
+
+  function renderUserProveedorServicesList(services) {
+    if (!userProveedorServicesList) return;
+    userProveedorModalServices = Array.isArray(services) ? services.slice() : [];
+    while (userProveedorServicesList.firstChild) {
+      userProveedorServicesList.removeChild(userProveedorServicesList.firstChild);
+    }
+    if (!userProveedorModalServices.length) {
+      const empty = document.createElement('p');
+      empty.className = 'user-proveedor-services-empty mb-0';
+      empty.textContent = 'No hay servicios (licencias) habilitados en la tienda.';
+      userProveedorServicesList.appendChild(empty);
+      return;
+    }
+    const head = document.createElement('div');
+    head.className = 'user-proveedor-services-head';
+    head.innerHTML = '<span></span><span>Servicio</span><span>Límite</span>';
+    userProveedorServicesList.appendChild(head);
+
+    userProveedorModalServices.forEach(function (svc) {
+      const lid = svc && svc.license_id != null ? String(svc.license_id) : '';
+      if (!lid) return;
+      const row = document.createElement('div');
+      row.className = 'user-proveedor-service-row';
+      row.setAttribute('data-license-id', lid);
+      row.setAttribute('data-service-name', String((svc && svc.name) || ''));
+
+      const fieldKey = 'proveedor_svc_' + lid;
+
+      const cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.className = 'user-proveedor-service-cb';
+      cb.id = fieldKey + '_enabled';
+      cb.name = fieldKey + '_enabled';
+      cb.checked = !!(svc && svc.enabled);
+      cb.setAttribute('aria-label', 'Permitir vender ' + String((svc && svc.name) || 'servicio'));
+
+      const nameSpan = document.createElement('span');
+      nameSpan.className = 'user-proveedor-service-name';
+      nameSpan.textContent = String((svc && svc.name) || '—');
+
+      const limitInp = document.createElement('input');
+      limitInp.type = 'number';
+      limitInp.min = '0';
+      limitInp.step = '1';
+      limitInp.className = 'user-proveedor-service-limit';
+      limitInp.id = fieldKey + '_limit';
+      limitInp.name = fieldKey + '_limit';
+      limitInp.placeholder = 'Ilimitado';
+      limitInp.setAttribute('aria-label', 'Límite de ventas para ' + String((svc && svc.name) || 'servicio'));
+      if (svc && svc.sales_limit != null && svc.sales_limit !== '') {
+        limitInp.value = String(Math.max(0, parseInt(svc.sales_limit, 10) || 0));
+      }
+
+      cb.addEventListener('change', function () {
+        syncUserProveedorServiceRowLimit(row);
+      });
+
+      row.appendChild(cb);
+      row.appendChild(nameSpan);
+      row.appendChild(limitInp);
+      syncUserProveedorServiceRowLimit(row);
+      userProveedorServicesList.appendChild(row);
+    });
+    filterUserProveedorServicesList();
+  }
+
+  function collectUserProveedorServicesFromModal() {
+    const out = [];
+    if (!userProveedorServicesList) return out;
+    userProveedorServicesList.querySelectorAll('.user-proveedor-service-row').forEach(function (row) {
+      const lid = parseInt(row.getAttribute('data-license-id'), 10);
+      if (!Number.isFinite(lid)) return;
+      const cb = row.querySelector('.user-proveedor-service-cb');
+      const limitInp = row.querySelector('.user-proveedor-service-limit');
+      const enabled = !!(cb && cb.checked);
+      let salesLimit = null;
+      if (enabled && limitInp) {
+        const raw = String(limitInp.value || '').trim();
+        if (raw !== '') {
+          const n = parseInt(raw, 10);
+          if (Number.isFinite(n) && n >= 0) salesLimit = n;
+        }
+      }
+      out.push({
+        license_id: lid,
+        enabled: enabled,
+        sales_limit: salesLimit,
+      });
+    });
+    return out;
+  }
+
+  function openUserProveedorInfoModal() {
+    const overlay = document.getElementById('user-proveedor-info-modal-overlay');
+    if (overlay) overlay.classList.remove('d-none');
+  }
+
+  function closeUserProveedorInfoModal() {
+    const overlay = document.getElementById('user-proveedor-info-modal-overlay');
+    if (overlay) overlay.classList.add('d-none');
+  }
+
+  function openUserProveedorServicesModal(userId, username) {
+    const overlay = document.getElementById('user-proveedor-modal-overlay');
+    const userIdInput = document.getElementById('userProveedorModalUserId');
+    const userLabel = document.getElementById('userProveedorModalUserLabel');
+    if (!overlay || userProveedorModalLoading) return;
+    userProveedorModalLoading = true;
+    if (userIdInput) userIdInput.value = String(userId);
+    if (userLabel) {
+      userLabel.textContent = username ? 'Usuario: ' + username : '';
+    }
+    if (userProveedorServicesSearch) userProveedorServicesSearch.value = '';
+    closeUserProveedorInfoModal();
+    setUserProveedorModalStatus('Cargando servicios…', false);
+    overlay.classList.remove('d-none');
+
+    permFetchJson('/admin/user_proveedor_services_ajax?user_id=' + encodeURIComponent(String(userId)))
+      .then(function (data) {
+        if (!data || data.status !== 'ok') {
+          throw new Error((data && data.message) || 'No se pudieron cargar los servicios');
+        }
+        renderUserProveedorServicesList(data.services || []);
+        setUserProveedorModalStatus('');
+      })
+      .catch(function (err) {
+        renderUserProveedorServicesList([]);
+        setUserProveedorModalStatus(
+          (err && err.message) || 'Error al cargar servicios del proveedor',
+          true
+        );
+      })
+      .finally(function () {
+        userProveedorModalLoading = false;
+      });
+  }
+
+  function closeUserProveedorServicesModal() {
+    const overlay = document.getElementById('user-proveedor-modal-overlay');
+    closeUserProveedorInfoModal();
+    if (overlay) overlay.classList.add('d-none');
+    setUserProveedorModalStatus('');
+    userProveedorModalServices = [];
+    if (userProveedorServicesSearch) userProveedorServicesSearch.value = '';
+  }
+
+  function saveUserProveedorServicesModal() {
+    const userIdInput = document.getElementById('userProveedorModalUserId');
+    if (!userIdInput || userProveedorModalLoading) return;
+    const userId = parseInt(userIdInput.value, 10);
+    if (!Number.isFinite(userId)) return;
+    userProveedorModalLoading = true;
+    setUserProveedorModalStatus('Guardando…', false);
+    permFetchJson('/admin/user_proveedor_services_ajax', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify({
+        user_id: userId,
+        services: collectUserProveedorServicesFromModal(),
+      }),
+    })
+      .then(function (data) {
+        if (!data || data.status !== 'ok') {
+          throw new Error((data && data.message) || 'No se pudo guardar');
+        }
+        renderUserProveedorServicesList(data.services || []);
+        setUserProveedorModalStatus(data.message || 'Guardado', false);
+        window.setTimeout(closeUserProveedorServicesModal, 500);
+      })
+      .catch(function (err) {
+        setUserProveedorModalStatus((err && err.message) || 'Error al guardar', true);
+      })
+      .finally(function () {
+        userProveedorModalLoading = false;
+      });
+  }
+
+  if (userProveedorServicesSearch) {
+    userProveedorServicesSearch.addEventListener('input', filterUserProveedorServicesList);
+  }
+  if (saveUserProveedorModalBtn) {
+    saveUserProveedorModalBtn.addEventListener('click', saveUserProveedorServicesModal);
+  }
+
   /** Línea secundaria: el saldo en la moneda no activa sigue en BD al cambiar USD↔COP. */
   function syncSaldoInactivoLine(container, tipoPrecioLower, saldoUsd, saldoCop) {
     if (!container) return;
@@ -1045,6 +1111,73 @@ document.addEventListener("DOMContentLoaded", function() {
     }
   }
   
+  function userPricesSnapshotFromUser(user) {
+    return {
+      tipo_precio: user.tipo_precio || null,
+      soporte_licencias: !!user.soporte_licencias,
+      puede_tener_deuda: !!user.puede_tener_deuda,
+      recarga_automatica: !!user.recarga_automatica,
+      proveedor: !!user.proveedor,
+      limite_deuda_usd:
+        user.limite_deuda_usd != null && user.limite_deuda_usd !== ''
+          ? Number(user.limite_deuda_usd)
+          : null,
+      limite_deuda_cop:
+        user.limite_deuda_cop != null && user.limite_deuda_cop !== ''
+          ? Number(user.limite_deuda_cop)
+          : null
+    };
+  }
+
+  function userPricesSnapshotFromData(userData) {
+    const snap = {
+      tipo_precio: userData.tipo_precio || null,
+      soporte_licencias: !!userData.soporte_licencias,
+      puede_tener_deuda: !!userData.puede_tener_deuda,
+      recarga_automatica: !!userData.recarga_automatica,
+      proveedor: !!userData.proveedor,
+      limite_deuda_usd: null,
+      limite_deuda_cop: null
+    };
+    if (snap.puede_tener_deuda) {
+      snap.limite_deuda_usd =
+        userData.limite_deuda_usd != null ? Number(userData.limite_deuda_usd) : null;
+      snap.limite_deuda_cop =
+        userData.limite_deuda_cop != null ? Number(userData.limite_deuda_cop) : null;
+    }
+    return snap;
+  }
+
+  function userPricesRowHasChanges(userId) {
+    const current = userPricesData[userId];
+    const baseline = userPricesBaseline[userId];
+    if (!current || !baseline) return false;
+    return JSON.stringify(userPricesSnapshotFromData(current)) !== JSON.stringify(baseline);
+  }
+
+  function buildUserPricesUpdate(userId, userData) {
+    const upd = {
+      user_id: parseInt(userId, 10),
+      tipo_precio: userData.tipo_precio || null,
+      soporte_licencias: !!userData.soporte_licencias,
+      puede_tener_deuda: !!userData.puede_tener_deuda,
+      recarga_automatica: !!userData.recarga_automatica,
+      proveedor: !!userData.proveedor
+    };
+    if (userData.puede_tener_deuda) {
+      upd.limite_deuda_usd = userData.limite_deuda_usd;
+      upd.limite_deuda_cop = userData.limite_deuda_cop;
+    }
+    return upd;
+  }
+
+  function rebuildUserPricesBaselineFromUsers(users) {
+    userPricesBaseline = {};
+    (users || []).forEach(function (user) {
+      userPricesBaseline[user.id] = userPricesSnapshotFromUser(user);
+    });
+  }
+
   // Cargar usuarios para la tabla de precios
   function loadUsersForPrices() {
     if (!userPricesTableBody) return;
@@ -1059,6 +1192,8 @@ document.addEventListener("DOMContentLoaded", function() {
     .then(data => {
       if (data.status === "ok") {
         allUsersForPrices = data.users || [];
+        userPricesData = {};
+        rebuildUserPricesBaselineFromUsers(allUsersForPrices);
         filterUsersForPrices();
       } else {
         while (userPricesTableBody.firstChild) {
@@ -1143,6 +1278,7 @@ document.addEventListener("DOMContentLoaded", function() {
         soporte_licencias: !!user.soporte_licencias,
         puede_tener_deuda: !!user.puede_tener_deuda,
         recarga_automatica: !!user.recarga_automatica,
+        proveedor: !!user.proveedor,
         limite_deuda_usd:
           user.limite_deuda_usd != null && user.limite_deuda_usd !== ''
             ? Number(user.limite_deuda_usd)
@@ -1279,32 +1415,49 @@ document.addEventListener("DOMContentLoaded", function() {
       autoRecargaContainer.appendChild(autoRecargaCheckbox);
       autoRecargaContainer.appendChild(autoRecargaLabel);
 
-      const pmRestrictContainer = document.createElement('div');
-      pmRestrictContainer.className = 'user-prices-tipo-row user-pm-restrict-row';
+      const proveedorContainer = document.createElement('div');
+      proveedorContainer.className = 'user-prices-tipo-row user-proveedor-row';
 
-      const pmRestrictBtn = document.createElement('button');
-      pmRestrictBtn.type = 'button';
-      pmRestrictBtn.id = `pm_restrict_btn_${userId}`;
-      pmRestrictBtn.className = 'btn-panel btn-blue btn-sm user-pm-restrict-btn';
-      pmRestrictBtn.textContent = formatUserPmRestrictBtnLabel(userPaymentMethodsState[userId]);
-      pmRestrictBtn.setAttribute('data-user-id', String(userId));
-      pmRestrictBtn.setAttribute('data-username', user.username);
-      pmRestrictBtn.setAttribute(
-        'title',
-        'Configurar medios de pago visibles al recargar saldo'
-      );
-      pmRestrictBtn.addEventListener('click', function () {
-        openUserPmRestrictModal(userId, user.username);
+      const proveedorCheckbox = document.createElement('input');
+      proveedorCheckbox.type = 'checkbox';
+      proveedorCheckbox.id = `proveedor_${userId}`;
+      proveedorCheckbox.name = `proveedor_${userId}`;
+      proveedorCheckbox.className = 'user-proveedor-checkbox';
+      proveedorCheckbox.checked = !!userData.proveedor;
+      proveedorCheckbox.setAttribute('data-user-id', userId);
+
+      const proveedorLabel = document.createElement('label');
+      proveedorLabel.setAttribute('for', `proveedor_${userId}`);
+      proveedorLabel.textContent = 'Proveedor';
+      proveedorLabel.className = 'user-price-label';
+      proveedorLabel.style.setProperty('cursor', 'pointer');
+
+      const proveedorEditBtn = document.createElement('button');
+      proveedorEditBtn.type = 'button';
+      proveedorEditBtn.id = `proveedor_edit_btn_${userId}`;
+      proveedorEditBtn.name = `proveedor_edit_btn_${userId}`;
+      proveedorEditBtn.className = 'user-proveedor-edit-btn open-proveedor-modal';
+      proveedorEditBtn.setAttribute('data-user-id', String(userId));
+      proveedorEditBtn.setAttribute('data-username', user.username);
+      proveedorEditBtn.setAttribute('aria-label', 'Editar configuración de proveedor');
+      proveedorEditBtn.innerHTML = '<i class="fas fa-edit" aria-hidden="true"></i>';
+      proveedorEditBtn.addEventListener('click', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        openUserProveedorModal(userId, user.username);
       });
+      syncUserProveedorEditButton(proveedorEditBtn, userData);
 
-      pmRestrictContainer.appendChild(pmRestrictBtn);
+      proveedorContainer.appendChild(proveedorCheckbox);
+      proveedorContainer.appendChild(proveedorLabel);
+      proveedorContainer.appendChild(proveedorEditBtn);
 
       tipoPrecioContainer.appendChild(usdContainer);
       tipoPrecioContainer.appendChild(copContainer);
       tipoPrecioContainer.appendChild(soporteContainer);
       tipoPrecioContainer.appendChild(deudaContainer);
       tipoPrecioContainer.appendChild(autoRecargaContainer);
-      tipoPrecioContainer.appendChild(pmRestrictContainer);
+      tipoPrecioContainer.appendChild(proveedorContainer);
       tdTipoPrecio.appendChild(tipoPrecioContainer);
       tr.appendChild(tdTipoPrecio);
       
@@ -1416,6 +1569,7 @@ document.addEventListener("DOMContentLoaded", function() {
       userData.soporte_licencias = !!userData.soporte_licencias;
       userData.puede_tener_deuda = !!userData.puede_tener_deuda;
       userData.recarga_automatica = !!userData.recarga_automatica;
+      userData.proveedor = !!userData.proveedor;
       userData.tipo_precio = userData.tipo_precio || null;
       if (userData.limite_deuda_usd == null && user.limite_deuda_usd != null) {
         userData.limite_deuda_usd = Number(user.limite_deuda_usd);
@@ -1452,11 +1606,13 @@ document.addEventListener("DOMContentLoaded", function() {
             const sl = document.getElementById(`soporte_lic_${userId}`);
             const pd = document.getElementById(`puede_deuda_${userId}`);
             const ra = document.getElementById(`recarga_auto_${userId}`);
+            const pv = document.getElementById(`proveedor_${userId}`);
             userPricesData[userId] = {
               tipo_precio: null,
               soporte_licencias: sl ? !!sl.checked : false,
               puede_tener_deuda: pd ? !!pd.checked : false,
-              recarga_automatica: ra ? !!ra.checked : false
+              recarga_automatica: ra ? !!ra.checked : false,
+              proveedor: pv ? !!pv.checked : false
             };
           }
           userPricesData[userId].tipo_precio = tipo;
@@ -1483,11 +1639,13 @@ document.addEventListener("DOMContentLoaded", function() {
         if (!userPricesData[userId]) {
           const pd = document.getElementById(`puede_deuda_${userId}`);
           const ra = document.getElementById(`recarga_auto_${userId}`);
+          const pv = document.getElementById(`proveedor_${userId}`);
           userPricesData[userId] = {
             tipo_precio: null,
             soporte_licencias: !!this.checked,
             puede_tener_deuda: pd ? !!pd.checked : false,
-            recarga_automatica: ra ? !!ra.checked : false
+            recarga_automatica: ra ? !!ra.checked : false,
+            proveedor: pv ? !!pv.checked : false
           };
         } else {
           userPricesData[userId].soporte_licencias = !!this.checked;
@@ -1501,11 +1659,13 @@ document.addEventListener("DOMContentLoaded", function() {
         if (!userPricesData[userId]) {
           const sl = document.getElementById(`soporte_lic_${userId}`);
           const ra = document.getElementById(`recarga_auto_${userId}`);
+          const pv = document.getElementById(`proveedor_${userId}`);
           userPricesData[userId] = {
             tipo_precio: null,
             soporte_licencias: sl ? !!sl.checked : false,
             puede_tener_deuda: !!this.checked,
             recarga_automatica: ra ? !!ra.checked : false,
+            proveedor: pv ? !!pv.checked : false,
             limite_deuda_usd: null,
             limite_deuda_cop: null
           };
@@ -1536,15 +1696,39 @@ document.addEventListener("DOMContentLoaded", function() {
         if (!userPricesData[userId]) {
           const sl = document.getElementById(`soporte_lic_${userId}`);
           const pd = document.getElementById(`puede_deuda_${userId}`);
+          const pv = document.getElementById(`proveedor_${userId}`);
           userPricesData[userId] = {
             tipo_precio: null,
             soporte_licencias: sl ? !!sl.checked : false,
             puede_tener_deuda: pd ? !!pd.checked : false,
-            recarga_automatica: !!this.checked
+            recarga_automatica: !!this.checked,
+            proveedor: pv ? !!pv.checked : false
           };
         } else {
           userPricesData[userId].recarga_automatica = !!this.checked;
         }
+      });
+    });
+
+    document.querySelectorAll('.user-proveedor-checkbox').forEach(cb => {
+      cb.addEventListener('change', function() {
+        const userId = this.getAttribute('data-user-id');
+        if (!userPricesData[userId]) {
+          const sl = document.getElementById(`soporte_lic_${userId}`);
+          const pd = document.getElementById(`puede_deuda_${userId}`);
+          const ra = document.getElementById(`recarga_auto_${userId}`);
+          userPricesData[userId] = {
+            tipo_precio: null,
+            soporte_licencias: sl ? !!sl.checked : false,
+            puede_tener_deuda: pd ? !!pd.checked : false,
+            recarga_automatica: ra ? !!ra.checked : false,
+            proveedor: !!this.checked
+          };
+        } else {
+          userPricesData[userId].proveedor = !!this.checked;
+        }
+        const provEditBtn = document.getElementById(`proveedor_edit_btn_${userId}`);
+        syncUserProveedorEditButton(provEditBtn, userPricesData[userId]);
       });
     });
   }
@@ -1555,22 +1739,10 @@ document.addEventListener("DOMContentLoaded", function() {
       if (!userPricesTableBody) return;
       
       const updates = [];
-      
-      // Recopilar todos los datos de la tabla
-      Object.keys(userPricesData).forEach(userId => {
-        const userData = userPricesData[userId];
-        const upd = {
-          user_id: parseInt(userId),
-          tipo_precio: userData.tipo_precio || null,
-          soporte_licencias: !!userData.soporte_licencias,
-          puede_tener_deuda: !!userData.puede_tener_deuda,
-          recarga_automatica: !!userData.recarga_automatica
-        };
-        if (userData.puede_tener_deuda) {
-          upd.limite_deuda_usd = userData.limite_deuda_usd;
-          upd.limite_deuda_cop = userData.limite_deuda_cop;
-        }
-        updates.push(upd);
+
+      Object.keys(userPricesData).forEach(function (userId) {
+        if (!userPricesRowHasChanges(userId)) return;
+        updates.push(buildUserPricesUpdate(userId, userPricesData[userId]));
       });
       
       if (updates.length === 0) {
@@ -1594,10 +1766,13 @@ document.addEventListener("DOMContentLoaded", function() {
       .then(res => res.json())
       .then(data => {
         if (data.status === 'ok') {
+          if ((data.updated_count || 0) === 0) {
+            showUserPricesStatus(data.message || 'No hay cambios para guardar', 'text-warning');
+            return;
+          }
           userPricesData = {};
           showUserPricesStatus(data.message || 'Cambios guardados correctamente', 'text-success');
-          // Recargar datos después de guardar
-          setTimeout(() => {
+          setTimeout(function () {
             loadUsersForPrices();
           }, 1000);
         } else {
@@ -2000,6 +2175,35 @@ document.addEventListener("DOMContentLoaded", function() {
   }
 
   /** SSE admin: actualiza columnas de saldo sin recargar la página (p. ej. recarga acreditada en otra pestaña). */
+  const userProveedorModalOverlay = document.getElementById('user-proveedor-modal-overlay');
+  const closeUserProveedorModalBtn = document.getElementById('closeUserProveedorModalBtn');
+  const userProveedorInfoBtn = document.getElementById('userProveedorInfoBtn');
+  const userProveedorInfoModalOverlay = document.getElementById('user-proveedor-info-modal-overlay');
+  const closeUserProveedorInfoModalBtn = document.getElementById('closeUserProveedorInfoModalBtn');
+  if (userProveedorInfoBtn) {
+    userProveedorInfoBtn.addEventListener('click', function (e) {
+      e.preventDefault();
+      e.stopPropagation();
+      openUserProveedorInfoModal();
+    });
+  }
+  if (closeUserProveedorInfoModalBtn) {
+    closeUserProveedorInfoModalBtn.addEventListener('click', closeUserProveedorInfoModal);
+  }
+  if (userProveedorInfoModalOverlay) {
+    userProveedorInfoModalOverlay.addEventListener('click', function (e) {
+      if (e.target === userProveedorInfoModalOverlay) closeUserProveedorInfoModal();
+    });
+  }
+  if (closeUserProveedorModalBtn) {
+    closeUserProveedorModalBtn.addEventListener('click', closeUserProveedorModal);
+  }
+  if (userProveedorModalOverlay) {
+    userProveedorModalOverlay.addEventListener('click', function (e) {
+      if (e.target === userProveedorModalOverlay) closeUserProveedorModal();
+    });
+  }
+
   (function bindAdminBalanceRealtime() {
     if (!userPricesTableBody || typeof window.BalanceRechargeRealtime === 'undefined') {
       return;

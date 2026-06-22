@@ -6,7 +6,7 @@
 {% block head %}
 <meta name="csrf_token" content="{{ csrf_token() }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/store.css') }}">
-<link rel="stylesheet" href="{{ url_for('static', filename='css/manage_permissions.css') }}?v=20260611-pm-restrict">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/manage_permissions.css') }}?v=20260621-remove-pm-restrict-ui">
 <link rel="stylesheet" href="{{ url_for('static', filename='fontawesome/css/all.css') }}">
 {% endblock %}
 
@@ -191,7 +191,7 @@
         <thead>
           <tr>
             <th>Usuario</th>
-            <th class="user-prices-th-tipo">Tipo precio <span class="user-prices-th-tipo-sub text-muted">USD · COP · Soporte licencias · Recarga automática · Medios recarga</span></th>
+            <th class="user-prices-th-tipo">Tipo precio <span class="user-prices-th-tipo-sub text-muted">USD · COP · Soporte licencias · Deuda · Recarga automática · Proveedor</span></th>
             <th>Saldo</th>
             <th>Productos Asociados</th>
           </tr>
@@ -235,27 +235,44 @@
   </div>
 </div>
 
-<!-- Modal: medios de pago permitidos para recargas de saldo -->
-<div id="user-pm-restrict-modal-overlay" class="modal-overlay d-none">
-  <div class="modal-balance-content modal-user-pm-restrict-content">
-    <input type="hidden" id="userPmRestrictUserId" name="user_id">
-    <p id="userPmRestrictUserLabel" class="modal-balance-current text-center" aria-live="polite"></p>
-    <h4 class="text-center mb-2">Medios de pago para recargas</h4>
-    <p class="user-pm-restrict-hint text-center text-muted mb-2">
-      Restringe qué medios ve el usuario al recargar saldo. Si no hay restricción, aplican los medios globales y el filtro por usuario del admin de recargas.
-    </p>
-    <div class="form-check user-pm-restrict-all-check mb-2">
-      <input class="form-check-input" type="checkbox" id="userPmRestrictAll" name="user_pm_restrict_all">
-      <label class="form-check-label" for="userPmRestrictAll">Sin restricción (todos los medios asignables)</label>
+<!-- Modal: configuración de proveedor -->
+<div id="user-proveedor-modal-overlay" class="modal-overlay d-none">
+  <div class="modal-balance-content modal-user-proveedor-content">
+    <input type="hidden" id="userProveedorModalUserId" name="user_id">
+    <p id="userProveedorModalUserLabel" class="modal-balance-current text-center" aria-live="polite"></p>
+    <div class="user-proveedor-modal-title-row">
+      <h4 class="mb-0">Configuración de proveedor</h4>
+      <button
+        type="button"
+        id="userProveedorInfoBtn"
+        class="user-proveedor-info-btn"
+        aria-label="Información sobre configuración de proveedor"
+        aria-haspopup="dialog"
+        aria-controls="user-proveedor-info-modal-overlay"
+        title="¿Para qué sirve esta configuración?">
+        <i class="fas fa-info-circle" aria-hidden="true"></i>
+      </button>
     </div>
-    <div id="userPmRestrictMethodsWrap" class="user-pm-restrict-methods-wrap">
-      <p class="user-pm-restrict-methods-title mb-1">Solo estos medios:</p>
-      <div id="userPmRestrictMethodsList" class="user-pm-restrict-methods-list" role="group" aria-label="Medios de pago permitidos"></div>
+    <div class="user-proveedor-services-search-wrap mb-1">
+      <label for="userProveedorServicesSearch" class="sr-only">Buscar servicio</label>
+      <input type="search" id="userProveedorServicesSearch" name="userProveedorServicesSearch" class="form-control user-proveedor-services-search" placeholder="Buscar servicio (Netflix, Disney…)" autocomplete="off">
     </div>
-    <p id="userPmRestrictStatus" class="user-pm-restrict-status text-center mb-0" role="status" aria-live="polite"></p>
+    <div id="userProveedorServicesList" class="user-proveedor-services-list" role="group" aria-label="Servicios del proveedor"></div>
+    <p id="userProveedorModalStatus" class="user-proveedor-modal-status text-center mb-0" role="status" aria-live="polite"></p>
     <div class="d-flex justify-content-between mt-2">
-      <button type="button" id="closeUserPmRestrictModalBtn" class="btn-panel btn-red">Cancelar</button>
-      <button type="button" id="saveUserPmRestrictBtn" class="btn-panel btn-green">Guardar medios</button>
+      <button type="button" id="closeUserProveedorModalBtn" class="btn-panel btn-red">Cancelar</button>
+      <button type="button" id="saveUserProveedorModalBtn" class="btn-panel btn-green">Guardar servicios</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: información configuración de proveedor -->
+<div id="user-proveedor-info-modal-overlay" class="modal-overlay modal-overlay--stack d-none" role="presentation">
+  <div class="modal-balance-content modal-user-proveedor-info-content" role="dialog" aria-modal="true" aria-labelledby="userProveedorInfoModalTitle">
+    <h4 id="userProveedorInfoModalTitle" class="text-center mb-2">¿Para qué sirve?</h4>
+    <p class="user-proveedor-info-modal-text mb-0">Aquí defines qué servicios de la tienda puede vender este usuario como proveedor y, si lo necesitas, un tope de ventas por servicio. Solo los servicios marcados estarán disponibles en su portal de licencias; en Admin Licencias verás su inventario etiquetado por servicio (las licencias en «Anónimo» no se muestran al admin).</p>
+    <div class="d-flex justify-content-center mt-2">
+      <button type="button" id="closeUserProveedorInfoModalBtn" class="btn-panel btn-green">Entendido</button>
     </div>
   </div>
 </div>
@@ -288,5 +305,5 @@
 <script src="{{ url_for('store_bp.static', filename='js/menu_tienda.js') }}" defer></script>
 <script src="{{ url_for('static', filename='js/clear_trigger_logs.js') }}" defer></script>
 <script src="{{ url_for('static', filename='js/logout_all_cookies_btn.js') }}" defer></script>
-<script src="{{ url_for('static', filename='js/manage_permissions.js') }}?v=20260611-pm-restrict" defer></script>
+<script src="{{ url_for('static', filename='js/manage_permissions.js') }}?v=20260621-remove-pm-restrict-ui" defer></script>
 {% endblock %}

@@ -11,6 +11,15 @@
 let licenses = [];
 let currentLicenseId = null;
 
+/** Filtro virtual del grid: tarjeta Proveedor (inventario de usuarios proveedor). */
+const ADMIN_PROVEEDOR_FILTER = 'proveedor';
+const ADMIN_PROVEEDOR_MERGED_FILTER_ALL = '__all__';
+var __adminLicProveedorMergedPickCtx = null;
+var __adminLicProveedorInfoOpener = null;
+const PROVEEDOR_SERVICE_ANONIMO = 'anonimo';
+/** Usuarios proveedor con inventario (API /api/admin/proveedor-inventory). */
+let adminProveedorProviders = [];
+
 /** Mapa correo→línea del bloc Licencias (por producto); se invalida al recargar o guardar notas. */
 let _licenseNotesCredentialLineCache = null;
 
@@ -167,6 +176,9 @@ let __adminLicPendingDaysFlushTimer = null;
 
 let __adminLicDaysRealtimeRefreshBusy = false;
 
+/** Mientras activateLicenseCard pinta blocs superiores, no dejar que loadLicenses dispare Días antes que Licencias. */
+let __adminLicActivateLicenseInFlight = null;
+
 /** Cuentas assigned/sold ya volcadas al bloc Licencias desde la API en esta sesión (evita líneas duplicadas). */
 let __adminLicInjectedAssignedAccountIds = new Set();
 function isAnyDayNotepadActivelyEditing() {
@@ -218,6 +230,7 @@ function flushPendingLoadAllDaysSoldAccounts() {
  * Usa schedule para no pisar borradores mientras el admin edita un día.
  */
 function refreshExpandedDaysAndAccountsFromLatestLicenses() {
+    if (__adminLicActivateLicenseInFlight != null) return;
     const inputContainer = document.getElementById('licenseAccountsInputContainer');
     if (!inputContainer || inputContainer.classList.contains('d-none')) return;
     const raw = inputContainer.dataset.activeLicenseId;
@@ -267,6 +280,11 @@ function adminLicenciasUserEditingMainLicenseSplit() {
     return !!(ae && ae.closest && ae.closest('#adminLicenciasLicenseSplitRoot'));
 }
 
+function adminLicenciasUserEditingCustomerRenewalSplit() {
+    const ae = document.activeElement;
+    return !!(ae && ae.closest && ae.closest('#adminLicenciasCustomerRenewalSplitRoot'));
+}
+
 /** Tras cada fetch `/api/licenses`: alinear bloc con servidor si el admin no está editando. */
 function adminPollRefreshOpenLicenseViews() {
     if (window.IS_ARCHIVED_MODE) return;
@@ -294,6 +312,20 @@ function adminPollRefreshOpenLicenseViews() {
             typeof window.AdminLicenciasNotepad.refreshLicenseSplitFromApi === 'function'
         ) {
             window.AdminLicenciasNotepad.refreshLicenseSplitFromApi(L);
+        }
+        if (
+            L &&
+            window.AdminLicenciasNotepad &&
+            typeof window.AdminLicenciasNotepad.refreshCustomerRenewalSplitFromApi === 'function' &&
+            typeof window.AdminLicenciasNotepad.customerRenewalSplitNeedsForcedServerSync === 'function'
+        ) {
+            var taCRPoll = document.getElementById('adminLicenciasNotepadByCustomerRenewal');
+            var forceCustRenewal =
+                taCRPoll &&
+                window.AdminLicenciasNotepad.customerRenewalSplitNeedsForcedServerSync(L, taCRPoll);
+            if (!adminLicenciasUserEditingCustomerRenewalSplit() || forceCustRenewal) {
+                window.AdminLicenciasNotepad.refreshCustomerRenewalSplitFromApi(L);
+            }
         }
     }
     refreshExpandedDaysAndAccountsFromLatestLicenses();
@@ -366,13 +398,18 @@ function patchLicenseNotesCache(
     suspended_notes,
     expired_notes,
     month_to_month,
-    changes_notes
+    changes_notes,
+    customer_renewal_notes
 ) {
     const L = licenses.find(l => l.id === licenseId);
     var prevChanges = L && Object.prototype.hasOwnProperty.call(L, 'changes_notes') ? L.changes_notes : undefined;
     if (L) {
-        L.personal_notes = personal_notes;
-        L.license_notes = license_notes;
+        if (personal_notes !== undefined) {
+            L.personal_notes = personal_notes;
+        }
+        if (license_notes !== undefined) {
+            L.license_notes = license_notes;
+        }
         if (suspended_notes !== undefined) {
             L.suspended_notes = suspended_notes;
         }
@@ -381,6 +418,9 @@ function patchLicenseNotesCache(
         }
         if (changes_notes !== undefined) {
             L.changes_notes = changes_notes;
+        }
+        if (customer_renewal_notes !== undefined) {
+            L.customer_renewal_notes = customer_renewal_notes;
         }
         if (month_to_month !== undefined) {
             L.month_to_month = month_to_month;
@@ -501,6 +541,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
 async function initializeLicenses() {
     try {
+        await loadAdminProveedorInventory();
         await loadLicenses();
         
         if (licenses.length === 0 && !window.IS_ARCHIVED_MODE) {
@@ -2878,6 +2919,9 @@ function setupEventListeners() {
     setupAdminUserLabelSearchModal();
     setupAdminLicenciasReportes();
     setupAdminLicenseBulkEditUi();
+    setupAdminLicProveedorMergedUi();
+    setupProveedorMergedBlocCollapse();
+    setupProveedorPanelUi();
     
     // Cerrar menús al hacer clic fuera
     document.addEventListener('click', function(event) {
@@ -3096,6 +3140,7 @@ function renderLicensesGrid() {
             .join('');
     }
     if (!window.IS_ARCHIVED_MODE) {
+        licensesHtml += createAdminProveedorGridButtonHtml();
         licensesHtml += createReportesGridButtonHtml();
     }
     
@@ -3163,10 +3208,64 @@ function renderLicensesGrid() {
                         </div>
                     </div>
                 </section>
+                <section class="admin-licencias-bloc admin-licencias-bloc--proveedor-merged d-none" id="adminLicenciasBlocProveedor" aria-label="Proveedores del producto">
+                    <div class="admin-licencias-bloc-header">
+                        <span class="admin-licencias-bloc-title admin-licencias-bloc-title--proveedor admin-licencias-bloc-title--proveedor-user-only">
+                            <span id="adminLicProveedorHeaderUserWrap" class="admin-lic-proveedor-header-user-wrap" hidden>
+                                <span id="adminLicProveedorHeaderUserPicker" class="admin-lic-proveedor-header-user-picker" aria-label="Proveedor visible"></span>
+                                <button type="button" class="admin-lic-proveedor-info-btn" id="adminLicProveedorMergedInfoBtn" title="Qué son los proveedores" aria-label="Información sobre proveedores" aria-controls="adminLicProveedorInfoModal"><i class="fas fa-info-circle" aria-hidden="true"></i></button>
+                            </span>
+                        </span>
+                        <div class="admin-licencias-bloc-header-actions">
+                            <span id="adminLicenciasProveedorMergedLineBadge" class="day-account-badge admin-licencias-notepad-line-badge" hidden></span>
+                        </div>
+                    </div>
+                    <div id="adminLicenciasProveedorMergedBody" class="admin-lic-proveedor-merged-body" role="region" aria-label="Licencias de proveedores para este producto"></div>
+                </section>
+                <section class="admin-licencias-bloc admin-licencias-bloc--license admin-licencias-bloc--customer-renewal d-none" id="adminLicenciasBlocCustomerRenewal" aria-label="Cuentas para renovar del producto">
+                    <div class="admin-licencias-bloc-header">
+                        <span class="admin-licencias-bloc-title"><span id="adminLicenciasCustomerRenewalHeading">Cuentas para renovar</span></span>
+                        <div class="admin-licencias-bloc-header-actions">
+                            <div class="admin-licencias-show-limit-wrap">
+                                <select id="adminLicenciasCustomerRenewalShowSelect" class="admin-licencias-show-limit-select" title="Cuántas filas visibles a la vez" aria-label="Filas visibles en cuentas para renovar">
+                                    <option value="20">20</option>
+                                    <option value="50">50</option>
+                                    <option value="100">100</option>
+                                    <option value="300">300</option>
+                                    <option value="all" selected>Todos</option>
+                                </select>
+                                <button type="button" id="adminLicenciasCustomerRenewalToggleNotesColBtn" class="admin-licencias-toggle-notes-col-btn" title="Ocultar columna Notas" aria-label="Ocultar columna Notas de cada fila" aria-pressed="false">
+                                    <i class="fas fa-eye-slash" aria-hidden="true"></i>
+                                </button>
+                            </div>
+                            <div class="admin-bloc-undo-toolbar admin-bloc-undo-toolbar--in-header" role="toolbar" aria-label="Deshacer y rehacer">
+                                <button type="button" class="admin-bloc-undo-btn" id="adminUndoRedoCustomerRenewalUndo" title="Deshacer (Ctrl+Z)" aria-label="Deshacer"><i class="fas fa-undo" aria-hidden="true"></i></button>
+                                <button type="button" class="admin-bloc-undo-btn" id="adminUndoRedoCustomerRenewalRedo" title="Rehacer (Ctrl+Y)" aria-label="Rehacer"><i class="fas fa-redo" aria-hidden="true"></i></button>
+                            </div>
+                            <span id="adminLicenciasCustomerRenewalLineBadge" class="day-account-badge admin-licencias-notepad-line-badge" hidden></span>
+                        </div>
+                    </div>
+                    <label id="adminLicenciasNotepadByCustomerRenewalLabel" class="sr-only" for="adminLicenciasNotepadByCustomerRenewal">Cuentas para renovar: credenciales enviadas por el cliente.</label>
+                    <div class="license-split-editor license-notepad--locked customer-renewal-license-split-root" id="adminLicenciasCustomerRenewalSplitRoot" data-license-viz="all">
+                        <div class="license-split-editor__viewport">
+                        <div class="license-split-editor__grid">
+                            <div class="license-split-editor__creds-cell">
+                            <textarea id="adminLicenciasNotepadByCustomerRenewal" name="admin_lic_customer_renewal_creds" class="admin-licencias-notepad-textarea license-split-editor__creds customer-renewal-license-split__creds" rows="1" spellcheck="true" wrap="off" autocomplete="off" readonly aria-labelledby="adminLicenciasNotepadByCustomerRenewalLabel" placeholder=""></textarea>
+                            </div>
+                            <div class="license-split-editor__side" aria-label="Usuario y notas por línea">
+                                <div id="adminLicenciasCustomerRenewalStructuredRows" class="license-split-editor__rows" role="region" aria-label="Usuario y notas por cada cuenta para renovar"></div>
+                            </div>
+                        </div>
+                        </div>
+                    </div>
+                </section>
                 <div id="adminLicenciasNotepadToast" class="admin-licencias-notepad-toast" role="status" aria-live="polite"></div>
                 <div class="license-all-days-container d-none" id="licenseAllDaysContainer">
                     <!-- Días 1–31: mismo patrón visual que Licencias (admin-licencias-bloc) -->
                 </div>
+            </div>
+            <div id="adminLicenciasProveedorPanel" class="admin-lic-proveedor-panel license-notepads-wrap d-none" role="region" aria-label="Proveedores" hidden>
+                <div id="adminLicenciasProveedorPanelBody" class="admin-lic-proveedor-panel-body"></div>
             </div>
             <div class="license-suspended-notepad-wrap">
                 <div class="day-section suspended-section" id="licenseSuspendedSection" aria-label="Caídas y cuentas suspendidas">
@@ -3354,6 +3453,7 @@ function renderLicensesGrid() {
 
     try {
         setupPersonalBlocCollapse();
+        setupProveedorMergedBlocCollapse();
     } catch (personalCollErr) {
         adminLicLogError('setupPersonalBlocCollapse:', personalCollErr);
     }
@@ -3411,6 +3511,1028 @@ function adminLicCompactProductLabel(name) {
         return (words[0].charAt(0) + words[1].charAt(0)).toUpperCase().slice(0, 3);
     }
     return s.slice(0, 3);
+}
+
+function adminLicEscHtml(str) {
+    return String(str != null ? str : '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+}
+
+function adminLicEscTextarea(str) {
+    return adminLicEscHtml(str).replace(/\r/g, '');
+}
+
+function adminLicProveedorCardVisible() {
+    return !window.IS_ARCHIVED_MODE && adminProveedorProviders.length > 0;
+}
+
+async function loadAdminProveedorInventory() {
+    const shell = document.querySelector('.admin-licencias-shell');
+    const url = shell && shell.getAttribute('data-admin-proveedor-url');
+    if (!url || window.IS_ARCHIVED_MODE) {
+        adminProveedorProviders = [];
+        return;
+    }
+    try {
+        const resp = await fetch(url, { cache: 'no-store', credentials: 'same-origin' });
+        if (!resp.ok) return;
+        const data = await resp.json();
+        if (data && data.success && Array.isArray(data.providers)) {
+            adminProveedorProviders = data.providers;
+        } else {
+            adminProveedorProviders = [];
+        }
+    } catch (e) {
+        adminLicLogError('loadAdminProveedorInventory:', e);
+        adminProveedorProviders = [];
+    }
+}
+
+function adminLicProveedorEnabledForLicense(providerRow, licenseId) {
+    if (!providerRow || licenseId == null) return false;
+    const ids = providerRow.enabled_license_ids;
+    if (!Array.isArray(ids) || ids.length === 0) return false;
+    const want = String(licenseId);
+    return ids.some(function (id) {
+        return String(id) === want;
+    });
+}
+
+function adminLicProveedorIsAnonimoService(serviceId) {
+    const s = String(serviceId != null ? serviceId : '')
+        .trim()
+        .toLowerCase();
+    return !s || s === PROVEEDOR_SERVICE_ANONIMO || s === 'anónimo' || s === 'anonymous';
+}
+
+function adminLicProveedorLineMatchesLicense(entry, licenseId) {
+    if (!entry || adminLicProveedorIsAnonimoService(entry.service)) return false;
+    return String(entry.service) === String(licenseId);
+}
+
+function adminLicProveedorVisibleLinesFromProvider(providerRow) {
+    const lines = Array.isArray(providerRow && providerRow.license_lines)
+        ? providerRow.license_lines
+        : [];
+    if (lines.length) {
+        return lines.filter(function (entry) {
+            return !adminLicProveedorIsAnonimoService(entry.service);
+        });
+    }
+    return [];
+}
+
+function adminLicProveedorLinesForLicense(licenseId) {
+    const out = [];
+    if (licenseId == null || String(licenseId) === String(ADMIN_PROVEEDOR_FILTER)) return out;
+    adminProveedorProviders.forEach(function (p) {
+        if (!adminLicProveedorEnabledForLicense(p, licenseId)) return;
+        const structured = Array.isArray(p.license_lines) ? p.license_lines : [];
+        if (structured.length) {
+            structured.forEach(function (entry) {
+                if (!adminLicProveedorLineMatchesLicense(entry, licenseId)) return;
+                out.push({
+                    username: (p && p.username) || '—',
+                    user_id: p && p.user_id,
+                    line: entry.cred,
+                    service: entry.service,
+                });
+            });
+            return;
+        }
+        const text = String((p && p.license_notes) || '');
+        text.replace(/\r\n/g, '\n')
+            .split('\n')
+            .forEach(function (line) {
+                const t = String(line).trim();
+                if (!t) return;
+                out.push({
+                    username: (p && p.username) || '—',
+                    user_id: p && p.user_id,
+                    line: line,
+                });
+            });
+    });
+    return out;
+}
+
+function adminLicProveedorLineCountForLicense(licenseId) {
+    return adminLicProveedorLinesForLicense(licenseId).length;
+}
+
+function adminLicProveedorCountLines(textOrLines) {
+    if (Array.isArray(textOrLines)) {
+        return textOrLines.filter(function (entry) {
+            return entry && String(entry.cred || '').trim();
+        }).length;
+    }
+    return String(textOrLines || '')
+        .replace(/\r\n/g, '\n')
+        .split('\n')
+        .filter(function (ln) {
+            return String(ln).trim() !== '';
+        }).length;
+}
+
+function adminLicProveedorDayVisibleLines(providerRow, day) {
+    const dayLinesMap = providerRow && providerRow.day_lines;
+    if (dayLinesMap && Array.isArray(dayLinesMap[String(day)])) {
+        return dayLinesMap[String(day)].filter(function (entry) {
+            return entry && String(entry.cred || '').trim() && !adminLicProveedorIsAnonimoService(entry.service);
+        });
+    }
+    const days = (providerRow && providerRow.day_notepads) || {};
+    const text = days[String(day)] != null ? String(days[String(day)]) : '';
+    return text
+        .replace(/\r\n/g, '\n')
+        .split('\n')
+        .filter(function (ln) {
+            return String(ln).trim() !== '';
+        })
+        .map(function (cred) {
+            return { cred: cred };
+        });
+}
+
+function adminLicProveedorDayTextFromEntries(entries) {
+    return (entries || [])
+        .map(function (entry) {
+            return String((entry && entry.cred) || '').trim();
+        })
+        .filter(Boolean)
+        .join('\n');
+}
+
+function adminLicProveedorProductNameForService(serviceId) {
+    if (serviceId == null || serviceId === '') {
+        return 'Sin producto';
+    }
+    const sid = String(serviceId);
+    let i;
+    for (i = 0; i < licenses.length; i += 1) {
+        const lic = licenses[i];
+        if (lic && String(lic.id) === sid) {
+            if (lic.product_name) {
+                return String(lic.product_name);
+            }
+            return 'Licencia #' + sid;
+        }
+    }
+    return 'Licencia #' + sid;
+}
+
+function adminLicProveedorCompareProductGroups(a, b) {
+    const an = a && a.productName ? String(a.productName) : '';
+    const bn = b && b.productName ? String(b.productName) : '';
+    if (an === bn) {
+        return String(a.serviceId || '').localeCompare(String(b.serviceId || ''), 'es', {
+            sensitivity: 'base',
+            numeric: true,
+        });
+    }
+    if (an === 'Sin producto') {
+        return 1;
+    }
+    if (bn === 'Sin producto') {
+        return -1;
+    }
+    return an.localeCompare(bn, 'es', { sensitivity: 'base', numeric: true });
+}
+
+function adminLicProveedorGroupEntriesByService(entries) {
+    const groups = {};
+    const order = [];
+    (entries || []).forEach(function (entry) {
+        if (!entry || !String(entry.cred || '').trim()) {
+            return;
+        }
+        const sid =
+            entry.service != null && String(entry.service).trim() !== ''
+                ? String(entry.service)
+                : '__unknown__';
+        if (!groups[sid]) {
+            groups[sid] = [];
+            order.push(sid);
+        }
+        groups[sid].push(entry);
+    });
+    return order
+        .map(function (sid) {
+            return {
+                serviceId: sid,
+                productName: adminLicProveedorProductNameForService(sid === '__unknown__' ? null : sid),
+                entries: groups[sid],
+            };
+        })
+        .sort(adminLicProveedorCompareProductGroups);
+}
+
+function adminLicProveedorFlattenEntriesSortedByProduct(entries) {
+    const out = [];
+    adminLicProveedorGroupEntriesByService(entries).forEach(function (group) {
+        group.entries.forEach(function (entry) {
+            out.push(entry);
+        });
+    });
+    return out;
+}
+
+function adminLicProveedorFormatEntriesWithProduct(entries) {
+    return adminLicProveedorFlattenEntriesSortedByProduct(entries)
+        .map(function (entry) {
+            const cred = String((entry && entry.cred) || '').trim();
+            if (!cred) {
+                return '';
+            }
+            const svc = entry && entry.service;
+            if (svc == null || svc === '' || adminLicProveedorIsAnonimoService(svc)) {
+                return cred;
+            }
+            return adminLicProveedorProductNameForService(svc) + ' · ' + cred;
+        })
+        .filter(Boolean)
+        .join('\n');
+}
+
+function adminLicProveedorPanelDayCollapsedWrite(userId, day, isCollapsed) {
+    adminLicEnsurePrefsObject();
+    const uid = String(userId);
+    adminLicenciasUiPrefs.proveedor_panel_day_collapsed =
+        adminLicenciasUiPrefs.proveedor_panel_day_collapsed || {};
+    adminLicenciasUiPrefs.proveedor_panel_day_collapsed[uid] =
+        adminLicenciasUiPrefs.proveedor_panel_day_collapsed[uid] || {};
+    adminLicenciasUiPrefs.proveedor_panel_day_collapsed[uid][String(day)] = !!isCollapsed;
+    scheduleAdminLicenciasUiPrefsSave();
+}
+
+function adminLicProveedorPanelDayCollapsedRead(userId, day) {
+    adminLicEnsurePrefsObject();
+    const byUser =
+        adminLicenciasUiPrefs.proveedor_panel_day_collapsed &&
+        adminLicenciasUiPrefs.proveedor_panel_day_collapsed[String(userId)];
+    if (byUser && Object.prototype.hasOwnProperty.call(byUser, String(day))) {
+        return byUser[String(day)] ? 'true' : 'false';
+    }
+    return null;
+}
+
+function adminLicProveedorReadonlyCredsTextarea(text, ariaLabel) {
+    const raw = String(text != null ? text : '');
+    const nonEmptyLines = raw
+        .replace(/\r\n/g, '\n')
+        .split('\n')
+        .filter(function (line) {
+            return String(line).trim() !== '';
+        });
+    if (!nonEmptyLines.length) {
+        return '';
+    }
+    const lineCount = nonEmptyLines.length;
+    return (
+        '<textarea class="admin-licencias-notepad-textarea license-split-editor__creds admin-lic-proveedor-readonly-creds" readonly tabindex="-1" rows="' +
+        String(lineCount) +
+        '" wrap="off" aria-label="' +
+        adminLicEscHtml(ariaLabel) +
+        '">' +
+        adminLicEscHtml(nonEmptyLines.join('\n')) +
+        '</textarea>'
+    );
+}
+
+function adminLicRenderProveedorDayReadonly(day, dayText, username, dayEntries) {
+    const entries = Array.isArray(dayEntries)
+        ? dayEntries
+        : adminLicProveedorDayTextFromEntries(
+              String(dayText || '')
+                  .replace(/\r\n/g, '\n')
+                  .split('\n')
+                  .filter(function (ln) {
+                      return String(ln).trim();
+                  })
+                  .map(function (cred) {
+                      return { cred: cred };
+                  })
+          );
+    const visible = entries.filter(function (entry) {
+        return entry && String(entry.cred || '').trim() && !adminLicProveedorIsAnonimoService(entry.service);
+    });
+    const nLines = visible.length;
+    if (!nLines) {
+        return '';
+    }
+    const credsHtml = adminLicProveedorReadonlyCredsTextarea(
+        adminLicProveedorFormatEntriesWithProduct(visible),
+        'Día ' + String(day) + ' del proveedor ' + username
+    );
+    if (!credsHtml) {
+        return '';
+    }
+    const badgeHtml =
+        '<span class="day-account-badge admin-licencias-notepad-line-badge" title="' +
+        adminLicEscHtml(nLines === 1 ? '1 línea' : nLines + ' líneas') +
+        '">' +
+        String(nLines) +
+        '</span>';
+    return (
+        '<section class="day-section admin-licencias-bloc admin-licencias-bloc--day admin-lic-proveedor-day" data-proveedor-day="' +
+        String(day) +
+        '">' +
+        '<div class="day-section-header admin-licencias-bloc-header">' +
+        '<span class="admin-licencias-bloc-title"><i class="fas fa-calendar-day" aria-hidden="true"></i> Día ' +
+        String(day) +
+        '</span>' +
+        '<div class="admin-licencias-bloc-header-actions">' +
+        badgeHtml +
+        '</div></div>' +
+        '<div class="day-accounts-list admin-lic-proveedor-day-body">' +
+        credsHtml +
+        '</div></section>'
+    );
+}
+
+function adminLicRenderProveedorLicBodyHtml(entries) {
+    if (!entries.length) {
+        return '';
+    }
+    const credsHtml = adminLicProveedorReadonlyCredsTextarea(
+        adminLicProveedorFormatEntriesWithProduct(entries),
+        'Licencias del proveedor'
+    );
+    if (!credsHtml) {
+        return '';
+    }
+    return (
+        '<div class="admin-lic-proveedor-lic-body">' +
+        '<div class="license-split-editor license-split-editor--proveedor-readonly license-notepad--locked">' +
+        '<div class="license-split-editor__viewport">' +
+        '<div class="license-split-editor__grid admin-lic-proveedor-merged-grid--creds-only">' +
+        '<div class="license-split-editor__creds-cell">' +
+        credsHtml +
+        '</div></div></div></div></div>'
+    );
+}
+
+function adminLicProveedorPanelUserLineCount(providerRow) {
+    let total = adminLicProveedorVisibleLinesFromProvider(providerRow).length;
+    let d;
+    for (d = 1; d <= 31; d += 1) {
+        total += adminLicProveedorDayVisibleLines(providerRow, d).length;
+    }
+    return total;
+}
+
+function adminLicRenderProveedorUserBlock(providerRow) {
+    if (!providerRow) return '';
+    const username = providerRow.username || '—';
+    const userId = providerRow.user_id != null ? String(providerRow.user_id) : username;
+    const visibleLic = adminLicProveedorVisibleLinesFromProvider(providerRow);
+    const licLines = visibleLic.length;
+    const totalLines = adminLicProveedorPanelUserLineCount(providerRow);
+    const userBadge =
+        totalLines > 0
+            ? '<span class="day-account-badge admin-licencias-notepad-line-badge" title="' +
+              adminLicEscHtml(totalLines === 1 ? '1 línea' : totalLines + ' líneas') +
+              '">' +
+              String(totalLines) +
+              '</span>'
+            : '';
+    let daysHtml = '';
+    let d;
+    for (d = 1; d <= 31; d += 1) {
+        const dayEntries = adminLicProveedorDayVisibleLines(providerRow, d);
+        if (!dayEntries.length) continue;
+        daysHtml += adminLicRenderProveedorDayReadonly(d, '', username, dayEntries);
+    }
+    if (!licLines && !daysHtml) return '';
+    return (
+        '<section class="admin-lic-proveedor-panel-user admin-lic-proveedor-user-section admin-licencias-bloc" data-proveedor-user-id="' +
+        adminLicEscHtml(userId) +
+        '" aria-label="Proveedor ' +
+        adminLicEscHtml(username) +
+        '">' +
+        '<div class="admin-licencias-bloc-header admin-lic-proveedor-user-header">' +
+        '<span class="admin-licencias-bloc-title admin-licencias-bloc-title--proveedor">' +
+        '<span>Proveedor</span>' +
+        '<span class="admin-lic-proveedor-header-user-wrap">' +
+        '<span class="admin-lic-proveedor-header-user-static">' +
+        adminLicEscHtml(username) +
+        '</span>' +
+        '<button type="button" class="admin-lic-proveedor-info-btn" title="Qué son los proveedores" aria-label="Información sobre proveedores" aria-controls="adminLicProveedorInfoModal"><i class="fas fa-info-circle" aria-hidden="true"></i></button>' +
+        '</span></span>' +
+        '<div class="admin-licencias-bloc-header-actions">' +
+        userBadge +
+        '</div></div>' +
+        '<div class="admin-lic-proveedor-panel-user-body">' +
+        (licLines ? adminLicRenderProveedorLicBodyHtml(visibleLic) : '') +
+        '<div class="license-all-days-container admin-lic-proveedor-days">' +
+        daysHtml +
+        '</div></div></section>'
+    );
+}
+
+function adminLicRenderProveedorPanelBody() {
+    if (!adminProveedorProviders.length) {
+        return '<p class="text-muted mb-0">No hay usuarios con permiso Proveedor.</p>';
+    }
+    const blocks = adminProveedorProviders.map(adminLicRenderProveedorUserBlock).filter(Boolean);
+    if (!blocks.length) {
+        return '<p class="text-muted mb-0">No hay licencias de proveedor visibles (solo servicios etiquetados; las anónimas no aparecen aquí).</p>';
+    }
+    return blocks.join('');
+}
+
+function adminLicRefreshProveedorPanelDom() {
+    const body = document.getElementById('adminLicenciasProveedorPanelBody');
+    if (!body) return;
+    body.innerHTML = adminLicRenderProveedorPanelBody();
+    restoreProveedorPanelCollapseState();
+}
+
+function restoreProveedorPanelCollapseState() {
+    const panel = document.getElementById('adminLicenciasProveedorPanel');
+    if (!panel || panel.hidden || panel.classList.contains('d-none')) return;
+    panel.querySelectorAll('.admin-lic-proveedor-user-section').forEach(function (section) {
+        const uid = section.dataset.proveedorUserId;
+        if (uid == null || uid === '') return;
+        const saved = adminLicGetBlocPrefCollapsed('proveedor_panel_user_collapsed', uid);
+        if (saved === 'true') {
+            section.classList.add('collapsed');
+        } else {
+            section.classList.remove('collapsed');
+        }
+    });
+    panel.querySelectorAll('.admin-lic-proveedor-day').forEach(function (daySection) {
+        const userSection = daySection.closest('.admin-lic-proveedor-user-section');
+        const uid = userSection && userSection.dataset.proveedorUserId;
+        const day = daySection.dataset.proveedorDay;
+        if (!uid || !day) return;
+        const saved = adminLicProveedorPanelDayCollapsedRead(uid, day);
+        if (saved === 'true') {
+            daySection.classList.add('collapsed');
+        } else if (saved === 'false') {
+            daySection.classList.remove('collapsed');
+        }
+    });
+}
+
+function setupProveedorPanelUi() {
+    if (document.documentElement.dataset.adminLicProveedorPanelUi === '1') return;
+    document.documentElement.dataset.adminLicProveedorPanelUi = '1';
+    document.addEventListener(
+        'click',
+        function (e) {
+            const panel = document.getElementById('adminLicenciasProveedorPanel');
+            if (!panel || panel.hidden || panel.classList.contains('d-none')) return;
+            const userHeader = e.target.closest && e.target.closest('.admin-lic-proveedor-user-header');
+            if (userHeader && panel.contains(userHeader)) {
+                if (e.target.closest('.admin-lic-proveedor-info-btn')) return;
+                if (e.target.closest('.day-account-badge')) return;
+                const section = userHeader.closest('.admin-lic-proveedor-user-section');
+                if (!section) return;
+                e.preventDefault();
+                e.stopPropagation();
+                section.classList.toggle('collapsed');
+                adminLicSetBlocPrefCollapsed(
+                    'proveedor_panel_user_collapsed',
+                    section.dataset.proveedorUserId,
+                    section.classList.contains('collapsed')
+                );
+                return;
+            }
+            const dayHeader =
+                e.target.closest &&
+                e.target.closest('.admin-lic-proveedor-day .admin-licencias-bloc-header');
+            if (dayHeader && panel.contains(dayHeader)) {
+                if (e.target.closest('.day-account-badge')) return;
+                const daySection = dayHeader.closest('.admin-lic-proveedor-day');
+                if (!daySection) return;
+                e.preventDefault();
+                e.stopPropagation();
+                daySection.classList.toggle('collapsed');
+                const userSection = daySection.closest('.admin-lic-proveedor-user-section');
+                const uid = userSection && userSection.dataset.proveedorUserId;
+                const day = daySection.dataset.proveedorDay;
+                if (uid && day) {
+                    adminLicProveedorPanelDayCollapsedWrite(uid, day, daySection.classList.contains('collapsed'));
+                }
+            }
+        },
+        false
+    );
+}
+
+function adminLicGetProveedorMergedUserFilter(licenseId) {
+    adminLicEnsurePrefsObject();
+    const m = adminLicenciasUiPrefs.proveedor_merged_user_filter;
+    const lid = String(licenseId);
+    if (m && Object.prototype.hasOwnProperty.call(m, lid)) {
+        return m[lid] != null ? String(m[lid]) : null;
+    }
+    return null;
+}
+
+function adminLicSetProveedorMergedUserFilter(licenseId, filterKey) {
+    adminLicEnsurePrefsObject();
+    adminLicenciasUiPrefs.proveedor_merged_user_filter = adminLicenciasUiPrefs.proveedor_merged_user_filter || {};
+    adminLicenciasUiPrefs.proveedor_merged_user_filter[String(licenseId)] = String(filterKey);
+    scheduleAdminLicenciasUiPrefsSave();
+}
+
+function adminLicProveedorMergedResolveFilter(licenseId, userKeys) {
+    if (!userKeys.length) {
+        return ADMIN_PROVEEDOR_MERGED_FILTER_ALL;
+    }
+    if (userKeys.length === 1) {
+        return userKeys[0];
+    }
+    const saved = adminLicGetProveedorMergedUserFilter(licenseId);
+    if (saved === ADMIN_PROVEEDOR_MERGED_FILTER_ALL) {
+        return ADMIN_PROVEEDOR_MERGED_FILTER_ALL;
+    }
+    if (saved && userKeys.indexOf(saved) >= 0) {
+        return saved;
+    }
+    return userKeys[0];
+}
+
+function adminLicProveedorMergedSetPickCtx(licenseId, byUser, userKeys, activeFilter) {
+    if (licenseId == null || !userKeys.length) {
+        __adminLicProveedorMergedPickCtx = null;
+        return;
+    }
+    __adminLicProveedorMergedPickCtx = {
+        licenseId: String(licenseId),
+        byUser: byUser,
+        userKeys: userKeys,
+        activeFilter: activeFilter
+    };
+}
+
+function adminLicProveedorMergedUserFilterLabel(activeFilter, byUser) {
+    if (activeFilter === ADMIN_PROVEEDOR_MERGED_FILTER_ALL) {
+        return 'Todo';
+    }
+    if (byUser[activeFilter] && byUser[activeFilter].username) {
+        return byUser[activeFilter].username;
+    }
+    return '—';
+}
+
+function adminLicProveedorUserPickMatchesQuery(label, key, q) {
+    if (!q) {
+        return true;
+    }
+    const ql = q.toLowerCase();
+    if (String(label).toLowerCase().indexOf(ql) >= 0) {
+        return true;
+    }
+    if (String(key).toLowerCase().indexOf(ql) >= 0) {
+        return true;
+    }
+    if (label === 'Todo' && (ql === 'todo' || ql === 'todos' || 'todo'.indexOf(ql) === 0)) {
+        return true;
+    }
+    return false;
+}
+
+function adminLicProveedorUserPickItemHtml(key, label, meta, active) {
+    return (
+        '<button type="button" class="admin-lic-proveedor-user-pick-item' +
+        (active ? ' active' : '') +
+        '" role="option" aria-selected="' +
+        (active ? 'true' : 'false') +
+        '" data-proveedor-user-key="' +
+        adminLicEscHtml(key) +
+        '">' +
+        '<span class="admin-lic-proveedor-user-pick-item__name">' +
+        adminLicEscHtml(label) +
+        '</span>' +
+        (meta
+            ? '<span class="admin-lic-proveedor-user-pick-item__meta">' + adminLicEscHtml(meta) + '</span>'
+            : '') +
+        '</button>'
+    );
+}
+
+function adminLicProveedorUserPickRenderList(query) {
+    const ctx = __adminLicProveedorMergedPickCtx;
+    const list = document.getElementById('adminLicProveedorUserPickList');
+    if (!list) {
+        return;
+    }
+    if (!ctx || !ctx.userKeys.length) {
+        list.innerHTML = '<p class="admin-lic-proveedor-user-pick-empty">No hay proveedores.</p>';
+        return;
+    }
+    const q = String(query != null ? query : '').trim();
+    let html = '';
+    if (ctx.userKeys.length > 1) {
+        if (adminLicProveedorUserPickMatchesQuery('Todo', ADMIN_PROVEEDOR_MERGED_FILTER_ALL, q)) {
+            html += adminLicProveedorUserPickItemHtml(
+                ADMIN_PROVEEDOR_MERGED_FILTER_ALL,
+                'Todo',
+                'Todos los proveedores',
+                ctx.activeFilter === ADMIN_PROVEEDOR_MERGED_FILTER_ALL
+            );
+        }
+    }
+    ctx.userKeys.forEach(function (key) {
+        const u = ctx.byUser[key] ? ctx.byUser[key].username : key;
+        const count = ctx.byUser[key] ? ctx.byUser[key].lines.length : 0;
+        const meta = count === 1 ? '1 línea' : count + ' líneas';
+        if (!adminLicProveedorUserPickMatchesQuery(u, key, q)) {
+            return;
+        }
+        html += adminLicProveedorUserPickItemHtml(key, u, meta, ctx.activeFilter === key);
+    });
+    if (!html) {
+        list.innerHTML = '<p class="admin-lic-proveedor-user-pick-empty">Ningún proveedor coincide.</p>';
+    } else {
+        list.innerHTML = html;
+    }
+}
+
+function adminLicProveedorUserPickOpenModal() {
+    const modal = document.getElementById('adminLicProveedorUserPickModal');
+    if (!modal || !__adminLicProveedorMergedPickCtx) {
+        return;
+    }
+    const search = document.getElementById('adminLicProveedorUserPickSearch');
+    if (search) {
+        search.value = '';
+    }
+    adminLicProveedorUserPickRenderList('');
+    modal.hidden = false;
+    modal.setAttribute('aria-hidden', 'false');
+    if (search) {
+        try {
+            search.focus({ preventScroll: true });
+        } catch (e1) {
+            try {
+                search.focus();
+            } catch (e2) {}
+        }
+    }
+}
+
+function adminLicProveedorUserPickCloseModal() {
+    const modal = document.getElementById('adminLicProveedorUserPickModal');
+    if (!modal || modal.hidden) {
+        return;
+    }
+    const opener = document.getElementById('adminLicProveedorHeaderUserBtn');
+    if (opener && typeof opener.focus === 'function') {
+        try {
+            opener.focus({ preventScroll: true });
+        } catch (e1) {
+            try {
+                opener.focus();
+            } catch (e2) {}
+        }
+    }
+    if (document.activeElement && modal.contains(document.activeElement)) {
+        try {
+            document.activeElement.blur();
+        } catch (e3) {}
+    }
+    modal.hidden = true;
+    modal.setAttribute('aria-hidden', 'true');
+}
+
+function adminLicProveedorUserPickApplyFilter(filterKey) {
+    const ctx = __adminLicProveedorMergedPickCtx;
+    if (!ctx || filterKey == null || filterKey === '') {
+        return;
+    }
+    adminLicSetProveedorMergedUserFilter(ctx.licenseId, filterKey);
+    adminLicProveedorUserPickCloseModal();
+    adminLicRefreshProveedorMergedBloc(ctx.licenseId);
+}
+
+function adminLicProveedorMergedSyncHeader(byUser, userKeys, activeFilter) {
+    const wrap = document.getElementById('adminLicProveedorHeaderUserWrap');
+    const picker = document.getElementById('adminLicProveedorHeaderUserPicker');
+    if (!wrap || !picker) return;
+    if (!userKeys.length) {
+        wrap.hidden = true;
+        picker.innerHTML = '';
+        return;
+    }
+    wrap.hidden = false;
+    const label = adminLicProveedorMergedUserFilterLabel(activeFilter, byUser);
+    picker.innerHTML =
+        '<button type="button" class="admin-lic-proveedor-header-user-btn" id="adminLicProveedorHeaderUserBtn" aria-haspopup="dialog" aria-controls="adminLicProveedorUserPickModal" title="Elegir proveedor">' +
+        adminLicEscHtml(label) +
+        '</button>';
+}
+
+function adminLicProveedorMergedRenderSplitEditor(lines, activeFilter) {
+    let filteredLines = lines;
+    if (activeFilter !== ADMIN_PROVEEDOR_MERGED_FILTER_ALL) {
+        filteredLines = lines.filter(function (item) {
+            const key = String(item.user_id != null ? item.user_id : item.username);
+            return key === activeFilter;
+        });
+    }
+    const credText = filteredLines
+        .map(function (item) {
+            return String(item.line || '').trim();
+        })
+        .filter(Boolean)
+        .join('\n');
+    const credsHtml = adminLicProveedorReadonlyCredsTextarea(
+        credText,
+        'Licencias del proveedor seleccionado'
+    );
+    if (!credsHtml) {
+        return '';
+    }
+
+    return (
+        '<div class="license-split-editor license-split-editor--proveedor-merged license-notepad--locked" data-proveedor-filter="' +
+        adminLicEscHtml(activeFilter) +
+        '">' +
+        '<div class="license-split-editor__viewport">' +
+        '<div class="license-split-editor__grid admin-lic-proveedor-merged-grid--creds-only">' +
+        '<div class="license-split-editor__creds-cell">' +
+        credsHtml +
+        '</div></div></div></div>'
+    );
+}
+
+function adminLicProveedorInfoOpenModal(openerEl) {
+    const modal = document.getElementById('adminLicProveedorInfoModal');
+    if (!modal) return;
+    __adminLicProveedorInfoOpener = openerEl || null;
+    modal.hidden = false;
+    modal.setAttribute('aria-hidden', 'false');
+    const okBtn = document.getElementById('adminLicProveedorInfoOkBtn');
+    if (okBtn) {
+        try {
+            okBtn.focus({ preventScroll: true });
+        } catch (e1) {
+            try {
+                okBtn.focus();
+            } catch (e2) {}
+        }
+    }
+}
+
+function adminLicProveedorInfoCloseModal() {
+    const modal = document.getElementById('adminLicProveedorInfoModal');
+    if (!modal || modal.hidden) return;
+    const opener = __adminLicProveedorInfoOpener;
+    if (opener && typeof opener.focus === 'function') {
+        try {
+            opener.focus({ preventScroll: true });
+        } catch (e1) {
+            try {
+                opener.focus();
+            } catch (e2) {}
+        }
+    }
+    if (document.activeElement && modal.contains(document.activeElement)) {
+        try {
+            document.activeElement.blur();
+        } catch (e3) {}
+    }
+    __adminLicProveedorInfoOpener = null;
+    modal.hidden = true;
+    modal.setAttribute('aria-hidden', 'true');
+}
+
+function setupAdminLicProveedorMergedUi() {
+    if (document.documentElement.dataset.adminLicProveedorMergedUi === '1') return;
+    document.documentElement.dataset.adminLicProveedorMergedUi = '1';
+    document.addEventListener(
+        'click',
+        function (e) {
+            const infoBtn = e.target.closest && e.target.closest('.admin-lic-proveedor-info-btn');
+            if (infoBtn) {
+                e.preventDefault();
+                e.stopPropagation();
+                adminLicProveedorInfoOpenModal(infoBtn);
+                return;
+            }
+            if (e.target.closest && e.target.closest('[data-admin-lic-proveedor-info-dismiss]')) {
+                e.preventDefault();
+                adminLicProveedorInfoCloseModal();
+                return;
+            }
+            if (e.target.closest && e.target.closest('#adminLicProveedorHeaderUserBtn')) {
+                e.preventDefault();
+                e.stopPropagation();
+                adminLicProveedorUserPickOpenModal();
+                return;
+            }
+            if (e.target.closest && e.target.closest('[data-admin-lic-proveedor-user-pick-dismiss]')) {
+                e.preventDefault();
+                adminLicProveedorUserPickCloseModal();
+                return;
+            }
+            const pickItem =
+                e.target.closest && e.target.closest('.admin-lic-proveedor-user-pick-item');
+            if (pickItem) {
+                e.preventDefault();
+                adminLicProveedorUserPickApplyFilter(pickItem.dataset.proveedorUserKey);
+                return;
+            }
+            const btn = e.target.closest && e.target.closest('.admin-lic-proveedor-user-tab');
+            if (!btn) return;
+            const body = document.getElementById('adminLicenciasProveedorMergedBody');
+            if (!body || !body.contains(btn)) return;
+            e.preventDefault();
+            e.stopPropagation();
+            const filterKey = btn.dataset.proveedorUserKey;
+            if (filterKey == null || filterKey === '') return;
+            const inputContainer = document.getElementById('licenseAccountsInputContainer');
+            const licenseId = inputContainer && inputContainer.dataset.activeLicenseId;
+            if (!licenseId || String(licenseId) === String(AGGREGATE_LICENSE_ID)) return;
+            if (String(licenseId) === ADMIN_PROVEEDOR_FILTER) return;
+            adminLicSetProveedorMergedUserFilter(licenseId, filterKey);
+            adminLicRefreshProveedorMergedBloc(licenseId);
+        },
+        false
+    );
+    document.addEventListener(
+        'input',
+        function (e) {
+            if (e.target && e.target.id === 'adminLicProveedorUserPickSearch') {
+                adminLicProveedorUserPickRenderList(e.target.value);
+            }
+        },
+        false
+    );
+    document.addEventListener(
+        'keydown',
+        function (e) {
+            if (e.key !== 'Escape') return;
+            const infoModal = document.getElementById('adminLicProveedorInfoModal');
+            if (infoModal && !infoModal.hidden) {
+                e.preventDefault();
+                adminLicProveedorInfoCloseModal();
+                return;
+            }
+            const modal = document.getElementById('adminLicProveedorUserPickModal');
+            if (modal && !modal.hidden) {
+                e.preventDefault();
+                adminLicProveedorUserPickCloseModal();
+            }
+        },
+        false
+    );
+}
+
+function setupProveedorMergedBlocCollapse() {
+    const section = document.getElementById('adminLicenciasBlocProveedor');
+    if (!section || section.dataset.proveedorCollapseBound === '1') return;
+    const header = section.querySelector('.admin-licencias-bloc-header');
+    const body = section.querySelector('.admin-lic-proveedor-merged-body');
+    if (!header || !body) return;
+    section.dataset.proveedorCollapseBound = '1';
+    header.style.cursor = 'pointer';
+    header.addEventListener('click', function (e) {
+        if (e.target.closest('.day-account-badge')) {
+            return;
+        }
+        if (e.target.closest('.admin-lic-proveedor-header-user-btn')) {
+            return;
+        }
+        if (e.target.closest('.admin-lic-proveedor-info-btn')) {
+            return;
+        }
+        const inputContainer = document.getElementById('licenseAccountsInputContainer');
+        const licenseId = inputContainer && inputContainer.dataset.activeLicenseId;
+        if (!licenseId || String(licenseId) === String(AGGREGATE_LICENSE_ID)) return;
+        if (String(licenseId) === ADMIN_PROVEEDOR_FILTER) return;
+        section.classList.toggle('collapsed');
+        const isCollapsed = section.classList.contains('collapsed');
+        adminLicSetBlocPrefCollapsed('proveedor_merged_collapsed', licenseId, isCollapsed);
+    });
+}
+
+function restoreProveedorMergedBlocState(licenseId) {
+    const section = document.getElementById('adminLicenciasBlocProveedor');
+    if (!section || section.classList.contains('d-none')) return;
+    if (
+        licenseId == null ||
+        String(licenseId) === String(AGGREGATE_LICENSE_ID) ||
+        String(licenseId) === ADMIN_PROVEEDOR_FILTER
+    ) {
+        section.classList.remove('collapsed');
+        return;
+    }
+    const saved = adminLicGetBlocPrefCollapsed('proveedor_merged_collapsed', licenseId);
+    if (saved === 'true') {
+        section.classList.add('collapsed');
+    } else {
+        section.classList.remove('collapsed');
+    }
+}
+
+function adminLicRefreshProveedorMergedBloc(licenseId) {
+    const bloc = document.getElementById('adminLicenciasBlocProveedor');
+    const body = document.getElementById('adminLicenciasProveedorMergedBody');
+    const badge = document.getElementById('adminLicenciasProveedorMergedLineBadge');
+    if (!bloc || !body) return;
+    const lines = adminLicProveedorLinesForLicense(licenseId);
+    if (!lines.length) {
+        bloc.classList.add('d-none');
+        body.innerHTML = '';
+        adminLicProveedorMergedSetPickCtx(null, {}, [], ADMIN_PROVEEDOR_MERGED_FILTER_ALL);
+        adminLicProveedorMergedSyncHeader({}, [], ADMIN_PROVEEDOR_MERGED_FILTER_ALL);
+        if (badge) {
+            badge.hidden = true;
+            badge.textContent = '';
+        }
+        return;
+    }
+    bloc.classList.remove('d-none');
+    const byUser = {};
+    lines.forEach(function (item) {
+        const key = String(item.user_id != null ? item.user_id : item.username);
+        if (!byUser[key]) {
+            byUser[key] = { username: item.username, lines: [] };
+        }
+        byUser[key].lines.push(item.line);
+    });
+    const userKeys = Object.keys(byUser);
+    const activeFilter = adminLicProveedorMergedResolveFilter(licenseId, userKeys);
+    adminLicProveedorMergedSetPickCtx(licenseId, byUser, userKeys, activeFilter);
+    adminLicProveedorMergedSyncHeader(byUser, userKeys, activeFilter);
+    body.innerHTML = adminLicProveedorMergedRenderSplitEditor(lines, activeFilter);
+    if (badge) {
+        badge.textContent = String(lines.length);
+        badge.title = lines.length === 1 ? '1 línea proveedor' : lines.length + ' líneas proveedor';
+        badge.hidden = false;
+    }
+    restoreProveedorMergedBlocState(licenseId);
+}
+
+function adminLicSetProveedorPanelMode(on) {
+    const panel = document.getElementById('adminLicenciasProveedorPanel');
+    const wrap = document.getElementById('licenseNotepadsWrap');
+    const suspended = document.querySelector('#licenseAccountsInputContainer .license-suspended-notepad-wrap');
+    const expired = document.querySelector('#licenseAccountsInputContainer .license-expired-notepad-wrap');
+    if (panel) {
+        panel.classList.toggle('d-none', !on);
+        panel.hidden = !on;
+        panel.setAttribute('aria-hidden', on ? 'false' : 'true');
+    }
+    if (wrap) wrap.classList.toggle('d-none', !!on);
+    if (suspended) suspended.classList.toggle('d-none', !!on);
+    if (expired) expired.classList.toggle('d-none', !!on);
+    if (on) adminLicRefreshProveedorPanelDom();
+}
+
+function adminLicIsProveedorFilterActive() {
+    const ic = document.getElementById('licenseAccountsInputContainer');
+    return !!(ic && String(ic.dataset.activeLicenseId || '') === ADMIN_PROVEEDOR_FILTER);
+}
+
+async function activateAdminProveedorCard(card, skipScroll) {
+    const inputContainer = document.getElementById('licenseAccountsInputContainer');
+    if (!card || !inputContainer) return;
+    closeAdminLicenciasReportesPanelUi();
+    closeAdminLicenciasCambiosPanelUi();
+    syncAdminHistorialShellMode();
+    try {
+        localStorage.removeItem(ADMIN_LICENCIAS_SIDEBAR_MODE_KEY);
+    } catch (e) {}
+    document.querySelectorAll('.license-card').forEach(function (c) {
+        if (c.classList.contains('license-card--panel-toggle')) return;
+        c.classList.remove('active');
+    });
+    card.classList.add('active');
+    try {
+        localStorage.setItem('selectedLicenseId', ADMIN_PROVEEDOR_FILTER);
+    } catch (e2) {}
+    inputContainer.classList.remove('d-none');
+    inputContainer.dataset.activeLicenseId = ADMIN_PROVEEDOR_FILTER;
+    adminLicSetProveedorPanelMode(true);
+    if (!skipScroll) {
+        setTimeout(function () {
+            inputContainer.scrollIntoView({ behavior: 'auto', block: 'nearest' });
+        }, 80);
+    }
+}
+
+function createAdminProveedorGridButtonHtml() {
+    if (!adminLicProveedorCardVisible()) return '';
+    return (
+        '<div class="license-card license-card--aggregate admin-lic-license-card--proveedor" data-license-id="' +
+        ADMIN_PROVEEDOR_FILTER +
+        '" title="Proveedores">' +
+        '<div class="license-card-header">' +
+        '<h3 class="license-name">' +
+        '<span class="full-text">Proveedores</span>' +
+        '<span class="first-letter">P</span>' +
+        '<span class="compact-label">Prov</span>' +
+        '</h3></div></div>'
+    );
 }
 
 function createLicenseCard(license) {
@@ -3491,7 +4613,14 @@ function addLicenseCardListeners() {
             licenseName.style.cursor = 'pointer';
             licenseName.addEventListener('click', function(e) {
                 e.stopPropagation();
-                const licenseId = parseInt(card.dataset.licenseId);
+                const rawId = card.dataset.licenseId;
+                if (rawId === ADMIN_PROVEEDOR_FILTER) {
+                    if (!card.classList.contains('active')) {
+                        void activateAdminProveedorCard(card, true);
+                    }
+                    return;
+                }
+                const licenseId = parseInt(card.dataset.licenseId, 10);
                 const isActive = card.classList.contains('active');
                 if (!isActive) {
                     void activateLicenseCard(card, licenseId, true).catch(function (err) {
@@ -3508,7 +4637,25 @@ function addLicenseCardListeners() {
                 return;
             }
             
-            const licenseId = parseInt(card.dataset.licenseId);
+            const rawId = card.dataset.licenseId;
+            if (rawId === ADMIN_PROVEEDOR_FILTER) {
+                if (!card.classList.contains('active')) {
+                    void activateAdminProveedorCard(card, true);
+                } else {
+                    const inputContainer = document.getElementById('licenseAccountsInputContainer');
+                    adminDupHighlightDeactivate();
+                    try {
+                        localStorage.removeItem('selectedLicenseId');
+                    } catch (eRm) {}
+                    if (inputContainer) {
+                        inputContainer.classList.add('d-none');
+                    }
+                    card.classList.remove('active');
+                }
+                return;
+            }
+
+            const licenseId = parseInt(card.dataset.licenseId, 10);
             const license = licenses.find(l => l.id === licenseId);
             const isActive = card.classList.contains('active');
             
@@ -3576,20 +4723,42 @@ function refreshChangesNotepadWrapVisibilityForLicense(_licenseId) {
     }
 }
 
+function refreshCustomerRenewalBlocVisibilityForLicense(licenseId) {
+    const bloc = document.getElementById('adminLicenciasBlocCustomerRenewal');
+    if (!bloc) return;
+    if (licenseId === AGGREGATE_LICENSE_ID) {
+        bloc.classList.add('d-none');
+        return;
+    }
+    const lic = licenses.find(function (l) {
+        return l.id === licenseId;
+    });
+    const show = !!(lic && licenseRenewCustomerAccountUiChecked(lic));
+    bloc.classList.toggle('d-none', !show);
+}
+
 function updateNotepadsVisibilityForLicense(licenseId) {
     const hideForAggregate = licenseId === AGGREGATE_LICENSE_ID;
+    const hideForProveedor = String(licenseId) === ADMIN_PROVEEDOR_FILTER;
     const personal = document.getElementById('adminLicenciasBlocPersonal');
     const licenseBloc = document.getElementById('adminLicenciasBlocLicense');
     const toast = document.getElementById('adminLicenciasNotepadToast');
     const suspendedWrap = document.querySelector(
         '#licenseAccountsInputContainer .license-suspended-notepad-wrap'
     );
+    if (hideForProveedor) {
+        adminLicSetProveedorPanelMode(true);
+        return;
+    }
+    adminLicSetProveedorPanelMode(false);
     if (personal) personal.classList.toggle('d-none', hideForAggregate);
     if (licenseBloc) licenseBloc.classList.toggle('d-none', hideForAggregate);
     if (toast) toast.classList.toggle('d-none', hideForAggregate);
     if (suspendedWrap) suspendedWrap.classList.toggle('d-none', hideForAggregate);
     refreshExpiredNotepadWrapVisibilityForLicense(licenseId);
     refreshChangesNotepadWrapVisibilityForLicense(licenseId);
+    refreshCustomerRenewalBlocVisibilityForLicense(licenseId);
+    adminLicRefreshProveedorMergedBloc(licenseId);
 }
 
 // Activar una tarjeta de licencia
@@ -3654,26 +4823,60 @@ async function activateLicenseCard(card, licenseId, skipScroll = false, options)
             __adminLicInjectedAssignedAccountIds.clear();
         } catch (_injClear) {}
 
-        await adminLicEnsureLicenseAccountsHydrated(licenseId);
+        __adminLicActivateLicenseInFlight = licenseId;
+        try {
+        /* Reservar hueco de blocs superiores antes de pintar Días (evita saltos de layout). */
+        updateNotepadsVisibilityForLicense(licenseId);
 
-        // Cargar y mostrar las cuentas guardadas (editables)
-        loadAndDisplaySavedAccounts(licenseId);
-        
-        // Cargar y mostrar todos los días con sus correos vendidos
-        _pendingLoadAllDaysLicenseId = null;
-        await loadAllDaysSoldAccounts(licenseId);
-        
+        /* Licencias / Cuentas para renovar: pintar ya con datos en memoria (sin esperar red ni Días). */
         if (window.AdminLicenciasNotepad && typeof window.AdminLicenciasNotepad.bindLicense === 'function') {
-            const lic = licenses.find(function (l) { return l.id === licenseId; });
-            const pname = lic && lic.product_name ? lic.product_name : '';
-            window.AdminLicenciasNotepad.bindLicense(licenseId, pname, lic || null);
+            const licNow = licenses.find(function (l) { return l.id === licenseId; });
+            const pnameNow = licNow && licNow.product_name ? licNow.product_name : '';
+            window.AdminLicenciasNotepad.bindLicense(licenseId, pnameNow, licNow || null);
         }
+        if (typeof adminLicenseSplitScheduleAutosizeCreds === 'function') {
+            adminLicenseSplitScheduleAutosizeCreds();
+        }
+        if (typeof window.customerRenewalLicenseSplitScheduleAutosize === 'function') {
+            window.customerRenewalLicenseSplitScheduleAutosize();
+        }
+
+        loadAndDisplaySavedAccounts(licenseId);
+
+        void adminLicEnsureLicenseAccountsHydrated(licenseId).then(function () {
+            const licFresh = licenses.find(function (l) { return l.id === licenseId; });
+            if (
+                licFresh &&
+                window.AdminLicenciasNotepad &&
+                typeof window.AdminLicenciasNotepad.refreshLicenseSplitFromApi === 'function'
+            ) {
+                window.AdminLicenciasNotepad.refreshLicenseSplitFromApi(licFresh);
+            }
+            if (
+                licFresh &&
+                window.AdminLicenciasNotepad &&
+                typeof window.AdminLicenciasNotepad.refreshCustomerRenewalSplitFromApi === 'function'
+            ) {
+                window.AdminLicenciasNotepad.refreshCustomerRenewalSplitFromApi(licFresh);
+            }
+            loadAndDisplaySavedAccounts(licenseId);
+            if (typeof adminLicenseSplitScheduleAutosizeCreds === 'function') {
+                adminLicenseSplitScheduleAutosizeCreds();
+            }
+            if (typeof window.customerRenewalLicenseSplitScheduleAutosize === 'function') {
+                window.customerRenewalLicenseSplitScheduleAutosize();
+            }
+        });
+
+        _pendingLoadAllDaysLicenseId = null;
+        scheduleLoadAllDaysSoldAccounts(licenseId);
 
         if (licenseId !== AGGREGATE_LICENSE_ID && typeof restorePersonalBlocState === 'function') {
             restorePersonalBlocState(licenseId);
         }
-
-        updateNotepadsVisibilityForLicense(licenseId);
+        if (licenseId !== AGGREGATE_LICENSE_ID && typeof restoreProveedorMergedBlocState === 'function') {
+            restoreProveedorMergedBlocState(licenseId);
+        }
 
         try {
             if (typeof adminLicenseHideStatusColSyncUi === 'function') {
@@ -3713,6 +4916,9 @@ async function activateLicenseCard(card, licenseId, skipScroll = false, options)
                     window.scrollTo(window.scrollX || 0, prevY);
                 }
             }, 100);
+        }
+        } finally {
+            __adminLicActivateLicenseInFlight = null;
         }
     }
 }
@@ -3798,6 +5004,19 @@ function restoreSelectedLicense(options) {
     }
     
     if (savedLicenseId && cards.length > 0) {
+        if (savedLicenseId === ADMIN_PROVEEDOR_FILTER && adminLicProveedorCardVisible()) {
+            const provCard = Array.from(cards).find(function (card) {
+                return card.dataset.licenseId === ADMIN_PROVEEDOR_FILTER;
+            });
+            if (provCard) {
+                cards.forEach(function (c) {
+                    if (opts.preserveSidebar && isPanelToggleCard(c)) return;
+                    c.classList.remove('active');
+                });
+                void activateAdminProveedorCard(provCard, true);
+                return;
+            }
+        }
         const savedId = parseInt(savedLicenseId, 10);
         if (savedId === AGGREGATE_LICENSE_ID) {
             try {
@@ -9409,6 +10628,7 @@ function adminLicenseBulkOpenModal(ctx) {
 function adminLicenseBulkCloseModal() {
     const modal = document.getElementById('adminLicenciasBulkModal');
     if (!modal) return;
+    adminLicenseBulkInfoCloseModal();
     const opener = document.getElementById('adminLicenciasBulkEditBtn');
     if (opener && typeof opener.focus === 'function' && !opener.disabled) {
         try {
@@ -9436,6 +10656,45 @@ function adminLicenseBulkCloseModal() {
         modal.hidden = true;
         modal.setAttribute('aria-hidden', 'true');
     }, 0);
+}
+
+function adminLicenseBulkInfoOpenModal() {
+    const modal = document.getElementById('adminLicBulkInfoModal');
+    if (!modal) return;
+    modal.hidden = false;
+    modal.setAttribute('aria-hidden', 'false');
+    const okBtn = document.getElementById('adminLicBulkInfoOkBtn');
+    if (okBtn) {
+        try {
+            okBtn.focus({ preventScroll: true });
+        } catch (e1) {
+            try {
+                okBtn.focus();
+            } catch (e2) {}
+        }
+    }
+}
+
+function adminLicenseBulkInfoCloseModal() {
+    const modal = document.getElementById('adminLicBulkInfoModal');
+    if (!modal || modal.hidden) return;
+    const opener = document.getElementById('adminLicBulkInfoBtn');
+    if (opener && typeof opener.focus === 'function') {
+        try {
+            opener.focus({ preventScroll: true });
+        } catch (e1) {
+            try {
+                opener.focus();
+            } catch (e2) {}
+        }
+    }
+    if (document.activeElement && modal.contains(document.activeElement)) {
+        try {
+            document.activeElement.blur();
+        } catch (e3) {}
+    }
+    modal.hidden = true;
+    modal.setAttribute('aria-hidden', 'true');
 }
 
 /** Cliente con nombre real (no anonimo/vacío): se puede cobrar deuda cuenta Licencias. */
@@ -9748,6 +11007,17 @@ function setupAdminLicenseBulkEditUi() {
                 adminLicenseBulkOpenModal({ mode: 'main', dayRoot: null, dayNum: null });
                 return;
             }
+            if (e.target.closest && e.target.closest('#adminLicBulkInfoBtn')) {
+                e.preventDefault();
+                e.stopPropagation();
+                adminLicenseBulkInfoOpenModal();
+                return;
+            }
+            if (e.target.closest && e.target.closest('[data-admin-lic-bulk-info-dismiss]')) {
+                e.preventDefault();
+                adminLicenseBulkInfoCloseModal();
+                return;
+            }
             if (e.target.closest && e.target.closest('[data-admin-lic-bulk-dismiss]')) {
                 adminLicenseBulkCloseModal();
             }
@@ -9766,6 +11036,19 @@ function setupAdminLicenseBulkEditUi() {
             void adminLicenseBulkApplyFromModal();
         });
     }
+
+    document.addEventListener(
+        'keydown',
+        function (e) {
+            if (e.key !== 'Escape' && e.key !== 'Esc') return;
+            const infoModal = document.getElementById('adminLicBulkInfoModal');
+            if (infoModal && !infoModal.hidden) {
+                adminLicenseBulkInfoCloseModal();
+                e.preventDefault();
+            }
+        },
+        false
+    );
 
     const icObs = document.getElementById('licenseAccountsInputContainer');
     if (icObs && typeof MutationObserver !== 'undefined') {
@@ -10640,6 +11923,9 @@ function adminLicenseSplitApplyMergedText(text) {
     }
     adminLicenseSplitRefreshRowAccessibility();
     adminLicenseSplitSyncRowsToTextarea();
+    if (typeof adminLicenseSplitAutosizeCredsTextarea === 'function') {
+        adminLicenseSplitAutosizeCredsTextarea();
+    }
     window.requestAnimationFrame(function () {
         adminLicenseSplitScheduleAutosizeCreds();
         const licRoot = document.getElementById('adminLicenciasLicenseSplitRoot');
@@ -14791,9 +16077,23 @@ function updateLicenseBlocLineCountBadge() {
               ? pad.value
               : editablePlainTextForPipeNormalize(pad);
     const n = countNonEmptyLinesInText(raw);
-    if (n > 0) {
-        badge.textContent = String(n);
-        badge.title = n === 1 ? '1 línea' : n + ' líneas';
+    const provN = adminLicProveedorLineCountForLicense(lid);
+    const totalN = n + provN;
+    if (totalN > 0) {
+        if (provN > 0 && n > 0) {
+            badge.textContent = String(n) + '+' + String(provN);
+            badge.title =
+                n +
+                (n === 1 ? ' propia + ' : ' propias + ') +
+                provN +
+                (provN === 1 ? ' proveedor' : ' proveedor');
+        } else if (provN > 0) {
+            badge.textContent = String(provN);
+            badge.title = provN === 1 ? '1 línea proveedor' : provN + ' líneas proveedor';
+        } else {
+            badge.textContent = String(n);
+            badge.title = n === 1 ? '1 línea' : n + ' líneas';
+        }
         badge.hidden = false;
     } else {
         badge.hidden = true;
@@ -14895,6 +16195,1092 @@ function updateExpiredBlocLineCountBadge() {
 }
 
 window.updateExpiredBlocLineCountBadge = updateExpiredBlocLineCountBadge;
+
+/* --- Cuentas para renovar (cuenta del cliente, fuera de inventario): usuario, verde, rojo, notas --- */
+
+function customerRenewalLicenseSplitQueryRoot() {
+    return document.getElementById('adminLicenciasCustomerRenewalSplitRoot');
+}
+
+function customerRenewalLicenseSplitQueryCredsTa(root) {
+    const r = root || customerRenewalLicenseSplitQueryRoot();
+    return r && r.querySelector ? r.querySelector('.customer-renewal-license-split__creds') : null;
+}
+
+function customerRenewalLicenseSplitQueryRowsWrap(root) {
+    const r = root || customerRenewalLicenseSplitQueryRoot();
+    return r && r.querySelector ? r.querySelector('#adminLicenciasCustomerRenewalStructuredRows') : null;
+}
+
+function customerRenewalLicenseSplitGetRowElements(root) {
+    const wrap = customerRenewalLicenseSplitQueryRowsWrap(root);
+    if (!wrap) return [];
+    return Array.prototype.slice.call(wrap.querySelectorAll('.license-split-editor__row'));
+}
+
+function customerRenewalLicenseSplitClearRows(root) {
+    const wrap = customerRenewalLicenseSplitQueryRowsWrap(root);
+    if (wrap) wrap.innerHTML = '';
+}
+
+function customerRenewalLicenseSplitCreateRow(
+    root,
+    initialUser,
+    _initialStatusGood,
+    _initialStatusBad,
+    initialExtra,
+    _initialOtroDetail,
+    initialDay
+) {
+    const row = document.createElement('div');
+    row.className = 'license-split-editor__row license-split-editor__row--customer-renewal';
+    const now = new Date();
+    let dayVal = adminLicenseSplitDefaultDayOfMonth();
+    if (initialDay != null && initialDay !== '') {
+        const parsed = parseInt(initialDay, 10);
+        if (Number.isFinite(parsed)) {
+            dayVal = adminLicenseSplitClampDayNumValue(parsed, now);
+        }
+    }
+    const daySellCell = document.createElement('div');
+    daySellCell.className = 'license-split-editor__day-sell-cell';
+    const dayInp = document.createElement('input');
+    dayInp.type = 'number';
+    dayInp.className = 'license-split-editor__day-num';
+    dayInp.min = '1';
+    dayInp.value = String(dayVal);
+    adminLicenseSplitApplyDayNumInputLimits(dayInp, now);
+    adminLicenseSplitWireDayNumInput(dayInp);
+    const sellBtn = document.createElement('button');
+    sellBtn.type = 'button';
+    sellBtn.className = 'license-split-editor__sell-btn';
+    sellBtn.title = 'Pasar esta cuenta al día indicado (vender)';
+    sellBtn.setAttribute('aria-label', 'Pasar cuenta para renovar al día seleccionado');
+    sellBtn.innerHTML = '<i class="fas fa-shopping-cart" aria-hidden="true"></i>';
+    const rejectBtn = document.createElement('button');
+    rejectBtn.type = 'button';
+    rejectBtn.className = 'license-split-editor__reject-btn';
+    rejectBtn.title = 'Rechazar renovación (avisar al cliente con el motivo)';
+    rejectBtn.setAttribute('aria-label', 'Rechazar renovación de esta cuenta');
+    rejectBtn.innerHTML = '<i class="fas fa-times" aria-hidden="true"></i>';
+    daySellCell.appendChild(dayInp);
+    daySellCell.appendChild(sellBtn);
+    daySellCell.appendChild(rejectBtn);
+    const userWrap = document.createElement('div');
+    userWrap.className = 'license-split-editor__user-wrap';
+    const sugBox = document.createElement('div');
+    sugBox.className = 'license-split-editor__user-suggestions';
+    sugBox.hidden = true;
+    sugBox.setAttribute('aria-hidden', 'true');
+    sugBox.setAttribute('role', 'group');
+    sugBox.setAttribute('aria-label', 'Sugerencias de usuario');
+    const u = document.createElement('input');
+    u.type = 'text';
+    u.className = 'license-split-editor__user';
+    u.setAttribute('autocomplete', 'off');
+    u.setAttribute('aria-label', 'Usuario o cliente de la cuenta para renovar');
+    u.placeholder = 'anonimo';
+    u.value = initialUser != null ? initialUser : '';
+    userWrap.appendChild(sugBox);
+    userWrap.appendChild(u);
+    adminLicenseSplitWireUserField(u, sugBox);
+    const n = document.createElement('input');
+    n.type = 'text';
+    n.className = 'license-split-editor__note';
+    n.setAttribute('autocomplete', 'off');
+    n.setAttribute('aria-label', 'Notas de la cuenta para renovar');
+    n.placeholder = 'Notas';
+    adminLicenseInitNoteField(n, row, initialExtra);
+    const lead = document.createElement('div');
+    lead.className = 'license-split-editor__lead';
+    lead.appendChild(daySellCell);
+    lead.appendChild(userWrap);
+    row.appendChild(lead);
+    row.appendChild(n);
+    return row;
+}
+
+function customerRenewalLicenseSplitReadRow(row) {
+    const u = row.querySelector('.license-split-editor__user');
+    const n = row.querySelector('.license-split-editor__note');
+    return {
+        user: u ? u.value : '',
+        statusGood: '',
+        statusBad: '',
+        extra: n ? n.value : '',
+    };
+}
+
+function customerRenewalLicenseSplitClearRowSideFields(row) {
+    if (!row) return;
+    const dayInp = row.querySelector('.license-split-editor__day-num');
+    if (dayInp) {
+        const refNow = new Date();
+        adminLicenseSplitApplyDayNumInputLimits(dayInp, refNow);
+        dayInp.value = String(adminLicenseSplitDefaultDayOfMonth());
+    }
+    const u = row.querySelector('.license-split-editor__user');
+    const n = row.querySelector('.license-split-editor__note');
+    const sug = row.querySelector('.license-split-editor__user-suggestions');
+    if (u) {
+        u.value = '';
+        u.classList.remove('license-split-editor__user--unknown');
+    }
+    if (sug) {
+        licenseSplitHideUserSuggestions(sug);
+    }
+    if (n) {
+        n.value = '';
+    }
+}
+
+function customerRenewalLicenseSplitRefreshRowAccessibility(root) {
+    const r = root || customerRenewalLicenseSplitQueryRoot();
+    const wrap = customerRenewalLicenseSplitQueryRowsWrap(r);
+    if (!wrap) return;
+    const rows = wrap.querySelectorAll('.license-split-editor__row');
+    rows.forEach(function (row, i) {
+        const line = i + 1;
+        const idBase = 'custRenSplitL' + line;
+        row.setAttribute('role', 'group');
+        row.setAttribute(
+            'aria-label',
+            'Cuenta para renovar, fila ' + line + ': día, vender, rechazar, usuario y notas'
+        );
+        const dayInpEl = row.querySelector('.license-split-editor__day-num');
+        const sellB = row.querySelector('.license-split-editor__sell-btn');
+        const rejectB = row.querySelector('.license-split-editor__reject-btn');
+        const u = row.querySelector('.license-split-editor__user');
+        const n = row.querySelector('.license-split-editor__note');
+        if (dayInpEl) {
+            const refNow = new Date();
+            const maxL = adminLicenseDaysInCalendarMonth(refNow);
+            adminLicenseSplitApplyDayNumInputLimits(dayInpEl, refNow);
+            dayInpEl.value = String(adminLicenseSplitClampDayNumValue(dayInpEl.value, refNow));
+            adminLicenseSplitWireDayNumInput(dayInpEl);
+            dayInpEl.id = idBase + 'Day';
+            dayInpEl.setAttribute('name', 'cust_ren_split_l' + line + '_day');
+            dayInpEl.setAttribute('aria-label', 'Día del mes (1–' + maxL + ') en la línea ' + line);
+        }
+        if (sellB) {
+            sellB.id = idBase + 'Sell';
+            sellB.setAttribute('aria-label', 'Pasar cuenta para renovar de la línea ' + line + ' al día indicado');
+        }
+        if (rejectB) {
+            rejectB.id = idBase + 'Reject';
+            rejectB.setAttribute(
+                'aria-label',
+                'Rechazar renovación de la línea ' + line + ' e indicar motivo al cliente'
+            );
+        }
+        if (u) {
+            u.id = idBase + 'User';
+            u.setAttribute('name', 'cust_ren_split_l' + line + '_user');
+            u.setAttribute('aria-label', 'Usuario o cliente en la línea ' + line);
+        }
+        if (n) {
+            n.id = idBase + 'Note';
+            n.setAttribute('name', 'cust_ren_split_l' + line + '_note');
+            n.setAttribute('aria-label', 'Notas (línea ' + line + ')');
+        }
+    });
+}
+
+function customerRenewalLicenseSplitEffectiveRowCount(credLineCount, root) {
+    const r = root || customerRenewalLicenseSplitQueryRoot();
+    const ta = customerRenewalLicenseSplitQueryCredsTa(r);
+    let n = Math.max(0, parseInt(credLineCount, 10) || 0);
+    if (n === 0 && ta && String(ta.dataset.licenseId || '') !== '0') {
+        return 1;
+    }
+    return n;
+}
+
+function customerRenewalLicenseSplitSyncRowCount(root, credLineCount) {
+    const r = root || customerRenewalLicenseSplitQueryRoot();
+    const wrap = customerRenewalLicenseSplitQueryRowsWrap(r);
+    if (!wrap) return;
+    let n = customerRenewalLicenseSplitEffectiveRowCount(credLineCount, r);
+    while (wrap.children.length < n) {
+        wrap.appendChild(customerRenewalLicenseSplitCreateRow(r, '', '', '', '', undefined, undefined));
+    }
+    while (wrap.children.length > n) {
+        wrap.removeChild(wrap.lastChild);
+    }
+    customerRenewalLicenseSplitRefreshRowAccessibility(r);
+}
+
+function customerRenewalLicenseSplitCascadeClearSidesForEmptyCredLines(root) {
+    const r = root || customerRenewalLicenseSplitQueryRoot();
+    const ta = customerRenewalLicenseSplitQueryCredsTa(r);
+    if (!ta || ta.tagName !== 'TEXTAREA') return;
+    if (customerRenewalLicenseSplitIsRenewClientMode(ta)) return;
+    const credLines = licenseSplitCredLinesFromRaw(String(ta.value != null ? ta.value : '').replace(/\r\n/g, '\n'));
+    const rows = customerRenewalLicenseSplitGetRowElements(r);
+    let anyCleared = false;
+    for (let i = 0; i < rows.length; i++) {
+        const cred = credLines[i] != null ? credLines[i] : '';
+        if (String(cred).trim() === '') {
+            customerRenewalLicenseSplitClearRowSideFields(rows[i]);
+            anyCleared = true;
+        }
+    }
+    if (anyCleared) {
+        customerRenewalLicenseSplitRefreshRowAccessibility(r);
+    }
+}
+
+function customerRenewalLicenseSplitGetMergedText(root) {
+    const r = root || customerRenewalLicenseSplitQueryRoot();
+    const ta = customerRenewalLicenseSplitQueryCredsTa(r);
+    if (!ta || ta.tagName !== 'TEXTAREA') return '';
+    const raw = String(ta.value != null ? ta.value : '').replace(/\r\n/g, '\n');
+    const credLines = licenseSplitCredLinesFromRaw(raw);
+    customerRenewalLicenseSplitSyncRowCount(r, credLines.length);
+    customerRenewalLicenseSplitCascadeClearSidesForEmptyCredLines(r);
+    const rows = customerRenewalLicenseSplitGetRowElements(r);
+    const origCreds = customerRenewalLicenseSplitIsRenewClientMode(ta)
+        ? customerRenewalLicenseSplitGetOrigCreds(ta)
+        : [];
+    const out = [];
+    for (let i = 0; i < credLines.length; i++) {
+        const rr = rows[i]
+            ? customerRenewalLicenseSplitReadRow(rows[i])
+            : { user: '', statusGood: '', statusBad: '', extra: '' };
+        let credPart = credLines[i];
+        const action = customerRenewalLicenseSplitParseAdminCredResponse(credPart);
+        if (action && origCreds[i] != null && String(origCreds[i]).trim() !== '') {
+            credPart = origCreds[i];
+        }
+        const line = buildAdminLicenseStorageLine(
+            credPart,
+            rr.user,
+            '',
+            '',
+            rr.extra
+        );
+        out.push(line);
+    }
+    while (out.length && out[out.length - 1] === '') {
+        out.pop();
+    }
+    return out.join('\n');
+}
+
+function customerRenewalLicenseSplitApplyMergedText(root, text) {
+    const r = root || customerRenewalLicenseSplitQueryRoot();
+    const ta = customerRenewalLicenseSplitQueryCredsTa(r);
+    const wrap = customerRenewalLicenseSplitQueryRowsWrap(r);
+    if (!ta || !wrap) return;
+    const t = text != null ? String(text).replace(/\r\n/g, '\n') : '';
+    let lines = [];
+    if (t.trim() !== '') {
+        lines = licenseCredLinesCollapseRepeatedTrailingBlankLines(t.split('\n'));
+        while (lines.length && String(lines[lines.length - 1]).trim() === '') {
+            lines.pop();
+        }
+    }
+    customerRenewalLicenseSplitClearRows(r);
+    const credParts = [];
+    lines.forEach(function (ln) {
+        const p = parseAdminLicenseLineToSplitParts(ln);
+        credParts.push(p.cred);
+        wrap.appendChild(
+            customerRenewalLicenseSplitCreateRow(
+                r,
+                p.user,
+                p.statusGood != null ? p.statusGood : '',
+                p.statusBad != null ? p.statusBad : '',
+                p.extra,
+                p.otroDetail != null ? p.otroDetail : '',
+                undefined
+            )
+        );
+    });
+    ta.value = credParts.join('\n');
+    if (lines.length === 0) {
+        ta.value = '';
+    }
+    customerRenewalLicenseSplitSyncOrigCredsFromCredLines(ta, credParts);
+    customerRenewalLicenseSplitRefreshRowAccessibility(r);
+    customerRenewalLicenseSplitSyncRowsToTextarea(r);
+    customerRenewalLicenseSplitAutosizeCreds(r);
+    window.requestAnimationFrame(function () {
+        customerRenewalLicenseSplitScheduleAutosize(r);
+        adminLicenseSplitValidateAllUserInputs(r);
+    });
+}
+
+function customerRenewalLicenseSplitSyncRowsToTextarea(root) {
+    const r = root || customerRenewalLicenseSplitQueryRoot();
+    const ta = customerRenewalLicenseSplitQueryCredsTa(r);
+    if (!ta) return;
+    const credLines = licenseSplitCredLinesFromRaw(String(ta.value != null ? ta.value : '').replace(/\r\n/g, '\n'));
+    customerRenewalLicenseSplitSyncRowCount(r, credLines.length);
+    customerRenewalLicenseSplitCascadeClearSidesForEmptyCredLines(r);
+    customerRenewalLicenseSplitScheduleAutosize(r);
+}
+
+var __custRenSplitAutosizeTimers = {};
+
+function customerRenewalLicenseSplitScheduleAutosize(root) {
+    const r = root || customerRenewalLicenseSplitQueryRoot();
+    if (!r) return;
+    customerRenewalLicenseSplitAutosizeCreds(r);
+    clearTimeout(__custRenSplitAutosizeTimers._k);
+    __custRenSplitAutosizeTimers._k = setTimeout(function () {
+        customerRenewalLicenseSplitAutosizeCreds(r);
+    }, 30);
+}
+
+function customerRenewalLicenseSplitAutosizeCreds(root) {
+    const r = root || customerRenewalLicenseSplitQueryRoot();
+    const ta = customerRenewalLicenseSplitQueryCredsTa(r);
+    if (!ta || ta.tagName !== 'TEXTAREA') return;
+    const splitSide = r.querySelector('.license-split-editor__side');
+    const rowsEl = customerRenewalLicenseSplitQueryRowsWrap(r);
+    const raw = String(ta.value != null ? ta.value : '').replace(/\r\n/g, '\n');
+    const credLines = licenseSplitCredLinesFromRaw(raw);
+    customerRenewalLicenseSplitSyncRowCount(r, credLines.length);
+    customerRenewalLicenseSplitCascadeClearSidesForEmptyCredLines(r);
+    if (splitSide && splitSide.hidden) {
+        ta.style.minHeight = '0';
+        ta.style.height = '0px';
+        const ns = ta.scrollHeight;
+        ta.style.minHeight = '';
+        ta.style.height = '';
+        const cs = window.getComputedStyle(ta);
+        let minPx = parseFloat(cs.minHeight);
+        if (Number.isNaN(minPx)) minPx = 20;
+        ta.style.height = Math.max(minPx, ns + 2) + 'px';
+        licenseSplitSyncCredsTaContentWidth(ta);
+        return;
+    }
+    if (rowsEl) {
+        void rowsEl.offsetHeight;
+    }
+    const cs0 = window.getComputedStyle(ta);
+    const linePx = adminLicSplitParseLineHeightPx(cs0);
+    const padY = (parseFloat(cs0.paddingTop) || 0) + (parseFloat(cs0.paddingBottom) || 0);
+    const estimateByLines = linePx * credLines.length + padY;
+    ta.style.minHeight = '0';
+    ta.style.height = '0px';
+    const naturalScroll = ta.scrollHeight;
+    ta.style.minHeight = '';
+    ta.style.height = '';
+    const cs = window.getComputedStyle(ta);
+    let minPx = parseFloat(cs.minHeight);
+    if (Number.isNaN(minPx)) minPx = 20;
+    const contentH = Math.max(naturalScroll + 2, estimateByLines);
+    let peerH = 0;
+    if (rowsEl) {
+        peerH = Math.max(rowsEl.scrollHeight, rowsEl.offsetHeight);
+    }
+    if (splitSide) {
+        peerH = Math.max(peerH, splitSide.scrollHeight, splitSide.offsetHeight);
+    }
+    ta.style.height = Math.ceil(Math.max(minPx, contentH, peerH)) + 'px';
+    licenseSplitSyncCredsTaContentWidth(ta);
+}
+
+function customerRenewalLicenseSplitIsRenewClientMode(ta) {
+    ta = ta || document.getElementById('adminLicenciasNotepadByCustomerRenewal');
+    return !!(ta && String(ta.dataset.renewCustomerAccount || '') === '1');
+}
+
+/** Respuesta admin en columna credencial (modo cliente): x = rechazar, compra = pasar al día. */
+function customerRenewalLicenseSplitParseAdminCredResponse(cred) {
+    const t = String(cred != null ? cred : '')
+        .trim()
+        .toLowerCase();
+    if (t === 'x') return 'reject';
+    if (t === 'compra') return 'complete';
+    return null;
+}
+
+function customerRenewalLicenseSplitGetOrigCreds(ta) {
+    if (!ta) return [];
+    try {
+        const raw = ta.dataset.custRenOrigCreds;
+        if (!raw) return [];
+        const parsed = JSON.parse(raw);
+        return Array.isArray(parsed) ? parsed.map(function (x) {
+            return x != null ? String(x) : '';
+        }) : [];
+    } catch (_e) {
+        return [];
+    }
+}
+
+function customerRenewalLicenseSplitSetOrigCreds(ta, credLines) {
+    if (!ta) return;
+    const arr = credLines != null ? credLines : [];
+    ta.dataset.custRenOrigCreds = JSON.stringify(
+        arr.map(function (x) {
+            return x != null ? String(x) : '';
+        })
+    );
+}
+
+function customerRenewalLicenseSplitSyncOrigCredsFromCredLines(ta, credLines) {
+    if (!ta || !customerRenewalLicenseSplitIsRenewClientMode(ta)) return;
+    const prev = customerRenewalLicenseSplitGetOrigCreds(ta);
+    const lines = credLines != null ? credLines : [];
+    const out = [];
+    for (let i = 0; i < lines.length; i++) {
+        const cur = lines[i] != null ? String(lines[i]) : '';
+        const action = customerRenewalLicenseSplitParseAdminCredResponse(cur);
+        if (action) {
+            out.push(prev[i] != null ? String(prev[i]) : '');
+        } else if (String(cur).trim() !== '') {
+            out.push(cur);
+        } else {
+            out.push(prev[i] != null ? String(prev[i]) : '');
+        }
+    }
+    customerRenewalLicenseSplitSetOrigCreds(ta, out);
+}
+
+/** En modo cliente no se puede dejar la credencial vacía: restaura la pendiente. */
+function customerRenewalLicenseSplitNormalizeCredTaForRenewMode(ta) {
+    ta = ta || document.getElementById('adminLicenciasNotepadByCustomerRenewal');
+    if (!ta || ta.tagName !== 'TEXTAREA' || !customerRenewalLicenseSplitIsRenewClientMode(ta)) {
+        return false;
+    }
+    const origCreds = customerRenewalLicenseSplitGetOrigCreds(ta);
+    const credLines = licenseSplitCredLinesFromRaw(String(ta.value != null ? ta.value : '').replace(/\r\n/g, '\n'));
+    let changed = false;
+    for (let i = 0; i < credLines.length; i++) {
+        const trimmed = String(credLines[i] != null ? credLines[i] : '').trim();
+        const action = customerRenewalLicenseSplitParseAdminCredResponse(trimmed);
+        const orig = origCreds[i] != null ? String(origCreds[i]).trim() : '';
+        if (trimmed === '' && orig) {
+            credLines[i] = origCreds[i];
+            changed = true;
+        } else if (action && !orig) {
+            continue;
+        }
+    }
+    if (changed) {
+        ta.value = credLines.join('\n');
+        const custRoot = customerRenewalLicenseSplitQueryRoot();
+        if (custRoot && typeof customerRenewalLicenseSplitSyncRowsToTextarea === 'function') {
+            customerRenewalLicenseSplitSyncRowsToTextarea(custRoot);
+        }
+        if (typeof showError === 'function') {
+            showError('No puedes borrar la cuenta. Responde con x (rechazar) o compra (pasar al día).');
+        }
+    }
+    return changed;
+}
+
+function customerRenewalLicenseSplitRestoreCredLine(ta, lineIdx, credValue) {
+    if (!ta || lineIdx < 0) return;
+    const credLines = licenseSplitCredLinesFromRaw(String(ta.value != null ? ta.value : '').replace(/\r\n/g, '\n'));
+    if (lineIdx >= credLines.length) return;
+    credLines[lineIdx] = credValue != null ? String(credValue) : '';
+    ta.value = credLines.join('\n');
+    const custRoot = customerRenewalLicenseSplitQueryRoot();
+    if (custRoot && typeof customerRenewalLicenseSplitSyncRowsToTextarea === 'function') {
+        customerRenewalLicenseSplitSyncRowsToTextarea(custRoot);
+    }
+    if (typeof customerRenewalLicenseSplitScheduleAutosize === 'function') {
+        customerRenewalLicenseSplitScheduleAutosize(custRoot);
+    }
+}
+
+/** Al salir del campo credencial: x → rechazo, compra → pasar al día (cobro ya hecho). */
+async function customerRenewalLicenseSplitProcessCredResponses(ta) {
+    ta = ta || document.getElementById('adminLicenciasNotepadByCustomerRenewal');
+    if (!ta || ta.tagName !== 'TEXTAREA' || !customerRenewalLicenseSplitIsRenewClientMode(ta)) {
+        return false;
+    }
+    if (
+        window.__adminCustomerRenewalSplitSellInFlight ||
+        window.__adminCustomerRenewalSplitRejectInFlight ||
+        window.__adminCustomerRenewalCredResponseProcessing
+    ) {
+        return false;
+    }
+    customerRenewalLicenseSplitNormalizeCredTaForRenewMode(ta);
+    const origCreds = customerRenewalLicenseSplitGetOrigCreds(ta);
+    const credLines = licenseSplitCredLinesFromRaw(String(ta.value != null ? ta.value : '').replace(/\r\n/g, '\n'));
+    const rows = customerRenewalLicenseSplitGetRowElements();
+    let handled = false;
+    for (let i = 0; i < credLines.length; i++) {
+        const action = customerRenewalLicenseSplitParseAdminCredResponse(credLines[i]);
+        if (!action) continue;
+        const origCred = origCreds[i] != null ? String(origCreds[i]).trim() : '';
+        if (!origCred) continue;
+        const row = rows[i];
+        if (!row) continue;
+        window.__adminCustomerRenewalCredResponseProcessing = true;
+        try {
+            if (action === 'complete') {
+                const ok =
+                    typeof adminCustomerRenewalSplitSellRowToDay === 'function'
+                        ? await adminCustomerRenewalSplitSellRowToDay(row, {
+                              credentialOverride: origCred,
+                              quiet: false,
+                          })
+                        : false;
+                if (!ok) {
+                    customerRenewalLicenseSplitRestoreCredLine(ta, i, origCred);
+                } else {
+                    handled = true;
+                }
+            } else if (action === 'reject') {
+                const r = customerRenewalLicenseSplitReadRow(row);
+                const noteReason = r.extra != null ? String(r.extra).trim() : '';
+                const ok =
+                    typeof adminCustomerRenewalSplitRejectRow === 'function'
+                        ? await adminCustomerRenewalSplitRejectRow(row, {
+                              credentialOverride: origCred,
+                              reason: noteReason || undefined,
+                              quiet: false,
+                          })
+                        : false;
+                if (!ok) {
+                    customerRenewalLicenseSplitRestoreCredLine(ta, i, origCred);
+                } else {
+                    handled = true;
+                }
+            }
+        } finally {
+            window.__adminCustomerRenewalCredResponseProcessing = false;
+        }
+        break;
+    }
+    return handled;
+}
+
+function customerRenewalLicenseSplitLock(root) {
+    const r = root || customerRenewalLicenseSplitQueryRoot();
+    if (!r) return;
+    const ta = customerRenewalLicenseSplitQueryCredsTa(r);
+    if (ta) {
+        ta.readOnly = true;
+        ta.setAttribute('tabindex', '-1');
+    }
+    r.classList.add('license-notepad--locked');
+    r.querySelectorAll('.license-split-editor__row input').forEach(function (x) {
+        x.disabled = false;
+        x.readOnly = true;
+        x.tabIndex = -1;
+    });
+    r.querySelectorAll('.license-split-editor__row select').forEach(function (x) {
+        x.disabled = false;
+        x.tabIndex = -1;
+    });
+}
+
+function customerRenewalLicenseSplitUnlock(root) {
+    const r = root || customerRenewalLicenseSplitQueryRoot();
+    if (!r) return;
+    if (String(r.dataset.licenseId || '') === '0') return;
+    const ta = customerRenewalLicenseSplitQueryCredsTa(r);
+    if (ta) {
+        ta.readOnly = false;
+        ta.removeAttribute('tabindex');
+    }
+    r.classList.remove('license-notepad--locked');
+    r.querySelectorAll('.license-split-editor__row input').forEach(function (x) {
+        x.readOnly = false;
+        x.removeAttribute('tabindex');
+    });
+    r.querySelectorAll('.license-split-editor__row select').forEach(function (x) {
+        x.removeAttribute('tabindex');
+    });
+}
+
+function customerRenewalLicenseSplitWireScrollSync(root) {
+    const r = root || customerRenewalLicenseSplitQueryRoot();
+    const ta = customerRenewalLicenseSplitQueryCredsTa(r);
+    const rows = customerRenewalLicenseSplitQueryRowsWrap(r);
+    if (!ta || !rows || rows.dataset.custRenLicScrollSync === '1') return;
+    rows.dataset.custRenLicScrollSync = '1';
+    let syncing = false;
+    ta.addEventListener('scroll', function () {
+        if (syncing) return;
+        syncing = true;
+        rows.scrollTop = ta.scrollTop;
+        window.requestAnimationFrame(function () {
+            syncing = false;
+        });
+    });
+    rows.addEventListener('scroll', function () {
+        if (syncing) return;
+        syncing = true;
+        ta.scrollTop = rows.scrollTop;
+        window.requestAnimationFrame(function () {
+            syncing = false;
+        });
+    });
+}
+
+function customerRenewalLicenseSplitBuildMergedAfterRemoveIndex(credLines, rows, removeIdx) {
+    const newCredLines = credLines.slice(0, removeIdx).concat(credLines.slice(removeIdx + 1));
+    const newMergedLines = [];
+    for (let i = 0; i < newCredLines.length; i++) {
+        const oldRowIdx = i < removeIdx ? i : i + 1;
+        const rrow = rows[oldRowIdx];
+        const rr = rrow
+            ? customerRenewalLicenseSplitReadRow(rrow)
+            : { user: '', statusGood: '', statusBad: '', extra: '' };
+        newMergedLines.push(
+            buildAdminLicenseStorageLine(newCredLines[i], rr.user, '', '', rr.extra)
+        );
+    }
+    while (newMergedLines.length && newMergedLines[newMergedLines.length - 1] === '') {
+        newMergedLines.pop();
+    }
+    return newMergedLines.join('\n');
+}
+
+var __adminCustomerRenewalRejectModalOpen = false;
+
+function adminCustomerRenewalPromptRejectReasonModal() {
+    return new Promise(function (resolve) {
+        if (__adminCustomerRenewalRejectModalOpen) {
+            resolve(null);
+            return;
+        }
+        __adminCustomerRenewalRejectModalOpen = true;
+        const modal = document.createElement('div');
+        modal.id = 'adminCustomerRenewalRejectModal';
+        modal.className = 'admin-customer-renewal-reject-modal show';
+        modal.setAttribute('role', 'dialog');
+        modal.setAttribute('aria-modal', 'true');
+        modal.setAttribute('aria-labelledby', 'adminCustomerRenewalRejectModalTitle');
+        modal.innerHTML =
+            '<div class="admin-customer-renewal-reject-modal__content">' +
+            '<h3 id="adminCustomerRenewalRejectModalTitle">No se puede renovar</h3>' +
+            '<p class="admin-customer-renewal-reject-modal__hint">Indica el motivo. Se enviará al cliente en la tienda y por correo (si tiene email registrado).</p>' +
+            '<label for="adminCustomerRenewalRejectReasonInput" class="sr-only">Motivo del rechazo</label>' +
+            '<textarea id="adminCustomerRenewalRejectReasonInput" class="admin-customer-renewal-reject-modal__textarea" rows="4" maxlength="2000" placeholder="Ej.: contraseña incorrecta, cuenta suspendida por Netflix…"></textarea>' +
+            '<div class="admin-customer-renewal-reject-modal__footer">' +
+            '<button type="button" class="btn-panel btn-red" data-action="cancel-customer-renewal-reject">Cancelar</button>' +
+            '<button type="button" class="btn-panel btn-green" data-action="confirm-customer-renewal-reject">Rechazar y avisar</button>' +
+            '</div></div>';
+        document.body.appendChild(modal);
+
+        const taReason = modal.querySelector('#adminCustomerRenewalRejectReasonInput');
+        const btnCancel = modal.querySelector('[data-action="cancel-customer-renewal-reject"]');
+        const btnConfirm = modal.querySelector('[data-action="confirm-customer-renewal-reject"]');
+
+        function closeModal(result) {
+            __adminCustomerRenewalRejectModalOpen = false;
+            document.removeEventListener('keydown', onKeyDown);
+            if (modal.parentNode) {
+                modal.parentNode.removeChild(modal);
+            }
+            resolve(result);
+        }
+
+        function onKeyDown(ev) {
+            if (ev.key === 'Escape') {
+                ev.preventDefault();
+                closeModal(null);
+            }
+        }
+
+        document.addEventListener('keydown', onKeyDown);
+        modal.addEventListener('click', function (e) {
+            if (e.target === modal) {
+                closeModal(null);
+            }
+        });
+        btnCancel.addEventListener('click', function () {
+            closeModal(null);
+        });
+        btnConfirm.addEventListener('click', function () {
+            const reason = taReason ? String(taReason.value || '').trim() : '';
+            if (!reason) {
+                if (typeof showError === 'function') {
+                    showError('Escribe el motivo por el que no se puede renovar.');
+                }
+                if (taReason) taReason.focus();
+                return;
+            }
+            closeModal(reason);
+        });
+        window.setTimeout(function () {
+            if (taReason) taReason.focus();
+        }, 30);
+    });
+}
+
+/**
+ * Rechaza una fila de «Cuentas para renovar»: pide motivo, avisa al cliente y quita la fila.
+ */
+async function adminCustomerRenewalSplitRejectRow(row, opts) {
+    const quiet = opts && opts.quiet;
+    if (!row || window.__adminCustomerRenewalSplitRejectInFlight || window.__adminCustomerRenewalSplitSellInFlight) {
+        return false;
+    }
+    const ta = document.getElementById('adminLicenciasNotepadByCustomerRenewal');
+    if (!ta || ta.tagName !== 'TEXTAREA') {
+        return false;
+    }
+    const licenseId = parseInt(ta.dataset.licenseId, 10);
+    if (!Number.isFinite(licenseId) || licenseId === AGGREGATE_LICENSE_ID) {
+        showError('Selecciona una licencia concreta (no «Todos») para rechazar cuentas.');
+        return false;
+    }
+    const rows = customerRenewalLicenseSplitGetRowElements();
+    const idx = rows.indexOf(row);
+    if (idx < 0) {
+        return false;
+    }
+    const credLines = licenseSplitCredLinesFromRaw(String(ta.value != null ? ta.value : '').replace(/\r\n/g, '\n'));
+    if (idx >= credLines.length) {
+        return false;
+    }
+    const displayedCred = credLines[idx] != null ? credLines[idx] : '';
+    const cred =
+        opts && opts.credentialOverride != null && String(opts.credentialOverride).trim() !== ''
+            ? String(opts.credentialOverride).trim()
+            : displayedCred;
+    if (!String(cred).trim()) {
+        showError('Esta fila no tiene credencial.');
+        return false;
+    }
+    const r = customerRenewalLicenseSplitReadRow(row);
+    let reason = null;
+    if (opts && opts.reason != null && String(opts.reason).trim() !== '') {
+        reason = String(opts.reason).trim();
+    } else {
+        reason = await adminCustomerRenewalPromptRejectReasonModal();
+    }
+    if (!reason) {
+        return false;
+    }
+
+    const custRoot = customerRenewalLicenseSplitQueryRoot();
+    const oldMerged = custRoot ? customerRenewalLicenseSplitGetMergedText(custRoot) : '';
+    const newMerged = customerRenewalLicenseSplitBuildMergedAfterRemoveIndex(credLines, rows, idx);
+
+    window.__adminCustomerRenewalSplitRejectInFlight = true;
+    try {
+        if (custRoot) {
+            customerRenewalLicenseSplitApplyMergedText(custRoot, newMerged);
+        }
+        if (ta) ta.dataset.customerRenewalDirty = '1';
+        const saveRes =
+            typeof window.adminLicenciasSaveCustomerRenewalNotesImmediate === 'function'
+                ? await window.adminLicenciasSaveCustomerRenewalNotesImmediate({ allowEmpty: true })
+                : { success: false, error: 'no_save_fn' };
+        if (!saveRes || !saveRes.success) {
+            if (custRoot) {
+                customerRenewalLicenseSplitApplyMergedText(custRoot, oldMerged);
+            }
+            showError('No se pudo guardar Cuentas para renovar. Revisa la conexión o vuelve a intentar.');
+            return false;
+        }
+
+        let rejectRes = null;
+        const rejectPayload = {
+            credential: cred,
+            client_username: r.user != null ? String(r.user) : '',
+            reason: reason,
+        };
+        if (typeof adminLicFetchJson === 'function') {
+            rejectRes = await adminLicFetchJson(
+                '/tienda/api/licenses/' + licenseId + '/customer-renewal/reject',
+                {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(rejectPayload),
+                }
+            );
+        } else {
+            const resp = await fetch('/tienda/api/licenses/' + licenseId + '/customer-renewal/reject', {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': typeof getCSRFToken === 'function' ? getCSRFToken() : '',
+                },
+                body: JSON.stringify(rejectPayload),
+            });
+            rejectRes = await resp.json().catch(function () {
+                return { success: false };
+            });
+        }
+        if (!rejectRes || !rejectRes.success) {
+            showError(
+                (rejectRes && rejectRes.error) ||
+                    'La fila se quitó pero no se pudo avisar al cliente. Revisa la conexión.'
+            );
+            return false;
+        }
+
+        let notifyMsg = '';
+        if (rejectRes.no_order) {
+            notifyMsg = ' Fila quitada (no había pedido pendiente para avisar ni devolver saldo).';
+        } else if (rejectRes.already_rejected) {
+            notifyMsg = rejectRes.refunded
+                ? ' El saldo ya estaba devuelto o se devolvió ahora.'
+                : ' Fila quitada (el pedido ya estaba rechazado).';
+        } else if (rejectRes.refunded) {
+            var refundAmt = rejectRes.refund_amount != null ? String(rejectRes.refund_amount) : '';
+            var refundCur = rejectRes.refund_currency ? String(rejectRes.refund_currency) : '';
+            notifyMsg =
+                ' Saldo devuelto al cliente' +
+                (refundAmt ? ' (' + refundAmt + (refundCur ? ' ' + refundCur : '') + ').' : '.');
+            if (rejectRes.email_sent) {
+                notifyMsg += ' Avisado en la tienda y por correo.';
+            } else if (rejectRes.notified) {
+                notifyMsg += ' Avisado en la tienda.';
+            }
+        } else if (rejectRes.email_sent) {
+            notifyMsg = ' El cliente fue avisado en la tienda y por correo.';
+        } else if (rejectRes.notified) {
+            notifyMsg = ' El cliente fue avisado en la tienda.';
+        }
+        if (!quiet && typeof showSuccess === 'function') {
+            showSuccess('Renovación rechazada.' + notifyMsg);
+        }
+        if (typeof updateCustomerRenewalBlocLineCountBadge === 'function') {
+            updateCustomerRenewalBlocLineCountBadge();
+        }
+        return true;
+    } catch (err) {
+        adminLicLogError('adminCustomerRenewalSplitRejectRow', err);
+        if (custRoot) {
+            customerRenewalLicenseSplitApplyMergedText(custRoot, oldMerged);
+        }
+        showError('Error al rechazar la renovación.');
+        return false;
+    } finally {
+        window.__adminCustomerRenewalSplitRejectInFlight = false;
+    }
+}
+
+window.adminCustomerRenewalSplitRejectRow = adminCustomerRenewalSplitRejectRow;
+
+/**
+ * Pasa una fila de «Cuentas para renovar» al bloc del día indicado (misma idea que Licencias).
+ */
+async function adminCustomerRenewalSplitSellRowToDay(row, opts) {
+    const quiet = opts && opts.quiet;
+    const suppressScroll = opts && opts.suppressScroll;
+    if (!row || window.__adminCustomerRenewalSplitSellInFlight || window.__adminCustomerRenewalSplitRejectInFlight) {
+        return false;
+    }
+    const ta = document.getElementById('adminLicenciasNotepadByCustomerRenewal');
+    if (!ta || ta.tagName !== 'TEXTAREA') {
+        return false;
+    }
+    const licenseId = parseInt(ta.dataset.licenseId, 10);
+    if (!Number.isFinite(licenseId) || licenseId === AGGREGATE_LICENSE_ID) {
+        showError('Selecciona una licencia concreta (no «Todos») para pasar cuentas al día.');
+        return false;
+    }
+    const rows = customerRenewalLicenseSplitGetRowElements();
+    const idx = rows.indexOf(row);
+    if (idx < 0) {
+        return false;
+    }
+    const credLines = licenseSplitCredLinesFromRaw(String(ta.value != null ? ta.value : '').replace(/\r\n/g, '\n'));
+    if (idx >= credLines.length) {
+        return false;
+    }
+    const displayedCred = credLines[idx] != null ? credLines[idx] : '';
+    const cred =
+        opts && opts.credentialOverride != null && String(opts.credentialOverride).trim() !== ''
+            ? String(opts.credentialOverride).trim()
+            : displayedCred;
+    if (!String(cred).trim()) {
+        showError('Esta fila no tiene credencial.');
+        return false;
+    }
+    const r = customerRenewalLicenseSplitReadRow(row);
+    const lineToMove = buildAdminLicenseStorageLine(
+        cred,
+        r.user,
+        '',
+        '',
+        r.extra
+    ).trim();
+    if (!lineToMove) {
+        showError('No hay datos válidos para mover.');
+        return false;
+    }
+    const dayInp = row.querySelector('.license-split-editor__day-num');
+    const refNow = new Date();
+    let day = dayInp ? parseInt(dayInp.value, 10) : NaN;
+    if (!Number.isFinite(day)) day = adminLicenseSplitDefaultDayOfMonth();
+    day = adminLicenseSplitClampDayNumValue(day, refNow);
+    if (dayInp) {
+        adminLicenseSplitApplyDayNumInputLimits(dayInp, refNow);
+        dayInp.value = String(day);
+    }
+
+    const container = document.getElementById('licenseAllDaysContainer');
+    const dayRoot =
+        container &&
+        container.querySelector(`.day-license-split-root[data-day="${day}"][data-license-id="${licenseId}"]`);
+    if (!dayRoot) {
+        showError('No se encontró el bloc del día ' + day + '.');
+        return false;
+    }
+
+    const newCredLines = credLines.slice(0, idx).concat(credLines.slice(idx + 1));
+    const newMerged = customerRenewalLicenseSplitBuildMergedAfterRemoveIndex(credLines, rows, idx);
+    const custRoot = customerRenewalLicenseSplitQueryRoot();
+    const oldMerged = custRoot ? customerRenewalLicenseSplitGetMergedText(custRoot) : '';
+
+    window.__adminCustomerRenewalSplitSellInFlight = true;
+    try {
+        if (custRoot) {
+            customerRenewalLicenseSplitApplyMergedText(custRoot, newMerged);
+        }
+        if (ta) ta.dataset.customerRenewalDirty = '1';
+        const saveRes =
+            typeof window.adminLicenciasSaveCustomerRenewalNotesImmediate === 'function'
+                ? await window.adminLicenciasSaveCustomerRenewalNotesImmediate({ allowEmpty: true })
+                : { success: false, error: 'no_save_fn' };
+        if (!saveRes || !saveRes.success) {
+            if (custRoot) {
+                customerRenewalLicenseSplitApplyMergedText(custRoot, oldMerged);
+            }
+            showError('No se pudo guardar Cuentas para renovar. Revisa la conexión o vuelve a intentar.');
+            return false;
+        }
+
+        const rawDay = dayLicenseSplitGetMergedText(dayRoot);
+        const dayPrev = String(rawDay != null ? rawDay : '').replace(/\r\n/g, '\n').trimEnd();
+        const combined = dayPrev ? dayPrev + '\n' + lineToMove : lineToMove;
+        dayLicenseSplitApplyMergedText(dayRoot, combined);
+        const finalText = dayLicenseSplitGetMergedText(dayRoot);
+        saveDayDraftLocal(licenseId, day, finalText);
+        await syncDayNotepad(licenseId, day, finalText);
+
+        let notifyOk = false;
+        let notifyMsg = '';
+        try {
+            const completePayload = {
+                credential: cred,
+                client_username: r.user != null ? String(r.user) : '',
+                day: day,
+            };
+            let completeRes = null;
+            if (typeof adminLicFetchJson === 'function') {
+                completeRes = await adminLicFetchJson(
+                    '/tienda/api/licenses/' + licenseId + '/customer-renewal/complete',
+                    {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(completePayload),
+                    }
+                );
+            } else {
+                const resp = await fetch(
+                    '/tienda/api/licenses/' + licenseId + '/customer-renewal/complete',
+                    {
+                        method: 'POST',
+                        credentials: 'same-origin',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRFToken': typeof getCSRFToken === 'function' ? getCSRFToken() : '',
+                        },
+                        body: JSON.stringify(completePayload),
+                    }
+                );
+                completeRes = await resp.json().catch(function () {
+                    return { success: false };
+                });
+            }
+            if (completeRes && completeRes.success) {
+                notifyOk = true;
+                if (completeRes.already_completed) {
+                    notifyMsg = ' (ya estaba marcada como renovada).';
+                } else if (completeRes.email_sent) {
+                    notifyMsg = ' El cliente fue avisado en la tienda y por correo.';
+                } else {
+                    notifyMsg = ' El cliente fue avisado en la tienda.';
+                }
+            } else if (completeRes && completeRes.error) {
+                notifyMsg = ' Aviso: ' + String(completeRes.error);
+            }
+        } catch (notifyErr) {
+            adminLicLogError('customer-renewal complete notify', notifyErr);
+            notifyMsg = ' No se pudo avisar al cliente; revisa la conexión.';
+        }
+
+        if (!quiet) {
+            showSuccess('Cuenta para renovar pasada al día ' + day + '.' + notifyMsg);
+        }
+        if (!suppressScroll) {
+            const section = dayRoot.closest('.day-section');
+            if (section && typeof section.scrollIntoView === 'function') {
+                section.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            }
+        }
+        if (typeof refreshDuplicateEmailHighlights === 'function') {
+            refreshDuplicateEmailHighlights(licenseId);
+        }
+        return true;
+    } catch (err) {
+        adminLicLogError('adminCustomerRenewalSplitSellRowToDay', err);
+        if (custRoot) {
+            customerRenewalLicenseSplitApplyMergedText(custRoot, oldMerged);
+        }
+        if (typeof window.adminLicenciasSaveCustomerRenewalNotesImmediate === 'function') {
+            await window.adminLicenciasSaveCustomerRenewalNotesImmediate();
+        }
+        showError('No se pudo completar el paso al día. Se restauró la fila en Cuentas para renovar.');
+        return false;
+    } finally {
+        window.__adminCustomerRenewalSplitSellInFlight = false;
+    }
+}
+
+window.adminCustomerRenewalSplitSellRowToDay = adminCustomerRenewalSplitSellRowToDay;
+
+function updateCustomerRenewalBlocLineCountBadge() {
+    const badge = document.getElementById('adminLicenciasCustomerRenewalLineBadge');
+    const pad = document.getElementById('adminLicenciasNotepadByCustomerRenewal');
+    if (!badge || !pad) return;
+    const lid = pad.dataset.licenseId;
+    if (lid === undefined || lid === '' || String(lid) === '0') {
+        badge.hidden = true;
+        badge.textContent = '';
+        badge.removeAttribute('title');
+        return;
+    }
+    const custRoot = customerRenewalLicenseSplitQueryRoot();
+    let raw;
+    if (custRoot && typeof customerRenewalLicenseSplitGetMergedText === 'function') {
+        raw = customerRenewalLicenseSplitGetMergedText(custRoot);
+    } else {
+        raw = pad.tagName === 'TEXTAREA' ? pad.value : '';
+    }
+    const n = countNonEmptyLinesInText(raw);
+    if (n > 0) {
+        badge.textContent = String(n);
+        badge.title = n === 1 ? '1 línea' : n + ' líneas';
+        badge.hidden = false;
+    } else {
+        badge.hidden = true;
+        badge.textContent = '';
+        badge.removeAttribute('title');
+    }
+}
+
+window.customerRenewalLicenseSplitGetMergedText = customerRenewalLicenseSplitGetMergedText;
+window.customerRenewalLicenseSplitApplyMergedText = customerRenewalLicenseSplitApplyMergedText;
+window.customerRenewalLicenseSplitSyncRowsToTextarea = customerRenewalLicenseSplitSyncRowsToTextarea;
+window.customerRenewalLicenseSplitScheduleAutosize = customerRenewalLicenseSplitScheduleAutosize;
+window.customerRenewalLicenseSplitLock = customerRenewalLicenseSplitLock;
+window.customerRenewalLicenseSplitUnlock = customerRenewalLicenseSplitUnlock;
+window.customerRenewalLicenseSplitWireScrollSync = customerRenewalLicenseSplitWireScrollSync;
+window.customerRenewalLicenseSplitIsRenewClientMode = customerRenewalLicenseSplitIsRenewClientMode;
+window.customerRenewalLicenseSplitNormalizeCredTaForRenewMode =
+    customerRenewalLicenseSplitNormalizeCredTaForRenewMode;
+window.customerRenewalLicenseSplitProcessCredResponses = customerRenewalLicenseSplitProcessCredResponses;
+window.updateCustomerRenewalBlocLineCountBadge = updateCustomerRenewalBlocLineCountBadge;
 
 function updateChangesBlocLineCountBadge() {
     document.querySelectorAll('.admin-licencias-bloc--changes-product').forEach(function (section) {
@@ -15471,6 +17857,9 @@ async function loadAllDaysSoldAccounts(licenseId) {
             if (licenseId !== AGGREGATE_LICENSE_ID && typeof restorePersonalBlocState === 'function') {
                 restorePersonalBlocState(licenseId);
             }
+            if (licenseId !== AGGREGATE_LICENSE_ID && typeof restoreProveedorMergedBlocState === 'function') {
+                restoreProveedorMergedBlocState(licenseId);
+            }
             return;
         }
 
@@ -15614,6 +18003,7 @@ async function loadAllDaysSoldAccounts(licenseId) {
     restoreSuspendedSectionState(licenseId);
         restoreExpiredSectionState(licenseId);
         restorePersonalBlocState(licenseId);
+        restoreProveedorMergedBlocState(licenseId);
     }
     
     // Agregar event listeners para contraer/expandir días
@@ -16400,6 +18790,15 @@ function filterLicenses() {
             card.classList.contains('license-card--panel-toggle')
         ) {
             card.classList.remove('hidden-by-search');
+            return;
+        }
+        if (card.dataset.licenseId === ADMIN_PROVEEDOR_FILTER) {
+            const showProv =
+                !searchTerm ||
+                searchTerm.indexOf('proveedor') !== -1 ||
+                searchTerm.indexOf('proveedores') !== -1 ||
+                searchTerm.indexOf('prov') !== -1;
+            card.classList.toggle('hidden-by-search', !showProv);
             return;
         }
         const licenseId = parseInt(card.dataset.licenseId, 10);
@@ -17649,6 +20048,8 @@ function handleAdminLicenciasMenuDeepLink() {
             showGestionarProductosModal();
         } else if (open === 'saldo-clientes' && typeof showSaldoClientesModal === 'function') {
             void showSaldoClientesModal();
+        } else if (open === 'proveedores-ventas' && typeof adminLicProveedorVentasOpenModal === 'function') {
+            adminLicProveedorVentasOpenModal();
         } else if (open === 'renovar-dia') {
             const renewBtn = document.getElementById('btnEjecutarRenovacionDia');
             if (renewBtn && typeof adminLicenseRunDayRenewalManual === 'function') {
@@ -17664,6 +20065,7 @@ function handleAdminLicenciasMenuDeepLink() {
         open === 'historial' ||
         open === 'gestionar-productos' ||
         open === 'saldo-clientes' ||
+        open === 'proveedores-ventas' ||
         open === 'renovar-dia' ||
         open === 'agregar-licencia'
     ) {
@@ -17893,6 +20295,30 @@ function showGestionarProductosModal() {
                         if (isMes) L.month_to_month = checked;
                         else if (isReservar) L.allow_reservation = checked;
                         else L.renew_customer_account = checked;
+                    }
+                    if (isRenovarCuenta) {
+                        const inputContainer = document.getElementById('licenseAccountsInputContainer');
+                        const activeRaw =
+                            inputContainer && inputContainer.dataset.activeLicenseId != null
+                                ? inputContainer.dataset.activeLicenseId
+                                : '';
+                        const active = parseInt(activeRaw, 10);
+                        if (Number.isFinite(active) && active === id) {
+                            updateNotepadsVisibilityForLicense(id);
+                            if (
+                                window.AdminLicenciasNotepad &&
+                                typeof window.AdminLicenciasNotepad.bindLicense === 'function'
+                            ) {
+                                const licActive = licenses.find(function (l) {
+                                    return l.id === id;
+                                });
+                                window.AdminLicenciasNotepad.bindLicense(
+                                    id,
+                                    licActive && licActive.product_name ? licActive.product_name : '',
+                                    licActive || null
+                                );
+                            }
+                        }
                     }
                     if (isMes) {
                         adminLicenseRefreshGoodStatusSelectsForLicense(id);

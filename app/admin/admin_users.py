@@ -136,6 +136,7 @@ def search_users_ajax():
             data[-1]["soporte_licencias"] = bool(precio_data.get("soporte_licencias"))
             data[-1]["puede_tener_deuda"] = bool(precio_data.get("puede_tener_deuda"))
             data[-1]["recarga_automatica"] = bool(precio_data.get("recarga_automatica"))
+            data[-1]["proveedor"] = bool(precio_data.get("proveedor"))
             data[-1]["limite_deuda_usd"] = precio_data.get("limite_deuda_usd")
             data[-1]["limite_deuda_cop"] = precio_data.get("limite_deuda_cop")
         else:
@@ -147,6 +148,7 @@ def search_users_ajax():
             data[-1]["soporte_licencias"] = False
             data[-1]["puede_tener_deuda"] = False
             data[-1]["recarga_automatica"] = False
+            data[-1]["proveedor"] = False
             data[-1]["limite_deuda_usd"] = None
             data[-1]["limite_deuda_cop"] = None
             
@@ -1457,12 +1459,38 @@ def update_tools_resources_permissions_ajax():
             "message": f"Error interno: {str(e)}"
         }), 500
 
+
+def _normalize_user_prices_compare_fields(user_prices):
+    """Campos comparables de user_prices para detectar cambios reales."""
+    up = user_prices or {}
+    result = {
+        "tipo_precio": str(up.get("tipo_precio") or "").strip().upper() or None,
+        "soporte_licencias": bool(up.get("soporte_licencias")),
+        "puede_tener_deuda": bool(up.get("puede_tener_deuda")),
+        "recarga_automatica": bool(up.get("recarga_automatica")),
+        "proveedor": bool(up.get("proveedor")),
+        "limite_deuda_usd": None,
+        "limite_deuda_cop": None,
+    }
+    if result["puede_tener_deuda"]:
+        for key in ("limite_deuda_usd", "limite_deuda_cop"):
+            value = up.get(key)
+            if value is None or value == "":
+                result[key] = None
+            else:
+                try:
+                    result[key] = max(0.0, float(value))
+                except (TypeError, ValueError):
+                    result[key] = None
+    return result
+
+
 @admin_bp.route("/update_user_prices_ajax", methods=["POST"])
 @admin_required
 def update_user_prices_ajax():
     """
     Actualiza los precios por usuario de forma masiva.
-    Recibe: { "updates": [{"user_id": 1, "tipo_precio": "USD", "soporte_licencias": true|false, "puede_tener_deuda": true|false, "recarga_automatica": true|false }, ...] }
+    Recibe: { "updates": [{"user_id": 1, "tipo_precio": "USD", "soporte_licencias": true|false, "puede_tener_deuda": true|false, "recarga_automatica": true|false, "proveedor": true|false }, ...] }
     """
     try:
         # Obtener el user_id del admin actual ANTES de hacer cambios
@@ -1559,6 +1587,12 @@ def update_user_prices_ajax():
                 else:
                     new_user_prices.pop('recarga_automatica', None)
 
+            if 'proveedor' in update_data:
+                if update_data['proveedor'] is True:
+                    new_user_prices['proveedor'] = True
+                else:
+                    new_user_prices.pop('proveedor', None)
+
             if 'limite_deuda_usd' in update_data:
                 lim_u = update_data.get('limite_deuda_usd')
                 if lim_u is None or lim_u == '':
@@ -1579,6 +1613,9 @@ def update_user_prices_ajax():
                     except (TypeError, ValueError):
                         pass
             
+            if _normalize_user_prices_compare_fields(old_user_prices) == _normalize_user_prices_compare_fields(new_user_prices):
+                continue
+
             # Asignar el nuevo diccionario y marcar como modificado
             user.user_prices = new_user_prices
             from sqlalchemy.orm.attributes import flag_modified
@@ -1586,6 +1623,13 @@ def update_user_prices_ajax():
             updated_count += 1
         
         try:
+            if updated_count == 0 and not errors:
+                return jsonify({
+                    "status": "ok",
+                    "message": "No hay cambios para guardar",
+                    "updated_count": 0,
+                })
+
             db.session.commit()
             return jsonify({
                 "status": "ok",
@@ -1607,6 +1651,207 @@ def update_user_prices_ajax():
             "status": "error",
             "message": f"Error interno: {str(e)}"
         }), 500
+
+
+def _enabled_store_licenses_for_proveedor_catalog():
+    """Licencias tienda habilitadas (servicios que puede vender un proveedor)."""
+    from app.store.models import License, Product
+    from sqlalchemy.orm import joinedload
+
+    return (
+        License.query.options(joinedload(License.product))
+        .join(Product, License.product_id == Product.id)
+        .filter(License.enabled.is_(True))
+        .filter(Product.enabled.is_(True))
+        .order_by(License.position.asc(), Product.name.asc())
+        .all()
+    )
+
+
+def _normalize_proveedor_services_map(raw):
+    """Mapa license_id (str) -> { sales_limit: int|None, warranty_days: int, sales_count: int } (None = ilimitado)."""
+    if not isinstance(raw, dict):
+        return {}
+    out = {}
+    for key, val in raw.items():
+        try:
+            lid = int(key)
+        except (TypeError, ValueError):
+            continue
+        if lid <= 0:
+            continue
+        limit = None
+        warranty_days = 0
+        sales_count = 0
+        if isinstance(val, dict):
+            lim_raw = val.get("sales_limit")
+            if lim_raw is None:
+                lim_raw = val.get("limit")
+            if lim_raw is not None and lim_raw != "":
+                try:
+                    limit = max(0, int(float(lim_raw)))
+                except (TypeError, ValueError):
+                    limit = None
+            wd_raw = val.get("warranty_days")
+            if wd_raw is None:
+                wd_raw = val.get("gar")
+            if wd_raw is not None and wd_raw != "":
+                try:
+                    warranty_days = max(0, min(3650, int(float(wd_raw))))
+                except (TypeError, ValueError):
+                    warranty_days = 0
+            sc_raw = val.get("sales_count")
+            if sc_raw is not None and sc_raw != "":
+                try:
+                    sales_count = max(0, int(float(sc_raw)))
+                except (TypeError, ValueError):
+                    sales_count = 0
+        out[str(lid)] = {
+            "sales_limit": limit,
+            "warranty_days": warranty_days,
+            "sales_count": sales_count,
+        }
+    return out
+
+
+def _proveedor_services_from_user_prices(user_prices):
+    up = user_prices or {}
+    return _normalize_proveedor_services_map(up.get("proveedor_services"))
+
+
+def _proveedor_services_payload_for_user(user_obj):
+    saved = _proveedor_services_from_user_prices(
+        user_obj.user_prices if user_obj and user_obj.user_prices else {}
+    )
+    services = []
+    for lic in _enabled_store_licenses_for_proveedor_catalog():
+        prod = getattr(lic, "product", None)
+        name = (prod.name if prod else None) or f"Licencia #{lic.id}"
+        key = str(lic.id)
+        entry = saved.get(key)
+        enabled = key in saved
+        limit = entry.get("sales_limit") if entry else None
+        services.append(
+            {
+                "license_id": lic.id,
+                "product_id": lic.product_id,
+                "name": name,
+                "enabled": enabled,
+                "sales_limit": limit,
+            }
+        )
+    return services
+
+
+@admin_bp.route("/user_proveedor_services_ajax", methods=["GET"])
+@admin_required
+def user_proveedor_services_ajax_get():
+    """Servicios (licencias tienda) configurables para un proveedor."""
+    try:
+        user_id = request.args.get("user_id", type=int)
+        if not user_id:
+            return jsonify({"status": "error", "message": "user_id requerido"}), 400
+        user = User.query.get(user_id)
+        if not user:
+            return jsonify({"status": "error", "message": "Usuario no encontrado"}), 404
+        if user.parent_id:
+            return jsonify({"status": "error", "message": "Solo usuarios principales"}), 400
+        return jsonify(
+            {
+                "status": "ok",
+                "user_id": user.id,
+                "username": user.username,
+                "proveedor": bool((user.user_prices or {}).get("proveedor")),
+                "services": _proveedor_services_payload_for_user(user),
+            }
+        )
+    except Exception as e:
+        current_app.logger.error(f"Error en user_proveedor_services_ajax GET: {e}", exc_info=True)
+        return jsonify({"status": "error", "message": f"Error interno: {str(e)}"}), 500
+
+
+@admin_bp.route("/user_proveedor_services_ajax", methods=["POST"])
+@admin_required
+def user_proveedor_services_ajax_post():
+    """Guarda qué servicios puede vender el proveedor y límite de ventas por servicio."""
+    try:
+        data = request.get_json() or {}
+        user_id = data.get("user_id")
+        if not user_id:
+            return jsonify({"status": "error", "message": "user_id requerido"}), 400
+        user = User.query.get(int(user_id))
+        if not user:
+            return jsonify({"status": "error", "message": "Usuario no encontrado"}), 404
+        if user.parent_id:
+            return jsonify({"status": "error", "message": "Solo usuarios principales"}), 400
+
+        catalog_ids = {lic.id for lic in _enabled_store_licenses_for_proveedor_catalog()}
+        existing_map = _proveedor_services_from_user_prices(user.user_prices)
+        incoming = data.get("services")
+        if not isinstance(incoming, list):
+            return jsonify({"status": "error", "message": "Formato services inválido"}), 400
+
+        new_map = {}
+        for item in incoming:
+            if not isinstance(item, dict):
+                continue
+            if not item.get("enabled"):
+                continue
+            try:
+                lid = int(item.get("license_id"))
+            except (TypeError, ValueError):
+                continue
+            if lid not in catalog_ids:
+                continue
+            limit = None
+            lim_raw = item.get("sales_limit")
+            if lim_raw is not None and lim_raw != "":
+                try:
+                    limit = max(0, int(float(lim_raw)))
+                except (TypeError, ValueError):
+                    limit = None
+            prev = existing_map.get(str(lid)) or {}
+            prev_wd = prev.get("warranty_days")
+            if prev_wd is None:
+                prev_wd = prev.get("gar")
+            try:
+                warranty_days = max(0, min(3650, int(float(prev_wd or 0))))
+            except (TypeError, ValueError):
+                warranty_days = 0
+            prev_sc = prev.get("sales_count")
+            try:
+                sales_count = max(0, int(float(prev_sc or 0)))
+            except (TypeError, ValueError):
+                sales_count = 0
+            new_map[str(lid)] = {
+                "sales_limit": limit,
+                "warranty_days": warranty_days,
+                "sales_count": sales_count,
+            }
+
+        new_user_prices = dict(user.user_prices) if user.user_prices else {}
+        if new_map:
+            new_user_prices["proveedor_services"] = new_map
+        else:
+            new_user_prices.pop("proveedor_services", None)
+
+        user.user_prices = new_user_prices
+        from sqlalchemy.orm.attributes import flag_modified
+
+        flag_modified(user, "user_prices")
+        db.session.commit()
+
+        return jsonify(
+            {
+                "status": "ok",
+                "message": "Configuración de proveedor guardada",
+                "services": _proveedor_services_payload_for_user(user),
+            }
+        )
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Error en user_proveedor_services_ajax POST: {e}", exc_info=True)
+        return jsonify({"status": "error", "message": f"Error interno: {str(e)}"}), 500
 
 
 @admin_bp.route("/update_user_debt_limit_ajax", methods=["POST"])

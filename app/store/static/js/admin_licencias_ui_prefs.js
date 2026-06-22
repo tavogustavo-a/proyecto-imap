@@ -14,6 +14,10 @@ function adminLicEnsurePrefsObject() {
       personal_collapsed: {},
       suspended_collapsed: {},
       expired_collapsed: {},
+      proveedor_merged_collapsed: {},
+      proveedor_merged_user_filter: {},
+      proveedor_panel_user_collapsed: {},
+      proveedor_panel_day_collapsed: {},
     };
   }
   return adminLicenciasUiPrefs;
@@ -34,7 +38,15 @@ function adminLicBootstrapUiPrefsFromDom() {
     if (parsed.admin_days && typeof parsed.admin_days === 'object') {
       adminLicenciasUiPrefs.admin_days = parsed.admin_days;
     }
-    var blocKeys = ['personal_collapsed', 'suspended_collapsed', 'expired_collapsed'];
+    var blocKeys = [
+      'personal_collapsed',
+      'suspended_collapsed',
+      'expired_collapsed',
+      'proveedor_merged_collapsed',
+      'proveedor_merged_user_filter',
+      'proveedor_panel_user_collapsed',
+      'proveedor_panel_day_collapsed',
+    ];
     var bi;
     for (bi = 0; bi < blocKeys.length; bi += 1) {
       var bk = blocKeys[bi];

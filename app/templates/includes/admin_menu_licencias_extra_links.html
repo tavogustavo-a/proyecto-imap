@@ -1,4 +1,4 @@
-{# Acciones de licencias admin (Menú2): productos, archivados, renovar, saldo. #}
+{# Acciones de licencias admin (Menú2): productos, archivados, renovar, saldo, proveedores. #}
 {% set _lic_inline = admin_lic_menu_inline | default(false) %}
 {% set _admin_lic_url = url_for('store_bp.admin_store') %}
 {% if _lic_inline %}
@@ -14,9 +14,11 @@
   <i class="fas fa-calendar-check" aria-hidden="true"></i> Renovar día (manual)
 </button>
 <button id="btnSaldoClientes" type="button" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-balance-scale-right"></i> Saldo clientes</button>
+<button id="btnAdminProveedorVentas" type="button" class="btn-panel btn-blue mobile-menu-btn mb-04" title="Ventas por servicio de cada proveedor" aria-haspopup="dialog" aria-controls="adminLicProveedorVentasModal"><i class="fas fa-truck-loading" aria-hidden="true"></i> Proveedores</button>
 {% else %}
 <a href="{{ _admin_lic_url }}?open=gestionar-productos" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-list"></i> Gestionar Productos</a>
 <a href="{{ url_for('store_bp.admin_archivados') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-archive"></i> Archivados <span id="archivadosCount">({{ admin_archivados_count | default(0) }})</span></a>
 <a href="{{ _admin_lic_url }}?open=renovar-dia" class="btn-panel btn-blue mobile-menu-btn mb-04" title="Cobra renovaciones del día (Colombia) y mueve vencidas a Cambios o Vencidas"><i class="fas fa-calendar-check" aria-hidden="true"></i> Renovar día (manual)</a>
 <a href="{{ _admin_lic_url }}?open=saldo-clientes" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-balance-scale-right"></i> Saldo clientes</a>
+<button id="btnAdminProveedorVentas" type="button" class="btn-panel btn-blue mobile-menu-btn mb-04" title="Ventas por servicio de cada proveedor" aria-haspopup="dialog" aria-controls="adminLicProveedorVentasModal"><i class="fas fa-truck-loading" aria-hidden="true"></i> Proveedores</button>
 {% endif %}

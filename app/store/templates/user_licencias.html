@@ -107,6 +107,11 @@
     {% else %}
       <a href="{{ url_for('user_auth_bp.logout') }}" class="btn-panel btn-red mobile-menu-btn mb-04"><i class="fas fa-sign-out-alt"></i> Cerrar Sesión</a>
     {% endif %}
+    {% if proveedor_nav %}
+      <button type="button" id="btnUserProveedorGestionarProductos" class="btn-panel btn-blue mobile-menu-btn mb-04 w-100 user-proveedor-gestionar-productos-btn" title="Reserva gar. de tus productos como proveedor">
+        <i class="fas fa-list" aria-hidden="true"></i> Gestionar productos
+      </button>
+    {% endif %}
     {% include 'includes/store_user_menu_saldo_block.html' %}
   </div>
   <div id="menuOverlay" class="menu-overlay"></div>
@@ -145,9 +150,33 @@
     <div id="userLicenciasGrid" class="licenses-grid"></div>
   </div>
 
-  <div id="userLicenciasTableOuter" class="user-licencias-view-wrap w-100" data-api-url="{{ url_for('store_bp.api_user_my_license_accounts') }}" data-rev-url="{{ url_for('store_bp.api_user_my_license_portal_rev') }}" data-day-status-url="{{ url_for('store_bp.api_user_license_day_row_status') }}" data-warranty-incidents-url="{{ url_for('store_bp.api_user_license_warranty_incidents') }}">
+  <div id="userLicenciasTableOuter" class="user-licencias-view-wrap w-100" data-api-url="{{ url_for('store_bp.api_user_my_license_accounts') }}" data-rev-url="{{ url_for('store_bp.api_user_my_license_portal_rev') }}" data-day-status-url="{{ url_for('store_bp.api_user_license_day_row_status') }}" data-warranty-incidents-url="{{ url_for('store_bp.api_user_license_warranty_incidents') }}" data-proveedor-url="{{ url_for('store_bp.api_user_proveedor_inventory_get') }}" data-proveedor-products-url="{{ url_for('store_bp.api_user_proveedor_products_get') }}">
     <p class="text-center user-licencias-empty py-4 mb-0" id="userLicenciasLoadingMsg">Cargando licencias…</p>
   </div>
+
+  <section id="userLicReportesPanel" class="admin-licencias-reportes-panel user-lic-reportes-panel d-none" role="region" aria-label="Reportes de tus licencias vendidas" aria-hidden="true" hidden>
+    <div class="admin-licencias-reportes-inner">
+      <p class="admin-licencias-reportes-hint mb-2">Solo cuentas de <strong>tus licencias asignadas</strong> con incidencia (estado rojo).</p>
+      <div class="admin-licencias-reportes-controls">
+        <label for="userLicReportesSearch" class="sr-only">Filtrar lista de reportes</label>
+        <input type="search" id="userLicReportesSearch" class="form-control admin-licencias-reportes-search" placeholder="Filtrar por cuenta, producto, día…" autocomplete="off">
+      </div>
+      <div class="admin-licencias-reportes-table-scroll">
+        <table class="admin-licencias-reportes-table" role="grid" aria-label="Reportes de tus licencias">
+          <thead>
+            <tr>
+              <th scope="col">Cuenta</th>
+              <th scope="col">Producto</th>
+              <th scope="col">Día</th>
+              <th scope="col">Estado</th>
+            </tr>
+          </thead>
+          <tbody id="userLicReportesTableBody"></tbody>
+        </table>
+      </div>
+      <p class="admin-licencias-reportes-meta" id="userLicReportesMeta" aria-live="polite"></p>
+    </div>
+  </section>
 
   <div id="userLicFullCredModal" class="user-lic-warranty-modal user-lic-full-cred-modal d-none" aria-hidden="true">
     <div id="userLicFullCredModalBackdrop" class="user-lic-warranty-modal__backdrop"></div>

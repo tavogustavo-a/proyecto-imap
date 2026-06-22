@@ -547,6 +547,8 @@ class License(db.Model):
     allow_reservation = db.Column(db.Boolean, default=False, nullable=False)
     # Si True, la tienda no vende inventario: el cliente envía su cuenta para que la enlacen/renueven.
     renew_customer_account = db.Column(db.Boolean, default=False, nullable=False)
+    # Bloc «Cuentas para renovar»: credenciales del cliente (fuera de inventario); mismo formato pipe que license_notes.
+    customer_renewal_notes = db.Column(db.Text, nullable=True)
     # Bloc «Cambios» (mes a mes): correo, terminado / problemas; mismo formato pipe que license_notes
     changes_notes = db.Column(db.Text, nullable=True)
     # JSON {"1":"texto bloc día 1", ...} — texto exacto del bloc por día (persiste aunque falle el parseo a cuentas)

@@ -7,6 +7,8 @@ var whatsappHealthPollTimer = null;
 var whatsappNotifyDailyLogCache = [];
 var whatsappQrModalTrigger = null;
 var whatsappNotifyAttemptsModalTrigger = null;
+var whatsappUserPhoneModalTrigger = null;
+var whatsappUserPhoneModalContext = null;
 
 var WHATSAPP_LICENSE_TEMPLATE_EXAMPLE =
     'Hola {{customer_name}}, tus licencias vencen pronto ({{days_left}} días): ' +
@@ -857,6 +859,467 @@ function bindWhatsAppInfoToggle(infoBtn, infoBox) {
     });
 }
 
+var whatsappUserNotifyPageState = {
+    currentPage: 1,
+    perPage: 999999,
+    wired: false,
+};
+
+function whatsappUserNotifySearchKey(user) {
+    return [
+        user && user.username,
+        user && user.full_name,
+        user && user.phone,
+    ]
+        .map(function (v) {
+            return String(v || '')
+                .trim()
+                .toLowerCase();
+        })
+        .join(' ');
+}
+
+function whatsappUserNotifyGetRows() {
+    var tbody = document.getElementById('whatsapp-user-notify-table-body');
+    if (!tbody) return [];
+    return Array.prototype.slice.call(tbody.querySelectorAll('tr[data-search]'));
+}
+
+function whatsappUserNotifyGetFilteredRows() {
+    return whatsappUserNotifyGetRows().filter(function (row) {
+        return !row.classList.contains('filtered-out');
+    });
+}
+
+function whatsappUserNotifyRenderPage() {
+    var showSelect = document.getElementById('whatsappUserNotifyShowCount');
+    var prevBtn = document.getElementById('whatsappUserNotifyPrevBtn');
+    var nextBtn = document.getElementById('whatsappUserNotifyNextBtn');
+    var allRows = whatsappUserNotifyGetRows();
+    var filteredRows = whatsappUserNotifyGetFilteredRows();
+    var showAll = showSelect && showSelect.value === 'all';
+    var perPage =
+        showSelect && showSelect.value === 'all'
+            ? filteredRows.length || 1
+            : parseInt(showSelect && showSelect.value, 10) || whatsappUserNotifyPageState.perPage;
+    var totalPages = showAll ? 1 : Math.max(1, Math.ceil(filteredRows.length / perPage) || 1);
+    if (whatsappUserNotifyPageState.currentPage > totalPages) {
+        whatsappUserNotifyPageState.currentPage = totalPages;
+    }
+    var start = showAll ? 0 : (whatsappUserNotifyPageState.currentPage - 1) * perPage;
+    var end = showAll ? filteredRows.length : start + perPage;
+
+    filteredRows.forEach(function (row, i) {
+        if (showAll || (i >= start && i < end)) {
+            row.style.display = '';
+        } else {
+            row.style.display = 'none';
+        }
+    });
+    allRows.forEach(function (row) {
+        if (row.classList.contains('filtered-out')) {
+            row.style.display = 'none';
+        }
+    });
+
+    if (prevBtn) prevBtn.disabled = whatsappUserNotifyPageState.currentPage <= 1;
+    if (nextBtn) nextBtn.disabled = whatsappUserNotifyPageState.currentPage >= totalPages;
+}
+
+function whatsappUserNotifyFilterRows() {
+    var searchInput = document.getElementById('whatsappUserNotifySearch');
+    var searchTerm = searchInput ? String(searchInput.value || '').trim().toLowerCase() : '';
+    whatsappUserNotifyGetRows().forEach(function (row) {
+        var key = row.getAttribute('data-search') || '';
+        if (!searchTerm || key.indexOf(searchTerm) !== -1) {
+            row.classList.remove('filtered-out');
+        } else {
+            row.classList.add('filtered-out');
+        }
+    });
+    whatsappUserNotifyPageState.currentPage = 1;
+    whatsappUserNotifyRenderPage();
+}
+
+function setupWhatsAppUserNotifyTableControls() {
+    if (whatsappUserNotifyPageState.wired) return;
+    var showSelect = document.getElementById('whatsappUserNotifyShowCount');
+    var prevBtn = document.getElementById('whatsappUserNotifyPrevBtn');
+    var nextBtn = document.getElementById('whatsappUserNotifyNextBtn');
+    var searchInput = document.getElementById('whatsappUserNotifySearch');
+    if (!showSelect || !prevBtn || !nextBtn || !searchInput) return;
+
+    whatsappUserNotifyPageState.wired = true;
+    whatsappUserNotifyPageState.perPage = parseInt(showSelect.value, 10) || 20;
+
+    showSelect.addEventListener('change', function () {
+        whatsappUserNotifyPageState.perPage =
+            showSelect.value === 'all' ? whatsappUserNotifyGetFilteredRows().length || 1 : parseInt(showSelect.value, 10);
+        whatsappUserNotifyPageState.currentPage = 1;
+        whatsappUserNotifyRenderPage();
+    });
+    prevBtn.addEventListener('click', function () {
+        if (whatsappUserNotifyPageState.currentPage > 1) {
+            whatsappUserNotifyPageState.currentPage -= 1;
+            whatsappUserNotifyRenderPage();
+        }
+    });
+    nextBtn.addEventListener('click', function () {
+        var showAll = showSelect.value === 'all';
+        var perPage = showAll
+            ? whatsappUserNotifyGetFilteredRows().length || 1
+            : parseInt(showSelect.value, 10) || whatsappUserNotifyPageState.perPage;
+        var totalPages = showAll
+            ? 1
+            : Math.max(1, Math.ceil(whatsappUserNotifyGetFilteredRows().length / perPage) || 1);
+        if (whatsappUserNotifyPageState.currentPage < totalPages) {
+            whatsappUserNotifyPageState.currentPage += 1;
+            whatsappUserNotifyRenderPage();
+        }
+    });
+    searchInput.addEventListener('input', whatsappUserNotifyFilterRows);
+    searchInput.addEventListener('search', function () {
+        if (this.value === '') {
+            whatsappUserNotifyFilterRows();
+        }
+    });
+}
+
+function whatsappEscapeHtmlAttr(value) {
+    return String(value != null ? value : '')
+        .replace(/&/g, '&amp;')
+        .replace(/"/g, '&quot;')
+        .replace(/</g, '&lt;');
+}
+
+function whatsappUserNotifyUpdateRowSearch(row) {
+    if (!row) return;
+    var userCell = row.querySelector('td:first-child');
+    var phoneEl = row.querySelector('.whatsapp-user-notify-phone-text');
+    var username = userCell ? String(userCell.textContent || '').trim() : '';
+    var phone = phoneEl ? String(phoneEl.getAttribute('data-phone') || '').trim() : '';
+    row.setAttribute(
+        'data-search',
+        [username, phone]
+            .map(function (v) {
+                return String(v || '').toLowerCase();
+            })
+            .join(' ')
+    );
+}
+
+function whatsappUserPhoneUpdateRowDisplay(rowEl, phone) {
+    if (!rowEl) return;
+    var span = rowEl.querySelector('.whatsapp-user-notify-phone-text');
+    var btn = rowEl.querySelector('.whatsapp-user-notify-phone-edit-btn');
+    var saved = String(phone || '').trim();
+    if (span) {
+        span.textContent = saved || '—';
+        span.setAttribute('data-phone', saved);
+        span.classList.toggle('text-muted', !saved);
+    }
+    if (btn) {
+        btn.setAttribute('data-phone', saved);
+    }
+    whatsappUserNotifyUpdateRowSearch(rowEl);
+}
+
+function closeWhatsAppUserPhoneModal() {
+    var modal = document.getElementById('whatsapp-user-phone-modal');
+    if (!modal) return;
+    var trigger =
+        whatsappUserPhoneModalTrigger && typeof whatsappUserPhoneModalTrigger.focus === 'function'
+            ? whatsappUserPhoneModalTrigger
+            : null;
+    modal.classList.add('d-none');
+    modal.setAttribute('hidden', '');
+    modal.setAttribute('aria-hidden', 'true');
+    whatsappUserPhoneModalTrigger = null;
+    whatsappUserPhoneModalContext = null;
+    if (trigger) {
+        trigger.focus({ preventScroll: true });
+    }
+}
+
+function openWhatsAppUserPhoneModal(userId, username, currentPhone, rowEl, triggerEl) {
+    var modal = document.getElementById('whatsapp-user-phone-modal');
+    var userLabel = document.getElementById('whatsapp-user-phone-modal-user');
+    var input = document.getElementById('whatsapp-user-phone-modal-input');
+    if (!modal || !input || !userId) return;
+
+    whatsappUserPhoneModalTrigger = triggerEl || document.activeElement;
+    whatsappUserPhoneModalContext = {
+        userId: userId,
+        rowEl: rowEl,
+        prevPhone: String(currentPhone || '').trim(),
+    };
+    if (userLabel) {
+        userLabel.textContent = username ? 'Usuario: ' + username : '';
+    }
+    input.value = whatsappUserPhoneModalContext.prevPhone;
+    modal.classList.remove('d-none');
+    modal.removeAttribute('hidden');
+    modal.setAttribute('aria-hidden', 'false');
+    input.focus();
+    input.select();
+}
+
+function saveWhatsAppUserPhoneFromModal() {
+    var ctx = whatsappUserPhoneModalContext;
+    var input = document.getElementById('whatsapp-user-phone-modal-input');
+    var saveBtn = document.getElementById('whatsapp-user-phone-modal-save-btn');
+    if (!ctx || !input) return;
+
+    var next = String(input.value || '').trim();
+    if (next === ctx.prevPhone) {
+        closeWhatsAppUserPhoneModal();
+        return;
+    }
+    if (saveBtn && saveBtn.dataset.saving === '1') return;
+
+    if (saveBtn) {
+        saveBtn.dataset.saving = '1';
+        saveBtn.disabled = true;
+    }
+    input.disabled = true;
+
+    fetch('/tienda/admin/whatsapp/user-notify-prefs/' + encodeURIComponent(ctx.userId) + '/phone', {
+        method: 'PUT',
+        credentials: 'same-origin',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': whatsappCsrfToken(),
+        },
+        body: JSON.stringify({ phone: next }),
+    })
+        .then(function (resp) {
+            return resp.json();
+        })
+        .then(function (data) {
+            if (!data || !data.success) {
+                showWhatsAppStatus(
+                    (data && data.error) || 'No se pudo guardar el teléfono.',
+                    'error'
+                );
+                return;
+            }
+            var saved = data.phone != null ? String(data.phone) : next;
+            whatsappUserPhoneUpdateRowDisplay(ctx.rowEl, saved);
+            showWhatsAppStatus('Teléfono guardado.', 'success');
+            closeWhatsAppUserPhoneModal();
+        })
+        .catch(function () {
+            showWhatsAppStatus('Error de red al guardar teléfono.', 'error');
+        })
+        .finally(function () {
+            input.disabled = false;
+            if (saveBtn) {
+                delete saveBtn.dataset.saving;
+                saveBtn.disabled = false;
+            }
+        });
+}
+
+function wireWhatsAppUserNotifyPhoneEditButtons(root) {
+    var scope = root || document;
+    scope.querySelectorAll('.whatsapp-user-notify-phone-edit-btn').forEach(function (btn) {
+        if (btn.dataset.phoneWired === '1') return;
+        btn.dataset.phoneWired = '1';
+        btn.addEventListener('click', function () {
+            var row = btn.closest('tr');
+            var userId = btn.getAttribute('data-user-id');
+            if (!userId) return;
+            var username = '';
+            if (row) {
+                var userCell = row.querySelector('td:first-child');
+                username = userCell ? String(userCell.textContent || '').trim() : '';
+            }
+            var phone = btn.getAttribute('data-phone') || '';
+            openWhatsAppUserPhoneModal(userId, username, phone, row, btn);
+        });
+    });
+}
+
+function setupWhatsAppUserPhoneModal() {
+    if (setupWhatsAppUserPhoneModal._wired) return;
+    setupWhatsAppUserPhoneModal._wired = true;
+
+    var modal = document.getElementById('whatsapp-user-phone-modal');
+    var cancelBtn = document.getElementById('whatsapp-user-phone-modal-cancel-btn');
+    var saveBtn = document.getElementById('whatsapp-user-phone-modal-save-btn');
+    var input = document.getElementById('whatsapp-user-phone-modal-input');
+
+    if (cancelBtn) {
+        cancelBtn.addEventListener('click', closeWhatsAppUserPhoneModal);
+    }
+    if (saveBtn) {
+        saveBtn.addEventListener('click', saveWhatsAppUserPhoneFromModal);
+    }
+    if (input) {
+        input.addEventListener('keydown', function (ev) {
+            if (ev.key === 'Enter') {
+                ev.preventDefault();
+                saveWhatsAppUserPhoneFromModal();
+            } else if (ev.key === 'Escape') {
+                ev.preventDefault();
+                closeWhatsAppUserPhoneModal();
+            }
+        });
+    }
+    if (modal) {
+        modal.addEventListener('click', function (e) {
+            if (e.target === modal) closeWhatsAppUserPhoneModal();
+        });
+    }
+}
+
+function loadWhatsAppUserNotifyPrefs() {
+    var tbody = document.getElementById('whatsapp-user-notify-table-body');
+    if (!tbody) return Promise.resolve();
+    setupWhatsAppUserNotifyTableControls();
+    tbody.innerHTML = '<tr><td colspan="3" class="text-center text-muted">Cargando usuarios…</td></tr>';
+    return fetch('/tienda/admin/whatsapp/user-notify-prefs', {
+        credentials: 'same-origin',
+        headers: { 'X-CSRFToken': whatsappCsrfToken() },
+    })
+        .then(function (resp) {
+            return resp.json();
+        })
+        .then(function (data) {
+            if (!data || !data.success) {
+                tbody.innerHTML =
+                    '<tr><td colspan="3" class="text-center text-danger">' +
+                    (data && data.error ? data.error : 'No se pudo cargar usuarios.') +
+                    '</td></tr>';
+                return;
+            }
+            renderWhatsAppUserNotifyTable(data.users || []);
+        })
+        .catch(function () {
+            tbody.innerHTML =
+                '<tr><td colspan="3" class="text-center text-danger">Error de red al cargar usuarios.</td></tr>';
+        });
+}
+
+function renderWhatsAppUserNotifyTable(users) {
+    var tbody = document.getElementById('whatsapp-user-notify-table-body');
+    var prevBtn = document.getElementById('whatsappUserNotifyPrevBtn');
+    var nextBtn = document.getElementById('whatsappUserNotifyNextBtn');
+    if (!tbody) return;
+    if (!users || !users.length) {
+        tbody.innerHTML =
+            '<tr><td colspan="3" class="text-center text-muted">No hay usuarios principales para configurar.</td></tr>';
+        if (prevBtn) prevBtn.disabled = true;
+        if (nextBtn) nextBtn.disabled = true;
+        return;
+    }
+    tbody.innerHTML = users
+        .map(function (u) {
+            var checked = u.whatsapp_notify_enabled !== false ? ' checked' : '';
+            var phoneRaw = String(u.phone || '').trim();
+            var phoneVal = whatsappEscapeHtmlAttr(phoneRaw);
+            var phoneDisplay = phoneRaw ? phoneVal : '—';
+            var phoneMutedClass = phoneRaw ? '' : ' text-muted';
+            var usernameLabel = whatsappEscapeHtmlAttr(u.username || 'usuario');
+            var searchKey = whatsappUserNotifySearchKey(u);
+            return (
+                '<tr data-user-id="' +
+                u.id +
+                '" data-search="' +
+                searchKey.replace(/"/g, '&quot;') +
+                '">' +
+                '<td>' +
+                (u.username || '—') +
+                '</td>' +
+                '<td class="whatsapp-notify-phone-cell">' +
+                '<div class="whatsapp-user-notify-phone-row">' +
+                '<span class="whatsapp-user-notify-phone-text' +
+                phoneMutedClass +
+                '" data-phone="' +
+                phoneVal +
+                '">' +
+                phoneDisplay +
+                '</span>' +
+                '<button type="button" class="whatsapp-user-notify-phone-edit-btn"' +
+                ' data-user-id="' +
+                u.id +
+                '" data-phone="' +
+                phoneVal +
+                '" title="Editar teléfono"' +
+                ' aria-label="Editar teléfono de ' +
+                usernameLabel +
+                '">' +
+                '<i class="fas fa-pen" aria-hidden="true"></i>' +
+                '</button>' +
+                '</div>' +
+                '</td>' +
+                '<td class="text-center whatsapp-user-notify-check-cell">' +
+                '<input type="checkbox" class="form-check-input whatsapp-user-notify-checkbox"' +
+                ' id="whatsapp-notify-user-' +
+                u.id +
+                '"' +
+                ' data-user-id="' +
+                u.id +
+                '"' +
+                checked +
+                ' aria-label="Enviar WhatsApp a ' +
+                (u.username || 'usuario') +
+                '">' +
+                '</td>' +
+                '</tr>'
+            );
+        })
+        .join('');
+
+    tbody.querySelectorAll('.whatsapp-user-notify-checkbox').forEach(function (cb) {
+        cb.addEventListener('change', function () {
+            saveWhatsAppUserNotifyPref(cb);
+        });
+    });
+    wireWhatsAppUserNotifyPhoneEditButtons(tbody);
+
+    whatsappUserNotifyPageState.currentPage = 1;
+    whatsappUserNotifyFilterRows();
+}
+
+function saveWhatsAppUserNotifyPref(checkbox) {
+    if (!checkbox) return;
+    var userId = checkbox.getAttribute('data-user-id');
+    if (!userId) return;
+    var enabled = !!checkbox.checked;
+    checkbox.disabled = true;
+    fetch('/tienda/admin/whatsapp/user-notify-prefs/' + encodeURIComponent(userId), {
+        method: 'PUT',
+        credentials: 'same-origin',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': whatsappCsrfToken(),
+        },
+        body: JSON.stringify({ enabled: enabled }),
+    })
+        .then(function (resp) {
+            return resp.json();
+        })
+        .then(function (data) {
+            if (!data || !data.success) {
+                checkbox.checked = !enabled;
+                showWhatsAppStatus(
+                    (data && data.error) || 'No se pudo guardar la preferencia.',
+                    'error'
+                );
+                return;
+            }
+            showWhatsAppStatus('Preferencia guardada.', 'success');
+        })
+        .catch(function () {
+            checkbox.checked = !enabled;
+            showWhatsAppStatus('Error de red al guardar.', 'error');
+        })
+        .finally(function () {
+            checkbox.disabled = false;
+        });
+}
+
 function setupWhatsAppInfoToggle() {
     whatsappInfoTogglePairs = [];
     bindWhatsAppInfoToggle(
@@ -955,7 +1418,10 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     }
 
+    setupWhatsAppUserPhoneModal();
+
     loadWhatsAppConfig();
+    loadWhatsAppUserNotifyPrefs();
     setupWhatsAppInfoToggle();
     setupWhatsAppTemplateField();
     startWhatsAppHealthPolling();

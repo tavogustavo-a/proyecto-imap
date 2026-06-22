@@ -202,6 +202,9 @@ class User(db.Model):
     )
 
     can_access_store = db.Column(db.Boolean, default=False, nullable=False)
+
+    # Avisos/resúmenes WhatsApp (solo cuentas principales; sub-usuarios nunca reciben).
+    whatsapp_notify_enabled = db.Column(db.Boolean, default=True, nullable=False, server_default='1')
     can_chat = db.Column(db.Boolean, default=False, nullable=False)
     can_manage_subusers = db.Column(db.Boolean, default=False, nullable=False)
     is_support = db.Column(db.Boolean, default=False, nullable=False)

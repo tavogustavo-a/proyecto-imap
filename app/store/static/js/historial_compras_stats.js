@@ -9,6 +9,8 @@ document.addEventListener('DOMContentLoaded', function () {
   const statsUrl = panel.dataset.statsUrl;
   const searchUsersUrl = panel.dataset.searchUsersUrl || '/admin/search_users_ajax';
   const scopeSelect = document.getElementById('phStatsScope');
+  const proveedorScopeWrap = document.getElementById('phStatsProveedorScopeWrap');
+  const proveedorScopeSelect = document.getElementById('phStatsProveedorScope');
   const userWrap = document.getElementById('phStatsUserWrap');
   const userIdInput = document.getElementById('phStatsUserId');
   const userSearchInput = document.getElementById('phStatsUserSearch');
@@ -16,6 +18,13 @@ document.addEventListener('DOMContentLoaded', function () {
   const userSelectedWrap = document.getElementById('phStatsUserSelected');
   const userSelectedLabel = document.getElementById('phStatsUserSelectedLabel');
   const userClearBtn = document.getElementById('phStatsUserClear');
+  const proveedorUserWrap = document.getElementById('phStatsProveedorUserWrap');
+  const proveedorUserIdInput = document.getElementById('phStatsProveedorUserId');
+  const proveedorUserSearchInput = document.getElementById('phStatsProveedorUserSearch');
+  const proveedorUserResultsEl = document.getElementById('phStatsProveedorUserResults');
+  const proveedorUserSelectedWrap = document.getElementById('phStatsProveedorUserSelected');
+  const proveedorUserSelectedLabel = document.getElementById('phStatsProveedorUserSelectedLabel');
+  const proveedorUserClearBtn = document.getElementById('phStatsProveedorUserClear');
   const periodToggle = document.getElementById('phStatsPeriodToggle');
   const periodPopover = document.getElementById('phStatsPeriodPopover');
   const periodDisplay = document.getElementById('phStatsPeriodDisplay');
@@ -73,13 +82,124 @@ document.addEventListener('DOMContentLoaded', function () {
   initStatsSalesHeaderTips();
 
   let userSearchDebounce = null;
+  let proveedorUserSearchDebounce = null;
 
   const ACTIVITY_LABELS = {
     caidas: 'Caídas',
     renovaciones_actividad: 'Renovaciones',
+    proveedores: 'Proveedores',
   };
 
-  const ACTIVITY_TABLE_ORDER = ['caidas', 'renovaciones_actividad'];
+  const ACTIVITY_TABLE_ORDER = ['caidas', 'renovaciones_actividad', 'proveedores'];
+
+  function viewerIsProveedor() {
+    return panel && panel.dataset.viewerIsProveedor === '1';
+  }
+
+  function statsScopeValue() {
+    if (selfMode) return 'user';
+    return scopeSelect ? scopeSelect.value : 'all';
+  }
+
+  function isSingleProveedorScope() {
+    if (selfMode) return false;
+    if (statsScopeValue() !== 'proveedor') return false;
+    return !!(
+      proveedorScopeSelect &&
+      proveedorScopeSelect.value === 'user' &&
+      proveedorUserIdInput &&
+      proveedorUserIdInput.value
+    );
+  }
+
+  function showProveedorStatsUi() {
+    if (selfMode) return viewerIsProveedor();
+    const scopeVal = statsScopeValue();
+    return scopeVal === 'proveedor' || scopeVal === 'all';
+  }
+
+  function showProveedorSalesColumn() {
+    if (isSingleProveedorScope()) return true;
+    if (!showProveedorStatsUi()) return false;
+    if (selfMode) return false;
+    return true;
+  }
+
+  function activityTableOrder() {
+    if (isSingleProveedorScope()) return ['proveedores'];
+    if (!showProveedorStatsUi()) {
+      return ['caidas', 'renovaciones_actividad'];
+    }
+    return ACTIVITY_TABLE_ORDER;
+  }
+
+  function updateSalesSubtitle() {
+    const el = document.getElementById('phStatsSalesSubtitle');
+    if (!el) return;
+    if (isSingleProveedorScope()) {
+      el.textContent = 'Servicios proveedor';
+      return;
+    }
+    if (selfMode) {
+      el.textContent = 'Ventas por servicio';
+      return;
+    }
+    el.textContent =
+      statsScopeValue() === 'proveedor'
+        ? 'Ventas por servicio proveedor'
+        : 'Ventas por servicio';
+  }
+
+  function toggleStatsViewMode() {
+    const singleProv = isSingleProveedorScope();
+    if (contentEl) {
+      contentEl.classList.toggle('purchase-history-stats-content--single-proveedor', singleProv);
+    }
+    panel.querySelectorAll('#phStatsSalesTable .ph-stats-col-general').forEach(function (th) {
+      th.hidden = singleProv;
+    });
+    toggleProveedorSalesColumn();
+    const activityBlock = document.getElementById('phStatsActivityBlock');
+    if (activityBlock) activityBlock.hidden = singleProv;
+    updateSalesSubtitle();
+  }
+
+  function toggleProveedorSalesColumn() {
+    const col = document.getElementById('phStatsSalesColProveedor');
+    if (col) col.hidden = !showProveedorSalesColumn();
+  }
+
+  function salesTableColCount() {
+    if (isSingleProveedorScope()) return 2;
+    return showProveedorSalesColumn() ? 6 : 5;
+  }
+
+  function salesRowHtml(r) {
+    if (isSingleProveedorScope()) {
+      return (
+        '<td>' +
+        escapeHtml(r.producto) +
+        '</td><td class="text-center">' +
+        (Number(r.proveedores) || 0) +
+        '</td>'
+      );
+    }
+    let html =
+      '<td>' +
+      escapeHtml(r.producto) +
+      '</td><td class="text-center">' +
+      escapeHtml(r.moneda || 'COP') +
+      '</td><td class="text-center">' +
+      r.ventas +
+      '</td><td class="text-center">' +
+      r.renovaciones +
+      '</td>';
+    if (showProveedorSalesColumn()) {
+      html += '<td class="text-center">' + (Number(r.proveedores) || 0) + '</td>';
+    }
+    html += '<td>' + formatMoney(r.total, r.moneda) + '</td>';
+    return html;
+  }
 
   function formatMoney(n, currency) {
     const x = Number(n);
@@ -169,10 +289,27 @@ document.addEventListener('DOMContentLoaded', function () {
     }
   }
 
+  function toggleScopeWraps() {
+    const scope = scopeSelect ? scopeSelect.value : 'all';
+    if (userWrap) userWrap.hidden = scope !== 'user';
+    if (proveedorScopeWrap) proveedorScopeWrap.hidden = scope !== 'proveedor';
+    if (scope !== 'user') clearSelectedUser();
+    if (scope !== 'proveedor') {
+      clearSelectedProveedorUser();
+      if (proveedorUserWrap) proveedorUserWrap.hidden = true;
+    } else {
+      toggleProveedorUserWrap();
+    }
+  }
+
+  function toggleProveedorUserWrap() {
+    if (!proveedorUserWrap || !proveedorScopeSelect) return;
+    proveedorUserWrap.hidden = proveedorScopeSelect.value !== 'user';
+    if (proveedorScopeSelect.value !== 'user') clearSelectedProveedorUser();
+  }
+
   function toggleUserWrap() {
-    if (!userWrap || !scopeSelect) return;
-    userWrap.hidden = scopeSelect.value !== 'user';
-    if (scopeSelect.value !== 'user') clearSelectedUser();
+    toggleScopeWraps();
   }
 
   function clearSelectedUser() {
@@ -196,6 +333,71 @@ document.addEventListener('DOMContentLoaded', function () {
     if (userSelectedWrap) userSelectedWrap.hidden = false;
     if (userSearchInput) userSearchInput.value = '';
     hideUserResults();
+  }
+
+  function clearSelectedProveedorUser() {
+    if (proveedorUserIdInput) proveedorUserIdInput.value = '';
+    if (proveedorUserSearchInput) proveedorUserSearchInput.value = '';
+    if (proveedorUserSelectedWrap) proveedorUserSelectedWrap.hidden = true;
+    if (proveedorUserSelectedLabel) proveedorUserSelectedLabel.textContent = '';
+    hideProveedorUserResults();
+    toggleStatsViewMode();
+  }
+
+  function hideProveedorUserResults() {
+    if (!proveedorUserResultsEl) return;
+    proveedorUserResultsEl.hidden = true;
+    proveedorUserResultsEl.innerHTML = '';
+  }
+
+  function setSelectedProveedorUser(user) {
+    if (!user || user.id == null) return;
+    if (proveedorUserIdInput) proveedorUserIdInput.value = String(user.id);
+    if (proveedorUserSelectedLabel) proveedorUserSelectedLabel.textContent = user.username || '';
+    if (proveedorUserSelectedWrap) proveedorUserSelectedWrap.hidden = false;
+    if (proveedorUserSearchInput) proveedorUserSearchInput.value = '';
+    hideProveedorUserResults();
+    toggleStatsViewMode();
+  }
+
+  async function searchProveedorUsers(query) {
+    const q = (query || '').trim();
+    if (q.length < 1) {
+      hideProveedorUserResults();
+      return;
+    }
+    try {
+      const res = await fetch(searchUsersUrl + '?query=' + encodeURIComponent(q), {
+        credentials: 'same-origin',
+      });
+      const data = await res.json();
+      if (!proveedorUserResultsEl) return;
+      proveedorUserResultsEl.innerHTML = '';
+      const users = (data.status === 'ok' && data.users ? data.users : []).filter(function (u) {
+        return u && u.proveedor;
+      });
+      if (!users.length) {
+        proveedorUserResultsEl.innerHTML =
+          '<p class="purchase-history-cleanup-user-empty">Sin proveedores con ese nombre.</p>';
+        proveedorUserResultsEl.hidden = false;
+        return;
+      }
+      users.slice(0, 40).forEach(function (u) {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'purchase-history-cleanup-user-row';
+        btn.dataset.userId = String(u.id);
+        btn.dataset.username = u.username || '';
+        const main = document.createElement('span');
+        main.className = 'purchase-history-cleanup-user-row-main';
+        main.textContent = u.username || '—';
+        btn.appendChild(main);
+        proveedorUserResultsEl.appendChild(btn);
+      });
+      proveedorUserResultsEl.hidden = false;
+    } catch (_e) {
+      hideProveedorUserResults();
+    }
   }
 
   async function searchUsers(query) {
@@ -259,7 +461,15 @@ document.addEventListener('DOMContentLoaded', function () {
 
   function renderSummary(s) {
     if (!summaryCards) return;
-    const cards = [
+    const cards = isSingleProveedorScope()
+      ? [
+          {
+            label: 'Proveedores',
+            value: formatCardValue(s.proveedores_ventas),
+            icon: 'fa-truck-loading',
+          },
+        ]
+      : [
       { label: 'Ventas', value: formatCardValue(s.ventas_total), icon: 'fa-shopping-cart' },
       {
         label: 'Renovaciones tienda',
@@ -322,14 +532,30 @@ document.addEventListener('DOMContentLoaded', function () {
 
   function appendSalesTotalsFooter(tbody, productRows) {
     if (!tbody || !productRows || !productRows.length) return;
+    if (isSingleProveedorScope()) {
+      let totalProv = 0;
+      productRows.forEach(function (r) {
+        totalProv += Number(r.proveedores) || 0;
+      });
+      const tr = document.createElement('tr');
+      tr.className = 'purchase-history-stats-table-total-row';
+      tr.innerHTML =
+        '<td><strong>Todo</strong></td>' +
+        '<td class="text-center"><strong>' +
+        totalProv +
+        '</strong></td>';
+      tbody.appendChild(tr);
+      return;
+    }
     const byMon = {};
     productRows.forEach(function (r) {
       const moneda = String(r.moneda || 'COP').toUpperCase();
       if (!byMon[moneda]) {
-        byMon[moneda] = { ventas: 0, renovaciones: 0, total: 0 };
+        byMon[moneda] = { ventas: 0, renovaciones: 0, proveedores: 0, total: 0 };
       }
       byMon[moneda].ventas += Number(r.ventas) || 0;
       byMon[moneda].renovaciones += Number(r.renovaciones) || 0;
+      byMon[moneda].proveedores += Number(r.proveedores) || 0;
       byMon[moneda].total += Number(r.total) || 0;
     });
     const order = ['COP', 'USD'];
@@ -342,7 +568,7 @@ document.addEventListener('DOMContentLoaded', function () {
       const t = byMon[moneda];
       const tr = document.createElement('tr');
       tr.className = 'purchase-history-stats-table-total-row';
-      tr.innerHTML =
+      let html =
         '<td><strong>Todo</strong></td>' +
         '<td class="text-center"><strong>' +
         escapeHtml(moneda) +
@@ -352,36 +578,26 @@ document.addEventListener('DOMContentLoaded', function () {
         '</strong></td>' +
         '<td class="text-center"><strong>' +
         t.renovaciones +
-        '</strong></td>' +
-        '<td><strong>' +
-        formatMoney(t.total, moneda) +
         '</strong></td>';
+      if (showProveedorSalesColumn()) {
+        html += '<td class="text-center"><strong>' + t.proveedores + '</strong></td>';
+      }
+      html += '<td><strong>' + formatMoney(t.total, moneda) + '</strong></td>';
+      tr.innerHTML = html;
       tbody.appendChild(tr);
     });
   }
 
   function renderSalesByProductTable(productRows) {
     if (!salesTable) return;
+    toggleStatsViewMode();
     const rows = productRows || [];
     fillTable(
       salesTable,
       rows.map(function (r) {
-        return {
-          html:
-            '<td>' +
-            escapeHtml(r.producto) +
-            '</td><td class="text-center">' +
-            escapeHtml(r.moneda || 'COP') +
-            '</td><td class="text-center">' +
-            r.ventas +
-            '</td><td class="text-center">' +
-            r.renovaciones +
-            '</td><td>' +
-            formatMoney(r.total, r.moneda) +
-            '</td>',
-        };
+        return { html: salesRowHtml(r) };
       }),
-      5
+      salesTableColCount()
     );
     appendSalesTotalsFooter(salesTable, rows);
   }
@@ -393,13 +609,17 @@ document.addEventListener('DOMContentLoaded', function () {
     renderSalesByProductTable(data.ventas_por_producto || []);
 
     const act = data.actividad_por_tipo || {};
-    const actRows = ACTIVITY_TABLE_ORDER.filter(function (k) {
-      return k === 'caidas' || k === 'renovaciones_actividad';
-    }).map(function (k) {
+    const actRows = activityTableOrder().map(function (k) {
+      const label = ACTIVITY_LABELS[k] || k;
+      const labelCell =
+        k === 'proveedores'
+          ? '<i class="fas fa-truck-loading purchase-history-stats-proveedor-tip" aria-hidden="true"></i> ' +
+            escapeHtml(label)
+          : escapeHtml(label);
       return {
         html:
           '<td>' +
-          escapeHtml(ACTIVITY_LABELS[k] || k) +
+          labelCell +
           '</td><td class="text-center">' +
           (act[k] || 0) +
           '</td>',
@@ -420,13 +640,19 @@ document.addEventListener('DOMContentLoaded', function () {
   }
 
   async function loadStats() {
+    const scopeVal = scopeSelect ? scopeSelect.value : 'all';
+    if (!selfMode && scopeVal === 'user' && !userIdInput?.value) {
+      showStatsError('Selecciona un usuario.');
+      return;
+    }
     if (
       !selfMode &&
-      scopeSelect &&
-      scopeSelect.value === 'user' &&
-      !userIdInput?.value
+      scopeVal === 'proveedor' &&
+      proveedorScopeSelect &&
+      proveedorScopeSelect.value === 'user' &&
+      !proveedorUserIdInput?.value
     ) {
-      showStatsError('Selecciona un usuario.');
+      showStatsError('Selecciona un proveedor.');
       return;
     }
     const from = dateFromInput?.value || '';
@@ -445,12 +671,21 @@ document.addEventListener('DOMContentLoaded', function () {
       date_to: to,
     });
     if (!selfMode) {
-      params.set('scope', scopeSelect ? scopeSelect.value : 'all');
-      if (scopeSelect?.value === 'user' && userIdInput?.value) {
+      params.set('scope', scopeVal);
+      if (scopeVal === 'user' && userIdInput?.value) {
         params.set('user_id', userIdInput.value);
+      }
+      if (
+        scopeVal === 'proveedor' &&
+        proveedorScopeSelect &&
+        proveedorScopeSelect.value === 'user' &&
+        proveedorUserIdInput?.value
+      ) {
+        params.set('user_id', proveedorUserIdInput.value);
       }
     }
     updatePeriodDisplayLabel();
+    updateSalesSubtitle();
     showStatsError('');
     if (applyBtn) applyBtn.disabled = true;
     try {
@@ -475,7 +710,14 @@ document.addEventListener('DOMContentLoaded', function () {
   }
 
   if (!selfMode) {
-    scopeSelect?.addEventListener('change', toggleUserWrap);
+    scopeSelect?.addEventListener('change', function () {
+      toggleUserWrap();
+      toggleStatsViewMode();
+    });
+    proveedorScopeSelect?.addEventListener('change', function () {
+      toggleProveedorUserWrap();
+      toggleStatsViewMode();
+    });
   }
   userSearchInput?.addEventListener('input', function () {
     clearTimeout(userSearchDebounce);
@@ -492,6 +734,21 @@ document.addEventListener('DOMContentLoaded', function () {
     });
   });
   userClearBtn?.addEventListener('click', clearSelectedUser);
+  proveedorUserSearchInput?.addEventListener('input', function () {
+    clearTimeout(proveedorUserSearchDebounce);
+    proveedorUserSearchDebounce = setTimeout(function () {
+      searchProveedorUsers(proveedorUserSearchInput.value);
+    }, 280);
+  });
+  proveedorUserResultsEl?.addEventListener('click', function (e) {
+    const row = e.target.closest('.purchase-history-cleanup-user-row');
+    if (!row) return;
+    setSelectedProveedorUser({
+      id: parseInt(row.dataset.userId, 10),
+      username: row.dataset.username || '',
+    });
+  });
+  proveedorUserClearBtn?.addEventListener('click', clearSelectedProveedorUser);
   applyBtn?.addEventListener('click', loadStats);
 
   periodToggle?.addEventListener('click', function (e) {
@@ -517,6 +774,9 @@ document.addEventListener('DOMContentLoaded', function () {
     if (userWrap && !userWrap.hidden && !userWrap.contains(e.target)) {
       hideUserResults();
     }
+    if (proveedorUserWrap && !proveedorUserWrap.hidden && !proveedorUserWrap.contains(e.target)) {
+      hideProveedorUserResults();
+    }
     const picker = document.querySelector('.purchase-history-stats-period-picker');
     if (picker && !picker.contains(e.target)) {
       closePeriodPopover();
@@ -529,6 +789,9 @@ document.addEventListener('DOMContentLoaded', function () {
 
   if (!selfMode) {
     toggleUserWrap();
+    toggleStatsViewMode();
+  } else {
+    updateSalesSubtitle();
   }
   initPeriodDefaults();
   loadStats();

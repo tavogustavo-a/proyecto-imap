@@ -1,0 +1,41 @@
+{# Modal ventas por servicio (Menú2 → Proveedores) — disponible en todas las plantillas admin. #}
+<div id="adminLicProveedorVentasModal" class="admin-lic-proveedor-ventas-modal" hidden aria-hidden="true">
+  <div class="admin-lic-proveedor-ventas-modal__backdrop" data-admin-lic-proveedor-ventas-dismiss="1"></div>
+  <div class="admin-lic-proveedor-ventas-modal__panel" role="dialog" aria-modal="true" aria-labelledby="adminLicProveedorVentasModalTitle">
+    <div class="admin-lic-proveedor-ventas-modal__head">
+      <div class="admin-lic-proveedor-ventas-modal__title-wrap">
+        <h2 id="adminLicProveedorVentasModalTitle" class="admin-lic-proveedor-ventas-modal__title">
+          <span>Proveedores</span>
+          <button type="button" id="adminLicProveedorVentasInfoBtn" class="admin-lic-proveedor-ventas-info-btn" title="Información sobre ventas por servicio" aria-label="Información sobre ventas por servicio" aria-controls="adminLicProveedorVentasInfoModal"><i class="fas fa-info-circle" aria-hidden="true"></i></button>
+        </h2>
+      </div>
+      <button type="button" class="admin-lic-proveedor-ventas-modal__close" data-admin-lic-proveedor-ventas-dismiss="1" title="Cerrar" aria-label="Cerrar"><i class="fas fa-times" aria-hidden="true"></i></button>
+    </div>
+    <div class="admin-lic-proveedor-ventas-modal__controls">
+      <label for="adminLicProveedorVentasProviderSelect" class="sr-only">Proveedor</label>
+      <select id="adminLicProveedorVentasProviderSelect" class="form-control admin-lic-proveedor-ventas-modal__provider-select" aria-label="Elegir proveedor"></select>
+      <label for="adminLicProveedorVentasSearch" class="sr-only">Buscar servicio</label>
+      <input type="search" id="adminLicProveedorVentasSearch" class="form-control admin-lic-proveedor-ventas-modal__search" placeholder="Buscar servicio…" autocomplete="off">
+    </div>
+    <div class="admin-lic-proveedor-ventas-modal__list-scroll">
+      <div id="adminLicProveedorVentasList" class="admin-lic-proveedor-ventas-list" role="list" aria-label="Ventas por servicio del proveedor"></div>
+    </div>
+    <p class="admin-lic-proveedor-ventas-modal__meta mb-0" id="adminLicProveedorVentasMeta" aria-live="polite"></p>
+  </div>
+</div>
+
+<div id="adminLicProveedorVentasInfoModal" class="admin-lic-bulk-info-modal" hidden aria-hidden="true">
+  <div class="admin-lic-bulk-info-modal__backdrop" data-admin-lic-proveedor-ventas-info-dismiss="1"></div>
+  <div class="admin-lic-bulk-info-modal__panel" role="dialog" aria-modal="true" aria-labelledby="adminLicProveedorVentasInfoModalTitle">
+    <div class="admin-lic-bulk-info-modal__head">
+      <h2 id="adminLicProveedorVentasInfoModalTitle" class="admin-lic-bulk-info-modal__title"><i class="fas fa-info-circle" aria-hidden="true"></i> Ventas por servicio</h2>
+      <button type="button" class="admin-lic-bulk-info-modal__close" data-admin-lic-proveedor-ventas-info-dismiss="1" title="Cerrar" aria-label="Cerrar"><i class="fas fa-times" aria-hidden="true"></i></button>
+    </div>
+    <div class="admin-lic-bulk-info-modal__body">
+      <p class="admin-lic-bulk-info-modal__lead">Licencias vendidas por servicio para cada usuario proveedor. El contador sube con ventas en tienda y entregas masivas del admin.</p>
+    </div>
+    <div class="admin-lic-bulk-info-modal__footer">
+      <button type="button" class="btn-blue menu-btn-worksheet" id="adminLicProveedorVentasInfoOkBtn" data-admin-lic-proveedor-ventas-info-dismiss="1">Entendido</button>
+    </div>
+  </div>
+</div>

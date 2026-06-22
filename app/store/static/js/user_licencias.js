@@ -23,6 +23,19 @@
     var userLicCaducidadNotifyBarWired = false;
     var userLicCaducidadNotifyPrefsMem = { enabled: false, fromDays: 5 };
     var userLicRenewalBalanceWarningsCache = [];
+    var USER_LIC_PORTAL_PROVEEDOR_FILTER = 'proveedor';
+    var USER_LIC_PORTAL_REPORTES_FILTER = 'reportes';
+    var userLicPortalProveedorEnabled = false;
+    var userLicPortalProveedorCache = {
+        license_notes: '',
+        day_notepads: {},
+        license_lines: [],
+        day_lines: {},
+        services_catalog: [{ id: 'anonimo', name: 'Anónimo' }],
+    };
+    var PROVEEDOR_SERVICE_ANONIMO = 'anonimo';
+    var userLicPortalProveedorSaveTimer = null;
+    var userLicPortalProveedorEditorWired = false;
     var USER_LIC_CADUCIDAD_NOTIFY_CHECK_MS = 30 * 60 * 1000;
     var USER_LIC_CADUCIDAD_NOTIFY_MAX_LEAD = 5;
     var USER_LIC_CADUCIDAD_INAPP_ALERT_MS = 9000;
@@ -85,6 +98,8 @@
     }
 
     function normalizePortalServiceFilterKey(filterRaw) {
+        if (filterRaw === USER_LIC_PORTAL_PROVEEDOR_FILTER) return USER_LIC_PORTAL_PROVEEDOR_FILTER;
+        if (filterRaw === USER_LIC_PORTAL_REPORTES_FILTER) return USER_LIC_PORTAL_REPORTES_FILTER;
         if (filterRaw === 'all' || filterRaw == null || filterRaw === 'vencimientos') return 'all';
         return String(filterRaw);
     }
@@ -110,6 +125,16 @@
         if (fk === 'all') {
             var t = gridHost.querySelector('.user-lic-license-card--todos');
             if (t) t.classList.add('active');
+            return;
+        }
+        if (fk === USER_LIC_PORTAL_PROVEEDOR_FILTER) {
+            var provCard = gridHost.querySelector('.user-lic-license-card--proveedor');
+            if (provCard) provCard.classList.add('active');
+            return;
+        }
+        if (fk === USER_LIC_PORTAL_REPORTES_FILTER) {
+            var repCard = gridHost.querySelector('.user-lic-license-card--reportes');
+            if (repCard) repCard.classList.add('active');
             return;
         }
         var b = gridCardByFilterKey(gridHost, fk);
@@ -705,6 +730,7 @@
                         window.setTimeout(function () {
                             row.style.outline = '';
                         }, 1200);
+                        userLicRefreshReportesUi(rootEl);
                     } else {
                         if (badgePending) {
                             badgePending.disabled = false;
@@ -788,6 +814,7 @@
                     if (daySecCh) {
                         userLicRefreshDayHeaderStatusBadgesFromSection(daySecCh);
                     }
+                    userLicRefreshReportesUi(rootEl);
                     schedulePersist(row);
                 }
             },
@@ -2075,7 +2102,22 @@
                 sheetsParts.push(renderMergedProductGroupSheet(grp, gk));
             }
         }
+        if (userLicPortalProveedorEnabled) {
+            sheetsParts.push(renderProveedorInventorySheet());
+        }
         return '<div class="user-lic-all-accounts">' + sheetsParts.join('') + '</div>';
+    }
+
+    function buildUserLicenciasPortalSheetsHtml(accounts) {
+        if (!accounts.length && !userLicPortalProveedorEnabled) {
+            return (
+                '<p class="text-center user-licencias-empty py-4 mb-0" role="status">Aún no tienes cuentas asignadas. Si ya compraste, espera la asignación o contacta soporte.</p>'
+            );
+        }
+        if (!accounts.length && userLicPortalProveedorEnabled) {
+            return renderProveedorInventorySheet();
+        }
+        return buildUserLicenciasNormalSheetsHtml(accounts);
     }
 
     function rebuildUserLicPortalMainContent(outer, host, gridInner, gridHostEl, persistUi) {
@@ -2086,7 +2128,7 @@
                 : readPersistedUserLicPortalServiceFilter(gridHostEl);
         effFilter = normalizePortalServiceFilterKey(effFilter);
 
-        if (!accounts.length) {
+        if (!accounts.length && !userLicPortalProveedorEnabled) {
             outer.innerHTML =
                 '<p class="text-center user-licencias-empty py-4 mb-0" role="status">Aún no tienes cuentas asignadas. Si ya compraste, espera la asignación o contacta soporte.</p>';
         } else if (userLicPortalVencimientosActive) {
@@ -2094,7 +2136,7 @@
             outer.dataset.userLicActiveFilter = 'vencimientos';
             delete outer.dataset.userLicCaducidadServiceFilter;
         } else {
-            outer.innerHTML = buildUserLicenciasNormalSheetsHtml(accounts);
+            outer.innerHTML = buildUserLicenciasPortalSheetsHtml(accounts);
             outer.dataset.userLicActiveFilter = effFilter;
             delete outer.dataset.userLicCaducidadServiceFilter;
         }
@@ -2102,6 +2144,7 @@
         initEditableLicenseRowsIn(outer);
         userLicPortalApplyColumnVisibility(outer);
         userLicPortalRestoreDaySectionsAndToolbars(outer);
+        userLicPortalWireProveedorEditors(outer);
 
         if (userLicPortalVencimientosActive) {
             syncServiceFilterGridCards(gridHostEl, null, true);
@@ -2116,6 +2159,13 @@
         userLicCaducidadSyncShellLayoutClass();
         userLicCaducidadNotifySyncBarVisibility();
         userLicCaducidadNotifyRunCheck();
+        if (effFilter === USER_LIC_PORTAL_REPORTES_FILTER) {
+            userLicPortalSetReportesMode(true, outer);
+            userLicRenderReportesPanel(outer);
+        } else {
+            userLicPortalSetReportesMode(false, outer);
+        }
+        userLicRefreshReportesUi(outer);
     }
 
     function wireUserLicVencimientosButton(outer, host, gridInner, gridHostEl) {
@@ -3081,6 +3131,777 @@
         );
     }
 
+    function userLicProveedorCountLines(text) {
+        return String(text || '')
+            .replace(/\r\n/g, '\n')
+            .split('\n')
+            .filter(function (ln) {
+                return String(ln).trim() !== '';
+            }).length;
+    }
+
+    function userLicProveedorCountStructuredLines(lines) {
+        if (!Array.isArray(lines)) return 0;
+        var n = 0;
+        lines.forEach(function (entry) {
+            if (entry && String(entry.cred || '').trim()) n += 1;
+        });
+        return n;
+    }
+
+    function userLicProveedorNormalizeServiceId(raw) {
+        var s = String(raw != null ? raw : '')
+            .trim()
+            .toLowerCase();
+        if (!s || s === PROVEEDOR_SERVICE_ANONIMO || s === 'anónimo' || s === 'anonymous') {
+            return PROVEEDOR_SERVICE_ANONIMO;
+        }
+        return s;
+    }
+
+    function userLicProveedorDefaultCatalog() {
+        return [{ id: PROVEEDOR_SERVICE_ANONIMO, name: 'Anónimo' }];
+    }
+
+    function userLicProveedorLinesFromLegacyText(text) {
+        return String(text || '')
+            .replace(/\r\n/g, '\n')
+            .split('\n')
+            .filter(function (ln) {
+                return String(ln).trim() !== '';
+            })
+            .map(function (cred) {
+                return { service: PROVEEDOR_SERVICE_ANONIMO, cred: cred };
+            });
+    }
+
+    function userLicProveedorNormalizeLineEntries(rawLines, legacyText) {
+        if (Array.isArray(rawLines)) {
+            var out = [];
+            rawLines.forEach(function (item) {
+                if (!item || typeof item !== 'object') return;
+                var cred = String(item.cred != null ? item.cred : item.line || '');
+                if (!cred.trim()) return;
+                out.push({
+                    service: userLicProveedorNormalizeServiceId(
+                        item.service != null ? item.service : item.license_id
+                    ),
+                    cred: cred,
+                });
+            });
+            return out;
+        }
+        return userLicProveedorLinesFromLegacyText(legacyText);
+    }
+
+    function userLicProveedorNormalizeDayLinesMap(rawDayLines, legacyDayNotepads) {
+        var out = {};
+        var legacy = legacyDayNotepads && typeof legacyDayNotepads === 'object' ? legacyDayNotepads : {};
+        var raw = rawDayLines && typeof rawDayLines === 'object' ? rawDayLines : {};
+        var d;
+        for (d = 1; d <= 31; d += 1) {
+            var k = String(d);
+            if (raw[k] != null) {
+                out[k] = userLicProveedorNormalizeLineEntries(raw[k]);
+            } else {
+                out[k] = userLicProveedorLinesFromLegacyText(legacy[k]);
+            }
+        }
+        return out;
+    }
+
+    function userLicProveedorLinesToCredsText(lines) {
+        return (lines || [])
+            .map(function (entry) {
+                return String((entry && entry.cred) || '');
+            })
+            .join('\n');
+    }
+
+    function userLicProveedorBuildServiceSelectHtml(selectedId, rowIndex, blockKey, dayNum) {
+        var catalog = userLicPortalProveedorCache.services_catalog || userLicProveedorDefaultCatalog();
+        var sel = userLicProveedorNormalizeServiceId(selectedId);
+        var opts = '';
+        var i;
+        for (i = 0; i < catalog.length; i += 1) {
+            var item = catalog[i];
+            if (!item) continue;
+            var id = String(item.id != null ? item.id : '');
+            var name = String(item.name != null ? item.name : id);
+            opts +=
+                '<option value="' +
+                escAttr(id) +
+                '"' +
+                (id === sel ? ' selected' : '') +
+                '>' +
+                escHtml(name) +
+                '</option>';
+        }
+        return (
+            '<select id="userLicProvSvc_' +
+            escAttr(blockKey) +
+            '_' +
+            escAttr(dayNum != null ? dayNum : 'lic') +
+            '_' +
+            String(rowIndex) +
+            '" class="license-split-editor__status license-split-editor__status-bad license-split-editor__status--tier-neutral user-lic-proveedor-service-select" data-proveedor-block="' +
+            escAttr(blockKey) +
+            '"' +
+            (dayNum != null ? ' data-proveedor-day="' + escAttr(String(dayNum)) + '"' : '') +
+            ' title="Servicio de esta licencia" aria-label="Servicio de la licencia">' +
+            opts +
+            '</select>'
+        );
+    }
+
+    function userLicProveedorLinesForBlock(blockKey, dayNum) {
+        if (blockKey === 'license') {
+            return userLicPortalProveedorCache.license_lines || [];
+        }
+        var dl = userLicPortalProveedorCache.day_lines || {};
+        var arr = dl[String(dayNum)];
+        return Array.isArray(arr) ? arr : [];
+    }
+
+    function userLicProveedorParseLineHeightPx(cs) {
+        var lh = cs.lineHeight;
+        var fs = parseFloat(cs.fontSize) || 14;
+        if (!lh || lh === 'normal') return fs * 1.45;
+        if (String(lh).indexOf('px') !== -1) return parseFloat(lh) || fs * 1.45;
+        var n = parseFloat(lh);
+        return Number.isFinite(n) ? n * fs : fs * 1.45;
+    }
+
+    /** Iguala altura del textarea de credenciales con el panel de servicios (como admin Licencias). */
+    function userLicProveedorAutosizeCredsForBlock(block) {
+        if (!block) return;
+        var ta = block.querySelector('.user-lic-proveedor-creds-ta');
+        var rowsEl = block.querySelector('.user-lic-proveedor-service-rows');
+        if (!ta || ta.tagName !== 'TEXTAREA' || !rowsEl) return;
+        var raw = String(ta.value != null ? ta.value : '').replace(/\r\n/g, '\n');
+        var credLines = raw.split('\n');
+        var nEst = credLines.length === 0 ? 1 : credLines.length;
+        var cs = window.getComputedStyle(ta);
+        var padY = (parseFloat(cs.paddingTop) || 0) + (parseFloat(cs.paddingBottom) || 0);
+        var stridePx = userLicProveedorParseLineHeightPx(cs);
+        var exactByLines = Math.ceil(stridePx * nEst + padY);
+
+        void rowsEl.offsetHeight;
+        var peerH = Math.max(rowsEl.offsetHeight, rowsEl.scrollHeight);
+        var minPx = parseFloat(cs.minHeight);
+        if (Number.isNaN(minPx)) minPx = stridePx;
+        var h = Math.max(minPx, exactByLines, peerH);
+        ta.style.height = Math.ceil(h) + 'px';
+    }
+
+    function userLicProveedorScheduleAutosizeCredsForBlock(block) {
+        if (!block) return;
+        userLicProveedorAutosizeCredsForBlock(block);
+        window.requestAnimationFrame(function () {
+            userLicProveedorAutosizeCredsForBlock(block);
+            window.requestAnimationFrame(function () {
+                userLicProveedorAutosizeCredsForBlock(block);
+            });
+        });
+    }
+
+    function userLicProveedorSyncServiceRowsForBlock(outer, blockKey, dayNum) {
+        if (!outer) return;
+        var blockSel =
+            blockKey === 'license'
+                ? '.user-lic-proveedor-split[data-proveedor-block="license"]'
+                : '.user-lic-proveedor-split[data-proveedor-block="day"][data-proveedor-day="' +
+                  String(dayNum) +
+                  '"]';
+        var block = outer.querySelector(blockSel);
+        if (!block) return;
+        var ta = block.querySelector('.user-lic-proveedor-creds-ta');
+        var rowsWrap = block.querySelector('.user-lic-proveedor-service-rows');
+        if (!ta || !rowsWrap) return;
+        var credLines = String(ta.value || '')
+            .replace(/\r\n/g, '\n')
+            .split('\n');
+        if (blockKey === 'day') {
+            credLines = credLines.filter(function (ln) {
+                return String(ln).trim() !== '';
+            });
+            if (credLines.length === 0) {
+                rowsWrap.innerHTML = '';
+                block.classList.add('user-lic-proveedor-day-empty');
+                ta.style.height = '';
+                return;
+            }
+            block.classList.remove('user-lic-proveedor-day-empty');
+        }
+        var cached = userLicProveedorLinesForBlock(blockKey, dayNum);
+        var existing = [];
+        rowsWrap.querySelectorAll('.user-lic-proveedor-service-select').forEach(function (sel, idx) {
+            existing[idx] = sel.value;
+        });
+        var html = '';
+        var idx;
+        for (idx = 0; idx < credLines.length; idx += 1) {
+            var svc =
+                existing[idx] != null
+                    ? existing[idx]
+                    : cached[idx] && cached[idx].service != null
+                      ? cached[idx].service
+                      : PROVEEDOR_SERVICE_ANONIMO;
+            html +=
+                '<div class="license-split-editor__row user-lic-readonly-row user-lic-proveedor-service-row">' +
+                '<div class="license-split-editor__status-wrap user-lic-proveedor-status-wrap">' +
+                '<div class="license-split-editor__status-select-shell license-split-editor__status-select-shell--bad user-lic-proveedor-service-shell">' +
+                userLicProveedorBuildServiceSelectHtml(svc, idx, blockKey, dayNum) +
+                '</div></div></div>';
+        }
+        rowsWrap.innerHTML = html;
+        userLicProveedorScheduleAutosizeCredsForBlock(block);
+    }
+
+    function userLicProveedorCollectLinesFromBlock(outer, blockKey, dayNum) {
+        var blockSel =
+            blockKey === 'license'
+                ? '.user-lic-proveedor-split[data-proveedor-block="license"]'
+                : '.user-lic-proveedor-split[data-proveedor-block="day"][data-proveedor-day="' +
+                  String(dayNum) +
+                  '"]';
+        var block = outer ? outer.querySelector(blockSel) : null;
+        if (!block) return [];
+        var ta = block.querySelector('.user-lic-proveedor-creds-ta');
+        var credLines = String((ta && ta.value) || '')
+            .replace(/\r\n/g, '\n')
+            .split('\n');
+        var out = [];
+        credLines.forEach(function (cred, idx) {
+            if (!String(cred).trim()) return;
+            var sel = block.querySelectorAll('.user-lic-proveedor-service-select')[idx];
+            var service =
+                sel && sel.value != null ? sel.value : PROVEEDOR_SERVICE_ANONIMO;
+            out.push({
+                service: userLicProveedorNormalizeServiceId(service),
+                cred: cred,
+            });
+        });
+        return out;
+    }
+
+    function userLicProveedorRenderSplitBlockHtml(blockKey, dayNum) {
+        var lines = userLicProveedorLinesForBlock(blockKey, dayNum);
+        var credText = userLicProveedorLinesToCredsText(lines);
+        var isLic = blockKey === 'license';
+        var rowAttr = isLic ? '3' : '1';
+        var rootId = isLic ? ' id="userLicProveedorLicenseSplitRoot"' : '';
+        var editorClasses =
+            'license-split-editor user-lic-proveedor-split license-split-editor--proveedor-service license-notepad--locked' +
+            (isLic
+                ? ''
+                : ' license-split-editor--day day-license-split-root day-account-item user-lic-days-bundle');
+        return (
+            '<div class="' +
+            editorClasses +
+            '"' +
+            rootId +
+            ' data-proveedor-block="' +
+            escAttr(blockKey) +
+            '"' +
+            (isLic ? '' : ' data-proveedor-day="' + escAttr(String(dayNum)) + '"') +
+            '>' +
+            '<div class="license-split-editor__viewport">' +
+            '<div class="license-split-editor__grid">' +
+            '<div class="license-split-editor__creds-cell">' +
+            '<textarea' +
+            (isLic
+                ? ' id="userLicProveedorLicenseNotes" name="userLicProveedorLicenseNotes"'
+                : ' id="userLicProveedorDayNotes-d' +
+                  escAttr(String(dayNum)) +
+                  '" name="userLicProveedorDayNotes-d' +
+                  escAttr(String(dayNum)) +
+                  '"') +
+            ' class="admin-licencias-notepad-textarea license-split-editor__creds user-lic-proveedor-creds-ta' +
+            (isLic ? ' user-lic-proveedor-lic-ta' : ' user-lic-proveedor-day-ta') +
+            '" rows="' +
+            rowAttr +
+            '" spellcheck="true" wrap="off" autocomplete="off"' +
+            (isLic ? '' : ' data-proveedor-day="' + escAttr(String(dayNum)) + '"') +
+            ' placeholder="Correo y contraseña, una por línea. Enter = nueva línea.">' +
+            escTextarea(credText) +
+            '</textarea></div>' +
+            '<div class="license-split-editor__side" aria-label="Servicio por licencia">' +
+            '<div class="license-split-editor__rows user-lic-proveedor-service-rows day-license-split-rows" role="region">' +
+            '</div></div></div></div></div>'
+        );
+    }
+
+    function userLicProveedorInitSplitBlocks(outer) {
+        if (!outer) return;
+        userLicProveedorSyncServiceRowsForBlock(outer, 'license', null);
+        var d;
+        for (d = 1; d <= 31; d += 1) {
+            if (
+                outer.querySelector(
+                    '.user-lic-proveedor-split[data-proveedor-block="day"][data-proveedor-day="' +
+                        String(d) +
+                        '"]'
+                )
+            ) {
+                userLicProveedorSyncServiceRowsForBlock(outer, 'day', d);
+            }
+        }
+        if (typeof ResizeObserver !== 'undefined') {
+            var wrap = outer.querySelector('.user-lic-proveedor-wrap');
+            if (wrap && wrap.getAttribute('data-prov-resize-wired') !== '1') {
+                wrap.setAttribute('data-prov-resize-wired', '1');
+                var debounceT = null;
+                var ro = new ResizeObserver(function () {
+                    clearTimeout(debounceT);
+                    debounceT = setTimeout(function () {
+                        wrap.querySelectorAll('.user-lic-proveedor-split').forEach(function (block) {
+                            userLicProveedorAutosizeCredsForBlock(block);
+                        });
+                    }, 16);
+                });
+                ro.observe(wrap);
+            }
+        }
+    }
+
+    function userLicProveedorDayTextFromCache(day) {
+        var days = userLicPortalProveedorCache.day_notepads || {};
+        var v = days[String(day)];
+        return v != null ? String(v) : '';
+    }
+
+    function renderProveedorDaySection(day) {
+        var dayLines = userLicProveedorLinesForBlock('day', day);
+        var nLines = userLicProveedorCountStructuredLines(dayLines);
+        var collapsedClass = nLines === 0 ? ' collapsed' : '';
+        var badgeHtml =
+            nLines > 0
+                ? '<span class="day-account-badge admin-licencias-notepad-line-badge" title="' +
+                  escAttr(nLines === 1 ? '1 línea' : nLines + ' líneas') +
+                  '">' +
+                  String(nLines) +
+                  '</span>'
+                : '';
+        var toolbarHtml =
+            day === 1
+                ? '<button type="button" class="admin-licencias-toggle-notes-col-btn admin-licencias-days-expand-all-btn user-lic-days-expand-all user-lic-proveedor-days-expand-all" title="Plegar todos los días" aria-label="Plegar todas las secciones de días" aria-expanded="true"><i class="fas fa-chevron-up" aria-hidden="true"></i></button>'
+                : '';
+        var headerActions =
+            '<div class="admin-licencias-bloc-header-actions user-lic-day-header-actions">' +
+            toolbarHtml +
+            badgeHtml +
+            '</div>';
+        return (
+            '<section class="day-section admin-licencias-bloc admin-licencias-bloc--day user-lic-readonly-day user-lic-proveedor-day' +
+            collapsedClass +
+            '" data-user-day="' +
+            String(day) +
+            '">' +
+            '<div class="day-section-header admin-licencias-bloc-header user-lic-day-header-toggle">' +
+            '<span class="admin-licencias-bloc-title">' +
+            '<i class="fas fa-calendar-day" aria-hidden="true"></i> <span>Día ' +
+            String(day) +
+            '</span></span>' +
+            headerActions +
+            '</div>' +
+            '<div class="day-accounts-list">' +
+            (nLines > 0 ? userLicProveedorRenderSplitBlockHtml('day', day) : '') +
+            '</div></section>'
+        );
+    }
+
+    function userLicProveedorExtraNotepadLine(row) {
+        return String(row.cuenta || '—').trim() || '—';
+    }
+
+    function userLicProveedorExtraBlankMeta() {
+        return {
+            product: '—',
+            cuenta: '—',
+            day: '—',
+            status: '',
+            filterKey: '',
+            licenseId: '',
+        };
+    }
+
+    function userLicProveedorExtraCredLinesFromTa(ta) {
+        return String((ta && ta.value) || '')
+            .replace(/\r\n/g, '\n')
+            .split('\n');
+    }
+
+    function userLicProveedorExtraFindRemovedLineIndex(oldLines, newLines) {
+        var i = 0;
+        var j = 0;
+        while (i < oldLines.length && j < newLines.length) {
+            if (oldLines[i] === newLines[j]) {
+                i += 1;
+                j += 1;
+                continue;
+            }
+            return i;
+        }
+        if (j === newLines.length && i < oldLines.length) return i;
+        return Math.max(0, oldLines.length - 1);
+    }
+
+    function userLicProveedorExtraFindAddedLineIndex(oldLines, newLines) {
+        var i = 0;
+        var j = 0;
+        while (i < oldLines.length && j < newLines.length) {
+            if (oldLines[i] === newLines[j]) {
+                i += 1;
+                j += 1;
+                continue;
+            }
+            return j;
+        }
+        return newLines.length - 1;
+    }
+
+    function userLicProveedorExtraDayRowHtml(row, rowKind, rowIndex) {
+        var dayStr = row.day != null && row.day !== '—' ? String(row.day) : '—';
+        var productStr = String(row.product || '—').trim() || '—';
+        var prefix = rowKind === 'suspended' ? 'userLicProvExtraCaid' : 'userLicProvExtraVenc';
+        var noteFieldId = prefix + 'Note' + String(rowIndex);
+        var rowClass =
+            rowKind === 'suspended'
+                ? 'license-split-editor__row license-split-editor__row--suspended user-lic-proveedor-extra-row user-lic-proveedor-extra-row--link'
+                : 'license-split-editor__row license-split-editor__row--expired user-lic-proveedor-extra-row user-lic-proveedor-extra-row--link';
+        return (
+            '<div class="' +
+            rowClass +
+            '" role="button" tabindex="0" aria-label="Ir al día ' +
+            escAttr(dayStr) +
+            ' de ' +
+            escAttr(productStr) +
+            '"' +
+            ' data-prov-extra-day="' +
+            escAttr(String(row.day != null ? row.day : '—')) +
+            '"' +
+            ' data-prov-extra-filter-key="' +
+            escAttr(String(row.filterKey || '')) +
+            '"' +
+            ' data-prov-extra-license-id="' +
+            escAttr(String(row.licenseId != null ? row.licenseId : '')) +
+            '"' +
+            ' data-prov-extra-product="' +
+            escAttr(productStr) +
+            '">' +
+            '<div class="license-split-editor__lead"></div>' +
+            '<div class="license-split-editor__status-wrap user-lic-proveedor-extra-side-row">' +
+            '<div class="user-lic-proveedor-extra-service-wrap" title="' +
+            escAttr(productStr) +
+            '">' +
+            '<span class="user-lic-proveedor-extra-service">' +
+            escHtml(productStr) +
+            '</span></div>' +
+            '<div class="user-lic-proveedor-extra-day-wrap">' +
+            '<span class="user-lic-proveedor-extra-day">' +
+            escHtml(dayStr) +
+            '</span></div></div>' +
+            '<input type="text" class="license-split-editor__note" id="' +
+            escAttr(noteFieldId) +
+            '" name="' +
+            escAttr(noteFieldId) +
+            '" hidden style="display:none" tabindex="-1" aria-hidden="true" />' +
+            '</div>'
+        );
+    }
+
+    function userLicProveedorExtraRebuildDayRows(section, rowKind) {
+        var rowsWrap = section ? section.querySelector('.user-lic-proveedor-extra-rows') : null;
+        var metas = section && section._userLicProvExtraRowMetas ? section._userLicProvExtraRowMetas : [];
+        if (!rowsWrap) return;
+        rowsWrap.innerHTML = metas
+            .map(function (row, idx) {
+                return userLicProveedorExtraDayRowHtml(row, rowKind, idx);
+            })
+            .join('');
+    }
+
+    function userLicProveedorExtraUpdateBadge(section) {
+        var badge = section ? section.querySelector('.user-lic-proveedor-lic-extra-badge') : null;
+        var ta = section ? section.querySelector('.user-lic-proveedor-extra-creds') : null;
+        if (!badge || !ta) return;
+        var n = userLicProveedorExtraCredLinesFromTa(ta).filter(function (ln) {
+            return String(ln).trim() !== '';
+        }).length;
+        badge.textContent = String(n);
+        badge.hidden = n <= 0;
+        badge.title = n === 1 ? '1 línea' : n + ' líneas';
+        section.classList.toggle('collapsed', n <= 0);
+    }
+
+    function userLicProveedorExtraSyncRowsToCredLines(section, rowKind) {
+        var ta = section ? section.querySelector('.user-lic-proveedor-extra-creds') : null;
+        if (!ta || !section) return;
+        var newLines = userLicProveedorExtraCredLinesFromTa(ta);
+        var oldLines =
+            section._userLicProvExtraLastLines != null
+                ? section._userLicProvExtraLastLines.slice()
+                : newLines.slice();
+        var metas =
+            section._userLicProvExtraRowMetas != null
+                ? section._userLicProvExtraRowMetas.slice()
+                : [];
+        if (newLines.length < oldLines.length) {
+            var removedAt = userLicProveedorExtraFindRemovedLineIndex(oldLines, newLines);
+            if (removedAt >= 0 && removedAt < metas.length) metas.splice(removedAt, 1);
+        } else if (newLines.length > oldLines.length) {
+            var addedAt = userLicProveedorExtraFindAddedLineIndex(oldLines, newLines);
+            metas.splice(addedAt, 0, userLicProveedorExtraBlankMeta());
+        }
+        while (metas.length < newLines.length) metas.push(userLicProveedorExtraBlankMeta());
+        if (metas.length > newLines.length) metas.length = newLines.length;
+        section._userLicProvExtraRowMetas = metas;
+        section._userLicProvExtraLastLines = newLines.slice();
+        userLicProveedorExtraRebuildDayRows(section, rowKind);
+        userLicProveedorExtraUpdateBadge(section);
+    }
+
+    function userLicProveedorExtraWireCredsEditor(section, outer, rowKind) {
+        if (!section || section.getAttribute('data-prov-extra-editor-wired') === '1') return;
+        section.setAttribute('data-prov-extra-editor-wired', '1');
+        var ta = section.querySelector('.user-lic-proveedor-extra-creds');
+        var rowsWrap = section.querySelector('.user-lic-proveedor-extra-rows');
+        if (!ta || !rowsWrap) return;
+        ta.addEventListener('input', function () {
+            userLicProveedorExtraSyncRowsToCredLines(section, rowKind);
+            userLicProveedorExtraAutosizeCreds(section);
+        });
+        rowsWrap.addEventListener('click', function (ev) {
+            var rowEl = ev.target.closest('.user-lic-proveedor-extra-row--link');
+            if (!rowEl) return;
+            userLicPortalReportNavigateToRow(outer, {
+                day: rowEl.getAttribute('data-prov-extra-day'),
+                filterKey: rowEl.getAttribute('data-prov-extra-filter-key'),
+                licenseId: rowEl.getAttribute('data-prov-extra-license-id'),
+                product: rowEl.getAttribute('data-prov-extra-product'),
+            });
+        });
+        rowsWrap.addEventListener('keydown', function (ev) {
+            var rowEl = ev.target.closest('.user-lic-proveedor-extra-row--link');
+            if (!rowEl || (ev.key !== 'Enter' && ev.key !== ' ')) return;
+            ev.preventDefault();
+            userLicPortalReportNavigateToRow(outer, {
+                day: rowEl.getAttribute('data-prov-extra-day'),
+                filterKey: rowEl.getAttribute('data-prov-extra-filter-key'),
+                licenseId: rowEl.getAttribute('data-prov-extra-license-id'),
+                product: rowEl.getAttribute('data-prov-extra-product'),
+            });
+        });
+    }
+
+    function userLicProveedorExtraAutosizeCreds(section) {
+        var credTa = section ? section.querySelector('.user-lic-proveedor-extra-creds') : null;
+        if (!credTa) return;
+        var n = Math.max(1, userLicProveedorExtraCredLinesFromTa(credTa).length);
+        credTa.rows = n;
+        credTa.style.height = 'auto';
+        credTa.style.height = credTa.scrollHeight + 'px';
+    }
+
+    function userLicRenderProveedorLicenciasExtraSection(outer, sectionSel, rows, emptyMsg, splitKind) {
+        var section = outer ? outer.querySelector(sectionSel) : null;
+        if (!section) return;
+        var splitWrap = section.querySelector('.user-lic-proveedor-extra-split-wrap');
+        var ta = section.querySelector('.user-lic-proveedor-extra-creds');
+        var rowsWrap = section.querySelector('.user-lic-proveedor-extra-rows');
+        var hint = section.querySelector('.user-lic-proveedor-lic-extra-hint');
+        var badge = section.querySelector('.user-lic-proveedor-lic-extra-badge');
+        var n = rows.length;
+        var rowKind = splitKind === 'suspended' ? 'suspended' : 'expired';
+        section.removeAttribute('data-prov-extra-editor-wired');
+        if (badge) {
+            badge.textContent = String(n);
+            badge.hidden = n <= 0;
+            badge.title = n === 1 ? '1 línea' : n + ' líneas';
+        }
+        if (n > 0) {
+            section.classList.remove('collapsed');
+        } else {
+            section.classList.add('collapsed');
+        }
+        if (!ta || !rowsWrap) return;
+        if (!n) {
+            ta.value = '';
+            ta.rows = 1;
+            rowsWrap.innerHTML = '';
+            section._userLicProvExtraRowMetas = [];
+            section._userLicProvExtraLastLines = [];
+            if (splitWrap) splitWrap.classList.add('user-lic-proveedor-extra-split-wrap--empty');
+            if (hint) {
+                hint.textContent = emptyMsg;
+                hint.hidden = !emptyMsg;
+            }
+            return;
+        }
+        if (splitWrap) splitWrap.classList.remove('user-lic-proveedor-extra-split-wrap--empty');
+        if (hint) hint.hidden = true;
+        var notepadLines = rows.map(userLicProveedorExtraNotepadLine);
+        section._userLicProvExtraRowMetas = rows.slice();
+        section._userLicProvExtraLastLines = notepadLines.slice();
+        ta.value = notepadLines.join('\n');
+        ta.rows = Math.max(1, rows.length);
+        userLicProveedorExtraRebuildDayRows(section, rowKind);
+        userLicProveedorExtraWireCredsEditor(section, outer, rowKind);
+        userLicProveedorExtraAutosizeCreds(section);
+    }
+
+    function userLicProveedorLicExtrasSearchQuery() {
+        var inp = document.getElementById('userLicenciasSearch');
+        return inp ? String(inp.value || '').toLowerCase().trim() : '';
+    }
+
+    function userLicRefreshProveedorLicenciasExtras(outer) {
+        if (!outer || !userLicPortalProveedorEnabled) return;
+        var q = userLicProveedorLicExtrasSearchQuery();
+        userLicRenderProveedorLicenciasExtraSection(
+            outer,
+            '.user-lic-proveedor-vencidas',
+            userLicFilterReportRows(userLicCollectVencidasEntries(outer), q),
+            'No hay cuentas vencidas. Cuando una licencia vendida expire, aparecerá aquí.',
+            'expired'
+        );
+        userLicRenderProveedorLicenciasExtraSection(
+            outer,
+            '.user-lic-proveedor-caidas',
+            userLicFilterReportRows(userLicCollectCaidasEntries(outer), q),
+            '',
+            'suspended'
+        );
+    }
+
+    function userLicProveedorLicExtraSectionHtml(title, iconClass, sectionClass, wrapClass, splitKind, emptyHint) {
+        var isExpired = splitKind === 'expired';
+        var sectionBodyClass = isExpired ? ' expired-section-body' : ' suspended-section-body';
+        var sectionExtraClass = isExpired ? ' expired-section' : ' suspended-section';
+        var innerWrapClass = isExpired
+            ? 'license-notepads-wrap--expired-inner'
+            : 'license-notepads-wrap--suspended-inner';
+        var credTaClass = isExpired ? 'expired-license-split__creds' : 'suspended-license-split__creds';
+        var rowsClass = isExpired ? 'expired-license-split-rows' : 'suspended-license-split-rows';
+        var rootRestoreHidden = isExpired
+            ? 'license-split-editor--expired-restore-hidden'
+            : 'license-split-editor--suspended-restore-hidden';
+        var rootKindClass = isExpired ? 'expired-license-split-root' : 'suspended-license-split-root';
+        var fieldPrefix = isExpired ? 'userLicProvExtraVenc' : 'userLicProvExtraCaid';
+        var credFieldId = fieldPrefix + 'Creds';
+        return (
+            '<div class="' +
+            escAttr(wrapClass) +
+            '">' +
+            '<section class="day-section admin-licencias-bloc admin-licencias-bloc--day user-lic-proveedor-lic-extra collapsed ' +
+            sectionClass +
+            sectionExtraClass +
+            '" aria-label="' +
+            escAttr(title) +
+            '">' +
+            '<div class="day-section-header admin-licencias-bloc-header user-lic-day-header-toggle">' +
+            '<span class="admin-licencias-bloc-title">' +
+            '<i class="' +
+            escAttr(iconClass) +
+            '" aria-hidden="true"></i> <span>' +
+            escHtml(title) +
+            '</span></span>' +
+            '<div class="admin-licencias-bloc-header-actions user-lic-day-header-actions">' +
+            '<span class="day-account-badge admin-licencias-notepad-line-badge user-lic-proveedor-lic-extra-badge" hidden role="status">0</span>' +
+            '</div></div>' +
+            '<div class="day-accounts-list' +
+            sectionBodyClass +
+            '">' +
+            '<div class="license-notepads-wrap ' +
+            innerWrapClass +
+            ' user-lic-proveedor-extra-split-wrap user-lic-proveedor-extra-split-wrap--empty">' +
+            '<div class="license-split-editor license-split-editor--day ' +
+            rootKindClass +
+            ' license-notepad--locked license-split-editor--notes-hidden ' +
+            rootRestoreHidden +
+            ' user-lic-proveedor-extra-split user-lic-proveedor-extra-split--editable user-lic-days-bundle" tabindex="-1" role="region" aria-label="' +
+            escAttr(title) +
+            ': servicio, licencia editable y día">' +
+            '<div class="license-split-editor__viewport user-lic-proveedor-extra-viewport">' +
+            '<div class="license-split-editor__grid">' +
+            '<div class="license-split-editor__creds-cell user-lic-proveedor-extra-creds-cell">' +
+            '<textarea id="' +
+            escAttr(credFieldId) +
+            '" name="' +
+            escAttr(credFieldId) +
+            '" class="admin-licencias-notepad-textarea license-split-editor__creds ' +
+            credTaClass +
+            ' user-lic-proveedor-extra-creds" rows="1" spellcheck="true" wrap="off" autocomplete="off" aria-label="Licencia o cuenta, una por línea"></textarea>' +
+            '</div>' +
+            '<div class="license-split-editor__side user-lic-proveedor-extra-side" aria-label="Día de venta">' +
+            '<div class="license-split-editor__rows ' +
+            rowsClass +
+            ' user-lic-proveedor-extra-rows" role="region"></div>' +
+            '</div></div></div></div></div>' +
+            (emptyHint
+                ? '<p class="user-lic-proveedor-lic-extra-hint mb-0" hidden>' +
+                  escHtml(emptyHint) +
+                  '</p>'
+                : '') +
+            '</div></section></div>'
+        );
+    }
+
+    function renderProveedorInventorySheet() {
+        var licLines = userLicProveedorLinesForBlock('license', null);
+        var licCount = userLicProveedorCountStructuredLines(licLines);
+        var licBadge =
+            licCount > 0
+                ? '<span class="day-account-badge admin-licencias-notepad-line-badge" title="' +
+                  escAttr(licCount === 1 ? '1 línea' : licCount + ' líneas') +
+                  '">' +
+                  String(licCount) +
+                  '</span>'
+                : '';
+        var daysHtml = '';
+        var d;
+        for (d = 1; d <= 31; d += 1) {
+            daysHtml += renderProveedorDaySection(d);
+        }
+        return (
+            '<article class="user-lic-account-sheet user-lic-account-sheet--proveedor"' +
+            ' data-search-filter="proveedor inventario licencias"' +
+            ' data-license-id="' +
+            USER_LIC_PORTAL_PROVEEDOR_FILTER +
+            '" data-default-scroll-day="1">' +
+            '<div class="license-notepads-wrap user-lic-bundle-wrap user-lic-proveedor-wrap">' +
+            '<section class="admin-licencias-bloc admin-licencias-bloc--license user-lic-proveedor-lic-bloc" aria-label="Licencias del proveedor">' +
+            '<div class="admin-licencias-bloc-header user-lic-proveedor-lic-header">' +
+            '<span class="admin-licencias-bloc-title">Licencias</span>' +
+            '<div class="admin-licencias-bloc-header-actions">' +
+            licBadge +
+            '</div></div>' +
+            userLicProveedorRenderSplitBlockHtml('license', null) +
+            '</section>' +
+            '<div id="userLicProveedorDaysContainer" class="license-all-days-container user-lic-proveedor-days">' +
+            daysHtml +
+            '</div>' +
+            userLicProveedorLicExtraSectionHtml(
+                'Vencidas',
+                'fas fa-calendar-times',
+                'user-lic-proveedor-vencidas',
+                'license-expired-notepad-wrap',
+                'expired',
+                'Licencias vendidas que ya expiraron.'
+            ) +
+            userLicProveedorLicExtraSectionHtml(
+                'Caídas',
+                'fas fa-exclamation-triangle',
+                'user-lic-proveedor-caidas',
+                'license-suspended-notepad-wrap',
+                'suspended',
+                ''
+            ) +
+            '</div></article>'
+        );
+    }
+
     function firstLetter(name) {
         var s = String(name || '').trim();
         return s ? s.charAt(0).toUpperCase() : '?';
@@ -3118,6 +3939,458 @@
         return out;
     }
 
+    function userLicFilterKeyForLicenseId(licenseId) {
+        var accounts = userLicPortalAccountsCache || [];
+        var i;
+        for (i = 0; i < accounts.length; i += 1) {
+            if (String(accounts[i].license_id) === String(licenseId)) {
+                return userLicPortalGridFilterKey(accounts[i]);
+            }
+        }
+        return 'all';
+    }
+
+    function userLicPortalAccountFromIds(licenseId, accountIdOptional) {
+        var accounts = userLicPortalAccountsCache || [];
+        var i;
+        for (i = 0; i < accounts.length; i += 1) {
+            var a = accounts[i];
+            if (String(a.license_id) !== String(licenseId)) continue;
+            if (
+                accountIdOptional != null &&
+                accountIdOptional !== '' &&
+                a.account_id != null &&
+                String(a.account_id) !== String(accountIdOptional)
+            ) {
+                continue;
+            }
+            return a;
+        }
+        return null;
+    }
+
+    function userLicReportEntryCredFromRow(row, acc) {
+        if (row && row.cred != null && String(row.cred).trim()) {
+            return String(row.cred).trim();
+        }
+        if (acc && acc.credential_preview) {
+            return String(acc.credential_preview).trim();
+        }
+        return '';
+    }
+
+    function userLicFilterReportRows(all, q) {
+        if (!q) return all.slice();
+        return all.filter(function (row) {
+            var blob = [row.product, row.cuenta, row.status, 'día ' + row.day].join(' ').toLowerCase();
+            return blob.indexOf(q) !== -1;
+        });
+    }
+
+    function userLicReportMetaText(total, q, emptyLabel, oneLabel, manyLabel) {
+        if (total === 0) {
+            return q ? 'Sin coincidencias' : emptyLabel;
+        }
+        return total + (total === 1 ? oneLabel : manyLabel);
+    }
+
+    function userLicCollectReportEntriesFromCache(accounts) {
+        var out = [];
+        (accounts || []).forEach(function (acc) {
+            var productName = String(acc.product_name || '—').trim() || '—';
+            var filterKey = userLicPortalGridFilterKey(acc);
+            var dl = acc.day_lines || {};
+            var d;
+            for (d = 1; d <= 31; d += 1) {
+                var rows = dl[String(d)] || [];
+                var ri;
+                for (ri = 0; ri < rows.length; ri += 1) {
+                    var row = rows[ri];
+                    if (!userLicRowIsReporte(row)) continue;
+                    var cuenta =
+                        row.cred != null
+                            ? String(row.cred).trim()
+                            : String(acc.credential_preview || '').trim();
+                    var statusCode = row.status_bad != null ? String(row.status_bad).trim() : '';
+                    var statusLabel = statusCode;
+                    var bi;
+                    for (bi = 0; bi < OPT_LICENSE_BAD.length; bi += 1) {
+                        if (
+                            normalizeStatusKey(OPT_LICENSE_BAD[bi].v) === normalizeStatusKey(statusCode)
+                        ) {
+                            statusLabel = OPT_LICENSE_BAD[bi].label;
+                            break;
+                        }
+                    }
+                    out.push({
+                        product: productName,
+                        cuenta: cuenta || '—',
+                        day: d,
+                        status: statusLabel || '—',
+                        filterKey: filterKey,
+                        licenseId: acc.license_id,
+                    });
+                }
+            }
+        });
+        return out;
+    }
+
+    function userLicCollectVencidasEntriesFromCache(accounts) {
+        var out = [];
+        (accounts || []).forEach(function (acc) {
+            if (acc.account_expired !== true) return;
+            var productName = String(acc.product_name || '—').trim() || '—';
+            var filterKey = userLicPortalGridFilterKey(acc);
+            var entries = portalRowEntriesForAccount(acc);
+            if (!entries.length) {
+                out.push({
+                    product: productName,
+                    cuenta: String(acc.credential_preview || '—').trim() || '—',
+                    day: acc.linked_sale_day != null ? acc.linked_sale_day : '—',
+                    status: 'Vencida',
+                    filterKey: filterKey,
+                    licenseId: acc.license_id,
+                });
+                return;
+            }
+            var ei;
+            for (ei = 0; ei < entries.length; ei += 1) {
+                var entry = entries[ei];
+                var row = entry.row;
+                var cuenta = userLicReportEntryCredFromRow(row, acc) || '—';
+                out.push({
+                    product: productName,
+                    cuenta: cuenta,
+                    day: entry.saleDay,
+                    status: 'Vencida',
+                    filterKey: filterKey,
+                    licenseId: acc.license_id,
+                });
+            }
+        });
+        return out;
+    }
+
+    function userLicCollectCaidasEntriesFromCache(accounts) {
+        var out = [];
+        (accounts || []).forEach(function (acc) {
+            var productName = String(acc.product_name || '—').trim() || '—';
+            var filterKey = userLicPortalGridFilterKey(acc);
+            var dl = acc.day_lines || {};
+            var d;
+            for (d = 1; d <= 31; d += 1) {
+                var rows = dl[String(d)] || [];
+                var ri;
+                for (ri = 0; ri < rows.length; ri += 1) {
+                    var row = rows[ri];
+                    if (!userLicRowIsGarantia(row)) continue;
+                    var cuenta = userLicReportEntryCredFromRow(row, acc) || '—';
+                    out.push({
+                        product: productName,
+                        cuenta: cuenta,
+                        day: d,
+                        status: 'Caída (repuesta)',
+                        filterKey: filterKey,
+                        licenseId: acc.license_id,
+                    });
+                }
+            }
+        });
+        return out;
+    }
+
+    function userLicCollectReportEntriesFromDom(root) {
+        var out = [];
+        if (!root) return out;
+        root
+            .querySelectorAll(
+                '.user-lic-account-sheet:not(.user-lic-account-sheet--proveedor):not(.user-lic-account-sheet--vencimientos):not(.user-lic-account-sheet--aggregate)'
+            )
+            .forEach(function (art) {
+                art.querySelectorAll('.day-section.user-lic-readonly-day[data-user-day]').forEach(function (sec) {
+                    var day = Number(sec.getAttribute('data-user-day'));
+                    if (!Number.isFinite(day)) return;
+                    var ta = sec.querySelector('.user-lic-creds-ro');
+                    sec.querySelectorAll('.user-lic-license-row-edit').forEach(function (rowEl) {
+                        if (userLicRowSignalClassFromDom(rowEl) !== 'user-lic-row--signal-reportes') return;
+                        var idx = Number(rowEl.getAttribute('data-lic-creds-line-index'));
+                        if (!Number.isFinite(idx)) idx = 0;
+                        var cuenta = '';
+                        if (ta) {
+                            var raw = String(ta.value || '').replace(/\r\n/g, '\n');
+                            var lines = raw.split('\n');
+                            cuenta = lines[idx] != null ? String(lines[idx]).trim() : '';
+                        }
+                        var sbEl = rowEl.querySelector('select.license-split-editor__status-bad');
+                        var statusLabel = '—';
+                        if (sbEl && sbEl.selectedIndex >= 0) {
+                            statusLabel = String(sbEl.options[sbEl.selectedIndex].textContent || '').trim() || '—';
+                        }
+                        var lid = rowEl.getAttribute('data-lic-row-license-id');
+                        out.push({
+                            product:
+                                String(rowEl.getAttribute('data-lic-product-label') || '').trim() || '—',
+                            cuenta: cuenta || '—',
+                            day: day,
+                            status: statusLabel,
+                            filterKey: userLicFilterKeyForLicenseId(lid),
+                            licenseId: lid,
+                        });
+                    });
+                });
+            });
+        return out;
+    }
+
+    function userLicCollectVencidasEntriesFromDom(root) {
+        var out = [];
+        if (!root) return out;
+        root
+            .querySelectorAll(
+                '.user-lic-account-sheet:not(.user-lic-account-sheet--proveedor):not(.user-lic-account-sheet--vencimientos):not(.user-lic-account-sheet--aggregate)'
+            )
+            .forEach(function (art) {
+                art.querySelectorAll('.day-section.user-lic-readonly-day[data-user-day]').forEach(function (sec) {
+                    var day = Number(sec.getAttribute('data-user-day'));
+                    if (!Number.isFinite(day)) return;
+                    var ta = sec.querySelector('.user-lic-creds-ro');
+                    sec.querySelectorAll('.user-lic-license-row-edit').forEach(function (rowEl) {
+                        var lid = rowEl.getAttribute('data-lic-row-license-id');
+                        var aid = rowEl.getAttribute('data-lic-row-account-id');
+                        var acc = userLicPortalAccountFromIds(lid, aid);
+                        if (!acc || acc.account_expired !== true) return;
+                        var idx = Number(rowEl.getAttribute('data-lic-creds-line-index'));
+                        if (!Number.isFinite(idx)) idx = 0;
+                        var cuenta = '';
+                        if (ta) {
+                            var raw = String(ta.value || '').replace(/\r\n/g, '\n');
+                            var lines = raw.split('\n');
+                            cuenta = lines[idx] != null ? String(lines[idx]).trim() : '';
+                        }
+                        if (!cuenta && acc.credential_preview) {
+                            cuenta = String(acc.credential_preview).trim();
+                        }
+                        out.push({
+                            product:
+                                String(rowEl.getAttribute('data-lic-product-label') || acc.product_name || '').trim() ||
+                                '—',
+                            cuenta: cuenta || '—',
+                            day: day,
+                            status: 'Vencida',
+                            filterKey: userLicFilterKeyForLicenseId(lid),
+                            licenseId: lid,
+                        });
+                    });
+                });
+            });
+        return out;
+    }
+
+    function userLicCollectCaidasEntriesFromDom(root) {
+        var out = [];
+        if (!root) return out;
+        root
+            .querySelectorAll(
+                '.user-lic-account-sheet:not(.user-lic-account-sheet--proveedor):not(.user-lic-account-sheet--vencimientos):not(.user-lic-account-sheet--aggregate)'
+            )
+            .forEach(function (art) {
+                art.querySelectorAll('.day-section.user-lic-readonly-day[data-user-day]').forEach(function (sec) {
+                    var day = Number(sec.getAttribute('data-user-day'));
+                    if (!Number.isFinite(day)) return;
+                    var ta = sec.querySelector('.user-lic-creds-ro');
+                    sec.querySelectorAll('.user-lic-license-row-edit').forEach(function (rowEl) {
+                        if (!rowEl.querySelector('.user-lic-garantia-badge')) {
+                            var sgEl = rowEl.querySelector('select.license-split-editor__status-good');
+                            var sgVal = sgEl ? String(sgEl.value != null ? sgEl.value : '').trim() : '';
+                            if (normalizeStatusKey(sgVal) !== normalizeStatusKey('garantia')) return;
+                        }
+                        var idx = Number(rowEl.getAttribute('data-lic-creds-line-index'));
+                        if (!Number.isFinite(idx)) idx = 0;
+                        var cuenta = '';
+                        if (ta) {
+                            var raw = String(ta.value || '').replace(/\r\n/g, '\n');
+                            var lines = raw.split('\n');
+                            cuenta = lines[idx] != null ? String(lines[idx]).trim() : '';
+                        }
+                        var lid = rowEl.getAttribute('data-lic-row-license-id');
+                        out.push({
+                            product:
+                                String(rowEl.getAttribute('data-lic-product-label') || '').trim() || '—',
+                            cuenta: cuenta || '—',
+                            day: day,
+                            status: 'Caída (repuesta)',
+                            filterKey: userLicFilterKeyForLicenseId(lid),
+                            licenseId: lid,
+                        });
+                    });
+                });
+            });
+        return out;
+    }
+
+    function userLicCollectReportEntries(root) {
+        var outer = root || document.getElementById('userLicenciasTableOuter');
+        if (outer && outer.querySelector('.user-lic-account-sheet')) {
+            return userLicCollectReportEntriesFromDom(outer);
+        }
+        return userLicCollectReportEntriesFromCache(userLicPortalAccountsCache);
+    }
+
+    function userLicCollectVencidasEntries(root) {
+        var outer = root || document.getElementById('userLicenciasTableOuter');
+        if (outer && outer.querySelector('.user-lic-account-sheet')) {
+            return userLicCollectVencidasEntriesFromDom(outer);
+        }
+        return userLicCollectVencidasEntriesFromCache(userLicPortalAccountsCache);
+    }
+
+    function userLicCollectCaidasEntries(root) {
+        var outer = root || document.getElementById('userLicenciasTableOuter');
+        if (outer && outer.querySelector('.user-lic-account-sheet')) {
+            return userLicCollectCaidasEntriesFromDom(outer);
+        }
+        return userLicCollectCaidasEntriesFromCache(userLicPortalAccountsCache);
+    }
+
+    function userLicPortalReportNavigateToRow(outer, row) {
+        var host = outer.closest('.user-licencias-shell') || document.body;
+        var gridHost = host.querySelector('#userLicenciasGridHost');
+        var fk = String(row.filterKey || 'all');
+        var dayRaw = row.day != null ? String(row.day) : '1';
+        userLicPortalSetReportesMode(false, outer);
+        applyLicenseFilter(outer, gridHost, fk, false, true);
+        window.setTimeout(function () {
+            var art = null;
+            outer.querySelectorAll('.user-lic-account-sheet').forEach(function (a) {
+                if (art) return;
+                if (a.classList.contains('user-lic-account-sheet--aggregate')) return;
+                if (a.classList.contains('user-lic-account-sheet--proveedor')) return;
+                if (a.classList.contains('user-lic-account-sheet--vencimientos')) return;
+                if (a.style.display === 'none') return;
+                art = a;
+            });
+            if (art) scrollDayWithinArticle(art, dayRaw);
+        }, 60);
+    }
+
+    function userLicPortalReportesModeActive(outer) {
+        var shell = outer && outer.closest ? outer.closest('.user-licencias-shell') : null;
+        return !!(shell && shell.classList.contains('user-lic-reportes-mode'));
+    }
+
+    function userLicPortalSetReportesMode(on, outer) {
+        var shell = outer && outer.closest ? outer.closest('.user-licencias-shell') : null;
+        var panel = document.getElementById('userLicReportesPanel');
+        var btn = document.querySelector('.user-lic-license-card--reportes');
+        if (shell) shell.classList.toggle('user-lic-reportes-mode', !!on);
+        if (panel) {
+            panel.classList.toggle('d-none', !on);
+            panel.hidden = !on;
+            panel.setAttribute('aria-hidden', on ? 'false' : 'true');
+        }
+        if (btn) {
+            btn.classList.toggle('active', !!on);
+            btn.classList.toggle('user-lic-reportes-toggle--open', !!on);
+            btn.setAttribute('aria-expanded', on ? 'true' : 'false');
+        }
+    }
+
+    function userLicSyncReportesBadge() {
+        var n = userLicCollectReportEntries().length;
+        var badge = document.getElementById('userLicReportesTotalBadge');
+        var numEl = badge ? badge.querySelector('.license-card-report-total-badge__num') : null;
+        if (numEl) numEl.textContent = String(n);
+        if (badge) badge.hidden = n <= 0;
+    }
+
+    function userLicRenderReportesTableSection(outer, tableBody, metaEl, rows, q, emptyLabel, oneLabel, manyLabel, emptyRowHtml) {
+        var filtered = userLicFilterReportRows(rows, q);
+        var total = filtered.length;
+        metaEl.textContent = userLicReportMetaText(total, q, emptyLabel, oneLabel, manyLabel);
+        tableBody.innerHTML = '';
+        if (filtered.length === 0) {
+            var trEmpty = document.createElement('tr');
+            trEmpty.className = 'admin-licencias-reportes-row admin-licencias-reportes-row--empty';
+            trEmpty.innerHTML =
+                '<td class="admin-licencias-reportes-col-cuenta" colspan="4">' + emptyRowHtml + '</td>';
+            tableBody.appendChild(trEmpty);
+            return;
+        }
+        filtered.forEach(function (row) {
+            var tr = document.createElement('tr');
+            tr.className = 'admin-licencias-reportes-row admin-licencias-reportes-row--link';
+            tr.setAttribute('data-user-lic-report-filter', String(row.filterKey || 'all'));
+            tr.setAttribute('data-user-lic-report-day', String(row.day != null ? row.day : ''));
+            tr.innerHTML =
+                '<td class="admin-licencias-reportes-col-cuenta"><code class="admin-licencias-reportes-cred">' +
+                escHtml(row.cuenta || '—') +
+                '</code></td>' +
+                '<td class="admin-licencias-reportes-col-user">' +
+                escHtml(row.product || '—') +
+                '</td>' +
+                '<td class="admin-licencias-reportes-col-status">' +
+                escHtml(String(row.day != null ? row.day : '—')) +
+                '</td>' +
+                '<td class="admin-licencias-reportes-col-action">' +
+                escHtml(row.status || '—') +
+                '</td>';
+            tr.addEventListener('click', function () {
+                userLicPortalReportNavigateToRow(outer, row);
+            });
+            tableBody.appendChild(tr);
+        });
+    }
+
+    function userLicRenderReportesPanel(outer) {
+        var panel = document.getElementById('userLicReportesPanel');
+        var searchInp = document.getElementById('userLicReportesSearch');
+        var metaEl = document.getElementById('userLicReportesMeta');
+        var tableBody = document.getElementById('userLicReportesTableBody');
+        if (!panel || !searchInp || !metaEl || !tableBody) return;
+
+        var q = String(searchInp.value || '')
+            .toLowerCase()
+            .trim();
+
+        userLicRenderReportesTableSection(
+            outer,
+            tableBody,
+            metaEl,
+            userLicCollectReportEntries(outer),
+            q,
+            '0 incidencias en tus licencias asignadas',
+            ' incidencia en tus licencias asignadas',
+            ' incidencias en tus licencias asignadas',
+            'No hay cuentas con incidencia en tus licencias. Al marcar un estado rojo en una fila, aparecerá aquí.'
+        );
+        userLicSyncReportesBadge();
+    }
+
+    function userLicRefreshReportesUi(outer) {
+        userLicSyncReportesBadge();
+        userLicRefreshProveedorLicenciasExtras(outer);
+        if (userLicPortalReportesModeActive(outer)) {
+            userLicRenderReportesPanel(outer);
+        }
+    }
+
+    var userLicReportesPanelWired = false;
+
+    function wireUserLicReportesPanel(outer) {
+        if (userLicReportesPanelWired) return;
+        var searchInp = document.getElementById('userLicReportesSearch');
+        if (!searchInp) return;
+        userLicReportesPanelWired = true;
+        var debounce = null;
+        searchInp.addEventListener('input', function () {
+            if (debounce) window.clearTimeout(debounce);
+            debounce = window.setTimeout(function () {
+                userLicRenderReportesPanel(outer);
+            }, 180);
+        });
+    }
+
     function renderUserLicenciasGrid(summaryList) {
         var parts = [];
 
@@ -3149,6 +4422,36 @@
             );
         }
 
+        if (userLicPortalProveedorEnabled) {
+            parts.push(
+                '<button type="button" class="license-card user-lic-license-card-btn user-lic-license-card--proveedor" data-user-license-filter="' +
+                    USER_LIC_PORTAL_PROVEEDOR_FILTER +
+                    '">' +
+                    '<div class="license-card-header">' +
+                    '<h3 class="license-name"><span class="full-text">' +
+                    escHtml('Proveedor') +
+                    '</span><span class="first-letter">P</span></h3>' +
+                    '</div></button>'
+            );
+        }
+
+        if (summaryList.length > 0) {
+            parts.push(
+                '<button type="button" class="license-card license-card--aggregate license-card--panel-toggle user-lic-license-card-btn user-lic-license-card--reportes user-lic-reportes-toggle"' +
+                    ' data-user-license-filter="' +
+                    USER_LIC_PORTAL_REPORTES_FILTER +
+                    '" title="Reportes: incidencias en tus licencias asignadas"' +
+                    ' aria-expanded="false" aria-controls="userLicReportesPanel"' +
+                    ' aria-label="Reportes: incidencias en tus licencias asignadas">' +
+                    '<div class="license-card-header">' +
+                    '<h3 class="license-name"><span class="full-text">Reportes' +
+                    '<span id="userLicReportesTotalBadge" class="license-card-report-total-badge" hidden role="status" aria-live="polite">' +
+                    '<span class="license-card-report-total-badge__num">0</span></span></span>' +
+                    '<span class="first-letter">R</span></h3>' +
+                    '</div></button>'
+            );
+        }
+
         return parts.join('');
     }
 
@@ -3169,6 +4472,9 @@
         var licSel = (container && container.dataset && container.dataset.userLicActiveFilter) || 'all';
         var inp = document.getElementById('userLicenciasSearch');
         var q = inp ? (inp.value || '').trim().toLowerCase() : '';
+        var host = container.closest('.user-licencias-shell') || document.body;
+        var gh = host.querySelector('#userLicenciasGridHost');
+        var gi = gh ? gh.querySelector('#userLicenciasGrid') : null;
         if (licSel === 'vencimientos' || userLicPortalVencimientosActive) {
             container.querySelectorAll('.user-lic-account-sheet').forEach(function (art) {
                 var isVenc = art.classList.contains('user-lic-account-sheet--vencimientos');
@@ -3178,9 +4484,38 @@
             });
             return;
         }
+        if (licSel === USER_LIC_PORTAL_REPORTES_FILTER) {
+            container.querySelectorAll('.user-lic-account-sheet').forEach(function (art) {
+                art.style.display = 'none';
+            });
+            if (gi) {
+                gi.querySelectorAll('.user-lic-license-card-btn[data-user-license-filter]').forEach(function (card) {
+                    card.classList.remove('user-lic-grid-no-match');
+                });
+            }
+            return;
+        }
+        if (licSel === USER_LIC_PORTAL_PROVEEDOR_FILTER) {
+            container.querySelectorAll('.user-lic-account-sheet').forEach(function (art) {
+                var isProv = art.classList.contains('user-lic-account-sheet--proveedor');
+                var hay = (art.getAttribute('data-search-filter') || '').trim().toLowerCase();
+                var matchQ = !q || hay.indexOf(q) !== -1;
+                art.style.display = isProv && matchQ ? '' : 'none';
+            });
+            if (gi) {
+                gi.querySelectorAll('.user-lic-license-card-btn[data-user-license-filter]').forEach(function (card) {
+                    card.classList.remove('user-lic-grid-no-match');
+                });
+            }
+            return;
+        }
         var visibleByLic = {};
         var hasMergedView = !!container.querySelector('.user-lic-account-sheet--aggregate');
         container.querySelectorAll('.user-lic-account-sheet').forEach(function (art) {
+            if (art.classList.contains('user-lic-account-sheet--proveedor')) {
+                art.style.display = 'none';
+                return;
+            }
             var isAgg = art.classList.contains('user-lic-account-sheet--aggregate');
             var lid = art.getAttribute('data-license-id');
             var hay = (art.getAttribute('data-search-filter') || '').trim().toLowerCase();
@@ -3201,9 +4536,6 @@
         });
 
         /* Opacidad en tarjetas de producto sin resultados visibles durante la búsqueda */
-        var host = container.closest('.user-licencias-shell') || document.body;
-        var gh = host.querySelector('#userLicenciasGridHost');
-        var gi = gh ? gh.querySelector('#userLicenciasGrid') : null;
         if (!gi || !gh) return;
         gi.querySelectorAll('.user-lic-license-card-btn[data-user-license-filter]').forEach(function (card) {
             var fr = card.getAttribute('data-user-license-filter');
@@ -3247,6 +4579,16 @@
             if (raw == null || String(raw).trim() === '') return 'all';
             var s = String(raw).trim();
             if (s === 'all') return 'all';
+            if (s === USER_LIC_PORTAL_PROVEEDOR_FILTER) {
+                return gridCardByFilterKey(gridHost, USER_LIC_PORTAL_PROVEEDOR_FILTER)
+                    ? USER_LIC_PORTAL_PROVEEDOR_FILTER
+                    : 'all';
+            }
+            if (s === USER_LIC_PORTAL_REPORTES_FILTER) {
+                return gridCardByFilterKey(gridHost, USER_LIC_PORTAL_REPORTES_FILTER)
+                    ? USER_LIC_PORTAL_REPORTES_FILTER
+                    : 'all';
+            }
             if (!gridHost) return 'all';
             return gridCardByFilterKey(gridHost, s) ? s : 'all';
         } catch (_e2) {
@@ -3264,6 +4606,30 @@
         var licenseNorm = normalizePortalServiceFilterKey(
             licenseIdSel === 'vencimientos' ? 'all' : licenseIdSel
         );
+
+        if (licenseNorm === USER_LIC_PORTAL_REPORTES_FILTER) {
+            container.dataset.userLicActiveFilter = USER_LIC_PORTAL_REPORTES_FILTER;
+            if (!skipPersist) {
+                persistUserLicPortalServiceFilter(USER_LIC_PORTAL_REPORTES_FILTER);
+            }
+            if (!skipRebuild) {
+                var hostR = container.closest('.user-licencias-shell') || document.body;
+                var gridHostElR = gridHost || hostR.querySelector('#userLicenciasGridHost');
+                var gridInnerR = gridHostElR ? gridHostElR.querySelector('#userLicenciasGrid') : null;
+                rebuildUserLicPortalMainContent(container, hostR, gridInnerR, gridHostElR, {
+                    filter: USER_LIC_PORTAL_REPORTES_FILTER,
+                });
+                return;
+            }
+            userLicPortalSetReportesMode(true, container);
+            userLicRenderReportesPanel(container);
+            syncServiceFilterGridCards(gridHost, USER_LIC_PORTAL_REPORTES_FILTER);
+            userLicCaducidadSyncShellLayoutClass();
+            return;
+        }
+
+        userLicPortalSetReportesMode(false, container);
+
         container.dataset.userLicActiveFilter = licenseNorm;
         delete container.dataset.userLicCaducidadServiceFilter;
         if (!skipPersist) {
@@ -3414,6 +4780,7 @@
         if (!inp) return;
         inp.addEventListener('input', function () {
             refreshSheetVisibility(root);
+            userLicRefreshProveedorLicenciasExtras(root);
         });
     }
 
@@ -3703,6 +5070,339 @@
         });
     }
 
+    function userLicPortalCollectProveedorFromDom(outer) {
+        var out = { license_lines: [], day_lines: {} };
+        if (!outer) return out;
+        out.license_lines = userLicProveedorCollectLinesFromBlock(outer, 'license', null);
+        var d;
+        for (d = 1; d <= 31; d += 1) {
+            out.day_lines[String(d)] = userLicProveedorCollectLinesFromBlock(outer, 'day', d);
+        }
+        out.license_notes = userLicProveedorLinesToCredsText(out.license_lines);
+        out.day_notepads = {};
+        for (d = 1; d <= 31; d += 1) {
+            out.day_notepads[String(d)] = userLicProveedorLinesToCredsText(out.day_lines[String(d)]);
+        }
+        return out;
+    }
+
+    function userLicPortalMergeProveedorCache(payload) {
+        if (!payload || typeof payload !== 'object') return;
+        if (Array.isArray(payload.services_catalog) && payload.services_catalog.length) {
+            userLicPortalProveedorCache.services_catalog = payload.services_catalog;
+        } else if (!userLicPortalProveedorCache.services_catalog.length) {
+            userLicPortalProveedorCache.services_catalog = userLicProveedorDefaultCatalog();
+        }
+        userLicPortalProveedorCache.license_lines = userLicProveedorNormalizeLineEntries(
+            payload.license_lines,
+            payload.license_notes
+        );
+        userLicPortalProveedorCache.day_lines = userLicProveedorNormalizeDayLinesMap(
+            payload.day_lines,
+            payload.day_notepads
+        );
+        userLicPortalProveedorCache.license_notes = userLicProveedorLinesToCredsText(
+            userLicPortalProveedorCache.license_lines
+        );
+        var outDays = {};
+        var d;
+        for (d = 1; d <= 31; d += 1) {
+            var k = String(d);
+            outDays[k] = userLicProveedorLinesToCredsText(
+                userLicPortalProveedorCache.day_lines[k] || []
+            );
+        }
+        userLicPortalProveedorCache.day_notepads = outDays;
+    }
+
+    function userLicPortalScheduleProveedorSave(outer, proveedorUrl) {
+        if (!proveedorUrl || !userLicPortalProveedorEnabled) return;
+        clearTimeout(userLicPortalProveedorSaveTimer);
+        userLicPortalProveedorSaveTimer = window.setTimeout(function () {
+            var body = userLicPortalCollectProveedorFromDom(outer);
+            userLicPortalMergeProveedorCache(body);
+            fetch(proveedorUrl, {
+                method: 'PUT',
+                credentials: 'same-origin',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    license_lines: body.license_lines,
+                    day_lines: body.day_lines,
+                }),
+            })
+                .then(function (r) {
+                    return r.json().catch(function () {
+                        return { success: false };
+                    });
+                })
+                .then(function (data) {
+                    if (data && data.success) {
+                        userLicPortalMergeProveedorCache(data);
+                    }
+                })
+                .catch(function () {
+                    /* ignore */
+                });
+        }, SAVE_DEBOUNCE_MS);
+    }
+
+    function userLicPortalWireProveedorEditors(outer) {
+        if (!outer || !userLicPortalProveedorEnabled) return;
+        var proveedorUrl = outer.getAttribute('data-proveedor-url') || '';
+        if (!proveedorUrl) return;
+        userLicProveedorInitSplitBlocks(outer);
+        outer.querySelectorAll('.user-lic-proveedor-creds-ta').forEach(function (ta) {
+            if (ta.getAttribute('data-prov-input-wired') === '1') return;
+            ta.setAttribute('data-prov-input-wired', '1');
+            ta.addEventListener('input', function () {
+                var block = ta.closest('.user-lic-proveedor-split');
+                var blockKey = block ? block.getAttribute('data-proveedor-block') : 'license';
+                var dayRaw = block ? block.getAttribute('data-proveedor-day') : null;
+                var dayNum = dayRaw != null && String(dayRaw).trim() !== '' ? parseInt(dayRaw, 10) : null;
+                userLicProveedorSyncServiceRowsForBlock(outer, blockKey, dayNum);
+                if (blockKey === 'day' && dayNum != null) {
+                    var dayLines = userLicProveedorCollectLinesFromBlock(outer, 'day', dayNum);
+                    var daySection = outer.querySelector(
+                        '.user-lic-proveedor-day[data-user-day="' + String(dayNum) + '"]'
+                    );
+                    if (daySection) {
+                        if (userLicProveedorCountStructuredLines(dayLines) === 0) {
+                            daySection.classList.add('collapsed');
+                            var list = daySection.querySelector('.day-accounts-list');
+                            if (list) list.innerHTML = '';
+                        } else {
+                            daySection.classList.remove('collapsed');
+                        }
+                    }
+                }
+                userLicPortalScheduleProveedorSave(outer, proveedorUrl);
+            });
+        });
+        if (outer.getAttribute('data-prov-change-wired') !== '1') {
+            outer.setAttribute('data-prov-change-wired', '1');
+            outer.addEventListener('change', function (e) {
+                if (!e.target || !e.target.classList.contains('user-lic-proveedor-service-select')) return;
+                userLicPortalScheduleProveedorSave(outer, proveedorUrl);
+            });
+        }
+        var expandBtn = outer.querySelector('.user-lic-proveedor-days-expand-all');
+        if (expandBtn && expandBtn.getAttribute('data-prov-expand-wired') !== '1') {
+            expandBtn.setAttribute('data-prov-expand-wired', '1');
+            expandBtn.addEventListener('click', function (e) {
+                e.preventDefault();
+                e.stopPropagation();
+                var wrap = outer.querySelector('.user-lic-proveedor-wrap');
+                if (!wrap) return;
+                var sections = wrap.querySelectorAll('.user-lic-proveedor-day');
+                var anyOpen = false;
+                sections.forEach(function (sec) {
+                    if (!sec.classList.contains('collapsed')) anyOpen = true;
+                });
+                sections.forEach(function (sec) {
+                    if (anyOpen) sec.classList.add('collapsed');
+                    else sec.classList.remove('collapsed');
+                });
+                expandBtn.setAttribute('aria-expanded', anyOpen ? 'false' : 'true');
+            });
+        }
+    }
+
+    function userLicPortalLoadProveedorInventory(proveedorUrl) {
+        if (!proveedorUrl) return Promise.resolve(false);
+        return fetchUserLicPortalJson(proveedorUrl).then(function (res) {
+            if (!res.httpOk || !res.data || !res.data.success) return false;
+            userLicPortalMergeProveedorCache(res.data);
+            return true;
+        });
+    }
+
+    var userLicProveedorProductsCache = [];
+
+    function userLicSyncProveedorGestionarProductosBtn(visible) {
+        var btn = document.getElementById('btnUserProveedorGestionarProductos');
+        if (!btn) return;
+        if (visible) {
+            btn.classList.remove('d-none');
+            btn.hidden = false;
+        } else {
+            btn.classList.add('d-none');
+            btn.hidden = true;
+        }
+    }
+
+    function userLicCloseProveedorGestionarProductosModal() {
+        var modal = document.getElementById('userProveedorGestionarProductosModal');
+        if (modal) modal.remove();
+    }
+
+    function userLicProveedorWarrantyUi(wd) {
+        var n = parseInt(wd, 10);
+        return Number.isFinite(n) && n >= 0 ? String(n) : '0';
+    }
+
+    function userLicRenderProveedorGestionarProductosModal(products) {
+        userLicCloseProveedorGestionarProductosModal();
+        var list = Array.isArray(products) ? products.slice() : [];
+        if (!list.length) {
+            window.alert('No tienes productos asignados como proveedor.');
+            return;
+        }
+        var rowsHtml = list
+            .map(function (p) {
+                var name = escHtml(String(p.product_name || 'Producto'));
+                var lid = escAttr(String(p.license_id != null ? p.license_id : ''));
+                var gar = userLicProveedorWarrantyUi(p.warranty_days);
+                return (
+                    '<div class="producto-item gestion-productos-item user-proveedor-gestion-productos-item" data-license-id="' +
+                    lid +
+                    '">' +
+                    '<div class="gestion-productos-item-name">' +
+                    '<strong title="' +
+                    name +
+                    '">' +
+                    name +
+                    '</strong>' +
+                    '</div>' +
+                    '<div class="gestion-productos-item-actions">' +
+                    '<button type="button" class="gestion-productos-btn user-proveedor-gestion-gar-btn" data-action="change-proveedor-product-warranty" data-license-id="' +
+                    lid +
+                    '" title="Cambiar reserva de garantía (gar.: cuentas no vendibles)">' +
+                    'gar. <span class="gestion-productos-position-span">' +
+                    escHtml(gar) +
+                    '</span></button>' +
+                    '</div></div>'
+                );
+            })
+            .join('');
+        var modalHtml =
+            '<div class="modal-overlay" id="userProveedorGestionarProductosModal">' +
+            '<div class="gestion-productos-modal-inner" role="dialog" aria-modal="true" aria-labelledby="userProveedorGestionProductosTitulo">' +
+            '<div class="gestion-productos-modal-content">' +
+            '<div class="gestion-productos-modal-header">' +
+            '<h3 id="userProveedorGestionProductosTitulo"><i class="fas fa-list"></i> Gestionar productos</h3>' +
+            '<button type="button" class="gestion-productos-modal-close user-proveedor-gestion-productos-close" aria-label="Cerrar">&times;</button>' +
+            '</div>' +
+            '<p class="admin-licencias-reportes-hint user-proveedor-gestion-productos-hint mb-2">Reserva gar.: cuentas de tu inventario que quedan apartadas como garantía (no vendibles).</p>' +
+            '<div class="gestion-productos-list" id="userProveedorGestionProductosList">' +
+            rowsHtml +
+            '</div></div></div></div>';
+        document.body.insertAdjacentHTML('beforeend', modalHtml);
+        var overlay = document.getElementById('userProveedorGestionarProductosModal');
+        if (!overlay) return;
+        overlay.addEventListener('click', function (e) {
+            if (e.target === overlay) userLicCloseProveedorGestionarProductosModal();
+        });
+        var closeBtn = overlay.querySelector('.user-proveedor-gestion-productos-close');
+        if (closeBtn) {
+            closeBtn.addEventListener('click', function (e) {
+                e.stopPropagation();
+                userLicCloseProveedorGestionarProductosModal();
+            });
+        }
+        var listEl = document.getElementById('userProveedorGestionProductosList');
+        if (listEl) {
+            listEl.addEventListener('click', function (e) {
+                var btn = e.target.closest('[data-action="change-proveedor-product-warranty"]');
+                if (!btn) return;
+                e.preventDefault();
+                userLicChangeProveedorProductWarranty(btn, overlay);
+            });
+        }
+    }
+
+    function userLicFetchProveedorProducts(productsUrl) {
+        return fetchUserLicPortalJson(productsUrl).then(function (res) {
+            if (!res.httpOk || !res.data || !res.data.success) {
+                throw new Error(
+                    (res.data && (res.data.error || res.data.message)) ||
+                        'No se pudieron cargar los productos.'
+                );
+            }
+            userLicProveedorProductsCache = Array.isArray(res.data.products) ? res.data.products : [];
+            return userLicProveedorProductsCache;
+        });
+    }
+
+    function userLicOpenProveedorGestionarProductosModal(productsUrl) {
+        if (!productsUrl) {
+            window.alert('No hay URL de productos configurada.');
+            return;
+        }
+        userLicFetchProveedorProducts(productsUrl)
+            .then(function (products) {
+                userLicRenderProveedorGestionarProductosModal(products);
+            })
+            .catch(function (err) {
+                window.alert(err && err.message ? err.message : 'Error al cargar productos.');
+            });
+    }
+
+    function userLicChangeProveedorProductWarranty(btn, overlay) {
+        var lid = parseInt(btn.getAttribute('data-license-id'), 10);
+        if (!Number.isFinite(lid) || lid <= 0) return;
+        var item = userLicProveedorProductsCache.find(function (p) {
+            return Number(p.license_id) === lid;
+        });
+        var current = item ? userLicProveedorWarrantyUi(item.warranty_days) : '0';
+        var raw = window.prompt(
+            'Número de cuentas en reserva garantía (gar., no vendibles):',
+            String(current)
+        );
+        if (raw === null || String(raw).trim() === '') return;
+        var n = parseInt(String(raw).trim(), 10);
+        if (Number.isNaN(n) || n < 0 || n > 3650) {
+            window.alert('Introduce un número entre 0 y 3650 (cuentas).');
+            return;
+        }
+        var outer = document.getElementById('userLicenciasTableOuter');
+        var base =
+            (outer && outer.getAttribute('data-proveedor-products-url')) ||
+            '/tienda/api/user/proveedor-products';
+        var url = base.replace(/\/$/, '') + '/' + encodeURIComponent(String(lid)) + '/warranty';
+        fetch(url, {
+            method: 'PUT',
+            credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ warranty_days: n }),
+        })
+            .then(function (r) {
+                return r.json().catch(function () {
+                    return { success: false };
+                });
+            })
+            .then(function (data) {
+                if (!data || !data.success) {
+                    window.alert(
+                        (data && data.error) || 'Error al guardar la reserva gar.'
+                    );
+                    return;
+                }
+                if (item) item.warranty_days = n;
+                var span = btn.querySelector('.gestion-productos-position-span');
+                if (span) span.textContent = String(n);
+            })
+            .catch(function () {
+                window.alert('Error de conexión al guardar la reserva gar.');
+            });
+    }
+
+    function wireUserLicProveedorGestionarProductos(outer) {
+        var btn = document.getElementById('btnUserProveedorGestionarProductos');
+        if (!btn || btn.getAttribute('data-prov-gestion-wired') === '1') return;
+        btn.setAttribute('data-prov-gestion-wired', '1');
+        btn.addEventListener('click', function (e) {
+            e.preventDefault();
+            var productsUrl =
+                (outer && outer.getAttribute('data-proveedor-products-url')) ||
+                '/tienda/api/user/proveedor-products';
+            userLicOpenProveedorGestionarProductosModal(productsUrl);
+            var menu = document.getElementById('mobileMenu');
+            var overlayMenu = document.getElementById('menuOverlay');
+            if (menu) menu.classList.add('hidden');
+            if (overlayMenu) overlayMenu.classList.remove('active');
+        });
+    }
+
     /**
      * @param {object|null} persistUi — si no es null: filter ('all' | clave) y texto de búsqueda.
      */
@@ -3725,10 +5425,12 @@
         if (apiOk && data.portal_colombia_clock && typeof data.portal_colombia_clock === 'object') {
             userLicPortalColombiaClock = data.portal_colombia_clock;
         }
+        userLicPortalProveedorEnabled = !!(apiOk && data.proveedor);
+        userLicSyncProveedorGestionarProductosBtn(userLicPortalProveedorEnabled);
 
         if (gridInner && gridHostEl) {
             gridInner.innerHTML = renderUserLicenciasGrid(summaryList);
-            setGridVisible(gridHostEl, true);
+            setGridVisible(gridHostEl, accounts.length > 0 || userLicPortalProveedorEnabled);
         }
 
         userLicPortalAccountsCache = accounts;
@@ -3750,9 +5452,18 @@
 
         wireUserLicPortalStaticHost(host, outer, gridInner, gridHostEl);
         bootstrapUserLicPortalCollapseOnce();
-        rebuildUserLicPortalMainContent(outer, host, gridInner, gridHostEl, persistUi);
-        userLicCaducidadNotifyRunCheck();
-        userLicRenewalNotifyRunCheck();
+        var proveedorUrl = outer.getAttribute('data-proveedor-url') || '';
+        var boot = function () {
+            rebuildUserLicPortalMainContent(outer, host, gridInner, gridHostEl, persistUi);
+            userLicCaducidadNotifyRunCheck();
+            userLicRenewalNotifyRunCheck();
+        };
+        if (userLicPortalProveedorEnabled && proveedorUrl) {
+            userLicPortalLoadProveedorInventory(proveedorUrl).then(boot);
+        } else {
+            boot();
+        }
+        userLicRefreshReportesUi(outer);
     }
 
     function wireUserLicCredsCopyNormalize(outer) {
@@ -3793,6 +5504,8 @@
         wireUserLicDaysToolbar(outer);
         wireUserLicVencimientosButton(outer, host, gridInner, gridHostEl);
         wireUserLicCaducidadNotifyBar();
+        wireUserLicReportesPanel(outer);
+        wireUserLicProveedorGestionarProductos(outer);
     }
 
     function bootstrapUserLicPortalCollapseOnce() {

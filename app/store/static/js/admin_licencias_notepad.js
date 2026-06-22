@@ -11,6 +11,8 @@
   var SUSPENDED_SUFFIX = '_v1';
   var EXPIRED_PREFIX = 'admin_licencias_bloc_expired_';
   var EXPIRED_SUFFIX = '_v1';
+  var CUSTOMER_RENEWAL_PREFIX = 'admin_licencias_bloc_customer_renewal_';
+  var CUSTOMER_RENEWAL_SUFFIX = '_v1';
   var CHANGES_PREFIX = 'admin_licencias_bloc_changes_';
   var CHANGES_SUFFIX = '_v1';
   var LEGACY_PERSONAL_GLOBAL = 'admin_licencias_bloc_personal_v1';
@@ -103,6 +105,10 @@
     return EXPIRED_PREFIX + id + EXPIRED_SUFFIX;
   }
 
+  function customerRenewalStorageKey(id) {
+    return CUSTOMER_RENEWAL_PREFIX + id + CUSTOMER_RENEWAL_SUFFIX;
+  }
+
   function changesStorageKey(id) {
     return CHANGES_PREFIX + id + CHANGES_SUFFIX;
   }
@@ -147,6 +153,13 @@
     if (licenseId === null || licenseId === undefined || licenseId === '') return;
     try {
       localStorage.setItem(expiredStorageKey(licenseId), value);
+    } catch (e) {}
+  }
+
+  function saveCustomerRenewalForId(licenseId, value) {
+    if (licenseId === null || licenseId === undefined || licenseId === '') return;
+    try {
+      localStorage.setItem(customerRenewalStorageKey(licenseId), value);
     } catch (e) {}
   }
 
@@ -202,7 +215,68 @@
         return window.expiredLicenseSplitGetMergedText(expRoot);
       }
     }
+    if (
+      el.id === 'adminLicenciasNotepadByCustomerRenewal' &&
+      typeof window.customerRenewalLicenseSplitGetMergedText === 'function'
+    ) {
+      var custRoot = getEl('adminLicenciasCustomerRenewalSplitRoot');
+      if (custRoot) {
+        return window.customerRenewalLicenseSplitGetMergedText(custRoot);
+      }
+    }
     return el.tagName === 'TEXTAREA' ? el.value : el.innerText || '';
+  }
+
+  function customerRenewalMergedOrBlockText(ta) {
+    if (
+      ta &&
+      ta.id === 'adminLicenciasNotepadByCustomerRenewal' &&
+      typeof window.customerRenewalLicenseSplitGetMergedText === 'function'
+    ) {
+      var root = getEl('adminLicenciasCustomerRenewalSplitRoot');
+      if (root) {
+        return window.customerRenewalLicenseSplitGetMergedText(root);
+      }
+    }
+    return licenseBlockText(ta);
+  }
+
+  /** Solo columna credenciales (izquierda), para comparar servidor ↔ UI sin falsos positivos. */
+  function customerRenewalCredColumnKeyFromStorageText(text) {
+    var lines = String(text || '')
+      .replace(/\r\n/g, '\n')
+      .split('\n')
+      .filter(function (line) {
+        return String(line || '').trim() !== '';
+      });
+    var sep = '\x1f';
+    var creds = lines.map(function (ln) {
+      var raw = String(ln || '');
+      if (raw.indexOf(sep) >= 0) {
+        return raw.slice(0, raw.indexOf(sep));
+      }
+      return raw;
+    });
+    return creds.join('\n').replace(/\r\n/g, '\n').trimEnd();
+  }
+
+  function customerRenewalCredColumnKeyFromOpenBloc(taCR) {
+    if (!taCR) return '';
+    if (taCR.tagName === 'TEXTAREA') {
+      return String(taCR.value != null ? taCR.value : '')
+        .replace(/\r\n/g, '\n')
+        .trimEnd();
+    }
+    return customerRenewalCredColumnKeyFromStorageText(customerRenewalMergedOrBlockText(taCR));
+  }
+
+  function customerRenewalSplitNeedsForcedServerSync(licenseRow, taCR) {
+    if (!licenseRow || !taCR) return false;
+    if (!Object.prototype.hasOwnProperty.call(licenseRow, 'customer_renewal_notes')) return false;
+    var serverText = licenseRow.customer_renewal_notes != null ? String(licenseRow.customer_renewal_notes) : '';
+    serverText = stripStandaloneGenericoLines(serverText);
+    if (!customerRenewalCredColumnKeyFromStorageText(serverText).trim()) return false;
+    return !customerRenewalCredColumnKeyFromOpenBloc(taCR).trim();
   }
 
   function licenseMergedOrBlockText(ta) {
@@ -321,6 +395,12 @@
     }
   }
 
+  function refreshCustomerRenewalLineBadge() {
+    if (typeof window.updateCustomerRenewalBlocLineCountBadge === 'function') {
+      window.updateCustomerRenewalBlocLineCountBadge();
+    }
+  }
+
   function refreshChangesLineBadge() {
     if (typeof window.updateChangesBlocLineCountBadge === 'function') {
       window.updateChangesBlocLineCountBadge();
@@ -356,6 +436,21 @@
       }
       if (expRootSet && typeof window.expiredLicenseSplitApplyMergedText === 'function') {
         window.expiredLicenseSplitApplyMergedText(expRootSet, text != null ? text : '');
+        return;
+      }
+    }
+    if (el.id === 'adminLicenciasNotepadByCustomerRenewal') {
+      var custRootSet = getEl('adminLicenciasCustomerRenewalSplitRoot');
+      var custRows = getEl('adminLicenciasCustomerRenewalStructuredRows');
+      if (String(el.dataset.licenseId || '') === '0') {
+        if (custRows) custRows.innerHTML = '';
+        if (el.tagName === 'TEXTAREA') {
+          el.value = text != null ? text : '';
+        }
+        return;
+      }
+      if (custRootSet && typeof window.customerRenewalLicenseSplitApplyMergedText === 'function') {
+        window.customerRenewalLicenseSplitApplyMergedText(custRootSet, text != null ? text : '');
         return;
       }
     }
@@ -398,6 +493,24 @@
     try {
       var s = localStorage.getItem(expiredStorageKey(licenseId));
       setLicenseBlockPlainText(el, s !== null ? s : '');
+    } catch (e) {
+      setLicenseBlockPlainText(el, '');
+    }
+  }
+
+  function loadCustomerRenewalFromLocalOnly(licenseId, el) {
+    try {
+      var s = localStorage.getItem(customerRenewalStorageKey(licenseId));
+      var v = s !== null ? s : '';
+      v = stripStandaloneGenericoLines(v);
+      if (typeof window.customerRenewalLicenseSplitApplyMergedText === 'function') {
+        var root = getEl('adminLicenciasCustomerRenewalSplitRoot');
+        if (root) {
+          window.customerRenewalLicenseSplitApplyMergedText(root, v);
+        }
+      } else {
+        setLicenseBlockPlainText(el, v);
+      }
     } catch (e) {
       setLicenseBlockPlainText(el, '');
     }
@@ -470,6 +583,25 @@
     loadExpiredFromLocalOnly(licenseId, el);
   }
 
+  function loadCustomerRenewalForId(licenseId, el, licenseRow) {
+    if (licenseRow && Object.prototype.hasOwnProperty.call(licenseRow, 'customer_renewal_notes')) {
+      var vr = licenseRow.customer_renewal_notes != null ? String(licenseRow.customer_renewal_notes) : '';
+      vr = stripStandaloneGenericoLines(vr);
+      if (typeof window.customerRenewalLicenseSplitApplyMergedText === 'function') {
+        var root = getEl('adminLicenciasCustomerRenewalSplitRoot');
+        if (root) {
+          window.customerRenewalLicenseSplitApplyMergedText(root, vr);
+        }
+      } else {
+        setLicenseBlockPlainText(el, vr);
+      }
+      saveCustomerRenewalForId(licenseId, customerRenewalMergedOrBlockText(el));
+      clearCustomerRenewalDirty(el);
+      return;
+    }
+    loadCustomerRenewalFromLocalOnly(licenseId, el);
+  }
+
   function saveCurrentPersonal(ta) {
     var lid = ta.dataset.licenseId;
     if (lid === undefined || lid === '') return;
@@ -494,6 +626,12 @@
     saveExpiredForId(lid, licenseBlockText(el));
   }
 
+  function saveCurrentCustomerRenewal(el) {
+    var lid = el.dataset.licenseId;
+    if (lid === undefined || lid === '') return;
+    saveCustomerRenewalForId(lid, customerRenewalMergedOrBlockText(el));
+  }
+
   function saveCurrentChanges(el) {
     var lid = el.dataset.licenseId;
     if (lid === undefined || lid === '') return;
@@ -504,23 +642,75 @@
     return typeof getCSRFToken === 'function' ? getCSRFToken() : '';
   }
 
+  function appendCustomerRenewalNotesToSaveBody(bodyObj, licenseId, taCR, opts) {
+    if (!bodyObj || !taCR || String(taCR.dataset.licenseId) !== String(licenseId)) return;
+    var merged = customerRenewalMergedOrBlockText(taCR);
+    var allowEmpty = opts && opts.allowEmpty;
+    /* Solo enviar vacío si se pide explícitamente (p. ej. quitar la última fila tras rechazar/vender). */
+    if (allowEmpty || String(merged || '').trim() !== '') {
+      bodyObj.customer_renewal_notes = merged != null ? merged : '';
+    }
+  }
+
+  function markCustomerRenewalDirty(taCR) {
+    if (taCR) taCR.dataset.customerRenewalDirty = '1';
+  }
+
+  function clearCustomerRenewalDirty(taCR) {
+    if (taCR) delete taCR.dataset.customerRenewalDirty;
+  }
+
+  function licenseRowRenewCustomerAccount(licenseRow) {
+    if (!licenseRow || licenseRow.renew_customer_account == null) return false;
+    var v = licenseRow.renew_customer_account;
+    if (v === true || v === 1) return true;
+    if (typeof v === 'string') {
+      var s = String(v).trim().toLowerCase();
+      return s === '1' || s === 'true' || s === 'yes';
+    }
+    return false;
+  }
+
+  function syncCustomerRenewalBlocUiForLicense(licenseRow, taCustomerRenewal) {
+    var renewMode = licenseRowRenewCustomerAccount(licenseRow);
+    var heading = getEl('adminLicenciasCustomerRenewalHeading');
+    if (heading) {
+      heading.textContent = renewMode
+        ? 'Cuentas para renovar (cliente)'
+        : 'Cuentas para renovar';
+    }
+    if (taCustomerRenewal) {
+      taCustomerRenewal.placeholder = renewMode
+        ? 'x (rechazar) o carrito compra (pasar al día).'
+        : '';
+    }
+    if (taCustomerRenewal && renewMode) {
+      unlockCustomerRenewalSplit(taCustomerRenewal);
+    }
+  }
+
   function saveNotesToServer(licenseId) {
     if (String(licenseId) === '0') return;
     var taP = getEl('adminLicenciasNotepadPersonal');
     var taL = getEl('adminLicenciasNotepadByLicense');
     var taS = getEl('adminLicenciasSuspendedNotepad');
     var taE = getEl('adminLicenciasExpiredNotepad');
+    var taCR = getEl('adminLicenciasNotepadByCustomerRenewal');
     if (!taP || !taL || !taS || !taE) return;
     if (String(taL.dataset.licenseId) !== String(licenseId)) return;
     if (String(taS.dataset.licenseId) !== String(licenseId)) return;
     if (String(taE.dataset.licenseId) !== String(licenseId)) return;
-    var body = JSON.stringify({
+    var bodyObj = {
       personal_notes: taP.value,
       license_notes: licenseMergedOrBlockText(taL),
       suspended_notes: licenseBlockText(taS),
       expired_notes: licenseBlockText(taE),
-      changes_notes: getChangesNotesMergedForLicenseId(licenseId)
-    });
+      changes_notes: getChangesNotesMergedForLicenseId(licenseId),
+    };
+    if (taCR && String(taCR.dataset.licenseId) === String(licenseId)) {
+      appendCustomerRenewalNotesToSaveBody(bodyObj, licenseId, taCR);
+    }
+    var body = JSON.stringify(bodyObj);
     if (typeof adminLicFetchJson !== 'function') return;
     adminLicFetchJson('/tienda/api/licenses/' + licenseId + '/notes', {
       method: 'PUT',
@@ -536,7 +726,10 @@
             licenseBlockText(taS),
             licenseBlockText(taE),
             undefined,
-            getChangesNotesMergedForLicenseId(licenseId)
+            getChangesNotesMergedForLicenseId(licenseId),
+            taCR && String(taCR.dataset.licenseId) === String(licenseId)
+              ? customerRenewalMergedOrBlockText(taCR)
+              : undefined
           );
         }
       })
@@ -554,6 +747,7 @@
     var taL = getEl('adminLicenciasNotepadByLicense');
     var taS = getEl('adminLicenciasSuspendedNotepad');
     var taE = getEl('adminLicenciasExpiredNotepad');
+    var taCR = getEl('adminLicenciasNotepadByCustomerRenewal');
     if (!taP || !taL || !taS || !taE) {
       return Promise.resolve({ success: false, error: 'missing_fields' });
     }
@@ -565,13 +759,20 @@
     saveCurrentLicense(taL);
     saveCurrentSuspended(taS);
     saveCurrentExpired(taE);
-    var body = JSON.stringify({
+    if (taCR && String(taCR.dataset.licenseId) === String(licenseId)) {
+      saveCurrentCustomerRenewal(taCR);
+    }
+    var bodyObj = {
       personal_notes: taP.value,
       license_notes: licenseMergedOrBlockText(taL),
       suspended_notes: licenseBlockText(taS),
       expired_notes: licenseBlockText(taE),
-      changes_notes: getChangesNotesMergedForLicenseId(licenseId)
-    });
+      changes_notes: getChangesNotesMergedForLicenseId(licenseId),
+    };
+    if (taCR && String(taCR.dataset.licenseId) === String(licenseId)) {
+      appendCustomerRenewalNotesToSaveBody(bodyObj, licenseId, taCR);
+    }
+    var body = JSON.stringify(bodyObj);
     if (typeof adminLicFetchJson !== 'function') {
       return Promise.resolve({ success: false, error: 'fetch_unavailable' });
     }
@@ -589,7 +790,10 @@
             licenseBlockText(taS),
             licenseBlockText(taE),
             undefined,
-            getChangesNotesMergedForLicenseId(licenseId)
+            getChangesNotesMergedForLicenseId(licenseId),
+            taCR && String(taCR.dataset.licenseId) === String(licenseId)
+              ? customerRenewalMergedOrBlockText(taCR)
+              : undefined
           );
         }
         return data;
@@ -597,6 +801,57 @@
       .catch(function (err) {
         if (typeof showError === 'function') {
           showError(adminLicFormatFetchError(err, 'Error al guardar notas'));
+        }
+        return { success: false, error: 'network' };
+      });
+  }
+
+  /** Guarda solo «Cuentas para renovar» de inmediato (p. ej. antes de pasar fila al día). */
+  function saveCustomerRenewalNotesImmediate(opts) {
+    clearTimeout(saveNotesTimer);
+    var taCR = getEl('adminLicenciasNotepadByCustomerRenewal');
+    if (!taCR) {
+      return Promise.resolve({ success: false, error: 'missing_customer_renewal' });
+    }
+    var licenseId = taCR.dataset.licenseId;
+    if (licenseId === undefined || licenseId === '' || String(licenseId) === '0') {
+      return Promise.resolve({ success: false, error: 'aggregate_or_empty' });
+    }
+    saveCurrentCustomerRenewal(taCR);
+    var bodyObj = {};
+    appendCustomerRenewalNotesToSaveBody(bodyObj, licenseId, taCR, opts);
+    if (!Object.prototype.hasOwnProperty.call(bodyObj, 'customer_renewal_notes')) {
+      return Promise.resolve({ success: false, error: 'empty_customer_renewal' });
+    }
+    if (typeof adminLicFetchJson !== 'function') {
+      return Promise.resolve({ success: false, error: 'fetch_unavailable' });
+    }
+    return adminLicFetchJson('/tienda/api/licenses/' + licenseId + '/notes', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(bodyObj),
+    })
+      .then(function (data) {
+        if (data.success) {
+          clearCustomerRenewalDirty(taCR);
+          if (typeof window.patchLicenseNotesCache === 'function') {
+            window.patchLicenseNotesCache(
+              licenseId,
+              undefined,
+              undefined,
+              undefined,
+              undefined,
+              undefined,
+              undefined,
+              customerRenewalMergedOrBlockText(taCR)
+            );
+          }
+        }
+        return data;
+      })
+      .catch(function (err) {
+        if (typeof showError === 'function') {
+          showError(adminLicFormatFetchError(err, 'Error al guardar cuentas para renovar'));
         }
         return { success: false, error: 'network' };
       });
@@ -641,6 +896,7 @@
     var taL = getEl('adminLicenciasNotepadByLicense');
     var taS = getEl('adminLicenciasSuspendedNotepad');
     var taE = getEl('adminLicenciasExpiredNotepad');
+    var taCR = getEl('adminLicenciasNotepadByCustomerRenewal');
     if (!taP || !taL || !taS || !taE) return;
 
     var buP = getEl('adminUndoRedoPersonalUndo');
@@ -651,18 +907,22 @@
     var brS = getEl('adminUndoRedoSuspendedRedo');
     var buE = getEl('adminUndoRedoExpiredUndo');
     var brE = getEl('adminUndoRedoExpiredRedo');
+    var buCR = getEl('adminUndoRedoCustomerRenewalUndo');
+    var brCR = getEl('adminUndoRedoCustomerRenewalRedo');
 
     function persistNotesFromUndoRedo() {
       saveCurrentPersonal(taP);
       saveCurrentLicense(taL);
       saveCurrentSuspended(taS);
       saveCurrentExpired(taE);
+      if (taCR) saveCurrentCustomerRenewal(taCR);
       var lid = taL.dataset.licenseId;
       if (lid) scheduleSaveNotes(lid);
       refreshLicenseLineBadge();
       refreshPersonalLineBadge();
       refreshSuspendedLineBadge();
       refreshExpiredLineBadge();
+      refreshCustomerRenewalLineBadge();
       refreshChangesLineBadge();
     }
 
@@ -791,6 +1051,39 @@
       );
     }
 
+    var custRootUndo = getEl('adminLicenciasCustomerRenewalSplitRoot');
+    if (
+      taCR &&
+      custRootUndo &&
+      typeof window.customerRenewalLicenseSplitGetMergedText === 'function' &&
+      typeof window.customerRenewalLicenseSplitApplyMergedText === 'function'
+    ) {
+      undoNotepadControllers.push(
+        attach(custRootUndo, {
+          listenElement: custRootUndo,
+          useFocusOutDelegate: true,
+          getPlainText: function () {
+            return window.customerRenewalLicenseSplitGetMergedText(custRootUndo);
+          },
+          setPlainText: function (text) {
+            window.customerRenewalLicenseSplitApplyMergedText(custRootUndo, text != null ? text : '');
+          },
+          undoBtn: buCR,
+          redoBtn: brCR,
+          onPersist: persistNotesFromUndoRedo,
+          afterVisual: function () {
+            if (typeof window.customerRenewalLicenseSplitSyncRowsToTextarea === 'function') {
+              window.customerRenewalLicenseSplitSyncRowsToTextarea(custRootUndo);
+            }
+            if (typeof window.customerRenewalLicenseSplitScheduleAutosize === 'function') {
+              window.customerRenewalLicenseSplitScheduleAutosize(custRootUndo);
+            }
+            refreshCustomerRenewalLineBadge();
+          }
+        })
+      );
+    }
+
   }
 
   function lockNotepadEditable(el) {
@@ -862,6 +1155,24 @@
       window.expiredLicenseSplitLock(root);
     } else {
       lockNotepadEditable(taExpired);
+    }
+  }
+
+  function lockCustomerRenewalSplit(taCustomerRenewal) {
+    var root = getEl('adminLicenciasCustomerRenewalSplitRoot');
+    if (root && typeof window.customerRenewalLicenseSplitLock === 'function') {
+      window.customerRenewalLicenseSplitLock(root);
+    } else if (taCustomerRenewal) {
+      lockNotepadEditable(taCustomerRenewal);
+    }
+  }
+
+  function unlockCustomerRenewalSplit(taCustomerRenewal) {
+    var root = getEl('adminLicenciasCustomerRenewalSplitRoot');
+    if (root && typeof window.customerRenewalLicenseSplitUnlock === 'function') {
+      window.customerRenewalLicenseSplitUnlock(root);
+    } else if (taCustomerRenewal) {
+      unlockNotepadEditable(taCustomerRenewal);
     }
   }
 
@@ -1047,6 +1358,77 @@
     }
     if (typeof window.expiredLicenseSplitWireScrollSync === 'function') {
       window.expiredLicenseSplitWireScrollSync();
+    }
+    if (typeof window.customerRenewalLicenseSplitWireScrollSync === 'function') {
+      window.customerRenewalLicenseSplitWireScrollSync();
+    }
+
+    var taCustomerRenewal = getEl('adminLicenciasNotepadByCustomerRenewal');
+    if (taCustomerRenewal) {
+      taCustomerRenewal.addEventListener('input', function () {
+        var custRoot = getEl('adminLicenciasCustomerRenewalSplitRoot');
+        if (custRoot && typeof window.customerRenewalLicenseSplitSyncRowsToTextarea === 'function') {
+          window.customerRenewalLicenseSplitSyncRowsToTextarea(custRoot);
+        }
+        markCustomerRenewalDirty(taCustomerRenewal);
+        saveCurrentCustomerRenewal(taCustomerRenewal);
+        refreshCustomerRenewalLineBadge();
+        var lid = taCustomerRenewal.dataset.licenseId;
+        if (lid) scheduleSaveNotes(lid);
+      });
+      taCustomerRenewal.addEventListener('blur', function () {
+        var custRoot = getEl('adminLicenciasCustomerRenewalSplitRoot');
+        if (custRoot && typeof window.customerRenewalLicenseSplitSyncRowsToTextarea === 'function') {
+          window.customerRenewalLicenseSplitSyncRowsToTextarea(custRoot);
+        }
+        if (typeof window.customerRenewalLicenseSplitNormalizeCredTaForRenewMode === 'function') {
+          window.customerRenewalLicenseSplitNormalizeCredTaForRenewMode(taCustomerRenewal);
+        }
+        if (typeof window.customerRenewalLicenseSplitProcessCredResponses === 'function') {
+          window.customerRenewalLicenseSplitProcessCredResponses(taCustomerRenewal);
+        }
+        if (typeof window.customerRenewalLicenseSplitScheduleAutosize === 'function') {
+          window.customerRenewalLicenseSplitScheduleAutosize(custRoot);
+        }
+      });
+    }
+
+    var custRowsEl = getEl('adminLicenciasCustomerRenewalStructuredRows');
+    if (custRowsEl && taCustomerRenewal) {
+      custRowsEl.addEventListener('input', function () {
+        markCustomerRenewalDirty(taCustomerRenewal);
+        saveCurrentCustomerRenewal(taCustomerRenewal);
+        refreshCustomerRenewalLineBadge();
+        var lid = taCustomerRenewal.dataset.licenseId;
+        if (lid) scheduleSaveNotes(lid);
+      });
+      custRowsEl.addEventListener('change', function () {
+        markCustomerRenewalDirty(taCustomerRenewal);
+        saveCurrentCustomerRenewal(taCustomerRenewal);
+        refreshCustomerRenewalLineBadge();
+        var lid = taCustomerRenewal.dataset.licenseId;
+        if (lid) scheduleSaveNotes(lid);
+      });
+      custRowsEl.addEventListener('click', function (e) {
+        var rejectBtn = e.target.closest && e.target.closest('.license-split-editor__reject-btn');
+        if (rejectBtn) {
+          e.preventDefault();
+          e.stopPropagation();
+          var rejectRow = rejectBtn.closest('.license-split-editor__row');
+          if (rejectRow && typeof window.adminCustomerRenewalSplitRejectRow === 'function') {
+            window.adminCustomerRenewalSplitRejectRow(rejectRow);
+          }
+          return;
+        }
+        var btn = e.target.closest && e.target.closest('.license-split-editor__sell-btn');
+        if (!btn) return;
+        e.preventDefault();
+        e.stopPropagation();
+        var row = btn.closest('.license-split-editor__row');
+        if (row && typeof window.adminCustomerRenewalSplitSellRowToDay === 'function') {
+          window.adminCustomerRenewalSplitSellRowToDay(row);
+        }
+      });
     }
 
     taSuspended.addEventListener('input', function () {
@@ -1343,6 +1725,70 @@
       });
     }
 
+    var custRoot = getEl('adminLicenciasCustomerRenewalSplitRoot');
+    if (custRoot && taCustomerRenewal) {
+      custRoot.addEventListener(
+        'mousedown',
+        function (e) {
+          if (String(taCustomerRenewal.dataset.licenseId || '') === '0') return;
+          if (!custRoot.classList.contains('license-notepad--locked')) return;
+          var inCreds =
+            e.target === taCustomerRenewal ||
+            (e.target.closest && e.target.closest('.license-split-editor__creds-cell'));
+          var inSide = e.target.closest && e.target.closest('.license-split-editor__side');
+          if (!inCreds && !inSide) return;
+          unlockCustomerRenewalSplit(taCustomerRenewal);
+          var cell =
+            e.target.closest &&
+            e.target.closest(
+              '.license-split-editor__user, .license-split-editor__status-good, .license-split-editor__status-bad, .license-split-editor__otro-combined, .license-split-editor__note'
+            );
+          if (!cell && e.target.closest) {
+            var urow = e.target.closest('.license-split-editor__row');
+            if (urow) {
+              cell =
+                urow.querySelector('.license-split-editor__user') ||
+                urow.querySelector('.license-split-editor__status-bad') ||
+                urow.querySelector('.license-split-editor__note');
+            }
+          }
+          if (inSide && cell) {
+            e.preventDefault();
+            cell.focus();
+          } else if (inSide) {
+            e.preventDefault();
+            taCustomerRenewal.focus();
+          } else if (inCreds) {
+            e.preventDefault();
+            taCustomerRenewal.focus();
+          }
+        },
+        true
+      );
+      custRoot.addEventListener('focusout', function () {
+        if (String(taCustomerRenewal.dataset.licenseId || '') === '0') return;
+        window.setTimeout(function () {
+          var a = document.activeElement;
+          if (a && custRoot.contains(a)) return;
+          if (typeof window.customerRenewalLicenseSplitNormalizeCredTaForRenewMode === 'function') {
+            window.customerRenewalLicenseSplitNormalizeCredTaForRenewMode(taCustomerRenewal);
+          }
+          var processPromise =
+            typeof window.customerRenewalLicenseSplitProcessCredResponses === 'function'
+              ? window.customerRenewalLicenseSplitProcessCredResponses(taCustomerRenewal)
+              : Promise.resolve(false);
+          Promise.resolve(processPromise).then(function () {
+            saveCurrentCustomerRenewal(taCustomerRenewal);
+            flushPendingNotesSave();
+            if (String(taCustomerRenewal.dataset.renewCustomerAccount || '') === '1') {
+              return;
+            }
+            lockCustomerRenewalSplit(taCustomerRenewal);
+          });
+        }, 0);
+      });
+    }
+
     if (!window._adminLicNotesVisHook) {
       window._adminLicNotesVisHook = true;
       document.addEventListener('visibilitychange', function () {
@@ -1360,6 +1806,7 @@
     lockSuspendedSplit(taSuspended);
     lockExpiredSplit(taExpired);
     lockChangesSplit();
+    if (taCustomerRenewal) lockCustomerRenewalSplit(taCustomerRenewal);
 
     initUndoNotepads();
 
@@ -1378,6 +1825,9 @@
           if (typeof window.expiredLicenseSplitScheduleAutosize === 'function') {
             window.expiredLicenseSplitScheduleAutosize();
           }
+          if (typeof window.customerRenewalLicenseSplitScheduleAutosize === 'function') {
+            window.customerRenewalLicenseSplitScheduleAutosize();
+          }
           if (typeof window.changesLicenseSplitScheduleAutosize === 'function') {
             window.changesLicenseSplitScheduleAutosize();
           }
@@ -1393,6 +1843,7 @@
     var taLicense = getEl('adminLicenciasNotepadByLicense');
     var taSuspended = getEl('adminLicenciasSuspendedNotepad');
     var taExpired = getEl('adminLicenciasExpiredNotepad');
+    var taCustomerRenewal = getEl('adminLicenciasNotepadByCustomerRenewal');
     if (!taPersonal || !taLicense || !taSuspended || !taExpired) return;
 
     var idStr = String(licenseId);
@@ -1402,6 +1853,9 @@
         saveLicenseForId(currentLicenseId, licenseMergedOrBlockText(taLicense));
         saveSuspendedForId(currentLicenseId, licenseBlockText(taSuspended));
         saveExpiredForId(currentLicenseId, licenseBlockText(taExpired));
+        if (taCustomerRenewal) {
+          saveCustomerRenewalForId(currentLicenseId, customerRenewalMergedOrBlockText(taCustomerRenewal));
+        }
       }
       flushPendingNotesSave();
     }
@@ -1411,10 +1865,16 @@
     taLicense.dataset.licenseId = idStr;
     taSuspended.dataset.licenseId = idStr;
     taExpired.dataset.licenseId = idStr;
+    if (taCustomerRenewal) taCustomerRenewal.dataset.licenseId = idStr;
+    if (taCustomerRenewal) {
+      taCustomerRenewal.dataset.renewCustomerAccount = licenseRowRenewCustomerAccount(licenseRow) ? '1' : '0';
+    }
     var suspRootBind = getEl('adminLicenciasSuspendedSplitRoot');
     if (suspRootBind) suspRootBind.dataset.licenseId = idStr;
     var expRootBind = getEl('adminLicenciasExpiredSplitRoot');
     if (expRootBind) expRootBind.dataset.licenseId = idStr;
+    var custRootBind = getEl('adminLicenciasCustomerRenewalSplitRoot');
+    if (custRootBind) custRootBind.dataset.licenseId = idStr;
 
     if (String(licenseId) === '0') {
       taPersonal.value =
@@ -1428,6 +1888,10 @@
       );
       var splitSide = document.querySelector('#adminLicenciasLicenseSplitRoot .license-split-editor__side');
       if (splitSide) splitSide.hidden = true;
+      var custSplitSide = document.querySelector(
+        '#adminLicenciasCustomerRenewalSplitRoot .license-split-editor__side'
+      );
+      if (custSplitSide) custSplitSide.hidden = true;
       setLicenseBlockPlainText(
         taSuspended,
         'En la vista «Todos» no se editan cuentas caídas aquí. Elige una plataforma.'
@@ -1436,17 +1900,25 @@
         taExpired,
         'En la vista «Todos» no se editan cuentas vencidas aquí. Elige una plataforma.'
       );
+      if (taCustomerRenewal) {
+        setLicenseBlockPlainText(
+          taCustomerRenewal,
+          'En la vista «Todos» no se editan cuentas para renovar aquí. Elige una plataforma.'
+        );
+      }
       setLicenseHeading(productName || 'Todos');
       resetUndoNotepads();
       lockNotepadEditable(taPersonal);
       lockLicenseSplit(taLicense);
       lockSuspendedSplit(taSuspended);
       lockExpiredSplit(taExpired);
+      if (taCustomerRenewal) lockCustomerRenewalSplit(taCustomerRenewal);
       lockChangesSplit();
       refreshLicenseLineBadge();
       refreshPersonalLineBadge();
       refreshSuspendedLineBadge();
       refreshExpiredLineBadge();
+      refreshCustomerRenewalLineBadge();
       refreshChangesLineBadge();
       if (typeof window.adminLicenseSplitScheduleAutosizeCreds === 'function') {
         window.requestAnimationFrame(function () {
@@ -1474,10 +1946,21 @@
     taPersonal.readOnly = false;
     var splitSideOpen = document.querySelector('#adminLicenciasLicenseSplitRoot .license-split-editor__side');
     if (splitSideOpen) splitSideOpen.hidden = false;
+    var custSplitSideOpen = document.querySelector(
+      '#adminLicenciasCustomerRenewalSplitRoot .license-split-editor__side'
+    );
+    if (custSplitSideOpen) custSplitSideOpen.hidden = false;
     loadPersonalForId(licenseId, taPersonal, licenseRow);
     loadLicenseForId(licenseId, taLicense, licenseRow);
     loadSuspendedForId(licenseId, taSuspended, licenseRow);
     loadExpiredForId(licenseId, taExpired, licenseRow);
+    if (taCustomerRenewal) {
+      loadCustomerRenewalForId(licenseId, taCustomerRenewal, licenseRow);
+      if (licenseRow) {
+        refreshCustomerRenewalSplitFromApi(licenseRow);
+      }
+      syncCustomerRenewalBlocUiForLicense(licenseRow, taCustomerRenewal);
+    }
     var sanitizedLicense = sanitizeStandaloneGenericoInLicenseSplit(taLicense);
     var sanitizedSuspended = sanitizeStandaloneGenericoInSuspendedSplit(taSuspended);
     var sanitizedExpired = sanitizeStandaloneGenericoInExpiredSplit(taExpired);
@@ -1498,11 +1981,15 @@
     lockLicenseSplit(taLicense);
     lockSuspendedSplit(taSuspended);
     lockExpiredSplit(taExpired);
+    if (taCustomerRenewal && (!licenseRow || !licenseRowRenewCustomerAccount(licenseRow))) {
+      lockCustomerRenewalSplit(taCustomerRenewal);
+    }
     lockChangesSplit();
     refreshLicenseLineBadge();
     refreshPersonalLineBadge();
     refreshSuspendedLineBadge();
     refreshExpiredLineBadge();
+    refreshCustomerRenewalLineBadge();
     refreshChangesLineBadge();
     if (typeof window.refreshChangesProductsListing === 'function') {
       window.refreshChangesProductsListing();
@@ -1517,6 +2004,11 @@
         window.expiredLicenseSplitScheduleAutosize();
       });
     }
+    if (typeof window.customerRenewalLicenseSplitScheduleAutosize === 'function') {
+      window.requestAnimationFrame(function () {
+        window.customerRenewalLicenseSplitScheduleAutosize();
+      });
+    }
     if (typeof window.changesLicenseSplitScheduleAutosize === 'function') {
       window.requestAnimationFrame(function () {
         window.changesLicenseSplitScheduleAutosize();
@@ -1529,14 +2021,48 @@
     var taLicense = getEl('adminLicenciasNotepadByLicense');
     var taSuspended = getEl('adminLicenciasSuspendedNotepad');
     var taExpired = getEl('adminLicenciasExpiredNotepad');
+    var taCustomerRenewal = getEl('adminLicenciasNotepadByCustomerRenewal');
     if (!taLicense || !taSuspended || !taExpired || currentLicenseId === null) return;
     savePersonalForId(currentLicenseId, taPersonal ? taPersonal.value : '');
     saveLicenseForId(currentLicenseId, licenseMergedOrBlockText(taLicense));
     saveSuspendedForId(currentLicenseId, licenseBlockText(taSuspended));
     saveExpiredForId(currentLicenseId, licenseBlockText(taExpired));
+    if (taCustomerRenewal) {
+      saveCustomerRenewalForId(currentLicenseId, customerRenewalMergedOrBlockText(taCustomerRenewal));
+    }
     flushPendingNotesSave();
     currentLicenseId = null;
     setLicenseHeading('');
+  }
+
+  function refreshCustomerRenewalSplitFromApi(licenseRow) {
+    if (!licenseRow || licenseRow.id == null) return;
+    var idStr = String(licenseRow.id);
+    var taCR = getEl('adminLicenciasNotepadByCustomerRenewal');
+    if (!taCR || String(taCR.dataset.licenseId) !== idStr) return;
+    if (!Object.prototype.hasOwnProperty.call(licenseRow, 'customer_renewal_notes')) return;
+    var v = licenseRow.customer_renewal_notes != null ? String(licenseRow.customer_renewal_notes) : '';
+    v = stripStandaloneGenericoLines(v);
+    var curKey = customerRenewalCredColumnKeyFromOpenBloc(taCR);
+    var nextKey = customerRenewalCredColumnKeyFromStorageText(v);
+    var forceApply = nextKey.trim() !== '' && curKey.trim() === '';
+    if (!forceApply && curKey === nextKey) return;
+    if (typeof window.customerRenewalLicenseSplitApplyMergedText === 'function') {
+      var root = getEl('adminLicenciasCustomerRenewalSplitRoot');
+      if (root) {
+        window.customerRenewalLicenseSplitApplyMergedText(root, v);
+      }
+    } else {
+      setLicenseBlockPlainText(taCR, v);
+    }
+    saveCustomerRenewalForId(idStr, customerRenewalMergedOrBlockText(taCR));
+    clearCustomerRenewalDirty(taCR);
+    refreshCustomerRenewalLineBadge();
+    if (typeof window.customerRenewalLicenseSplitScheduleAutosize === 'function') {
+      window.requestAnimationFrame(function () {
+        window.customerRenewalLicenseSplitScheduleAutosize();
+      });
+    }
   }
 
   function refreshLicenseSplitFromApi(licenseRow) {
@@ -1574,11 +2100,14 @@
 
   window.initAdminLicenciasNotepad = init;
   window.adminLicenciasSaveCurrentLicenseNotesImmediate = saveCurrentLicenseNotesImmediate;
+  window.adminLicenciasSaveCustomerRenewalNotesImmediate = saveCustomerRenewalNotesImmediate;
   window.adminLicenciasScheduleSaveChangesNotesOnly = scheduleSaveChangesNotesOnly;
   window.adminLicenciasFlushPendingChangesNotesSaves = flushPendingChangesNotesSaves;
   window.AdminLicenciasNotepad = {
     bindLicense: bindLicense,
     flushLicense: flushLicense,
-    refreshLicenseSplitFromApi: refreshLicenseSplitFromApi
+    refreshLicenseSplitFromApi: refreshLicenseSplitFromApi,
+    refreshCustomerRenewalSplitFromApi: refreshCustomerRenewalSplitFromApi,
+    customerRenewalSplitNeedsForcedServerSync: customerRenewalSplitNeedsForcedServerSync
   };
 })();

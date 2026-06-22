@@ -175,6 +175,14 @@ def purge_sales_batched(retention_days, user_id=None, batch_size=PURGE_BATCH_SIZ
     purge_snapshots_batched(retention_days, user_id=user_id)
 
     try:
+        from app.store.proveedor_daily_summaries import purge_proveedor_daily_summaries_before
+
+        cutoff_day = (get_colombia_now().date() - timedelta(days=max(0, int(retention_days or 0))))
+        purge_proveedor_daily_summaries_before(cutoff_day, user_id=user_id)
+    except Exception as prov_purge_exc:
+        logger.warning('Limpieza resúmenes proveedor: %s', prov_purge_exc)
+
+    try:
         from flask import current_app
         from app.services.disk_orphan_maintenance import run_disk_orphan_maintenance
 

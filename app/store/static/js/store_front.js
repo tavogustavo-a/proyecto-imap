@@ -61,6 +61,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
   function catalogTableRowHasNoStock(row) {
     if (!row) return false;
+    if (String(row.getAttribute('data-renew-customer-account') || '') === '1') return false;
     const raw = row.getAttribute('data-stock');
     if (raw !== null && raw !== '') {
       return (parseInt(raw, 10) || 0) <= 0;
@@ -110,6 +111,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
   function cardHasNoStock(card) {
     if (!card) return false;
+    if (productShellAllowsRenewCustomerAccount(card)) return false;
     const stock = parseStockFromCard(card);
     if (stock !== null) return stock <= 0;
     if (card.classList.contains('store-front-product-card--no-stock')) return true;
@@ -257,8 +259,11 @@ document.addEventListener('DOMContentLoaded', function() {
   function applyTableRowStockVisual(productId, count) {
     const n = Math.max(0, parseInt(count, 10) || 0);
     document.querySelectorAll('.store-products-table__row[data-product-id="' + productId + '"]').forEach(function (row) {
+      const renewCustomer = row.getAttribute('data-renew-customer-account') === '1';
       row.setAttribute('data-stock', String(n));
-      row.classList.toggle('store-products-table__row--no-stock', n <= 0);
+      if (!renewCustomer) {
+        row.classList.toggle('store-products-table__row--no-stock', n <= 0);
+      }
       const stockEl = row.querySelector('.product-stock-info[data-product-id]');
       if (stockEl) {
         applyStockBadgeVisual(stockEl, n);
@@ -267,7 +272,9 @@ document.addEventListener('DOMContentLoaded', function() {
     const card = document.querySelector('.card.product-card[data-id="' + productId + '"]');
     if (card) {
       card.setAttribute('data-stock', String(n));
-      card.classList.toggle('store-front-product-card--no-stock', n <= 0);
+      if (card.getAttribute('data-renew-customer-account') !== '1') {
+        card.classList.toggle('store-front-product-card--no-stock', n <= 0);
+      }
     }
   }
 
@@ -646,6 +653,7 @@ document.addEventListener('DOMContentLoaded', function() {
       }
       if (p.es_renovar_cuenta_cliente) {
         row.es_renovar_cuenta_cliente = true;
+        row.customer_credential = p.customer_credential || '';
         row.customer_email = p.customer_email || '';
         row.customer_password = p.customer_password || '';
       }
@@ -864,13 +872,13 @@ document.addEventListener('DOMContentLoaded', function() {
       const logoBadge = producto.es_renovacion
         ? '<span class="renovacion-logo-badge" title="Renovación"><i class="fas fa-sync-alt"></i></span>'
         : producto.es_renovar_cuenta_cliente
-          ? '<span class="renovacion-logo-badge renovacion-logo-badge--cuenta-cliente" title="Renovar su cuenta"><i class="fas fa-user-check"></i></span>'
+          ? '<span class="renovacion-logo-badge renovacion-logo-badge--cuenta-cliente" title="Renovar tu cuenta"><i class="fas fa-user-check"></i></span>'
           : '';
 
       const cuentaClienteSub =
-        producto.es_renovar_cuenta_cliente && producto.customer_email
+        producto.es_renovar_cuenta_cliente && (producto.customer_credential || producto.customer_email)
           ? '<div class="carrito-cuenta-cliente-email">' +
-            tiendaEscapeHtmlParaModal(producto.customer_email) +
+            tiendaEscapeHtmlParaModal(producto.customer_credential || producto.customer_email) +
             '</div>'
           : '';
 
@@ -1178,10 +1186,6 @@ document.addEventListener('DOMContentLoaded', function() {
     btn.addEventListener('click', function() {
       const shell = resolveProductPurchaseShell(btn);
       if (!shell) return;
-      if (productShellAllowsRenewCustomerAccount(shell.root)) {
-        alert('Este producto usa «Renovar»: envía tu cuenta con el botón azul Renovar.');
-        return;
-      }
       const nombre = shell.name();
       const input = shell.input();
       let cantidadPedida = input ? parseInt(input.value, 10) || 1 : 1;
@@ -1256,15 +1260,22 @@ document.addEventListener('DOMContentLoaded', function() {
   const descModalText = document.getElementById('descModalText');
   const closeDescModalBtn = document.getElementById('closeDescModalBtn');
 
-  // Click en el icono
-  document.querySelectorAll('.btn-show-desc').forEach(el => {
-    el.addEventListener('click', function() {
-      descModalText.innerHTML = el.getAttribute('data-desc');
-      descModal.classList.remove('modal-hidden');
-      setTimeout(() => {
-        descModal.addEventListener('mousedown', closeOnOutsideClick);
-      }, 10);
-    });
+  // Click en iconos de información / descripción (delegación: también etiquetas dinámicas)
+  document.addEventListener('click', function (e) {
+    var btn = e.target.closest && e.target.closest('.btn-show-desc');
+    if (!btn || !descModal || !descModalText) return;
+    e.preventDefault();
+    e.stopPropagation();
+    descModalText.textContent = btn.getAttribute('data-desc') || '';
+    descModal.classList.remove('modal-hidden');
+    setTimeout(function () {
+      descModal.addEventListener('mousedown', closeOnOutsideClick);
+    }, 10);
+  });
+
+  // Compat: evitar doble handler en elementos ya enlazados al cargar
+  document.querySelectorAll('.btn-show-desc').forEach(function (el) {
+    el.dataset.descWired = '1';
   });
 
   // Click en el botón de cerrar
@@ -2280,12 +2291,12 @@ document.addEventListener('DOMContentLoaded', function() {
     var resBtn = root.querySelector('.btn-reservar-producto-tienda');
     var pending = !!pendingReservationProductIds[pid];
     var showRenewCustomer = renewCustomer;
-    var showReserve = !showRenewCustomer && reservable && stock !== null && stock <= 0;
-    if (qtyRow) qtyRow.style.display = showRenewCustomer || showReserve ? 'none' : '';
+    var showReserve = reservable && stock !== null && stock <= 0;
+    if (qtyRow) qtyRow.style.display = showReserve ? 'none' : '';
     if (renewBlock) renewBlock.style.display = showRenewCustomer ? '' : 'none';
     if (addBtn) {
-      addBtn.hidden = showRenewCustomer || showReserve;
-      addBtn.style.display = showRenewCustomer || showReserve ? 'none' : '';
+      addBtn.hidden = showReserve;
+      addBtn.style.display = showReserve ? 'none' : '';
     }
     if (resBtn) {
       resBtn.hidden = !showReserve;
@@ -2294,13 +2305,6 @@ document.addEventListener('DOMContentLoaded', function() {
       resBtn.textContent = pending ? 'Reservado' : 'Reservar';
       resBtn.classList.toggle('btn-reservar-producto-tienda--pending', pending);
     }
-    var stockEls = root.querySelectorAll('.product-stock-info');
-    stockEls.forEach(function (el) {
-      if (showRenewCustomer) {
-        el.textContent = 'Renovar su cuenta';
-        el.classList.remove('product-stock-info--zero');
-      }
-    });
   }
 
   function syncAllProductReserveUi() {
@@ -2457,6 +2461,50 @@ document.addEventListener('DOMContentLoaded', function() {
     if (form) form.reset();
   }
 
+  function isValidRenewCustomerEmail(value) {
+    var em = String(value || '').trim();
+    if (!em || em.indexOf('@') < 0) return false;
+    var domain = em.slice(em.indexOf('@') + 1);
+    return domain.indexOf('.') >= 0;
+  }
+
+  function parseRenovarCuentaClienteCredLine(credLine) {
+    var raw = String(credLine || '').trim();
+    if (!raw) {
+      return { ok: false, message: 'Indica el correo de la cuenta a renovar.' };
+    }
+    var colon = raw.match(/^([^\s:]+@[^\s:]+\.\S+):(\S+)/);
+    if (colon) {
+      return {
+        ok: true,
+        credential: raw,
+        email: colon[1].trim(),
+        password: colon[2].trim(),
+      };
+    }
+    var space = raw.match(/^([^\s]+@[^\s]+\.\S+)\s+(\S+)/);
+    if (space) {
+      return {
+        ok: true,
+        credential: raw,
+        email: space[1].trim(),
+        password: space[2].trim(),
+      };
+    }
+    if (isValidRenewCustomerEmail(raw) && !/\s/.test(raw) && raw.indexOf(':') < 0) {
+      return {
+        ok: true,
+        credential: raw,
+        email: raw,
+        password: '',
+      };
+    }
+    return {
+      ok: false,
+      message: 'Indica un correo válido (con @ y punto). Opcional: añade la contraseña en la misma línea.',
+    };
+  }
+
   function openRenovarCuentaClienteModal(shell) {
     if (!shell) return;
     var modal = document.getElementById('renovarCuentaClienteModal');
@@ -2465,11 +2513,11 @@ document.addEventListener('DOMContentLoaded', function() {
     renovarCuentaClientePendingShell = shell;
     if (nameEl) nameEl.textContent = shell.name() || 'Producto';
     modal.classList.remove('modal-hidden');
-    var emailInput = document.getElementById('renovarCuentaClienteEmail');
-    if (emailInput) window.setTimeout(function () { emailInput.focus(); }, 80);
+    var credInput = document.getElementById('renovarCuentaClienteCred');
+    if (credInput) window.setTimeout(function () { credInput.focus(); }, 80);
   }
 
-  function addRenovarCuentaClienteToCart(shell, email, password) {
+  function addRenovarCuentaClienteToCart(shell, credential, email, password) {
     var pid = shell.id();
     var nombre = shell.name();
     var img = shell.img();
@@ -2490,6 +2538,7 @@ document.addEventListener('DOMContentLoaded', function() {
       precio_unitario: precio_unitario,
       moneda: moneda,
       es_renovar_cuenta_cliente: true,
+      customer_credential: credential,
       customer_email: email,
       customer_password: password,
       line_uid: 'rc_' + Date.now() + '_' + Math.random().toString(36).slice(2, 9),
@@ -2505,26 +2554,6 @@ document.addEventListener('DOMContentLoaded', function() {
       if (!shell) return;
       if (!productShellAllowsRenewCustomerAccount(shell.root)) {
         alert('Este producto no admite renovar con cuenta del cliente.');
-        return;
-      }
-      var emailEl = shell.root.querySelector('.product-renovar-cuenta-email');
-      var passEl = shell.root.querySelector('.product-renovar-cuenta-password');
-      if (emailEl && passEl) {
-        var email = (emailEl.value || '').trim();
-        var password = (passEl.value || '').trim();
-        if (!email || email.indexOf('@') < 1) {
-          alert('Indica el correo de la cuenta que quieres renovar.');
-          emailEl.focus();
-          return;
-        }
-        if (!password) {
-          alert('Indica la contraseña de la cuenta que quieres renovar.');
-          passEl.focus();
-          return;
-        }
-        addRenovarCuentaClienteToCart(shell, email, password);
-        emailEl.value = '';
-        passEl.value = '';
         return;
       }
       openRenovarCuentaClienteModal(shell);
@@ -2544,17 +2573,18 @@ document.addEventListener('DOMContentLoaded', function() {
     renovarCuentaForm.addEventListener('submit', function (e) {
       e.preventDefault();
       if (!renovarCuentaClientePendingShell) return;
-      var email = (document.getElementById('renovarCuentaClienteEmail').value || '').trim();
-      var password = (document.getElementById('renovarCuentaClientePassword').value || '').trim();
-      if (!email || email.indexOf('@') < 1) {
-        alert('Indica un correo válido de la cuenta a renovar.');
+      var credLine = (document.getElementById('renovarCuentaClienteCred').value || '').trim();
+      var parsed = parseRenovarCuentaClienteCredLine(credLine);
+      if (!parsed.ok) {
+        alert(parsed.message);
         return;
       }
-      if (!password) {
-        alert('Indica la contraseña de la cuenta a renovar.');
-        return;
-      }
-      addRenovarCuentaClienteToCart(renovarCuentaClientePendingShell, email, password);
+      addRenovarCuentaClienteToCart(
+        renovarCuentaClientePendingShell,
+        parsed.credential,
+        parsed.email,
+        parsed.password
+      );
       closeRenovarCuentaClienteModal();
     });
   }
