@@ -32,7 +32,8 @@
       <button type="button" class="admin-lic-bulk-info-modal__close" data-admin-lic-proveedor-ventas-info-dismiss="1" title="Cerrar" aria-label="Cerrar"><i class="fas fa-times" aria-hidden="true"></i></button>
     </div>
     <div class="admin-lic-bulk-info-modal__body">
-      <p class="admin-lic-bulk-info-modal__lead">Licencias vendidas por servicio para cada usuario proveedor. El contador sube con ventas en tienda y entregas masivas del admin.</p>
+      <p class="admin-lic-bulk-info-modal__lead">Contador operativo por servicio: sube con cada venta en tienda o entrega masiva del admin. Puedes resetearlo a cero con el botón <i class="fas fa-undo" aria-hidden="true"></i> junto a cada servicio.</p>
+      <p class="admin-lic-bulk-info-modal__text"><strong>No es lo mismo que el historial de estadísticas.</strong> Allí las ventas del período se calculan desde la base de datos (solo ventas a terceros) y los resúmenes diarios son un registro persistido por día. Este contador es acumulado desde el último reset y puede diferir si hubo ventas antes del resumen, reset manual o limpieza masiva del historial.</p>
     </div>
     <div class="admin-lic-bulk-info-modal__footer">
       <button type="button" class="btn-blue menu-btn-worksheet" id="adminLicProveedorVentasInfoOkBtn" data-admin-lic-proveedor-ventas-info-dismiss="1">Entendido</button>

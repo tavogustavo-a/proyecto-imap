@@ -1,7 +1,7 @@
 /**
- * SSE para recargas de saldo: el servidor empuja solo cuando hay cambios (sin polling).
- * Una sola conexión EventSource por URL (varios listeners comparten el stream).
- * En error cierra el stream y reconecta con backoff (evita ERR_CONNECTION_RESET en bucle).
+ * SSE compartido (tienda): pool por URL, reconexión con backoff, listeners múltiples.
+ * StoreSseRealtime — callbacks directos.
+ * BalanceRechargeRealtime — mismo motor + CustomEvent `balance-recharge-realtime`.
  */
 (function (global) {
   'use strict';
@@ -10,19 +10,9 @@
   var MIN_RECONNECT_MS = 3000;
   var MAX_RECONNECT_MS = 60000;
 
-  function dispatchUpdate(data) {
-    if (!data || data.type === 'connected') return;
-    try {
-      global.dispatchEvent(
-        new global.CustomEvent('balance-recharge-realtime', { detail: data })
-      );
-    } catch (_e) {}
-  }
-
   function nextBackoffMs(pool) {
     var attempt = Math.max(0, pool.reconnectAttempt || 0);
-    var delay = Math.min(MAX_RECONNECT_MS, MIN_RECONNECT_MS * Math.pow(2, attempt));
-    return delay;
+    return Math.min(MAX_RECONNECT_MS, MIN_RECONNECT_MS * Math.pow(2, attempt));
   }
 
   function clearReconnectTimer(pool) {
@@ -31,6 +21,14 @@
       global.clearTimeout(pool.reconnectTimer);
     } catch (_t) {}
     pool.reconnectTimer = null;
+  }
+
+  function dispatchPoolEvent(pool, data) {
+    var name = pool && pool.dispatchEventName;
+    if (!name || !data || data.type === 'connected') return;
+    try {
+      global.dispatchEvent(new global.CustomEvent(name, { detail: data }));
+    } catch (_e) {}
   }
 
   function openStream(url, pool, opts) {
@@ -57,7 +55,7 @@
         var data = JSON.parse(ev.data);
         if (!data || data.type === 'connected') return;
         pool.reconnectAttempt = 0;
-        dispatchUpdate(data);
+        dispatchPoolEvent(pool, data);
         pool.listeners.slice().forEach(function (fn) {
           try {
             fn(data);
@@ -103,6 +101,7 @@
         closing: false,
         reconnectAttempt: 0,
         reconnectTimer: null,
+        dispatchEventName: opts.dispatchEventName || null,
       };
       pools[url] = pool;
       openStream(url, pool, opts);
@@ -114,7 +113,7 @@
       pool.listeners.push(onUpdate);
     }
 
-    var handle = {
+    return {
       close: function () {
         if (!pool || pool.closing) return;
         if (typeof onUpdate === 'function') {
@@ -134,11 +133,34 @@
         delete pools[url];
       },
     };
-
-    return handle;
   }
 
-  global.BalanceRechargeRealtime = {
+  function connectOrFallback(url, onUpdate, onFallback, opts) {
+    if (!url || typeof global.EventSource === 'undefined') {
+      if (typeof onFallback === 'function') {
+        try {
+          onFallback();
+        } catch (_fb) {}
+      }
+      return null;
+    }
+    return connect(url, onUpdate, opts);
+  }
+
+  function connectBalanceRecharge(url, onUpdate, opts) {
+    opts = opts || {};
+    if (!opts.dispatchEventName) {
+      opts.dispatchEventName = 'balance-recharge-realtime';
+    }
+    return connect(url, onUpdate, opts);
+  }
+
+  global.StoreSseRealtime = {
     connect: connect,
+    connectOrFallback: connectOrFallback,
+  };
+
+  global.BalanceRechargeRealtime = {
+    connect: connectBalanceRecharge,
   };
 })(window);

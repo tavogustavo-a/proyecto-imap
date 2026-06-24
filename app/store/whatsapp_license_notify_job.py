@@ -1,10 +1,9 @@
 # -*- coding: utf-8 -*-
-"""Job diario: avisos WhatsApp de licencias por vencer (Evolution API)."""
+"""Job programado: resúmenes WhatsApp de ventas y renovaciones (Evolution API)."""
 
 from __future__ import annotations
 
 import logging
-import time
 from datetime import datetime, timedelta
 from typing import Any
 
@@ -14,7 +13,6 @@ from app.store.models import WhatsAppConfig
 from app.store.whatsapp_license_notify_log import (
     append_notify_run_log,
     build_notify_log_entry,
-    notify_success_for_co_date,
 )
 from app.store.whatsapp_license_notify_schedule import (
     clear_reconnect_catchup,
@@ -27,34 +25,42 @@ from app.utils.timezone import get_colombia_datetime
 
 logger = logging.getLogger(__name__)
 
-NOTIFY_MAX_DAYS = 5
-SEND_PAUSE_SEC = 2.5
 NOTIFY_FAIL_ALERT_COOLDOWN = timedelta(hours=1)
-MAX_DELIVERY_DETAILS = 100
+NOTIFY_REPEAT_FAIL_LOG_COOLDOWN = timedelta(minutes=9)
 
 
-def _append_delivery_detail(
-    stats: dict[str, Any],
-    *,
-    username: str,
-    phone: str | None,
-    kind: str,
-    outcome: str,
-    reason: str = '',
-) -> None:
-    """Registra usuario/teléfono cuando un envío falla o no tiene número listo."""
-    details = stats.setdefault('delivery_details', [])
-    if len(details) >= MAX_DELIVERY_DETAILS:
-        return
-    details.append(
-        {
-            'username': (username or '').strip() or '—',
-            'phone': (phone or '').strip(),
-            'kind': kind,
-            'outcome': outcome,
-            'reason': (reason or '').strip(),
-        }
-    )
+def _should_append_notify_log(config: WhatsAppConfig, entry: dict[str, Any]) -> bool:
+    """
+    Tras la hora programada el loop corre cada 10 min; no duplicar el mismo fallo
+    de desconexión en el historial en cada tick.
+    """
+    if str(entry.get('status') or '').lower() != 'failed':
+        return True
+    reason = str(entry.get('reason') or '')
+    if reason != 'whatsapp_no_conectado':
+        return True
+    from app.store.whatsapp_license_notify_log import parse_notify_run_log
+
+    co_date = str(entry.get('co_date') or '').strip()
+    if not co_date:
+        return True
+    for day in parse_notify_run_log(config):
+        if str(day.get('co_date') or '') != co_date:
+            continue
+        attempts = day.get('attempts') or []
+        if not attempts:
+            return True
+        last = attempts[0]
+        if str(last.get('reason') or '') != 'whatsapp_no_conectado':
+            return True
+        at_raw = str(last.get('at_utc') or '')
+        try:
+            last_at = datetime.fromisoformat(at_raw.replace('Z', ''))
+        except Exception:
+            return True
+        if (datetime.utcnow() - last_at) < NOTIFY_REPEAT_FAIL_LOG_COOLDOWN:
+            return False
+    return True
 
 
 def _resolve_user_whatsapp_phone(user: User) -> str | None:
@@ -74,21 +80,6 @@ def _resolve_user_whatsapp_phone(user: User) -> str | None:
     return None
 
 
-def _effective_days_until_notify(row: dict[str, Any]) -> int | None:
-    candidates: list[int] = []
-    for key in ('days_until_expiry', 'days_until_calendar_sale'):
-        raw = row.get(key)
-        if raw is None or raw == '':
-            continue
-        try:
-            n = int(raw)
-            if n >= 0:
-                candidates.append(n)
-        except (TypeError, ValueError):
-            continue
-    return min(candidates) if candidates else None
-
-
 def _customer_display_name(user: User) -> str:
     full = (getattr(user, 'full_name', None) or '').strip()
     if full:
@@ -96,72 +87,12 @@ def _customer_display_name(user: User) -> str:
     return (user.username or 'cliente').strip() or 'cliente'
 
 
-def render_whatsapp_license_template(
-    template: str,
-    *,
-    customer_name: str,
-    product_names: str,
-    days_left: int,
-) -> str:
-    text = str(template or '')
-    replacements = {
-        'customer_name': customer_name,
-        'product_names': product_names,
-        'days_left': str(days_left),
-    }
-    for key, val in replacements.items():
-        text = text.replace('{{' + key + '}}', val)
-    return text
-
-
-def _build_user_notify_payload(user: User) -> dict[str, Any] | None:
-    """
-    Estado actual de licencias por vencer (≤5 días).
-    Si hubo días sin envío, no acumula avisos viejos: solo lo vigente hoy.
-    """
-    from app.store.routes import (
-        USER_LIC_CADUCIDAD_VIEW_MAX_DAYS,
-        _eligible_tienda_user_licencias_portal,
-        _user_my_license_accounts_list_for_portal,
-    )
-
-    if not _eligible_tienda_user_licencias_portal(user):
-        return None
-
-    accounts = _user_my_license_accounts_list_for_portal(user)
-    if not accounts:
-        return None
-
-    max_days = USER_LIC_CADUCIDAD_VIEW_MAX_DAYS or NOTIFY_MAX_DAYS
-    qualifying: list[tuple[str, int]] = []
-    for row in accounts:
-        days = _effective_days_until_notify(row)
-        if days is None or days < 0 or days > max_days:
-            continue
-        pname = str(row.get('product_name') or '').strip() or 'Licencia'
-        qualifying.append((pname, days))
-
-    if not qualifying:
-        return None
-
-    seen_products: set[str] = set()
-    product_names: list[str] = []
-    min_days = qualifying[0][1]
-    for pname, days in qualifying:
-        min_days = min(min_days, days)
-        key = pname.lower()
-        if key not in seen_products:
-            seen_products.add(key)
-            product_names.append(pname)
-
-    return {
-        'customer_name': _customer_display_name(user),
-        'product_names': ', '.join(product_names),
-        'days_left': min_days,
-    }
-
-
 def _send_notify_failure_alert(config: WhatsAppConfig, entry: dict[str, Any]) -> None:
+    from app.store.whatsapp_user_messages import (
+        humanize_whatsapp_notify_reason,
+        humanize_whatsapp_notify_status,
+        humanize_whatsapp_notify_trigger,
+    )
     from app.store.whatsapp_web_service import resolve_whatsapp_admin_alert_email, send_whatsapp_alert_email
 
     alert_to = resolve_whatsapp_admin_alert_email()
@@ -173,17 +104,17 @@ def _send_notify_failure_alert(config: WhatsAppConfig, entry: dict[str, Any]) ->
         return
 
     body = (
-        'Falló el job de avisos WhatsApp de licencias en tu tienda IMAP.\n\n'
+        'Falló el job de resúmenes WhatsApp (ventas/renovaciones) en tu tienda IMAP.\n\n'
         f"Fecha (Colombia): {entry.get('co_date')} {entry.get('co_time')}\n"
-        f"Origen: {entry.get('trigger')}\n"
-        f"Estado: {entry.get('status')}\n"
-        f"Enviados: {entry.get('sent', 0)} · Errores: {entry.get('errors', 0)}\n"
-        f"Motivo: {entry.get('reason') or '—'}\n\n"
+        f"Origen: {humanize_whatsapp_notify_trigger(entry.get('trigger'))}\n"
+        f"Estado: {humanize_whatsapp_notify_status(entry.get('status'))}\n"
+        f"Resúmenes enviados: {entry.get('daily_sent', 0)} · Errores: {entry.get('errors', 0)}\n"
+        f"Motivo: {humanize_whatsapp_notify_reason(entry.get('reason'))}\n\n"
         'Revisá Configuraciones → WhatsApp Web (salud y últimas ejecuciones).\n'
     )
     if send_whatsapp_alert_email(
         alert_to,
-        '[IMAP] Fallo avisos WhatsApp licencias',
+        '[IMAP] Fallo resúmenes WhatsApp',
         body,
     ):
         config.last_notify_fail_alert_at = now
@@ -196,8 +127,8 @@ def _finalize_notify_run(
     result: dict[str, Any],
 ) -> dict[str, Any]:
     """Registra historial (10), alertas y limpia catch-up si hubo éxito."""
-    total_sent = int(result.get('sent') or 0) + int(result.get('daily_sent') or 0)
-    total_errors = int(result.get('errors') or 0)
+    total_sent = int(result.get('daily_sent') or 0)
+    total_errors = int(result.get('daily_errors') or 0)
 
     if result.get('skipped'):
         status = 'skipped'
@@ -212,7 +143,8 @@ def _finalize_notify_run(
         status = 'success'
 
     entry = build_notify_log_entry(trigger=trigger, status=status, result=result)
-    append_notify_run_log(config, entry)
+    if _should_append_notify_log(config, entry):
+        append_notify_run_log(config, entry)
 
     if status in ('failed', 'partial'):
         _send_notify_failure_alert(config, entry)
@@ -242,6 +174,9 @@ def run_whatsapp_license_notify_for_config(
     ensure_whatsapp_daily_sales_columns()
     co_now = get_colombia_datetime()
 
+    if not config.is_enabled:
+        return {'skipped': True, 'reason': 'whatsapp_desactivado'}
+
     if force:
         run_trigger = trigger or 'manual'
     elif should_run_catchup_notify(config, co_now):
@@ -254,10 +189,10 @@ def run_whatsapp_license_notify_for_config(
     from app.store.whatsapp_web_service import (
         STATUS_CONNECTED,
         config_evolution_instance,
+        random_send_pause_sec,
         refresh_config_health,
         resolve_config_api_key,
         resolve_config_base_url,
-        resolve_license_notify_template,
         send_text_message,
     )
     from app.store.whatsapp_daily_sales import (
@@ -269,13 +204,16 @@ def run_whatsapp_license_notify_for_config(
         result = {'skipped': True, 'reason': 'sin_api_key'}
         return _finalize_notify_run(config, trigger=run_trigger, result=result)
 
-    run_expiry = not notify_success_for_co_date(config, co_now.date())
-    run_daily = has_pending_daily_digests_ready(config, co_now)
-    if not run_expiry and not run_daily and not force:
+    run_daily = force or has_pending_daily_digests_ready(config, co_now)
+    if not run_daily:
         return {'skipped': True, 'reason': 'nada_pendiente'}
 
     health = refresh_config_health(config, send_alerts=False)
     if health.get('status') != STATUS_CONNECTED:
+        if not force:
+            from app.store.whatsapp_daily_sales import record_daily_digest_connect_failures
+
+            record_daily_digest_connect_failures(config, co_now, force=False)
         result = {
             'skipped': True,
             'reason': 'whatsapp_no_conectado',
@@ -283,111 +221,34 @@ def run_whatsapp_license_notify_for_config(
         }
         return _finalize_notify_run(config, trigger=run_trigger, result=result)
 
-    template = resolve_license_notify_template(config)
-
     stats: dict[str, Any] = {
         'sent': 0,
         'skipped_no_phone': 0,
         'errors': 0,
-        'user_ids_sent': [],
         'trigger': run_trigger,
         'daily_sent': 0,
         'daily_errors': 0,
         'daily_skipped_no_phone': 0,
+        'delivery_details': [],
     }
 
-    if run_expiry or force:
-        from app.store.whatsapp_user_notify_prefs import user_receives_whatsapp_notifications
-
-        users = User.query.filter_by(enabled=True).order_by(User.id.asc()).all()
-        for user in users:
-            if not user_receives_whatsapp_notifications(user):
-                continue
-            phone = _resolve_user_whatsapp_phone(user)
-            payload = _build_user_notify_payload(user)
-            if not payload:
-                continue
-            if not phone:
-                stats['skipped_no_phone'] += 1
-                _append_delivery_detail(
-                    stats,
-                    username=user.username or '',
-                    phone=None,
-                    kind='aviso',
-                    outcome='sin_telefono',
-                    reason='Sin teléfono en perfil',
-                )
-                continue
-
-            body = render_whatsapp_license_template(
-                template,
-                customer_name=payload['customer_name'],
-                product_names=payload['product_names'],
-                days_left=int(payload['days_left']),
-            )
-            try:
-                send_result = send_text_message(
-                    resolve_config_base_url(config),
-                    resolve_config_api_key(config),
-                    config_evolution_instance(config),
-                    phone,
-                    body,
-                )
-                if send_result.get('success'):
-                    stats['sent'] += 1
-                    stats['user_ids_sent'].append(user.id)
-                    logger.info(
-                        'WhatsApp licencia enviado user=%s días=%s trigger=%s',
-                        user.username,
-                        payload['days_left'],
-                        run_trigger,
-                    )
-                    time.sleep(SEND_PAUSE_SEC)
-                else:
-                    stats['errors'] += 1
-                    err_msg = str(send_result.get('error') or 'Envío fallido')
-                    _append_delivery_detail(
-                        stats,
-                        username=user.username or '',
-                        phone=phone,
-                        kind='aviso',
-                        outcome='error',
-                        reason=err_msg,
-                    )
-                    logger.warning(
-                        'WhatsApp licencia falló user=%s: %s',
-                        user.username,
-                        send_result.get('error'),
-                    )
-            except Exception as exc:
-                stats['errors'] += 1
-                _append_delivery_detail(
-                    stats,
-                    username=user.username or '',
-                    phone=phone,
-                    kind='aviso',
-                    outcome='error',
-                    reason=str(exc),
-                )
-
-    if run_daily or force:
-        daily_stats = send_pending_daily_digests_for_config(
-            config,
-            co_now,
-            send_text_message=send_text_message,
-            resolve_config_base_url=resolve_config_base_url,
-            resolve_config_api_key=resolve_config_api_key,
-            config_evolution_instance=config_evolution_instance,
-            resolve_phone=_resolve_user_whatsapp_phone,
-            customer_name_fn=_customer_display_name,
-            pause_sec=SEND_PAUSE_SEC,
-            force=force,
-            delivery_details=stats.setdefault('delivery_details', []),
-        )
-        stats['daily_sent'] = daily_stats.get('daily_sent', 0)
-        stats['daily_errors'] = daily_stats.get('daily_errors', 0)
-        stats['daily_skipped_no_phone'] = daily_stats.get('daily_skipped_no_phone', 0)
-        stats['errors'] += int(daily_stats.get('daily_errors') or 0)
+    daily_stats = send_pending_daily_digests_for_config(
+        config,
+        co_now,
+        send_text_message=send_text_message,
+        resolve_config_base_url=resolve_config_base_url,
+        resolve_config_api_key=resolve_config_api_key,
+        config_evolution_instance=config_evolution_instance,
+        resolve_phone=_resolve_user_whatsapp_phone,
+        customer_name_fn=_customer_display_name,
+        pause_between_messages=lambda: random_send_pause_sec(config),
+        force=force,
+        delivery_details=stats['delivery_details'],
+    )
+    stats['daily_sent'] = daily_stats.get('daily_sent', 0)
+    stats['daily_errors'] = daily_stats.get('daily_errors', 0)
+    stats['daily_skipped_no_phone'] = daily_stats.get('daily_skipped_no_phone', 0)
+    stats['errors'] = int(daily_stats.get('daily_errors') or 0)
 
     stats['skipped'] = False
     return _finalize_notify_run(config, trigger=run_trigger, result=stats)
@@ -418,5 +279,4 @@ __all__ = [
     'run_whatsapp_license_notify_for_config',
     'run_whatsapp_license_notify_pipeline',
     'schedule_reconnect_catchup',
-    'notify_success_for_co_date',
 ]

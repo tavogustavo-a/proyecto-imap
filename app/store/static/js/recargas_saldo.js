@@ -1,7 +1,7 @@
 (function () {
   'use strict';
 
-  var BINANCE_PAY_POLL_MS = 3000;
+  var BINANCE_PAY_FALLBACK_POLL_MS = 12000;
   var BINANCE_PAY_POLL_MAX_MS = 15 * 60 * 1000;
   var rechargeRealtimeConn = null;
   var userRechargeItems = [];
@@ -9,7 +9,9 @@
   var userListLoadingMore = false;
   var binancePayPollTimer = null;
   var binancePayActiveTradeNo = '';
+  var binancePayPollMeta = null;
   var binancePayPollStartedAt = 0;
+  var binancePayRealtimeWired = false;
 
   function rechargeFetchJson(url, options) {
     if (window.StoreFetchJson && window.StoreFetchJson.fetch) {
@@ -91,6 +93,9 @@
 
     function onRealtimeUpdate(eventData) {
       refreshRechargeSaldoDisplay();
+      if (binancePayActiveTradeNo && binancePayPollMeta) {
+        checkBinancePayStatusOnce(binancePayPollMeta, binancePayActiveTradeNo);
+      }
       patchUserRechargeFromRealtime(eventData, meta).catch(function () {
         if (document.getElementById('balanceRechargeList')) {
           loadList(meta);
@@ -162,6 +167,7 @@
       binancePayPollTimer = null;
     }
     binancePayActiveTradeNo = '';
+    binancePayPollMeta = null;
   }
 
   function setBinancePayStatus(text, isError) {
@@ -261,49 +267,68 @@
     setBinancePayStatus('Esperando confirmación de pago en Binance…', false);
   }
 
+  function checkBinancePayStatusOnce(meta, tradeNo) {
+    if (!tradeNo) return Promise.resolve();
+    var statusUrl = binancePayStatusUrl(meta.binancePayStatusUrlTemplate, tradeNo);
+    if (!statusUrl || statusUrl.indexOf('__TRADE__') >= 0) return Promise.resolve();
+
+    if (Date.now() - binancePayPollStartedAt > BINANCE_PAY_POLL_MAX_MS) {
+      stopBinancePayPolling();
+      setBinancePayStatus(
+        'Tiempo de espera agotado. Si ya pagaste, el saldo se acreditará en breve; revisa la lista o espera unos segundos.',
+        false
+      );
+      return Promise.resolve();
+    }
+
+    return rechargeFetchJson(statusUrl)
+      .then(function (res) {
+        if (!res || !res.success) return;
+        if (res.paid) {
+          stopBinancePayPolling();
+          setBinancePayStatus('¡Pago confirmado! Saldo acreditado.', false);
+          showFormMsg('Saldo acreditado por Binance Pay.', false);
+          refreshRechargeSaldoDisplay();
+          loadList(meta);
+          var form = document.getElementById('balanceRechargeForm');
+          if (form) form.reset();
+          renderPreview(null);
+          resetBinancePayCheckout();
+          updateSelectedMethodQr();
+          updateAmountFieldForMethod();
+          return;
+        }
+        if ((res.status || '').toLowerCase() === 'rejected') {
+          stopBinancePayPolling();
+          setBinancePayStatus('El pago fue rechazado o cancelado.', true);
+        }
+      })
+      .catch(function () {});
+  }
+
+  function wireBinancePayRealtimeOnce() {
+    if (binancePayRealtimeWired) return;
+    binancePayRealtimeWired = true;
+    window.addEventListener('balance-recharge-realtime', function (ev) {
+      if (!binancePayActiveTradeNo || !binancePayPollMeta) return;
+      checkBinancePayStatusOnce(binancePayPollMeta, binancePayActiveTradeNo);
+    });
+  }
+
   function startBinancePayPolling(meta, tradeNo) {
     stopBinancePayPolling();
+    wireBinancePayRealtimeOnce();
     if (!tradeNo) return;
     binancePayActiveTradeNo = tradeNo;
+    binancePayPollMeta = meta;
     binancePayPollStartedAt = Date.now();
     var statusUrl = binancePayStatusUrl(meta.binancePayStatusUrlTemplate, tradeNo);
     if (!statusUrl || statusUrl.indexOf('__TRADE__') >= 0) return;
 
-    function poll() {
-      if (Date.now() - binancePayPollStartedAt > BINANCE_PAY_POLL_MAX_MS) {
-        stopBinancePayPolling();
-        setBinancePayStatus(
-          'Tiempo de espera agotado. Si ya pagaste, el saldo se acreditará en breve; revisa la lista o espera unos segundos.',
-          false
-        );
-        return;
-      }
-      rechargeFetchJson(statusUrl)
-        .then(function (res) {
-          if (!res || !res.success) return;
-          if (res.paid) {
-            stopBinancePayPolling();
-            setBinancePayStatus('¡Pago confirmado! Saldo acreditado.', false);
-            showFormMsg('Saldo acreditado por Binance Pay.', false);
-            refreshRechargeSaldoDisplay();
-            loadList(meta);
-            var form = document.getElementById('balanceRechargeForm');
-            if (form) form.reset();
-            renderPreview(null);
-            resetBinancePayCheckout();
-            updateSelectedMethodQr();
-            updateAmountFieldForMethod();
-            return;
-          }
-          if ((res.status || '').toLowerCase() === 'rejected') {
-            stopBinancePayPolling();
-            setBinancePayStatus('El pago fue rechazado o cancelado.', true);
-          }
-        })
-        .catch(function () {});
-    }
-    poll();
-    binancePayPollTimer = window.setInterval(poll, BINANCE_PAY_POLL_MS);
+    checkBinancePayStatusOnce(meta, tradeNo);
+    binancePayPollTimer = window.setInterval(function () {
+      checkBinancePayStatusOnce(meta, tradeNo);
+    }, BINANCE_PAY_FALLBACK_POLL_MS);
   }
 
   function getCsrfToken() {

@@ -1,11 +1,11 @@
 # -*- coding: utf-8 -*-
-"""Historial de ejecuciones del job de avisos WhatsApp (1 registro por día CO)."""
+"""Historial de ejecuciones del job de resúmenes WhatsApp (1 registro por día CO)."""
 
 from __future__ import annotations
 
 import json
 import logging
-from datetime import date, datetime
+from datetime import datetime
 from typing import Any
 
 from app.utils.timezone import get_colombia_datetime
@@ -159,17 +159,6 @@ def compact_notify_run_log(config, *, persist: bool = True) -> list[dict[str, An
     return compact
 
 
-def notify_success_for_co_date(config, co_date: date) -> bool:
-    """True si ese día calendario CO ya hubo una ejecución exitosa o parcial."""
-    key = co_date.isoformat()
-    for entry in parse_notify_run_log(config):
-        if entry.get('co_date') != key:
-            continue
-        if entry.get('status') in ('success', 'partial'):
-            return True
-    return False
-
-
 def append_notify_run_log(config, entry: dict[str, Any]) -> None:
     """Añade un intento al día CO; la tabla guarda como máximo MAX_NOTIFY_RUN_LOG días."""
     co_date = str(entry.get('co_date') or '').strip()
@@ -196,8 +185,11 @@ def build_notify_log_entry(
     result: dict[str, Any],
     reason: str | None = None,
 ) -> dict[str, Any]:
+    from app.store.whatsapp_user_messages import humanize_whatsapp_notify_reason
+
     co_now = get_colombia_datetime()
     now_utc = datetime.utcnow()
+    raw_reason = reason or result.get('reason') or ''
     return {
         'at_utc': now_utc.isoformat() + 'Z',
         'co_date': co_now.date().isoformat(),
@@ -210,12 +202,17 @@ def build_notify_log_entry(
         'daily_skipped_no_phone': int(result.get('daily_skipped_no_phone') or 0),
         'daily_sent': int(result.get('daily_sent') or 0),
         'daily_errors': int(result.get('daily_errors') or 0),
-        'reason': reason or result.get('reason') or '',
+        'reason': humanize_whatsapp_notify_reason(
+            raw_reason,
+            connection_status=result.get('status') or result.get('connection_status'),
+        ),
         'delivery_details': result.get('delivery_details') or [],
     }
 
 
 def serialize_notify_run_log_for_api(config) -> list[dict[str, Any]]:
+    from app.store.whatsapp_user_messages import humanize_whatsapp_notify_log_entry
+
     out = []
     for entry in compact_notify_run_log(config, persist=True):
         attempts = []
@@ -239,20 +236,22 @@ def serialize_notify_run_log_for_api(config) -> list[dict[str, Any]]:
                 }
             )
         out.append(
-            {
-                'co_date': entry.get('co_date'),
-                'co_time': entry.get('co_time'),
-                'at_utc': entry.get('at_utc'),
-                'trigger': entry.get('trigger'),
-                'status': entry.get('status'),
-                'sent': entry.get('sent', 0),
-                'errors': entry.get('errors', 0),
-                'skipped_no_phone': entry.get('skipped_no_phone', 0),
-                'daily_sent': entry.get('daily_sent', 0),
-                'daily_errors': entry.get('daily_errors', 0),
-                'reason': entry.get('reason') or '',
-                'attempt_count': entry.get('attempt_count', len(attempts)),
-                'attempts': attempts,
-            }
+            humanize_whatsapp_notify_log_entry(
+                {
+                    'co_date': entry.get('co_date'),
+                    'co_time': entry.get('co_time'),
+                    'at_utc': entry.get('at_utc'),
+                    'trigger': entry.get('trigger'),
+                    'status': entry.get('status'),
+                    'sent': entry.get('sent', 0),
+                    'errors': entry.get('errors', 0),
+                    'skipped_no_phone': entry.get('skipped_no_phone', 0),
+                    'daily_sent': entry.get('daily_sent', 0),
+                    'daily_errors': entry.get('daily_errors', 0),
+                    'reason': entry.get('reason') or '',
+                    'attempt_count': entry.get('attempt_count', len(attempts)),
+                    'attempts': attempts,
+                }
+            )
         )
     return out

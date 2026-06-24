@@ -1591,7 +1591,9 @@ def update_user_prices_ajax():
                 if update_data['proveedor'] is True:
                     new_user_prices['proveedor'] = True
                 else:
-                    new_user_prices.pop('proveedor', None)
+                    from app.store.proveedor_user_data import purge_proveedor_keys_from_prices
+
+                    new_user_prices = purge_proveedor_keys_from_prices(new_user_prices, remove_flag=True)
 
             if 'limite_deuda_usd' in update_data:
                 lim_u = update_data.get('limite_deuda_usd')

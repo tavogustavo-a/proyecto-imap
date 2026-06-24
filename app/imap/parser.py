@@ -160,8 +160,9 @@ def parse_raw_email(raw_bytes):
 
     text_part = text_part.strip()
     html_part = html_part.strip()
+    html_raw = html_part
 
-    # Reescribir enlaces salvo Paramount
+    # Reescribir enlaces en HTML de visualización (clic en correo); regex usa html_raw.
     # Si from_ contiene "noreply@paramountplus.com" => no reescribimos
     is_paramount = ("noreply@paramountplus.com" in from_.lower())
 
@@ -184,5 +185,6 @@ def parse_raw_email(raw_bytes):
         "date": date_,
         "text": text_part,
         "html": html_part,
+        "html_raw": html_raw,
         "message_id": message_id
     }

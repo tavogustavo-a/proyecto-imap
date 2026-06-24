@@ -2,7 +2,7 @@
 
 {% block title %}Tienda Pública{% endblock %}
 
-{% block head %}{{ super() }}<link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}?v=20260611-store-cuentas-precios-center"><link rel="stylesheet" href="{{ url_for('static', filename='fontawesome/css/all.css') }}"><link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/chat_soporte.css') }}"><meta name="csrf_token" content="{{ csrf_token() }}">{% endblock %}
+{% block head %}{{ super() }}<link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}?v=20260622-store-desc-modal-backdrop"><link rel="stylesheet" href="{{ url_for('static', filename='fontawesome/css/all.css') }}"><link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/chat_soporte.css') }}"><meta name="csrf_token" content="{{ csrf_token() }}">{% endblock %}
 {% block content %}
 <div class="container container-max-width-900 store-light store-front-main">
   {% set blocked_users = ['soporte','soporte1','soporte2','soporte3'] %}
@@ -692,7 +692,7 @@
 {% block scripts %}
 <meta name="clear_trigger_log_url" content="{{ url_for('admin_bp.clear_trigger_log') }}">
 <script src="{{ url_for('store_bp.static', filename='js/store_config.js') }}?v=20260611-store-cuentas-precios-center" defer></script>
-<script src="{{ url_for('store_bp.static', filename='js/store_front.js') }}?v=20260611-store-renovar-cuenta-v3" defer></script>
+<script src="{{ url_for('store_bp.static', filename='js/store_front.js') }}?v=20260622-store-stock-sse" defer></script>
 <script src="{{ url_for('store_bp.static', filename='js/store_renovacion.js') }}?v=20260520-buena-revisada" defer></script>
 <script src="{{ url_for('store_bp.static', filename='js/menu_tienda.js') }}" defer></script>
 <script src="{{ url_for('static', filename='js/admin_imap.js') }}" defer></script>

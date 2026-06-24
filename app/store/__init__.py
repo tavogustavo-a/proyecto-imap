@@ -61,6 +61,9 @@ def decimal_filter(value):
         return Decimal('0')
 
 from . import routes
+from . import routes_whatsapp  # noqa: F401 — registra rutas WhatsApp en store_bp
+from . import routes_licencias  # noqa: F401 — registra rutas licencias en store_bp
+from . import routes_historial  # noqa: F401 — registra rutas historial compras en store_bp
 
 # Contexto global para plantillas
 @store_bp.context_processor

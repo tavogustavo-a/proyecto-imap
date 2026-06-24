@@ -712,7 +712,7 @@ def _process_mails(all_mails, filters, regexes, user_searching, searched_address
 
     for mail in all_mails:
         _format_date(mail)
-        body_raw = mail.get("text", "") + mail.get("html", "")
+        body_raw = mail.get("text", "") + (mail.get("html_raw") or mail.get("html", ""))
         sender_lower = mail.get("from", "").lower()
 
         matched_filter = get_first_filter_that_matches(mail, filters)

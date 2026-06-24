@@ -170,7 +170,7 @@
     } catch (e) {}
   }
 
-  function loadPersonalFromLocalOnly(licenseId, ta) {
+  function readPersonalFromLocalRaw(licenseId) {
     try {
       var s = localStorage.getItem(personalStorageKey(licenseId));
       if (s === null) {
@@ -189,10 +189,19 @@
           s = legacy;
         }
       }
-      ta.value = s !== null ? s : '';
+      return s;
     } catch (e) {
-      ta.value = '';
+      return null;
     }
+  }
+
+  function normalizePersonalNotesText(text) {
+    return String(text != null ? text : '').replace(/\r\n/g, '\n');
+  }
+
+  function loadPersonalFromLocalOnly(licenseId, ta) {
+    var s = readPersonalFromLocalRaw(licenseId);
+    ta.value = s !== null ? s : '';
   }
 
   function licenseBlockText(el) {
@@ -536,10 +545,38 @@
   }
 
   /**
-   * Si hay datos del API (licenseRow), la base de datos manda; si no, solo localStorage.
+   * Si hay datos del API (licenseRow), la base de datos manda salvo caché local más reciente
+   * (p. ej. recarga antes de que termine el PUT o edición aún en el textarea).
    */
   function loadPersonalForId(licenseId, ta, licenseRow) {
+    var localRaw = readPersonalFromLocalRaw(licenseId);
+    var localNorm = localRaw !== null ? normalizePersonalNotesText(localRaw) : null;
+    var serverNorm = null;
     if (licenseRow && Object.prototype.hasOwnProperty.call(licenseRow, 'personal_notes')) {
+      serverNorm = normalizePersonalNotesText(
+        licenseRow.personal_notes != null ? String(licenseRow.personal_notes) : ''
+      );
+    }
+    var openNorm =
+      ta && String(currentLicenseId) === String(licenseId)
+        ? normalizePersonalNotesText(ta.value)
+        : null;
+
+    if (openNorm !== null && serverNorm !== null && openNorm !== serverNorm) {
+      ta.value = ta.value != null ? String(ta.value) : '';
+      savePersonalForId(licenseId, ta.value);
+      scheduleSaveNotes(licenseId);
+      return;
+    }
+
+    if (localNorm !== null && serverNorm !== null && localNorm !== serverNorm) {
+      ta.value = localRaw !== null ? localRaw : '';
+      savePersonalForId(licenseId, ta.value);
+      scheduleSaveNotes(licenseId);
+      return;
+    }
+
+    if (serverNorm !== null) {
       var v = licenseRow.personal_notes != null ? String(licenseRow.personal_notes) : '';
       ta.value = v;
       savePersonalForId(licenseId, v);
@@ -548,23 +585,93 @@
     loadPersonalFromLocalOnly(licenseId, ta);
   }
 
+  function normalizeBlocNotesText(text) {
+    return String(text != null ? text : '').replace(/\r\n/g, '\n');
+  }
+
+  function readLocalStorageRaw(readFn) {
+    try {
+      return readFn();
+    } catch (_e) {
+      return null;
+    }
+  }
+
+  function applyLicenseBlocText(ta, text) {
+    var v = text != null ? String(text) : '';
+    v = stripStandaloneGenericoLines(v);
+    if (typeof window.adminLicenseSplitApplyMergedText === 'function') {
+      window.adminLicenseSplitApplyMergedText(v);
+    } else {
+      setLicenseBlockPlainText(ta, v);
+    }
+  }
+
   function loadLicenseForId(licenseId, ta, licenseRow) {
+    var localRaw = readLocalStorageRaw(function () {
+      return localStorage.getItem(licenseStorageKey(licenseId));
+    });
+    var localNorm = localRaw !== null ? normalizeBlocNotesText(stripStandaloneGenericoLines(localRaw)) : null;
+    var serverNorm = null;
     if (licenseRow && Object.prototype.hasOwnProperty.call(licenseRow, 'license_notes')) {
-      var v = licenseRow.license_notes != null ? String(licenseRow.license_notes) : '';
-      v = stripStandaloneGenericoLines(v);
-      if (typeof window.adminLicenseSplitApplyMergedText === 'function') {
-        window.adminLicenseSplitApplyMergedText(v);
-      } else {
-        setLicenseBlockPlainText(ta, v);
-      }
-      saveLicenseForId(licenseId, licenseMergedOrBlockText(ta));
+      serverNorm = normalizeBlocNotesText(
+        stripStandaloneGenericoLines(
+          licenseRow.license_notes != null ? String(licenseRow.license_notes) : ''
+        )
+      );
+    }
+    var openNorm =
+      ta && String(currentLicenseId) === String(licenseId)
+        ? normalizeBlocNotesText(stripStandaloneGenericoLines(licenseMergedOrBlockText(ta)))
+        : null;
+
+    if (openNorm !== null && serverNorm !== null && openNorm !== serverNorm) {
+      saveCurrentLicense(ta);
+      scheduleSaveNotes(licenseId);
+      return;
+    }
+    if (localNorm !== null && serverNorm !== null && localNorm !== serverNorm) {
+      applyLicenseBlocText(ta, localRaw);
+      saveCurrentLicense(ta);
+      scheduleSaveNotes(licenseId);
+      return;
+    }
+    if (serverNorm !== null) {
+      applyLicenseBlocText(ta, licenseRow.license_notes);
+      saveCurrentLicense(ta);
       return;
     }
     loadLicenseFromLocalOnly(licenseId, ta);
   }
 
   function loadSuspendedForId(licenseId, el, licenseRow) {
+    var localRaw = readLocalStorageRaw(function () {
+      return localStorage.getItem(suspendedStorageKey(licenseId));
+    });
+    var localNorm = localRaw !== null ? normalizeBlocNotesText(localRaw) : null;
+    var serverNorm = null;
     if (licenseRow && Object.prototype.hasOwnProperty.call(licenseRow, 'suspended_notes')) {
+      serverNorm = normalizeBlocNotesText(
+        licenseRow.suspended_notes != null ? String(licenseRow.suspended_notes) : ''
+      );
+    }
+    var openNorm =
+      el && String(currentLicenseId) === String(licenseId)
+        ? normalizeBlocNotesText(licenseBlockText(el))
+        : null;
+
+    if (openNorm !== null && serverNorm !== null && openNorm !== serverNorm) {
+      saveCurrentSuspended(el);
+      scheduleSaveNotes(licenseId);
+      return;
+    }
+    if (localNorm !== null && serverNorm !== null && localNorm !== serverNorm) {
+      setLicenseBlockPlainText(el, localRaw);
+      saveCurrentSuspended(el);
+      scheduleSaveNotes(licenseId);
+      return;
+    }
+    if (serverNorm !== null) {
       var v = licenseRow.suspended_notes != null ? String(licenseRow.suspended_notes) : '';
       setLicenseBlockPlainText(el, v);
       saveSuspendedForId(licenseId, v);
@@ -574,7 +681,33 @@
   }
 
   function loadExpiredForId(licenseId, el, licenseRow) {
+    var localRaw = readLocalStorageRaw(function () {
+      return localStorage.getItem(expiredStorageKey(licenseId));
+    });
+    var localNorm = localRaw !== null ? normalizeBlocNotesText(localRaw) : null;
+    var serverNorm = null;
     if (licenseRow && Object.prototype.hasOwnProperty.call(licenseRow, 'expired_notes')) {
+      serverNorm = normalizeBlocNotesText(
+        licenseRow.expired_notes != null ? String(licenseRow.expired_notes) : ''
+      );
+    }
+    var openNorm =
+      el && String(currentLicenseId) === String(licenseId)
+        ? normalizeBlocNotesText(licenseBlockText(el))
+        : null;
+
+    if (openNorm !== null && serverNorm !== null && openNorm !== serverNorm) {
+      saveCurrentExpired(el);
+      scheduleSaveNotes(licenseId);
+      return;
+    }
+    if (localNorm !== null && serverNorm !== null && localNorm !== serverNorm) {
+      setLicenseBlockPlainText(el, localRaw);
+      saveCurrentExpired(el);
+      scheduleSaveNotes(licenseId);
+      return;
+    }
+    if (serverNorm !== null) {
       var ve = licenseRow.expired_notes != null ? String(licenseRow.expired_notes) : '';
       setLicenseBlockPlainText(el, ve);
       saveExpiredForId(licenseId, ve);
@@ -584,7 +717,47 @@
   }
 
   function loadCustomerRenewalForId(licenseId, el, licenseRow) {
+    if (el && el.dataset.customerRenewalDirty === '1') {
+      saveCurrentCustomerRenewal(el);
+      return;
+    }
+    var localRaw = readLocalStorageRaw(function () {
+      return localStorage.getItem(customerRenewalStorageKey(licenseId));
+    });
+    var localNorm = localRaw !== null ? normalizeBlocNotesText(stripStandaloneGenericoLines(localRaw)) : null;
+    var serverNorm = null;
     if (licenseRow && Object.prototype.hasOwnProperty.call(licenseRow, 'customer_renewal_notes')) {
+      serverNorm = normalizeBlocNotesText(
+        stripStandaloneGenericoLines(
+          licenseRow.customer_renewal_notes != null ? String(licenseRow.customer_renewal_notes) : ''
+        )
+      );
+    }
+    var openNorm =
+      el && String(currentLicenseId) === String(licenseId)
+        ? normalizeBlocNotesText(stripStandaloneGenericoLines(customerRenewalMergedOrBlockText(el)))
+        : null;
+
+    if (openNorm !== null && serverNorm !== null && openNorm !== serverNorm) {
+      saveCurrentCustomerRenewal(el);
+      scheduleSaveNotes(licenseId);
+      return;
+    }
+    if (localNorm !== null && serverNorm !== null && localNorm !== serverNorm) {
+      var localApply = stripStandaloneGenericoLines(localRaw);
+      if (typeof window.customerRenewalLicenseSplitApplyMergedText === 'function') {
+        var rootLocal = getEl('adminLicenciasCustomerRenewalSplitRoot');
+        if (rootLocal) {
+          window.customerRenewalLicenseSplitApplyMergedText(rootLocal, localApply);
+        }
+      } else {
+        setLicenseBlockPlainText(el, localApply);
+      }
+      saveCurrentCustomerRenewal(el);
+      scheduleSaveNotes(licenseId);
+      return;
+    }
+    if (serverNorm !== null) {
       var vr = licenseRow.customer_renewal_notes != null ? String(licenseRow.customer_renewal_notes) : '';
       vr = stripStandaloneGenericoLines(vr);
       if (typeof window.customerRenewalLicenseSplitApplyMergedText === 'function') {
@@ -646,8 +819,9 @@
     if (!bodyObj || !taCR || String(taCR.dataset.licenseId) !== String(licenseId)) return;
     var merged = customerRenewalMergedOrBlockText(taCR);
     var allowEmpty = opts && opts.allowEmpty;
-    /* Solo enviar vacío si se pide explícitamente (p. ej. quitar la última fila tras rechazar/vender). */
-    if (allowEmpty || String(merged || '').trim() !== '') {
+    var dirty = taCR.dataset.customerRenewalDirty === '1';
+    /* Enviar vacío si el admin borró todo (dirty); si no, el servidor conserva filas antiguas. */
+    if (allowEmpty || dirty || String(merged || '').trim() !== '') {
       bodyObj.customer_renewal_notes = merged != null ? merged : '';
     }
   }
@@ -682,9 +856,9 @@
     if (taCustomerRenewal) {
       taCustomerRenewal.placeholder = renewMode
         ? 'x (rechazar) o carrito compra (pasar al día).'
-        : '';
+        : 'Correo y contraseña, una por línea.';
     }
-    if (taCustomerRenewal && renewMode) {
+    if (taCustomerRenewal) {
       unlockCustomerRenewalSplit(taCustomerRenewal);
     }
   }
@@ -731,6 +905,12 @@
               ? customerRenewalMergedOrBlockText(taCR)
               : undefined
           );
+        }
+        if (data.success && taCR && String(taCR.dataset.licenseId) === String(licenseId)) {
+          clearCustomerRenewalDirty(taCR);
+        }
+        if (data.success && taP) {
+          savePersonalForId(licenseId, taP.value);
         }
       })
       .catch(function (err) {
@@ -1370,6 +1550,9 @@
         if (custRoot && typeof window.customerRenewalLicenseSplitSyncRowsToTextarea === 'function') {
           window.customerRenewalLicenseSplitSyncRowsToTextarea(custRoot);
         }
+        if (typeof window.customerRenewalLicenseSplitRefreshOrigCredsAfterEdit === 'function') {
+          window.customerRenewalLicenseSplitRefreshOrigCredsAfterEdit(taCustomerRenewal);
+        }
         markCustomerRenewalDirty(taCustomerRenewal);
         saveCurrentCustomerRenewal(taCustomerRenewal);
         refreshCustomerRenewalLineBadge();
@@ -1390,6 +1573,8 @@
         if (typeof window.customerRenewalLicenseSplitScheduleAutosize === 'function') {
           window.customerRenewalLicenseSplitScheduleAutosize(custRoot);
         }
+        saveCurrentCustomerRenewal(taCustomerRenewal);
+        flushPendingNotesSave();
       });
     }
 
@@ -1796,8 +1981,13 @@
           flushPendingNotesSave();
         }
       });
+      window.addEventListener('pagehide', function () {
+        flushPendingNotesSave();
+      });
     }
     taPersonal.addEventListener('blur', function () {
+      saveCurrentPersonal(taPersonal);
+      flushPendingNotesSave();
       lockNotepadEditable(taPersonal);
     });
 
@@ -1847,6 +2037,7 @@
     if (!taPersonal || !taLicense || !taSuspended || !taExpired) return;
 
     var idStr = String(licenseId);
+    var wasSameLicense = currentLicenseId === idStr;
     if (currentLicenseId !== null && currentLicenseId !== idStr) {
       if (currentLicenseId !== '0') {
         savePersonalForId(currentLicenseId, taPersonal.value);
@@ -1950,13 +2141,25 @@
       '#adminLicenciasCustomerRenewalSplitRoot .license-split-editor__side'
     );
     if (custSplitSideOpen) custSplitSideOpen.hidden = false;
-    loadPersonalForId(licenseId, taPersonal, licenseRow);
-    loadLicenseForId(licenseId, taLicense, licenseRow);
-    loadSuspendedForId(licenseId, taSuspended, licenseRow);
-    loadExpiredForId(licenseId, taExpired, licenseRow);
+    if (!wasSameLicense) {
+      loadPersonalForId(licenseId, taPersonal, licenseRow);
+      loadLicenseForId(licenseId, taLicense, licenseRow);
+      loadSuspendedForId(licenseId, taSuspended, licenseRow);
+      loadExpiredForId(licenseId, taExpired, licenseRow);
+      if (taCustomerRenewal) {
+        loadCustomerRenewalForId(licenseId, taCustomerRenewal, licenseRow);
+      }
+    } else {
+      saveCurrentPersonal(taPersonal);
+      saveCurrentLicense(taLicense);
+      saveCurrentSuspended(taSuspended);
+      saveCurrentExpired(taExpired);
+      if (taCustomerRenewal) {
+        saveCurrentCustomerRenewal(taCustomerRenewal);
+      }
+    }
     if (taCustomerRenewal) {
-      loadCustomerRenewalForId(licenseId, taCustomerRenewal, licenseRow);
-      if (licenseRow) {
+      if (licenseRow && taCustomerRenewal.dataset.customerRenewalDirty !== '1') {
         refreshCustomerRenewalSplitFromApi(licenseRow);
       }
       syncCustomerRenewalBlocUiForLicense(licenseRow, taCustomerRenewal);
@@ -1981,9 +2184,6 @@
     lockLicenseSplit(taLicense);
     lockSuspendedSplit(taSuspended);
     lockExpiredSplit(taExpired);
-    if (taCustomerRenewal && (!licenseRow || !licenseRowRenewCustomerAccount(licenseRow))) {
-      lockCustomerRenewalSplit(taCustomerRenewal);
-    }
     lockChangesSplit();
     refreshLicenseLineBadge();
     refreshPersonalLineBadge();
@@ -2040,6 +2240,7 @@
     var idStr = String(licenseRow.id);
     var taCR = getEl('adminLicenciasNotepadByCustomerRenewal');
     if (!taCR || String(taCR.dataset.licenseId) !== idStr) return;
+    if (taCR.dataset.customerRenewalDirty === '1') return;
     if (!Object.prototype.hasOwnProperty.call(licenseRow, 'customer_renewal_notes')) return;
     var v = licenseRow.customer_renewal_notes != null ? String(licenseRow.customer_renewal_notes) : '';
     v = stripStandaloneGenericoLines(v);
@@ -2067,6 +2268,7 @@
 
   function refreshLicenseSplitFromApi(licenseRow) {
     if (!licenseRow || licenseRow.id == null) return;
+    if (saveNotesTimer) return;
     var idStr = String(licenseRow.id);
     var taLicense = getEl('adminLicenciasNotepadByLicense');
     if (!taLicense || String(taLicense.dataset.licenseId) !== idStr) return;

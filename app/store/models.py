@@ -52,6 +52,7 @@ class SalePurchaseSnapshot(db.Model):
     purged_from_sales = db.Column(db.Boolean, default=False, nullable=False, index=True)
     whatsapp_daily_co_date = db.Column(db.Date, nullable=True, index=True)
     whatsapp_daily_sent_at = db.Column(db.DateTime, nullable=True, index=True)
+    whatsapp_daily_send_attempts = db.Column(db.Integer, default=0, nullable=False, server_default='0')
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -350,15 +351,6 @@ class StoreSetting(db.Model):
     value = db.Column(db.Text, nullable=False)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow) 
 
-class GSheetsLink(db.Model):
-    __tablename__ = "gsheets_links"
-    id = db.Column(db.Integer, primary_key=True)
-    plantilla = db.Column(db.String(64), nullable=False, index=True)  # nombre interno de la plantilla
-    credentials_json = db.Column(db.Text, nullable=False)
-    sheet_id = db.Column(db.String(128), nullable=False)
-    tab_name = db.Column(db.String(128), nullable=False)
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-
 class DriveTransfer(db.Model):
     __tablename__ = "drive_transfers"
     id = db.Column(db.Integer, primary_key=True)
@@ -386,7 +378,7 @@ class WhatsAppConfig(db.Model):
     # Número esperado / etiqueta (opcional, sin +)
     phone_number = db.Column(db.String(20), nullable=False)
     webhook_verify_token = db.Column(db.String(255), nullable=False, default='')
-    template_message = db.Column(db.Text, nullable=False)
+    template_message = db.Column(db.Text, nullable=False, default='')
     notification_time = db.Column(db.Time, nullable=False)  # Hora colombiana
     is_enabled = db.Column(db.Boolean, default=True, nullable=False)
     last_sent = db.Column(db.DateTime, nullable=True)

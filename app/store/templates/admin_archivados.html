@@ -147,22 +147,6 @@
     </div>
   </div>
 
-  <div id="adminLicProveedorInfoModal" class="admin-lic-bulk-info-modal" hidden aria-hidden="true">
-    <div class="admin-lic-bulk-info-modal__backdrop" data-admin-lic-proveedor-info-dismiss="1"></div>
-    <div class="admin-lic-bulk-info-modal__panel" role="dialog" aria-modal="true" aria-labelledby="adminLicProveedorInfoModalTitle">
-      <div class="admin-lic-bulk-info-modal__head">
-        <h2 id="adminLicProveedorInfoModalTitle" class="admin-lic-bulk-info-modal__title"><i class="fas fa-info-circle" aria-hidden="true"></i> Proveedores</h2>
-        <button type="button" class="admin-lic-bulk-info-modal__close" data-admin-lic-proveedor-info-dismiss="1" title="Cerrar" aria-label="Cerrar"><i class="fas fa-times" aria-hidden="true"></i></button>
-      </div>
-      <div class="admin-lic-bulk-info-modal__body">
-        <p class="admin-lic-bulk-info-modal__lead">Inventario de usuarios con permiso <strong>Proveedor</strong>. Junto a tus licencias del producto, estas líneas suman al total disponible para vender.</p>
-      </div>
-      <div class="admin-lic-bulk-info-modal__footer">
-        <button type="button" class="btn-blue menu-btn-worksheet" id="adminLicProveedorInfoOkBtn" data-admin-lic-proveedor-info-dismiss="1">Entendido</button>
-      </div>
-    </div>
-  </div>
-
   <div id="adminLicProveedorUserPickModal" class="admin-lic-proveedor-user-pick-modal" hidden aria-hidden="true">
     <div class="admin-lic-proveedor-user-pick-modal__backdrop" data-admin-lic-proveedor-user-pick-dismiss="1"></div>
     <div class="admin-lic-proveedor-user-pick-modal__panel" role="dialog" aria-modal="true" aria-labelledby="adminLicProveedorUserPickModalTitle">
@@ -221,7 +205,6 @@
 
 {% block scripts %}
   {{ super() }}
-  <script src="{{ url_for('store_bp.static', filename='js/store_fetch_json.js') }}?v={{ licencias_static_version }}" defer></script>
   <script src="{{ url_for('store_bp.static', filename='js/licencias_bootstrap.js') }}?v={{ licencias_static_version }}" defer></script>
   <script src="{{ url_for('store_bp.static', filename='js/licencias_shared.js') }}?v={{ licencias_static_version }}" defer></script>
   <script src="{{ url_for('store_bp.static', filename='js/admin_licencias_ui_prefs.js') }}?v={{ licencias_static_version }}" defer></script>

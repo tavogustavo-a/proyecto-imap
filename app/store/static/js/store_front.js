@@ -3,6 +3,10 @@ document.addEventListener('DOMContentLoaded', function() {
   const productCards = document.querySelectorAll('.card.product-texture-bg');
   var pendingReservationProductIds = Object.create(null);
   var storeNotifSeenIds = Object.create(null);
+  var storeNotifSseHandle = null;
+  var storeNotifPollInterval = null;
+  var STORE_NOTIF_SSE_URL = '/tienda/api/user/store-notifications/stream';
+  var STORE_NOTIF_POLL_MS = 15000;
 
   function resolveProductPurchaseShell(fromEl) {
     if (!fromEl) return null;
@@ -239,10 +243,13 @@ document.addEventListener('DOMContentLoaded', function() {
   let cuponAplicado = null;
   let descuentoCupon = 0;
 
-  // Existencias en casi tiempo real: solo polling (1,2 s visible / 8 s oculto).
-  // EventSource fallaba al cerrar el stream (~29 s) y mezclaba errores con reconexión;
-  // el GET /stock ya devuelve datos frescos sin depender de SSE.
+  // Existencias en casi tiempo real: SSE (/stock/stream) con fallback a polling (/stock/rev).
+  // Sin conexión mientras la pestaña está oculta.
+  let stockSseHandle = null;
   let stockPollInterval = null;
+  let stockLastRev = null;
+  const STOCK_SSE_URL = '/tienda/api/products/stock/stream';
+  const STOCK_REV_POLL_MS = 1200;
   /** @type {Record<string, number>} snapshot completo desde /tienda/api/products/stock */
   let stockByProductId = {};
   /** Tras una respuesta de /stock, cualquier producto sin fila ya no está a la venta (se trata como 0). */
@@ -475,7 +482,7 @@ document.addEventListener('DOMContentLoaded', function() {
     });
   }
 
-  async function updateAllProductsStock() {
+  async function fetchFullProductsStock() {
     try {
       const response = await fetch('/tienda/api/products/stock', {
         cache: 'no-store',
@@ -496,21 +503,79 @@ document.addEventListener('DOMContentLoaded', function() {
     }
   }
 
-  function stopStockRealtime() {
+  async function pollProductsStockRev() {
+    if (document.visibilityState !== 'visible') return;
+    try {
+      const response = await fetch('/tienda/api/products/stock/rev', {
+        cache: 'no-store',
+        credentials: 'same-origin',
+        headers: { Accept: 'application/json' },
+      });
+      if (!response.ok) {
+        markStockLoadFailedBriefly();
+        return;
+      }
+      const data = await response.json();
+      if (!data || !data.success || data.stock_rev == null) return;
+      const nextRev = String(data.stock_rev);
+      if (stockLastRev !== null && nextRev === stockLastRev) return;
+      stockLastRev = nextRev;
+      await fetchFullProductsStock();
+    } catch (error) {
+      console.error('Error al revisar stock:', error);
+      markStockLoadFailedBriefly();
+    }
+  }
+
+  function onStockSseMessage(data) {
+    if (!data || data.type !== 'stock' || !data.success) return;
+    if (data.stock_rev != null) {
+      stockLastRev = String(data.stock_rev);
+    }
+    if (!applyStockPayload(data)) {
+      markStockLoadFailedBriefly();
+    }
+  }
+
+  function stopStockPollFallback() {
     if (stockPollInterval) {
       clearInterval(stockPollInterval);
       stockPollInterval = null;
     }
   }
 
+  function startStockPollFallback() {
+    if (stockPollInterval) return;
+    void pollProductsStockRev();
+    stockPollInterval = setInterval(pollProductsStockRev, STOCK_REV_POLL_MS);
+  }
+
+  function stopStockRealtime() {
+    if (stockSseHandle) {
+      stockSseHandle.close();
+      stockSseHandle = null;
+    }
+    stopStockPollFallback();
+  }
+
   function startStockRealtime() {
     if (!document.querySelector('.product-stock-info')) return;
+    if (document.visibilityState !== 'visible') {
+      stopStockRealtime();
+      return;
+    }
 
     stopStockRealtime();
-    updateAllProductsStock();
 
-    const ms = document.hidden ? 8000 : 1200;
-    stockPollInterval = setInterval(updateAllProductsStock, ms);
+    if (typeof window.StoreSseRealtime !== 'undefined' && typeof window.StoreSseRealtime.connectOrFallback === 'function') {
+      stockSseHandle = window.StoreSseRealtime.connectOrFallback(
+        STOCK_SSE_URL,
+        onStockSseMessage,
+        startStockPollFallback
+      );
+    } else {
+      startStockPollFallback();
+    }
   }
 
   // Función para obtener el token CSRF
@@ -1780,10 +1845,12 @@ document.addEventListener('DOMContentLoaded', function() {
   startStockRealtime();
   document.addEventListener('visibilitychange', function () {
     if (!document.querySelector('.product-stock-info')) return;
-    startStockRealtime();
+    if (document.visibilityState === 'visible') {
+      startStockRealtime();
+    } else {
+      stopStockRealtime();
+    }
   });
-
-  // --- Funciones para manejo de cupones ---
   function aplicarCupon(codigoCupon) {
     if (!codigoCupon || codigoCupon.trim() === '') {
       alert('Por favor ingresa un código de cupón válido.');
@@ -2263,7 +2330,9 @@ document.addEventListener('DOMContentLoaded', function() {
   document.addEventListener('visibilitychange', function () {
     if (document.visibilityState === 'visible') {
       refreshStoreFrontSaldoFromApi();
-      pollStoreNotifications();
+      startStoreNotificationsRealtime();
+    } else {
+      stopStoreNotificationsRealtime();
     }
   });
 
@@ -2400,6 +2469,49 @@ document.addEventListener('DOMContentLoaded', function() {
         loadPendingProductReservations();
       })
       .catch(function () {});
+  }
+
+  function onStoreNotifSseMessage(data) {
+    if (!data || data.type !== 'notifications' || !data.success) return;
+    if (Array.isArray(data.notifications)) {
+      data.notifications.slice().reverse().forEach(showStoreReservationNotification);
+    }
+    refreshStoreFrontSaldoFromApi();
+    loadPendingProductReservations();
+  }
+
+  function stopStoreNotificationsRealtime() {
+    if (storeNotifSseHandle) {
+      storeNotifSseHandle.close();
+      storeNotifSseHandle = null;
+    }
+    if (storeNotifPollInterval) {
+      clearInterval(storeNotifPollInterval);
+      storeNotifPollInterval = null;
+    }
+  }
+
+  function startStoreNotificationsPollFallback() {
+    if (storeNotifPollInterval) return;
+    void pollStoreNotifications();
+    storeNotifPollInterval = setInterval(pollStoreNotifications, STORE_NOTIF_POLL_MS);
+  }
+
+  function startStoreNotificationsRealtime() {
+    if (document.visibilityState !== 'visible') {
+      stopStoreNotificationsRealtime();
+      return;
+    }
+    stopStoreNotificationsRealtime();
+    if (typeof window.StoreSseRealtime !== 'undefined' && typeof window.StoreSseRealtime.connectOrFallback === 'function') {
+      storeNotifSseHandle = window.StoreSseRealtime.connectOrFallback(
+        STORE_NOTIF_SSE_URL,
+        onStoreNotifSseMessage,
+        startStoreNotificationsPollFallback
+      );
+    } else {
+      startStoreNotificationsPollFallback();
+    }
   }
 
   document.querySelectorAll('.btn-reservar-producto-tienda').forEach(function (btn) {
@@ -2590,8 +2702,7 @@ document.addEventListener('DOMContentLoaded', function() {
   }
 
   loadPendingProductReservations();
-  window.setInterval(pollStoreNotifications, 15000);
-  pollStoreNotifications();
+  startStoreNotificationsRealtime();
 
   window.TiendaRenovacion = {
     getCart: function () {

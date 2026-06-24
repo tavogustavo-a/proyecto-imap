@@ -9,7 +9,7 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='fontawesome/css/all.css') }}">
 {% endblock %}
 {% block content %}
-<div class="container-fluid mt-2 store-light worksheet-panel admin-licencias-page admin-licencias-shell" data-licencias-persist-scope="{{ (session.get('username') or '')|e }}" data-admin-warranty-incidents-url="{{ url_for('store_bp.api_admin_license_warranty_incidents') }}" data-admin-proveedor-url="{{ url_for('store_bp.api_admin_proveedor_inventory_get') }}" data-admin-proveedor-sales-url="{{ url_for('store_bp.api_admin_proveedor_sales_stats_get') }}" data-admin-proveedor-sales-reset-url="{{ url_for('store_bp.api_admin_proveedor_sales_stats_reset') }}" {% if license_support_restricted_mode %}data-license-support-restricted="true"{% endif %}>
+<div class="container-fluid mt-2 store-light worksheet-panel admin-licencias-page admin-licencias-shell" data-licencias-persist-scope="{{ (session.get('username') or '')|e }}" data-admin-warranty-incidents-url="{{ url_for('store_bp.api_admin_license_warranty_incidents') }}" data-admin-proveedor-url="{{ url_for('store_bp.api_admin_proveedor_inventory_get') }}" data-admin-proveedor-put-url="{{ url_for('store_bp.api_admin_proveedor_inventory_put') }}" data-admin-proveedor-sales-url="{{ url_for('store_bp.api_admin_proveedor_sales_stats_get') }}" data-admin-proveedor-sales-reset-url="{{ url_for('store_bp.api_admin_proveedor_sales_stats_reset') }}" {% if license_support_restricted_mode %}data-license-support-restricted="true"{% endif %}>
   {% if license_support_restricted_mode %}
   {# Misma fila que la tienda: Menú a la izquierda, acción derecha alineada (como carrito en store_front) #}
   <div class="d-flex justify-content-between align-items-center flex-nowrap mb-3 w-100 admin-lic-toolbar-soporte-row">
@@ -213,22 +213,6 @@
     </div>
   </div>
 
-  <div id="adminLicProveedorInfoModal" class="admin-lic-bulk-info-modal" hidden aria-hidden="true">
-    <div class="admin-lic-bulk-info-modal__backdrop" data-admin-lic-proveedor-info-dismiss="1"></div>
-    <div class="admin-lic-bulk-info-modal__panel" role="dialog" aria-modal="true" aria-labelledby="adminLicProveedorInfoModalTitle">
-      <div class="admin-lic-bulk-info-modal__head">
-        <h2 id="adminLicProveedorInfoModalTitle" class="admin-lic-bulk-info-modal__title"><i class="fas fa-info-circle" aria-hidden="true"></i> Proveedores</h2>
-        <button type="button" class="admin-lic-bulk-info-modal__close" data-admin-lic-proveedor-info-dismiss="1" title="Cerrar" aria-label="Cerrar"><i class="fas fa-times" aria-hidden="true"></i></button>
-      </div>
-      <div class="admin-lic-bulk-info-modal__body">
-        <p class="admin-lic-bulk-info-modal__lead">Inventario de usuarios con permiso <strong>Proveedor</strong>. Junto a tus licencias del producto, estas líneas suman al total disponible para vender.</p>
-      </div>
-      <div class="admin-lic-bulk-info-modal__footer">
-        <button type="button" class="btn-blue menu-btn-worksheet" id="adminLicProveedorInfoOkBtn" data-admin-lic-proveedor-info-dismiss="1">Entendido</button>
-      </div>
-    </div>
-  </div>
-
   <div id="adminLicProveedorUserPickModal" class="admin-lic-proveedor-user-pick-modal" hidden aria-hidden="true">
     <div class="admin-lic-proveedor-user-pick-modal__backdrop" data-admin-lic-proveedor-user-pick-dismiss="1"></div>
     <div class="admin-lic-proveedor-user-pick-modal__panel" role="dialog" aria-modal="true" aria-labelledby="adminLicProveedorUserPickModalTitle">
@@ -304,7 +288,6 @@
 {% endblock %}
 {% block scripts %}
   {{ super() }}
-  <script src="{{ url_for('store_bp.static', filename='js/store_fetch_json.js') }}?v={{ licencias_static_version }}" defer></script>
   <script src="{{ url_for('store_bp.static', filename='js/admin_store.js') }}?v={{ licencias_static_version }}" defer></script>
   <script src="{{ url_for('store_bp.static', filename='js/menu_tienda.js') }}?v={{ licencias_static_version }}" defer></script>
   <script src="{{ url_for('store_bp.static', filename='js/licencias_bootstrap.js') }}?v={{ licencias_static_version }}" defer></script>

@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Resumen diario WhatsApp: compras y renovaciones del día (Colombia) + pausa de ventas."""
+"""Resumen diario WhatsApp: compras y renovaciones del día (Colombia)."""
 
 from __future__ import annotations
 
@@ -9,12 +9,16 @@ import re
 from datetime import date, datetime, time
 from typing import Any, Callable
 
+from sqlalchemy import or_
+
 from app.extensions import db
 from app.models.user import User
 from app.store.models import Sale, SalePurchaseSnapshot, WhatsAppConfig
 from app.utils.timezone import COLOMBIA_TZ, get_colombia_datetime, utc_to_colombia
 
 logger = logging.getLogger(__name__)
+
+MAX_DAILY_DIGEST_SEND_ATTEMPTS = 2
 
 
 def ensure_whatsapp_daily_sales_columns():
@@ -33,6 +37,10 @@ def ensure_whatsapp_daily_sales_columns():
         additions = [
             ('whatsapp_daily_co_date', f'ALTER TABLE store_sale_purchase_snapshots ADD COLUMN whatsapp_daily_co_date {date_type}'),
             ('whatsapp_daily_sent_at', f'ALTER TABLE store_sale_purchase_snapshots ADD COLUMN whatsapp_daily_sent_at {dt_type}'),
+            (
+                'whatsapp_daily_send_attempts',
+                'ALTER TABLE store_sale_purchase_snapshots ADD COLUMN whatsapp_daily_send_attempts INTEGER NOT NULL DEFAULT 0',
+            ),
         ]
         for col_name, ddl in additions:
             if col_name in cols:
@@ -105,13 +113,22 @@ def _co_date_ready_for_send(co_date: date, config: WhatsAppConfig, co_now) -> bo
     return (co_now.hour * 60 + co_now.minute) >= (target.hour * 60 + target.minute)
 
 
-def pending_daily_snapshots_query():
+def pending_daily_snapshots_query(*, ignore_attempt_limit: bool = False):
     ensure_whatsapp_daily_sales_columns()
-    return SalePurchaseSnapshot.query.filter(
+    q = SalePurchaseSnapshot.query.filter(
         SalePurchaseSnapshot.is_reversed.is_(False),
         SalePurchaseSnapshot.whatsapp_daily_sent_at.is_(None),
         SalePurchaseSnapshot.whatsapp_daily_co_date.isnot(None),
     )
+    if not ignore_attempt_limit:
+        attempts_col = SalePurchaseSnapshot.whatsapp_daily_send_attempts
+        q = q.filter(
+            or_(
+                attempts_col.is_(None),
+                attempts_col < MAX_DAILY_DIGEST_SEND_ATTEMPTS,
+            )
+        )
+    return q
 
 
 def user_has_pending_whatsapp_daily_sales(user: User) -> bool:
@@ -194,7 +211,8 @@ def _group_pending_by_user_and_date(
     from app.store.routes import _billing_user_for_store_debt_limit
 
     groups: dict[tuple[int, date], list[SalePurchaseSnapshot]] = {}
-    for snap in pending_daily_snapshots_query().order_by(SalePurchaseSnapshot.id.asc()).all():
+    snap_q = pending_daily_snapshots_query(ignore_attempt_limit=force)
+    for snap in snap_q.order_by(SalePurchaseSnapshot.id.asc()).all():
         co_date = _snapshot_co_date(snap)
         if not co_date:
             continue
@@ -639,6 +657,46 @@ def mark_daily_snapshots_sent(snapshots: list[SalePurchaseSnapshot]) -> None:
         db.session.add(snap)
 
 
+def _increment_daily_digest_send_attempts(
+    snapshots: list[SalePurchaseSnapshot],
+) -> bool:
+    """Suma 1 intento fallido por grupo; True si ya no se reintenta (máx. 2)."""
+    if not snapshots:
+        return False
+    abandoned = False
+    for snap in snapshots:
+        n = int(getattr(snap, 'whatsapp_daily_send_attempts', 0) or 0) + 1
+        snap.whatsapp_daily_send_attempts = n
+        db.session.add(snap)
+        if n >= MAX_DAILY_DIGEST_SEND_ATTEMPTS:
+            abandoned = True
+    if abandoned:
+        logger.warning(
+            'WhatsApp resumen diario: abandonado tras %s intentos (sale_ids=%s)',
+            MAX_DAILY_DIGEST_SEND_ATTEMPTS,
+            [getattr(s, 'sale_id', None) for s in snapshots[:5]],
+        )
+    return abandoned
+
+
+def record_daily_digest_connect_failures(
+    config: WhatsAppConfig,
+    co_now,
+    *,
+    force: bool = False,
+) -> int:
+    """
+    WhatsApp desconectado: cuenta 1 intento fallido por resumen pendiente
+    (misma regla que un envío fallido; máx. 2 por cliente/día).
+    """
+    groups = _group_pending_by_user_and_date(config, co_now, force=force)
+    touched = 0
+    for snaps in groups.values():
+        if _increment_daily_digest_send_attempts(snaps):
+            touched += 1
+    return touched
+
+
 def send_pending_daily_digests_for_config(
     config: WhatsAppConfig,
     co_now,
@@ -649,7 +707,7 @@ def send_pending_daily_digests_for_config(
     config_evolution_instance,
     resolve_phone,
     customer_name_fn,
-    pause_sec: float,
+    pause_between_messages: Callable[[], float] | None = None,
     force: bool = False,
     delivery_details: list | None = None,
 ) -> dict[str, Any]:
@@ -662,7 +720,14 @@ def send_pending_daily_digests_for_config(
         'daily_skipped_no_phone': 0,
         'daily_groups': 0,
     }
+    if not config or not config.is_enabled:
+        return stats
     details = delivery_details if delivery_details is not None else []
+
+    def _next_pause_sec() -> float:
+        if pause_between_messages is not None:
+            return max(0.0, float(pause_between_messages()))
+        return 3.0
 
     def _append_detail(*, username: str, phone: str | None, outcome: str, reason: str = '') -> None:
         if len(details) >= 100:
@@ -688,6 +753,7 @@ def send_pending_daily_digests_for_config(
         from app.store.whatsapp_user_notify_prefs import user_receives_whatsapp_notifications
 
         if not user_receives_whatsapp_notifications(billing_user):
+            mark_daily_snapshots_sent(snaps)
             stats['daily_skipped_no_phone'] += 1
             _append_detail(
                 username=billing_user.username or '',
@@ -698,6 +764,7 @@ def send_pending_daily_digests_for_config(
             continue
         phone = resolve_phone(billing_user)
         if not phone:
+            mark_daily_snapshots_sent(snaps)
             stats['daily_skipped_no_phone'] += 1
             _append_detail(
                 username=billing_user.username or '',
@@ -735,10 +802,11 @@ def send_pending_daily_digests_for_config(
                     co_date.isoformat(),
                     len(snaps),
                 )
-                time.sleep(pause_sec)
+                time.sleep(_next_pause_sec())
             else:
                 stats['daily_errors'] += 1
                 err_msg = str(result.get('error') or 'Envío fallido')
+                _increment_daily_digest_send_attempts(snaps)
                 _append_detail(
                     username=billing_user.username or '',
                     phone=phone,
@@ -752,6 +820,7 @@ def send_pending_daily_digests_for_config(
                 )
         except Exception as exc:
             stats['daily_errors'] += 1
+            _increment_daily_digest_send_attempts(snaps)
             _append_detail(
                 username=billing_user.username or '',
                 phone=phone,

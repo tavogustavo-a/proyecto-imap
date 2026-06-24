@@ -15,6 +15,7 @@ function adminLicEnsurePrefsObject() {
       suspended_collapsed: {},
       expired_collapsed: {},
       proveedor_merged_collapsed: {},
+      customer_renewal_collapsed: {},
       proveedor_merged_user_filter: {},
       proveedor_panel_user_collapsed: {},
       proveedor_panel_day_collapsed: {},
@@ -43,6 +44,7 @@ function adminLicBootstrapUiPrefsFromDom() {
       'suspended_collapsed',
       'expired_collapsed',
       'proveedor_merged_collapsed',
+      'customer_renewal_collapsed',
       'proveedor_merged_user_filter',
       'proveedor_panel_user_collapsed',
       'proveedor_panel_day_collapsed',
@@ -148,6 +150,25 @@ function scheduleAdminLicenciasUiPrefsSave() {
   }, 420);
 }
 
+if (typeof window !== 'undefined' && !window._adminLicUiPrefsPageHook) {
+  window._adminLicUiPrefsPageHook = true;
+  window.addEventListener('pagehide', function () {
+    if (__adminLicUiPrefsSaveTimer) {
+      window.clearTimeout(__adminLicUiPrefsSaveTimer);
+      __adminLicUiPrefsSaveTimer = null;
+    }
+    void flushAdminLicenciasUiPrefsSave();
+  });
+  document.addEventListener('visibilitychange', function () {
+    if (document.visibilityState !== 'hidden') return;
+    if (__adminLicUiPrefsSaveTimer) {
+      window.clearTimeout(__adminLicUiPrefsSaveTimer);
+      __adminLicUiPrefsSaveTimer = null;
+    }
+    void flushAdminLicenciasUiPrefsSave();
+  });
+}
+
 async function flushAdminLicenciasUiPrefsSave() {
   if (!document.getElementById('adminLicenciasUiPrefsJson')) return;
   adminLicEnsurePrefsObject();
@@ -169,21 +190,36 @@ async function flushAdminLicenciasUiPrefsSave() {
   }
 }
 
-function adminLicGetBlocPrefCollapsed(mapKey, licenseId) {
+function adminLicGetBlocPrefCollapsed(mapKey, licenseId, legacyKeyFn) {
   adminLicEnsurePrefsObject();
   var lid = String(licenseId);
   var m = adminLicenciasUiPrefs[mapKey];
   if (m && Object.prototype.hasOwnProperty.call(m, lid)) {
     return m[lid] ? 'true' : 'false';
   }
+  if (typeof legacyKeyFn === 'function') {
+    try {
+      var lv = localStorage.getItem(legacyKeyFn(licenseId));
+      if (lv === 'true' || lv === 'false') {
+        adminLicenciasUiPrefs[mapKey] = adminLicenciasUiPrefs[mapKey] || {};
+        adminLicenciasUiPrefs[mapKey][lid] = lv === 'true';
+        return lv;
+      }
+    } catch (_leg) {}
+  }
   return null;
 }
 
-function adminLicSetBlocPrefCollapsed(mapKey, licenseId, isCollapsed) {
+function adminLicSetBlocPrefCollapsed(mapKey, licenseId, isCollapsed, legacyKeyFn) {
   adminLicEnsurePrefsObject();
   var lid = String(licenseId);
   adminLicenciasUiPrefs[mapKey] = adminLicenciasUiPrefs[mapKey] || {};
   adminLicenciasUiPrefs[mapKey][lid] = !!isCollapsed;
+  if (typeof legacyKeyFn === 'function') {
+    try {
+      localStorage.setItem(legacyKeyFn(licenseId), isCollapsed ? 'true' : 'false');
+    } catch (_legW) {}
+  }
   scheduleAdminLicenciasUiPrefsSave();
 }
 
@@ -204,6 +240,17 @@ function licenciasUiScopeSlug() {
   }
 }
 
+function licenciasUiAdminDayStorageKeys(licenseId, day) {
+  var slug = licenciasUiScopeSlug();
+  var lid =
+    licenseId === AGGREGATE_LICENSE_ID || licenseId === '0' || licenseId === 0 ? '0' : String(licenseId);
+  var d = String(day);
+  return {
+    scoped: 'licencias_ui_' + slug + '_admin_day_' + lid + '_' + d + '_collapsed',
+    legacy: 'daySection_' + lid + '_' + d + '_collapsed',
+  };
+}
+
 function licenciasUiAdminDayCollapsedRead(licenseId, day) {
   var lid =
     licenseId === AGGREGATE_LICENSE_ID || licenseId === '0' || licenseId === 0 ? '0' : String(licenseId);
@@ -213,6 +260,16 @@ function licenciasUiAdminDayCollapsedRead(licenseId, day) {
   if (byLic && Object.prototype.hasOwnProperty.call(byLic, d)) {
     return byLic[d] ? 'true' : 'false';
   }
+  var keys = licenciasUiAdminDayStorageKeys(licenseId, day);
+  try {
+    var v = localStorage.getItem(keys.scoped);
+    if (v == null || v === '') v = localStorage.getItem(keys.legacy);
+    if (v === 'true' || v === 'false') {
+      adminLicenciasUiPrefs.admin_days[lid] = adminLicenciasUiPrefs.admin_days[lid] || {};
+      adminLicenciasUiPrefs.admin_days[lid][d] = v === 'true';
+      return v;
+    }
+  } catch (_ls) {}
   return null;
 }
 
@@ -223,7 +280,26 @@ function licenciasUiAdminDayCollapsedWrite(licenseId, day, isCollapsed) {
   adminLicEnsurePrefsObject();
   adminLicenciasUiPrefs.admin_days[lid] = adminLicenciasUiPrefs.admin_days[lid] || {};
   adminLicenciasUiPrefs.admin_days[lid][d] = !!isCollapsed;
+  var keys = licenciasUiAdminDayStorageKeys(licenseId, day);
+  try {
+    localStorage.setItem(keys.scoped, isCollapsed ? 'true' : 'false');
+  } catch (_lsW) {}
   scheduleAdminLicenciasUiPrefsSave();
+}
+
+/** Antes de reemplazar #licenseAllDaysContainer, volcar plegado actual al almacén (BD + localStorage). */
+function licenciasUiCaptureAdminDaySectionsFromDom(licenseId) {
+  var container = document.getElementById('licenseAllDaysContainer');
+  if (!container || container.classList.contains('d-none')) return;
+  if (licenseId == null || licenseId === '') return;
+  var sections = container.querySelectorAll('.day-section[data-day]');
+  var i;
+  for (i = 0; i < sections.length; i += 1) {
+    var section = sections[i];
+    var day = section.dataset.day;
+    if (day == null || day === '') continue;
+    licenciasUiAdminDayCollapsedWrite(licenseId, day, section.classList.contains('collapsed'));
+  }
 }
 
 function licenciasUiMainGridStorageKeys() {
@@ -239,11 +315,25 @@ function licenciasUiMainGridCollapsedRead() {
   adminLicEnsurePrefsObject();
   if (adminLicenciasUiPrefs.main_grid_collapsed === true) return 'true';
   if (adminLicenciasUiPrefs.main_grid_collapsed === false) return 'false';
+  var keys = licenciasUiMainGridStorageKeys();
+  try {
+    var v = localStorage.getItem(keys.scoped);
+    if (v == null || v === '') v = localStorage.getItem(keys.legacyAdmin);
+    if (v == null || v === '') v = localStorage.getItem(keys.legacyPortal);
+    if (v === 'true' || v === 'false') {
+      adminLicenciasUiPrefs.main_grid_collapsed = v === 'true';
+      return v;
+    }
+  } catch (_mg) {}
   return null;
 }
 
 function licenciasUiMainGridCollapsedWrite(isCollapsed) {
   adminLicEnsurePrefsObject();
   adminLicenciasUiPrefs.main_grid_collapsed = !!isCollapsed;
+  var keys = licenciasUiMainGridStorageKeys();
+  try {
+    localStorage.setItem(keys.scoped, isCollapsed ? 'true' : 'false');
+  } catch (_mgW) {}
   scheduleAdminLicenciasUiPrefsSave();
 }

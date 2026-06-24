@@ -56,11 +56,11 @@
   <script src="{{ url_for('static', filename='js/main.js') }}?v=20260611-mail-field-names"></script>
   <script src="{{ url_for('static', filename='js/loading_overlay.js') }}" defer></script>
   <script src="{{ url_for('store_bp.static', filename='js/store_fetch_json.js') }}?v=20260610" defer></script>
-  <script src="{{ url_for('store_bp.static', filename='js/balance_recharge_realtime.js') }}?v=20260609-sse-backoff" defer></script>
+  <script src="{{ url_for('store_bp.static', filename='js/store_sse_realtime.js') }}?v=20260622-sse-unified" defer></script>
   <script src="{{ url_for('store_bp.static', filename='js/store_menu_saldo_realtime.js') }}?v=20260610-fetch" defer></script>
   {% if is_admin %}
-  <script src="{{ url_for('store_bp.static', filename='js/admin_archivados_menu_count.js') }}?v=2" defer></script>
-  <script src="{{ url_for('store_bp.static', filename='js/admin_proveedor_ventas_menu.js') }}?v={{ licencias_static_version }}" defer></script>
+  <script src="{{ url_for('store_bp.static', filename='js/admin_archivados_menu_count.js') }}?v=20260622-archived-sse" defer></script>
+  <script src="{{ url_for('store_bp.static', filename='js/admin_proveedor_ventas_menu.js') }}?v=20260622-proveedor-sse" defer></script>
   {% endif %}
 
   {# Bloque para que las plantillas hijas puedan añadir sus propios scripts #}

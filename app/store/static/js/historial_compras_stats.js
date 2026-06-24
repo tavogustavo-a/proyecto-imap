@@ -38,6 +38,8 @@ document.addEventListener('DOMContentLoaded', function () {
   const salesTable = document.querySelector('#phStatsSalesTable tbody');
   const activityTable = document.querySelector('#phStatsActivityTable tbody');
 
+  let lastProveedorServiciosPayload = null;
+
   function initStatsSalesHeaderTips() {
     const salesHead = document.getElementById('phStatsSalesTable');
     if (!salesHead) return;
@@ -87,7 +89,7 @@ document.addEventListener('DOMContentLoaded', function () {
   const ACTIVITY_LABELS = {
     caidas: 'Caídas',
     renovaciones_actividad: 'Renovaciones',
-    proveedores: 'Proveedores',
+    proveedores: 'Resúmenes proveedor',
   };
 
   const ACTIVITY_TABLE_ORDER = ['caidas', 'renovaciones_actividad', 'proveedores'];
@@ -112,21 +114,20 @@ document.addEventListener('DOMContentLoaded', function () {
     );
   }
 
+  function isUnifiedProveedorView() {
+    return selfMode && viewerIsProveedor();
+  }
+
   function showProveedorStatsUi() {
+    if (isUnifiedProveedorView()) return false;
     if (selfMode) return viewerIsProveedor();
     const scopeVal = statsScopeValue();
     return scopeVal === 'proveedor' || scopeVal === 'all';
   }
 
-  function showProveedorSalesColumn() {
-    if (isSingleProveedorScope()) return true;
-    if (!showProveedorStatsUi()) return false;
-    if (selfMode) return false;
-    return true;
-  }
-
   function activityTableOrder() {
     if (isSingleProveedorScope()) return ['proveedores'];
+    if (isUnifiedProveedorView()) return ['caidas', 'renovaciones_actividad', 'proveedores'];
     if (!showProveedorStatsUi()) {
       return ['caidas', 'renovaciones_actividad'];
     }
@@ -158,20 +159,12 @@ document.addEventListener('DOMContentLoaded', function () {
     panel.querySelectorAll('#phStatsSalesTable .ph-stats-col-general').forEach(function (th) {
       th.hidden = singleProv;
     });
-    toggleProveedorSalesColumn();
-    const activityBlock = document.getElementById('phStatsActivityBlock');
-    if (activityBlock) activityBlock.hidden = singleProv;
     updateSalesSubtitle();
-  }
-
-  function toggleProveedorSalesColumn() {
-    const col = document.getElementById('phStatsSalesColProveedor');
-    if (col) col.hidden = !showProveedorSalesColumn();
   }
 
   function salesTableColCount() {
     if (isSingleProveedorScope()) return 2;
-    return showProveedorSalesColumn() ? 6 : 5;
+    return 5;
   }
 
   function salesRowHtml(r) {
@@ -193,11 +186,9 @@ document.addEventListener('DOMContentLoaded', function () {
       r.ventas +
       '</td><td class="text-center">' +
       r.renovaciones +
+      '</td><td>' +
+      formatMoney(r.total, r.moneda) +
       '</td>';
-    if (showProveedorSalesColumn()) {
-      html += '<td class="text-center">' + (Number(r.proveedores) || 0) + '</td>';
-    }
-    html += '<td>' + formatMoney(r.total, r.moneda) + '</td>';
     return html;
   }
 
@@ -459,17 +450,8 @@ document.addEventListener('DOMContentLoaded', function () {
     });
   }
 
-  function renderSummary(s) {
-    if (!summaryCards) return;
-    const cards = isSingleProveedorScope()
-      ? [
-          {
-            label: 'Proveedores',
-            value: formatCardValue(s.proveedores_ventas),
-            icon: 'fa-truck-loading',
-          },
-        ]
-      : [
+  function fullSummaryCardDefs(s) {
+    return [
       { label: 'Ventas', value: formatCardValue(s.ventas_total), icon: 'fa-shopping-cart' },
       {
         label: 'Renovaciones tienda',
@@ -493,7 +475,11 @@ document.addEventListener('DOMContentLoaded', function () {
       },
       { label: 'Garantías', value: formatCardValue(s.garantias), icon: 'fa-shield-alt' },
     ];
-    summaryCards.innerHTML = '';
+  }
+
+  function renderSummaryCards(targetEl, cards) {
+    if (!targetEl) return;
+    targetEl.innerHTML = '';
     cards.forEach(function (c) {
       const div = document.createElement('div');
       div.className = 'purchase-history-stats-card';
@@ -505,9 +491,23 @@ document.addEventListener('DOMContentLoaded', function () {
         '</span><span class="purchase-history-stats-card-label">' +
         escapeHtml(c.label) +
         '</span>';
-      summaryCards.appendChild(div);
+      targetEl.appendChild(div);
     });
-    removeStaleSummaryCards();
+    if (targetEl === summaryCards) removeStaleSummaryCards();
+  }
+
+  function renderSummary(s) {
+    if (isSingleProveedorScope()) {
+      renderSummaryCards(summaryCards, [
+        {
+          label: 'Proveedores',
+          value: formatCardValue(s.proveedores_ventas),
+          icon: 'fa-truck-loading',
+        },
+      ]);
+      return;
+    }
+    renderSummaryCards(summaryCards, fullSummaryCardDefs(s));
   }
 
   function fillTable(tbody, rows, cols) {
@@ -551,11 +551,10 @@ document.addEventListener('DOMContentLoaded', function () {
     productRows.forEach(function (r) {
       const moneda = String(r.moneda || 'COP').toUpperCase();
       if (!byMon[moneda]) {
-        byMon[moneda] = { ventas: 0, renovaciones: 0, proveedores: 0, total: 0 };
+        byMon[moneda] = { ventas: 0, renovaciones: 0, total: 0 };
       }
       byMon[moneda].ventas += Number(r.ventas) || 0;
       byMon[moneda].renovaciones += Number(r.renovaciones) || 0;
-      byMon[moneda].proveedores += Number(r.proveedores) || 0;
       byMon[moneda].total += Number(r.total) || 0;
     });
     const order = ['COP', 'USD'];
@@ -578,14 +577,42 @@ document.addEventListener('DOMContentLoaded', function () {
         '</strong></td>' +
         '<td class="text-center"><strong>' +
         t.renovaciones +
+        '</strong></td>' +
+        '<td><strong>' +
+        formatMoney(t.total, moneda) +
         '</strong></td>';
-      if (showProveedorSalesColumn()) {
-        html += '<td class="text-center"><strong>' + t.proveedores + '</strong></td>';
-      }
-      html += '<td><strong>' + formatMoney(t.total, moneda) + '</strong></td>';
       tr.innerHTML = html;
       tbody.appendChild(tr);
     });
+  }
+
+  function proveedorActivityCount(act, proveedorPayload) {
+    const payload = proveedorPayload || {};
+    if (payload.total_ventas != null) return Number(payload.total_ventas) || 0;
+    return Number((act && act.proveedores) || 0);
+  }
+
+  function renderActivityTable(tbody, act, orderKeys, proveedorPayload) {
+    if (!tbody) return;
+    const actRows = (orderKeys || []).map(function (k) {
+      const label = ACTIVITY_LABELS[k] || k;
+      const labelCell =
+        k === 'proveedores' ? proveedorActLabelHtml(label) : escapeHtml(label);
+      const qty =
+        k === 'proveedores' ? proveedorActivityCount(act, proveedorPayload) : act[k] || 0;
+      return {
+        html:
+          '<td>' +
+          labelCell +
+          '</td><td class="text-center">' +
+          qty +
+          '</td>',
+      };
+    });
+    fillTable(tbody, actRows, 2);
+    if (orderKeys.indexOf('proveedores') >= 0) {
+      bindProveedorActivityModal(tbody, proveedorPayload);
+    }
   }
 
   function renderSalesByProductTable(productRows) {
@@ -602,41 +629,98 @@ document.addEventListener('DOMContentLoaded', function () {
     appendSalesTotalsFooter(salesTable, rows);
   }
 
-  function renderStats(data) {
-    const s = data.summary || {};
-    renderSummary(s);
+  function escapeHtml(text) {
+    const d = document.createElement('div');
+    d.textContent = text == null ? '' : String(text);
+    return d.innerHTML;
+  }
 
+  function proveedorActLabelHtml(label) {
+    return (
+      '<button type="button" class="ph-stats-proveedor-act-btn" title="Ver ventas por servicio vinculado">' +
+      '<i class="fas fa-truck-loading purchase-history-stats-proveedor-tip" aria-hidden="true"></i>' +
+      '<span class="ph-stats-proveedor-act-label">' +
+      escapeHtml(label) +
+      '</span></button>'
+    );
+  }
+
+  function statsPeriodModalTitle(prefix) {
+    const from = dateFromInput?.value || '';
+    const to = dateToInput?.value || '';
+    if (from && to) {
+      return (
+        (prefix || 'Resúmenes proveedor') +
+        ' — ' +
+        formatDisplayDate(from) +
+        ' — ' +
+        formatDisplayDate(to)
+      );
+    }
+    return prefix || 'Resúmenes proveedor';
+  }
+
+  function openProveedorServiciosModal(proveedorPayload) {
+    if (typeof window.purchaseHistoryOpenProveedorServiciosModal !== 'function') return;
+    lastProveedorServiciosPayload = proveedorPayload || { servicios: [], total_ventas: 0 };
+    window.purchaseHistoryOpenProveedorServiciosModal(
+      lastProveedorServiciosPayload,
+      statsPeriodModalTitle('Resúmenes proveedor')
+    );
+  }
+
+  function bindProveedorActivityModal(tableBody, proveedorPayload) {
+    if (!tableBody) return;
+    const btn = tableBody.querySelector('.ph-stats-proveedor-act-btn');
+    if (!btn) return;
+    btn.addEventListener('click', function () {
+      openProveedorServiciosModal(proveedorPayload);
+    });
+  }
+
+  function renderUnifiedProveedorStats(data) {
+    const compras = data.mis_compras || {};
+    const ventas = data.ventas_proveedor || {};
+    const actMerged = Object.assign({}, compras.actividad_por_tipo || {});
+    const proveedorPayload =
+      ventas.proveedor_servicios_resumen || { servicios: [], total_ventas: 0 };
+    actMerged.proveedores = proveedorActivityCount(
+      ventas.actividad_por_tipo || {},
+      proveedorPayload
+    );
+
+    renderSummaryCards(summaryCards, fullSummaryCardDefs(compras.summary || {}));
+    renderSalesByProductTable(compras.ventas_por_producto || []);
+    renderActivityTable(
+      activityTable,
+      actMerged,
+      ['caidas', 'renovaciones_actividad', 'proveedores'],
+      proveedorPayload
+    );
+  }
+
+  function renderStats(data) {
+    if (data.unified) {
+      renderUnifiedProveedorStats(data);
+      const suggestionsEl = document.getElementById('phStatsSuggestions');
+      if (suggestionsEl) suggestionsEl.remove();
+      return;
+    }
+
+    const s = data.summary || {};
+    const proveedorPayload =
+      data.proveedor_servicios_resumen || { servicios: [], total_ventas: 0 };
+
+    renderSummary(s);
     renderSalesByProductTable(data.ventas_por_producto || []);
 
     const act = data.actividad_por_tipo || {};
-    const actRows = activityTableOrder().map(function (k) {
-      const label = ACTIVITY_LABELS[k] || k;
-      const labelCell =
-        k === 'proveedores'
-          ? '<i class="fas fa-truck-loading purchase-history-stats-proveedor-tip" aria-hidden="true"></i> ' +
-            escapeHtml(label)
-          : escapeHtml(label);
-      return {
-        html:
-          '<td>' +
-          labelCell +
-          '</td><td class="text-center">' +
-          (act[k] || 0) +
-          '</td>',
-      };
-    });
-    fillTable(activityTable, actRows, 2);
+    renderActivityTable(activityTable, act, activityTableOrder(), proveedorPayload);
 
     const suggestionsEl = document.getElementById('phStatsSuggestions');
     if (suggestionsEl) {
       suggestionsEl.remove();
     }
-  }
-
-  function escapeHtml(text) {
-    const d = document.createElement('div');
-    d.textContent = text == null ? '' : String(text);
-    return d.innerHTML;
   }
 
   async function loadStats() {
@@ -683,6 +767,8 @@ document.addEventListener('DOMContentLoaded', function () {
       ) {
         params.set('user_id', proveedorUserIdInput.value);
       }
+    } else if (isUnifiedProveedorView()) {
+      params.set('scope', 'unified');
     }
     updatePeriodDisplayLabel();
     updateSalesSubtitle();
@@ -781,10 +867,43 @@ document.addEventListener('DOMContentLoaded', function () {
     if (picker && !picker.contains(e.target)) {
       closePeriodPopover();
     }
+    const proveedorInfoBox = document.getElementById('phStatsProveedorInfoBox');
+    const proveedorInfoBtn = document.getElementById('phStatsProveedorInfoBtn');
+    if (proveedorInfoBox && !proveedorInfoBox.hidden) {
+      if (
+        proveedorInfoBtn &&
+        !proveedorInfoBtn.contains(e.target) &&
+        !proveedorInfoBox.contains(e.target)
+      ) {
+        proveedorInfoBox.hidden = true;
+        proveedorInfoBtn.setAttribute('aria-expanded', 'false');
+      }
+    }
   });
 
+  (function initProveedorCoherenceInfo() {
+    const infoBtn = document.getElementById('phStatsProveedorInfoBtn');
+    const infoBox = document.getElementById('phStatsProveedorInfoBox');
+    if (!infoBtn || !infoBox) return;
+    infoBtn.addEventListener('click', function (e) {
+      e.preventDefault();
+      e.stopPropagation();
+      const open = infoBox.hidden;
+      infoBox.hidden = !open;
+      infoBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+    });
+  })();
+
   document.addEventListener('keydown', function (e) {
-    if (e.key === 'Escape') closePeriodPopover();
+    if (e.key === 'Escape') {
+      closePeriodPopover();
+      const proveedorInfoBox = document.getElementById('phStatsProveedorInfoBox');
+      const proveedorInfoBtn = document.getElementById('phStatsProveedorInfoBtn');
+      if (proveedorInfoBox && !proveedorInfoBox.hidden) {
+        proveedorInfoBox.hidden = true;
+        if (proveedorInfoBtn) proveedorInfoBtn.setAttribute('aria-expanded', 'false');
+      }
+    }
   });
 
   if (!selfMode) {

@@ -17,6 +17,13 @@ logger = logging.getLogger(__name__)
 
 _STORAGE_KEY = 'proveedor_daily_summaries'
 
+PROVEEDOR_METRICS_COHERENCE_NOTE = (
+    'Ventas del período: se calculan desde la base de datos (solo ventas a terceros). '
+    'Resúmenes diarios: registro persistido por día al registrar una venta. '
+    'Contador Admin → Proveedores: acumulado operativo desde el último reset; '
+    'puede no coincidir si hubo ventas antes del resumen, reset manual o limpieza masiva.'
+)
+
 
 def _format_money_plain(n) -> str:
     try:
@@ -103,10 +110,49 @@ def _co_date_from_event(event: dict[str, Any]) -> date | None:
     return utc_to_colombia(datetime.utcnow()).date()
 
 
+def make_proveedor_daily_sale_event(
+    *,
+    license_id: int,
+    product_name: str = 'Producto',
+    quantity: int = 1,
+    line_amount: float = 0.0,
+    is_renewal: bool = False,
+    currency: str = 'COP',
+    sold_at=None,
+    buyer_user_id=None,
+    sort_ts=None,
+) -> dict[str, Any]:
+    """Evento normalizado para ``record_proveedor_daily_events``."""
+    qty = max(1, int(quantity or 1))
+    sold_at = sold_at or datetime.utcnow()
+    if sort_ts is None and isinstance(sold_at, datetime) and hasattr(sold_at, 'timestamp'):
+        sort_ts = sold_at.timestamp()
+    buyer_uid = None
+    if buyer_user_id is not None:
+        try:
+            buyer_uid = int(buyer_user_id)
+        except (TypeError, ValueError):
+            buyer_uid = None
+    return {
+        'license_id': int(license_id),
+        'product_name': str(product_name or 'Producto').strip() or 'Producto',
+        'quantity': qty,
+        'line_amount': float(line_amount or 0),
+        'is_renewal': bool(is_renewal),
+        'currency': str(currency or 'COP').strip().upper() or 'COP',
+        'sold_at': sold_at,
+        'sort_ts': sort_ts,
+        'buyer_user_id': buyer_uid,
+    }
+
+
 def record_proveedor_daily_events(events: list[dict[str, Any]] | None) -> None:
     """
-    Registra ventas del checkout en el resumen diario de cada proveedor afectado.
-    Cada evento: license_id, product_name, quantity, line_amount, is_renewal, currency, sold_at?
+    Registra ventas en el resumen diario de cada proveedor afectado.
+    Origen: checkout tienda, entrega admin (bulk delivery) u otros flujos que
+    llamen ``make_proveedor_daily_sale_event`` / ``_proveedor_record_license_sale``.
+    Cada evento: license_id, product_name, quantity, line_amount, is_renewal,
+    currency, sold_at?, buyer_user_id?
     """
     if not events:
         return
@@ -160,6 +206,15 @@ def record_proveedor_daily_events(events: list[dict[str, Any]] | None) -> None:
         for user_row, license_keys in proveedor_users:
             if lid_key not in license_keys:
                 continue
+            from app.store.purchase_history_stats import _proveedor_self_buyer_ids
+
+            buyer_uid = event.get('buyer_user_id')
+            if buyer_uid is not None:
+                try:
+                    if int(buyer_uid) in _proveedor_self_buyer_ids(user_row.id):
+                        continue
+                except (TypeError, ValueError):
+                    pass
             summaries = _summaries_map(user_row)
             day = dict(summaries.get(date_key) or {})
             products = dict(day.get('products') or {})
@@ -234,10 +289,141 @@ def purge_proveedor_daily_summaries_before(
     return removed
 
 
-def build_proveedor_sales_daily_summary_items(billing_user, *, utc_to_colombia_fn=None):
+def delete_proveedor_daily_summary_day(billing_user, co_date: date) -> tuple[bool, str | None]:
+    """Elimina un día concreto del resumen persistido del proveedor."""
+    if not billing_user:
+        return False, 'Usuario no encontrado.'
+    try:
+        target = co_date if isinstance(co_date, date) else date.fromisoformat(str(co_date)[:10])
+    except ValueError:
+        return False, 'Fecha inválida.'
+    up = billing_user.user_prices if isinstance(billing_user.user_prices, dict) else {}
+    if not up.get('proveedor'):
+        return False, 'El usuario no es proveedor.'
+    summaries = _summaries_map(billing_user)
+    date_key = target.isoformat()
+    if date_key not in summaries:
+        return False, 'No hay resumen guardado para esa fecha.'
+    keep = dict(summaries)
+    del keep[date_key]
+    if keep:
+        _save_summaries_map(billing_user, keep)
+    else:
+        new_up = dict(up)
+        new_up.pop(_STORAGE_KEY, None)
+        billing_user.user_prices = new_up
+        flag_modified(billing_user, 'user_prices')
+        db.session.add(billing_user)
+    try:
+        db.session.commit()
+    except Exception as exc:
+        db.session.rollback()
+        logger.warning('delete_proveedor_daily_summary_day: %s', exc)
+        return False, 'No se pudo borrar el resumen.'
+    return True, None
+
+
+def list_proveedor_daily_summaries_in_period(
+    billing_user=None,
+    date_from: date | None = None,
+    date_to: date | None = None,
+    *,
+    all_proveedores: bool = False,
+) -> list[dict[str, Any]]:
+    """Resúmenes persistidos del proveedor dentro del rango calendario (inclusive)."""
+    if not date_from or not date_to:
+        return []
+    if date_from > date_to:
+        date_from, date_to = date_to, date_from
+
+    if all_proveedores:
+        from app.store.purchase_history_stats import _proveedor_user_rows
+
+        items_out: list[dict[str, Any]] = []
+        for user_row in _proveedor_user_rows():
+            username = (user_row.username or '—').strip() or '—'
+            for item in _list_proveedor_daily_summaries_for_user(
+                user_row, date_from, date_to
+            ):
+                out = dict(item)
+                out['user_id'] = int(user_row.id)
+                out['usuario'] = username
+                out['producto'] = f'{username} — {item["producto"]}'
+                items_out.append(out)
+        items_out.sort(
+            key=lambda x: (str(x.get('co_date') or ''), str(x.get('usuario') or '').lower()),
+            reverse=True,
+        )
+        return items_out
+
+    if not billing_user:
+        return []
+    return _list_proveedor_daily_summaries_for_user(billing_user, date_from, date_to)
+
+
+def _list_proveedor_daily_summaries_for_user(
+    billing_user,
+    date_from: date,
+    date_to: date,
+) -> list[dict[str, Any]]:
+    summaries = _summaries_map(billing_user)
+    if not summaries:
+        return []
+
+    items_out: list[dict[str, Any]] = []
+    for date_key in sorted(summaries.keys(), reverse=True):
+        day = summaries.get(date_key)
+        if not isinstance(day, dict):
+            continue
+        try:
+            co_date = date.fromisoformat(str(date_key)[:10])
+        except ValueError:
+            continue
+        if co_date < date_from or co_date > date_to:
+            continue
+        qty = int(day.get('qty') or 0)
+        if qty <= 0:
+            continue
+        text = str(day.get('summary_text') or '').strip()
+        if not text:
+            text = _rebuild_summary_text(day)
+        items_out.append(
+            {
+                'co_date': co_date.isoformat(),
+                'producto': f'Venta diaria proveedor — {co_date.strftime("%d/%m/%Y")}',
+                'daily_summary_text': text,
+                'cantidad': qty,
+                'total': float(day.get('total') or 0),
+            }
+        )
+    return items_out
+
+
+def build_proveedor_sales_daily_summary_items(
+    billing_user=None,
+    *,
+    all_users: bool = False,
+    utc_to_colombia_fn=None,
+):
     """Filas de historial desde resúmenes persistidos del proveedor."""
-    del utc_to_colombia_fn
-    col_fn = utc_to_colombia
+    col_fn = utc_to_colombia_fn or utc_to_colombia
+    if all_users:
+        from app.store.purchase_history_stats import _proveedor_user_rows
+
+        items_out: list[dict[str, Any]] = []
+        for user_row in _proveedor_user_rows():
+            for item in _proveedor_daily_items_for_user(user_row, col_fn=col_fn):
+                item['user_id'] = int(user_row.id)
+                item['usuario'] = user_row.username or '—'
+                items_out.append(item)
+        return items_out
+    if not billing_user:
+        return []
+    return _proveedor_daily_items_for_user(billing_user, col_fn=col_fn)
+
+
+def _proveedor_daily_items_for_user(billing_user, *, col_fn):
+    """Filas de historial para un proveedor (billing user)."""
     if not billing_user:
         return []
 
@@ -320,7 +506,13 @@ def _legacy_build_from_sales(billing_user, *, col_fn):
             return
         if pid not in product_ids:
             return
-        from app.store.purchase_history_stats import _currency_from_user_row
+        from app.store.purchase_history_stats import (
+            _currency_from_user_row,
+            _sale_counts_as_proveedor_sale,
+        )
+
+        if not _sale_counts_as_proveedor_sale(user_id, pid, billing_user.id):
+            return
 
         buyer = User.query.get(int(user_id)) if user_id else None
         cur = _currency_from_user_row(buyer)
@@ -334,16 +526,17 @@ def _legacy_build_from_sales(billing_user, *, col_fn):
         if not lic:
             return
         events.append(
-            {
-                'license_id': int(lic.id),
-                'product_name': pname,
-                'quantity': qty,
-                'line_amount': amt,
-                'is_renewal': bool(is_ren),
-                'currency': cur,
-                'sold_at': created_at,
-                'sort_ts': created_at.timestamp() if hasattr(created_at, 'timestamp') else None,
-            }
+            make_proveedor_daily_sale_event(
+                license_id=int(lic.id),
+                product_name=pname,
+                quantity=qty,
+                line_amount=amt,
+                is_renewal=bool(is_ren),
+                currency=cur,
+                sold_at=created_at,
+                buyer_user_id=int(user_id) if user_id else None,
+                sort_ts=created_at.timestamp() if hasattr(created_at, 'timestamp') else None,
+            )
         )
 
     for sale in Sale.query.filter(Sale.product_id.in_(list(product_ids))).all():

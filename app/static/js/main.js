@@ -764,7 +764,22 @@ document.addEventListener("DOMContentLoaded", function () {
   }
 
   window.renderCodeResult = function(code, mailDateFormatted) {
-    const codeStr = String(code != null ? code : '').trim();
+    function unwrapAdminRedirectUrl(raw) {
+      var s = String(raw != null ? raw : '').trim();
+      if (!s) return s;
+      var marker = '/admin/redirect_to?url=';
+      var idx = s.indexOf(marker);
+      if (idx >= 0) {
+        try {
+          return decodeURIComponent(s.slice(idx + marker.length).split(/["']/)[0]);
+        } catch (_e) {
+          return s.slice(idx + marker.length);
+        }
+      }
+      return s;
+    }
+
+    const codeStr = unwrapAdminRedirectUrl(code);
     if (!codeStr) {
       return null;
     }

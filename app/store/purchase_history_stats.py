@@ -94,6 +94,45 @@ def _user_is_proveedor(user_row):
     return bool(up.get('proveedor'))
 
 
+def _proveedor_self_buyer_ids(proveedor_user_id):
+    """Titular + sub-usuarios: compras propias, no ventas a terceros."""
+    if not proveedor_user_id:
+        return set()
+    pid = int(proveedor_user_id)
+    ids = {pid}
+    for row in User.query.filter(User.parent_id == pid).with_entities(User.id).all():
+        ids.add(int(row.id))
+    return ids
+
+
+def _sale_counts_as_proveedor_sale(buyer_user_id, product_id, proveedor_user_id=None):
+    """
+    True si la venta es a un tercero de un producto del catálogo proveedor.
+    Excluye compras del propio titular o sus sub-usuarios.
+    """
+    if not product_id:
+        return False
+    try:
+        pid = int(product_id)
+    except (TypeError, ValueError):
+        return False
+    rows = _proveedor_user_rows(proveedor_user_id)
+    if not rows:
+        return False
+    try:
+        buyer_id = int(buyer_user_id) if buyer_user_id is not None else None
+    except (TypeError, ValueError):
+        buyer_id = None
+    for user_row in rows:
+        product_ids = _product_ids_for_proveedor_users([user_row])
+        if pid not in product_ids:
+            continue
+        if buyer_id is not None and buyer_id in _proveedor_self_buyer_ids(user_row.id):
+            return False
+        return True
+    return False
+
+
 def _count_proveedor_sales_in_period(start, end, proveedor_user_id=None):
     """Ventas en tienda de servicios habilitados para proveedor(es) en el período."""
     rows = _proveedor_user_rows(proveedor_user_id)
@@ -101,11 +140,14 @@ def _count_proveedor_sales_in_period(start, end, proveedor_user_id=None):
     if not product_ids:
         return 0
     pid_list = list(product_ids)
-    total = Sale.query.filter(
+    total = 0
+    for sale in Sale.query.filter(
         Sale.created_at >= start,
         Sale.created_at <= end,
         Sale.product_id.in_(pid_list),
-    ).count()
+    ).all():
+        if _sale_counts_as_proveedor_sale(sale.user_id, sale.product_id, proveedor_user_id):
+            total += 1
     active_sale_ids = {s.id for s in Sale.query.with_entities(Sale.id).all()}
     snaps = SalePurchaseSnapshot.query.filter(
         SalePurchaseSnapshot.purged_from_sales.is_(True),
@@ -116,8 +158,78 @@ def _count_proveedor_sales_in_period(start, end, proveedor_user_id=None):
     for snap in snaps:
         if snap.sale_id and snap.sale_id in active_sale_ids:
             continue
-        total += 1
+        if _sale_counts_as_proveedor_sale(snap.user_id, snap.product_id, proveedor_user_id):
+            total += 1
     return total
+
+
+def _build_proveedor_servicios_resumen(proveedor_rows, by_product_sales):
+    """Servicios vinculados al proveedor con ventas del período (0 si no hubo)."""
+    from app.store.models import License, Product
+    from sqlalchemy.orm import joinedload
+
+    sales_map: dict[str, dict] = defaultdict(lambda: {'ventas': 0, 'renovaciones': 0})
+    for (pname, _cur), bucket in (by_product_sales or {}).items():
+        sales_map[str(pname)]['ventas'] += int(bucket.get('ventas') or 0)
+        sales_map[str(pname)]['renovaciones'] += int(bucket.get('renovaciones') or 0)
+
+    seen: set[str] = set()
+    servicios: list[dict] = []
+    for user_row in proveedor_rows or []:
+        up = user_row.user_prices if isinstance(user_row.user_prices, dict) else {}
+        raw = up.get('proveedor_services')
+        if not isinstance(raw, dict):
+            continue
+        for key in raw.keys():
+            try:
+                lid = int(key)
+            except (TypeError, ValueError):
+                continue
+            if lid <= 0:
+                continue
+            lic = (
+                License.query.options(joinedload(License.product))
+                .filter(License.id == lid, License.enabled.is_(True))
+                .first()
+            )
+            if not lic or not lic.product_id:
+                continue
+            prod = getattr(lic, 'product', None)
+            pname = (prod.name if prod else None) or f'Producto #{lic.product_id}'
+            if pname in seen:
+                continue
+            seen.add(pname)
+            bucket = sales_map.get(pname, {'ventas': 0, 'renovaciones': 0})
+            servicios.append(
+                {
+                    'producto': pname,
+                    'ventas': int(bucket.get('ventas') or 0),
+                    'renovaciones': int(bucket.get('renovaciones') or 0),
+                }
+            )
+    servicios.sort(key=lambda x: (-int(x.get('ventas') or 0), str(x.get('producto') or '').lower()))
+    total_ventas = sum(int(s.get('ventas') or 0) for s in servicios)
+    return {'servicios': servicios, 'total_ventas': total_ventas}
+
+
+def _build_global_proveedor_servicios_resumen(by_product_sales):
+    """Ventas proveedor agregadas por producto (alcance todos los usuarios)."""
+    agg: dict[str, dict] = {}
+    for (pname, cur), bucket in (by_product_sales or {}).items():
+        key = str(pname)
+        if key not in agg:
+            agg[key] = {
+                'producto': key,
+                'ventas': 0,
+                'renovaciones': 0,
+                'moneda': str(cur or 'COP').upper(),
+            }
+        agg[key]['ventas'] += int(bucket.get('proveedores') or 0)
+    servicios = sorted(
+        agg.values(),
+        key=lambda x: (-int(x.get('ventas') or 0), str(x.get('producto') or '').lower()),
+    )
+    return {'servicios': servicios, 'total_ventas': sum(int(s.get('ventas') or 0) for s in servicios)}
 
 
 def _iter_portal_activity(user_row, start, end):
@@ -222,7 +334,6 @@ def compute_purchase_history_stats(scope='all', user_id=None, date_from=None, da
 
     sales_count = 0
     renewals_count = 0
-    global_proveedor_product_ids = _product_ids_for_proveedor_users(_proveedor_user_rows())
     by_currency = defaultdict(lambda: {'ventas': 0, 'renovaciones': 0, 'total': 0.0})
     by_product_sales = defaultdict(lambda: {'ventas': 0, 'renovaciones': 0, 'proveedores': 0, 'total': 0.0})
 
@@ -244,12 +355,12 @@ def compute_purchase_history_stats(scope='all', user_id=None, date_from=None, da
         if is_ren:
             bucket['renovaciones'] += 1
         bucket['total'] += amt
-        is_proveedor_sale = product_ids_filter is not None
-        if not is_proveedor_sale and product_id:
-            try:
-                is_proveedor_sale = int(product_id) in global_proveedor_product_ids
-            except (TypeError, ValueError):
-                is_proveedor_sale = False
+        if scope == 'proveedor':
+            is_proveedor_sale = True
+        elif product_id:
+            is_proveedor_sale = _sale_counts_as_proveedor_sale(user_id, product_id, None)
+        else:
+            is_proveedor_sale = False
         if is_proveedor_sale:
             bucket['proveedores'] += 1
 
@@ -285,7 +396,18 @@ def compute_purchase_history_stats(scope='all', user_id=None, date_from=None, da
     buyer_ids.update(s.user_id for s in snaps_list if s.user_id)
     currency_cache = _build_user_currency_cache(buyer_ids)
 
+    def _include_proveedor_sale_row(buyer_user_id, product_id):
+        if scope != 'proveedor':
+            return True
+        return _sale_counts_as_proveedor_sale(
+            buyer_user_id,
+            product_id,
+            proveedor_user_id,
+        )
+
     for sale in sales_list:
+        if not _include_proveedor_sale_row(sale.user_id, sale.product_id):
+            continue
         pname = '—'
         if sale.product_id:
             prod = Product.query.get(sale.product_id)
@@ -300,6 +422,8 @@ def compute_purchase_history_stats(scope='all', user_id=None, date_from=None, da
 
     for snap in snaps_list:
         if snap.sale_id and snap.sale_id in active_sale_ids:
+            continue
+        if not _include_proveedor_sale_row(snap.user_id, snap.product_id):
             continue
         _record_sale(
             snap.user_id,
@@ -333,7 +457,44 @@ def compute_purchase_history_stats(scope='all', user_id=None, date_from=None, da
     else:
         proveedores_actividad = _count_proveedor_sales_in_period(start, end, None)
 
-    return {
+    resumenes_proveedor_diarios: list[dict] = []
+    proveedor_billing_id = None
+    if scope == 'proveedor' and proveedor_user_id:
+        proveedor_billing_id = int(proveedor_user_id)
+    elif scope == 'user' and user_id:
+        user_row = User.query.get(int(user_id))
+        if user_row and _user_is_proveedor(user_row):
+            proveedor_billing_id = int(user_row.id)
+    if proveedor_billing_id:
+        from app.store.proveedor_daily_summaries import list_proveedor_daily_summaries_in_period
+
+        billing_row = User.query.get(proveedor_billing_id)
+        if billing_row:
+            resumenes_proveedor_diarios = list_proveedor_daily_summaries_in_period(
+                billing_row,
+                start.date(),
+                end.date(),
+            )
+    elif scope in ('all', 'proveedor'):
+        from app.store.proveedor_daily_summaries import list_proveedor_daily_summaries_in_period
+
+        resumenes_proveedor_diarios = list_proveedor_daily_summaries_in_period(
+            None,
+            start.date(),
+            end.date(),
+            all_proveedores=True,
+        )
+
+    proveedor_servicios_resumen = None
+    if scope == 'proveedor':
+        proveedor_servicios_resumen = _build_proveedor_servicios_resumen(
+            proveedor_rows,
+            by_product_sales,
+        )
+    elif scope == 'all':
+        proveedor_servicios_resumen = _build_global_proveedor_servicios_resumen(by_product_sales)
+
+    result = {
         'success': True,
         'period': {
             'from': start.isoformat(),
@@ -384,7 +545,11 @@ def compute_purchase_history_stats(scope='all', user_id=None, date_from=None, da
             }
             for k, v in sorted(by_product_sales.items(), key=lambda x: -x[1]['total'])
         ],
+        'resumenes_proveedor_diarios': resumenes_proveedor_diarios,
+        'proveedor_servicios_resumen': proveedor_servicios_resumen
+        or {'servicios': [], 'total_ventas': 0},
     }
+    return result
 
 
 def build_proveedor_sales_daily_summary_items(billing_user, *, utc_to_colombia_fn=None):

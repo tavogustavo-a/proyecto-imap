@@ -982,6 +982,9 @@ html, body {
   .license-notepads-wrap .admin-licencias-bloc--proveedor-merged.collapsed .admin-licencias-bloc-header {
     border-radius: 5px !important;
   }
+  .license-notepads-wrap .admin-licencias-bloc--customer-renewal.collapsed .admin-licencias-bloc-header {
+    border-radius: 5px !important;
+  }
   .admin-lic-proveedor-panel .admin-lic-proveedor-user-section.collapsed .admin-lic-proveedor-user-header,
   .admin-lic-proveedor-panel .admin-lic-proveedor-day.collapsed .admin-licencias-bloc-header {
     border-radius: 5px !important;
@@ -11427,6 +11430,12 @@ html, body {
   .admin-licencias-page.admin-licencias-shell .admin-licencias-bloc--proveedor-merged.collapsed > .admin-lic-proveedor-merged-body {
     display: none !important;
   }
+  .admin-licencias-page.admin-licencias-shell .admin-licencias-bloc--customer-renewal.collapsed > .admin-licencias-customer-renewal-body {
+    display: none !important;
+  }
+  .admin-licencias-page.admin-licencias-shell .admin-licencias-bloc--customer-renewal .admin-licencias-bloc-header {
+    cursor: pointer;
+  }
   .admin-licencias-page.admin-licencias-shell .admin-lic-proveedor-user-section.collapsed > .admin-lic-proveedor-panel-user-body {
     display: none !important;
   }
@@ -12326,10 +12335,21 @@ html, body {
     padding-top: 0.25rem;
   }
 
-  .whatsapp-web-config-panel .whatsapp-user-notify-hint {
-    max-width: 42rem;
-    margin-left: auto;
-    margin-right: auto;
+  .whatsapp-web-config-panel .whatsapp-user-notify-section-title {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 0.25rem;
+  }
+
+  .whatsapp-web-config-panel .whatsapp-user-notify-info-wrap {
+    margin-left: 0.1rem;
+  }
+
+  .whatsapp-web-config-panel .whatsapp-user-notify-info-box {
+    font-size: 0.82rem;
+    line-height: 1.45;
   }
 
   .whatsapp-web-config-panel .whatsapp-user-notify-panel {
@@ -12354,6 +12374,7 @@ html, body {
   .whatsapp-web-config-panel .whatsapp-user-notify-pagination.pagination-buttons {
     width: 100%;
     max-width: 98%;
+    gap: 0.55rem;
   }
 
   .whatsapp-web-config-panel .whatsapp-user-notify-table th,
@@ -14955,6 +14976,139 @@ html, body {
 
   .purchase-history-stats-proveedor-tip {
     color: #ea580c;
+  }
+
+  .purchase-history-stats-proveedor-note {
+    margin: 0 0 0.65rem;
+    padding: 0.55rem 0.75rem;
+    font-size: 0.82rem;
+    line-height: 1.45;
+    color: #64748b;
+    background: rgba(148, 163, 184, 0.12);
+    border-radius: 0.45rem;
+    border-left: 3px solid #ea580c;
+  }
+
+  .ph-proveedor-resumen-item {
+    margin-bottom: 0.85rem;
+    padding-bottom: 0.75rem;
+    border-bottom: 1px solid rgba(148, 163, 184, 0.25);
+  }
+
+  .ph-proveedor-resumen-item:last-child {
+    margin-bottom: 0;
+    padding-bottom: 0;
+    border-bottom: none;
+  }
+
+  .ph-proveedor-resumen-item__head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 0.65rem;
+    margin-bottom: 0.45rem;
+  }
+
+  .ph-proveedor-resumen-item__title {
+    margin: 0;
+    font-size: 0.92rem;
+    font-weight: 600;
+    color: #0f172a;
+  }
+
+  .ph-proveedor-resumen-item__delete {
+    flex-shrink: 0;
+  }
+
+  .ph-proveedor-resumen-item__pre {
+    margin: 0;
+    white-space: pre-wrap;
+    word-break: break-word;
+    font-size: 0.84rem;
+    line-height: 1.45;
+  }
+
+  .ph-proveedor-servicios-modal-total {
+    text-align: right;
+    font-size: 0.92rem;
+    color: #0f172a;
+  }
+
+  .ph-proveedor-servicios-modal-list {
+    margin: 0;
+  }
+
+  .purchase-history-stats-th-proveedor-label {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.35rem;
+    white-space: nowrap;
+    font-weight: 600;
+  }
+
+  .ph-stats-proveedor-act-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    margin: 0;
+    padding: 0;
+    border: none;
+    background: transparent;
+    font: inherit;
+    font-weight: 600;
+    color: inherit;
+    cursor: pointer;
+    text-align: left;
+  }
+
+  .ph-stats-proveedor-act-btn:hover,
+  .ph-stats-proveedor-act-btn:focus-visible {
+    outline: none;
+  }
+
+  .ph-stats-proveedor-act-btn:hover .ph-stats-proveedor-act-label,
+  .ph-stats-proveedor-act-btn:focus-visible .ph-stats-proveedor-act-label {
+    text-decoration: underline;
+  }
+
+  .purchase-history-stats-single-proveedor-actions {
+    margin-top: -0.25rem;
+  }
+
+  .purchase-history-stats-unified-section + .purchase-history-stats-unified-section {
+    margin-top: 1.75rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid rgba(0, 0, 0, 0.08);
+  }
+
+  .purchase-history-stats-section-title {
+    margin: 0 0 1rem;
+    font-size: 1.05rem;
+    font-weight: 700;
+    text-align: center;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.45rem;
+    flex-wrap: wrap;
+  }
+
+  .ph-stats-proveedor-info-wrap {
+    position: relative;
+    display: inline-flex;
+    vertical-align: middle;
+  }
+
+  .ph-stats-proveedor-info-wrap .purchase-history-cleanup-info-box {
+    left: 50%;
+    transform: translateX(-50%);
+    min-width: min(20rem, 92vw);
+    max-width: min(24rem, 94vw);
+    text-align: left;
+    font-weight: 400;
+    font-size: 0.82rem;
+    line-height: 1.45;
   }
 
   .purchase-history-container .tabla-licencias-actividad tbody tr.purchase-history-proveedor-daily-summary-row td,
@@ -25831,11 +25985,64 @@ body .card.product-texture-bg::before,
   box-shadow: none !important;
   border-radius: 0 !important;
 }
-.admin-licencias-page.user-licencias-shell .user-lic-proveedor-wrap .user-lic-proveedor-split.user-lic-proveedor-day-empty {
-  display: none !important;
-}
-.admin-licencias-page.user-licencias-shell .user-lic-proveedor-days .user-lic-proveedor-day.collapsed .day-accounts-list {
+.admin-licencias-page.user-licencias-shell .user-lic-proveedor-wrap .user-lic-proveedor-day.collapsed .day-accounts-list {
   display: none;
+}
+/* Proveedor días: flecha principal solo en Día 1 (izquierda), título centrado — como admin */
+.admin-licencias-page.user-licencias-shell .user-lic-proveedor-wrap #userLicProveedorDaysContainer .admin-licencias-bloc--day .admin-licencias-bloc-header {
+  display: grid !important;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center !important;
+  gap: 0.35rem;
+  flex-wrap: nowrap !important;
+}
+.admin-licencias-page.user-licencias-shell .user-lic-proveedor-wrap #userLicProveedorDaysContainer .admin-licencias-bloc--day .admin-licencias-bloc-title {
+  grid-column: 2;
+  justify-self: center;
+  text-align: center;
+  flex: none !important;
+  min-width: 0;
+  padding-left: 0;
+}
+.admin-licencias-page.user-licencias-shell .user-lic-proveedor-wrap #userLicProveedorDaysContainer .admin-licencias-bloc--day .admin-licencias-bloc-header-actions {
+  grid-column: 3;
+  justify-self: end;
+  display: flex;
+  align-items: center;
+  flex: 0 0 auto !important;
+  flex-wrap: nowrap !important;
+  justify-content: flex-end;
+  gap: 0.28rem;
+  min-width: 0;
+}
+.admin-licencias-page.user-licencias-shell .user-lic-proveedor-wrap #userLicProveedorDaysContainer .admin-licencias-bloc-header--day-toolbar .admin-licencias-day-header-leading {
+  grid-column: 1;
+  justify-self: start;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.28rem;
+  flex-shrink: 0;
+  min-width: 0;
+}
+.admin-licencias-page.user-licencias-shell .user-lic-proveedor-wrap #userLicProveedorDaysContainer .admin-licencias-days-expand-all-btn--leading {
+  margin-right: 0 !important;
+  flex-shrink: 0;
+}
+.admin-licencias-page.user-licencias-shell .user-lic-proveedor-day:not(.collapsed) .day-accounts-list {
+  display: block !important;
+}
+.admin-licencias-page.user-licencias-shell .user-lic-proveedor-day-empty-creds {
+  min-height: calc(var(--lic-line-box, 1.27rem) + 0.35rem);
+  background: #000 !important;
+  color: rgba(148, 163, 184, 0.45) !important;
+  cursor: default;
+}
+.admin-licencias-page.user-licencias-shell .user-lic-proveedor-readonly-grid--creds-only {
+  grid-template-columns: minmax(0, 1fr) !important;
+}
+.admin-licencias-page.user-licencias-shell .user-lic-proveedor-readonly-creds {
+  cursor: default;
+  resize: none;
 }
 .admin-licencias-page.user-licencias-shell .user-lic-account-sheet--proveedor {
   width: 100%;
@@ -25973,13 +26180,63 @@ body .card.product-texture-bg::before,
 .admin-licencias-page.admin-licencias-shell .admin-lic-proveedor-day.collapsed .admin-lic-proveedor-day-body {
   display: none !important;
 }
-.admin-licencias-page.admin-licencias-shell .admin-lic-proveedor-panel .admin-lic-proveedor-readonly-creds,
-.admin-licencias-page.admin-licencias-shell .license-notepads-wrap .admin-lic-proveedor-merged-creds {
+.admin-licencias-page.admin-licencias-shell .admin-lic-proveedor-panel .admin-lic-proveedor-split .admin-lic-proveedor-creds-ta,
+.admin-licencias-page.admin-licencias-shell .admin-lic-proveedor-panel .admin-lic-proveedor-extra-creds {
+  width: 100% !important;
+  min-width: 100% !important;
+  max-width: none !important;
+  box-sizing: border-box !important;
   resize: none;
-  cursor: default;
   min-height: var(--lic-line-box, 1.27rem) !important;
-  flex: 0 0 auto !important;
-  height: auto !important;
+}
+.admin-licencias-page.admin-licencias-shell .admin-lic-proveedor-panel .admin-lic-proveedor-side {
+  min-width: 0;
+}
+.admin-licencias-page.admin-licencias-shell .admin-lic-proveedor-panel .admin-lic-proveedor-user-header .admin-licencias-bloc-title--proveedor-user-only {
+  justify-content: flex-start;
+}
+.admin-licencias-page.admin-licencias-shell .admin-lic-proveedor-panel .admin-lic-proveedor-header-user-wrap--solo {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+.admin-licencias-page.admin-licencias-shell .admin-lic-proveedor-panel .admin-lic-proveedor-stock-wrap {
+  margin-bottom: 0.12rem;
+}
+.admin-licencias-page.admin-licencias-shell .admin-lic-proveedor-panel .admin-lic-proveedor-stock-wrap .admin-lic-proveedor-lic-body {
+  margin: 0;
+}
+.admin-licencias-page.admin-licencias-shell .admin-lic-proveedor-panel .admin-lic-proveedor-sold.collapsed .admin-lic-proveedor-sold-body,
+.admin-licencias-page.admin-licencias-shell .admin-lic-proveedor-panel .admin-lic-proveedor-sold.collapsed .day-accounts-list {
+  display: none !important;
+}
+.admin-licencias-page.admin-licencias-shell .admin-lic-proveedor-panel .admin-lic-proveedor-sold {
+  margin-top: 0.12rem;
+}
+.admin-licencias-page.admin-licencias-shell .admin-lic-proveedor-panel .admin-lic-proveedor-sold-day-cell {
+  border-right: none;
+}
+.admin-licencias-page.admin-licencias-shell .admin-lic-proveedor-extra.collapsed .admin-lic-proveedor-extra-body,
+.admin-licencias-page.admin-licencias-shell .admin-lic-proveedor-extra.collapsed .day-accounts-list {
+  display: none !important;
+}
+.admin-licencias-page.admin-licencias-shell .admin-lic-proveedor-panel .admin-lic-proveedor-extra-wrap {
+  margin-top: 0.12rem;
+}
+.admin-licencias-page.admin-licencias-shell .admin-lic-proveedor-panel .admin-lic-proveedor-sold-split .license-split-editor__status-select-shell--bad,
+.admin-licencias-page.admin-licencias-shell .admin-lic-proveedor-panel .admin-lic-proveedor-extra-split .license-split-editor__status-select-shell--bad {
+  display: flex !important;
+  flex-direction: row;
+  align-items: stretch;
+  gap: 0.12rem;
+  min-width: 0;
+}
+.admin-licencias-page.admin-licencias-shell .admin-lic-proveedor-panel .admin-lic-proveedor-sold-split .license-split-editor__status-select-shell--bad .user-lic-expiry-countdown,
+.admin-licencias-page.admin-licencias-shell .admin-lic-proveedor-panel .admin-lic-proveedor-extra-split .license-split-editor__status-select-shell--bad .user-lic-expiry-countdown {
+  flex: 0 0 auto;
+}
+.admin-licencias-page.admin-licencias-shell .admin-lic-proveedor-panel .admin-lic-proveedor-day-empty .admin-lic-proveedor-service-rows {
+  min-height: 0;
 }
 .admin-licencias-page.admin-licencias-shell .admin-lic-proveedor-panel .license-split-editor--proveedor-readonly .license-split-editor__creds-cell,
 .admin-licencias-page.admin-licencias-shell .license-notepads-wrap .license-split-editor--proveedor-merged .license-split-editor__creds-cell {
@@ -26268,6 +26525,32 @@ body .card.product-texture-bg::before,
   text-align: center;
   min-width: 0;
   padding: 0;
+}
+.admin-licencias-page.user-licencias-shell .user-lic-proveedor-lic-extra .user-lic-proveedor-extra-side-row {
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) 2.75rem !important;
+  gap: 0 !important;
+  align-items: stretch !important;
+  width: 100% !important;
+}
+.admin-licencias-page.user-licencias-shell .user-lic-proveedor-lic-extra .user-lic-proveedor-extra-day-input {
+  width: 100%;
+  min-width: 0;
+  height: 100%;
+  padding: 0 0.15rem;
+  text-align: center;
+  font-size: var(--lic-line-fs, 0.875rem);
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  color: rgba(251, 191, 36, 0.98);
+}
+.admin-licencias-page.user-licencias-shell .user-lic-proveedor-lic-extra .user-lic-proveedor-service-shell {
+  min-width: 0;
+  border-right: var(--lic-border-w, 2px) solid rgba(59, 130, 246, 0.48);
+}
+.admin-licencias-page.user-licencias-shell .user-lic-proveedor-wrap .user-lic-proveedor-split--editable .license-split-editor__grid {
+  grid-template-columns: minmax(0, 1fr) minmax(8rem, 12rem) !important;
 }
 .admin-licencias-page.user-licencias-shell .user-lic-proveedor-lic-extra .user-lic-proveedor-extra-row--link {
   cursor: pointer;
@@ -26811,6 +27094,12 @@ html.admin-lic-bulk-modal--lock body {
 }
 .admin-lic-bulk-info-modal__lead {
   margin: 0 0 0.55rem;
+}
+.admin-lic-bulk-info-modal__text {
+  margin: 0;
+  font-size: 0.84rem;
+  line-height: 1.45;
+  color: #475569;
 }
 .admin-lic-bulk-info-modal__list {
   margin: 0 0 0.55rem;
@@ -27499,7 +27788,22 @@ html.admin-lic-bulk-modal--lock body {
 }
 
 #descModal.desc-modal:not(.modal-hidden) {
+  position: fixed !important;
+  inset: 0 !important;
   z-index: 12100 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  padding: 1rem;
+  box-sizing: border-box;
+  background: rgba(15, 23, 42, 0.62) !important;
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+}
+
+#descModal .desc-modal-content {
+  max-width: min(420px, 92vw);
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.38);
 }
 
 .store-config-modal .desc-modal-content.store-config-modal-panel {
@@ -34132,6 +34436,10 @@ body.balance-recharge-qr-lightbox-open {
   position: relative;
 }
 
+.whatsapp-web-config-panel .whatsapp-user-notify-pagination.pagination-buttons {
+  gap: 0.55rem;
+}
+
 .whatsapp-web-config-panel .purchase-history-cleanup-info-box {
   position: fixed;
   top: 50%;
@@ -34210,48 +34518,6 @@ body.balance-recharge-qr-lightbox-open {
   line-height: 1.1 !important;
 }
 
-.whatsapp-web-config-panel .whatsapp-template-field {
-  position: relative;
-}
-
-.whatsapp-web-config-panel .whatsapp-template-input.form-control {
-  position: relative;
-  z-index: 1;
-  background-color: #fff;
-  resize: vertical;
-  font-size: 0.78rem;
-  line-height: 1.45;
-}
-
-.whatsapp-web-config-panel .whatsapp-template-example {
-  position: absolute;
-  top: 0;
-  right: 0;
-  bottom: 0;
-  left: 0;
-  z-index: 2;
-  padding: 0.375rem 0.75rem;
-  margin: 0;
-  font-size: 0.78rem;
-  line-height: 1.45;
-  font-family: inherit;
-  color: #6c757d;
-  opacity: 0.45;
-  pointer-events: none;
-  user-select: none;
-  -webkit-user-select: none;
-  white-space: pre-wrap;
-  word-break: break-word;
-  overflow-wrap: anywhere;
-  overflow: hidden;
-  box-sizing: border-box;
-}
-
-.whatsapp-web-config-panel .whatsapp-template-field.is-filled .whatsapp-template-example,
-.whatsapp-web-config-panel .whatsapp-template-field.is-focused .whatsapp-template-example {
-  visibility: hidden;
-}
-
 .whatsapp-phone-field-group {
   display: inline-flex;
   align-items: center;
@@ -34304,19 +34570,6 @@ body.balance-recharge-qr-lightbox-open {
   gap: 0.4rem !important;
 }
 
-.whatsapp-web-config-panel .whatsapp-save-row {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 0.45rem;
-}
-
-.whatsapp-web-config-panel .whatsapp-save-row .whatsapp-status-msg {
-  flex: 1 1 auto;
-  min-width: 0;
-  text-align: right;
-}
-
 .whatsapp-web-config-panel .whatsapp-status-msg {
   flex: 1 1 auto;
   min-width: 0;
@@ -34340,6 +34593,12 @@ body.balance-recharge-qr-lightbox-open {
   font-weight: 600;
 }
 
+.whatsapp-web-config-panel .whatsapp-health-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
 .whatsapp-web-config-panel .whatsapp-health-row {
   display: flex;
   align-items: center;
@@ -34347,21 +34606,29 @@ body.balance-recharge-qr-lightbox-open {
   gap: 0.4rem 0.45rem;
 }
 
-.whatsapp-web-config-panel .whatsapp-health-actions {
-  display: inline-flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 0.4rem 0.45rem;
-  flex: 1 1 auto;
-  min-width: 0;
+.whatsapp-web-config-panel .whatsapp-health-row--top {
+  flex-wrap: nowrap;
+  justify-content: center;
+  width: 100%;
 }
 
-.whatsapp-web-config-panel .whatsapp-health-row .btn-panel {
+.whatsapp-web-config-panel .whatsapp-health-row--bottom {
+  justify-content: flex-start;
+}
+
+.whatsapp-web-config-panel .whatsapp-health-sep {
+  font-weight: 700;
+  color: #374151;
+  line-height: 1;
+  flex: 0 0 auto;
+}
+
+.whatsapp-web-config-panel .whatsapp-save-inline-group {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  min-height: 1.75rem;
-  line-height: 1.2;
+  flex-wrap: nowrap;
+  gap: 0.45rem;
+  flex: 0 0 auto;
 }
 
 .whatsapp-web-config-panel .whatsapp-health-row .whatsapp-enabled-check.form-check {
@@ -34376,6 +34643,26 @@ body.balance-recharge-qr-lightbox-open {
   flex: 0 0 auto;
 }
 
+.whatsapp-web-config-panel .whatsapp-health-row .whatsapp-status-msg {
+  flex: 1 1 auto;
+  min-width: 8rem;
+  text-align: left;
+  margin-left: auto;
+}
+
+.whatsapp-web-config-panel .whatsapp-health-row--bottom .whatsapp-enabled-check.form-check {
+  flex: 1 1 auto;
+  min-width: 12rem;
+}
+
+.whatsapp-web-config-panel .whatsapp-health-row .btn-panel {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 1.75rem;
+  line-height: 1.2;
+}
+
 .whatsapp-health-status {
   display: inline-flex;
   align-items: center;
@@ -34387,15 +34674,8 @@ body.balance-recharge-qr-lightbox-open {
   font-weight: 600;
 }
 
-.whatsapp-health-status__label {
-  display: inline-flex;
-  align-items: baseline;
-  gap: 0.25rem;
+.whatsapp-health-status__value {
   font-weight: 600;
-}
-
-.whatsapp-health-status__prefix {
-  color: #111;
 }
 
 .whatsapp-health-status--no-configurado .whatsapp-health-status__value {
@@ -34426,6 +34706,12 @@ body.balance-recharge-qr-lightbox-open {
   border-radius: 6px !important;
   font-weight: 600 !important;
   white-space: nowrap;
+}
+
+.whatsapp-web-config-panel .whatsapp-notify-btn--icon.btn-panel.btn-orange {
+  padding: 0.28rem 0.5rem !important;
+  min-width: 1.75rem !important;
+  width: 1.75rem;
 }
 
 .whatsapp-web-config-panel .whatsapp-notify-btn.btn-panel.btn-orange i {
@@ -34548,6 +34834,78 @@ body.balance-recharge-qr-lightbox-open {
   overflow: auto;
 }
 
+.whatsapp-notify-attempts-modal-body .whatsapp-notify-attempts-section + .whatsapp-notify-attempts-section {
+  margin-top: 0.85rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid #cbd5e1;
+}
+
+.whatsapp-notify-attempts-section-title {
+  margin: 0 0 0.45rem;
+  font-size: 0.84rem;
+  font-weight: 700;
+  text-align: center;
+  color: #0f172a;
+}
+
+.whatsapp-notify-attempts-modal-body .whatsapp-notify-attempts-table-wrap {
+  width: 100%;
+  overflow-x: auto;
+}
+
+.whatsapp-notify-attempts-modal-body .whatsapp-notify-attempts-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: auto;
+  margin-bottom: 0;
+  background: #fff;
+}
+
+.whatsapp-notify-attempts-modal-body .whatsapp-notify-attempts-table thead {
+  display: table-header-group;
+}
+
+.whatsapp-notify-attempts-modal-body .whatsapp-notify-attempts-table tbody {
+  display: table-row-group;
+}
+
+.whatsapp-notify-attempts-modal-body .whatsapp-notify-attempts-table tr {
+  display: table-row;
+}
+
+.whatsapp-notify-attempts-modal-body .whatsapp-notify-attempts-table thead th {
+  display: table-cell;
+  background: #e2e8f0;
+  border: 1px solid #64748b;
+  padding: 0.4rem 0.35rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-align: center;
+  vertical-align: middle;
+  white-space: nowrap;
+  line-height: 1.25;
+}
+
+.whatsapp-notify-attempts-modal-body .whatsapp-notify-attempts-table tbody td {
+  display: table-cell;
+  border: 1px solid #94a3b8;
+  padding: 0.4rem 0.35rem;
+  font-size: 0.78rem;
+  vertical-align: middle;
+  text-align: center;
+  line-height: 1.25;
+  white-space: nowrap;
+}
+
+.whatsapp-notify-attempts-modal-body .whatsapp-notify-attempts-table tbody tr:nth-child(even) td {
+  background: #f8fafc;
+}
+
+.whatsapp-notify-attempts-modal-body .whatsapp-notify-attempts-table .whatsapp-notify-cell-text {
+  text-align: left;
+  white-space: nowrap;
+}
+
 .whatsapp-notify-run-log-table .whatsapp-notify-day-detail-btn {
   min-width: 2rem;
   padding: 0.2rem 0.45rem !important;
@@ -34594,31 +34952,24 @@ body.balance-recharge-qr-lightbox-open {
     margin-top: 0.2rem;
   }
 
-  .whatsapp-web-config-panel .whatsapp-inline-flex-break {
-    display: block;
-    flex-basis: 100%;
-    width: 0;
-    height: 0;
-    overflow: hidden;
+  .whatsapp-web-config-panel .whatsapp-health-row--top {
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  .whatsapp-web-config-panel .whatsapp-health-row--bottom {
+    width: 100%;
   }
 
   .whatsapp-web-config-panel .whatsapp-health-row {
     gap: 0.35rem 0.45rem;
   }
 
-  .whatsapp-web-config-panel .whatsapp-health-actions {
+  .whatsapp-web-config-panel .whatsapp-health-row .whatsapp-status-msg {
     flex: 1 1 100%;
     width: 100%;
-  }
-
-  .whatsapp-web-config-panel .whatsapp-template-input.form-control,
-  .whatsapp-web-config-panel .whatsapp-template-example {
-    font-size: 0.68rem;
-    line-height: 1.4;
-    padding: 0.3rem 0.55rem;
-  }
-
-  .whatsapp-web-config-panel .whatsapp-template-input.form-control {
-    min-height: calc(0.68rem * 1.4 * 4 + 0.6rem);
+    text-align: left;
+    margin-top: 0.15rem;
+    margin-left: 0;
   }
 }

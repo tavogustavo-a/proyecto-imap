@@ -34,52 +34,12 @@
 
   <div id="menuOverlay" class="menu-overlay"></div>
 
-<div class="store-light maxw-800 mx-auto br-8 configuraciones-admin-page">
-  <div class="configuraciones-admin-toolbar d-flex gap-05 mb-1">
-    <button id="menuToggleBtn" type="button" class="btn-panel btn-blue" title="Menú de navegación" aria-label="Abrir menú de navegación">&#9776; Menú</button>
-    <button id="menu2ToggleBtn" type="button" class="btn-panel btn-blue" title="Menú secundario" aria-label="Abrir segundo menú">&#9776; Menú2</button>
-  </div>
-  <h2 class="m-0 mb-1 text-center w-100"><i class="fas fa-cog"></i> Configuraciones</h2>
-  <!-- Primer contenedor blanco: Google Sheets -->
-    <h4 class="mb-1">Vinculación de plantillas con Google Sheets</h4>
-    <form id="gsheets-config-form" method="post" autocomplete="off">
-      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-      <div class="mb-1">
-        <label for="gsheets-template" class="form-label">Selecciona la plantilla a vincular:</label>
-        <select id="gsheets-template" name="gsheets_template" class="form-select" required autocomplete="off">
-          <option value="">-- Selecciona una plantilla --</option>
-          <option value="hojas_de_calculo">Hojas de cálculo</option>
-          <option value="usuarios">Usuarios</option>
-          <option value="productos">Productos</option>
-          <option value="roles">Roles</option>
-        </select>
-      </div>
-      <div class="mb-1">
-        <label for="gsheets-credentials-json" class="form-label">Pega aquí el JSON de credenciales de Google:</label>
-        <textarea id="gsheets-credentials-json" name="gsheets_credentials_json" class="form-control" rows="8" placeholder="{\n  \"type\": \"service_account\", ...\n}" required autocomplete="off"></textarea>
-      </div>
-      <div class="mb-1">
-        <label for="gsheets-sheet-id" class="form-label">ID de la hoja de Google Sheets:</label>
-        <input type="text" id="gsheets-sheet-id" name="gsheets_sheet_id" class="form-control" placeholder="Ej: 1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms" required autocomplete="off">
-      </div>
-      <div class="mb-1">
-        <label for="gsheets-tab-name" class="form-label">Nombre de la hoja/tab (worksheet):</label>
-        <input type="text" id="gsheets-tab-name" name="gsheets_tab_name" class="form-control" placeholder="Ej: Hoja1" required autocomplete="off">
-      </div>
-      <div class="mb-1">
-        <button type="button" id="test-gsheets-connection" class="btn-panel btn-blue">Probar conexión</button>
-        <button type="submit" class="btn-green ms-2">Guardar</button>
-      </div>
-      <div id="gsheets-status" class="mt-2"></div>
-    </form>
-    <h5 class="mb-3">Vinculaciones actuales</h5>
-    <div id="gsheets-links-table-container" class="mb-4">
-      <!-- Aquí se renderizará la tabla de vinculaciones con JS -->
+  <!-- Pasar de Drive a Drive -->
+  <div class="store-light maxw-800 mx-auto br-8 configuraciones-admin-page">
+    <div class="configuraciones-admin-toolbar d-flex gap-05 mb-1">
+      <button id="menuToggleBtn" type="button" class="btn-panel btn-blue" title="Menú de navegación" aria-label="Abrir menú de navegación">&#9776; Menú</button>
+      <button id="menu2ToggleBtn" type="button" class="btn-panel btn-blue" title="Menú secundario" aria-label="Abrir segundo menú">&#9776; Menú2</button>
     </div>
-  </div>
-  
-  <!-- Segundo contenedor blanco: Pasar de Drive a Drive -->
-  <div class="store-light maxw-800 mx-auto br-8 configuraciones-admin-page mt-1">
     <h4 class="mb-1">Pasar de Drive a Drive</h4>
     <form id="drive-transfer-form" method="post" autocomplete="off">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -130,25 +90,38 @@
           title="Más información"
         >
           <i class="fas fa-info-circle" aria-hidden="true"></i>
-          <span class="sr-only">Información sobre WhatsApp Web y avisos de licencias</span>
+          <span class="sr-only">Información sobre WhatsApp Web y resúmenes de ventas</span>
         </button>
         <div id="whatsappWebInfoBox" class="purchase-history-cleanup-info-box whatsapp-web-info-box" hidden>
-          <strong>Avisos de licencias por WhatsApp.</strong>
-          Configurá tu línea, la plantilla del mensaje y la hora de envío (Colombia). Luego
+          <strong>Resúmenes de ventas y renovaciones por WhatsApp.</strong>
+          Configurá tu línea y la hora de envío (Colombia). Luego
           <strong>Guardá</strong> (con WhatsApp Web activo) y escaneá el QR con WhatsApp
           (Dispositivos vinculados → Vincular dispositivo).
           <br><br>
-          El sistema envía <strong>avisos de licencias por vencer</strong> (hasta 5 días) y, a la hora configurada,
-          un <strong>resumen diario</strong> con las compras y renovaciones de cada cliente (día calendario Colombia).
+          A la hora configurada el sistema envía un <strong>resumen diario</strong> con las compras
+          y renovaciones de cada cliente (día calendario Colombia).
           <br><br>
-          Tras una compra o renovación, las ventas de ese cliente quedan <strong>pausadas</strong> hasta que se envíe
-          el resumen del día por WhatsApp (al teléfono del perfil).
+          Los avisos de licencias por vencer <strong>no se envían por WhatsApp</strong>; el cliente
+          los ve en su portal de licencias en la tienda.
           <br><br>
-          La plantilla de vencimientos es <strong>opcional</strong>; si no escribís nada, se usa un mensaje predeterminado.
-          Podés usar {% raw %}<code>{{customer_name}}</code>, <code>{{product_names}}</code> y <code>{{days_left}}</code>{% endraw %} en el texto.
+          Tras una compra o renovación, la venta entra en cola para el <strong>resumen diario</strong>
+          por WhatsApp. <strong>Las compras y renovaciones siguen permitidas</strong> aunque el resumen
+          aún no se haya enviado.
+          <br><br>
+          Si el envío falla (WhatsApp caído o error al mandar), el sistema reintenta como máximo
+          <strong>2 veces</strong> por cliente y día; después deja de insistir para no bloquear la tienda
+          ni saturar WhatsApp. Podés forzar un reenvío con el botón <strong>Resúmenes</strong>.
+          <br><br>
+          Entre cada mensaje el sistema espera una <strong>pausa aleatoria de 3 a 10 segundos</strong>
+          (fija en el código) para reducir riesgo de bloqueo.
           <br><br>
           Si WhatsApp se desconecta, recibís un correo al admin (si tenés email en el perfil). Al reconectar,
-          se reintenta el envío pendiente del día. Las últimas 10 ejecuciones quedan registradas abajo.
+          se reintenta el envío pendiente del día a los ~10 minutos.
+          <br><br>
+          El sistema revisa en segundo plano: cada <strong>6 horas</strong> lejos de la hora de envío,
+          cada <strong>30 minutos</strong> en la última hora antes, cada <strong>10 minutos</strong> faltando
+          poco, y —tras pasar la hora programada— cada <strong>10 minutos</strong> mientras queden resúmenes
+          pendientes. Las últimas 10 ejecuciones quedan registradas abajo.
         </div>
       </span>
     </h4>
@@ -173,11 +146,11 @@
                 <span class="sr-only">Información sobre el número WhatsApp</span>
               </button>
               <div id="whatsappPhoneInfoBox" class="purchase-history-cleanup-info-box whatsapp-field-info-box" hidden>
-                <strong>Opcional.</strong> Número de referencia para pruebas y para identificar la línea en el panel.
-                Escribilo <strong>sin el signo +</strong>, con código de país (ej. Colombia: <code>573001234567</code>).
+                <strong>Solo prueba.</strong> Escribí un número temporal para el botón <strong>Prueba</strong>
+                (un mensaje al pulsar). <strong>No se guarda</strong> al hacer clic en Guardar.
+                Sin el signo <strong>+</strong>, con código de país (ej. Colombia: <code>573001234567</code>).
                 <br><br>
-                Se usa con el botón <strong>Prueba</strong> al lado del campo. Los avisos automáticos de licencias van al
-                teléfono que cada cliente tiene en su perfil, no a este campo.
+                Los resúmenes automáticos van al teléfono que cada cliente tiene en su perfil, no a este campo.
                 <br><br>
                 Después de escanear el QR, WhatsApp muestra el número real
                 vinculado al verificar la salud. Ese es el que queda conectado para enviar.
@@ -185,7 +158,7 @@
             </span>
           </span>
           <span class="whatsapp-phone-field-group">
-            <input type="text" id="whatsapp-phone-number" name="whatsapp_phone_number" class="form-control whatsapp-phone-inline-input" placeholder="573001234567" autocomplete="off">
+            <input type="text" id="whatsapp-phone-number" class="form-control whatsapp-phone-inline-input" placeholder="573001234567" autocomplete="off">
             <button
               type="button"
               id="whatsapp-send-test-btn"
@@ -197,65 +170,76 @@
             </button>
           </span>
           <span class="whatsapp-time-field-group">
-            <label for="whatsapp-notification-time" class="form-label whatsapp-time-icon-label" title="Hora de envío de avisos de licencias">
+            <label for="whatsapp-notification-time" class="form-label whatsapp-time-icon-label" title="Hora de envío de resúmenes diarios">
               <i class="fas fa-paper-plane" aria-hidden="true"></i>
-              <span class="sr-only">Hora de envío de avisos de licencias</span>
+              <span class="sr-only">Hora de envío de resúmenes diarios</span>
             </label>
             <input type="time" id="whatsapp-notification-time" name="whatsapp_notification_time" class="form-control whatsapp-time-inline-input" value="00:00" required autocomplete="off">
           </span>
         </div>
       </div>
 
-      <div class="mb-1">
-        <div class="whatsapp-template-field">
-          <textarea id="whatsapp-template-message" name="whatsapp_template_message" class="form-control whatsapp-template-input" rows="3" aria-label="Plantilla avisos de licencias (opcional)" autocomplete="off"></textarea>
-          <div id="whatsapp-template-example" class="whatsapp-template-example" aria-hidden="true">{% raw %}Hola {{customer_name}}, tus licencias vencen pronto ({{days_left}} días): {{product_names}}. Renová en la tienda.{% endraw %}</div>
-        </div>
-      </div>
-
-      <div class="mb-1 whatsapp-health-row">
-        <div
-          id="whatsapp-health-status"
-          class="whatsapp-health-status whatsapp-health-status--no-configurado"
-          role="status"
-          aria-live="polite"
-          title=""
-        >
-          <strong id="whatsapp-health-label" class="whatsapp-health-status__label">
-            <span class="whatsapp-health-status__prefix">Estado:</span>
+      <div class="mb-1 whatsapp-health-actions">
+        <div class="whatsapp-health-row whatsapp-health-row--top">
+          <button
+            type="button"
+            id="test-whatsapp-connection"
+            class="btn-panel btn-blue whatsapp-verify-state-btn"
+            title="Comprobar conexión de WhatsApp Web"
+          >
+            Verificar estado
+          </button>
+          <span class="whatsapp-health-sep" aria-hidden="true">:</span>
+          <div
+            id="whatsapp-health-status"
+            class="whatsapp-health-status whatsapp-health-status--no-configurado"
+            role="status"
+            aria-live="polite"
+            title=""
+          >
             <span id="whatsapp-health-value" class="whatsapp-health-status__value">No configurado</span>
-          </strong>
-        </div>
-        <button type="button" id="test-whatsapp-connection" class="btn-panel btn-blue">Verificar salud</button>
-        <span class="whatsapp-inline-flex-break" aria-hidden="true"></span>
-        <span class="whatsapp-health-actions">
-          <div class="form-check whatsapp-enabled-check">
-            <input class="form-check-input" type="checkbox" id="whatsapp-enabled" name="whatsapp_enabled" checked>
-            <label class="form-check-label" for="whatsapp-enabled">Activar WhatsApp Web</label>
           </div>
           <button
             type="button"
             id="whatsapp-run-notify-btn"
             class="btn-panel btn-orange whatsapp-notify-btn"
-            title="Enviar avisos de licencias por vencer ahora"
+            title="Enviar resúmenes de ventas y renovaciones pendientes ahora"
           >
             <i class="fas fa-paper-plane" aria-hidden="true"></i>
-            <span>Enviar avisos licencias</span>
+            <span>Enviar resumen</span>
           </button>
           <button type="button" id="whatsapp-show-qr-btn" class="btn-panel btn-blue">Mostrar QR</button>
-        </span>
-      </div>
-
-      <div class="mb-1 whatsapp-save-row">
-        <button type="submit" class="btn-panel btn-green">Guardar</button>
-        <div id="whatsapp-status" class="whatsapp-status-msg" role="status" aria-live="polite"></div>
+        </div>
+        <div class="whatsapp-health-row whatsapp-health-row--bottom">
+          <div class="form-check whatsapp-enabled-check">
+            <input class="form-check-input" type="checkbox" id="whatsapp-enabled" name="whatsapp_enabled" checked>
+            <label class="form-check-label" for="whatsapp-enabled">Activar el uso de WhatsApp</label>
+          </div>
+          <button type="submit" class="btn-panel btn-green whatsapp-save-btn">Guardar</button>
+          <div id="whatsapp-status" class="whatsapp-status-msg" role="status" aria-live="polite"></div>
+        </div>
       </div>
     </form>
 
-    <h6 class="mb-2 mt-4 text-center w-100">Usuarios — envío WhatsApp</h6>
-    <p class="text-muted small text-center mb-2 whatsapp-user-notify-hint">
-      Solo cuentas principales. El icono <i class="fab fa-whatsapp" aria-hidden="true"></i> activo = recibe avisos y resúmenes (todos marcados por defecto). Los sub-usuarios nunca reciben WhatsApp.
-    </p>
+    <h6 class="mb-2 mt-4 text-center w-100 whatsapp-user-notify-section-title">
+      Usuarios — envío WhatsApp
+      <span class="purchase-history-cleanup-info-wrap whatsapp-user-notify-info-wrap">
+        <button
+          type="button"
+          id="whatsappUserNotifyInfoBtn"
+          class="purchase-history-cleanup-info-btn"
+          aria-expanded="false"
+          aria-controls="whatsappUserNotifyInfoBox"
+          title="Más información"
+        >
+          <i class="fas fa-info-circle" aria-hidden="true"></i>
+          <span class="sr-only">Información sobre envío WhatsApp por usuario</span>
+        </button>
+        <div id="whatsappUserNotifyInfoBox" class="purchase-history-cleanup-info-box whatsapp-user-notify-info-box" hidden>
+          Solo cuentas principales. El icono <i class="fab fa-whatsapp" aria-hidden="true"></i> activo = recibe resúmenes de ventas y renovaciones (todos marcados por defecto). Los sub-usuarios nunca reciben WhatsApp. Los avisos de vencimiento se ven solo en el portal de licencias.
+        </div>
+      </span>
+    </h6>
     <div class="d-flex flex-column align-items-center whatsapp-user-notify-panel mb-4">
       <div class="d-flex flex-wrap align-items-center mb-1 productos-buscar-mostrar">
         <div class="search-container">
@@ -299,7 +283,7 @@
       </div>
     </div>
 
-    <h6 class="mb-2 mt-2 text-center w-100">Últimas ejecuciones — avisos licencias</h6>
+    <h6 class="mb-2 mt-2 text-center w-100">Últimas ejecuciones — resúmenes WhatsApp</h6>
     <div id="whatsapp-notify-run-log-container" class="mb-4"></div>
 
     <div class="mb-5"></div>
@@ -320,7 +304,7 @@
 </div>
 
 <div id="whatsapp-notify-attempts-modal" class="modal d-none whatsapp-notify-attempts-modal" tabindex="-1" role="dialog" aria-labelledby="whatsappNotifyAttemptsTitle" aria-modal="true" aria-hidden="true" hidden>
-  <div class="modal-content bg-white mx-auto p-20 w-95 maxw-640 br-8 rel">
+  <div class="modal-content bg-white mx-auto p-20 w-95 maxw-720 br-8 rel">
     <h4 id="whatsappNotifyAttemptsTitle" class="text-center mb-2">Intentos del día</h4>
     <p id="whatsapp-notify-attempts-modal-date" class="text-muted small text-center mb-2"></p>
     <div id="whatsapp-notify-attempts-modal-body" class="whatsapp-notify-attempts-modal-body"></div>
@@ -343,42 +327,6 @@
     </div>
   </div>
 </div>
-<!-- Modal de edición para Google Sheets -->
-    <div id="gsheets-edit-modal" class="modal d-none" tabindex="-1">
-      <div class="modal-content bg-white mx-auto p-20 w-90 maxw-400 br-8 rel">
-        <h4>Editar vinculación</h4>
-        <form id="gsheets-edit-form" autocomplete="off">
-          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-          <input type="hidden" id="edit-link-id" name="edit_link_id">
-          <div class="mb-1">
-            <label for="edit-gsheets-template" class="form-label">Plantilla:</label>
-            <select id="edit-gsheets-template" name="gsheets_template" class="form-select" required autocomplete="off">
-              <option value="hojas_de_calculo">Hojas de cálculo</option>
-              <option value="usuarios">Usuarios</option>
-              <option value="productos">Productos</option>
-              <option value="roles">Roles</option>
-            </select>
-          </div>
-          <div class="mb-1">
-            <label for="edit-gsheets-credentials-json" class="form-label">Credenciales JSON:</label>
-            <textarea id="edit-gsheets-credentials-json" name="gsheets_credentials_json" class="form-control" rows="6" required autocomplete="off"></textarea>
-          </div>
-          <div class="mb-1">
-            <label for="edit-gsheets-sheet-id" class="form-label">ID de hoja:</label>
-            <input type="text" id="edit-gsheets-sheet-id" name="gsheets_sheet_id" class="form-control" required autocomplete="off">
-          </div>
-          <div class="mb-1">
-            <label for="edit-gsheets-tab-name" class="form-label">Nombre de hoja/tab:</label>
-            <input type="text" id="edit-gsheets-tab-name" name="gsheets_tab_name" class="form-control" required autocomplete="off">
-          </div>
-          <div class="mb-1 d-flex justify-content-end gap-1">
-        <button type="button" id="close-edit-modal" class="btn-panel btn-red">Cancelar</button>
-        <button type="submit" class="btn-panel btn-green">Guardar cambios</button>
-      </div>
-    </form>
-  </div>
-</div>
-
 <!-- Modal de edición para Drive Transfer -->
 <div id="drive-edit-modal" class="modal d-none" tabindex="-1">
   <div class="modal-content bg-white mx-auto p-20 w-90 maxw-400 br-8 rel">
@@ -490,7 +438,6 @@
   <script src="{{ url_for('store_bp.static', filename='js/menu_tienda.js') }}" defer></script>
   <script src="{{ url_for('static', filename='js/clear_trigger_logs.js') }}" defer></script>
   <script src="{{ url_for('static', filename='js/logout_all_cookies_btn.js') }}" defer></script>
-  <script src="{{ url_for('store_bp.static', filename='js/admin_gsheets_config.js') }}" defer></script>
   <script src="{{ url_for('store_bp.static', filename='js/drive_manager.js') }}" defer></script>
-  <script src="{{ url_for('store_bp.static', filename='js/whatsapp_manager.js') }}" defer></script>
+  <script src="{{ url_for('store_bp.static', filename='js/whatsapp_manager.js') }}?v=20260622-whatsapp-sse" defer></script>
 {% endblock %}

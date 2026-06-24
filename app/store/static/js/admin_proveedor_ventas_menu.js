@@ -1,5 +1,6 @@
 /**
  * Modal «Proveedores — ventas por servicio» (Menú2 en todas las plantillas admin).
+ * SSE con fallback a sondeo ligero mientras el modal está abierto.
  */
 (function () {
     'use strict';
@@ -8,8 +9,12 @@
     var __activeUserId = null;
     var __infoOpener = null;
     var __modalOpener = null;
+    var __sseHandle = null;
     var __pollTimer = null;
+    var __lastStatsRev = null;
     var POLL_MS = 4000;
+    var PROVEEDOR_STATS_SSE_URL = '/tienda/api/admin/proveedor-sales-stats/stream';
+    var PROVEEDOR_STATS_REV_URL = '/tienda/api/admin/proveedor-sales-stats/rev';
 
     function logError(context, err) {
         if (typeof adminLicLogError === 'function') {
@@ -129,24 +134,14 @@
         }
     }
 
-    function stopPolling() {
-        if (__pollTimer != null) {
-            clearInterval(__pollTimer);
-            __pollTimer = null;
-        }
-    }
-
-    function startPolling() {
-        stopPolling();
-        __pollTimer = window.setInterval(function () {
-            void pollTick();
-        }, POLL_MS);
-    }
-
-    async function pollTick() {
+    function isModalOpen() {
         var modal = document.getElementById('adminLicProveedorVentasModal');
-        if (!modal || modal.hidden) {
-            stopPolling();
+        return !!(modal && !modal.hidden);
+    }
+
+    async function refreshFromStatsSignal() {
+        if (!isModalOpen()) {
+            stopRealtime();
             return;
         }
         try {
@@ -154,7 +149,71 @@
             syncProviderSelect();
             renderList();
         } catch (err) {
-            logError('adminLicProveedorVentasPollTick:', err);
+            logError('adminLicProveedorVentasRefresh:', err);
+        }
+    }
+
+    function onProveedorStatsSse(data) {
+        if (!data || data.type !== 'proveedor_stats_rev' || data.stats_rev == null) return;
+        var nextRev = String(data.stats_rev);
+        if (__lastStatsRev === null) {
+            __lastStatsRev = nextRev;
+            return;
+        }
+        if (nextRev === __lastStatsRev) return;
+        __lastStatsRev = nextRev;
+        void refreshFromStatsSignal();
+    }
+
+    function stopRealtime() {
+        if (__sseHandle) {
+            __sseHandle.close();
+            __sseHandle = null;
+        }
+        if (__pollTimer != null) {
+            clearInterval(__pollTimer);
+            __pollTimer = null;
+        }
+    }
+
+    async function pollStatsRev() {
+        if (!isModalOpen()) {
+            stopRealtime();
+            return;
+        }
+        try {
+            var res = await fetch(PROVEEDOR_STATS_REV_URL + '?_t=' + Date.now(), {
+                credentials: 'same-origin',
+                cache: 'no-store',
+                headers: { Accept: 'application/json' },
+            });
+            var data = await res.json().catch(function () {
+                return null;
+            });
+            if (!res.ok || !data || !data.success || data.stats_rev == null) return;
+            onProveedorStatsSse({ type: 'proveedor_stats_rev', stats_rev: data.stats_rev });
+        } catch (_err) {}
+    }
+
+    function startPollFallback() {
+        if (__pollTimer != null) return;
+        void pollStatsRev();
+        __pollTimer = window.setInterval(function () {
+            void pollStatsRev();
+        }, POLL_MS);
+    }
+
+    function startRealtime() {
+        if (!isModalOpen()) return;
+        stopRealtime();
+        if (typeof window.StoreSseRealtime !== 'undefined' && typeof window.StoreSseRealtime.connectOrFallback === 'function') {
+            __sseHandle = window.StoreSseRealtime.connectOrFallback(
+                PROVEEDOR_STATS_SSE_URL,
+                onProveedorStatsSse,
+                startPollFallback
+            );
+        } else {
+            startPollFallback();
         }
     }
 
@@ -216,6 +275,9 @@
             throw new Error((data && (data.error || data.message)) || 'No se pudieron cargar las ventas.');
         }
         __cache = Array.isArray(data.providers) ? data.providers : [];
+        if (data.stats_rev != null) {
+            __lastStatsRev = String(data.stats_rev);
+        }
         return __cache;
     }
 
@@ -250,7 +312,7 @@
             .then(function () {
                 syncProviderSelect();
                 renderList();
-                startPolling();
+                startRealtime();
             })
             .catch(function (err) {
                 if (meta) {
@@ -263,7 +325,7 @@
     function closeModal() {
         var modal = document.getElementById('adminLicProveedorVentasModal');
         if (!modal || modal.hidden) return;
-        stopPolling();
+        stopRealtime();
         closeInfoModal();
         var opener = __modalOpener;
         if (opener && typeof opener.focus === 'function' && document.contains(opener)) {

@@ -785,6 +785,10 @@ document.addEventListener('DOMContentLoaded', function() {
   });
 
   var storeNotifSeenIds = Object.create(null);
+  var historialNotifSseHandle = null;
+  var historialNotifPollInterval = null;
+  var HISTORIAL_NOTIF_SSE_URL = '/tienda/api/user/store-notifications/stream';
+  var HISTORIAL_NOTIF_POLL_MS = 15000;
 
   function historialCsrfToken() {
     var meta = document.querySelector('meta[name="csrf_token"]');
@@ -851,6 +855,266 @@ document.addEventListener('DOMContentLoaded', function() {
       .catch(function () {});
   }
 
-  pollHistorialStoreNotifications();
-  window.setInterval(pollHistorialStoreNotifications, 15000);
+  function onHistorialNotifSseMessage(data) {
+    if (!data || data.type !== 'notifications' || !data.success) return;
+    if (Array.isArray(data.notifications)) {
+      data.notifications.slice().reverse().forEach(showHistorialStoreNotification);
+    }
+  }
+
+  function stopHistorialNotificationsRealtime() {
+    if (historialNotifSseHandle) {
+      historialNotifSseHandle.close();
+      historialNotifSseHandle = null;
+    }
+    if (historialNotifPollInterval) {
+      window.clearInterval(historialNotifPollInterval);
+      historialNotifPollInterval = null;
+    }
+  }
+
+  function startHistorialNotificationsPollFallback() {
+    if (historialNotifPollInterval) return;
+    pollHistorialStoreNotifications();
+    historialNotifPollInterval = window.setInterval(pollHistorialStoreNotifications, HISTORIAL_NOTIF_POLL_MS);
+  }
+
+  function startHistorialNotificationsRealtime() {
+    if (document.visibilityState !== 'visible') {
+      stopHistorialNotificationsRealtime();
+      return;
+    }
+    stopHistorialNotificationsRealtime();
+    if (typeof window.StoreSseRealtime !== 'undefined' && typeof window.StoreSseRealtime.connectOrFallback === 'function') {
+      historialNotifSseHandle = window.StoreSseRealtime.connectOrFallback(
+        HISTORIAL_NOTIF_SSE_URL,
+        onHistorialNotifSseMessage,
+        startHistorialNotificationsPollFallback
+      );
+    } else {
+      startHistorialNotificationsPollFallback();
+    }
+  }
+
+  document.addEventListener('visibilitychange', function historialNotifVisibility() {
+    if (document.visibilityState === 'visible') {
+      startHistorialNotificationsRealtime();
+    } else {
+      stopHistorialNotificationsRealtime();
+    }
+  });
+
+  startHistorialNotificationsRealtime();
+
+  let proveedorResumenModalCtx = null;
+
+  if (modalBody) {
+    modalBody.addEventListener('click', function (e) {
+      const btn = e.target.closest && e.target.closest('.ph-proveedor-resumen-delete-btn');
+      if (!btn || btn.disabled || !proveedorResumenModalCtx) return;
+      const ctx = proveedorResumenModalCtx;
+      if (!ctx.canDelete || !ctx.deleteUrl) return;
+      e.preventDefault();
+      const coDate = btn.getAttribute('data-co-date');
+      if (!coDate) return;
+      const userId =
+        btn.getAttribute('data-user-id') ||
+        (ctx.adminMode && ctx.defaultUserId ? String(ctx.defaultUserId) : '');
+      const match = (ctx.list || []).find(function (x) {
+        return String(x.co_date) === String(coDate);
+      });
+      const label = String((match && match.producto) || coDate);
+      if (
+        !window.confirm(
+          '¿Borrar el resumen del día «' +
+            label +
+            '»?\n\nNo modifica ventas en la base de datos ni el contador Admin → Proveedores.'
+        )
+      ) {
+        return;
+      }
+      btn.disabled = true;
+      const payload = { co_date: coDate };
+      if (ctx.adminMode && userId) payload.user_id = parseInt(userId, 10);
+      fetch(ctx.deleteUrl, {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+          'X-CSRFToken': historialCsrfToken(),
+          'X-Requested-With': 'XMLHttpRequest',
+        },
+        body: JSON.stringify(payload),
+      })
+        .then(function (r) {
+          return r.json().catch(function () {
+            return { success: false };
+          });
+        })
+        .then(function (data) {
+          if (!data || !data.success) {
+            throw new Error((data && data.error) || 'No se pudo borrar.');
+          }
+          ctx.list = (ctx.list || []).filter(function (x) {
+            return String(x.co_date) !== String(coDate);
+          });
+          if (typeof ctx.render === 'function') ctx.render();
+          if (typeof ctx.onDeleted === 'function') ctx.onDeleted(coDate);
+        })
+        .catch(function (err) {
+          window.alert(err && err.message ? err.message : 'Error al borrar.');
+          btn.disabled = false;
+        });
+    });
+  }
+
+  window.purchaseHistoryOpenProveedorResumenesModal = function (items, periodLabel, options) {
+    if (!modal || !modalBody) return;
+    options = options || {};
+    lastLicenciasOpenerBtn = null;
+    modalTitle.textContent = periodLabel || 'Resúmenes proveedor';
+    const canDelete = !!options.canDelete && !!options.deleteUrl;
+    if (modalSub) {
+      modalSub.textContent = canDelete
+        ? 'Resumen de lo vendido por día. Puedes borrar un día concreto; no afecta el contador Admin → Proveedores.'
+        : 'Resumen de lo vendido por día';
+      modalSub.hidden = false;
+    }
+
+    const list = Array.isArray(items) ? items.slice() : [];
+
+    function buildCopyText(entries) {
+      return entries
+        .map(function (it) {
+          const title = String(it.producto || '').trim();
+          const body = String(it.daily_summary_text || '').trim();
+          return title && body ? title + '\n' + body : title || body;
+        })
+        .filter(Boolean)
+        .join('\n\n────────────────\n\n');
+    }
+
+    function renderResumenesList() {
+      modalBody.innerHTML = '';
+      if (!list.length) {
+        const p = document.createElement('p');
+        p.className = 'purchase-licencias-empty';
+        p.textContent = 'No hay resúmenes guardados para este período.';
+        modalBody.appendChild(p);
+        if (copyActions) copyActions.setAttribute('hidden', '');
+        if (copyBuf) copyBuf.value = '';
+        return;
+      }
+      list.forEach(function (it) {
+        const wrap = document.createElement('div');
+        wrap.className = 'ph-proveedor-resumen-item';
+        const head = document.createElement('div');
+        head.className = 'ph-proveedor-resumen-item__head';
+        const title = document.createElement('h4');
+        title.className = 'ph-proveedor-resumen-item__title';
+        title.textContent = String(it.producto || 'Resumen diario').trim() || 'Resumen diario';
+        head.appendChild(title);
+        if (canDelete && it.co_date) {
+          const delBtn = document.createElement('button');
+          delBtn.type = 'button';
+          delBtn.className =
+            'btn-panel btn-red btn-sm ph-proveedor-resumen-item__delete ph-proveedor-resumen-delete-btn';
+          delBtn.setAttribute('data-co-date', String(it.co_date));
+          if (it.user_id != null) {
+            delBtn.setAttribute('data-user-id', String(it.user_id));
+          }
+          delBtn.title = 'Borrar resumen de este día';
+          delBtn.innerHTML =
+            '<i class="fas fa-trash-alt" aria-hidden="true"></i><span class="sr-only"> Borrar</span>';
+          head.appendChild(delBtn);
+        }
+        wrap.appendChild(head);
+        const body = String(it.daily_summary_text || '').trim();
+        if (body) {
+          const pre = document.createElement('pre');
+          pre.className = 'ph-proveedor-resumen-item__pre purchase-daily-summary-pre lic-block';
+          pre.textContent = body;
+          wrap.appendChild(pre);
+        }
+        modalBody.appendChild(wrap);
+      });
+      const text = buildCopyText(list);
+      if (copyActions) {
+        if (text) copyActions.removeAttribute('hidden');
+        else copyActions.setAttribute('hidden', '');
+      }
+      if (copyBuf) copyBuf.value = text;
+    }
+
+    proveedorResumenModalCtx = {
+      list: list,
+      canDelete: canDelete,
+      deleteUrl: options.deleteUrl || '',
+      adminMode: !!options.adminMode,
+      defaultUserId: options.defaultUserId || null,
+      onDeleted: options.onDeleted,
+      render: renderResumenesList,
+    };
+
+    renderResumenesList();
+    modal.classList.remove('modal-hidden');
+    modal.setAttribute('aria-hidden', 'false');
+  };
+
+  window.purchaseHistoryOpenProveedorServiciosModal = function (payload, periodLabel) {
+    if (!modal || !modalBody) return;
+    lastLicenciasOpenerBtn = null;
+    payload = payload || {};
+    const servicios = Array.isArray(payload.servicios) ? payload.servicios : [];
+    const totalVentas = Number(payload.total_ventas) || 0;
+
+    modalTitle.textContent = periodLabel || 'Resúmenes proveedor';
+    if (modalSub) {
+      modalSub.textContent = 'Ventas del período por servicio vinculado';
+      modalSub.hidden = false;
+    }
+    modalBody.innerHTML = '';
+
+    if (!servicios.length) {
+      if (copyActions) copyActions.setAttribute('hidden', '');
+      if (copyBuf) copyBuf.value = '';
+      const p = document.createElement('p');
+      p.className = 'purchase-licencias-empty';
+      p.textContent = 'No hay servicios vinculados o ventas en este período.';
+      modalBody.appendChild(p);
+    } else {
+      const list = document.createElement('div');
+      list.className = 'admin-lic-proveedor-ventas-list ph-proveedor-servicios-modal-list';
+      list.setAttribute('role', 'list');
+      const copyLines = [];
+      servicios.forEach(function (svc) {
+        const name = String(svc.producto || '—').trim() || '—';
+        const count = Math.max(0, parseInt(svc.ventas, 10) || 0);
+        copyLines.push(name + ': ' + count);
+        const item = document.createElement('div');
+        item.className = 'admin-lic-proveedor-ventas-item';
+        item.setAttribute('role', 'listitem');
+        item.innerHTML =
+          '<span class="admin-lic-proveedor-ventas-item__name">' +
+          name.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;') +
+          '</span>' +
+          '<span class="admin-lic-proveedor-ventas-item__count" aria-label="Vendidas">' +
+          String(count) +
+          '</span>';
+        list.appendChild(item);
+      });
+      modalBody.appendChild(list);
+      const totalRow = document.createElement('p');
+      totalRow.className = 'ph-proveedor-servicios-modal-total mb-0 mt-2';
+      totalRow.innerHTML = '<strong>Total:</strong> ' + String(totalVentas);
+      modalBody.appendChild(totalRow);
+      const copyText = copyLines.join('\n') + '\nTotal: ' + String(totalVentas);
+      if (copyActions) copyActions.removeAttribute('hidden');
+      if (copyBuf) copyBuf.value = copyText;
+    }
+
+    modal.classList.remove('modal-hidden');
+    modal.setAttribute('aria-hidden', 'false');
+  };
 });

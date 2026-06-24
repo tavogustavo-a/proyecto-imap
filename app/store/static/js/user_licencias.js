@@ -7,7 +7,7 @@
 
     var SAVE_DEBOUNCE_MS = 600;
 
-    /** Sondeo ligero: mismo hash que el servidor (`portal_rev`) para refrescar sin F5 cuando admin cambia licencias. */
+    /** Actualización casi en tiempo real vía SSE (`portal_rev`); fallback a sondeo ligero. */
     var USER_LIC_PORTAL_POLL_MS = 2500;
     /** Vista Caducidad: solo cuentas con vencimiento en 5 días o menos (incluye «vence hoy» = 0). */
     var USER_LIC_CADUCIDAD_VIEW_MAX_DAYS = 5;
@@ -17,8 +17,13 @@
     var userLicPortalColombiaClock = null;
     var userLicPortalVencimientosActive = false;
     var userLicPortalPollTimer = null;
+    var userLicPortalSseHandle = null;
+    var userLicPortalPollContext = null;
     var userLicPortalStaticWired = false;
     var userLicPortalCollapseBootstrapped = false;
+    var userLicPortalDeferredRev = null;
+    var userLicPortalRowAutosaveFlush = null;
+    var userLicPortalRowAutosaveHasPending = null;
     var userLicCaducidadNotifyTimer = null;
     var userLicCaducidadNotifyBarWired = false;
     var userLicCaducidadNotifyPrefsMem = { enabled: false, fromDays: 5 };
@@ -31,11 +36,27 @@
         day_notepads: {},
         license_lines: [],
         day_lines: {},
+        expired_lines: [],
+        suspended_lines: [],
         services_catalog: [{ id: 'anonimo', name: 'Anónimo' }],
     };
     var PROVEEDOR_SERVICE_ANONIMO = 'anonimo';
     var userLicPortalProveedorSaveTimer = null;
     var userLicPortalProveedorEditorWired = false;
+    var userLicPortalProveedorDirty = false;
+    var userLicPortalProveedorSaveInFlight = false;
+
+    function userLicPortalMarkProveedorDirty() {
+        userLicPortalProveedorDirty = true;
+    }
+
+    function userLicPortalClearProveedorDirty() {
+        userLicPortalProveedorDirty = false;
+    }
+
+    function userLicPortalIsProveedorDirty() {
+        return userLicPortalProveedorDirty || userLicPortalProveedorSaveInFlight;
+    }
     var USER_LIC_CADUCIDAD_NOTIFY_CHECK_MS = 30 * 60 * 1000;
     var USER_LIC_CADUCIDAD_NOTIFY_MAX_LEAD = 5;
     var USER_LIC_CADUCIDAD_INAPP_ALERT_MS = 9000;
@@ -731,6 +752,7 @@
                             row.style.outline = '';
                         }, 1200);
                         userLicRefreshReportesUi(rootEl);
+                        userLicPortalTryCatchUpRevRefresh();
                     } else {
                         if (badgePending) {
                             badgePending.disabled = false;
@@ -761,6 +783,37 @@
                 persistRow(row);
                 delete timers[sk];
             }, SAVE_DEBOUNCE_MS);
+        }
+
+        function flushAllPendingRowSaves() {
+            var keys = Object.keys(timers);
+            var i;
+            for (i = 0; i < keys.length; i += 1) {
+                var sk = keys[i];
+                window.clearTimeout(timers[sk]);
+                delete timers[sk];
+                var row = rootEl.querySelector('[data-user-lic-save-key="' + sk + '"]');
+                if (row) persistRow(row);
+            }
+        }
+
+        function hasPendingRowSaves() {
+            return Object.keys(timers).length > 0;
+        }
+
+        userLicPortalRowAutosaveFlush = flushAllPendingRowSaves;
+        userLicPortalRowAutosaveHasPending = hasPendingRowSaves;
+
+        if (!window._userLicRowAutosavePageHook) {
+            window._userLicRowAutosavePageHook = true;
+            window.addEventListener('pagehide', function () {
+                if (userLicPortalRowAutosaveFlush) userLicPortalRowAutosaveFlush();
+            });
+            document.addEventListener('visibilitychange', function () {
+                if (document.visibilityState === 'hidden' && userLicPortalRowAutosaveFlush) {
+                    userLicPortalRowAutosaveFlush();
+                }
+            });
         }
 
         rootEl.addEventListener(
@@ -2120,7 +2173,38 @@
         return buildUserLicenciasNormalSheetsHtml(accounts);
     }
 
-    function rebuildUserLicPortalMainContent(outer, host, gridInner, gridHostEl, persistUi) {
+    function userLicPortalCaptureDaySectionsFromDom(outer) {
+        if (!outer) return;
+        outer.querySelectorAll('.user-lic-account-sheet').forEach(function (article) {
+            article.querySelectorAll('.user-lic-readonly-day[data-user-day]').forEach(function (sec) {
+                var day = sec.getAttribute('data-user-day');
+                if (day == null || day === '') return;
+                userLicPortalPersistDayCollapsed(article, day, sec.classList.contains('collapsed'));
+            });
+        });
+    }
+
+    function userLicPortalCanApplyPortalRevRefresh() {
+        if (userLicPortalIsProveedorDirty()) return false;
+        if (userLicPortalRowAutosaveHasPending && userLicPortalRowAutosaveHasPending()) return false;
+        var ae = document.activeElement;
+        if (ae && ae.closest && ae.closest('.user-lic-license-row-edit')) return false;
+        return true;
+    }
+
+    function userLicPortalTryCatchUpRevRefresh() {
+        if (!userLicPortalDeferredRev || !userLicPortalPollContext) return;
+        if (!userLicPortalCanApplyPortalRevRefresh()) return;
+        var rev = userLicPortalDeferredRev;
+        var ctx = userLicPortalPollContext;
+        userLicPortalDeferredRev = null;
+        refreshUserLicPortalIfRevChanged(rev, ctx);
+    }
+
+    function rebuildUserLicPortalMainContent(outer, host, gridInner, gridHostEl, persistUi, forceRebuild) {
+        if (!forceRebuild && userLicPortalIsProveedorDirty()) return;
+        if (userLicPortalRowAutosaveFlush) userLicPortalRowAutosaveFlush();
+        userLicPortalCaptureDaySectionsFromDom(outer);
         var accounts = userLicPortalAccountsCache || [];
         var effFilter =
             persistUi && persistUi.filter != null
@@ -2176,13 +2260,25 @@
             var entering = !userLicPortalVencimientosActive;
             userLicPortalVencimientosActive = entering;
             setCaducidadToolbarActive(entering);
-            rebuildUserLicPortalMainContent(
-                outer,
-                host,
-                gridInner,
-                gridHostEl,
-                entering ? { filter: 'all' } : null
-            );
+            var doRebuild = function (forceRebuild) {
+                rebuildUserLicPortalMainContent(
+                    outer,
+                    host,
+                    gridInner,
+                    gridHostEl,
+                    entering ? { filter: 'all' } : null,
+                    forceRebuild
+                );
+            };
+            if (userLicPortalProveedorDirty) {
+                userLicPortalFlushProveedorSave(outer, outer.getAttribute('data-proveedor-url') || '').finally(
+                    function () {
+                        doRebuild(true);
+                    }
+                );
+            } else {
+                doRebuild(false);
+            }
             userLicCaducidadNotifySyncBarVisibility();
         });
     }
@@ -3163,6 +3259,47 @@
         return [{ id: PROVEEDOR_SERVICE_ANONIMO, name: 'Anónimo' }];
     }
 
+    function userLicProveedorNormalizeExtraLineEntries(rawLines, legacyText) {
+        if (Array.isArray(rawLines)) {
+            var out = [];
+            rawLines.forEach(function (item) {
+                if (!item || typeof item !== 'object') return;
+                var cred = String(item.cred || item.line || '').trim();
+                if (!cred) return;
+                var entry = {
+                    service: userLicProveedorNormalizeServiceId(
+                        item.service != null ? item.service : item.license_id
+                    ),
+                    cred: cred,
+                };
+                var rawDay = item.sale_day != null ? item.sale_day : item.day;
+                if (rawDay != null && String(rawDay).trim() !== '' && String(rawDay).trim() !== '—') {
+                    var d = parseInt(rawDay, 10);
+                    if (Number.isFinite(d) && d >= 1 && d <= 31) entry.sale_day = d;
+                }
+                out.push(entry);
+            });
+            return out;
+        }
+        if (legacyText != null && String(legacyText).trim()) {
+            return userLicProveedorLinesFromLegacyText(legacyText);
+        }
+        return [];
+    }
+
+    function userLicProveedorExtraRowsFromPersistedLines(lines, rowKind) {
+        return (lines || []).map(function (entry) {
+            return {
+                product: userLicProveedorProductNameForService(entry && entry.service),
+                cuenta: String((entry && entry.cred) || '—').trim() || '—',
+                day: entry && entry.sale_day != null ? entry.sale_day : '—',
+                status: rowKind === 'suspended' ? 'Caída' : 'Vencida',
+                filterKey: USER_LIC_PORTAL_PROVEEDOR_FILTER,
+                licenseId: entry && entry.service != null ? entry.service : '',
+            };
+        });
+    }
+
     function userLicProveedorLinesFromLegacyText(text) {
         return String(text || '')
             .replace(/\r\n/g, '\n')
@@ -3215,6 +3352,40 @@
             .map(function (entry) {
                 return String((entry && entry.cred) || '');
             })
+            .join('\n');
+    }
+
+    function userLicProveedorIsAnonimoService(serviceId) {
+        return userLicProveedorNormalizeServiceId(serviceId) === PROVEEDOR_SERVICE_ANONIMO;
+    }
+
+    function userLicProveedorProductNameForService(serviceId) {
+        var catalog = userLicPortalProveedorCache.services_catalog || userLicProveedorDefaultCatalog();
+        var sel = userLicProveedorNormalizeServiceId(serviceId);
+        var i;
+        for (i = 0; i < catalog.length; i += 1) {
+            var item = catalog[i];
+            if (!item) continue;
+            if (String(item.id != null ? item.id : '') === sel) {
+                return String(item.name != null ? item.name : item.id);
+            }
+        }
+        return sel === PROVEEDOR_SERVICE_ANONIMO ? '—' : sel;
+    }
+
+    /** Texto de solo lectura (portal proveedor): producto · credencial, como en admin. */
+    function userLicProveedorFormatLinesForDisplay(lines) {
+        return (lines || [])
+            .map(function (entry) {
+                var cred = String((entry && entry.cred) || '').trim();
+                if (!cred) return '';
+                var svc = entry && entry.service;
+                if (svc == null || svc === '' || userLicProveedorIsAnonimoService(svc)) {
+                    return cred;
+                }
+                return userLicProveedorProductNameForService(svc) + ' · ' + cred;
+            })
+            .filter(Boolean)
             .join('\n');
     }
 
@@ -3373,96 +3544,102 @@
             .split('\n');
         var out = [];
         credLines.forEach(function (cred, idx) {
-            if (!String(cred).trim()) return;
+            var trimmed = String(cred).replace(/\s+$/g, '');
+            if (!String(trimmed).trim()) return;
             var sel = block.querySelectorAll('.user-lic-proveedor-service-select')[idx];
             var service =
                 sel && sel.value != null ? sel.value : PROVEEDOR_SERVICE_ANONIMO;
             out.push({
                 service: userLicProveedorNormalizeServiceId(service),
-                cred: cred,
+                cred: trimmed,
             });
         });
         return out;
     }
 
-    function userLicProveedorRenderSplitBlockHtml(blockKey, dayNum) {
+    function userLicProveedorRenderEmptyDayBodyHtml(day) {
+        return (
+            '<div class="user-lic-proveedor-day-empty-state license-split-editor license-split-editor--proveedor-readonly license-notepad--locked license-split-editor--day">' +
+            '<div class="license-split-editor__viewport">' +
+            '<div class="license-split-editor__grid user-lic-proveedor-readonly-grid--creds-only">' +
+            '<div class="license-split-editor__creds-cell">' +
+            '<textarea class="admin-licencias-notepad-textarea license-split-editor__creds user-lic-proveedor-readonly-creds user-lic-proveedor-day-empty-creds user-lic-creds-ro" readonly tabindex="-1" rows="1" wrap="off" spellcheck="false" aria-readonly="true" aria-label="Día ' +
+            escAttr(String(day)) +
+            ' sin licencias"></textarea>' +
+            '</div></div></div></div>'
+        );
+    }
+
+    function userLicProveedorRenderEditableSplitBlockHtml(blockKey, dayNum) {
         var lines = userLicProveedorLinesForBlock(blockKey, dayNum);
         var credText = userLicProveedorLinesToCredsText(lines);
-        var isLic = blockKey === 'license';
-        var rowAttr = isLic ? '3' : '1';
-        var rootId = isLic ? ' id="userLicProveedorLicenseSplitRoot"' : '';
-        var editorClasses =
-            'license-split-editor user-lic-proveedor-split license-split-editor--proveedor-service license-notepad--locked' +
-            (isLic
-                ? ''
-                : ' license-split-editor--day day-license-split-root day-account-item user-lic-days-bundle');
+        var nLines = Math.max(1, credText ? credText.split('\n').length : 1);
+        var ariaLabel = blockKey === 'license' ? 'Licencias del proveedor' : 'Día ' + String(dayNum);
         return (
-            '<div class="' +
-            editorClasses +
-            '"' +
-            rootId +
-            ' data-proveedor-block="' +
+            '<div class="license-split-editor user-lic-proveedor-split user-lic-proveedor-split--editable" data-proveedor-block="' +
             escAttr(blockKey) +
             '"' +
-            (isLic ? '' : ' data-proveedor-day="' + escAttr(String(dayNum)) + '"') +
+            (blockKey === 'license' ? '' : ' data-proveedor-day="' + escAttr(String(dayNum)) + '"') +
             '>' +
             '<div class="license-split-editor__viewport">' +
             '<div class="license-split-editor__grid">' +
             '<div class="license-split-editor__creds-cell">' +
-            '<textarea' +
-            (isLic
-                ? ' id="userLicProveedorLicenseNotes" name="userLicProveedorLicenseNotes"'
-                : ' id="userLicProveedorDayNotes-d' +
-                  escAttr(String(dayNum)) +
-                  '" name="userLicProveedorDayNotes-d' +
-                  escAttr(String(dayNum)) +
-                  '"') +
-            ' class="admin-licencias-notepad-textarea license-split-editor__creds user-lic-proveedor-creds-ta' +
-            (isLic ? ' user-lic-proveedor-lic-ta' : ' user-lic-proveedor-day-ta') +
-            '" rows="' +
-            rowAttr +
-            '" spellcheck="true" wrap="off" autocomplete="off"' +
-            (isLic ? '' : ' data-proveedor-day="' + escAttr(String(dayNum)) + '"') +
-            ' placeholder="Correo y contraseña, una por línea. Enter = nueva línea.">' +
+            '<textarea class="admin-licencias-notepad-textarea license-split-editor__creds user-lic-proveedor-creds-ta" rows="' +
+            String(nLines) +
+            '" spellcheck="true" wrap="off" autocomplete="off" aria-label="' +
+            escAttr(ariaLabel) +
+            '" placeholder="Correo y contraseña, una por línea.">' +
             escTextarea(credText) +
             '</textarea></div>' +
-            '<div class="license-split-editor__side" aria-label="Servicio por licencia">' +
-            '<div class="license-split-editor__rows user-lic-proveedor-service-rows day-license-split-rows" role="region">' +
-            '</div></div></div></div></div>'
+            '<div class="license-split-editor__side user-lic-proveedor-side" aria-label="Servicio por línea">' +
+            '<div class="license-split-editor__rows user-lic-proveedor-service-rows"></div>' +
+            '</div></div></div></div>'
         );
+    }
+
+    function userLicProveedorRenderSplitBlockHtml(blockKey, dayNum) {
+        if (blockKey === 'license') {
+            return userLicProveedorRenderEditableSplitBlockHtml('license', null);
+        }
+        var lines = userLicProveedorLinesForBlock(blockKey, dayNum);
+        var nLines = userLicProveedorCountStructuredLines(lines);
+        if (!nLines) {
+            return '';
+        }
+        var credText = userLicProveedorFormatLinesForDisplay(lines);
+        var ariaLabel = 'Día ' + String(dayNum) + ' del proveedor';
+        return (
+            '<div class="license-split-editor user-lic-proveedor-split license-split-editor--proveedor-readonly license-notepad--locked license-split-editor--day" data-proveedor-block="' +
+            escAttr(blockKey) +
+            '" data-proveedor-day="' +
+            escAttr(String(dayNum)) +
+            '">' +
+            '<div class="license-split-editor__viewport">' +
+            '<div class="license-split-editor__grid user-lic-proveedor-readonly-grid--creds-only">' +
+            '<div class="license-split-editor__creds-cell">' +
+            '<textarea class="admin-licencias-notepad-textarea license-split-editor__creds user-lic-proveedor-readonly-creds user-lic-creds-ro" readonly tabindex="-1" rows="' +
+            String(Math.max(1, nLines)) +
+            '" wrap="off" spellcheck="false" aria-readonly="true" aria-label="' +
+            escAttr(ariaLabel) +
+            '">' +
+            escTextarea(credText) +
+            '</textarea></div></div></div></div>'
+        );
+    }
+
+    function userLicProveedorInitEditableBlocks(outer) {
+        if (!outer) return;
+        userLicProveedorSyncServiceRowsForBlock(outer, 'license', null);
+        var licBlock = outer.querySelector('.user-lic-proveedor-split[data-proveedor-block="license"]');
+        if (licBlock) userLicProveedorScheduleAutosizeCredsForBlock(licBlock);
     }
 
     function userLicProveedorInitSplitBlocks(outer) {
         if (!outer) return;
-        userLicProveedorSyncServiceRowsForBlock(outer, 'license', null);
-        var d;
-        for (d = 1; d <= 31; d += 1) {
-            if (
-                outer.querySelector(
-                    '.user-lic-proveedor-split[data-proveedor-block="day"][data-proveedor-day="' +
-                        String(d) +
-                        '"]'
-                )
-            ) {
-                userLicProveedorSyncServiceRowsForBlock(outer, 'day', d);
-            }
-        }
-        if (typeof ResizeObserver !== 'undefined') {
-            var wrap = outer.querySelector('.user-lic-proveedor-wrap');
-            if (wrap && wrap.getAttribute('data-prov-resize-wired') !== '1') {
-                wrap.setAttribute('data-prov-resize-wired', '1');
-                var debounceT = null;
-                var ro = new ResizeObserver(function () {
-                    clearTimeout(debounceT);
-                    debounceT = setTimeout(function () {
-                        wrap.querySelectorAll('.user-lic-proveedor-split').forEach(function (block) {
-                            userLicProveedorAutosizeCredsForBlock(block);
-                        });
-                    }, 16);
-                });
-                ro.observe(wrap);
-            }
-        }
+        outer.querySelectorAll('.user-lic-proveedor-readonly-creds, .user-lic-proveedor-day-empty-creds').forEach(function (ta) {
+            ta.style.height = 'auto';
+            ta.style.height = Math.max(ta.scrollHeight, ta.offsetHeight) + 'px';
+        });
     }
 
     function userLicProveedorDayTextFromCache(day) {
@@ -3471,10 +3648,18 @@
         return v != null ? String(v) : '';
     }
 
-    function renderProveedorDaySection(day) {
+    function renderProveedorDaySection(day, sheetKey) {
         var dayLines = userLicProveedorLinesForBlock('day', day);
         var nLines = userLicProveedorCountStructuredLines(dayLines);
-        var collapsedClass = nLines === 0 ? ' collapsed' : '';
+        var collapsedClass = '';
+        if (sheetKey != null) {
+            var sv = portalDayCollapsedRead(sheetKey, String(day));
+            if (sv === 'true') collapsedClass = ' collapsed';
+            else if (sv === 'false') collapsedClass = '';
+            else collapsedClass = nLines === 0 ? ' collapsed' : '';
+        } else {
+            collapsedClass = nLines === 0 ? ' collapsed' : '';
+        }
         var badgeHtml =
             nLines > 0
                 ? '<span class="day-account-badge admin-licencias-notepad-line-badge" title="' +
@@ -3483,22 +3668,30 @@
                   String(nLines) +
                   '</span>'
                 : '';
-        var toolbarHtml =
+        var day1LeadingHtml =
             day === 1
-                ? '<button type="button" class="admin-licencias-toggle-notes-col-btn admin-licencias-days-expand-all-btn user-lic-days-expand-all user-lic-proveedor-days-expand-all" title="Plegar todos los días" aria-label="Plegar todas las secciones de días" aria-expanded="true"><i class="fas fa-chevron-up" aria-hidden="true"></i></button>'
+                ? '<div class="admin-licencias-day-header-leading">' +
+                  '<button type="button" class="admin-licencias-toggle-notes-col-btn admin-licencias-days-expand-all-btn admin-licencias-days-expand-all-btn--leading user-lic-days-expand-all user-lic-proveedor-days-expand-all" title="Plegar todos los días" aria-label="Plegar todas las secciones de días" aria-expanded="true">' +
+                  '<i class="fas fa-chevron-up" aria-hidden="true"></i></button></div>'
                 : '';
-        var headerActions =
-            '<div class="admin-licencias-bloc-header-actions user-lic-day-header-actions">' +
-            toolbarHtml +
-            badgeHtml +
-            '</div>';
+        var dayHeaderExtraClass = day === 1 ? ' admin-licencias-bloc-header--day-toolbar' : '';
+        var headerActions = badgeHtml
+            ? '<div class="admin-licencias-bloc-header-actions user-lic-day-header-actions">' + badgeHtml + '</div>'
+            : '';
+        var bodyHtml =
+            nLines > 0
+                ? userLicProveedorRenderSplitBlockHtml('day', day)
+                : userLicProveedorRenderEmptyDayBodyHtml(day);
         return (
             '<section class="day-section admin-licencias-bloc admin-licencias-bloc--day user-lic-readonly-day user-lic-proveedor-day' +
             collapsedClass +
             '" data-user-day="' +
             String(day) +
             '">' +
-            '<div class="day-section-header admin-licencias-bloc-header user-lic-day-header-toggle">' +
+            '<div class="day-section-header admin-licencias-bloc-header user-lic-day-header-toggle' +
+            dayHeaderExtraClass +
+            '">' +
+            day1LeadingHtml +
             '<span class="admin-licencias-bloc-title">' +
             '<i class="fas fa-calendar-day" aria-hidden="true"></i> <span>Día ' +
             String(day) +
@@ -3506,7 +3699,7 @@
             headerActions +
             '</div>' +
             '<div class="day-accounts-list">' +
-            (nLines > 0 ? userLicProveedorRenderSplitBlockHtml('day', day) : '') +
+            bodyHtml +
             '</div></section>'
         );
     }
@@ -3561,65 +3754,89 @@
         return newLines.length - 1;
     }
 
-    function userLicProveedorExtraDayRowHtml(row, rowKind, rowIndex) {
-        var dayStr = row.day != null && row.day !== '—' ? String(row.day) : '—';
-        var productStr = String(row.product || '—').trim() || '—';
-        var prefix = rowKind === 'suspended' ? 'userLicProvExtraCaid' : 'userLicProvExtraVenc';
-        var noteFieldId = prefix + 'Note' + String(rowIndex);
+    function userLicProveedorExtraEditableRowHtml(entry, rowKind, rowIndex) {
+        var svc =
+            entry && entry.service != null ? entry.service : PROVEEDOR_SERVICE_ANONIMO;
+        var saleDay =
+            entry && entry.sale_day != null && entry.sale_day !== '—' ? String(entry.sale_day) : '';
         var rowClass =
             rowKind === 'suspended'
-                ? 'license-split-editor__row license-split-editor__row--suspended user-lic-proveedor-extra-row user-lic-proveedor-extra-row--link'
-                : 'license-split-editor__row license-split-editor__row--expired user-lic-proveedor-extra-row user-lic-proveedor-extra-row--link';
+                ? 'license-split-editor__row license-split-editor__row--suspended user-lic-proveedor-extra-row'
+                : 'license-split-editor__row license-split-editor__row--expired user-lic-proveedor-extra-row';
         return (
             '<div class="' +
             rowClass +
-            '" role="button" tabindex="0" aria-label="Ir al día ' +
-            escAttr(dayStr) +
-            ' de ' +
-            escAttr(productStr) +
-            '"' +
-            ' data-prov-extra-day="' +
-            escAttr(String(row.day != null ? row.day : '—')) +
-            '"' +
-            ' data-prov-extra-filter-key="' +
-            escAttr(String(row.filterKey || '')) +
-            '"' +
-            ' data-prov-extra-license-id="' +
-            escAttr(String(row.licenseId != null ? row.licenseId : '')) +
-            '"' +
-            ' data-prov-extra-product="' +
-            escAttr(productStr) +
+            '" data-prov-extra-row-index="' +
+            String(rowIndex) +
             '">' +
             '<div class="license-split-editor__lead"></div>' +
             '<div class="license-split-editor__status-wrap user-lic-proveedor-extra-side-row">' +
-            '<div class="user-lic-proveedor-extra-service-wrap" title="' +
-            escAttr(productStr) +
-            '">' +
-            '<span class="user-lic-proveedor-extra-service">' +
-            escHtml(productStr) +
-            '</span></div>' +
+            '<div class="license-split-editor__status-select-shell license-split-editor__status-select-shell--bad user-lic-proveedor-service-shell">' +
+            userLicProveedorBuildServiceSelectHtml(svc, rowIndex, rowKind, null) +
+            '</div>' +
             '<div class="user-lic-proveedor-extra-day-wrap">' +
-            '<span class="user-lic-proveedor-extra-day">' +
-            escHtml(dayStr) +
-            '</span></div></div>' +
-            '<input type="text" class="license-split-editor__note" id="' +
-            escAttr(noteFieldId) +
-            '" name="' +
-            escAttr(noteFieldId) +
-            '" hidden style="display:none" tabindex="-1" aria-hidden="true" />' +
-            '</div>'
+            '<input type="number" min="1" max="31" step="1" class="user-lic-proveedor-extra-day-input form-control form-control-sm" data-proveedor-extra-kind="' +
+            escAttr(rowKind) +
+            '" data-proveedor-row-index="' +
+            String(rowIndex) +
+            '" value="' +
+            escAttr(saleDay) +
+            '" placeholder="Día" aria-label="Día de venta" />' +
+            '</div></div></div>'
         );
     }
 
-    function userLicProveedorExtraRebuildDayRows(section, rowKind) {
+    function userLicProveedorExtraSyncEditableRows(section, rowKind, cachedLines) {
+        var ta = section ? section.querySelector('.user-lic-proveedor-extra-creds') : null;
         var rowsWrap = section ? section.querySelector('.user-lic-proveedor-extra-rows') : null;
-        var metas = section && section._userLicProvExtraRowMetas ? section._userLicProvExtraRowMetas : [];
-        if (!rowsWrap) return;
-        rowsWrap.innerHTML = metas
-            .map(function (row, idx) {
-                return userLicProveedorExtraDayRowHtml(row, rowKind, idx);
+        var block = section ? section.querySelector('.user-lic-proveedor-extra-split') : null;
+        if (!ta || !rowsWrap) return;
+        var credLines = userLicProveedorExtraCredLinesFromTa(ta)
+            .map(function (ln) {
+                return String(ln).replace(/\s+$/g, '');
             })
-            .join('');
+            .filter(function (ln) {
+                return String(ln).trim() !== '';
+            });
+        var cached = Array.isArray(cachedLines) ? cachedLines : [];
+        var existingSvc = [];
+        var existingDay = [];
+        rowsWrap.querySelectorAll('.user-lic-proveedor-extra-row').forEach(function (rowEl, idx) {
+            var sel = rowEl.querySelector('.user-lic-proveedor-service-select');
+            var dayInp = rowEl.querySelector('.user-lic-proveedor-extra-day-input');
+            existingSvc[idx] = sel ? sel.value : PROVEEDOR_SERVICE_ANONIMO;
+            existingDay[idx] = dayInp ? dayInp.value : '';
+        });
+        var html = '';
+        credLines.forEach(function (cred, idx) {
+            var entry = {
+                service:
+                    existingSvc[idx] != null
+                        ? existingSvc[idx]
+                        : cached[idx] && cached[idx].service != null
+                          ? cached[idx].service
+                          : PROVEEDOR_SERVICE_ANONIMO,
+                cred: cred,
+                sale_day:
+                    existingDay[idx] != null && existingDay[idx] !== ''
+                        ? existingDay[idx]
+                        : cached[idx] && cached[idx].sale_day != null
+                          ? cached[idx].sale_day
+                          : null,
+            };
+            html += userLicProveedorExtraEditableRowHtml(entry, rowKind, idx);
+        });
+        rowsWrap.innerHTML = html;
+        if (block) userLicProveedorScheduleAutosizeCredsForBlock(block);
+        userLicProveedorExtraUpdateBadge(section);
+    }
+
+    function userLicProveedorExtraRebuildDayRows(section, rowKind) {
+        var cached =
+            rowKind === 'suspended'
+                ? userLicPortalProveedorCache.suspended_lines || []
+                : userLicPortalProveedorCache.expired_lines || [];
+        userLicProveedorExtraSyncEditableRows(section, rowKind, cached);
     }
 
     function userLicProveedorExtraUpdateBadge(section) {
@@ -3632,67 +3849,23 @@
         badge.textContent = String(n);
         badge.hidden = n <= 0;
         badge.title = n === 1 ? '1 línea' : n + ' líneas';
+        if (section.classList.contains('user-lic-proveedor-lic-extra')) {
+            return;
+        }
         section.classList.toggle('collapsed', n <= 0);
     }
 
     function userLicProveedorExtraSyncRowsToCredLines(section, rowKind) {
-        var ta = section ? section.querySelector('.user-lic-proveedor-extra-creds') : null;
-        if (!ta || !section) return;
-        var newLines = userLicProveedorExtraCredLinesFromTa(ta);
-        var oldLines =
-            section._userLicProvExtraLastLines != null
-                ? section._userLicProvExtraLastLines.slice()
-                : newLines.slice();
-        var metas =
-            section._userLicProvExtraRowMetas != null
-                ? section._userLicProvExtraRowMetas.slice()
-                : [];
-        if (newLines.length < oldLines.length) {
-            var removedAt = userLicProveedorExtraFindRemovedLineIndex(oldLines, newLines);
-            if (removedAt >= 0 && removedAt < metas.length) metas.splice(removedAt, 1);
-        } else if (newLines.length > oldLines.length) {
-            var addedAt = userLicProveedorExtraFindAddedLineIndex(oldLines, newLines);
-            metas.splice(addedAt, 0, userLicProveedorExtraBlankMeta());
-        }
-        while (metas.length < newLines.length) metas.push(userLicProveedorExtraBlankMeta());
-        if (metas.length > newLines.length) metas.length = newLines.length;
-        section._userLicProvExtraRowMetas = metas;
-        section._userLicProvExtraLastLines = newLines.slice();
-        userLicProveedorExtraRebuildDayRows(section, rowKind);
-        userLicProveedorExtraUpdateBadge(section);
+        var cached =
+            rowKind === 'suspended'
+                ? userLicPortalProveedorCache.suspended_lines || []
+                : userLicPortalProveedorCache.expired_lines || [];
+        userLicProveedorExtraSyncEditableRows(section, rowKind, cached);
     }
 
     function userLicProveedorExtraWireCredsEditor(section, outer, rowKind) {
         if (!section || section.getAttribute('data-prov-extra-editor-wired') === '1') return;
         section.setAttribute('data-prov-extra-editor-wired', '1');
-        var ta = section.querySelector('.user-lic-proveedor-extra-creds');
-        var rowsWrap = section.querySelector('.user-lic-proveedor-extra-rows');
-        if (!ta || !rowsWrap) return;
-        ta.addEventListener('input', function () {
-            userLicProveedorExtraSyncRowsToCredLines(section, rowKind);
-            userLicProveedorExtraAutosizeCreds(section);
-        });
-        rowsWrap.addEventListener('click', function (ev) {
-            var rowEl = ev.target.closest('.user-lic-proveedor-extra-row--link');
-            if (!rowEl) return;
-            userLicPortalReportNavigateToRow(outer, {
-                day: rowEl.getAttribute('data-prov-extra-day'),
-                filterKey: rowEl.getAttribute('data-prov-extra-filter-key'),
-                licenseId: rowEl.getAttribute('data-prov-extra-license-id'),
-                product: rowEl.getAttribute('data-prov-extra-product'),
-            });
-        });
-        rowsWrap.addEventListener('keydown', function (ev) {
-            var rowEl = ev.target.closest('.user-lic-proveedor-extra-row--link');
-            if (!rowEl || (ev.key !== 'Enter' && ev.key !== ' ')) return;
-            ev.preventDefault();
-            userLicPortalReportNavigateToRow(outer, {
-                day: rowEl.getAttribute('data-prov-extra-day'),
-                filterKey: rowEl.getAttribute('data-prov-extra-filter-key'),
-                licenseId: rowEl.getAttribute('data-prov-extra-license-id'),
-                product: rowEl.getAttribute('data-prov-extra-product'),
-            });
-        });
     }
 
     function userLicProveedorExtraAutosizeCreds(section) {
@@ -3704,7 +3877,7 @@
         credTa.style.height = credTa.scrollHeight + 'px';
     }
 
-    function userLicRenderProveedorLicenciasExtraSection(outer, sectionSel, rows, emptyMsg, splitKind) {
+    function userLicRenderProveedorLicenciasExtraSection(outer, sectionSel, lines, emptyMsg, splitKind) {
         var section = outer ? outer.querySelector(sectionSel) : null;
         if (!section) return;
         var splitWrap = section.querySelector('.user-lic-proveedor-extra-split-wrap');
@@ -3712,7 +3885,10 @@
         var rowsWrap = section.querySelector('.user-lic-proveedor-extra-rows');
         var hint = section.querySelector('.user-lic-proveedor-lic-extra-hint');
         var badge = section.querySelector('.user-lic-proveedor-lic-extra-badge');
-        var n = rows.length;
+        var persistedLines = Array.isArray(lines) ? lines : [];
+        var n = persistedLines.filter(function (entry) {
+            return entry && String(entry.cred || '').trim();
+        }).length;
         var rowKind = splitKind === 'suspended' ? 'suspended' : 'expired';
         section.removeAttribute('data-prov-extra-editor-wired');
         if (badge) {
@@ -3720,35 +3896,37 @@
             badge.hidden = n <= 0;
             badge.title = n === 1 ? '1 línea' : n + ' líneas';
         }
-        if (n > 0) {
-            section.classList.remove('collapsed');
-        } else {
+        var art = outer ? outer.querySelector('.user-lic-account-sheet--proveedor') : null;
+        var dayKey = section.getAttribute('data-user-day');
+        if (section.classList.contains('user-lic-proveedor-lic-extra')) {
+            if (art && dayKey != null) {
+                var skExtra = userLicPortalSheetStorageKey(art);
+                var svExtra = portalDayCollapsedRead(skExtra, dayKey);
+                if (svExtra === 'true') section.classList.add('collapsed');
+                else if (svExtra === 'false') section.classList.remove('collapsed');
+                else section.classList.remove('collapsed');
+            }
+        } else if (n <= 0) {
             section.classList.add('collapsed');
+        } else if (art && dayKey != null) {
+            var sk = userLicPortalSheetStorageKey(art);
+            var sv = portalDayCollapsedRead(sk, dayKey);
+            if (sv === 'true') section.classList.add('collapsed');
+            else if (sv === 'false') section.classList.remove('collapsed');
+            else section.classList.remove('collapsed');
+        } else {
+            section.classList.remove('collapsed');
         }
         if (!ta || !rowsWrap) return;
-        if (!n) {
-            ta.value = '';
-            ta.rows = 1;
-            rowsWrap.innerHTML = '';
-            section._userLicProvExtraRowMetas = [];
-            section._userLicProvExtraLastLines = [];
-            if (splitWrap) splitWrap.classList.add('user-lic-proveedor-extra-split-wrap--empty');
-            if (hint) {
-                hint.textContent = emptyMsg;
-                hint.hidden = !emptyMsg;
-            }
-            return;
+        if (splitWrap) splitWrap.classList.toggle('user-lic-proveedor-extra-split-wrap--empty', n <= 0);
+        if (hint) {
+            hint.textContent = emptyMsg;
+            hint.hidden = n > 0 || !emptyMsg;
         }
-        if (splitWrap) splitWrap.classList.remove('user-lic-proveedor-extra-split-wrap--empty');
-        if (hint) hint.hidden = true;
-        var notepadLines = rows.map(userLicProveedorExtraNotepadLine);
-        section._userLicProvExtraRowMetas = rows.slice();
-        section._userLicProvExtraLastLines = notepadLines.slice();
-        ta.value = notepadLines.join('\n');
-        ta.rows = Math.max(1, rows.length);
-        userLicProveedorExtraRebuildDayRows(section, rowKind);
+        ta.value = userLicProveedorLinesToCredsText(persistedLines);
+        ta.rows = Math.max(1, n || 1);
+        userLicProveedorExtraSyncEditableRows(section, rowKind, persistedLines);
         userLicProveedorExtraWireCredsEditor(section, outer, rowKind);
-        userLicProveedorExtraAutosizeCreds(section);
     }
 
     function userLicProveedorLicExtrasSearchQuery() {
@@ -3757,20 +3935,19 @@
     }
 
     function userLicRefreshProveedorLicenciasExtras(outer) {
-        if (!outer || !userLicPortalProveedorEnabled) return;
-        var q = userLicProveedorLicExtrasSearchQuery();
+        if (!outer || !userLicPortalProveedorEnabled || userLicPortalIsProveedorDirty()) return;
         userLicRenderProveedorLicenciasExtraSection(
             outer,
             '.user-lic-proveedor-vencidas',
-            userLicFilterReportRows(userLicCollectVencidasEntries(outer), q),
-            'No hay cuentas vencidas. Cuando una licencia vendida expire, aparecerá aquí.',
+            userLicPortalProveedorCache.expired_lines || [],
+            '',
             'expired'
         );
         userLicRenderProveedorLicenciasExtraSection(
             outer,
             '.user-lic-proveedor-caidas',
-            userLicFilterReportRows(userLicCollectCaidasEntries(outer), q),
-            '',
+            userLicPortalProveedorCache.suspended_lines || [],
+            'Añade aquí caídas (una por línea). Los cambios se guardan solos.',
             'suspended'
         );
     }
@@ -3794,9 +3971,11 @@
             '<div class="' +
             escAttr(wrapClass) +
             '">' +
-            '<section class="day-section admin-licencias-bloc admin-licencias-bloc--day user-lic-proveedor-lic-extra collapsed ' +
+            '<section class="day-section admin-licencias-bloc admin-licencias-bloc--day user-lic-readonly-day user-lic-proveedor-lic-extra ' +
             sectionClass +
             sectionExtraClass +
+            '" data-user-day="' +
+            escAttr(splitKind === 'suspended' ? 'caidas' : 'vencidas') +
             '" aria-label="' +
             escAttr(title) +
             '">' +
@@ -3818,9 +3997,9 @@
             ' user-lic-proveedor-extra-split-wrap user-lic-proveedor-extra-split-wrap--empty">' +
             '<div class="license-split-editor license-split-editor--day ' +
             rootKindClass +
-            ' license-notepad--locked license-split-editor--notes-hidden ' +
+            ' user-lic-proveedor-extra-split user-lic-proveedor-extra-split--editable license-split-editor--notes-hidden ' +
             rootRestoreHidden +
-            ' user-lic-proveedor-extra-split user-lic-proveedor-extra-split--editable user-lic-days-bundle" tabindex="-1" role="region" aria-label="' +
+            ' user-lic-days-bundle" tabindex="-1" role="region" aria-label="' +
             escAttr(title) +
             ': servicio, licencia editable y día">' +
             '<div class="license-split-editor__viewport user-lic-proveedor-extra-viewport">' +
@@ -3832,7 +4011,7 @@
             escAttr(credFieldId) +
             '" class="admin-licencias-notepad-textarea license-split-editor__creds ' +
             credTaClass +
-            ' user-lic-proveedor-extra-creds" rows="1" spellcheck="true" wrap="off" autocomplete="off" aria-label="Licencia o cuenta, una por línea"></textarea>' +
+            ' user-lic-proveedor-extra-creds user-lic-proveedor-creds-ta" rows="1" spellcheck="true" wrap="off" autocomplete="off" aria-label="Licencia o cuenta, una por línea" placeholder="Correo y contraseña, una por línea."></textarea>' +
             '</div>' +
             '<div class="license-split-editor__side user-lic-proveedor-extra-side" aria-label="Día de venta">' +
             '<div class="license-split-editor__rows ' +
@@ -3859,10 +4038,11 @@
                   String(licCount) +
                   '</span>'
                 : '';
+        var proveedorSheetKey = USER_LIC_PORTAL_PROVEEDOR_FILTER;
         var daysHtml = '';
         var d;
         for (d = 1; d <= 31; d += 1) {
-            daysHtml += renderProveedorDaySection(d);
+            daysHtml += renderProveedorDaySection(d, proveedorSheetKey);
         }
         return (
             '<article class="user-lic-account-sheet user-lic-account-sheet--proveedor"' +
@@ -3888,7 +4068,7 @@
                 'user-lic-proveedor-vencidas',
                 'license-expired-notepad-wrap',
                 'expired',
-                'Licencias vendidas que ya expiraron.'
+                ''
             ) +
             userLicProveedorLicExtraSectionHtml(
                 'Caídas',
@@ -4596,7 +4776,7 @@
         }
     }
 
-    function applyLicenseFilter(container, gridHost, filterRaw, skipPersist, skipRebuild) {
+    function applyLicenseFilter(container, gridHost, filterRaw, skipPersist, skipRebuild, skipProveedorFlush) {
         var licenseIdSel = filterRaw === 'all' || filterRaw == null ? 'all' : String(filterRaw);
 
         if (licenseIdSel !== 'vencimientos') {
@@ -4607,18 +4787,38 @@
             licenseIdSel === 'vencimientos' ? 'all' : licenseIdSel
         );
 
+        function portalRebuildAfterProveedorFlush(rebuildFn) {
+            if (!skipRebuild) {
+                if (userLicPortalProveedorDirty && !skipProveedorFlush) {
+                    var proveedorUrlFlush = container.getAttribute('data-proveedor-url') || '';
+                    userLicPortalFlushProveedorSave(container, proveedorUrlFlush).finally(function () {
+                        applyLicenseFilter(container, gridHost, filterRaw, skipPersist, skipRebuild, true);
+                    });
+                    return;
+                }
+                rebuildFn(!!skipProveedorFlush);
+                return;
+            }
+        }
+
         if (licenseNorm === USER_LIC_PORTAL_REPORTES_FILTER) {
             container.dataset.userLicActiveFilter = USER_LIC_PORTAL_REPORTES_FILTER;
             if (!skipPersist) {
                 persistUserLicPortalServiceFilter(USER_LIC_PORTAL_REPORTES_FILTER);
             }
-            if (!skipRebuild) {
+            if (portalRebuildAfterProveedorFlush(function (forceRebuild) {
                 var hostR = container.closest('.user-licencias-shell') || document.body;
                 var gridHostElR = gridHost || hostR.querySelector('#userLicenciasGridHost');
                 var gridInnerR = gridHostElR ? gridHostElR.querySelector('#userLicenciasGrid') : null;
-                rebuildUserLicPortalMainContent(container, hostR, gridInnerR, gridHostElR, {
-                    filter: USER_LIC_PORTAL_REPORTES_FILTER,
-                });
+                rebuildUserLicPortalMainContent(
+                    container,
+                    hostR,
+                    gridInnerR,
+                    gridHostElR,
+                    { filter: USER_LIC_PORTAL_REPORTES_FILTER },
+                    forceRebuild
+                );
+            })) {
                 return;
             }
             userLicPortalSetReportesMode(true, container);
@@ -4636,13 +4836,19 @@
             persistUserLicPortalServiceFilter(licenseNorm);
         }
 
-        if (!skipRebuild) {
+        if (portalRebuildAfterProveedorFlush(function (forceRebuild) {
             var hostR = container.closest('.user-licencias-shell') || document.body;
             var gridHostElR = gridHost || hostR.querySelector('#userLicenciasGridHost');
             var gridInnerR = gridHostElR ? gridHostElR.querySelector('#userLicenciasGrid') : null;
-            rebuildUserLicPortalMainContent(container, hostR, gridInnerR, gridHostElR, {
-                filter: licenseNorm,
-            });
+            rebuildUserLicPortalMainContent(
+                container,
+                hostR,
+                gridInnerR,
+                gridHostElR,
+                { filter: licenseNorm },
+                forceRebuild
+            );
+        })) {
             return;
         }
 
@@ -4713,6 +4919,12 @@
                     var dAttr = section.getAttribute('data-user-day');
                     if (dAttr != null) {
                         userLicPortalPersistDayCollapsed(art, dAttr, section.classList.contains('collapsed'));
+                    }
+                    if (
+                        section.classList.contains('user-lic-proveedor-day') &&
+                        !section.classList.contains('collapsed')
+                    ) {
+                        userLicProveedorInitSplitBlocks(outer);
                     }
                     userLicPortalSyncExpandAllToolbar(bundle);
                 }
@@ -5070,19 +5282,52 @@
         });
     }
 
+    function userLicProveedorCollectExtraFromSection(outer, kind) {
+        var sel =
+            kind === 'suspended' ? '.user-lic-proveedor-caidas' : '.user-lic-proveedor-vencidas';
+        var section = outer ? outer.querySelector(sel) : null;
+        var block = section ? section.querySelector('.user-lic-proveedor-extra-split') : null;
+        if (!block) return [];
+        var ta = block.querySelector('.user-lic-proveedor-extra-creds');
+        if (!ta) return [];
+        var credLines = String(ta.value || '')
+            .replace(/\r\n/g, '\n')
+            .split('\n')
+            .filter(function (ln) {
+                return String(ln).trim() !== '';
+            });
+        var out = [];
+        credLines.forEach(function (cred, idx) {
+            var rowEl = block.querySelectorAll('.user-lic-proveedor-extra-row')[idx];
+            var selEl = rowEl ? rowEl.querySelector('.user-lic-proveedor-service-select') : null;
+            var dayInp = rowEl ? rowEl.querySelector('.user-lic-proveedor-extra-day-input') : null;
+            var entry = {
+                service: userLicProveedorNormalizeServiceId(
+                    selEl && selEl.value != null ? selEl.value : PROVEEDOR_SERVICE_ANONIMO
+                ),
+                cred: String(cred).trim(),
+            };
+            if (dayInp && String(dayInp.value || '').trim() !== '') {
+                var d = parseInt(dayInp.value, 10);
+                if (Number.isFinite(d) && d >= 1 && d <= 31) entry.sale_day = d;
+            }
+            out.push(entry);
+        });
+        return out;
+    }
+
     function userLicPortalCollectProveedorFromDom(outer) {
-        var out = { license_lines: [], day_lines: {} };
+        var out = {
+            license_lines: [],
+            expired_lines: [],
+            suspended_lines: [],
+            day_lines: userLicPortalProveedorCache.day_lines || {},
+        };
         if (!outer) return out;
         out.license_lines = userLicProveedorCollectLinesFromBlock(outer, 'license', null);
-        var d;
-        for (d = 1; d <= 31; d += 1) {
-            out.day_lines[String(d)] = userLicProveedorCollectLinesFromBlock(outer, 'day', d);
-        }
+        out.expired_lines = userLicProveedorCollectExtraFromSection(outer, 'expired');
+        out.suspended_lines = userLicProveedorCollectExtraFromSection(outer, 'suspended');
         out.license_notes = userLicProveedorLinesToCredsText(out.license_lines);
-        out.day_notepads = {};
-        for (d = 1; d <= 31; d += 1) {
-            out.day_notepads[String(d)] = userLicProveedorLinesToCredsText(out.day_lines[String(d)]);
-        }
         return out;
     }
 
@@ -5113,77 +5358,161 @@
             );
         }
         userLicPortalProveedorCache.day_notepads = outDays;
+        userLicPortalProveedorCache.expired_lines = userLicProveedorNormalizeExtraLineEntries(
+            payload.expired_lines,
+            payload.expired_notes
+        );
+        userLicPortalProveedorCache.suspended_lines = userLicProveedorNormalizeExtraLineEntries(
+            payload.suspended_lines,
+            payload.suspended_notes
+        );
+    }
+
+    function userLicPortalSaveProveedorNow(outer, proveedorUrl) {
+        if (!proveedorUrl || !userLicPortalProveedorEnabled || !outer) {
+            return Promise.resolve(false);
+        }
+        var body = userLicPortalCollectProveedorFromDom(outer);
+        userLicPortalProveedorSaveInFlight = true;
+        return fetch(proveedorUrl, {
+            method: 'PUT',
+            credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                license_lines: body.license_lines,
+                license_notes: body.license_notes,
+                expired_lines: body.expired_lines,
+                suspended_lines: body.suspended_lines,
+            }),
+        })
+            .then(function (r) {
+                return r.json().catch(function () {
+                    return { success: false };
+                });
+            })
+            .then(function (data) {
+                userLicPortalProveedorSaveInFlight = false;
+                if (data && data.success) {
+                    userLicPortalMergeProveedorCache(data);
+                    userLicPortalClearProveedorDirty();
+                    userLicRefreshProveedorLicenciasExtras(outer);
+                    return true;
+                }
+                return false;
+            })
+            .catch(function () {
+                userLicPortalProveedorSaveInFlight = false;
+                return false;
+            });
+    }
+
+    function userLicPortalFlushProveedorSave(outer, proveedorUrl) {
+        clearTimeout(userLicPortalProveedorSaveTimer);
+        userLicPortalProveedorSaveTimer = null;
+        if (!userLicPortalProveedorDirty) return Promise.resolve(true);
+        return userLicPortalSaveProveedorNow(outer, proveedorUrl);
     }
 
     function userLicPortalScheduleProveedorSave(outer, proveedorUrl) {
         if (!proveedorUrl || !userLicPortalProveedorEnabled) return;
+        userLicPortalMarkProveedorDirty();
         clearTimeout(userLicPortalProveedorSaveTimer);
         userLicPortalProveedorSaveTimer = window.setTimeout(function () {
-            var body = userLicPortalCollectProveedorFromDom(outer);
-            userLicPortalMergeProveedorCache(body);
-            fetch(proveedorUrl, {
-                method: 'PUT',
-                credentials: 'same-origin',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    license_lines: body.license_lines,
-                    day_lines: body.day_lines,
-                }),
-            })
-                .then(function (r) {
-                    return r.json().catch(function () {
-                        return { success: false };
-                    });
-                })
-                .then(function (data) {
-                    if (data && data.success) {
-                        userLicPortalMergeProveedorCache(data);
-                    }
-                })
-                .catch(function () {
-                    /* ignore */
-                });
+            userLicPortalSaveProveedorNow(outer, proveedorUrl);
         }, SAVE_DEBOUNCE_MS);
     }
 
     function userLicPortalWireProveedorEditors(outer) {
         if (!outer || !userLicPortalProveedorEnabled) return;
-        var proveedorUrl = outer.getAttribute('data-proveedor-url') || '';
-        if (!proveedorUrl) return;
         userLicProveedorInitSplitBlocks(outer);
-        outer.querySelectorAll('.user-lic-proveedor-creds-ta').forEach(function (ta) {
-            if (ta.getAttribute('data-prov-input-wired') === '1') return;
-            ta.setAttribute('data-prov-input-wired', '1');
-            ta.addEventListener('input', function () {
-                var block = ta.closest('.user-lic-proveedor-split');
-                var blockKey = block ? block.getAttribute('data-proveedor-block') : 'license';
-                var dayRaw = block ? block.getAttribute('data-proveedor-day') : null;
-                var dayNum = dayRaw != null && String(dayRaw).trim() !== '' ? parseInt(dayRaw, 10) : null;
-                userLicProveedorSyncServiceRowsForBlock(outer, blockKey, dayNum);
-                if (blockKey === 'day' && dayNum != null) {
-                    var dayLines = userLicProveedorCollectLinesFromBlock(outer, 'day', dayNum);
-                    var daySection = outer.querySelector(
-                        '.user-lic-proveedor-day[data-user-day="' + String(dayNum) + '"]'
-                    );
-                    if (daySection) {
-                        if (userLicProveedorCountStructuredLines(dayLines) === 0) {
-                            daySection.classList.add('collapsed');
-                            var list = daySection.querySelector('.day-accounts-list');
-                            if (list) list.innerHTML = '';
-                        } else {
-                            daySection.classList.remove('collapsed');
+        userLicProveedorInitEditableBlocks(outer);
+        userLicRefreshProveedorLicenciasExtras(outer);
+        if (!userLicPortalProveedorEditorWired) {
+            userLicPortalProveedorEditorWired = true;
+            document.addEventListener(
+                'input',
+                function (ev) {
+                    var ta = ev.target;
+                    if (!ta || ta.tagName !== 'TEXTAREA') return;
+                    var sheet = ta.closest('.user-lic-account-sheet--proveedor');
+                    if (!sheet) return;
+                    var tableOuter = sheet.closest('#userLicenciasTableOuter');
+                    if (!tableOuter || !userLicPortalProveedorEnabled) return;
+                    var proveedorUrl = tableOuter.getAttribute('data-proveedor-url') || '';
+                    if (ta.classList.contains('user-lic-proveedor-creds-ta')) {
+                        var block = ta.closest('.user-lic-proveedor-split, .user-lic-proveedor-extra-split');
+                        if (block && block.dataset.proveedorBlock === 'license') {
+                            userLicProveedorSyncServiceRowsForBlock(tableOuter, 'license', null);
+                            userLicPortalScheduleProveedorSave(tableOuter, proveedorUrl);
+                        } else if (block && block.classList.contains('user-lic-proveedor-extra-split')) {
+                            var kind = block.closest('.user-lic-proveedor-vencidas')
+                                ? 'expired'
+                                : block.closest('.user-lic-proveedor-caidas')
+                                  ? 'suspended'
+                                  : null;
+                            var section =
+                                kind === 'expired'
+                                    ? tableOuter.querySelector('.user-lic-proveedor-vencidas')
+                                    : kind === 'suspended'
+                                      ? tableOuter.querySelector('.user-lic-proveedor-caidas')
+                                      : null;
+                            if (section && kind) {
+                                userLicProveedorExtraSyncRowsToCredLines(section, kind);
+                                userLicPortalScheduleProveedorSave(tableOuter, proveedorUrl);
+                            }
                         }
                     }
-                }
-                userLicPortalScheduleProveedorSave(outer, proveedorUrl);
-            });
-        });
-        if (outer.getAttribute('data-prov-change-wired') !== '1') {
-            outer.setAttribute('data-prov-change-wired', '1');
-            outer.addEventListener('change', function (e) {
-                if (!e.target || !e.target.classList.contains('user-lic-proveedor-service-select')) return;
-                userLicPortalScheduleProveedorSave(outer, proveedorUrl);
-            });
+                },
+                false
+            );
+            document.addEventListener(
+                'change',
+                function (ev) {
+                    var el = ev.target;
+                    if (!el || !el.classList) return;
+                    var sheet = el.closest('.user-lic-account-sheet--proveedor');
+                    if (!sheet) return;
+                    var tableOuter = sheet.closest('#userLicenciasTableOuter');
+                    if (!tableOuter || !userLicPortalProveedorEnabled) return;
+                    if (
+                        el.classList.contains('user-lic-proveedor-service-select') ||
+                        el.classList.contains('user-lic-proveedor-extra-day-input')
+                    ) {
+                        userLicPortalScheduleProveedorSave(
+                            tableOuter,
+                            tableOuter.getAttribute('data-proveedor-url') || ''
+                        );
+                    }
+                },
+                false
+            );
+            document.addEventListener(
+                'focusout',
+                function (ev) {
+                    var ta = ev.target;
+                    if (!ta || ta.tagName !== 'TEXTAREA') return;
+                    if (
+                        !ta.classList.contains('user-lic-proveedor-creds-ta') &&
+                        !ta.classList.contains('user-lic-proveedor-extra-creds')
+                    ) {
+                        return;
+                    }
+                    var sheet = ta.closest('.user-lic-account-sheet--proveedor');
+                    if (!sheet) return;
+                    var tableOuter = sheet.closest('#userLicenciasTableOuter');
+                    if (!tableOuter || !userLicPortalProveedorEnabled) return;
+                    window.setTimeout(function () {
+                        var active = document.activeElement;
+                        if (active && sheet.contains(active)) return;
+                        if (!userLicPortalProveedorDirty) return;
+                        userLicPortalFlushProveedorSave(
+                            tableOuter,
+                            tableOuter.getAttribute('data-proveedor-url') || ''
+                        );
+                    }, 0);
+                },
+                false
+            );
         }
         var expandBtn = outer.querySelector('.user-lic-proveedor-days-expand-all');
         if (expandBtn && expandBtn.getAttribute('data-prov-expand-wired') !== '1') {
@@ -5193,7 +5522,8 @@
                 e.stopPropagation();
                 var wrap = outer.querySelector('.user-lic-proveedor-wrap');
                 if (!wrap) return;
-                var sections = wrap.querySelectorAll('.user-lic-proveedor-day');
+                var art = outer.querySelector('.user-lic-account-sheet--proveedor');
+                var sections = wrap.querySelectorAll('.user-lic-proveedor-day[data-user-day]');
                 var anyOpen = false;
                 sections.forEach(function (sec) {
                     if (!sec.classList.contains('collapsed')) anyOpen = true;
@@ -5201,8 +5531,13 @@
                 sections.forEach(function (sec) {
                     if (anyOpen) sec.classList.add('collapsed');
                     else sec.classList.remove('collapsed');
+                    var day = sec.getAttribute('data-user-day');
+                    if (day != null && art) {
+                        userLicPortalPersistDayCollapsed(art, day, sec.classList.contains('collapsed'));
+                    }
                 });
-                expandBtn.setAttribute('aria-expanded', anyOpen ? 'false' : 'true');
+                if (!anyOpen) userLicProveedorInitSplitBlocks(outer);
+                userLicPortalSyncExpandAllToolbar(wrap);
             });
         }
     }
@@ -5514,19 +5849,69 @@
         setupCollapseButton();
     }
 
+    function refreshUserLicPortalIfRevChanged(nextRev, ctx) {
+        if (!ctx || !ctx.apiUrl) return;
+        var rev = String(nextRev);
+        if (userLicPortalLastRev === null) {
+            userLicPortalLastRev = rev;
+            return;
+        }
+        if (rev === userLicPortalLastRev) return;
+        if (!userLicPortalCanApplyPortalRevRefresh()) {
+            userLicPortalDeferredRev = rev;
+            return;
+        }
+        var prevRev = userLicPortalLastRev;
+        userLicPortalLastRev = rev;
+        userLicPortalDeferredRev = null;
+        var outer = ctx.outer;
+        var host = ctx.host;
+        var gridInner = ctx.gridInner;
+        var gridHostEl = ctx.gridHostEl;
+        var apiUrl = ctx.apiUrl;
+        var prevFilter = outer.dataset.userLicActiveFilter || 'all';
+        var inp0 = document.getElementById('userLicenciasSearch');
+        var prevSearch = inp0 ? inp0.value || '' : '';
+        var apiSep = apiUrl.indexOf('?') === -1 ? '?' : '&';
+        return fetchUserLicPortalJson(apiUrl + apiSep + '_t=' + Date.now())
+            .then(function (fullRes) {
+                applyUserLicPortalFetchResult(outer, host, gridInner, gridHostEl, fullRes, {
+                    filter: prevFilter,
+                    search: prevSearch,
+                });
+            })
+            .catch(function () {
+                userLicPortalLastRev = prevRev;
+            });
+    }
+
+    function onUserLicPortalSseMessage(data) {
+        var ctx = userLicPortalPollContext;
+        if (!ctx || !data || data.type !== 'portal_rev' || data.portal_rev == null) return;
+        refreshUserLicPortalIfRevChanged(data.portal_rev, ctx);
+    }
+
     function stopUserLicPortalPoll() {
+        if (userLicPortalSseHandle) {
+            userLicPortalSseHandle.close();
+            userLicPortalSseHandle = null;
+        }
         if (userLicPortalPollTimer) {
             window.clearInterval(userLicPortalPollTimer);
             userLicPortalPollTimer = null;
         }
     }
 
-    function startUserLicPortalPoll(revUrl, apiUrl, host, outer, gridInner, gridHostEl) {
-        stopUserLicPortalPoll();
-        if (!revUrl || !apiUrl) return;
+    function startUserLicPortalPollFallback(revUrl) {
+        if (userLicPortalPollTimer) return;
         userLicPortalPollTimer = window.setInterval(function () {
-            if (document.visibilityState !== 'visible') return;
+            if (document.visibilityState !== 'visible') {
+                stopUserLicPortalPoll();
+                return;
+            }
             if (userLicPortalLastRev === null) return;
+            var ctx = userLicPortalPollContext;
+            if (!ctx || !revUrl) return;
             var sep = revUrl.indexOf('?') === -1 ? '?' : '&';
             fetch(revUrl + sep + '_t=' + Date.now(), { credentials: 'same-origin', cache: 'no-store' })
                 .then(function (r) {
@@ -5543,24 +5928,66 @@
                 .then(function (rv) {
                     var pd = rv.data || {};
                     if (!rv.httpOk || !pd.success || pd.portal_rev == null) return;
-                    var nextRev = String(pd.portal_rev);
-                    if (nextRev === userLicPortalLastRev) return;
-                    var prevFilter = outer.dataset.userLicActiveFilter || 'all';
-                    var inp0 = document.getElementById('userLicenciasSearch');
-                    var prevSearch = inp0 ? inp0.value || '' : '';
-                    var apiSep = apiUrl.indexOf('?') === -1 ? '?' : '&';
-                    return fetchUserLicPortalJson(apiUrl + apiSep + '_t=' + Date.now()).then(function (fullRes) {
-                        applyUserLicPortalFetchResult(outer, host, gridInner, gridHostEl, fullRes, {
-                            filter: prevFilter,
-                            search: prevSearch,
-                        });
-                    });
+                    return refreshUserLicPortalIfRevChanged(pd.portal_rev, ctx);
                 })
                 .catch(function () {
                     /* ignorar errores de sondeo */
                 });
         }, USER_LIC_PORTAL_POLL_MS);
     }
+
+    function startUserLicPortalPoll(revUrl, streamUrl, apiUrl, host, outer, gridInner, gridHostEl) {
+        stopUserLicPortalPoll();
+        if (!apiUrl) return;
+        userLicPortalPollContext = {
+            revUrl: revUrl,
+            streamUrl: streamUrl,
+            apiUrl: apiUrl,
+            host: host,
+            outer: outer,
+            gridInner: gridInner,
+            gridHostEl: gridHostEl,
+        };
+        if (document.visibilityState !== 'visible') return;
+
+        if (
+            streamUrl &&
+            typeof window.StoreSseRealtime !== 'undefined' &&
+            typeof window.StoreSseRealtime.connectOrFallback === 'function'
+        ) {
+            userLicPortalSseHandle = window.StoreSseRealtime.connectOrFallback(
+                streamUrl,
+                onUserLicPortalSseMessage,
+                function () {
+                    startUserLicPortalPollFallback(revUrl);
+                }
+            );
+        } else if (revUrl) {
+            startUserLicPortalPollFallback(revUrl);
+        }
+    }
+
+    function resumeUserLicPortalPollIfNeeded() {
+        var ctx = userLicPortalPollContext;
+        if (!ctx || userLicPortalPollTimer || userLicPortalSseHandle) return;
+        startUserLicPortalPoll(
+            ctx.revUrl,
+            ctx.streamUrl,
+            ctx.apiUrl,
+            ctx.host,
+            ctx.outer,
+            ctx.gridInner,
+            ctx.gridHostEl
+        );
+    }
+
+    document.addEventListener('visibilitychange', function userLicPortalPollVisibility() {
+        if (document.visibilityState === 'visible') {
+            resumeUserLicPortalPollIfNeeded();
+            return;
+        }
+        stopUserLicPortalPoll();
+    });
 
     function init() {
         var outer = document.getElementById('userLicenciasTableOuter');
@@ -5575,6 +6002,7 @@
             outer.getAttribute('data-api-url') ||
             (typeof window.USER_LICENCIAS_API_URL === 'string' ? window.USER_LICENCIAS_API_URL : '');
         var revUrl = outer.getAttribute('data-rev-url') || '';
+        var streamUrl = outer.getAttribute('data-stream-url') || '';
 
         if (!apiUrl) return;
 
@@ -5583,7 +6011,7 @@
         fetchUserLicPortalJson(apiUrl)
             .then(function (res) {
                 applyUserLicPortalFetchResult(outer, host, gridInner, gridHostEl, res, null);
-                startUserLicPortalPoll(revUrl, apiUrl, host, outer, gridInner, gridHostEl);
+                startUserLicPortalPoll(revUrl, streamUrl, apiUrl, host, outer, gridInner, gridHostEl);
             })
             .catch(function () {
                 if (gridInner && gridHostEl) {

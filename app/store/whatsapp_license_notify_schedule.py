@@ -5,13 +5,14 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, time
 
-from app.store.whatsapp_license_notify_log import notify_success_for_co_date
 from app.utils.timezone import get_colombia_datetime
 
 POLL_6H_SEC = 6 * 3600
 POLL_30M_SEC = 30 * 60
 POLL_10M_SEC = 10 * 60
 RECONNECT_CATCHUP_MINUTES = 10
+# «Faltando poco» antes de la hora programada (Colombia).
+PRE_NOTIFY_FAST_POLL_MINUTES = 30
 
 
 def _co_minutes(co_now) -> int:
@@ -38,8 +39,6 @@ def is_past_notify_target_today(co_now, target: time) -> bool:
 
 def catchup_due(config, co_now=None) -> bool:
     co_now = co_now or get_colombia_datetime()
-    if notify_success_for_co_date(config, co_now.date()):
-        return False
     raw = getattr(config, 'notify_catchup_after', None)
     if not raw:
         return False
@@ -47,16 +46,23 @@ def catchup_due(config, co_now=None) -> bool:
         due = raw if isinstance(raw, datetime) else datetime.fromisoformat(str(raw))
     except Exception:
         return False
-    return datetime.utcnow() >= due
+    if datetime.utcnow() < due:
+        return False
+    from app.store.whatsapp_daily_sales import pending_daily_snapshots_query
+
+    return pending_daily_snapshots_query().count() > 0
 
 
 def schedule_reconnect_catchup(config, co_now=None) -> None:
     """
-    Tras reconectar WhatsApp: intentar avisos ~10 min después (mismo día calendario CO).
-    Si van varios días sin envío, solo se evalúa el estado actual al ejecutar (no backlog).
+    Tras reconectar WhatsApp: intentar resúmenes pendientes ~10 min después.
     """
-    co_now = co_now or get_colombia_datetime()
-    if notify_success_for_co_date(config, co_now.date()):
+    del co_now
+    if not config.is_enabled:
+        return
+    from app.store.whatsapp_daily_sales import pending_daily_snapshots_query
+
+    if pending_daily_snapshots_query().count() <= 0:
         return
     config.notify_catchup_after = datetime.utcnow() + timedelta(minutes=RECONNECT_CATCHUP_MINUTES)
 
@@ -66,16 +72,17 @@ def clear_reconnect_catchup(config) -> None:
 
 
 def notify_poll_interval_sec_for_config(config, co_now=None) -> int:
-    """6 h lejos; 30 min en la última hora; 10 min cerca o si ya pasó la hora sin éxito."""
+    """
+    Intervalo del loop según hora Colombia:
+    - Lejos de la hora programada: cada 6 h
+    - Última hora antes (31–60 min): cada 30 min
+    - Faltando poco (≤30 min antes): cada 10 min
+    - Tras la hora programada: cada 10 min solo mientras haya resúmenes listos
+    - Catch-up tras reconexión: cada 10 min
+    """
     co_now = co_now or get_colombia_datetime()
     if not config.is_enabled:
         return POLL_6H_SEC
-
-    if notify_success_for_co_date(config, co_now.date()):
-        from app.store.whatsapp_daily_sales import has_pending_daily_digests_ready
-
-        if not has_pending_daily_digests_ready(config, co_now):
-            return POLL_6H_SEC
 
     if catchup_due(config, co_now):
         return POLL_10M_SEC
@@ -85,10 +92,14 @@ def notify_poll_interval_sec_for_config(config, co_now=None) -> int:
         return POLL_6H_SEC
 
     if is_past_notify_target_today(co_now, target):
-        return POLL_10M_SEC
+        from app.store.whatsapp_daily_sales import has_pending_daily_digests_ready
+
+        if has_pending_daily_digests_ready(config, co_now):
+            return POLL_10M_SEC
+        return POLL_6H_SEC
 
     until = minutes_until_notify_target(co_now, target)
-    if until <= 30:
+    if until <= PRE_NOTIFY_FAST_POLL_MINUTES:
         return POLL_10M_SEC
     if until <= 60:
         return POLL_30M_SEC
@@ -104,7 +115,7 @@ def compute_notify_poll_interval_sec(configs, co_now=None) -> int:
 
 
 def should_run_scheduled_notify(config, co_now=None) -> bool:
-    """Ejecutar si ya pasó la hora programada y faltan avisos o resúmenes diarios."""
+    """Ejecutar si ya pasó la hora programada y hay resúmenes diarios listos."""
     if not config.is_enabled:
         return False
     co_now = co_now or get_colombia_datetime()
@@ -113,8 +124,6 @@ def should_run_scheduled_notify(config, co_now=None) -> bool:
         return False
     if not is_past_notify_target_today(co_now, target):
         return False
-    if not notify_success_for_co_date(config, co_now.date()):
-        return True
     from app.store.whatsapp_daily_sales import has_pending_daily_digests_ready
 
     return has_pending_daily_digests_ready(config, co_now)
@@ -124,4 +133,4 @@ def should_run_catchup_notify(config, co_now=None) -> bool:
     if not config.is_enabled:
         return False
     co_now = co_now or get_colombia_datetime()
-    return catchup_due(config, co_now) and not notify_success_for_co_date(config, co_now.date())
+    return catchup_due(config, co_now)

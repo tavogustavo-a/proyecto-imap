@@ -15,10 +15,11 @@ let currentLicenseId = null;
 const ADMIN_PROVEEDOR_FILTER = 'proveedor';
 const ADMIN_PROVEEDOR_MERGED_FILTER_ALL = '__all__';
 var __adminLicProveedorMergedPickCtx = null;
-var __adminLicProveedorInfoOpener = null;
 const PROVEEDOR_SERVICE_ANONIMO = 'anonimo';
 /** Usuarios proveedor con inventario (API /api/admin/proveedor-inventory). */
 let adminProveedorProviders = [];
+var adminLicProveedorSaveTimers = {};
+const ADMIN_PROVEEDOR_SAVE_DEBOUNCE_MS = 650;
 
 /** Mapa correo→línea del bloc Licencias (por producto); se invalida al recargar o guardar notas. */
 let _licenseNotesCredentialLineCache = null;
@@ -163,14 +164,16 @@ function adminLicRefreshDaysUiLight(licenseId) {
     scheduleRefreshAdminLicenciasReportCounts();
 }
 
-/** Intervalo (~s): compras/asignaciones y notas tras pago sin recargar página. */
-/** Refresco de «Días» en admin tras nuevas cuentas (compras, etc.). Menos intervalo → más cercano al “tiempo real”. */
+/** Refresco de «Días» en admin tras nuevas cuentas (compras, etc.). SSE con fallback a /rev. */
 const ADMIN_LICENCIAS_DAYS_POLL_MS = 1200;
+const ADMIN_LIC_SSE_URL = '/tienda/api/admin/licenses/stream';
 
 /** Tras cerrar foco desde un día, otra pestaña puede dejar pendiente refrescar «Días» — se reintenta a menudo. */
 const ADMIN_LICENCIAS_PENDING_DAYS_FLUSH_MS = 1800;
 
 let __adminLicDaysPollTimer = null;
+let __adminLicDaysSseHandle = null;
+let __adminLicLastRev = null;
 
 let __adminLicPendingDaysFlushTimer = null;
 
@@ -323,7 +326,12 @@ function adminPollRefreshOpenLicenseViews() {
             var forceCustRenewal =
                 taCRPoll &&
                 window.AdminLicenciasNotepad.customerRenewalSplitNeedsForcedServerSync(L, taCRPoll);
-            if (!adminLicenciasUserEditingCustomerRenewalSplit() || forceCustRenewal) {
+            var custRenewalDirty =
+                taCRPoll && taCRPoll.dataset && taCRPoll.dataset.customerRenewalDirty === '1';
+            if (
+                (!adminLicenciasUserEditingCustomerRenewalSplit() && !custRenewalDirty) ||
+                forceCustRenewal
+            ) {
                 window.AdminLicenciasNotepad.refreshCustomerRenewalSplitFromApi(L);
             }
         }
@@ -331,17 +339,92 @@ function adminPollRefreshOpenLicenseViews() {
     refreshExpandedDaysAndAccountsFromLatestLicenses();
 }
 
+function adminLicArchivedQuerySuffix() {
+    return window.IS_ARCHIVED_MODE ? '?archived=1' : '';
+}
+
+function adminLicRefreshFromRealtimeSignal() {
+    if (__adminLicDaysRealtimeRefreshBusy) return;
+    __adminLicDaysRealtimeRefreshBusy = true;
+    loadLicenses({ skipGridRender: true }).finally(function () {
+        adminPollRefreshOpenLicenseViews();
+        __adminLicDaysRealtimeRefreshBusy = false;
+    });
+}
+
+function onAdminLicensesSseMessage(data) {
+    if (!data || data.type !== 'licenses_rev' || data.licenses_rev == null) return;
+    var nextRev = String(data.licenses_rev);
+    if (__adminLicLastRev === null) {
+        __adminLicLastRev = nextRev;
+        return;
+    }
+    if (nextRev === __adminLicLastRev) return;
+    __adminLicLastRev = nextRev;
+    adminLicRefreshFromRealtimeSignal();
+}
+
+async function pollAdminLicensesRev() {
+    if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return;
+    try {
+        var sep = adminLicArchivedQuerySuffix() ? '&' : '?';
+        var url =
+            '/tienda/api/admin/licenses/rev' +
+            adminLicArchivedQuerySuffix() +
+            sep +
+            '_t=' +
+            Date.now();
+        var response = await fetch(url, { cache: 'no-store', credentials: 'same-origin' });
+        if (!response.ok) return;
+        var data = await response.json();
+        if (!data || !data.success || data.licenses_rev == null) return;
+        var nextRev = String(data.licenses_rev);
+        if (__adminLicLastRev === null) {
+            __adminLicLastRev = nextRev;
+            return;
+        }
+        if (nextRev === __adminLicLastRev) return;
+        __adminLicLastRev = nextRev;
+        adminLicRefreshFromRealtimeSignal();
+    } catch (_pollErr) {}
+}
+
+function stopAdminLicenciasDaysRealtimePoll() {
+    if (__adminLicDaysSseHandle) {
+        __adminLicDaysSseHandle.close();
+        __adminLicDaysSseHandle = null;
+    }
+    if (__adminLicDaysPollTimer != null) {
+        clearInterval(__adminLicDaysPollTimer);
+        __adminLicDaysPollTimer = null;
+    }
+}
+
+function startAdminLicenciasPollFallback() {
+    if (__adminLicDaysPollTimer != null) return;
+    void pollAdminLicensesRev();
+    __adminLicDaysPollTimer = setInterval(pollAdminLicensesRev, ADMIN_LICENCIAS_DAYS_POLL_MS);
+}
+
 function startAdminLicenciasDaysRealtimePoll() {
-    if (__adminLicDaysPollTimer != null || window.IS_ARCHIVED_MODE) return;
-    __adminLicDaysPollTimer = setInterval(function adminLicDaysPollTick() {
-        if (__adminLicDaysRealtimeRefreshBusy) return;
-        if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return;
-        __adminLicDaysRealtimeRefreshBusy = true;
-        loadLicenses({ skipGridRender: true }).finally(function () {
-            adminPollRefreshOpenLicenseViews();
-            __adminLicDaysRealtimeRefreshBusy = false;
-        });
-    }, ADMIN_LICENCIAS_DAYS_POLL_MS);
+    if (window.IS_ARCHIVED_MODE) return;
+    if (typeof document !== 'undefined' && document.visibilityState !== 'visible') {
+        stopAdminLicenciasDaysRealtimePoll();
+        return;
+    }
+
+    stopAdminLicenciasDaysRealtimePoll();
+
+    var streamUrl = ADMIN_LIC_SSE_URL + adminLicArchivedQuerySuffix();
+    if (typeof window.StoreSseRealtime !== 'undefined' && typeof window.StoreSseRealtime.connectOrFallback === 'function') {
+        __adminLicDaysSseHandle = window.StoreSseRealtime.connectOrFallback(
+            streamUrl,
+            onAdminLicensesSseMessage,
+            startAdminLicenciasPollFallback
+        );
+    } else {
+        startAdminLicenciasPollFallback();
+    }
 }
 
 function injectAggregateLicenseEntry() {
@@ -529,7 +612,11 @@ document.addEventListener('DOMContentLoaded', function() {
         { passive: true, capture: true }
     );
     document.addEventListener('visibilitychange', function adminLicenciasDaysOnVisible() {
-        if (typeof document.visibilityState !== 'undefined' && document.visibilityState !== 'visible') return;
+        if (typeof document.visibilityState !== 'undefined' && document.visibilityState !== 'visible') {
+            stopAdminLicenciasDaysRealtimePoll();
+            return;
+        }
+        startAdminLicenciasDaysRealtimePoll();
         if (window.IS_ARCHIVED_MODE || __adminLicDaysRealtimeRefreshBusy) return;
         __adminLicDaysRealtimeRefreshBusy = true;
         loadLicenses({ skipGridRender: true }).finally(function () {
@@ -3015,6 +3102,9 @@ async function loadLicenses(options) {
         
         if (data.success) {
             const prevLicenses = licenses;
+            if (data.licenses_rev != null) {
+                __adminLicLastRev = String(data.licenses_rev);
+            }
             licenses = adminLicMergeLicensesFromApi(
                 prevLicenses,
                 data.licenses || [],
@@ -3213,7 +3303,6 @@ function renderLicensesGrid() {
                         <span class="admin-licencias-bloc-title admin-licencias-bloc-title--proveedor admin-licencias-bloc-title--proveedor-user-only">
                             <span id="adminLicProveedorHeaderUserWrap" class="admin-lic-proveedor-header-user-wrap" hidden>
                                 <span id="adminLicProveedorHeaderUserPicker" class="admin-lic-proveedor-header-user-picker" aria-label="Proveedor visible"></span>
-                                <button type="button" class="admin-lic-proveedor-info-btn" id="adminLicProveedorMergedInfoBtn" title="Qué son los proveedores" aria-label="Información sobre proveedores" aria-controls="adminLicProveedorInfoModal"><i class="fas fa-info-circle" aria-hidden="true"></i></button>
                             </span>
                         </span>
                         <div class="admin-licencias-bloc-header-actions">
@@ -3245,6 +3334,7 @@ function renderLicensesGrid() {
                             <span id="adminLicenciasCustomerRenewalLineBadge" class="day-account-badge admin-licencias-notepad-line-badge" hidden></span>
                         </div>
                     </div>
+                    <div class="admin-licencias-customer-renewal-body">
                     <label id="adminLicenciasNotepadByCustomerRenewalLabel" class="sr-only" for="adminLicenciasNotepadByCustomerRenewal">Cuentas para renovar: credenciales enviadas por el cliente.</label>
                     <div class="license-split-editor license-notepad--locked customer-renewal-license-split-root" id="adminLicenciasCustomerRenewalSplitRoot" data-license-viz="all">
                         <div class="license-split-editor__viewport">
@@ -3257,6 +3347,7 @@ function renderLicensesGrid() {
                             </div>
                         </div>
                         </div>
+                    </div>
                     </div>
                 </section>
                 <div id="adminLicenciasNotepadToast" class="admin-licencias-notepad-toast" role="status" aria-live="polite"></div>
@@ -3453,6 +3544,7 @@ function renderLicensesGrid() {
 
     try {
         setupPersonalBlocCollapse();
+        setupCustomerRenewalBlocCollapse();
         setupProveedorMergedBlocCollapse();
     } catch (personalCollErr) {
         adminLicLogError('setupPersonalBlocCollapse:', personalCollErr);
@@ -3779,7 +3871,68 @@ function adminLicProveedorPanelDayCollapsedRead(userId, day) {
     return null;
 }
 
-function adminLicProveedorReadonlyCredsTextarea(text, ariaLabel) {
+function adminLicProveedorSectionCollapsedStorageKey(userId, sectionKey) {
+    return 'admin_lic_proveedor_panel_' + String(sectionKey) + '_collapsed_' + String(userId) + '_v1';
+}
+
+function adminLicProveedorSectionCollapsedRead(userId, sectionKey) {
+    try {
+        return localStorage.getItem(adminLicProveedorSectionCollapsedStorageKey(userId, sectionKey));
+    } catch (_e) {
+        return null;
+    }
+}
+
+function adminLicProveedorSectionCollapsedWrite(userId, sectionKey, isCollapsed) {
+    try {
+        localStorage.setItem(
+            adminLicProveedorSectionCollapsedStorageKey(userId, sectionKey),
+            isCollapsed ? 'true' : 'false'
+        );
+    } catch (_e2) {}
+}
+
+function adminLicProveedorSectionCollapsedClass(userId, sectionKey, defaultCollapsed) {
+    const sv = adminLicProveedorSectionCollapsedRead(userId, sectionKey);
+    if (sv === 'true') return ' collapsed';
+    if (sv === 'false') return '';
+    return defaultCollapsed ? ' collapsed' : '';
+}
+
+function adminLicProveedorDayCollapsedClass(userId, day, defaultCollapsed) {
+    const sv = adminLicProveedorPanelDayCollapsedRead(userId, day);
+    if (sv === 'true') return ' collapsed';
+    if (sv === 'false') return '';
+    return defaultCollapsed ? ' collapsed' : '';
+}
+
+function adminLicCaptureProveedorPanelCollapseFromDom() {
+    const panel = document.getElementById('adminLicenciasProveedorPanel');
+    if (!panel || panel.hidden || panel.classList.contains('d-none')) return;
+    panel.querySelectorAll('.admin-lic-proveedor-user-section').forEach(function (section) {
+        const uid = section.dataset.proveedorUserId;
+        if (uid == null || uid === '') return;
+        adminLicSetBlocPrefCollapsed(
+            'proveedor_panel_user_collapsed',
+            uid,
+            section.classList.contains('collapsed')
+        );
+        section.querySelectorAll('.admin-lic-proveedor-sold').forEach(function (sold) {
+            adminLicProveedorSectionCollapsedWrite(uid, 'sold', sold.classList.contains('collapsed'));
+        });
+        section.querySelectorAll('.admin-lic-proveedor-extra').forEach(function (extra) {
+            const kind = extra.getAttribute('data-proveedor-extra-kind') || 'extra';
+            adminLicProveedorSectionCollapsedWrite(uid, kind, extra.classList.contains('collapsed'));
+        });
+        section.querySelectorAll('.admin-lic-proveedor-day[data-proveedor-day]').forEach(function (daySec) {
+            const day = daySec.getAttribute('data-proveedor-day');
+            if (day == null || day === '') return;
+            adminLicProveedorPanelDayCollapsedWrite(uid, day, daySec.classList.contains('collapsed'));
+        });
+    });
+}
+
+function adminLicProveedorReadonlyCredsTextarea(text, ariaLabel, fieldId) {
     const raw = String(text != null ? text : '');
     const nonEmptyLines = raw
         .replace(/\r\n/g, '\n')
@@ -3791,8 +3944,13 @@ function adminLicProveedorReadonlyCredsTextarea(text, ariaLabel) {
         return '';
     }
     const lineCount = nonEmptyLines.length;
+    const fid = String(fieldId || 'adminLicProveedorReadonlyCreds').replace(/[^a-zA-Z0-9_-]/g, '_');
     return (
-        '<textarea class="admin-licencias-notepad-textarea license-split-editor__creds admin-lic-proveedor-readonly-creds" readonly tabindex="-1" rows="' +
+        '<textarea id="' +
+        adminLicEscHtml(fid) +
+        '" name="' +
+        adminLicEscHtml(fid) +
+        '" class="admin-licencias-notepad-textarea license-split-editor__creds admin-lic-proveedor-readonly-creds" readonly tabindex="-1" rows="' +
         String(lineCount) +
         '" wrap="off" aria-label="' +
         adminLicEscHtml(ariaLabel) +
@@ -3800,6 +3958,896 @@ function adminLicProveedorReadonlyCredsTextarea(text, ariaLabel) {
         adminLicEscHtml(nonEmptyLines.join('\n')) +
         '</textarea>'
     );
+}
+
+function adminLicProveedorServicesCatalog(providerRow) {
+    const items = [{ id: PROVEEDOR_SERVICE_ANONIMO, name: 'Anónimo' }];
+    const seen = { anonimo: true };
+    const addId = function (rawId) {
+        if (rawId == null || rawId === '') return;
+        const sid = String(rawId);
+        if (seen[sid]) return;
+        seen[sid] = true;
+        items.push({ id: sid, name: adminLicProveedorProductNameForService(sid) });
+    };
+    if (providerRow && Array.isArray(providerRow.services_catalog)) {
+        providerRow.services_catalog.forEach(function (item) {
+            if (item && item.id != null) addId(item.id);
+        });
+    }
+    if (providerRow && Array.isArray(providerRow.enabled_license_ids)) {
+        providerRow.enabled_license_ids.forEach(addId);
+    }
+    const scanLines = function (lines) {
+        (lines || []).forEach(function (entry) {
+            if (entry && entry.service != null) addId(entry.service);
+        });
+    };
+    if (providerRow) {
+        scanLines(providerRow.license_lines);
+        scanLines(providerRow.expired_lines);
+        scanLines(providerRow.suspended_lines);
+        const dl = providerRow.day_lines || {};
+        Object.keys(dl).forEach(function (k) {
+            scanLines(dl[k]);
+        });
+    }
+    return items;
+}
+
+function adminLicProveedorLinesFromProvider(providerRow, blockKey, dayNum) {
+    if (!providerRow) return [];
+    if (blockKey === 'license') {
+        return Array.isArray(providerRow.license_lines) ? providerRow.license_lines.slice() : [];
+    }
+    const dl = providerRow.day_lines || {};
+    const arr = dl[String(dayNum)];
+    return Array.isArray(arr) ? arr.slice() : [];
+}
+
+function adminLicProveedorExtraLinesFromProvider(providerRow, kind) {
+    if (!providerRow) return [];
+    if (kind === 'expired') {
+        return Array.isArray(providerRow.expired_lines) ? providerRow.expired_lines.slice() : [];
+    }
+    return Array.isArray(providerRow.suspended_lines) ? providerRow.suspended_lines.slice() : [];
+}
+
+function adminLicProveedorSoldLinesFromProvider(providerRow) {
+    if (!providerRow) return [];
+    const dl = providerRow.day_lines || {};
+    const out = [];
+    let d;
+    for (d = 1; d <= 31; d += 1) {
+        (dl[String(d)] || []).forEach(function (entry) {
+            if (!entry || !String(entry.cred || '').trim()) return;
+            out.push({
+                service: entry.service,
+                cred: entry.cred,
+                sale_day: d,
+            });
+        });
+    }
+    out.sort(function (a, b) {
+        const da = Number(a.sale_day);
+        const db = Number(b.sale_day);
+        if (da !== db) return da - db;
+        return String(a.cred || '').localeCompare(String(b.cred || ''), 'es', { sensitivity: 'base' });
+    });
+    return out;
+}
+
+function adminLicProveedorDayLinesFromSoldLines(soldLines) {
+    const out = {};
+    let d;
+    for (d = 1; d <= 31; d += 1) {
+        out[String(d)] = [];
+    }
+    (soldLines || []).forEach(function (entry) {
+        const cred = String((entry && entry.cred) || '').trim();
+        if (!cred) return;
+        const day = parseInt(entry.sale_day, 10);
+        if (!Number.isFinite(day) || day < 1 || day > 31) return;
+        out[String(day)].push({
+            service: entry.service != null ? entry.service : PROVEEDOR_SERVICE_ANONIMO,
+            cred: cred,
+        });
+    });
+    return out;
+}
+
+function adminLicProveedorColombiaClockFromBrowser() {
+    try {
+        const parts = new Intl.DateTimeFormat('en-US', {
+            timeZone: 'America/Bogota',
+            year: 'numeric',
+            month: 'numeric',
+            day: 'numeric',
+        }).formatToParts(new Date());
+        let y = NaN;
+        let m = NaN;
+        let d = NaN;
+        parts.forEach(function (p) {
+            if (p.type === 'year') y = parseInt(p.value, 10);
+            if (p.type === 'month') m = parseInt(p.value, 10);
+            if (p.type === 'day') d = parseInt(p.value, 10);
+        });
+        if (!Number.isFinite(y) || !Number.isFinite(m) || !Number.isFinite(d)) return null;
+        return { year: y, month: m, day: d, days_in_month: new Date(y, m, 0).getDate() };
+    } catch (_e) {
+        return null;
+    }
+}
+
+/** Días hasta el próximo «Día N» del mes (renovación mes a mes), hora Colombia. */
+function adminLicProveedorDaysUntilCalendarSaleDay(saleDay, clock) {
+    const cal = Number(saleDay);
+    if (!Number.isFinite(cal) || cal < 1 || cal > 31) return null;
+    const co = clock || adminLicProveedorColombiaClockFromBrowser();
+    if (!co || co.day == null) return null;
+    const today = Number(co.day);
+    const y = Number(co.year);
+    const m = Number(co.month);
+    const dim = Number(co.days_in_month);
+    if (!Number.isFinite(today) || !Number.isFinite(dim) || dim < 28) return null;
+    if (!Number.isFinite(y) || !Number.isFinite(m)) return null;
+
+    function prevMonthDays(year, month) {
+        let pm = month - 1;
+        let py = year;
+        if (pm < 1) {
+            pm = 12;
+            py -= 1;
+        }
+        return new Date(py, pm, 0).getDate();
+    }
+
+    function dateKey(dObj) {
+        return (
+            dObj.getFullYear() +
+            '-' +
+            String(dObj.getMonth() + 1).padStart(2, '0') +
+            '-' +
+            String(dObj.getDate()).padStart(2, '0')
+        );
+    }
+
+    const todayDate = new Date(y, m - 1, today);
+    const candidates = [];
+    if (cal <= dim && cal >= today) candidates.push(new Date(y, m - 1, cal));
+    if (today === 1) {
+        const prevDim = prevMonthDays(y, m);
+        if (cal > prevDim) candidates.push(new Date(y, m - 1, 1));
+    }
+    let nm = m + 1;
+    let ny = y;
+    if (nm > 12) {
+        nm = 1;
+        ny += 1;
+    }
+    const ndim = new Date(ny, nm, 0).getDate();
+    if (cal > dim) {
+        candidates.push(new Date(ny, nm - 1, 1));
+    } else if (cal <= ndim) {
+        candidates.push(new Date(ny, nm - 1, cal));
+    } else {
+        let nnm = nm + 1;
+        let nny = ny;
+        if (nnm > 12) {
+            nnm = 1;
+            nny += 1;
+        }
+        candidates.push(new Date(nny, nnm - 1, 1));
+    }
+    const todayKey = dateKey(todayDate);
+    let best = null;
+    candidates.forEach(function (c) {
+        if (dateKey(c) < todayKey) return;
+        if (!best || dateKey(c) < dateKey(best)) best = c;
+    });
+    if (!best) return null;
+    const msDay = 24 * 60 * 60 * 1000;
+    return Math.max(0, Math.round((best.getTime() - todayDate.getTime()) / msDay));
+}
+
+function adminLicProveedorCountdownHtmlForSaleDay(saleDay) {
+    const daysLeft = adminLicProveedorDaysUntilCalendarSaleDay(saleDay);
+    if (daysLeft == null) {
+        return (
+            '<span class="user-lic-expiry-countdown" title="Sin día de venta" aria-label="Sin día de venta">—</span>'
+        );
+    }
+    const info = adminLicExpiryCountdownInfo({ days_until_expiry: daysLeft });
+    if (!info) {
+        return (
+            '<span class="user-lic-expiry-countdown" title="Sin vencimiento" aria-label="Sin vencimiento">—</span>'
+        );
+    }
+    return (
+        '<span class="user-lic-expiry-countdown' +
+        (info.urgent ? ' user-lic-expiry-countdown--urgent' : '') +
+        '" title="' +
+        adminLicEscHtml(info.title) +
+        '" aria-label="' +
+        adminLicEscHtml(info.title) +
+        '">' +
+        adminLicEscHtml(info.label) +
+        '</span>'
+    );
+}
+
+function adminLicProveedorBuildSoldDayInputHtml(value, rowIndex, userId) {
+    const dayVal = value != null && value !== '' && value !== '—' ? String(value) : '';
+    return (
+        '<input type="number" min="1" max="31" step="1" class="license-split-editor__day-num admin-lic-proveedor-sold-day-input" data-proveedor-user-id="' +
+        adminLicEscHtml(String(userId)) +
+        '" data-proveedor-row-index="' +
+        String(rowIndex) +
+        '" value="' +
+        adminLicEscHtml(dayVal) +
+        '" placeholder="Día" aria-label="Día que se vendió" />'
+    );
+}
+
+function adminLicProveedorCredsTextFromLines(lines) {
+    return (lines || [])
+        .map(function (entry) {
+            return String((entry && entry.cred) || '').replace(/\s+$/g, '');
+        })
+        .join('\n');
+}
+
+function adminLicProveedorBuildEditableServiceSelectHtml(catalog, selectedId, rowIndex, userId, blockKey, dayNum) {
+    const sel = String(selectedId != null ? selectedId : PROVEEDOR_SERVICE_ANONIMO);
+    let opts = '';
+    (catalog || []).forEach(function (item) {
+        if (!item) return;
+        const id = String(item.id != null ? item.id : '');
+        const name = String(item.name != null ? item.name : id);
+        opts +=
+            '<option value="' +
+            adminLicEscHtml(id) +
+            '"' +
+            (id === sel ? ' selected' : '') +
+            '>' +
+            adminLicEscHtml(name) +
+            '</option>';
+    });
+    return (
+        '<select class="license-split-editor__status license-split-editor__status-bad license-split-editor__status--tier-neutral admin-lic-proveedor-service-select" data-proveedor-user-id="' +
+        adminLicEscHtml(String(userId)) +
+        '" data-proveedor-block="' +
+        adminLicEscHtml(blockKey) +
+        '"' +
+        (dayNum != null ? ' data-proveedor-day="' + adminLicEscHtml(String(dayNum)) + '"' : '') +
+        ' data-proveedor-row-index="' +
+        String(rowIndex) +
+        '" title="Servicio de esta licencia" aria-label="Servicio de la licencia">' +
+        opts +
+        '</select>'
+    );
+}
+
+function adminLicProveedorParseLineHeightPx(cs) {
+    const lh = cs.lineHeight;
+    const fs = parseFloat(cs.fontSize) || 14;
+    if (!lh || lh === 'normal') return fs * 1.45;
+    if (String(lh).indexOf('px') !== -1) return parseFloat(lh) || fs * 1.45;
+    const n = parseFloat(lh);
+    return Number.isFinite(n) ? n * fs : fs * 1.45;
+}
+
+function adminLicProveedorAutosizeCredsForBlock(block) {
+    if (!block) return;
+    const ta = block.querySelector('.admin-lic-proveedor-creds-ta');
+    const rowsEl = block.querySelector(
+        '.admin-lic-proveedor-service-rows, .admin-lic-proveedor-sold-rows, .admin-lic-proveedor-extra-rows'
+    );
+    if (!ta || ta.tagName !== 'TEXTAREA' || !rowsEl) return;
+    const raw = String(ta.value != null ? ta.value : '').replace(/\r\n/g, '\n');
+    const credLines = raw.split('\n');
+    const nEst = credLines.length === 0 ? 1 : credLines.length;
+    const cs = window.getComputedStyle(ta);
+    const padY = (parseFloat(cs.paddingTop) || 0) + (parseFloat(cs.paddingBottom) || 0);
+    const stridePx = adminLicProveedorParseLineHeightPx(cs);
+    const exactByLines = Math.ceil(stridePx * nEst + padY);
+    void rowsEl.offsetHeight;
+    const peerH = Math.max(rowsEl.offsetHeight, rowsEl.scrollHeight);
+    let minPx = parseFloat(cs.minHeight);
+    if (Number.isNaN(minPx)) minPx = stridePx;
+    ta.style.height = Math.ceil(Math.max(minPx, exactByLines, peerH)) + 'px';
+}
+
+function adminLicProveedorScheduleAutosizeCredsForBlock(block) {
+    if (!block) return;
+    adminLicProveedorAutosizeCredsForBlock(block);
+    window.requestAnimationFrame(function () {
+        adminLicProveedorAutosizeCredsForBlock(block);
+        window.requestAnimationFrame(function () {
+            adminLicProveedorAutosizeCredsForBlock(block);
+        });
+    });
+}
+
+function adminLicProveedorFindSplitBlock(section, blockKey, dayNum) {
+    if (!section) return null;
+    if (blockKey === 'license') {
+        return section.querySelector('.admin-lic-proveedor-split[data-proveedor-block="license"]');
+    }
+    return section.querySelector(
+        '.admin-lic-proveedor-split[data-proveedor-block="day"][data-proveedor-day="' + String(dayNum) + '"]'
+    );
+}
+
+function adminLicProveedorSyncServiceRowsForBlock(section, providerRow, blockKey, dayNum) {
+    const block = adminLicProveedorFindSplitBlock(section, blockKey, dayNum);
+    if (!block || !providerRow) return;
+    const ta = block.querySelector('.admin-lic-proveedor-creds-ta');
+    const rowsWrap = block.querySelector('.admin-lic-proveedor-service-rows');
+    if (!ta || !rowsWrap) return;
+    let credLines = String(ta.value || '')
+        .replace(/\r\n/g, '\n')
+        .split('\n');
+    if (blockKey === 'day') {
+        credLines = credLines.filter(function (ln) {
+            return String(ln).trim() !== '';
+        });
+        if (!credLines.length) {
+            rowsWrap.innerHTML = '';
+            block.classList.add('admin-lic-proveedor-day-empty');
+            ta.style.height = '';
+            return;
+        }
+        block.classList.remove('admin-lic-proveedor-day-empty');
+    }
+    const cached = adminLicProveedorLinesFromProvider(providerRow, blockKey, dayNum);
+    const existing = [];
+    rowsWrap.querySelectorAll('.admin-lic-proveedor-service-select').forEach(function (sel, idx) {
+        existing[idx] = sel.value;
+    });
+    const catalog = adminLicProveedorServicesCatalog(providerRow);
+    const userId = providerRow.user_id;
+    let html = '';
+    let idx;
+    for (idx = 0; idx < credLines.length; idx += 1) {
+        const svc =
+            existing[idx] != null
+                ? existing[idx]
+                : cached[idx] && cached[idx].service != null
+                  ? cached[idx].service
+                  : PROVEEDOR_SERVICE_ANONIMO;
+        html +=
+            '<div class="license-split-editor__row admin-lic-proveedor-service-row">' +
+            '<div class="license-split-editor__lead"></div>' +
+            '<div class="license-split-editor__status-wrap">' +
+            '<div class="license-split-editor__status-select-shell license-split-editor__status-select-shell--bad">' +
+            adminLicProveedorBuildEditableServiceSelectHtml(catalog, svc, idx, userId, blockKey, dayNum) +
+            '</div></div>' +
+            '<input type="text" class="license-split-editor__note" hidden aria-hidden="true" tabindex="-1" />' +
+            '</div>';
+    }
+    rowsWrap.innerHTML = html;
+    adminLicProveedorScheduleAutosizeCredsForBlock(block);
+}
+
+function adminLicProveedorRenderEditableSplitBlock(providerRow, blockKey, dayNum) {
+    const lines = adminLicProveedorLinesFromProvider(providerRow, blockKey, dayNum);
+    const credText = adminLicProveedorCredsTextFromLines(lines);
+    const isLic = blockKey === 'license';
+    const userId = providerRow.user_id != null ? String(providerRow.user_id) : '';
+    const nLines = Math.max(1, credText ? credText.split('\n').length : 1);
+    const ariaLabel = isLic
+        ? 'Licencias del proveedor ' + (providerRow.username || userId)
+        : 'Día ' + String(dayNum) + ' del proveedor ' + (providerRow.username || userId);
+    const fieldId = isLic
+        ? 'adminLicProveedorPanelLicCreds_' + userId
+        : 'adminLicProveedorPanelDay' + String(dayNum) + 'Creds_' + userId;
+    return (
+        '<div class="license-split-editor admin-lic-proveedor-split admin-licencias-license-editable license-notepad--locked license-split-editor--notes-hidden' +
+        (isLic ? '' : ' license-split-editor--day') +
+        '" data-proveedor-user-id="' +
+        adminLicEscHtml(userId) +
+        '" data-proveedor-block="' +
+        adminLicEscHtml(blockKey) +
+        '"' +
+        (isLic ? '' : ' data-proveedor-day="' + adminLicEscHtml(String(dayNum)) + '"') +
+        '>' +
+        '<div class="license-split-editor__viewport">' +
+        '<div class="license-split-editor__grid">' +
+        '<div class="license-split-editor__creds-cell">' +
+        '<textarea id="' +
+        adminLicEscHtml(fieldId) +
+        '" name="' +
+        adminLicEscHtml(fieldId) +
+        '" class="admin-licencias-notepad-textarea license-split-editor__creds admin-lic-proveedor-creds-ta" rows="' +
+        String(nLines) +
+        '" spellcheck="true" wrap="off" autocomplete="off" aria-label="' +
+        adminLicEscHtml(ariaLabel) +
+        '" placeholder="Correo y contraseña, una por línea.">' +
+        adminLicEscHtml(credText) +
+        '</textarea></div>' +
+        '<div class="license-split-editor__side" aria-label="Servicio por línea">' +
+        '<div class="license-split-editor__rows admin-lic-proveedor-service-rows"></div>' +
+        '</div></div></div></div>'
+    );
+}
+
+function adminLicProveedorBuildExtraDayInputHtml(value, rowIndex, userId, kind) {
+    const dayVal = value != null && value !== '' && value !== '—' ? String(value) : '';
+    return (
+        '<input type="number" min="1" max="31" step="1" class="license-split-editor__day-num admin-lic-proveedor-extra-day-input" data-proveedor-user-id="' +
+        adminLicEscHtml(String(userId)) +
+        '" data-proveedor-extra-kind="' +
+        adminLicEscHtml(kind) +
+        '" data-proveedor-row-index="' +
+        String(rowIndex) +
+        '" value="' +
+        adminLicEscHtml(dayVal) +
+        '" placeholder="Día" aria-label="Día de venta" />'
+    );
+}
+
+function adminLicProveedorSyncExtraRowsForSection(section, providerRow, kind) {
+    const block = section
+        ? section.querySelector('.admin-lic-proveedor-extra-split[data-proveedor-extra-kind="' + kind + '"]')
+        : null;
+    if (!block || !providerRow) return;
+    const ta = block.querySelector('.admin-lic-proveedor-extra-creds');
+    const rowsWrap = block.querySelector('.admin-lic-proveedor-extra-rows');
+    if (!ta || !rowsWrap) return;
+    const credLines = String(ta.value || '')
+        .replace(/\r\n/g, '\n')
+        .split('\n')
+        .filter(function (ln) {
+            return String(ln).trim() !== '';
+        });
+    const cached = adminLicProveedorExtraLinesFromProvider(providerRow, kind);
+    const existingSvc = [];
+    const existingDay = [];
+    rowsWrap.querySelectorAll('.admin-lic-proveedor-extra-row').forEach(function (rowEl, idx) {
+        const sel = rowEl.querySelector('.admin-lic-proveedor-service-select');
+        const dayInp = rowEl.querySelector('.admin-lic-proveedor-extra-day-input');
+        existingSvc[idx] = sel ? sel.value : PROVEEDOR_SERVICE_ANONIMO;
+        existingDay[idx] = dayInp ? dayInp.value : '';
+    });
+    const catalog = adminLicProveedorServicesCatalog(providerRow);
+    const userId = providerRow.user_id;
+    let html = '';
+    credLines.forEach(function (_cred, idx) {
+        const svc =
+            existingSvc[idx] != null
+                ? existingSvc[idx]
+                : cached[idx] && cached[idx].service != null
+                  ? cached[idx].service
+                  : PROVEEDOR_SERVICE_ANONIMO;
+        const saleDay =
+            existingDay[idx] != null && existingDay[idx] !== ''
+                ? existingDay[idx]
+                : cached[idx] && cached[idx].sale_day != null
+                  ? cached[idx].sale_day
+                  : '';
+        html +=
+            '<div class="license-split-editor__row ' +
+            (kind === 'suspended'
+                ? 'license-split-editor__row--suspended'
+                : 'license-split-editor__row--expired') +
+            ' admin-lic-proveedor-extra-row">' +
+            '<div class="license-split-editor__lead">' +
+            '<div class="license-split-editor__day-sell-cell">' +
+            adminLicProveedorBuildExtraDayInputHtml(saleDay, idx, userId, kind) +
+            '</div></div>' +
+            '<div class="license-split-editor__status-wrap">' +
+            '<div class="license-split-editor__status-select-shell license-split-editor__status-select-shell--bad">' +
+            adminLicProveedorBuildEditableServiceSelectHtml(catalog, svc, idx, userId, kind, null) +
+            '</div></div>' +
+            '<input type="text" class="license-split-editor__note" hidden aria-hidden="true" tabindex="-1" />' +
+            '</div>';
+    });
+    rowsWrap.innerHTML = html;
+    adminLicProveedorScheduleAutosizeCredsForBlock(block);
+}
+
+function adminLicProveedorSoldRowHtml(entry, rowIndex, userId, catalog) {
+    const svc =
+        entry && entry.service != null ? entry.service : PROVEEDOR_SERVICE_ANONIMO;
+    const saleDay =
+        entry && entry.sale_day != null && entry.sale_day !== '—' ? entry.sale_day : '';
+    return (
+        '<div class="license-split-editor__row admin-lic-proveedor-sold-row" data-prov-sold-row-index="' +
+        String(rowIndex) +
+        '">' +
+        '<div class="license-split-editor__lead">' +
+        '<div class="license-split-editor__day-sell-cell admin-lic-proveedor-sold-day-cell">' +
+        adminLicProveedorBuildSoldDayInputHtml(saleDay, rowIndex, userId) +
+        '</div></div>' +
+        '<div class="license-split-editor__status-wrap">' +
+        '<div class="license-split-editor__status-select-shell license-split-editor__status-select-shell--bad">' +
+        adminLicProveedorBuildEditableServiceSelectHtml(catalog, svc, rowIndex, userId, 'sold', null) +
+        adminLicProveedorCountdownHtmlForSaleDay(saleDay) +
+        '</div></div>' +
+        '<input type="text" class="license-split-editor__note" hidden aria-hidden="true" tabindex="-1" />' +
+        '</div>'
+    );
+}
+
+function adminLicProveedorUpdateSoldRowCountdown(rowEl) {
+    if (!rowEl) return;
+    const dayInp = rowEl.querySelector('.admin-lic-proveedor-sold-day-input');
+    const shell = rowEl.querySelector('.license-split-editor__status-select-shell--bad');
+    if (!shell) return;
+    const d = dayInp ? parseInt(dayInp.value, 10) : NaN;
+    const countdownHtml = adminLicProveedorCountdownHtmlForSaleDay(Number.isFinite(d) ? d : null);
+    let el = shell.querySelector('.user-lic-expiry-countdown');
+    if (el) {
+        el.outerHTML = countdownHtml;
+    } else {
+        shell.insertAdjacentHTML('beforeend', countdownHtml);
+    }
+}
+
+function adminLicProveedorRefreshSoldCountdowns(section) {
+    if (!section) return;
+    section.querySelectorAll('.admin-lic-proveedor-sold-row').forEach(function (rowEl) {
+        adminLicProveedorUpdateSoldRowCountdown(rowEl);
+    });
+}
+
+function adminLicProveedorSyncSoldRowsForSection(section, providerRow) {
+    const block = section ? section.querySelector('.admin-lic-proveedor-sold-split') : null;
+    if (!block || !providerRow) return;
+    const ta = block.querySelector('.admin-lic-proveedor-sold-creds');
+    const rowsWrap = block.querySelector('.admin-lic-proveedor-sold-rows');
+    if (!ta || !rowsWrap) return;
+    const credLines = String(ta.value || '')
+        .replace(/\r\n/g, '\n')
+        .split('\n')
+        .filter(function (ln) {
+            return String(ln).trim() !== '';
+        });
+    const cached = adminLicProveedorSoldLinesFromProvider(providerRow);
+    const existingSvc = [];
+    const existingDay = [];
+    rowsWrap.querySelectorAll('.admin-lic-proveedor-sold-row').forEach(function (rowEl, idx) {
+        const sel = rowEl.querySelector('.admin-lic-proveedor-service-select');
+        const dayInp = rowEl.querySelector('.admin-lic-proveedor-sold-day-input');
+        existingSvc[idx] = sel ? sel.value : PROVEEDOR_SERVICE_ANONIMO;
+        existingDay[idx] = dayInp ? dayInp.value : '';
+    });
+    const catalog = adminLicProveedorServicesCatalog(providerRow);
+    const userId = providerRow.user_id;
+    let html = '';
+    credLines.forEach(function (cred, idx) {
+        const entry = {
+            service:
+                existingSvc[idx] != null
+                    ? existingSvc[idx]
+                    : cached[idx] && cached[idx].service != null
+                      ? cached[idx].service
+                      : PROVEEDOR_SERVICE_ANONIMO,
+            cred: cred,
+            sale_day:
+                existingDay[idx] != null && existingDay[idx] !== ''
+                    ? existingDay[idx]
+                    : cached[idx] && cached[idx].sale_day != null
+                      ? cached[idx].sale_day
+                      : '',
+        };
+        html += adminLicProveedorSoldRowHtml(entry, idx, userId, catalog);
+    });
+    rowsWrap.innerHTML = html;
+    adminLicProveedorScheduleAutosizeCredsForBlock(block);
+}
+
+function adminLicProveedorRenderSoldSectionHtml(providerRow) {
+    const lines = adminLicProveedorSoldLinesFromProvider(providerRow);
+    const credText = adminLicProveedorCredsTextFromLines(lines);
+    const nLines = credText
+        ? credText.split('\n').filter(function (ln) {
+              return String(ln).trim() !== '';
+          }).length
+        : 0;
+    const userId = providerRow.user_id != null ? String(providerRow.user_id) : '';
+    const badgeHtml =
+        nLines > 0
+            ? '<span class="day-account-badge admin-licencias-notepad-line-badge" title="' +
+              adminLicEscHtml(nLines === 1 ? '1 línea' : nLines + ' líneas') +
+              '">' +
+              String(nLines) +
+              '</span>'
+            : '';
+    return (
+        '<section class="day-section admin-licencias-bloc admin-licencias-bloc--day admin-lic-proveedor-sold' +
+        adminLicProveedorSectionCollapsedClass(userId, 'sold', nLines <= 0) +
+        '" aria-label="Licencias vendidas del proveedor ' +
+        adminLicEscHtml(providerRow.username || userId) +
+        '">' +
+        '<div class="day-section-header admin-licencias-bloc-header admin-lic-proveedor-sold-header">' +
+        '<span class="admin-licencias-bloc-title"><i class="fas fa-shopping-cart" aria-hidden="true"></i> Vendidas</span>' +
+        '<div class="admin-licencias-bloc-header-actions">' +
+        badgeHtml +
+        '</div></div>' +
+        '<div class="day-accounts-list admin-lic-proveedor-sold-body">' +
+        '<div class="license-split-editor license-split-editor--day day-license-split-root admin-lic-proveedor-sold-split admin-licencias-license-editable license-notepad--locked license-split-editor--notes-hidden" data-proveedor-user-id="' +
+        adminLicEscHtml(userId) +
+        '" data-proveedor-block="sold">' +
+        '<div class="license-split-editor__viewport">' +
+        '<div class="license-split-editor__grid">' +
+        '<div class="license-split-editor__creds-cell">' +
+        '<textarea id="adminLicProveedorPanelSoldCreds_' +
+        adminLicEscHtml(userId) +
+        '" name="adminLicProveedorPanelSoldCreds_' +
+        adminLicEscHtml(userId) +
+        '" class="admin-licencias-notepad-textarea license-split-editor__creds day-license-split__creds admin-lic-proveedor-sold-creds admin-lic-proveedor-creds-ta" rows="' +
+        String(Math.max(1, nLines || 1)) +
+        '" spellcheck="true" wrap="off" autocomplete="off" aria-label="Licencias vendidas del proveedor" placeholder="Correo y contraseña, una por línea.">' +
+        adminLicEscHtml(credText) +
+        '</textarea></div>' +
+        '<div class="license-split-editor__side" aria-label="Día de venta, servicio y vencimiento">' +
+        '<div class="license-split-editor__rows day-license-split-rows admin-lic-proveedor-sold-rows"></div>' +
+        '</div></div></div></div></div></section>'
+    );
+}
+
+function adminLicProveedorRenderExtraSectionHtml(providerRow, kind) {
+    const isExpired = kind === 'expired';
+    const title = isExpired ? 'Vencidas' : 'Caídas';
+    const icon = isExpired ? 'fas fa-calendar-times' : 'fas fa-exclamation-triangle';
+    const sectionClass = isExpired ? 'admin-lic-proveedor-vencidas' : 'admin-lic-proveedor-caidas';
+    const lines = adminLicProveedorExtraLinesFromProvider(providerRow, kind);
+    const credText = adminLicProveedorCredsTextFromLines(lines);
+    const nLines = credText
+        ? credText.split('\n').filter(function (ln) {
+              return String(ln).trim() !== '';
+          }).length
+        : 0;
+    const userId = providerRow.user_id != null ? String(providerRow.user_id) : '';
+    const badgeHtml =
+        nLines > 0
+            ? '<span class="day-account-badge admin-licencias-notepad-line-badge" title="' +
+              adminLicEscHtml(nLines === 1 ? '1 línea' : nLines + ' líneas') +
+              '">' +
+              String(nLines) +
+              '</span>'
+            : '';
+    const rootKindClass = isExpired ? 'expired-license-split-root' : 'suspended-license-split-root';
+    const credTaClass = isExpired ? 'expired-license-split__creds' : 'suspended-license-split__creds';
+    const rowsClass = isExpired ? 'expired-license-split-rows' : 'suspended-license-split-rows';
+    const wrapClass = isExpired ? 'license-expired-notepad-wrap' : 'license-suspended-notepad-wrap';
+    const sectionExtraClass = isExpired ? 'expired-section' : 'suspended-section';
+    const bodyClass = isExpired ? 'expired-section-body' : 'suspended-section-body';
+    const innerWrapClass = isExpired ? 'license-notepads-wrap--expired-inner' : 'license-notepads-wrap--suspended-inner';
+    const extraFieldId =
+        'adminLicProveedorPanel' + (isExpired ? 'Expired' : 'Suspended') + 'Creds_' + userId;
+    return (
+        '<div class="' +
+        wrapClass +
+        ' admin-lic-proveedor-extra-wrap">' +
+        '<section class="day-section ' +
+        sectionExtraClass +
+        ' admin-licencias-bloc admin-licencias-bloc--day admin-lic-proveedor-extra ' +
+        sectionClass +
+        adminLicProveedorSectionCollapsedClass(userId, kind, nLines <= 0) +
+        '" data-proveedor-extra-kind="' +
+        adminLicEscHtml(kind) +
+        '">' +
+        '<div class="day-section-header admin-lic-proveedor-extra-header">' +
+        '<div class="day-header-content day-header-content--with-actions">' +
+        '<div class="day-header-label">' +
+        '<i class="' +
+        icon +
+        ' day-icon" aria-hidden="true"></i>' +
+        '<span class="day-number">' +
+        title +
+        '</span></div>' +
+        '<div class="day-header-actions">' +
+        badgeHtml +
+        '</div></div></div>' +
+        '<div class="day-accounts-list ' +
+        bodyClass +
+        ' admin-lic-proveedor-extra-body">' +
+        '<div class="license-notepads-wrap ' +
+        innerWrapClass +
+        '">' +
+        '<div class="license-split-editor license-split-editor--day ' +
+        rootKindClass +
+        ' admin-lic-proveedor-extra-split admin-licencias-license-editable license-notepad--locked license-split-editor--notes-hidden" data-proveedor-user-id="' +
+        adminLicEscHtml(userId) +
+        '" data-proveedor-extra-kind="' +
+        adminLicEscHtml(kind) +
+        '">' +
+        '<div class="license-split-editor__viewport">' +
+        '<div class="license-split-editor__grid">' +
+        '<div class="license-split-editor__creds-cell">' +
+        '<textarea id="' +
+        adminLicEscHtml(extraFieldId) +
+        '" name="' +
+        adminLicEscHtml(extraFieldId) +
+        '" class="admin-licencias-notepad-textarea license-split-editor__creds ' +
+        credTaClass +
+        ' admin-lic-proveedor-extra-creds admin-lic-proveedor-creds-ta" rows="' +
+        String(Math.max(1, nLines || 1)) +
+        '" spellcheck="true" wrap="off" autocomplete="off" aria-label="' +
+        adminLicEscHtml(title + ' del proveedor ' + (providerRow.username || userId)) +
+        '" placeholder="Correo y contraseña, una por línea.">' +
+        adminLicEscHtml(credText) +
+        '</textarea></div>' +
+        '<div class="license-split-editor__side" aria-label="Día de venta y servicio (' +
+        title +
+        ')">' +
+        '<div class="license-split-editor__rows ' +
+        rowsClass +
+        ' admin-lic-proveedor-extra-rows"></div>' +
+        '</div></div></div></div></div></div></section></div>'
+    );
+}
+
+function adminLicProveedorCollectBlockFromSection(section, blockKey, dayNum) {
+    const block = adminLicProveedorFindSplitBlock(section, blockKey, dayNum);
+    if (!block) return [];
+    const ta = block.querySelector('.admin-lic-proveedor-creds-ta');
+    if (!ta) return [];
+    let credLines = String(ta.value || '')
+        .replace(/\r\n/g, '\n')
+        .split('\n');
+    if (blockKey === 'day') {
+        credLines = credLines.filter(function (ln) {
+            return String(ln).trim() !== '';
+        });
+    }
+    const out = [];
+    credLines.forEach(function (cred, idx) {
+        const trimmed = String(cred).replace(/\s+$/g, '');
+        if (blockKey === 'day' && !String(trimmed).trim()) return;
+        const sel = block.querySelectorAll('.admin-lic-proveedor-service-select')[idx];
+        const service = sel ? String(sel.value || PROVEEDOR_SERVICE_ANONIMO) : PROVEEDOR_SERVICE_ANONIMO;
+        out.push({ service: service, cred: trimmed });
+    });
+    return out;
+}
+
+function adminLicProveedorCollectExtraFromSection(section, kind) {
+    const block = section
+        ? section.querySelector('.admin-lic-proveedor-extra-split[data-proveedor-extra-kind="' + kind + '"]')
+        : null;
+    if (!block) return [];
+    const ta = block.querySelector('.admin-lic-proveedor-extra-creds');
+    if (!ta) return [];
+    const credLines = String(ta.value || '')
+        .replace(/\r\n/g, '\n')
+        .split('\n')
+        .filter(function (ln) {
+            return String(ln).trim() !== '';
+        });
+    const out = [];
+    credLines.forEach(function (cred, idx) {
+        const trimmed = String(cred).trim();
+        if (!trimmed) return;
+        const rowEl = block.querySelectorAll('.admin-lic-proveedor-extra-row')[idx];
+        const sel = rowEl ? rowEl.querySelector('.admin-lic-proveedor-service-select') : null;
+        const dayInp = rowEl ? rowEl.querySelector('.admin-lic-proveedor-extra-day-input') : null;
+        const entry = {
+            service: sel ? String(sel.value || PROVEEDOR_SERVICE_ANONIMO) : PROVEEDOR_SERVICE_ANONIMO,
+            cred: trimmed,
+        };
+        if (dayInp && String(dayInp.value || '').trim() !== '') {
+            const d = parseInt(dayInp.value, 10);
+            if (Number.isFinite(d) && d >= 1 && d <= 31) entry.sale_day = d;
+        }
+        out.push(entry);
+    });
+    return out;
+}
+
+function adminLicProveedorCollectSoldFromSection(section) {
+    const block = section ? section.querySelector('.admin-lic-proveedor-sold-split') : null;
+    if (!block) return [];
+    const ta = block.querySelector('.admin-lic-proveedor-sold-creds');
+    if (!ta) return [];
+    const credLines = String(ta.value || '')
+        .replace(/\r\n/g, '\n')
+        .split('\n')
+        .filter(function (ln) {
+            return String(ln).trim() !== '';
+        });
+    const out = [];
+    credLines.forEach(function (cred, idx) {
+        const trimmed = String(cred).trim();
+        if (!trimmed) return;
+        const rowEl = block.querySelectorAll('.admin-lic-proveedor-sold-row')[idx];
+        const sel = rowEl ? rowEl.querySelector('.admin-lic-proveedor-service-select') : null;
+        const dayInp = rowEl ? rowEl.querySelector('.admin-lic-proveedor-sold-day-input') : null;
+        const entry = {
+            service: sel ? String(sel.value || PROVEEDOR_SERVICE_ANONIMO) : PROVEEDOR_SERVICE_ANONIMO,
+            cred: trimmed,
+        };
+        if (dayInp && String(dayInp.value || '').trim() !== '') {
+            const d = parseInt(dayInp.value, 10);
+            if (Number.isFinite(d) && d >= 1 && d <= 31) entry.sale_day = d;
+        }
+        out.push(entry);
+    });
+    return out;
+}
+
+function adminLicProveedorCollectProviderFromSection(section, providerRow) {
+    const soldLines = adminLicProveedorCollectSoldFromSection(section);
+    return {
+        user_id: providerRow.user_id,
+        license_lines: adminLicProveedorCollectBlockFromSection(section, 'license', null),
+        day_lines: adminLicProveedorDayLinesFromSoldLines(soldLines),
+        expired_lines: adminLicProveedorCollectExtraFromSection(section, 'expired'),
+        suspended_lines: adminLicProveedorCollectExtraFromSection(section, 'suspended'),
+    };
+}
+
+function adminLicProveedorMergeSavedIntoProvider(providerRow, data) {
+    if (!providerRow || !data) return;
+    if (Array.isArray(data.license_lines)) providerRow.license_lines = data.license_lines;
+    if (data.day_lines && typeof data.day_lines === 'object') providerRow.day_lines = data.day_lines;
+    if (Array.isArray(data.expired_lines)) providerRow.expired_lines = data.expired_lines;
+    if (Array.isArray(data.suspended_lines)) providerRow.suspended_lines = data.suspended_lines;
+    if (data.license_notes != null) providerRow.license_notes = data.license_notes;
+    if (data.day_notepads && typeof data.day_notepads === 'object') providerRow.day_notepads = data.day_notepads;
+    if (data.expired_notes != null) providerRow.expired_notes = data.expired_notes;
+    if (data.suspended_notes != null) providerRow.suspended_notes = data.suspended_notes;
+}
+
+function adminLicProveedorScheduleSave(userId) {
+    const key = String(userId);
+    clearTimeout(adminLicProveedorSaveTimers[key]);
+    adminLicProveedorSaveTimers[key] = window.setTimeout(function () {
+        adminLicProveedorFlushSave(userId);
+    }, ADMIN_PROVEEDOR_SAVE_DEBOUNCE_MS);
+}
+
+async function adminLicProveedorFlushSave(userId) {
+    const section = document.querySelector(
+        '.admin-lic-proveedor-user-section[data-proveedor-user-id="' + String(userId) + '"]'
+    );
+    const providerRow = adminProveedorProviders.find(function (p) {
+        return p && String(p.user_id) === String(userId);
+    });
+    const shell = document.querySelector('.admin-licencias-shell');
+    const putUrl = shell && shell.getAttribute('data-admin-proveedor-put-url');
+    if (!section || !providerRow || !putUrl) return;
+    const body = adminLicProveedorCollectProviderFromSection(section, providerRow);
+    try {
+        const resp = await fetch(putUrl, {
+            method: 'PUT',
+            credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+        });
+        const data = await resp.json().catch(function () {
+            return { success: false };
+        });
+        if (data && data.success) {
+            adminLicProveedorMergeSavedIntoProvider(providerRow, data);
+            adminLicProveedorSyncSoldRowsForSection(section, providerRow);
+        }
+    } catch (e) {
+        adminLicLogError('adminLicProveedorFlushSave:', e);
+    }
+}
+
+function adminLicProveedorInitEditableSection(section, providerRow) {
+    if (!section || !providerRow) return;
+    adminLicProveedorSyncServiceRowsForBlock(section, providerRow, 'license', null);
+    adminLicProveedorSyncSoldRowsForSection(section, providerRow);
+    adminLicProveedorSyncExtraRowsForSection(section, providerRow, 'expired');
+    adminLicProveedorSyncExtraRowsForSection(section, providerRow, 'suspended');
+}
+
+function adminLicProveedorInitAllEditableSections() {
+    const panel = document.getElementById('adminLicenciasProveedorPanel');
+    if (!panel) return;
+    panel.querySelectorAll('.admin-lic-proveedor-user-section').forEach(function (section) {
+        const uid = section.dataset.proveedorUserId;
+        const providerRow = adminProveedorProviders.find(function (p) {
+            return p && String(p.user_id) === String(uid);
+        });
+        adminLicProveedorInitEditableSection(section, providerRow);
+    });
 }
 
 function adminLicRenderProveedorDayReadonly(day, dayText, username, dayEntries) {
@@ -3825,7 +4873,8 @@ function adminLicRenderProveedorDayReadonly(day, dayText, username, dayEntries) 
     }
     const credsHtml = adminLicProveedorReadonlyCredsTextarea(
         adminLicProveedorFormatEntriesWithProduct(visible),
-        'Día ' + String(day) + ' del proveedor ' + username
+        'Día ' + String(day) + ' del proveedor ' + username,
+        'adminLicProveedorPanelDay' + String(day) + 'ReadonlyCreds'
     );
     if (!credsHtml) {
         return '';
@@ -3853,60 +4902,69 @@ function adminLicRenderProveedorDayReadonly(day, dayText, username, dayEntries) 
     );
 }
 
-function adminLicRenderProveedorLicBodyHtml(entries) {
-    if (!entries.length) {
-        return '';
-    }
-    const credsHtml = adminLicProveedorReadonlyCredsTextarea(
-        adminLicProveedorFormatEntriesWithProduct(entries),
-        'Licencias del proveedor'
-    );
-    if (!credsHtml) {
-        return '';
-    }
+function adminLicRenderProveedorLicBodyHtml(providerRow) {
     return (
-        '<div class="admin-lic-proveedor-lic-body">' +
-        '<div class="license-split-editor license-split-editor--proveedor-readonly license-notepad--locked">' +
-        '<div class="license-split-editor__viewport">' +
-        '<div class="license-split-editor__grid admin-lic-proveedor-merged-grid--creds-only">' +
-        '<div class="license-split-editor__creds-cell">' +
-        credsHtml +
-        '</div></div></div></div></div>'
+        '<div class="admin-lic-proveedor-lic-body admin-lic-proveedor-panel-lic">' +
+        adminLicProveedorRenderEditableSplitBlock(providerRow, 'license', null) +
+        '</div>'
+    );
+}
+
+function adminLicRenderProveedorDayEditable(day, providerRow) {
+    const username = providerRow.username || '—';
+    const dayEntries = adminLicProveedorLinesFromProvider(providerRow, 'day', day);
+    const nLines = dayEntries.filter(function (entry) {
+        return entry && String(entry.cred || '').trim();
+    }).length;
+    const badgeHtml =
+        nLines > 0
+            ? '<span class="day-account-badge admin-licencias-notepad-line-badge" title="' +
+              adminLicEscHtml(nLines === 1 ? '1 línea' : nLines + ' líneas') +
+              '">' +
+              String(nLines) +
+              '</span>'
+            : '';
+    const userId = providerRow.user_id != null ? String(providerRow.user_id) : '';
+    return (
+        '<section class="day-section admin-licencias-bloc admin-licencias-bloc--day admin-lic-proveedor-day' +
+        adminLicProveedorDayCollapsedClass(userId, day, nLines <= 0) +
+        '" data-proveedor-day="' +
+        String(day) +
+        '">' +
+        '<div class="day-section-header admin-licencias-bloc-header">' +
+        '<span class="admin-licencias-bloc-title"><i class="fas fa-calendar-day" aria-hidden="true"></i> Día ' +
+        String(day) +
+        '</span>' +
+        '<div class="admin-licencias-bloc-header-actions">' +
+        badgeHtml +
+        '</div></div>' +
+        '<div class="day-accounts-list admin-lic-proveedor-day-body">' +
+        adminLicProveedorRenderEditableSplitBlock(providerRow, 'day', day) +
+        '</div></section>'
     );
 }
 
 function adminLicProveedorPanelUserLineCount(providerRow) {
     let total = adminLicProveedorVisibleLinesFromProvider(providerRow).length;
-    let d;
-    for (d = 1; d <= 31; d += 1) {
-        total += adminLicProveedorDayVisibleLines(providerRow, d).length;
-    }
+    total += adminLicProveedorSoldLinesFromProvider(providerRow).length;
+    (providerRow.expired_lines || []).forEach(function (entry) {
+        if (entry && String(entry.cred || '').trim()) total += 1;
+    });
+    (providerRow.suspended_lines || []).forEach(function (entry) {
+        if (entry && String(entry.cred || '').trim()) total += 1;
+    });
     return total;
+}
+
+function adminLicProveedorDisplayLabel(username) {
+    const name = username != null && String(username).trim() !== '' ? String(username).trim() : '—';
+    return 'Proveedor: ' + name;
 }
 
 function adminLicRenderProveedorUserBlock(providerRow) {
     if (!providerRow) return '';
     const username = providerRow.username || '—';
     const userId = providerRow.user_id != null ? String(providerRow.user_id) : username;
-    const visibleLic = adminLicProveedorVisibleLinesFromProvider(providerRow);
-    const licLines = visibleLic.length;
-    const totalLines = adminLicProveedorPanelUserLineCount(providerRow);
-    const userBadge =
-        totalLines > 0
-            ? '<span class="day-account-badge admin-licencias-notepad-line-badge" title="' +
-              adminLicEscHtml(totalLines === 1 ? '1 línea' : totalLines + ' líneas') +
-              '">' +
-              String(totalLines) +
-              '</span>'
-            : '';
-    let daysHtml = '';
-    let d;
-    for (d = 1; d <= 31; d += 1) {
-        const dayEntries = adminLicProveedorDayVisibleLines(providerRow, d);
-        if (!dayEntries.length) continue;
-        daysHtml += adminLicRenderProveedorDayReadonly(d, '', username, dayEntries);
-    }
-    if (!licLines && !daysHtml) return '';
     return (
         '<section class="admin-lic-proveedor-panel-user admin-lic-proveedor-user-section admin-licencias-bloc" data-proveedor-user-id="' +
         adminLicEscHtml(userId) +
@@ -3914,22 +4972,17 @@ function adminLicRenderProveedorUserBlock(providerRow) {
         adminLicEscHtml(username) +
         '">' +
         '<div class="admin-licencias-bloc-header admin-lic-proveedor-user-header">' +
-        '<span class="admin-licencias-bloc-title admin-licencias-bloc-title--proveedor">' +
-        '<span>Proveedor</span>' +
-        '<span class="admin-lic-proveedor-header-user-wrap">' +
-        '<span class="admin-lic-proveedor-header-user-static">' +
-        adminLicEscHtml(username) +
-        '</span>' +
-        '<button type="button" class="admin-lic-proveedor-info-btn" title="Qué son los proveedores" aria-label="Información sobre proveedores" aria-controls="adminLicProveedorInfoModal"><i class="fas fa-info-circle" aria-hidden="true"></i></button>' +
-        '</span></span>' +
-        '<div class="admin-licencias-bloc-header-actions">' +
-        userBadge +
-        '</div></div>' +
+        '<span class="admin-licencias-bloc-title admin-licencias-bloc-title--proveedor admin-licencias-bloc-title--proveedor-user-only">' +
+        adminLicEscHtml(adminLicProveedorDisplayLabel(username)) +
+        '</span></div>' +
         '<div class="admin-lic-proveedor-panel-user-body">' +
-        (licLines ? adminLicRenderProveedorLicBodyHtml(visibleLic) : '') +
-        '<div class="license-all-days-container admin-lic-proveedor-days">' +
-        daysHtml +
-        '</div></div></section>'
+        '<div class="admin-lic-proveedor-stock-wrap" aria-label="Licencias a vender">' +
+        adminLicRenderProveedorLicBodyHtml(providerRow) +
+        '</div>' +
+        adminLicProveedorRenderSoldSectionHtml(providerRow) +
+        adminLicProveedorRenderExtraSectionHtml(providerRow, 'expired') +
+        adminLicProveedorRenderExtraSectionHtml(providerRow, 'suspended') +
+        '</div></section>'
     );
 }
 
@@ -3937,17 +4990,16 @@ function adminLicRenderProveedorPanelBody() {
     if (!adminProveedorProviders.length) {
         return '<p class="text-muted mb-0">No hay usuarios con permiso Proveedor.</p>';
     }
-    const blocks = adminProveedorProviders.map(adminLicRenderProveedorUserBlock).filter(Boolean);
-    if (!blocks.length) {
-        return '<p class="text-muted mb-0">No hay licencias de proveedor visibles (solo servicios etiquetados; las anónimas no aparecen aquí).</p>';
-    }
+    const blocks = adminProveedorProviders.map(adminLicRenderProveedorUserBlock);
     return blocks.join('');
 }
 
 function adminLicRefreshProveedorPanelDom() {
     const body = document.getElementById('adminLicenciasProveedorPanelBody');
     if (!body) return;
+    adminLicCaptureProveedorPanelCollapseFromDom();
     body.innerHTML = adminLicRenderProveedorPanelBody();
+    adminLicProveedorInitAllEditableSections();
     restoreProveedorPanelCollapseState();
 }
 
@@ -3963,18 +5015,24 @@ function restoreProveedorPanelCollapseState() {
         } else {
             section.classList.remove('collapsed');
         }
-    });
-    panel.querySelectorAll('.admin-lic-proveedor-day').forEach(function (daySection) {
-        const userSection = daySection.closest('.admin-lic-proveedor-user-section');
-        const uid = userSection && userSection.dataset.proveedorUserId;
-        const day = daySection.dataset.proveedorDay;
-        if (!uid || !day) return;
-        const saved = adminLicProveedorPanelDayCollapsedRead(uid, day);
-        if (saved === 'true') {
-            daySection.classList.add('collapsed');
-        } else if (saved === 'false') {
-            daySection.classList.remove('collapsed');
-        }
+        section.querySelectorAll('.admin-lic-proveedor-sold').forEach(function (sold) {
+            const sv = adminLicProveedorSectionCollapsedRead(uid, 'sold');
+            if (sv === 'true') sold.classList.add('collapsed');
+            else if (sv === 'false') sold.classList.remove('collapsed');
+        });
+        section.querySelectorAll('.admin-lic-proveedor-extra').forEach(function (extra) {
+            const kind = extra.getAttribute('data-proveedor-extra-kind') || 'extra';
+            const sv = adminLicProveedorSectionCollapsedRead(uid, kind);
+            if (sv === 'true') extra.classList.add('collapsed');
+            else if (sv === 'false') extra.classList.remove('collapsed');
+        });
+        section.querySelectorAll('.admin-lic-proveedor-day[data-proveedor-day]').forEach(function (daySec) {
+            const day = daySec.getAttribute('data-proveedor-day');
+            if (day == null || day === '') return;
+            const dv = adminLicProveedorPanelDayCollapsedRead(uid, day);
+            if (dv === 'true') daySec.classList.add('collapsed');
+            else if (dv === 'false') daySec.classList.remove('collapsed');
+        });
     });
 }
 
@@ -3988,7 +5046,6 @@ function setupProveedorPanelUi() {
             if (!panel || panel.hidden || panel.classList.contains('d-none')) return;
             const userHeader = e.target.closest && e.target.closest('.admin-lic-proveedor-user-header');
             if (userHeader && panel.contains(userHeader)) {
-                if (e.target.closest('.admin-lic-proveedor-info-btn')) return;
                 if (e.target.closest('.day-account-badge')) return;
                 const section = userHeader.closest('.admin-lic-proveedor-user-section');
                 if (!section) return;
@@ -4004,21 +5061,128 @@ function setupProveedorPanelUi() {
             }
             const dayHeader =
                 e.target.closest &&
-                e.target.closest('.admin-lic-proveedor-day .admin-licencias-bloc-header');
+                e.target.closest('.admin-lic-proveedor-sold-header');
             if (dayHeader && panel.contains(dayHeader)) {
                 if (e.target.closest('.day-account-badge')) return;
-                const daySection = dayHeader.closest('.admin-lic-proveedor-day');
+                const soldSection = dayHeader.closest('.admin-lic-proveedor-sold');
+                if (!soldSection) return;
+                const userSection = soldSection.closest('.admin-lic-proveedor-user-section');
+                const uid = userSection && userSection.dataset.proveedorUserId;
+                e.preventDefault();
+                e.stopPropagation();
+                soldSection.classList.toggle('collapsed');
+                if (uid) {
+                    adminLicProveedorSectionCollapsedWrite(uid, 'sold', soldSection.classList.contains('collapsed'));
+                }
+                return;
+            }
+            const proveedorDayHeader =
+                e.target.closest &&
+                e.target.closest('.admin-lic-proveedor-day .day-section-header');
+            if (proveedorDayHeader && panel.contains(proveedorDayHeader)) {
+                if (e.target.closest('.day-account-badge')) return;
+                const daySection = proveedorDayHeader.closest('.admin-lic-proveedor-day');
                 if (!daySection) return;
+                const userSectionDay = daySection.closest('.admin-lic-proveedor-user-section');
+                const uidDay = userSectionDay && userSectionDay.dataset.proveedorUserId;
+                const dayNum = daySection.getAttribute('data-proveedor-day');
                 e.preventDefault();
                 e.stopPropagation();
                 daySection.classList.toggle('collapsed');
-                const userSection = daySection.closest('.admin-lic-proveedor-user-section');
-                const uid = userSection && userSection.dataset.proveedorUserId;
-                const day = daySection.dataset.proveedorDay;
-                if (uid && day) {
-                    adminLicProveedorPanelDayCollapsedWrite(uid, day, daySection.classList.contains('collapsed'));
+                if (uidDay && dayNum != null && dayNum !== '') {
+                    adminLicProveedorPanelDayCollapsedWrite(
+                        uidDay,
+                        dayNum,
+                        daySection.classList.contains('collapsed')
+                    );
                 }
+                return;
             }
+            const extraHeader =
+                e.target.closest && e.target.closest('.admin-lic-proveedor-extra-header');
+            if (extraHeader && panel.contains(extraHeader)) {
+                if (e.target.closest('.day-account-badge')) return;
+                const extraSection = extraHeader.closest('.admin-lic-proveedor-extra');
+                if (!extraSection) return;
+                const userSectionExtra = extraSection.closest('.admin-lic-proveedor-user-section');
+                const uidExtra = userSectionExtra && userSectionExtra.dataset.proveedorUserId;
+                const kind = extraSection.getAttribute('data-proveedor-extra-kind') || 'extra';
+                e.preventDefault();
+                e.stopPropagation();
+                extraSection.classList.toggle('collapsed');
+                if (uidExtra) {
+                    adminLicProveedorSectionCollapsedWrite(
+                        uidExtra,
+                        kind,
+                        extraSection.classList.contains('collapsed')
+                    );
+                }
+                return;
+            }
+        },
+        false
+    );
+    document.addEventListener(
+        'input',
+        function (e) {
+            const ta = e.target;
+            if (!ta || !ta.classList || !ta.classList.contains('admin-lic-proveedor-creds-ta')) return;
+            const panel = document.getElementById('adminLicenciasProveedorPanel');
+            if (!panel || !panel.contains(ta)) return;
+            const block = ta.closest('.admin-lic-proveedor-split, .admin-lic-proveedor-extra-split, .admin-lic-proveedor-sold-split');
+            const section = ta.closest('.admin-lic-proveedor-user-section');
+            const uid = section && section.dataset.proveedorUserId;
+            const providerRow = adminProveedorProviders.find(function (p) {
+                return p && String(p.user_id) === String(uid);
+            });
+            if (!block || !section || !providerRow) return;
+            if (block.classList.contains('admin-lic-proveedor-extra-split')) {
+                const kind = block.dataset.proveedorExtraKind;
+                adminLicProveedorSyncExtraRowsForSection(section, providerRow, kind);
+            } else if (block.classList.contains('admin-lic-proveedor-sold-split')) {
+                adminLicProveedorSyncSoldRowsForSection(section, providerRow);
+            } else {
+                adminLicProveedorSyncServiceRowsForBlock(
+                    section,
+                    providerRow,
+                    block.dataset.proveedorBlock,
+                    block.dataset.proveedorDay != null ? parseInt(block.dataset.proveedorDay, 10) : null
+                );
+            }
+            if (uid) adminLicProveedorScheduleSave(uid);
+        },
+        false
+    );
+    document.addEventListener(
+        'change',
+        function (e) {
+            const el = e.target;
+            if (!el || !el.classList) return;
+            const panel = document.getElementById('adminLicenciasProveedorPanel');
+            if (!panel || !panel.contains(el)) return;
+            const isSvc = el.classList.contains('admin-lic-proveedor-service-select');
+            const isDay =
+                el.classList.contains('admin-lic-proveedor-extra-day-input') ||
+                el.classList.contains('admin-lic-proveedor-sold-day-input');
+            if (!isSvc && !isDay) return;
+            if (el.classList.contains('admin-lic-proveedor-sold-day-input')) {
+                const rowEl = el.closest('.admin-lic-proveedor-sold-row');
+                adminLicProveedorUpdateSoldRowCountdown(rowEl);
+            }
+            const section = el.closest('.admin-lic-proveedor-user-section');
+            const uid = section && section.dataset.proveedorUserId;
+            if (uid) adminLicProveedorScheduleSave(uid);
+        },
+        false
+    );
+    document.addEventListener(
+        'input',
+        function (e) {
+            const el = e.target;
+            if (!el || !el.classList || !el.classList.contains('admin-lic-proveedor-sold-day-input')) return;
+            const panel = document.getElementById('adminLicenciasProveedorPanel');
+            if (!panel || !panel.contains(el)) return;
+            adminLicProveedorUpdateSoldRowCountdown(el.closest('.admin-lic-proveedor-sold-row'));
         },
         false
     );
@@ -4076,7 +5240,7 @@ function adminLicProveedorMergedUserFilterLabel(activeFilter, byUser) {
         return 'Todo';
     }
     if (byUser[activeFilter] && byUser[activeFilter].username) {
-        return byUser[activeFilter].username;
+        return adminLicProveedorDisplayLabel(byUser[activeFilter].username);
     }
     return '—';
 }
@@ -4245,7 +5409,8 @@ function adminLicProveedorMergedRenderSplitEditor(lines, activeFilter) {
         .join('\n');
     const credsHtml = adminLicProveedorReadonlyCredsTextarea(
         credText,
-        'Licencias del proveedor seleccionado'
+        'Licencias del proveedor seleccionado',
+        'adminLicProveedorMergedReadonlyCreds'
     );
     if (!credsHtml) {
         return '';
@@ -4263,65 +5428,12 @@ function adminLicProveedorMergedRenderSplitEditor(lines, activeFilter) {
     );
 }
 
-function adminLicProveedorInfoOpenModal(openerEl) {
-    const modal = document.getElementById('adminLicProveedorInfoModal');
-    if (!modal) return;
-    __adminLicProveedorInfoOpener = openerEl || null;
-    modal.hidden = false;
-    modal.setAttribute('aria-hidden', 'false');
-    const okBtn = document.getElementById('adminLicProveedorInfoOkBtn');
-    if (okBtn) {
-        try {
-            okBtn.focus({ preventScroll: true });
-        } catch (e1) {
-            try {
-                okBtn.focus();
-            } catch (e2) {}
-        }
-    }
-}
-
-function adminLicProveedorInfoCloseModal() {
-    const modal = document.getElementById('adminLicProveedorInfoModal');
-    if (!modal || modal.hidden) return;
-    const opener = __adminLicProveedorInfoOpener;
-    if (opener && typeof opener.focus === 'function') {
-        try {
-            opener.focus({ preventScroll: true });
-        } catch (e1) {
-            try {
-                opener.focus();
-            } catch (e2) {}
-        }
-    }
-    if (document.activeElement && modal.contains(document.activeElement)) {
-        try {
-            document.activeElement.blur();
-        } catch (e3) {}
-    }
-    __adminLicProveedorInfoOpener = null;
-    modal.hidden = true;
-    modal.setAttribute('aria-hidden', 'true');
-}
-
 function setupAdminLicProveedorMergedUi() {
     if (document.documentElement.dataset.adminLicProveedorMergedUi === '1') return;
     document.documentElement.dataset.adminLicProveedorMergedUi = '1';
     document.addEventListener(
         'click',
         function (e) {
-            const infoBtn = e.target.closest && e.target.closest('.admin-lic-proveedor-info-btn');
-            if (infoBtn) {
-                e.preventDefault();
-                e.stopPropagation();
-                adminLicProveedorInfoOpenModal(infoBtn);
-                return;
-            }
-            if (e.target.closest && e.target.closest('[data-admin-lic-proveedor-info-dismiss]')) {
-                e.preventDefault();
-                adminLicProveedorInfoCloseModal();
-                return;
-            }
             if (e.target.closest && e.target.closest('#adminLicProveedorHeaderUserBtn')) {
                 e.preventDefault();
                 e.stopPropagation();
@@ -4370,12 +5482,6 @@ function setupAdminLicProveedorMergedUi() {
         'keydown',
         function (e) {
             if (e.key !== 'Escape') return;
-            const infoModal = document.getElementById('adminLicProveedorInfoModal');
-            if (infoModal && !infoModal.hidden) {
-                e.preventDefault();
-                adminLicProveedorInfoCloseModal();
-                return;
-            }
             const modal = document.getElementById('adminLicProveedorUserPickModal');
             if (modal && !modal.hidden) {
                 e.preventDefault();
@@ -4399,9 +5505,6 @@ function setupProveedorMergedBlocCollapse() {
             return;
         }
         if (e.target.closest('.admin-lic-proveedor-header-user-btn')) {
-            return;
-        }
-        if (e.target.closest('.admin-lic-proveedor-info-btn')) {
             return;
         }
         const inputContainer = document.getElementById('licenseAccountsInputContainer');
@@ -4735,6 +5838,9 @@ function refreshCustomerRenewalBlocVisibilityForLicense(licenseId) {
     });
     const show = !!(lic && licenseRenewCustomerAccountUiChecked(lic));
     bloc.classList.toggle('d-none', !show);
+    if (show && typeof restoreCustomerRenewalBlocState === 'function') {
+        restoreCustomerRenewalBlocState(licenseId);
+    }
 }
 
 function updateNotepadsVisibilityForLicense(licenseId) {
@@ -4873,6 +5979,9 @@ async function activateLicenseCard(card, licenseId, skipScroll = false, options)
 
         if (licenseId !== AGGREGATE_LICENSE_ID && typeof restorePersonalBlocState === 'function') {
             restorePersonalBlocState(licenseId);
+        }
+        if (licenseId !== AGGREGATE_LICENSE_ID && typeof restoreCustomerRenewalBlocState === 'function') {
+            restoreCustomerRenewalBlocState(licenseId);
         }
         if (licenseId !== AGGREGATE_LICENSE_ID && typeof restoreProveedorMergedBlocState === 'function') {
             restoreProveedorMergedBlocState(licenseId);
@@ -16641,6 +17750,28 @@ function customerRenewalLicenseSplitSyncOrigCredsFromCredLines(ta, credLines) {
     customerRenewalLicenseSplitSetOrigCreds(ta, out);
 }
 
+/** Tras editar credenciales: alinear origCreds con lo visible para permitir altas/bajas manuales. */
+function customerRenewalLicenseSplitRefreshOrigCredsAfterEdit(ta) {
+    ta = ta || document.getElementById('adminLicenciasNotepadByCustomerRenewal');
+    if (!ta || !customerRenewalLicenseSplitIsRenewClientMode(ta)) return;
+    const credLines = licenseSplitCredLinesFromRaw(
+        String(ta.value != null ? ta.value : '').replace(/\r\n/g, '\n')
+    );
+    const prev = customerRenewalLicenseSplitGetOrigCreds(ta);
+    const out = [];
+    for (let i = 0; i < credLines.length; i++) {
+        const cur = credLines[i] != null ? String(credLines[i]) : '';
+        const trimmed = cur.trim();
+        const action = customerRenewalLicenseSplitParseAdminCredResponse(trimmed);
+        if (action) {
+            out.push(prev[i] != null ? String(prev[i]) : '');
+        } else {
+            out.push(trimmed ? cur : '');
+        }
+    }
+    customerRenewalLicenseSplitSetOrigCreds(ta, out);
+}
+
 /** En modo cliente no se puede dejar la credencial vacía: restaura la pendiente. */
 function customerRenewalLicenseSplitNormalizeCredTaForRenewMode(ta) {
     ta = ta || document.getElementById('adminLicenciasNotepadByCustomerRenewal');
@@ -16654,7 +17785,7 @@ function customerRenewalLicenseSplitNormalizeCredTaForRenewMode(ta) {
         const trimmed = String(credLines[i] != null ? credLines[i] : '').trim();
         const action = customerRenewalLicenseSplitParseAdminCredResponse(trimmed);
         const orig = origCreds[i] != null ? String(origCreds[i]).trim() : '';
-        if (trimmed === '' && orig) {
+        if (trimmed === '' && orig && action) {
             credLines[i] = origCreds[i];
             changed = true;
         } else if (action && !orig) {
@@ -16668,7 +17799,7 @@ function customerRenewalLicenseSplitNormalizeCredTaForRenewMode(ta) {
             customerRenewalLicenseSplitSyncRowsToTextarea(custRoot);
         }
         if (typeof showError === 'function') {
-            showError('No puedes borrar la cuenta. Responde con x (rechazar) o compra (pasar al día).');
+            showError('Escribe x (rechazar) o compra (pasar al día) en la credencial pendiente.');
         }
     }
     return changed;
@@ -17279,6 +18410,8 @@ window.customerRenewalLicenseSplitWireScrollSync = customerRenewalLicenseSplitWi
 window.customerRenewalLicenseSplitIsRenewClientMode = customerRenewalLicenseSplitIsRenewClientMode;
 window.customerRenewalLicenseSplitNormalizeCredTaForRenewMode =
     customerRenewalLicenseSplitNormalizeCredTaForRenewMode;
+window.customerRenewalLicenseSplitRefreshOrigCredsAfterEdit =
+    customerRenewalLicenseSplitRefreshOrigCredsAfterEdit;
 window.customerRenewalLicenseSplitProcessCredResponses = customerRenewalLicenseSplitProcessCredResponses;
 window.updateCustomerRenewalBlocLineCountBadge = updateCustomerRenewalBlocLineCountBadge;
 
@@ -17857,6 +18990,9 @@ async function loadAllDaysSoldAccounts(licenseId) {
             if (licenseId !== AGGREGATE_LICENSE_ID && typeof restorePersonalBlocState === 'function') {
                 restorePersonalBlocState(licenseId);
             }
+            if (licenseId !== AGGREGATE_LICENSE_ID && typeof restoreCustomerRenewalBlocState === 'function') {
+                restoreCustomerRenewalBlocState(licenseId);
+            }
             if (licenseId !== AGGREGATE_LICENSE_ID && typeof restoreProveedorMergedBlocState === 'function') {
                 restoreProveedorMergedBlocState(licenseId);
             }
@@ -17889,6 +19025,10 @@ async function loadAllDaysSoldAccounts(licenseId) {
     }
 
     const daysScrollAnchor = adminLicCaptureDaysScrollAnchor();
+
+    if (typeof licenciasUiCaptureAdminDaySectionsFromDom === 'function') {
+        licenciasUiCaptureAdminDaySectionsFromDom(licenseId);
+    }
 
     const daysToolbarD1ExpandHtml =
         '<button type="button" id="adminLicenciasToggleAllDaysSectionsBtn" class="admin-licencias-toggle-notes-col-btn admin-licencias-days-expand-all-btn admin-licencias-days-expand-all-btn--leading" title="Plegar todos los días" aria-label="Plegar todas las secciones de días" aria-expanded="true">' +
@@ -18003,6 +19143,7 @@ async function loadAllDaysSoldAccounts(licenseId) {
     restoreSuspendedSectionState(licenseId);
         restoreExpiredSectionState(licenseId);
         restorePersonalBlocState(licenseId);
+        restoreCustomerRenewalBlocState(licenseId);
         restoreProveedorMergedBlocState(licenseId);
     }
     
@@ -18120,7 +19261,7 @@ function restoreDaySectionsState(licenseId) {
 
         if (savedState === 'true' && accountsList) {
             section.classList.add('collapsed');
-        } else if (accountsList) {
+        } else if (savedState === 'false' && accountsList) {
             section.classList.remove('collapsed');
         }
     });
@@ -18254,6 +19395,52 @@ function restorePersonalBlocState(licenseId) {
     } else {
         section.classList.remove('collapsed');
         body.style.display = 'block';
+    }
+}
+
+/** Plegar / expandir «Cuentas para renovar (cliente)» (mismo patrón que Notas personales). */
+function setupCustomerRenewalBlocCollapse() {
+    const section = document.getElementById('adminLicenciasBlocCustomerRenewal');
+    if (!section || section.dataset.customerRenewalCollapseBound === '1') return;
+    const header = section.querySelector('.admin-licencias-bloc-header');
+    const body = section.querySelector('.admin-licencias-customer-renewal-body');
+    if (!header || !body) return;
+    section.dataset.customerRenewalCollapseBound = '1';
+    header.style.cursor = 'pointer';
+    header.addEventListener('click', function (e) {
+        if (e.target.closest('.day-account-badge')) {
+            return;
+        }
+        if (e.target.closest('.admin-bloc-undo-toolbar')) {
+            return;
+        }
+        if (e.target.closest('.admin-licencias-toggle-notes-col-btn')) {
+            return;
+        }
+        if (e.target.closest('.admin-licencias-show-limit-wrap')) {
+            return;
+        }
+        const inputContainer = document.getElementById('licenseAccountsInputContainer');
+        const licenseId = inputContainer && inputContainer.dataset.activeLicenseId;
+        if (!licenseId || String(licenseId) === String(AGGREGATE_LICENSE_ID)) return;
+        section.classList.toggle('collapsed');
+        const isCollapsed = section.classList.contains('collapsed');
+        adminLicSetBlocPrefCollapsed('customer_renewal_collapsed', licenseId, isCollapsed);
+    });
+}
+
+function restoreCustomerRenewalBlocState(licenseId) {
+    const section = document.getElementById('adminLicenciasBlocCustomerRenewal');
+    if (!section || section.classList.contains('d-none')) return;
+    if (licenseId == null || String(licenseId) === String(AGGREGATE_LICENSE_ID)) {
+        section.classList.remove('collapsed');
+        return;
+    }
+    const saved = adminLicGetBlocPrefCollapsed('customer_renewal_collapsed', licenseId);
+    if (saved === 'true') {
+        section.classList.add('collapsed');
+    } else {
+        section.classList.remove('collapsed');
     }
 }
 

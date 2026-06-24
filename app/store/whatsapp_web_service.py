@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import os
+import random
 import smtplib
 import time
 from datetime import datetime, timedelta
@@ -30,16 +31,20 @@ STATUS_UNKNOWN = 'unknown'
 
 DISCONNECT_ALERT_COOLDOWN = timedelta(hours=1)
 
-DEFAULT_LICENSE_NOTIFY_TEMPLATE = (
-    'Hola {{customer_name}}, tus licencias vencen pronto ({{days_left}} días): '
-    '{{product_names}}. Renová en la tienda.'
-)
+DEFAULT_SEND_PAUSE_MIN_SEC = 3.0
+DEFAULT_SEND_PAUSE_MAX_SEC = 10.0
 
 
-def resolve_license_notify_template(config) -> str:
-    """Texto del aviso; si la plantilla está vacía usa el predeterminado."""
-    raw = (getattr(config, 'template_message', None) or '').strip() if config else ''
-    return raw or DEFAULT_LICENSE_NOTIFY_TEMPLATE
+def resolve_send_pause_bounds(config=None) -> tuple[float, float]:
+    """Pausa entre mensajes: 3–10 s (fijo en código)."""
+    del config
+    return DEFAULT_SEND_PAUSE_MIN_SEC, DEFAULT_SEND_PAUSE_MAX_SEC
+
+
+def random_send_pause_sec(config=None) -> float:
+    """Pausa aleatoria uniforme entre 3 y 10 segundos."""
+    min_s, max_s = resolve_send_pause_bounds(config)
+    return random.uniform(min_s, max_s)
 
 
 def get_whatsapp_singleton_config():
@@ -672,7 +677,6 @@ def serialize_whatsapp_config(config, *, include_secrets: bool = False) -> dict[
         'alert_email': resolve_whatsapp_admin_alert_email(),
         'health_alert_enabled': True,
         'webhook_verify_token': config.webhook_verify_token if include_secrets else _mask_secret(config.webhook_verify_token),
-        'template_message': config.template_message,
         'notification_time': config.notification_time.strftime('%H:%M') if config.notification_time else None,
         'is_enabled': config.is_enabled,
         'last_sent': config.last_sent.isoformat() + 'Z' if config.last_sent else None,
@@ -680,6 +684,30 @@ def serialize_whatsapp_config(config, *, include_secrets: bool = False) -> dict[
         'notify_run_log': serialize_notify_run_log_for_api(config),
         'created_at': config.created_at.isoformat() if config.created_at else None,
     }
+
+
+def whatsapp_config_health_fingerprint(config) -> str:
+    """Hash ligero para SSE de salud WhatsApp (BD + log de notify)."""
+    import hashlib
+
+    if not config:
+        return hashlib.sha256(b'none').hexdigest()[:24]
+    log_sig = hashlib.sha256(str(config.notify_run_log_json or '').encode('utf-8')).hexdigest()[:16]
+    parts = '|'.join(
+        [
+            str(config.id),
+            str(config.connection_status or ''),
+            str(config.linked_phone or ''),
+            str(config.last_health_at or ''),
+            str(config.last_health_error or ''),
+            '1' if config.is_enabled else '0',
+            str(config.last_notify_at or ''),
+            str(config.last_sent or ''),
+            str(config.updated_at or ''),
+            log_sig,
+        ]
+    )
+    return hashlib.sha256(parts.encode('utf-8')).hexdigest()[:24]
 
 
 def _mask_secret(value: str | None) -> str:

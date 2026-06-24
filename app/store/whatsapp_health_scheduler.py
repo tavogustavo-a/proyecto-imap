@@ -20,8 +20,6 @@ def run_whatsapp_health_checks(app):
             from app.store.whatsapp_web_service import get_whatsapp_singleton_config, refresh_config_health
 
             ensure_whatsapp_web_columns()
-            from app.store.whatsapp_web_service import get_whatsapp_singleton_config
-
             cfg = get_whatsapp_singleton_config()
             if not cfg or not cfg.is_enabled:
                 return
