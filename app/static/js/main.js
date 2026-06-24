@@ -385,10 +385,6 @@ document.addEventListener("DOMContentLoaded", function () {
         const hiddenId = hiddenContainer.getAttribute("data-service-id");
         hiddenServiceId.value = hiddenId;
         hiddenContainer.classList.add("selected-service");
-        console.log("Servicio oculto seleccionado automáticamente:", hiddenId);
-      } else {
-        // No se encontró ningún servicio oculto
-        console.log("No se encontraron servicios ocultos disponibles");
       }
     }
   }

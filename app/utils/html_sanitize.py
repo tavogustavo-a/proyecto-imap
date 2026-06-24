@@ -13,6 +13,7 @@ _ALLOWED_TAGS = frozenset({
     "ul", "ol", "li",
     "table", "thead", "tbody", "tfoot", "tr", "th", "td",
     "img", "pre", "code", "blockquote",
+    "style", "button",
 })
 
 _GLOBAL_ATTRS = frozenset({"class", "title", "aria-label"})
@@ -21,9 +22,17 @@ _TAG_ATTRS = {
     "img": frozenset({"src", "alt", "width", "height"}),
     "th": frozenset({"colspan", "rowspan", "scope"}),
     "td": frozenset({"colspan", "rowspan"}),
+    "button": frozenset({"type", "disabled"}),
+    "style": frozenset({"type"}),
 }
 
 _UNSAFE_URL_SCHEMES = frozenset({"javascript", "vbscript", "data"})
+
+_STYLE_UNSAFE = re.compile(
+    r"@import\b|expression\s*\(|javascript\s*:|vbscript\s*:|-moz-binding\b|behavior\s*\(|"
+    r"url\s*\(\s*['\"]?\s*javascript",
+    re.I,
+)
 
 
 def _is_safe_url(value: str, *, allow_data_images: bool = False) -> bool:
@@ -49,8 +58,38 @@ def _clean_attr_name(name: str) -> str:
     return (name or "").strip().lower()
 
 
+def _wrap_bare_css_prefix(text: str) -> str:
+    """CSS pegado sin <style> (común al copiar desde Herramienta HTML) → envolver en <style>."""
+    stripped = text.lstrip()
+    if stripped.startswith("<") or "{" not in stripped or "}" not in stripped:
+        return text
+    tag_match = re.search(r"<\s*[a-zA-Z]", stripped)
+    if not tag_match or tag_match.start() <= 0:
+        return text
+    prefix = stripped[: tag_match.start()]
+    if "<" in prefix or ">" in prefix:
+        return text
+    if not re.search(r"\{[^{}]*\}", prefix):
+        return text
+    rest = stripped[tag_match.start() :]
+    return "<style type=\"text/css\">\n" + prefix.strip() + "\n</style>\n" + rest
+
+
+def _sanitize_style_element(tag) -> None:
+    css_text = tag.get_text() or ""
+    if _STYLE_UNSAFE.search(css_text):
+        tag.decompose()
+        return
+    tag.attrs = {"type": "text/css"}
+    tag.clear()
+    tag.append(css_text)
+
+
 def _sanitize_element(tag) -> None:
     name = tag.name.lower() if tag.name else ""
+    if name == "style":
+        _sanitize_style_element(tag)
+        return
     if name not in _ALLOWED_TAGS:
         tag.unwrap()
         return
@@ -78,6 +117,9 @@ def _sanitize_element(tag) -> None:
         parts = set(rel_text.split()) | {"noopener", "noreferrer"}
         tag["rel"] = " ".join(sorted(parts))
 
+    if name == "button":
+        tag["type"] = "button"
+
 
 def sanitize_admin_message_html(raw: str | None) -> Markup:
     """Permite formato básico admin; elimina scripts, eventos y URLs peligrosas."""
@@ -90,6 +132,8 @@ def sanitize_admin_message_html(raw: str | None) -> Markup:
 
     if "<" not in text and ">" not in text:
         return Markup(text)
+
+    text = _wrap_bare_css_prefix(text)
 
     soup = BeautifulSoup(text, "html.parser")
     for comment in soup.find_all(string=lambda s: isinstance(s, Comment)):
