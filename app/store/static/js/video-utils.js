@@ -235,31 +235,41 @@ window.setupVideoProtection = function() {
 // ✅ FUNCIÓN: Mostrar archivos en el chat (versión unificada)
 window.displayFileInChat = function(messageData) {
     if (!messageData.has_attachment || !messageData.attachment_filename) return '';
+
+    const escapeHtml =
+        typeof window.escapeChatHtml === 'function'
+            ? window.escapeChatHtml
+            : function (text) {
+                  if (text == null) return '';
+                  return String(text)
+                      .replace(/&/g, '&amp;')
+                      .replace(/</g, '&lt;')
+                      .replace(/>/g, '&gt;')
+                      .replace(/"/g, '&quot;')
+                      .replace(/'/g, '&#39;');
+              };
     
     const fileType = messageData.attachment_type;
     const fileName = messageData.attachment_filename;
     // ✅ CORREGIDO: Usar attachment_path en lugar de attachment_filename para la URL
     const filePath = messageData.attachment_path || fileName;
     const fileUrl = `/tienda/store/static/uploads/chat/${filePath}`;
-    
+    const safeFileName = escapeHtml(fileName);
+    const safeFileUrl = escapeHtml(fileUrl);
     
     // ✅ CONFIGURACIÓN SIMPLE: Solo usar controles nativos del navegador
     
     if (fileType.startsWith('image/') || isImageFile(fileName)) {
-        const escapedFileUrl = fileUrl.replace(/'/g, "&#39;").replace(/"/g, "&quot;");
-        const escapedFileName = fileName.replace(/'/g, "&#39;").replace(/"/g, "&quot;");
         return `
             <div class="file-attachment image-attachment">
-                <img src="${fileUrl}" alt="${fileName}" class="chat-image" data-action="open-image-modal" data-file-url="${escapedFileUrl}" data-file-name="${escapedFileName}" draggable="false">
+                <img src="${safeFileUrl}" alt="${safeFileName}" class="chat-image" data-action="open-image-modal" data-file-url="${safeFileUrl}" data-file-name="${safeFileName}" draggable="false">
             </div>
         `;
     } else if (fileType === 'application/pdf' || fileName.toLowerCase().endsWith('.pdf')) {
         // ✅ PDF: Vista previa minimalista - solo imagen
-        const escapedFileUrl = fileUrl.replace(/'/g, "&#39;").replace(/"/g, "&quot;");
-        const escapedFileName = fileName.replace(/'/g, "&#39;").replace(/"/g, "&quot;");
         return `
             <div class="file-attachment pdf-attachment">
-                <div class="pdf-preview" data-action="open-pdf-modal" data-file-url="${escapedFileUrl}" data-file-name="${escapedFileName}" style="position: relative; width: 100%; max-width: 200px; height: 150px; border-radius: 8px; background: linear-gradient(135deg, #dc3545, #c82333); display: flex; align-items: center; justify-content: center; cursor: pointer; box-shadow: 0 4px 12px rgba(0,0,0,0.15); transition: all 0.3s ease;">
+                <div class="pdf-preview" data-action="open-pdf-modal" data-file-url="${safeFileUrl}" data-file-name="${safeFileName}" style="position: relative; width: 100%; max-width: 200px; height: 150px; border-radius: 8px; background: linear-gradient(135deg, #dc3545, #c82333); display: flex; align-items: center; justify-content: center; cursor: pointer; box-shadow: 0 4px 12px rgba(0,0,0,0.15); transition: all 0.3s ease;">
                     <div style="background: rgba(255,255,255,0.2); border-radius: 50%; padding: 25px;">
                         <i class="fas fa-file-pdf" style="font-size: 48px; color: white; opacity: 0.9;"></i>
                     </div>
@@ -282,15 +292,15 @@ window.displayFileInChat = function(messageData) {
                            controlsList="nodownload"
                            style="width: 100%; max-width: 100%; max-height: 250px; height: auto; aspect-ratio: 16/9; border-radius: 8px; background: #000; display: block; object-fit: contain;"
                            data-action-error="handle-mov-video-error"
-                           data-file-url="${fileUrl.replace(/'/g, "&#39;").replace(/"/g, "&quot;")}">
-                        <source src="${fileUrl}" type="video/quicktime">
-                        <source src="${fileUrl}" type="video/mp4">
+                           data-file-url="${safeFileUrl}">
+                        <source src="${safeFileUrl}" type="video/quicktime">
+                        <source src="${safeFileUrl}" type="video/mp4">
                         <p>Tu navegador no soporta la reproducción de este video.</p>
                     </video>
                     <div class="mov-video-error-fallback" style="display: none; padding: 20px; text-align: center; color: white; background: #000; border-radius: 8px;">
                         <i class="fas fa-play-circle" style="font-size: 48px; margin-bottom: 10px;"></i>
                         <p>Video no compatible</p>
-                        <button class="open-video-new-tab-btn" data-action="open-video-new-tab" data-file-url="${fileUrl.replace(/'/g, "&#39;").replace(/"/g, "&quot;")}" style="background: #007bff; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer;">
+                        <button class="open-video-new-tab-btn" data-action="open-video-new-tab" data-file-url="${safeFileUrl}" style="background: #007bff; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer;">
                             Abrir en nueva pestaña
                         </button>
                     </div>

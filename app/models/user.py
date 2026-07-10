@@ -123,6 +123,12 @@ class User(db.Model):
     # JSON: preferencias UI del panel «Admin Licencias» (plegados Días / Notas / etc.) por usuario
     admin_licencias_ui_prefs = db.Column(JSON, nullable=True)
 
+    # JSON: preferencias UI de la tienda pública (vista, filtros, tabla precios)
+    store_front_ui_prefs = db.Column(JSON, nullable=True)
+
+    # JSON: preferencias de vista de botones de servicios (plantilla Códigos)
+    codigos_view_prefs = db.Column(JSON, nullable=True)
+
     # Campo para indicar si el usuario puede buscar cualquier email (o solo los permitidos)
     can_search_any = db.Column(db.Boolean, default=False, nullable=False)
     

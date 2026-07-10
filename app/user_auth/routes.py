@@ -31,30 +31,30 @@ def csrf_exempt_route(func):
     func._csrf_exempt = True
     return func
 
+from app.auth.session_guards import (
+    user_request_is_ajax as _user_request_is_ajax,
+    ensure_user_session_token_valid,
+)
+
 def login_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
+        is_ajax = _user_request_is_ajax()
+
         if 'logged_in' not in session:
-            # Detectar si es una petición AJAX/JSON
-            is_ajax = (
-                request.is_json or 
-                request.headers.get('Content-Type', '').startswith('application/json') or
-                request.headers.get('X-Requested-With') == 'XMLHttpRequest' or
-                request.path.startswith('/api/') or
-                request.path.startswith('/usuario/my_page/') or
-                request.method in ['GET', 'POST', 'PUT', 'DELETE'] and 'twofa-configs' in request.path
-            )
-            
             if is_ajax:
                 return jsonify({"status": "error", "message": "No autenticado"}), 401
-            else:
-                flash('Por favor inicie sesión para acceder a esta página.', 'danger')
-                return redirect(url_for('user_auth_bp.login'))
+            flash('Por favor inicie sesión para acceder a esta página.', 'danger')
+            return redirect(url_for('user_auth_bp.login'))
         
         # Verificar también que is_user esté presente para usuarios normales
         if request.path.startswith('/usuario/') and 'is_user' not in session:
             flash('Por favor inicie sesión para acceder a esta página.', 'danger')
             return redirect(url_for('user_auth_bp.login'))
+
+        token_reject = ensure_user_session_token_valid(is_ajax=is_ajax)
+        if token_reject is not None:
+            return token_reject
         
         return f(*args, **kwargs)
     return decorated_function
@@ -65,21 +65,14 @@ def check_session_revocation_user():
     Verifica si el usuario principal o sub-usuario sigue habilitado o existe.
     Si no, fuerza cierre de sesión y redirige a login.
     Además, fuerza cierre de sesión si el contador user_session_rev_count cambió (revocación individual).
+    Valida session_token (alineado con admin).
     NOTA: La verificación global session_revocation_count ahora se maneja en app/__init__.py
     """
     # Excluir rutas de login y logout para evitar loops infinitos
     if request.endpoint in ['user_auth_bp.login', 'user_auth_bp.logout']:
         return None
     
-    # Detectar si es una petición AJAX/JSON
-    is_ajax = (
-        request.is_json or 
-        request.headers.get('Content-Type', '').startswith('application/json') or
-        request.headers.get('X-Requested-With') == 'XMLHttpRequest' or
-        request.path.startswith('/api/') or
-        request.path.startswith('/usuario/my_page/') or
-        request.method in ['GET', 'POST', 'PUT', 'DELETE'] and 'twofa-configs' in request.path
-    )
+    is_ajax = _user_request_is_ajax()
     
     if "logged_in" in session and "is_user" in session:
         user_id = session.get("user_id")
@@ -104,6 +97,10 @@ def check_session_revocation_user():
                     return jsonify({"status": "error", "message": "Tu sesión se ha cerrado por un cambio en tu configuración de usuario."}), 401
                 flash("Tu sesión se ha cerrado por un cambio en tu configuración de usuario.", "info")
                 return redirect(url_for("user_auth_bp.login"))
+
+            token_reject = ensure_user_session_token_valid(is_ajax=is_ajax)
+            if token_reject is not None:
+                return token_reject
     
     return None
 
@@ -496,18 +493,10 @@ def my_page_twofa_configs(server_id):
     if request.method == "GET":
         # Implementar directamente sin llamar a función del admin
         try:
+            from app.utils.totp_config_serialize import serialize_twofa_config
+
             configs = IMAP2TwoFAConfig.query.filter_by(imap_server_id=server_id).order_by(IMAP2TwoFAConfig.created_at.desc()).all()
-            configs_data = []
-            for config in configs:
-                configs_data.append({
-                    'id': config.id,
-                    'secret_key': config.secret_key,
-                    'emails': config.emails,
-                    'emails_list': config.get_emails_list(),
-                    'is_enabled': config.is_enabled,
-                    'created_at': config.created_at.isoformat() if config.created_at else None,
-                    'updated_at': config.updated_at.isoformat() if config.updated_at else None
-                })
+            configs_data = [serialize_twofa_config(c, include_secret=False) for c in configs]
             return jsonify({'success': True, 'configs': configs_data}), 200
         except Exception as e:
             return jsonify({'success': False, 'error': str(e)}), 500
@@ -547,7 +536,7 @@ def my_page_twofa_configs(server_id):
             db.session.rollback()
             return jsonify({'success': False, 'error': str(e)}), 500
 
-@user_auth_bp.route("/my_page/twofa-configs/<int:config_id>", methods=["PUT", "DELETE"])
+@user_auth_bp.route("/my_page/twofa-configs/<int:config_id>", methods=["GET", "PUT", "DELETE"])
 @login_required
 @csrf_exempt_route
 def my_page_twofa_config(config_id):
@@ -565,6 +554,13 @@ def my_page_twofa_config(config_id):
     # Verificar permiso
     if user not in config.imap_server.allowed_users.all():
         return jsonify({"status": "error", "message": "No tienes permiso"}), 403
+
+    if request.method == "GET":
+        from app.utils.totp_config_serialize import serialize_twofa_config
+        return jsonify({
+            'success': True,
+            'config': serialize_twofa_config(config, include_secret=True),
+        }), 200
     
     if request.method == "PUT":
         # Implementar actualización directamente

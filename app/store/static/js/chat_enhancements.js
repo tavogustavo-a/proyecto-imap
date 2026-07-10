@@ -157,14 +157,27 @@ function renderMessage(messageData) {
     if (messageCache.has(cacheKey)) {
         return messageCache.get(cacheKey);
     }
+
+    const escapeHtml =
+        typeof window.escapeChatHtml === 'function'
+            ? window.escapeChatHtml
+            : function (text) {
+                  if (text == null) return '';
+                  return String(text)
+                      .replace(/&/g, '&amp;')
+                      .replace(/</g, '&lt;')
+                      .replace(/>/g, '&gt;')
+                      .replace(/"/g, '&quot;')
+                      .replace(/'/g, '&#39;');
+              };
     
     // Crear elemento de mensaje
     const messageElement = document.createElement('div');
     messageElement.className = `message ${messageData.sender_id === 'user' ? 'own-message' : 'other-message'}`;
     messageElement.innerHTML = `
         <div class="message-content">
-            <p>${messageData.message}</p>
-            <span class="message-time">${new Date(messageData.created_at).toLocaleTimeString()}</span>
+            <p>${escapeHtml(messageData.message || '')}</p>
+            <span class="message-time">${escapeHtml(new Date(messageData.created_at).toLocaleTimeString())}</span>
         </div>
     `;
     

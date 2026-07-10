@@ -4,7 +4,7 @@
 
 {% block head %}
   {{ super() }}
-  <link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}?v={{ licencias_static_version }}">
+  <link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}?v=20260708-portal-renewal-pending-v10">
   <link rel="stylesheet" href="{{ url_for('static', filename='fontawesome/css/all.css') }}">
 {% endblock %}
 
@@ -101,16 +101,18 @@
     {% endif %}
     {% if is_admin %}
       <a href="{{ url_for('admin_bp.dashboard') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-cogs"></i> Administración</a>
+    {% endif %}
+    {% if proveedor_nav and not licencias_view_only|default(false) %}
+      <button type="button" id="btnUserProveedorGestionarProductos" class="btn-panel btn-blue mobile-menu-btn mb-04 w-100 user-proveedor-gestionar-productos-btn" title="Reserva gar. de tus productos como proveedor">
+        <i class="fas fa-list" aria-hidden="true"></i> Gestionar productos
+      </button>
+    {% endif %}
+    {% if is_admin %}
       <a href="{{ url_for('auth_bp.logout') }}" class="btn-panel btn-red mobile-menu-btn mb-04"><i class="fas fa-sign-out-alt"></i> Cerrar Sesión</a>
     {% elif is_user %}
       <a href="{{ url_for('user_auth_bp.logout') }}" class="btn-panel btn-red mobile-menu-btn mb-04"><i class="fas fa-sign-out-alt"></i> Cerrar Sesión</a>
     {% else %}
       <a href="{{ url_for('user_auth_bp.logout') }}" class="btn-panel btn-red mobile-menu-btn mb-04"><i class="fas fa-sign-out-alt"></i> Cerrar Sesión</a>
-    {% endif %}
-    {% if proveedor_nav %}
-      <button type="button" id="btnUserProveedorGestionarProductos" class="btn-panel btn-blue mobile-menu-btn mb-04 w-100 user-proveedor-gestionar-productos-btn" title="Reserva gar. de tus productos como proveedor">
-        <i class="fas fa-list" aria-hidden="true"></i> Gestionar productos
-      </button>
     {% endif %}
     {% include 'includes/store_user_menu_saldo_block.html' %}
   </div>
@@ -127,11 +129,11 @@
     <div class="user-lic-caducidad-notify-bar__inner">
       <div class="user-lic-caducidad-notify-bar__lead-row">
         <label class="user-lic-caducidad-notify-bar__check" title="Activar avisos de caducidad">
-          <input type="checkbox" id="userLicCaducidadNotifyEnabled" autocomplete="off">
+          <input type="checkbox" id="userLicCaducidadNotifyEnabled" name="userLicCaducidadNotifyEnabled" autocomplete="off">
           <span class="user-lic-caducidad-notify-bar__lead-text">Activa si quieres que te avise sobre cuentas que vencen. Puedes avisar desde 5 días, repetidamente hasta 1 día.</span>
         </label>
         <label class="user-lic-caducidad-notify-bar__days" for="userLicCaducidadNotifyFromDays">
-          <select id="userLicCaducidadNotifyFromDays" class="user-lic-caducidad-notify-bar__select" disabled autocomplete="off" aria-label="Días para avisar antes del vencimiento">
+          <select id="userLicCaducidadNotifyFromDays" name="userLicCaducidadNotifyFromDays" class="user-lic-caducidad-notify-bar__select" disabled autocomplete="off" aria-label="Días para avisar antes del vencimiento">
             <option value="5">5 días</option>
             <option value="4">4 días</option>
             <option value="3">3 días</option>
@@ -144,22 +146,27 @@
     </div>
   </div>
 
+  {% if licencias_view_only|default(false) %}
+  <div class="store-view-only-banner" role="status">
+    Solo visualización: puedes ver las licencias del usuario principal, pero no editar estados, notas ni inventario.
+  </div>
+  {% endif %}
+
   <div id="userLicCaducidadAlertStack" class="user-lic-caducidad-alert-stack" aria-live="polite" aria-label="Alertas de caducidad" hidden></div>
 
   <div id="userLicenciasGridHost" class="licencias-container user-licencias-grid-host mb-3 w-100 d-none" hidden aria-hidden="true">
     <div id="userLicenciasGrid" class="licenses-grid"></div>
   </div>
 
-  <div id="userLicenciasTableOuter" class="user-licencias-view-wrap w-100" data-api-url="{{ url_for('store_bp.api_user_my_license_accounts') }}" data-rev-url="{{ url_for('store_bp.api_user_my_license_portal_rev') }}" data-stream-url="{{ url_for('store_bp.api_user_my_license_portal_stream') }}" data-day-status-url="{{ url_for('store_bp.api_user_license_day_row_status') }}" data-warranty-incidents-url="{{ url_for('store_bp.api_user_license_warranty_incidents') }}" data-proveedor-url="{{ url_for('store_bp.api_user_proveedor_inventory_get') }}" data-proveedor-products-url="{{ url_for('store_bp.api_user_proveedor_products_get') }}">
+  <div id="userLicenciasTableOuter" class="user-licencias-view-wrap w-100{% if licencias_view_only|default(false) %} user-licencias-view-only{% endif %}" data-api-url="{{ url_for('store_bp.api_user_my_license_accounts') }}" data-rev-url="{{ url_for('store_bp.api_user_my_license_portal_rev') }}" data-stream-url="{{ url_for('store_bp.api_user_my_license_portal_stream') }}" data-day-status-url="{{ url_for('store_bp.api_user_license_day_row_status') }}" data-warranty-incidents-url="{{ url_for('store_bp.api_user_license_warranty_incidents') }}" data-proveedor-url="{{ url_for('store_bp.api_user_proveedor_inventory_get') }}" data-proveedor-products-url="{{ url_for('store_bp.api_user_proveedor_products_get') }}" data-licencias-view-only="{% if licencias_view_only|default(false) %}1{% else %}0{% endif %}">
     <p class="text-center user-licencias-empty py-4 mb-0" id="userLicenciasLoadingMsg">Cargando licencias…</p>
   </div>
 
   <section id="userLicReportesPanel" class="admin-licencias-reportes-panel user-lic-reportes-panel d-none" role="region" aria-label="Reportes de tus licencias vendidas" aria-hidden="true" hidden>
     <div class="admin-licencias-reportes-inner">
-      <p class="admin-licencias-reportes-hint mb-2">Solo cuentas de <strong>tus licencias asignadas</strong> con incidencia (estado rojo).</p>
       <div class="admin-licencias-reportes-controls">
         <label for="userLicReportesSearch" class="sr-only">Filtrar lista de reportes</label>
-        <input type="search" id="userLicReportesSearch" class="form-control admin-licencias-reportes-search" placeholder="Filtrar por cuenta, producto, día…" autocomplete="off">
+        <input type="search" id="userLicReportesSearch" name="userLicReportesSearch" class="form-control admin-licencias-reportes-search" placeholder="Filtrar por cuenta, producto, día…" autocomplete="off">
       </div>
       <div class="admin-licencias-reportes-table-scroll">
         <table class="admin-licencias-reportes-table" role="grid" aria-label="Reportes de tus licencias">
@@ -218,5 +225,6 @@
 {% block scripts %}
 {{ super() }}
 <script src="{{ url_for('static', filename='js/menu_busqueda.js') }}" defer></script>
-<script src="{{ url_for('store_bp.static', filename='js/user_licencias.js') }}?v={{ licencias_static_version }}" defer></script>
+<script src="{{ url_for('store_bp.static', filename='js/licencias_shared.js') }}?v=20260708-portal-renewal-pending-v10" defer></script>
+<script src="{{ url_for('store_bp.static', filename='js/user_licencias.js') }}?v=20260710-csrf-user-lic" defer></script>
 {% endblock %}

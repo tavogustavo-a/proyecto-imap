@@ -2,6 +2,20 @@
 // CHAT UNIFIED - VERSIÓN LIMPIA - CON MENSAJES TEMPORALES
 // ============================================================================
 
+/** Escapa texto de usuario antes de insertarlo en innerHTML (anti-XSS). */
+function escapeChatHtml(text) {
+    if (text == null) return '';
+    return String(text)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+if (typeof window !== 'undefined') {
+    window.escapeChatHtml = escapeChatHtml;
+}
+
 // Variables globales
 let chatCurrentUserId = null;
 let chatCurrentUsername = null;
@@ -333,14 +347,14 @@ function addUserMessage(messageData) {
             senderLabel = ''; // No mostrar etiqueta para mensajes propios
         } else {
             // Solo mostrar etiqueta si es un mensaje de otro usuario (no debería pasar en chat de soporte)
-            senderLabel = `<span class="message-sender-inline user-inline">${messageData.sender_name || 'Usuario'}: </span>`;
+            senderLabel = `<span class="message-sender-inline user-inline">${escapeChatHtml(messageData.sender_name || 'Usuario')}: </span>`;
         }
     } else if (messageData.message_type === 'system') {
         // ✅ NUEVO: Mensaje del sistema (centrado, estilo especial)
         senderLabel = '<span class="message-sender-inline system-inline">Sistema: </span>';
     }
     
-    const messageTime = formatTimeAgo(messageData.created_at || messageData.timestamp);
+    const messageTime = escapeChatHtml(formatTimeAgo(messageData.created_at || messageData.timestamp));
     
     // Verificar si es un mensaje con archivos
     if (messageData.has_attachment) {
@@ -484,7 +498,7 @@ function addUserMessage(messageData) {
         // Mensaje de texto normal
         messageElement.innerHTML = `
             <div class="message-content">
-                <div class="message-text">${senderLabel}${messageData.message}</div>
+                <div class="message-text">${senderLabel}${escapeChatHtml(messageData.message || '')}</div>
                 <div class="message-time">${messageTime}</div>
             </div>
         `;

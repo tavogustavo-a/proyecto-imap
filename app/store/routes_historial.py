@@ -29,11 +29,28 @@ from .routes import (
     _ensure_balance_recharges_table,
     _ensure_license_account_sale_id_column,
     _ensure_user_portal_license_activity_log_column,
+    _json_licencias_view_only_forbidden,
     _user_licencias_viewer_scope,
     _user_store_proveedor_flag,
+    _user_store_view_only,
     csrf_exempt_route,
     store_access_required,
 )
+
+
+def _historial_show_individual_sale_row(*, is_reversed, renewal_kind, snap_row):
+    """
+    Compras, renovaciones de licencia y reservas cumplidas van solo en resumen diario.
+    Filas sueltas: revertidas, renovar tu cuenta, ventas sin snapshot.
+    """
+    if is_reversed:
+        return True
+    if renewal_kind == 'customer_account':
+        return True
+    if snap_row is None:
+        return True
+    return False
+
 
 @store_bp.route('/admin/purchase_history')
 @admin_required
@@ -100,6 +117,15 @@ def historial_compras_usuario():
         )
 
     compras_info = []
+    from app.store.product_reservations import (
+        build_reservation_historial_items,
+        fulfilled_reservation_map_for_sale_ids,
+        historial_product_label_with_reservation,
+    )
+
+    sale_ids_for_res = [row[0].id for row in compras]
+    fulfilled_res_by_sale = fulfilled_reservation_map_for_sale_ids(sale_ids_for_res)
+
     for row in compras:
         if mostrar_usuario_comprador:
             sale, product, comprador = row
@@ -118,11 +144,14 @@ def historial_compras_usuario():
         licencias, is_reversed, is_renewal, snap_id = get_licencias_for_sale_row(sale)
         snap_row = SalePurchaseSnapshot.query.get(snap_id) if snap_id else None
         renewal_kind = resolve_renewal_kind_for_sale(sale, snap_row) if is_renewal else None
-        producto_label = product.name
+        producto_label = historial_product_label_with_reservation(
+            product.name, sale.id, fulfilled_res_by_sale
+        )
         if is_reversed:
             producto_label = producto_label + ' (compra revertida)'
 
         sort_ts = sale.created_at.timestamp() if sale.created_at else 0.0
+        res_info = fulfilled_res_by_sale.get(int(sale.id))
         item = {
             'id': sale.id,
             'fecha': fecha_str,
@@ -138,6 +167,10 @@ def historial_compras_usuario():
             'has_licencias': len(licencias) > 0,
             'sort_ts': sort_ts,
         }
+        if res_info:
+            item['is_reservation_fulfilled'] = True
+            item['reservation_kind'] = res_info.get('kind')
+            item['reservation_fulfilled_label'] = res_info.get('suffix')
         if mostrar_usuario_comprador and comprador is not None:
             item['user_id'] = comprador.id
             item['usuario'] = comprador.username
@@ -145,13 +178,61 @@ def historial_compras_usuario():
             from app.store.customer_account_renewals import enrich_historial_item_customer_renewal
 
             enrich_historial_item_customer_renewal(item, sale_id=sale.id)
+        if not _historial_show_individual_sale_row(
+            is_reversed=is_reversed,
+            renewal_kind=renewal_kind,
+            snap_row=snap_row,
+        ):
+            continue
         compras_info.append(item)
+
+    try:
+        compras_info.extend(
+            build_reservation_historial_items(all_users=True, utc_to_colombia_fn=utc_to_colombia)
+            if mostrar_usuario_comprador
+            else build_reservation_historial_items(user_id=user.id, utc_to_colombia_fn=utc_to_colombia)
+        )
+    except Exception as res_hist_exc:
+        current_app.logger.warning('Historial reservas canceladas: %s', res_hist_exc)
 
     archived_q = SalePurchaseSnapshot.query.filter_by(purged_from_sales=True)
     if not mostrar_usuario_comprador:
         archived_q = archived_q.filter_by(user_id=user.id)
-    for snap in archived_q.order_by(SalePurchaseSnapshot.sale_created_at.desc()).all():
-        compras_info.append(snapshot_to_historial_item(snap))
+    archived_snaps = archived_q.order_by(SalePurchaseSnapshot.sale_created_at.desc()).all()
+    archived_sale_ids = [s.sale_id for s in archived_snaps if s.sale_id]
+    archived_res_by_sale = fulfilled_reservation_map_for_sale_ids(archived_sale_ids)
+    for snap in archived_snaps:
+        item = snapshot_to_historial_item(snap)
+        if snap.sale_id and int(snap.sale_id) in archived_res_by_sale:
+            res_info = archived_res_by_sale[int(snap.sale_id)]
+            base_name = (snap.product_name or 'Compra').split(' (')[0]
+            item['producto'] = historial_product_label_with_reservation(
+                base_name, snap.sale_id, archived_res_by_sale
+            )
+            if snap.is_reversed:
+                item['producto'] = item['producto'] + ' (compra revertida)'
+            item['is_reservation_fulfilled'] = True
+            item['reservation_kind'] = res_info.get('kind')
+            item['reservation_fulfilled_label'] = res_info.get('suffix')
+        arch_renewal_kind = (
+            resolve_renewal_kind_for_sale(
+                Sale.query.get(snap.sale_id) if snap.sale_id else None,
+                snap,
+            )
+            if snap.is_renewal and snap.sale_id
+            else None
+        )
+        if arch_renewal_kind == 'customer_account' and snap.sale_id:
+            from app.store.customer_account_renewals import enrich_historial_item_customer_renewal
+
+            enrich_historial_item_customer_renewal(item, sale_id=snap.sale_id)
+        if not _historial_show_individual_sale_row(
+            is_reversed=bool(snap.is_reversed),
+            renewal_kind=arch_renewal_kind,
+            snap_row=snap,
+        ):
+            continue
+        compras_info.append(item)
 
     _ensure_balance_recharges_table()
     from app.store.balance_recharge_historial_snapshot import ensure_snapshot_table
@@ -812,7 +893,6 @@ def api_purchase_history_my_stats():
     return _attach_private_no_cache_headers(jsonify(data))
 
 @store_bp.route('/api/purchase-history/my-proveedor-daily-summary/delete', methods=['POST'])
-@csrf_exempt_route
 @store_access_required
 def api_purchase_history_my_proveedor_daily_summary_delete():
     """Borra un día concreto del resumen diario del proveedor en sesión."""
@@ -825,6 +905,8 @@ def api_purchase_history_my_proveedor_daily_summary_delete():
     user = User.query.get(int(user_id))
     if not user:
         return jsonify({'success': False, 'error': 'Usuario no encontrado.'}), 404
+    if _user_store_view_only(user):
+        return _json_licencias_view_only_forbidden()
     billing = _balance_recharge_viewer_billing_user(user) or user
     if not _user_store_proveedor_flag(billing):
         return jsonify({'success': False, 'error': 'Sin permiso de proveedor.'}), 403

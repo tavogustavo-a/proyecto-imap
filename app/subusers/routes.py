@@ -25,6 +25,12 @@ def login_required(f):
         if 'logged_in' not in session:
             flash('Por favor inicie sesión para acceder a esta página.', 'danger')
             return redirect(url_for('user_auth_bp.login'))
+        # Misma validación de session_token que usuarios / admin
+        if session.get('is_user'):
+            from app.auth.session_guards import ensure_user_session_token_valid
+            token_reject = ensure_user_session_token_valid()
+            if token_reject is not None:
+                return token_reject
         return f(*args, **kwargs)
     return decorated_function
 
@@ -1759,8 +1765,14 @@ def save_tools_permissions(subuser_id):
     from app.store.models import ToolInfo, HtmlInfo, YouTubeListing, ApiInfo
     sub_user = User.query.get_or_404(subuser_id)
     parent_user = User.query.get(sub_user.parent_id)
-    if not parent_user:
-        return jsonify({"status": "error", "message": "Padre no encontrado"}), 400
+    admin_username = current_app.config.get("ADMIN_USER", "admin")
+    if not parent_user or (
+        session.get("user_id") != parent_user.id
+        and session.get("username") != admin_username
+    ):
+        return jsonify(
+            {"status": "error", "message": "No tienes permiso para modificar este sub-usuario."}
+        ), 403
 
     data = request.get_json()
     tool_ids = data.get("tool_ids", [])
@@ -1942,21 +1954,46 @@ def list_twofa_configs_subuser():
 
     try:
         from app.store.models import TwoFAConfig
+        from app.utils.totp_config_serialize import serialize_twofa_config
+
         configs = TwoFAConfig.query.order_by(TwoFAConfig.created_at.desc()).all()
-        configs_data = []
-        for config in configs:
-            configs_data.append({
-                'id': config.id,
-                'secret_key': config.secret_key,
-                'emails': config.emails,
-                'emails_list': config.get_emails_list(),
-                'is_enabled': config.is_enabled,
-                'created_at': config.created_at.isoformat() if config.created_at else None,
-                'updated_at': config.updated_at.isoformat() if config.updated_at else None
-            })
+        configs_data = [serialize_twofa_config(c, include_secret=False) for c in configs]
         return jsonify({'success': True, 'configs': configs_data}), 200
     except Exception as e:
         current_app.logger.error(f"Error al listar configuraciones 2FA: {e}", exc_info=True)
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@subuser_bp.route('/twofa-configs/<int:config_id>', methods=['GET'])
+def get_twofa_config_subuser(config_id):
+    """Detalle de una config 2FA (incluye secreto para editar)."""
+    if not can_access_subusers():
+        return jsonify({'success': False, 'error': 'No autorizado'}), 403
+
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({'success': False, 'error': 'No hay usuario logueado.'}), 401
+
+    user = User.query.get(user_id)
+    if not user:
+        return jsonify({'success': False, 'error': 'Usuario no encontrado.'}), 404
+
+    if user.parent_id:
+        return jsonify({'success': False, 'error': 'Los sub-usuarios no pueden gestionar 2FA.'}), 403
+
+    if not user.can_manage_2fa_emails:
+        return jsonify({'success': False, 'error': 'No tienes permiso para gestionar 2FA por correo.'}), 403
+
+    try:
+        from app.store.models import TwoFAConfig
+        from app.utils.totp_config_serialize import serialize_twofa_config
+
+        config = TwoFAConfig.query.get_or_404(config_id)
+        return jsonify({
+            'success': True,
+            'config': serialize_twofa_config(config, include_secret=True),
+        }), 200
+    except Exception as e:
+        current_app.logger.error(f"Error al obtener configuración 2FA: {e}", exc_info=True)
         return jsonify({'success': False, 'error': str(e)}), 500
 
 @subuser_bp.route('/twofa-configs', methods=['POST'])

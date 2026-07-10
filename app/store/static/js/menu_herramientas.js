@@ -1653,62 +1653,6 @@ function initHttpApiForm() {
     });
 }
 
-function initDbApiForm() {
-    document.querySelectorAll('.api-db-form').forEach(form => {
-        const sqlInput = form.querySelector('.api-db-sql');
-        const resultado = form.parentElement.querySelector('.api-db-resultado');
-        // Obtener el api_id del acordeón
-        let apiId = null;
-        // Verificación segura para closest
-        let card = null;
-        if (form && typeof form.closest === 'function') {
-            card = form.closest('.herramienta-accordion');
-        }
-        if (card && card.dataset && card.dataset.apiId) {
-            apiId = card.dataset.apiId;
-        } else if (card && card.getAttribute('data-api-id')) {
-            apiId = card.getAttribute('data-api-id');
-        }
-        form.addEventListener('submit', async function(e) {
-            e.preventDefault();
-            const sql = sqlInput.value.trim();
-            if (!sql) return;
-            resultado.innerHTML = `<div class='text-center'><div class='spinner-border' role='status'><span class='visually-hidden'>Cargando...</span></div></div>`;
-            try {
-                const response = await fetch('/tienda/tools/db-query', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-CSRFToken': document.querySelector('meta[name="csrf_token"]').getAttribute('content')
-                    },
-                    body: JSON.stringify({ sql, api_id: apiId })
-                });
-                const data = await response.json();
-                if (!response.ok) {
-                    throw new Error(data.error || 'Error desconocido');
-                }
-                // Crear tabla
-                if (!data.rows || data.rows.length === 0) {
-                    resultado.innerHTML = `<div class='alert alert-warning'>No se encontraron resultados.</div>`;
-                    return;
-                }
-                let tableHtml = `<div class='table-responsive'><table class='table table-sm table-bordered bg-light'><thead><tr>`;
-                data.columns.forEach(col => { tableHtml += `<th>${col}</th>`; });
-                tableHtml += `</tr></thead><tbody>`;
-                data.rows.forEach(row => {
-                    tableHtml += `<tr>`;
-                    data.columns.forEach(col => { tableHtml += `<td>${row[col]}</td>`; });
-                    tableHtml += `</tr>`;
-                });
-                tableHtml += `</tbody></table></div>`;
-                resultado.innerHTML = `<div class='alert alert-info'><div class="d-flex align-items-center mb-2"><i class="fas fa-database text-info me-2"></i><strong>🗄️ Resultado de consulta SQL</strong></div>${tableHtml}<p class="mb-0 mt-2"><small class="text-muted">🔍 Consulta ejecutada: <code>${sql}</code></small></p></div>`;
-            } catch (error) {
-                resultado.innerHTML = `<div class='alert alert-danger'>${error.message}</div>`;
-            }
-        });
-    });
-}
-
 // Función optimizada para agregar event listeners pasivos
 function addOptimizedEventListeners() {
   // Optimizar todos los inputs de la página
@@ -1939,7 +1883,6 @@ document.addEventListener('DOMContentLoaded', function() {
   initChatbotIAForm();
   initGenericaForm();
   initHttpApiForm();
-  initDbApiForm();
   
   // Aplicar optimizaciones adicionales
   addOptimizedEventListeners();

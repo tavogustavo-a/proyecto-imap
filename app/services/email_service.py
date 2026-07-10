@@ -1,11 +1,147 @@
 import smtplib
 import random
+import os
+import re
+from datetime import datetime
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from email.header import Header
-import os
+from email.utils import formataddr, formatdate, make_msgid
 from app.extensions import db
 from flask import current_app, render_template
+
+
+def _smtp_credentials():
+    smtp_host = os.getenv("SMTP_HOST", "smtp.gmail.com")
+    smtp_port = int(os.getenv("SMTP_PORT", "465"))
+    smtp_user = (os.getenv("SMTP_USER", "") or "").strip()
+    smtp_password = os.getenv("SMTP_PASSWORD", "")
+    return smtp_host, smtp_port, smtp_user, smtp_password
+
+
+def _is_valid_email_address(value: str) -> bool:
+    em = (value or "").strip()
+    if not em or "@" not in em:
+        return False
+    return bool(re.match(r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$", em))
+
+
+def email_recipient_display_name(user) -> str:
+    """
+    Nombre seguro para el saludo del correo.
+    Evita «Hola, 1» u otros usernames numéricos/cortos que parecen spam.
+    """
+    if not user:
+        return ""
+    full = (getattr(user, "full_name", None) or "").strip()
+    if full and not re.match(r"^\d+$", full):
+        return full
+    un = (getattr(user, "username", None) or "").strip()
+    if not un or un.lower() in ("anonimo", "generico", "genérico"):
+        return ""
+    if re.match(r"^\d+$", un):
+        return ""
+    if len(un) <= 2:
+        return ""
+    return un
+
+
+def _transactional_reply_to(smtp_user: str) -> str | None:
+    """Reply-To distinto del From autenticado mejora confianza; si no hay soporte, omitir."""
+    raw = (os.getenv("SMTP_REPLY_TO", "") or os.getenv("SUPPORT_EMAIL", "") or "").strip()
+    if raw and _is_valid_email_address(raw) and raw.lower() != (smtp_user or "").lower():
+        return raw
+    return None
+
+
+def send_transactional_email(
+    to_email,
+    subject,
+    body_text,
+    body_html=None,
+    *,
+    from_display_name="Tu Premium",
+):
+    """
+    Correo transaccional (tienda, renovaciones, etc.) vía SMTP autenticado.
+    Mismas credenciales que OTP: SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASSWORD.
+    Cabeceras alineadas con buenas prácticas (From = cuenta autenticada, texto + HTML).
+    """
+    to_email = (to_email or "").strip()
+    if not _is_valid_email_address(to_email):
+        current_app.logger.warning(
+            "Email transaccional omitido: destinatario inválido (%r).", to_email
+        )
+        return False
+
+    smtp_host, smtp_port, smtp_user, smtp_password = _smtp_credentials()
+    if not smtp_user or not smtp_password:
+        current_app.logger.error(
+            "SMTP_USER o SMTP_PASSWORD no configurados. No se puede enviar email transaccional."
+        )
+        return False
+
+    subject = (subject or "").strip() or "Aviso de Tu Premium"
+    body_text = (body_text or "").strip() or subject
+
+    msg = MIMEMultipart("alternative")
+    msg["Subject"] = str(Header(subject, "utf-8"))
+    msg["From"] = formataddr((from_display_name, smtp_user))
+    msg["To"] = to_email
+    reply_to = _transactional_reply_to(smtp_user)
+    if reply_to:
+        msg["Reply-To"] = formataddr(("Soporte Tu Premium", reply_to))
+    msg["Date"] = formatdate(localtime=True)
+    domain = smtp_user.split("@")[-1] if "@" in smtp_user else "localhost"
+    msg["Message-ID"] = make_msgid(domain=domain)
+    msg["MIME-Version"] = "1.0"
+    msg["Content-Language"] = "es"
+    msg["Auto-Submitted"] = "auto-generated"
+    msg["X-Auto-Response-Suppress"] = "All"
+
+    msg.attach(MIMEText(body_text, "plain", "utf-8"))
+    if body_html:
+        msg.attach(MIMEText(body_html, "html", "utf-8"))
+
+    try:
+        with smtplib.SMTP_SSL(smtp_host, smtp_port) as server:
+            server.login(smtp_user, smtp_password)
+            server.sendmail(smtp_user, [to_email], msg.as_string())
+        current_app.logger.info("Email transaccional enviado a %s", to_email)
+        return True
+    except Exception as e:
+        current_app.logger.error(
+            "No se pudo enviar email transaccional a %s: %s", to_email, e
+        )
+        return False
+
+
+def render_transactional_email_html(
+    email_title, recipient_name, paragraphs, *, preheader=None, include_store_link=True
+):
+    """Plantilla HTML con autoescape para párrafos de texto plano."""
+    safe_name = (recipient_name or "").strip()
+    para_list = [str(p).strip() for p in (paragraphs or []) if str(p).strip()]
+    pre = (preheader or "").strip()
+    if not pre and para_list:
+        pre = para_list[0][:120]
+    ctx = dict(
+        email_title=email_title,
+        recipient_name=safe_name,
+        paragraphs=para_list,
+        preheader=pre,
+        year=datetime.utcnow().year,
+        store_url=None,
+    )
+    with current_app.test_request_context():
+        if include_store_link:
+            try:
+                from flask import url_for
+
+                ctx["store_url"] = url_for("store_bp.store_front", _external=True)
+            except Exception:
+                ctx["store_url"] = None
+        return render_template("email_transactional_template.html", **ctx)
 
 def send_otp_email(to_email, code):
     """

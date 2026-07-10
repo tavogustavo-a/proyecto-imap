@@ -1,14 +1,20 @@
 /**
- * Configuración tienda pública (preferencias locales por usuario).
+ * Configuración tienda pública.
+ * Con sesión: fuente de verdad en BD (`users.store_front_ui_prefs`).
+ * localStorage se usa como caché local y para migrar una vez a BD.
  */
 (function () {
   const STORAGE_PREFIX = 'storeFrontPrefs_';
   const VIEW_GRID = 'grid';
   const VIEW_LIST = 'list';
   const VIEW_COMPACT = 'compact';
-  const VIEW_TABLE = 'table';
   const VIEW_TEXT = 'text';
   const VIEW_6 = 'view6';
+  const API_URL = '/tienda/api/store-front-ui-prefs';
+
+  var __storePrefsSaveTimer = null;
+  var __storePrefsLegacyMigrated = false;
+  var __storePrefsMemory = null;
 
   function prefsStorageKey() {
     const el = document.getElementById('storeFrontPrefsScope');
@@ -16,7 +22,12 @@
     return STORAGE_PREFIX + (uid ? String(uid) : 'anon');
   }
 
-  function readPrefs() {
+  function canPersistServer() {
+    const el = document.getElementById('storeFrontPrefsScope');
+    return !!(el && el.getAttribute('data-persist-server') === '1' && document.getElementById('storeFrontUiPrefsJson'));
+  }
+
+  function readLocalPrefs() {
     try {
       const raw = localStorage.getItem(prefsStorageKey());
       return raw ? JSON.parse(raw) : {};
@@ -25,9 +36,98 @@
     }
   }
 
+  function writeLocalPrefs(prefs) {
+    try {
+      localStorage.setItem(prefsStorageKey(), JSON.stringify(prefs || {}));
+    } catch (e) {}
+  }
+
+  function bootstrapFromDom() {
+    if (__storePrefsMemory) return __storePrefsMemory;
+    var merged = {};
+    var el = document.getElementById('storeFrontUiPrefsJson');
+    if (el) {
+      try {
+        var parsed = JSON.parse(String(el.textContent || '').trim() || '{}');
+        if (parsed && typeof parsed === 'object') {
+          merged = Object.assign({}, parsed);
+        }
+      } catch (_e) {}
+    }
+    if (!Object.keys(merged).length) {
+      merged = Object.assign({}, readLocalPrefs());
+    }
+    __storePrefsMemory = merged;
+    return __storePrefsMemory;
+  }
+
+  function readPrefs() {
+    if (canPersistServer()) {
+      return Object.assign({}, bootstrapFromDom());
+    }
+    return readLocalPrefs();
+  }
+
+  function scheduleServerSave() {
+    if (!canPersistServer()) return;
+    if (__storePrefsSaveTimer) window.clearTimeout(__storePrefsSaveTimer);
+    __storePrefsSaveTimer = window.setTimeout(function () {
+      __storePrefsSaveTimer = null;
+      void flushServerSave();
+    }, 420);
+  }
+
+  function getCsrfToken() {
+    var meta = document.querySelector('meta[name="csrf_token"]');
+    if (meta && meta.getAttribute('content')) {
+      return meta.getAttribute('content');
+    }
+    var match = document.cookie ? document.cookie.match(/(?:^|;\s*)_csrf=([^;]+)/) : null;
+    return match ? decodeURIComponent(match[1]) : '';
+  }
+
+  async function flushServerSave() {
+    if (!canPersistServer() || !__storePrefsMemory) return;
+    var payload = JSON.stringify({ prefs: __storePrefsMemory });
+    for (var attempt = 0; attempt < 3; attempt++) {
+      try {
+        var headers = { 'Content-Type': 'application/json' };
+        var csrf = getCsrfToken();
+        if (csrf) headers['X-CSRFToken'] = csrf;
+        var resp = await fetch(API_URL, {
+          method: 'PUT',
+          headers: headers,
+          credentials: 'same-origin',
+          body: payload,
+        });
+        if (!resp.ok) throw new Error('HTTP ' + resp.status);
+        var el = document.getElementById('storeFrontUiPrefsJson');
+        if (el) {
+          try {
+            el.textContent = JSON.stringify(__storePrefsMemory);
+          } catch (_sync) {}
+        }
+        return;
+      } catch (_err) {
+        if (attempt >= 2) return;
+        await new Promise(function (resolve) {
+          window.setTimeout(resolve, 800 * (attempt + 1));
+        });
+      }
+    }
+  }
+
   function writePrefs(partial) {
-    const next = Object.assign({}, readPrefs(), partial || {});
-    localStorage.setItem(prefsStorageKey(), JSON.stringify(next));
+    var next;
+    if (canPersistServer()) {
+      next = Object.assign({}, bootstrapFromDom(), partial || {});
+      __storePrefsMemory = next;
+      writeLocalPrefs(next);
+      scheduleServerSave();
+      return next;
+    }
+    next = Object.assign({}, readLocalPrefs(), partial || {});
+    writeLocalPrefs(next);
     return next;
   }
 
@@ -36,7 +136,7 @@
     let changed = false;
     const patch = {};
     if (prefs.storeView === 'table') {
-      patch.storeView = VIEW_TABLE;
+      patch.storeView = VIEW_LIST;
       changed = true;
     }
     if (changed) {
@@ -44,10 +144,50 @@
     }
   }
 
+  function migrateLocalStorageToServerOnce() {
+    if (__storePrefsLegacyMigrated) return;
+    __storePrefsLegacyMigrated = true;
+    if (!canPersistServer()) return;
+    bootstrapFromDom();
+    var local = readLocalPrefs();
+    if (!local || typeof local !== 'object') return;
+    var dirty = false;
+    var patch = {};
+    if (
+      (__storePrefsMemory.hideZeroStock !== true && __storePrefsMemory.hideZeroStock !== false) &&
+      (local.hideZeroStock === true || local.hideZeroStock === false)
+    ) {
+      patch.hideZeroStock = local.hideZeroStock;
+      dirty = true;
+    }
+    if (
+      (__storePrefsMemory.showPriceTable !== true && __storePrefsMemory.showPriceTable !== false) &&
+      (local.showPriceTable === true || local.showPriceTable === false)
+    ) {
+      patch.showPriceTable = local.showPriceTable;
+      dirty = true;
+    }
+    if (
+      (__storePrefsMemory.priceTableCollapsed !== true &&
+        __storePrefsMemory.priceTableCollapsed !== false) &&
+      (local.priceTableCollapsed === true || local.priceTableCollapsed === false)
+    ) {
+      patch.priceTableCollapsed = local.priceTableCollapsed;
+      dirty = true;
+    }
+    if (!__storePrefsMemory.storeView && local.storeView) {
+      patch.storeView = local.storeView === 'table' ? VIEW_LIST : local.storeView;
+      dirty = true;
+    }
+    if (dirty) {
+      writePrefs(patch);
+    }
+  }
+
   function normalizeStoreView(view) {
     if (view === VIEW_LIST) return VIEW_LIST;
     if (view === VIEW_COMPACT) return VIEW_COMPACT;
-    if (view === VIEW_TABLE) return VIEW_TABLE;
+    if (view === 'table') return VIEW_LIST;
     if (view === VIEW_TEXT) return VIEW_TEXT;
     if (view === VIEW_6) return VIEW_6;
     return VIEW_GRID;
@@ -84,20 +224,10 @@
       'store-products-wrap--view-grid',
       'store-products-wrap--view-list',
       'store-products-wrap--view-compact',
-      'store-products-wrap--view-table',
       'store-products-wrap--view-text',
       'store-products-wrap--view-view6'
     );
     wrap.classList.add('store-products-wrap--view-' + view);
-
-    const hdr = document.getElementById('storeCatalogTableHeader');
-    if (hdr) {
-      const isListColumns = view === VIEW_TABLE;
-      if (!isListColumns) {
-        hdr.hidden = true;
-        hdr.setAttribute('aria-hidden', 'true');
-      }
-    }
 
     const fullTableWrap = document.getElementById('storeCatalogFullTableWrap');
     if (fullTableWrap) {
@@ -106,7 +236,6 @@
       fullTableWrap.setAttribute('aria-hidden', isView6 ? 'false' : 'true');
     }
 
-    document.body.classList.toggle('store-front-active-view-table', view === VIEW_TABLE);
     document.body.classList.toggle('store-front-active-view-text', view === VIEW_TEXT);
     document.body.classList.toggle('store-front-active-view-view6', view === VIEW_6);
 
@@ -264,7 +393,30 @@
     });
   }
 
+  if (typeof window !== 'undefined' && !window._storeFrontPrefsPageHook) {
+    window._storeFrontPrefsPageHook = true;
+    window.addEventListener('pagehide', function () {
+      if (__storePrefsSaveTimer) {
+        window.clearTimeout(__storePrefsSaveTimer);
+        __storePrefsSaveTimer = null;
+      }
+      void flushServerSave();
+    });
+    document.addEventListener('visibilitychange', function () {
+      if (document.visibilityState !== 'hidden') return;
+      if (__storePrefsSaveTimer) {
+        window.clearTimeout(__storePrefsSaveTimer);
+        __storePrefsSaveTimer = null;
+      }
+      void flushServerSave();
+    });
+  }
+
   document.addEventListener('DOMContentLoaded', function () {
+    if (canPersistServer()) {
+      bootstrapFromDom();
+      migrateLocalStorageToServerOnce();
+    }
     migrateLegacyPrefs();
     window.storeFrontApplyStoreView();
     window.storeFrontApplyPriceTablePanel();

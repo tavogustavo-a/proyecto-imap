@@ -1,5 +1,7 @@
 /**
  * Preferencias de vista para botones de servicios (plantilla Códigos).
+ * Con sesión: fuente de verdad en BD (`users.codigos_view_prefs`).
+ * localStorage se usa como caché local y para migrar una vez a BD.
  */
 (function () {
   const STORAGE_PREFIX = 'codigosViewPrefs_';
@@ -8,8 +10,13 @@
   const VIEW_GRID = 'grid';
   const VIEW_TABLE = 'table';
   const VIEW_ICONS = 'icons';
+  const API_URL = '/tienda/api/codigos-view-prefs';
 
   const VIEW_CLASS_PREFIX = 'codigos-services-wrap--view-';
+
+  var __codigosPrefsSaveTimer = null;
+  var __codigosPrefsLegacyMigrated = false;
+  var __codigosPrefsMemory = null;
 
   function prefsStorageKey() {
     const el = document.getElementById('codigosViewPrefsScope');
@@ -17,7 +24,16 @@
     return STORAGE_PREFIX + (uid ? String(uid) : 'anon');
   }
 
-  function readPrefs() {
+  function canPersistServer() {
+    const el = document.getElementById('codigosViewPrefsScope');
+    return !!(
+      el &&
+      el.getAttribute('data-persist-server') === '1' &&
+      document.getElementById('codigosViewPrefsJson')
+    );
+  }
+
+  function readLocalPrefs() {
     try {
       const raw = localStorage.getItem(prefsStorageKey());
       return raw ? JSON.parse(raw) : {};
@@ -26,10 +42,111 @@
     }
   }
 
+  function writeLocalPrefs(prefs) {
+    try {
+      localStorage.setItem(prefsStorageKey(), JSON.stringify(prefs || {}));
+    } catch (e) {}
+  }
+
+  function bootstrapFromDom() {
+    if (__codigosPrefsMemory) return __codigosPrefsMemory;
+    var merged = {};
+    var el = document.getElementById('codigosViewPrefsJson');
+    if (el) {
+      try {
+        var parsed = JSON.parse(String(el.textContent || '').trim() || '{}');
+        if (parsed && typeof parsed === 'object') {
+          merged = Object.assign({}, parsed);
+        }
+      } catch (_e) {}
+    }
+    if (!Object.keys(merged).length) {
+      merged = Object.assign({}, readLocalPrefs());
+    }
+    __codigosPrefsMemory = merged;
+    return __codigosPrefsMemory;
+  }
+
+  function readPrefs() {
+    if (canPersistServer()) {
+      return Object.assign({}, bootstrapFromDom());
+    }
+    return readLocalPrefs();
+  }
+
+  function scheduleServerSave() {
+    if (!canPersistServer()) return;
+    if (__codigosPrefsSaveTimer) window.clearTimeout(__codigosPrefsSaveTimer);
+    __codigosPrefsSaveTimer = window.setTimeout(function () {
+      __codigosPrefsSaveTimer = null;
+      void flushServerSave();
+    }, 420);
+  }
+
+  function getCsrfToken() {
+    var meta = document.querySelector('meta[name="csrf_token"]');
+    if (meta && meta.getAttribute('content')) {
+      return meta.getAttribute('content');
+    }
+    var match = document.cookie ? document.cookie.match(/(?:^|;\s*)_csrf=([^;]+)/) : null;
+    return match ? decodeURIComponent(match[1]) : '';
+  }
+
+  async function flushServerSave() {
+    if (!canPersistServer() || !__codigosPrefsMemory) return;
+    var payload = JSON.stringify({ prefs: __codigosPrefsMemory });
+    for (var attempt = 0; attempt < 3; attempt++) {
+      try {
+        var headers = { 'Content-Type': 'application/json' };
+        var csrf = getCsrfToken();
+        if (csrf) headers['X-CSRFToken'] = csrf;
+        var resp = await fetch(API_URL, {
+          method: 'PUT',
+          headers: headers,
+          credentials: 'same-origin',
+          body: payload,
+        });
+        if (!resp.ok) throw new Error('HTTP ' + resp.status);
+        var el = document.getElementById('codigosViewPrefsJson');
+        if (el) {
+          try {
+            el.textContent = JSON.stringify(__codigosPrefsMemory);
+          } catch (_sync) {}
+        }
+        return;
+      } catch (_err) {
+        if (attempt >= 2) return;
+        await new Promise(function (resolve) {
+          window.setTimeout(resolve, 800 * (attempt + 1));
+        });
+      }
+    }
+  }
+
   function writePrefs(partial) {
-    const next = Object.assign({}, readPrefs(), partial || {});
-    localStorage.setItem(prefsStorageKey(), JSON.stringify(next));
+    var next;
+    if (canPersistServer()) {
+      next = Object.assign({}, bootstrapFromDom(), partial || {});
+      __codigosPrefsMemory = next;
+      writeLocalPrefs(next);
+      scheduleServerSave();
+      return next;
+    }
+    next = Object.assign({}, readLocalPrefs(), partial || {});
+    writeLocalPrefs(next);
     return next;
+  }
+
+  function migrateLocalStorageToServerOnce() {
+    if (__codigosPrefsLegacyMigrated) return;
+    __codigosPrefsLegacyMigrated = true;
+    if (!canPersistServer()) return;
+    bootstrapFromDom();
+    var local = readLocalPrefs();
+    if (!local || typeof local !== 'object') return;
+    if (!__codigosPrefsMemory.codigosView && local.codigosView) {
+      writePrefs({ codigosView: local.codigosView });
+    }
   }
 
   function normalizeView(view) {
@@ -270,7 +387,30 @@
     }
   }
 
+  if (typeof window !== 'undefined' && !window._codigosViewPrefsPageHook) {
+    window._codigosViewPrefsPageHook = true;
+    window.addEventListener('pagehide', function () {
+      if (__codigosPrefsSaveTimer) {
+        window.clearTimeout(__codigosPrefsSaveTimer);
+        __codigosPrefsSaveTimer = null;
+      }
+      void flushServerSave();
+    });
+    document.addEventListener('visibilitychange', function () {
+      if (document.visibilityState !== 'hidden') return;
+      if (__codigosPrefsSaveTimer) {
+        window.clearTimeout(__codigosPrefsSaveTimer);
+        __codigosPrefsSaveTimer = null;
+      }
+      void flushServerSave();
+    });
+  }
+
   document.addEventListener('DOMContentLoaded', function () {
+    if (canPersistServer()) {
+      bootstrapFromDom();
+      migrateLocalStorageToServerOnce();
+    }
     enhanceAdminMenu2CodigosRow();
     window.codigosViewApply();
     syncControlsFromPrefs();

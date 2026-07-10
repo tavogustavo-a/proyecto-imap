@@ -427,6 +427,8 @@ def _tipo_visual(tipo_raw: str) -> str:
         'renovacion_tienda',
     ):
         return 'Renovación'
+    if t in ('abono_admin', 'abono_recarga', 'pago_cuenta'):
+        return 'Pago / abono'
     if t == 'incidencia_limpia':
         return 'Actualización estado'
     if t == 'entrega':

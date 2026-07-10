@@ -5,7 +5,7 @@
 {% block head %}
   {{ super() }}
   <meta name="licenses-archive-mode" content="1">
-  <link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}?v={{ licencias_static_version }}">
+  <link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}?v=20260628-notes-hidden-fix-v1">
   <link rel="stylesheet" href="{{ url_for('static', filename='fontawesome/css/all.css') }}">
 {% endblock %}
 
@@ -94,11 +94,13 @@
             <input type="text" id="adminLicBulkUser" class="form-control admin-lic-bulk-modal__input admin-lic-bulk-modal__input--user-inline" value="anonimo" placeholder="anonimo" autocomplete="off" aria-label="Usuario o cliente">
           </div>
           <div class="admin-lic-bulk-modal__status-inline-group" aria-label="Estados">
-            <div class="admin-lic-bulk-modal__status-inline-block">
-              <select id="adminLicBulkSelGood" class="form-control admin-lic-bulk-modal__input" title="Estado verde (columna buena)" aria-label="Estado verde"></select>
+            <div class="admin-lic-bulk-modal__status-inline-block" id="adminLicBulkGoodStatusBlock">
+              <label for="adminLicBulkSelGood" class="admin-lic-bulk-modal__label-plain admin-lic-bulk-modal__label-plain--status">Estado verde</label>
+              <select id="adminLicBulkSelGood" class="form-control admin-lic-bulk-modal__input license-split-editor__status license-split-editor__status-good" title="Estado verde (columna buena)" aria-label="Estado verde"></select>
             </div>
             <div class="admin-lic-bulk-modal__status-inline-block">
-              <select id="adminLicBulkSelBad" class="form-control admin-lic-bulk-modal__input" title="Estado rojo (incidencia)" aria-label="Estado rojo"></select>
+              <label for="adminLicBulkSelBad" class="admin-lic-bulk-modal__label-plain admin-lic-bulk-modal__label-plain--status">Estado rojo</label>
+              <select id="adminLicBulkSelBad" class="form-control admin-lic-bulk-modal__input license-split-editor__status license-split-editor__status-bad" title="Estado rojo (incidencia)" aria-label="Estado rojo"></select>
             </div>
           </div>
         </div>
@@ -205,9 +207,9 @@
 
 {% block scripts %}
   {{ super() }}
-  <script src="{{ url_for('store_bp.static', filename='js/licencias_bootstrap.js') }}?v={{ licencias_static_version }}" defer></script>
-  <script src="{{ url_for('store_bp.static', filename='js/licencias_shared.js') }}?v={{ licencias_static_version }}" defer></script>
-  <script src="{{ url_for('store_bp.static', filename='js/admin_licencias_ui_prefs.js') }}?v={{ licencias_static_version }}" defer></script>
-  <script src="{{ url_for('store_bp.static', filename='js/licencias.js') }}?v={{ licencias_static_version }}" defer></script>
-  <script src="{{ url_for('store_bp.static', filename='js/admin_licencias_notepad.js') }}?v={{ licencias_static_version }}" defer></script>
+  <script src="{{ url_for('store_bp.static', filename='js/licencias_bootstrap.js') }}?v=20260628-notas-ocultas-default-v16" defer></script>
+  <script src="{{ url_for('store_bp.static', filename='js/licencias_shared.js') }}?v=20260628-notas-ocultas-default-v16" defer></script>
+  <script src="{{ url_for('store_bp.static', filename='js/admin_licencias_ui_prefs.js') }}?v=20260628-notas-ocultas-default-v16" defer></script>
+  <script src="{{ url_for('store_bp.static', filename='js/licencias.js') }}?v=20260628-notes-hidden-fix-v1" defer></script>
+  <script src="{{ url_for('store_bp.static', filename='js/admin_licencias_notepad.js') }}?v=20260628-notas-ocultas-default-v16" defer></script>
 {% endblock %}

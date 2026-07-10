@@ -537,6 +537,8 @@ class License(db.Model):
     month_to_month = db.Column(db.Boolean, default=False, nullable=False)
     # Si True y stock=0 en tienda pública, el cliente puede reservar hasta que haya existencias.
     allow_reservation = db.Column(db.Boolean, default=False, nullable=False)
+    # Si True, el cliente puede programar compras para el día siguiente (se procesan al cerrar el día).
+    allow_next_day_reservation = db.Column(db.Boolean, default=False, nullable=False)
     # Si True, la tienda no vende inventario: el cliente envía su cuenta para que la enlacen/renueven.
     renew_customer_account = db.Column(db.Boolean, default=False, nullable=False)
     # Bloc «Cuentas para renovar»: credenciales del cliente (fuera de inventario); mismo formato pipe que license_notes.
@@ -623,7 +625,8 @@ class LicenseAccount(db.Model):
 
 
 class ProductReservation(db.Model):
-    """Cola de reserva cuando un producto está agotado pero admite reservas (allow_reservation)."""
+    """Cola de reserva: producto agotado (kind='stock') o venta programada para el día
+    siguiente Colombia (kind='next_day', allow_next_day_reservation en License)."""
     __tablename__ = 'store_product_reservations'
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='CASCADE'), nullable=False, index=True)
@@ -639,6 +642,14 @@ class ProductReservation(db.Model):
     fulfilled_at = db.Column(db.DateTime, nullable=True)
     cancelled_at = db.Column(db.DateTime, nullable=True)
     last_error = db.Column(db.String(500), nullable=True)
+    # 'stock' = lista de espera clásica; 'next_day' = venta programada para otro día.
+    kind = db.Column(db.String(16), default='stock', nullable=False, index=True)
+    quantity = db.Column(db.Integer, default=1, nullable=False)
+    # Resultado parcial ofrecido (p. ej. 5 de 10) pendiente de que el cliente acepte.
+    offered_quantity = db.Column(db.Integer, nullable=True)
+    fulfilled_quantity = db.Column(db.Integer, nullable=True)
+    # Día calendario Colombia (YYYY-MM-DD) en que debe procesarse la venta programada.
+    target_co_date = db.Column(db.String(10), nullable=True, index=True)
 
     user = db.relationship('User', foreign_keys=[user_id])
     product = db.relationship('Product', foreign_keys=[product_id])
@@ -663,6 +674,19 @@ class CustomerAccountRenewalOrder(db.Model):
     product = db.relationship('Product', foreign_keys=[product_id])
 
 
+class CustomerRenewalNotifyBatch(db.Model):
+    """Cola de avisos agrupados al cliente (complete/reject) — ventana 30 s desde el primero."""
+    __tablename__ = 'store_customer_renewal_notify_batches'
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='CASCADE'), nullable=False, index=True)
+    items_json = db.Column(db.Text, nullable=False, default='[]')
+    flush_at = db.Column(db.DateTime, nullable=False, index=True)
+    flushed_at = db.Column(db.DateTime, nullable=True, index=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    user = db.relationship('User', foreign_keys=[user_id])
+
+
 class StoreUserNotification(db.Model):
     """Notificaciones in-app para usuarios de tienda (p. ej. reserva cumplida)."""
     __tablename__ = 'store_user_notifications'
@@ -674,6 +698,22 @@ class StoreUserNotification(db.Model):
     payload_json = db.Column(db.Text, nullable=True)
     read_at = db.Column(db.DateTime, nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
+
+    user = db.relationship('User', foreign_keys=[user_id])
+
+
+class MobilePushToken(db.Model):
+    """Token FCM de la app Android/iOS Capacitor por usuario."""
+    __tablename__ = 'store_mobile_push_tokens'
+    __table_args__ = (db.UniqueConstraint('token', name='uq_store_mobile_push_token'),)
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='CASCADE'), nullable=False, index=True)
+    token = db.Column(db.String(512), nullable=False)
+    platform = db.Column(db.String(20), nullable=False, default='android')
+    device_label = db.Column(db.String(120), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     user = db.relationship('User', foreign_keys=[user_id])
 

@@ -137,6 +137,7 @@ def search_users_ajax():
             data[-1]["puede_tener_deuda"] = bool(precio_data.get("puede_tener_deuda"))
             data[-1]["recarga_automatica"] = bool(precio_data.get("recarga_automatica"))
             data[-1]["proveedor"] = bool(precio_data.get("proveedor"))
+            data[-1]["reserva_otro_dia"] = bool(precio_data.get("reserva_otro_dia"))
             data[-1]["limite_deuda_usd"] = precio_data.get("limite_deuda_usd")
             data[-1]["limite_deuda_cop"] = precio_data.get("limite_deuda_cop")
         else:
@@ -149,6 +150,7 @@ def search_users_ajax():
             data[-1]["puede_tener_deuda"] = False
             data[-1]["recarga_automatica"] = False
             data[-1]["proveedor"] = False
+            data[-1]["reserva_otro_dia"] = False
             data[-1]["limite_deuda_usd"] = None
             data[-1]["limite_deuda_cop"] = None
             
@@ -1469,6 +1471,7 @@ def _normalize_user_prices_compare_fields(user_prices):
         "puede_tener_deuda": bool(up.get("puede_tener_deuda")),
         "recarga_automatica": bool(up.get("recarga_automatica")),
         "proveedor": bool(up.get("proveedor")),
+        "reserva_otro_dia": bool(up.get("reserva_otro_dia")),
         "limite_deuda_usd": None,
         "limite_deuda_cop": None,
     }
@@ -1594,6 +1597,13 @@ def update_user_prices_ajax():
                     from app.store.proveedor_user_data import purge_proveedor_keys_from_prices
 
                     new_user_prices = purge_proveedor_keys_from_prices(new_user_prices, remove_flag=True)
+
+            if 'reserva_otro_dia' in update_data:
+                if update_data['reserva_otro_dia'] is True:
+                    new_user_prices['reserva_otro_dia'] = True
+                else:
+                    new_user_prices.pop('reserva_otro_dia', None)
+                    new_user_prices.pop('reserva_otro_dia_services', None)
 
             if 'limite_deuda_usd' in update_data:
                 lim_u = update_data.get('limite_deuda_usd')
@@ -1853,6 +1863,143 @@ def user_proveedor_services_ajax_post():
     except Exception as e:
         db.session.rollback()
         current_app.logger.error(f"Error en user_proveedor_services_ajax POST: {e}", exc_info=True)
+        return jsonify({"status": "error", "message": f"Error interno: {str(e)}"}), 500
+
+
+def _reserva_otrodia_services_from_user_prices(user_prices):
+    """Mapa guardado {license_id: {'limit': int|None}} de reserva para otro día."""
+    up = user_prices or {}
+    raw = up.get("reserva_otro_dia_services")
+    out = {}
+    if not isinstance(raw, dict):
+        return out
+    for lid, val in raw.items():
+        try:
+            key = str(int(lid))
+        except (TypeError, ValueError):
+            continue
+        limit = None
+        if isinstance(val, dict):
+            lim_raw = val.get("limit")
+            if lim_raw is not None and lim_raw != "":
+                try:
+                    limit = max(0, int(float(lim_raw)))
+                except (TypeError, ValueError):
+                    limit = None
+        out[key] = {"limit": limit}
+    return out
+
+
+def _reserva_otrodia_services_payload_for_user(user_obj):
+    saved = _reserva_otrodia_services_from_user_prices(
+        user_obj.user_prices if user_obj and user_obj.user_prices else {}
+    )
+    services = []
+    for lic in _enabled_store_licenses_for_proveedor_catalog():
+        prod = getattr(lic, "product", None)
+        name = (prod.name if prod else None) or f"Licencia #{lic.id}"
+        key = str(lic.id)
+        entry = saved.get(key)
+        services.append(
+            {
+                "license_id": lic.id,
+                "product_id": lic.product_id,
+                "name": name,
+                "enabled": key in saved,
+                "limit": entry.get("limit") if entry else None,
+            }
+        )
+    return services
+
+
+@admin_bp.route("/user_reserva_otrodia_services_ajax", methods=["GET"])
+@admin_required
+def user_reserva_otrodia_services_ajax_get():
+    """Productos permitidos y límite por producto para «Reservar otro día»."""
+    try:
+        user_id = request.args.get("user_id", type=int)
+        if not user_id:
+            return jsonify({"status": "error", "message": "user_id requerido"}), 400
+        user = User.query.get(user_id)
+        if not user:
+            return jsonify({"status": "error", "message": "Usuario no encontrado"}), 404
+        if user.parent_id:
+            return jsonify({"status": "error", "message": "Solo usuarios principales"}), 400
+        return jsonify(
+            {
+                "status": "ok",
+                "user_id": user.id,
+                "username": user.username,
+                "reserva_otro_dia": bool((user.user_prices or {}).get("reserva_otro_dia")),
+                "services": _reserva_otrodia_services_payload_for_user(user),
+            }
+        )
+    except Exception as e:
+        current_app.logger.error(f"Error en user_reserva_otrodia_services_ajax GET: {e}", exc_info=True)
+        return jsonify({"status": "error", "message": f"Error interno: {str(e)}"}), 500
+
+
+@admin_bp.route("/user_reserva_otrodia_services_ajax", methods=["POST"])
+@admin_required
+def user_reserva_otrodia_services_ajax_post():
+    """Guarda qué productos puede reservar para otro día el usuario y el límite por producto."""
+    try:
+        data = request.get_json() or {}
+        user_id = data.get("user_id")
+        if not user_id:
+            return jsonify({"status": "error", "message": "user_id requerido"}), 400
+        user = User.query.get(int(user_id))
+        if not user:
+            return jsonify({"status": "error", "message": "Usuario no encontrado"}), 404
+        if user.parent_id:
+            return jsonify({"status": "error", "message": "Solo usuarios principales"}), 400
+
+        catalog_ids = {lic.id for lic in _enabled_store_licenses_for_proveedor_catalog()}
+        incoming = data.get("services")
+        if not isinstance(incoming, list):
+            return jsonify({"status": "error", "message": "Formato services inválido"}), 400
+
+        new_map = {}
+        for item in incoming:
+            if not isinstance(item, dict) or not item.get("enabled"):
+                continue
+            try:
+                lid = int(item.get("license_id"))
+            except (TypeError, ValueError):
+                continue
+            if lid not in catalog_ids:
+                continue
+            limit = None
+            lim_raw = item.get("limit")
+            if lim_raw is not None and lim_raw != "":
+                try:
+                    limit = max(0, int(float(lim_raw)))
+                except (TypeError, ValueError):
+                    limit = None
+            new_map[str(lid)] = {"limit": limit}
+
+        new_user_prices = dict(user.user_prices) if user.user_prices else {}
+        if new_map:
+            new_user_prices["reserva_otro_dia_services"] = new_map
+        else:
+            new_user_prices.pop("reserva_otro_dia_services", None)
+
+        user.user_prices = new_user_prices
+        from sqlalchemy.orm.attributes import flag_modified
+
+        flag_modified(user, "user_prices")
+        db.session.commit()
+
+        return jsonify(
+            {
+                "status": "ok",
+                "message": "Configuración de reserva para otro día guardada",
+                "services": _reserva_otrodia_services_payload_for_user(user),
+            }
+        )
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Error en user_reserva_otrodia_services_ajax POST: {e}", exc_info=True)
         return jsonify({"status": "error", "message": f"Error interno: {str(e)}"}), 500
 
 

@@ -7,6 +7,9 @@
   var PERSONAL_SUFFIX = '_v1';
   var LICENSE_PREFIX = 'admin_licencias_bloc_license_';
   var LICENSE_SUFFIX = '_v1';
+  /** Borrador columna credenciales (textarea crudo); no confundir con LICENSE_PREFIX (merged pipe). */
+  var LICENSE_CREDS_DRAFT_PREFIX = 'admin_licencias_license_creds_draft_';
+  var LICENSE_CREDS_DRAFT_SUFFIX = '_v1';
   var SUSPENDED_PREFIX = 'admin_licencias_bloc_suspended_';
   var SUSPENDED_SUFFIX = '_v1';
   var EXPIRED_PREFIX = 'admin_licencias_bloc_expired_';
@@ -20,8 +23,13 @@
 
   var currentLicenseId = null;
   var saveNotesTimer = null;
+  var saveLicenseNotesTimer = null;
+  /** PUT /notes en vuelo (evita que SSE/poll pisen el bloc con datos viejos del servidor). */
+  var notesSaveInFlight = false;
+  var licenseNotesSaveInFlight = false;
   /* Corto: bloc licencias (incl. columna notas) debe persistir pronto si se recarga o se cambia de pestaña. */
   var SAVE_DEBOUNCE_MS = 180;
+  var SAVE_LICENSE_DEBOUNCE_MS = 120;
   var saveChangesOnlyTimers = {};
   var undoNotepadControllers = [];
 
@@ -95,6 +103,77 @@
 
   function licenseStorageKey(id) {
     return LICENSE_PREFIX + id + LICENSE_SUFFIX;
+  }
+
+  function licenseCredsDraftKey(id) {
+    return LICENSE_CREDS_DRAFT_PREFIX + id + LICENSE_CREDS_DRAFT_SUFFIX;
+  }
+
+  function normalizeLicenseCredsDraft(text) {
+    return String(text != null ? text : '').replace(/\r\n/g, '\n');
+  }
+
+  function saveLicenseCredsDraft(licenseId, rawTaValue) {
+    if (licenseId === null || licenseId === undefined || licenseId === '' || String(licenseId) === '0') {
+      return;
+    }
+    try {
+      localStorage.setItem(licenseCredsDraftKey(licenseId), normalizeLicenseCredsDraft(rawTaValue));
+    } catch (e) {}
+  }
+
+  function loadLicenseCredsDraft(licenseId) {
+    try {
+      var v = localStorage.getItem(licenseCredsDraftKey(licenseId));
+      return v === null ? null : v;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function clearLicenseCredsDraft(licenseId) {
+    if (licenseId === null || licenseId === undefined || licenseId === '') return;
+    try {
+      localStorage.removeItem(licenseCredsDraftKey(licenseId));
+    } catch (e) {}
+  }
+
+  function isUserEditingMainLicenseSplit() {
+    var ae = document.activeElement;
+    var splitRoot = getEl('adminLicenciasLicenseSplitRoot');
+    return !!(ae && splitRoot && splitRoot.contains(ae));
+  }
+
+  /** Tras aplicar merged: restaurar solo si el borrador es edición en curso (más largo / fila nueva), nunca uno más corto. */
+  function restoreLicenseCredsDraftAfterApply(ta, licenseId) {
+    if (!ta || ta.id !== 'adminLicenciasNotepadByLicense' || String(licenseId) === '0') return;
+    var draft = loadLicenseCredsDraft(licenseId);
+    if (draft === null) return;
+    var draftNorm = normalizeLicenseCredsDraft(draft);
+    var appliedNorm = normalizeLicenseCredsDraft(ta.value);
+    if (draftNorm === appliedNorm) {
+      clearLicenseCredsDraft(licenseId);
+      return;
+    }
+    /* Borrador viejo (p. ej. keydown antes del \n): no pisar licencias ya cargadas. */
+    if (draftNorm.length < appliedNorm.length) {
+      clearLicenseCredsDraft(licenseId);
+      return;
+    }
+    var appliedCore = appliedNorm.replace(/\n+$/, '');
+    var draftCore = draftNorm.replace(/\n+$/, '');
+    if (draftCore.length < appliedCore.length) {
+      clearLicenseCredsDraft(licenseId);
+      return;
+    }
+    if (draftCore !== appliedCore.slice(0, draftCore.length)) {
+      clearLicenseCredsDraft(licenseId);
+      return;
+    }
+    ta.value = draftNorm;
+    if (typeof window.adminLicenseSplitSyncRowsToTextarea === 'function') {
+      window.adminLicenseSplitSyncRowsToTextarea();
+    }
   }
 
   function suspendedStorageKey(id) {
@@ -292,6 +371,13 @@
     if (
       ta &&
       ta.id === 'adminLicenciasNotepadByLicense' &&
+      typeof window.adminLicenseSplitMergedTextForSave === 'function'
+    ) {
+      return window.adminLicenseSplitMergedTextForSave();
+    }
+    if (
+      ta &&
+      ta.id === 'adminLicenciasNotepadByLicense' &&
       typeof window.adminLicenseSplitGetMergedNotes === 'function'
     ) {
       return window.adminLicenseSplitGetMergedNotes();
@@ -336,7 +422,7 @@
     var raw = window.adminLicenseSplitGetMergedNotes();
     var clean = stripStandaloneGenericoLines(raw);
     if (clean === raw) return false;
-    window.adminLicenseSplitApplyMergedText(clean);
+    window.adminLicenseSplitApplyMergedText(clean, { force: true });
     return true;
   }
 
@@ -418,6 +504,14 @@
 
   function setLicenseBlockPlainText(el, text) {
     if (!el) return;
+    if (el.id === 'adminLicenciasNotepadByLicense') {
+      if (typeof window.adminLicenseSplitApplyMergedText === 'function') {
+        window.adminLicenseSplitApplyMergedText(text != null ? text : '', { force: true });
+      } else if (el.tagName === 'TEXTAREA') {
+        el.value = text != null ? text : '';
+      }
+      return;
+    }
     if (el.id === 'adminLicenciasSuspendedNotepad') {
       var suspRoot = getEl('adminLicenciasSuspendedSplitRoot');
       var suspRows = getEl('adminLicenciasSuspendedRows');
@@ -476,16 +570,18 @@
       var v = s !== null ? s : '';
       v = stripStandaloneGenericoLines(v);
       if (typeof window.adminLicenseSplitApplyMergedText === 'function') {
-        window.adminLicenseSplitApplyMergedText(v);
+        window.adminLicenseSplitApplyMergedText(v, { force: true });
       } else {
         setLicenseBlockPlainText(ta, v);
       }
+      restoreLicenseCredsDraftAfterApply(ta, licenseId);
     } catch (e) {
       if (typeof window.adminLicenseSplitApplyMergedText === 'function') {
-        window.adminLicenseSplitApplyMergedText('');
+        window.adminLicenseSplitApplyMergedText('', { force: true });
       } else {
         setLicenseBlockPlainText(ta, '');
       }
+      restoreLicenseCredsDraftAfterApply(ta, licenseId);
     }
   }
 
@@ -548,7 +644,9 @@
    * Si hay datos del API (licenseRow), la base de datos manda salvo caché local más reciente
    * (p. ej. recarga antes de que termine el PUT o edición aún en el textarea).
    */
-  function loadPersonalForId(licenseId, ta, licenseRow) {
+  function loadPersonalForId(licenseId, ta, licenseRow, opts) {
+    opts = opts || {};
+    var trustOpenUi = opts.trustOpenUi !== false;
     var localRaw = readPersonalFromLocalRaw(licenseId);
     var localNorm = localRaw !== null ? normalizePersonalNotesText(localRaw) : null;
     var serverNorm = null;
@@ -558,7 +656,7 @@
       );
     }
     var openNorm =
-      ta && String(currentLicenseId) === String(licenseId)
+      trustOpenUi && ta && String(currentLicenseId) === String(licenseId)
         ? normalizePersonalNotesText(ta.value)
         : null;
 
@@ -589,6 +687,20 @@
     return String(text != null ? text : '').replace(/\r\n/g, '\n');
   }
 
+  /** Texto persistido en localStorage para el bloc Licencias (misma normalización que loadLicenseForId). */
+  function licenseNotesLocalNormalized(licenseId) {
+    var localRaw = readLocalStorageRaw(function () {
+      return localStorage.getItem(licenseStorageKey(licenseId));
+    });
+    if (localRaw === null) return { raw: null, norm: null };
+    var norm = normalizeBlocNotesText(stripStandaloneGenericoLines(localRaw));
+    return { raw: localRaw, norm: norm };
+  }
+
+  function licenseNotesServerNormalized(serverText) {
+    return normalizeBlocNotesText(stripStandaloneGenericoLines(serverText != null ? String(serverText) : ''));
+  }
+
   function readLocalStorageRaw(readFn) {
     try {
       return readFn();
@@ -598,53 +710,99 @@
   }
 
   function applyLicenseBlocText(ta, text) {
+    if (isUserEditingMainLicenseSplit()) {
+      return;
+    }
     var v = text != null ? String(text) : '';
     v = stripStandaloneGenericoLines(v);
     if (typeof window.adminLicenseSplitApplyMergedText === 'function') {
-      window.adminLicenseSplitApplyMergedText(v);
+      window.adminLicenseSplitApplyMergedText(v, { force: true });
     } else {
       setLicenseBlockPlainText(ta, v);
     }
+    var lid = ta && ta.dataset.licenseId;
+    if (lid) restoreLicenseCredsDraftAfterApply(ta, lid);
   }
 
-  function loadLicenseForId(licenseId, ta, licenseRow) {
+  function loadLicenseForId(licenseId, ta, licenseRow, opts) {
+    opts = opts || {};
+    var trustOpenUi = opts.trustOpenUi !== false;
     var localRaw = readLocalStorageRaw(function () {
       return localStorage.getItem(licenseStorageKey(licenseId));
     });
     var localNorm = localRaw !== null ? normalizeBlocNotesText(stripStandaloneGenericoLines(localRaw)) : null;
-    var serverNorm = null;
-    if (licenseRow && Object.prototype.hasOwnProperty.call(licenseRow, 'license_notes')) {
-      serverNorm = normalizeBlocNotesText(
-        stripStandaloneGenericoLines(
-          licenseRow.license_notes != null ? String(licenseRow.license_notes) : ''
-        )
-      );
-    }
+    var credDraft = loadLicenseCredsDraft(licenseId);
+    var credDraftTrim =
+      credDraft !== null ? String(normalizeLicenseCredsDraft(credDraft)).replace(/\n+$/, '').trim() : '';
+    var serverRaw =
+      licenseRow && Object.prototype.hasOwnProperty.call(licenseRow, 'license_notes')
+        ? licenseRow.license_notes != null
+          ? String(licenseRow.license_notes)
+          : ''
+        : null;
+    var serverNorm =
+      serverRaw !== null ? normalizeBlocNotesText(stripStandaloneGenericoLines(serverRaw)) : null;
     var openNorm =
-      ta && String(currentLicenseId) === String(licenseId)
+      trustOpenUi && ta && String(currentLicenseId) === String(licenseId)
         ? normalizeBlocNotesText(stripStandaloneGenericoLines(licenseMergedOrBlockText(ta)))
         : null;
 
-    if (openNorm !== null && serverNorm !== null && openNorm !== serverNorm) {
+    /*
+     * UI con contenido distinto al servidor: conservar UI y empujar al servidor.
+     * NUNCA empujar vacío (textarea sin cargar aún) — eso borraba la BD con PUT 200.
+     */
+    if (openNorm !== null && serverNorm !== null && openNorm !== serverNorm && String(openNorm).trim() !== '') {
       saveCurrentLicense(ta);
-      scheduleSaveNotes(licenseId);
+      scheduleSaveLicenseNotesOnly(licenseId);
       return;
     }
-    if (localNorm !== null && serverNorm !== null && localNorm !== serverNorm) {
+
+    if (
+      openNorm !== null &&
+      serverNorm !== null &&
+      String(openNorm).trim() === '' &&
+      String(serverNorm).trim() !== ''
+    ) {
+      applyLicenseBlocText(ta, serverRaw);
+      saveCurrentLicense(ta);
+      return;
+    }
+
+    if (localNorm !== null && localNorm !== '' && serverNorm !== null && localNorm !== serverNorm) {
       applyLicenseBlocText(ta, localRaw);
       saveCurrentLicense(ta);
-      scheduleSaveNotes(licenseId);
+      scheduleSaveLicenseNotesOnly(licenseId);
       return;
     }
-    if (serverNorm !== null) {
-      applyLicenseBlocText(ta, licenseRow.license_notes);
+    if (
+      credDraftTrim !== '' &&
+      serverNorm !== null &&
+      serverNorm === '' &&
+      (localNorm === null || localNorm === '')
+    ) {
+      applyLicenseBlocText(ta, '');
+      restoreLicenseCredsDraftAfterApply(ta, licenseId);
       saveCurrentLicense(ta);
+      scheduleSaveLicenseNotesOnly(licenseId);
+      return;
+    }
+    if (serverNorm !== null && serverNorm !== '') {
+      applyLicenseBlocText(ta, serverRaw);
+      saveCurrentLicense(ta);
+      return;
+    }
+    if (localNorm !== null && localNorm !== '') {
+      applyLicenseBlocText(ta, localRaw);
+      saveCurrentLicense(ta);
+      scheduleSaveLicenseNotesOnly(licenseId);
       return;
     }
     loadLicenseFromLocalOnly(licenseId, ta);
   }
 
-  function loadSuspendedForId(licenseId, el, licenseRow) {
+  function loadSuspendedForId(licenseId, el, licenseRow, opts) {
+    opts = opts || {};
+    var trustOpenUi = opts.trustOpenUi !== false;
     var localRaw = readLocalStorageRaw(function () {
       return localStorage.getItem(suspendedStorageKey(licenseId));
     });
@@ -656,7 +814,7 @@
       );
     }
     var openNorm =
-      el && String(currentLicenseId) === String(licenseId)
+      trustOpenUi && el && String(currentLicenseId) === String(licenseId)
         ? normalizeBlocNotesText(licenseBlockText(el))
         : null;
 
@@ -680,7 +838,9 @@
     loadSuspendedFromLocalOnly(licenseId, el);
   }
 
-  function loadExpiredForId(licenseId, el, licenseRow) {
+  function loadExpiredForId(licenseId, el, licenseRow, opts) {
+    opts = opts || {};
+    var trustOpenUi = opts.trustOpenUi !== false;
     var localRaw = readLocalStorageRaw(function () {
       return localStorage.getItem(expiredStorageKey(licenseId));
     });
@@ -692,7 +852,7 @@
       );
     }
     var openNorm =
-      el && String(currentLicenseId) === String(licenseId)
+      trustOpenUi && el && String(currentLicenseId) === String(licenseId)
         ? normalizeBlocNotesText(licenseBlockText(el))
         : null;
 
@@ -716,7 +876,9 @@
     loadExpiredFromLocalOnly(licenseId, el);
   }
 
-  function loadCustomerRenewalForId(licenseId, el, licenseRow) {
+  function loadCustomerRenewalForId(licenseId, el, licenseRow, opts) {
+    opts = opts || {};
+    var trustOpenUi = opts.trustOpenUi !== false;
     if (el && el.dataset.customerRenewalDirty === '1') {
       saveCurrentCustomerRenewal(el);
       return;
@@ -734,7 +896,7 @@
       );
     }
     var openNorm =
-      el && String(currentLicenseId) === String(licenseId)
+      trustOpenUi && el && String(currentLicenseId) === String(licenseId)
         ? normalizeBlocNotesText(stripStandaloneGenericoLines(customerRenewalMergedOrBlockText(el)))
         : null;
 
@@ -784,6 +946,9 @@
   function saveCurrentLicense(ta) {
     var lid = ta.dataset.licenseId;
     if (lid === undefined || lid === '') return;
+    if (ta.id === 'adminLicenciasNotepadByLicense' && ta.tagName === 'TEXTAREA') {
+      saveLicenseCredsDraft(lid, ta.value);
+    }
     saveLicenseForId(lid, licenseMergedOrBlockText(ta));
   }
 
@@ -846,21 +1011,73 @@
   }
 
   function syncCustomerRenewalBlocUiForLicense(licenseRow, taCustomerRenewal) {
-    var renewMode = licenseRowRenewCustomerAccount(licenseRow);
     var heading = getEl('adminLicenciasCustomerRenewalHeading');
     if (heading) {
-      heading.textContent = renewMode
-        ? 'Cuentas para renovar (cliente)'
-        : 'Cuentas para renovar';
+      heading.textContent = 'Cuentas para renovar';
     }
     if (taCustomerRenewal) {
-      taCustomerRenewal.placeholder = renewMode
-        ? 'x (rechazar) o carrito compra (pasar al día).'
-        : 'Correo y contraseña, una por línea.';
+      taCustomerRenewal.placeholder = 'Una por línea.';
     }
     if (taCustomerRenewal) {
       unlockCustomerRenewalSplit(taCustomerRenewal);
     }
+  }
+
+  function licenseNotesPutPayloadFromTa(taL) {
+    var merged = licenseMergedOrBlockText(taL);
+    var payload = { license_notes: merged };
+    if (!String(stripStandaloneGenericoLines(merged)).trim()) {
+      payload.license_notes_force_empty = true;
+    }
+    return payload;
+  }
+
+  function persistLicenseBlocNotesToServer(licenseId) {
+    if (String(licenseId) === '0') return Promise.resolve({ success: false, error: 'aggregate' });
+    var taL = getEl('adminLicenciasNotepadByLicense');
+    if (!taL || String(taL.dataset.licenseId) !== String(licenseId)) {
+      return Promise.resolve({ success: false, error: 'license_mismatch' });
+    }
+    saveCurrentLicense(taL);
+    var notesPayload = licenseNotesPutPayloadFromTa(taL);
+    var merged = notesPayload.license_notes;
+    if (typeof adminLicFetchJson !== 'function') {
+      return Promise.resolve({ success: false, error: 'fetch_unavailable' });
+    }
+    licenseNotesSaveInFlight = true;
+    return adminLicFetchJson('/tienda/api/licenses/' + licenseId + '/notes', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(notesPayload),
+    })
+      .then(function (data) {
+        if (data.success && typeof window.adminLicMarkSelfLicenseNotesSaved === 'function') {
+          window.adminLicMarkSelfLicenseNotesSaved(data.licenses_rev);
+        }
+        if (data.success && typeof window.patchLicenseNotesCache === 'function') {
+          window.patchLicenseNotesCache(licenseId, undefined, merged);
+        }
+        if (data.success) {
+          saveLicenseForId(licenseId, merged);
+          var storedDraft = loadLicenseCredsDraft(licenseId);
+          if (
+            storedDraft === null ||
+            normalizeLicenseCredsDraft(storedDraft) === normalizeLicenseCredsDraft(taL.value)
+          ) {
+            clearLicenseCredsDraft(licenseId);
+          }
+        }
+        return data;
+      })
+      .catch(function (err) {
+        if (typeof showError === 'function') {
+          showError(adminLicFormatFetchError(err, 'Error al guardar licencias'));
+        }
+        return { success: false, error: 'network' };
+      })
+      .finally(function () {
+        licenseNotesSaveInFlight = false;
+      });
   }
 
   function saveNotesToServer(licenseId) {
@@ -870,33 +1087,51 @@
     var taS = getEl('adminLicenciasSuspendedNotepad');
     var taE = getEl('adminLicenciasExpiredNotepad');
     var taCR = getEl('adminLicenciasNotepadByCustomerRenewal');
-    if (!taP || !taL || !taS || !taE) return;
+    if (!taL) return;
     if (String(taL.dataset.licenseId) !== String(licenseId)) return;
-    if (String(taS.dataset.licenseId) !== String(licenseId)) return;
-    if (String(taE.dataset.licenseId) !== String(licenseId)) return;
+    var idStr = String(licenseId);
+    if (taP && String(taP.dataset.licenseId || '') !== idStr) taP.dataset.licenseId = idStr;
+    if (taS && String(taS.dataset.licenseId || '') !== idStr) taS.dataset.licenseId = idStr;
+    if (taE && String(taE.dataset.licenseId || '') !== idStr) taE.dataset.licenseId = idStr;
+    if (!taP || !taS || !taE) return;
+    saveCurrentPersonal(taP);
+    saveCurrentLicense(taL);
+    saveCurrentSuspended(taS);
+    saveCurrentExpired(taE);
+    if (taCR && String(taCR.dataset.licenseId) === String(licenseId)) {
+      saveCurrentCustomerRenewal(taCR);
+    }
+    var licenseNotesPayload = licenseMergedOrBlockText(taL);
     var bodyObj = {
       personal_notes: taP.value,
-      license_notes: licenseMergedOrBlockText(taL),
+      license_notes: licenseNotesPayload,
       suspended_notes: licenseBlockText(taS),
       expired_notes: licenseBlockText(taE),
       changes_notes: getChangesNotesMergedForLicenseId(licenseId),
     };
+    if (!String(stripStandaloneGenericoLines(licenseNotesPayload)).trim()) {
+      bodyObj.license_notes_force_empty = true;
+    }
     if (taCR && String(taCR.dataset.licenseId) === String(licenseId)) {
       appendCustomerRenewalNotesToSaveBody(bodyObj, licenseId, taCR);
     }
     var body = JSON.stringify(bodyObj);
     if (typeof adminLicFetchJson !== 'function') return;
+    notesSaveInFlight = true;
     adminLicFetchJson('/tienda/api/licenses/' + licenseId + '/notes', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: body,
     })
       .then(function (data) {
+        if (data.success && typeof window.adminLicMarkSelfLicenseNotesSaved === 'function') {
+          window.adminLicMarkSelfLicenseNotesSaved(data.licenses_rev);
+        }
         if (data.success && typeof window.patchLicenseNotesCache === 'function') {
           window.patchLicenseNotesCache(
             licenseId,
             taP.value,
-            licenseMergedOrBlockText(taL),
+            licenseNotesPayload,
             licenseBlockText(taS),
             licenseBlockText(taE),
             undefined,
@@ -912,11 +1147,24 @@
         if (data.success && taP) {
           savePersonalForId(licenseId, taP.value);
         }
+        if (data.success && taL && String(taL.dataset.licenseId) === String(licenseId)) {
+          saveLicenseForId(licenseId, licenseMergedOrBlockText(taL));
+          var storedDraft = loadLicenseCredsDraft(licenseId);
+          if (
+            storedDraft === null ||
+            normalizeLicenseCredsDraft(storedDraft) === normalizeLicenseCredsDraft(taL.value)
+          ) {
+            clearLicenseCredsDraft(licenseId);
+          }
+        }
       })
       .catch(function (err) {
         if (typeof showError === 'function') {
           showError(adminLicFormatFetchError(err, 'Error al guardar notas'));
         }
+      })
+      .finally(function () {
+        notesSaveInFlight = false;
       });
   }
 
@@ -942,13 +1190,17 @@
     if (taCR && String(taCR.dataset.licenseId) === String(licenseId)) {
       saveCurrentCustomerRenewal(taCR);
     }
+    var licenseNotesPayload = licenseMergedOrBlockText(taL);
     var bodyObj = {
       personal_notes: taP.value,
-      license_notes: licenseMergedOrBlockText(taL),
+      license_notes: licenseNotesPayload,
       suspended_notes: licenseBlockText(taS),
       expired_notes: licenseBlockText(taE),
       changes_notes: getChangesNotesMergedForLicenseId(licenseId),
     };
+    if (!String(stripStandaloneGenericoLines(licenseNotesPayload)).trim()) {
+      bodyObj.license_notes_force_empty = true;
+    }
     if (taCR && String(taCR.dataset.licenseId) === String(licenseId)) {
       appendCustomerRenewalNotesToSaveBody(bodyObj, licenseId, taCR);
     }
@@ -956,17 +1208,21 @@
     if (typeof adminLicFetchJson !== 'function') {
       return Promise.resolve({ success: false, error: 'fetch_unavailable' });
     }
+    notesSaveInFlight = true;
     return adminLicFetchJson('/tienda/api/licenses/' + licenseId + '/notes', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: body,
     })
       .then(function (data) {
+        if (data.success && typeof window.adminLicMarkSelfLicenseNotesSaved === 'function') {
+          window.adminLicMarkSelfLicenseNotesSaved(data.licenses_rev);
+        }
         if (data.success && typeof window.patchLicenseNotesCache === 'function') {
           window.patchLicenseNotesCache(
             licenseId,
             taP.value,
-            licenseMergedOrBlockText(taL),
+            licenseNotesPayload,
             licenseBlockText(taS),
             licenseBlockText(taE),
             undefined,
@@ -976,6 +1232,16 @@
               : undefined
           );
         }
+        if (data.success && taL && String(taL.dataset.licenseId) === String(licenseId)) {
+          saveLicenseForId(licenseId, licenseMergedOrBlockText(taL));
+          var storedDraftImm = loadLicenseCredsDraft(licenseId);
+          if (
+            storedDraftImm === null ||
+            normalizeLicenseCredsDraft(storedDraftImm) === normalizeLicenseCredsDraft(taL.value)
+          ) {
+            clearLicenseCredsDraft(licenseId);
+          }
+        }
         return data;
       })
       .catch(function (err) {
@@ -983,6 +1249,9 @@
           showError(adminLicFormatFetchError(err, 'Error al guardar notas'));
         }
         return { success: false, error: 'network' };
+      })
+      .finally(function () {
+        notesSaveInFlight = false;
       });
   }
 
@@ -1037,10 +1306,28 @@
       });
   }
 
+  function scheduleSaveLicenseNotesOnly(licenseId) {
+    if (String(licenseId) === '0') return;
+    clearTimeout(saveLicenseNotesTimer);
+    saveLicenseNotesTimer = setTimeout(function () {
+      saveLicenseNotesTimer = null;
+      persistLicenseBlocNotesToServer(licenseId);
+    }, SAVE_LICENSE_DEBOUNCE_MS);
+  }
+
+  function flushPendingLicenseNotesSave() {
+    clearTimeout(saveLicenseNotesTimer);
+    if (currentLicenseId !== null && String(currentLicenseId) !== '0') {
+      return persistLicenseBlocNotesToServer(currentLicenseId);
+    }
+    return Promise.resolve({ success: false, error: 'no_license' });
+  }
+
   function scheduleSaveNotes(licenseId) {
     if (String(licenseId) === '0') return;
     clearTimeout(saveNotesTimer);
     saveNotesTimer = setTimeout(function () {
+      saveNotesTimer = null;
       saveNotesToServer(licenseId);
     }, SAVE_DEBOUNCE_MS);
   }
@@ -1048,9 +1335,12 @@
   function flushPendingNotesSave() {
     flushPendingChangesNotesSaves();
     clearTimeout(saveNotesTimer);
+    clearTimeout(saveLicenseNotesTimer);
+    var licFlush = flushPendingLicenseNotesSave();
     if (currentLicenseId !== null && String(currentLicenseId) !== '0') {
       saveNotesToServer(currentLicenseId);
     }
+    return licFlush;
   }
 
   function destroyUndoNotepads() {
@@ -1348,12 +1638,7 @@
   }
 
   function unlockCustomerRenewalSplit(taCustomerRenewal) {
-    var root = getEl('adminLicenciasCustomerRenewalSplitRoot');
-    if (root && typeof window.customerRenewalLicenseSplitUnlock === 'function') {
-      window.customerRenewalLicenseSplitUnlock(root);
-    } else if (taCustomerRenewal) {
-      unlockNotepadEditable(taCustomerRenewal);
-    }
+    /* No-op para mantener bloqueada la edición en Cuentas para renovar (solo admin: rechazar/aceptar) */
   }
 
   function lockChangesSplit() {
@@ -1405,7 +1690,11 @@
         e.preventDefault();
         e.stopPropagation();
         unlockNotepadEditable(el);
-        el.focus();
+        if (typeof licenseSplitFocusElNoScroll === 'function') {
+          licenseSplitFocusElNoScroll(el);
+        } else {
+          el.focus();
+        }
       },
       true
     );
@@ -1442,7 +1731,101 @@
     });
   }
 
+  /** Delegación en document: sobrevive al re-render del grid (innerHTML) sin duplicar listeners. */
+  function wireAdminLicenseBlocDelegatesOnce() {
+    if (document.documentElement.dataset.adminLicLicenseBlocDelegated === '1') return;
+    document.documentElement.dataset.adminLicLicenseBlocDelegated = '1';
+
+    function onLicenseCredInput() {
+      var ta = getEl('adminLicenciasNotepadByLicense');
+      if (!ta || ta.readOnly) return;
+      var lid = ta.dataset.licenseId;
+      if (typeof window.adminLicMarkLicensePanelInteraction === 'function') {
+        window.adminLicMarkLicensePanelInteraction(2800);
+      }
+      if (typeof window.adminLicenseSplitSyncRowsToTextarea === 'function') {
+        window.adminLicenseSplitSyncRowsToTextarea();
+      }
+      saveCurrentLicense(ta);
+      refreshLicenseLineBadge();
+      if (lid) scheduleSaveLicenseNotesOnly(lid);
+      if (typeof window.scheduleRefreshAdminDupIfActive === 'function') {
+        window.scheduleRefreshAdminDupIfActive();
+      }
+    }
+
+    function onLicenseSideFieldChange() {
+      var ta = getEl('adminLicenciasNotepadByLicense');
+      if (!ta) return;
+      if (typeof window.adminLicMarkLicensePanelInteraction === 'function') {
+        window.adminLicMarkLicensePanelInteraction(2800);
+      }
+      saveCurrentLicense(ta);
+      refreshLicenseLineBadge();
+      var lid = ta.dataset.licenseId;
+      if (lid) scheduleSaveLicenseNotesOnly(lid);
+      if (typeof window.scheduleRefreshAdminDupIfActive === 'function') {
+        window.scheduleRefreshAdminDupIfActive();
+      }
+    }
+
+    document.addEventListener(
+      'input',
+      function (e) {
+        var t = e.target;
+        if (!t) return;
+        if (t.id === 'adminLicenciasNotepadByLicense') {
+          onLicenseCredInput();
+          return;
+        }
+        if (t.closest && t.closest('#adminLicenciasStructuredRows')) {
+          onLicenseSideFieldChange();
+        }
+      },
+      true
+    );
+
+    document.addEventListener(
+      'change',
+      function (e) {
+        var t = e.target;
+        if (t && t.closest && t.closest('#adminLicenciasStructuredRows')) {
+          onLicenseSideFieldChange();
+        }
+      },
+      true
+    );
+
+    document.addEventListener(
+      'click',
+      function (e) {
+        var btn = e.target.closest && e.target.closest('#adminLicenciasStructuredRows .license-split-editor__sell-btn');
+        if (!btn) return;
+        e.preventDefault();
+        e.stopPropagation();
+        var row = btn.closest('.license-split-editor__row');
+        if (row && typeof window.adminLicenseSplitSellRowToDay === 'function') {
+          window.adminLicenseSplitSellRowToDay(row);
+        }
+      },
+      true
+    );
+
+    document.addEventListener(
+      'blur',
+      function (e) {
+        if (!e.target || e.target.id !== 'adminLicenciasNotepadByLicense') return;
+        if (typeof window.adminMainLicenseNormalizeCredTaTrailingRunsIfBlur === 'function') {
+          window.adminMainLicenseNormalizeCredTaTrailingRunsIfBlur(e.target);
+        }
+        saveCurrentLicense(e.target);
+      },
+      true
+    );
+  }
+
   function init() {
+    wireAdminLicenseBlocDelegatesOnce();
     var taPersonal = getEl('adminLicenciasNotepadPersonal');
     var taLicense = getEl('adminLicenciasNotepadByLicense');
     var taSuspended = getEl('adminLicenciasSuspendedNotepad');
@@ -1455,78 +1838,13 @@
       var lid = taPersonal.dataset.licenseId;
       if (lid) scheduleSaveNotes(lid);
     });
-    taLicense.addEventListener('input', function () {
-      if (typeof window.adminLicenseSplitSyncRowsToTextarea === 'function') {
-        window.adminLicenseSplitSyncRowsToTextarea();
-      }
-      saveCurrentLicense(taLicense);
-      refreshLicenseLineBadge();
-      var lid = taLicense.dataset.licenseId;
-      if (lid) scheduleSaveNotes(lid);
-      if (typeof window.scheduleRefreshAdminDupIfActive === 'function') {
-        window.scheduleRefreshAdminDupIfActive();
-      }
-    });
-
-    taLicense.addEventListener('blur', function () {
-      if (typeof window.adminMainLicenseNormalizeCredTaTrailingRunsIfBlur === 'function') {
-        window.adminMainLicenseNormalizeCredTaTrailingRunsIfBlur(taLicense);
-      }
-      if (typeof window.adminLicenseSplitScheduleAutosizeCreds === 'function') {
-        window.adminLicenseSplitScheduleAutosizeCreds();
-      }
-      var splitR = getEl('adminLicenciasLicenseSplitRoot');
-      window.setTimeout(function () {
-        var a = document.activeElement;
-        if (splitR && a && splitR.contains(a)) return;
-        flushPendingNotesSave();
-        lockLicenseSplit(taLicense);
-        if (typeof window.scheduleRefreshAdminDupIfActive === 'function') {
-          window.scheduleRefreshAdminDupIfActive();
-        }
-      }, 0);
-    });
 
     var structuredRows = getEl('adminLicenciasStructuredRows');
-    if (structuredRows) {
-      structuredRows.addEventListener('input', function () {
-        saveCurrentLicense(taLicense);
-        refreshLicenseLineBadge();
-        var lid = taLicense.dataset.licenseId;
-        if (lid) scheduleSaveNotes(lid);
-        if (typeof window.scheduleRefreshAdminDupIfActive === 'function') {
-          window.scheduleRefreshAdminDupIfActive();
-        }
-      });
-      structuredRows.addEventListener('change', function () {
-        saveCurrentLicense(taLicense);
-        refreshLicenseLineBadge();
-        var lid = taLicense.dataset.licenseId;
-        if (lid) scheduleSaveNotes(lid);
-        if (typeof window.scheduleRefreshAdminDupIfActive === 'function') {
-          window.scheduleRefreshAdminDupIfActive();
-        }
-      });
+    if (structuredRows && structuredRows.dataset.licSidePersistWired !== '1') {
+      structuredRows.dataset.licSidePersistWired = '1';
       structuredRows.addEventListener('focusout', function () {
-        window.setTimeout(function () {
-          var a = document.activeElement;
-          if (a && structuredRows.contains(a)) return;
-          saveCurrentLicense(taLicense);
-          flushPendingNotesSave();
-          if (typeof window.scheduleRefreshAdminDupIfActive === 'function') {
-            window.scheduleRefreshAdminDupIfActive();
-          }
-        }, 0);
-      });
-      structuredRows.addEventListener('click', function (e) {
-        var btn = e.target.closest && e.target.closest('.license-split-editor__sell-btn');
-        if (!btn) return;
-        e.preventDefault();
-        e.stopPropagation();
-        var row = btn.closest('.license-split-editor__row');
-        if (row && typeof window.adminLicenseSplitSellRowToDay === 'function') {
-          window.adminLicenseSplitSellRowToDay(row);
-        }
+        var taL = getEl('adminLicenciasNotepadByLicense');
+        if (taL) saveCurrentLicense(taL);
       });
     }
     wireLicenseSplitScrollSync();
@@ -1736,46 +2054,10 @@
         function (e) {
           if (String(taLicense.dataset.licenseId || '') === '0') return;
           if (!splitRoot.classList.contains('license-notepad--locked')) return;
-          if (e.target.closest && e.target.closest('.license-split-editor__user-suggestions')) return;
-          var inCreds =
-            e.target === taLicense ||
-            (e.target.closest && e.target.closest('.license-split-editor__creds-cell'));
-          var inSide = e.target.closest && e.target.closest('.license-split-editor__side');
-          if (!inCreds && !inSide) return;
-          unlockLicenseSplit(taLicense);
-          if (e.target.closest && e.target.closest('.license-split-editor__sell-btn')) {
-            return;
-          }
-          if (e.target.closest && e.target.closest('.license-split-editor__day-num')) {
-            var dayEl = e.target.closest('.license-split-editor__day-num');
-            if (dayEl) {
-              e.preventDefault();
-              dayEl.focus();
-            }
-            return;
-          }
-          var cell =
-            e.target.closest &&
-            e.target.closest(
-              '.license-split-editor__user, .license-split-editor__status-good, .license-split-editor__status-bad, .license-split-editor__otro-combined, .license-split-editor__note'
-            );
-          if (!cell && e.target.closest) {
-            var uw = e.target.closest('.license-split-editor__user-wrap');
-            if (uw) cell = uw.querySelector('.license-split-editor__user');
-          }
-          if (!cell && e.target.closest) {
-            var row = e.target.closest('.license-split-editor__row');
-            if (row) cell = row.querySelector('.license-split-editor__user');
-          }
-          if (inSide && cell) {
-            e.preventDefault();
-            cell.focus();
-          } else if (inSide) {
-            e.preventDefault();
-            taLicense.focus();
-          } else if (inCreds) {
-            e.preventDefault();
-            taLicense.focus();
+          if (typeof licenseSplitHandleLockedMousedown === 'function') {
+            licenseSplitHandleLockedMousedown(e, taLicense, function () {
+              unlockLicenseSplit(taLicense);
+            }, splitRoot);
           }
         },
         true
@@ -1799,37 +2081,12 @@
         function (e) {
           if (String(taSuspended.dataset.licenseId || '') === '0') return;
           if (!suspRoot.classList.contains('license-notepad--locked')) return;
-          if (e.target.closest && e.target.closest('.license-split-editor__restore-to-license-btn')) return;
-          var inCreds =
-            e.target === taSuspended ||
-            (e.target.closest && e.target.closest('.license-split-editor__creds-cell'));
-          var inSide = e.target.closest && e.target.closest('.license-split-editor__side');
-          if (!inCreds && !inSide) return;
-          if (typeof window.suspendedLicenseSplitUnlock === 'function') {
-            window.suspendedLicenseSplitUnlock(suspRoot);
-          }
-          var cell =
-            e.target.closest &&
-            e.target.closest(
-              '.license-split-editor__status-bad, .license-split-editor__otro-combined, .license-split-editor__note'
-            );
-          if (!cell && e.target.closest) {
-            var srow = e.target.closest('.license-split-editor__row');
-            if (srow) {
-              cell =
-                srow.querySelector('.license-split-editor__status-bad') ||
-                srow.querySelector('.license-split-editor__note');
-            }
-          }
-          if (inSide && cell) {
-            e.preventDefault();
-            cell.focus();
-          } else if (inSide) {
-            e.preventDefault();
-            taSuspended.focus();
-          } else if (inCreds) {
-            e.preventDefault();
-            taSuspended.focus();
+          if (typeof licenseSplitHandleLockedMousedown === 'function') {
+            licenseSplitHandleLockedMousedown(e, taSuspended, function () {
+              if (typeof window.suspendedLicenseSplitUnlock === 'function') {
+                window.suspendedLicenseSplitUnlock(suspRoot);
+              }
+            }, suspRoot);
           }
         },
         true
@@ -1858,37 +2115,12 @@
         function (e) {
           if (String(taExpired.dataset.licenseId || '') === '0') return;
           if (!expRoot.classList.contains('license-notepad--locked')) return;
-          if (e.target.closest && e.target.closest('.license-split-editor__restore-to-license-btn')) return;
-          var inCredsE =
-            e.target === taExpired ||
-            (e.target.closest && e.target.closest('.license-split-editor__creds-cell'));
-          var inSideE = e.target.closest && e.target.closest('.license-split-editor__side');
-          if (!inCredsE && !inSideE) return;
-          if (typeof window.expiredLicenseSplitUnlock === 'function') {
-            window.expiredLicenseSplitUnlock(expRoot);
-          }
-          var cellE =
-            e.target.closest &&
-            e.target.closest(
-              '.license-split-editor__status-bad, .license-split-editor__otro-combined, .license-split-editor__note'
-            );
-          if (!cellE && e.target.closest) {
-            var erow = e.target.closest('.license-split-editor__row');
-            if (erow) {
-              cellE =
-                erow.querySelector('.license-split-editor__status-bad') ||
-                erow.querySelector('.license-split-editor__note');
-            }
-          }
-          if (inSideE && cellE) {
-            e.preventDefault();
-            cellE.focus();
-          } else if (inSideE) {
-            e.preventDefault();
-            taExpired.focus();
-          } else if (inCredsE) {
-            e.preventDefault();
-            taExpired.focus();
+          if (typeof licenseSplitHandleLockedMousedown === 'function') {
+            licenseSplitHandleLockedMousedown(e, taExpired, function () {
+              if (typeof window.expiredLicenseSplitUnlock === 'function') {
+                window.expiredLicenseSplitUnlock(expRoot);
+              }
+            }, expRoot);
           }
         },
         true
@@ -1917,35 +2149,17 @@
         function (e) {
           if (String(taCustomerRenewal.dataset.licenseId || '') === '0') return;
           if (!custRoot.classList.contains('license-notepad--locked')) return;
-          var inCreds =
-            e.target === taCustomerRenewal ||
-            (e.target.closest && e.target.closest('.license-split-editor__creds-cell'));
-          var inSide = e.target.closest && e.target.closest('.license-split-editor__side');
-          if (!inCreds && !inSide) return;
-          unlockCustomerRenewalSplit(taCustomerRenewal);
-          var cell =
-            e.target.closest &&
-            e.target.closest(
-              '.license-split-editor__user, .license-split-editor__status-good, .license-split-editor__status-bad, .license-split-editor__otro-combined, .license-split-editor__note'
+          if (typeof licenseSplitHandleLockedMousedown === 'function') {
+            licenseSplitHandleLockedMousedown(
+              e,
+              taCustomerRenewal,
+              function () {
+                if (typeof window.customerRenewalLicenseSplitUnlock === 'function') {
+                  window.customerRenewalLicenseSplitUnlock(custRoot);
+                }
+              },
+              custRoot
             );
-          if (!cell && e.target.closest) {
-            var urow = e.target.closest('.license-split-editor__row');
-            if (urow) {
-              cell =
-                urow.querySelector('.license-split-editor__user') ||
-                urow.querySelector('.license-split-editor__status-bad') ||
-                urow.querySelector('.license-split-editor__note');
-            }
-          }
-          if (inSide && cell) {
-            e.preventDefault();
-            cell.focus();
-          } else if (inSide) {
-            e.preventDefault();
-            taCustomerRenewal.focus();
-          } else if (inCreds) {
-            e.preventDefault();
-            taCustomerRenewal.focus();
           }
         },
         true
@@ -1982,6 +2196,21 @@
         }
       });
       window.addEventListener('pagehide', function () {
+        if (currentLicenseId !== null && String(currentLicenseId) !== '0') {
+          var taL = getEl('adminLicenciasNotepadByLicense');
+          var taP = getEl('adminLicenciasNotepadPersonal');
+          var taS = getEl('adminLicenciasSuspendedNotepad');
+          var taE = getEl('adminLicenciasExpiredNotepad');
+          var taCR = getEl('adminLicenciasNotepadByCustomerRenewal');
+          if (taP) savePersonalForId(currentLicenseId, taP.value);
+          if (taL) {
+            saveLicenseCredsDraft(currentLicenseId, taL.value);
+            saveLicenseForId(currentLicenseId, licenseMergedOrBlockText(taL));
+          }
+          if (taS) saveSuspendedForId(currentLicenseId, licenseBlockText(taS));
+          if (taE) saveExpiredForId(currentLicenseId, licenseBlockText(taE));
+          if (taCR) saveCustomerRenewalForId(currentLicenseId, customerRenewalMergedOrBlockText(taCR));
+        }
         flushPendingNotesSave();
       });
     }
@@ -2071,7 +2300,7 @@
       taPersonal.value =
         'En la vista «Todos» no hay notas por producto. Elige una plataforma en la cuadrícula para editar notas en este dispositivo.';
       if (typeof window.adminLicenseSplitApplyMergedText === 'function') {
-        window.adminLicenseSplitApplyMergedText('');
+        window.adminLicenseSplitApplyMergedText('', { force: true });
       }
       setLicenseBlockPlainText(
         taLicense,
@@ -2142,12 +2371,14 @@
     );
     if (custSplitSideOpen) custSplitSideOpen.hidden = false;
     if (!wasSameLicense) {
-      loadPersonalForId(licenseId, taPersonal, licenseRow);
-      loadLicenseForId(licenseId, taLicense, licenseRow);
-      loadSuspendedForId(licenseId, taSuspended, licenseRow);
-      loadExpiredForId(licenseId, taExpired, licenseRow);
+      /* Tras cambiar currentLicenseId el DOM aún muestra el producto anterior: no usar openNorm. */
+      var freshLoadOpts = { trustOpenUi: false };
+      loadPersonalForId(licenseId, taPersonal, licenseRow, freshLoadOpts);
+      loadLicenseForId(licenseId, taLicense, licenseRow, freshLoadOpts);
+      loadSuspendedForId(licenseId, taSuspended, licenseRow, freshLoadOpts);
+      loadExpiredForId(licenseId, taExpired, licenseRow, freshLoadOpts);
       if (taCustomerRenewal) {
-        loadCustomerRenewalForId(licenseId, taCustomerRenewal, licenseRow);
+        loadCustomerRenewalForId(licenseId, taCustomerRenewal, licenseRow, freshLoadOpts);
       }
     } else {
       saveCurrentPersonal(taPersonal);
@@ -2177,7 +2408,8 @@
         if (cid) scheduleSaveChangesNotesOnly(cid);
       });
     }
-    if (sanitizedLicense || sanitizedSuspended || sanitizedExpired) scheduleSaveNotes(licenseId);
+    if (sanitizedLicense) scheduleSaveLicenseNotesOnly(licenseId);
+    if (sanitizedSuspended || sanitizedExpired) scheduleSaveNotes(licenseId);
     setLicenseHeading(productName || '');
     resetUndoNotepads();
     lockNotepadEditable(taPersonal);
@@ -2224,6 +2456,9 @@
     var taCustomerRenewal = getEl('adminLicenciasNotepadByCustomerRenewal');
     if (!taLicense || !taSuspended || !taExpired || currentLicenseId === null) return;
     savePersonalForId(currentLicenseId, taPersonal ? taPersonal.value : '');
+    if (taLicense.tagName === 'TEXTAREA') {
+      saveLicenseCredsDraft(currentLicenseId, taLicense.value);
+    }
     saveLicenseForId(currentLicenseId, licenseMergedOrBlockText(taLicense));
     saveSuspendedForId(currentLicenseId, licenseBlockText(taSuspended));
     saveExpiredForId(currentLicenseId, licenseBlockText(taExpired));
@@ -2266,35 +2501,82 @@
     }
   }
 
+  function licenseMainSplitMergedNormFromOpenBloc(taLicense) {
+    var merged = '';
+    if (typeof window.adminLicenseSplitMergedTextForSave === 'function') {
+      merged = window.adminLicenseSplitMergedTextForSave();
+    } else if (typeof window.adminLicenseSplitGetMergedNotes === 'function') {
+      merged = window.adminLicenseSplitGetMergedNotes();
+    } else {
+      merged = licenseMergedOrBlockText(taLicense);
+    }
+    return licenseNotesServerNormalized(merged);
+  }
+
   function refreshLicenseSplitFromApi(licenseRow) {
     if (!licenseRow || licenseRow.id == null) return;
-    if (saveNotesTimer) return;
+    if (saveNotesTimer || saveLicenseNotesTimer || notesSaveInFlight || licenseNotesSaveInFlight) return;
+    if (isUserEditingMainLicenseSplit()) return;
+    if (
+      typeof window.adminLicShouldSkipLicenseNotesRealtimeRefresh === 'function' &&
+      window.adminLicShouldSkipLicenseNotesRealtimeRefresh()
+    ) {
+      return;
+    }
     var idStr = String(licenseRow.id);
     var taLicense = getEl('adminLicenciasNotepadByLicense');
     if (!taLicense || String(taLicense.dataset.licenseId) !== idStr) return;
     if (!Object.prototype.hasOwnProperty.call(licenseRow, 'license_notes')) return;
     var v = licenseRow.license_notes != null ? String(licenseRow.license_notes) : '';
     v = stripStandaloneGenericoLines(v);
-    var cur = '';
-    if (typeof window.adminLicenseSplitGetMergedNotes === 'function') {
-      cur = String(window.adminLicenseSplitGetMergedNotes()).replace(/\r\n/g, '\n').trimEnd();
-    } else {
-      cur = licenseMergedOrBlockText(taLicense).replace(/\r\n/g, '\n').trimEnd();
+    var serverNorm = licenseNotesServerNormalized(v);
+    var localPack = licenseNotesLocalNormalized(idStr);
+    var openNorm = licenseMainSplitMergedNormFromOpenBloc(taLicense);
+
+    /*
+     * SSE / poll / hydrate: no pisar con servidor si localStorage o la UI tienen datos más recientes
+     * (p. ej. recarga F5 antes del PUT, o rev SSE mientras el guardado va en vuelo).
+     */
+    if (localPack.norm !== null && localPack.norm !== serverNorm) {
+      applyLicenseBlocText(taLicense, localPack.raw);
+      saveLicenseForId(idStr, licenseMergedOrBlockText(taLicense));
+      scheduleSaveLicenseNotesOnly(idStr);
+      refreshLicenseLineBadge();
+      if (typeof refreshDuplicateEmailHighlights === 'function') {
+        refreshDuplicateEmailHighlights(parseInt(idStr, 10));
+      }
+      return;
     }
-    var next = v.replace(/\r\n/g, '\n').trimEnd();
+
+    if (openNorm !== serverNorm) {
+      saveLicenseForId(idStr, licenseMergedOrBlockText(taLicense));
+      scheduleSaveLicenseNotesOnly(idStr);
+      refreshLicenseLineBadge();
+      if (typeof refreshDuplicateEmailHighlights === 'function') {
+        refreshDuplicateEmailHighlights(parseInt(idStr, 10));
+      }
+      return;
+    }
+
+    var credDraft = loadLicenseCredsDraft(idStr);
+    if (credDraft !== null && String(credDraft).trim() !== '') {
+      var appliedCred = normalizeLicenseCredsDraft(taLicense.value).replace(/\n+$/, '');
+      var draftCred = normalizeLicenseCredsDraft(credDraft).replace(/\n+$/, '');
+      if (draftCred !== appliedCred) {
+        restoreLicenseCredsDraftAfterApply(taLicense, idStr);
+        saveCurrentLicense(taLicense);
+        scheduleSaveLicenseNotesOnly(idStr);
+        refreshLicenseLineBadge();
+        return;
+      }
+    }
+
+    var cur = openNorm.replace(/\r\n/g, '\n').trimEnd();
+    var next = serverNorm.replace(/\r\n/g, '\n').trimEnd();
     if (cur === next) return;
-    if (typeof window.adminLicenseSplitApplyMergedText === 'function') {
-      window.adminLicenseSplitApplyMergedText(v);
-    } else {
-      setLicenseBlockPlainText(taLicense, v);
-    }
+    applyLicenseBlocText(taLicense, v);
     saveLicenseForId(idStr, licenseMergedOrBlockText(taLicense));
     refreshLicenseLineBadge();
-    if (typeof window.adminLicenseSplitScheduleAutosizeCreds === 'function') {
-      window.requestAnimationFrame(function () {
-        window.adminLicenseSplitScheduleAutosizeCreds();
-      });
-    }
     if (typeof refreshDuplicateEmailHighlights === 'function') {
       refreshDuplicateEmailHighlights(parseInt(idStr, 10));
     }
@@ -2310,6 +2592,12 @@
     flushLicense: flushLicense,
     refreshLicenseSplitFromApi: refreshLicenseSplitFromApi,
     refreshCustomerRenewalSplitFromApi: refreshCustomerRenewalSplitFromApi,
-    customerRenewalSplitNeedsForcedServerSync: customerRenewalSplitNeedsForcedServerSync
+    customerRenewalSplitNeedsForcedServerSync: customerRenewalSplitNeedsForcedServerSync,
+    restoreLicenseCredsDraftAfterApply: restoreLicenseCredsDraftAfterApply,
+    licenseNotesSavePending: function () {
+      return !!(saveNotesTimer || saveLicenseNotesTimer || notesSaveInFlight || licenseNotesSaveInFlight);
+    },
+    flushPendingLicenseNotesSave: flushPendingLicenseNotesSave,
+    persistLicenseBlocNotesToServer: persistLicenseBlocNotesToServer
   };
 })();

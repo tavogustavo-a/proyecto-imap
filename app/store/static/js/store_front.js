@@ -2,11 +2,6 @@ document.addEventListener('DOMContentLoaded', function() {
   const searchInput = document.getElementById('searchStoreInput');
   const productCards = document.querySelectorAll('.card.product-texture-bg');
   var pendingReservationProductIds = Object.create(null);
-  var storeNotifSeenIds = Object.create(null);
-  var storeNotifSseHandle = null;
-  var storeNotifPollInterval = null;
-  var STORE_NOTIF_SSE_URL = '/tienda/api/user/store-notifications/stream';
-  var STORE_NOTIF_POLL_MS = 15000;
 
   function resolveProductPurchaseShell(fromEl) {
     if (!fromEl) return null;
@@ -161,15 +156,6 @@ document.addEventListener('DOMContentLoaded', function() {
       setFilteredRowVisible(row, matchesSearch);
     });
 
-    const wrap = document.getElementById('storeProductsWrap');
-    const hdr = document.getElementById('storeCatalogTableHeader');
-    if (wrap && hdr && wrap.classList.contains('store-products-wrap--view-table')) {
-      const anyVisible = wrap.querySelector(
-        '.card.product-card:not(.store-front-product--hidden)'
-      );
-      hdr.hidden = !anyVisible;
-      hdr.setAttribute('aria-hidden', anyVisible ? 'false' : 'true');
-    }
   }
 
   window.storeFrontApplyProductFilters = function () {
@@ -213,8 +199,20 @@ document.addEventListener('DOMContentLoaded', function() {
         const shell = resolveProductPurchaseShell(btnSumar);
         if (!shell) return;
         const pid = shell.id();
+        const root = shell.root;
         const stock = getSellableStockForProduct(pid);
+        const reserveMode =
+          root && typeof productShellIsReserveMode === 'function' && productShellIsReserveMode(root);
         let cur = parseInt(input.value, 10) || 1;
+        if (reserveMode) {
+          if (cur >= 500) {
+            alert('Cantidad máxima 500 por reserva.');
+            return;
+          }
+          cur++;
+          input.value = String(cur);
+          return;
+        }
         if (stock !== null && cur >= stock) {
           if (stock <= 0) {
             alert('No hay existencias disponibles para este producto.');
@@ -279,6 +277,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const card = document.querySelector('.card.product-card[data-id="' + productId + '"]');
     if (card) {
       card.setAttribute('data-stock', String(n));
+      card.classList.toggle('store-front-product-card--zero-stock', n <= 0);
       if (card.getAttribute('data-renew-customer-account') !== '1') {
         card.classList.toggle('store-front-product-card--no-stock', n <= 0);
       }
@@ -416,6 +415,16 @@ document.addEventListener('DOMContentLoaded', function() {
     const idRaw = rootEl.getAttribute('data-id') || rootEl.getAttribute('data-product-id');
     const pid = parseInt(idRaw, 10);
     let maxVal = preferredMax != null ? preferredMax : getSellableStockForProduct(pid);
+    const reserveMode =
+      typeof productShellIsReserveMode === 'function' && productShellIsReserveMode(rootEl);
+    if (reserveMode) {
+      input.removeAttribute('max');
+      let v = parseInt(input.value, 10) || 1;
+      if (v < 1) v = 1;
+      if (v > 500) v = 500;
+      input.value = String(v);
+      return;
+    }
     if (maxVal === null) return;
     let v = parseInt(input.value, 10) || 1;
     if (maxVal <= 0) {
@@ -695,12 +704,169 @@ document.addEventListener('DOMContentLoaded', function() {
 
   function sincronizarReservasRenovacionCarrito() {
     const ids = recolectarIdsRenovacionCarrito();
-    if (!ids.length) return Promise.resolve();
+    if (!ids.length) {
+      startRenewalCartRealtime();
+      return Promise.resolve();
+    }
     return reservarCuentasRenovacion(ids).then(function (data) {
       if (data && data.failed && data.failed.length) {
         quitarCuentasRenovacionDelCarrito(data.failed);
       }
+      startRenewalCartRealtime();
     });
+  }
+
+  // Reservas de renovación en carrito: SSE con fallback a poll (/carrito-reservas/rev).
+  var renewalCartSseHandle = null;
+  var renewalCartPollInterval = null;
+  var renewalCartLastRev = null;
+  var renewalCartActiveStreamUrl = null;
+  var renewalCartReserveBusy = false;
+  var RENEWAL_CART_SSE_BASE = '/tienda/api/renovacion/carrito-reservas/stream';
+  var RENEWAL_CART_REV_BASE = '/tienda/api/renovacion/carrito-reservas/rev';
+  var RENEWAL_CART_POLL_MS = 1500;
+
+  function buildRenewalCartWatchUrl(base) {
+    var ids = recolectarIdsRenovacionCarrito();
+    if (!ids.length) return null;
+    return base + '?account_ids=' + encodeURIComponent(ids.join(','));
+  }
+
+  function persistCarritoLocal() {
+    try {
+      localStorage.setItem('carritoPago', JSON.stringify(carritoPago));
+    } catch (_e) {}
+  }
+
+  function notifyRenewalCartLost(lost, silent) {
+    if (!lost || !lost.length) return;
+    quitarCuentasRenovacionDelCarrito(lost);
+    persistCarritoLocal();
+    if (silent) return;
+    var emails = lost
+      .map(function (f) {
+        return f.email || f.account_id;
+      })
+      .join(', ');
+    alert(
+      'Una o más cuentas de renovación ya no están disponibles' +
+        (emails ? ' (' + emails + ')' : '') +
+        ' y se quitaron del carrito.'
+    );
+  }
+
+  function handleRenewalCartWatchPayload(data) {
+    if (!data || !data.success) return;
+    var rev = data.renewal_rev != null ? String(data.renewal_rev) : null;
+    var isInitial = renewalCartLastRev === null;
+    if (rev !== null && rev === renewalCartLastRev) return;
+    if (rev !== null) renewalCartLastRev = rev;
+
+    var lost = data.lost || [];
+    var needsRenew = data.needs_renew || [];
+
+    if (needsRenew.length && !renewalCartReserveBusy) {
+      renewalCartReserveBusy = true;
+      reservarCuentasRenovacion(needsRenew)
+        .then(function (reserveData) {
+          renewalCartReserveBusy = false;
+          if (reserveData && reserveData.failed && reserveData.failed.length) {
+            notifyRenewalCartLost(reserveData.failed, isInitial);
+          }
+        })
+        .catch(function () {
+          renewalCartReserveBusy = false;
+        });
+    }
+
+    if (lost.length) {
+      notifyRenewalCartLost(lost, isInitial);
+    }
+  }
+
+  function onRenewalCartSseMessage(data) {
+    if (!data || data.type !== 'renewal_cart') return;
+    handleRenewalCartWatchPayload(data);
+  }
+
+  function pollRenewalCartRev() {
+    if (document.visibilityState !== 'visible') return;
+    var url = buildRenewalCartWatchUrl(RENEWAL_CART_REV_BASE);
+    if (!url) {
+      stopRenewalCartRealtime();
+      return;
+    }
+    fetch(url, {
+      cache: 'no-store',
+      credentials: 'same-origin',
+      headers: { Accept: 'application/json' },
+    })
+      .then(function (r) {
+        return r.json();
+      })
+      .then(function (data) {
+        handleRenewalCartWatchPayload(data);
+      })
+      .catch(function () {});
+  }
+
+  function stopRenewalCartPollFallback() {
+    if (renewalCartPollInterval) {
+      clearInterval(renewalCartPollInterval);
+      renewalCartPollInterval = null;
+    }
+  }
+
+  function startRenewalCartPollFallback() {
+    if (renewalCartPollInterval) return;
+    void pollRenewalCartRev();
+    renewalCartPollInterval = setInterval(pollRenewalCartRev, RENEWAL_CART_POLL_MS);
+  }
+
+  function stopRenewalCartRealtime() {
+    if (renewalCartSseHandle) {
+      renewalCartSseHandle.close();
+      renewalCartSseHandle = null;
+    }
+    stopRenewalCartPollFallback();
+    renewalCartLastRev = null;
+    renewalCartActiveStreamUrl = null;
+  }
+
+  function startRenewalCartRealtime() {
+    var streamUrl = buildRenewalCartWatchUrl(RENEWAL_CART_SSE_BASE);
+    if (!streamUrl) {
+      stopRenewalCartRealtime();
+      return;
+    }
+    if (document.visibilityState !== 'visible') {
+      stopRenewalCartRealtime();
+      return;
+    }
+    if (
+      streamUrl === renewalCartActiveStreamUrl &&
+      (renewalCartSseHandle || renewalCartPollInterval)
+    ) {
+      return;
+    }
+    stopRenewalCartRealtime();
+    renewalCartActiveStreamUrl = streamUrl;
+
+    if (
+      typeof window.StoreSseRealtime !== 'undefined' &&
+      typeof window.StoreSseRealtime.connectOrFallback === 'function'
+    ) {
+      renewalCartSseHandle = window.StoreSseRealtime.connectOrFallback(
+        streamUrl,
+        onRenewalCartSseMessage,
+        startRenewalCartPollFallback
+      );
+      if (!renewalCartSseHandle) {
+        startRenewalCartPollFallback();
+      }
+    } else {
+      startRenewalCartPollFallback();
+    }
   }
 
   function serializarProductosPago() {
@@ -1245,6 +1411,7 @@ document.addEventListener('DOMContentLoaded', function() {
       });
     });
     actualizarCarritoContador();
+    startRenewalCartRealtime();
   }
 
   document.querySelectorAll('.btn-anadir-producto-tienda').forEach((btn) => {
@@ -1258,9 +1425,9 @@ document.addEventListener('DOMContentLoaded', function() {
       let precioUsd = shell.priceUsd();
       const id = shell.id();
       const img = shell.img();
+      const stock = getSellableStockForProduct(id);
       const existe = carritoPago.find(p => p.id === id);
       const yaEnCarrito = existe ? existe.cantidad : 0;
-      const stock = getSellableStockForProduct(id);
 
       if (stock !== null) {
         if (stock <= 0) {
@@ -1412,6 +1579,8 @@ document.addEventListener('DOMContentLoaded', function() {
 
   // Saldo y «puede tener deuda»: deben estar listos antes de syncCart/stock poll (usan renderizarCarrito).
   const saldoDataDiv = document.getElementById('userSaldoData');
+  const STORE_VIEW_ONLY =
+    !!(saldoDataDiv && saldoDataDiv.getAttribute('data-store-view-only') === '1');
   let SALDO_USD = 0;
   let SALDO_COP = 0;
   let TIPO_PRECIO = 'usd';
@@ -1442,6 +1611,13 @@ document.addEventListener('DOMContentLoaded', function() {
       const lc = Number(limCopRaw);
       if (Number.isFinite(lc) && lc >= 0) LIMITE_DEUDA_COP = lc;
     }
+  }
+
+  if (STORE_VIEW_ONLY) {
+    carritoPago = [];
+    try {
+      localStorage.removeItem('carritoPago');
+    } catch (_e) {}
   }
 
   /** Saldo prepago en la moneda del cliente (misma regla que menú y admin). */
@@ -1831,7 +2007,9 @@ document.addEventListener('DOMContentLoaded', function() {
   if (typeof window.storeFrontFilterProducts === 'function') {
     window.storeFrontFilterProducts();
   }
-  sincronizarReservasRenovacionCarrito();
+  sincronizarReservasRenovacionCarrito().finally(function () {
+    startRenewalCartRealtime();
+  });
   document.querySelectorAll('.card.product-texture-bg').forEach(function (card) {
     const pid = parseInt(card.getAttribute('data-id'), 10);
     if (!pid) return;
@@ -1849,6 +2027,13 @@ document.addEventListener('DOMContentLoaded', function() {
       startStockRealtime();
     } else {
       stopStockRealtime();
+    }
+  });
+  document.addEventListener('visibilitychange', function () {
+    if (document.visibilityState === 'visible') {
+      startRenewalCartRealtime();
+    } else {
+      stopRenewalCartRealtime();
     }
   });
   function aplicarCupon(codigoCupon) {
@@ -2244,8 +2429,19 @@ document.addEventListener('DOMContentLoaded', function() {
         alert(payBalanceErr);
         return;
       }
-      
+
       btnProcesarPago.disabled = true;
+      btnProcesarPago.textContent = 'Validando...';
+
+      validateCustomerRenewalCartBeforePay()
+        .then(function (renewErr) {
+          if (renewErr) {
+            btnProcesarPago.disabled = false;
+            btnProcesarPago.textContent = 'Procesar pago';
+            alert(renewErr);
+            return;
+          }
+
       btnProcesarPago.textContent = 'Procesando...';
       
       // Incluir información del cupón en la petición
@@ -2298,6 +2494,12 @@ document.addEventListener('DOMContentLoaded', function() {
         btnProcesarPago.textContent = 'Procesar pago';
         alert('Error de red o servidor.');
       });
+        })
+        .catch(function () {
+          btnProcesarPago.disabled = false;
+          btnProcesarPago.textContent = 'Procesar pago';
+          alert('Error de conexión al validar el correo.');
+        });
     });
   }
   
@@ -2330,11 +2532,53 @@ document.addEventListener('DOMContentLoaded', function() {
   document.addEventListener('visibilitychange', function () {
     if (document.visibilityState === 'visible') {
       refreshStoreFrontSaldoFromApi();
-      startStoreNotificationsRealtime();
-    } else {
-      stopStoreNotificationsRealtime();
+      if (
+        window.StoreUserNotifications &&
+        typeof window.StoreUserNotifications.start === 'function'
+      ) {
+        window.StoreUserNotifications.start();
+      }
+    } else if (
+      window.StoreUserNotifications &&
+      typeof window.StoreUserNotifications.stop === 'function'
+    ) {
+      window.StoreUserNotifications.stop();
     }
   });
+
+  document.addEventListener('store-user-notifications-received', function () {
+    refreshStoreFrontSaldoFromApi();
+    loadPendingProductReservations();
+    loadDetailedReservations();
+  });
+
+  function productShellIsReserveMode(root) {
+    if (!root) return false;
+    var pidRaw = root.getAttribute('data-id') || root.getAttribute('data-product-id');
+    var pid = parseInt(pidRaw, 10);
+    if (!Number.isFinite(pid)) return false;
+    var stock = getSellableStockForProduct(pid);
+    return productShellAllowsReservation(root) && stock !== null && stock <= 0;
+  }
+
+  function postProductStockReservation(pid, quantity) {
+    return fetch('/tienda/api/products/' + encodeURIComponent(String(pid)) + '/reservar', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+        'X-CSRFToken': getCsrfToken(),
+        'X-Requested-With': 'XMLHttpRequest',
+      },
+      body: JSON.stringify({ quantity: quantity }),
+    })
+      .then(function (r) {
+        return r.json().catch(function () {
+          return { success: false };
+        });
+      });
+  }
 
   function productShellAllowsReservation(root) {
     if (!root) return false;
@@ -2346,6 +2590,21 @@ document.addEventListener('DOMContentLoaded', function() {
     return String(root.getAttribute('data-renew-customer-account') || '') === '1';
   }
 
+  function getPendingStockReservationQty(pid) {
+    var rows = detailedReservationsCache || [];
+    for (var i = 0; i < rows.length; i++) {
+      var r = rows[i];
+      if (
+        parseInt(r.product_id, 10) === pid &&
+        r.kind === 'stock' &&
+        (r.status === 'pending' || r.status === 'awaiting_accept')
+      ) {
+        return parseInt(r.quantity, 10) || 1;
+      }
+    }
+    return null;
+  }
+
   function syncProductReserveUiForRoot(root) {
     if (!root) return;
     var pidRaw = root.getAttribute('data-id') || root.getAttribute('data-product-id');
@@ -2355,24 +2614,58 @@ document.addEventListener('DOMContentLoaded', function() {
     var reservable = productShellAllowsReservation(root);
     var renewCustomer = productShellAllowsRenewCustomerAccount(root);
     var qtyRow = root.querySelector('.product-card-qty-add-row, .store-catalog-full-table__buy-row');
+    var reserveRow = root.querySelector('.product-stock-reserve-row');
     var renewBlock = root.querySelector('.product-renovar-cuenta-block');
     var addBtn = root.querySelector('.btn-anadir-producto-tienda');
     var resBtn = root.querySelector('.btn-reservar-producto-tienda');
+    var qtyInputGroup = qtyRow ? qtyRow.querySelector('.input-group-cantidad') : null;
     var pending = !!pendingReservationProductIds[pid];
+    var outOfStock = stock !== null && stock <= 0;
     var showRenewCustomer = renewCustomer;
-    var showReserve = reservable && stock !== null && stock <= 0;
-    if (qtyRow) qtyRow.style.display = showReserve ? 'none' : '';
+    var showReserve = reservable && outOfStock;
+    if (root.classList && root.classList.contains('card')) {
+      root.classList.toggle('store-front-product-card--zero-stock', outOfStock);
+    }
+    if (qtyRow) {
+      qtyRow.style.display = '';
+      qtyRow.classList.toggle('product-card-qty-add-row--reserve-only', showReserve && !showRenewCustomer);
+      qtyRow.classList.toggle('product-card-qty-add-row--with-reserve', showReserve && showRenewCustomer);
+      qtyRow.classList.toggle('product-card-qty-add-row--stock-reserve', showReserve);
+    }
+    if (qtyInputGroup) {
+      qtyInputGroup.style.display = '';
+    }
+    if (showReserve && pending && qtyInputGroup) {
+      var reservedQty = getPendingStockReservationQty(pid);
+      var qtyInput = qtyInputGroup.querySelector('.input-cantidad-licencia');
+      if (qtyInput && reservedQty != null) {
+        qtyInput.value = String(reservedQty);
+      }
+    }
     if (renewBlock) renewBlock.style.display = showRenewCustomer ? '' : 'none';
     if (addBtn) {
-      addBtn.hidden = showReserve;
-      addBtn.style.display = showReserve ? 'none' : '';
+      addBtn.hidden = showReserve || outOfStock;
+      addBtn.style.display = showReserve || outOfStock ? 'none' : '';
+      addBtn.textContent = 'Añadir';
+      addBtn.disabled = false;
+      addBtn.classList.remove('btn-anadir-producto-tienda--reserve-mode');
+      addBtn.classList.remove('btn-anadir-producto-tienda--reserve-pending');
+    }
+    if (reserveRow) {
+      reserveRow.classList.toggle('product-stock-reserve-row--visible', showReserve);
+      reserveRow.toggleAttribute('hidden', !showReserve);
     }
     if (resBtn) {
-      resBtn.hidden = !showReserve;
-      resBtn.style.display = showReserve ? '' : 'none';
-      resBtn.disabled = pending;
-      resBtn.textContent = pending ? 'Reservado' : 'Reservar';
-      resBtn.classList.toggle('btn-reservar-producto-tienda--pending', pending);
+      resBtn.classList.toggle('btn-reservar-producto-tienda--pending', showReserve && pending);
+      if (showReserve) {
+        resBtn.removeAttribute('hidden');
+        resBtn.disabled = false;
+        resBtn.textContent = pending ? 'Actualizar reserva' : 'Reservar';
+      } else {
+        resBtn.setAttribute('hidden', '');
+        resBtn.disabled = false;
+        resBtn.textContent = 'Reservar';
+      }
     }
   }
 
@@ -2409,51 +2702,152 @@ document.addEventListener('DOMContentLoaded', function() {
       });
   }
 
-  function showStoreReservationNotification(notif) {
-    if (!notif || notif.id == null) return;
-    if (storeNotifSeenIds[notif.id]) return;
-    storeNotifSeenIds[notif.id] = true;
-    var isMobile = window.matchMedia && window.matchMedia('(max-width: 768px)').matches;
-    var node = document.createElement('div');
-    node.className =
-      'in-page-notification push-notification store-reservation-notify ' +
-      (isMobile ? 'push-notification-mobile' : 'push-notification-desktop');
-    var bodyText = String(notif.body || '').trim();
-    if (bodyText.length > 220) bodyText = bodyText.slice(0, 217) + '…';
-    node.innerHTML =
-      '<div class="push-notification-title">' +
-      (notif.title ? String(notif.title) : 'Reserva completada') +
-      '</div>' +
-      '<div class="push-notification-body">' +
-      bodyText.replace(/\n/g, '<br>') +
-      '</div>' +
-      (isMobile ? '<div class="push-notification-hint">Toca para cerrar</div>' : '');
-    node.addEventListener('click', function () {
-      node.classList.add('push-notification-closing');
-      window.setTimeout(function () {
-        if (node.parentNode) node.parentNode.removeChild(node);
-      }, 280);
-      fetch('/tienda/api/user/store-notifications/' + encodeURIComponent(String(notif.id)) + '/read', {
-        method: 'POST',
-        credentials: 'same-origin',
-        headers: {
-          'X-CSRFToken': getCsrfToken(),
-          'X-Requested-With': 'XMLHttpRequest',
-        },
-      }).catch(function () {});
+  document.querySelectorAll('.btn-reservar-producto-tienda').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var shell = resolveProductPurchaseShell(btn);
+      if (!shell) return;
+      var pid = shell.id();
+      if (!Number.isFinite(pid)) return;
+      var wasPending = !!pendingReservationProductIds[pid];
+      var stock = getSellableStockForProduct(pid);
+      if (stock !== null && stock > 0) {
+        alert('Ya hay existencias; usa «Añadir» para comprar.');
+        syncAllProductReserveUi();
+        return;
+      }
+      var input = shell.input();
+      var cantidad = input ? parseInt(input.value, 10) || 1 : 1;
+      if (cantidad < 1) return;
+      btn.disabled = true;
+      postProductStockReservation(pid, cantidad)
+        .then(function (data) {
+          btn.disabled = false;
+          if (!data || !data.success) {
+            loadDetailedReservations();
+            var errMsg = (data && data.error) || 'No se pudo crear la reserva.';
+            alert(errMsg);
+            syncAllProductReserveUi();
+            var resBox = document.getElementById('reservasPendientesResumen');
+            if (resBox && !resBox.hidden) {
+              try {
+                resBox.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+              } catch (_e) {}
+            }
+            return;
+          }
+          pendingReservationProductIds[pid] = true;
+          syncAllProductReserveUi();
+          loadDetailedReservations();
+          alert(
+            wasPending
+              ? 'Reserva actualizada (x' +
+                  cantidad +
+                  '). Solo hay un pedido activo por producto; se reemplazó la cantidad anterior.'
+              : 'Reserva registrada (x' +
+                  cantidad +
+                  '). Cuando haya stock se procesará automáticamente. El saldo queda anclado hasta cancelar.'
+          );
+        })
+        .catch(function () {
+          btn.disabled = false;
+          alert('Error de conexión al reservar.');
+        });
     });
-    document.body.appendChild(node);
-    window.setTimeout(function () {
-      if (!node.parentNode) return;
-      node.classList.add('push-notification-closing');
-      window.setTimeout(function () {
-        if (node.parentNode) node.parentNode.removeChild(node);
-      }, 280);
-    }, 12000);
+  });
+
+  /* ==================== Reservas para otro día + lista de pendientes ==================== */
+
+  var detailedReservationsCache = [];
+
+  function escReservaHtml(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
   }
 
-  function pollStoreNotifications() {
-    return fetch('/tienda/api/user/store-notifications', {
+  function formatReservaMonto(n) {
+    var v = Number(n) || 0;
+    return Math.abs(v - Math.round(v)) < 1e-9 ? String(Math.round(v)) : String(Number(v.toFixed(2)));
+  }
+
+  function renderReservationsInto(listEl, boxEl) {
+    if (!listEl || !boxEl) return;
+    var rows = detailedReservationsCache;
+    if (!rows.length) {
+      boxEl.hidden = true;
+      listEl.innerHTML = '';
+      return;
+    }
+    boxEl.hidden = false;
+    listEl.innerHTML = rows
+      .map(function (r) {
+        var isNextDay = r.kind === 'next_day';
+        var qty = parseInt(r.quantity, 10) || 1;
+        var tipo = isNextDay
+          ? 'Para el ' + escReservaHtml(r.target_co_date || 'día siguiente')
+          : 'Agotado (en espera de stock)';
+        var total = formatReservaMonto((r.unit_price || 0) * qty) + ' ' + escReservaHtml(r.currency || '');
+        var estado = '';
+        var acceptBtn = '';
+        if (r.status === 'awaiting_accept') {
+          var offered = parseInt(r.offered_quantity, 10) || 0;
+          estado =
+            '<div class="reserva-pendiente-estado reserva-pendiente-estado--parcial">Solo hay ' +
+            offered +
+            ' de ' +
+            qty +
+            ' — acepta para procesar</div>';
+          acceptBtn =
+            '<button type="button" class="reserva-pendiente-aceptar" data-res-id="' +
+            r.id +
+            '" title="Aceptar el cambio y procesar ' +
+            offered +
+            ' cuenta(s)">Aceptar</button>';
+        } else if (r.last_error) {
+          estado =
+            '<div class="reserva-pendiente-estado reserva-pendiente-estado--error">' +
+            escReservaHtml(r.last_error) +
+            '</div>';
+        }
+        var editBtn =
+          '<button type="button" class="reserva-pendiente-editar" data-res-id="' +
+          r.id +
+          '" title="Cambiar cantidad"><i class="fas fa-pen"></i></button>';
+        return (
+          '<div class="reserva-pendiente-item" data-res-id="' + r.id + '">' +
+          '<div class="reserva-pendiente-info">' +
+          '<span class="reserva-pendiente-nombre">' + escReservaHtml(r.product_name) + '</span>' +
+          '<span class="reserva-pendiente-detalle">x' + qty + ' · ' + total + ' · ' + tipo + '</span>' +
+          estado +
+          '</div>' +
+          '<div class="reserva-pendiente-acciones">' +
+          acceptBtn +
+          editBtn +
+          '<button type="button" class="reserva-pendiente-eliminar" data-res-id="' +
+          r.id +
+          '" title="Eliminar esta reserva">&times;</button>' +
+          '</div>' +
+          '</div>'
+        );
+      })
+      .join('');
+  }
+
+  function renderAllReservationLists() {
+    renderReservationsInto(
+      document.getElementById('reservasPendientesLista'),
+      document.getElementById('reservasPendientesResumen')
+    );
+    renderReservationsInto(
+      document.getElementById('reservasPendientesListaCarrito'),
+      document.getElementById('reservasPendientesCarrito')
+    );
+  }
+
+  function loadDetailedReservations() {
+    return fetch('/tienda/api/user/product-reservations/list', {
       credentials: 'same-origin',
       cache: 'no-store',
     })
@@ -2463,104 +2857,170 @@ document.addEventListener('DOMContentLoaded', function() {
         });
       })
       .then(function (data) {
-        if (!data || !data.success || !Array.isArray(data.notifications)) return;
-        data.notifications.slice().reverse().forEach(showStoreReservationNotification);
-        refreshStoreFrontSaldoFromApi();
-        loadPendingProductReservations();
+        detailedReservationsCache =
+          data && data.success && Array.isArray(data.reservations) ? data.reservations : [];
+        renderAllReservationLists();
+        syncAllProductReserveUi();
       })
       .catch(function () {});
   }
 
-  function onStoreNotifSseMessage(data) {
-    if (!data || data.type !== 'notifications' || !data.success) return;
-    if (Array.isArray(data.notifications)) {
-      data.notifications.slice().reverse().forEach(showStoreReservationNotification);
-    }
-    refreshStoreFrontSaldoFromApi();
-    loadPendingProductReservations();
+  function reservaApiPost(url, body) {
+    return fetch(url, {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+        'X-CSRFToken': getCsrfToken(),
+        'X-Requested-With': 'XMLHttpRequest',
+      },
+      body: JSON.stringify(body || {}),
+    }).then(function (r) {
+      return r.json().catch(function () {
+        return { success: false };
+      });
+    });
   }
 
-  function stopStoreNotificationsRealtime() {
-    if (storeNotifSseHandle) {
-      storeNotifSseHandle.close();
-      storeNotifSseHandle = null;
-    }
-    if (storeNotifPollInterval) {
-      clearInterval(storeNotifPollInterval);
-      storeNotifPollInterval = null;
+  var editReservaCurrentId = null;
+
+  function openEditReservaModal(resId) {
+    var r = detailedReservationsCache.find(function (x) {
+      return String(x.id) === String(resId);
+    });
+    if (!r) return;
+    editReservaCurrentId = r.id;
+    var modal = document.getElementById('editReservaModal');
+    var prodEl = document.getElementById('editReservaProducto');
+    var qtyEl = document.getElementById('editReservaCantidad');
+    if (prodEl) prodEl.textContent = r.product_name + ' · ' + (r.target_co_date || '');
+    if (qtyEl) qtyEl.value = parseInt(r.quantity, 10) || 1;
+    if (modal) {
+      modal.classList.remove('modal-hidden');
+      modal.setAttribute('aria-hidden', 'false');
     }
   }
 
-  function startStoreNotificationsPollFallback() {
-    if (storeNotifPollInterval) return;
-    void pollStoreNotifications();
-    storeNotifPollInterval = setInterval(pollStoreNotifications, STORE_NOTIF_POLL_MS);
+  function closeEditReservaModal() {
+    editReservaCurrentId = null;
+    var modal = document.getElementById('editReservaModal');
+    if (modal) {
+      modal.classList.add('modal-hidden');
+      modal.setAttribute('aria-hidden', 'true');
+    }
   }
 
-  function startStoreNotificationsRealtime() {
-    if (document.visibilityState !== 'visible') {
-      stopStoreNotificationsRealtime();
+  (function wireEditReservaModal() {
+    var save = document.getElementById('editReservaGuardar');
+    var cancel = document.getElementById('editReservaCancelar');
+    var backdrop = document.getElementById('editReservaModalBackdrop');
+    if (cancel) cancel.addEventListener('click', closeEditReservaModal);
+    if (backdrop) backdrop.addEventListener('click', closeEditReservaModal);
+    if (save) {
+      save.addEventListener('click', function () {
+        if (editReservaCurrentId == null) return;
+        var qtyEl = document.getElementById('editReservaCantidad');
+        var qty = qtyEl ? parseInt(qtyEl.value, 10) : NaN;
+        if (!Number.isFinite(qty) || qty < 1) {
+          alert('Cantidad inválida.');
+          return;
+        }
+        fetch('/tienda/api/product-reservations/' + encodeURIComponent(String(editReservaCurrentId)), {
+          method: 'PUT',
+          credentials: 'same-origin',
+          headers: {
+            'Content-Type': 'application/json',
+            Accept: 'application/json',
+            'X-CSRFToken': getCsrfToken(),
+            'X-Requested-With': 'XMLHttpRequest',
+          },
+          body: JSON.stringify({ quantity: qty }),
+        })
+          .then(function (r) {
+            return r.json().catch(function () {
+              return { success: false };
+            });
+          })
+          .then(function (data) {
+            if (!data || !data.success) {
+              alert((data && data.error) || 'No se pudo actualizar la reserva.');
+              return;
+            }
+            closeEditReservaModal();
+            loadDetailedReservations();
+          })
+          .catch(function () {
+            alert('Error de conexión al actualizar la reserva.');
+          });
+      });
+    }
+  })();
+
+  document.addEventListener('click', function (ev) {
+    var t = ev.target;
+    var del = t.closest ? t.closest('.reserva-pendiente-eliminar') : null;
+    if (del) {
+      var idDel = del.getAttribute('data-res-id');
+      reservaApiPost('/tienda/api/product-reservations/' + encodeURIComponent(String(idDel)) + '/cancel', {}).then(
+        function (data) {
+          if (!data || !data.success) {
+            alert((data && data.error) || 'No se pudo eliminar la reserva.');
+          }
+          loadDetailedReservations();
+          loadPendingProductReservations();
+        }
+      );
       return;
     }
-    stopStoreNotificationsRealtime();
-    if (typeof window.StoreSseRealtime !== 'undefined' && typeof window.StoreSseRealtime.connectOrFallback === 'function') {
-      storeNotifSseHandle = window.StoreSseRealtime.connectOrFallback(
-        STORE_NOTIF_SSE_URL,
-        onStoreNotifSseMessage,
-        startStoreNotificationsPollFallback
-      );
-    } else {
-      startStoreNotificationsPollFallback();
-    }
-  }
-
-  document.querySelectorAll('.btn-reservar-producto-tienda').forEach(function (btn) {
-    btn.addEventListener('click', function () {
-      var shell = resolveProductPurchaseShell(btn);
-      if (!shell) return;
-      var pid = shell.id();
-      if (!Number.isFinite(pid)) return;
-      if (pendingReservationProductIds[pid]) return;
-      var stock = getSellableStockForProduct(pid);
-      if (stock !== null && stock > 0) {
-        alert('Ya hay existencias; usa «Añadir» para comprar.');
-        syncAllProductReserveUi();
-        return;
-      }
-      btn.disabled = true;
-      fetch('/tienda/api/products/' + encodeURIComponent(String(pid)) + '/reservar', {
-        method: 'POST',
-        credentials: 'same-origin',
-        headers: {
-          'Content-Type': 'application/json',
-          Accept: 'application/json',
-          'X-CSRFToken': getCsrfToken(),
-          'X-Requested-With': 'XMLHttpRequest',
-        },
-        body: '{}',
-      })
-        .then(function (r) {
-          return r.json().catch(function () {
-            return { success: false };
-          });
-        })
-        .then(function (data) {
+    var acc = t.closest ? t.closest('.reserva-pendiente-aceptar') : null;
+    if (acc) {
+      var idAcc = acc.getAttribute('data-res-id');
+      acc.disabled = true;
+      reservaApiPost('/tienda/api/product-reservations/' + encodeURIComponent(String(idAcc)) + '/accept', {}).then(
+        function (data) {
           if (!data || !data.success) {
-            alert((data && data.error) || 'No se pudo crear la reserva.');
-            btn.disabled = false;
-            return;
+            alert((data && data.error) || 'No se pudo procesar el cambio.');
           }
-          pendingReservationProductIds[pid] = true;
-          syncAllProductReserveUi();
-          alert(
-            'Reserva registrada. Cuando haya stock se te asignará la cuenta automáticamente (se debitará tu saldo) y recibirás aviso aquí y por correo.'
-          );
-        })
-        .catch(function () {
-          alert('Error de conexión al reservar.');
-          btn.disabled = false;
-        });
-    });
+          loadDetailedReservations();
+          refreshStoreFrontSaldoFromApi();
+        }
+      );
+      return;
+    }
+    var edit = t.closest ? t.closest('.reserva-pendiente-editar') : null;
+    if (edit) {
+      openEditReservaModal(edit.getAttribute('data-res-id'));
+      return;
+    }
+    var nextBtn = t.closest ? t.closest('.btn-reservar-nextday-tienda') : null;
+    if (nextBtn) {
+      var shellNd = resolveProductPurchaseShell(nextBtn);
+      if (!shellNd) return;
+      var pidNd = shellNd.id();
+      if (!Number.isFinite(pidNd)) return;
+      var card = nextBtn.closest('.product-card, .store-products-table__row');
+      var qtyInp = card ? card.querySelector('.input-cantidad-licencia') : null;
+      var qtyNd = qtyInp ? parseInt(qtyInp.value, 10) : 1;
+      if (!Number.isFinite(qtyNd) || qtyNd < 1) qtyNd = 1;
+      nextBtn.disabled = true;
+      reservaApiPost('/tienda/api/products/' + encodeURIComponent(String(pidNd)) + '/reservar-otro-dia', {
+        quantity: qtyNd,
+      }).then(function (data) {
+        nextBtn.disabled = false;
+        if (!data || !data.success) {
+          alert((data && data.error) || 'No se pudo crear la reserva para otro día.');
+          return;
+        }
+        alert(
+          'Reserva para otro día registrada (x' +
+            qtyNd +
+            '). Se procesará al cerrar el día de hoy; recibirás el resultado aquí y por correo.'
+        );
+        loadDetailedReservations();
+      });
+      return;
+    }
   });
 
   var renovarCuentaClientePendingShell = null;
@@ -2569,6 +3029,7 @@ document.addEventListener('DOMContentLoaded', function() {
     var modal = document.getElementById('renovarCuentaClienteModal');
     if (modal) modal.classList.add('modal-hidden');
     renovarCuentaClientePendingShell = null;
+    setRenovarCuentaClienteStatus('', null);
     var form = document.getElementById('renovarCuentaClienteForm');
     if (form) form.reset();
   }
@@ -2580,41 +3041,201 @@ document.addEventListener('DOMContentLoaded', function() {
     return domain.indexOf('.') >= 0;
   }
 
+  function extractRenewCustomerEmail(raw) {
+    var m = String(raw || '').match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);
+    return m ? m[0].trim().toLowerCase() : '';
+  }
+
   function parseRenovarCuentaClienteCredLine(credLine) {
     var raw = String(credLine || '').trim();
     if (!raw) {
       return { ok: false, message: 'Indica el correo de la cuenta a renovar.' };
     }
-    var colon = raw.match(/^([^\s:]+@[^\s:]+\.\S+):(\S+)/);
+    var colon = raw.match(/^([^\s:]+@[^\s:]+\.[^\s:]+):(\S+)/);
     if (colon) {
+      var emColon = colon[1].trim().toLowerCase();
+      if (!isValidRenewCustomerEmail(emColon)) {
+        return {
+          ok: false,
+          message: 'Indica un correo válido (con @ y punto). Opcional: correo:contraseña.',
+        };
+      }
       return {
         ok: true,
-        credential: raw,
-        email: colon[1].trim(),
+        credential: emColon + ':' + colon[2].trim(),
+        email: emColon,
         password: colon[2].trim(),
       };
     }
-    var space = raw.match(/^([^\s]+@[^\s]+\.\S+)\s+(\S+)/);
-    if (space) {
+    var email = extractRenewCustomerEmail(raw);
+    if (!email || !isValidRenewCustomerEmail(email)) {
       return {
-        ok: true,
-        credential: raw,
-        email: space[1].trim(),
-        password: space[2].trim(),
-      };
-    }
-    if (isValidRenewCustomerEmail(raw) && !/\s/.test(raw) && raw.indexOf(':') < 0) {
-      return {
-        ok: true,
-        credential: raw,
-        email: raw,
-        password: '',
+        ok: false,
+        message: 'Indica un correo válido (con @ y punto).',
       };
     }
     return {
-      ok: false,
-      message: 'Indica un correo válido (con @ y punto). Opcional: añade la contraseña en la misma línea.',
+      ok: true,
+      credential: email,
+      email: email,
+      password: '',
     };
+  }
+
+  function customerRenewalBlockedMessage(data, fallback) {
+    if (data && data.error) return String(data.error);
+    return fallback || 'No se pudo validar el correo.';
+  }
+
+  function setRenovarCuentaClienteStatus(message, kind) {
+    var el = document.getElementById('renovarCuentaClienteStatus');
+    var submitBtn = document.getElementById('btnRenovarCuentaClienteSubmit');
+    if (!el) return;
+    if (!message) {
+      el.textContent = '';
+      el.classList.add('d-none');
+      el.setAttribute('hidden', 'hidden');
+      el.classList.remove(
+        'renovar-cuenta-cliente-status--warn',
+        'renovar-cuenta-cliente-status--blocked'
+      );
+      if (submitBtn) submitBtn.disabled = false;
+      return;
+    }
+    el.textContent = message;
+    el.classList.remove('d-none');
+    el.removeAttribute('hidden');
+    el.classList.remove('renovar-cuenta-cliente-status--warn', 'renovar-cuenta-cliente-status--blocked');
+    if (kind === 'blocked') {
+      el.classList.add('renovar-cuenta-cliente-status--blocked');
+    } else if (kind === 'warn') {
+      el.classList.add('renovar-cuenta-cliente-status--warn');
+    }
+    if (submitBtn) submitBtn.disabled = kind === 'blocked';
+  }
+
+  var renovarCuentaClienteEmailCheckTimer = null;
+
+  function scheduleRenovarCuentaClienteEmailCheck(shell) {
+    if (!shell) return;
+    if (renovarCuentaClienteEmailCheckTimer) {
+      window.clearTimeout(renovarCuentaClienteEmailCheckTimer);
+    }
+    renovarCuentaClienteEmailCheckTimer = window.setTimeout(function () {
+      renovarCuentaClienteEmailCheckTimer = null;
+      var credLine = (document.getElementById('renovarCuentaClienteCred').value || '').trim();
+      var parsed = parseRenovarCuentaClienteCredLine(credLine);
+      if (!parsed.ok) {
+        setRenovarCuentaClienteStatus('', null);
+        return;
+      }
+      checkCustomerRenewalEmailAllowed(shell.id(), parsed)
+        .then(function (data) {
+          if (!data || !data.success) {
+            setRenovarCuentaClienteStatus('', null);
+            return;
+          }
+          if (!data.allowed) {
+            var kind = data.reason === 'already_renewed' ? 'blocked' : 'warn';
+            setRenovarCuentaClienteStatus(customerRenewalBlockedMessage(data), kind);
+            return;
+          }
+          if (data.warning) {
+            setRenovarCuentaClienteStatus(String(data.warning), 'warn');
+            return;
+          }
+          setRenovarCuentaClienteStatus('', null);
+        })
+        .catch(function () {
+          setRenovarCuentaClienteStatus('', null);
+        });
+    }, 450);
+  }
+
+  function carritoYaTieneRenovacionCorreo(productId, email) {
+    var em = String(email || '').trim().toLowerCase();
+    if (!em) return false;
+    return carritoPago.some(function (p) {
+      return (
+        p.es_renovar_cuenta_cliente &&
+        String(p.id) === String(productId) &&
+        String(p.customer_email || '').trim().toLowerCase() === em
+      );
+    });
+  }
+
+  function confirmCustomerRenewalWarning(warning) {
+    if (!warning) return Promise.resolve(true);
+    return Promise.resolve(
+      window.confirm(String(warning) + '\n\n¿Deseas continuar de todos modos?')
+    );
+  }
+
+  function checkCustomerRenewalEmailAllowed(productId, parsed) {
+    return fetch('/tienda/api/customer-renewal/check-email', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRFToken': getCsrfToken(),
+      },
+      body: JSON.stringify({
+        product_id: productId,
+        customer_email: parsed.email,
+        customer_password: parsed.password,
+        customer_credential: parsed.credential,
+      }),
+    }).then(function (r) {
+      return r.json();
+    });
+  }
+
+  function validateCustomerRenewalCartBeforePay() {
+    var items = carritoPago.filter(function (p) {
+      return p.es_renovar_cuenta_cliente;
+    });
+    if (!items.length) return Promise.resolve(null);
+    var seen = {};
+    var i;
+    for (i = 0; i < items.length; i += 1) {
+      var p = items[i];
+      var em = String(p.customer_email || '').trim().toLowerCase();
+      var key = String(p.id) + '|' + em;
+      if (seen[key]) {
+        return Promise.resolve('El correo está pendiente para cuentas a renovar.');
+      }
+      seen[key] = true;
+    }
+    var chain = Promise.resolve(null);
+    items.forEach(function (p) {
+      chain = chain.then(function (prevErr) {
+        if (prevErr) return prevErr;
+        return checkCustomerRenewalEmailAllowed(p.id, {
+          email: p.customer_email,
+          password: p.customer_password || '',
+          credential: p.customer_credential || p.customer_email,
+        }).then(function (data) {
+          if (!data || !data.success) {
+            return (data && data.error) || 'No se pudo validar el correo.';
+          }
+          if (!data.allowed) {
+            return data.error || customerRenewalBlockedMessage(data, 'El correo está pendiente para cuentas a renovar.');
+          }
+          return confirmCustomerRenewalWarning(data.warning).then(function (ok) {
+            if (!ok) {
+              return '__cancelled__';
+            }
+            if (data.email) {
+              p.customer_email = data.email;
+              p.customer_credential = data.credential || data.email;
+            }
+            return null;
+          });
+        });
+      });
+    });
+    return chain.then(function (err) {
+      return err === '__cancelled__' ? 'Operación cancelada.' : err;
+    });
   }
 
   function openRenovarCuentaClienteModal(shell) {
@@ -2623,14 +3244,23 @@ document.addEventListener('DOMContentLoaded', function() {
     var nameEl = document.getElementById('renovarCuentaClienteProductName');
     if (!modal) return;
     renovarCuentaClientePendingShell = shell;
+    setRenovarCuentaClienteStatus('', null);
     if (nameEl) nameEl.textContent = shell.name() || 'Producto';
     modal.classList.remove('modal-hidden');
     var credInput = document.getElementById('renovarCuentaClienteCred');
-    if (credInput) window.setTimeout(function () { credInput.focus(); }, 80);
+    if (credInput) {
+      credInput.value = '';
+      window.setTimeout(function () { credInput.focus(); }, 80);
+    }
   }
 
   function addRenovarCuentaClienteToCart(shell, credential, email, password) {
     var pid = shell.id();
+    var emNorm = String(email || '').trim().toLowerCase();
+    if (carritoYaTieneRenovacionCorreo(pid, emNorm)) {
+      alert('El correo está pendiente para cuentas a renovar.');
+      return;
+    }
     var nombre = shell.name();
     var img = shell.img();
     var precioCop = shell.priceCop();
@@ -2651,7 +3281,7 @@ document.addEventListener('DOMContentLoaded', function() {
       moneda: moneda,
       es_renovar_cuenta_cliente: true,
       customer_credential: credential,
-      customer_email: email,
+      customer_email: emNorm,
       customer_password: password,
       line_uid: 'rc_' + Date.now() + '_' + Math.random().toString(36).slice(2, 9),
     });
@@ -2691,18 +3321,45 @@ document.addEventListener('DOMContentLoaded', function() {
         alert(parsed.message);
         return;
       }
-      addRenovarCuentaClienteToCart(
-        renovarCuentaClientePendingShell,
-        parsed.credential,
-        parsed.email,
-        parsed.password
-      );
-      closeRenovarCuentaClienteModal();
+      var shell = renovarCuentaClientePendingShell;
+      if (carritoYaTieneRenovacionCorreo(shell.id(), parsed.email)) {
+        alert('El correo está pendiente para cuentas a renovar.');
+        return;
+      }
+      checkCustomerRenewalEmailAllowed(shell.id(), parsed)
+        .then(function (data) {
+          if (!data || !data.success) {
+            alert((data && data.error) || 'No se pudo validar el correo.');
+            return;
+          }
+          if (!data.allowed) {
+            var kind = data.reason === 'already_renewed' ? 'blocked' : 'warn';
+            setRenovarCuentaClienteStatus(customerRenewalBlockedMessage(data), kind);
+            return;
+          }
+          confirmCustomerRenewalWarning(data.warning).then(function (ok) {
+            if (!ok) return;
+            var emailUse = data.email || parsed.email;
+            var credUse = data.credential || parsed.credential;
+            addRenovarCuentaClienteToCart(shell, credUse, emailUse, parsed.password);
+            closeRenovarCuentaClienteModal();
+          });
+        })
+        .catch(function () {
+          alert('Error de conexión al validar el correo.');
+        });
+    });
+  }
+  var renovarCuentaCredInput = document.getElementById('renovarCuentaClienteCred');
+  if (renovarCuentaCredInput) {
+    renovarCuentaCredInput.addEventListener('input', function () {
+      if (!renovarCuentaClientePendingShell) return;
+      scheduleRenovarCuentaClienteEmailCheck(renovarCuentaClientePendingShell);
     });
   }
 
   loadPendingProductReservations();
-  startStoreNotificationsRealtime();
+  loadDetailedReservations();
 
   window.TiendaRenovacion = {
     getCart: function () {

@@ -5,11 +5,8 @@ from __future__ import annotations
 import logging
 import os
 import random
-import smtplib
 import time
 from datetime import datetime, timedelta
-from email.header import Header
-from email.mime.text import MIMEText
 from typing import Any
 from urllib.parse import urljoin
 
@@ -88,9 +85,26 @@ def default_evolution_base_url() -> str:
     return _norm_base_url(os.getenv('EVOLUTION_API_URL'))
 
 
+def _flask_env_is_development() -> bool:
+    return (os.getenv('FLASK_ENV') or 'development').strip().lower() == 'development'
+
+
 def default_evolution_api_key() -> str:
-    key = (os.getenv('EVOLUTION_API_KEY') or DEFAULT_API_KEY).strip()
-    return key or DEFAULT_API_KEY
+    """
+    API key de Evolution.
+    En desarrollo puede caer al placeholder; en producción exige EVOLUTION_API_KEY real.
+    """
+    key = (os.getenv('EVOLUTION_API_KEY') or '').strip()
+    if key:
+        if not _flask_env_is_development() and key == DEFAULT_API_KEY:
+            raise RuntimeError(
+                'EVOLUTION_API_KEY insegura en producción (valor por defecto). '
+                'Definí una clave distinta de imap-evolution-change-me.'
+            )
+        return key
+    if _flask_env_is_development():
+        return DEFAULT_API_KEY
+    return ''
 
 
 def default_evolution_webhook_token() -> str:
@@ -115,7 +129,9 @@ def apply_whatsapp_config_env_secrets(config) -> None:
     """Aplica URL, API key y webhook desde .env (producción)."""
     if config is None:
         return
-    config.api_key = default_evolution_api_key()
+    env_key = default_evolution_api_key()
+    if env_key:
+        config.api_key = env_key
     config.base_url = default_evolution_base_url()
     webhook = default_evolution_webhook_token()
     if webhook:
@@ -124,7 +140,7 @@ def apply_whatsapp_config_env_secrets(config) -> None:
 
 def whatsapp_using_default_api_key(config=None) -> bool:
     key = resolve_config_api_key(config) if config is not None else default_evolution_api_key()
-    return key == DEFAULT_API_KEY
+    return (not key) or key == DEFAULT_API_KEY
 
 
 def resolve_config_base_url(config) -> str:
@@ -134,7 +150,11 @@ def resolve_config_base_url(config) -> str:
 
 def resolve_config_api_key(config) -> str:
     raw = (getattr(config, 'api_key', None) or '').strip() if config is not None else ''
-    return raw or default_evolution_api_key()
+    if raw:
+        if not _flask_env_is_development() and raw == DEFAULT_API_KEY:
+            return ''
+        return raw
+    return default_evolution_api_key()
 
 
 def humanize_evolution_error(raw: str | None, *, base_url: str | None = None) -> str:
@@ -563,27 +583,32 @@ def resolve_whatsapp_admin_alert_email() -> str | None:
 
 
 def send_whatsapp_alert_email(to_email: str, subject: str, body: str) -> bool:
-    """Envía alerta usando SMTP (mismas variables que recuperación de contraseña)."""
-    smtp_host = os.getenv('SMTP_HOST', 'smtp.gmail.com')
-    smtp_port = int(os.getenv('SMTP_PORT', '465'))
-    smtp_user = os.getenv('SMTP_USER', '')
-    smtp_password = os.getenv('SMTP_PASSWORD', '')
-
-    if not to_email or not smtp_user or not smtp_password:
-        logger.warning('Alerta WhatsApp no enviada: falta correo admin o SMTP_USER/SMTP_PASSWORD')
-        return False
-
-    msg = MIMEText(body, 'plain', 'utf-8')
-    msg['Subject'] = str(Header(subject, 'utf-8'))
-    msg['From'] = smtp_user
-    msg['To'] = to_email
+    """Envía alerta admin usando el mismo pipeline transaccional (texto + cabeceras)."""
     try:
-        with smtplib.SMTP_SSL(smtp_host, smtp_port) as server:
-            server.login(smtp_user, smtp_password)
-            server.sendmail(smtp_user, [to_email], msg.as_string())
-        return True
+        from app.services.email_service import send_transactional_email
+
+        paragraphs = [ln.strip() for ln in (body or '').split('\n') if ln.strip()]
+        body_html = None
+        try:
+            from app.services.email_service import render_transactional_email_html
+
+            title = (subject or 'Aviso Tu Premium').split('—')[0].strip() or 'Aviso Tu Premium'
+            body_html = render_transactional_email_html(
+                title,
+                '',
+                paragraphs or [body or subject or ''],
+            )
+        except Exception:
+            body_html = None
+        return send_transactional_email(
+            to_email=to_email,
+            subject=subject,
+            body_text=body or subject or '',
+            body_html=body_html,
+            from_display_name='Tu Premium — Avisos',
+        )
     except Exception as exc:
-        logger.exception('Error enviando alerta WhatsApp por correo: %s', exc)
+        logger.exception('Error enviando alerta por correo: %s', exc)
         return False
 
 

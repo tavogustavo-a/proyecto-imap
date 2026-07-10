@@ -2,6 +2,20 @@
 // CHAT DASHBOARD INTEGRADO - VERSIÓN LIMPIA - CON MENSAJES TEMPORALES
 // ============================================================================
 
+/** Escapa texto de usuario antes de insertarlo en innerHTML (anti-XSS). */
+function escapeChatHtml(text) {
+    if (text == null) return '';
+    return String(text)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+if (typeof window !== 'undefined') {
+    window.escapeChatHtml = escapeChatHtml;
+}
+
     // Variables globales
     let dashboardCurrentUserId = null;
     let dashboardCurrentUsername = null;
@@ -147,25 +161,31 @@ async function loadUsersList(response = null) {
                     userItem.setAttribute('data-username', user.username);
                     // Para sub-usuarios: display_name = "padre / subusuario" (chat independiente)
                     const displayName = user.display_name || user.username;
+                    const safeDisplayName = escapeChatHtml(displayName);
+                    const safeUsername = escapeChatHtml(user.username || '');
+                    const safeLastMessage = escapeChatHtml(user.last_message || 'Sin mensajes');
+                    const safeInitial = escapeChatHtml(
+                        String(displayName || '?').charAt(0).toUpperCase() || '?'
+                    );
                     userItem.setAttribute('data-display-name', displayName);
                     
                     userItem.innerHTML = `
                         <div class="user-avatar">
-                            <span class="user-initial">${displayName.charAt(0).toUpperCase()}</span>
+                            <span class="user-initial">${safeInitial}</span>
                         </div>
                         <div class="user-info">
-                            <div class="user-name">${displayName}</div>
-                            <div class="user-last-message">${user.last_message || 'Sin mensajes'}</div>
+                            <div class="user-name">${safeDisplayName}</div>
+                            <div class="user-last-message">${safeLastMessage}</div>
                 <div class="user-typing-indicator d-none">
                     <span class="typing-text">escribiendo</span>
                 </div>
                         </div>
                         <div class="user-actions">
-                            <button class="finish-support-btn" title="Finalizar soporte" data-user-id="${user.id}" data-username="${user.username}">
+                            <button class="finish-support-btn" title="Finalizar soporte" data-user-id="${user.id}" data-username="${safeUsername}">
                                 <i class="fas fa-check-circle"></i>
                             </button>
                             ${isAdminUser && currentUser.username === ADMIN_USER ? `
-                                <button class="delete-chat-btn" title="Eliminar chat completo" data-user-id="${user.id}" data-username="${user.username}">
+                                <button class="delete-chat-btn" title="Eliminar chat completo" data-user-id="${user.id}" data-username="${safeUsername}">
                                     <i class="fas fa-times"></i>
                                 </button>
                             ` : ''}
@@ -597,7 +617,7 @@ function addMessageToChat(messageData, isFromServer = false) {
         } else {
             // Admin y soporte ven el nombre real
             const senderUsername = messageData.sender_name || 'Soporte';
-            senderLabel = `<span class="message-sender-inline support-inline">${senderUsername}: </span>`;
+            senderLabel = `<span class="message-sender-inline support-inline">${escapeChatHtml(senderUsername)}: </span>`;
         }
     } else if (messageData.message_type === 'user') {
         senderLabel = '';
@@ -606,7 +626,7 @@ function addMessageToChat(messageData, isFromServer = false) {
         senderLabel = '<span class="message-sender-inline system-inline">Sistema: </span>';
     }
     
-    const messageTime = formatTimeAgo(messageData.created_at || messageData.timestamp);
+    const messageTime = escapeChatHtml(formatTimeAgo(messageData.created_at || messageData.timestamp));
     
     // Verificar si es un mensaje con archivos
     if (messageData.has_attachment) {
@@ -751,7 +771,7 @@ function addMessageToChat(messageData, isFromServer = false) {
         // Mensaje de texto normal
         messageElement.innerHTML = `
             <div class="message-content">
-                <div class="message-text">${senderLabel}${messageData.message}</div>
+                <div class="message-text">${senderLabel}${escapeChatHtml(messageData.message || '')}</div>
                 <div class="message-time">${messageTime}</div>
             </div>
         `;

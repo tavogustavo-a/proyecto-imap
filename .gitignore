@@ -64,3 +64,6 @@ app/static/uploads/
 !app/static/uploads/.gitkeep
 app/store/static/uploads/
 !app/store/static/uploads/.gitkeep
+
+# App Capacitor (Android/iOS) — local, no versionar
+mobile/

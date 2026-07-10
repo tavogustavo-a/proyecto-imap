@@ -524,22 +524,31 @@ def update_imap2_regex_association_ajax():
 def list_imap2_twofa_configs(server_id):
     """Lista todas las configuraciones 2FA de un servidor IMAP2 específico"""
     try:
+        from app.utils.totp_config_serialize import serialize_twofa_config
+
         server = IMAPServer2.query.get_or_404(server_id)
         configs = IMAP2TwoFAConfig.query.filter_by(imap_server_id=server_id).order_by(IMAP2TwoFAConfig.created_at.desc()).all()
-        configs_data = []
-        for config in configs:
-            configs_data.append({
-                'id': config.id,
-                'secret_key': config.secret_key,
-                'emails': config.emails,
-                'emails_list': config.get_emails_list(),
-                'is_enabled': config.is_enabled,
-                'created_at': config.created_at.isoformat() if config.created_at else None,
-                'updated_at': config.updated_at.isoformat() if config.updated_at else None
-            })
+        configs_data = [serialize_twofa_config(c, include_secret=False) for c in configs]
         return jsonify({'success': True, 'configs': configs_data}), 200
     except Exception as e:
         current_app.logger.error(f"Error al listar configuraciones 2FA de IMAP2: {e}", exc_info=True)
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@admin_bp.route("/imap2/twofa-configs/<int:config_id>", methods=["GET"])
+@admin_required
+def get_imap2_twofa_config(config_id):
+    """Detalle de una config 2FA (incluye secreto para editar)."""
+    try:
+        from app.utils.totp_config_serialize import serialize_twofa_config
+
+        config = IMAP2TwoFAConfig.query.get_or_404(config_id)
+        return jsonify({
+            'success': True,
+            'config': serialize_twofa_config(config, include_secret=True),
+        }), 200
+    except Exception as e:
+        current_app.logger.error(f"Error al obtener configuración 2FA de IMAP2: {e}", exc_info=True)
         return jsonify({'success': False, 'error': str(e)}), 500
 
 

@@ -479,9 +479,9 @@
                   <button class="btn-panel btn-blue btn-copy-link btn-small minw-70" data-link="{{ api.api_key }}">Copiar</button>
               </div>
               {% else %}
-              {# API Genérica - mostrar como HTML #}
+              {# API Genérica: HTML sanitizado (sin scripts / on* / javascript:) #}
               <div class="api-key-html-content">
-                  {{ api.api_key | safe }}
+                  {{ api.api_key | sanitize_message_html }}
               </div>
               {% endif %}
             {% endif %}
@@ -546,7 +546,7 @@
 {% block scripts %}
 {{ super() }}
 <meta name="clear_trigger_log_url" content="{{ url_for('admin_bp.clear_trigger_log') }}">
-<script src="{{ url_for('store_bp.static', filename='js/menu_herramientas.js') }}" defer></script>
+<script src="{{ url_for('store_bp.static', filename='js/menu_herramientas.js') }}?v=20260710-no-db-query" defer></script>
 <script src="{{ url_for('store_bp.static', filename='js/drive_manager.js') }}" defer></script>
 <script src="{{ url_for('static', filename='js/clear_trigger_logs.js') }}" defer></script>
 <script src="{{ url_for('static', filename='js/logout_all_cookies_btn.js') }}" defer></script>

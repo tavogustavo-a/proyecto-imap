@@ -906,6 +906,61 @@ def username_linked_explicitly_to_viewer(line_user: str, allowed_names: List[str
     return False
 
 
+def dual_to_portal_readonly_row(
+    dual: Dict[str, Any],
+    raw_line: str,
+    calendar_day: int,
+    phys_idx: int,
+    *,
+    display_user: Optional[str] = None,
+    row_ordinal: Optional[int] = None,
+) -> Dict[str, Any]:
+    """Convierte una fila admin del bloc día al dict que consume el portal de licencias."""
+    stripped = str(raw_line or '').strip()
+    sg = str(dual.get('statusGood') or '').strip()
+    sb_sel = str(dual.get('statusBad') or '').strip()
+    od = str(dual.get('otroDetail') or '').strip()
+    eff = effective_bad_for_tier(sb_sel, od if sb_sel else '')
+    tier_bad = admin_license_status_tier_from_stored(eff)
+
+    gv = _spanish_good_label(sg) if sg else ''
+    bv = ''
+    if sb_sel or od:
+        bv = _spanish_bad_label(sb_sel, od)
+
+    lt_good = 'good' if sg else 'neutral'
+    lt_bad = 'bad' if tier_bad == 'bad' else 'neutral'
+    canon_g = (_canonical_good_from_stored(sg) or sg).strip() if sg else ''
+    is_ok = normalize_status_key(canon_g) == 'ok'
+    green_select = resolve_portal_green_select_value(dual, stripped)
+    prev_restore = green_select if is_ok else ''
+    prev_bad_restore = _prev_bad_restore_from_dual(dual) if is_ok else ''
+    user_out = (
+        str(display_user).strip()
+        if display_user is not None and str(display_user).strip()
+        else str(dual.get('user') or '')
+    )
+
+    return {
+        'cred': str(dual.get('cred') or ''),
+        'user': user_out,
+        'vinculo_dia': int(calendar_day),
+        'label_good': gv,
+        'label_bad': bv,
+        'tier_good': lt_good,
+        'tier_bad': lt_bad,
+        'status_good': canon_g,
+        'status_bad': sb_sel,
+        'otro_detail': od,
+        'prev_good_restore': prev_restore,
+        'prev_bad_restore': prev_bad_restore,
+        'green_select_value': green_select,
+        'buena_revisada_readonly': is_ok,
+        'phys_line_index': int(phys_idx),
+        'row_ordinal': int(row_ordinal) if row_ordinal is not None else 0,
+    }
+
+
 def matched_rows_for_username_only_day(
     day_text: Optional[str],
     allowed_usernames: List[str],
@@ -924,45 +979,14 @@ def matched_rows_for_username_only_day(
         dual = parse_admin_license_line_to_split_parts(line)
         if not username_linked_explicitly_to_viewer(str(dual.get('user') or ''), allowed_usernames):
             continue
-        sg = str(dual.get('statusGood') or '').strip()
-        sb_sel = str(dual.get('statusBad') or '').strip()
-        od = str(dual.get('otroDetail') or '').strip()
-        eff = effective_bad_for_tier(sb_sel, od if sb_sel else '')
-        tier_bad = admin_license_status_tier_from_stored(eff)
-
-        gv = _spanish_good_label(sg) if sg else ''
-        bv = ''
-        if sb_sel or od:
-            bv = _spanish_bad_label(sb_sel, od)
-
-        lt_good = 'good' if sg else 'neutral'
-        lt_bad = 'bad' if tier_bad == 'bad' else 'neutral'
-        canon_g = (_canonical_good_from_stored(sg) or sg).strip() if sg else ''
-        is_ok = normalize_status_key(canon_g) == 'ok'
-        green_select = resolve_portal_green_select_value(dual, stripped)
-        prev_restore = green_select if is_ok else ''
-        prev_bad_restore = _prev_bad_restore_from_dual(dual) if is_ok else ''
-
-        out.append(
-            {
-                'cred': str(dual.get('cred') or ''),
-                'user': str(dual.get('user') or ''),
-                'vinculo_dia': int(calendar_day),
-                'label_good': gv,
-                'label_bad': bv,
-                'tier_good': lt_good,
-                'tier_bad': lt_bad,
-                'status_good': canon_g,
-                'status_bad': sb_sel,
-                'otro_detail': od,
-                'prev_good_restore': prev_restore,
-                'prev_bad_restore': prev_bad_restore,
-                'green_select_value': green_select,
-                'buena_revisada_readonly': is_ok,
-                'phys_line_index': int(phys_idx),
-                'row_ordinal': len(out),
-            }
+        row = dual_to_portal_readonly_row(
+            dual,
+            line,
+            calendar_day,
+            phys_idx,
+            row_ordinal=len(out),
         )
+        out.append(row)
     return out
 
 

@@ -79,6 +79,53 @@
         return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;');
     }
 
+    function userLicGetCsrfToken() {
+        var meta = document.querySelector('meta[name="csrf_token"]');
+        if (meta && meta.getAttribute('content')) {
+            return meta.getAttribute('content');
+        }
+        var match = document.cookie ? document.cookie.match(/(?:^|;\s*)_csrf=([^;]+)/) : null;
+        return match ? decodeURIComponent(match[1]) : '';
+    }
+
+    function userLicJsonHeaders(extra) {
+        var headers = { 'Content-Type': 'application/json', Accept: 'application/json' };
+        var csrf = userLicGetCsrfToken();
+        if (csrf) headers['X-CSRFToken'] = csrf;
+        if (extra && typeof extra === 'object') {
+            Object.keys(extra).forEach(function (k) {
+                headers[k] = extra[k];
+            });
+        }
+        return headers;
+    }
+
+    function userLicPortalIsViewOnly(rootEl) {
+        var el =
+            rootEl ||
+            document.getElementById('userLicenciasTableOuter') ||
+            document.querySelector('[data-licencias-view-only]');
+        if (!el) return false;
+        return String(el.getAttribute('data-licencias-view-only') || '') === '1';
+    }
+
+    function userLicPortalApplyViewOnlyUi(rootEl) {
+        if (!rootEl || !userLicPortalIsViewOnly(rootEl)) return;
+        rootEl.classList.add('user-licencias-view-only');
+        rootEl.querySelectorAll('select, textarea, input:not([type="search"]):not([type="checkbox"])').forEach(
+            function (node) {
+                if (!node || node.disabled) return;
+                if (node.closest('.user-lic-caducidad-notify-bar')) return;
+                if (node.id === 'userLicenciasSearch' || node.id === 'userLicReportesSearch') return;
+                node.disabled = true;
+                node.setAttribute('aria-disabled', 'true');
+                if (node.tagName === 'TEXTAREA' || node.tagName === 'INPUT') {
+                    node.setAttribute('readonly', 'readonly');
+                }
+            }
+        );
+    }
+
     /** Al copiar licencias: una línea por credencial, sin huecos por filas vacías del editor. */
     function normalizeLicenseClipboardText(raw) {
         return String(raw || '')
@@ -294,6 +341,12 @@
 
     function userLicPromptAndApplyNewPassword(row) {
         if (!row || window.__userLicDayPasswordInFlight) return;
+        if (userLicPortalIsViewOnly(row.closest('#userLicenciasTableOuter'))) {
+            window.alert(
+                'Tu cuenta solo puede visualizar licencias. No puedes cambiar contraseñas.'
+            );
+            return;
+        }
         var cred = userLicGetRowCredPlain(row);
         if (!userLicCredentialPlainHasPasswordPart(cred)) {
             window.alert('Esta fila solo tiene correo en el bloc; no se puede cambiar la contraseña aquí.');
@@ -326,7 +379,7 @@
 
         fetch(patchUrl, {
             method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
+            headers: userLicJsonHeaders(),
             credentials: 'same-origin',
             body: JSON.stringify({
                 license_id: lid,
@@ -573,6 +626,7 @@
 
     function initEditableLicenseRowsIn(container) {
         if (!container) return;
+        userLicEnsureFormFieldIdName(container);
         container.querySelectorAll('.user-lic-license-row-edit').forEach(function (row) {
             syncOtroShell(row);
             applyDualTierUi(row);
@@ -584,6 +638,10 @@
     }
 
     function wireLicenseStatusAutosave(rootEl) {
+        if (userLicPortalIsViewOnly(rootEl)) {
+            userLicPortalApplyViewOnlyUi(rootEl);
+            return;
+        }
         var patchUrl =
             rootEl.getAttribute('data-day-status-url') || '/tienda/api/user/license-day-row-status';
         var timers = Object.create(null);
@@ -678,7 +736,7 @@
 
             fetch(patchUrl, {
                 method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
+                headers: userLicJsonHeaders(),
                 credentials: 'same-origin',
                 body: JSON.stringify(payload),
             })
@@ -848,6 +906,11 @@
                     ev.target.classList.contains('license-split-editor__status-good') ||
                     ev.target.classList.contains('license-split-editor__status-bad')
                 ) {
+                    if (row.getAttribute('data-user-lic-renewal-pending') === '1') {
+                        ev.preventDefault();
+                        ev.stopPropagation();
+                        return;
+                    }
                     if (ev.target.classList.contains('license-split-editor__status-bad')) {
                         var badActionVal = String(ev.target.value || '').trim();
                         if (userLicIsBadSelectActionValue(badActionVal)) {
@@ -891,8 +954,37 @@
         );
     }
 
+    function userLicRowCustomerRenewalPending(row) {
+        if (!row || typeof row !== 'object') return false;
+        return String(row.customer_renewal_status || '').trim().toLowerCase() === 'pending';
+    }
+
     /** Saldo de cuenta (API billing_saldo): 0 = al día (Pagada); distinto de 0 muestra importe pendiente o a favor (no «Pagada»). */
-    function formatUserLicBillingSaldoCell(lm) {
+    function formatUserLicBillingSaldoCell(lm, row) {
+        if (userLicRowCustomerRenewalPending(row)) {
+            return (
+                '<span class="user-lic-saldo-display user-lic-saldo-display--due user-lic-saldo-display--renewal-pending" title="Tu renovación fue comprada y está en cola; soporte la confirmará pronto.">Pendiente</span>'
+            );
+        }
+        /* Pendiente de ESTA cuenta (deuda repartida de la compra más vieja a la más nueva);
+           el saldo total ya se ve en el menú. Sin dato por cuenta se usa el saldo global. */
+        if (lm && lm.billing_account_due != null && Number.isFinite(Number(lm.billing_account_due))) {
+            var due = Number(lm.billing_account_due);
+            if (due > 1e-9) {
+                var dueTxt =
+                    Math.abs(due - Math.round(due)) < 1e-9
+                        ? String(Math.round(due))
+                        : String(Number(due.toFixed(2)));
+                return (
+                    '<span class="user-lic-saldo-display user-lic-saldo-display--due" title="Pendiente de esta cuenta; los pagos se aplican de la compra más vieja a la más nueva.">Debe ' +
+                    escHtml(dueTxt) +
+                    '</span>'
+                );
+            }
+            return (
+                '<span class="user-lic-saldo-display user-lic-saldo-display--paid" title="Esta cuenta ya está pagada.">Pagada</span>'
+            );
+        }
         var raw = lm && lm.billing_saldo != null ? Number(lm.billing_saldo) : 0;
         if (!Number.isFinite(raw)) raw = 0;
         if (Math.abs(raw) < 1e-9) {
@@ -900,18 +992,22 @@
                 '<span class="user-lic-saldo-display user-lic-saldo-display--paid" title="Cuenta al día (sin saldo pendiente)">Pagada</span>'
             );
         }
-        var txt = Math.abs(raw - Math.round(raw)) < 1e-9 ? String(Math.round(raw)) : String(Number(raw.toFixed(2)));
-        var titleExtra = '';
+        var absVal = Math.abs(raw);
+        var txt = Math.abs(absVal - Math.round(absVal)) < 1e-9 ? String(Math.round(absVal)) : String(Number(absVal.toFixed(2)));
+        var label;
+        var titleExtra;
         if (raw > 1e-9) {
+            label = 'Debe ' + txt;
             titleExtra = 'Importe pendiente en cuenta licencias.';
         } else {
+            label = 'A favor ' + txt;
             titleExtra = 'Saldo negativo / a favor (no al día como «Pagada»).';
         }
         return (
             '<span class="user-lic-saldo-display user-lic-saldo-display--due" title="' +
             escAttr(titleExtra) +
             '">' +
-            escHtml(txt) +
+            escHtml(label) +
             '</span>'
         );
     }
@@ -929,6 +1025,10 @@
         var slug = slugForCredFieldId(lm.credSlug || 'u0');
         var ordStored = row.row_ordinal != null ? Number(row.row_ordinal) : Number(ordinal);
         if (!Number.isFinite(ordStored)) ordStored = ordinal;
+        var renewalPending = userLicRowCustomerRenewalPending(row);
+        var renewalPendingLockAttrs = renewalPending
+            ? ' disabled aria-disabled="true" title="Renovación en proceso; esperá confirmación de soporte."'
+            : '';
 
         var curSg = row.status_good != null ? String(row.status_good).trim() : '';
         var curSb = row.status_bad != null ? String(row.status_bad).trim() : '';
@@ -1010,7 +1110,7 @@
                   '" autocomplete="off" aria-label="Estado favorable (renovación)"' +
                   (isBuenaRevisada
                       ? ' disabled aria-disabled="true" title="Renovación guardada. Pulsa «Buena» en la columna de reportes para editar."'
-                      : '') +
+                      : renewalPendingLockAttrs) +
                   '>' +
                   statusOptionsInnerHtml(userLicPortalGoodOptionsForLicense(lm), goodSelectValue) +
                   '</select>';
@@ -1024,6 +1124,7 @@
             '<div class="license-split-editor__row user-lic-readonly-row user-lic-license-row-edit' +
             (userLicRowSignalClassFromRow(row) ? ' ' + userLicRowSignalClassFromRow(row) : '') +
             (showGoodCol ? '' : ' user-lic-row-hide-good-select') +
+            (renewalPending ? ' user-lic-row--renewal-pending' : '') +
             '"' +
             ' data-user-lic-save-key="' +
             escAttr(saveKeyParts) +
@@ -1050,6 +1151,7 @@
             escAttr(String(ordStored)) +
             '"' +
             (isBuenaRevisada ? ' data-user-lic-buena-revisada="1"' : '') +
+            (renewalPending ? ' data-user-lic-renewal-pending="1"' : '') +
             ' data-user-lic-saved-good="' +
             escAttr(isBuenaRevisada ? prevGoodRestore : goodSelectValue || curSg) +
             '"' +
@@ -1068,7 +1170,7 @@
             '<button type="button" class="user-lic-warranty-history-btn" title="Historial de caídas y garantías" aria-label="Ver historial de caídas y garantías de esta fila">' +
             '<i class="fas fa-exclamation-triangle" aria-hidden="true"></i>' +
             '</button>' +
-            userLicExpiryCountdownHtml(lm) +
+            (renewalPending ? '' : userLicExpiryCountdownHtml(lm)) +
             goodSelectOrBadgeHtml +
             '</div>' +
             '<div class="license-split-editor__status-select-shell license-split-editor__status-select-shell--bad">' +
@@ -1080,7 +1182,9 @@
                   bid +
                   '" class="license-split-editor__status license-split-editor__status-bad license-split-editor__status--tier-' +
                   bTier +
-                  '" autocomplete="off" aria-label="Reportar problema o incidencia">' +
+                  '" autocomplete="off" aria-label="Reportar problema o incidencia"' +
+                  renewalPendingLockAttrs +
+                  '>' +
                   statusOptionsInnerHtml(OPT_LICENSE_BAD, curSb) +
                   '</select>') +
             '</div>' +
@@ -1100,7 +1204,7 @@
             '<div class="license-split-editor__saldo-cell"' +
             ' role="gridcell"' +
             ' aria-label="Saldo de cuenta">' +
-            formatUserLicBillingSaldoCell(lm || {}) +
+            formatUserLicBillingSaldoCell(lm || {}, row) +
             '</div>' +
             '<input id="' +
             escAttr(nid) +
@@ -1121,6 +1225,32 @@
         return String(fkey || 'u0').replace(/[^a-zA-Z0-9_-]/g, '_');
     }
 
+    /** Chrome Issues: todo input/select/textarea debe tener id o name (autofill). */
+    function userLicEnsureFormFieldIdName(root) {
+        if (!root || !root.querySelectorAll) return;
+        var seq = 0;
+        root.querySelectorAll('input, select, textarea').forEach(function (el) {
+            if (el.id && el.name) return;
+            var base = el.id || el.name;
+            if (!base) {
+                var hint =
+                    el.getAttribute('data-proveedor-extra-kind') ||
+                    el.getAttribute('data-proveedor-block') ||
+                    el.getAttribute('data-proveedor-day') ||
+                    el.className ||
+                    el.tagName;
+                base = 'user-lic-field-' + slugForCredFieldId(hint) + '-' + String(seq);
+                seq += 1;
+                while (document.getElementById(base)) {
+                    base = 'user-lic-field-' + slugForCredFieldId(hint) + '-' + String(seq);
+                    seq += 1;
+                }
+            }
+            if (!el.id) el.id = base;
+            if (!el.name) el.name = base;
+        });
+    }
+
     /** Filtro de tarjeta «Todos»: una sola grilla día 1–31 con todas las cuentas. */
     var USER_LIC_AGGREGATE_LICENSE_ID = '__aggregate_all__';
 
@@ -1135,6 +1265,10 @@
             virtual: !!(acc.virtual === true || acc.is_virtual === true),
             credSlug: fkey,
             billing_saldo: acc.billing_saldo != null ? Number(acc.billing_saldo) : 0,
+            billing_account_due:
+                acc.billing_account_due != null && acc.billing_account_due !== ''
+                    ? Number(acc.billing_account_due)
+                    : null,
             product_name: pn,
             month_to_month: userLicPortalMonthToMonthChecked(acc),
             days_until_expiry: daysLeft,
@@ -2229,6 +2363,7 @@
         userLicPortalApplyColumnVisibility(outer);
         userLicPortalRestoreDaySectionsAndToolbars(outer);
         userLicPortalWireProveedorEditors(outer);
+        userLicPortalApplyViewOnlyUi(outer);
 
         if (userLicPortalVencimientosActive) {
             syncServiceFilterGridCards(gridHostEl, null, true);
@@ -2568,8 +2703,9 @@
         var scopeSeg = slugForCredFieldId(domScopeSeg || 'x');
         var taIdName = 'user-lic-creds-' + slug + '-' + scopeSeg + '-d' + String(day);
         var badgeTitle = n === 1 ? '1 cuenta' : n + ' cuentas';
+        /* Portal usuario: el contador solo se muestra cuando el día tiene licencias (en admin sí sale siempre). */
         var badgeHtml =
-            sectionOpts.caducidadMode || n > 0
+            n > 0
                 ? '<span class="day-account-badge admin-licencias-notepad-line-badge" title="' +
                   escAttr(badgeTitle) +
                   '">' +
@@ -2692,9 +2828,6 @@
         }
         return (
             expandBtn +
-            '<button type="button" class="admin-licencias-toggle-notes-col-btn user-lic-days-toggle-creds" title="Ocultar columna de cuentas (texto izquierdo)" aria-label="Ocultar columna de credenciales en cada día" aria-pressed="false">' +
-            '<i class="fas fa-eye-slash" aria-hidden="true"></i>' +
-            '</button>' +
             '<button type="button" class="admin-licencias-toggle-notes-col-btn user-lic-days-toggle-bad" title="Ocultar columna incidencias (roja) y «Otro»" aria-label="Ocultar columna incidencias (roja) y detalle Otro" aria-pressed="false">' +
             '<i class="fas fa-eye-slash" aria-hidden="true"></i>' +
             '</button>' +
@@ -2823,19 +2956,12 @@
     function userLicPortalHideNotesRead() {
         try {
             var v = localStorage.getItem(USER_LIC_PORTAL_HIDE_NOTES_KEY);
-            return v === '1' || v === 'true';
+            if (v === '1' || v === 'true') return true;
+            if (v === '0' || v === 'false') return false;
         } catch (e1) {
-            return false;
+            /* ignore */
         }
-    }
-
-    function userLicPortalHideCredsRead() {
-        try {
-            var v = localStorage.getItem(USER_LIC_PORTAL_HIDE_CREDS_KEY);
-            return v === '1' || v === 'true';
-        } catch (eCr) {
-            return false;
-        }
+        return true;
     }
 
     function userLicPortalToggleEyeButtonUi(btn, hidden, titleWhenHidden, labelWhenHidden, titleWhenShown, labelWhenShown) {
@@ -2856,18 +2982,11 @@
 
     function userLicPortalSyncAllColumnToolbars(outer) {
         if (!outer) return;
-        var hidCr = userLicPortalHideCredsRead();
         var hidB = userLicPortalHideBadRead();
         var hidNt = userLicPortalHideNotesRead();
+        /* El ojo de credenciales se retiró: la columna Licencias nunca se oculta. */
         outer.querySelectorAll('.user-lic-days-toggle-creds').forEach(function (b) {
-            userLicPortalToggleEyeButtonUi(
-                b,
-                hidCr,
-                'Ocultar columna de cuentas (texto izquierdo)',
-                'Ocultar columna de credenciales en cada día',
-                'Mostrar columna de cuentas (texto izquierdo)',
-                'Mostrar columna de credenciales en cada día'
-            );
+            b.remove();
         });
         outer.querySelectorAll('.user-lic-days-toggle-bad').forEach(function (b) {
             userLicPortalToggleEyeButtonUi(
@@ -2891,25 +3010,130 @@
         });
     }
 
+    /** Igual que en admin: ancho en px de la línea más larga del textarea de credenciales. */
+    function userLicMeasureCredsTaContentWidthPx(ta) {
+        if (!ta || ta.tagName !== 'TEXTAREA') return 0;
+        var cs = window.getComputedStyle(ta);
+        var font =
+            (cs.fontWeight || 'normal') + ' ' + (cs.fontSize || '14px') + ' ' + (cs.fontFamily || 'sans-serif');
+        var raw = String(ta.value != null ? ta.value : '').replace(/\r\n/g, '\n');
+        var lines = raw.split('\n');
+        var canvas =
+            userLicMeasureCredsTaContentWidthPx.canvas ||
+            (userLicMeasureCredsTaContentWidthPx.canvas = document.createElement('canvas'));
+        var context = canvas.getContext('2d');
+        context.font = font;
+        var maxTextW = 0;
+        var i;
+        for (i = 0; i < lines.length; i += 1) {
+            var line = String(lines[i]);
+            if (line.trim() === '') continue;
+            var w = context.measureText(line).width;
+            if (w > maxTextW) maxTextW = w;
+        }
+        if (maxTextW <= 0) return 0;
+        var padX = (parseFloat(cs.paddingLeft) || 0) + (parseFloat(cs.paddingRight) || 0);
+        var borderX = (parseFloat(cs.borderLeftWidth) || 0) + (parseFloat(cs.borderRightWidth) || 0);
+        return Math.ceil(maxTextW + padX + borderX + 16);
+    }
+
+    /** Mismo diseño que el bloc Licencias de admin: la columna de credenciales queda fija al
+        ancho de su contenido (px) y la columna derecha absorbe el hueco (CSS minmax(0,1fr));
+        scroll horizontal solo cuando el contenido realmente no cabe. Solo blocs de licencias
+        del portal (excluye editor de proveedor). */
+    function userLicSyncCredsColumnWidthsFromContent() {
+        document
+            .querySelectorAll('.user-lic-bundle-wrap .day-license-split-root')
+            .forEach(function (root) {
+                if (root.closest('.user-lic-proveedor-wrap')) return;
+                var grid = root.querySelector('.license-split-editor__grid');
+                var cell = root.querySelector('.license-split-editor__creds-cell');
+                var ta = root.querySelector('.license-split-editor__creds');
+                if (cell) {
+                    cell.style.removeProperty('min-width');
+                    cell.style.removeProperty('width');
+                    cell.style.removeProperty('max-width');
+                }
+                if (ta) {
+                    ta.style.removeProperty('min-width');
+                    ta.style.removeProperty('width');
+                    ta.style.removeProperty('max-width');
+                }
+                if (!grid) return;
+                if (!ta || root.classList.contains('user-lic-col-hide-creds')) {
+                    grid.style.removeProperty('--lic-split-creds-col');
+                    return;
+                }
+                var w = Math.max(72, userLicMeasureCredsTaContentWidthPx(ta) || 0);
+                grid.style.setProperty('--lic-split-creds-col', w + 'px');
+                if (cell) {
+                    cell.style.setProperty('min-width', w + 'px', 'important');
+                    cell.style.setProperty('width', '100%', 'important');
+                }
+                if (ta.getAttribute('wrap') !== 'off') {
+                    ta.setAttribute('wrap', 'off');
+                }
+                ta.style.setProperty('min-width', w + 'px', 'important');
+                ta.style.setProperty('width', '100%', 'important');
+            });
+        userLicSyncSaldoColumnWidthFromContent();
+    }
+
+    /** Columna Saldo uniforme en todos los blocs: ancho de la etiqueta más larga
+        («Pagada», «Debe 92000», «A favor 5.5»…) medida con canvas. */
+    function userLicSyncSaldoColumnWidthFromContent() {
+        var spans = document.querySelectorAll(
+            '.user-lic-bundle-wrap .license-split-editor__row.user-lic-readonly-row .license-split-editor__saldo-cell .user-lic-saldo-display'
+        );
+        var canvas =
+            userLicMeasureCredsTaContentWidthPx.canvas ||
+            (userLicMeasureCredsTaContentWidthPx.canvas = document.createElement('canvas'));
+        var context = canvas.getContext('2d');
+        var maxW = 0;
+        spans.forEach(function (span) {
+            var txt = String(span.textContent || '').trim();
+            if (!txt) return;
+            var cs = window.getComputedStyle(span);
+            context.font =
+                (cs.fontWeight || '700') + ' ' + (cs.fontSize || '12.5px') + ' ' + (cs.fontFamily || 'sans-serif');
+            var w = context.measureText(txt).width;
+            if (w > maxW) maxW = w;
+        });
+        var roots = document.querySelectorAll('.user-lic-bundle-wrap .day-license-split-root');
+        if (maxW <= 0) {
+            roots.forEach(function (root) {
+                root.style.removeProperty('--user-lic-saldo-col');
+            });
+            return;
+        }
+        /* + padding lateral de la celda (0.16rem×2) + borde derecho + margen de seguridad */
+        var colW = Math.ceil(maxW + 12);
+        roots.forEach(function (root) {
+            root.style.setProperty('--user-lic-saldo-col', colW + 'px');
+        });
+    }
+
     function userLicPortalApplyColumnVisibility(outer) {
         if (!outer) return;
         userLicPortalMigrateLegacyColumnKeys();
         try {
             localStorage.removeItem('user_lic_portal_days_hide_good_v1');
+            /* El ojo de credenciales se retiró: limpiar preferencia guardada para que nunca oculte la columna. */
+            localStorage.removeItem(USER_LIC_PORTAL_HIDE_CREDS_KEY);
         } catch (eClrG) {
             /* ignore */
         }
-        var hidCr = userLicPortalHideCredsRead();
         var hidB = userLicPortalHideBadRead();
         var hidNt = userLicPortalHideNotesRead();
         outer.querySelectorAll('.user-lic-bundle-wrap .day-license-split-root.license-split-editor--day').forEach(function (root) {
             root.classList.remove('user-lic-col-hide-good');
-            root.classList.toggle('user-lic-col-hide-creds', hidCr);
+            root.classList.remove('user-lic-col-hide-creds');
             root.classList.toggle('user-lic-col-hide-bad', hidB);
             root.classList.toggle('license-split-editor--notes-hidden', hidNt);
             root.classList.remove('license-split-editor--status-hidden');
         });
         userLicPortalSyncAllColumnToolbars(outer);
+        userLicSyncCredsColumnWidthsFromContent();
     }
 
     function userLicPortalSyncExpandAllToolbar(bundleWrap) {
@@ -3016,18 +3240,6 @@
                 try {
                     localStorage.setItem(USER_LIC_PORTAL_HIDE_BAD_KEY, nb ? '1' : '0');
                 } catch (eB) {
-                    /* ignore */
-                }
-                userLicPortalApplyColumnVisibility(outer);
-                return;
-            }
-
-            var crBtn = t.closest('.user-lic-days-toggle-creds');
-            if (crBtn && outer.contains(crBtn)) {
-                var nextCr = !userLicPortalHideCredsRead();
-                try {
-                    localStorage.setItem(USER_LIC_PORTAL_HIDE_CREDS_KEY, nextCr ? '1' : '0');
-                } catch (eCr2) {
                     /* ignore */
                 }
                 userLicPortalApplyColumnVisibility(outer);
@@ -3415,6 +3627,12 @@
             escAttr(dayNum != null ? dayNum : 'lic') +
             '_' +
             String(rowIndex) +
+            '" name="userLicProvSvc_' +
+            escAttr(blockKey) +
+            '_' +
+            escAttr(dayNum != null ? dayNum : 'lic') +
+            '_' +
+            String(rowIndex) +
             '" class="license-split-editor__status license-split-editor__status-bad license-split-editor__status--tier-neutral user-lic-proveedor-service-select" data-proveedor-block="' +
             escAttr(blockKey) +
             '"' +
@@ -3526,6 +3744,7 @@
                 '</div></div></div>';
         }
         rowsWrap.innerHTML = html;
+        userLicEnsureFormFieldIdName(rowsWrap);
         userLicProveedorScheduleAutosizeCredsForBlock(block);
     }
 
@@ -3558,12 +3777,17 @@
     }
 
     function userLicProveedorRenderEmptyDayBodyHtml(day) {
+        var taId = 'userLicProvEmptyTa-d' + String(day);
         return (
             '<div class="user-lic-proveedor-day-empty-state license-split-editor license-split-editor--proveedor-readonly license-notepad--locked license-split-editor--day">' +
             '<div class="license-split-editor__viewport">' +
             '<div class="license-split-editor__grid user-lic-proveedor-readonly-grid--creds-only">' +
             '<div class="license-split-editor__creds-cell">' +
-            '<textarea class="admin-licencias-notepad-textarea license-split-editor__creds user-lic-proveedor-readonly-creds user-lic-proveedor-day-empty-creds user-lic-creds-ro" readonly tabindex="-1" rows="1" wrap="off" spellcheck="false" aria-readonly="true" aria-label="Día ' +
+            '<textarea id="' +
+            escAttr(taId) +
+            '" name="' +
+            escAttr(taId) +
+            '" class="admin-licencias-notepad-textarea license-split-editor__creds user-lic-proveedor-readonly-creds user-lic-proveedor-day-empty-creds user-lic-creds-ro" readonly tabindex="-1" rows="1" wrap="off" spellcheck="false" aria-readonly="true" aria-label="Día ' +
             escAttr(String(day)) +
             ' sin licencias"></textarea>' +
             '</div></div></div></div>'
@@ -3575,6 +3799,11 @@
         var credText = userLicProveedorLinesToCredsText(lines);
         var nLines = Math.max(1, credText ? credText.split('\n').length : 1);
         var ariaLabel = blockKey === 'license' ? 'Licencias del proveedor' : 'Día ' + String(dayNum);
+        var taId =
+            'userLicProvCreds-' +
+            slugForCredFieldId(blockKey) +
+            '-' +
+            (dayNum != null ? String(dayNum) : 'lic');
         return (
             '<div class="license-split-editor user-lic-proveedor-split user-lic-proveedor-split--editable" data-proveedor-block="' +
             escAttr(blockKey) +
@@ -3584,7 +3813,11 @@
             '<div class="license-split-editor__viewport">' +
             '<div class="license-split-editor__grid">' +
             '<div class="license-split-editor__creds-cell">' +
-            '<textarea class="admin-licencias-notepad-textarea license-split-editor__creds user-lic-proveedor-creds-ta" rows="' +
+            '<textarea id="' +
+            escAttr(taId) +
+            '" name="' +
+            escAttr(taId) +
+            '" class="admin-licencias-notepad-textarea license-split-editor__creds user-lic-proveedor-creds-ta" rows="' +
             String(nLines) +
             '" spellcheck="true" wrap="off" autocomplete="off" aria-label="' +
             escAttr(ariaLabel) +
@@ -3608,6 +3841,7 @@
         }
         var credText = userLicProveedorFormatLinesForDisplay(lines);
         var ariaLabel = 'Día ' + String(dayNum) + ' del proveedor';
+        var taId = 'userLicProvRo-' + slugForCredFieldId(blockKey) + '-d' + String(dayNum);
         return (
             '<div class="license-split-editor user-lic-proveedor-split license-split-editor--proveedor-readonly license-notepad--locked license-split-editor--day" data-proveedor-block="' +
             escAttr(blockKey) +
@@ -3617,7 +3851,11 @@
             '<div class="license-split-editor__viewport">' +
             '<div class="license-split-editor__grid user-lic-proveedor-readonly-grid--creds-only">' +
             '<div class="license-split-editor__creds-cell">' +
-            '<textarea class="admin-licencias-notepad-textarea license-split-editor__creds user-lic-proveedor-readonly-creds user-lic-creds-ro" readonly tabindex="-1" rows="' +
+            '<textarea id="' +
+            escAttr(taId) +
+            '" name="' +
+            escAttr(taId) +
+            '" class="admin-licencias-notepad-textarea license-split-editor__creds user-lic-proveedor-readonly-creds user-lic-creds-ro" readonly tabindex="-1" rows="' +
             String(Math.max(1, nLines)) +
             '" wrap="off" spellcheck="false" aria-readonly="true" aria-label="' +
             escAttr(ariaLabel) +
@@ -3632,6 +3870,15 @@
         userLicProveedorSyncServiceRowsForBlock(outer, 'license', null);
         var licBlock = outer.querySelector('.user-lic-proveedor-split[data-proveedor-block="license"]');
         if (licBlock) userLicProveedorScheduleAutosizeCredsForBlock(licBlock);
+        if (typeof licenseSplitGenericLock === 'function') {
+            outer
+                .querySelectorAll(
+                    '.user-lic-proveedor-split:not(.license-split-editor--proveedor-readonly), .user-lic-proveedor-extra-split--editable'
+                )
+                .forEach(function (root) {
+                    licenseSplitGenericLock(root);
+                });
+        }
     }
 
     function userLicProveedorInitSplitBlocks(outer) {
@@ -3661,13 +3908,11 @@
             collapsedClass = nLines === 0 ? ' collapsed' : '';
         }
         var badgeHtml =
-            nLines > 0
-                ? '<span class="day-account-badge admin-licencias-notepad-line-badge" title="' +
-                  escAttr(nLines === 1 ? '1 línea' : nLines + ' líneas') +
-                  '">' +
-                  String(nLines) +
-                  '</span>'
-                : '';
+            '<span class="day-account-badge admin-licencias-notepad-line-badge"' +
+            (nLines > 0 ? ' title="' + escAttr(nLines === 1 ? '1 línea' : nLines + ' líneas') + '"' : '') +
+            '>' +
+            String(nLines) +
+            '</span>';
         var day1LeadingHtml =
             day === 1
                 ? '<div class="admin-licencias-day-header-leading">' +
@@ -3675,9 +3920,8 @@
                   '<i class="fas fa-chevron-up" aria-hidden="true"></i></button></div>'
                 : '';
         var dayHeaderExtraClass = day === 1 ? ' admin-licencias-bloc-header--day-toolbar' : '';
-        var headerActions = badgeHtml
-            ? '<div class="admin-licencias-bloc-header-actions user-lic-day-header-actions">' + badgeHtml + '</div>'
-            : '';
+        var headerActions =
+            '<div class="admin-licencias-bloc-header-actions user-lic-day-header-actions">' + badgeHtml + '</div>';
         var bodyHtml =
             nLines > 0
                 ? userLicProveedorRenderSplitBlockHtml('day', day)
@@ -3763,6 +4007,7 @@
             rowKind === 'suspended'
                 ? 'license-split-editor__row license-split-editor__row--suspended user-lic-proveedor-extra-row'
                 : 'license-split-editor__row license-split-editor__row--expired user-lic-proveedor-extra-row';
+        var dayInpId = 'userLicProvExtraDay-' + slugForCredFieldId(rowKind) + '-r' + String(rowIndex);
         return (
             '<div class="' +
             rowClass +
@@ -3775,7 +4020,11 @@
             userLicProveedorBuildServiceSelectHtml(svc, rowIndex, rowKind, null) +
             '</div>' +
             '<div class="user-lic-proveedor-extra-day-wrap">' +
-            '<input type="number" min="1" max="31" step="1" class="user-lic-proveedor-extra-day-input form-control form-control-sm" data-proveedor-extra-kind="' +
+            '<input type="number" id="' +
+            escAttr(dayInpId) +
+            '" name="' +
+            escAttr(dayInpId) +
+            '" min="1" max="31" step="1" class="user-lic-proveedor-extra-day-input form-control form-control-sm" data-proveedor-extra-kind="' +
             escAttr(rowKind) +
             '" data-proveedor-row-index="' +
             String(rowIndex) +
@@ -3827,6 +4076,7 @@
             html += userLicProveedorExtraEditableRowHtml(entry, rowKind, idx);
         });
         rowsWrap.innerHTML = html;
+        userLicEnsureFormFieldIdName(rowsWrap);
         if (block) userLicProveedorScheduleAutosizeCredsForBlock(block);
         userLicProveedorExtraUpdateBadge(section);
     }
@@ -3847,7 +4097,7 @@
             return String(ln).trim() !== '';
         }).length;
         badge.textContent = String(n);
-        badge.hidden = n <= 0;
+        badge.hidden = false;
         badge.title = n === 1 ? '1 línea' : n + ' líneas';
         if (section.classList.contains('user-lic-proveedor-lic-extra')) {
             return;
@@ -3893,7 +4143,7 @@
         section.removeAttribute('data-prov-extra-editor-wired');
         if (badge) {
             badge.textContent = String(n);
-            badge.hidden = n <= 0;
+            badge.hidden = false;
             badge.title = n === 1 ? '1 línea' : n + ' líneas';
         }
         var art = outer ? outer.querySelector('.user-lic-account-sheet--proveedor') : null;
@@ -3927,6 +4177,10 @@
         ta.rows = Math.max(1, n || 1);
         userLicProveedorExtraSyncEditableRows(section, rowKind, persistedLines);
         userLicProveedorExtraWireCredsEditor(section, outer, rowKind);
+        if (typeof licenseSplitGenericLock === 'function') {
+            var extraRoot = section.querySelector('.user-lic-proveedor-extra-split--editable');
+            if (extraRoot) licenseSplitGenericLock(extraRoot);
+        }
     }
 
     function userLicProveedorLicExtrasSearchQuery() {
@@ -3987,7 +4241,7 @@
             escHtml(title) +
             '</span></span>' +
             '<div class="admin-licencias-bloc-header-actions user-lic-day-header-actions">' +
-            '<span class="day-account-badge admin-licencias-notepad-line-badge user-lic-proveedor-lic-extra-badge" hidden role="status">0</span>' +
+            '<span class="day-account-badge admin-licencias-notepad-line-badge user-lic-proveedor-lic-extra-badge" role="status">0</span>' +
             '</div></div>' +
             '<div class="day-accounts-list' +
             sectionBodyClass +
@@ -4031,13 +4285,11 @@
         var licLines = userLicProveedorLinesForBlock('license', null);
         var licCount = userLicProveedorCountStructuredLines(licLines);
         var licBadge =
-            licCount > 0
-                ? '<span class="day-account-badge admin-licencias-notepad-line-badge" title="' +
-                  escAttr(licCount === 1 ? '1 línea' : licCount + ' líneas') +
-                  '">' +
-                  String(licCount) +
-                  '</span>'
-                : '';
+            '<span class="day-account-badge admin-licencias-notepad-line-badge"' +
+            (licCount > 0 ? ' title="' + escAttr(licCount === 1 ? '1 línea' : licCount + ' líneas') + '"' : '') +
+            '>' +
+            String(licCount) +
+            '</span>';
         var proveedorSheetKey = USER_LIC_PORTAL_PROVEEDOR_FILTER;
         var daysHtml = '';
         var d;
@@ -4409,9 +4661,9 @@
         return out;
     }
 
-    function userLicCollectReportEntries(root) {
+    function userLicCollectReportEntries(root, preferCache) {
         var outer = root || document.getElementById('userLicenciasTableOuter');
-        if (outer && outer.querySelector('.user-lic-account-sheet')) {
+        if (!preferCache && outer && outer.querySelector('.user-lic-account-sheet')) {
             return userLicCollectReportEntriesFromDom(outer);
         }
         return userLicCollectReportEntriesFromCache(userLicPortalAccountsCache);
@@ -4476,8 +4728,8 @@
         }
     }
 
-    function userLicSyncReportesBadge() {
-        var n = userLicCollectReportEntries().length;
+    function userLicSyncReportesBadge(preferCache) {
+        var n = userLicCollectReportEntries(null, preferCache).length;
         var badge = document.getElementById('userLicReportesTotalBadge');
         var numEl = badge ? badge.querySelector('.license-card-report-total-badge__num') : null;
         if (numEl) numEl.textContent = String(n);
@@ -4522,7 +4774,7 @@
         });
     }
 
-    function userLicRenderReportesPanel(outer) {
+    function userLicRenderReportesPanel(outer, preferCache) {
         var panel = document.getElementById('userLicReportesPanel');
         var searchInp = document.getElementById('userLicReportesSearch');
         var metaEl = document.getElementById('userLicReportesMeta');
@@ -4537,14 +4789,14 @@
             outer,
             tableBody,
             metaEl,
-            userLicCollectReportEntries(outer),
+            userLicCollectReportEntries(outer, preferCache),
             q,
             '0 incidencias en tus licencias asignadas',
             ' incidencia en tus licencias asignadas',
             ' incidencias en tus licencias asignadas',
             'No hay cuentas con incidencia en tus licencias. Al marcar un estado rojo en una fila, aparecerá aquí.'
         );
-        userLicSyncReportesBadge();
+        userLicSyncReportesBadge(preferCache);
     }
 
     function userLicRefreshReportesUi(outer) {
@@ -5134,6 +5386,8 @@
                 navigator.clipboard.writeText(t).catch(function () {
                     try {
                         var x = document.createElement('textarea');
+                        x.id = 'userLicClipboardFallback';
+                        x.name = 'userLicClipboardFallback';
                         x.value = t;
                         x.setAttribute('readonly', '');
                         x.style.position = 'fixed';
@@ -5149,6 +5403,8 @@
             } else {
                 try {
                     var x2 = document.createElement('textarea');
+                    x2.id = 'userLicClipboardFallback';
+                    x2.name = 'userLicClipboardFallback';
                     x2.value = t;
                     x2.setAttribute('readonly', '');
                     x2.style.position = 'fixed';
@@ -5377,7 +5633,7 @@
         return fetch(proveedorUrl, {
             method: 'PUT',
             credentials: 'same-origin',
-            headers: { 'Content-Type': 'application/json' },
+            headers: userLicJsonHeaders(),
             body: JSON.stringify({
                 license_lines: body.license_lines,
                 license_notes: body.license_notes,
@@ -5424,6 +5680,10 @@
 
     function userLicPortalWireProveedorEditors(outer) {
         if (!outer || !userLicPortalProveedorEnabled) return;
+        if (userLicPortalIsViewOnly(outer)) {
+            userLicPortalApplyViewOnlyUi(outer);
+            return;
+        }
         userLicProveedorInitSplitBlocks(outer);
         userLicProveedorInitEditableBlocks(outer);
         userLicRefreshProveedorLicenciasExtras(outer);
@@ -5585,11 +5845,20 @@
         var rowsHtml = list
             .map(function (p) {
                 var name = escHtml(String(p.product_name || 'Producto'));
+                var searchName = escAttr(
+                    typeof gestionProductosNormalizeSearchQuery === 'function'
+                        ? gestionProductosNormalizeSearchQuery(p.product_name || 'Producto')
+                        : String(p.product_name || 'Producto')
+                              .trim()
+                              .toLowerCase()
+                );
                 var lid = escAttr(String(p.license_id != null ? p.license_id : ''));
                 var gar = userLicProveedorWarrantyUi(p.warranty_days);
                 return (
                     '<div class="producto-item gestion-productos-item user-proveedor-gestion-productos-item" data-license-id="' +
                     lid +
+                    '" data-search-name="' +
+                    searchName +
                     '">' +
                     '<div class="gestion-productos-item-name">' +
                     '<strong title="' +
@@ -5617,6 +5886,11 @@
             '<h3 id="userProveedorGestionProductosTitulo"><i class="fas fa-list"></i> Gestionar productos</h3>' +
             '<button type="button" class="gestion-productos-modal-close user-proveedor-gestion-productos-close" aria-label="Cerrar">&times;</button>' +
             '</div>' +
+            '<div class="gestion-productos-search-wrap">' +
+            '<label class="sr-only" for="userProveedorGestionProductosSearch">Buscar producto</label>' +
+            '<input type="search" id="userProveedorGestionProductosSearch" class="gestion-productos-search-input" placeholder="Buscar producto…" autocomplete="off" spellcheck="false" aria-label="Buscar producto en la lista" />' +
+            '</div>' +
+            '<p class="gestion-productos-search-empty" hidden role="status">No hay productos que coincidan con la búsqueda.</p>' +
             '<p class="admin-licencias-reportes-hint user-proveedor-gestion-productos-hint mb-2">Reserva gar.: cuentas de tu inventario que quedan apartadas como garantía (no vendibles).</p>' +
             '<div class="gestion-productos-list" id="userProveedorGestionProductosList">' +
             rowsHtml +
@@ -5633,6 +5907,9 @@
                 e.stopPropagation();
                 userLicCloseProveedorGestionarProductosModal();
             });
+        }
+        if (typeof gestionProductosWireSearch === 'function') {
+            gestionProductosWireSearch(overlay);
         }
         var listEl = document.getElementById('userProveedorGestionProductosList');
         if (listEl) {
@@ -5697,7 +5974,7 @@
         fetch(url, {
             method: 'PUT',
             credentials: 'same-origin',
-            headers: { 'Content-Type': 'application/json' },
+            headers: userLicJsonHeaders(),
             body: JSON.stringify({ warranty_days: n }),
         })
             .then(function (r) {
@@ -5741,6 +6018,18 @@
     /**
      * @param {object|null} persistUi — si no es null: filter ('all' | clave) y texto de búsqueda.
      */
+    /** ¿La cuenta tiene al menos una línea visible en algún día? Sin líneas no hay nada
+        que mostrar (cuenta vieja o retirada de los blocs): el producto no debe salir. */
+    function userLicAccountHasAnyDayLine(acc) {
+        var dl = acc && acc.day_lines;
+        if (!dl || typeof dl !== 'object') return false;
+        for (var d = 1; d <= 31; d += 1) {
+            var rows = dl[String(d)];
+            if (rows && rows.length) return true;
+        }
+        return false;
+    }
+
     function applyUserLicPortalFetchResult(outer, host, gridInner, gridHostEl, res, persistUi) {
         var data = res.data || {};
         var apiOk = !!(res.httpOk && data && data.success);
@@ -5751,7 +6040,10 @@
                       (data && (data.error || data.message)) ||
                           (!res.httpOk ? 'Sin autorización o error HTTP.' : 'No se pudieron cargar los datos.')
                   );
-        var accounts = apiOk && Array.isArray(data.accounts) ? data.accounts : [];
+        var accounts =
+            apiOk && Array.isArray(data.accounts)
+                ? data.accounts.filter(userLicAccountHasAnyDayLine)
+                : [];
         var summaryList = groupSummariesFromAccounts(accounts);
 
         if (apiOk && data.portal_rev != null) {
@@ -5841,12 +6133,41 @@
         wireUserLicCaducidadNotifyBar();
         wireUserLicReportesPanel(outer);
         wireUserLicProveedorGestionarProductos(outer);
+        var credsColResizeTimer = null;
+        window.addEventListener('resize', function () {
+            if (credsColResizeTimer) clearTimeout(credsColResizeTimer);
+            credsColResizeTimer = setTimeout(function () {
+                credsColResizeTimer = null;
+                userLicSyncCredsColumnWidthsFromContent();
+            }, 160);
+        });
     }
 
     function bootstrapUserLicPortalCollapseOnce() {
         if (userLicPortalCollapseBootstrapped) return;
         userLicPortalCollapseBootstrapped = true;
         setupCollapseButton();
+    }
+
+    /** Reportes en tiempo real: aun cuando la reconstrucción completa se difiere (usuario editando),
+        se refresca la tabla/badge de Reportes desde el caché recién descargado (panel solo lectura). */
+    function userLicReportesLightRealtimeRefresh(ctx) {
+        var apiUrl = ctx && ctx.apiUrl;
+        if (!apiUrl) return;
+        var apiSep = apiUrl.indexOf('?') === -1 ? '?' : '&';
+        fetchUserLicPortalJson(apiUrl + apiSep + '_t=' + Date.now())
+            .then(function (res) {
+                var data = res && res.data ? res.data : {};
+                if (!res.httpOk || !data.success || !Array.isArray(data.accounts)) return;
+                userLicPortalAccountsCache = data.accounts.filter(userLicAccountHasAnyDayLine);
+                userLicSyncReportesBadge(true);
+                if (userLicPortalReportesModeActive(ctx.outer)) {
+                    userLicRenderReportesPanel(ctx.outer, true);
+                }
+            })
+            .catch(function () {
+                /* ignorar; el catch-up diferido lo reintentará */
+            });
     }
 
     function refreshUserLicPortalIfRevChanged(nextRev, ctx) {
@@ -5859,6 +6180,7 @@
         if (rev === userLicPortalLastRev) return;
         if (!userLicPortalCanApplyPortalRevRefresh()) {
             userLicPortalDeferredRev = rev;
+            userLicReportesLightRealtimeRefresh(ctx);
             return;
         }
         var prevRev = userLicPortalLastRev;

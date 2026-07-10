@@ -49,4 +49,3 @@ def start_whatsapp_health_loop(app):
         _loop_started['started'] = True
     t = threading.Thread(target=_health_loop, args=(app,), daemon=True, name='whatsapp-health')
     t.start()
-    logger.debug('WhatsApp Web health loop iniciado (cada %ss)', POLL_SEC)

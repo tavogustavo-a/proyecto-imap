@@ -44,6 +44,10 @@ def ensure_customer_account_renewal_schema():
 
         if CustomerAccountRenewalOrder.__tablename__ not in tables:
             CustomerAccountRenewalOrder.__table__.create(db.engine, checkfirst=True)
+
+        from app.store.customer_renewal_notify_batch import ensure_customer_renewal_notify_batch_schema
+
+        ensure_customer_renewal_notify_batch_schema()
     except Exception as ex:
         db.session.rollback()
         current_app.logger.warning('ensure_customer_account_renewal_schema: %s', ex)
@@ -99,6 +103,286 @@ def _is_valid_customer_renewal_email(email) -> bool:
     return True
 
 
+CUSTOMER_RENEWAL_CHECKOUT_BLOCKED_MSG = (
+    'El correo está pendiente para cuentas a renovar.'
+)
+
+CUSTOMER_RENEWAL_ALREADY_COMPLETED_MSG = 'Esta cuenta ya fue renovada.'
+
+
+def extract_first_customer_renewal_email(text):
+    """Primer correo válido en el texto; ignora basura antes/después."""
+    m = re.search(
+        r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}',
+        str(text or ''),
+        re.I,
+    )
+    if not m:
+        return ''
+    return m.group(0).strip().lower()
+
+
+def customer_renewal_email_in_product_queue(product_id, email) -> bool:
+    """True si el correo ya está en el bloc admin «Cuentas para renovar» del producto."""
+    em = (email or '').strip().lower()
+    if not em or not product_id:
+        return False
+    for lic in _licenses_for_customer_renewal(product_id):
+        notes = getattr(lic, 'customer_renewal_notes', None) or ''
+        for line in notes.replace('\r\n', '\n').split('\n'):
+            if not line.strip():
+                continue
+            line_em = extract_email_from_renewal_credential(line)
+            if line_em and line_em.lower() == em:
+                return True
+    return False
+
+
+def customer_renewal_email_has_pending_order(product_id, email) -> bool:
+    from app.store.models import CustomerAccountRenewalOrder
+
+    em = (email or '').strip().lower()
+    if not em or not product_id:
+        return False
+    return (
+        CustomerAccountRenewalOrder.query.filter(
+            CustomerAccountRenewalOrder.product_id == int(product_id),
+            func.lower(CustomerAccountRenewalOrder.customer_email) == em,
+            CustomerAccountRenewalOrder.status == 'pending',
+        ).first()
+        is not None
+    )
+
+
+def get_latest_customer_renewal_order(product_id, email, user_id=None):
+    from app.store.models import CustomerAccountRenewalOrder
+
+    em = (email or '').strip().lower()
+    if not em or not product_id:
+        return None
+    q = CustomerAccountRenewalOrder.query.filter(
+        CustomerAccountRenewalOrder.product_id == int(product_id),
+        func.lower(CustomerAccountRenewalOrder.customer_email) == em,
+    )
+    if user_id is not None:
+        try:
+            q = q.filter(CustomerAccountRenewalOrder.user_id == int(user_id))
+        except (TypeError, ValueError):
+            pass
+    return q.order_by(CustomerAccountRenewalOrder.created_at.desc()).first()
+
+
+def customer_renewal_email_recently_completed(product_id, email, user_id=None) -> bool:
+    """
+    True si el cliente ya renovó esta cuenta en el ciclo actual (mes calendario Colombia).
+    """
+    em = (email or '').strip().lower()
+    if not em or not product_id:
+        return False
+    latest = get_latest_customer_renewal_order(int(product_id), em, user_id=user_id)
+    if not latest:
+        return False
+    if (latest.status or '').strip().lower() != 'completed':
+        return False
+    ref = latest.processed_at or latest.created_at
+    if not ref:
+        return True
+    from app.utils.timezone import get_colombia_datetime, utc_to_colombia
+
+    now_co = get_colombia_datetime()
+    ref_co = utc_to_colombia(ref)
+    return (ref_co.year, ref_co.month) == (now_co.year, now_co.month)
+
+
+def customer_renewal_checkout_block_reason(product_id, email, user_id=None):
+    """
+    (reason_code, message) si el checkout debe bloquearse; None si puede continuar.
+    reason_code: 'already_renewed' | 'pending'
+    """
+    em = (email or '').strip().lower()
+    if not em or not product_id:
+        return None
+    if customer_renewal_email_recently_completed(int(product_id), em, user_id=user_id):
+        return 'already_renewed', CUSTOMER_RENEWAL_ALREADY_COMPLETED_MSG
+    if customer_renewal_email_blocks_checkout(int(product_id), em, user_id=user_id):
+        return 'pending', CUSTOMER_RENEWAL_CHECKOUT_BLOCKED_MSG
+    return None
+
+
+def customer_renewal_email_blocks_checkout(product_id, email, user_id=None) -> bool:
+    """
+    Bloquea solo renovaciones realmente pendientes.
+    Tras un rechazo (aunque quede línea obsoleta en el bloc admin) se permite reintentar.
+    """
+    em = (email or '').strip().lower()
+    if not em or not product_id:
+        return False
+    if customer_renewal_email_has_pending_order(int(product_id), em):
+        return True
+    if not customer_renewal_email_in_product_queue(int(product_id), em):
+        return False
+    latest = get_latest_customer_renewal_order(int(product_id), em, user_id=user_id)
+    if not latest:
+        return True
+    return (latest.status or 'pending').strip().lower() == 'pending'
+
+
+CUSTOMER_RENEWAL_RECENT_REJECT_WARNING = (
+    'Recuerda que este correo ya fue rechazado anteriormente esta semana.'
+)
+
+
+def _same_calendar_week_colombia(dt_a, dt_b) -> bool:
+    from app.utils.timezone import utc_to_colombia
+
+    if not dt_a or not dt_b:
+        return False
+    try:
+        a = utc_to_colombia(dt_a)
+        b = utc_to_colombia(dt_b)
+        return a.isocalendar()[:2] == b.isocalendar()[:2]
+    except (ValueError, TypeError, OSError, OverflowError):
+        return False
+
+
+def customer_renewal_recent_rejection_warning(product_id, email, user_id=None):
+    """Aviso informativo si el mismo correo fue rechazado en la semana calendario actual (CO)."""
+    from datetime import datetime
+
+    from app.store.models import CustomerAccountRenewalOrder
+
+    em = (email or '').strip().lower()
+    if not em or not product_id:
+        return None
+    q = CustomerAccountRenewalOrder.query.filter(
+        CustomerAccountRenewalOrder.product_id == int(product_id),
+        func.lower(CustomerAccountRenewalOrder.customer_email) == em,
+        CustomerAccountRenewalOrder.status == 'rejected',
+    )
+    if user_id is not None:
+        try:
+            q = q.filter(CustomerAccountRenewalOrder.user_id == int(user_id))
+        except (TypeError, ValueError):
+            pass
+    row = q.order_by(
+        CustomerAccountRenewalOrder.processed_at.desc(),
+        CustomerAccountRenewalOrder.created_at.desc(),
+    ).first()
+    if not row:
+        return None
+    ref_dt = row.processed_at or row.created_at
+    if not ref_dt or not _same_calendar_week_colombia(ref_dt, datetime.utcnow()):
+        return None
+    return CUSTOMER_RENEWAL_RECENT_REJECT_WARNING
+
+
+def remove_customer_renewal_email_from_product_notes(product_id, email) -> bool:
+    """Quita el correo del bloc admin «Cuentas para renovar» (p. ej. tras rechazo)."""
+    from app.store.user_license_line_parse import LICENSE_LINE_FIELD_SEP
+
+    em = (email or '').strip().lower()
+    if not em or not product_id:
+        return False
+    changed = False
+    sep = LICENSE_LINE_FIELD_SEP
+    for license_obj in _licenses_for_customer_renewal(product_id):
+        existing = getattr(license_obj, 'customer_renewal_notes', None) or ''
+        kept = []
+        for ln in existing.replace('\r\n', '\n').split('\n'):
+            if not ln.strip():
+                continue
+            cred_part = ln.split(sep)[0] if sep in ln else ln
+            line_em = extract_email_from_renewal_credential(cred_part)
+            if line_em and line_em.lower() == em:
+                changed = True
+                continue
+            kept.append(ln)
+        if changed:
+            license_obj.customer_renewal_notes = '\n'.join(kept)
+    return changed
+
+
+def assert_customer_renewal_email_allowed_for_checkout(product, email, user_id=None):
+    em = (email or '').strip().lower()
+    pid = getattr(product, 'id', None)
+    if not pid or not em:
+        return 'Indica un correo válido de la cuenta a renovar (con @ y punto).'
+    block = customer_renewal_checkout_block_reason(pid, em, user_id=user_id)
+    if block:
+        return block[1]
+    return None
+
+
+def customer_renewal_checkout_warning(product, email, user_id=None):
+    pid = getattr(product, 'id', None)
+    em = (email or '').strip().lower()
+    if not pid or not em:
+        return None
+    return customer_renewal_recent_rejection_warning(pid, em, user_id=user_id)
+
+
+def _parse_customer_renewal_credential_input(cred_raw, *, is_netflix=False):
+    """
+    Extrae correo (y contraseña solo con formato correo:contraseña).
+    Texto extra tras el correo se descarta (p. ej. «mail@gmail.com basura» → solo el correo).
+    """
+    from app.store.user_license_line_parse import parse_cred_part_plain
+
+    raw = (cred_raw or '').strip()
+    if not raw:
+        return None, None, None, 'Indica el correo de la cuenta a renovar.'
+
+    colon_m = re.match(r'^([^\s:]+@[^\s:]+\.[^\s:]+):(\S+)', raw)
+    if colon_m:
+        em = colon_m.group(1).strip().lower()
+        pw = colon_m.group(2).strip()
+        if pw == '.':
+            pw = ''
+        if not _is_valid_customer_renewal_email(em):
+            return (
+                None,
+                None,
+                None,
+                'Indica un correo válido (con @ y punto). Opcional: correo:contraseña.',
+            )
+        if is_netflix and not pw:
+            return None, None, None, 'Indica la contraseña de la cuenta Netflix (correo:contraseña).'
+        if len(pw) > 255:
+            return None, None, None, 'La contraseña es demasiado larga.'
+        cred_line = f'{em}:{pw}' if pw else em
+        if len(cred_line) > 500:
+            return None, None, None, 'La línea de cuenta es demasiado larga.'
+        return em, pw, cred_line, None
+
+    parsed = parse_cred_part_plain(raw, is_netflix)
+    if parsed and parsed.get('email'):
+        em = str(parsed.get('email') or '').strip().lower()
+        pw = str(parsed.get('password') or '').strip()
+        if pw == '.':
+            pw = ''
+        if not _is_valid_customer_renewal_email(em):
+            return (
+                None,
+                None,
+                None,
+                'Indica un correo válido (con @ y punto).',
+            )
+        if parsed.get('netflix_slot') is not None and not pw:
+            return None, None, None, 'Indica la contraseña Netflix con formato correo:contraseña.'
+        cred_line = f'{em}:{pw}' if pw else em
+        return em, pw, cred_line, None
+
+    em = extract_first_customer_renewal_email(raw)
+    if not _is_valid_customer_renewal_email(em):
+        return (
+            None,
+            None,
+            None,
+            'Indica un correo válido (con @ y punto).',
+        )
+    return em, '', em, None
+
+
 def validate_customer_renewal_credentials(email, password):
     em = (email or '').strip()
     pw = (password or '').strip()
@@ -115,51 +399,27 @@ def _product_name_is_netflix(name):
     return bool(name and re.search(r'netflix', str(name).strip(), re.I))
 
 
-def validate_customer_renewal_from_cart_item(product, email=None, password=None, customer_credential=None):
+def validate_customer_renewal_from_cart_item(product, email=None, password=None, customer_credential=None, user_id=None):
     """
     Valida renovación con cuenta del cliente.
-    Preferir ``customer_credential`` (correo y contraseña en una línea).
+    Preferir ``customer_credential`` (correo; contraseña opcional solo como correo:contraseña).
     """
-    from app.store.user_license_line_parse import parse_cred_part_plain
-
+    is_nf = _product_name_is_netflix(getattr(product, 'name', None) if product else None)
     cred_raw = (customer_credential or '').strip()
     if cred_raw:
-        is_nf = _product_name_is_netflix(getattr(product, 'name', None) if product else None)
-        parsed = parse_cred_part_plain(cred_raw, is_nf)
-        if parsed and parsed.get('email'):
-            em = str(parsed.get('email') or '').strip()
-            pw = str(parsed.get('password') or '').strip()
-            if pw == '.':
-                pw = ''
-            if parsed.get('netflix_slot') is not None and not pw:
-                return None, None, None, 'Indica la contraseña de la cuenta Netflix en la misma línea.'
-            if not _is_valid_customer_renewal_email(em):
-                return (
-                    None,
-                    None,
-                    None,
-                    'Indica un correo válido (con @ y punto). Opcional: añade la contraseña en la misma línea.',
-                )
-            if len(pw) > 255:
-                return None, None, None, 'La contraseña es demasiado larga.'
-            if len(cred_raw) > 500:
-                return None, None, None, 'La línea de cuenta es demasiado larga.'
-            return em, pw, cred_raw, None
-        if _is_valid_customer_renewal_email(cred_raw) and ' ' not in cred_raw and ':' not in cred_raw:
-            if len(cred_raw) > 500:
-                return None, None, None, 'La línea de cuenta es demasiado larga.'
-            return cred_raw.strip(), '', cred_raw, None
-        return (
-            None,
-            None,
-            None,
-            'Indica un correo válido (con @ y punto). Opcional: añade la contraseña en la misma línea.',
-        )
+        em, pw, cred_line, err = _parse_customer_renewal_credential_input(cred_raw, is_netflix=is_nf)
+        if err:
+            return None, None, None, err
+    else:
+        em_in = extract_first_customer_renewal_email(email) or (email or '').strip().lower()
+        em, pw, err = validate_customer_renewal_credentials(em_in, password)
+        if err:
+            return None, None, None, err
+        cred_line = f'{em}:{pw}' if pw else em
 
-    em, pw, err = validate_customer_renewal_credentials(email, password)
-    if err:
-        return None, None, None, err
-    cred_line = f'{em} {pw}'.strip()
+    block = assert_customer_renewal_email_allowed_for_checkout(product, em, user_id=user_id)
+    if block:
+        return None, None, None, block
     return em, pw, cred_line, None
 
 
@@ -272,6 +532,55 @@ def append_customer_renewal_notes_for_checkout(product, user, email, password, c
         license_obj.customer_renewal_notes = '\n'.join(lines)
 
 
+def reconcile_orphan_pending_customer_renewal_notes() -> int:
+    """
+    Restaura en el bloc admin «Cuentas para renovar» los pedidos ``pending``
+    cuya línea se perdió (huérfanos: el portal del cliente los sigue mostrando).
+    Devuelve cuántas líneas se reinsertaron.
+    """
+    from app.models.user import User
+    from app.store.models import CustomerAccountRenewalOrder
+
+    ensure_customer_account_renewal_schema()
+    pending = (
+        CustomerAccountRenewalOrder.query.filter(
+            CustomerAccountRenewalOrder.status == 'pending',
+        )
+        .order_by(CustomerAccountRenewalOrder.id.asc())
+        .all()
+    )
+    restored = 0
+    for order in pending:
+        em = (order.customer_email or '').strip().lower()
+        pid = getattr(order, 'product_id', None)
+        if not em or not pid:
+            continue
+        if customer_renewal_email_in_product_queue(int(pid), em):
+            continue
+        lic_rows = _licenses_for_customer_renewal(int(pid))
+        if not lic_rows:
+            continue
+        buyer = User.query.get(order.user_id)
+        buyer_label = customer_renewal_buyer_label(buyer)
+        pw = getattr(order, 'customer_password', None) or ''
+        line = build_customer_renewal_storage_line(em, pw, buyer_label)
+        for license_obj in lic_rows:
+            existing = getattr(license_obj, 'customer_renewal_notes', None) or ''
+            lines = [ln for ln in existing.replace('\r\n', '\n').split('\n') if ln.strip()]
+            already = False
+            for ln in lines:
+                line_em = extract_email_from_renewal_credential(ln)
+                if line_em and line_em.lower() == em:
+                    already = True
+                    break
+            if already:
+                continue
+            lines.append(line)
+            license_obj.customer_renewal_notes = '\n'.join(lines)
+            restored += 1
+    return restored
+
+
 def create_customer_account_renewal_order(user, product, sale, email, password):
     from app.store.models import CustomerAccountRenewalOrder
 
@@ -310,6 +619,34 @@ def notify_customer_account_renewal_received(user, product, email):
     return notif
 
 
+def notify_admin_customer_account_renewal_pending(user, product, email):
+    """Correo al admin cuando un cliente envía una cuenta para renovar."""
+    from app.store.whatsapp_web_service import (
+        resolve_whatsapp_admin_alert_email,
+        send_whatsapp_alert_email,
+    )
+
+    admin_email = resolve_whatsapp_admin_alert_email()
+    if not admin_email:
+        current_app.logger.info(
+            'Aviso admin renovación omitido: sin email de admin configurado.',
+        )
+        return False
+
+    pname = getattr(product, 'name', None) or 'Producto'
+    uname = getattr(user, 'username', None) or 'cliente'
+    em = (email or '').strip()
+    subject = f'Cuenta para renovar — {pname}'
+    body = (
+        f'Nueva solicitud de renovación con cuenta del cliente.\n\n'
+        f'Producto: {pname}\n'
+        f'Cliente: {uname}\n'
+        f'Cuenta: {em}\n\n'
+        f'Revisa el bloc «Cuentas para renovar» en Admin → Licencias.'
+    )
+    return send_whatsapp_alert_email(admin_email, subject, body)
+
+
 def extract_email_from_renewal_credential(credential):
     c = (credential or '').strip()
     if not c:
@@ -323,6 +660,51 @@ def _normalize_client_username(value):
     if not u or u in ('anonimo', 'genérico', 'generico'):
         return ''
     return u
+
+
+def customer_renewal_client_username_for_admin(license_id, credential, client_username_hint=None):
+    """
+    Usuario de login del comprador para pasar una fila al bloc día (portal del cliente).
+    Prioriza el pedido pagado sobre lo escrito a mano en admin.
+    """
+    from app.models.user import User
+    from app.store.models import CustomerAccountRenewalOrder, License
+
+    account_email = extract_email_from_renewal_credential(credential)
+    hint = (client_username_hint or '').strip()
+    if not account_email:
+        return hint
+
+    lic = License.query.get(int(license_id)) if license_id else None
+    if not lic:
+        return hint
+
+    q = CustomerAccountRenewalOrder.query.filter(
+        func.lower(CustomerAccountRenewalOrder.customer_email) == account_email.strip().lower(),
+    )
+    if getattr(lic, 'product_id', None):
+        q = q.filter(CustomerAccountRenewalOrder.product_id == int(lic.product_id))
+    else:
+        q = q.filter(CustomerAccountRenewalOrder.license_id == int(license_id))
+
+    rows = q.order_by(CustomerAccountRenewalOrder.created_at.desc()).all()
+    if not rows:
+        return hint
+
+    uname = _normalize_client_username(client_username_hint)
+    chosen = rows[0]
+    if uname:
+        for row in rows:
+            buyer = User.query.get(row.user_id)
+            if _buyer_matches_renewal_label(buyer, client_username_hint):
+                chosen = row
+                break
+
+    buyer = User.query.get(chosen.user_id)
+    un = (getattr(buyer, 'username', None) or '').strip()
+    if un:
+        return un
+    return hint
 
 
 def find_pending_customer_renewal_order(license_id, customer_email, client_username=None):
@@ -405,6 +787,7 @@ def _reject_result_payload(
     *,
     notified=False,
     email_sent=False,
+    notify_queued=False,
     refund_ok=False,
     refund_info=None,
     no_order=False,
@@ -413,7 +796,8 @@ def _reject_result_payload(
     payload = {
         'order_id': int(order.id) if order else None,
         'notified': bool(notified),
-        'email_sent': bool(email_sent),
+        'email_sent': bool(email_sent) if not notify_queued else False,
+        'notify_queued': bool(notify_queued),
         'refunded': bool(refund_ok),
         'no_order': bool(no_order),
         'already_rejected': bool(already_rejected),
@@ -428,6 +812,48 @@ def _reject_result_payload(
         if buyer:
             payload['client_username'] = getattr(buyer, 'username', None) or ''
     return payload
+
+
+def _user_platform_email(user):
+    return (getattr(user, 'email', None) or '').strip()
+
+
+def _send_customer_renewal_transactional_email(user, *, subject, email_title, paragraphs):
+    """Envía al email registrado del usuario en la plataforma (campo User.email)."""
+    to_email = _user_platform_email(user)
+    if not to_email:
+        current_app.logger.info(
+            'Email renovación omitido: usuario %s sin email en perfil.',
+            getattr(user, 'username', None) or getattr(user, 'id', '?'),
+        )
+        return False
+
+    from app.services.email_service import email_recipient_display_name, render_transactional_email_html, send_transactional_email
+
+    uname = email_recipient_display_name(user)
+    body_lines = [f'Hola {uname},'] if uname else ['Hola,']
+    body_lines.extend(paragraphs)
+    body_lines.extend(['', 'Tu Premium — mensaje automático de la tienda.'])
+    body_text = '\n\n'.join(body_lines)
+
+    body_html = None
+    try:
+        body_html = render_transactional_email_html(
+            email_title, uname, paragraphs, include_store_link=False
+        )
+    except Exception as ex:
+        current_app.logger.warning('Plantilla email renovación: %s', ex)
+
+    try:
+        return send_transactional_email(
+            to_email=to_email,
+            subject=subject,
+            body_text=body_text,
+            body_html=body_html,
+        )
+    except Exception as ex:
+        current_app.logger.warning('email renovación cuenta cliente: %s', ex)
+        return False
 
 
 def notify_customer_account_renewal_completed(user, product, account_email, day=None):
@@ -463,41 +889,19 @@ def notify_customer_account_renewal_completed(user, product, account_email, day=
 
 def email_customer_account_renewal_completed(user, product, account_email):
     """Correo al email registrado del usuario en la plataforma (no al correo de la cuenta Netflix/etc.)."""
-    to_email = (getattr(user, 'email', None) or '').strip()
-    if not to_email:
-        return False
     pname = getattr(product, 'name', None) or 'Producto'
     em = (account_email or '').strip()
-    uname = getattr(user, 'username', None) or ''
-    subject = f'Cuenta renovada — {pname}'
-    text = (
-        f'Hola {uname},\n\n'
-        f'Tu solicitud de renovación para «{pname}» ya está lista.\n'
-        f'La cuenta {em} fue renovada correctamente.\n\n'
-        f'También puedes ver el aviso en la tienda de la plataforma.\n'
+    subject = f'Actualización de tu renovación — {pname}'
+    paragraphs = [
+        f'Tu solicitud de renovación para {pname} ya fue procesada.',
+        f'La cuenta {em} quedó renovada correctamente.',
+    ]
+    return _send_customer_renewal_transactional_email(
+        user,
+        subject=subject,
+        email_title='Renovación completada',
+        paragraphs=paragraphs,
     )
-    html = (
-        f'<p>Hola <strong>{uname}</strong>,</p>'
-        f'<p>Tu solicitud de renovación para <strong>{pname}</strong> ya está lista.</p>'
-        f'<p>La cuenta <strong>{em}</strong> fue renovada correctamente.</p>'
-        f'<p>También puedes ver el aviso en la tienda de la plataforma.</p>'
-    )
-    from_email = current_app.config.get('SMTP_FROM', 'noreply@tusitio.com')
-    try:
-        from app.services.smtp_client import send_email_via_smtp
-
-        return bool(
-            send_email_via_smtp(
-                from_email=from_email,
-                to_email=to_email,
-                subject=subject,
-                text_content=text,
-                html_content=html,
-            )
-        )
-    except Exception as ex:
-        current_app.logger.warning('email renovación cuenta cliente: %s', ex)
-        return False
 
 
 def complete_customer_account_renewal_from_admin(license_id, credential, client_username, day=None):
@@ -541,13 +945,17 @@ def complete_customer_account_renewal_from_admin(license_id, credential, client_
     if note_bits:
         order.admin_notes = ', '.join(note_bits)
 
-    notify_customer_account_renewal_completed(user, product, account_email, day=day)
-    email_sent = email_customer_account_renewal_completed(user, product, account_email)
+    from app.store.customer_renewal_notify_batch import queue_customer_renewal_notify
+
+    queue_customer_renewal_notify(
+        user, 'completed', product, account_email, day=day
+    )
     db.session.commit()
     return True, {
         'order_id': int(order.id),
         'notified': True,
-        'email_sent': bool(email_sent),
+        'notify_queued': True,
+        'email_sent': False,
         'client_username': getattr(user, 'username', None) or '',
     }
 
@@ -581,42 +989,21 @@ def notify_customer_account_renewal_rejected(user, product, account_email, reaso
 
 
 def email_customer_account_renewal_rejected(user, product, account_email, reason):
-    to_email = (getattr(user, 'email', None) or '').strip()
-    if not to_email:
-        return False
     pname = getattr(product, 'name', None) or 'Producto'
     em = (account_email or '').strip()
     reason_txt = (reason or '').strip()
-    uname = getattr(user, 'username', None) or ''
-    subject = f'Renovación no procesada — {pname}'
-    text = (
-        f'Hola {uname},\n\n'
-        f'No pudimos renovar tu cuenta {em} para «{pname}».\n'
-        f'Motivo: {reason_txt}\n\n'
-        f'También puedes ver el aviso en la tienda de la plataforma.\n'
+    subject = f'Actualización de tu renovación — {pname}'
+    paragraphs = [
+        f'No pudimos completar la renovación de tu cuenta {em} para {pname}.',
+        f'Motivo indicado por el administrador: {reason_txt}',
+        'Si correspondía devolución de saldo, ya debería reflejarse en tu cuenta de la tienda.',
+    ]
+    return _send_customer_renewal_transactional_email(
+        user,
+        subject=subject,
+        email_title='Renovación no procesada',
+        paragraphs=paragraphs,
     )
-    html = (
-        f'<p>Hola <strong>{uname}</strong>,</p>'
-        f'<p>No pudimos renovar tu cuenta <strong>{em}</strong> para <strong>{pname}</strong>.</p>'
-        f'<p><strong>Motivo:</strong> {reason_txt}</p>'
-        f'<p>También puedes ver el aviso en la tienda de la plataforma.</p>'
-    )
-    from_email = current_app.config.get('SMTP_FROM', 'noreply@tusitio.com')
-    try:
-        from app.services.smtp_client import send_email_via_smtp
-
-        return bool(
-            send_email_via_smtp(
-                from_email=from_email,
-                to_email=to_email,
-                subject=subject,
-                text_content=text,
-                html_content=html,
-            )
-        )
-    except Exception as ex:
-        current_app.logger.warning('email rechazo renovación cuenta cliente: %s', ex)
-        return False
 
 
 def reject_customer_account_renewal_from_admin(license_id, credential, client_username, reason):
@@ -636,10 +1023,19 @@ def reject_customer_account_renewal_from_admin(license_id, credential, client_us
 
     account_email = extract_email_from_renewal_credential(credential)
     if not account_email:
-        return False, 'No se pudo identificar el correo de la cuenta.'
+        # Fila del bloc admin sin correo identificable: permitir quitarla sin pedido asociado.
+        return True, _reject_result_payload(None, no_order=True)
+
+    from app.store.models import License
+
+    lic = License.query.get(int(license_id))
+    product_id_for_notes = int(lic.product_id) if lic and getattr(lic, 'product_id', None) else None
 
     order = find_pending_customer_renewal_order(license_id, account_email, client_username)
     if not order:
+        if product_id_for_notes:
+            remove_customer_renewal_email_from_product_notes(product_id_for_notes, account_email)
+            db.session.commit()
         return True, _reject_result_payload(None, no_order=True)
 
     status = (order.status or '').lower()
@@ -665,6 +1061,8 @@ def reject_customer_account_renewal_from_admin(license_id, credential, client_us
         return False, 'No se pudo devolver el saldo al cliente.'
 
     if status == 'rejected':
+        if product_id_for_notes:
+            remove_customer_renewal_email_from_product_notes(product_id_for_notes, account_email)
         db.session.commit()
         try:
             from app.store.balance_recharge_events import notify_balance_recharge_updated
@@ -683,8 +1081,13 @@ def reject_customer_account_renewal_from_admin(license_id, credential, client_us
     order.processed_at = datetime.utcnow()
     order.admin_notes = reason_txt
 
-    notify_customer_account_renewal_rejected(user, product, account_email, reason_txt)
-    email_sent = email_customer_account_renewal_rejected(user, product, account_email, reason_txt)
+    from app.store.customer_renewal_notify_batch import queue_customer_renewal_notify
+
+    queue_customer_renewal_notify(
+        user, 'rejected', product, account_email, reason=reason_txt
+    )
+    if product_id_for_notes:
+        remove_customer_renewal_email_from_product_notes(product_id_for_notes, account_email)
     db.session.commit()
     try:
         from app.store.balance_recharge_events import notify_balance_recharge_updated
@@ -695,7 +1098,7 @@ def reject_customer_account_renewal_from_admin(license_id, credential, client_us
     return True, _reject_result_payload(
         order,
         notified=True,
-        email_sent=bool(email_sent),
+        notify_queued=True,
         refund_ok=True,
         refund_info=refund_info,
     )

@@ -135,7 +135,7 @@ from functools import wraps
 # - Usuarios de Soporte: Acceso completo SOLO si NO están en lista bloqueados
 # - Usuarios bloqueados: "soporte", "soporte1", "soporte2", "soporte3" (NO acceso)
 # - Usuarios normales: Requieren rol o permisos específicos
-# - Subusuarios: Requieren can_access_store
+# - Subusuarios: Requieren can_access_store (solo visualización: catálogo/stock, sin comprar)
 def store_access_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
@@ -187,6 +187,39 @@ def store_access_required(f):
                 return redirect(url_for("main_bp.home"))
         return f(*args, **kwargs)
     return decorated_function
+
+
+def _user_store_view_only(user_obj):
+    """Subusuario con acceso a tienda: puede ver catálogo/stock, no comprar."""
+    return bool(user_obj and getattr(user_obj, 'parent_id', None) is not None)
+
+
+def _user_can_purchase_in_store(user_obj):
+    """Compra/reservas/renovación de carrito: solo usuarios principales (no subusuarios)."""
+    if not user_obj:
+        return False
+    if _user_store_view_only(user_obj):
+        return False
+    return True
+
+
+def _json_store_purchase_forbidden():
+    r = jsonify(
+        success=False,
+        error='Tu cuenta solo puede visualizar la tienda y el stock. No puedes comprar ni reservar.',
+    )
+    return _attach_private_no_cache_headers(r), 403
+
+
+def _json_licencias_view_only_forbidden():
+    r = jsonify(
+        success=False,
+        error=(
+            'Tu cuenta solo puede visualizar las licencias del usuario principal. '
+            'No puedes editar notas, estados ni inventario.'
+        ),
+    )
+    return _attach_private_no_cache_headers(r), 403
 
 
 def _user_store_soporte_licencias_flag(user_obj):
@@ -1000,7 +1033,7 @@ def _record_portal_renewal_blocked_activity(
 USER_LIC_CADUCIDAD_VIEW_MAX_DAYS = 5
 
 # Cache bust único: Admin Licencias + portal /licencias (evita CSS/JS mezclados en producción).
-LICENCIAS_STATIC_VERSION = '20260622-proveedor-vencidas-caidas-collapse-v1'
+LICENCIAS_STATIC_VERSION = '20260628-notes-hidden-fix-v1'
 
 
 def _billing_user_for_store_debt_limit(user_obj):
@@ -1156,6 +1189,7 @@ def _sanitize_admin_licencias_ui_prefs(raw):
             out['admin_days'] = clean_ad
     for bloc in (
         'personal_collapsed',
+        'license_collapsed',
         'suspended_collapsed',
         'expired_collapsed',
         'proveedor_merged_collapsed',
@@ -1208,6 +1242,7 @@ def _sanitize_admin_licencias_ui_prefs(raw):
 def admin_store():
     products = Product.query.order_by(Product.id.desc()).all()
     restricted = getattr(g, 'license_support_restricted_mode', False)
+    view_only = getattr(g, 'license_support_view_only', False)
     admin_ui_prefs = {}
     uid = session.get('user_id')
     if uid:
@@ -1222,6 +1257,7 @@ def admin_store():
             products=products,
             title='Admin Licencias',
             license_support_restricted_mode=restricted,
+            license_support_view_only=view_only,
             admin_licencias_ui_prefs=admin_ui_prefs,
             current_user=current_user,
             licencias_static_version=LICENCIAS_STATIC_VERSION,
@@ -1260,6 +1296,120 @@ def api_admin_licencias_ui_prefs():
         r = jsonify(success=False, error=str(ex))
         return _attach_private_no_cache_headers(r), 500
     r = jsonify(success=True)
+    return _attach_private_no_cache_headers(r)
+
+
+_STORE_FRONT_VIEWS = frozenset({'grid', 'list', 'compact', 'text', 'view6'})
+_CODIGOS_VIEWS = frozenset({'cards', 'compact', 'grid', 'table', 'icons'})
+
+
+def _sanitize_store_front_ui_prefs(raw):
+    """Acota JSON para `User.store_front_ui_prefs`."""
+    if raw is None or not isinstance(raw, dict):
+        return {}
+    try:
+        if len(json.dumps(raw, separators=(',', ':'))) > 4000:
+            return {}
+    except Exception:
+        return {}
+    out = {}
+    if raw.get('hideZeroStock') is True or raw.get('hideZeroStock') is False:
+        out['hideZeroStock'] = bool(raw['hideZeroStock'])
+    if raw.get('showPriceTable') is True or raw.get('showPriceTable') is False:
+        out['showPriceTable'] = bool(raw['showPriceTable'])
+    if raw.get('priceTableCollapsed') is True or raw.get('priceTableCollapsed') is False:
+        out['priceTableCollapsed'] = bool(raw['priceTableCollapsed'])
+    view = raw.get('storeView')
+    if view == 'table':
+        view = 'list'
+    if isinstance(view, str) and view in _STORE_FRONT_VIEWS:
+        out['storeView'] = view
+    return out
+
+
+def _sanitize_codigos_view_prefs(raw):
+    """Acota JSON para `User.codigos_view_prefs`."""
+    if raw is None or not isinstance(raw, dict):
+        return {}
+    try:
+        if len(json.dumps(raw, separators=(',', ':'))) > 2000:
+            return {}
+    except Exception:
+        return {}
+    out = {}
+    view = raw.get('codigosView')
+    if isinstance(view, str) and view in _CODIGOS_VIEWS:
+        out['codigosView'] = view
+    return out
+
+
+def _session_user_for_ui_prefs():
+    """Usuario de sesión para preferencias UI (requiere login)."""
+    if not session.get('logged_in'):
+        return None
+    return get_current_user()
+
+
+@store_bp.route('/api/store-front-ui-prefs', methods=['GET', 'PUT'])
+def api_store_front_ui_prefs():
+    """Guardar / leer preferencias de configuración de la tienda en BD."""
+    user = _session_user_for_ui_prefs()
+    if not user:
+        r = jsonify(success=False, error='Sesión inválida.')
+        return _attach_private_no_cache_headers(r), 401
+    if user.parent_id is not None:
+        r = jsonify(success=False, error='No disponible para sub-usuarios.')
+        return _attach_private_no_cache_headers(r), 403
+    if request.method == 'GET':
+        prefs = user.store_front_ui_prefs
+        if not isinstance(prefs, dict):
+            prefs = {}
+        r = jsonify(success=True, prefs=prefs)
+        return _attach_private_no_cache_headers(r)
+    data = request.get_json(silent=True) or {}
+    prefs_in = data.get('prefs')
+    if not isinstance(prefs_in, dict):
+        r = jsonify(success=False, error='prefs debe ser un objeto JSON.')
+        return _attach_private_no_cache_headers(r), 400
+    user.store_front_ui_prefs = _sanitize_store_front_ui_prefs(prefs_in)
+    try:
+        db.session.commit()
+    except Exception as ex:
+        db.session.rollback()
+        current_app.logger.exception('api_store_front_ui_prefs commit')
+        r = jsonify(success=False, error=str(ex))
+        return _attach_private_no_cache_headers(r), 500
+    r = jsonify(success=True, prefs=user.store_front_ui_prefs or {})
+    return _attach_private_no_cache_headers(r)
+
+
+@store_bp.route('/api/codigos-view-prefs', methods=['GET', 'PUT'])
+def api_codigos_view_prefs():
+    """Guardar / leer preferencias de vista de Códigos en BD."""
+    user = _session_user_for_ui_prefs()
+    if not user:
+        r = jsonify(success=False, error='Sesión inválida.')
+        return _attach_private_no_cache_headers(r), 401
+    if request.method == 'GET':
+        prefs = user.codigos_view_prefs
+        if not isinstance(prefs, dict):
+            prefs = {}
+        r = jsonify(success=True, prefs=prefs)
+        return _attach_private_no_cache_headers(r)
+    data = request.get_json(silent=True) or {}
+    prefs_in = data.get('prefs')
+    if not isinstance(prefs_in, dict):
+        r = jsonify(success=False, error='prefs debe ser un objeto JSON.')
+        return _attach_private_no_cache_headers(r), 400
+    user.codigos_view_prefs = _sanitize_codigos_view_prefs(prefs_in)
+    try:
+        db.session.commit()
+    except Exception as ex:
+        db.session.rollback()
+        current_app.logger.exception('api_codigos_view_prefs commit')
+        r = jsonify(success=False, error=str(ex))
+        return _attach_private_no_cache_headers(r), 500
+    r = jsonify(success=True, prefs=user.codigos_view_prefs or {})
     return _attach_private_no_cache_headers(r)
 
 
@@ -1638,7 +1788,17 @@ def store_front():
     product_month_to_month = _product_month_to_month_map(products)
     product_billing_period = _product_billing_period_map(products)
     product_allow_reservation = _product_allow_reservation_map(products)
+    from app.store.product_reservations import user_next_day_products_map
+
+    # «Reservar otro día» es permiso por usuario (Gestión de permisos), no por producto.
+    product_allow_next_day_reservation = user_next_day_products_map(user, products)
     product_renew_customer_account = _product_renew_customer_account_map(products)
+    store_front_ui_prefs = {}
+    store_view_only = _user_store_view_only(user)
+    if user and user.parent_id is None:
+        sp = getattr(user, 'store_front_ui_prefs', None)
+        if isinstance(sp, dict):
+            store_front_ui_prefs = _sanitize_store_front_ui_prefs(sp)
     resp = make_response(render_template(
         'store_front.html',
         products=products,
@@ -1646,6 +1806,7 @@ def store_front():
         product_month_to_month=product_month_to_month,
         product_billing_period=product_billing_period,
         product_allow_reservation=product_allow_reservation,
+        product_allow_next_day_reservation=product_allow_next_day_reservation,
         product_renew_customer_account=product_renew_customer_account,
         coupons=coupons,
         ADMIN_USER=admin_user,
@@ -1658,6 +1819,8 @@ def store_front():
         puede_tener_deuda=puede_tener_deuda,
         limite_deuda_usd=limite_deuda_usd,
         limite_deuda_cop=limite_deuda_cop,
+        store_front_ui_prefs=store_front_ui_prefs,
+        store_view_only=store_view_only,
     ))
     _attach_document_no_store_headers(resp)
     return resp
@@ -2173,6 +2336,11 @@ def create_api():
         drive_subtitle_photos = request.form.get('drive_subtitle_photos', '').strip()
         drive_subtitle_videos = request.form.get('drive_subtitle_videos', '').strip()
 
+    # Genérica: sanitizar HTML al guardar (defensa en profundidad)
+    if not (api_type or '').strip():
+        from app.utils.html_sanitize import sanitize_admin_message_html_str
+        api_key = sanitize_admin_message_html_str(api_key)
+
     new_api = ApiInfo(
         title=title,
         api_key=api_key,
@@ -2204,6 +2372,10 @@ def update_api(api_id):
     if not title or not api_key:
         flash('El título y la clave de API son obligatorios.', 'danger')
         return render_template('edit_api.html', api=api)
+
+    if not (api_type or '').strip():
+        from app.utils.html_sanitize import sanitize_admin_message_html_str
+        api_key = sanitize_admin_message_html_str(api_key)
 
     api.title = title
     api.api_key = api_key
@@ -2492,25 +2664,140 @@ def _github_blob_to_raw(url):
     return url
 
 
+def _proxy_image_url_allowed(url):
+    """
+    Anti-SSRF para /proxy-image: esquema http(s), sin hosts/IPs internas,
+    y resolución DNS sin direcciones privadas/loopback.
+    """
+    from urllib.parse import urlparse
+    import socket
+    from ipaddress import ip_address, AddressValueError
+    from app.services.search_service import validate_external_url_ssrf, is_internal_ip
+
+    if not url or not isinstance(url, str):
+        return False
+    url = url.strip()
+    if len(url) > 2048:
+        return False
+    if not validate_external_url_ssrf(url):
+        return False
+    try:
+        parsed = urlparse(url)
+        hostname = parsed.hostname
+        if not hostname:
+            return False
+        # Bloquear credenciales en URL (user:pass@host)
+        if parsed.username or parsed.password:
+            return False
+        # Puerto no estándar hacia servicios internos típicos: ya cubierto si IP es privada;
+        # resolver A/AAAA y rechazar si alguna es interna.
+        try:
+            infos = socket.getaddrinfo(hostname, None, type=socket.SOCK_STREAM)
+        except socket.gaierror:
+            return False
+        if not infos:
+            return False
+        for info in infos:
+            addr = info[4][0]
+            try:
+                ip = ip_address(addr)
+            except (ValueError, AddressValueError):
+                return False
+            if (
+                ip.is_loopback
+                or ip.is_private
+                or ip.is_link_local
+                or ip.is_reserved
+                or ip.is_multicast
+                or ip.is_unspecified
+            ):
+                return False
+            if is_internal_ip(addr):
+                return False
+        return True
+    except Exception:
+        return False
+
+
 @store_bp.route('/proxy-image')
 @csrf_exempt_route
 def proxy_image():
     """Proxy de imágenes externas para evitar CORB/CORS en contenido HTML (GitHub raw, etc.)."""
+    if not session.get('logged_in'):
+        return Response('No autorizado', status=401)
+
     url = request.args.get('url')
-    if not url or not url.startswith(('http://', 'https://')):
+    if not url or not isinstance(url, str):
         return Response('URL inválida', status=400)
+    url = url.strip()
+    if not url.startswith(('http://', 'https://')):
+        return Response('URL inválida', status=400)
+
     # Convertir GitHub blob a raw para obtener el archivo binario, no HTML
     if 'github.com' in url and '/blob/' in url:
         url = _github_blob_to_raw(url)
+
+    if not _proxy_image_url_allowed(url):
+        return Response('URL no permitida', status=403)
+
     try:
-        resp = requests.get(url, timeout=10, stream=True)
+        # allow_redirects=False evita SSRF vía redirect a IP interna
+        resp = requests.get(
+            url,
+            timeout=8,
+            stream=True,
+            allow_redirects=False,
+            headers={'User-Agent': 'IMAP-Store-ImageProxy/1.0'},
+        )
+        if resp.is_redirect or resp.status_code in (301, 302, 303, 307, 308):
+            loc = resp.headers.get('Location') or ''
+            if not _proxy_image_url_allowed(loc):
+                return Response('Redirect no permitido', status=403)
+            resp.close()
+            resp = requests.get(
+                loc,
+                timeout=8,
+                stream=True,
+                allow_redirects=False,
+                headers={'User-Agent': 'IMAP-Store-ImageProxy/1.0'},
+            )
+            if resp.is_redirect or resp.status_code in (301, 302, 303, 307, 308):
+                resp.close()
+                return Response('Demasiados redirects', status=403)
+
         resp.raise_for_status()
-        content_type = resp.headers.get('Content-Type', 'application/octet-stream')
-        if not any(ct in content_type for ct in ('image/', 'octet-stream')):
+        content_type = (resp.headers.get('Content-Type') or 'application/octet-stream').split(';')[0].strip().lower()
+        if not content_type.startswith('image/'):
+            resp.close()
             return Response('Solo se permiten imágenes', status=403)
-        return Response(resp.iter_content(chunk_size=8192), content_type=content_type)
+
+        # Límite de tamaño (~5 MB) para no usar el proxy como descarga arbitraria
+        max_bytes = 5 * 1024 * 1024
+        cl = resp.headers.get('Content-Length')
+        if cl is not None:
+            try:
+                if int(cl) > max_bytes:
+                    resp.close()
+                    return Response('Imagen demasiado grande', status=413)
+            except (TypeError, ValueError):
+                pass
+
+        def _iter_limited():
+            total = 0
+            try:
+                for chunk in resp.iter_content(chunk_size=8192):
+                    if not chunk:
+                        continue
+                    total += len(chunk)
+                    if total > max_bytes:
+                        break
+                    yield chunk
+            finally:
+                resp.close()
+
+        return Response(_iter_limited(), content_type=content_type)
     except Exception as e:
-        current_app.logger.warning(f"Proxy imagen falló para {url[:80]}: {e}")
+        current_app.logger.warning('Proxy imagen falló para %s: %s', url[:80], e)
         return Response('Error al cargar imagen', status=502)
 
 
@@ -3044,49 +3331,6 @@ def http_request():
         return jsonify({'result': result})
     except requests.exceptions.RequestException as e:
         return jsonify({'error': f'Error al contactar la URL: {str(e)}'}), 500 
-
-@store_bp.route('/tools/db-query', methods=['POST'])
-def db_query():
-    from flask import request, jsonify, session, current_app
-    from sqlalchemy import text
-    user = None
-    username = session.get("username")
-    user_id = session.get("user_id")
-
-    if username:
-        user = User.query.filter_by(username=username).first()
-    elif user_id:
-        user = User.query.get(user_id)
-
-    admin_username = current_app.config.get("ADMIN_USER", "admin")
-    data = request.get_json()
-    sql = data.get('sql')
-    api_id = data.get('api_id')
-    if not sql or not sql.strip().lower().startswith('select'):
-        return jsonify({'error': 'Solo se permiten consultas SELECT.'}), 400
-
-    # Permitir solo admin o usuarios principales vinculados a la API
-    if not user:
-        return jsonify({'error': 'No autorizado'}), 401
-    if user.username == admin_username:
-        pass  # admin siempre puede
-    else:
-        # Sub-usuarios no pueden
-        if getattr(user, 'parent_id', None):
-            return jsonify({'error': 'No autorizado para sub-usuarios.'}), 403
-        # Debe estar vinculado a la API
-        from app.store.models import ApiInfo
-        api = ApiInfo.query.get(api_id)
-        if not api or api.api_type != 'APIs de Base de Datos' or user not in api.users:
-            return jsonify({'error': 'No autorizado para esta API.'}), 403
-
-    try:
-        result = db.session.execute(text(sql))
-        columns = result.keys()
-        rows = [dict(zip(columns, row)) for row in result.fetchall()]
-        return jsonify({'columns': list(columns), 'rows': rows})
-    except Exception as e:
-        return jsonify({'error': f'Error al ejecutar la consulta: {str(e)}'}), 500
 
 @store_bp.route('/tools/weather', methods=['POST'])
 def get_weather():
@@ -4397,22 +4641,64 @@ def add_balance():
         tipo_precio_raw = user.user_prices.get('tipo_precio')
         if tipo_precio_raw and tipo_precio_raw in ['USD', 'COP']:
             tipo_precio = tipo_precio_raw.lower()
+    debt_apply = None
     if tipo_precio == 'usd':
-        cur = float(user.saldo_usd or 0)
+        amt = amount_usd
+        if amt <= 0 and not subtract:
+            return jsonify({'success': False, 'error': 'Monto inválido'}), 400
         if subtract:
-            if amount_usd <= 0:
+            if amt <= 0:
                 return jsonify({'success': False, 'error': 'El monto a descontar debe ser mayor que cero'}), 400
-            user.saldo_usd = cur - amount_usd
+            from app.store.license_debt_credit import reduce_license_account_saldo_with_fifo_log
+
+            # Primero baja deuda de licencias (FIFO); el resto descuenta prepago.
+            rem = amt
+            try:
+                lic_debt = float(getattr(user, 'saldo', 0) or 0)
+            except (TypeError, ValueError):
+                lic_debt = 0.0
+            if lic_debt > 1e-9:
+                pay = min(lic_debt, rem)
+                debt_apply = reduce_license_account_saldo_with_fifo_log(
+                    user, pay, source='admin'
+                )
+                rem -= pay
+            if rem > 1e-12:
+                user.saldo_usd = float(user.saldo_usd or 0) - rem
         else:
-            user.saldo_usd = cur + amount_usd
+            from app.store.license_debt_credit import apply_positive_credit_against_license_debts
+
+            debt_apply = apply_positive_credit_against_license_debts(
+                user, amt, source='admin', currency='USD'
+            )
     elif tipo_precio == 'cop':
-        cur = float(user.saldo_cop or 0)
+        amt = amount_cop
+        if amt <= 0 and not subtract:
+            return jsonify({'success': False, 'error': 'Monto inválido'}), 400
         if subtract:
-            if amount_cop <= 0:
+            if amt <= 0:
                 return jsonify({'success': False, 'error': 'El monto a descontar debe ser mayor que cero'}), 400
-            user.saldo_cop = cur - amount_cop
+            from app.store.license_debt_credit import reduce_license_account_saldo_with_fifo_log
+
+            rem = amt
+            try:
+                lic_debt = float(getattr(user, 'saldo', 0) or 0)
+            except (TypeError, ValueError):
+                lic_debt = 0.0
+            if lic_debt > 1e-9:
+                pay = min(lic_debt, rem)
+                debt_apply = reduce_license_account_saldo_with_fifo_log(
+                    user, pay, source='admin'
+                )
+                rem -= pay
+            if rem > 1e-12:
+                user.saldo_cop = float(user.saldo_cop or 0) - rem
         else:
-            user.saldo_cop = cur + amount_cop
+            from app.store.license_debt_credit import apply_positive_credit_against_license_debts
+
+            debt_apply = apply_positive_credit_against_license_debts(
+                user, amt, source='admin', currency='COP'
+            )
     else:
         return jsonify({'success': False, 'error': 'El usuario no tiene tipo de precio configurado (USD o COP).'}), 400
     from app import db
@@ -4423,7 +4709,15 @@ def add_balance():
         notify_balance_recharge_updated(int(user.id), reason='admin_balance_adjust')
     except Exception:
         pass
-    return jsonify({'success': True, 'new_saldo_usd': user.saldo_usd, 'new_saldo_cop': user.saldo_cop})
+    payload = {
+        'success': True,
+        'new_saldo_usd': user.saldo_usd,
+        'new_saldo_cop': user.saldo_cop,
+        'new_license_saldo': float(getattr(user, 'saldo', 0) or 0),
+    }
+    if debt_apply:
+        payload['debt_apply'] = debt_apply
+    return jsonify(payload)
 
 
 @store_bp.route('/api/user/store-menu-balance', methods=['GET'])
@@ -4542,16 +4836,32 @@ def store_front_legacy_redirect():
     """URL legacy; la tienda vive en /tienda/."""
     return redirect(url_for('store_bp.store_front'))
 
-# --- Al dar acceso a la tienda a un subusuario, solo actualizar can_access_store, sin roles ---
+# --- Acceso tienda subusuario: solo visualización (catálogo/stock). Ruta legacy endurecida. ---
 from app.models.user import User
 @store_bp.route('/subusers/update_access', methods=['POST'])
 def update_subuser_access():
-    data = request.get_json()
+    """Actualiza can_access_store. Requiere padre/admin; no permite compra al subusuario."""
+    from app.subusers.routes import can_access_subusers
+
+    if not can_access_subusers():
+        return jsonify({'success': False, 'error': 'No autorizado'}), 403
+    data = request.get_json(silent=True) or {}
     subuser_id = data.get('subuser_id')
     can_access_store = data.get('can_access_store', False)
+    try:
+        subuser_id = int(subuser_id)
+    except (TypeError, ValueError):
+        return jsonify({'success': False, 'error': 'subuser_id inválido.'}), 400
     subuser = User.query.get(subuser_id)
-    if not subuser:
+    if not subuser or subuser.parent_id is None:
         return jsonify({'success': False, 'error': 'Subusuario no encontrado.'}), 404
+    parent_user = User.query.get(subuser.parent_id)
+    admin_username = current_app.config.get('ADMIN_USER', 'admin')
+    if not parent_user or (
+        session.get('user_id') != parent_user.id
+        and session.get('username') != admin_username
+    ):
+        return jsonify({'success': False, 'error': 'No tienes permiso para modificar este sub-usuario.'}), 403
     subuser.can_access_store = bool(can_access_store)
     db.session.commit()
     return jsonify({'success': True, 'can_access_store': subuser.can_access_store})
@@ -4580,6 +4890,8 @@ def procesar_pago():
         user = User.query.get(user_id)
     if not user:
         return jsonify({'success': False, 'error': 'Usuario no autenticado'}), 401
+    if not _user_can_purchase_in_store(user):
+        return _json_store_purchase_forbidden()
 
     data = request.get_json()
     productos = data.get('productos', [])
@@ -4728,16 +5040,11 @@ def procesar_pago():
         user.saldo_cop = 0
     if user.saldo_usd is None:
         user.saldo_usd = 0
-    permite_deuda = _user_puede_tener_deuda_effective(user)
-    if not permite_deuda:
-        if total_cop > user.saldo_cop:
-            return jsonify({'success': False, 'error': 'Saldo COP insuficiente'}), 400
-        if total_usd > user.saldo_usd:
-            return jsonify({'success': False, 'error': 'Saldo USD insuficiente'}), 400
-    else:
-        debt_err = _store_prepaid_debt_limit_error(user, total_cop, total_usd)
-        if debt_err:
-            return jsonify({'success': False, 'error': debt_err}), 400
+    from app.store.product_reservations import user_can_pay_checkout_with_holds
+
+    pay_err = user_can_pay_checkout_with_holds(user, total_cop, total_usd)
+    if pay_err:
+        return jsonify({'success': False, 'error': pay_err}), 400
 
     cuentas_asignadas = []
     asignadas_por_producto = defaultdict(int)
@@ -4812,6 +5119,7 @@ def procesar_pago():
                 from app.store.customer_account_renewals import (
                     append_customer_renewal_notes_for_checkout,
                     create_customer_account_renewal_order,
+                    notify_admin_customer_account_renewal_pending,
                     notify_customer_account_renewal_received,
                     product_allows_customer_account_renewal,
                     validate_customer_renewal_from_cart_item,
@@ -4830,6 +5138,7 @@ def procesar_pago():
                     p.get('customer_email'),
                     p.get('customer_password'),
                     p.get('customer_credential'),
+                    user_id=user.id,
                 )
                 if verr:
                     db.session.rollback()
@@ -4840,6 +5149,7 @@ def procesar_pago():
                 append_customer_renewal_notes_for_checkout(
                     producto, user, em, pw, credential_line=cred_line
                 )
+                notify_admin_customer_account_renewal_pending(user, producto, em)
                 notify_customer_account_renewal_received(user, producto, em)
                 cuentas_asignadas.append(
                     {
@@ -5057,6 +5367,8 @@ def api_product_reservar(product_id):
         user = User.query.get(user_id)
     if not user:
         return jsonify({'success': False, 'error': 'Debes iniciar sesión.'}), 401
+    if not _user_can_purchase_in_store(user):
+        return _json_store_purchase_forbidden()
 
     product = Product.query.get(product_id)
     if not product or not product.enabled:
@@ -5071,7 +5383,8 @@ def api_product_reservar(product_id):
     if int(product_id) not in allowed_ids:
         return jsonify({'success': False, 'error': 'No tienes acceso a este producto.'}), 403
 
-    reservation, err = create_product_reservation(user, product)
+    data = request.get_json(silent=True) or {}
+    reservation, err = create_product_reservation(user, product, data.get('quantity', 1))
     if err:
         return jsonify({'success': False, 'error': err}), 400
     return jsonify({'success': True, 'reservation': reservation})
@@ -5090,6 +5403,163 @@ def api_user_pending_product_reservations():
     return jsonify({'success': True, 'product_ids': ids})
 
 
+@store_bp.route('/api/products/<int:product_id>/reservar-otro-dia', methods=['POST'])
+@store_access_required
+def api_product_reservar_otro_dia(product_id):
+    """Programa una compra para el día siguiente (Colombia); valida saldo al crear."""
+    from app.store.models import Product
+    from app.store.product_reservations import create_next_day_reservation, ensure_product_reservation_schema
+
+    ensure_product_reservation_schema()
+    user = User.query.get(session.get('user_id'))
+    if not user:
+        return jsonify({'success': False, 'error': 'Debes iniciar sesión.'}), 401
+    if not _user_can_purchase_in_store(user):
+        return _json_store_purchase_forbidden()
+
+    product = Product.query.get(product_id)
+    if not product or not product.enabled:
+        return jsonify({'success': False, 'error': 'Producto no disponible.'}), 404
+    archived = _product_ids_with_archived_license()
+    if int(product_id) in archived:
+        return jsonify({'success': False, 'error': 'Producto no disponible.'}), 404
+    products, _tipo = catalog_products_for_store_user(user)
+    if int(product_id) not in {p.id for p in (products or [])}:
+        return jsonify({'success': False, 'error': 'No tienes acceso a este producto.'}), 403
+
+    data = request.get_json(silent=True) or {}
+    reservation, err = create_next_day_reservation(user, product, data.get('quantity', 1))
+    if err:
+        return jsonify({'success': False, 'error': err}), 400
+    return jsonify({'success': True, 'reservation': reservation})
+
+
+@store_bp.route('/api/user/product-reservations/list', methods=['GET'])
+@store_access_required
+def api_user_product_reservations_list():
+    """Reservas activas del usuario (agotado + otro día) con detalle para la tienda."""
+    from app.store.product_reservations import (
+        ensure_product_reservation_schema,
+        list_user_reservations_detailed,
+        process_due_next_day_reservations,
+    )
+
+    ensure_product_reservation_schema()
+    user = User.query.get(session.get('user_id'))
+    if not user:
+        return jsonify({'success': False, 'error': 'Usuario no autenticado.'}), 401
+    try:
+        # Oportunista: si el scheduler aún no pasó, procesa lo que ya venció.
+        process_due_next_day_reservations()
+    except Exception:
+        current_app.logger.exception('process_due_next_day_reservations (list)')
+    return jsonify({'success': True, 'reservations': list_user_reservations_detailed(user.id)})
+
+
+@store_bp.route('/api/product-reservations/<int:reservation_id>/cancel', methods=['POST'])
+@store_access_required
+def api_product_reservation_cancel(reservation_id):
+    from app.store.product_reservations import cancel_product_reservation
+
+    user = User.query.get(session.get('user_id'))
+    if not user:
+        return jsonify({'success': False, 'error': 'Usuario no autenticado.'}), 401
+    ok, err = cancel_product_reservation(user, reservation_id)
+    if not ok:
+        return jsonify({'success': False, 'error': err}), 400
+    return jsonify({'success': True})
+
+
+@store_bp.route('/api/product-reservations/<int:reservation_id>', methods=['PUT'])
+@store_access_required
+def api_product_reservation_update(reservation_id):
+    from app.store.product_reservations import update_reservation_quantity
+
+    user = User.query.get(session.get('user_id'))
+    if not user:
+        return jsonify({'success': False, 'error': 'Usuario no autenticado.'}), 401
+    data = request.get_json(silent=True) or {}
+    reservation, err = update_reservation_quantity(user, reservation_id, data.get('quantity'))
+    if err:
+        return jsonify({'success': False, 'error': err}), 400
+    return jsonify({'success': True, 'reservation': reservation})
+
+
+@store_bp.route('/api/product-reservations/<int:reservation_id>/accept', methods=['POST'])
+@store_access_required
+def api_product_reservation_accept(reservation_id):
+    """El cliente acepta el cambio (cantidad parcial) y se procesa la venta."""
+    from app.store.product_reservations import accept_reservation_offer
+
+    user = User.query.get(session.get('user_id'))
+    if not user:
+        return jsonify({'success': False, 'error': 'Usuario no autenticado.'}), 401
+    reservation, err = accept_reservation_offer(user, reservation_id)
+    if err:
+        return jsonify({'success': False, 'error': err}), 400
+    return jsonify({'success': True, 'reservation': reservation})
+
+
+@store_bp.route('/api/customer-renewal/check-email', methods=['POST'])
+@store_access_required
+def api_check_customer_renewal_email():
+    """Valida correo de renovación con cuenta del cliente antes de añadir al carrito o pagar."""
+    from app.store.customer_account_renewals import (
+        customer_renewal_checkout_warning,
+        product_allows_customer_account_renewal,
+        validate_customer_renewal_from_cart_item,
+    )
+    from app.store.models import Product
+
+    user = User.query.get(session.get('user_id'))
+    if not user:
+        return jsonify({'success': False, 'error': 'Usuario no autenticado.'}), 401
+    if not _user_can_purchase_in_store(user):
+        return _json_store_purchase_forbidden()
+
+    data = request.get_json(silent=True) or {}
+    try:
+        product_id = int(data.get('product_id'))
+    except (TypeError, ValueError):
+        return jsonify({'success': False, 'error': 'Producto no válido.'}), 400
+
+    product = Product.query.get(product_id)
+    if not product or not product.enabled or not product_allows_customer_account_renewal(product):
+        return jsonify({'success': False, 'error': 'Producto no válido.'}), 400
+
+    user_id = int(user.id)
+
+    em, _pw, cred_line, verr = validate_customer_renewal_from_cart_item(
+        product,
+        data.get('customer_email'),
+        data.get('customer_password'),
+        data.get('customer_credential'),
+        user_id=user_id,
+    )
+    if verr:
+        from app.store.customer_account_renewals import (
+            CUSTOMER_RENEWAL_ALREADY_COMPLETED_MSG,
+            CUSTOMER_RENEWAL_CHECKOUT_BLOCKED_MSG,
+        )
+
+        payload = {'success': True, 'allowed': False, 'error': verr}
+        if verr == CUSTOMER_RENEWAL_ALREADY_COMPLETED_MSG:
+            payload['reason'] = 'already_renewed'
+        elif verr == CUSTOMER_RENEWAL_CHECKOUT_BLOCKED_MSG:
+            payload['reason'] = 'pending'
+        return jsonify(payload)
+    warning = customer_renewal_checkout_warning(product, em, user_id=user_id)
+    return jsonify(
+        {
+            'success': True,
+            'allowed': True,
+            'email': em,
+            'credential': cred_line,
+            'warning': warning,
+        }
+    )
+
+
 @store_bp.route('/api/user/store-notifications', methods=['GET'])
 @store_access_required
 def api_user_store_notifications():
@@ -5103,6 +5573,65 @@ def api_user_store_notifications():
         return jsonify({'success': False, 'error': 'Usuario no autenticado.'}), 401
     items = list_unread_notifications(user.id, limit=30)
     return jsonify({'success': True, 'notifications': items})
+
+
+@store_bp.route('/api/mobile/push-token', methods=['POST'])
+@csrf_exempt_route
+@store_access_required
+def api_mobile_push_token():
+    """Registra el token FCM de la app Capacitor para el usuario en sesión."""
+    from app.store.mobile_push import ensure_mobile_push_schema, upsert_push_token
+
+    ensure_mobile_push_schema()
+    user = User.query.get(session.get('user_id'))
+    if not user:
+        return jsonify({'success': False, 'error': 'Usuario no autenticado.'}), 401
+    data = request.get_json(silent=True) or {}
+    token = (data.get('token') or '').strip()
+    platform = (data.get('platform') or 'android').strip()
+    device_label = (data.get('device_label') or '').strip() or None
+    if not token:
+        return jsonify({'success': False, 'error': 'Token vacío.'}), 400
+    try:
+        upsert_push_token(user.id, token, platform=platform, device_label=device_label)
+        return jsonify({'success': True})
+    except Exception as ex:
+        current_app.logger.warning('api_mobile_push_token: %s', ex)
+        return jsonify({'success': False, 'error': 'No se pudo guardar el token.'}), 500
+
+
+@store_bp.route('/api/mobile/session-status', methods=['GET'])
+@csrf_exempt_route
+def api_mobile_session_status():
+    """Estado de sesión para la app Capacitor (biometría / gesto admin)."""
+    logged_in = bool(session.get('logged_in'))
+    username = (session.get('username') or '').strip()
+    admin_name = (current_app.config.get('ADMIN_USER') or 'admin').strip()
+    is_user_flag = bool(session.get('is_user'))
+    role = 'none'
+    home_path = ''
+    if logged_in and username:
+        if username == admin_name and not is_user_flag:
+            role = 'admin'
+            try:
+                home_path = url_for('admin_bp.dashboard')
+            except Exception:
+                home_path = '/admin/'
+        else:
+            role = 'user'
+            try:
+                home_path = url_for('main_bp.home')
+            except Exception:
+                home_path = '/tienda/'
+    return jsonify(
+        {
+            'success': True,
+            'logged_in': role != 'none',
+            'role': role,
+            'username': username if role != 'none' else '',
+            'home_path': home_path,
+        }
+    )
 
 
 def _store_notifications_revision_fingerprint(user_id):
@@ -5280,8 +5809,6 @@ def _renewal_release_stale_reservations():
 
 def _renewal_account_available_for_user(account, user_id):
     """Disponible para renovación del usuario (available y sin reserva ajena)."""
-    from app.store.models import LicenseAccount
-
     _renewal_release_stale_reservations()
     if not account or (account.status or '').lower() != 'available':
         return False
@@ -5493,6 +6020,12 @@ def _lookup_store_renewal_accounts(emails):
 @store_access_required
 def api_store_renovacion_buscar():
     """Buscar cuentas renovables por correo (inventario available / licencias para venta)."""
+    user = User.query.get(session.get('user_id'))
+    if not user:
+        return jsonify({'success': False, 'error': 'Usuario no autenticado'}), 401
+    if not _user_can_purchase_in_store(user):
+        return _json_store_purchase_forbidden()
+
     data = request.get_json(silent=True) or {}
     raw = (data.get('cuentas') or data.get('emails') or data.get('q') or '').strip()
     if not raw:
@@ -5512,6 +6045,156 @@ def api_store_renovacion_buscar():
     )
 
 
+def _parse_renewal_account_id_list(raw_ids):
+    """IDs de cuenta desde query (?account_ids=1,2) o lista JSON."""
+    if raw_ids is None:
+        return []
+    if isinstance(raw_ids, list):
+        tokens = raw_ids
+    else:
+        tokens = str(raw_ids).split(',')
+    out = []
+    seen = set()
+    for tok in tokens:
+        try:
+            aid = int(str(tok).strip())
+        except (TypeError, ValueError):
+            continue
+        if aid <= 0 or aid in seen:
+            continue
+        seen.add(aid)
+        out.append(aid)
+        if len(out) >= 80:
+            break
+    return out
+
+
+def _check_renewal_cart_accounts(user_id, account_ids):
+    """
+    Estado de cuentas en carrito de renovación (SSE / poll).
+    lost: vendida o reservada por otro usuario.
+    needs_renew: sigue available pero sin reserva activa del usuario (TTL vencido).
+    """
+    import hashlib
+
+    from app.store.models import LicenseAccount
+
+    if not account_ids:
+        return hashlib.sha256(b'empty').hexdigest()[:24], [], []
+
+    _renewal_release_stale_reservations()
+    uid = int(user_id)
+    lost = []
+    needs_renew = []
+    parts = []
+    for aid in account_ids:
+        acc = LicenseAccount.query.get(aid)
+        em = (getattr(acc, 'email', None) or '').strip() if acc else ''
+        if not acc:
+            lost.append(
+                {
+                    'account_id': aid,
+                    'email': em or str(aid),
+                    'message': 'La cuenta ya no está disponible para renovación.',
+                }
+            )
+            parts.append(f'{aid}|missing')
+            continue
+        status = (acc.status or '').lower()
+        rid = acc.renewal_reserved_user_id
+        rat = acc.renewal_reserved_at.isoformat() if acc.renewal_reserved_at else ''
+        parts.append(f'{aid}|{status}|{rid}|{rat}')
+        if status != 'available':
+            lost.append(
+                {
+                    'account_id': aid,
+                    'email': em or str(aid),
+                    'message': 'La cuenta ya fue vendida o no está disponible.',
+                }
+            )
+            continue
+        if rid is None:
+            needs_renew.append(aid)
+            continue
+        if int(rid) != uid:
+            lost.append(
+                {
+                    'account_id': aid,
+                    'email': em or str(aid),
+                    'message': 'Otra persona reservó esta cuenta para renovación.',
+                }
+            )
+    rev = hashlib.sha256('\n'.join(parts).encode('utf-8')).hexdigest()[:24]
+    return rev, lost, needs_renew
+
+
+@store_bp.route('/api/renovacion/carrito-reservas/rev')
+@store_access_required
+def api_renovacion_carrito_reservas_rev():
+    """Revisión ligera del estado de reservas de renovación en carrito."""
+    user_id = session.get('user_id')
+    if not user_id:
+        return jsonify({'success': False, 'error': 'Usuario no autenticado'}), 401
+    account_ids = _parse_renewal_account_id_list(request.args.get('account_ids'))
+    rev, lost, needs_renew = _check_renewal_cart_accounts(user_id, account_ids)
+    return jsonify(
+        {
+            'success': True,
+            'renewal_rev': rev,
+            'lost': lost,
+            'needs_renew': needs_renew,
+        }
+    )
+
+
+@store_bp.route('/api/renovacion/carrito-reservas/stream')
+@store_access_required
+def api_renovacion_carrito_reservas_stream():
+    """SSE: avisa si cuentas de renovación del carrito fueron reservadas por otro o vendidas."""
+    user_id = session.get('user_id')
+    if not user_id:
+        return jsonify({'success': False, 'error': 'Usuario no autenticado'}), 401
+    account_ids = _parse_renewal_account_id_list(request.args.get('account_ids'))
+    uid = int(user_id)
+
+    @stream_with_context
+    def generate():
+        last_rev = None
+        yield f"data: {json.dumps({'type': 'connected'})}\n\n"
+        for _ in range(24):
+            try:
+                db.session.expire_all()
+                rev, lost, needs_renew = _check_renewal_cart_accounts(uid, account_ids)
+                if rev != last_rev:
+                    last_rev = rev
+                    payload = json.dumps(
+                        {
+                            'type': 'renewal_cart',
+                            'success': True,
+                            'renewal_rev': rev,
+                            'lost': lost,
+                            'needs_renew': needs_renew,
+                        }
+                    )
+                    yield f"data: {payload}\n\n"
+                else:
+                    yield ": heartbeat\n\n"
+            except Exception as e:
+                current_app.logger.error(f'Error en stream reservas renovación carrito: {e}')
+                yield f"data: {json.dumps({'type': 'error', 'success': False, 'error': str(e)})}\n\n"
+            time.sleep(1.2)
+
+    return Response(
+        generate(),
+        mimetype='text/event-stream',
+        headers={
+            'Cache-Control': 'no-cache',
+            'Connection': 'keep-alive',
+            'X-Accel-Buffering': 'no',
+        },
+    )
+
+
 @store_bp.route('/api/renovacion/reservar', methods=['POST'])
 @csrf_exempt_route
 @store_access_required
@@ -5520,6 +6203,9 @@ def api_store_renovacion_reservar():
     user_id = session.get('user_id')
     if not user_id:
         return jsonify({'success': False, 'error': 'Usuario no autenticado'}), 401
+    user = User.query.get(user_id)
+    if not _user_can_purchase_in_store(user):
+        return _json_store_purchase_forbidden()
     data = request.get_json(silent=True) or {}
     raw_ids = data.get('account_ids') or data.get('cuentas') or []
     if not isinstance(raw_ids, list) or not raw_ids:
@@ -5536,6 +6222,9 @@ def api_store_renovacion_liberar():
     user_id = session.get('user_id')
     if not user_id:
         return jsonify({'success': False, 'error': 'Usuario no autenticado'}), 401
+    user = User.query.get(user_id)
+    if not _user_can_purchase_in_store(user):
+        return _json_store_purchase_forbidden()
     data = request.get_json(silent=True) or {}
     raw_ids = data.get('account_ids') or []
     if isinstance(raw_ids, list) and raw_ids:
@@ -10688,45 +11377,83 @@ def cleanup_orphaned_files():
 
 @store_bp.route('/store/static/uploads/chat/<filename>')
 def serve_chat_file(filename):
-    """Servir archivos de chat (imágenes, videos, audio)"""
+    """Servir archivos de chat (imágenes, videos, audio). Requiere sesión y acceso al mensaje."""
     try:
-        # Verificar que el archivo existe
-        upload_dir = os.path.join(current_app.root_path, 'store', 'static', 'uploads', 'chat')
-        file_path = os.path.join(upload_dir, filename)
-        
-        # Verificar que el directorio existe
-        if not os.path.exists(upload_dir):
+        from werkzeug.utils import secure_filename
+        from sqlalchemy import or_
+        from app.models.chat import ChatMessage
+
+        if not session.get('logged_in'):
+            return jsonify({'error': 'No autorizado'}), 401
+        current_user = get_current_user()
+        if not current_user:
+            return jsonify({'error': 'No autorizado'}), 401
+
+        # Solo un nombre de archivo (sin directorios / traversal)
+        safe_name = secure_filename(os.path.basename(filename or ''))
+        if not safe_name or safe_name != os.path.basename(str(filename).replace('\\', '/')):
+            return jsonify({'error': 'Nombre de archivo inválido'}), 400
+
+        upload_dir = os.path.realpath(
+            os.path.join(current_app.root_path, 'store', 'static', 'uploads', 'chat')
+        )
+        if not os.path.isdir(upload_dir):
             return jsonify({'error': 'Directorio de archivos no encontrado'}), 404
-        
-        # Verificar que el archivo existe
-        if not os.path.exists(file_path):
-            return jsonify({'error': 'Archivo no encontrado'}), 404
-        
-        # Verificar que es un archivo válido
+
+        file_path = os.path.realpath(os.path.join(upload_dir, safe_name))
+        # Debe quedar estrictamente dentro de upload_dir
+        if not (file_path == upload_dir or file_path.startswith(upload_dir + os.sep)):
+            return jsonify({'error': 'Ruta no permitida'}), 403
+
         if not os.path.isfile(file_path):
-            return jsonify({'error': 'No es un archivo válido'}), 400
-        
-        # Determinar el tipo MIME basado en la extensión
+            return jsonify({'error': 'Archivo no encontrado'}), 404
+
+        # El archivo debe pertenecer a un mensaje de chat; solo participantes / admin / soporte
+        chat_message = (
+            ChatMessage.query.filter(
+                or_(
+                    ChatMessage.attachment_path == safe_name,
+                    ChatMessage.attachment_filename == safe_name,
+                )
+            )
+            .order_by(ChatMessage.id.desc())
+            .first()
+        )
+        if not chat_message:
+            return jsonify({'error': 'Archivo no encontrado'}), 404
+
+        admin_username = current_app.config.get('ADMIN_USER', 'admin')
+        is_admin = (
+            current_user.username == admin_username and current_user.parent_id is None
+        )
+        is_support = bool(getattr(current_user, 'is_support', False))
+        if not is_admin and not is_support:
+            uid = int(current_user.id)
+            if uid not in (
+                int(chat_message.sender_id) if chat_message.sender_id is not None else -1,
+                int(chat_message.recipient_id) if chat_message.recipient_id is not None else -1,
+            ):
+                return jsonify({'error': 'No tienes acceso a este archivo'}), 403
+
         import mimetypes
+
         mime_type, _ = mimetypes.guess_type(file_path)
         if mime_type is None:
             mime_type = 'application/octet-stream'
-        
-        # Usar send_file con parámetros correctos para streaming
-        if mime_type and mime_type.startswith('audio/'):
-            # Para audio, usar send_file con as_attachment=False para streaming
+
+        if mime_type.startswith('audio/'):
             return send_file(
-                file_path, 
+                file_path,
                 mimetype=mime_type,
                 as_attachment=False,
-                conditional=True  # Soporte para range requests
+                conditional=True,
             )
-        else:
-            # Para archivos que no son audio, usar send_file normal
-            return send_file(file_path, mimetype=mime_type)
-            
+        return send_file(file_path, mimetype=mime_type, as_attachment=False, conditional=True)
+
     except Exception as e:
-        return jsonify({'error': f'Error al servir archivo: {str(e)}'}), 500
+        current_app.logger.warning('serve_chat_file error: %s', e)
+        return jsonify({'error': 'Error al servir archivo'}), 500
+
 
 @store_bp.route('/api/chat/sync_messages', methods=['GET'])
 @chat_access_required
@@ -10929,36 +11656,48 @@ def get_audio_file(message_id):
     """Servir archivo de audio por ID de mensaje"""
     try:
         from app.models.chat import ChatMessage
-        
-        # Buscar el mensaje
+        from werkzeug.utils import secure_filename
+
+        current_user = get_current_user()
+        if not current_user:
+            return jsonify({'status': 'error', 'message': 'Usuario no autenticado'}), 401
+
         chat_message = ChatMessage.query.get(message_id)
         if not chat_message:
             return jsonify({'status': 'error', 'message': 'Mensaje no encontrado'}), 404
-        
-        # Verificar que sea un mensaje de audio
+
         if not chat_message.has_attachment or chat_message.attachment_type != 'audio':
             return jsonify({'status': 'error', 'message': 'No es un mensaje de audio'}), 400
-        
-        # Construir ruta del archivo
-        import os
-        # Usar attachment_path en lugar de attachment_filename
-        file_path = os.path.join(
-            current_app.root_path, 
-            'store', 
-            'static', 
-            'uploads', 
-            'chat', 
-            chat_message.attachment_path or chat_message.attachment_filename
+
+        admin_username = current_app.config.get('ADMIN_USER', 'admin')
+        is_admin = (
+            current_user.username == admin_username and current_user.parent_id is None
         )
-        
-        # Verificar que el archivo existe
-        if not os.path.exists(file_path):
+        is_support = bool(getattr(current_user, 'is_support', False))
+        if not is_admin and not is_support:
+            uid = int(current_user.id)
+            if uid not in (
+                int(chat_message.sender_id) if chat_message.sender_id is not None else -1,
+                int(chat_message.recipient_id) if chat_message.recipient_id is not None else -1,
+            ):
+                return jsonify({'status': 'error', 'message': 'No tienes acceso a este archivo'}), 403
+
+        raw_name = chat_message.attachment_path or chat_message.attachment_filename or ''
+        safe_name = secure_filename(os.path.basename(str(raw_name)))
+        if not safe_name:
             return jsonify({'status': 'error', 'message': 'Archivo de audio no encontrado'}), 404
-        
-        # Usar send_file directamente sin manejo complejo de rangos
-        filename = chat_message.attachment_path or chat_message.attachment_filename
-        
-        # Determinar MIME type basado en la extensión del archivo
+
+        upload_dir = os.path.realpath(
+            os.path.join(current_app.root_path, 'store', 'static', 'uploads', 'chat')
+        )
+        file_path = os.path.realpath(os.path.join(upload_dir, safe_name))
+        if not (file_path == upload_dir or file_path.startswith(upload_dir + os.sep)):
+            return jsonify({'status': 'error', 'message': 'Ruta no permitida'}), 403
+
+        if not os.path.isfile(file_path):
+            return jsonify({'status': 'error', 'message': 'Archivo de audio no encontrado'}), 404
+
+        filename = safe_name
         if filename.endswith('.webm'):
             mimetype = 'audio/webm'
         elif filename.endswith('.mp4'):
@@ -10967,19 +11706,17 @@ def get_audio_file(message_id):
             mimetype = 'audio/ogg'
         else:
             mimetype = 'audio/wav'
-        
-        # Usar send_file con soporte para rangos automático
+
         return send_file(
             file_path,
             mimetype=mimetype,
             as_attachment=False,
-            conditional=True  # Soporte automático para range requests
+            conditional=True,
         )
-        
-    except Exception as e:
-        # Error general
-        return jsonify({'status': 'error', 'message': f'Error al servir audio: {str(e)}'}), 500
 
+    except Exception as e:
+        current_app.logger.warning('get_audio_file error: %s', e)
+        return jsonify({'status': 'error', 'message': 'Error al servir audio'}), 500
 
 
 @store_bp.route('/api/chat/typing_status', methods=['POST'])
@@ -13413,19 +14150,27 @@ def cleanup_sms_messages():
 def list_twofa_configs():
     """Lista todas las configuraciones 2FA"""
     try:
+        from app.utils.totp_config_serialize import serialize_twofa_config
+
         configs = TwoFAConfig.query.order_by(TwoFAConfig.created_at.desc()).all()
-        configs_data = []
-        for config in configs:
-            configs_data.append({
-                'id': config.id,
-                'secret_key': config.secret_key,
-                'emails': config.emails,
-                'emails_list': config.get_emails_list(),
-                'is_enabled': config.is_enabled,
-                'created_at': config.created_at.isoformat() if config.created_at else None,
-                'updated_at': config.updated_at.isoformat() if config.updated_at else None
-            })
+        configs_data = [serialize_twofa_config(c, include_secret=False) for c in configs]
         return jsonify({'success': True, 'configs': configs_data}), 200
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@store_bp.route('/admin/twofa-configs/<int:config_id>', methods=['GET'])
+@admin_required
+def get_twofa_config(config_id):
+    """Detalle de una config 2FA (incluye secreto para editar)."""
+    try:
+        from app.utils.totp_config_serialize import serialize_twofa_config
+
+        config = TwoFAConfig.query.get_or_404(config_id)
+        return jsonify({
+            'success': True,
+            'config': serialize_twofa_config(config, include_secret=True),
+        }), 200
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 

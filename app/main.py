@@ -60,6 +60,55 @@ def get_imap2_by_custom_domain(request):
     return None
 
 # ✅ NUEVO: Ruta para favicon.ico para evitar error 404
+@main_bp.route('/.well-known/assetlinks.json')
+def android_assetlinks():
+    """
+    Digital Asset Links para App Links (deep links verificados).
+    Configura ANDROID_APP_SHA256_FINGERPRINTS con huellas SHA-256 del keystore
+    (separadas por coma). Formato: AA:BB:CC:...
+    """
+    from flask import current_app, jsonify
+    import os
+
+    package = (
+        current_app.config.get('ANDROID_APP_PACKAGE')
+        or os.getenv('ANDROID_APP_PACKAGE')
+        or 'com.imap.storeclient'
+    )
+    raw = (
+        current_app.config.get('ANDROID_APP_SHA256_FINGERPRINTS')
+        or os.getenv('ANDROID_APP_SHA256_FINGERPRINTS')
+        or ''
+    )
+    fingerprints = []
+    for part in str(raw).replace(';', ',').split(','):
+        fp = part.strip().upper()
+        if not fp:
+            continue
+        # Normalizar sin separadores → con :
+        if ':' not in fp and len(fp) == 64:
+            fp = ':'.join(fp[i : i + 2] for i in range(0, 64, 2))
+        fingerprints.append(fp)
+
+    if not fingerprints:
+        # Sin huellas configuradas: respuesta vacía (App Links no se verifican aún)
+        return jsonify([]), 200
+
+    payload = [
+        {
+            'relation': ['delegate_permission/common.handle_all_urls'],
+            'target': {
+                'namespace': 'android_app',
+                'package_name': package,
+                'sha256_cert_fingerprints': fingerprints,
+            },
+        }
+    ]
+    resp = jsonify(payload)
+    resp.headers['Content-Type'] = 'application/json'
+    return resp
+
+
 @main_bp.route('/favicon.ico')
 def favicon():
     """Servir favicon.svg directamente con tipo MIME correcto"""
@@ -124,13 +173,24 @@ def home():
     # La validación de permisos se hace al buscar (en search_sms_messages)
     # No necesitamos verificar permisos aquí para mostrar el botón
 
+    codigos_view_prefs = {}
+    if current_user:
+        cp = getattr(current_user, 'codigos_view_prefs', None)
+        if isinstance(cp, dict):
+            try:
+                from app.store.routes import _sanitize_codigos_view_prefs
+                codigos_view_prefs = _sanitize_codigos_view_prefs(cp)
+            except Exception:
+                codigos_view_prefs = {}
+
     return render_template(
         "search.html",
         # logo_on=(logo_enabled.value == "true" if logo_enabled else False),
         main_message=(search_message.value if search_message else ""),
         services_in_rows=services_in_rows,
         default_service_id=default_service_id,
-        current_user=current_user
+        current_user=current_user,
+        codigos_view_prefs=codigos_view_prefs,
     )
 
 def render_imap2_page(imap_server, session):
@@ -211,6 +271,7 @@ def dynamic_imap2_route(route_path):
         'usuario',    # /usuario/* - user_auth_bp
         'subusers',   # /subusers/* - subuser_bp
         'static',     # /static/* - Flask maneja esto automáticamente
+        '.well-known',  # App Links / assetlinks.json
     ]
     
     # Rutas específicas que también deben ser excluidas
@@ -218,6 +279,7 @@ def dynamic_imap2_route(route_path):
         'favicon.ico',
         'robots.txt',
         'sitemap.xml',
+        '.well-known/assetlinks.json',
     ]
     
     # Normalizar la ruta (sin barras iniciales/finales y en minúsculas)

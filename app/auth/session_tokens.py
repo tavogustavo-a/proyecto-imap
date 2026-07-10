@@ -79,6 +79,22 @@ def validate_session_token(token, expected_user_id=None, require_admin=False):
         return True
 
 
+def resolve_session_token(current_token, user_id, is_admin=False, allow_recover=False):
+    """
+    Devuelve un token válido para la sesión, o None si debe rechazarse.
+
+    Si el token actual es válido, lo reutiliza. Si no lo es y allow_recover=True
+    (p. ej. reinicio del servidor que vació la memoria), genera uno nuevo.
+    """
+    if current_token and validate_session_token(
+        current_token, expected_user_id=user_id, require_admin=is_admin
+    ):
+        return current_token
+    if allow_recover and user_id is not None:
+        return generate_session_token(user_id, is_admin=is_admin)
+    return None
+
+
 def revoke_session_token(token):
     """
     Revoca un token de sesión específico.

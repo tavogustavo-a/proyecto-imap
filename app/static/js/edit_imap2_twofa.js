@@ -508,7 +508,7 @@
     }
     
     // Función para abrir modal de edición
-    function openEditModal(configId) {
+    async function openEditModal(configId) {
         const config = currentConfigs.find(c => c.id === configId);
         if (!config) return;
         
@@ -519,15 +519,46 @@
         const editSecretDisplayValue = document.getElementById('edit-imap2-twofa-secret-display-value');
         const editConfigId = document.getElementById('edit-imap2-twofa-config-id');
         
-        if (editModal && editEmailsInput && editSecretInput && editConfigId) {
-            editConfigId.value = configId;
-            editEmailsInput.value = config.emails;
-            editSecretInput.value = config.secret_key;
+        if (!editModal || !editEmailsInput || !editSecretInput || !editConfigId) return;
+
+        editConfigId.value = configId;
+        editEmailsInput.value = config.emails || '';
+        editSecretInput.value = '';
+        if (editSecretDisplay && editSecretDisplayValue) {
+            editSecretDisplayValue.textContent = 'Cargando…';
+            editSecretDisplay.classList.remove('d-none');
+        }
+
+        try {
+            const response = await fetch(`${getBaseRoute()}/twofa-configs/${configId}`, {
+                method: 'GET',
+                headers: {
+                    'X-CSRFToken': getCsrfToken()
+                },
+                credentials: 'same-origin'
+            });
+            const data = await response.json().catch(function () { return {}; });
+            if (!response.ok || !data.success || !data.config) {
+                showMessage(
+                    (data && (data.error || data.message)) || 'No se pudo cargar el secreto 2FA',
+                    'error'
+                );
+                return;
+            }
+            const secret = data.config.secret_key || '';
+            editSecretInput.value = secret;
             if (editSecretDisplay && editSecretDisplayValue) {
-                editSecretDisplayValue.textContent = config.secret_key;
+                editSecretDisplayValue.textContent = secret;
                 editSecretDisplay.classList.remove('d-none');
             }
+            // Actualizar cache local con el secreto solo para esta edición
+            const idx = currentConfigs.findIndex(c => c.id === configId);
+            if (idx >= 0) {
+                currentConfigs[idx] = Object.assign({}, currentConfigs[idx], data.config);
+            }
             editModal.classList.remove('d-none');
+        } catch (err) {
+            showMessage('Error al cargar el secreto 2FA: ' + (err && err.message ? err.message : err), 'error');
         }
     }
     

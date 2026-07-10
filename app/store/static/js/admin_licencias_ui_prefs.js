@@ -12,6 +12,7 @@ function adminLicEnsurePrefsObject() {
       main_grid_collapsed: null,
       admin_days: {},
       personal_collapsed: {},
+      license_collapsed: {},
       suspended_collapsed: {},
       expired_collapsed: {},
       proveedor_merged_collapsed: {},
@@ -41,6 +42,7 @@ function adminLicBootstrapUiPrefsFromDom() {
     }
     var blocKeys = [
       'personal_collapsed',
+      'license_collapsed',
       'suspended_collapsed',
       'expired_collapsed',
       'proveedor_merged_collapsed',
@@ -173,20 +175,30 @@ async function flushAdminLicenciasUiPrefsSave() {
   if (!document.getElementById('adminLicenciasUiPrefsJson')) return;
   adminLicEnsurePrefsObject();
   var url = '/tienda/api/admin-licencias-ui-prefs';
-  try {
-    await adminLicFetchJson(url, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ prefs: adminLicenciasUiPrefs }),
-    });
-    var el = document.getElementById('adminLicenciasUiPrefsJson');
-    if (el) {
-      try {
-        el.textContent = JSON.stringify(adminLicenciasUiPrefs);
-      } catch (_syncDom) {}
+  var payload = JSON.stringify({ prefs: adminLicenciasUiPrefs });
+  for (var attempt = 0; attempt < 3; attempt++) {
+    try {
+      await adminLicFetchJson(url, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: payload,
+      });
+      var el = document.getElementById('adminLicenciasUiPrefsJson');
+      if (el) {
+        try {
+          el.textContent = JSON.stringify(adminLicenciasUiPrefs);
+        } catch (_syncDom) {}
+      }
+      return;
+    } catch (err) {
+      if (attempt >= 2) {
+        adminLicLogWarn('No se pudieron guardar preferencias UI:', adminLicFormatFetchError(err));
+        return;
+      }
+      await new Promise(function (resolve) {
+        window.setTimeout(resolve, 800 * (attempt + 1));
+      });
     }
-  } catch (err) {
-    adminLicLogWarn('No se pudieron guardar preferencias UI:', adminLicFormatFetchError(err));
   }
 }
 

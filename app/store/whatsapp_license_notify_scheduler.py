@@ -15,6 +15,14 @@ _loop_lock = threading.Lock()
 def run_whatsapp_license_notify_tick(app):
     with app.app_context():
         try:
+            # Reservas «para otro día»: se procesan al llegar su fecha (Colombia),
+            # con o sin WhatsApp activo (la venta igual queda en el historial).
+            from app.store.product_reservations import process_due_next_day_reservations
+
+            process_due_next_day_reservations()
+        except Exception as exc:
+            logger.exception('process_due_next_day_reservations: %s', exc)
+        try:
             from app.store.whatsapp_license_notify_job import run_whatsapp_license_notify_for_config
             from app.store.whatsapp_license_notify_schedule import (
                 should_run_catchup_notify,
@@ -71,7 +79,6 @@ def _notify_loop(app):
         except Exception as exc:
             logger.exception('whatsapp license notify loop: %s', exc)
         sleep_sec = _compute_sleep_sec(app)
-        logger.debug('WhatsApp licencias notify: próximo tick en %ss', sleep_sec)
         time.sleep(sleep_sec)
 
 
@@ -87,6 +94,3 @@ def start_whatsapp_license_notify_loop(app):
         name='whatsapp-license-notify',
     )
     t.start()
-    logger.debug(
-        'WhatsApp licencias notify loop iniciado (6 h / 30 min / 10 min según hora CO)'
-    )

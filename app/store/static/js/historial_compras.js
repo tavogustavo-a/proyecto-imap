@@ -452,6 +452,12 @@ document.addEventListener('DOMContentLoaded', function() {
       .replace(/^Recarga revertida\s*[—-]\s*/i, 'Revertida — ');
   }
 
+  function isCustomerRenewalRejected(row) {
+    if (!row) return false;
+    if (!row.is_customer_account_renewal && !row.has_customer_renewal_detail) return false;
+    return String(row.customer_renewal_status || '').toLowerCase() === 'rejected';
+  }
+
   function rechargeProductoDisplay(row) {
     if (!row || !row.is_recharge_event) return row.producto || '';
     const legacy = String(row.producto || '');
@@ -534,6 +540,16 @@ document.addEventListener('DOMContentLoaded', function() {
           } else {
             tr.className += ' purchase-history-recharge-row--success';
           }
+        } else if (row.is_reservation_fulfilled) {
+          tr.className =
+            row.reservation_kind === 'next_day'
+              ? 'purchase-history-reservation-fulfilled-row purchase-history-reservation-fulfilled-row--next-day'
+              : 'purchase-history-reservation-fulfilled-row purchase-history-reservation-fulfilled-row--stock';
+        } else if (row.is_reservation_event) {
+          tr.className =
+            row.reservation_kind === 'next_day'
+              ? 'purchase-history-reservation-cancelled-row purchase-history-reservation-cancelled-row--next-day'
+              : 'purchase-history-reservation-cancelled-row purchase-history-reservation-cancelled-row--stock';
         }
         const licBtnCell = document.createElement('td');
         if (row.is_cleanup_log) {
@@ -559,9 +575,16 @@ document.addEventListener('DOMContentLoaded', function() {
         } else if (row.is_customer_account_renewal || row.has_customer_renewal_detail) {
           const btn = document.createElement('button');
           btn.type = 'button';
-          btn.className = 'btn-panel btn-blue btn-sm btn-ver-cuenta-renovacion-compra';
           btn.setAttribute('data-row-id', String(row.id));
-          btn.textContent = 'Ver cuenta';
+          if (isCustomerRenewalRejected(row)) {
+            btn.className =
+              'btn-panel btn-red btn-sm btn-ver-cuenta-renovacion-compra purchase-history-renewal-rejected-btn';
+            btn.setAttribute('title', 'Ver motivo del rechazo');
+            btn.textContent = 'Rechazada';
+          } else {
+            btn.className = 'btn-panel btn-blue btn-sm btn-ver-cuenta-renovacion-compra';
+            btn.textContent = 'Ver cuenta';
+          }
           licBtnCell.appendChild(btn);
         } else if (
           (row.licencias && row.licencias.length) ||
@@ -599,6 +622,33 @@ document.addEventListener('DOMContentLoaded', function() {
             '<i class="fas fa-clipboard-list" aria-hidden="true"></i> ' +
             escapeHtml(productoTexto) +
             '</span>';
+        } else if (row.is_reservation_event) {
+          var cancelTone =
+            row.reservation_kind === 'next_day'
+              ? 'purchase-history-reservation-cancelled-product--next-day'
+              : 'purchase-history-reservation-cancelled-product--stock';
+          productoCell =
+            '<span class="purchase-history-reservation-cancelled-product ' +
+            cancelTone +
+            '">' +
+            '<i class="fas fa-clock" aria-hidden="true"></i> ' +
+            escapeHtml(productoTexto) +
+            '</span>';
+        } else if (row.is_reservation_fulfilled) {
+          var resIcon = row.reservation_kind === 'next_day' ? 'fa-calendar-check' : 'fa-bookmark';
+          var resTone =
+            row.reservation_kind === 'next_day'
+              ? 'purchase-history-reservation-fulfilled-product--next-day'
+              : 'purchase-history-reservation-fulfilled-product--stock';
+          productoCell =
+            '<span class="purchase-history-reservation-fulfilled-product ' +
+            resTone +
+            '">' +
+            '<i class="fas ' +
+            resIcon +
+            '" aria-hidden="true"></i> ' +
+            escapeHtml(productoTexto) +
+            '</span>';
         } else if (row.is_recharge_event) {
           var rechargeIcon = 'fa-wallet';
           var rechargeTone = 'success';
@@ -624,14 +674,30 @@ document.addEventListener('DOMContentLoaded', function() {
           if (row.is_customer_account_renewal || row.renewal_kind === 'customer_account') {
             renewalTitle = 'Renovar tu cuenta';
           }
-          productoCell =
-            '<span class="purchase-history-product-icon-stack" title="' +
-            escapeHtml(renewalTitle) +
-            '" aria-hidden="true">' +
-            '<i class="fas fa-sync-alt purchase-history-renewal-icon"></i>' +
-            '<i class="fas fa-ticket-alt purchase-history-product-icon-base"></i>' +
-            '</span> ' +
-            escapeHtml(productoTexto);
+          if (isCustomerRenewalRejected(row)) {
+            renewalTitle = 'Renovación rechazada';
+            productoCell =
+              '<span class="purchase-history-product-icon-stack purchase-history-product-icon-stack--rejected" title="' +
+              escapeHtml(renewalTitle) +
+              '" aria-hidden="true">' +
+              '<i class="fas fa-times purchase-history-renewal-reject-icon"></i>' +
+              '<i class="fas fa-ticket-alt purchase-history-product-icon-base"></i>' +
+              '</span> ' +
+              '<span class="purchase-history-renewal-product-name--rejected" title="' +
+              escapeHtml(renewalTitle) +
+              '">' +
+              escapeHtml(productoTexto) +
+              '</span>';
+          } else {
+            productoCell =
+              '<span class="purchase-history-product-icon-stack" title="' +
+              escapeHtml(renewalTitle) +
+              '" aria-hidden="true">' +
+              '<i class="fas fa-sync-alt purchase-history-renewal-icon"></i>' +
+              '<i class="fas fa-ticket-alt purchase-history-product-icon-base"></i>' +
+              '</span> ' +
+              escapeHtml(productoTexto);
+          }
         } else {
           productoCell =
             '<i class="fas fa-ticket-alt" aria-hidden="true"></i> ' +
@@ -720,6 +786,7 @@ document.addEventListener('DOMContentLoaded', function() {
         if (row.is_customer_account_renewal || row.has_customer_renewal_detail) {
           if (row.customer_renewal_email) hay.push(row.customer_renewal_email);
           if (row.customer_renewal_status_label) hay.push(row.customer_renewal_status_label);
+          if (isCustomerRenewalRejected(row)) hay.push('rechazada');
         }
         if (Array.isArray(row.licencias)) {
           row.licencias.forEach(function (lic) {
@@ -783,128 +850,6 @@ document.addEventListener('DOMContentLoaded', function() {
   window.addEventListener('balance-recharge-realtime', function () {
     refreshRechargeHistorialLabels();
   });
-
-  var storeNotifSeenIds = Object.create(null);
-  var historialNotifSseHandle = null;
-  var historialNotifPollInterval = null;
-  var HISTORIAL_NOTIF_SSE_URL = '/tienda/api/user/store-notifications/stream';
-  var HISTORIAL_NOTIF_POLL_MS = 15000;
-
-  function historialCsrfToken() {
-    var meta = document.querySelector('meta[name="csrf_token"]');
-    return meta ? meta.getAttribute('content') || '' : '';
-  }
-
-  function showHistorialStoreNotification(notif) {
-    if (!notif || notif.id == null) return;
-    if (storeNotifSeenIds[notif.id]) return;
-    storeNotifSeenIds[notif.id] = true;
-    var isMobile = window.matchMedia && window.matchMedia('(max-width: 768px)').matches;
-    var node = document.createElement('div');
-    node.className =
-      'in-page-notification push-notification store-reservation-notify ' +
-      (isMobile ? 'push-notification-mobile' : 'push-notification-desktop');
-    var bodyText = String(notif.body || '').trim();
-    if (bodyText.length > 220) bodyText = bodyText.slice(0, 217) + '…';
-    node.innerHTML =
-      '<div class="push-notification-title">' +
-      (notif.title ? String(notif.title) : 'Aviso de la tienda') +
-      '</div>' +
-      '<div class="push-notification-body">' +
-      bodyText.replace(/\n/g, '<br>') +
-      '</div>' +
-      (isMobile ? '<div class="push-notification-hint">Toca para cerrar</div>' : '');
-    node.addEventListener('click', function () {
-      node.classList.add('push-notification-closing');
-      window.setTimeout(function () {
-        if (node.parentNode) node.parentNode.removeChild(node);
-      }, 280);
-      fetch('/tienda/api/user/store-notifications/' + encodeURIComponent(String(notif.id)) + '/read', {
-        method: 'POST',
-        credentials: 'same-origin',
-        headers: {
-          'X-CSRFToken': historialCsrfToken(),
-          'X-Requested-With': 'XMLHttpRequest',
-        },
-      }).catch(function () {});
-    });
-    document.body.appendChild(node);
-    window.setTimeout(function () {
-      if (!node.parentNode) return;
-      node.classList.add('push-notification-closing');
-      window.setTimeout(function () {
-        if (node.parentNode) node.parentNode.removeChild(node);
-      }, 280);
-    }, 12000);
-  }
-
-  function pollHistorialStoreNotifications() {
-    fetch('/tienda/api/user/store-notifications', {
-      credentials: 'same-origin',
-      cache: 'no-store',
-    })
-      .then(function (r) {
-        return r.json().catch(function () {
-          return { success: false };
-        });
-      })
-      .then(function (data) {
-        if (!data || !data.success || !Array.isArray(data.notifications)) return;
-        data.notifications.slice().reverse().forEach(showHistorialStoreNotification);
-      })
-      .catch(function () {});
-  }
-
-  function onHistorialNotifSseMessage(data) {
-    if (!data || data.type !== 'notifications' || !data.success) return;
-    if (Array.isArray(data.notifications)) {
-      data.notifications.slice().reverse().forEach(showHistorialStoreNotification);
-    }
-  }
-
-  function stopHistorialNotificationsRealtime() {
-    if (historialNotifSseHandle) {
-      historialNotifSseHandle.close();
-      historialNotifSseHandle = null;
-    }
-    if (historialNotifPollInterval) {
-      window.clearInterval(historialNotifPollInterval);
-      historialNotifPollInterval = null;
-    }
-  }
-
-  function startHistorialNotificationsPollFallback() {
-    if (historialNotifPollInterval) return;
-    pollHistorialStoreNotifications();
-    historialNotifPollInterval = window.setInterval(pollHistorialStoreNotifications, HISTORIAL_NOTIF_POLL_MS);
-  }
-
-  function startHistorialNotificationsRealtime() {
-    if (document.visibilityState !== 'visible') {
-      stopHistorialNotificationsRealtime();
-      return;
-    }
-    stopHistorialNotificationsRealtime();
-    if (typeof window.StoreSseRealtime !== 'undefined' && typeof window.StoreSseRealtime.connectOrFallback === 'function') {
-      historialNotifSseHandle = window.StoreSseRealtime.connectOrFallback(
-        HISTORIAL_NOTIF_SSE_URL,
-        onHistorialNotifSseMessage,
-        startHistorialNotificationsPollFallback
-      );
-    } else {
-      startHistorialNotificationsPollFallback();
-    }
-  }
-
-  document.addEventListener('visibilitychange', function historialNotifVisibility() {
-    if (document.visibilityState === 'visible') {
-      startHistorialNotificationsRealtime();
-    } else {
-      stopHistorialNotificationsRealtime();
-    }
-  });
-
-  startHistorialNotificationsRealtime();
 
   let proveedorResumenModalCtx = null;
 

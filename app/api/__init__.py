@@ -514,85 +514,64 @@ def search_sms_messages(email_to_search, user=None, origin_domain=None):
 
 @api_bp.route("/2fa/code/<path:email>", methods=["GET"])
 def get_2fa_code_for_email(email):
-    """Obtiene el código 2FA actual para un correo específico"""
+    """Obtiene el código 2FA actual para un correo específico (requiere sesión)."""
     try:
         import pyotp
+        import time
         from flask import session
-        
+
         # Validar: no aceptar URLs (evitar peticiones malformadas que usan href en lugar de email)
         email_str = (email or "").strip().lower()
         if email_str.startswith("http://") or email_str.startswith("https://") or "@" not in email_str:
             return jsonify({"error": "Invalid email parameter"}), 400
-        
+
         email_normalized = email_str
-        
-        # PRIMERO: Buscar configuración 2FA para este correo (igual que SMS busca en AllowedSMSNumber)
-        configs = TwoFAConfig.query.filter(
-            TwoFAConfig.is_enabled == True
-        ).all()
-        
+
+        # Exigir sesión: sin user_id no se entrega código ni se revela si hay config 2FA
+        user_id = session.get("user_id")
+        if not user_id:
+            return jsonify({"error": "Debes iniciar sesión para consultar códigos 2FA."}), 401
+
+        user = User.query.get(user_id)
+        if not user:
+            return jsonify({"error": "Sesión inválida."}), 401
+
+        admin_username = current_app.config.get("ADMIN_USER", "admin")
+        is_admin = user.username == admin_username and user.parent_id is None
+
+        if not is_admin:
+            if not user.enabled:
+                return jsonify({"error": "No tienes permiso al consultar este correo."}), 403
+            if not user.can_search_any:
+                if not _user_has_allowed_email(user, email_normalized):
+                    return jsonify({"error": "No tienes permiso al consultar este correo."}), 403
+
+        configs = TwoFAConfig.query.filter(TwoFAConfig.is_enabled == True).all()
         matching_config = None
         for cfg in configs:
             emails_list = cfg.get_emails_list()
             if email_normalized in emails_list:
                 matching_config = cfg
                 break
-        
-        # Si no hay configuración 2FA para este correo, devolver 204 (No Content) en lugar de 404
+
+        # Sin configuración 2FA para este correo
         if not matching_config:
             return "", 204
-        
-        # SEGUNDO: Validar permisos del usuario (MISMA LÓGICA QUE SMS Y CORREOS NORMALES)
-        user_id = session.get("user_id")
-        
-        # Verificar si el usuario es admin ANTES de cualquier validación
-        # Basarse SOLO en la base de datos (más confiable que la sesión)
-        is_admin = False
-        if user_id:
-            user = User.query.get(user_id)
-            if user:
-                admin_username = current_app.config.get("ADMIN_USER", "admin")
-                # Verificar si es admin: username == admin_username y parent_id is None
-                is_admin = (user.username == admin_username and user.parent_id is None)
-        
-        # Si es admin, puede consultar sin restricciones (saltar TODAS las validaciones)
-        if not is_admin and user_id:
-            user = User.query.get(user_id)
-            if user:
-                # Si no es admin, validar permisos generales básicos
-                if not user.enabled:
-                    return jsonify({"error": "No tienes permiso al consultar este correo."}), 403
-                
-                # Si el usuario NO puede buscar cualquiera, verificar AllowedEmail (igual que SMS y correos normales)
-                if not user.can_search_any:
-                    # Verificar AllowedEmail: el correo debe estar en la lista de correos permitidos del usuario
-                    is_allowed = _user_has_allowed_email(user, email_normalized)
-                    if not is_allowed:
-                        return jsonify({"error": "No tienes permiso al consultar este correo."}), 403
-        
-        # Si llegamos aquí, el usuario tiene permisos (o es admin) y hay configuración 2FA
-        # Generar código TOTP
-        import time
-        # Obtener el secreto original de la base de datos
+
         secret_key_raw = matching_config.secret_key
-        # Normalizar el secreto antes de usarlo (mayúsculas, sin espacios)
-        secret_key_normalized = secret_key_raw.strip().upper().replace(' ', '').replace('-', '')
+        secret_key_normalized = secret_key_raw.strip().upper().replace(" ", "").replace("-", "")
         totp = pyotp.TOTP(secret_key_normalized)
         current_time = int(time.time())
-        
-        # Generar código actual
         current_code = totp.now()
-        
-        # Calcular tiempo restante hasta el próximo código (30 segundos)
         time_remaining = 30 - (current_time % 30)
-        
+
         return jsonify({
             "success": True,
             "code": current_code,
             "time_remaining": time_remaining,
-            "email": email_normalized
+            "email": email_normalized,
         }), 200
-        
+
     except Exception as e:
         return jsonify({"error": f"Error al generar código 2FA: {str(e)}"}), 500
 
@@ -610,7 +589,7 @@ def receive_sms_from_android():
         "to_number": "+0987654321",    // Tu número Android
         "message_body": "Código: 123456",  // Contenido del SMS
         "sms_config_id": 1,            // (Opcional) ID de SMSConfig a usar
-        "api_key": "tu_api_key_secreta"  // (Opcional) Clave API para seguridad
+        "api_key": "tu_api_key_secreta"  // Obligatoria (también acepta header X-API-Key)
     }
     
     Respuesta:
@@ -695,22 +674,47 @@ def receive_sms_from_android():
                 "error": "No se pudo determinar el número destinatario. Configura un número Android en el panel de administración."
             }), 400
         
-        # ✅ API KEY OPCIONAL: Validar solo si está configurada, permitir acceso sin ella
-        api_key = data.get("api_key", "")
+        # API KEY OBLIGATORIA: sin key configurada o sin key en el request → rechazar
+        api_key = (
+            data.get("api_key")
+            or request.headers.get("X-API-Key")
+            or request.headers.get("X-Api-Key")
+            or ""
+        )
+        if isinstance(api_key, str):
+            api_key = api_key.strip()
+        else:
+            api_key = str(api_key or "").strip()
+
         from app.admin.site_settings import get_site_setting
-        expected_api_key_db = get_site_setting("android_sms_api_key", "")
-        expected_api_key_config = current_app.config.get("ANDROID_SMS_API_KEY", None)
-        
-        # Usar la API key de la BD si existe, sino la de config.py
-        expected_api_key = expected_api_key_db if expected_api_key_db else expected_api_key_config
-        
-        # Solo validar si hay API key configurada Y se envió una API key
-        if expected_api_key and api_key:
-            if api_key != expected_api_key:
-                return jsonify({
-                    "success": False, 
-                    "error": "API key inválida"
-                }), 401
+        import secrets
+
+        expected_api_key_db = (get_site_setting("android_sms_api_key", "") or "").strip()
+        expected_api_key_config = current_app.config.get("ANDROID_SMS_API_KEY") or ""
+        if isinstance(expected_api_key_config, str):
+            expected_api_key_config = expected_api_key_config.strip()
+        else:
+            expected_api_key_config = str(expected_api_key_config).strip()
+
+        expected_api_key = expected_api_key_db or expected_api_key_config
+
+        if not expected_api_key:
+            return jsonify({
+                "success": False,
+                "error": "API key no configurada en el servidor. Configúrala en el panel SMS Android.",
+            }), 503
+
+        if not api_key:
+            return jsonify({
+                "success": False,
+                "error": "API key requerida",
+            }), 401
+
+        if not secrets.compare_digest(api_key, expected_api_key):
+            return jsonify({
+                "success": False,
+                "error": "API key inválida",
+            }), 401
         
         # Obtener sms_config_id si se proporciona, o buscar configuración Android automáticamente
         sms_config_id = data.get("sms_config_id")

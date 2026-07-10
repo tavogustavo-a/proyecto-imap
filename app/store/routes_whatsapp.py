@@ -65,9 +65,14 @@ def list_whatsapp_configs():
     if config:
         apply_whatsapp_config_env_secrets(config)
         if whatsapp_using_default_api_key(config):
-            current_app.logger.warning(
-                'WhatsApp Web: API key por defecto; definí EVOLUTION_API_KEY en producción.'
-            )
+            if current_app.config.get('FLASK_ENV') == 'development':
+                current_app.logger.warning(
+                    'WhatsApp Web: API key por defecto; definí EVOLUTION_API_KEY en producción.'
+                )
+            else:
+                current_app.logger.error(
+                    'WhatsApp Web: falta EVOLUTION_API_KEY segura en producción.'
+                )
         consolidate_extra_whatsapp_configs(config)
         from app.store.whatsapp_license_notify_log import compact_notify_run_log
 
@@ -100,8 +105,17 @@ def create_whatsapp_config():
     notification_time_str = data.get('whatsapp_notification_time') or '00:00'
     is_enabled = data.get('whatsapp_enabled', 'on') == 'on'
 
-    if not api_key:
-        return jsonify({'success': False, 'error': 'Falta API Key de Evolution (EVOLUTION_API_KEY)'}), 400
+    if (
+        not api_key
+        or (
+            api_key == 'imap-evolution-change-me'
+            and current_app.config.get('FLASK_ENV') != 'development'
+        )
+    ):
+        return jsonify({
+            'success': False,
+            'error': 'Falta API Key de Evolution (definí EVOLUTION_API_KEY en el servidor).',
+        }), 400
 
     try:
         from datetime import time

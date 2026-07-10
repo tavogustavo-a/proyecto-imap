@@ -408,7 +408,7 @@
     }
     
     // Función para editar configuración (abre el modal)
-    function editConfig(configId) {
+    async function editConfig(configId) {
         const config = currentConfigs.find(c => c.id == configId);
         if (!config) {
             showMessage('Configuración no encontrada', 'error');
@@ -421,17 +421,44 @@
             editTwofaEmailsInput.value = emailsList.length > 0 ? emailsList.join(', ') : config.emails || '';
         }
         if (editTwofaConfigId) editTwofaConfigId.value = config.id;
-        currentEditSecret = config.secret_key;
+        currentEditSecret = null;
         
         if (editTwofaSecretDisplay && editTwofaSecretDisplayValue) {
-            editTwofaSecretDisplayValue.textContent = currentEditSecret;
+            editTwofaSecretDisplayValue.textContent = 'Cargando…';
             editTwofaSecretDisplay.classList.remove('d-none');
         }
         
         if (editTwofaSecretInput) editTwofaSecretInput.value = '';
-        
-        // Abrir modal
-        openEditModal();
+
+        try {
+            const response = await fetch(`/tienda/admin/twofa-configs/${configId}`, {
+                method: 'GET',
+                headers: {
+                    'X-CSRFToken': getCsrfToken()
+                },
+                credentials: 'same-origin'
+            });
+            const data = await response.json().catch(function () { return {}; });
+            if (!response.ok || !data.success || !data.config) {
+                showMessage(
+                    (data && (data.error || data.message)) || 'No se pudo cargar el secreto 2FA',
+                    'error'
+                );
+                return;
+            }
+            currentEditSecret = data.config.secret_key || '';
+            if (editTwofaSecretDisplay && editTwofaSecretDisplayValue) {
+                editTwofaSecretDisplayValue.textContent = currentEditSecret;
+                editTwofaSecretDisplay.classList.remove('d-none');
+            }
+            const idx = currentConfigs.findIndex(c => c.id == configId);
+            if (idx >= 0) {
+                currentConfigs[idx] = Object.assign({}, currentConfigs[idx], data.config);
+            }
+            openEditModal();
+        } catch (err) {
+            showMessage('Error al cargar el secreto 2FA: ' + (err && err.message ? err.message : err), 'error');
+        }
     }
     
     // Función para eliminar configuración

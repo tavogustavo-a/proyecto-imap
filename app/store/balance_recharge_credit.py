@@ -17,12 +17,19 @@ BINANCE_PAY_AUTO_ADMIN_NOTE = 'Acreditado automáticamente por Binance Pay (webh
 
 
 def apply_user_balance_credit(user: User, currency: str, amount: float) -> None:
+    """Acredita saldo: primero paga deuda de licencias (FIFO), luego prepago."""
+    from app.store.license_debt_credit import apply_positive_credit_against_license_debts
+
     cur = (currency or 'COP').strip().upper()
     amt = float(amount)
-    if cur == 'USD':
-        user.saldo_usd = float(getattr(user, 'saldo_usd', 0) or 0) + amt
-    else:
-        user.saldo_cop = float(getattr(user, 'saldo_cop', 0) or 0) + amt
+    if amt <= 0:
+        return
+    apply_positive_credit_against_license_debts(
+        user,
+        amt,
+        source='recarga',
+        currency=cur,
+    )
 
 
 def apply_user_balance_debit(user: User, currency: str, amount: float) -> None:

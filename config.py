@@ -118,6 +118,19 @@ class Config:
 
 
     # --- Seguridad ---------------------------------------------------------
+    _INSECURE_SECRET_KEYS = frozenset({
+        "dev-secret-key-change-me",
+        "changeme",
+        "secret",
+        "secret_key",
+        "change-me",
+    })
+    _INSECURE_ADMIN_SECURITY_CODES = frozenset({
+        "cambia-esto-en-produccion",
+        "changeme",
+        "change-me",
+    })
+
     ADMIN_CONFIG_SECURITY_CODE = os.getenv("ADMIN_CONFIG_SECURITY_CODE")
     if not ADMIN_CONFIG_SECURITY_CODE:
         if FLASK_ENV == "development":
@@ -125,6 +138,12 @@ class Config:
             print("[WARN] Usando ADMIN_CONFIG_SECURITY_CODE insegura por defecto SOLO para desarrollo.")
         else:
             raise RuntimeError("ADMIN_CONFIG_SECURITY_CODE no configurada en entorno de producción.")
+    elif FLASK_ENV != "development" and ADMIN_CONFIG_SECURITY_CODE.strip() in _INSECURE_ADMIN_SECURITY_CODES:
+        raise RuntimeError(
+            "ADMIN_CONFIG_SECURITY_CODE insegura en producción. "
+            "Definí un valor fuerte distinto del placeholder de desarrollo."
+        )
+
     SECRET_KEY = os.getenv("SECRET_KEY")
     if not SECRET_KEY:
         if FLASK_ENV == "development":
@@ -132,11 +151,22 @@ class Config:
             print("[WARN] Usando SECRET_KEY insegura por defecto SOLO para desarrollo.")
         else:
             raise RuntimeError("SECRET_KEY no configurada en entorno de producción.")
+    elif FLASK_ENV != "development" and SECRET_KEY.strip() in _INSECURE_SECRET_KEYS:
+        raise RuntimeError(
+            "SECRET_KEY insegura en producción. "
+            "Definí un valor fuerte distinto del placeholder de desarrollo."
+        )
     
     # ✅ Configuración para recibir SMS desde Android
-    # Opcional: API key para autenticar requests desde apps Android
-    # Si no se configura, el endpoint funcionará sin autenticación (menos seguro)
+    # Obligatoria en el endpoint /api/sms/android-receive (BD o esta env).
     ANDROID_SMS_API_KEY = os.getenv("ANDROID_SMS_API_KEY", None)
+
+    # Push nativo app Capacitor (FCM legacy server key). Opcional.
+    FCM_SERVER_KEY = os.getenv("FCM_SERVER_KEY", None)
+
+    # App Links / deep links Android (huellas SHA-256 del keystore, separadas por coma)
+    ANDROID_APP_PACKAGE = os.getenv("ANDROID_APP_PACKAGE", "com.imap.storeclient")
+    ANDROID_APP_SHA256_FINGERPRINTS = os.getenv("ANDROID_APP_SHA256_FINGERPRINTS", "")
 
     # Chatbot respuestas-preguntas (opcional, capa gratuita de Google / Groq)
     GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", None)

@@ -5,11 +5,16 @@
 {% block head %}
   {{ super() }}
   <meta name="clear_trigger_log_url" content="{{ url_for('admin_bp.clear_trigger_log') }}">
-  <link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}?v={{ licencias_static_version }}">
+  <link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}?v=20260709-proveedor-vendidas-style-v1">
   <link rel="stylesheet" href="{{ url_for('static', filename='fontawesome/css/all.css') }}">
 {% endblock %}
 {% block content %}
-<div class="container-fluid mt-2 store-light worksheet-panel admin-licencias-page admin-licencias-shell" data-licencias-persist-scope="{{ (session.get('username') or '')|e }}" data-admin-warranty-incidents-url="{{ url_for('store_bp.api_admin_license_warranty_incidents') }}" data-admin-proveedor-url="{{ url_for('store_bp.api_admin_proveedor_inventory_get') }}" data-admin-proveedor-put-url="{{ url_for('store_bp.api_admin_proveedor_inventory_put') }}" data-admin-proveedor-sales-url="{{ url_for('store_bp.api_admin_proveedor_sales_stats_get') }}" data-admin-proveedor-sales-reset-url="{{ url_for('store_bp.api_admin_proveedor_sales_stats_reset') }}" {% if license_support_restricted_mode %}data-license-support-restricted="true"{% endif %}>
+<div class="container-fluid mt-2 store-light worksheet-panel admin-licencias-page admin-licencias-shell" data-licencias-persist-scope="{{ (session.get('username') or '')|e }}" data-admin-warranty-incidents-url="{{ url_for('store_bp.api_admin_license_warranty_incidents') }}" data-admin-proveedor-url="{{ url_for('store_bp.api_admin_proveedor_inventory_get') }}" data-admin-proveedor-put-url="{{ url_for('store_bp.api_admin_proveedor_inventory_put') }}" data-admin-proveedor-sales-url="{{ url_for('store_bp.api_admin_proveedor_sales_stats_get') }}" data-admin-proveedor-sales-reset-url="{{ url_for('store_bp.api_admin_proveedor_sales_stats_reset') }}" {% if license_support_restricted_mode %}data-license-support-restricted="true"{% endif %}{% if license_support_view_only|default(false) %} data-license-support-view-only="true"{% endif %}>
+  {% if license_support_view_only|default(false) %}
+  <div class="store-view-only-banner" role="status">
+    Solo visualización: puedes consultar el panel, pero no modificar licencias ni datos del usuario principal.
+  </div>
+  {% endif %}
   {% if license_support_restricted_mode %}
   {# Misma fila que la tienda: Menú a la izquierda, acción derecha alineada (como carrito en store_front) #}
   <div class="d-flex justify-content-between align-items-center flex-nowrap mb-3 w-100 admin-lic-toolbar-soporte-row">
@@ -65,6 +70,9 @@
         <label for="adminStoreSearch" class="sr-only">Buscar en licencias</label>
         <input type="search" id="adminStoreSearch" class="form-control text-center" placeholder="Buscar..." autocomplete="off">
       </div>
+      <button type="button" id="adminLicAdvFilterBtn" class="admin-lic-adv-filter-btn" title="Filtros: deuda, pagadas, por vencer, mes a mes, renovar, caídas" aria-label="Abrir filtros de cuentas" aria-haspopup="dialog">
+        <i class="fas fa-filter" aria-hidden="true"></i>
+      </button>
     </div>
   </div>
   {% endif %}
@@ -160,11 +168,13 @@
             <input type="text" id="adminLicBulkUser" class="form-control admin-lic-bulk-modal__input admin-lic-bulk-modal__input--user-inline" value="anonimo" placeholder="anonimo" autocomplete="off" aria-label="Usuario o cliente">
           </div>
           <div class="admin-lic-bulk-modal__status-inline-group" aria-label="Estados">
-            <div class="admin-lic-bulk-modal__status-inline-block">
-              <select id="adminLicBulkSelGood" class="form-control admin-lic-bulk-modal__input" title="Estado verde (columna buena)" aria-label="Estado verde"></select>
+            <div class="admin-lic-bulk-modal__status-inline-block" id="adminLicBulkGoodStatusBlock">
+              <label for="adminLicBulkSelGood" class="admin-lic-bulk-modal__label-plain admin-lic-bulk-modal__label-plain--status">Estado verde</label>
+              <select id="adminLicBulkSelGood" class="form-control admin-lic-bulk-modal__input license-split-editor__status license-split-editor__status-good" title="Estado verde (columna buena)" aria-label="Estado verde"></select>
             </div>
             <div class="admin-lic-bulk-modal__status-inline-block">
-              <select id="adminLicBulkSelBad" class="form-control admin-lic-bulk-modal__input" title="Estado rojo (incidencia)" aria-label="Estado rojo"></select>
+              <label for="adminLicBulkSelBad" class="admin-lic-bulk-modal__label-plain admin-lic-bulk-modal__label-plain--status">Estado rojo</label>
+              <select id="adminLicBulkSelBad" class="form-control admin-lic-bulk-modal__input license-split-editor__status license-split-editor__status-bad" title="Estado rojo (incidencia)" aria-label="Estado rojo"></select>
             </div>
           </div>
         </div>
@@ -288,13 +298,13 @@
 {% endblock %}
 {% block scripts %}
   {{ super() }}
-  <script src="{{ url_for('store_bp.static', filename='js/admin_store.js') }}?v={{ licencias_static_version }}" defer></script>
-  <script src="{{ url_for('store_bp.static', filename='js/menu_tienda.js') }}?v={{ licencias_static_version }}" defer></script>
-  <script src="{{ url_for('store_bp.static', filename='js/licencias_bootstrap.js') }}?v={{ licencias_static_version }}" defer></script>
-  <script src="{{ url_for('store_bp.static', filename='js/licencias_shared.js') }}?v={{ licencias_static_version }}" defer></script>
-  <script src="{{ url_for('store_bp.static', filename='js/admin_licencias_ui_prefs.js') }}?v={{ licencias_static_version }}" defer></script>
-  <script src="{{ url_for('store_bp.static', filename='js/licencias.js') }}?v={{ licencias_static_version }}" defer></script>
-  <script src="{{ url_for('store_bp.static', filename='js/admin_licencias_notepad.js') }}?v={{ licencias_static_version }}" defer></script>
+  <script src="{{ url_for('store_bp.static', filename='js/admin_store.js') }}?v=20260628-notas-ocultas-default-v16" defer></script>
+  <script src="{{ url_for('store_bp.static', filename='js/menu_tienda.js') }}?v=20260628-notas-ocultas-default-v16" defer></script>
+  <script src="{{ url_for('store_bp.static', filename='js/licencias_bootstrap.js') }}?v=20260710-view-only-subuser" defer></script>
+  <script src="{{ url_for('store_bp.static', filename='js/licencias_shared.js') }}?v=20260628-notas-ocultas-default-v16" defer></script>
+  <script src="{{ url_for('store_bp.static', filename='js/admin_licencias_ui_prefs.js') }}?v=20260703-reserva-otro-dia-v7" defer></script>
+  <script src="{{ url_for('store_bp.static', filename='js/licencias.js') }}?v=20260709-proveedor-note-id-name" defer></script>
+  <script src="{{ url_for('store_bp.static', filename='js/admin_licencias_notepad.js') }}?v=20260628-notas-ocultas-default-v16" defer></script>
   <script src="{{ url_for('static', filename='js/clear_trigger_logs.js') }}" defer></script>
   <script src="{{ url_for('static', filename='js/logout_all_cookies_btn.js') }}" defer></script>
 {% endblock %} 

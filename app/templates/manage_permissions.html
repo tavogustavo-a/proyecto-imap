@@ -6,7 +6,7 @@
 {% block head %}
 <meta name="csrf_token" content="{{ csrf_token() }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/store.css') }}">
-<link rel="stylesheet" href="{{ url_for('static', filename='css/manage_permissions.css') }}?v=20260621-remove-pm-restrict-ui">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/manage_permissions.css') }}?v=20260703-reserva-otrodia-perm-v12">
 <link rel="stylesheet" href="{{ url_for('static', filename='fontawesome/css/all.css') }}">
 {% endblock %}
 
@@ -41,8 +41,8 @@
       <button id="menuToggleBtn" type="button" class="btn-panel btn-blue menu-toggle-btn" title="Menú de navegación" aria-label="Abrir menú de navegación">&#9776; Menú</button>
       <button id="menu2ToggleBtn" type="button" class="btn-panel btn-blue menu-toggle-btn" title="Menú secundario" aria-label="Abrir segundo menú">&#9776; Menú2</button>
     </div>
-    <h3 class="m-0 mb-1 text-center w-100">🔐 Gestión Centralizada de Permisos</h3>
-    
+    <h3 class="m-0 mb-1 text-center w-100 perm-section-toggle" data-section-key="permisos" title="Clic para contraer o expandir esta sección" role="button" tabindex="0">🔐 Gestión Centralizada de Permisos</h3>
+    <div class="perm-section-body">
     <div class="d-flex align-items-center justify-content-between gap-2 mb-1 search-stats-container">
       <div class="search-input-wrapper">
         <input 
@@ -99,14 +99,15 @@
     </div>
     
     <div id="saveStatus" class="mt-1 text-center"></div>
+    </div>
   </div>
   
   <!-- Nueva sección para gestionar permisos de recursos de herramientas admin -->
   <div class="admin-card mt-2">
-    <div class="d-flex justify-content-between align-items-center mb-1">
-      <h3 class="m-0">🔧 Gestión de Permisos de Herramientas Admin</h3>
+    <div class="d-flex justify-content-center align-items-center mb-1">
+      <h3 class="m-0 text-center perm-section-toggle" data-section-key="herramientas" title="Clic para contraer o expandir esta sección" role="button" tabindex="0"><i class="fas fa-tools perm-section-title-icon" aria-hidden="true"></i> Gestión de Permisos de Herramientas Admin</h3>
     </div>
-    
+    <div class="perm-section-body">
     <div class="d-flex align-items-center justify-content-between gap-2 mb-1 search-stats-container">
       <div class="search-input-wrapper">
         <input 
@@ -156,14 +157,15 @@
     </div>
     
     <div id="saveResourcesStatus" class="mt-1 text-center"></div>
+    </div>
   </div>
   
   <!-- Nueva sección para gestión de precios por usuario -->
   <div class="admin-card mt-2">
-    <div class="d-flex justify-content-between align-items-center mb-1">
-      <h3 class="m-0">💰 Gestión de Precios por Usuario</h3>
+    <div class="d-flex justify-content-center align-items-center mb-1">
+      <h3 class="m-0 text-center perm-section-toggle" data-section-key="precios" title="Clic para contraer o expandir esta sección" role="button" tabindex="0">💰 Gestión de Precios por Usuario</h3>
     </div>
-    
+    <div class="perm-section-body">
     <div class="d-flex align-items-center justify-content-between gap-2 mb-1 search-stats-container">
       <div class="search-input-wrapper">
         <input 
@@ -191,26 +193,30 @@
         <thead>
           <tr>
             <th>Usuario</th>
-            <th class="user-prices-th-tipo">Tipo precio <span class="user-prices-th-tipo-sub text-muted">USD · COP · Soporte licencias · Deuda · Recarga automática · Proveedor</span></th>
+            <th class="user-prices-th-tipo">
+              Tipo precio
+              <button
+                type="button"
+                id="userPricesTipoInfoBtn"
+                class="info-icon info-icon-square user-prices-tipo-info-btn"
+                aria-label="Información sobre las opciones de tipo de precio"
+                aria-haspopup="dialog"
+                aria-controls="user-prices-tipo-info-modal-overlay"
+                title="¿Qué significa cada opción?">i</button>
+            </th>
             <th>Saldo</th>
-            <th>Productos Asociados</th>
           </tr>
         </thead>
         <tbody id="userPricesTableBody">
           <tr>
-            <td colspan="4" class="text-center text-secondary">Cargando usuarios...</td>
+            <td colspan="3" class="text-center text-secondary">Cargando usuarios...</td>
           </tr>
         </tbody>
       </table>
     </div>
     
-    <div class="d-flex justify-content-center mt-1">
-      <button id="saveUserPricesBtn" class="btn-panel btn-green save-permissions-btn">
-        <i class="fas fa-save"></i> Guardar Cambios de Precios
-      </button>
+    <div id="saveUserPricesStatus" class="mt-1 text-center" role="status" aria-live="polite"></div>
     </div>
-    
-    <div id="saveUserPricesStatus" class="mt-1 text-center"></div>
   </div>
 </div>
 
@@ -245,13 +251,11 @@
       <button
         type="button"
         id="userProveedorInfoBtn"
-        class="user-proveedor-info-btn"
+        class="info-icon info-icon-square user-proveedor-info-btn"
         aria-label="Información sobre configuración de proveedor"
         aria-haspopup="dialog"
         aria-controls="user-proveedor-info-modal-overlay"
-        title="¿Para qué sirve esta configuración?">
-        <i class="fas fa-info-circle" aria-hidden="true"></i>
-      </button>
+        title="¿Para qué sirve esta configuración?">i</button>
     </div>
     <div class="user-proveedor-services-search-wrap mb-1">
       <label for="userProveedorServicesSearch" class="sr-only">Buscar servicio</label>
@@ -273,6 +277,91 @@
     <p class="user-proveedor-info-modal-text mb-0">Aquí defines qué servicios de la tienda puede vender este usuario como proveedor y, si lo necesitas, un tope de ventas por servicio. Solo los servicios marcados estarán disponibles en su portal de licencias; en Admin Licencias verás su inventario etiquetado por servicio (las licencias en «Anónimo» no se muestran al admin).</p>
     <div class="d-flex justify-content-center mt-2">
       <button type="button" id="closeUserProveedorInfoModalBtn" class="btn-panel btn-green">Entendido</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: configuración de reservar otro día -->
+<div id="user-reservaotrodia-modal-overlay" class="modal-overlay d-none">
+  <div class="modal-balance-content modal-user-proveedor-content">
+    <input type="hidden" id="userReservaOtroDiaModalUserId" name="user_id">
+    <p id="userReservaOtroDiaModalUserLabel" class="modal-balance-current text-center" aria-live="polite"></p>
+    <div class="user-proveedor-modal-title-row">
+      <h4 class="mb-0">Reservar otro día</h4>
+      <button
+        type="button"
+        id="userReservaOtroDiaInfoBtn"
+        class="info-icon info-icon-square user-proveedor-info-btn"
+        aria-label="Información sobre reservar otro día"
+        aria-haspopup="dialog"
+        aria-controls="user-reservaotrodia-info-modal-overlay"
+        title="¿Para qué sirve esta configuración?">i</button>
+    </div>
+    <div class="user-proveedor-services-search-wrap mb-1">
+      <label for="userReservaOtroDiaServicesSearch" class="sr-only">Buscar producto</label>
+      <input type="search" id="userReservaOtroDiaServicesSearch" name="userReservaOtroDiaServicesSearch" class="form-control user-proveedor-services-search" placeholder="Buscar producto (Netflix, Disney…)" autocomplete="off">
+    </div>
+    <div id="userReservaOtroDiaServicesList" class="user-proveedor-services-list" role="group" aria-label="Productos permitidos para reservar otro día"></div>
+    <p id="userReservaOtroDiaModalStatus" class="user-proveedor-modal-status text-center mb-0" role="status" aria-live="polite"></p>
+    <div class="d-flex justify-content-between mt-2">
+      <button type="button" id="closeUserReservaOtroDiaModalBtn" class="btn-panel btn-red">Cancelar</button>
+      <button type="button" id="saveUserReservaOtroDiaModalBtn" class="btn-panel btn-green">Guardar productos</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: información opciones de tipo de precio -->
+<div id="user-prices-tipo-info-modal-overlay" class="modal-overlay d-none" role="presentation">
+  <div class="modal-balance-content modal-user-prices-tipo-info-content" role="dialog" aria-modal="true" aria-labelledby="userPricesTipoInfoModalTitle">
+    <h4 id="userPricesTipoInfoModalTitle" class="text-center mb-2">Opciones de tipo de precio</h4>
+    <p class="user-prices-tipo-info-intro mb-2">Cada casilla define qué puede hacer el usuario en la tienda y en licencias. Solo una moneda (USD o COP) puede estar activa a la vez.</p>
+    <ul class="user-prices-tipo-info-list mb-0">
+      <li class="user-prices-tipo-info-item">
+        <span class="user-prices-tipo-info-term">USD</span>
+        <span class="user-prices-tipo-info-desc">Precios, saldo y cobros en dólares estadounidenses. Activa el catálogo de productos en USD.</span>
+      </li>
+      <li class="user-prices-tipo-info-item">
+        <span class="user-prices-tipo-info-term">COP</span>
+        <span class="user-prices-tipo-info-desc">Precios, saldo y cobros en pesos colombianos. Activa el catálogo de productos en COP.</span>
+      </li>
+      <li class="user-prices-tipo-info-item">
+        <span class="user-prices-tipo-info-term">Soporte licencias</span>
+        <span class="user-prices-tipo-info-desc">Acceso al portal de licencias del usuario: ve sus cuentas, estados, reportes y puede gestionar sus servicios asignados.</span>
+      </li>
+      <li class="user-prices-tipo-info-item">
+        <span class="user-prices-tipo-info-term">Deuda</span>
+        <span class="user-prices-tipo-info-desc">Permite comprar aunque no tenga saldo suficiente, hasta el límite de deuda que configures en la columna Saldo. Las compras quedan registradas como pendientes de pago.</span>
+      </li>
+      <li class="user-prices-tipo-info-item">
+        <span class="user-prices-tipo-info-term">Recarga automática</span>
+        <span class="user-prices-tipo-info-desc">Al subir un comprobante de recarga, el saldo se acredita al instante. Tú puedes revisar y corregir después si hace falta.</span>
+      </li>
+      <li class="user-prices-tipo-info-item">
+        <span class="user-prices-tipo-info-term">Proveedor</span>
+        <span class="user-prices-tipo-info-desc">El usuario vende servicios como proveedor. Con el lápiz eliges qué productos puede ofrecer y, opcionalmente, un tope de ventas por servicio.</span>
+      </li>
+      <li class="user-prices-tipo-info-item">
+        <span class="user-prices-tipo-info-term">Reservar otro día</span>
+        <span class="user-prices-tipo-info-desc">Programa compras para el día siguiente en la tienda. Se procesan al cerrar el día (resumen diario), con las mismas reglas de saldo o deuda.</span>
+      </li>
+      <li class="user-prices-tipo-info-item">
+        <span class="user-prices-tipo-info-term">Productos</span>
+        <span class="user-prices-tipo-info-desc">Catálogo personalizado y descuentos por producto para este usuario. Requiere USD o COP activo; se edita con el lápiz de «Productos asociados».</span>
+      </li>
+    </ul>
+    <div class="d-flex justify-content-center mt-2">
+      <button type="button" id="closeUserPricesTipoInfoModalBtn" class="btn-panel btn-green">Entendido</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: información reservar otro día -->
+<div id="user-reservaotrodia-info-modal-overlay" class="modal-overlay modal-overlay--stack d-none" role="presentation">
+  <div class="modal-balance-content modal-user-proveedor-info-content" role="dialog" aria-modal="true" aria-labelledby="userReservaOtroDiaInfoModalTitle">
+    <h4 id="userReservaOtroDiaInfoModalTitle" class="text-center mb-2">¿Para qué sirve?</h4>
+    <p class="user-proveedor-info-modal-text mb-0">Permite a este usuario programar compras para el día siguiente en la tienda: la venta se procesa al cerrar el día (cambios diarios / resumen de WhatsApp), se cobra con la misma regla de saldo o deuda, queda en su historial y recibe aviso por correo y en la tienda. Aquí eliges qué productos puede reservar y, si quieres, un límite de unidades por reserva en cada producto (vacío = ilimitado).</p>
+    <div class="d-flex justify-content-center mt-2">
+      <button type="button" id="closeUserReservaOtroDiaInfoModalBtn" class="btn-panel btn-green">Entendido</button>
     </div>
   </div>
 </div>
@@ -305,5 +394,5 @@
 <script src="{{ url_for('store_bp.static', filename='js/menu_tienda.js') }}" defer></script>
 <script src="{{ url_for('static', filename='js/clear_trigger_logs.js') }}" defer></script>
 <script src="{{ url_for('static', filename='js/logout_all_cookies_btn.js') }}" defer></script>
-<script src="{{ url_for('static', filename='js/manage_permissions.js') }}?v=20260621-remove-pm-restrict-ui" defer></script>
+<script src="{{ url_for('static', filename='js/manage_permissions.js') }}?v=20260703-reserva-otrodia-perm-v12" defer></script>
 {% endblock %}

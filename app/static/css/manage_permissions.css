@@ -334,31 +334,39 @@
   cursor: pointer;
 }
 
-/* Columna tipo precio (USD / COP / Soporte licencias): texto pequeño y filas juntas */
+/* Columna tipo precio (USD / COP / Soporte licencias): bloque compacto y alineado,
+   centrado en la celda, con cada opción en su línea (sin partir nombres). */
 #user-prices-table .user-prices-tipo-stack {
   display: flex;
   flex-direction: column;
-  align-items: center;
+  align-items: flex-start;
   justify-content: center;
-  gap: 0.06rem;
-  font-size: 0.7rem;
-  line-height: 1.1;
-  padding: 0.1rem 0;
+  gap: 0.14rem;
+  font-size: 0.72rem;
+  line-height: 1.15;
+  padding: 0.22rem 0.45rem;
+  width: max-content;
+  margin: 0 auto;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #f8fafc;
 }
 
 #user-prices-table .user-prices-tipo-row {
   display: flex;
   align-items: center;
-  justify-content: center;
-  gap: 0.12rem;
+  justify-content: flex-start;
+  gap: 0.14rem;
   margin: 0;
   width: 100%;
+  white-space: nowrap;
 }
 
 #user-prices-table .user-prices-tipo-stack .user-price-label {
-  margin-left: 0.12rem !important;
+  margin-left: 0.14rem !important;
   font-size: inherit;
   font-weight: 500;
+  white-space: nowrap;
 }
 
 #user-prices-table .user-prices-tipo-stack input[type='checkbox'],
@@ -366,6 +374,7 @@
 #user-prices-table .user-prices-tipo-stack .user-soporte-licencias-checkbox,
 #user-prices-table .user-prices-tipo-stack .user-puede-deuda-checkbox,
 #user-prices-table .user-prices-tipo-stack .user-proveedor-checkbox,
+#user-prices-table .user-prices-tipo-stack .user-reserva-otrodia-checkbox,
 #user-prices-table .user-prices-tipo-stack .user-recarga-automatica-checkbox {
   width: 13px !important;
   height: 13px !important;
@@ -384,6 +393,59 @@
   font-size: 0.75rem;
   padding: 0.45rem 0.35rem;
   line-height: 1.2;
+  white-space: nowrap;
+}
+
+#user-prices-table th.user-prices-th-tipo .user-prices-tipo-info-btn {
+  margin-left: 0.35rem;
+  vertical-align: middle;
+  width: 1.32rem;
+  height: 1.32rem;
+  min-width: 1.32rem;
+  font-size: 0.78em;
+  border-radius: 4px;
+  border-width: 1.5px;
+}
+
+/* Icono «i» azul cuadrado — mismo estilo que la tienda (info-icon-square). */
+.info-icon.info-icon-square {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  min-width: 22px;
+  padding: 0;
+  background: #1976d2;
+  color: #fff;
+  font-weight: bold;
+  font-size: 1.08em;
+  line-height: 1;
+  border-radius: 5px;
+  margin-left: 0;
+  cursor: pointer;
+  box-shadow: 0 1px 2px #1976d2aa;
+  border: 2.5px solid #1976d2;
+  transition: box-shadow 0.15s, border-color 0.15s;
+  user-select: none;
+  font-family: inherit;
+}
+
+button.info-icon.info-icon-square {
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+.info-icon.info-icon-square:hover,
+.info-icon.info-icon-square:focus-visible {
+  box-shadow: 0 0 0 2.5px #1256a6;
+  border-color: #1256a6;
+  outline: none;
+}
+
+.user-proveedor-modal-title-row .info-icon.info-icon-square {
+  margin-left: 0.15rem;
+  flex-shrink: 0;
 }
 
 #user-prices-table th.user-prices-th-tipo .user-prices-th-tipo-sub {
@@ -420,10 +482,17 @@
 }
 
 .edit-role-product-cell {
-  max-width: 150px;
-  white-space: normal;
-  word-break: break-word;
+  /* Usuario siempre en una sola línea; si no cabe, el contenedor de la tabla hace scroll. */
+  max-width: none;
+  white-space: nowrap;
+  word-break: normal;
   font-weight: 500;
+}
+
+/* Columna Usuario en una línea en todas las tablas de permisos. */
+.permissions-table td:first-child,
+.permissions-table th:first-child {
+  white-space: nowrap;
 }
 
 .td-final-price {
@@ -617,37 +686,86 @@
   gap: 0.2rem;
 }
 
+/* Títulos plegables de sección */
+.perm-section-toggle {
+  cursor: pointer;
+  user-select: none;
+}
+
+.perm-section-toggle .perm-section-title-icon {
+  margin-right: 0.35rem;
+  font-size: 0.95em;
+  vertical-align: middle;
+  color: #ca8a04;
+}
+
+.perm-section-toggle::after {
+  content: ' ▾';
+  font-size: 0.8em;
+  color: #64748b;
+}
+
+.perm-section-toggle--collapsed::after {
+  content: ' ▸';
+}
+
+.perm-section-toggle:hover {
+  color: #2563eb;
+}
+
 .user-proveedor-edit-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 1.35rem;
-  height: 1.35rem;
+  /* Un poco menor que la letra de la fila: simétrico en Proveedor, Reservar otro día y Productos. */
+  width: 0.9em;
+  height: 0.9em;
   padding: 0;
   margin-left: 0.08rem;
-  border-radius: 4px;
-  border: 1px solid #94a3b8;
-  background: #f8fafc;
-  color: #475569;
+  border-radius: 3px;
+  /* Editable = azul, bien visible; deshabilitado vuelve a gris. */
+  border: 1px solid #2563eb;
+  background: #dbeafe;
+  color: #1d4ed8;
   cursor: pointer;
   flex-shrink: 0;
+  text-decoration: none;
   transition: background 0.15s, border-color 0.15s, color 0.15s;
 }
 
 .user-proveedor-edit-btn i {
-  font-size: 0.68rem;
+  font-size: 0.56em;
   line-height: 1;
 }
 
-.user-proveedor-edit-btn:hover:not(:disabled) {
-  background: #e2e8f0;
-  border-color: #64748b;
-  color: #1e293b;
+.user-proveedor-edit-btn:hover:not(:disabled):not(.user-proveedor-edit-btn--disabled) {
+  background: #2563eb;
+  border-color: #1d4ed8;
+  color: #ffffff;
 }
 
-.user-proveedor-edit-btn:disabled {
-  opacity: 0.4;
+.user-proveedor-edit-btn:disabled,
+.user-proveedor-edit-btn--disabled {
+  border-color: #94a3b8;
+  background: #f1f5f9;
+  color: #94a3b8;
+  opacity: 0.55;
+  pointer-events: none;
   cursor: not-allowed;
+}
+
+/* USD y COP en la misma línea */
+.user-prices-usdcop-row {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 0.6rem;
+}
+
+.user-prices-usdcop-row .user-prices-tipo-row {
+  width: auto;
+  display: inline-flex;
+  align-items: center;
 }
 
 .modal-user-proveedor-content {
@@ -668,26 +786,6 @@
   margin-bottom: 0.35rem;
 }
 
-.user-proveedor-info-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border: none;
-  background: transparent;
-  color: #64748b;
-  cursor: pointer;
-  padding: 0.1rem;
-  line-height: 1;
-  font-size: 1.05rem;
-  border-radius: 50%;
-}
-
-.user-proveedor-info-btn:hover,
-.user-proveedor-info-btn:focus-visible {
-  color: #2563eb;
-  outline: none;
-}
-
 .modal-user-proveedor-info-content {
   max-width: 28rem;
   width: min(92vw, 28rem);
@@ -699,6 +797,54 @@
   color: #475569;
   line-height: 1.4;
   text-align: left;
+}
+
+.modal-user-prices-tipo-info-content {
+  max-width: 34rem;
+  width: min(94vw, 34rem);
+  padding: 1.15rem 1.1rem 1rem;
+  max-height: min(88vh, 640px);
+  overflow-y: auto;
+}
+
+.user-prices-tipo-info-intro {
+  font-size: 0.82rem;
+  color: #64748b;
+  line-height: 1.35;
+  text-align: center;
+}
+
+.user-prices-tipo-info-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.user-prices-tipo-info-item {
+  display: grid;
+  grid-template-columns: minmax(6.5rem, 7.5rem) 1fr;
+  gap: 0.45rem 0.65rem;
+  align-items: start;
+  padding: 0.45rem 0.55rem;
+  border-radius: 0.45rem;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+}
+
+.user-prices-tipo-info-term {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #1e40af;
+  line-height: 1.25;
+}
+
+.user-prices-tipo-info-desc {
+  font-size: 0.78rem;
+  color: #475569;
+  line-height: 1.35;
 }
 
 .modal-user-proveedor-content .modal-balance-current {

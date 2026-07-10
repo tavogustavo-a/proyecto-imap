@@ -780,13 +780,14 @@ document.addEventListener("DOMContentLoaded", function() {
   
   // ============ Gestión de Precios por Usuario ============
   const userPricesTableBody = document.getElementById("userPricesTableBody");
-  const saveUserPricesBtn = document.getElementById("saveUserPricesBtn");
   const saveUserPricesStatus = document.getElementById("saveUserPricesStatus");
   const searchUserPricesInput = document.getElementById("searchUserPricesInput");
   const clearUserPricesSearchBtn = document.getElementById("clearUserPricesSearchBtn");
   
   let userPricesData = {}; // { userId: { tipo_precio, soporte_licencias, puede_tener_deuda, recarga_automatica, proveedor, limite_deuda_usd, limite_deuda_cop } }
   let userPricesBaseline = {}; // Snapshot inicial por userId para detectar cambios reales
+  let userPricesSaveInFlight = {};
+  let userPricesStatusHideTimer = null;
   let allUsersForPrices = []; // Todos los usuarios cargados
   let filteredUsersForPrices = []; // Usuarios filtrados por búsqueda
 
@@ -844,6 +845,24 @@ document.addEventListener("DOMContentLoaded", function() {
       'title',
       activo ? 'Editar configuración de proveedor' : 'Activa «Proveedor» para configurar'
     );
+  }
+
+  function syncUserProductosAsociadosEditLink(userId, userData) {
+    const link = document.getElementById(`productos_asociados_edit_${userId}`);
+    if (!link) return;
+    const hasTipo = !!(userData && userData.tipo_precio);
+    link.classList.toggle('user-proveedor-edit-btn--disabled', !hasTipo);
+    if (hasTipo) {
+      link.href = `/admin/users/${userId}/edit_products`;
+      link.setAttribute('title', 'Editar productos asociados');
+      link.removeAttribute('aria-disabled');
+      link.removeAttribute('tabindex');
+    } else {
+      link.removeAttribute('href');
+      link.setAttribute('title', 'Activa USD o COP para asociar productos');
+      link.setAttribute('aria-disabled', 'true');
+      link.setAttribute('tabindex', '-1');
+    }
   }
 
   function openUserProveedorModal(userId, username) {
@@ -998,6 +1017,16 @@ document.addEventListener("DOMContentLoaded", function() {
     if (overlay) overlay.classList.add('d-none');
   }
 
+  function openUserPricesTipoInfoModal() {
+    const overlay = document.getElementById('user-prices-tipo-info-modal-overlay');
+    if (overlay) overlay.classList.remove('d-none');
+  }
+
+  function closeUserPricesTipoInfoModal() {
+    const overlay = document.getElementById('user-prices-tipo-info-modal-overlay');
+    if (overlay) overlay.classList.add('d-none');
+  }
+
   function openUserProveedorServicesModal(userId, username) {
     const overlay = document.getElementById('user-proveedor-modal-overlay');
     const userIdInput = document.getElementById('userProveedorModalUserId');
@@ -1080,6 +1109,226 @@ document.addEventListener("DOMContentLoaded", function() {
     saveUserProveedorModalBtn.addEventListener('click', saveUserProveedorServicesModal);
   }
 
+  /* ===== Reservar otro día: mismo patrón que el modal de proveedor ===== */
+
+  let userReservaOtroDiaModalLoading = false;
+  const userReservaOtroDiaServicesSearch = document.getElementById('userReservaOtroDiaServicesSearch');
+  const userReservaOtroDiaServicesList = document.getElementById('userReservaOtroDiaServicesList');
+  const userReservaOtroDiaModalStatus = document.getElementById('userReservaOtroDiaModalStatus');
+  const saveUserReservaOtroDiaModalBtn = document.getElementById('saveUserReservaOtroDiaModalBtn');
+
+  function syncUserReservaOtroDiaEditButton(btn, userData) {
+    if (!btn) return;
+    const activo = !!(userData && userData.reserva_otro_dia);
+    btn.disabled = !activo;
+    btn.setAttribute(
+      'title',
+      activo
+        ? 'Editar productos y límites de reservar otro día'
+        : 'Activa «Reservar otro día» para configurar'
+    );
+  }
+
+  function setUserReservaOtroDiaModalStatus(message, isError) {
+    if (!userReservaOtroDiaModalStatus) return;
+    userReservaOtroDiaModalStatus.textContent = message || '';
+    userReservaOtroDiaModalStatus.className =
+      'user-proveedor-modal-status text-center mb-0' +
+      (isError ? ' text-danger' : message ? ' text-success' : '');
+  }
+
+  function filterUserReservaOtroDiaServicesList() {
+    if (!userReservaOtroDiaServicesList || !userReservaOtroDiaServicesSearch) return;
+    const q = String(userReservaOtroDiaServicesSearch.value || '')
+      .trim()
+      .toLowerCase();
+    userReservaOtroDiaServicesList
+      .querySelectorAll('.user-proveedor-service-row')
+      .forEach(function (row) {
+        const name = String(row.getAttribute('data-service-name') || '').toLowerCase();
+        row.classList.toggle('is-hidden-by-search', !!q && name.indexOf(q) === -1);
+      });
+  }
+
+  function renderUserReservaOtroDiaServicesList(services) {
+    if (!userReservaOtroDiaServicesList) return;
+    while (userReservaOtroDiaServicesList.firstChild) {
+      userReservaOtroDiaServicesList.removeChild(userReservaOtroDiaServicesList.firstChild);
+    }
+    const arr = Array.isArray(services) ? services : [];
+    if (!arr.length) {
+      const empty = document.createElement('p');
+      empty.className = 'user-proveedor-services-empty mb-0';
+      empty.textContent = 'No hay productos habilitados en la tienda.';
+      userReservaOtroDiaServicesList.appendChild(empty);
+      return;
+    }
+    const head = document.createElement('div');
+    head.className = 'user-proveedor-services-head';
+    head.innerHTML = '<span></span><span>Producto</span><span>Límite</span>';
+    userReservaOtroDiaServicesList.appendChild(head);
+
+    arr.forEach(function (svc) {
+      const lid = svc && svc.license_id != null ? String(svc.license_id) : '';
+      if (!lid) return;
+      const row = document.createElement('div');
+      row.className = 'user-proveedor-service-row';
+      row.setAttribute('data-license-id', lid);
+      row.setAttribute('data-service-name', String((svc && svc.name) || ''));
+
+      const fieldKey = 'reserva_otrodia_svc_' + lid;
+
+      const cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.className = 'user-proveedor-service-cb';
+      cb.id = fieldKey + '_enabled';
+      cb.name = fieldKey + '_enabled';
+      cb.checked = !!(svc && svc.enabled);
+      cb.setAttribute('aria-label', 'Permitir reservar ' + String((svc && svc.name) || 'producto'));
+
+      const nameSpan = document.createElement('span');
+      nameSpan.className = 'user-proveedor-service-name';
+      nameSpan.textContent = String((svc && svc.name) || '—');
+
+      const limitInp = document.createElement('input');
+      limitInp.type = 'number';
+      limitInp.min = '0';
+      limitInp.step = '1';
+      limitInp.className = 'user-proveedor-service-limit';
+      limitInp.id = fieldKey + '_limit';
+      limitInp.name = fieldKey + '_limit';
+      limitInp.placeholder = 'Ilimitado';
+      limitInp.setAttribute(
+        'aria-label',
+        'Límite de unidades por reserva para ' + String((svc && svc.name) || 'producto')
+      );
+      if (svc && svc.limit != null && svc.limit !== '') {
+        limitInp.value = String(Math.max(0, parseInt(svc.limit, 10) || 0));
+      }
+
+      cb.addEventListener('change', function () {
+        syncUserProveedorServiceRowLimit(row);
+      });
+
+      row.appendChild(cb);
+      row.appendChild(nameSpan);
+      row.appendChild(limitInp);
+      syncUserProveedorServiceRowLimit(row);
+      userReservaOtroDiaServicesList.appendChild(row);
+    });
+    filterUserReservaOtroDiaServicesList();
+  }
+
+  function collectUserReservaOtroDiaServicesFromModal() {
+    const out = [];
+    if (!userReservaOtroDiaServicesList) return out;
+    userReservaOtroDiaServicesList
+      .querySelectorAll('.user-proveedor-service-row')
+      .forEach(function (row) {
+        const lid = parseInt(row.getAttribute('data-license-id'), 10);
+        if (!Number.isFinite(lid)) return;
+        const cb = row.querySelector('.user-proveedor-service-cb');
+        const limitInp = row.querySelector('.user-proveedor-service-limit');
+        const enabled = !!(cb && cb.checked);
+        let limit = null;
+        if (enabled && limitInp) {
+          const raw = String(limitInp.value || '').trim();
+          if (raw !== '') {
+            const n = parseInt(raw, 10);
+            if (Number.isFinite(n) && n >= 0) limit = n;
+          }
+        }
+        out.push({ license_id: lid, enabled: enabled, limit: limit });
+      });
+    return out;
+  }
+
+  function openUserReservaOtroDiaInfoModal() {
+    const overlay = document.getElementById('user-reservaotrodia-info-modal-overlay');
+    if (overlay) overlay.classList.remove('d-none');
+  }
+
+  function closeUserReservaOtroDiaInfoModal() {
+    const overlay = document.getElementById('user-reservaotrodia-info-modal-overlay');
+    if (overlay) overlay.classList.add('d-none');
+  }
+
+  function openUserReservaOtroDiaModal(userId, username) {
+    const overlay = document.getElementById('user-reservaotrodia-modal-overlay');
+    const userIdInput = document.getElementById('userReservaOtroDiaModalUserId');
+    const userLabel = document.getElementById('userReservaOtroDiaModalUserLabel');
+    if (!overlay || userReservaOtroDiaModalLoading) return;
+    userReservaOtroDiaModalLoading = true;
+    if (userIdInput) userIdInput.value = String(userId);
+    if (userLabel) userLabel.textContent = username ? 'Usuario: ' + username : '';
+    if (userReservaOtroDiaServicesSearch) userReservaOtroDiaServicesSearch.value = '';
+    closeUserReservaOtroDiaInfoModal();
+    setUserReservaOtroDiaModalStatus('Cargando productos…', false);
+    overlay.classList.remove('d-none');
+
+    permFetchJson('/admin/user_reserva_otrodia_services_ajax?user_id=' + encodeURIComponent(String(userId)))
+      .then(function (data) {
+        if (!data || data.status !== 'ok') {
+          throw new Error((data && data.message) || 'No se pudieron cargar los productos');
+        }
+        renderUserReservaOtroDiaServicesList(data.services || []);
+        setUserReservaOtroDiaModalStatus('');
+      })
+      .catch(function (err) {
+        renderUserReservaOtroDiaServicesList([]);
+        setUserReservaOtroDiaModalStatus((err && err.message) || 'Error al cargar productos', true);
+      })
+      .finally(function () {
+        userReservaOtroDiaModalLoading = false;
+      });
+  }
+
+  function closeUserReservaOtroDiaModal() {
+    const overlay = document.getElementById('user-reservaotrodia-modal-overlay');
+    closeUserReservaOtroDiaInfoModal();
+    if (overlay) overlay.classList.add('d-none');
+    setUserReservaOtroDiaModalStatus('');
+    if (userReservaOtroDiaServicesSearch) userReservaOtroDiaServicesSearch.value = '';
+  }
+
+  function saveUserReservaOtroDiaServicesModal() {
+    const userIdInput = document.getElementById('userReservaOtroDiaModalUserId');
+    if (!userIdInput || userReservaOtroDiaModalLoading) return;
+    const userId = parseInt(userIdInput.value, 10);
+    if (!Number.isFinite(userId)) return;
+    userReservaOtroDiaModalLoading = true;
+    setUserReservaOtroDiaModalStatus('Guardando…', false);
+    permFetchJson('/admin/user_reserva_otrodia_services_ajax', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify({
+        user_id: userId,
+        services: collectUserReservaOtroDiaServicesFromModal(),
+      }),
+    })
+      .then(function (data) {
+        if (!data || data.status !== 'ok') {
+          throw new Error((data && data.message) || 'No se pudo guardar');
+        }
+        renderUserReservaOtroDiaServicesList(data.services || []);
+        setUserReservaOtroDiaModalStatus(data.message || 'Guardado', false);
+        window.setTimeout(closeUserReservaOtroDiaModal, 500);
+      })
+      .catch(function (err) {
+        setUserReservaOtroDiaModalStatus((err && err.message) || 'Error al guardar', true);
+      })
+      .finally(function () {
+        userReservaOtroDiaModalLoading = false;
+      });
+  }
+
+  if (userReservaOtroDiaServicesSearch) {
+    userReservaOtroDiaServicesSearch.addEventListener('input', filterUserReservaOtroDiaServicesList);
+  }
+  if (saveUserReservaOtroDiaModalBtn) {
+    saveUserReservaOtroDiaModalBtn.addEventListener('click', saveUserReservaOtroDiaServicesModal);
+  }
+
   /** Línea secundaria: el saldo en la moneda no activa sigue en BD al cambiar USD↔COP. */
   function syncSaldoInactivoLine(container, tipoPrecioLower, saldoUsd, saldoCop) {
     if (!container) return;
@@ -1118,6 +1367,7 @@ document.addEventListener("DOMContentLoaded", function() {
       puede_tener_deuda: !!user.puede_tener_deuda,
       recarga_automatica: !!user.recarga_automatica,
       proveedor: !!user.proveedor,
+      reserva_otro_dia: !!user.reserva_otro_dia,
       limite_deuda_usd:
         user.limite_deuda_usd != null && user.limite_deuda_usd !== ''
           ? Number(user.limite_deuda_usd)
@@ -1136,6 +1386,7 @@ document.addEventListener("DOMContentLoaded", function() {
       puede_tener_deuda: !!userData.puede_tener_deuda,
       recarga_automatica: !!userData.recarga_automatica,
       proveedor: !!userData.proveedor,
+      reserva_otro_dia: !!userData.reserva_otro_dia,
       limite_deuda_usd: null,
       limite_deuda_cop: null
     };
@@ -1162,13 +1413,117 @@ document.addEventListener("DOMContentLoaded", function() {
       soporte_licencias: !!userData.soporte_licencias,
       puede_tener_deuda: !!userData.puede_tener_deuda,
       recarga_automatica: !!userData.recarga_automatica,
-      proveedor: !!userData.proveedor
+      proveedor: !!userData.proveedor,
+      reserva_otro_dia: !!userData.reserva_otro_dia
     };
     if (userData.puede_tener_deuda) {
       upd.limite_deuda_usd = userData.limite_deuda_usd;
       upd.limite_deuda_cop = userData.limite_deuda_cop;
     }
     return upd;
+  }
+
+  function revertUserPricesUiFromBaseline(userId) {
+    const baseline = userPricesBaseline[userId];
+    if (!baseline) return;
+    userPricesData[userId] = Object.assign({}, userPricesData[userId] || {}, baseline);
+
+    const usdCb = document.querySelector(`input[name="tipo_precio_${userId}"][data-tipo="USD"]`);
+    const copCb = document.querySelector(`input[name="tipo_precio_${userId}"][data-tipo="COP"]`);
+    if (usdCb) usdCb.checked = baseline.tipo_precio === 'USD';
+    if (copCb) copCb.checked = baseline.tipo_precio === 'COP';
+
+    const sl = document.getElementById(`soporte_lic_${userId}`);
+    if (sl) sl.checked = !!baseline.soporte_licencias;
+    const pd = document.getElementById(`puede_deuda_${userId}`);
+    if (pd) pd.checked = !!baseline.puede_tener_deuda;
+    const ra = document.getElementById(`recarga_auto_${userId}`);
+    if (ra) ra.checked = !!baseline.recarga_automatica;
+    const pv = document.getElementById(`proveedor_${userId}`);
+    if (pv) pv.checked = !!baseline.proveedor;
+    const rd = document.getElementById(`reserva_otrodia_${userId}`);
+    if (rd) rd.checked = !!baseline.reserva_otro_dia;
+
+    let tp = null;
+    if (baseline.tipo_precio) tp = String(baseline.tipo_precio).toLowerCase();
+    const debtBtn = document.getElementById(`debt_limit_btn_${userId}`);
+    if (debtBtn) syncUserDebtLimitButton(debtBtn, userId, userPricesData[userId], tp);
+    syncUserProveedorEditButton(
+      document.getElementById(`proveedor_edit_btn_${userId}`),
+      userPricesData[userId]
+    );
+    syncUserReservaOtroDiaEditButton(
+      document.getElementById(`reserva_otrodia_edit_btn_${userId}`),
+      userPricesData[userId]
+    );
+    syncUserProductosAsociadosEditLink(userId, userPricesData[userId]);
+  }
+
+  function saveUserPricesRow(userId) {
+    if (!userId || !userPricesData[userId]) return Promise.resolve();
+    if (!userPricesRowHasChanges(userId)) return Promise.resolve();
+
+    if (userPricesSaveInFlight[userId]) {
+      return userPricesSaveInFlight[userId].finally(function () {
+        if (userPricesRowHasChanges(userId)) {
+          return saveUserPricesRow(userId);
+        }
+      });
+    }
+
+    const update = buildUserPricesUpdate(userId, userPricesData[userId]);
+    showUserPricesStatus('Guardando cambios…', 'text-info');
+
+    const req = fetch('/admin/update_user_prices_ajax', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRFToken': getCsrfToken()
+      },
+      body: JSON.stringify({ updates: [update] })
+    })
+      .then(function (res) {
+        return res.json();
+      })
+      .then(function (data) {
+        if (data.status === 'ok' && (data.updated_count || 0) > 0) {
+          userPricesBaseline[userId] = userPricesSnapshotFromData(userPricesData[userId]);
+          const u = allUsersForPrices.find(function (x) {
+            return String(x.id) === String(userId);
+          });
+          if (u) {
+            Object.assign(u, userPricesBaseline[userId]);
+          }
+          showUserPricesStatus('Cambios guardados', 'text-success');
+          return;
+        }
+        if (data.status === 'ok') {
+          revertUserPricesUiFromBaseline(userId);
+          showUserPricesStatus(
+            data.message || 'No se pudo guardar el cambio',
+            'text-warning'
+          );
+          return;
+        }
+        revertUserPricesUiFromBaseline(userId);
+        showUserPricesStatus(data.message || 'Error al guardar cambios', 'text-danger');
+        throw new Error(data.message || 'save failed');
+      })
+      .catch(function (err) {
+        if (err && err.message === 'save failed') return;
+        revertUserPricesUiFromBaseline(userId);
+        showUserPricesStatus('Error al guardar cambios', 'text-danger');
+      })
+      .finally(function () {
+        delete userPricesSaveInFlight[userId];
+        if (userPricesStatusHideTimer) clearTimeout(userPricesStatusHideTimer);
+        userPricesStatusHideTimer = setTimeout(function () {
+          showUserPricesStatus('', '');
+        }, 2500);
+      });
+
+    userPricesSaveInFlight[userId] = req;
+    return req;
   }
 
   function rebuildUserPricesBaselineFromUsers(users) {
@@ -1201,7 +1556,7 @@ document.addEventListener("DOMContentLoaded", function() {
         }
         const tr = document.createElement('tr');
         const td = document.createElement('td');
-        td.colSpan = 4;
+        td.colSpan = 3;
         td.className = 'text-center text-danger';
         td.textContent = 'Error al cargar usuarios';
         tr.appendChild(td);
@@ -1215,7 +1570,7 @@ document.addEventListener("DOMContentLoaded", function() {
       }
       const tr = document.createElement('tr');
       const td = document.createElement('td');
-      td.colSpan = 4;
+      td.colSpan = 3;
       td.className = 'text-center text-danger';
       td.textContent = 'Error al cargar usuarios';
       tr.appendChild(td);
@@ -1260,7 +1615,7 @@ document.addEventListener("DOMContentLoaded", function() {
       }
       const tr = document.createElement('tr');
       const td = document.createElement('td');
-      td.colSpan = 4;
+      td.colSpan = 3;
       td.className = 'text-center text-secondary';
       td.textContent = 'No hay usuarios';
       tr.appendChild(td);
@@ -1279,6 +1634,7 @@ document.addEventListener("DOMContentLoaded", function() {
         puede_tener_deuda: !!user.puede_tener_deuda,
         recarga_automatica: !!user.recarga_automatica,
         proveedor: !!user.proveedor,
+        reserva_otro_dia: !!user.reserva_otro_dia,
         limite_deuda_usd:
           user.limite_deuda_usd != null && user.limite_deuda_usd !== ''
             ? Number(user.limite_deuda_usd)
@@ -1452,12 +1808,92 @@ document.addEventListener("DOMContentLoaded", function() {
       proveedorContainer.appendChild(proveedorLabel);
       proveedorContainer.appendChild(proveedorEditBtn);
 
-      tipoPrecioContainer.appendChild(usdContainer);
-      tipoPrecioContainer.appendChild(copContainer);
+      const reservaOtroDiaContainer = document.createElement('div');
+      reservaOtroDiaContainer.className = 'user-prices-tipo-row user-proveedor-row user-reserva-otrodia-row';
+
+      const reservaOtroDiaCheckbox = document.createElement('input');
+      reservaOtroDiaCheckbox.type = 'checkbox';
+      reservaOtroDiaCheckbox.id = `reserva_otrodia_${userId}`;
+      reservaOtroDiaCheckbox.name = `reserva_otrodia_${userId}`;
+      reservaOtroDiaCheckbox.className = 'user-reserva-otrodia-checkbox';
+      reservaOtroDiaCheckbox.checked = !!userData.reserva_otro_dia;
+      reservaOtroDiaCheckbox.setAttribute('data-user-id', userId);
+
+      const reservaOtroDiaLabel = document.createElement('label');
+      reservaOtroDiaLabel.setAttribute('for', `reserva_otrodia_${userId}`);
+      reservaOtroDiaLabel.textContent = 'Reservar otro día';
+      reservaOtroDiaLabel.className = 'user-price-label';
+      reservaOtroDiaLabel.style.setProperty('cursor', 'pointer');
+      reservaOtroDiaLabel.setAttribute(
+        'title',
+        'Permite programar compras para el día siguiente; se procesan al cerrar el día.'
+      );
+
+      const reservaOtroDiaEditBtn = document.createElement('button');
+      reservaOtroDiaEditBtn.type = 'button';
+      reservaOtroDiaEditBtn.id = `reserva_otrodia_edit_btn_${userId}`;
+      reservaOtroDiaEditBtn.name = `reserva_otrodia_edit_btn_${userId}`;
+      reservaOtroDiaEditBtn.className = 'user-proveedor-edit-btn open-reserva-otrodia-modal';
+      reservaOtroDiaEditBtn.setAttribute('data-user-id', String(userId));
+      reservaOtroDiaEditBtn.setAttribute('data-username', user.username);
+      reservaOtroDiaEditBtn.setAttribute('aria-label', 'Editar productos y límites de reservar otro día');
+      reservaOtroDiaEditBtn.innerHTML = '<i class="fas fa-edit" aria-hidden="true"></i>';
+      reservaOtroDiaEditBtn.addEventListener('click', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        openUserReservaOtroDiaModal(userId, user.username);
+      });
+      syncUserReservaOtroDiaEditButton(reservaOtroDiaEditBtn, userData);
+
+      reservaOtroDiaContainer.appendChild(reservaOtroDiaCheckbox);
+      reservaOtroDiaContainer.appendChild(reservaOtroDiaLabel);
+      reservaOtroDiaContainer.appendChild(reservaOtroDiaEditBtn);
+
+      // Productos asociados: antes era columna propia; ahora fila con lápiz (optimiza espacio).
+      const productosAsociadosContainer = document.createElement('div');
+      productosAsociadosContainer.className = 'user-prices-tipo-row user-proveedor-row user-productos-asociados-row';
+
+      /* <span>, no <label>: no etiqueta un campo de formulario (evita la violación
+         «No label associated with a form field» de Chrome Issues). */
+      const productosAsociadosLabel = document.createElement('span');
+      productosAsociadosLabel.textContent = 'Productos asociados';
+      productosAsociadosLabel.className = 'user-price-label';
+      productosAsociadosLabel.setAttribute(
+        'title',
+        'Catálogo y descuentos de productos para este usuario en la tienda.'
+      );
+
+      const productosAsociadosEditLink = document.createElement('a');
+      productosAsociadosEditLink.id = `productos_asociados_edit_${userId}`;
+      productosAsociadosEditLink.className = 'user-proveedor-edit-btn user-productos-edit-link';
+      productosAsociadosEditLink.setAttribute('aria-label', 'Editar productos asociados del usuario');
+      productosAsociadosEditLink.innerHTML = '<i class="fas fa-edit" aria-hidden="true"></i>';
+      if (userData.tipo_precio) {
+        productosAsociadosEditLink.href = `/admin/users/${userId}/edit_products`;
+        productosAsociadosEditLink.setAttribute('title', 'Editar productos asociados');
+      } else {
+        productosAsociadosEditLink.classList.add('user-proveedor-edit-btn--disabled');
+        productosAsociadosEditLink.setAttribute('title', 'Activa USD o COP para asociar productos');
+        productosAsociadosEditLink.setAttribute('aria-disabled', 'true');
+        productosAsociadosEditLink.setAttribute('tabindex', '-1');
+      }
+
+      productosAsociadosContainer.appendChild(productosAsociadosLabel);
+      productosAsociadosContainer.appendChild(productosAsociadosEditLink);
+
+      // USD y COP en la misma línea.
+      const usdCopRow = document.createElement('div');
+      usdCopRow.className = 'user-prices-tipo-row user-prices-usdcop-row';
+      usdCopRow.appendChild(usdContainer);
+      usdCopRow.appendChild(copContainer);
+
+      tipoPrecioContainer.appendChild(usdCopRow);
       tipoPrecioContainer.appendChild(soporteContainer);
       tipoPrecioContainer.appendChild(deudaContainer);
       tipoPrecioContainer.appendChild(autoRecargaContainer);
       tipoPrecioContainer.appendChild(proveedorContainer);
+      tipoPrecioContainer.appendChild(reservaOtroDiaContainer);
+      tipoPrecioContainer.appendChild(productosAsociadosContainer);
       tdTipoPrecio.appendChild(tipoPrecioContainer);
       tr.appendChild(tdTipoPrecio);
       
@@ -1549,23 +1985,6 @@ document.addEventListener("DOMContentLoaded", function() {
       tdSaldo.appendChild(saldoContainer);
       tr.appendChild(tdSaldo);
       
-      // Productos Asociados (botón Editar que dirige a editar productos del usuario)
-      const tdProductosAsociados = document.createElement('td');
-      tdProductosAsociados.className = 'text-center';
-      
-      // Mostrar botón si el usuario tiene tipo_precio configurado
-      if (tipoPrecioSaldo) {
-        const editProductsBtn = document.createElement('a');
-        editProductsBtn.href = `/admin/users/${userId}/edit_products`;
-        editProductsBtn.className = 'action-btn action-blue';
-        editProductsBtn.textContent = 'Editar';
-        tdProductosAsociados.appendChild(editProductsBtn);
-      } else {
-        tdProductosAsociados.textContent = '-';
-      }
-      
-      tr.appendChild(tdProductosAsociados);
-      
       userData.soporte_licencias = !!userData.soporte_licencias;
       userData.puede_tener_deuda = !!userData.puede_tener_deuda;
       userData.recarga_automatica = !!userData.recarga_automatica;
@@ -1607,12 +2026,14 @@ document.addEventListener("DOMContentLoaded", function() {
             const pd = document.getElementById(`puede_deuda_${userId}`);
             const ra = document.getElementById(`recarga_auto_${userId}`);
             const pv = document.getElementById(`proveedor_${userId}`);
+            const rd = document.getElementById(`reserva_otrodia_${userId}`);
             userPricesData[userId] = {
               tipo_precio: null,
               soporte_licencias: sl ? !!sl.checked : false,
               puede_tener_deuda: pd ? !!pd.checked : false,
               recarga_automatica: ra ? !!ra.checked : false,
-              proveedor: pv ? !!pv.checked : false
+              proveedor: pv ? !!pv.checked : false,
+              reserva_otro_dia: rd ? !!rd.checked : false
             };
           }
           userPricesData[userId].tipo_precio = tipo;
@@ -1630,6 +2051,8 @@ document.addEventListener("DOMContentLoaded", function() {
           if (tpSync) debtBtnTp.setAttribute('data-tipo-precio', tpSync);
           syncUserDebtLimitButton(debtBtnTp, userId, userPricesData[userId], tpSync);
         }
+        syncUserProductosAsociadosEditLink(userId, userPricesData[userId]);
+        saveUserPricesRow(userId);
       });
     });
 
@@ -1640,16 +2063,19 @@ document.addEventListener("DOMContentLoaded", function() {
           const pd = document.getElementById(`puede_deuda_${userId}`);
           const ra = document.getElementById(`recarga_auto_${userId}`);
           const pv = document.getElementById(`proveedor_${userId}`);
+          const rd = document.getElementById(`reserva_otrodia_${userId}`);
           userPricesData[userId] = {
             tipo_precio: null,
             soporte_licencias: !!this.checked,
             puede_tener_deuda: pd ? !!pd.checked : false,
             recarga_automatica: ra ? !!ra.checked : false,
-            proveedor: pv ? !!pv.checked : false
+            proveedor: pv ? !!pv.checked : false,
+            reserva_otro_dia: rd ? !!rd.checked : false
           };
         } else {
           userPricesData[userId].soporte_licencias = !!this.checked;
         }
+        saveUserPricesRow(userId);
       });
     });
 
@@ -1660,12 +2086,14 @@ document.addEventListener("DOMContentLoaded", function() {
           const sl = document.getElementById(`soporte_lic_${userId}`);
           const ra = document.getElementById(`recarga_auto_${userId}`);
           const pv = document.getElementById(`proveedor_${userId}`);
+          const rd = document.getElementById(`reserva_otrodia_${userId}`);
           userPricesData[userId] = {
             tipo_precio: null,
             soporte_licencias: sl ? !!sl.checked : false,
             puede_tener_deuda: !!this.checked,
             recarga_automatica: ra ? !!ra.checked : false,
             proveedor: pv ? !!pv.checked : false,
+            reserva_otro_dia: rd ? !!rd.checked : false,
             limite_deuda_usd: null,
             limite_deuda_cop: null
           };
@@ -1687,6 +2115,7 @@ document.addEventListener("DOMContentLoaded", function() {
         if (usdCb && usdCb.checked) tp = 'usd';
         else if (copCb && copCb.checked) tp = 'cop';
         syncUserDebtLimitButton(debtBtn, userId, userPricesData[userId], tp);
+        saveUserPricesRow(userId);
       });
     });
 
@@ -1697,16 +2126,19 @@ document.addEventListener("DOMContentLoaded", function() {
           const sl = document.getElementById(`soporte_lic_${userId}`);
           const pd = document.getElementById(`puede_deuda_${userId}`);
           const pv = document.getElementById(`proveedor_${userId}`);
+          const rd = document.getElementById(`reserva_otrodia_${userId}`);
           userPricesData[userId] = {
             tipo_precio: null,
             soporte_licencias: sl ? !!sl.checked : false,
             puede_tener_deuda: pd ? !!pd.checked : false,
             recarga_automatica: !!this.checked,
-            proveedor: pv ? !!pv.checked : false
+            proveedor: pv ? !!pv.checked : false,
+            reserva_otro_dia: rd ? !!rd.checked : false
           };
         } else {
           userPricesData[userId].recarga_automatica = !!this.checked;
         }
+        saveUserPricesRow(userId);
       });
     });
 
@@ -1717,89 +2149,54 @@ document.addEventListener("DOMContentLoaded", function() {
           const sl = document.getElementById(`soporte_lic_${userId}`);
           const pd = document.getElementById(`puede_deuda_${userId}`);
           const ra = document.getElementById(`recarga_auto_${userId}`);
+          const rd = document.getElementById(`reserva_otrodia_${userId}`);
           userPricesData[userId] = {
             tipo_precio: null,
             soporte_licencias: sl ? !!sl.checked : false,
             puede_tener_deuda: pd ? !!pd.checked : false,
             recarga_automatica: ra ? !!ra.checked : false,
-            proveedor: !!this.checked
+            proveedor: !!this.checked,
+            reserva_otro_dia: rd ? !!rd.checked : false
           };
         } else {
           userPricesData[userId].proveedor = !!this.checked;
         }
         const provEditBtn = document.getElementById(`proveedor_edit_btn_${userId}`);
         syncUserProveedorEditButton(provEditBtn, userPricesData[userId]);
+        saveUserPricesRow(userId);
       });
     });
-  }
-  
-  // Guardar cambios de precios
-  if (saveUserPricesBtn) {
-    saveUserPricesBtn.addEventListener('click', function() {
-      if (!userPricesTableBody) return;
-      
-      const updates = [];
 
-      Object.keys(userPricesData).forEach(function (userId) {
-        if (!userPricesRowHasChanges(userId)) return;
-        updates.push(buildUserPricesUpdate(userId, userPricesData[userId]));
-      });
-      
-      if (updates.length === 0) {
-        showUserPricesStatus('No hay cambios para guardar', 'text-warning');
-        return;
-      }
-      
-      // Deshabilitar botón mientras se guarda
-      saveUserPricesBtn.disabled = true;
-      saveUserPricesBtn.textContent = 'Guardando...';
-      showUserPricesStatus('Guardando cambios...', 'text-info');
-      
-      fetch('/admin/update_user_prices_ajax', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-CSRFToken': getCsrfToken()
-        },
-        body: JSON.stringify({ updates: updates })
-      })
-      .then(res => res.json())
-      .then(data => {
-        if (data.status === 'ok') {
-          if ((data.updated_count || 0) === 0) {
-            showUserPricesStatus(data.message || 'No hay cambios para guardar', 'text-warning');
-            return;
-          }
-          userPricesData = {};
-          showUserPricesStatus(data.message || 'Cambios guardados correctamente', 'text-success');
-          setTimeout(function () {
-            loadUsersForPrices();
-          }, 1000);
+    document.querySelectorAll('.user-reserva-otrodia-checkbox').forEach(cb => {
+      cb.addEventListener('change', function() {
+        const userId = this.getAttribute('data-user-id');
+        if (!userPricesData[userId]) {
+          const sl = document.getElementById(`soporte_lic_${userId}`);
+          const pd = document.getElementById(`puede_deuda_${userId}`);
+          const ra = document.getElementById(`recarga_auto_${userId}`);
+          const pv = document.getElementById(`proveedor_${userId}`);
+          userPricesData[userId] = {
+            tipo_precio: null,
+            soporte_licencias: sl ? !!sl.checked : false,
+            puede_tener_deuda: pd ? !!pd.checked : false,
+            recarga_automatica: ra ? !!ra.checked : false,
+            proveedor: pv ? !!pv.checked : false,
+            reserva_otro_dia: !!this.checked
+          };
         } else {
-          showUserPricesStatus(data.message || 'Error al guardar cambios', 'text-danger');
+          userPricesData[userId].reserva_otro_dia = !!this.checked;
         }
-      })
-      .catch(err => {
-        console.error('Error al guardar precios:', err);
-        showUserPricesStatus('Error al guardar cambios', 'text-danger');
-      })
-      .finally(() => {
-        saveUserPricesBtn.disabled = false;
-        while (saveUserPricesBtn.firstChild) {
-          saveUserPricesBtn.removeChild(saveUserPricesBtn.firstChild);
-        }
-        const icon = document.createElement('i');
-        icon.className = 'fas fa-save';
-        saveUserPricesBtn.appendChild(icon);
-        saveUserPricesBtn.appendChild(document.createTextNode(' Guardar Cambios de Precios'));
+        const rdEditBtn = document.getElementById(`reserva_otrodia_edit_btn_${userId}`);
+        syncUserReservaOtroDiaEditButton(rdEditBtn, userPricesData[userId]);
+        saveUserPricesRow(userId);
       });
     });
   }
   
   function showUserPricesStatus(message, className) {
     if (saveUserPricesStatus) {
-      saveUserPricesStatus.textContent = message;
-      saveUserPricesStatus.className = className;
+      saveUserPricesStatus.textContent = message || '';
+      saveUserPricesStatus.className = 'mt-1 text-center' + (className ? ' ' + className : '');
     }
   }
   
@@ -2175,6 +2572,25 @@ document.addEventListener("DOMContentLoaded", function() {
   }
 
   /** SSE admin: actualiza columnas de saldo sin recargar la página (p. ej. recarga acreditada en otra pestaña). */
+  const userPricesTipoInfoBtn = document.getElementById('userPricesTipoInfoBtn');
+  const userPricesTipoInfoModalOverlay = document.getElementById('user-prices-tipo-info-modal-overlay');
+  const closeUserPricesTipoInfoModalBtn = document.getElementById('closeUserPricesTipoInfoModalBtn');
+  if (userPricesTipoInfoBtn) {
+    userPricesTipoInfoBtn.addEventListener('click', function (e) {
+      e.preventDefault();
+      e.stopPropagation();
+      openUserPricesTipoInfoModal();
+    });
+  }
+  if (closeUserPricesTipoInfoModalBtn) {
+    closeUserPricesTipoInfoModalBtn.addEventListener('click', closeUserPricesTipoInfoModal);
+  }
+  if (userPricesTipoInfoModalOverlay) {
+    userPricesTipoInfoModalOverlay.addEventListener('click', function (e) {
+      if (e.target === userPricesTipoInfoModalOverlay) closeUserPricesTipoInfoModal();
+    });
+  }
+
   const userProveedorModalOverlay = document.getElementById('user-proveedor-modal-overlay');
   const closeUserProveedorModalBtn = document.getElementById('closeUserProveedorModalBtn');
   const userProveedorInfoBtn = document.getElementById('userProveedorInfoBtn');
@@ -2201,6 +2617,35 @@ document.addEventListener("DOMContentLoaded", function() {
   if (userProveedorModalOverlay) {
     userProveedorModalOverlay.addEventListener('click', function (e) {
       if (e.target === userProveedorModalOverlay) closeUserProveedorModal();
+    });
+  }
+
+  const userReservaOtroDiaModalOverlay = document.getElementById('user-reservaotrodia-modal-overlay');
+  const closeUserReservaOtroDiaModalBtn = document.getElementById('closeUserReservaOtroDiaModalBtn');
+  const userReservaOtroDiaInfoBtn = document.getElementById('userReservaOtroDiaInfoBtn');
+  const userReservaOtroDiaInfoModalOverlay = document.getElementById('user-reservaotrodia-info-modal-overlay');
+  const closeUserReservaOtroDiaInfoModalBtn = document.getElementById('closeUserReservaOtroDiaInfoModalBtn');
+  if (userReservaOtroDiaInfoBtn) {
+    userReservaOtroDiaInfoBtn.addEventListener('click', function (e) {
+      e.preventDefault();
+      e.stopPropagation();
+      openUserReservaOtroDiaInfoModal();
+    });
+  }
+  if (closeUserReservaOtroDiaInfoModalBtn) {
+    closeUserReservaOtroDiaInfoModalBtn.addEventListener('click', closeUserReservaOtroDiaInfoModal);
+  }
+  if (userReservaOtroDiaInfoModalOverlay) {
+    userReservaOtroDiaInfoModalOverlay.addEventListener('click', function (e) {
+      if (e.target === userReservaOtroDiaInfoModalOverlay) closeUserReservaOtroDiaInfoModal();
+    });
+  }
+  if (closeUserReservaOtroDiaModalBtn) {
+    closeUserReservaOtroDiaModalBtn.addEventListener('click', closeUserReservaOtroDiaModal);
+  }
+  if (userReservaOtroDiaModalOverlay) {
+    userReservaOtroDiaModalOverlay.addEventListener('click', function (e) {
+      if (e.target === userReservaOtroDiaModalOverlay) closeUserReservaOtroDiaModal();
     });
   }
 
@@ -2309,5 +2754,43 @@ document.addEventListener("DOMContentLoaded", function() {
       }
     });
     window.addEventListener('focus', refreshUserPricesSaldosAll);
+  })();
+
+  /* Secciones plegables por título (estado recordado por sección en este navegador). */
+  (function wirePermSectionCollapse() {
+    document.querySelectorAll('.perm-section-toggle').forEach(function (titleEl) {
+      const card = titleEl.closest('.admin-card');
+      const body = card ? card.querySelector('.perm-section-body') : null;
+      if (!body) return;
+      const key = 'perm_section_collapsed_' + (titleEl.getAttribute('data-section-key') || 'x');
+
+      function applyState(collapsed) {
+        body.style.display = collapsed ? 'none' : '';
+        titleEl.classList.toggle('perm-section-toggle--collapsed', collapsed);
+        titleEl.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+      }
+
+      let saved = null;
+      try {
+        saved = localStorage.getItem(key);
+      } catch (e) {}
+      applyState(saved === '1');
+
+      function toggle() {
+        const collapsed = body.style.display !== 'none';
+        applyState(collapsed);
+        try {
+          localStorage.setItem(key, collapsed ? '1' : '0');
+        } catch (e) {}
+      }
+
+      titleEl.addEventListener('click', toggle);
+      titleEl.addEventListener('keydown', function (ev) {
+        if (ev.key === 'Enter' || ev.key === ' ') {
+          ev.preventDefault();
+          toggle();
+        }
+      });
+    });
   })();
 });

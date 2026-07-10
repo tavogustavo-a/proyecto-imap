@@ -440,6 +440,6 @@
 {{ super() }}
 <script src="{{ url_for('store_bp.static', filename='js/menu_tienda.js') }}" defer></script>
 <script src="{{ url_for('static', filename='js/edit_imap2.js') }}" defer></script>
-<script src="{{ url_for('static', filename='js/edit_imap2_twofa.js') }}" defer></script>
+<script src="{{ url_for('static', filename='js/edit_imap2_twofa.js') }}?v=20260710-totp-mask" defer></script>
 <script src="{{ url_for('static', filename='js/manage_my_page.js') }}" defer></script>
 {% endblock %}

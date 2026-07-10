@@ -160,12 +160,40 @@ def has_pending_daily_digests_ready(config: WhatsAppConfig, co_now=None) -> bool
     return False
 
 
-def queue_snapshots_for_whatsapp_daily(sale_ids: list[int]) -> None:
-    """Marca ventas del checkout para el resumen diario WhatsApp."""
-    if not is_whatsapp_daily_digest_active() or not sale_ids:
-        return
+def backfill_missing_snapshot_daily_co_dates(*, limit: int = 5000) -> int:
+    """Persiste fecha CO en snapshots sin marcar (historial + cola WA futura)."""
+    ensure_whatsapp_daily_sales_columns()
+    rows = (
+        SalePurchaseSnapshot.query.filter(
+            SalePurchaseSnapshot.is_reversed.is_(False),
+            SalePurchaseSnapshot.whatsapp_daily_co_date.is_(None),
+        )
+        .order_by(SalePurchaseSnapshot.id.asc())
+        .limit(max(1, int(limit)))
+        .all()
+    )
+    changed = 0
+    for snap in rows:
+        co_date = _snapshot_co_date(snap)
+        if not co_date:
+            continue
+        snap.whatsapp_daily_co_date = co_date
+        db.session.add(snap)
+        changed += 1
+    if changed:
+        try:
+            db.session.commit()
+        except Exception as exc:
+            db.session.rollback()
+            logger.warning('backfill_missing_snapshot_daily_co_dates: %s', exc)
+            return 0
+    return changed
 
-    from app.store.routes import _eligible_tienda_user_licencias_portal
+
+def queue_snapshots_for_whatsapp_daily(sale_ids: list[int]) -> None:
+    """Marca ventas para resumen diario del historial (independiente de WhatsApp activo)."""
+    if not sale_ids:
+        return
 
     ensure_whatsapp_daily_sales_columns()
     co_now = get_colombia_datetime()
@@ -178,7 +206,7 @@ def queue_snapshots_for_whatsapp_daily(sale_ids: list[int]) -> None:
         if not sale:
             continue
         user = User.query.get(sale.user_id)
-        if not user or not _eligible_tienda_user_licencias_portal(user):
+        if not user:
             continue
 
         snap = SalePurchaseSnapshot.query.filter_by(sale_id=sale.id).first()
@@ -262,16 +290,59 @@ def _format_whatsapp_saldo_line(amount: float) -> str:
     return 'al día ($0)'
 
 
+def _reservation_label_map_for_snapshots(snapshots: list[SalePurchaseSnapshot]) -> dict[int, dict]:
+    sale_ids = [int(s.sale_id) for s in snapshots if getattr(s, 'sale_id', None)]
+    if not sale_ids:
+        return {}
+    from app.store.product_reservations import fulfilled_reservation_map_for_sale_ids
+
+    return fulfilled_reservation_map_for_sale_ids(sale_ids)
+
+
+def _snapshot_reservation_kind(
+    snap: SalePurchaseSnapshot,
+    res_map: dict[int, dict],
+) -> str | None:
+    sid = getattr(snap, 'sale_id', None)
+    if sid is None:
+        return None
+    try:
+        info = (res_map or {}).get(int(sid))
+    except (TypeError, ValueError):
+        return None
+    if not info:
+        return None
+    return (info.get('kind') or 'stock').strip().lower()
+
+
 def _aggregate_snapshots_by_product(
     snapshots: list[SalePurchaseSnapshot],
     *,
     is_renewal: bool,
+    reservation_kind: str | None = '__regular__',
 ) -> list[tuple[str, int]]:
+    """
+    reservation_kind:
+      __regular__ → solo compras normales (sin reserva cumplida)
+      'next_day' | 'stock' → solo ese tipo de reserva cumplida
+      None → todas las compras (legacy)
+    """
+    res_map = _reservation_label_map_for_snapshots(snapshots)
     order: list[str] = []
     totals: dict[str, int] = {}
     for snap in snapshots:
         if bool(getattr(snap, 'is_renewal', False)) != is_renewal:
             continue
+        if is_renewal:
+            res_kind = None
+        else:
+            res_kind = _snapshot_reservation_kind(snap, res_map)
+            if reservation_kind == '__regular__':
+                if res_kind is not None:
+                    continue
+            elif reservation_kind in ('next_day', 'stock'):
+                if res_kind != reservation_kind:
+                    continue
         name = (snap.product_name or 'Producto').strip()
         qty = max(1, int(snap.quantity or 1))
         if name not in totals:
@@ -286,8 +357,13 @@ def _section_summary_line(
     snapshots: list[SalePurchaseSnapshot],
     *,
     is_renewal: bool,
+    reservation_kind: str | None = '__regular__',
 ) -> str | None:
-    items = _aggregate_snapshots_by_product(snapshots, is_renewal=is_renewal)
+    items = _aggregate_snapshots_by_product(
+        snapshots,
+        is_renewal=is_renewal,
+        reservation_kind=reservation_kind,
+    )
     if not items:
         return None
     parts = [f'{qty} {name}' for name, qty in items]
@@ -298,7 +374,13 @@ def _day_has_commerce_snapshots(snapshots: list[SalePurchaseSnapshot]) -> bool:
     """True si el día tiene al menos una compra o renovación en tienda."""
     return bool(
         _section_summary_line('Renovaciones', snapshots, is_renewal=True)
-        or _section_summary_line('Compras', snapshots, is_renewal=False)
+        or _section_summary_line('Compras', snapshots, is_renewal=False, reservation_kind='__regular__')
+        or _section_summary_line(
+            'Compra programada', snapshots, is_renewal=False, reservation_kind='next_day'
+        )
+        or _section_summary_line(
+            'Compra reservada', snapshots, is_renewal=False, reservation_kind='stock'
+        )
     )
 
 
@@ -336,37 +418,53 @@ def _whatsapp_license_line(lic: dict[str, Any]) -> str | None:
     return None
 
 
-def _collect_license_lines(
+def _ordered_snapshots_for_summary_license_lines(
     snapshots: list[SalePurchaseSnapshot],
-    *,
-    is_renewal: bool,
-) -> list[str]:
+) -> list[SalePurchaseSnapshot]:
+    """Renovaciones, compras normales, compra programada, compra reservada."""
+    res_map = _reservation_label_map_for_snapshots(snapshots)
+    renewals = [s for s in snapshots if bool(getattr(s, 'is_renewal', False))]
+    purchases = [s for s in snapshots if not bool(getattr(s, 'is_renewal', False))]
+    regular = [s for s in purchases if _snapshot_reservation_kind(s, res_map) is None]
+    next_day = [s for s in purchases if _snapshot_reservation_kind(s, res_map) == 'next_day']
+    stock = [s for s in purchases if _snapshot_reservation_kind(s, res_map) == 'stock']
+    return renewals + regular + next_day + stock
+
+
+def _license_lines_from_snapshots(snaps: list[SalePurchaseSnapshot]) -> list[str]:
     from app.store.sale_purchase_snapshot import _load_licencias_json
 
-    product_order: list[str] = []
-    by_product: dict[str, list[str]] = {}
-    for snap in snapshots:
-        if bool(getattr(snap, 'is_renewal', False)) != is_renewal:
-            continue
-        name = (snap.product_name or 'Producto').strip()
-        if name not in by_product:
-            product_order.append(name)
-            by_product[name] = []
+    lines: list[str] = []
+    for snap in snaps:
         licencias = _load_licencias_json(snap)
         if licencias:
             for lic in licencias:
                 line = _whatsapp_license_line(lic)
                 if line:
-                    by_product[name].append(line)
+                    lines.append(line)
             continue
         qty = max(1, int(snap.quantity or 1))
         for _ in range(qty):
-            by_product[name].append('—')
-
-    lines: list[str] = []
-    for name in product_order:
-        lines.extend(by_product[name])
+            lines.append('—')
     return lines
+
+
+def _collect_all_summary_license_lines(snapshots: list[SalePurchaseSnapshot]) -> list[str]:
+    return _license_lines_from_snapshots(_ordered_snapshots_for_summary_license_lines(snapshots))
+
+
+def _collect_license_lines(
+    snapshots: list[SalePurchaseSnapshot],
+    *,
+    is_renewal: bool,
+) -> list[str]:
+    """Compat: líneas de credencial filtradas por renovación o compra."""
+    subset = [
+        s
+        for s in snapshots
+        if bool(getattr(s, 'is_renewal', False)) == is_renewal
+    ]
+    return _license_lines_from_snapshots(subset)
 
 
 def _saldo_inicio_con_total_hoy(saldo_before: float, day_total: float) -> str:
@@ -473,9 +571,22 @@ def build_daily_summary_lines(
     include_failed_renewals: bool = False,
 ) -> list[str] | None:
     renewals_summary = _section_summary_line('Renovaciones', snapshots, is_renewal=True)
-    purchases_summary = _section_summary_line('Compras', snapshots, is_renewal=False)
+    purchases_summary = _section_summary_line(
+        'Compras', snapshots, is_renewal=False, reservation_kind='__regular__'
+    )
+    next_day_summary = _section_summary_line(
+        'Compra programada', snapshots, is_renewal=False, reservation_kind='next_day'
+    )
+    stock_summary = _section_summary_line(
+        'Compra reservada', snapshots, is_renewal=False, reservation_kind='stock'
+    )
 
-    if not renewals_summary and not purchases_summary:
+    header_lines = [
+        x
+        for x in (renewals_summary, purchases_summary, next_day_summary, stock_summary)
+        if x
+    ]
+    if not header_lines:
         return None
 
     failed_lines: list[str] = []
@@ -485,20 +596,15 @@ def build_daily_summary_lines(
     day_total = _snapshot_day_total(snapshots)
     saldo_before = 0.0
     saldo_after = 0.0
-    has_balance = bool(billing_user) and (renewals_summary or purchases_summary)
+    has_balance = bool(billing_user) and bool(header_lines)
     if billing_user and has_balance:
         currency = _billing_currency(billing_user)
         saldo_after = _billing_prepaid_balance(billing_user, currency)
         saldo_before = saldo_after + day_total
 
-    lines: list[str] = []
-    if renewals_summary:
-        lines.append(renewals_summary)
-    if purchases_summary:
-        lines.append(purchases_summary)
+    lines: list[str] = list(header_lines)
 
-    license_lines = _collect_license_lines(snapshots, is_renewal=True)
-    license_lines.extend(_collect_license_lines(snapshots, is_renewal=False))
+    license_lines = _collect_all_summary_license_lines(snapshots)
     if license_lines:
         if lines:
             lines.append('')
@@ -568,10 +674,10 @@ def build_purchase_history_daily_summary_items(
     del utc_to_colombia_fn
 
     ensure_whatsapp_daily_sales_columns()
+    backfill_missing_snapshot_daily_co_dates()
 
     q = SalePurchaseSnapshot.query.filter(
         SalePurchaseSnapshot.is_reversed.is_(False),
-        SalePurchaseSnapshot.whatsapp_daily_co_date.isnot(None),
     )
     account_ids: set[int] | None = None
     if not all_users and viewer_billing_user_id:

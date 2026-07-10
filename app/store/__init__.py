@@ -65,6 +65,13 @@ from . import routes_whatsapp  # noqa: F401 — registra rutas WhatsApp en store
 from . import routes_licencias  # noqa: F401 — registra rutas licencias en store_bp
 from . import routes_historial  # noqa: F401 — registra rutas historial compras en store_bp
 
+try:
+    from app.store.mobile_push import register_mobile_push_listeners
+
+    register_mobile_push_listeners()
+except Exception:
+    pass
+
 # Contexto global para plantillas
 @store_bp.context_processor
 def inject_worksheet_access():

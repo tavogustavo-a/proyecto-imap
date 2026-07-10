@@ -298,6 +298,34 @@ def create_app(config_class_passed=None):
                     )
 
                 ucols = _cols("users")
+                if "store_front_ui_prefs" not in ucols:
+                    db.session.execute(
+                        text(
+                            "ALTER TABLE users ADD COLUMN store_front_ui_prefs TEXT"
+                        )
+                    )
+                    db.session.commit()
+                    app.logger.info(
+                        "Esquema: columna store_front_ui_prefs "
+                        "(JSON preferencias UI tienda) añadida a users (%s)",
+                        dialect,
+                    )
+
+                ucols = _cols("users")
+                if "codigos_view_prefs" not in ucols:
+                    db.session.execute(
+                        text(
+                            "ALTER TABLE users ADD COLUMN codigos_view_prefs TEXT"
+                        )
+                    )
+                    db.session.commit()
+                    app.logger.info(
+                        "Esquema: columna codigos_view_prefs "
+                        "(JSON preferencias vista códigos) añadida a users (%s)",
+                        dialect,
+                    )
+
+                ucols = _cols("users")
                 if "whatsapp_notify_enabled" not in ucols:
                     if dialect == "postgresql":
                         wa_sql = (
@@ -318,7 +346,7 @@ def create_app(config_class_passed=None):
         except Exception as schema_users_patch_err:
             db.session.rollback()
             app.logger.warning(
-                "No se pudo aplicar parche columnas users (saldo / portal_license_activity_log / admin_licencias_ui_prefs): %s",
+                "No se pudo aplicar parche columnas users (saldo / portal_license_activity_log / admin_licencias_ui_prefs / store_front_ui_prefs / codigos_view_prefs): %s",
                 schema_users_patch_err,
             )
 
@@ -339,14 +367,10 @@ def create_app(config_class_passed=None):
             _ensure_license_expired_notes_and_month_columns()
             ensure_product_reservation_schema()
             ensure_customer_account_renewal_schema()
-            app.logger.debug(
-                "Esquema: tablas/columnas de recargas y ventas (historial) verificadas"
-                + (
-                    f"; {repaired_accum} acumulación(es) legacy reparada(s)"
-                    if repaired_accum
-                    else ""
+            if repaired_accum:
+                app.logger.debug(
+                    f"Esquema: {repaired_accum} acumulación(es) legacy reparada(s)"
                 )
-            )
         except Exception as store_schema_err:
             db.session.rollback()
             app.logger.warning(

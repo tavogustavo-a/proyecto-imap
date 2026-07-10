@@ -351,10 +351,6 @@ def start_balance_recharge_events_redis_listener(app) -> None:
                 'Con varios workers Gunicorn las actualizaciones en tiempo real solo llegan al worker '
                 'que procesó la acción.'
             )
-        else:
-            logger.debug(
-                'SSE recargas: modo solo worker local; configure Redis para repartir eventos entre workers.'
-            )
         return
     with _redis_listener_lock:
         if _redis_listener_started:

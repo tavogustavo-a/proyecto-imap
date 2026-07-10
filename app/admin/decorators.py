@@ -213,32 +213,15 @@ def admin_or_soporte_licencias_required(f):
         if not session.get('logged_in'):
             return return_error('Inicia sesión para acceder.', 401, clear_session=False)
 
-        from app.auth.session_tokens import validate_session_token, generate_session_token
+        from app.auth.session_guards import ensure_user_session_token_valid
 
         user_id = session.get('user_id')
         if user_id is None:
             return return_error('Sesión inválida. Vuelve a iniciar sesión.', 401, clear_session=not is_ajax)
 
-        session_token = session.get('session_token')
-
-        def token_valid(tok):
-            return bool(tok) and validate_session_token(
-                tok, expected_user_id=user_id, require_admin=False
-            )
-
-        if not token_valid(session_token):
-            chk = User.query.get(user_id)
-            sess_uname = session.get('username')
-            recover_ok = chk and chk.enabled and (not sess_uname or chk.username == sess_uname)
-            if recover_ok:
-                session_token = generate_session_token(user_id, is_admin=False)
-                session['session_token'] = session_token
-            else:
-                return return_error(
-                    'Sesión inválida o expirada. Vuelve a iniciar sesión.',
-                    401,
-                    clear_session=not is_ajax,
-                )
+        token_reject = ensure_user_session_token_valid(is_ajax=is_ajax)
+        if token_reject is not None:
+            return token_reject
 
         user_obj = User.query.get(user_id)
         if not user_obj:
@@ -266,6 +249,21 @@ def admin_or_soporte_licencias_required(f):
             )
 
         g.license_support_restricted_mode = True
+        # Subusuario: puede ver el panel, no mutar datos del padre
+        if user_obj.parent_id is not None:
+            g.license_support_view_only = True
+            method = (request.method or 'GET').upper()
+            if method in ('POST', 'PUT', 'DELETE', 'PATCH'):
+                # Preferencias UI propias del subusuario (no son datos del padre)
+                ep = request.endpoint or ''
+                if ep == 'store_bp.api_admin_licencias_ui_prefs' and method == 'PUT':
+                    return f(*args, **kwargs)
+                return return_error(
+                    'Tu cuenta solo puede visualizar. No puedes modificar licencias ni datos del usuario principal.',
+                    403,
+                    clear_session=False,
+                )
+
         return f(*args, **kwargs)
 
     return decorated_function

@@ -63,7 +63,10 @@
     {% endif %}
 
     {% if services_in_rows %}
-    <div id="codigosViewPrefsScope" hidden data-user-id="{{ current_user_id if current_user_id else 'anon' }}"></div>
+    <div id="codigosViewPrefsScope" hidden data-user-id="{{ current_user_id if current_user_id else 'anon' }}"{% if current_user_id %} data-persist-server="1"{% endif %}></div>
+    {% if current_user_id %}
+    <div id="codigosViewPrefsJson" hidden class="embedded-page-json">{{ (codigos_view_prefs or {})|tojson }}</div>
+    {% endif %}
     <div id="codigosServicesWrap" class="codigos-services-wrap codigos-services-wrap--view-cards">
       {% if is_admin %}
         {# ADMIN TAMBIÉN RESPETA VISIBILITY_MODE (solo ve servicios visibles) #}
@@ -500,7 +503,7 @@
 
 {% block scripts %}
 {{ super() }}
-<script src="{{ url_for('static', filename='js/codigos_view_config.js') }}?v=20260611-codigos-a11y-layout" defer></script>
+<script src="{{ url_for('static', filename='js/codigos_view_config.js') }}?v=20260709-codigos-prefs-bd" defer></script>
 <script src="{{ url_for('static', filename='js/menu_busqueda.js') }}" defer></script>
 <script src="{{ url_for('static', filename='js/admin_imap.js') }}" defer></script>
 
