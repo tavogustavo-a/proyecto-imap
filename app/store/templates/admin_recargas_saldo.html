@@ -2,7 +2,7 @@
 
 {% block title %}{{ title }}{% endblock %}
 
-{% block head %}{{ super() }}<link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}?v=20260611-cleanup-mobile"><link rel="stylesheet" href="{{ url_for('static', filename='fontawesome/css/all.css') }}"><meta name="csrf_token" content="{{ csrf_token() }}">{% endblock %}
+{% block head %}{{ super() }}<link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}?v=20260611-cleanup-mobile"><meta name="csrf_token" content="{{ csrf_token() }}">{% endblock %}
 {% block content %}
 <div class="purchase-history-page purchase-history-admin admin-recargas-page"
      data-list-url="{{ url_for('store_bp.api_admin_balance_recharges') }}"

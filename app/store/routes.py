@@ -5579,10 +5579,12 @@ def api_user_store_notifications():
 
 @store_bp.route('/api/mobile/push-token', methods=['POST'])
 @csrf_exempt_route
-@store_access_required
 def api_mobile_push_token():
-    """Registra el token FCM de la app Capacitor para el usuario en sesión."""
+    """Registra el token FCM de la app nativa/Capacitor para el usuario en sesión."""
     from app.store.mobile_push import ensure_mobile_push_schema, upsert_push_token
+
+    if not session.get('logged_in') or not session.get('user_id'):
+        return jsonify({'success': False, 'error': 'Usuario no autenticado.'}), 401
 
     ensure_mobile_push_schema()
     user = User.query.get(session.get('user_id'))
@@ -5622,7 +5624,7 @@ def api_mobile_session_status():
         else:
             role = 'user'
             try:
-                home_path = url_for('main_bp.home')
+                home_path = url_for('store_bp.store_front')
             except Exception:
                 home_path = '/tienda/'
     return jsonify(
@@ -5632,6 +5634,91 @@ def api_mobile_session_status():
             'role': role,
             'username': username if role != 'none' else '',
             'home_path': home_path,
+        }
+    )
+
+
+@store_bp.route('/api/mobile/app-version', methods=['GET'])
+@csrf_exempt_route
+def api_mobile_app_version():
+    """Versión publicada de la app nativa (aviso de actualización)."""
+    from app.admin.site_settings import get_site_setting
+
+    def _as_int(raw, default):
+        try:
+            return int(str(raw or '').strip())
+        except (TypeError, ValueError):
+            return default
+
+    latest_code = _as_int(get_site_setting('mobile_app_version_code', '3'), 3)
+    min_code = _as_int(get_site_setting('mobile_app_min_version_code', '1'), 1)
+    latest_name = (get_site_setting('mobile_app_version_name', '3') or '3').strip() or '3'
+    message = (
+        get_site_setting(
+            'mobile_app_update_message',
+            'Hay una nueva versión de la app. Actualízala para continuar.',
+        )
+        or 'Hay una nueva versión de la app. Actualízala para continuar.'
+    ).strip()
+    download_url = (get_site_setting('mobile_app_download_url', '') or '').strip()
+    force = (get_site_setting('mobile_app_force_update', 'false') or 'false').strip().lower() in (
+        '1',
+        'true',
+        'yes',
+        'on',
+    )
+
+    return jsonify(
+        {
+            'success': True,
+            'platform': 'android',
+            'latest_version_code': latest_code,
+            'latest_version_name': latest_name,
+            'min_version_code': min_code,
+            'force_update': force,
+            'message': message,
+            'download_url': download_url,
+        }
+    )
+
+
+@store_bp.route('/api/mobile/appearance', methods=['GET'])
+@csrf_exempt_route
+def api_mobile_appearance():
+    """Tema/fondo público para la app nativa (login y shell)."""
+    import os
+    import re
+
+    from app.admin.site_settings import get_site_setting
+
+    theme = (get_site_setting('current_theme', 'tema1') or 'tema1').strip().lower()
+    if not re.fullmatch(r'tema\d+|temaadmin', theme):
+        theme = 'tema1'
+    opacity_raw = (get_site_setting('card_opacity', '0.8') or '0.8').strip()
+    try:
+        opacity = float(opacity_raw)
+    except (TypeError, ValueError):
+        opacity = 0.8
+    opacity = max(0.2, min(1.0, opacity))
+
+    images_dir = os.path.join(current_app.root_path, 'static', 'images')
+    filename = f'{theme}.png'
+    if not os.path.isfile(os.path.join(images_dir, filename)):
+        filename = 'tema1.png'
+        theme = 'tema1'
+
+    bg_path = f'/static/images/{filename}'
+    try:
+        bg_url = url_for('static', filename=f'images/{filename}')
+    except Exception:
+        bg_url = bg_path
+
+    return jsonify(
+        {
+            'success': True,
+            'theme': theme,
+            'background_path': bg_url if str(bg_url).startswith('/') else bg_path,
+            'card_opacity': opacity,
         }
     )
 

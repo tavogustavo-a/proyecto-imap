@@ -103,11 +103,8 @@ def upsert_push_token(user_id: int, token: str, platform: str = 'android', devic
 
 
 def send_fcm_to_user(user_id: int, title: str, body: str, data: dict | None = None) -> int:
-    """Envía FCM legacy si hay FCM_SERVER_KEY. Retorna cantidad de envíos OK."""
+    """Envía push FCM (HTTP v1 con service account, o legacy si hay FCM_SERVER_KEY)."""
     ensure_mobile_push_schema()
-    server_key = (current_app.config.get('FCM_SERVER_KEY') or '').strip()
-    if not server_key:
-        return 0
 
     from app.store.models import MobilePushToken
 
@@ -119,22 +116,124 @@ def send_fcm_to_user(user_id: int, title: str, body: str, data: dict | None = No
     if not tokens:
         return 0
 
+    data_payload = {str(k): str(v) for k, v in (data or {}).items()}
+    data_payload.setdefault('click_action', 'FLUTTER_NOTIFICATION_CLICK')
+    title_s = (title or 'Aviso')[:200]
+    body_s = (body or '')[:1000]
+
+    # Preferir HTTP v1 (proyectos Firebase actuales)
+    v1 = _send_fcm_v1(tokens, title_s, body_s, data_payload)
+    if v1 is not None:
+        return v1
+
+    return _send_fcm_legacy(tokens, title_s, body_s, data_payload)
+
+
+def _fcm_service_account_path():
+    import os
+
+    path = (current_app.config.get('FCM_SERVICE_ACCOUNT_FILE') or '').strip()
+    if not path:
+        path = (os.getenv('GOOGLE_APPLICATION_CREDENTIALS') or '').strip()
+    if not path:
+        return None
+    if not os.path.isabs(path):
+        # Relativo a la raíz del proyecto Flask
+        root = os.path.abspath(os.path.join(current_app.root_path, '..'))
+        path = os.path.join(root, path)
+    return path if os.path.isfile(path) else None
+
+
+def _send_fcm_v1(tokens, title, body, data_payload):
+    """FCM HTTP v1. Retorna enviados, o None si no hay credenciales v1."""
+    import os
+
+    sa_path = _fcm_service_account_path()
+    if not sa_path:
+        return None
+
+    try:
+        from google.auth.transport.requests import Request as GoogleAuthRequest
+        from google.oauth2 import service_account
+    except Exception as ex:
+        current_app.logger.warning('FCM v1: falta google-auth (%s)', ex)
+        return None
+
+    try:
+        scopes = ['https://www.googleapis.com/auth/firebase.messaging']
+        creds = service_account.Credentials.from_service_account_file(sa_path, scopes=scopes)
+        project_id = getattr(creds, 'project_id', None) or ''
+        if not project_id:
+            with open(sa_path, 'r', encoding='utf-8') as fh:
+                project_id = (json.load(fh) or {}).get('project_id') or ''
+        if not project_id:
+            current_app.logger.warning('FCM v1: project_id vacío en service account')
+            return 0
+        creds.refresh(GoogleAuthRequest())
+        access_token = creds.token
+    except Exception as ex:
+        current_app.logger.warning('FCM v1 auth: %s', ex)
+        return 0
+
+    url = f'https://fcm.googleapis.com/v1/projects/{project_id}/messages:send'
+    headers = {
+        'Authorization': f'Bearer {access_token}',
+        'Content-Type': 'application/json; charset=UTF-8',
+    }
+    sent = 0
+    stale = []
+    for token in tokens:
+        payload = {
+            'message': {
+                'token': token,
+                'notification': {
+                    'title': title,
+                    'body': body,
+                },
+                'data': data_payload,
+                'android': {
+                    'priority': 'HIGH',
+                    'notification': {
+                        'sound': 'default',
+                        'channel_id': 'store_push',
+                    },
+                },
+            }
+        }
+        try:
+            resp = requests.post(url, headers=headers, data=json.dumps(payload), timeout=10)
+            if resp.status_code == 200:
+                sent += 1
+            else:
+                text = (resp.text or '')[:300]
+                current_app.logger.warning('FCM v1 HTTP %s: %s', resp.status_code, text)
+                if resp.status_code == 404 or 'UNREGISTERED' in text or 'NOT_FOUND' in text:
+                    stale.append(token)
+        except Exception as ex:
+            current_app.logger.warning('FCM v1 send error: %s', ex)
+
+    _purge_stale_tokens(stale)
+    return sent
+
+
+def _send_fcm_legacy(tokens, title, body, data_payload):
+    server_key = (current_app.config.get('FCM_SERVER_KEY') or '').strip()
+    if not server_key:
+        return 0
+
     sent = 0
     stale = []
     headers = {
         'Authorization': f'key={server_key}',
         'Content-Type': 'application/json',
     }
-    data_payload = {str(k): str(v) for k, v in (data or {}).items()}
-    data_payload.setdefault('click_action', 'FLUTTER_NOTIFICATION_CLICK')
-
     for token in tokens:
         payload = {
             'to': token,
             'priority': 'high',
             'notification': {
-                'title': (title or 'Aviso')[:200],
-                'body': (body or '')[:1000],
+                'title': title,
+                'body': body,
                 'sound': 'default',
             },
             'data': data_payload,
@@ -164,16 +263,22 @@ def send_fcm_to_user(user_id: int, title: str, body: str, data: dict | None = No
         except Exception as ex:
             current_app.logger.warning('FCM send error: %s', ex)
 
-    if stale:
-        try:
-            MobilePushToken.query.filter(MobilePushToken.token.in_(stale)).delete(
-                synchronize_session=False
-            )
-            db.session.commit()
-        except Exception:
-            db.session.rollback()
-
+    _purge_stale_tokens(stale)
     return sent
+
+
+def _purge_stale_tokens(stale):
+    if not stale:
+        return
+    try:
+        from app.store.models import MobilePushToken
+
+        MobilePushToken.query.filter(MobilePushToken.token.in_(stale)).delete(
+            synchronize_session=False
+        )
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
 
 
 def _on_store_notification_insert(mapper, connection, target):

@@ -6,8 +6,7 @@
 {% block head %}
   {{ super() }}
   <link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}?v=20260522-my-pages-menu">
-  <link rel="stylesheet" href="{{ url_for('static', filename='fontawesome/css/all.css') }}">
-  <link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/sms.css') }}">
+<link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/sms.css') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/edit_imap2.css') }}">
   <meta name="csrf_token" content="{{ csrf_token() }}">
 {% endblock %}

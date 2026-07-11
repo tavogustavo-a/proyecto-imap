@@ -6,8 +6,7 @@
   {{ super() }}
   <link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}">
   <link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/html_tools.css') }}">
-  <link rel="stylesheet" href="{{ url_for('static', filename='fontawesome/css/all.css') }}">
-  <script src="{{ url_for('store_bp.static', filename='js/vendor/iconify-icon.min.js') }}" defer></script>
+<script src="{{ url_for('store_bp.static', filename='js/vendor/iconify-icon.min.js') }}" defer></script>
   <meta name="html-tools-static-images" content="{{ url_for('static', filename='images/') }}">
 {% endblock %}
 

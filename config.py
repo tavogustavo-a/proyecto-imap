@@ -161,7 +161,10 @@ class Config:
     # Obligatoria en el endpoint /api/sms/android-receive (BD o esta env).
     ANDROID_SMS_API_KEY = os.getenv("ANDROID_SMS_API_KEY", None)
 
-    # Push nativo app Capacitor (FCM legacy server key). Opcional.
+    # Push nativo app Android (FCM HTTP v1 — cuenta de servicio).
+    # Ruta al JSON de Firebase → Project settings → Service accounts → Generate new private key.
+    FCM_SERVICE_ACCOUNT_FILE = os.getenv("FCM_SERVICE_ACCOUNT_FILE", None)
+    # Legacy (ya no disponible en proyectos nuevos). Se mantiene por compatibilidad.
     FCM_SERVER_KEY = os.getenv("FCM_SERVER_KEY", None)
 
     # App Links / deep links Android (huellas SHA-256 del keystore, separadas por coma)

@@ -67,3 +67,6 @@ app/store/static/uploads/
 
 # App Capacitor (Android/iOS) — local, no versionar
 mobile/
+
+# App Android nativa (Kotlin) — local, no versionar por error
+mobile-android-native/

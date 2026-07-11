@@ -2,7 +2,7 @@
 
 {% block title %}Chatbot respuestas-preguntas{% endblock %}
 
-{% block head %}{{ super() }}<link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}?v=20260611-logout-cookies-label"><link rel="stylesheet" href="{{ url_for('static', filename='fontawesome/css/all.css') }}">{% endblock %}
+{% block head %}{{ super() }}<link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}?v=20260611-logout-cookies-label">{% endblock %}
 {% block content %}
 <div class="container container-max-width-900 store-light store-front-main px-2 pb-3 chatbot-rp-page"
      {% if is_admin %}

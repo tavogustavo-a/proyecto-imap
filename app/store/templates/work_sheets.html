@@ -9,8 +9,7 @@
   <meta name="is_logged_in" content="{{ 'true' if session.get('logged_in') else 'false' }}">
   <meta name="is_admin" content="{{ 'true' if is_admin else 'false' }}">
   <link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}">
-  <link rel="stylesheet" href="{{ url_for('static', filename='fontawesome/css/all.css') }}">
-  <meta name="has_worksheet_access" content="{{ 'true' if current_user and user_has_worksheet_access(current_user) else 'false' }}">
+<meta name="has_worksheet_access" content="{{ 'true' if current_user and user_has_worksheet_access(current_user) else 'false' }}">
   <meta name="clear_trigger_log_url" content="{{ url_for('admin_bp.clear_trigger_log') }}">
 {% endblock %}
 {% block content %}

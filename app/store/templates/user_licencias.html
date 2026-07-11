@@ -5,7 +5,6 @@
 {% block head %}
   {{ super() }}
   <link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}?v=20260708-portal-renewal-pending-v10">
-  <link rel="stylesheet" href="{{ url_for('static', filename='fontawesome/css/all.css') }}">
 {% endblock %}
 
 {% macro format_license_price_num(n) -%}

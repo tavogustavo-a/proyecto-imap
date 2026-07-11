@@ -6,7 +6,6 @@
   {{ super() }}
   <meta name="clear_trigger_log_url" content="{{ url_for('admin_bp.clear_trigger_log') }}">
   <link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}?v=20260710-mobile-lic-sym">
-  <link rel="stylesheet" href="{{ url_for('static', filename='fontawesome/css/all.css') }}">
 {% endblock %}
 {% block content %}
 <div class="container-fluid mt-2 store-light worksheet-panel admin-licencias-page admin-licencias-shell" data-licencias-persist-scope="{{ (session.get('username') or '')|e }}" data-admin-warranty-incidents-url="{{ url_for('store_bp.api_admin_license_warranty_incidents') }}" data-admin-proveedor-url="{{ url_for('store_bp.api_admin_proveedor_inventory_get') }}" data-admin-proveedor-put-url="{{ url_for('store_bp.api_admin_proveedor_inventory_put') }}" data-admin-proveedor-sales-url="{{ url_for('store_bp.api_admin_proveedor_sales_stats_get') }}" data-admin-proveedor-sales-reset-url="{{ url_for('store_bp.api_admin_proveedor_sales_stats_reset') }}" {% if license_support_restricted_mode %}data-license-support-restricted="true"{% endif %}{% if license_support_view_only|default(false) %} data-license-support-view-only="true"{% endif %}>

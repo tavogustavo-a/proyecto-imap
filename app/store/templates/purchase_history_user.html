@@ -2,7 +2,7 @@
 
 {% block title %}Mi Historial de Compras{% endblock %}
 
-{% block head %}{{ super() }}<link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}?v=20260704-historial-reserva-color-v1"><link rel="stylesheet" href="{{ url_for('static', filename='fontawesome/css/all.css') }}">{% endblock %}
+{% block head %}{{ super() }}<link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}?v=20260704-historial-reserva-color-v1">{% endblock %}
 {% block content %}
 <div class="purchase-history-page{% if mostrar_usuario_comprador %} purchase-history-admin{% endif %}"
      data-show-user-column="{{ 'true' if mostrar_usuario_comprador else 'false' }}"
