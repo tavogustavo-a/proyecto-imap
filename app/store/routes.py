@@ -1351,6 +1351,7 @@ def _session_user_for_ui_prefs():
 
 
 @store_bp.route('/api/store-front-ui-prefs', methods=['GET', 'PUT'])
+@csrf_exempt_route
 def api_store_front_ui_prefs():
     """Guardar / leer preferencias de configuración de la tienda en BD."""
     user = _session_user_for_ui_prefs()
@@ -1384,6 +1385,7 @@ def api_store_front_ui_prefs():
 
 
 @store_bp.route('/api/codigos-view-prefs', methods=['GET', 'PUT'])
+@csrf_exempt_route
 def api_codigos_view_prefs():
     """Guardar / leer preferencias de vista de Códigos en BD."""
     user = _session_user_for_ui_prefs()
@@ -14523,6 +14525,7 @@ from app.store.routes_licencias import (  # noqa: E402
     _product_renew_customer_account_map,
     _public_checkout_assign_license_account,
     _sync_allowed_emails_from_license_admin_texts,
+    sync_allowed_emails_for_license,
     _user_licencias_viewer_scope,
     _warranty_reserve_for_product,
 )

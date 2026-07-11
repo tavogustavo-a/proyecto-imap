@@ -213,6 +213,31 @@ textarea {
 
 /* Max-width para inputs API (sin estilos inline, CSP) */
 .api-input-max-200 { max-width: 200px; }
+
+/* Icono ⓘ compacto (pisa min-width de .btn-blue) — dashboard + plantilla email */
+.btn-panel.btn-blue.admin-global-api-info-btn,
+button.admin-global-api-info-btn {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  flex: 0 0 auto !important;
+  width: auto !important;
+  min-width: 0 !important;
+  max-width: fit-content !important;
+  min-height: 1.55rem !important;
+  height: 1.55rem !important;
+  padding: 0.1rem 0.28rem !important;
+  margin: 0 !important;
+  font-size: 0.9rem !important;
+  line-height: 1 !important;
+  border-radius: 999px !important;
+  box-sizing: border-box !important;
+}
+.btn-panel.btn-blue.admin-global-api-info-btn i,
+button.admin-global-api-info-btn i {
+  margin: 0 !important;
+  line-height: 1 !important;
+}
 .api-input-max-250 { max-width: 250px; }
 
 /* Trigger logs - truncar correo y mensajes error (CSP, sin inline) */
@@ -843,6 +868,10 @@ noscript p {
 
 .flex-wrap {
   flex-wrap: wrap;
+}
+
+.flex-nowrap {
+  flex-wrap: nowrap;
 }
 
 .flex-column {
@@ -3687,6 +3716,12 @@ a.btn-search.btn-rounded:hover {
     justify-content: center !important;
     align-items: center !important;
     flex-direction: column !important;
+  }
+  /* Título + ⓘ en la misma línea (no apilar) */
+  .admin-card h3.admin-api-section-title {
+    flex-direction: row !important;
+    flex-wrap: nowrap !important;
+    gap: 0.35rem !important;
   }
   .admin-card form#securitySettingsForm .d-flex > div {
     width: 100% !important;

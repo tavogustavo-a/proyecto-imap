@@ -461,7 +461,7 @@ def search_and_apply_filters(to_address, service_id=None, user=None, origin_doma
         if found_mail:
             return found_mail
 
-    ext = search_linked_projects_only(to_address, user)
+    ext = search_linked_projects_only(to_address, user, service_id=service_id)
     if ext:
         return ext
 

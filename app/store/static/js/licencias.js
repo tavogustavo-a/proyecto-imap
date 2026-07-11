@@ -181,10 +181,9 @@ function adminLicDaysCanSkipFullRerender(licenseId, renderKey, container) {
     if (!container || container.classList.contains('d-none')) return false;
     if (!renderKey || renderKey !== __adminLicLastDaysRenderKey) return false;
     if (__adminLicLastDaysRenderLicenseId !== licenseId) return false;
-    if (container.querySelectorAll('.day-section').length !== 31) return false;
-    return !!container.querySelector(
-        '.day-license-split-root[data-license-id="' + String(licenseId) + '"]'
-    );
+    /* Con lazy-mount bastan las 31 cabeceras; no hace falta que existan split editors. */
+    if (container.querySelectorAll('.day-section.admin-licencias-bloc--day').length !== 31) return false;
+    return true;
 }
 
 function adminLicRefreshDaysUiLight(licenseId) {
@@ -195,7 +194,13 @@ function adminLicRefreshDaysUiLight(licenseId) {
 
 /** Refresco de «Días» en admin tras nuevas cuentas (compras, etc.). SSE con fallback a /rev. */
 const ADMIN_LICENCIAS_DAYS_POLL_MS = 1200;
+/** Sin producto abierto / grid plegado: el /rev puede ir más despacio. */
+const ADMIN_LICENCIAS_DAYS_POLL_IDLE_MS = 5000;
+let __adminLicLastIdleRevPollAt = 0;
 const ADMIN_LIC_SSE_URL = '/tienda/api/admin/licenses/stream';
+
+/** Meta de texto por día para montar el editor solo al expandir (lazy). */
+let __adminLicDaysLazyMeta = { licenseId: null, byDay: Object.create(null) };
 
 /** Tras cerrar foco desde un día, otra pestaña puede dejar pendiente refrescar «Días» — se reintenta a menudo. */
 const ADMIN_LICENCIAS_PENDING_DAYS_FLUSH_MS = 1800;
@@ -405,8 +410,21 @@ function onAdminLicensesSseMessage(data) {
     adminLicRefreshFromRealtimeSignal();
 }
 
+function adminLicDaysPollIsIdle() {
+    const ic = document.getElementById('licenseAccountsInputContainer');
+    if (!ic || ic.classList.contains('d-none')) return true;
+    const grid = document.getElementById('licenciasContainer');
+    if (grid && grid.classList.contains('collapsed')) return true;
+    return false;
+}
+
 async function pollAdminLicensesRev() {
     if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return;
+    if (adminLicDaysPollIsIdle()) {
+        const now = Date.now();
+        if (now - __adminLicLastIdleRevPollAt < ADMIN_LICENCIAS_DAYS_POLL_IDLE_MS) return;
+        __adminLicLastIdleRevPollAt = now;
+    }
     try {
         var sep = adminLicArchivedQuerySuffix() ? '&' : '?';
         var url =
@@ -737,16 +755,16 @@ function setupCollapseButton() {
     const licenciasContainer = document.getElementById('licenciasContainer');
     
     if (collapseBtn && licenciasContainer && collapseIcon) {
-        // Cargar estado guardado
+        // Por defecto contraído; solo expandido si el usuario lo dejó abierto
         const savedState = licenciasUiMainGridCollapsedRead();
-        if (savedState === 'true') {
-            licenciasContainer.classList.add('collapsed');
-            collapseIcon.classList.remove('fa-chevron-up');
-            collapseIcon.classList.add('fa-chevron-down');
-        } else {
+        if (savedState === 'false') {
             licenciasContainer.classList.remove('collapsed');
             collapseIcon.classList.remove('fa-chevron-down');
             collapseIcon.classList.add('fa-chevron-up');
+        } else {
+            licenciasContainer.classList.add('collapsed');
+            collapseIcon.classList.remove('fa-chevron-up');
+            collapseIcon.classList.add('fa-chevron-down');
         }
         
         // Remover listener anterior si existe
@@ -2132,16 +2150,10 @@ async function adminLicenseReportesApplyBuenaResolved(entry, selEl) {
                 adminLicenseReportesUndoSelect(selEl, sigK);
                 return;
             }
-            const container = document.getElementById('licenseAllDaysContainer');
             const dayRoot =
-                container &&
-                container.querySelector(
-                    '.day-license-split-root[data-day="' +
-                        dayNum +
-                        '"][data-license-id="' +
-                        entry.licenseId +
-                        '"]'
-                );
+                typeof adminLicQueryOrMountDayRoot === 'function'
+                    ? adminLicQueryOrMountDayRoot(entry.licenseId, dayNum)
+                    : null;
             if (!dayRoot) {
                 showError('No se encontró el bloc del día ' + dayNum + '.');
                 adminLicenseReportesUndoSelect(selEl, sigK);
@@ -2669,16 +2681,10 @@ async function adminLicenseReportesApplyWarrantyReplace(entry, selEl) {
     }
     try {
         const dayNum = entry.dayNum;
-        const container = document.getElementById('licenseAllDaysContainer');
         const dayRoot =
-            container &&
-            container.querySelector(
-                '.day-license-split-root[data-day="' +
-                    dayNum +
-                    '"][data-license-id="' +
-                    entry.licenseId +
-                    '"]'
-            );
+            typeof adminLicQueryOrMountDayRoot === 'function'
+                ? adminLicQueryOrMountDayRoot(entry.licenseId, dayNum)
+                : null;
         if (!dayRoot) {
             showError('No se encontró el bloc del día ' + dayNum + '.');
             adminLicenseReportesUndoSelect(selEl, sigK);
@@ -3356,7 +3362,7 @@ function renderLicensesGrid() {
                     <textarea id="adminLicenciasNotepadPersonal" name="admin_lic_personal_notes" class="admin-licencias-notepad-textarea" rows="4" spellcheck="true" autocomplete="off" readonly placeholder="Apuntes solo para este producto… se guardan en este dispositivo (sin conexión)."></textarea>
                     </div>
                 </section>
-                <section class="admin-licencias-bloc admin-licencias-bloc--license" id="adminLicenciasBlocLicense" aria-label="Licencias del producto">
+                <section class="admin-licencias-bloc admin-licencias-bloc--license collapsed" id="adminLicenciasBlocLicense" aria-label="Licencias del producto">
                     <div class="admin-licencias-bloc-header">
                         <span class="admin-licencias-bloc-title"><span id="adminLicenciasLicenciasHeading">Licencias</span></span>
                         <div class="admin-licencias-bloc-header-actions user-lic-day-header-actions">
@@ -3386,7 +3392,7 @@ function renderLicensesGrid() {
                             <span id="adminLicenciasLicenseLineBadge" class="day-account-badge admin-licencias-notepad-line-badge">0</span>
                         </div>
                     </div>
-                    <div class="admin-licencias-license-body">
+                    <div class="admin-licencias-license-body" style="display: none;">
                     <label id="adminLicenciasNotepadByLicenseLabel" class="sr-only" for="adminLicenciasNotepadByLicense">Licencias: credenciales a la izquierda (bloc de notas); usuario, estados verde y rojo, y notas a la derecha.</label>
                     <div class="license-split-editor license-notepad--locked license-split-editor--notes-hidden" id="adminLicenciasLicenseSplitRoot" data-license-viz="all">
                         <div class="license-split-editor__viewport">
@@ -3415,7 +3421,7 @@ function renderLicensesGrid() {
                     </div>
                     <div id="adminLicenciasProveedorMergedBody" class="admin-lic-proveedor-merged-body" role="region" aria-label="Licencias de proveedores para este producto"></div>
                 </section>
-                <section class="admin-licencias-bloc admin-licencias-bloc--license admin-licencias-bloc--customer-renewal d-none" id="adminLicenciasBlocCustomerRenewal" aria-label="Cuentas para renovar del producto">
+                <section class="admin-licencias-bloc admin-licencias-bloc--license admin-licencias-bloc--customer-renewal collapsed d-none" id="adminLicenciasBlocCustomerRenewal" aria-label="Cuentas para renovar del producto">
                     <div class="admin-licencias-bloc-header">
                         <span class="admin-licencias-bloc-title"><span id="adminLicenciasCustomerRenewalHeading">Cuentas para renovar</span></span>
                         <div class="admin-licencias-bloc-header-actions user-lic-day-header-actions">
@@ -3454,7 +3460,7 @@ function renderLicensesGrid() {
                 <div id="adminLicenciasProveedorPanelBody" class="admin-lic-proveedor-panel-body"></div>
             </div>
             <div class="license-suspended-notepad-wrap">
-                <div class="day-section suspended-section" id="licenseSuspendedSection" aria-label="Caídas y cuentas suspendidas">
+                <div class="day-section suspended-section collapsed" id="licenseSuspendedSection" aria-label="Caídas y cuentas suspendidas">
                     <div class="day-section-header">
                         <div class="day-header-content day-header-content--with-actions">
                             <div class="day-header-label">
@@ -3476,7 +3482,7 @@ function renderLicensesGrid() {
                             </div>
                         </div>
                     </div>
-                    <div class="day-accounts-list suspended-section-body">
+                    <div class="day-accounts-list suspended-section-body" style="display: none;">
                         <div class="license-notepads-wrap license-notepads-wrap--suspended-inner">
                             <label id="adminLicenciasSuspendedNotepadLabel" class="sr-only" for="adminLicenciasSuspendedNotepad">Caídas: credenciales a la izquierda; estado rojo, subir a Licencias y notas a la derecha.</label>
                             <div id="adminLicenciasSuspendedSplitRoot" class="license-split-editor license-split-editor--day suspended-license-split-root admin-licencias-license-editable license-notepad--locked license-split-editor--notes-hidden" data-license-viz="all" tabindex="-1" role="region" aria-label="Caídas y suspendidas: credenciales a la izquierda; estado rojo, subir a Licencias y notas a la derecha.">
@@ -3496,7 +3502,7 @@ function renderLicensesGrid() {
                 </div>
             </div>
             <div class="license-expired-notepad-wrap">
-                <div class="day-section expired-section" id="licenseExpiredSection" aria-label="Cuentas vencidas o sin renovación mes a mes">
+                <div class="day-section expired-section collapsed" id="licenseExpiredSection" aria-label="Cuentas vencidas o sin renovación mes a mes">
                     <div class="day-section-header">
                         <div class="day-header-content day-header-content--with-actions">
                             <div class="day-header-label">
@@ -3518,7 +3524,7 @@ function renderLicensesGrid() {
                             </div>
                         </div>
                     </div>
-                    <div class="day-accounts-list expired-section-body">
+                    <div class="day-accounts-list expired-section-body" style="display: none;">
                         <div class="license-notepads-wrap license-notepads-wrap--expired-inner">
                             <label id="adminLicenciasExpiredNotepadLabel" class="sr-only" for="adminLicenciasExpiredNotepad">Vencidas: credenciales a la izquierda; estado rojo, subir a Licencias y notas a la derecha.</label>
                             <div id="adminLicenciasExpiredSplitRoot" class="license-split-editor license-split-editor--day expired-license-split-root admin-licencias-license-editable license-notepad--locked license-split-editor--notes-hidden" data-license-viz="all" tabindex="-1" role="region" aria-label="Vencidas: credenciales a la izquierda; estado rojo, subir a Licencias y notas a la derecha.">
@@ -4795,7 +4801,7 @@ function adminLicProveedorRenderSoldSectionHtml(providerRow) {
     return (
         '<div class="license-suspended-notepad-wrap admin-lic-proveedor-sold-wrap">' +
         '<section class="day-section suspended-section admin-licencias-bloc admin-licencias-bloc--day admin-lic-proveedor-sold' +
-        adminLicProveedorSectionCollapsedClass(userId, 'sold', nLines <= 0) +
+        adminLicProveedorSectionCollapsedClass(userId, 'sold', true) +
         '" aria-label="Licencias vendidas del proveedor ' +
         adminLicEscHtml(providerRow.username || userId) +
         '">' +
@@ -4866,7 +4872,7 @@ function adminLicProveedorRenderExtraSectionHtml(providerRow, kind) {
         sectionExtraClass +
         ' admin-licencias-bloc admin-licencias-bloc--day admin-lic-proveedor-extra ' +
         sectionClass +
-        adminLicProveedorSectionCollapsedClass(userId, kind, nLines <= 0) +
+        adminLicProveedorSectionCollapsedClass(userId, kind, true) +
         '" data-proveedor-extra-kind="' +
         adminLicEscHtml(kind) +
         '">' +
@@ -5172,7 +5178,7 @@ function adminLicRenderProveedorDayEditable(day, providerRow) {
     const userId = providerRow.user_id != null ? String(providerRow.user_id) : '';
     return (
         '<section class="day-section admin-licencias-bloc admin-licencias-bloc--day admin-lic-proveedor-day' +
-        adminLicProveedorDayCollapsedClass(userId, day, nLines <= 0) +
+        adminLicProveedorDayCollapsedClass(userId, day, true) +
         '" data-proveedor-day="' +
         String(day) +
         '">' +
@@ -5296,32 +5302,31 @@ function restoreProveedorPanelCollapseState() {
         const providerRow = adminProveedorProviders.find(function (p) {
             return p && String(p.user_id) === String(uid);
         });
-        const hasInventory = adminLicProveedorProviderHasInventory(providerRow);
+        void providerRow;
         const saved = adminLicGetBlocPrefCollapsed('proveedor_panel_user_collapsed', uid);
-        if (hasInventory) {
+        // Por defecto contraído (también con inventario)
+        if (saved === 'false') {
             section.classList.remove('collapsed');
-        } else if (saved === 'true') {
-            section.classList.add('collapsed');
         } else {
-            section.classList.remove('collapsed');
+            section.classList.add('collapsed');
         }
         section.querySelectorAll('.admin-lic-proveedor-sold').forEach(function (sold) {
             const sv = adminLicProveedorSectionCollapsedRead(uid, 'sold');
-            if (sv === 'true') sold.classList.add('collapsed');
-            else if (sv === 'false') sold.classList.remove('collapsed');
+            if (sv === 'false') sold.classList.remove('collapsed');
+            else sold.classList.add('collapsed');
         });
         section.querySelectorAll('.admin-lic-proveedor-extra').forEach(function (extra) {
             const kind = extra.getAttribute('data-proveedor-extra-kind') || 'extra';
             const sv = adminLicProveedorSectionCollapsedRead(uid, kind);
-            if (sv === 'true') extra.classList.add('collapsed');
-            else if (sv === 'false') extra.classList.remove('collapsed');
+            if (sv === 'false') extra.classList.remove('collapsed');
+            else extra.classList.add('collapsed');
         });
         section.querySelectorAll('.admin-lic-proveedor-day[data-proveedor-day]').forEach(function (daySec) {
             const day = daySec.getAttribute('data-proveedor-day');
             if (day == null || day === '') return;
             const dv = adminLicProveedorPanelDayCollapsedRead(uid, day);
-            if (dv === 'true') daySec.classList.add('collapsed');
-            else if (dv === 'false') daySec.classList.remove('collapsed');
+            if (dv === 'false') daySec.classList.remove('collapsed');
+            else daySec.classList.add('collapsed');
         });
     });
 }
@@ -5816,20 +5821,15 @@ function restoreProveedorMergedBlocState(licenseId) {
         String(licenseId) === String(AGGREGATE_LICENSE_ID) ||
         String(licenseId) === ADMIN_PROVEEDOR_FILTER
     ) {
-        section.classList.remove('collapsed');
-        return;
-    }
-    const badge = document.getElementById('adminLicenciasProveedorMergedLineBadge');
-    const lineCount = badge ? parseInt(String(badge.textContent || '0'), 10) : 0;
-    if (Number.isFinite(lineCount) && lineCount > 0) {
-        section.classList.remove('collapsed');
+        section.classList.add('collapsed');
         return;
     }
     const saved = adminLicGetBlocPrefCollapsed('proveedor_merged_collapsed', licenseId);
-    if (saved === 'true') {
-        section.classList.add('collapsed');
-    } else {
+    // Por defecto contraído
+    if (saved === 'false') {
         section.classList.remove('collapsed');
+    } else {
+        section.classList.add('collapsed');
     }
 }
 
@@ -7484,9 +7484,13 @@ function restoreChangesProductSectionsState() {
         if (saved === 'true') {
             section.classList.add('collapsed');
             body.style.display = 'none';
-        } else {
+        } else if (saved === 'false') {
             section.classList.remove('collapsed');
             body.style.display = 'block';
+        } else {
+            // Por defecto contraído
+            section.classList.add('collapsed');
+            body.style.display = 'none';
         }
     });
 }
@@ -13740,8 +13744,13 @@ async function adminLicenseSplitSellRowToDay(row, opts) {
 
     const container = document.getElementById('licenseAllDaysContainer');
     const dayRoot =
-        container &&
-        container.querySelector(`.day-license-split-root[data-day="${day}"][data-license-id="${licenseId}"]`);
+        (typeof adminLicQueryOrMountDayRoot === 'function'
+            ? adminLicQueryOrMountDayRoot(licenseId, day)
+            : null) ||
+        (container &&
+            container.querySelector(
+                `.day-license-split-root[data-day="${day}"][data-license-id="${licenseId}"]`
+            ));
     if (!dayRoot) {
         showError('No se encontró el bloc del día ' + day + '.');
         return false;
@@ -17007,25 +17016,46 @@ function adminLicSyncCredsColumnWidthsFromContent() {
     });
 
     var isMobile = typeof adminLicenseSplitIsMobileLayout === 'function' && adminLicenseSplitIsMobileLayout();
-    var desktopMaxW = 96;
-    if (!isMobile) {
-        var mainTa = document.getElementById('adminLicenciasNotepadByLicense');
-        if (mainTa) {
-            desktopMaxW = Math.max(desktopMaxW, licenseSplitMeasureCredsTaContentWidthPx(mainTa));
-        }
-        document.querySelectorAll('#licenseAllDaysContainer .day-license-split-root .license-split-editor__creds').forEach(function (ta) {
-            if (!ta) return;
-            desktopMaxW = Math.max(desktopMaxW, licenseSplitMeasureCredsTaContentWidthPx(ta));
-        });
-    }
-    var sideColDefault = 'minmax(0, max-content)';
     var wrap = document.querySelector('.license-notepads-wrap');
-    if (wrap && !isMobile) {
-        wrap.style.setProperty('--lic-split-creds-col', 'minmax(' + Math.ceil(desktopMaxW) + 'px, 1fr)');
-        wrap.style.setProperty('--lic-split-side-col', sideColDefault);
-    } else if (wrap && isMobile) {
+    if (wrap) {
         wrap.style.removeProperty('--lic-split-creds-col');
         wrap.style.removeProperty('--lic-split-side-col');
+    }
+
+    /* Móvil: columnas fluidas (CSS). No fijar px — eso deja el hueco negro a la derecha. */
+    if (isMobile) {
+        document
+            .querySelectorAll(
+                '#adminLicenciasLicenseSplitRoot, #licenseAllDaysContainer .day-license-split-root, #adminLicenciasSuspendedSplitRoot, #adminLicenciasExpiredSplitRoot'
+            )
+            .forEach(function (root) {
+                var grid = root.querySelector('.license-split-editor__grid');
+                if (grid) {
+                    grid.style.removeProperty('--lic-split-creds-col');
+                    grid.style.removeProperty('--lic-split-side-col');
+                    grid.style.removeProperty('width');
+                    grid.style.removeProperty('min-width');
+                    grid.style.removeProperty('max-width');
+                }
+                root.style.removeProperty('--lic-split-creds-col');
+                root.style.removeProperty('--lic-split-side-col');
+                delete root.dataset.licCredsColW;
+            });
+        return;
+    }
+
+    var desktopMaxW = 96;
+    var mainTa = document.getElementById('adminLicenciasNotepadByLicense');
+    if (mainTa) {
+        desktopMaxW = Math.max(desktopMaxW, licenseSplitMeasureCredsTaContentWidthPx(mainTa));
+    }
+    document.querySelectorAll('#licenseAllDaysContainer .day-license-split-root .license-split-editor__creds').forEach(function (ta) {
+        if (!ta) return;
+        desktopMaxW = Math.max(desktopMaxW, licenseSplitMeasureCredsTaContentWidthPx(ta));
+    });
+    if (wrap) {
+        wrap.style.setProperty('--lic-split-creds-col', 'minmax(' + Math.ceil(desktopMaxW) + 'px, 1fr)');
+        wrap.style.setProperty('--lic-split-side-col', 'minmax(0, 1fr)');
     }
 
     /* Mismo diseño en todos los blocs (Licencias, Días, Caídas, Vencidas):
@@ -17073,7 +17103,7 @@ function adminLicSyncCredsColumnWidthsFromContent() {
                 /* Columna fija en px: el max-content del grid no se infla con el ancho
                    intrínseco del textarea; la derecha (minmax(0,1fr) en CSS) absorbe el hueco. */
                 grid.style.setProperty('--lic-split-creds-col', w + 'px');
-                grid.style.removeProperty('--lic-split-side-col');
+                grid.style.setProperty('--lic-split-side-col', 'minmax(0, 1fr)');
                 grid.style.removeProperty('width');
                 grid.style.removeProperty('min-width');
                 grid.style.removeProperty('max-width');
@@ -17221,12 +17251,22 @@ function adminLicenseShowLimitNormalize(val) {
     return 'all';
 }
 
+function adminLicenseShowLimitApplyToDayRoots(val) {
+    var container = document.getElementById('licenseAllDaysContainer');
+    if (!container) return;
+    var viz = adminLicenseShowLimitNormalize(val);
+    container.querySelectorAll('.day-license-split-root').forEach(function (dayRoot) {
+        dayRoot.setAttribute('data-license-viz', viz);
+    });
+}
+
 function adminLicenseShowLimitApply() {
     var sel = document.getElementById('adminLicenciasLicenseShowSelect');
     var root = document.getElementById('adminLicenciasLicenseSplitRoot');
     if (!root) return;
     var val = adminLicenseShowLimitNormalize(sel ? sel.value : adminLicenseShowLimitReadStored());
     root.setAttribute('data-license-viz', val);
+    adminLicenseShowLimitApplyToDayRoots(val);
     try {
         localStorage.setItem(ADMIN_LICENSE_SHOW_LIMIT_KEY, val);
     } catch (e) {
@@ -17247,6 +17287,7 @@ function adminLicenseShowLimitSyncUi() {
         sel.value = val;
     }
     root.setAttribute('data-license-viz', val);
+    adminLicenseShowLimitApplyToDayRoots(val);
 }
 
 window.adminLicenseShowLimitApply = adminLicenseShowLimitApply;
@@ -19481,8 +19522,13 @@ async function adminCustomerRenewalSplitSellRowToDay(row, opts) {
 
     const container = document.getElementById('licenseAllDaysContainer');
     const dayRoot =
-        container &&
-        container.querySelector(`.day-license-split-root[data-day="${day}"][data-license-id="${licenseId}"]`);
+        (typeof adminLicQueryOrMountDayRoot === 'function'
+            ? adminLicQueryOrMountDayRoot(licenseId, day)
+            : null) ||
+        (container &&
+            container.querySelector(
+                `.day-license-split-root[data-day="${day}"][data-license-id="${licenseId}"]`
+            ));
     if (!dayRoot) {
         showError('No se encontró el bloc del día ' + day + '.');
         return false;
@@ -19862,7 +19908,21 @@ function captureDayTextsForLicense(licenseId) {
             texts[d] = dayLicenseSplitGetMergedText(root);
         } else {
             const st = loadDayDraftLocal(licenseId, d);
-            texts[d] = st !== null ? st : '';
+            if (st !== null) {
+                texts[d] = st;
+            } else if (
+                __adminLicDaysLazyMeta &&
+                __adminLicDaysLazyMeta.licenseId === licenseId &&
+                __adminLicDaysLazyMeta.byDay &&
+                __adminLicDaysLazyMeta.byDay[d] &&
+                __adminLicDaysLazyMeta.byDay[d].textToApply != null
+            ) {
+                texts[d] = __adminLicDaysLazyMeta.byDay[d].textToApply;
+            } else if (typeof buildServerPlainForDay === 'function') {
+                texts[d] = buildServerPlainForDay(licenseId, d);
+            } else {
+                texts[d] = '';
+            }
         }
     }
     return texts;
@@ -20469,7 +20529,7 @@ async function loadAllDaysSoldAccounts(licenseId) {
         });
     }
 
-    // Generar HTML para todos los días del 1 al 31 (siempre mostrar todos)
+    // Cabeceras 1–31 siempre; el split editor se monta solo al expandir (lazy).
     let allDaysHtml = '';
     for (let mi = 0; mi < dayMetaList.length; mi++) {
         const meta = dayMetaList[mi];
@@ -20479,7 +20539,7 @@ async function loadAllDaysSoldAccounts(licenseId) {
             lineCount === 1 ? '1 línea' : lineCount + ' líneas';
         const day1ToolbarHtml = day === 1 ? daysToolbarD1ExpandHtml + daysToolbarD1EyesHtml : '';
         allDaysHtml += `
-            <section class="day-section admin-licencias-bloc admin-licencias-bloc--day" data-day="${day}" aria-label="Día ${day}">
+            <section class="day-section admin-licencias-bloc admin-licencias-bloc--day collapsed" data-day="${day}" aria-label="Día ${day}">
                 <div class="day-section-header admin-licencias-bloc-header">
                     <span class="admin-licencias-bloc-title"><i class="fas fa-calendar-day" aria-hidden="true"></i> <span>Día ${day}</span></span>
                     <div class="admin-licencias-bloc-header-actions user-lic-day-header-actions">
@@ -20492,45 +20552,23 @@ async function loadAllDaysSoldAccounts(licenseId) {
                         <span class="admin-licencias-report-header-badge js-admin-day-report-badge" data-day="${day}" hidden role="status" aria-live="polite" aria-label="Sin reportes pendientes en el día ${day}">Reportes <span class="admin-licencias-report-header-badge__num">0</span></span>
                     </div>
                 </div>
-                <div class="day-accounts-list">
-                    <div class="license-split-editor license-split-editor--day day-license-split-root day-account-item admin-licencias-license-editable license-notepad--locked license-split-editor--notes-hidden" data-day="${day}" data-license-id="${licenseId}" data-license-viz="all" tabindex="-1" role="region" aria-label="Día ${day}: credenciales a la izquierda; usuario, estados verde y rojo, y notas a la derecha.">
-                        <div class="license-split-editor__viewport">
-                            <div class="license-split-editor__grid">
-                                <div class="license-split-editor__creds-cell">
-                                    <textarea id="adminLicDayCreds-${licenseId}-${day}" name="admin_lic_day_creds_${licenseId}_${day}" class="admin-licencias-notepad-textarea license-split-editor__creds day-license-split__creds" rows="1" spellcheck="true" wrap="off" autocomplete="off" readonly data-day="${day}" aria-label="Día ${day}: una licencia por línea." placeholder="Una por línea."></textarea>
-                                </div>
-                                <div class="license-split-editor__side" aria-label="Usuario, estados verde y rojo, y notas (día ${day})">
-                                    <div class="license-split-editor__rows day-license-split-rows" role="region" aria-label="Filas del día ${day}: usuario, estados verde y rojo, y notas"></div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
+                <div class="day-accounts-list" data-day-lazy="1"></div>
             </section>
         `;
     }
     
     allDaysContainer.innerHTML = allDaysHtml;
 
-    const dayRootsByNum = new Map();
-    allDaysContainer
-        .querySelectorAll('.day-license-split-root[data-license-id="' + String(licenseId) + '"]')
-        .forEach(function (root) {
-            const d = parseInt(root.dataset.day, 10);
-            if (Number.isFinite(d)) {
-                dayRootsByNum.set(d, root);
-            }
-        });
-
-    const bulkApplyOpts = { skipPostAutosize: true };
+    const lazyByDay = Object.create(null);
     for (let mi = 0; mi < dayMetaList.length; mi++) {
         const meta = dayMetaList[mi];
-        if (!meta.hasContent) continue;
-        const root = dayRootsByNum.get(meta.day);
-        if (root) {
-            dayLicenseSplitApplyMergedText(root, meta.textToApply, bulkApplyOpts);
-        }
+        lazyByDay[meta.day] = {
+            textToApply: meta.textToApply,
+            lineCount: meta.lineCount,
+            hasContent: meta.hasContent,
+        };
     }
+    __adminLicDaysLazyMeta = { licenseId: licenseId, byDay: lazyByDay };
 
     __adminLicLastDaysRenderKey = daysRenderKey;
     __adminLicLastDaysRenderLicenseId = licenseId;
@@ -20554,6 +20592,9 @@ async function loadAllDaysSoldAccounts(licenseId) {
     
     // Agregar event listeners para contraer/expandir días
     setupDaySectionsToggle(licenseId);
+
+    /* Solo montar editores de días ya expandidos (prefs); el resto queda lazy. */
+    adminLicMountExpandedDayEditors(licenseId);
 
     try {
         if (typeof adminDaysHideRestoreColSyncUi === 'function') {
@@ -20579,9 +20620,6 @@ async function loadAllDaysSoldAccounts(licenseId) {
         adminLicLogError('adminDaysHideNotesColSyncUi:', daysNotesErr);
     }
     
-    // Un bloc por día (como notas): borrar línea = borrar cuenta al guardar
-    setupEditableDayAccounts(licenseId);
-    
     refreshDuplicateEmailHighlights(licenseId);
     
     // Aplicar resaltado de búsqueda si hay un término activo
@@ -20604,7 +20642,10 @@ async function loadAllDaysSoldAccounts(licenseId) {
         } else if (typeof adminLicSyncCredsColumnWidthsFromContent === 'function') {
             adminLicSyncCredsColumnWidthsFromContent();
         }
-        dayRootsByNum.forEach(function (root) {
+        const mountedRoots = document.querySelectorAll(
+            '#licenseAllDaysContainer .day-license-split-root[data-day-mounted="1"]'
+        );
+        mountedRoots.forEach(function (root) {
             if (root && typeof dayLicenseSplitAutosizeCreds === 'function') {
                 dayLicenseSplitAutosizeCreds(root);
             }
@@ -20622,9 +20663,186 @@ async function loadAllDaysSoldAccounts(licenseId) {
     }
 }
 
+function adminLicDayEditorShellHtml(licenseId, day, viz) {
+    const vizSafe = adminLicenseShowLimitNormalize(viz);
+    return (
+        '<div class="license-split-editor license-split-editor--day day-license-split-root day-account-item admin-licencias-license-editable license-notepad--locked license-split-editor--notes-hidden" data-day="' +
+        day +
+        '" data-license-id="' +
+        licenseId +
+        '" data-license-viz="' +
+        vizSafe +
+        '" tabindex="-1" role="region" aria-label="Día ' +
+        day +
+        ': credenciales a la izquierda; usuario, estados verde y rojo, y notas a la derecha.">' +
+        '<div class="license-split-editor__viewport">' +
+        '<div class="license-split-editor__grid">' +
+        '<div class="license-split-editor__creds-cell">' +
+        '<textarea id="adminLicDayCreds-' +
+        licenseId +
+        '-' +
+        day +
+        '" name="admin_lic_day_creds_' +
+        licenseId +
+        '_' +
+        day +
+        '" class="admin-licencias-notepad-textarea license-split-editor__creds day-license-split__creds" rows="1" spellcheck="true" wrap="off" autocomplete="off" readonly data-day="' +
+        day +
+        '" aria-label="Día ' +
+        day +
+        ': una licencia por línea." placeholder="Una por línea."></textarea>' +
+        '</div>' +
+        '<div class="license-split-editor__side" aria-label="Usuario, estados verde y rojo, y notas (día ' +
+        day +
+        ')">' +
+        '<div class="license-split-editor__rows day-license-split-rows" role="region" aria-label="Filas del día ' +
+        day +
+        ': usuario, estados verde y rojo, y notas"></div>' +
+        '</div>' +
+        '</div>' +
+        '</div>' +
+        '</div>'
+    );
+}
+
+/**
+ * Monta el split editor de un día solo cuando se necesita (expandir).
+ * @returns {HTMLElement|null} root montado
+ */
+function adminLicEnsureDayEditorMounted(licenseId, dayOrSection) {
+    let section = null;
+    if (dayOrSection && dayOrSection.nodeType === 1) {
+        section = dayOrSection;
+    } else {
+        const dayNum = parseInt(dayOrSection, 10);
+        if (!Number.isFinite(dayNum)) return null;
+        section = document.querySelector(
+            '#licenseAllDaysContainer .day-section.admin-licencias-bloc--day[data-day="' + dayNum + '"]'
+        );
+    }
+    if (!section) return null;
+    const day = parseInt(section.dataset.day, 10);
+    if (!Number.isFinite(day)) return null;
+
+    let root = section.querySelector('.day-license-split-root');
+    if (root && root.dataset.dayMounted === '1') {
+        return root;
+    }
+
+    const list = section.querySelector('.day-accounts-list');
+    if (!list) return null;
+
+    const viz = adminLicenseShowLimitNormalize(
+        typeof adminLicenseShowLimitReadStored === 'function' ? adminLicenseShowLimitReadStored() : 'all'
+    );
+
+    if (!root) {
+        list.innerHTML = adminLicDayEditorShellHtml(licenseId, day, viz);
+        list.removeAttribute('data-day-lazy');
+        root = list.querySelector('.day-license-split-root');
+    }
+    if (!root) return null;
+
+    let textToApply = '';
+    if (__adminLicDaysLazyMeta && __adminLicDaysLazyMeta.licenseId === licenseId) {
+        const meta = __adminLicDaysLazyMeta.byDay[day];
+        if (meta && meta.textToApply != null) {
+            textToApply = meta.textToApply;
+        }
+    }
+    dayLicenseSplitApplyMergedText(root, textToApply, { skipPostAutosize: true });
+    root.dataset.dayMounted = '1';
+    root.setAttribute('data-license-viz', viz);
+
+    if (typeof setupEditableDayAccountsOne === 'function') {
+        setupEditableDayAccountsOne(licenseId, root);
+    }
+
+    try {
+        if (typeof adminDaysHideRestoreColSyncUi === 'function') {
+            adminDaysHideRestoreColSyncUi();
+        }
+        if (typeof adminDaysHideStatusColSyncUi === 'function') {
+            adminDaysHideStatusColSyncUi(licenseId);
+        }
+        if (typeof adminDaysHideNotesColSyncUi === 'function') {
+            adminDaysHideNotesColSyncUi();
+        }
+    } catch (_prefErr) {
+        /* ignore */
+    }
+
+    if (typeof dayLicenseSplitAutosizeCreds === 'function') {
+        dayLicenseSplitAutosizeCreds(root);
+    }
+
+    const searchInput = document.getElementById('adminStoreSearch');
+    if (searchInput && searchInput.value.trim() && typeof highlightMatchingEmails === 'function') {
+        highlightMatchingEmails(searchInput.value.toLowerCase().trim());
+    }
+    if (typeof refreshDuplicateEmailHighlights === 'function') {
+        refreshDuplicateEmailHighlights(licenseId);
+    }
+
+    return root;
+}
+
+function adminLicMountExpandedDayEditors(licenseId) {
+    const sections = document.querySelectorAll(
+        '#licenseAllDaysContainer .day-section.admin-licencias-bloc--day:not(.collapsed)'
+    );
+    sections.forEach(function (section) {
+        adminLicEnsureDayEditorMounted(licenseId, section);
+    });
+}
+
+/** Monta varios días en tandas (p. ej. «desplegar todos») para no congelar el UI. */
+function adminLicMountDayEditorsChunked(licenseId, dayList, onDone) {
+    const days = Array.isArray(dayList) ? dayList.slice() : [];
+    let i = 0;
+    function step() {
+        const end = Math.min(i + 4, days.length);
+        for (; i < end; i += 1) {
+            adminLicEnsureDayEditorMounted(licenseId, days[i]);
+        }
+        if (i < days.length) {
+            window.requestAnimationFrame(step);
+        } else if (typeof onDone === 'function') {
+            onDone();
+        }
+    }
+    if (!days.length) {
+        if (typeof onDone === 'function') onDone();
+        return;
+    }
+    step();
+}
+
+window.adminLicEnsureDayEditorMounted = adminLicEnsureDayEditorMounted;
+window.adminLicMountExpandedDayEditors = adminLicMountExpandedDayEditors;
+
+/** Obtiene el root del día; si aún no existe (lazy), lo monta. */
+function adminLicQueryOrMountDayRoot(licenseId, day) {
+    const dayNum = parseInt(day, 10);
+    if (!Number.isFinite(dayNum) || licenseId == null) return null;
+    const container = document.getElementById('licenseAllDaysContainer');
+    if (!container) return null;
+    let root = container.querySelector(
+        '.day-license-split-root[data-day="' +
+            dayNum +
+            '"][data-license-id="' +
+            String(licenseId) +
+            '"]'
+    );
+    if (root) return root;
+    return adminLicEnsureDayEditorMounted(licenseId, dayNum);
+}
+
+window.adminLicQueryOrMountDayRoot = adminLicQueryOrMountDayRoot;
+
 // Configurar el toggle de contraer/expandir para secciones de días
 function setupDaySectionsToggle(licenseId) {
-    const daySections = document.querySelectorAll('#licenseAllDaysContainer .day-section');
+    const daySections = document.querySelectorAll('#licenseAllDaysContainer .day-section.admin-licencias-bloc--day');
     
     daySections.forEach(section => {
         const header = section.querySelector('.day-section-header');
@@ -20653,6 +20871,10 @@ function setupDaySectionsToggle(licenseId) {
                 section.classList.toggle('collapsed');
                 const isCollapsed = section.classList.contains('collapsed');
 
+                if (!isCollapsed) {
+                    adminLicEnsureDayEditorMounted(licenseId, section);
+                }
+
                 licenciasUiAdminDayCollapsedWrite(licenseId, day, isCollapsed);
                 try {
                     if (typeof adminDaysSyncExpandAllToolbarBtn === 'function') {
@@ -20675,10 +20897,11 @@ function restoreDaySectionsState(licenseId) {
         const accountsList = section.querySelector('.day-accounts-list');
         const savedState = licenciasUiAdminDayCollapsedRead(licenseId, day);
 
-        if (savedState === 'true' && accountsList) {
-            section.classList.add('collapsed');
-        } else if (savedState === 'false' && accountsList) {
+        if (savedState === 'false' && accountsList) {
             section.classList.remove('collapsed');
+        } else if (accountsList) {
+            // Por defecto contraído (también si no hay preferencia guardada)
+            section.classList.add('collapsed');
         }
     });
 }
@@ -20727,7 +20950,9 @@ function adminDaysSyncExpandAllToolbarBtn() {
 function adminDaysToggleAllDaySections() {
     const licenseId = adminDaysToolbarActiveLicenseId();
     if (licenseId == null) return;
-    const sections = document.querySelectorAll('#licenseAllDaysContainer .day-section');
+    const sections = document.querySelectorAll(
+        '#licenseAllDaysContainer .day-section.admin-licencias-bloc--day'
+    );
     if (!sections.length) return;
     let anyExpanded = false;
     sections.forEach(function (section) {
@@ -20736,6 +20961,7 @@ function adminDaysToggleAllDaySections() {
         }
     });
     const collapseAll = anyExpanded;
+    const daysToMount = [];
     sections.forEach(function (section) {
         const accountsList = section.querySelector('.day-accounts-list');
         const day = section.dataset.day;
@@ -20746,9 +20972,15 @@ function adminDaysToggleAllDaySections() {
         } else {
             section.classList.remove('collapsed');
             licenciasUiAdminDayCollapsedWrite(licenseId, day, false);
+            daysToMount.push(day);
         }
     });
     adminDaysSyncExpandAllToolbarBtn();
+    if (!collapseAll && daysToMount.length) {
+        adminLicMountDayEditorsChunked(licenseId, daysToMount, function () {
+            scheduleAdminLicExpiryRefreshAllVisibleDayRows();
+        });
+    }
 }
 
 window.adminDaysSyncExpandAllToolbarBtn = adminDaysSyncExpandAllToolbarBtn;
@@ -20856,8 +21088,8 @@ function restoreLicenseBlocState(licenseId) {
         licenseId != null
             ? adminLicGetBlocPrefCollapsed('license_collapsed', licenseId, licenseBlocStorageKey)
             : null;
-    /* Por defecto expandido; solo pliega si el usuario lo dejó plegado para este producto. */
-    const collapsed = saved === 'true';
+    /* Por defecto contraído; solo expandido si el usuario lo dejó abierto. */
+    const collapsed = saved !== 'false';
     section.classList.toggle('collapsed', collapsed);
     body.style.display = collapsed ? 'none' : 'block';
     if (!collapsed && typeof adminLicSyncCredsColumnWidthsFromContent === 'function') {
@@ -20900,14 +21132,15 @@ function restoreCustomerRenewalBlocState(licenseId) {
     const section = document.getElementById('adminLicenciasBlocCustomerRenewal');
     if (!section || section.classList.contains('d-none')) return;
     if (licenseId == null || String(licenseId) === String(AGGREGATE_LICENSE_ID)) {
-        section.classList.remove('collapsed');
+        section.classList.add('collapsed');
         return;
     }
     const saved = adminLicGetBlocPrefCollapsed('customer_renewal_collapsed', licenseId);
-    if (saved === 'true') {
-        section.classList.add('collapsed');
-    } else {
+    // Por defecto contraído
+    if (saved === 'false') {
         section.classList.remove('collapsed');
+    } else {
+        section.classList.add('collapsed');
     }
 }
 
@@ -20945,12 +21178,13 @@ function restoreSuspendedSectionState(licenseId) {
     const body = section && section.querySelector('.suspended-section-body');
     if (!section || !body) return;
     let saved = adminLicGetBlocPrefCollapsed('suspended_collapsed', licenseId, suspendedSectionStorageKey);
-    if (saved === 'true') {
-        section.classList.add('collapsed');
-        body.style.display = 'none';
-    } else {
+    // Por defecto contraído
+    if (saved === 'false') {
         section.classList.remove('collapsed');
         body.style.display = 'block';
+    } else {
+        section.classList.add('collapsed');
+        body.style.display = 'none';
     }
 }
 
@@ -20988,12 +21222,13 @@ function restoreExpiredSectionState(licenseId) {
     const body = section && section.querySelector('.expired-section-body');
     if (!section || !body) return;
     let saved = adminLicGetBlocPrefCollapsed('expired_collapsed', licenseId, expiredSectionStorageKey);
-    if (saved === 'true') {
-        section.classList.add('collapsed');
-        body.style.display = 'none';
-    } else {
+    // Por defecto contraído
+    if (saved === 'false') {
         section.classList.remove('collapsed');
         body.style.display = 'block';
+    } else {
+        section.classList.add('collapsed');
+        body.style.display = 'none';
     }
 }
 
@@ -21006,128 +21241,163 @@ function isDayNotepadUnlocked(item) {
 }
 
 /** Mismo modelo que Licencias (split): textarea de creds + filas; clic para desbloquear. */
-function setupEditableDayAccounts(licenseId) {
-    const daysWrap = document.getElementById('licenseAllDaysContainer');
-    if (!daysWrap) return;
+function setupEditableDayAccountsOne(licenseId, root) {
+    if (!root || root.dataset.dayWired === '1') return;
     const lidStr = String(licenseId);
-    daysWrap.querySelectorAll('.day-license-split-root').forEach((root) => {
-        if (String(root.dataset.licenseId || '') !== lidStr) return;
-        const ta = dayLicenseSplitQueryCredsTa(root);
-        const rowsWrap = dayLicenseSplitQueryRowsWrap(root);
-        if (!ta || !rowsWrap) return;
+    if (String(root.dataset.licenseId || '') !== lidStr) return;
+    const ta = dayLicenseSplitQueryCredsTa(root);
+    const rowsWrap = dayLicenseSplitQueryRowsWrap(root);
+    if (!ta || !rowsWrap) return;
 
-        const day = parseInt(root.dataset.day, 10) || new Date().getDate();
-        dayLicenseSplitWireScrollSync(root);
+    const day = parseInt(root.dataset.day, 10) || new Date().getDate();
+    dayLicenseSplitWireScrollSync(root);
 
-        let saveTimeout;
-        let normalizeInputTimeout;
-        let isSaving = false;
-        let lastSyncedText = dayLicenseSplitGetMergedText(root).trim();
+    let saveTimeout;
+    let isSaving = false;
+    let lastSyncedText = dayLicenseSplitGetMergedText(root).trim();
 
-        const sectionEl = root.closest('.day-section');
-        const undoBtn = sectionEl ? sectionEl.querySelector(`.js-day-undo[data-day="${day}"]`) : null;
-        const redoBtn = sectionEl ? sectionEl.querySelector(`.js-day-redo[data-day="${day}"]`) : null;
+    const sectionEl = root.closest('.day-section');
+    const undoBtn = sectionEl ? sectionEl.querySelector(`.js-day-undo[data-day="${day}"]`) : null;
+    const redoBtn = sectionEl ? sectionEl.querySelector(`.js-day-redo[data-day="${day}"]`) : null;
 
-        dayLicenseSplitLock(root);
+    dayLicenseSplitLock(root);
 
-        // Eliminado saveDayDraftLocal aquí: si se guarda el borrador al inicializar,
-        // congela el estado y bloquea las actualizaciones en tiempo real (polling).
-        
-        const runSync = async function () {
-            if (!root.isConnected || isSaving) return;
-            const text = dayLicenseSplitGetMergedText(root);
-            const t = text.trim();
-            if (t === lastSyncedText) {
-                clearDayDraftLocal(licenseId, day);
-                return;
-            }
-            isSaving = true;
-            try {
-                await syncDayNotepad(licenseId, day, text);
-                lastSyncedText = t;
-            } catch (err) {
-                adminLicLogError('Error al sincronizar día:', err);
-            } finally {
-                isSaving = false;
-            }
-        };
+    // Eliminado saveDayDraftLocal aquí: si se guarda el borrador al inicializar,
+    // congela el estado y bloquea las actualizaciones en tiempo real (polling).
 
-        if (window.AdminLicenciasUndoCore && typeof window.AdminLicenciasUndoCore.attach === 'function') {
-            window.AdminLicenciasUndoCore.attach(root, {
-                listenElement: root,
-                useFocusOutDelegate: true,
-                getPlainText: function () {
-                    return dayLicenseSplitGetMergedText(root);
-                },
-                setPlainText: function (text) {
-                    dayLicenseSplitApplyMergedText(root, text != null ? text : '');
-                    lastSyncedText = dayLicenseSplitGetMergedText(root).trim();
-                },
-                undoBtn: undoBtn,
-                redoBtn: redoBtn,
-                onPersist: function () {
-                    const text = dayLicenseSplitGetMergedText(root);
-                    saveDayDraftLocal(licenseId, day, text);
-                    lastSyncedText = text.trim();
-                    clearTimeout(saveTimeout);
-                    syncDayNotepad(licenseId, day, text).catch(function (err) {
-                        adminLicLogError('Error al sincronizar día (undo/redo):', err);
-                    });
-                },
-                afterVisual: function () {
-                    if (licenseId != null && typeof window.refreshDuplicateEmailHighlights === 'function') {
-                        window.refreshDuplicateEmailHighlights(licenseId);
-                    }
-                    dayLicenseSplitScheduleAutosize(root);
-                    if (typeof updateAdminDaySectionLineCountBadge === 'function') {
-                        updateAdminDaySectionLineCountBadge(sectionEl);
-                    }
-                }
-            });
+    const runSync = async function () {
+        if (!root.isConnected || isSaving) return;
+        const text = dayLicenseSplitGetMergedText(root);
+        const t = text.trim();
+        if (t === lastSyncedText) {
+            clearDayDraftLocal(licenseId, day);
+            return;
         }
-
-        if (typeof ResizeObserver !== 'undefined' && rowsWrap.dataset.dayResizeObs !== '1') {
-            rowsWrap.dataset.dayResizeObs = '1';
-            const ro = new ResizeObserver(function () {
-                dayLicenseSplitAutosizeCreds(root);
-            });
-            ro.observe(rowsWrap);
+        isSaving = true;
+        try {
+            await syncDayNotepad(licenseId, day, text);
+            lastSyncedText = t;
+        } catch (err) {
+            adminLicLogError('Error al sincronizar día:', err);
+        } finally {
+            isSaving = false;
         }
+    };
 
-        root.addEventListener(
-            'mousedown',
-            function (e) {
-                if (!root.classList.contains('license-notepad--locked')) return;
-                if (typeof licenseSplitHandleLockedMousedown === 'function') {
-                    licenseSplitHandleLockedMousedown(e, ta, function () {
-                        dayLicenseSplitUnlock(root);
-                    }, root);
-                }
+    if (window.AdminLicenciasUndoCore && typeof window.AdminLicenciasUndoCore.attach === 'function') {
+        window.AdminLicenciasUndoCore.attach(root, {
+            listenElement: root,
+            useFocusOutDelegate: true,
+            getPlainText: function () {
+                return dayLicenseSplitGetMergedText(root);
             },
-            true
-        );
+            setPlainText: function (text) {
+                dayLicenseSplitApplyMergedText(root, text != null ? text : '');
+                lastSyncedText = dayLicenseSplitGetMergedText(root).trim();
+            },
+            undoBtn: undoBtn,
+            redoBtn: redoBtn,
+            onPersist: function () {
+                const text = dayLicenseSplitGetMergedText(root);
+                saveDayDraftLocal(licenseId, day, text);
+                lastSyncedText = text.trim();
+                clearTimeout(saveTimeout);
+                syncDayNotepad(licenseId, day, text).catch(function (err) {
+                    adminLicLogError('Error al sincronizar día (undo/redo):', err);
+                });
+            },
+            afterVisual: function () {
+                if (licenseId != null && typeof window.refreshDuplicateEmailHighlights === 'function') {
+                    window.refreshDuplicateEmailHighlights(licenseId);
+                }
+                dayLicenseSplitScheduleAutosize(root);
+                if (typeof updateAdminDaySectionLineCountBadge === 'function') {
+                    updateAdminDaySectionLineCountBadge(sectionEl);
+                }
+            }
+        });
+    }
 
-        ta.addEventListener(
-            'beforeinput',
-            function (e) {
-                if (ta.readOnly) {
+    if (typeof ResizeObserver !== 'undefined' && rowsWrap.dataset.dayResizeObs !== '1') {
+        rowsWrap.dataset.dayResizeObs = '1';
+        const ro = new ResizeObserver(function () {
+            dayLicenseSplitAutosizeCreds(root);
+        });
+        ro.observe(rowsWrap);
+    }
+
+    root.addEventListener(
+        'mousedown',
+        function (e) {
+            if (!root.classList.contains('license-notepad--locked')) return;
+            if (typeof licenseSplitHandleLockedMousedown === 'function') {
+                licenseSplitHandleLockedMousedown(e, ta, function () {
+                    dayLicenseSplitUnlock(root);
+                }, root);
+            }
+        },
+        true
+    );
+
+    ta.addEventListener(
+        'beforeinput',
+        function (e) {
+            if (ta.readOnly) {
+                e.preventDefault();
+            }
+        },
+        true
+    );
+    ta.addEventListener(
+        'paste',
+        function (e) {
+            if (ta.readOnly) {
+                e.preventDefault();
+                e.stopPropagation();
+            }
+        },
+        true
+    );
+
+    function onFieldInput() {
+        clearTimeout(saveTimeout);
+        const currentText = dayLicenseSplitGetMergedText(root);
+        if (currentText.trim() === lastSyncedText) {
+            clearDayDraftLocal(licenseId, day);
+        } else {
+            saveDayDraftLocal(licenseId, day, currentText);
+        }
+        if (typeof updateAdminDaySectionLineCountBadge === 'function') {
+            updateAdminDaySectionLineCountBadge(sectionEl);
+        }
+        saveTimeout = setTimeout(function () {
+            if (!root.isConnected) return;
+            runSync();
+        }, 500);
+        if (typeof window.scheduleRefreshAdminDupIfActive === 'function') {
+            window.scheduleRefreshAdminDupIfActive();
+        }
+    }
+
+    ta.addEventListener('input', function () {
+        dayLicenseSplitSyncRowsToTextarea(root);
+        onFieldInput();
+    });
+    rowsWrap.addEventListener('input', onFieldInput);
+    rowsWrap.addEventListener('change', onFieldInput);
+
+    ta.addEventListener('keydown', function (e) {
+        if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
             e.preventDefault();
-                }
-            },
-            true
-        );
-        ta.addEventListener(
-            'paste',
-            function (e) {
-                if (ta.readOnly) {
-                    e.preventDefault();
-                    e.stopPropagation();
-                }
-            },
-            true
-        );
+            clearTimeout(saveTimeout);
+            runSync();
+        }
+    });
 
-        function onFieldInput() {
+    root.addEventListener('focusout', function () {
+        window.setTimeout(function () {
+            const a = document.activeElement;
+            if (a && root.contains(a)) return;
             clearTimeout(saveTimeout);
             const currentText = dayLicenseSplitGetMergedText(root);
             if (currentText.trim() === lastSyncedText) {
@@ -21135,54 +21405,27 @@ function setupEditableDayAccounts(licenseId) {
             } else {
                 saveDayDraftLocal(licenseId, day, currentText);
             }
-            if (typeof updateAdminDaySectionLineCountBadge === 'function') {
-                updateAdminDaySectionLineCountBadge(sectionEl);
-            }
-            saveTimeout = setTimeout(function () {
-                if (!root.isConnected) return;
-                runSync();
-            }, 500);
+            runSync();
+            dayLicenseSplitLock(root);
+            flushPendingLoadAllDaysSoldAccounts();
             if (typeof window.scheduleRefreshAdminDupIfActive === 'function') {
                 window.scheduleRefreshAdminDupIfActive();
             }
-        }
+        }, 0);
+    });
 
-        ta.addEventListener('input', function () {
-            dayLicenseSplitSyncRowsToTextarea(root);
-            onFieldInput();
-        });
-        rowsWrap.addEventListener('input', onFieldInput);
-        rowsWrap.addEventListener('change', onFieldInput);
+    root.dataset.dayWired = '1';
+}
 
-        ta.addEventListener('keydown', function (e) {
-            if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
-                e.preventDefault();
-            clearTimeout(saveTimeout);
-                runSync();
-            }
-        });
-
-        root.addEventListener('focusout', function () {
-            window.setTimeout(function () {
-                const a = document.activeElement;
-                if (a && root.contains(a)) return;
-                clearTimeout(saveTimeout);
-                const currentText = dayLicenseSplitGetMergedText(root);
-                if (currentText.trim() === lastSyncedText) {
-                    clearDayDraftLocal(licenseId, day);
-                } else {
-                    saveDayDraftLocal(licenseId, day, currentText);
-                }
-                runSync();
-                dayLicenseSplitLock(root);
-                flushPendingLoadAllDaysSoldAccounts();
-                if (typeof window.scheduleRefreshAdminDupIfActive === 'function') {
-                    window.scheduleRefreshAdminDupIfActive();
-                }
-            }, 0);
-        });
+function setupEditableDayAccounts(licenseId) {
+    const daysWrap = document.getElementById('licenseAllDaysContainer');
+    if (!daysWrap) return;
+    daysWrap.querySelectorAll('.day-license-split-root').forEach(function (root) {
+        setupEditableDayAccountsOne(licenseId, root);
     });
 }
+
+window.setupEditableDayAccountsOne = setupEditableDayAccountsOne;
 
 // Configurar el campo de entrada para agregar correos vendidos
 function setupSoldAccountsInput(licenseId, day) {

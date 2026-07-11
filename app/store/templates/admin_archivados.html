@@ -5,7 +5,7 @@
 {% block head %}
   {{ super() }}
   <meta name="licenses-archive-mode" content="1">
-  <link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}?v=20260628-notes-hidden-fix-v1">
+  <link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}?v=20260710-mobile-lic-sym">
   <link rel="stylesheet" href="{{ url_for('static', filename='fontawesome/css/all.css') }}">
 {% endblock %}
 
@@ -17,7 +17,7 @@
         <i class="fas fa-arrow-left"></i>
       </a>
       <button type="button" id="licensesCollapseBtn" class="btn-blue menu-btn-worksheet licenses-collapse-btn licenses-collapse-btn--toolbar" title="Contraer o expandir licencias" aria-label="Contraer o expandir licencias">
-        <i class="fas fa-chevron-up" id="collapseIcon" aria-hidden="true"></i>
+        <i class="fas fa-chevron-down" id="collapseIcon" aria-hidden="true"></i>
       </button>
       <button type="button" id="btnRestaurarDesdeArchivo" class="btn-blue menu-btn-worksheet licenses-restore-archived-btn licenses-restore-archived-btn--toolbar" title="Volver a poner servicios en Licencias" aria-label="Restaurar productos en la plantilla Licencias">
         <i class="fas fa-folder-open" aria-hidden="true"></i>
@@ -35,7 +35,7 @@
   </div>
   
   <!-- Interfaz de Licencias -->
-  <div class="licencias-container" id="licenciasContainer">
+  <div class="licencias-container collapsed" id="licenciasContainer">
     <div class="licencias-content">
       <!-- Grid de Licencias -->
       <div id="licensesGrid" class="licenses-grid">
@@ -210,6 +210,6 @@
   <script src="{{ url_for('store_bp.static', filename='js/licencias_bootstrap.js') }}?v=20260628-notas-ocultas-default-v16" defer></script>
   <script src="{{ url_for('store_bp.static', filename='js/licencias_shared.js') }}?v=20260628-notas-ocultas-default-v16" defer></script>
   <script src="{{ url_for('store_bp.static', filename='js/admin_licencias_ui_prefs.js') }}?v=20260628-notas-ocultas-default-v16" defer></script>
-  <script src="{{ url_for('store_bp.static', filename='js/licencias.js') }}?v=20260628-notes-hidden-fix-v1" defer></script>
+  <script src="{{ url_for('store_bp.static', filename='js/licencias.js') }}?v=20260710-mobile-lic-sym" defer></script>
   <script src="{{ url_for('store_bp.static', filename='js/admin_licencias_notepad.js') }}?v=20260628-notas-ocultas-default-v16" defer></script>
 {% endblock %}

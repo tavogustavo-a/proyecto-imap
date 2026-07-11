@@ -2590,23 +2590,7 @@ def api_user_license_day_row_status():
             if account is not None:
                 account.password = new_password[:200]
 
-            texts_for_sync = [
-                license_row.license_notes or '',
-                getattr(license_row, 'suspended_notes', None) or '',
-                getattr(license_row, 'expired_notes', None) or '',
-                getattr(license_row, 'changes_notes', None) or '',
-            ]
-            raw_day_sy = getattr(license_row, 'day_notepads_json', None)
-            if raw_day_sy and str(raw_day_sy).strip():
-                try:
-                    dm_sy = _json.loads(raw_day_sy)
-                    if isinstance(dm_sy, dict):
-                        for v_sy in dm_sy.values():
-                            if v_sy:
-                                texts_for_sync.append(str(v_sy))
-                except Exception:
-                    pass
-            _sync_allowed_emails_from_license_admin_texts(texts_for_sync)
+            sync_allowed_emails_for_license(license_row)
 
             db.session.commit()
             return jsonify({'success': True, 'new_cred': new_cred})
@@ -2690,23 +2674,7 @@ def api_user_license_day_row_status():
 
         license_row.day_notepads_json = _json.dumps(day_map, ensure_ascii=False)
 
-        texts_for_sync = [
-            license_row.license_notes or '',
-            getattr(license_row, 'suspended_notes', None) or '',
-            getattr(license_row, 'expired_notes', None) or '',
-            getattr(license_row, 'changes_notes', None) or '',
-        ]
-        raw_day_sy = getattr(license_row, 'day_notepads_json', None)
-        if raw_day_sy and str(raw_day_sy).strip():
-            try:
-                dm_sy = _json.loads(raw_day_sy)
-                if isinstance(dm_sy, dict):
-                    for v_sy in dm_sy.values():
-                        if v_sy:
-                            texts_for_sync.append(str(v_sy))
-            except Exception:
-                pass
-        _sync_allowed_emails_from_license_admin_texts(texts_for_sync)
+        sync_allowed_emails_for_license(license_row)
 
         try:
             _ensure_user_portal_license_activity_log_column()
@@ -3360,19 +3328,18 @@ def _split_line_cred_notes_user_admin(line):
     return cred, after1[:i2].strip(), after1[i2 + 2 :].strip()
 
 
-_LICENSE_CRED_FIRST_EMAIL_RE = re.compile(r'\S+@\S+\.\S+')
+_LICENSE_CRED_FIRST_EMAIL_RE = None  # legacy name; usar normalize_allowed_email
 
 
-def _sync_allowed_emails_from_license_admin_texts(text_blocks):
+def _iter_license_client_email_pairs(text_blocks):
     """
-    Por cada línea con credencial y cliente (separadores \\x1f o legado //), toma el primer correo de la credencial
-    y lo añade a AllowedEmail del usuario principal cuyo username coincide con <cliente>.
-    Omite cliente vacío o 'anonimo'; no duplica filas existentes.
+    Yield (username_lower, email_lower) desde líneas admin
+    credencial \\x1f cliente \\x1f … (o legado //). Omite anonimo / sin correo.
+    Usa la misma normalización que el alta manual / API (AllowedEmail).
     """
-    from sqlalchemy import func
+    from app.utils.allowed_email import normalize_allowed_email
 
     seen = set()
-    added = 0
     for block in text_blocks:
         if not block or not str(block).strip():
             continue
@@ -3381,28 +3348,162 @@ def _sync_allowed_emails_from_license_admin_texts(text_blocks):
             ul = (client_part or '').strip()
             if not ul or ul.lower() == 'anonimo':
                 continue
-            m = _LICENSE_CRED_FIRST_EMAIL_RE.search((cred or '').strip())
-            if not m:
+            email = normalize_allowed_email(cred or '')
+            if not email:
                 continue
-            email = m.group(0).strip().lower()
-            if '@' not in email or '.' not in email:
-                continue
-            principal = User.query.filter(
-                User.parent_id.is_(None),
-                func.lower(User.username) == ul.lower(),
-            ).first()
-            if not principal:
-                continue
-            key = (principal.id, email)
+            key = (ul.lower(), email)
             if key in seen:
                 continue
             seen.add(key)
-            exists = AllowedEmail.query.filter_by(user_id=principal.id, email=email).first()
-            if exists:
-                continue
+            yield key[0], key[1]
+
+
+def _license_day_notepad_texts(license_row):
+    """Solo textos de Día 1–31 (consulta IMAP permitida)."""
+    out = []
+    raw = getattr(license_row, 'day_notepads_json', None)
+    if not raw or not str(raw).strip():
+        return out
+    try:
+        dm = json.loads(raw) if not isinstance(raw, dict) else raw
+    except Exception:
+        return out
+    if not isinstance(dm, dict):
+        return out
+    for day in range(1, 32):
+        v = dm.get(str(day), dm.get(day))
+        if v and str(v).strip():
+            out.append(str(v))
+    return out
+
+
+def _license_universe_notepad_texts(license_row):
+    """
+    Todos los blocs de la licencia donde puede aparecer un correo ligado a cliente.
+    Sirve para saber qué AllowedEmail vienen del panel Licencias (y poder podarlos
+    si ya no están en un Día 1–31).
+    """
+    texts = list(_license_day_notepad_texts(license_row))
+    for attr in (
+        'license_notes',
+        'suspended_notes',
+        'expired_notes',
+        'changes_notes',
+        'customer_renewal_notes',
+    ):
+        v = getattr(license_row, attr, None)
+        if v and str(v).strip():
+            texts.append(str(v))
+    return texts
+
+
+def _remove_allowed_email_from_principal_and_subusers(principal, email_lower):
+    """Quita el correo del usuario principal y de todos sus sub-usuarios."""
+    email_lower = (email_lower or '').strip().lower()
+    if not principal or not email_lower:
+        return 0
+    n = AllowedEmail.query.filter_by(user_id=principal.id, email=email_lower).delete(
+        synchronize_session=False
+    )
+    sub_ids = [sub.id for sub in getattr(principal, 'subusers', []) or []]
+    if sub_ids:
+        n += AllowedEmail.query.filter(
+            AllowedEmail.user_id.in_(sub_ids),
+            AllowedEmail.email == email_lower,
+        ).delete(synchronize_session=False)
+    return n
+
+
+def _reconcile_allowed_emails_for_usernames(usernames):
+    """
+    Reconcilia AllowedEmail para usuarios principales (username en usernames):
+    - Añade correos que estén en algún Día 1–31 ligados a ese username.
+    - Quita correos que aparezcan en el panel Licencias (días u otros blocs) pero
+      ya NO estén en ningún Día 1–31 (p. ej. pasaron a Cambios / Caídas / Vencidas).
+    - No toca correos solo manuales (nunca vistos en ningún bloc de licencias).
+    """
+    from collections import defaultdict
+    from sqlalchemy import func
+
+    from app.store.models import License
+
+    names = {
+        str(u).strip().lower()
+        for u in (usernames or [])
+        if u and str(u).strip() and str(u).strip().lower() != 'anonimo'
+    }
+    if not names:
+        return {'added': 0, 'removed': 0}
+
+    day_by_user = defaultdict(set)
+    universe_by_user = defaultdict(set)
+
+    q = License.query
+    for lic in q.all():
+        for uname, email in _iter_license_client_email_pairs(_license_day_notepad_texts(lic)):
+            if uname in names:
+                day_by_user[uname].add(email)
+        for uname, email in _iter_license_client_email_pairs(_license_universe_notepad_texts(lic)):
+            if uname in names:
+                universe_by_user[uname].add(email)
+
+    added = 0
+    removed = 0
+    for uname in names:
+        principal = User.query.filter(
+            User.parent_id.is_(None),
+            func.lower(User.username) == uname,
+        ).first()
+        if not principal:
+            continue
+        desired = day_by_user.get(uname, set())
+        universe = universe_by_user.get(uname, set())
+        actual = {
+            str(ae.email or '').strip().lower()
+            for ae in AllowedEmail.query.filter_by(user_id=principal.id).all()
+            if ae.email
+        }
+        for email in desired - actual:
             db.session.add(AllowedEmail(user_id=principal.id, email=email))
             added += 1
-    return added
+        for email in (actual & universe) - desired:
+            removed += _remove_allowed_email_from_principal_and_subusers(principal, email)
+    return {'added': added, 'removed': removed}
+
+
+def _usernames_from_license_texts(license_row):
+    names = set()
+    for uname, _email in _iter_license_client_email_pairs(_license_universe_notepad_texts(license_row)):
+        names.add(uname)
+    return names
+
+
+def _sync_allowed_emails_from_license_admin_texts(text_blocks):
+    """
+    Compatibilidad: interpreta text_blocks como días activos y reconcilia
+    los usernames encontrados (añade días / poda si ya no están en días).
+    Preferir sync_allowed_emails_for_license(license_row).
+    """
+    names = {uname for uname, _e in _iter_license_client_email_pairs(text_blocks)}
+    if not names:
+        return 0
+    stats = _reconcile_allowed_emails_for_usernames(names)
+    return int(stats.get('added') or 0)
+
+
+def sync_allowed_emails_for_license(license_row):
+    """
+    Tras guardar una licencia: solo correos en Día 1–31 ligados al username
+    quedan consultables; si pasaron a Cambios/Caídas/Vencidas se quitan
+    (también de sub-usuarios). Los correos manuales del admin no se tocan.
+    """
+    if not license_row:
+        return {'added': 0, 'removed': 0}
+    names = _usernames_from_license_texts(license_row)
+    # También usernames solo en días (por si universe vacío tras borrar laterales)
+    for uname, _e in _iter_license_client_email_pairs(_license_day_notepad_texts(license_row)):
+        names.add(uname)
+    return _reconcile_allowed_emails_for_usernames(names)
 
 
 _LICENSE_LINE_FIELD_SEP = '\x1f'
@@ -4754,24 +4855,7 @@ def api_put_license_notes(license_id):
             or 'customer_renewal_notes' in data
             or ('day_notepads' in data and isinstance(data.get('day_notepads'), dict))
         ):
-            texts_for_sync = [
-                license_obj.license_notes or '',
-                license_obj.suspended_notes or '',
-                getattr(license_obj, 'expired_notes', None) or '',
-                getattr(license_obj, 'changes_notes', None) or '',
-                getattr(license_obj, 'customer_renewal_notes', None) or '',
-            ]
-            raw_day = getattr(license_obj, 'day_notepads_json', None)
-            if raw_day and str(raw_day).strip():
-                try:
-                    dm = _json.loads(raw_day)
-                    if isinstance(dm, dict):
-                        for v in dm.values():
-                            if v:
-                                texts_for_sync.append(str(v))
-                except Exception:
-                    pass
-            _sync_allowed_emails_from_license_admin_texts(texts_for_sync)
+            sync_allowed_emails_for_license(license_obj)
 
         inv_sync_result = None
         if 'license_notes' in data:

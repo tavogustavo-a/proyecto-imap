@@ -348,25 +348,30 @@ async function guardarCambiosProductos() {
 
 // Configurar botón de contraer/expandir
 function setupCollapseButton() {
-    const collapseBtn = document.getElementById('archivedCollapseBtn');
-    const collapseIcon = document.getElementById('archivedCollapseIcon');
+    const collapseBtn = document.getElementById('archivedCollapseBtn') || document.getElementById('licensesCollapseBtn');
+    const collapseIcon = document.getElementById('archivedCollapseIcon') || document.getElementById('collapseIcon');
     const licenciasContainer = document.getElementById('licenciasContainer');
     
     if (!collapseBtn || !collapseIcon || !licenciasContainer) return;
+
+    // Por defecto contraído en Archivados
+    licenciasContainer.classList.add('collapsed');
+    collapseIcon.className = 'fas fa-chevron-down';
     
     // Clonar el botón para reemplazar el anterior y mantener los event listeners
     const newCollapseBtn = collapseBtn.cloneNode(true);
-    const newCollapseIcon = newCollapseBtn.querySelector('#archivedCollapseIcon');
+    const newCollapseIcon = newCollapseBtn.querySelector('#archivedCollapseIcon, #collapseIcon') || newCollapseBtn.querySelector('i');
     
     collapseBtn.parentNode.replaceChild(newCollapseBtn, collapseBtn);
     
     newCollapseBtn.addEventListener('click', function() {
         licenciasContainer.classList.toggle('collapsed');
-        
+        const icon = document.getElementById('archivedCollapseIcon') || document.getElementById('collapseIcon') || newCollapseBtn.querySelector('i');
+        if (!icon) return;
         if (licenciasContainer.classList.contains('collapsed')) {
-            newCollapseIcon.className = 'fas fa-chevron-down';
+            icon.className = 'fas fa-chevron-down';
         } else {
-            newCollapseIcon.className = 'fas fa-chevron-up';
+            icon.className = 'fas fa-chevron-up';
         }
     });
 }

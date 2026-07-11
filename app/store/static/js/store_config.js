@@ -79,10 +79,14 @@
 
   function getCsrfToken() {
     var meta = document.querySelector('meta[name="csrf_token"]');
-    if (meta && meta.getAttribute('content')) {
+    if (meta && meta.getAttribute('content') && meta.getAttribute('content') !== 'None') {
       return meta.getAttribute('content');
     }
-    var match = document.cookie ? document.cookie.match(/(?:^|;\s*)_csrf=([^;]+)/) : null;
+    var match = document.cookie
+      ? document.cookie.match(/(?:^|;\s*)_csrf_token=([^;]+)/)
+      : null;
+    if (match) return decodeURIComponent(match[1]);
+    match = document.cookie ? document.cookie.match(/(?:^|;\s*)_csrf=([^;]+)/) : null;
     return match ? decodeURIComponent(match[1]) : '';
   }
 

@@ -1000,29 +1000,13 @@ def _sync_allowed_emails_for_touched_licenses(license_ids: List[int]) -> None:
         return
     try:
         from app.store.models import License
-        from app.store.routes import _sync_allowed_emails_from_license_admin_texts
+        from app.store.routes_licencias import sync_allowed_emails_for_license
 
         for lid in set(license_ids):
             lic = db.session.get(License, int(lid))
             if not lic:
                 continue
-            texts = [
-                lic.license_notes or '',
-                lic.suspended_notes or '',
-                getattr(lic, 'expired_notes', None) or '',
-                getattr(lic, 'changes_notes', None) or '',
-            ]
-            raw_day = getattr(lic, 'day_notepads_json', None)
-            if raw_day and str(raw_day).strip():
-                try:
-                    dm = json.loads(raw_day)
-                    if isinstance(dm, dict):
-                        for v in dm.values():
-                            if v:
-                                texts.append(str(v))
-                except Exception:
-                    pass
-            _sync_allowed_emails_from_license_admin_texts(texts)
+            sync_allowed_emails_for_license(lic)
         db.session.commit()
     except Exception as ex:
         db.session.rollback()

@@ -29,18 +29,29 @@ def _user_has_allowed_email(user, email_normalized: str) -> bool:
     """
     True si el correo está en allowed_emails del usuario.
     Comparación insensible a mayúsculas y con trim (evita rechazos si en BD quedó otro casing o espacios).
+    Acepta credenciales tipo «user@x.com:pass» o «user@x.com (1)» extrayendo el email base
+    (misma normalización que Licencias / alta manual).
     """
     if not user or not email_normalized:
         return False
     en = email_normalized.strip().lower()
     if not en:
         return False
-    return (
-        user.allowed_email_entries.filter(
-            func.lower(func.trim(AllowedEmail.email)) == en
-        ).first()
-        is not None
-    )
+    try:
+        from app.utils.allowed_email import normalize_allowed_email
+
+        extracted = normalize_allowed_email(en)
+    except Exception:
+        extracted = None
+    candidates = [en]
+    if extracted and extracted not in candidates:
+        candidates.append(extracted)
+    for cand in candidates:
+        if user.allowed_email_entries.filter(
+            func.lower(func.trim(AllowedEmail.email)) == cand
+        ).first() is not None:
+            return True
+    return False
 
 # ===== SEGURIDAD: Rate Limiting =====
 # Almacenar requests por IP con timestamps
@@ -87,13 +98,10 @@ EMAIL_REGEX = re.compile(
 )
 
 def validate_email_format(email):
-    """Valida el formato de un email"""
-    if not email or not isinstance(email, str):
-        return False
-    email = email.strip()
-    if len(email) > 254:  # RFC 5321 límite
-        return False
-    return bool(EMAIL_REGEX.match(email))
+    """Valida el formato de un email (misma regla que AllowedEmail / Licencias)."""
+    from app.utils.allowed_email import normalize_allowed_email
+
+    return normalize_allowed_email(email) is not None
 
 # ===== SEGURIDAD: Validación de Dominios Permitidos =====
 def get_allowed_domains():

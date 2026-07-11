@@ -1239,16 +1239,19 @@ document.addEventListener("DOMContentLoaded", function() {
   const popups = [
     'regexModal', 'filtersModal', 'subusersModal', 
     'subusersRegexModal', 'subusersFiltersModal',
-    'myApiModal', 'editLinkedApiModal'
+    'myApiModal', 'editLinkedApiModal', 'linkedApisInfoModal'
   ];
   popups.forEach(function(popupId) {
     const popup = document.getElementById(popupId);
     if (popup) {
       document.addEventListener('mousedown', function(e) {
         if (popup.classList.contains('popup-show') || popup.classList.contains('popup-visible')) {
-          if (!popup.contains(e.target) && !e.target.closest('.open-alias-popup') && !e.target.closest('#showMyApiBtn') && !e.target.closest('.edit-project-btn')) {
+          if (!popup.contains(e.target) && !e.target.closest('.open-alias-popup') && !e.target.closest('#showMyApiBtn') && !e.target.closest('#linkedApisInfoBtn') && !e.target.closest('.edit-project-btn')) {
             popup.classList.remove('popup-show', 'popup-visible');
             popup.classList.add('popup-hide');
+            if (popupId === 'linkedApisInfoModal') {
+              popup.setAttribute('hidden', '');
+            }
           }
         }
       });
@@ -1269,6 +1272,38 @@ document.addEventListener("DOMContentLoaded", function() {
   const myApiUrlDisplay = document.getElementById("myApiUrlDisplay");
   const myApiTokenDisplay = document.getElementById("myApiTokenDisplay");
   const regenMasterTokenBtn = document.getElementById("regenMasterTokenBtn");
+
+  const linkedApisInfoBtn = document.getElementById("linkedApisInfoBtn");
+  const linkedApisInfoModal = document.getElementById("linkedApisInfoModal");
+  const closeLinkedApisInfoBtn = document.getElementById("closeLinkedApisInfoBtn");
+  const okLinkedApisInfoBtn = document.getElementById("okLinkedApisInfoBtn");
+
+  function openLinkedApisInfo() {
+    if (!linkedApisInfoModal) return;
+    linkedApisInfoModal.removeAttribute("hidden");
+    linkedApisInfoModal.classList.remove("popup-hide");
+    linkedApisInfoModal.classList.add("popup-show");
+  }
+
+  function closeLinkedApisInfo() {
+    if (!linkedApisInfoModal) return;
+    linkedApisInfoModal.classList.remove("popup-show");
+    linkedApisInfoModal.classList.add("popup-hide");
+    linkedApisInfoModal.setAttribute("hidden", "");
+  }
+
+  if (linkedApisInfoBtn) {
+    linkedApisInfoBtn.addEventListener("click", function (e) {
+      e.preventDefault();
+      openLinkedApisInfo();
+    });
+  }
+  if (closeLinkedApisInfoBtn) {
+    closeLinkedApisInfoBtn.addEventListener("click", closeLinkedApisInfo);
+  }
+  if (okLinkedApisInfoBtn) {
+    okLinkedApisInfoBtn.addEventListener("click", closeLinkedApisInfo);
+  }
 
   const editLinkedApiModal = document.getElementById("editLinkedApiModal");
   const closeEditApiModalBtn = document.getElementById("closeEditApiModalBtn");

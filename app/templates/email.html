@@ -107,11 +107,16 @@
       {# --- NUEVA SECCIÓN: APIs Vinculadas --- #}
       <hr class="hr-margin-15">
       <div id="linkedApisSection" class="mb-0">
-        <div class="d-flex justify-content-between align-items-center mb-05">
-          <strong>APIs Vinculadas (Otros Proyectos):</strong>
+        <div class="d-flex justify-content-between align-items-center mb-05 flex-nowrap gap-05">
+          <strong class="d-flex align-items-center gap-05 flex-nowrap">
+            <span>APIs Vinculadas proyectos</span>
+            <button type="button" id="linkedApisInfoBtn" class="btn-panel btn-blue admin-global-api-info-btn" title="Qué hace esta sección" aria-label="Información sobre APIs Vinculadas" aria-controls="linkedApisInfoModal" aria-haspopup="dialog">
+              <i class="fas fa-info-circle" aria-hidden="true"></i>
+            </button>
+          </strong>
           <div class="d-flex align-items-center gap-05">
             <button type="button" id="showMyApiBtn" class="btn-panel btn-blue btn-sm" title="Ver mi API para este proyecto">
-              <i class="fas fa-key"></i> Mi API
+              Mi API
             </button>
           </div>
         </div>
@@ -240,9 +245,28 @@
 </div>
 
 {# --- MODALES PARA APIs VINCULADAS --- #}
+<div id="linkedApisInfoModal" class="popup-base popup-small popup-hide" role="dialog" aria-modal="true" aria-labelledby="linkedApisInfoTitle" hidden>
+  <div class="popup-modal-header">
+    <h4 id="linkedApisInfoTitle" class="mt-0 mb-0 flex-grow-1 text-center">
+      <i class="fas fa-info-circle" aria-hidden="true"></i> APIs Vinculadas proyectos
+    </h4>
+    <button type="button" class="btn-close" id="closeLinkedApisInfoBtn" aria-label="Cerrar información">
+      <i class="fas fa-times" aria-hidden="true"></i>
+    </button>
+  </div>
+  <div class="mb-1 text-left text-small" style="line-height:1.45; padding: 0 0.35rem;">
+    <p class="mb-05"><strong>Qué hace:</strong> conecta a este usuario con otros proyectos para consultar correos desde Códigos en esos servidores.</p>
+    <p class="mb-05"><strong>Cómo usarlo:</strong> agrega nombre, URL de la API y el token del otro proyecto. Con <strong>Mi API</strong> obtienes la URL y el token de este usuario para pegarlos en el otro lado.</p>
+    <p class="mb-0"><strong>Nota:</strong> el correo debe estar permitido aquí o en el proyecto remoto; filtros y regex se aplican igual al consultar.</p>
+  </div>
+  <div class="d-flex justify-content-center">
+    <button type="button" class="popup-button-confirm" id="okLinkedApisInfoBtn">Entendido</button>
+  </div>
+</div>
+
 <div id="myApiModal" class="popup-base popup-small popup-hide">
   <div class="popup-modal-header">
-    <h4 class="mt-0 mb-0 flex-grow-1 text-center">Mi API de Acceso</h4>
+    <h4 class="mt-0 mb-0 flex-grow-1 text-center">Mi API de Acceso para codigos</h4>
     <button type="button" class="btn-close" id="closeMyApiModalBtn" aria-label="Cerrar modal">
       <i class="fas fa-times" aria-hidden="true"></i>
     </button>

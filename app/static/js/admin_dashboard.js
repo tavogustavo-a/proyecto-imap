@@ -47,6 +47,38 @@ document.addEventListener('DOMContentLoaded', function() {
     const editGlobalApiToken = document.getElementById("editGlobalApiToken");
     const saveEditGlobalApiBtn = document.getElementById("saveEditGlobalApiBtn");
 
+    const globalLinkedApisInfoBtn = document.getElementById("globalLinkedApisInfoBtn");
+    const globalLinkedApisInfoModal = document.getElementById("globalLinkedApisInfoModal");
+    const closeGlobalLinkedApisInfoBtn = document.getElementById("closeGlobalLinkedApisInfoBtn");
+    const okGlobalLinkedApisInfoBtn = document.getElementById("okGlobalLinkedApisInfoBtn");
+
+    function openGlobalLinkedApisInfo() {
+        if (!globalLinkedApisInfoModal) return;
+        globalLinkedApisInfoModal.removeAttribute("hidden");
+        globalLinkedApisInfoModal.classList.remove("popup-hide");
+        globalLinkedApisInfoModal.classList.add("popup-show");
+    }
+
+    function closeGlobalLinkedApisInfo() {
+        if (!globalLinkedApisInfoModal) return;
+        globalLinkedApisInfoModal.classList.remove("popup-show");
+        globalLinkedApisInfoModal.classList.add("popup-hide");
+        globalLinkedApisInfoModal.setAttribute("hidden", "");
+    }
+
+    if (globalLinkedApisInfoBtn) {
+        globalLinkedApisInfoBtn.addEventListener("click", function (e) {
+            e.preventDefault();
+            openGlobalLinkedApisInfo();
+        });
+    }
+    if (closeGlobalLinkedApisInfoBtn) {
+        closeGlobalLinkedApisInfoBtn.addEventListener("click", closeGlobalLinkedApisInfo);
+    }
+    if (okGlobalLinkedApisInfoBtn) {
+        okGlobalLinkedApisInfoBtn.addEventListener("click", closeGlobalLinkedApisInfo);
+    }
+
     function getCsrfToken() {
         const metaTag = document.querySelector('meta[name="csrf_token"]');
         return metaTag ? metaTag.getAttribute('content') : '';
@@ -86,7 +118,6 @@ document.addEventListener('DOMContentLoaded', function() {
         if (!globalLinkedApisList) return;
         globalLinkedApisList.innerHTML = "";
         if (!projects || projects.length === 0) {
-            globalLinkedApisList.innerHTML = '<p class="text-muted text-center">No hay APIs globales vinculadas.</p>';
             return;
         }
 
@@ -207,6 +238,11 @@ document.addEventListener('DOMContentLoaded', function() {
             if (!editGlobalApiModal.contains(e.target) && !e.target.closest('.edit-global-project-btn')) {
                 editGlobalApiModal.classList.remove("popup-show");
                 editGlobalApiModal.classList.add("popup-hide");
+            }
+        }
+        if (globalLinkedApisInfoModal && globalLinkedApisInfoModal.classList.contains('popup-show')) {
+            if (!globalLinkedApisInfoModal.contains(e.target) && !e.target.closest('#globalLinkedApisInfoBtn')) {
+                closeGlobalLinkedApisInfo();
             }
         }
     });

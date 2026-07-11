@@ -903,11 +903,18 @@ def add_allowed_emails_ajax():
     if user.parent_id is not None: 
         return jsonify({"status": "error", "message": "Usuario no es principal"}), 403
 
-    # Normalizar y asegurar unicidad en la lista de entrada
-    normalized_new_emails = list(set( # set para unicidad rápida
-        e.strip().lower() 
-        for e in emails_to_add if isinstance(e, str) and e.strip() and ('@' in e and '.' in e)
-    ))
+    # Normalizar con la misma regla que Licencias / API (formato email válido)
+    from app.utils.allowed_email import normalize_allowed_email
+
+    normalized_new_emails = sorted(
+        {
+            em
+            for e in emails_to_add
+            if isinstance(e, str)
+            for em in [normalize_allowed_email(e)]
+            if em
+        }
+    )
     
     if not normalized_new_emails:
         return jsonify({"status":"ok", "added_count": 0, "message":"No emails válidos para añadir."})
