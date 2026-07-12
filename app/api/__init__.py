@@ -242,6 +242,166 @@ def _parse_optional_service_id(raw):
     return v
 
 
+def _service_priority_key(s):
+    return abs(s.position) * 2 + (1 if s.position > 0 else 0)
+
+
+def _codigos_service_visible(srv, *, logged_in: bool, is_admin: bool) -> bool:
+    """Misma lógica de visibilidad que search.html (botones mostrados)."""
+    mode = (srv.visibility_mode or 'off').strip()
+    if mode == 'off':
+        return False
+    if is_admin:
+        if mode == 'on-usuarios':
+            return True
+        if mode == 'sms' and logged_in:
+            return True
+        return False
+    if mode == 'on-no-usuarios' and not logged_in:
+        return True
+    if mode == 'on-usuarios' and logged_in:
+        return True
+    if mode == 'sms' and logged_in:
+        return True
+    return False
+
+
+def _codigos_service_in_bootstrap(srv, *, logged_in: bool, is_admin: bool) -> bool:
+    """Incluye también on-no-usuarios-no-visible (oculto en UI, usable como default)."""
+    if _codigos_service_visible(srv, logged_in=logged_in, is_admin=is_admin):
+        return True
+    mode = (srv.visibility_mode or 'off').strip()
+    return mode == 'on-no-usuarios-no-visible' and not logged_in and not is_admin
+
+
+def _codigos_service_payload(srv, *, ui_visible: bool):
+    icon_urls = []
+    try:
+        for icon_obj in (srv.service_icons or []):
+            name = (getattr(icon_obj, 'icon_name', None) or '').strip()
+            if name:
+                icon_urls.append(f'/static/images/{name}')
+    except Exception:
+        icon_urls = []
+    return {
+        'id': srv.id,
+        'name': srv.name,
+        'visibility_mode': srv.visibility_mode,
+        'color': srv.color or 'black',
+        'border_color': srv.border_color or '#764ba2',
+        'gradient_color': srv.gradient_color or '#667eea',
+        'click_color1': srv.click_color1 or '#031faa',
+        'click_color2': srv.click_color2 or '#031faa',
+        'position': srv.position,
+        'icon_urls': icon_urls,
+        'has_aliases': bool(getattr(srv, 'aliases', None) and len(srv.aliases) > 0),
+        'ui_visible': ui_visible,
+    }
+
+
+@api_bp.route('/codigos/bootstrap', methods=['GET'])
+def codigos_bootstrap():
+    """
+    Datos iniciales para la pantalla nativa de Códigos.
+    Sesión opcional (mismo acceso público que /).
+    """
+    from flask import url_for
+    from app.admin.site_settings import get_site_setting
+    from app.models.settings import SiteSettings
+
+    public_access_enabled = get_site_setting('public_access_enabled', 'true') == 'true'
+    logged_in = bool(session.get('logged_in'))
+    username = (session.get('username') or '').strip()
+    user_id = session.get('user_id')
+    is_user_flag = bool(session.get('is_user'))
+    admin_name = (current_app.config.get('ADMIN_USER') or 'admin').strip()
+
+    if not public_access_enabled and not logged_in:
+        return jsonify({
+            'success': False,
+            'error': 'login_required',
+            'login_path': '/usuario/login',
+        }), 401
+
+    role = 'none'
+    home_path = ''
+    is_admin = False
+    if logged_in and username:
+        if username == admin_name and not is_user_flag:
+            role = 'admin'
+            is_admin = True
+            try:
+                home_path = url_for('admin_bp.dashboard')
+            except Exception:
+                home_path = '/admin/'
+        else:
+            role = 'user'
+            try:
+                home_path = url_for('store_bp.store_front')
+            except Exception:
+                home_path = '/tienda/'
+
+    all_visible = ServiceModel.query.filter(ServiceModel.visibility_mode != 'off').all()
+    services_sorted = sorted(all_visible, key=_service_priority_key)
+    services = []
+    for s in services_sorted:
+        if not _codigos_service_in_bootstrap(s, logged_in=logged_in, is_admin=is_admin):
+            continue
+        ui_visible = _codigos_service_visible(s, logged_in=logged_in, is_admin=is_admin)
+        services.append(_codigos_service_payload(s, ui_visible=ui_visible))
+    visible_services = [s for s in services if s.get('ui_visible')]
+    default_service_id = (
+        visible_services[0]['id'] if visible_services
+        else (services[0]['id'] if services else None)
+    )
+
+    search_message = SiteSettings.query.filter_by(key='search_message').first()
+    main_message = (search_message.value if search_message and search_message.value else '') or ''
+
+    codigos_view_prefs = {}
+    current_user = None
+    if username:
+        current_user = User.query.filter_by(username=username).first()
+    elif user_id:
+        current_user = User.query.get(user_id)
+    if current_user:
+        cp = getattr(current_user, 'codigos_view_prefs', None)
+        if isinstance(cp, dict):
+            try:
+                from app.store.routes import _sanitize_codigos_view_prefs
+                codigos_view_prefs = _sanitize_codigos_view_prefs(cp)
+            except Exception:
+                codigos_view_prefs = {}
+
+    csrf_token = ''
+    try:
+        csrf_fn = current_app.jinja_env.globals.get('csrf_token')
+        if callable(csrf_fn):
+            csrf_token = csrf_fn() or ''
+    except Exception:
+        csrf_token = ''
+
+    return jsonify({
+        'success': True,
+        'services': services,
+        'default_service_id': default_service_id,
+        'main_message': main_message,
+        'codigos_view_prefs': codigos_view_prefs,
+        'csrf_token': csrf_token,
+        'public_access_enabled': public_access_enabled,
+        'session': {
+            'logged_in': role != 'none',
+            'role': role,
+            'username': username if role != 'none' else '',
+            'home_path': home_path,
+            'store_path': '/tienda/',
+            'licenses_path': '/tienda/licencias',
+            'login_path': '/usuario/login',
+            'codes_path': '/',
+        },
+    })
+
+
 def _resolve_external_service_id(ext_service_id, service_name_raw, match_key_raw=None):
     """
     Entre proyectos con distinta BD, el mismo botón puede tener otro service_id u otro nombre visible.
