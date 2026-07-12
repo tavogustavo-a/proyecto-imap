@@ -22,6 +22,24 @@ function ensureEmbeddedFormFieldNames(container) {
   });
 }
 
+/** Abre un enlace en el navegador del sistema (apps nativa/Capacitor), no en el WebView. */
+function openExternalLink(url) {
+  if (!url) return;
+  try {
+    if (window.NativeAppBridge && typeof NativeAppBridge.openExternal === 'function') {
+      NativeAppBridge.openExternal(String(url));
+      return;
+    }
+  } catch (e) { /* ignore */ }
+  try {
+    if (window.AndroidAppBridge && typeof AndroidAppBridge.openExternal === 'function') {
+      AndroidAppBridge.openExternal(String(url));
+      return;
+    }
+  } catch (e) { /* ignore */ }
+  window.open(url, '_blank');
+}
+
 // Función auxiliar para obtener el estado de login desde data-* attributes
 function getIsUserLoggedIn() {
   // Buscar en el contenedor principal o en cualquier elemento con el atributo
@@ -902,7 +920,7 @@ document.addEventListener("DOMContentLoaded", function () {
       openLinkBtn.addEventListener("click", function() {
         const link = openLinkBtn.getAttribute("data-link");
         if (link) {
-          window.open(link, "_blank");
+          openExternalLink(link);
         }
       });
     }

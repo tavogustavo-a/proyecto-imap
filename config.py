@@ -1,7 +1,10 @@
 import os
 from datetime import timedelta
 
+from branding_domain import load_site_branding
+
 basedir = os.path.abspath(os.path.dirname(__file__))
+_site = load_site_branding() or {}
 
 class Config:
     FLASK_ENV = os.getenv("FLASK_ENV", "development")
@@ -107,13 +110,23 @@ class Config:
     SOCKETIO_HOST = os.getenv('SOCKETIO_HOST', '0.0.0.0')
     SOCKETIO_PORT = int(os.getenv('SOCKETIO_PORT', 5001))
     SOCKETIO_DEBUG = (FLASK_ENV == 'development')
-    SOCKETIO_CORS_ORIGINS = os.getenv('SOCKETIO_CORS_ORIGINS')
+    # Preferí DOMINIO.txt; .env solo si querés forzar una lista distinta
+    SOCKETIO_CORS_ORIGINS = (
+        os.getenv('SOCKETIO_CORS_ORIGINS')
+        or _site.get('cors_origins')
+        or None
+    )
     if not SOCKETIO_CORS_ORIGINS:
         if FLASK_ENV == "development":
             SOCKETIO_CORS_ORIGINS = "*"
             print("[WARN] Usando SOCKETIO_CORS_ORIGINS='*' (permite todos los orígenes) SOLO para desarrollo.")
         else:
-            raise RuntimeError("SOCKETIO_CORS_ORIGINS no configurada en entorno de producción.")
+            raise RuntimeError(
+                "SOCKETIO_CORS_ORIGINS no configurada: definí DOMINIO.txt en la raíz "
+                "o SOCKETIO_CORS_ORIGINS en .env."
+            )
+    elif _site.get('cors_origins') and not os.getenv('SOCKETIO_CORS_ORIGINS'):
+        print(f"[INFO] SOCKETIO_CORS_ORIGINS desde DOMINIO.txt -> {SOCKETIO_CORS_ORIGINS}")
 
 
 
@@ -167,9 +180,16 @@ class Config:
     # Legacy (ya no disponible en proyectos nuevos). Se mantiene por compatibilidad.
     FCM_SERVER_KEY = os.getenv("FCM_SERVER_KEY", None)
 
-    # App Links / deep links Android (huellas SHA-256 del keystore, separadas por coma)
-    ANDROID_APP_PACKAGE = os.getenv("ANDROID_APP_PACKAGE", "com.imap.storeclient")
+    # App Links: package desde DOMINIO.txt (com.imap.nativestore.<marca>,com.imap.storeclient).
+    # Huellas SHA-256 sí van en .env (son del keystore, no del dominio).
+    ANDROID_APP_PACKAGE = (
+        os.getenv("ANDROID_APP_PACKAGE")
+        or _site.get("android_app_package")
+        or "com.imap.storeclient"
+    )
     ANDROID_APP_SHA256_FINGERPRINTS = os.getenv("ANDROID_APP_SHA256_FINGERPRINTS", "")
+    # Origen público (útil para logs / enlaces); viene de DOMINIO.txt
+    PUBLIC_SITE_URL = os.getenv("PUBLIC_SITE_URL") or _site.get("site_url") or ""
 
     # Chatbot respuestas-preguntas (opcional, capa gratuita de Google / Groq)
     GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", None)

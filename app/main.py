@@ -64,17 +64,25 @@ def get_imap2_by_custom_domain(request):
 def android_assetlinks():
     """
     Digital Asset Links para App Links (deep links verificados).
-    Configura ANDROID_APP_SHA256_FINGERPRINTS con huellas SHA-256 del keystore
-    (separadas por coma). Formato: AA:BB:CC:...
+    ANDROID_APP_PACKAGE: uno o varios packages separados por coma
+      (nativa + Capacitor).
+    ANDROID_APP_SHA256_FINGERPRINTS: huellas SHA-256 del/los keystore(s),
+      separadas por coma. Formato: AA:BB:CC:...
     """
     from flask import current_app, jsonify
     import os
 
-    package = (
+    raw_packages = (
         current_app.config.get('ANDROID_APP_PACKAGE')
         or os.getenv('ANDROID_APP_PACKAGE')
         or 'com.imap.storeclient'
     )
+    packages = []
+    for part in str(raw_packages).replace(';', ',').split(','):
+        pkg = part.strip()
+        if pkg:
+            packages.append(pkg)
+
     raw = (
         current_app.config.get('ANDROID_APP_SHA256_FINGERPRINTS')
         or os.getenv('ANDROID_APP_SHA256_FINGERPRINTS')
@@ -90,7 +98,7 @@ def android_assetlinks():
             fp = ':'.join(fp[i : i + 2] for i in range(0, 64, 2))
         fingerprints.append(fp)
 
-    if not fingerprints:
+    if not fingerprints or not packages:
         # Sin huellas configuradas: respuesta vacía (App Links no se verifican aún)
         return jsonify([]), 200
 
@@ -103,6 +111,7 @@ def android_assetlinks():
                 'sha256_cert_fingerprints': fingerprints,
             },
         }
+        for package in packages
     ]
     resp = jsonify(payload)
     resp.headers['Content-Type'] = 'application/json'
@@ -252,7 +261,7 @@ def dynamic_imap2_route(route_path):
     
     # PRIMERO: Verificar si hay un dominio personalizado configurado
     # Si hay un dominio personalizado, tiene prioridad absoluta sobre la ruta
-    # Esto permite que funcione tanto tupremiumm.com como tupremiumm.com/codigos4
+    # Esto permite dominios con path (ej. ejemplo.com/codigos4) además de la raíz.
     imap_server_by_domain = get_imap2_by_custom_domain(request)
     if imap_server_by_domain:
         # Si hay un dominio personalizado configurado, servir esa página

@@ -1,0 +1,11 @@
+# ============================================================
+# DOMINIO DEL PROYECTO (única fuente)
+# ============================================================
+# Escribe abajo la URL pública (una sola línea, sin #).
+# De aquí se derivan:
+#   - Apps Android (Capacitor + nativa): nombre, App Links, SERVER_URL
+#   - Servidor: SOCKETIO_CORS_ORIGINS y ANDROID_APP_PACKAGE (si no están en .env)
+# Las huellas SHA-256 del keystore sí van en .env (ANDROID_APP_SHA256_FINGERPRINTS).
+# ============================================================
+
+https://tupremiumm.com

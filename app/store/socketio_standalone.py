@@ -9,9 +9,17 @@ from dotenv import load_dotenv
 # Cargar variables de entorno si no están ya cargadas
 load_dotenv()
 
-# Obtener CORS origins desde .env o usar '*' por defecto solo en desarrollo
+# Obtener CORS origins: .env > DOMINIO.txt > desarrollo
 FLASK_ENV = os.getenv("FLASK_ENV", "development")
 cors_origins = os.getenv('SOCKETIO_CORS_ORIGINS')
+if not cors_origins:
+    try:
+        from branding_domain import load_site_branding
+        _brand = load_site_branding()
+        if _brand:
+            cors_origins = _brand.get('cors_origins')
+    except Exception:
+        cors_origins = None
 
 # Orígenes para desarrollo (localhost + red local + HTTPS)
 DEV_ORIGINS = [
