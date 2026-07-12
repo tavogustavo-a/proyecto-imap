@@ -671,6 +671,18 @@ def _log_auto_renewal_activity(acc, lic, dual: Dict[str, Any]) -> None:
             'cred_hint': cred[:140] if cred else (acc_email[:140] if acc_email else ''),
         },
     )
+    try:
+        from app.store.store_event_notify import notify_auto_renewal_success
+
+        notify_auto_renewal_success(
+            user=viewer,
+            product_name=pname,
+            credential_hint=cred or acc_email,
+            license_id=int(getattr(lic, 'id', 0) or 0) or None,
+            account_id=int(getattr(acc, 'id', 0) or 0) or None,
+        )
+    except Exception:
+        pass
 
 
 def _charge_one_month_debt(lic, username: str, acc=None) -> Tuple[bool, str]:

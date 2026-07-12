@@ -40,6 +40,7 @@ def _get_principal_users_data(admin_username):
             "can_add_own_emails": usr.can_add_own_emails if usr.can_add_own_emails is not None else False,
             "can_bulk_delete_emails": usr.can_bulk_delete_emails if usr.can_bulk_delete_emails is not None else False,
             "can_manage_2fa_emails": usr.can_manage_2fa_emails if usr.can_manage_2fa_emails is not None else False,
+            "email_notify_enabled": bool(getattr(usr, 'email_notify_enabled', True)),
             "parent_id": usr.parent_id if usr.parent_id else None,
             "full_name": usr.full_name or "",
             "phone": usr.phone or "",
@@ -112,6 +113,7 @@ def search_users_ajax():
             "can_add_own_emails": u.can_add_own_emails if u.can_add_own_emails is not None else False,
             "can_bulk_delete_emails": u.can_bulk_delete_emails if u.can_bulk_delete_emails is not None else False,
             "can_manage_2fa_emails": u.can_manage_2fa_emails if u.can_manage_2fa_emails is not None else False,
+            "email_notify_enabled": bool(getattr(u, 'email_notify_enabled', True)),
             "can_chat": u.can_chat if u.can_chat is not None else False,
             "can_manage_subusers": u.can_manage_subusers if u.can_manage_subusers is not None else False,
             "is_support": u.is_support if u.is_support is not None else False,
@@ -449,6 +451,11 @@ def update_user_ajax():
         new_can_add_own_emails = data.get("can_add_own_emails", False) if "can_add_own_emails" in data else False
         new_can_bulk_delete_emails = data.get("can_bulk_delete_emails", False) if "can_bulk_delete_emails" in data else False
         new_can_manage_2fa_emails = data.get("can_manage_2fa_emails", False) if "can_manage_2fa_emails" in data else False
+        # Default True si no viene (compatibilidad); el checkbox del form siempre envía el valor.
+        if "email_notify_enabled" in data:
+            new_email_notify_enabled = bool(data.get("email_notify_enabled"))
+        else:
+            new_email_notify_enabled = True
         new_full_name = data.get("full_name", "").strip() if "full_name" in data else ""
         new_phone = data.get("phone", "").strip() if "phone" in data else ""
         new_email = data.get("email", None)
@@ -520,6 +527,10 @@ def update_user_ajax():
         
         # Manejo de can_manage_2fa_emails
         user_to_update.can_manage_2fa_emails = bool(new_can_manage_2fa_emails)
+
+        # Manejo de email_notify_enabled (notificaciones de tienda por correo)
+        if hasattr(user_to_update, 'email_notify_enabled'):
+            user_to_update.email_notify_enabled = bool(new_email_notify_enabled)
 
         # --- INICIO: Lógica de Inicialización/Limpieza de Defaults ---
         if not old_can_sub and new_can_sub:

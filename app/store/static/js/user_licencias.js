@@ -26,7 +26,16 @@
     var userLicPortalRowAutosaveHasPending = null;
     var userLicCaducidadNotifyTimer = null;
     var userLicCaducidadNotifyBarWired = false;
-    var userLicCaducidadNotifyPrefsMem = { enabled: false, fromDays: 5 };
+    var userLicCaducidadNotifyPrefsMem = {
+        enabled: false,
+        fromDays: 5,
+        email: true,
+        push: true,
+        inapp: true,
+        vibrate: false,
+        sound: false,
+    };
+    var userLicNotifyPrefsSaveTimer = null;
     var userLicRenewalBalanceWarningsCache = [];
     var USER_LIC_PORTAL_PROVEEDOR_FILTER = 'proveedor';
     var USER_LIC_PORTAL_REPORTES_FILTER = 'reportes';
@@ -1034,8 +1043,10 @@
         var curSb = row.status_bad != null ? String(row.status_bad).trim() : '';
         var curOd = row.otro_detail != null ? String(row.otro_detail).trim() : '';
         var isGarantia = normalizeStatusKey(curSg) === normalizeStatusKey('garantia');
+        var isWarrantyPending = row.warranty_pending === true;
         var isBuenaRevisada =
             !isGarantia &&
+            !isWarrantyPending &&
             (row.buena_revisada_readonly === true || normalizeStatusKey(curSg) === normalizeStatusKey('ok'));
         var prevGoodRestore =
             row.prev_good_restore != null ? String(row.prev_good_restore).trim() : '';
@@ -1056,7 +1067,7 @@
               : row.tier_good === 'good'
                 ? 'good'
                 : 'neutral';
-        var bTier = row.tier_bad === 'bad' ? 'bad' : 'neutral';
+        var bTier = isWarrantyPending ? 'neutral' : row.tier_bad === 'bad' ? 'bad' : 'neutral';
 
         var scopeSeg = slugForCredFieldId(domScopeSeg || 'x');
         var gid = 'user-lic-sg-' + scopeSeg + '-' + slug + '-d' + day + '-r' + ordStored;
@@ -1173,8 +1184,13 @@
             (renewalPending ? '' : userLicExpiryCountdownHtml(lm)) +
             goodSelectOrBadgeHtml +
             '</div>' +
-            '<div class="license-split-editor__status-select-shell license-split-editor__status-select-shell--bad">' +
-            (isBuenaRevisada
+            '<div class="license-split-editor__status-select-shell license-split-editor__status-select-shell--bad' +
+            (isWarrantyPending ? ' license-split-editor__status-select-shell--warranty-pending' : '') +
+            '">' +
+            (isWarrantyPending
+                ? '<span class="user-lic-warranty-pending-badge license-split-editor__status license-split-editor__status-bad" title="Soporte recibió tu reporte: pendiente de stock de garantía.">' +
+                  '<i class="fas fa-hourglass-half" aria-hidden="true"></i> Pendiente garantía</span>'
+                : isBuenaRevisada
                 ? userLicBuenaRevisadaBadgeHtml(prevGoodRestore, prevBadRestore)
                 : '<select id="' +
                   bid +
@@ -1662,6 +1678,14 @@
         });
 
         stack.appendChild(card);
+        try {
+            if (
+                window.StoreUserNotifications &&
+                typeof window.StoreUserNotifications.playAlertFeedback === 'function'
+            ) {
+                window.StoreUserNotifications.playAlertFeedback();
+            }
+        } catch (_fbR) {}
         window.setTimeout(function () {
             userLicCaducidadNotifyDismissInAppAlert(card);
         }, USER_LIC_CADUCIDAD_INAPP_ALERT_MS);
@@ -1674,7 +1698,9 @@
         var warnings = userLicRenewalBalanceWarningsCache || [];
         if (!warnings.length) return;
 
-        var useBrowser = userLicCaducidadNotifyBrowserGranted();
+        var useBrowser = !!prefs.push && userLicCaducidadNotifyBrowserGranted();
+        var useInapp = prefs.inapp !== false;
+        if (!useBrowser && !useInapp) return;
         if (!useBrowser && document.visibilityState !== 'visible') return;
 
         var today = userLicCaducidadNotifyTodayStamp();
@@ -1719,7 +1745,7 @@
                 }
             }
 
-            if (!delivered && document.visibilityState === 'visible') {
+            if (!delivered && useInapp && document.visibilityState === 'visible') {
                 if (shownInApp >= USER_LIC_CADUCIDAD_INAPP_ALERT_MAX) continue;
                 if (userLicRenewalNotifyShowInAppAlert(title, body, urgent)) {
                     shownInApp += 1;
@@ -1748,6 +1774,147 @@
         return 'user_lic_' + portalUiPersistScopeSlug() + '_caducidad_notify_' + suffix;
     }
 
+    function userLicNotifyPrefsFromEmbedded() {
+        var el = document.getElementById('userLicNotifyPrefsJson');
+        if (!el) return null;
+        try {
+            var raw = (el.textContent || '').trim();
+            if (!raw) return null;
+            var parsed = JSON.parse(raw);
+            return parsed && typeof parsed === 'object' ? parsed : null;
+        } catch (_e) {
+            return null;
+        }
+    }
+
+    function userLicNotifyPrefsApplyServer(prefs) {
+        if (!prefs || typeof prefs !== 'object') return;
+        userLicCaducidadNotifyPrefsMem.enabled = !!prefs.caducidad_notify_enabled;
+        var fd = parseInt(prefs.caducidad_notify_from_days, 10);
+        userLicCaducidadNotifyPrefsMem.fromDays =
+            Number.isFinite(fd) && fd >= 1 && fd <= 5 ? fd : 5;
+        userLicCaducidadNotifyPrefsMem.email = prefs.email_notify_enabled !== false;
+        userLicCaducidadNotifyPrefsMem.push = prefs.push_notify_enabled !== false;
+        userLicCaducidadNotifyPrefsMem.inapp = prefs.inapp_notify_enabled !== false;
+        userLicCaducidadNotifyPrefsMem.vibrate = !!prefs.notify_vibrate_enabled;
+        userLicCaducidadNotifyPrefsMem.sound = !!prefs.notify_sound_enabled;
+        try {
+            window.__storeNotifyPrefs = {
+                email: userLicCaducidadNotifyPrefsMem.email,
+                push: userLicCaducidadNotifyPrefsMem.push,
+                inapp: userLicCaducidadNotifyPrefsMem.inapp,
+                vibrate: userLicCaducidadNotifyPrefsMem.vibrate,
+                sound: userLicCaducidadNotifyPrefsMem.sound,
+            };
+        } catch (_w) {}
+    }
+
+    function userLicNotifyPrefsCsrf() {
+        var meta = document.querySelector('meta[name="csrf_token"]');
+        return meta ? meta.getAttribute('content') || '' : '';
+    }
+
+    function userLicNotifyPrefsSetSaveStatus(text, kind) {
+        var el = document.getElementById('userLicNotifyPrefsSaveStatus');
+        if (!el) return;
+        var t = String(text || '').trim();
+        if (!t) {
+            el.hidden = true;
+            el.textContent = '';
+            el.className = 'user-lic-caducidad-notify-bar__hint mb-0';
+            return;
+        }
+        el.hidden = false;
+        el.textContent = t;
+        el.className =
+            'user-lic-caducidad-notify-bar__hint mb-0' +
+            (kind === 'ok'
+                ? ' user-lic-caducidad-notify-bar__hint--ok'
+                : kind === 'warn'
+                  ? ' user-lic-caducidad-notify-bar__hint--warn'
+                  : '');
+    }
+
+    function userLicNotifyPrefsCollectFromDom() {
+        var chkCad = document.getElementById('userLicCaducidadNotifyEnabled');
+        var sel = document.getElementById('userLicCaducidadNotifyFromDays');
+        var chkEmail = document.getElementById('userLicNotifyEmailEnabled');
+        var chkPush = document.getElementById('userLicNotifyPushEnabled');
+        var chkInapp = document.getElementById('userLicNotifyInappEnabled');
+        var chkVibrate = document.getElementById('userLicNotifyVibrateEnabled');
+        var chkSound = document.getElementById('userLicNotifySoundEnabled');
+        return {
+            email_notify_enabled: chkEmail ? !!chkEmail.checked : userLicCaducidadNotifyPrefsMem.email,
+            push_notify_enabled: chkPush ? !!chkPush.checked : userLicCaducidadNotifyPrefsMem.push,
+            inapp_notify_enabled: chkInapp ? !!chkInapp.checked : userLicCaducidadNotifyPrefsMem.inapp,
+            notify_vibrate_enabled: chkVibrate
+                ? !!chkVibrate.checked
+                : !!userLicCaducidadNotifyPrefsMem.vibrate,
+            notify_sound_enabled: chkSound
+                ? !!chkSound.checked
+                : !!userLicCaducidadNotifyPrefsMem.sound,
+            caducidad_notify_enabled: chkCad
+                ? !!chkCad.checked
+                : userLicCaducidadNotifyPrefsMem.enabled,
+            caducidad_notify_from_days: sel
+                ? Number(sel.value) || 5
+                : userLicCaducidadNotifyPrefsMem.fromDays || 5,
+        };
+    }
+
+    function userLicNotifyPrefsSaveToServer(payload) {
+        var body = payload || userLicNotifyPrefsCollectFromDom();
+        userLicNotifyPrefsApplyServer({
+            email_notify_enabled: body.email_notify_enabled,
+            push_notify_enabled: body.push_notify_enabled,
+            inapp_notify_enabled: body.inapp_notify_enabled,
+            notify_vibrate_enabled: body.notify_vibrate_enabled,
+            notify_sound_enabled: body.notify_sound_enabled,
+            caducidad_notify_enabled: body.caducidad_notify_enabled,
+            caducidad_notify_from_days: body.caducidad_notify_from_days,
+        });
+        if (userLicNotifyPrefsSaveTimer) {
+            window.clearTimeout(userLicNotifyPrefsSaveTimer);
+            userLicNotifyPrefsSaveTimer = null;
+        }
+        userLicNotifyPrefsSaveTimer = window.setTimeout(function () {
+            userLicNotifyPrefsSaveTimer = null;
+            userLicNotifyPrefsSetSaveStatus('Guardando…', '');
+            fetch('/tienda/api/user/notify-prefs', {
+                method: 'PUT',
+                credentials: 'same-origin',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': userLicNotifyPrefsCsrf(),
+                    'X-Requested-With': 'XMLHttpRequest',
+                },
+                body: JSON.stringify(body),
+            })
+                .then(function (r) {
+                    return r.json().catch(function () {
+                        return { success: false };
+                    });
+                })
+                .then(function (data) {
+                    if (data && data.success && data.prefs) {
+                        userLicNotifyPrefsApplyServer(data.prefs);
+                        userLicNotifyPrefsSetSaveStatus('Guardado', 'ok');
+                        window.setTimeout(function () {
+                            userLicNotifyPrefsSetSaveStatus('', '');
+                        }, 1800);
+                        return;
+                    }
+                    userLicNotifyPrefsSetSaveStatus(
+                        (data && data.error) || 'No se pudo guardar',
+                        'warn'
+                    );
+                })
+                .catch(function () {
+                    userLicNotifyPrefsSetSaveStatus('Error de red al guardar', 'warn');
+                });
+        }, 350);
+    }
+
     function userLicCaducidadNotifyTodayStamp() {
         var d = new Date();
         var m = d.getMonth() + 1;
@@ -1764,28 +1931,22 @@
     }
 
     function userLicCaducidadNotifyPrefsRead() {
-        var fromDays = USER_LIC_CADUCIDAD_NOTIFY_MAX_LEAD;
-        var enabled = userLicCaducidadNotifyPrefsMem.enabled;
-        try {
-            var rawEnabled = localStorage.getItem(userLicCaducidadNotifyLsKey('enabled'));
-            if (rawEnabled != null && rawEnabled !== '') {
-                enabled = rawEnabled === '1' || rawEnabled === 'true';
-            }
-            var rawFrom = localStorage.getItem(userLicCaducidadNotifyLsKey('from_days'));
-            if (rawFrom != null && rawFrom !== '') {
-                var n = Number(rawFrom);
-                if (Number.isFinite(n)) fromDays = Math.trunc(n);
-            } else if (userLicCaducidadNotifyPrefsMem.fromDays != null) {
-                fromDays = userLicCaducidadNotifyPrefsMem.fromDays;
-            }
-        } catch (_ePr) {
-            enabled = userLicCaducidadNotifyPrefsMem.enabled;
-            fromDays = userLicCaducidadNotifyPrefsMem.fromDays || fromDays;
-        }
-        fromDays = Math.max(1, Math.min(USER_LIC_CADUCIDAD_NOTIFY_MAX_LEAD, fromDays));
-        userLicCaducidadNotifyPrefsMem.enabled = !!enabled;
-        userLicCaducidadNotifyPrefsMem.fromDays = fromDays;
-        return { enabled: enabled, fromDays: fromDays };
+        var fromDays = Math.max(
+            1,
+            Math.min(
+                USER_LIC_CADUCIDAD_NOTIFY_MAX_LEAD,
+                Number(userLicCaducidadNotifyPrefsMem.fromDays) || 5
+            )
+        );
+        return {
+            enabled: !!userLicCaducidadNotifyPrefsMem.enabled,
+            fromDays: fromDays,
+            email: userLicCaducidadNotifyPrefsMem.email !== false,
+            push: userLicCaducidadNotifyPrefsMem.push !== false,
+            inapp: userLicCaducidadNotifyPrefsMem.inapp !== false,
+            vibrate: !!userLicCaducidadNotifyPrefsMem.vibrate,
+            sound: !!userLicCaducidadNotifyPrefsMem.sound,
+        };
     }
 
     function userLicCaducidadNotifyPrefsWrite(enabled, fromDays) {
@@ -1801,6 +1962,15 @@
         } catch (_ePw) {
             /* ignore */
         }
+        userLicNotifyPrefsSaveToServer({
+            email_notify_enabled: userLicCaducidadNotifyPrefsMem.email !== false,
+            push_notify_enabled: userLicCaducidadNotifyPrefsMem.push !== false,
+            inapp_notify_enabled: userLicCaducidadNotifyPrefsMem.inapp !== false,
+            notify_vibrate_enabled: !!userLicCaducidadNotifyPrefsMem.vibrate,
+            notify_sound_enabled: !!userLicCaducidadNotifyPrefsMem.sound,
+            caducidad_notify_enabled: !!enabled,
+            caducidad_notify_from_days: fd,
+        });
     }
 
     function userLicCaducidadNotifySentRead() {
@@ -1859,26 +2029,35 @@
     }
 
     function userLicCaducidadNotifyEnabledHint() {
-        if (!userLicCaducidadNotifyBrowserGranted()) {
-            if (typeof Notification === 'undefined') {
-                return {
-                    text: 'Avisos en la app: alertas en pantalla con esta página abierta.',
-                    kind: 'ok',
-                };
+        var prefs = userLicCaducidadNotifyPrefsRead();
+        var bits = [];
+        if (prefs.inapp) bits.push('app');
+        if (prefs.push) {
+            if (userLicCaducidadNotifyBrowserGranted()) {
+                bits.push('navegador');
+            } else if (typeof Notification !== 'undefined' && Notification.permission === 'denied') {
+                bits.push('navegador bloqueado');
+            } else if (typeof Notification !== 'undefined') {
+                bits.push('navegador (pide permiso)');
             }
-            if (Notification.permission === 'denied') {
-                return {
-                    text: 'Avisos en la app (alertas en pantalla). Notificaciones del navegador bloqueadas; usa el candado de la barra si quieres ambas.',
-                    kind: 'warn',
-                };
-            }
+        }
+        if (!bits.length) {
             return {
-                text: 'Avisos en la app. Si aceptas permiso del navegador, también avisará fuera de la página.',
-                kind: 'ok',
+                text: 'Caducidad activa, pero sin canales: activa «Avisos en la app» o «Push / navegador» arriba.',
+                kind: 'warn',
+            };
+        }
+        if (prefs.push && typeof Notification !== 'undefined' && Notification.permission === 'denied') {
+            return {
+                text: 'Avisos por: ' + bits.join(' · ') + '. Puedes desbloquear el navegador en el candado de la barra.',
+                kind: 'warn',
             };
         }
         return {
-            text: 'Avisos activos (navegador y app). Se revisan al cargar y cada 30 min con la pestaña abierta.',
+            text:
+                'Avisos de caducidad por: ' +
+                bits.join(' · ') +
+                '. Se revisan al cargar y cada 30 min con la pestaña abierta.',
             kind: 'ok',
         };
     }
@@ -1933,7 +2112,7 @@
             '<div class="user-lic-caducidad-alert__body">' +
             escHtml(body) +
             '</div>' +
-            '<div class="user-lic-caducidad-alert__foot">Toca para ir a Caducidad</div>';
+                '<div class="user-lic-caducidad-alert__foot">Toca para ir a Notificación</div>';
 
         var closeBtn = card.querySelector('.user-lic-caducidad-alert__close');
         if (closeBtn) {
@@ -1948,6 +2127,14 @@
         });
 
         stack.appendChild(card);
+        try {
+            if (
+                window.StoreUserNotifications &&
+                typeof window.StoreUserNotifications.playAlertFeedback === 'function'
+            ) {
+                window.StoreUserNotifications.playAlertFeedback();
+            }
+        } catch (_fb) {}
         window.setTimeout(function () {
             userLicCaducidadNotifyDismissInAppAlert(card);
         }, USER_LIC_CADUCIDAD_INAPP_ALERT_MS);
@@ -1975,12 +2162,26 @@
         var bar = document.getElementById('userLicCaducidadNotifyBar');
         var chk = document.getElementById('userLicCaducidadNotifyEnabled');
         var sel = document.getElementById('userLicCaducidadNotifyFromDays');
-        if (!bar || !chk || !sel) return;
+        var chkEmail = document.getElementById('userLicNotifyEmailEnabled');
+        var chkPush = document.getElementById('userLicNotifyPushEnabled');
+        var chkInapp = document.getElementById('userLicNotifyInappEnabled');
+        var chkVibrate = document.getElementById('userLicNotifyVibrateEnabled');
+        var chkSound = document.getElementById('userLicNotifySoundEnabled');
+        if (!bar) return;
         var prefs = userLicCaducidadNotifyPrefsRead();
-        chk.checked = prefs.enabled;
-        sel.value = String(prefs.fromDays);
-        sel.disabled = !prefs.enabled;
-        chk.disabled = false;
+        if (chk) {
+            chk.checked = !!prefs.enabled;
+            chk.disabled = false;
+        }
+        if (sel) {
+            sel.value = String(prefs.fromDays || 5);
+            sel.disabled = !prefs.enabled;
+        }
+        if (chkEmail) chkEmail.checked = prefs.email !== false;
+        if (chkPush) chkPush.checked = prefs.push !== false;
+        if (chkInapp) chkInapp.checked = prefs.inapp !== false;
+        if (chkVibrate) chkVibrate.checked = !!prefs.vibrate;
+        if (chkSound) chkSound.checked = !!prefs.sound;
         if (!prefs.enabled) {
             userLicCaducidadNotifySetHint('', '');
             return;
@@ -2043,7 +2244,9 @@
         var accounts = userLicPortalAccountsCache || [];
         if (!accounts.length) return;
 
-        var useBrowser = userLicCaducidadNotifyBrowserGranted();
+        var useBrowser = !!prefs.push && userLicCaducidadNotifyBrowserGranted();
+        var useInapp = prefs.inapp !== false;
+        if (!useBrowser && !useInapp) return;
         if (!useBrowser && document.visibilityState !== 'visible') return;
 
         var fromDays = prefs.fromDays;
@@ -2084,7 +2287,7 @@
                 }
             }
 
-            if (!delivered && document.visibilityState === 'visible') {
+            if (!delivered && useInapp && document.visibilityState === 'visible') {
                 if (shownInApp >= USER_LIC_CADUCIDAD_INAPP_ALERT_MAX) continue;
                 if (userLicCaducidadNotifyShowInAppAlert(title, body, left <= 1)) {
                     shownInApp += 1;
@@ -2161,6 +2364,9 @@
         if (typeof Notification === 'undefined' || Notification.permission !== 'default') {
             return;
         }
+        if (!userLicCaducidadNotifyPrefsRead().push) {
+            return;
+        }
 
         userLicCaducidadNotifyRequestPermission()
             .then(function () {
@@ -2181,6 +2387,24 @@
         if (!userLicCaducidadNotifyBarWired) {
             userLicCaducidadNotifyBarWired = true;
 
+            var embedded = userLicNotifyPrefsFromEmbedded();
+            if (embedded) {
+                userLicNotifyPrefsApplyServer(embedded);
+            } else {
+                // Migrar localStorage → BD una sola vez si no hay JSON embebido
+                try {
+                    var rawEnabled = localStorage.getItem(userLicCaducidadNotifyLsKey('enabled'));
+                    var rawFrom = localStorage.getItem(userLicCaducidadNotifyLsKey('from_days'));
+                    if (rawEnabled === '1' || rawEnabled === 'true') {
+                        userLicCaducidadNotifyPrefsMem.enabled = true;
+                    }
+                    var nFrom = rawFrom != null ? Number(rawFrom) : NaN;
+                    if (Number.isFinite(nFrom) && nFrom >= 1 && nFrom <= 5) {
+                        userLicCaducidadNotifyPrefsMem.fromDays = Math.trunc(nFrom);
+                    }
+                } catch (_mig) {}
+            }
+
             var chkWire = document.getElementById('userLicCaducidadNotifyEnabled');
             if (chkWire) {
                 chkWire.addEventListener('change', function () {
@@ -2198,6 +2422,28 @@
                     var prefs = userLicCaducidadNotifyPrefsRead();
                     userLicCaducidadNotifyPrefsWrite(prefs.enabled, Number(t.value) || 5);
                     if (prefs.enabled) userLicCaducidadNotifyRunCheck();
+                    return;
+                }
+                if (
+                    t.id === 'userLicNotifyEmailEnabled' ||
+                    t.id === 'userLicNotifyPushEnabled' ||
+                    t.id === 'userLicNotifyInappEnabled' ||
+                    t.id === 'userLicNotifyVibrateEnabled' ||
+                    t.id === 'userLicNotifySoundEnabled'
+                ) {
+                    if (t.id === 'userLicNotifyEmailEnabled') {
+                        userLicCaducidadNotifyPrefsMem.email = !!t.checked;
+                    } else if (t.id === 'userLicNotifyPushEnabled') {
+                        userLicCaducidadNotifyPrefsMem.push = !!t.checked;
+                    } else if (t.id === 'userLicNotifyInappEnabled') {
+                        userLicCaducidadNotifyPrefsMem.inapp = !!t.checked;
+                    } else if (t.id === 'userLicNotifyVibrateEnabled') {
+                        userLicCaducidadNotifyPrefsMem.vibrate = !!t.checked;
+                    } else {
+                        userLicCaducidadNotifyPrefsMem.sound = !!t.checked;
+                    }
+                    userLicNotifyPrefsSaveToServer(userLicNotifyPrefsCollectFromDom());
+                    userLicCaducidadNotifySyncBarUi();
                 }
             });
 
@@ -2206,6 +2452,31 @@
                     userLicCaducidadNotifyRunCheck();
                 }
             });
+
+            // Refrescar prefs desde API (sincroniza con admin)
+            fetch('/tienda/api/user/notify-prefs', {
+                credentials: 'same-origin',
+                cache: 'no-store',
+            })
+                .then(function (r) {
+                    return r.json().catch(function () {
+                        return { success: false };
+                    });
+                })
+                .then(function (data) {
+                    if (data && data.success && data.prefs) {
+                        userLicNotifyPrefsApplyServer(data.prefs);
+                        userLicCaducidadNotifySyncBarUi();
+                        var prefsBoot = userLicCaducidadNotifyPrefsRead();
+                        if (prefsBoot.enabled) {
+                            userLicCaducidadNotifyStartTimer();
+                            userLicCaducidadNotifyRunCheck();
+                        } else {
+                            userLicCaducidadNotifyStopTimer();
+                        }
+                    }
+                })
+                .catch(function () {});
 
             var prefsBoot = userLicCaducidadNotifyPrefsRead();
             if (prefsBoot.enabled) {
@@ -2431,12 +2702,14 @@
     function userLicRowSignalClassFromRow(row) {
         if (userLicRowIsBuena(row)) return 'user-lic-row--signal-buena';
         if (userLicRowIsGarantia(row)) return 'user-lic-row--signal-garantia';
+        if (userLicRowIsWarrantyPending(row)) return 'user-lic-row--signal-pendiente-garantia';
         if (userLicRowIsReporte(row)) return 'user-lic-row--signal-reportes';
         return '';
     }
 
     function userLicRowSignalStripeColorFromRow(row) {
         if (userLicRowIsBuena(row) || userLicRowIsGarantia(row)) return 'rgba(22, 101, 52, 0.78)';
+        if (userLicRowIsWarrantyPending(row)) return 'rgba(180, 83, 9, 0.85)';
         if (userLicRowIsReporte(row)) return 'rgba(153, 27, 27, 0.78)';
         return '';
     }
@@ -2445,6 +2718,9 @@
         if (!rowEl) return '';
         if (rowEl.querySelector('.user-lic-buena-revisada-badge')) return 'user-lic-row--signal-buena';
         if (rowEl.querySelector('.user-lic-garantia-badge')) return 'user-lic-row--signal-garantia';
+        if (rowEl.querySelector('.user-lic-warranty-pending-badge')) {
+            return 'user-lic-row--signal-pendiente-garantia';
+        }
         var sgEl = rowEl.querySelector('select.license-split-editor__status-good');
         var sgVal = sgEl ? String(sgEl.value != null ? sgEl.value : '').trim() : '';
         if (sgVal && normalizeStatusKey(sgVal) === normalizeStatusKey('garantia')) {
@@ -2461,6 +2737,7 @@
         if (cls === 'user-lic-row--signal-buena' || cls === 'user-lic-row--signal-garantia') {
             return 'rgba(22, 101, 52, 0.78)';
         }
+        if (cls === 'user-lic-row--signal-pendiente-garantia') return 'rgba(180, 83, 9, 0.85)';
         if (cls === 'user-lic-row--signal-reportes') return 'rgba(153, 27, 27, 0.78)';
         return '';
     }
@@ -2470,7 +2747,8 @@
         rowEl.classList.remove(
             'user-lic-row--signal-reportes',
             'user-lic-row--signal-buena',
-            'user-lic-row--signal-garantia'
+            'user-lic-row--signal-garantia',
+            'user-lic-row--signal-pendiente-garantia'
         );
         var cls = rowDataOptional
             ? userLicRowSignalClassFromRow(rowDataOptional)
@@ -2525,17 +2803,23 @@
         return normalizeStatusKey(row.status_good || '') === normalizeStatusKey('garantia');
     }
 
+    function userLicRowIsWarrantyPending(row) {
+        return !!(row && row.warranty_pending === true);
+    }
+
     function userLicRowIsBuena(row) {
-        if (!row || userLicRowIsGarantia(row)) return false;
+        if (!row || userLicRowIsGarantia(row) || userLicRowIsWarrantyPending(row)) return false;
         if (row.buena_revisada_readonly === true) return true;
         return normalizeStatusKey(row.status_good || '') === normalizeStatusKey('ok');
     }
 
     function userLicRowIsReporte(row) {
-        if (!row || userLicRowIsBuena(row) || userLicRowIsGarantia(row)) return false;
+        if (!row || userLicRowIsBuena(row) || userLicRowIsGarantia(row) || userLicRowIsWarrantyPending(row)) {
+            return false;
+        }
         if (row.tier_bad === 'bad') return true;
         var sb = String(row.status_bad != null ? row.status_bad : '').trim();
-        if (!sb || sb.indexOf('__prev_good:') === 0) return false;
+        if (!sb || sb.indexOf('__prev_good:') === 0 || sb.indexOf('__') === 0) return false;
         return normalizeStatusKey(sb) !== '';
     }
 
@@ -2543,17 +2827,20 @@
         var nReportes = 0;
         var nBuena = 0;
         var nGarantia = 0;
+        var nPendGar = 0;
         (pairs || []).forEach(function (p) {
             var row = p && p.row;
             if (userLicRowIsBuena(row)) {
                 nBuena += 1;
             } else if (userLicRowIsGarantia(row)) {
                 nGarantia += 1;
+            } else if (userLicRowIsWarrantyPending(row)) {
+                nPendGar += 1;
             } else if (userLicRowIsReporte(row)) {
                 nReportes += 1;
             }
         });
-        return { reportes: nReportes, buena: nBuena, garantia: nGarantia };
+        return { reportes: nReportes, buena: nBuena, garantia: nGarantia, pendienteGarantia: nPendGar };
     }
 
     function userLicDayStatusBadgesHtml(counts) {
@@ -2563,6 +2850,13 @@
             parts.push(
                 '<span class="user-lic-day-cnt-badge user-lic-day-cnt-badge--reportes" role="status" aria-live="polite">reportes ' +
                     String(counts.reportes) +
+                    '</span>'
+            );
+        }
+        if (counts.pendienteGarantia > 0) {
+            parts.push(
+                '<span class="user-lic-day-cnt-badge user-lic-day-cnt-badge--pendiente-garantia" role="status" aria-live="polite">pendiente garantía ' +
+                    String(counts.pendienteGarantia) +
                     '</span>'
             );
         }
@@ -2588,7 +2882,8 @@
         var nReportes = 0;
         var nBuena = 0;
         var nGarantia = 0;
-        if (!section) return { reportes: 0, buena: 0, garantia: 0 };
+        var nPendGar = 0;
+        if (!section) return { reportes: 0, buena: 0, garantia: 0, pendienteGarantia: 0 };
         section.querySelectorAll('.user-lic-license-row-edit').forEach(function (row) {
             if (row.querySelector('.user-lic-buena-revisada-badge')) {
                 nBuena += 1;
@@ -2596,6 +2891,10 @@
             }
             if (row.querySelector('.user-lic-garantia-badge')) {
                 nGarantia += 1;
+                return;
+            }
+            if (row.querySelector('.user-lic-warranty-pending-badge')) {
+                nPendGar += 1;
                 return;
             }
             var sgEl = row.querySelector('select.license-split-editor__status-good');
@@ -2606,11 +2905,16 @@
             }
             var sbEl = row.querySelector('select.license-split-editor__status-bad');
             var sbVal = sbEl ? String(sbEl.value != null ? sbEl.value : '').trim() : '';
-            if (sbVal && sbVal.indexOf('__prev_good:') !== 0) {
+            if (sbVal && sbVal.indexOf('__') !== 0) {
                 nReportes += 1;
             }
         });
-        return { reportes: nReportes, buena: nBuena, garantia: nGarantia };
+        return {
+            reportes: nReportes,
+            buena: nBuena,
+            garantia: nGarantia,
+            pendienteGarantia: nPendGar,
+        };
     }
 
     function userLicSyncDaySectionSignalClasses(section, counts) {
@@ -2618,11 +2922,14 @@
         section.classList.remove(
             'user-lic-day--signal-reportes',
             'user-lic-day--signal-buena',
-            'user-lic-day--signal-garantia'
+            'user-lic-day--signal-garantia',
+            'user-lic-day--signal-pendiente-garantia'
         );
         if (!counts) return;
         if (counts.reportes > 0) {
             section.classList.add('user-lic-day--signal-reportes');
+        } else if (counts.pendienteGarantia > 0) {
+            section.classList.add('user-lic-day--signal-pendiente-garantia');
         } else if (counts.garantia > 0 || counts.buena > 0) {
             section.classList.add('user-lic-day--signal-buena');
         }
@@ -2719,9 +3026,11 @@
             ? ''
             : daySignals.reportes > 0
               ? ' user-lic-day--signal-reportes'
-              : daySignals.garantia > 0 || daySignals.buena > 0
-                ? ' user-lic-day--signal-buena'
-                : '';
+              : daySignals.pendienteGarantia > 0
+                ? ' user-lic-day--signal-pendiente-garantia'
+                : daySignals.garantia > 0 || daySignals.buena > 0
+                  ? ' user-lic-day--signal-buena'
+                  : '';
 
         var caducidadToolbar = !!sectionOpts.caducidadMode;
         var toolbarHtml = sectionOpts.showDaysToolbar

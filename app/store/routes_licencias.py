@@ -140,6 +140,22 @@ def user_licencias():
     soporte_licencias_nav = bool(_user_store_soporte_licencias_flag(user))
     proveedor_nav = bool(_user_store_proveedor_flag(user))
     licencias_view_only = bool(_user_store_view_only(user))
+    notify_prefs = {}
+    try:
+        from app.store.email_notify_prefs import get_store_notify_prefs
+
+        notify_prefs = get_store_notify_prefs(user)
+    except Exception:
+        notify_prefs = {
+            'email_notify_enabled': True,
+            'push_notify_enabled': True,
+            'inapp_notify_enabled': True,
+            'notify_vibrate_enabled': False,
+            'notify_sound_enabled': False,
+            'caducidad_notify_enabled': False,
+            'caducidad_notify_from_days': 5,
+            'whatsapp_admin_only': True,
+        }
     resp = make_response(render_template(
         'user_licencias.html',
         title='Licencias',
@@ -151,6 +167,7 @@ def user_licencias():
         soporte_licencias_nav=soporte_licencias_nav,
         proveedor_nav=proveedor_nav,
         licencias_view_only=licencias_view_only,
+        notify_prefs=notify_prefs,
         licencias_static_version=LICENCIAS_STATIC_VERSION,
     ))
     _attach_document_no_store_headers(resp)
@@ -5547,6 +5564,10 @@ def api_deliver_warranty_replacement(license_id):
 
         old_at = bad_acc.assigned_at
         old_ex = bad_acc.expires_at
+        old_cred_plain = '{} {}'.format(
+            str(bad_acc.email or '').strip(),
+            str(bad_acc.password or '').replace('\r\n', ' ').replace('\n', ' ').strip(),
+        ).strip()
 
         db.session.delete(bad_acc)
         db.session.flush()
@@ -5556,12 +5577,63 @@ def api_deliver_warranty_replacement(license_id):
         replacement.assigned_at = old_at or datetime.utcnow()
         replacement.expires_at = old_ex or (datetime.utcnow() + _license_account_term_timedelta(license_obj))
         replacement.updated_at = datetime.utcnow()
-        db.session.commit()
 
         new_cred_plain = '{} {}'.format(
             str(replacement.email or '').strip(),
             str(replacement.password or '').replace('\r\n', ' ').replace('\n', ' ').strip(),
         ).strip()
+
+        try:
+            from app.store.license_report_notify import notify_license_report_answered
+
+            if urow is not None:
+                notify_license_report_answered(
+                    user=urow,
+                    license_obj=license_obj,
+                    outcome='warranty_replaced',
+                    credential_hint=cred_hint or old_cred_plain,
+                    new_credential=new_cred_plain,
+                    commit=False,
+                )
+        except Exception as nerr:
+            current_app.logger.warning('notify warranty_replaced: %s', nerr)
+
+        try:
+            from app.store.routes import _billing_user_for_store_debt_limit
+            from app.store.user_license_activity import append_portal_license_activity_record
+
+            billing_for_log = (
+                _billing_user_for_store_debt_limit(urow) if urow is not None else None
+            ) or urow
+            if billing_for_log is not None:
+                pname = ''
+                try:
+                    if license_obj.product is not None:
+                        pname = str(license_obj.product.name or '').strip()
+                except Exception:
+                    pname = ''
+                if not pname:
+                    pname = 'Producto'
+                append_portal_license_activity_record(
+                    billing_for_log,
+                    'garantia_entrega',
+                    '%s · garantía entregada' % pname,
+                    detail='%s\nse dio garantia por esta\n%s'
+                    % (old_cred_plain, new_cred_plain),
+                    extra={
+                        'license_id': license_id,
+                        'account_id': replacement.id,
+                        'product_name': pname,
+                        'old_cred': old_cred_plain,
+                        'new_cred': new_cred_plain,
+                        'cred_hint': old_cred_plain,
+                        'wa_digest_pending': 1,
+                    },
+                )
+        except Exception as log_err:
+            current_app.logger.warning('log garantia_entrega: %s', log_err)
+
+        db.session.commit()
 
         return jsonify(
             {
@@ -5570,11 +5642,84 @@ def api_deliver_warranty_replacement(license_id):
                 'new_cred_plain': new_cred_plain,
                 'new_account_identifier': str(replacement.account_identifier or '').strip(),
                 'replacement_account_id': replacement.id,
+                'notified': True,
             }
         )
     except Exception as e:
         db.session.rollback()
         current_app.logger.exception('api_deliver_warranty_replacement')
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@store_bp.route('/api/licenses/<int:license_id>/notify-report-answered', methods=['POST'])
+@admin_or_soporte_licencias_required
+def api_notify_license_report_answered(license_id):
+    """
+    Avisa al cliente cuando se contesta un reporte desde el panel (buena / garantía pendiente).
+    El reemplazo con stock también notifica desde deliver-warranty-replacement.
+    """
+    try:
+        from app.store.models import License
+        from app.store.license_report_notify import (
+            notify_license_report_answered,
+            resolve_store_user_for_report_notify,
+        )
+
+        license_obj = License.query.get(license_id)
+        if not license_obj:
+            return jsonify({'success': False, 'error': 'Licencia no encontrada.'}), 404
+
+        data = request.get_json(silent=True) or {}
+        outcome = str(data.get('outcome') or '').strip().lower()
+        if outcome not in ('buena', 'warranty_replaced', 'warranty_pending'):
+            return jsonify({'success': False, 'error': 'outcome inválido.'}), 400
+
+        raw_uid = data.get('user_id')
+        uid = None
+        try:
+            if raw_uid is not None and str(raw_uid).strip() != '':
+                uid = int(raw_uid)
+        except (TypeError, ValueError):
+            uid = None
+
+        username = str(data.get('username') or data.get('reporter_username') or '').strip()
+        user = resolve_store_user_for_report_notify(user_id=uid, username=username)
+        if not user:
+            return jsonify(
+                {
+                    'success': False,
+                    'error': 'No se encontró el usuario del reporte para notificar.',
+                    'notified': False,
+                }
+            ), 404
+
+        day = data.get('day')
+        try:
+            day_n = int(day) if day is not None and str(day).strip() != '' else None
+        except (TypeError, ValueError):
+            day_n = None
+
+        notif = notify_license_report_answered(
+            user=user,
+            license_obj=license_obj,
+            outcome=outcome,
+            credential_hint=str(data.get('credential_hint') or data.get('credential') or ''),
+            new_credential=str(data.get('new_credential') or data.get('new_cred_plain') or ''),
+            day=day_n,
+            product_name=str(data.get('product_name') or '') or None,
+            commit=True,
+        )
+        return jsonify(
+            {
+                'success': True,
+                'notified': bool(notif),
+                'notification_id': getattr(notif, 'id', None) if notif else None,
+                'user_id': int(user.id),
+            }
+        )
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.exception('api_notify_license_report_answered')
         return jsonify({'success': False, 'error': str(e)}), 500
 
 

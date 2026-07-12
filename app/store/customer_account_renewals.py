@@ -820,6 +820,15 @@ def _user_platform_email(user):
 
 def _send_customer_renewal_transactional_email(user, *, subject, email_title, paragraphs):
     """Envía al email registrado del usuario en la plataforma (campo User.email)."""
+    from app.store.email_notify_prefs import user_receives_email_notifications
+
+    if not user_receives_email_notifications(user):
+        current_app.logger.info(
+            'Email renovación omitido: email notificaciones desactivado user=%s',
+            getattr(user, 'username', None) or getattr(user, 'id', '?'),
+        )
+        return False
+
     to_email = _user_platform_email(user)
     if not to_email:
         current_app.logger.info(

@@ -15,8 +15,24 @@ _CRED_EMAIL_RE = re.compile(r'\S+@\S+\.\S+')
 PORTAL_ACTIVITY_MAX = 380
 PORTAL_ACTIVITY_RETENTION_DAYS = 180
 _PORTAL_ACTIVITY_EXTRA_KEYS = frozenset(
-    {'license_id', 'calendar_day', 'row_ordinal', 'account_id', 'cred_hint'}
+    {
+        'license_id',
+        'calendar_day',
+        'row_ordinal',
+        'account_id',
+        'cred_hint',
+        'old_cred',
+        'new_cred',
+        'product_name',
+        'wa_digest_pending',
+    }
 )
+_PORTAL_ACTIVITY_STR_EXTRA_MAX = {
+    'cred_hint': 140,
+    'old_cred': 220,
+    'new_cred': 220,
+    'product_name': 120,
+}
 
 
 def _sanitize_portal_activity_extra(extra: Optional[Dict[str, Any]]) -> Dict[str, Any]:
@@ -27,10 +43,16 @@ def _sanitize_portal_activity_extra(extra: Optional[Dict[str, Any]]) -> Dict[str
         if k not in extra:
             continue
         v = extra[k]
-        if k == 'cred_hint':
-            s = str(v or '').strip()[:140]
+        if k in _PORTAL_ACTIVITY_STR_EXTRA_MAX:
+            s = str(v or '').strip()[: _PORTAL_ACTIVITY_STR_EXTRA_MAX[k]]
             if s:
                 out[k] = s
+            continue
+        if k == 'wa_digest_pending':
+            try:
+                out[k] = 1 if int(v) else 0
+            except (TypeError, ValueError):
+                continue
             continue
         if k == 'account_id':
             if v is None or v == '':
@@ -418,6 +440,8 @@ def _tipo_visual(tipo_raw: str) -> str:
         return 'Caída / cuenta suspendida'
     if t == 'portal_garantia':
         return 'Garantía (repuesto)'
+    if t == 'garantia_entrega':
+        return 'Garantía entregada'
     if t in ('incidencia', 'reporte_o_incidencia'):
         return 'Reporte / incidencia'
     if t in (
@@ -927,6 +951,15 @@ def portal_log_status_changes(
                 detail=otro_use.strip() if otro_use else None,
                 extra=ctx,
             )
+            _notify_admin_portal_report(
+                viewer_user_row,
+                product_name=pname,
+                report_kind='caida',
+                credential_hint=cred_short,
+                license_id=license_id,
+                calendar_day=calendar_day,
+                detail=otro_use.strip() if otro_use else '',
+            )
         elif canon_sb.strip():
             det = otro_use.strip() if nk_new_sb == normalize_status_key('otro') else ''
             label = portal_bad_label_readable(canon_sb)
@@ -941,6 +974,15 @@ def portal_log_status_changes(
                 sum_inc,
                 detail=(det if det else None),
                 extra=ctx,
+            )
+            _notify_admin_portal_report(
+                viewer_user_row,
+                product_name=pname,
+                report_kind='incidencia',
+                credential_hint=cred_short,
+                license_id=license_id,
+                calendar_day=calendar_day,
+                detail=det or label,
             )
         elif old_sb:
             append_portal_license_activity_record(
@@ -963,6 +1005,15 @@ def portal_log_status_changes(
                 detail=None,
                 extra=ctx,
             )
+            _notify_admin_portal_report(
+                viewer_user_row,
+                product_name=pname,
+                report_kind='garantia',
+                credential_hint=cred_short,
+                license_id=license_id,
+                calendar_day=calendar_day,
+                detail='',
+            )
         elif nk_new_sg in renew_nk:
             append_portal_license_activity_record(
                 viewer_user_row,
@@ -971,3 +1022,30 @@ def portal_log_status_changes(
                 detail=None,
                 extra=ctx,
             )
+
+
+def _notify_admin_portal_report(
+    viewer_user_row: Any,
+    *,
+    product_name: str,
+    report_kind: str,
+    credential_hint: str,
+    license_id: int,
+    calendar_day: int,
+    detail: str = '',
+) -> None:
+    try:
+        from app.store.license_report_notify import notify_admin_license_report_from_user
+
+        notify_admin_license_report_from_user(
+            reporter_user=viewer_user_row,
+            product_name=product_name,
+            report_kind=report_kind,
+            credential_hint=credential_hint,
+            license_id=license_id,
+            calendar_day=calendar_day,
+            detail=detail,
+            commit=False,
+        )
+    except Exception:
+        pass

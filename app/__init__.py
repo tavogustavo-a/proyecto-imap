@@ -343,6 +343,34 @@ def create_app(config_class_passed=None):
                         "Esquema: columna whatsapp_notify_enabled añadida a users (%s)",
                         dialect,
                     )
+
+                ucols = _cols("users")
+                if "email_notify_enabled" not in ucols:
+                    if dialect == "postgresql":
+                        em_sql = (
+                            "ALTER TABLE users ADD COLUMN email_notify_enabled "
+                            "BOOLEAN NOT NULL DEFAULT TRUE"
+                        )
+                    else:
+                        em_sql = (
+                            "ALTER TABLE users ADD COLUMN email_notify_enabled "
+                            "INTEGER NOT NULL DEFAULT 1"
+                        )
+                    db.session.execute(text(em_sql))
+                    db.session.commit()
+                    app.logger.info(
+                        "Esquema: columna email_notify_enabled añadida a users (%s)",
+                        dialect,
+                    )
+
+                try:
+                    from app.store.email_notify_prefs import ensure_store_notify_prefs_columns
+
+                    ensure_store_notify_prefs_columns()
+                except Exception as prefs_err:
+                    app.logger.warning(
+                        "No se pudieron asegurar prefs notificación: %s", prefs_err
+                    )
         except Exception as schema_users_patch_err:
             db.session.rollback()
             app.logger.warning(
@@ -367,6 +395,9 @@ def create_app(config_class_passed=None):
             _ensure_license_expired_notes_and_month_columns()
             ensure_product_reservation_schema()
             ensure_customer_account_renewal_schema()
+            from app.store.email_notify_prefs import ensure_user_email_notify_enabled_column
+
+            ensure_user_email_notify_enabled_column()
             if repaired_accum:
                 app.logger.debug(
                     f"Esquema: {repaired_accum} acumulación(es) legacy reparada(s)"

@@ -1600,4 +1600,77 @@ document.addEventListener("DOMContentLoaded", function () {
     observer.observe(resultsDiv, { childList: true, subtree: true });
   }
 
+  // --- UX móvil (apps WebView): teclado + menús laterales ---
+  (function initMobileKeyboardMenuUx() {
+    var root = document.documentElement;
+    var focusScrollTimer = null;
+
+    function isCoarsePointer() {
+      try {
+        return !!(window.matchMedia && window.matchMedia('(pointer: coarse)').matches);
+      } catch (e) {
+        return /Android|iPhone|iPad|iPod/i.test(navigator.userAgent || '');
+      }
+    }
+
+    function syncKeyboardCssVar() {
+      var vv = window.visualViewport;
+      if (!vv) {
+        root.style.setProperty('--mobile-kb', '0px');
+        return;
+      }
+      var kb = Math.max(0, Math.round(window.innerHeight - vv.height - vv.offsetTop));
+      // Ignorar ruido pequeño (barra URL, etc.)
+      if (kb < 80) kb = 0;
+      root.style.setProperty('--mobile-kb', kb + 'px');
+      root.classList.toggle('mobile-keyboard-open', kb > 0);
+    }
+
+    function scrollFocusedFieldIntoView(el) {
+      if (!el || typeof el.scrollIntoView !== 'function') return;
+      try {
+        el.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'smooth' });
+      } catch (e) {
+        try {
+          el.scrollIntoView(true);
+        } catch (e2) {}
+      }
+      // Si el campo está dentro del menú lateral, también desplaza el menú.
+      var menu = el.closest && el.closest('.mobile-menu-store');
+      if (menu && typeof menu.scrollTop === 'number') {
+        try {
+          var rect = el.getBoundingClientRect();
+          var menuRect = menu.getBoundingClientRect();
+          if (rect.bottom > menuRect.bottom - 12 || rect.top < menuRect.top + 12) {
+            menu.scrollTop += rect.top - menuRect.top - menu.clientHeight * 0.35;
+          }
+        } catch (e3) {}
+      }
+    }
+
+    syncKeyboardCssVar();
+    if (window.visualViewport) {
+      window.visualViewport.addEventListener('resize', syncKeyboardCssVar);
+      window.visualViewport.addEventListener('scroll', syncKeyboardCssVar);
+    }
+    window.addEventListener('resize', syncKeyboardCssVar);
+
+    if (!isCoarsePointer()) return;
+
+    document.addEventListener(
+      'focusin',
+      function (ev) {
+        var t = ev.target;
+        if (!t || !t.matches) return;
+        if (!t.matches('input, textarea, select, [contenteditable="true"]')) return;
+        if (focusScrollTimer) window.clearTimeout(focusScrollTimer);
+        focusScrollTimer = window.setTimeout(function () {
+          syncKeyboardCssVar();
+          scrollFocusedFieldIntoView(t);
+        }, 280);
+      },
+      true
+    );
+  })();
+
 }); // Fin DOMContentLoaded

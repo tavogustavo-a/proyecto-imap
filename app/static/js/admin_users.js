@@ -239,6 +239,8 @@ document.addEventListener("DOMContentLoaded", function() {
       const canBulkDeleteEmails = editUserCanBulkDeleteEmails ? editUserCanBulkDeleteEmails.checked : false;
       const editUserCanManage2FAEmails = document.getElementById("editUserCanManage2FAEmails");
       const canManage2FAEmails = editUserCanManage2FAEmails ? editUserCanManage2FAEmails.checked : false;
+      const editUserEmailNotifyEnabled = document.getElementById("editUserEmailNotifyEnabled");
+      const emailNotifyEnabled = editUserEmailNotifyEnabled ? editUserEmailNotifyEnabled.checked : true;
       const fullNameVal = editUserFullName.value.trim();
       const phoneVal = editUserPhone.value.trim();
       const emailVal = editUserEmail.value.trim();
@@ -263,6 +265,7 @@ document.addEventListener("DOMContentLoaded", function() {
         can_add_own_emails: canAddOwnEmails,
         can_bulk_delete_emails: canBulkDeleteEmails,
         can_manage_2fa_emails: canManage2FAEmails,
+        email_notify_enabled: emailNotifyEnabled,
         full_name: fullNameVal,
         phone: phoneVal,
         email: emailVal
@@ -453,6 +456,9 @@ document.addEventListener("DOMContentLoaded", function() {
       const canBulkDeleteEmails = (target.getAttribute("data-canbulkdeleteemails") === "true");
       const canManage2FAEmailsAttr = target.getAttribute("data-canmanage2faemails");
       const canManage2FAEmails = (canManage2FAEmailsAttr === "true");
+      const emailNotifyAttr = target.getAttribute("data-emailnotifyenabled");
+      // Por defecto activo si el atributo no viene (usuarios antiguos)
+      const emailNotifyEnabled = emailNotifyAttr !== "false";
       const fullName = target.getAttribute("data-fullname") || "";
       const phone = target.getAttribute("data-phone") || "";
       const email = target.getAttribute("data-email") || "";
@@ -470,6 +476,8 @@ document.addEventListener("DOMContentLoaded", function() {
       if (editUserCanBulkDeleteEmailsCheckbox) editUserCanBulkDeleteEmailsCheckbox.checked = canBulkDeleteEmails;
       const editUserCanManage2FAEmailsCheckbox = document.getElementById("editUserCanManage2FAEmails");
       if (editUserCanManage2FAEmailsCheckbox) editUserCanManage2FAEmailsCheckbox.checked = canManage2FAEmails;
+      const editUserEmailNotifyEnabledCheckbox = document.getElementById("editUserEmailNotifyEnabled");
+      if (editUserEmailNotifyEnabledCheckbox) editUserEmailNotifyEnabledCheckbox.checked = emailNotifyEnabled;
       editUserFullName.value = fullName;
       editUserPhone.value = phone;
       editUserEmail.value = email;
@@ -585,6 +593,7 @@ document.addEventListener("DOMContentLoaded", function() {
       editBtn.dataset.canaddownemails = (u.can_add_own_emails === true) ? 'true' : 'false';
       editBtn.dataset.canbulkdeleteemails = (u.can_bulk_delete_emails === true) ? 'true' : 'false';
       editBtn.dataset.canmanage2faemails = (u.can_manage_2fa_emails === true) ? 'true' : 'false';
+      editBtn.dataset.emailnotifyenabled = (u.email_notify_enabled === false) ? 'false' : 'true';
       editBtn.dataset.fullname = escapeHtml(u.full_name || '');
       editBtn.dataset.phone = escapeHtml(u.phone || '');
       editBtn.dataset.email = escapeHtml(u.email || '');

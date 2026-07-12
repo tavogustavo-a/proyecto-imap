@@ -2,7 +2,7 @@
 
 {% block title %}Tienda Pública{% endblock %}
 
-{% block head %}{{ super() }}<link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}?v=20260709-store-view-only"><link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/chat_soporte.css') }}"><meta name="csrf_token" content="{{ csrf_token() }}">{% endblock %}
+{% block head %}{{ super() }}<link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}?v=20260711-store-view5-scroll"><link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/chat_soporte.css') }}"><meta name="csrf_token" content="{{ csrf_token() }}">{% endblock %}
 {% block content %}
 <div class="container container-max-width-900 store-light store-front-main">
   {% set blocked_users = ['soporte','soporte1','soporte2','soporte3'] %}

@@ -211,6 +211,16 @@ class User(db.Model):
 
     # Avisos/resúmenes WhatsApp (solo cuentas principales; sub-usuarios nunca reciben).
     whatsapp_notify_enabled = db.Column(db.Boolean, default=True, nullable=False, server_default='1')
+    # Notificaciones de tienda (email sincronizado con admin; push/in-app gestionables por el cliente).
+    email_notify_enabled = db.Column(db.Boolean, default=True, nullable=False, server_default='1')
+    push_notify_enabled = db.Column(db.Boolean, default=True, nullable=False, server_default='1')
+    inapp_notify_enabled = db.Column(db.Boolean, default=True, nullable=False, server_default='1')
+    notify_vibrate_enabled = db.Column(db.Boolean, default=False, nullable=False, server_default='0')
+    notify_sound_enabled = db.Column(db.Boolean, default=False, nullable=False, server_default='0')
+    # JSON: preferencias por tipo de aviso (admin/cliente). Keys ausentes = activo.
+    notify_type_prefs_json = db.Column(db.Text, nullable=True)
+    caducidad_notify_enabled = db.Column(db.Boolean, default=False, nullable=False, server_default='0')
+    caducidad_notify_from_days = db.Column(db.Integer, default=5, nullable=False, server_default='5')
     can_chat = db.Column(db.Boolean, default=False, nullable=False)
     can_manage_subusers = db.Column(db.Boolean, default=False, nullable=False)
     is_support = db.Column(db.Boolean, default=False, nullable=False)

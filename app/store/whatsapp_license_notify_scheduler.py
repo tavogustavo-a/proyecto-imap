@@ -23,6 +23,14 @@ def run_whatsapp_license_notify_tick(app):
         except Exception as exc:
             logger.exception('process_due_next_day_reservations: %s', exc)
         try:
+            from app.store.license_report_answer_email_batch import (
+                flush_due_license_report_answer_emails,
+            )
+
+            flush_due_license_report_answer_emails()
+        except Exception as exc:
+            logger.exception('flush_due_license_report_answer_emails: %s', exc)
+        try:
             from app.store.whatsapp_license_notify_job import run_whatsapp_license_notify_for_config
             from app.store.whatsapp_license_notify_schedule import (
                 should_run_catchup_notify,

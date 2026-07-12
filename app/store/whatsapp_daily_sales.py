@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Resumen diario WhatsApp: compras y renovaciones del día (Colombia)."""
+"""Resumen diario WhatsApp: compras, renovaciones y garantías del día (Colombia)."""
 
 from __future__ import annotations
 
@@ -253,6 +253,11 @@ def _group_pending_by_user_and_date(
         billing_id = int(billing.id) if billing else int(snap.user_id)
         key = (billing_id, co_date)
         groups.setdefault(key, []).append(snap)
+
+    for key in _pending_warranty_only_digest_keys(
+        config, co_now, force=force, existing=set(groups.keys())
+    ):
+        groups.setdefault(key, [])
     return groups
 
 
@@ -563,6 +568,264 @@ def _failed_renewal_historial_lines(billing_user: User, co_date: date) -> list[s
     return lines
 
 
+def _join_es_y(parts: list[str]) -> str:
+    clean = [p for p in parts if p]
+    if not clean:
+        return ''
+    if len(clean) == 1:
+        return clean[0]
+    if len(clean) == 2:
+        return f'{clean[0]} y {clean[1]}'
+    return ', '.join(clean[:-1]) + f' y {clean[-1]}'
+
+
+def _parse_activity_log_items(raw: Any) -> list[dict[str, Any]]:
+    if not str(raw or '').strip():
+        return []
+    try:
+        items = json.loads(raw)
+    except (json.JSONDecodeError, TypeError):
+        return []
+    if not isinstance(items, list):
+        return []
+    return [x for x in items if isinstance(x, dict)]
+
+
+def _garantia_entrega_event_from_item(item: dict[str, Any]) -> dict[str, Any] | None:
+    if str(item.get('tipo') or '').strip().lower() != 'garantia_entrega':
+        return None
+    extra = item.get('extra') if isinstance(item.get('extra'), dict) else {}
+    product_name = str(extra.get('product_name') or '').strip()
+    if not product_name:
+        summary = str(item.get('summary') or '').strip()
+        if ' · ' in summary:
+            product_name = summary.split(' · ', 1)[0].strip()
+        else:
+            product_name = summary or 'Producto'
+    old_cred = str(extra.get('old_cred') or '').strip()
+    new_cred = str(extra.get('new_cred') or '').strip()
+    if (not old_cred or not new_cred) and item.get('detail'):
+        detail = str(item.get('detail') or '')
+        parts = [p.strip() for p in detail.split('\nse dio garantia por esta\n')]
+        if len(parts) == 2:
+            old_cred = old_cred or parts[0].strip()
+            new_cred = new_cred or parts[1].strip()
+    if not old_cred and not new_cred:
+        return None
+    return {
+        'product_name': product_name or 'Producto',
+        'old_cred': old_cred,
+        'new_cred': new_cred,
+        'wa_digest_pending': int(extra.get('wa_digest_pending') or 0),
+    }
+
+
+def _garantia_entrega_events_on_co_date(
+    billing_user: User,
+    co_date: date,
+) -> list[dict[str, Any]]:
+    """Garantías entregadas ese día CO (titular + subusuarios de la cuenta)."""
+    user_ids = _store_account_user_ids(billing_user) or {int(billing_user.id)}
+    users = User.query.filter(User.id.in_(list(user_ids))).all()
+    seen: set[tuple[str, str, str]] = set()
+    out: list[dict[str, Any]] = []
+    for u in users:
+        for item in _parse_activity_log_items(
+            getattr(u, 'portal_license_activity_log', None)
+        ):
+            ts_raw = item.get('ts')
+            if not ts_raw:
+                continue
+            try:
+                ts = datetime.fromisoformat(str(ts_raw).replace('Z', '')[:26])
+            except ValueError:
+                continue
+            try:
+                item_co = utc_to_colombia(ts).date()
+            except Exception:
+                continue
+            if item_co != co_date:
+                continue
+            ev = _garantia_entrega_event_from_item(item)
+            if not ev:
+                continue
+            key = (ev['product_name'], ev['old_cred'], ev['new_cred'])
+            if key in seen:
+                continue
+            seen.add(key)
+            out.append(ev)
+    return out
+
+
+def _warranty_summary_lines(events: list[dict[str, Any]]) -> list[str]:
+    if not events:
+        return []
+    order: list[str] = []
+    totals: dict[str, int] = {}
+    for ev in events:
+        name = str(ev.get('product_name') or 'Producto').strip() or 'Producto'
+        if name not in totals:
+            order.append(name)
+            totals[name] = 0
+        totals[name] += 1
+    n = len(events)
+    label = '1 garantia' if n == 1 else f'{n} garantias'
+    parts = [f'{totals[name]} {name}' for name in order]
+    lines: list[str] = [f'{label}: {_join_es_y(parts)}', '']
+    blocks: list[str] = []
+    for ev in events:
+        old_c = str(ev.get('old_cred') or '').strip()
+        new_c = str(ev.get('new_cred') or '').strip()
+        block_parts = []
+        if old_c:
+            block_parts.append(old_c)
+        block_parts.append('se dio garantia por esta')
+        if new_c:
+            block_parts.append(new_c)
+        blocks.append('\n'.join(block_parts))
+    lines.append('\n\n'.join(blocks))
+    return lines
+
+
+def _mark_warranty_digests_sent(billing_user: User, co_date: date) -> bool:
+    """Quita wa_digest_pending de garantia_entrega de ese día CO. True si hubo cambios."""
+    changed = False
+    user_ids = _store_account_user_ids(billing_user) or {int(billing_user.id)}
+    users = User.query.filter(User.id.in_(list(user_ids))).all()
+    for u in users:
+        raw = getattr(u, 'portal_license_activity_log', None)
+        items = _parse_activity_log_items(raw)
+        if not items:
+            continue
+        user_changed = False
+        for item in items:
+            if str(item.get('tipo') or '').strip().lower() != 'garantia_entrega':
+                continue
+            ts_raw = item.get('ts')
+            if not ts_raw:
+                continue
+            try:
+                ts = datetime.fromisoformat(str(ts_raw).replace('Z', '')[:26])
+                item_co = utc_to_colombia(ts).date()
+            except Exception:
+                continue
+            if item_co != co_date:
+                continue
+            extra = item.get('extra') if isinstance(item.get('extra'), dict) else {}
+            if int(extra.get('wa_digest_pending') or 0) != 1:
+                continue
+            extra = dict(extra)
+            extra['wa_digest_pending'] = 0
+            item['extra'] = extra
+            user_changed = True
+        if user_changed:
+            u.portal_license_activity_log = json.dumps(items, ensure_ascii=False)
+            db.session.add(u)
+            changed = True
+    return changed
+
+
+def _pending_warranty_only_digest_keys(
+    config: WhatsAppConfig,
+    co_now,
+    *,
+    force: bool = False,
+    existing: set[tuple[int, date]] | None = None,
+) -> list[tuple[int, date]]:
+    """Días con garantía pendiente de WA y sin grupo de compras/renovaciones."""
+    from app.store.routes import _billing_user_for_store_debt_limit
+
+    existing = existing or set()
+    out: list[tuple[int, date]] = []
+    seen: set[tuple[int, date]] = set()
+    users = (
+        User.query.filter(User.portal_license_activity_log.like('%garantia_entrega%'))
+        .all()
+    )
+    for u in users:
+        billing = _billing_user_for_store_debt_limit(u) or u
+        billing_id = int(billing.id)
+        for item in _parse_activity_log_items(
+            getattr(u, 'portal_license_activity_log', None)
+        ):
+            if str(item.get('tipo') or '').strip().lower() != 'garantia_entrega':
+                continue
+            extra = item.get('extra') if isinstance(item.get('extra'), dict) else {}
+            if int(extra.get('wa_digest_pending') or 0) != 1:
+                continue
+            ts_raw = item.get('ts')
+            if not ts_raw:
+                continue
+            try:
+                ts = datetime.fromisoformat(str(ts_raw).replace('Z', '')[:26])
+                co_date = utc_to_colombia(ts).date()
+            except Exception:
+                continue
+            if co_date > co_now.date():
+                continue
+            if not force and not _co_date_ready_for_send(co_date, config, co_now):
+                continue
+            key = (billing_id, co_date)
+            if key in existing or key in seen:
+                continue
+            seen.add(key)
+            out.append(key)
+    return out
+
+
+def _warranty_events_map_for_historial(
+    *,
+    viewer_billing_user_id: int | None = None,
+    all_users: bool = False,
+) -> dict[tuple[int, date], list[dict[str, Any]]]:
+    from app.store.routes import _billing_user_for_store_debt_limit
+
+    out: dict[tuple[int, date], list[dict[str, Any]]] = {}
+    if not all_users and viewer_billing_user_id:
+        billing = User.query.get(int(viewer_billing_user_id))
+        if not billing:
+            return out
+        user_ids = _store_account_user_ids(billing) or {int(billing.id)}
+        users = User.query.filter(User.id.in_(list(user_ids))).all()
+    else:
+        users = User.query.filter(
+            User.portal_license_activity_log.like('%garantia_entrega%')
+        ).all()
+
+    seen_ev: dict[tuple[int, date], set[tuple[str, str, str]]] = {}
+    for u in users:
+        billing = _billing_user_for_store_debt_limit(u) or u
+        billing_id = int(billing.id)
+        if (
+            not all_users
+            and viewer_billing_user_id
+            and billing_id != int(viewer_billing_user_id)
+        ):
+            continue
+        for item in _parse_activity_log_items(
+            getattr(u, 'portal_license_activity_log', None)
+        ):
+            ts_raw = item.get('ts')
+            if not ts_raw:
+                continue
+            try:
+                ts = datetime.fromisoformat(str(ts_raw).replace('Z', '')[:26])
+                co_date = utc_to_colombia(ts).date()
+            except Exception:
+                continue
+            ev = _garantia_entrega_event_from_item(item)
+            if not ev:
+                continue
+            key = (billing_id, co_date)
+            dedup = seen_ev.setdefault(key, set())
+            ek = (ev['product_name'], ev['old_cred'], ev['new_cred'])
+            if ek in dedup:
+                continue
+            dedup.add(ek)
+            out.setdefault(key, []).append(ev)
+    return out
+
+
 def build_daily_summary_lines(
     snapshots: list[SalePurchaseSnapshot],
     billing_user: User | None,
@@ -586,12 +849,18 @@ def build_daily_summary_lines(
         for x in (renewals_summary, purchases_summary, next_day_summary, stock_summary)
         if x
     ]
-    if not header_lines:
-        return None
+
+    warranty_events: list[dict[str, Any]] = []
+    if billing_user and co_date:
+        warranty_events = _garantia_entrega_events_on_co_date(billing_user, co_date)
+    warranty_lines = _warranty_summary_lines(warranty_events)
 
     failed_lines: list[str] = []
     if include_failed_renewals and billing_user and co_date:
         failed_lines = _failed_renewal_historial_lines(billing_user, co_date)
+
+    if not header_lines and not warranty_lines and not failed_lines:
+        return None
 
     day_total = _snapshot_day_total(snapshots)
     saldo_before = 0.0
@@ -609,6 +878,11 @@ def build_daily_summary_lines(
         if lines:
             lines.append('')
         lines.extend(license_lines)
+
+    if warranty_lines:
+        if lines:
+            lines.append('')
+        lines.extend(warranty_lines)
 
     if has_balance:
         lines.extend(
@@ -689,16 +963,19 @@ def build_purchase_history_daily_summary_items(
 
     snapshots = q.order_by(SalePurchaseSnapshot.id.asc()).all()
     groups = _group_all_snapshots_by_billing_and_date(snapshots)
+    warranty_map = _warranty_events_map_for_historial(
+        viewer_billing_user_id=viewer_billing_user_id,
+        all_users=all_users,
+    )
 
     items_out: list[dict[str, Any]] = []
-    for billing_id, co_date in sorted(groups.keys(), key=lambda k: (k[1], k[0]), reverse=True):
-        billing_user = User.query.get(int(billing_id))
-        if not billing_user:
-            continue
 
-        snaps = groups.get((billing_id, co_date), [])
-        if not snaps or not _day_has_commerce_snapshots(snaps):
-            continue
+    def _append_summary_item(
+        billing_id: int,
+        co_date: date,
+        snaps: list[SalePurchaseSnapshot],
+        billing_user: User,
+    ) -> None:
         summary_lines = build_daily_summary_lines(
             snaps,
             billing_user,
@@ -706,8 +983,7 @@ def build_purchase_history_daily_summary_items(
             include_failed_renewals=True,
         )
         if not summary_lines:
-            continue
-
+            return
         sort_ts = _daily_summary_sort_ts(snaps, co_date)
         fecha_str = 'Fecha no disponible'
         try:
@@ -718,21 +994,32 @@ def build_purchase_history_daily_summary_items(
 
         day_total = _snapshot_day_total(snaps)
         qty = _snapshot_total_quantity(snaps) if snaps else 0
-        item: dict[str, Any] = {
-            'id': f'daily-summary-{billing_id}-{co_date.isoformat()}',
-            'fecha': fecha_str,
-            'producto': f'Resumen diario — {co_date.strftime("%d/%m/%Y")}',
-            'cantidad': qty if qty else '—',
-            'total': float(day_total),
-            'licencias': [],
-            'has_licencias': False,
-            'is_daily_summary': True,
-            'daily_summary_text': '\n'.join(summary_lines),
-            'user_id': int(billing_id),
-            'usuario': billing_user.username or '—',
-            'sort_ts': sort_ts,
-        }
-        items_out.append(item)
+        items_out.append(
+            {
+                'id': f'daily-summary-{billing_id}-{co_date.isoformat()}',
+                'fecha': fecha_str,
+                'producto': f'Resumen diario — {co_date.strftime("%d/%m/%Y")}',
+                'cantidad': qty if qty else '—',
+                'total': float(day_total),
+                'licencias': [],
+                'has_licencias': False,
+                'is_daily_summary': True,
+                'daily_summary_text': '\n'.join(summary_lines),
+                'user_id': int(billing_id),
+                'usuario': billing_user.username or '—',
+                'sort_ts': sort_ts,
+            }
+        )
+
+    all_keys = set(groups.keys()) | set(warranty_map.keys())
+    for billing_id, co_date in sorted(
+        all_keys, key=lambda k: (k[1], k[0]), reverse=True
+    ):
+        billing_user = User.query.get(int(billing_id))
+        if not billing_user:
+            continue
+        snaps = groups.get((billing_id, co_date), [])
+        _append_summary_item(billing_id, co_date, snaps, billing_user)
 
     return items_out
 
@@ -797,9 +1084,27 @@ def record_daily_digest_connect_failures(
     """
     groups = _group_pending_by_user_and_date(config, co_now, force=force)
     touched = 0
-    for snaps in groups.values():
-        if _increment_daily_digest_send_attempts(snaps):
-            touched += 1
+    for (billing_user_id, co_date), snaps in groups.items():
+        if not _increment_daily_digest_send_attempts(snaps):
+            continue
+        touched += 1
+        billing_user = User.query.get(int(billing_user_id))
+        if not billing_user:
+            continue
+        try:
+            from app.store.store_event_notify import notify_whatsapp_digest_undelivered
+
+            notify_whatsapp_digest_undelivered(
+                billing_user,
+                co_date,
+                snaps,
+                outcome='error',
+                reason='WhatsApp desconectado / no disponible',
+            )
+            mark_daily_snapshots_sent(snaps)
+            _mark_warranty_digests_sent(billing_user, co_date)
+        except Exception as nexc:
+            logger.warning('fallback digest WA connect: %s', nexc)
     return touched
 
 
@@ -859,7 +1164,20 @@ def send_pending_daily_digests_for_config(
         from app.store.whatsapp_user_notify_prefs import user_receives_whatsapp_notifications
 
         if not user_receives_whatsapp_notifications(billing_user):
+            try:
+                from app.store.store_event_notify import notify_whatsapp_digest_undelivered
+
+                notify_whatsapp_digest_undelivered(
+                    billing_user,
+                    co_date,
+                    snaps,
+                    outcome='deshabilitado',
+                    reason='WhatsApp desactivado para este usuario',
+                )
+            except Exception as nexc:
+                logger.warning('fallback digest WA deshabilitado: %s', nexc)
             mark_daily_snapshots_sent(snaps)
+            _mark_warranty_digests_sent(billing_user, co_date)
             stats['daily_skipped_no_phone'] += 1
             _append_detail(
                 username=billing_user.username or '',
@@ -870,7 +1188,20 @@ def send_pending_daily_digests_for_config(
             continue
         phone = resolve_phone(billing_user)
         if not phone:
+            try:
+                from app.store.store_event_notify import notify_whatsapp_digest_undelivered
+
+                notify_whatsapp_digest_undelivered(
+                    billing_user,
+                    co_date,
+                    snaps,
+                    outcome='sin_telefono',
+                    reason='Sin teléfono en perfil',
+                )
+            except Exception as nexc:
+                logger.warning('fallback digest WA sin teléfono: %s', nexc)
             mark_daily_snapshots_sent(snaps)
+            _mark_warranty_digests_sent(billing_user, co_date)
             stats['daily_skipped_no_phone'] += 1
             _append_detail(
                 username=billing_user.username or '',
@@ -888,6 +1219,7 @@ def send_pending_daily_digests_for_config(
         )
         if not body:
             mark_daily_snapshots_sent(snaps)
+            _mark_warranty_digests_sent(billing_user, co_date)
             continue
 
         stats['daily_groups'] += 1
@@ -901,6 +1233,7 @@ def send_pending_daily_digests_for_config(
             )
             if result.get('success'):
                 mark_daily_snapshots_sent(snaps)
+                _mark_warranty_digests_sent(billing_user, co_date)
                 stats['daily_sent'] += 1
                 logger.info(
                     'WhatsApp resumen diario user=%s fecha=%s compras=%s',
@@ -912,7 +1245,23 @@ def send_pending_daily_digests_for_config(
             else:
                 stats['daily_errors'] += 1
                 err_msg = str(result.get('error') or 'Envío fallido')
-                _increment_daily_digest_send_attempts(snaps)
+                abandoned = _increment_daily_digest_send_attempts(snaps)
+                if abandoned:
+                    try:
+                        from app.store.store_event_notify import notify_whatsapp_digest_undelivered
+
+                        notify_whatsapp_digest_undelivered(
+                            billing_user,
+                            co_date,
+                            snaps,
+                            outcome='error',
+                            reason=err_msg,
+                            digest_body=body,
+                        )
+                        mark_daily_snapshots_sent(snaps)
+                        _mark_warranty_digests_sent(billing_user, co_date)
+                    except Exception as nexc:
+                        logger.warning('fallback digest WA error: %s', nexc)
                 _append_detail(
                     username=billing_user.username or '',
                     phone=phone,
@@ -926,7 +1275,23 @@ def send_pending_daily_digests_for_config(
                 )
         except Exception as exc:
             stats['daily_errors'] += 1
-            _increment_daily_digest_send_attempts(snaps)
+            abandoned = _increment_daily_digest_send_attempts(snaps)
+            if abandoned:
+                try:
+                    from app.store.store_event_notify import notify_whatsapp_digest_undelivered
+
+                    notify_whatsapp_digest_undelivered(
+                        billing_user,
+                        co_date,
+                        snaps,
+                        outcome='error',
+                        reason=str(exc),
+                        digest_body=body,
+                    )
+                    mark_daily_snapshots_sent(snaps)
+                    _mark_warranty_digests_sent(billing_user, co_date)
+                except Exception as nexc:
+                    logger.warning('fallback digest WA excepción: %s', nexc)
             _append_detail(
                 username=billing_user.username or '',
                 phone=phone,

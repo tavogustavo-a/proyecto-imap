@@ -1025,6 +1025,27 @@ def _record_portal_renewal_blocked_activity(
                 'calendar_day': calendar_day,
             },
         )
+        try:
+            from app.store.store_event_notify import notify_auto_renewal_failed
+
+            pname = 'Producto'
+            if license_id:
+                from app.store.models import License
+
+                lic = License.query.get(int(license_id))
+                if lic and getattr(lic, 'product', None):
+                    pname = str(lic.product.name or '').strip() or pname
+            notify_auto_renewal_failed(
+                user=billing_user,
+                product_name=pname,
+                credential_hint=hint,
+                reason=str(reason or ''),
+                license_id=license_id,
+                account_id=account_id,
+                message=msg,
+            )
+        except Exception as nexc:
+            current_app.logger.warning('notify auto renewal failed: %s', nexc)
     except Exception as ex:
         current_app.logger.warning('record portal renewal blocked: %s', ex)
 
@@ -5333,6 +5354,19 @@ def procesar_pago():
             try:
                 ensure_sale_schema()
                 sync_snapshots_for_sale_ids(checkout_sale_ids)
+                try:
+                    from app.store.store_event_notify import notify_store_purchases_for_sale_ids
+
+                    notify_store_purchases_for_sale_ids(checkout_sale_ids)
+                    db.session.commit()
+                except Exception as nexc:
+                    current_app.logger.warning(
+                        'Notificación compra/renovación tras checkout: %s', nexc
+                    )
+                    try:
+                        db.session.rollback()
+                    except Exception:
+                        pass
             except Exception as snap_exc:
                 current_app.logger.warning(
                     'Snapshot historial compras tras checkout: %s', snap_exc
@@ -5575,6 +5609,24 @@ def api_user_store_notifications():
         return jsonify({'success': False, 'error': 'Usuario no autenticado.'}), 401
     items = list_unread_notifications(user.id, limit=30)
     return jsonify({'success': True, 'notifications': items})
+
+
+@store_bp.route('/api/user/notify-prefs', methods=['GET', 'PUT'])
+@store_access_required
+def api_user_notify_prefs():
+    """Preferencias de notificación (email/push/in-app/caducidad) de la cuenta de facturación."""
+    from app.store.email_notify_prefs import get_store_notify_prefs, set_store_notify_prefs
+
+    user = User.query.get(session.get('user_id'))
+    if not user:
+        return jsonify({'success': False, 'error': 'Usuario no autenticado.'}), 401
+    if request.method == 'GET':
+        return jsonify({'success': True, 'prefs': get_store_notify_prefs(user)})
+    data = request.get_json(silent=True) or {}
+    ok, err, prefs = set_store_notify_prefs(user, data)
+    if not ok:
+        return jsonify({'success': False, 'error': err or 'No se pudo guardar.'}), 400
+    return jsonify({'success': True, 'prefs': prefs})
 
 
 @store_bp.route('/api/mobile/push-token', methods=['POST'])

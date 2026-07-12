@@ -832,6 +832,192 @@ function gestionProductosWireSearch(modalOverlay) {
   }, 60);
 }
 
+function gestionProductosWireNotifyPrefs(modalOverlay) {
+  /* Compat no-op: vibrar/sonar se gestionan en showAdminLicenciasNotificacionesModal. */
+  return;
+}
+
+function showAdminLicenciasNotificacionesModal() {
+  var existing = document.getElementById('adminLicenciasNotificacionesModal');
+  if (existing) {
+    existing.remove();
+  }
+
+  var html =
+    '<div class="modal-overlay" id="adminLicenciasNotificacionesModal">' +
+    '  <div class="admin-lic-notify-prefs-modal-inner" role="dialog" aria-modal="true" aria-labelledby="adminLicNotifyPrefsTitulo">' +
+    '    <div class="admin-lic-notify-prefs-modal-content">' +
+    '      <div class="admin-lic-notify-prefs-modal-header">' +
+    '        <h3 id="adminLicNotifyPrefsTitulo"><i class="fas fa-bell" aria-hidden="true"></i> Notificaciones</h3>' +
+    '        <button type="button" class="admin-lic-notify-prefs-modal-close" aria-label="Cerrar">&times;</button>' +
+    '      </div>' +
+    '      <div class="admin-lic-notify-prefs-body">' +
+    '        <p class="admin-lic-notify-prefs-section-title">Tipos de aviso</p>' +
+    '        <p class="admin-lic-notify-prefs-hint">Activa o desactiva qué avisos quieres recibir (app / web). Por defecto todos activos.</p>' +
+    '        <div class="admin-lic-notify-prefs-types">' +
+    '          <label class="admin-lic-notify-prefs-check"><input type="checkbox" id="adminNotifyTypeLicenseReport" checked autocomplete="off"> <span>Reportes de clientes</span></label>' +
+    '          <label class="admin-lic-notify-prefs-check"><input type="checkbox" id="adminNotifyTypeBalanceRecharge" checked autocomplete="off"> <span>Recargas (acreditada / rechazada)</span></label>' +
+    '          <label class="admin-lic-notify-prefs-check"><input type="checkbox" id="adminNotifyTypeReservation" checked autocomplete="off"> <span>Reservas</span></label>' +
+    '          <label class="admin-lic-notify-prefs-check"><input type="checkbox" id="adminNotifyTypeWaDigest" checked autocomplete="off"> <span>Fallback WhatsApp (app + correo)</span></label>' +
+    '        </div>' +
+    '        <p class="admin-lic-notify-prefs-section-title">Alerta al recibir</p>' +
+    '        <p class="admin-lic-notify-prefs-hint">Desactivados por defecto. Puedes activarlos manualmente.</p>' +
+    '        <div class="admin-lic-notify-prefs-feedback">' +
+    '          <label class="admin-lic-notify-prefs-check"><input type="checkbox" id="adminNotifyVibrateEnabled" autocomplete="off"> <span>Vibrar</span></label>' +
+    '          <label class="admin-lic-notify-prefs-check"><input type="checkbox" id="adminNotifySoundEnabled" autocomplete="off"> <span>Sonar</span></label>' +
+    '        </div>' +
+    '        <p id="adminLicNotifyPrefsSaveStatus" class="admin-lic-notify-prefs-status" role="status" hidden></p>' +
+    '      </div>' +
+    '    </div>' +
+    '  </div>' +
+    '</div>';
+
+  document.body.insertAdjacentHTML('beforeend', html);
+  var modal = document.getElementById('adminLicenciasNotificacionesModal');
+  if (!modal) return;
+
+  function closeModal() {
+    if (modal && modal.parentNode) modal.parentNode.removeChild(modal);
+  }
+
+  modal.addEventListener('click', function (e) {
+    if (e.target === modal) closeModal();
+  });
+  var btnClose = modal.querySelector('.admin-lic-notify-prefs-modal-close');
+  if (btnClose) {
+    btnClose.addEventListener('click', function (e) {
+      e.stopPropagation();
+      closeModal();
+    });
+  }
+
+  adminLicenciasWireNotifyPrefsModal(modal);
+}
+
+function adminLicenciasWireNotifyPrefsModal(modalOverlay) {
+  if (!modalOverlay) return;
+  var chkVibrate = modalOverlay.querySelector('#adminNotifyVibrateEnabled');
+  var chkSound = modalOverlay.querySelector('#adminNotifySoundEnabled');
+  var chkReport = modalOverlay.querySelector('#adminNotifyTypeLicenseReport');
+  var chkRecharge = modalOverlay.querySelector('#adminNotifyTypeBalanceRecharge');
+  var chkReservation = modalOverlay.querySelector('#adminNotifyTypeReservation');
+  var chkWa = modalOverlay.querySelector('#adminNotifyTypeWaDigest');
+  var statusEl = modalOverlay.querySelector('#adminLicNotifyPrefsSaveStatus');
+
+  function setStatus(text, ok) {
+    if (!statusEl) return;
+    var t = String(text || '').trim();
+    if (!t) {
+      statusEl.hidden = true;
+      statusEl.textContent = '';
+      return;
+    }
+    statusEl.hidden = false;
+    statusEl.textContent = t;
+    statusEl.classList.toggle('admin-lic-notify-prefs-status--ok', !!ok);
+    statusEl.classList.toggle('admin-lic-notify-prefs-status--warn', !ok);
+  }
+
+  function csrfToken() {
+    if (typeof getCSRFToken === 'function') return getCSRFToken() || '';
+    var meta = document.querySelector('meta[name="csrf_token"]');
+    return meta ? meta.getAttribute('content') || '' : '';
+  }
+
+  function applyPrefs(prefs) {
+    if (!prefs || typeof prefs !== 'object') return;
+    if (chkVibrate) chkVibrate.checked = !!prefs.notify_vibrate_enabled;
+    if (chkSound) chkSound.checked = !!prefs.notify_sound_enabled;
+    var types = prefs.notify_types || {};
+    if (chkReport) chkReport.checked = types.license_report !== false;
+    if (chkRecharge) chkRecharge.checked = types.balance_recharge !== false;
+    if (chkReservation) chkReservation.checked = types.reservation !== false;
+    if (chkWa) chkWa.checked = types.wa_digest !== false;
+    try {
+      window.__storeNotifyPrefs = Object.assign({}, window.__storeNotifyPrefs || {}, {
+        vibrate: !!prefs.notify_vibrate_enabled,
+        sound: !!prefs.notify_sound_enabled,
+        email: prefs.email_notify_enabled !== false,
+        push: prefs.push_notify_enabled !== false,
+        inapp: prefs.inapp_notify_enabled !== false,
+      });
+    } catch (_w) {}
+  }
+
+  function collectPayload() {
+    return {
+      notify_vibrate_enabled: chkVibrate ? !!chkVibrate.checked : false,
+      notify_sound_enabled: chkSound ? !!chkSound.checked : false,
+      notify_types: {
+        license_report: chkReport ? !!chkReport.checked : true,
+        balance_recharge: chkRecharge ? !!chkRecharge.checked : true,
+        reservation: chkReservation ? !!chkReservation.checked : true,
+        wa_digest: chkWa ? !!chkWa.checked : true,
+      },
+    };
+  }
+
+  var saveTimer = null;
+  function savePrefs() {
+    var body = collectPayload();
+    applyPrefs(body);
+    if (saveTimer) window.clearTimeout(saveTimer);
+    setStatus('Guardando…', true);
+    saveTimer = window.setTimeout(function () {
+      saveTimer = null;
+      fetch('/tienda/api/user/notify-prefs', {
+        method: 'PUT',
+        credentials: 'same-origin',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRFToken': csrfToken(),
+          'X-Requested-With': 'XMLHttpRequest',
+        },
+        body: JSON.stringify(body),
+      })
+        .then(function (r) {
+          return r.json().catch(function () {
+            return { success: false };
+          });
+        })
+        .then(function (data) {
+          if (data && data.success && data.prefs) {
+            applyPrefs(data.prefs);
+            setStatus('Guardado', true);
+            window.setTimeout(function () {
+              setStatus('', true);
+            }, 1600);
+            return;
+          }
+          setStatus((data && data.error) || 'No se pudo guardar', false);
+        })
+        .catch(function () {
+          setStatus('Error de red', false);
+        });
+    }, 280);
+  }
+
+  fetch('/tienda/api/user/notify-prefs', {
+    credentials: 'same-origin',
+    cache: 'no-store',
+  })
+    .then(function (r) {
+      return r.json().catch(function () {
+        return { success: false };
+      });
+    })
+    .then(function (data) {
+      if (data && data.success && data.prefs) applyPrefs(data.prefs);
+    })
+    .catch(function () {});
+
+  [chkVibrate, chkSound, chkReport, chkRecharge, chkReservation, chkWa].forEach(function (el) {
+    if (el) el.addEventListener('change', savePrefs);
+  });
+}
+
+window.showAdminLicenciasNotificacionesModal = showAdminLicenciasNotificacionesModal;
+
 (function adminLicInstallMutationFetchGuard() {
   if (typeof window === 'undefined' || window.__adminLicMutationFetchGuard) {
     return;

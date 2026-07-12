@@ -881,6 +881,15 @@ def _send_reservation_result_transactional_email(
     Correo al email del perfil (User.email), mismo contenido que el aviso en tienda.
     flow_kind: 'stock' | 'next_day'
     """
+    from app.store.email_notify_prefs import user_receives_email_notifications
+
+    if not user_receives_email_notifications(user):
+        current_app.logger.info(
+            'Email reserva omitido: email notificaciones desactivado user=%s',
+            getattr(user, 'username', None) or getattr(user, 'id', '?'),
+        )
+        return False
+
     to_email = _user_platform_email(user)
     pname = getattr(product, 'name', None) or 'Producto'
     cred_lines = _unique_cred_lines(_reservation_fulfilled_creds(reservation, cred_lines))
@@ -957,6 +966,41 @@ def _send_reservation_result_transactional_email(
         return False
 
 
+def _notify_admins_reservation_app(user, product, title, body, *, reservation_id=None, extra_payload=None):
+    """Aviso app/web al admin+soporte (sin email)."""
+    try:
+        from app.store.store_event_notify import (
+            KIND_ADMIN_RESERVATION,
+            notify_admins_app,
+        )
+
+        uname = str(getattr(user, 'username', None) or '').strip() or f'user#{getattr(user, "id", "")}'
+        pname = getattr(product, 'name', None) or 'Producto'
+        admin_title = str(title or f'Reserva: {pname}')[:200]
+        if uname and uname not in admin_title:
+            admin_title = f'{admin_title} — {uname}'[:200]
+        admin_body = f'Cliente: {uname}\n{body or ""}'.strip()
+        payload = {
+            'reservation_id': reservation_id,
+            'product_id': getattr(product, 'id', None),
+            'product_name': pname,
+            'customer_user_id': getattr(user, 'id', None),
+            'customer_username': uname,
+            'url': '/tienda/admin',
+        }
+        if isinstance(extra_payload, dict):
+            payload.update(extra_payload)
+        notify_admins_app(
+            kind=KIND_ADMIN_RESERVATION,
+            title=admin_title,
+            body=admin_body[:4000],
+            payload=payload,
+            exclude_user_id=getattr(user, 'id', None),
+        )
+    except Exception as ex:
+        current_app.logger.warning('_notify_admins_reservation_app: %s', ex)
+
+
 def _notify_reservation_fulfilled(user, product, account, reservation_id):
     from app.store.models import StoreUserNotification
 
@@ -981,10 +1025,21 @@ def _notify_reservation_fulfilled(user, product, account, reservation_id):
         payload_json=json.dumps(payload, ensure_ascii=False),
     )
     db.session.add(notif)
+    _notify_admins_reservation_app(
+        user,
+        product,
+        title,
+        f'Reserva lista.\nCredencial:\n{cred}',
+        reservation_id=reservation_id,
+    )
     return notif
 
 
 def _email_reservation_fulfilled(user, product, account):
+    from app.store.email_notify_prefs import user_receives_email_notifications
+
+    if not user_receives_email_notifications(user):
+        return False
     to_email = (getattr(user, 'email', None) or '').strip()
     if not to_email:
         return False
@@ -1051,6 +1106,14 @@ def _notify_stock_result(user, product, reservation, requested, fulfilled, creds
         cred_lines,
         flow_kind='stock',
     )
+    _notify_admins_reservation_app(
+        user,
+        product,
+        title,
+        body,
+        reservation_id=getattr(reservation, 'id', None),
+        extra_payload={'requested': requested, 'fulfilled': fulfilled},
+    )
 
 
 def _notify_stock_issue(user, product, reservation, title, body, kind):
@@ -1070,9 +1133,20 @@ def _notify_stock_issue(user, product, reservation, title, body, kind):
             payload_json=json.dumps(payload, ensure_ascii=False),
         )
     )
+    _notify_admins_reservation_app(
+        user,
+        product,
+        title,
+        body,
+        reservation_id=getattr(reservation, 'id', None),
+    )
 
 
 def _email_stock_reservation(user, subject, text_body):
+    from app.store.email_notify_prefs import user_receives_email_notifications
+
+    if not user_receives_email_notifications(user):
+        return False
     to_email = (getattr(user, 'email', None) or '').strip()
     if not to_email:
         return False
@@ -1558,6 +1632,14 @@ def _notify_next_day_result(user, product, reservation, requested, fulfilled, cr
         cred_lines,
         flow_kind='next_day',
     )
+    _notify_admins_reservation_app(
+        user,
+        product,
+        title,
+        body,
+        reservation_id=getattr(reservation, 'id', None),
+        extra_payload={'requested': requested, 'fulfilled': fulfilled, 'flow': 'next_day'},
+    )
 
 
 def _notify_next_day_issue(user, product, reservation, title, body, kind):
@@ -1577,9 +1659,21 @@ def _notify_next_day_issue(user, product, reservation, title, body, kind):
             payload_json=json.dumps(payload, ensure_ascii=False),
         )
     )
+    _notify_admins_reservation_app(
+        user,
+        product,
+        title,
+        body,
+        reservation_id=getattr(reservation, 'id', None),
+        extra_payload={'flow': 'next_day'},
+    )
 
 
 def _email_next_day(user, subject, text_body):
+    from app.store.email_notify_prefs import user_receives_email_notifications
+
+    if not user_receives_email_notifications(user):
+        return False
     to_email = (getattr(user, 'email', None) or '').strip()
     if not to_email:
         return False

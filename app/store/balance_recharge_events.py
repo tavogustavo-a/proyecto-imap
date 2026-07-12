@@ -11,6 +11,8 @@ import threading
 import time
 from typing import Any
 
+from app.extensions import db
+
 logger = logging.getLogger(__name__)
 
 _HEARTBEAT_SEC = 25
@@ -457,6 +459,17 @@ def notify_from_recharge_row(
         reason=reason,
         broadcast_admin=broadcast_admin,
     )
+    try:
+        from app.store.store_event_notify import notify_balance_recharge_event
+
+        notify_balance_recharge_event(row, reason=reason)
+        db.session.commit()
+    except Exception as exc:
+        logger.warning('notify_balance_recharge_event: %s', exc)
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
 
 
 def recharge_events_heartbeat_seconds() -> int:

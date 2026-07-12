@@ -125,11 +125,6 @@ class Config:
                 "SOCKETIO_CORS_ORIGINS no configurada: definí DOMINIO.txt en la raíz "
                 "o SOCKETIO_CORS_ORIGINS en .env."
             )
-    elif _site.get('cors_origins') and not os.getenv('SOCKETIO_CORS_ORIGINS'):
-        print(f"[INFO] SOCKETIO_CORS_ORIGINS desde DOMINIO.txt -> {SOCKETIO_CORS_ORIGINS}")
-
-
-
     # --- Seguridad ---------------------------------------------------------
     _INSECURE_SECRET_KEYS = frozenset({
         "dev-secret-key-change-me",

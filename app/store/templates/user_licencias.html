@@ -4,7 +4,7 @@
 
 {% block head %}
   {{ super() }}
-  <link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}?v=20260708-portal-renewal-pending-v10">
+  <link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}?v=20260711-vibrate-sound">
 {% endblock %}
 
 {% macro format_license_price_num(n) -%}
@@ -32,8 +32,8 @@
       <button type="button" id="licensesCollapseBtn" class="btn-blue menu-btn-worksheet licenses-collapse-btn licenses-collapse-btn--toolbar" title="Contraer o expandir licencias" aria-label="Contraer o expandir licencias">
         <i class="fas fa-chevron-up" id="collapseIcon" aria-hidden="true"></i>
       </button>
-      <button type="button" id="btnUserLicVencimientos" class="btn-blue menu-btn-worksheet user-lic-vencimientos-btn" title="Caducidad: cuentas que vencen en 5 días o menos" aria-label="Caducidad: vence en 5 días o menos" aria-pressed="false">
-        <i class="fas fa-hourglass-half" aria-hidden="true"></i> Caducidad
+      <button type="button" id="btnUserLicVencimientos" class="btn-blue menu-btn-worksheet user-lic-vencimientos-btn" title="Notificación: avisos y cuentas por vencer" aria-label="Notificación: avisos y caducidad" aria-pressed="false">
+        <i class="fas fa-bell" aria-hidden="true"></i> Notificación
       </button>
     </div>
   </div>
@@ -124,24 +124,51 @@
     </div>
   </div>
 
-  <div id="userLicCaducidadNotifyBar" class="user-lic-caducidad-notify-bar w-100 d-none" hidden aria-hidden="true" role="region" aria-label="Avisos de caducidad">
+  <div id="userLicCaducidadNotifyBar" class="user-lic-caducidad-notify-bar w-100 d-none" hidden aria-hidden="true" role="region" aria-label="Preferencias de notificación">
+    <div id="userLicNotifyPrefsJson" hidden class="embedded-page-json">{{ (notify_prefs or {})|tojson }}</div>
     <div class="user-lic-caducidad-notify-bar__inner">
+      <p class="user-lic-caducidad-notify-bar__section-title mb-1">Canales de avisos</p>
+      <div class="user-lic-notify-channels">
+        <label class="user-lic-caducidad-notify-bar__check" title="Toasts dentro de la tienda">
+          <input type="checkbox" id="userLicNotifyInappEnabled" name="userLicNotifyInappEnabled" autocomplete="off"{% if (notify_prefs or {}).get('inapp_notify_enabled', True) %} checked{% endif %}>
+          <span class="user-lic-caducidad-notify-bar__lead-text">Avisos en la app</span>
+        </label>
+        <label class="user-lic-caducidad-notify-bar__check" title="Push móvil y notificaciones del navegador">
+          <input type="checkbox" id="userLicNotifyPushEnabled" name="userLicNotifyPushEnabled" autocomplete="off"{% if (notify_prefs or {}).get('push_notify_enabled', True) %} checked{% endif %}>
+          <span class="user-lic-caducidad-notify-bar__lead-text">Push / navegador</span>
+        </label>
+        <label class="user-lic-caducidad-notify-bar__check" title="Correos de la tienda (sincronizado con admin)">
+          <input type="checkbox" id="userLicNotifyEmailEnabled" name="userLicNotifyEmailEnabled" autocomplete="off"{% if (notify_prefs or {}).get('email_notify_enabled', True) %} checked{% endif %}>
+          <span class="user-lic-caducidad-notify-bar__lead-text">Envío email notificaciones</span>
+        </label>
+        <label class="user-lic-caducidad-notify-bar__check" title="Vibrar al recibir un aviso (móvil)">
+          <input type="checkbox" id="userLicNotifyVibrateEnabled" name="userLicNotifyVibrateEnabled" autocomplete="off"{% if (notify_prefs or {}).get('notify_vibrate_enabled') %} checked{% endif %}>
+          <span class="user-lic-caducidad-notify-bar__lead-text">Vibrar</span>
+        </label>
+        <label class="user-lic-caducidad-notify-bar__check" title="Sonido corto al recibir un aviso">
+          <input type="checkbox" id="userLicNotifySoundEnabled" name="userLicNotifySoundEnabled" autocomplete="off"{% if (notify_prefs or {}).get('notify_sound_enabled') %} checked{% endif %}>
+          <span class="user-lic-caducidad-notify-bar__lead-text">Sonar</span>
+        </label>
+      </div>
+
       <div class="user-lic-caducidad-notify-bar__lead-row">
         <label class="user-lic-caducidad-notify-bar__check" title="Activar avisos de caducidad">
-          <input type="checkbox" id="userLicCaducidadNotifyEnabled" name="userLicCaducidadNotifyEnabled" autocomplete="off">
+          <input type="checkbox" id="userLicCaducidadNotifyEnabled" name="userLicCaducidadNotifyEnabled" autocomplete="off"{% if (notify_prefs or {}).get('caducidad_notify_enabled') %} checked{% endif %}>
           <span class="user-lic-caducidad-notify-bar__lead-text">Activa si quieres que te avise sobre cuentas que vencen. Puedes avisar desde 5 días, repetidamente hasta 1 día.</span>
         </label>
         <label class="user-lic-caducidad-notify-bar__days" for="userLicCaducidadNotifyFromDays">
-          <select id="userLicCaducidadNotifyFromDays" name="userLicCaducidadNotifyFromDays" class="user-lic-caducidad-notify-bar__select" disabled autocomplete="off" aria-label="Días para avisar antes del vencimiento">
-            <option value="5">5 días</option>
-            <option value="4">4 días</option>
-            <option value="3">3 días</option>
-            <option value="2">2 días</option>
-            <option value="1">1 día</option>
+          <select id="userLicCaducidadNotifyFromDays" name="userLicCaducidadNotifyFromDays" class="user-lic-caducidad-notify-bar__select" {% if not (notify_prefs or {}).get('caducidad_notify_enabled') %}disabled {% endif %}autocomplete="off" aria-label="Días para avisar antes del vencimiento">
+            {% set fd = (notify_prefs or {}).get('caducidad_notify_from_days', 5)|int %}
+            <option value="5"{% if fd == 5 %} selected{% endif %}>5 días</option>
+            <option value="4"{% if fd == 4 %} selected{% endif %}>4 días</option>
+            <option value="3"{% if fd == 3 %} selected{% endif %}>3 días</option>
+            <option value="2"{% if fd == 2 %} selected{% endif %}>2 días</option>
+            <option value="1"{% if fd == 1 %} selected{% endif %}>1 día</option>
           </select>
         </label>
       </div>
       <p id="userLicCaducidadNotifyHint" class="user-lic-caducidad-notify-bar__hint mb-0" role="status" hidden></p>
+      <p id="userLicNotifyPrefsSaveStatus" class="user-lic-caducidad-notify-bar__hint mb-0" role="status" hidden></p>
     </div>
   </div>
 
@@ -151,7 +178,7 @@
   </div>
   {% endif %}
 
-  <div id="userLicCaducidadAlertStack" class="user-lic-caducidad-alert-stack" aria-live="polite" aria-label="Alertas de caducidad" hidden></div>
+  <div id="userLicCaducidadAlertStack" class="user-lic-caducidad-alert-stack" aria-live="polite" aria-label="Alertas de notificación" hidden></div>
 
   <div id="userLicenciasGridHost" class="licencias-container user-licencias-grid-host mb-3 w-100 d-none" hidden aria-hidden="true">
     <div id="userLicenciasGrid" class="licenses-grid"></div>
@@ -224,6 +251,6 @@
 {% block scripts %}
 {{ super() }}
 <script src="{{ url_for('static', filename='js/menu_busqueda.js') }}" defer></script>
-<script src="{{ url_for('store_bp.static', filename='js/licencias_shared.js') }}?v=20260708-portal-renewal-pending-v10" defer></script>
-<script src="{{ url_for('store_bp.static', filename='js/user_licencias.js') }}?v=20260710-csrf-user-lic" defer></script>
+<script src="{{ url_for('store_bp.static', filename='js/licencias_shared.js') }}?v=20260711-vibrate-sound" defer></script>
+  <script src="{{ url_for('store_bp.static', filename='js/user_licencias.js') }}?v=20260711-vibrate-sound" defer></script>
 {% endblock %}

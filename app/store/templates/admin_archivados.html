@@ -5,7 +5,7 @@
 {% block head %}
   {{ super() }}
   <meta name="licenses-archive-mode" content="1">
-  <link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}?v=20260710-mobile-lic-sym">
+  <link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}?v=20260711-pendiente-garantia">
 {% endblock %}
 
 {% block content %}
@@ -47,7 +47,7 @@
     <div class="admin-licencias-reportes-inner">
       <div class="admin-licencias-reportes-controls">
         <label for="adminReportesSearch" class="sr-only">Filtrar lista de reportes</label>
-        <input type="search" id="adminReportesSearch" class="form-control admin-licencias-reportes-search" placeholder="Filtrar por cuenta, usuario, estado…" autocomplete="off">
+        <input type="search" id="adminReportesSearch" class="form-control admin-licencias-reportes-search" placeholder="Filtrar por cuenta, producto, usuario, estado…" autocomplete="off">
       </div>
       <div class="admin-licencias-reportes-table-scroll">
         <table class="admin-licencias-reportes-table" role="grid" aria-label="Cuentas reportadas">
@@ -209,6 +209,6 @@
   <script src="{{ url_for('store_bp.static', filename='js/licencias_bootstrap.js') }}?v=20260628-notas-ocultas-default-v16" defer></script>
   <script src="{{ url_for('store_bp.static', filename='js/licencias_shared.js') }}?v=20260628-notas-ocultas-default-v16" defer></script>
   <script src="{{ url_for('store_bp.static', filename='js/admin_licencias_ui_prefs.js') }}?v=20260628-notas-ocultas-default-v16" defer></script>
-  <script src="{{ url_for('store_bp.static', filename='js/licencias.js') }}?v=20260710-mobile-lic-sym" defer></script>
+  <script src="{{ url_for('store_bp.static', filename='js/licencias.js') }}?v=20260711-admin-report-notif" defer></script>
   <script src="{{ url_for('store_bp.static', filename='js/admin_licencias_notepad.js') }}?v=20260628-notas-ocultas-default-v16" defer></script>
 {% endblock %}

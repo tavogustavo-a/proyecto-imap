@@ -687,6 +687,29 @@ class CustomerRenewalNotifyBatch(db.Model):
     user = db.relationship('User', foreign_keys=[user_id])
 
 
+class LicenseReportAnswerEmailBatch(db.Model):
+    """
+    Cola de emails al cliente cuando soporte contesta reportes.
+    Un solo correo por usuario y día Colombia, enviado a partir de las 12:00 CO.
+    """
+    __tablename__ = 'store_license_report_answer_email_batches'
+    __table_args__ = (
+        db.UniqueConstraint('user_id', 'co_date', name='uq_lic_report_answer_email_user_co_date'),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(
+        db.Integer, db.ForeignKey('users.id', ondelete='CASCADE'), nullable=False, index=True
+    )
+    co_date = db.Column(db.String(10), nullable=False, index=True)  # YYYY-MM-DD Colombia
+    items_json = db.Column(db.Text, nullable=False, default='[]')
+    flush_at = db.Column(db.DateTime, nullable=False, index=True)
+    flushed_at = db.Column(db.DateTime, nullable=True, index=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    user = db.relationship('User', foreign_keys=[user_id])
+
+
 class StoreUserNotification(db.Model):
     """Notificaciones in-app para usuarios de tienda (p. ej. reserva cumplida)."""
     __tablename__ = 'store_user_notifications'

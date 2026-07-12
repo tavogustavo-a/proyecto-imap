@@ -296,7 +296,39 @@ def _on_store_notification_insert(mapper, connection, target):
         data = {
             'kind': kind,
             'notification_id': str(notif_id or ''),
-            'url': '/tienda/',
+            'url': (
+              '/tienda/admin'
+              if str(kind) in (
+                  'admin_license_report_new',
+                  'admin_product_reservation',
+              )
+              else (
+                  '/tienda/licencias'
+                  if (
+                      str(kind).startswith('license_')
+                      or str(kind) in (
+                          'store_purchase',
+                          'store_renewal',
+                      )
+                  )
+                  else (
+                      '/tienda/admin/recargas-saldo'
+                      if str(kind) == 'admin_balance_recharge'
+                      else (
+                          '/tienda/recargas'
+                          if str(kind) == 'balance_recharge'
+                          else (
+                              '/tienda/historial'
+                              if str(kind) in (
+                                  'whatsapp_digest_fallback',
+                                  'admin_whatsapp_digest_fallback',
+                              )
+                              else '/tienda/'
+                          )
+                      )
+                  )
+              )
+          ),
         }
 
         if has_app_context():
@@ -305,6 +337,14 @@ def _on_store_notification_insert(mapper, connection, target):
             def _job():
                 with app.app_context():
                     try:
+                        from app.models.user import User
+                        from app.store.email_notify_prefs import (
+                            user_receives_push_notifications,
+                        )
+
+                        u = User.query.get(user_id)
+                        if not user_receives_push_notifications(u):
+                            return
                         send_fcm_to_user(user_id, title, body, data=data)
                     except Exception as ex:
                         app.logger.debug('mobile push after_insert: %s', ex)

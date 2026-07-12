@@ -6,5 +6,6 @@
 <a href="{{ url_for('store_bp.store_front') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-store"></i> Tienda Pública</a>
 <a href="{{ url_for('store_bp.tools_public') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-tools"></i> Herramientas Pública</a>
 <a href="{{ url_for('store_bp.historial_compras_usuario') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-receipt"></i> Mi Historial de Compras</a>
+{% include 'includes/store_user_menu_notificaciones_link.html' %}
 <a href="{{ url_for('store_bp.admin_recargas_saldo') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-wallet"></i> Recargas y pagos</a>
 <a href="{{ url_for('main_bp.home') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-code"></i> Códigos</a>

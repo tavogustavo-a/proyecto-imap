@@ -11,6 +11,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 LICENSE_LINE_FIELD_SEP = '\x1f'
 PREV_GOOD_BAD_PREFIX = '__prev_good:'
+WARRANTY_PENDING_BAD_PREFIX = '__warranty_pending:'
 PORTAL_GREEN_EXTRA_PREFIX = '_u_green:'
 PORTAL_BAD_EXTRA_PREFIX = '_u_bad:'
 AUTO_MES_EXTRA_PREFIX = '_auto_mes:'
@@ -122,6 +123,28 @@ def unpack_prev_good_from_bad_segment(bad_raw: str) -> Tuple[str, str]:
     return s, ''
 
 
+def is_warranty_pending_bad(bad_raw: Any) -> bool:
+    return str(bad_raw or '').strip().startswith(WARRANTY_PENDING_BAD_PREFIX)
+
+
+def unpack_warranty_pending_from_bad(bad_raw: str) -> Tuple[str, str]:
+    """Devuelve (visible_bad, packed_pending). Si es pendiente, visible vacío."""
+    s = str(bad_raw or '').strip()
+    if not is_warranty_pending_bad(s):
+        return s, ''
+    return '', s
+
+
+def pack_warranty_pending_bad(status_bad: str = '') -> str:
+    raw = str(status_bad or '').strip()
+    if is_warranty_pending_bad(raw):
+        return raw
+    if not raw:
+        return WARRANTY_PENDING_BAD_PREFIX + 'caida o suspendida'
+    canon = _canonical_bad_from_stored(raw) or raw
+    return WARRANTY_PENDING_BAD_PREFIX + canon
+
+
 def pack_prev_good_bad_segment(prev_good: str) -> str:
     pg = str(prev_good or '').strip()
     if not pg or normalize_status_key(pg) == 'ok':
@@ -142,22 +165,32 @@ def parse_bad_stored_segment(bad_raw: str) -> Dict[str, str]:
 
 
 def dual_from_stored_segments(cred: str, user: str, good_raw: str, bad_raw: str, extra: str) -> Dict[str, Any]:
-    visible_bad, prev_good = unpack_prev_good_from_bad_segment(bad_raw)
-    bp = parse_bad_stored_segment(visible_bad if visible_bad else bad_raw)
+    packed_pending = ''
+    raw_bad = str(bad_raw or '').strip()
+    if is_warranty_pending_bad(raw_bad):
+        packed_pending = raw_bad
+        visible_bad, prev_good = '', ''
+        bp = {'selValue': '', 'otroDetail': ''}
+    else:
+        visible_bad, prev_good = unpack_prev_good_from_bad_segment(bad_raw)
+        bp = parse_bad_stored_segment(visible_bad if visible_bad else bad_raw)
     sg = good_raw.strip() if good_raw else ''
     status_good = (_canonical_good_from_stored(sg) or sg) if sg else ''
     return {
         'cred': cred if cred is not None else '',
         'user': (user or '').strip(),
         'statusGood': status_good,
-        'statusBad': bp['selValue'],
-        'otroDetail': bp['otroDetail'],
+        'statusBad': packed_pending or bp['selValue'],
+        'otroDetail': bp.get('otroDetail') or '',
         'extra': (extra or '').strip(),
         'prevGoodRestore': prev_good,
+        'warrantyPendingPacked': packed_pending,
     }
 
 
 def effective_bad_for_tier(status_bad: str, otro_detail: str) -> str:
+    if is_warranty_pending_bad(status_bad):
+        return ''
     visible_bad, _prev = unpack_prev_good_from_bad_segment(status_bad)
     sv = str(visible_bad or '').strip()
     if not sv:
@@ -179,22 +212,28 @@ def dual_to_storage_line(dual: Dict[str, Any]) -> str:
     sb_sel = str(dual.get('statusBad') or '').strip()
     od = str(dual.get('otroDetail') or '').strip()
     extra = str(dual.get('extra') or '').strip()
-    bad_seg = effective_bad_for_tier(sb_sel, od)
-    if normalize_status_key(sg) == 'ok':
-        prev_bad_save = str(dual.get('prevBadRestore') or '').strip()
-        if not prev_bad_save:
-            prev_bad_save = effective_bad_for_tier(sb_sel, od)
-        if not prev_bad_save:
-            prev_bad_save = portal_bad_from_extra(extra)
-        prev_pack = str(dual.get('prevGoodRestore') or '').strip()
-        if not prev_pack:
-            _, prev_pack = unpack_prev_good_from_bad_segment(bad_seg)
-        if not prev_pack:
-            prev_pack = portal_green_from_extra(extra)
-        packed_prev = pack_prev_good_bad_segment(prev_pack)
-        bad_seg = packed_prev if packed_prev else ''
-        if prev_bad_save:
-            extra = portal_bad_embed_in_extra(extra, prev_bad_save)
+    pending = str(dual.get('warrantyPendingPacked') or '').strip()
+    if is_warranty_pending_bad(sb_sel):
+        pending = sb_sel
+    if pending:
+        bad_seg = pending
+    else:
+        bad_seg = effective_bad_for_tier(sb_sel, od)
+        if normalize_status_key(sg) == 'ok':
+            prev_bad_save = str(dual.get('prevBadRestore') or '').strip()
+            if not prev_bad_save:
+                prev_bad_save = effective_bad_for_tier(sb_sel, od)
+            if not prev_bad_save:
+                prev_bad_save = portal_bad_from_extra(extra)
+            prev_pack = str(dual.get('prevGoodRestore') or '').strip()
+            if not prev_pack:
+                _, prev_pack = unpack_prev_good_from_bad_segment(bad_seg)
+            if not prev_pack:
+                prev_pack = portal_green_from_extra(extra)
+            packed_prev = pack_prev_good_bad_segment(prev_pack)
+            bad_seg = packed_prev if packed_prev else ''
+            if prev_bad_save:
+                extra = portal_bad_embed_in_extra(extra, prev_bad_save)
     green_tag = ''
     if normalize_status_key(sg) == 'ok':
         green_tag = str(dual.get('prevGoodRestore') or '').strip() or portal_green_from_extra(extra)
@@ -920,12 +959,19 @@ def dual_to_portal_readonly_row(
     sg = str(dual.get('statusGood') or '').strip()
     sb_sel = str(dual.get('statusBad') or '').strip()
     od = str(dual.get('otroDetail') or '').strip()
-    eff = effective_bad_for_tier(sb_sel, od if sb_sel else '')
+    pending_packed = str(dual.get('warrantyPendingPacked') or '').strip()
+    if not pending_packed and is_warranty_pending_bad(sb_sel):
+        pending_packed = sb_sel
+    is_warranty_pending = bool(pending_packed)
+    sb_for_tier = '' if is_warranty_pending else sb_sel
+    eff = effective_bad_for_tier(sb_for_tier, od if sb_for_tier else '')
     tier_bad = admin_license_status_tier_from_stored(eff)
 
     gv = _spanish_good_label(sg) if sg else ''
     bv = ''
-    if sb_sel or od:
+    if is_warranty_pending:
+        bv = 'Pendiente garantía'
+    elif sb_sel or od:
         bv = _spanish_bad_label(sb_sel, od)
 
     lt_good = 'good' if sg else 'neutral'
@@ -950,12 +996,13 @@ def dual_to_portal_readonly_row(
         'tier_good': lt_good,
         'tier_bad': lt_bad,
         'status_good': canon_g,
-        'status_bad': sb_sel,
+        'status_bad': '' if is_warranty_pending else sb_sel,
         'otro_detail': od,
         'prev_good_restore': prev_restore,
         'prev_bad_restore': prev_bad_restore,
         'green_select_value': green_select,
         'buena_revisada_readonly': is_ok,
+        'warranty_pending': is_warranty_pending,
         'phys_line_index': int(phys_idx),
         'row_ordinal': int(row_ordinal) if row_ordinal is not None else 0,
     }
@@ -1017,43 +1064,12 @@ def matched_rows_for_account_day(
             continue
         if consumed_lines is not None and license_id is not None:
             consumed_lines.add((license_id, calendar_day, phys_idx))
-        sg = str(dual.get('statusGood') or '').strip()
-        sb_sel = str(dual.get('statusBad') or '').strip()
-        od = str(dual.get('otroDetail') or '').strip()
-        eff = effective_bad_for_tier(sb_sel, od if sb_sel else '')
-        tier_bad = admin_license_status_tier_from_stored(eff)
-
-        gv = _spanish_good_label(sg) if sg else ''
-        bv = ''
-        if sb_sel or od:
-            bv = _spanish_bad_label(sb_sel, od)
-
-        lt_good = 'good' if sg else 'neutral'
-        lt_bad = 'bad' if tier_bad == 'bad' else 'neutral'
-        canon_g = (_canonical_good_from_stored(sg) or sg).strip() if sg else ''
-        is_ok = normalize_status_key(canon_g) == 'ok'
-        green_select = resolve_portal_green_select_value(dual, stripped)
-        prev_restore = green_select if is_ok else ''
-        prev_bad_restore = _prev_bad_restore_from_dual(dual) if is_ok else ''
-
-        out.append(
-            {
-                'cred': str(dual.get('cred') or ''),
-                'user': str(dual.get('user') or ''),
-                'vinculo_dia': int(calendar_day),
-                'label_good': gv,
-                'label_bad': bv,
-                'tier_good': lt_good,
-                'tier_bad': lt_bad,
-                'status_good': canon_g,
-                'status_bad': sb_sel,
-                'otro_detail': od,
-                'prev_good_restore': prev_restore,
-                'prev_bad_restore': prev_bad_restore,
-                'green_select_value': green_select,
-                'buena_revisada_readonly': is_ok,
-                'phys_line_index': int(phys_idx),
-                'row_ordinal': len(out),
-            }
+        row = dual_to_portal_readonly_row(
+            dual,
+            line,
+            calendar_day,
+            phys_idx,
+            row_ordinal=len(out),
         )
+        out.append(row)
     return out

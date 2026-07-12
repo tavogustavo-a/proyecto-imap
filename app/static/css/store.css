@@ -8,6 +8,9 @@
   left: -320px;
   width: 320px;
   height: 100vh;
+  height: 100dvh;
+  max-height: calc(100dvh - var(--mobile-kb, 0px));
+  height: calc(100dvh - var(--mobile-kb, 0px));
   background: var(--menu-bg, #fff) !important;
   box-shadow: 2px 0 8px rgba(0,0,0,0.12);
   z-index: 1000;
@@ -16,6 +19,12 @@
   flex-direction: column;
   align-items: stretch;
   padding-top: 1.5rem;
+  padding-bottom: max(0.75rem, env(safe-area-inset-bottom, 0px));
+  overflow-x: hidden;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  box-sizing: border-box;
 }
 .mobile-menu-store:not(.hidden) {
   left: -12px;

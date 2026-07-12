@@ -15,6 +15,7 @@
   var sseHandle = null;
   var pollInterval = null;
   var started = false;
+  var prefsLoaded = false;
 
   var RENEWAL_KINDS = {
     customer_account_renewal_batch: true,
@@ -77,6 +78,85 @@
           .join('\n');
       }
       return { title: title, body: bodyText, renewal: true };
+    }
+
+    if (
+      kind === 'license_report_buena' ||
+      kind === 'license_warranty_replaced' ||
+      kind === 'license_warranty_pending'
+    ) {
+      var licPname = String(payload.product_name || '').trim();
+      var newCred = String(payload.new_credential || '').trim();
+      var oldCred = String(payload.credential || '').trim();
+      if (!bodyText) {
+        if (kind === 'license_warranty_replaced' && newCred) {
+          bodyText = (licPname ? '«' + licPname + '»\n' : '') + newCred;
+        } else if (oldCred) {
+          bodyText = (licPname ? '«' + licPname + '»\n' : '') + oldCred;
+        }
+      } else if (kind === 'license_warranty_replaced' && newCred && bodyText.indexOf(newCred) === -1) {
+        bodyText = bodyText + '\n' + newCred;
+      }
+      return { title: title, body: bodyText, renewal: false, licenseReport: true };
+    }
+
+    if (kind === 'admin_license_report_new') {
+      return {
+        title: title,
+        body: bodyText,
+        renewal: false,
+        licenseReport: true,
+        adminReport: true,
+      };
+    }
+
+    if (kind === 'store_purchase' || kind === 'store_renewal') {
+      var spName = String(payload.product_name || '').trim();
+      if (!bodyText && spName) {
+        bodyText =
+          (kind === 'store_renewal' ? 'Renovación' : 'Compra') +
+          ' de «' +
+          spName +
+          '» lista.';
+      }
+      if (creds.length && bodyText.indexOf(creds[0]) === -1) {
+        bodyText = bodyText + '\n' + creds.slice(0, 5).join('\n');
+      }
+      return { title: title, body: bodyText, renewal: kind === 'store_renewal', storePurchase: true };
+    }
+
+    if (kind === 'license_auto_renewal' || kind === 'license_auto_renewal_failed') {
+      return { title: title, body: bodyText, renewal: true, licenseReport: true };
+    }
+
+    if (kind === 'balance_recharge' || kind === 'admin_balance_recharge') {
+      return {
+        title: title,
+        body: bodyText,
+        renewal: false,
+        balanceRecharge: true,
+        adminOps: kind === 'admin_balance_recharge',
+      };
+    }
+
+    if (kind === 'whatsapp_digest_fallback' || kind === 'admin_whatsapp_digest_fallback') {
+      return {
+        title: title,
+        body: bodyText,
+        renewal: false,
+        waDigestFallback: true,
+        adminOps: kind === 'admin_whatsapp_digest_fallback',
+      };
+    }
+
+    if (kind === 'admin_product_reservation') {
+      return {
+        title: title,
+        body: bodyText,
+        renewal: false,
+        adminReservation: true,
+        adminOps: true,
+      };
     }
 
     if (kind === 'product_reservation_next_day_result' || kind === 'product_reservation_fulfilled') {
@@ -167,7 +247,87 @@
     } catch (e) {}
   }
 
+  function channelPrefs() {
+    var p = global.__storeNotifyPrefs || {};
+    return {
+      inapp: p.inapp !== false,
+      push: p.push !== false,
+      vibrate: !!p.vibrate,
+      sound: !!p.sound,
+    };
+  }
+
+  function loadNotifyPrefs() {
+    return fetch('/tienda/api/user/notify-prefs', {
+      credentials: 'same-origin',
+      cache: 'no-store',
+    })
+      .then(function (r) {
+        return r.json().catch(function () {
+          return { success: false };
+        });
+      })
+      .then(function (data) {
+        if (!data || !data.success || !data.prefs) return;
+        try {
+          global.__storeNotifyPrefs = {
+            email: data.prefs.email_notify_enabled !== false,
+            push: data.prefs.push_notify_enabled !== false,
+            inapp: data.prefs.inapp_notify_enabled !== false,
+            vibrate: !!data.prefs.notify_vibrate_enabled,
+            sound: !!data.prefs.notify_sound_enabled,
+          };
+          prefsLoaded = true;
+        } catch (e) {}
+      })
+      .catch(function () {});
+  }
+
+  function playNotifySound() {
+    try {
+      var Ctx = global.AudioContext || global.webkitAudioContext;
+      if (!Ctx) return;
+      var ctx = playNotifySound._ctx || new Ctx();
+      playNotifySound._ctx = ctx;
+      if (ctx.state === 'suspended' && typeof ctx.resume === 'function') {
+        ctx.resume().catch(function () {});
+      }
+      var osc = ctx.createOscillator();
+      var gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.value = 880;
+      gain.gain.value = 0.0001;
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      var t0 = ctx.currentTime;
+      gain.gain.setValueAtTime(0.0001, t0);
+      gain.gain.exponentialRampToValueAtTime(0.12, t0 + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.22);
+      osc.start(t0);
+      osc.stop(t0 + 0.25);
+    } catch (e) {}
+  }
+
+  function playNotifyVibrate() {
+    try {
+      if (global.AndroidAppBridge && typeof global.AndroidAppBridge.vibrate === 'function') {
+        global.AndroidAppBridge.vibrate(120);
+        return;
+      }
+      if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
+        navigator.vibrate([70, 40, 70]);
+      }
+    } catch (e) {}
+  }
+
+  function playAlertFeedback() {
+    var p = channelPrefs();
+    if (p.sound) playNotifySound();
+    if (p.vibrate) playNotifyVibrate();
+  }
+
   function tryBrowserNotification(notif, display) {
+    if (!channelPrefs().push) return;
     if (typeof Notification === 'undefined') return;
     if (Notification.permission !== 'granted') return;
     var title = display.title || 'Aviso de la tienda';
@@ -190,6 +350,7 @@
   }
 
   function maybePromptBrowserPermissionForRenewals() {
+    if (!channelPrefs().push) return;
     if (typeof Notification === 'undefined') return;
     if (Notification.permission !== 'default') return;
     try {
@@ -225,47 +386,113 @@
     }
     seenIds[notif.id] = true;
 
+    var channels = channelPrefs();
     var display = buildNotifDisplay(notif);
-    var isMobile = global.matchMedia && global.matchMedia('(max-width: 768px)').matches;
-    var node = document.createElement('div');
-    node.className =
-      'in-page-notification push-notification store-reservation-notify ' +
-      (display.renewal ? 'store-renewal-notify ' : '') +
-      (isMobile ? 'push-notification-mobile' : 'push-notification-desktop');
 
-    var bodyText = display.body;
-    node.innerHTML =
-      '<div class="push-notification-title">' +
-      (display.title || 'Aviso de la tienda') +
-      '</div>' +
-      '<div class="push-notification-body">' +
-      String(bodyText || '').replace(/\n/g, '<br>') +
-      '</div>' +
-      (isMobile ? '<div class="push-notification-hint">Toca para cerrar</div>' : '');
-
-    node.addEventListener('click', function () {
-      node.classList.add('push-notification-closing');
-      global.setTimeout(function () {
-        if (node.parentNode) node.parentNode.removeChild(node);
-      }, 280);
+    if (!channels.inapp && !channels.push) {
       acknowledge(notif.id);
-    });
+      return;
+    }
 
-    document.body.appendChild(node);
+    if (channels.inapp) {
+      var isMobile = global.matchMedia && global.matchMedia('(max-width: 768px)').matches;
+      var node = document.createElement('div');
+      node.className =
+        'in-page-notification push-notification store-reservation-notify ' +
+        (display.renewal ? 'store-renewal-notify ' : '') +
+        (isMobile ? 'push-notification-mobile' : 'push-notification-desktop');
+
+      var bodyText = display.body;
+      node.innerHTML =
+        '<div class="push-notification-title">' +
+        (display.title || 'Aviso de la tienda') +
+        '</div>' +
+        '<div class="push-notification-body">' +
+        String(bodyText || '').replace(/\n/g, '<br>') +
+        '</div>' +
+        (isMobile ? '<div class="push-notification-hint">Toca para cerrar</div>' : '');
+
+      node.addEventListener('click', function () {
+        node.classList.add('push-notification-closing');
+        global.setTimeout(function () {
+          if (node.parentNode) node.parentNode.removeChild(node);
+        }, 280);
+        acknowledge(notif.id);
+        if (display.licenseReport) {
+          try {
+            var go =
+              (payload && payload.url) ||
+              (display.adminReport ? '/tienda/admin' : '/tienda/licencias');
+            var path = String((global.location && global.location.pathname) || '');
+            if (display.adminReport) {
+              if (path.indexOf('/tienda/admin') !== 0) {
+                global.location.href = go;
+              } else if (typeof global.openAdminLicenciasReportesPanelUi === 'function') {
+                global.openAdminLicenciasReportesPanelUi();
+              } else {
+                var repBtn = document.getElementById('adminLicenciasReportesBtn');
+                if (repBtn) repBtn.click();
+              }
+            } else if (go && path.indexOf('/tienda/licencias') !== 0) {
+              global.location.href = go;
+            }
+          } catch (eNav) {}
+        } else if (display.balanceRecharge) {
+          try {
+            var goR =
+              (payload && payload.url) ||
+              (display.adminOps ? '/tienda/admin/recargas-saldo' : '/tienda/recargas');
+            var pathR = String((global.location && global.location.pathname) || '');
+            if (goR && pathR.indexOf(goR) !== 0) {
+              global.location.href = goR;
+            }
+          } catch (eNav2) {}
+        } else if (display.adminReservation) {
+          try {
+            var goA = (payload && payload.url) || '/tienda/admin';
+            if (
+              goA &&
+              String((global.location && global.location.pathname) || '').indexOf('/tienda/admin') !== 0
+            ) {
+              global.location.href = goA;
+            }
+          } catch (eNavA) {}
+        } else if (display.waDigestFallback || display.storePurchase) {
+          try {
+            var goH =
+              (payload && payload.url) ||
+              (display.storePurchase
+                ? '/tienda/licencias'
+                : display.adminOps
+                  ? '/tienda/historial'
+                  : '/tienda/historial');
+            var pathH = String((global.location && global.location.pathname) || '');
+            if (goH && pathH.indexOf(goH) !== 0) {
+              global.location.href = goH;
+            }
+          } catch (eNav3) {}
+        }
+      });
+
+      document.body.appendChild(node);
+      playAlertFeedback();
+      global.setTimeout(function () {
+        if (!node.parentNode) return;
+        node.classList.add('push-notification-closing');
+        global.setTimeout(function () {
+          if (node.parentNode) node.parentNode.removeChild(node);
+        }, 280);
+      }, 12000);
+    } else if (channels.push) {
+      playAlertFeedback();
+    }
+
     acknowledge(notif.id);
 
-    if (display.renewal) {
+    if (channels.push && display.renewal) {
       maybePromptBrowserPermissionForRenewals();
     }
     tryBrowserNotification(notif, display);
-
-    global.setTimeout(function () {
-      if (!node.parentNode) return;
-      node.classList.add('push-notification-closing');
-      global.setTimeout(function () {
-        if (node.parentNode) node.parentNode.removeChild(node);
-      }, 280);
-    }, 12000);
   }
 
   function handleNotifications(list) {
@@ -369,6 +596,9 @@
     }
     stop();
     started = true;
+    if (!prefsLoaded && !global.__storeNotifyPrefs) {
+      loadNotifyPrefs();
+    }
     syncNativePushToken();
     setTimeout(syncNativePushToken, 3500);
     if (
@@ -408,6 +638,7 @@
     stop: stop,
     poll: poll,
     show: showNotification,
+    playAlertFeedback: playAlertFeedback,
     requestBrowserPermission: function () {
       if (typeof Notification === 'undefined') {
         return Promise.resolve('unsupported');

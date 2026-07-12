@@ -53,12 +53,12 @@
   <script src="{{ url_for('static', filename='js/code_protection.js') }}" defer></script>
   {% endif %} #}
   
-  <script src="{{ url_for('static', filename='js/main.js') }}?v=20260611-mail-field-names" defer></script>
+  <script src="{{ url_for('static', filename='js/main.js') }}?v=20260712-mobile-kb-ux" defer></script>
   <script src="{{ url_for('static', filename='js/loading_overlay.js') }}" defer></script>
   <script src="{{ url_for('store_bp.static', filename='js/store_fetch_json.js') }}?v=20260610" defer></script>
   <script src="{{ url_for('store_bp.static', filename='js/store_sse_realtime.js') }}?v=20260622-sse-unified" defer></script>
-  {% if session.get('logged_in') and not is_admin %}
-  <script src="{{ url_for('store_bp.static', filename='js/store_user_notifications.js') }}?v=20260708-store-notif-global-v1" defer></script>
+  {% if session.get('logged_in') %}
+  <script src="{{ url_for('store_bp.static', filename='js/store_user_notifications.js') }}?v=20260711-vibrate-sound" defer></script>
   {% endif %}
   <script src="{{ url_for('store_bp.static', filename='js/store_menu_saldo_realtime.js') }}?v=20260610-fetch" defer></script>
   {% if is_admin %}
