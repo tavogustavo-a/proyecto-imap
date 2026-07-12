@@ -431,6 +431,7 @@ def _resolve_external_service_id(ext_service_id, service_name_raw, match_key_raw
 
 
 @api_bp.route("/search_mails", methods=["POST"])
+@csrf_exempt_api
 def search_mails():
     data = request.get_json()
     if not data or "email_to_search" not in data:
