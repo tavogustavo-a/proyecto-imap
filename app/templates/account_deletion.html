@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block title %}Eliminación de cuenta — {{ brand_name }}{% endblock %}
+
+{% block content %}
+<article class="privacy-page" lang="es">
+  {% set back_href = url_for('main_bp.home') %}
+  {% include 'includes/page_back_link.html' %}
+  <h1 class="privacy-page__title">Solicitar eliminación de cuenta</h1>
+  <p class="privacy-page__meta">Última actualización: {{ privacy_updated }}</p>
+
+  <p>
+    En <strong>{{ brand_name }}</strong> podés solicitar que se elimine tu cuenta
+    y los datos personales asociados.
+  </p>
+
+  <h2>Cómo solicitarlo</h2>
+  <ol>
+    <li>Iniciá sesión en el sitio o en la app con tu cuenta.</li>
+    <li>
+      Contactá <strong>soporte</strong> desde el chat/canales disponibles en el sitio o la app
+      e indicá claramente: <em>«Quiero eliminar mi cuenta»</em>.
+    </li>
+    <li>
+      Confirmá el <strong>nombre de usuario</strong> (y correo, si lo tenés vinculado)
+      para que podamos verificar que la solicitud es tuya.
+    </li>
+  </ol>
+
+  <h2>Qué se elimina</h2>
+  <ul>
+    <li>La cuenta de acceso (usuario / credenciales de inicio de sesión).</li>
+    <li>Datos de perfil y preferencias asociadas a esa cuenta.</li>
+    <li>Tokens de notificaciones push vinculados a tus dispositivos, cuando existan.</li>
+  </ul>
+
+  <h2>Qué puede conservarse</h2>
+  <p>
+    Podemos conservar por un tiempo limitado registros técnicos o de seguridad,
+    y datos que la ley exija retener (por ejemplo, comprobantes de transacciones
+    si aplican obligaciones legales o antifraude). Esos datos no se usan para
+    seguir operando la cuenta eliminada.
+  </p>
+
+  <h2>Plazo</h2>
+  <p>
+    Tras verificar la solicitud, procesamos la eliminación de la cuenta en un
+    plazo razonable (normalmente dentro de <strong>30 días</strong>).
+  </p>
+
+  <h2>Más información</h2>
+  <p>
+    Detalles generales del tratamiento de datos:
+    <a href="{{ url_for('main_bp.privacy_policy') }}">Política de privacidad</a>.
+    {% if site_url %}
+    <br>Sitio: <a href="{{ site_url }}">{{ site_url }}</a>
+    {% endif %}
+  </p>
+</article>
+{% endblock %}

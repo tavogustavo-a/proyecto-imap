@@ -133,9 +133,8 @@ def favicon():
     return '', 404
 
 
-@main_bp.route('/privacidad', methods=['GET'])
-def privacy_policy():
-    """Política de privacidad genérica por proyecto (DOMINIO.txt / branding)."""
+def _public_branding_for_legal_pages():
+    """Nombre / host / URL públicos para páginas legales (privacidad, borrado de cuenta)."""
     from datetime import date
     from urllib.parse import urlparse
 
@@ -151,11 +150,9 @@ def privacy_policy():
             return False
         if h.startswith('127.') or h.endswith('.local'):
             return False
-        # IPv4 literal
         parts = h.split('.')
         if len(parts) == 4 and all(p.isdigit() for p in parts):
             return False
-        # Debe parecer dominio (tener un punto y empezar con letra)
         if '.' not in h or not h[0].isalpha():
             return False
         return True
@@ -196,13 +193,29 @@ def privacy_policy():
     elif site_url and not _is_public_host(urlparse(site_url).hostname or ''):
         site_url = f'https://{host}'
 
-    return render_template(
-        'privacy_policy.html',
-        brand_name=brand_name,
-        brand_host=host,
-        site_url=site_url,
-        privacy_updated=date.today().isoformat(),
-    )
+    return {
+        'brand_name': brand_name,
+        'brand_host': host,
+        'site_url': site_url,
+        'privacy_updated': date.today().isoformat(),
+    }
+
+
+@main_bp.route('/privacidad', methods=['GET'])
+def privacy_policy():
+    """Política de privacidad genérica por proyecto (DOMINIO.txt / branding)."""
+    ctx = _public_branding_for_legal_pages()
+    return render_template('privacy_policy.html', **ctx)
+
+
+@main_bp.route('/eliminar-cuenta', methods=['GET'])
+@main_bp.route('/delete-account', methods=['GET'])
+def account_deletion_request():
+    """
+    Página pública exigida por Google Play: solicitar borrado de cuenta y datos asociados.
+    """
+    ctx = _public_branding_for_legal_pages()
+    return render_template('account_deletion.html', **ctx)
 
 
 @main_bp.route("/", methods=["GET"])
