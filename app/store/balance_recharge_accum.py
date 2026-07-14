@@ -148,13 +148,12 @@ def list_accumulated_summary() -> List[Dict[str, Any]]:
     buckets: Dict[tuple, Dict[str, Any]] = {}
     user_ids = set()
 
-    for row in rows:
+    def _bucket_for(row):
         pm_id = (row.payment_method_id or '').strip()
         if not pm_id or not is_accumulator_method_id(pm_id):
-            continue
+            return None
         key = (int(row.user_id), pm_id)
         user_ids.add(int(row.user_id))
-        amt = float(row.amount_claimed or 0)
         if key not in buckets:
             buckets[key] = {
                 'user_id': int(row.user_id),
@@ -162,9 +161,34 @@ def list_accumulated_summary() -> List[Dict[str, Any]]:
                 'payment_currency': (row.currency or 'COP').strip().upper(),
                 'total': 0.0,
                 'count': 0,
+                'pending_auto_total': 0.0,
+                'pending_auto_count': 0,
             }
-        buckets[key]['total'] += amt
-        buckets[key]['count'] += 1
+        return buckets[key]
+
+    for row in rows:
+        bucket = _bucket_for(row)
+        if bucket is None:
+            continue
+        bucket['total'] += float(row.amount_claimed or 0)
+        bucket['count'] += 1
+
+    # Provisionales (auto_accumulated sin verificar): el usuario ya los ve en su
+    # total «Acumulado»; el admin debe verlos también para no descuadrar cuentas.
+    auto_rows = (
+        BalanceRecharge.query.filter(
+            BalanceRecharge.status == 'auto_accumulated',
+            BalanceRecharge.admin_verified.is_(None),
+        )
+        .order_by(BalanceRecharge.user_id.asc(), BalanceRecharge.payment_method_id.asc())
+        .all()
+    )
+    for row in auto_rows:
+        bucket = _bucket_for(row)
+        if bucket is None:
+            continue
+        bucket['pending_auto_total'] += float(row.amount_claimed or 0)
+        bucket['pending_auto_count'] += 1
 
     users_map = {}
     if user_ids:
@@ -209,6 +233,8 @@ def list_accumulated_summary() -> List[Dict[str, Any]]:
                 'conversion_label': conversion_label,
                 'total_accumulated': round(item['total'], 2),
                 'recharge_count': item['count'],
+                'pending_auto_total': round(item.get('pending_auto_total') or 0.0, 2),
+                'pending_auto_count': int(item.get('pending_auto_count') or 0),
                 'mult_usd_to_cop': mults.get('mult_usd_to_cop'),
                 'mult_cop_to_usd': mults.get('mult_cop_to_usd'),
                 'preview_credit': preview_credit,

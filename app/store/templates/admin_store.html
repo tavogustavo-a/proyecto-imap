@@ -5,7 +5,38 @@
 {% block head %}
   {{ super() }}
   <meta name="clear_trigger_log_url" content="{{ url_for('admin_bp.clear_trigger_log') }}">
-  <link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}?v=20260711-admin-notify-types">
+{% endblock %}
+{% block page_styles %}
+  {{ super() }}
+  <link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}?v={{ licencias_static_version }}">
+  <style>
+    /* Garantía: amarillo pintado; Caída: rojo pintado (después de styles.css) */
+    .admin-licencias-page .user-lic-warranty-pending-badge,
+    .admin-licencias-page .user-lic-warranty-pending-badge[data-lic-pendiente-garantia='1'],
+    .admin-licencias-page .user-lic-warranty-pending-badge .fa-hourglass-half,
+    .admin-licencias-page .user-lic-warranty-pending-badge > .fas {
+      color: #111827 !important;
+      -webkit-text-fill-color: #111827 !important;
+      background: #eab308 !important;
+      border: none !important;
+    }
+    .admin-licencias-page .user-lic-warranty-pending-badge .fa-hourglass-half,
+    .admin-licencias-page .user-lic-warranty-pending-badge > .fas {
+      background: transparent !important;
+    }
+    .admin-licencias-page select.license-split-editor__status.license-split-editor__status--tier-bad,
+    .admin-licencias-page select.license-split-editor__status-bad.license-split-editor__status--tier-bad,
+    .admin-licencias-page .license-notepads-wrap .license-split-editor__row select.license-split-editor__status.license-split-editor__status--tier-bad {
+      color: #ffffff !important;
+      -webkit-text-fill-color: #ffffff !important;
+      background-color: #dc2626 !important;
+      background-image: linear-gradient(45deg, transparent 50%, #ffffff 50%),
+        linear-gradient(135deg, #ffffff 50%, transparent 50%) !important;
+      background-position: calc(100% - 0.65rem) 50%, calc(100% - 0.45rem) 50% !important;
+      background-size: 0.28rem 0.28rem, 0.28rem 0.28rem !important;
+      background-repeat: no-repeat !important;
+    }
+  </style>
 {% endblock %}
 {% block content %}
 <div class="container-fluid mt-2 store-light worksheet-panel admin-licencias-page admin-licencias-shell" data-licencias-persist-scope="{{ (session.get('username') or '')|e }}" data-admin-warranty-incidents-url="{{ url_for('store_bp.api_admin_license_warranty_incidents') }}" data-admin-proveedor-url="{{ url_for('store_bp.api_admin_proveedor_inventory_get') }}" data-admin-proveedor-put-url="{{ url_for('store_bp.api_admin_proveedor_inventory_put') }}" data-admin-proveedor-sales-url="{{ url_for('store_bp.api_admin_proveedor_sales_stats_get') }}" data-admin-proveedor-sales-reset-url="{{ url_for('store_bp.api_admin_proveedor_sales_stats_reset') }}" {% if license_support_restricted_mode %}data-license-support-restricted="true"{% endif %}{% if license_support_view_only|default(false) %} data-license-support-view-only="true"{% endif %}>
@@ -299,11 +330,11 @@
   {{ super() }}
   <script src="{{ url_for('store_bp.static', filename='js/admin_store.js') }}?v=20260628-notas-ocultas-default-v16" defer></script>
   <script src="{{ url_for('store_bp.static', filename='js/menu_tienda.js') }}?v=20260628-notas-ocultas-default-v16" defer></script>
-  <script src="{{ url_for('store_bp.static', filename='js/licencias_bootstrap.js') }}?v=20260710-view-only-subuser" defer></script>
-  <script src="{{ url_for('store_bp.static', filename='js/licencias_shared.js') }}?v=20260711-notify-in-modal" defer></script>
-  <script src="{{ url_for('store_bp.static', filename='js/admin_licencias_ui_prefs.js') }}?v=20260703-reserva-otro-dia-v7" defer></script>
-  <script src="{{ url_for('store_bp.static', filename='js/licencias.js') }}?v=20260711-admin-notify-types" defer></script>
-  <script src="{{ url_for('store_bp.static', filename='js/admin_licencias_notepad.js') }}?v=20260628-notas-ocultas-default-v16" defer></script>
+  <script src="{{ url_for('store_bp.static', filename='js/licencias_bootstrap.js') }}?v={{ licencias_static_version }}" defer></script>
+  <script src="{{ url_for('store_bp.static', filename='js/licencias_shared.js') }}?v={{ licencias_static_version }}" defer></script>
+  <script src="{{ url_for('store_bp.static', filename='js/admin_licencias_ui_prefs.js') }}?v={{ licencias_static_version }}" defer></script>
+  <script src="{{ url_for('store_bp.static', filename='js/licencias.js') }}?v={{ licencias_static_version }}" defer></script>
+  <script src="{{ url_for('store_bp.static', filename='js/admin_licencias_notepad.js') }}?v={{ licencias_static_version }}" defer></script>
   <script src="{{ url_for('static', filename='js/clear_trigger_logs.js') }}" defer></script>
   <script src="{{ url_for('static', filename='js/logout_all_cookies_btn.js') }}" defer></script>
 {% endblock %} 

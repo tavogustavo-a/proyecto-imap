@@ -901,9 +901,16 @@ def _recharge_duplicate_blocks(row: BalanceRecharge) -> bool:
     st = (row.status or '').lower()
     if st == 'rejected':
         return False
-    if st == 'auto_credited':
+    if st in ('auto_credited', 'auto_accumulated'):
+        # Provisional (sin revisar por admin): sigue bloqueando el comprobante.
         return getattr(row, 'admin_verified', None) is None
-    return st in ('pending', 'approved', 'accumulated', 'accum_converted')
+    return st in (
+        'pending',
+        'pending_binance_pay',
+        'approved',
+        'accumulated',
+        'accum_converted',
+    )
 
 
 def free_recharge_proof_identifiers(row: BalanceRecharge) -> None:

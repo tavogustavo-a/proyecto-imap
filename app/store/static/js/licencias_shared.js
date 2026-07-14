@@ -858,6 +858,7 @@ function showAdminLicenciasNotificacionesModal() {
     '          <label class="admin-lic-notify-prefs-check"><input type="checkbox" id="adminNotifyTypeLicenseReport" checked autocomplete="off"> <span>Reportes de clientes</span></label>' +
     '          <label class="admin-lic-notify-prefs-check"><input type="checkbox" id="adminNotifyTypeBalanceRecharge" checked autocomplete="off"> <span>Recargas (acreditada / rechazada)</span></label>' +
     '          <label class="admin-lic-notify-prefs-check"><input type="checkbox" id="adminNotifyTypeReservation" checked autocomplete="off"> <span>Reservas</span></label>' +
+    '          <label class="admin-lic-notify-prefs-check"><input type="checkbox" id="adminNotifyTypeStockUpload" checked autocomplete="off"> <span>Cuentas subidas (stock nuevo)</span></label>' +
     '          <label class="admin-lic-notify-prefs-check"><input type="checkbox" id="adminNotifyTypeWaDigest" checked autocomplete="off"> <span>Fallback WhatsApp (app + correo)</span></label>' +
     '        </div>' +
     '        <p class="admin-lic-notify-prefs-section-title">Alerta al recibir</p>' +
@@ -901,6 +902,7 @@ function adminLicenciasWireNotifyPrefsModal(modalOverlay) {
   var chkReport = modalOverlay.querySelector('#adminNotifyTypeLicenseReport');
   var chkRecharge = modalOverlay.querySelector('#adminNotifyTypeBalanceRecharge');
   var chkReservation = modalOverlay.querySelector('#adminNotifyTypeReservation');
+  var chkStock = modalOverlay.querySelector('#adminNotifyTypeStockUpload');
   var chkWa = modalOverlay.querySelector('#adminNotifyTypeWaDigest');
   var statusEl = modalOverlay.querySelector('#adminLicNotifyPrefsSaveStatus');
 
@@ -932,6 +934,7 @@ function adminLicenciasWireNotifyPrefsModal(modalOverlay) {
     if (chkReport) chkReport.checked = types.license_report !== false;
     if (chkRecharge) chkRecharge.checked = types.balance_recharge !== false;
     if (chkReservation) chkReservation.checked = types.reservation !== false;
+    if (chkStock) chkStock.checked = types.stock_upload !== false;
     if (chkWa) chkWa.checked = types.wa_digest !== false;
     try {
       window.__storeNotifyPrefs = Object.assign({}, window.__storeNotifyPrefs || {}, {
@@ -952,6 +955,7 @@ function adminLicenciasWireNotifyPrefsModal(modalOverlay) {
         license_report: chkReport ? !!chkReport.checked : true,
         balance_recharge: chkRecharge ? !!chkRecharge.checked : true,
         reservation: chkReservation ? !!chkReservation.checked : true,
+        stock_upload: chkStock ? !!chkStock.checked : true,
         wa_digest: chkWa ? !!chkWa.checked : true,
       },
     };
@@ -1011,7 +1015,7 @@ function adminLicenciasWireNotifyPrefsModal(modalOverlay) {
     })
     .catch(function () {});
 
-  [chkVibrate, chkSound, chkReport, chkRecharge, chkReservation, chkWa].forEach(function (el) {
+  [chkVibrate, chkSound, chkReport, chkRecharge, chkReservation, chkStock, chkWa].forEach(function (el) {
     if (el) el.addEventListener('change', savePrefs);
   });
 }

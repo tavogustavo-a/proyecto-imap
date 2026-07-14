@@ -11,7 +11,8 @@
   {% endblock %}
 
   <link rel="icon" href="{{ url_for('static', filename='images/favicon.svg') }}?v=20241220" type="image/svg+xml">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}?v=20260611-logout-cookies-label">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}?v=20260712-back-right">
+  {% block page_styles %}{% endblock %}
   {% if is_admin %}
   <meta name="archived-licenses-count-url" content="{{ url_for('store_bp.api_archived_licenses_count') }}">
   <meta name="archived-licenses-list-url" content="{{ url_for('store_bp.api_get_archived_licenses') }}">
@@ -44,6 +45,8 @@
     {% block content %}{% endblock %}
   </div>
 
+  {% include 'includes/site_footer.html' %}
+
   {% if is_admin %}
   {% include 'includes/admin_proveedor_ventas_modals.html' %}
   {% endif %}
@@ -58,7 +61,7 @@
   <script src="{{ url_for('store_bp.static', filename='js/store_fetch_json.js') }}?v=20260610" defer></script>
   <script src="{{ url_for('store_bp.static', filename='js/store_sse_realtime.js') }}?v=20260622-sse-unified" defer></script>
   {% if session.get('logged_in') %}
-  <script src="{{ url_for('store_bp.static', filename='js/store_user_notifications.js') }}?v=20260711-vibrate-sound" defer></script>
+  <script src="{{ url_for('store_bp.static', filename='js/store_user_notifications.js') }}?v=20260712-stock-upload-notify" defer></script>
   {% endif %}
   <script src="{{ url_for('store_bp.static', filename='js/store_menu_saldo_realtime.js') }}?v=20260610-fetch" defer></script>
   {% if is_admin %}

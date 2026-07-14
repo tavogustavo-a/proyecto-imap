@@ -31,6 +31,10 @@ from app.utils.timezone import get_colombia_datetime, utc_to_colombia
 logger = logging.getLogger(__name__)
 
 LICENSE_LINE_SEP = '\x1f'
+# OJO: \x1f cuenta como whitespace para str.strip() en Python; usar siempre
+# BLOC_WS al recortar líneas/textos de bloc para no perder el separador final
+# (si se pierde, la línea pasa a 4 segmentos y el estado rojo se lee como notas).
+BLOC_WS = ' \t\r\n'
 _CRED_EMAIL_RE = re.compile(r'\S+@\S+\.\S+')
 _AUTO_MES_RE = re.compile(r'_auto_mes:(\d{4}-\d{2})')
 RENEWAL_DAYS = 30
@@ -101,12 +105,82 @@ def _route_dual_line_to_changes_or_expired(
     return changes_cur, expired_cur, True
 
 
+def clear_solucionada_statuses_overnight() -> Dict[str, Any]:
+    """
+    Medianoche CO: «solucionada» vuelve a — en todos los blocs día,
+    salvo que admin/usuario lo hayan cambiado antes.
+    """
+    from app.store.models import License
+    from app.store.user_license_line_parse import (
+        dual_from_stored_segments,
+        dual_to_storage_line,
+        is_solucionada_status,
+        parse_admin_license_line_to_split_parts,
+    )
+
+    cleared = 0
+    license_ids: List[int] = []
+    for lic in License.query.filter(License.enabled.is_(True)).all():
+        day_map = _load_day_map(lic)
+        if not day_map:
+            continue
+        dirty = False
+        for dk, text in list(day_map.items()):
+            day_dirty = False
+            lines = str(text or '').replace('\r\n', '\n').split('\n')
+            new_lines: List[str] = []
+            for line in lines:
+                if not str(line).strip():
+                    new_lines.append(line)
+                    continue
+                try:
+                    p = parse_admin_license_line_to_split_parts(line)
+                except Exception:
+                    new_lines.append(line)
+                    continue
+                sb = str(p.get('statusBad') or '').strip()
+                if not is_solucionada_status(sb):
+                    new_lines.append(line)
+                    continue
+                dual = dual_from_stored_segments(
+                    p.get('cred') or '',
+                    p.get('user') or '',
+                    p.get('statusGood') or '',
+                    '',
+                    p.get('extra') or '',
+                )
+                dual['statusBad'] = ''
+                dual['otroDetail'] = ''
+                new_lines.append(dual_to_storage_line(dual))
+                day_dirty = True
+                cleared += 1
+            # Solo reescribir el bloc del día que sí cambió (evita renormalizar
+            # líneas intactas de otros días).
+            if day_dirty:
+                day_map[str(dk)] = '\n'.join(new_lines)
+                dirty = True
+        if dirty:
+            try:
+                lic.day_notepads_json = json.dumps(
+                    {str(k): str(v or '') for k, v in day_map.items() if str(v or '').strip()},
+                    ensure_ascii=False,
+                )
+                lid = int(getattr(lic, 'id', 0) or 0)
+                if lid and lid not in license_ids:
+                    license_ids.append(lid)
+            except Exception:
+                logger.exception('clear_solucionada license=%s', getattr(lic, 'id', None))
+    return {'cleared': cleared, 'license_ids': license_ids}
+
+
 def run_license_day_renewal_pipeline() -> Dict[str, Any]:
     """Ejecutar renovaciones del día y luego enrutar vencidas (medianoche Colombia)."""
     _ensure_schema_columns()
     co_now = get_colombia_datetime()
     days_to_run = calendar_days_to_process(co_now)
     calendar_day = int(co_now.day)
+
+    sol_clear = clear_solucionada_statuses_overnight()
 
     renew_stats = _empty_renew_stats()
     route_stats = {'lines_moved': 0, 'license_ids': []}
@@ -133,6 +207,7 @@ def run_license_day_renewal_pipeline() -> Dict[str, Any]:
         + route_stats.get('license_ids', [])
         + expired_stats.get('license_ids', [])
         + stripped.get('license_ids', [])
+        + sol_clear.get('license_ids', [])
     )
     if (
         renew_stats.get('charged')
@@ -144,6 +219,7 @@ def run_license_day_renewal_pipeline() -> Dict[str, Any]:
         or route_stats.get('license_ids')
         or expired_stats.get('license_ids')
         or stripped.get('license_ids')
+        or sol_clear.get('cleared')
     ):
         try:
             db.session.commit()
@@ -159,6 +235,7 @@ def run_license_day_renewal_pipeline() -> Dict[str, Any]:
         'routed_day_lines': route_stats,
         'expired': expired_stats,
         'day_bloc_stripped': stripped,
+        'solucionada_cleared': sol_clear,
     }
 
 
@@ -336,14 +413,14 @@ def process_day_renewals_for_calendar_day(
 
         if lic_changed:
             if new_lines:
-                day_map[day_key] = '\n'.join(new_lines).strip()
+                day_map[day_key] = '\n'.join(new_lines).strip(BLOC_WS)
             else:
                 day_map.pop(day_key, None)
             m2m = bool(getattr(lic, 'month_to_month', False))
             if m2m:
-                lic.changes_notes = changes_cur.strip()
+                lic.changes_notes = changes_cur.strip(BLOC_WS)
             else:
-                lic.expired_notes = expired_cur.strip()
+                lic.expired_notes = expired_cur.strip(BLOC_WS)
             lic.day_notepads_json = json.dumps(day_map, ensure_ascii=False) if day_map else None
             lic.updated_at = now_utc
             license_ids.append(int(lic.id))
@@ -426,13 +503,13 @@ def route_unrenewed_day_lines_on_renewal_day(
 
         if lic_changed:
             if new_day_lines:
-                day_map[day_key] = '\n'.join(new_day_lines).strip()
+                day_map[day_key] = '\n'.join(new_day_lines).strip(BLOC_WS)
             else:
                 day_map.pop(day_key, None)
             if m2m:
-                lic.changes_notes = changes_cur.strip()
+                lic.changes_notes = changes_cur.strip(BLOC_WS)
             else:
-                lic.expired_notes = expired_cur.strip()
+                lic.expired_notes = expired_cur.strip(BLOC_WS)
             lic.day_notepads_json = json.dumps(day_map, ensure_ascii=False) if day_map else None
             lic.updated_at = now_utc
             license_ids.append(int(lic.id))
@@ -477,7 +554,7 @@ def sync_expired_accounts_by_renewal_policy() -> Dict[str, Any]:
         if m2m:
             from_expired: List[str] = []
             for line in expired_cur.split('\n'):
-                line = line.strip()
+                line = line.strip(BLOC_WS)
                 if not line:
                     continue
                 cred_part = line.split(LICENSE_LINE_SEP)[0] if LICENSE_LINE_SEP in line else line
@@ -528,9 +605,9 @@ def sync_expired_accounts_by_renewal_policy() -> Dict[str, Any]:
 
         if lic_touched:
             if m2m:
-                lic.changes_notes = changes_cur.strip()
+                lic.changes_notes = changes_cur.strip(BLOC_WS)
             else:
-                lic.expired_notes = expired_cur.strip()
+                lic.expired_notes = expired_cur.strip(BLOC_WS)
             lic.day_notepads_json = json.dumps(day_map, ensure_ascii=False) if day_map else None
             lic.updated_at = now_utc
             license_ids.append(int(lic.id))
@@ -749,10 +826,14 @@ def _effective_green_for_automation(dual: Dict[str, Any], raw_line: str) -> str:
 
 
 def _find_green_for_account(lic, acc, day_map: Dict[str, str]) -> Tuple[str, str, str, Dict[str, Any]]:
-    from app.store.user_license_line_parse import parse_admin_license_line_to_split_parts
+    from app.store.user_license_line_parse import (
+        credential_matches_account,
+        parse_admin_license_line_to_split_parts,
+    )
 
     email_k = _email_key_from_cred(f'{acc.email} {acc.password}')
-    if not email_k:
+    ident = str(getattr(acc, 'account_identifier', '') or '').strip()
+    if not email_k and not ident:
         return '', '', '', {}
 
     linked_day = ''
@@ -772,12 +853,18 @@ def _find_green_for_account(lic, acc, day_map: Dict[str, str]) -> Tuple[str, str
     for dk in search_keys:
         raw = day_map.get(dk) or ''
         for line in str(raw).replace('\r\n', '\n').split('\n'):
-            line = line.strip()
+            line = line.strip(BLOC_WS)
             if not line:
                 continue
-            cred_k = _email_key_from_cred(line.split(LICENSE_LINE_SEP)[0] if LICENSE_LINE_SEP in line else line)
-            if cred_k != email_k:
-                continue
+            cred_part = line.split(LICENSE_LINE_SEP)[0] if LICENSE_LINE_SEP in line else line
+            if email_k:
+                cred_k = _email_key_from_cred(cred_part)
+                if cred_k != email_k:
+                    continue
+            else:
+                # Cuentas sin email: casar por identificador (mismo patrón que garantías).
+                if not credential_matches_account(cred_part, '', ident):
+                    continue
             dual = parse_admin_license_line_to_split_parts(line)
             green = _effective_green_for_automation(dual, line)
             return green, dk, line, dual
@@ -832,7 +919,7 @@ def _line_cred_key(cred: str) -> str:
 def _cred_keys_in_bloc(text: str) -> set:
     seen: set = set()
     for line in str(text or '').replace('\r\n', '\n').split('\n'):
-        line = line.strip()
+        line = line.strip(BLOC_WS)
         if not line:
             continue
         cred = line.split(LICENSE_LINE_SEP)[0] if LICENSE_LINE_SEP in line else line
@@ -890,7 +977,7 @@ def strip_day_bloc_lines_present_in_side_blocs_for_calendar_day(calendar_day: in
         kept: List[str] = []
         removed_here = 0
         for line in str(raw_day).replace('\r\n', '\n').split('\n'):
-            line = line.strip()
+            line = line.strip(BLOC_WS)
             if not line:
                 continue
             cred = line.split(LICENSE_LINE_SEP)[0] if LICENSE_LINE_SEP in line else line
@@ -902,7 +989,7 @@ def strip_day_bloc_lines_present_in_side_blocs_for_calendar_day(calendar_day: in
             continue
         lines_removed += removed_here
         if kept:
-            day_map[day_key] = '\n'.join(kept).strip()
+            day_map[day_key] = '\n'.join(kept).strip(BLOC_WS)
         else:
             day_map.pop(day_key, None)
         lic.day_notepads_json = json.dumps(day_map, ensure_ascii=False) if day_map else None
@@ -919,14 +1006,14 @@ def filter_day_text_excluding_side_blocs(lic, day_text: str) -> str:
         return str(day_text or '')
     kept: List[str] = []
     for line in str(day_text or '').replace('\r\n', '\n').split('\n'):
-        line = line.strip()
+        line = line.strip(BLOC_WS)
         if not line:
             continue
         cred = line.split(LICENSE_LINE_SEP)[0] if LICENSE_LINE_SEP in line else line
         if _line_cred_key(cred) in side_keys:
             continue
         kept.append(line)
-    return '\n'.join(kept).strip()
+    return '\n'.join(kept).strip(BLOC_WS)
 
 
 def _emails_in_bloc(text: str) -> set:
@@ -934,11 +1021,11 @@ def _emails_in_bloc(text: str) -> set:
 
 
 def _append_bloc_line(cur: str, line: str) -> str:
-    cur_s = (cur or '').strip()
-    add = (line or '').strip()
+    cur_s = (cur or '').strip(BLOC_WS)
+    add = (line or '').strip(BLOC_WS)
     if not add:
         return cur_s
-    return (cur_s + '\n' + add).strip() if cur_s else add
+    return (cur_s + '\n' + add).strip(BLOC_WS) if cur_s else add
 
 
 def _remove_line_from_day_map(day_map: Dict[str, str], cred_key: str, day_key: str) -> bool:
@@ -957,7 +1044,7 @@ def _remove_line_from_day_map(day_map: Dict[str, str], cred_key: str, day_key: s
     if not removed:
         return False
     if kept:
-        day_map[day_key] = '\n'.join(kept).strip()
+        day_map[day_key] = '\n'.join(kept).strip(BLOC_WS)
     else:
         day_map.pop(day_key, None)
     return True

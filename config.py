@@ -175,7 +175,7 @@ class Config:
     # Legacy (ya no disponible en proyectos nuevos). Se mantiene por compatibilidad.
     FCM_SERVER_KEY = os.getenv("FCM_SERVER_KEY", None)
 
-    # App Links: package desde DOMINIO.txt (com.imap.nativestore.<marca>,com.imap.storeclient).
+    # App Links: package desde DOMINIO.txt (applicationId=... o com.<marca>.app).
     # Huellas SHA-256 sí van en .env (son del keystore, no del dominio).
     ANDROID_APP_PACKAGE = (
         os.getenv("ANDROID_APP_PACKAGE")

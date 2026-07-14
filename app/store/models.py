@@ -74,6 +74,25 @@ class Coupon(db.Model):
     # Relación ManyToMany con productos
     products = db.relationship('Product', secondary='coupon_products', backref='coupons')
 
+
+class CouponRedemption(db.Model):
+    """Uso de cupón en un checkout: permite aplicar max_uses_per_user en servidor."""
+    __tablename__ = 'store_coupon_redemptions'
+    id = db.Column(db.Integer, primary_key=True)
+    coupon_id = db.Column(
+        db.Integer,
+        db.ForeignKey('store_coupons.id', ondelete='CASCADE'),
+        nullable=False,
+        index=True,
+    )
+    user_id = db.Column(
+        db.Integer,
+        db.ForeignKey('users.id', ondelete='CASCADE'),
+        nullable=False,
+        index=True,
+    )
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
 # Tabla de asociación cupones-productos
 coupon_products = db.Table('coupon_products',
     db.Column('coupon_id', db.Integer, db.ForeignKey('store_coupons.id', ondelete='CASCADE'), primary_key=True),

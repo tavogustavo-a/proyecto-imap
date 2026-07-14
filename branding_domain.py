@@ -6,8 +6,13 @@ Prioridad de lectura:
   2) mobile/DOMINIO.txt
   3) mobile-android-native/DOMINIO.txt
 
-Editá solo la URL (una línea sin #). El resto (CORS, package nativo, App Links)
-se deriva solo — no hardcodear el dominio en .env.
+Formato de DOMINIO.txt:
+  - Una línea con la URL pública (obligatoria)
+  - Opcionales (clave=valor):
+      applicationId=com.tupremiumm.app   # package de Play / App Links
+      package=com.tupremiumm.app         # alias de applicationId
+      appName=tupremiumm                 # nombre visible de la app
+      appIdSuffix=tupremiumm             # solo si no pones applicationId
 """
 from __future__ import annotations
 
@@ -16,6 +21,11 @@ import re
 from urllib.parse import urlparse
 
 _ROOT = os.path.abspath(os.path.dirname(__file__))
+
+_PACKAGE_RE = re.compile(
+    r"^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$",
+    re.I,
+)
 
 
 def dominio_txt_candidates():
@@ -26,20 +36,50 @@ def dominio_txt_candidates():
     )
 
 
+def _parse_dominio_file(path):
+    """Lee URL + claves opcionales de un DOMINIO.txt."""
+    url_raw = ""
+    extras = {}
+    try:
+        with open(path, "r", encoding="utf-8") as fh:
+            for line in fh:
+                trimmed = line.strip()
+                if not trimmed or trimmed.startswith("#"):
+                    continue
+                if "=" in trimmed and not trimmed.lower().startswith(("http://", "https://")):
+                    key, _, val = trimmed.partition("=")
+                    k = key.strip().lower().replace("-", "_")
+                    v = val.strip()
+                    if k and v:
+                        extras[k] = v
+                    continue
+                if not url_raw:
+                    url_raw = trimmed
+    except OSError:
+        return "", {}, None
+    return url_raw, extras, path
+
+
 def read_dominio_raw_line():
+    """Compat: (primera URL, path) o ('', None)."""
     for path in dominio_txt_candidates():
         if not os.path.isfile(path):
             continue
-        try:
-            with open(path, "r", encoding="utf-8") as fh:
-                for line in fh:
-                    trimmed = line.strip()
-                    if not trimmed or trimmed.startswith("#"):
-                        continue
-                    return trimmed, path
-        except OSError:
-            continue
+        url_raw, _extras, src = _parse_dominio_file(path)
+        if url_raw:
+            return url_raw, src
     return "", None
+
+
+def read_dominio_file():
+    """(url_raw, extras_dict, source_path) del primer DOMINIO.txt usable."""
+    for path in dominio_txt_candidates():
+        if not os.path.isfile(path):
+            continue
+        url_raw, extras, src = _parse_dominio_file(path)
+        if url_raw or extras:
+            return url_raw, extras, src
+    return "", {}, None
 
 
 def normalize_site_url(raw):
@@ -77,41 +117,79 @@ def brand_suffix_from_hostname(hostname):
     if multi and multi.group(1):
         base = multi.group(1).split(".")[0]
         return re.sub(r"[^a-z0-9]", "", base.lower()) or "app"
-    # primer label del host (sin TLD)
     label = h.split(".")[0]
     return re.sub(r"[^a-z0-9]", "", label.lower()) or "app"
+
+
+def sanitize_app_id_suffix(raw):
+    s = re.sub(r"[^a-z0-9]", "", (raw or "").lower())
+    return s or "app"
+
+
+def sanitize_application_id(raw):
+    """Normaliza package Android (minúsculas, solo [a-z0-9_.])."""
+    pkg = re.sub(r"[^a-zA-Z0-9_.]", "", (raw or "").strip()).lower()
+    if not pkg or not _PACKAGE_RE.match(pkg):
+        return ""
+    return pkg
+
+
+def default_application_id(suffix):
+    return f"com.{sanitize_app_id_suffix(suffix)}.app"
 
 
 def load_site_branding():
     """
     Devuelve dict con:
-      site_url, hostname, hostname_no_www, brand_suffix,
-      cors_origins, android_app_package, source_path
+      site_url, hostname, hostname_no_www, brand_suffix, app_name,
+      application_id, cors_origins, android_app_package, source_path
     o None si no hay DOMINIO.txt usable.
     """
-    raw, source = read_dominio_raw_line()
+    raw, extras, source = read_dominio_file()
     info = normalize_site_url(raw)
     if not info:
         return None
-    suffix = brand_suffix_from_hostname(info["hostname"])
+
+    suffix_override = sanitize_app_id_suffix(extras.get("appidsuffix") or extras.get("app_id_suffix") or "")
+    suffix = suffix_override if extras.get("appidsuffix") or extras.get("app_id_suffix") else brand_suffix_from_hostname(
+        info["hostname"]
+    )
+
+    app_name = (extras.get("appname") or extras.get("app_name") or "").strip()
+    if not app_name:
+        app_name = suffix
+
+    explicit_pkg = sanitize_application_id(
+        extras.get("applicationid")
+        or extras.get("application_id")
+        or extras.get("package")
+        or extras.get("android_package")
+        or ""
+    )
+    application_id = explicit_pkg or default_application_id(suffix)
+
     host = info["hostname_no_www"]
     scheme = urlparse(info["href"]).scheme or "https"
     primary = f"{scheme}://{host}"
     www = f"{scheme}://www.{host}"
-    # Si el usuario puso www. en DOMINIO, primary ya incluye www; igual listamos ambos
     origins = []
     for o in (info["href"], primary, www):
         if o and o not in origins:
             origins.append(o)
-    packages = [
-        f"com.imap.nativestore.{suffix}",
-        "com.imap.storeclient",
-    ]
+
+    # Package principal (Play) + legado Capacitor si aún se usa.
+    packages = [application_id]
+    legacy = "com.imap.storeclient"
+    if legacy not in packages:
+        packages.append(legacy)
+
     return {
         "site_url": info["href"],
         "hostname": info["hostname"],
         "hostname_no_www": host,
         "brand_suffix": suffix,
+        "app_name": app_name,
+        "application_id": application_id,
         "cors_origins": ",".join(origins),
         "android_app_package": ",".join(packages),
         "source_path": source,

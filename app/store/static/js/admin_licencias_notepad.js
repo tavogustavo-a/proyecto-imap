@@ -1118,6 +1118,7 @@
     var body = JSON.stringify(bodyObj);
     if (typeof adminLicFetchJson !== 'function') return;
     notesSaveInFlight = true;
+    window.__adminLicNotesSaveDispatchedAt = Date.now();
     adminLicFetchJson('/tienda/api/licenses/' + licenseId + '/notes', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
@@ -1209,6 +1210,7 @@
       return Promise.resolve({ success: false, error: 'fetch_unavailable' });
     }
     notesSaveInFlight = true;
+    window.__adminLicNotesSaveDispatchedAt = Date.now();
     return adminLicFetchJson('/tienda/api/licenses/' + licenseId + '/notes', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
@@ -2470,8 +2472,16 @@
     setLicenseHeading('');
   }
 
+  /** Snapshot de /api/licenses iniciado antes del último PUT /notes: obsoleto para blocs. */
+  function licensesSnapshotPredatesLastNotesSave() {
+    var snapAt = window.__adminLicLicensesSnapshotAt || 0;
+    var saveAt = window.__adminLicNotesSaveDispatchedAt || 0;
+    return !!(saveAt && snapAt && snapAt < saveAt);
+  }
+
   function refreshCustomerRenewalSplitFromApi(licenseRow) {
     if (!licenseRow || licenseRow.id == null) return;
+    if (licensesSnapshotPredatesLastNotesSave()) return;
     var idStr = String(licenseRow.id);
     var taCR = getEl('adminLicenciasNotepadByCustomerRenewal');
     if (!taCR || String(taCR.dataset.licenseId) !== idStr) return;
@@ -2516,6 +2526,9 @@
   function refreshLicenseSplitFromApi(licenseRow) {
     if (!licenseRow || licenseRow.id == null) return;
     if (saveNotesTimer || saveLicenseNotesTimer || notesSaveInFlight || licenseNotesSaveInFlight) return;
+    /* Carrera SSE vs guardado: los datos se descargaron antes de despachar el último
+       PUT /notes; aplicarlos pisaría la edición recién guardada. El próximo rev refetchea. */
+    if (licensesSnapshotPredatesLastNotesSave()) return;
     if (isUserEditingMainLicenseSplit()) return;
     if (
       typeof window.adminLicShouldSkipLicenseNotesRealtimeRefresh === 'function' &&

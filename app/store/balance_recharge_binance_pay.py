@@ -162,6 +162,20 @@ def _fetch_certificates(api_key: str, secret: str) -> dict[str, str]:
     return certs
 
 
+# Anti-replay: un webhook capturado no debe poder reenviarse indefinidamente.
+_WEBHOOK_TIMESTAMP_TOLERANCE_SEC = 300
+
+
+def _webhook_timestamp_fresh(timestamp: str) -> bool:
+    """El header BinancePay-Timestamp (epoch ms) debe estar dentro de ±5 min."""
+    try:
+        ts_ms = int(str(timestamp).strip())
+    except (TypeError, ValueError):
+        return False
+    now_ms = int(time.time() * 1000)
+    return abs(now_ms - ts_ms) <= _WEBHOOK_TIMESTAMP_TOLERANCE_SEC * 1000
+
+
 def verify_webhook_signature(
     *,
     api_key: str,
@@ -172,6 +186,9 @@ def verify_webhook_signature(
     raw_body: str,
 ) -> bool:
     if not all((api_key, secret, timestamp, nonce, signature_b64, raw_body)):
+        return False
+    if not _webhook_timestamp_fresh(timestamp):
+        logger.warning('Binance Pay webhook: timestamp fuera de tolerancia (posible replay)')
         return False
     payload = f'{timestamp}\n{nonce}\n{raw_body}\n'
     try:

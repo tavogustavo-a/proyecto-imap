@@ -1,0 +1,11 @@
+{# Enlace «Volver» estándar (texto, alineado a la derecha).
+   Uso:
+   {% set back_href = url_for('main_bp.home') %}
+   {% include 'includes/page_back_link.html' %}
+   Opcional: {% set back_label = '← Volver' %}
+#}
+{% set _back_href = back_href|default(url_for('main_bp.home')) %}
+{% set _back_label = back_label|default('← Volver') %}
+<p class="site-back-nav">
+  <a class="site-back-link" href="{{ _back_href }}">{{ _back_label }}</a>
+</p>

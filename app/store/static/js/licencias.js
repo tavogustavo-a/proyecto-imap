@@ -186,7 +186,125 @@ function adminLicDaysCanSkipFullRerender(licenseId, renderKey, container) {
     return true;
 }
 
+/**
+ * Resuelve el texto a mostrar en un día (servidor + borrador local), igual que loadAllDaysSoldAccounts.
+ */
+function adminLicResolveDayTextToApply(licenseId, day, dayAccounts, aggregateVisibleIds) {
+    const displayBase = getDayNotepadDisplayText(
+        licenseId,
+        day,
+        dayAccounts || [],
+        licenseId === AGGREGATE_LICENSE_ID ? aggregateVisibleIds : undefined
+    );
+    const draft = typeof loadDayDraftLocal === 'function' ? loadDayDraftLocal(licenseId, day) : null;
+    let textToApply = displayBase;
+    let textForBadge = displayBase;
+    if (
+        draft !== null &&
+        typeof normalizeDraftCompare === 'function' &&
+        normalizeDraftCompare(draft) !== normalizeDraftCompare(displayBase)
+    ) {
+        textToApply = draft;
+        textForBadge = draft;
+    } else if (draft !== null && typeof clearDayDraftLocal === 'function') {
+        clearDayDraftLocal(licenseId, day);
+    }
+    return {
+        textToApply: textToApply,
+        lineCount: countNonEmptyLinesInText(textForBadge),
+        hasContent:
+            (dayAccounts && dayAccounts.length > 0) ||
+            (typeof normalizeDraftCompare === 'function'
+                ? normalizeDraftCompare(textToApply) !== ''
+                : String(textToApply || '').trim() !== ''),
+    };
+}
+
+/**
+ * Tras SSE/poll: si se omite el re-render completo de Días (mismas cuentas), igual hay que
+ * empujar day_notepads nuevos a lazy-meta + editores montados. Sin esto Reportes (R) sí
+ * actualiza (lee memoria) pero el servicio abierto queda con selects/badges viejos.
+ */
+function adminLicSyncDaysNotepadsFromLicenses(licenseId) {
+    if (!Number.isFinite(licenseId)) return;
+    const container = document.getElementById('licenseAllDaysContainer');
+    if (!container || container.classList.contains('d-none')) return;
+
+    const aggregateVisibleIds =
+        licenseId === AGGREGATE_LICENSE_ID && typeof getAggregateVisibleLicenseIdSet === 'function'
+            ? getAggregateVisibleLicenseIdSet()
+            : undefined;
+
+    if (!__adminLicDaysLazyMeta || __adminLicDaysLazyMeta.licenseId !== licenseId) {
+        __adminLicDaysLazyMeta = { licenseId: licenseId, byDay: Object.create(null) };
+    }
+
+    let editingDayRoot = null;
+    try {
+        if (isAnyDayNotepadActivelyEditing() && document.activeElement) {
+            editingDayRoot = document.activeElement.closest('.day-license-split-root');
+        }
+    } catch (_eEd) {
+        editingDayRoot = null;
+    }
+
+    for (let day = 1; day <= 31; day++) {
+        const dayAccounts =
+            typeof getSoldAccountsForDayNumber === 'function'
+                ? getSoldAccountsForDayNumber(licenseId, day)
+                : [];
+        const resolved = adminLicResolveDayTextToApply(
+            licenseId,
+            day,
+            dayAccounts,
+            aggregateVisibleIds
+        );
+        __adminLicDaysLazyMeta.byDay[day] = {
+            textToApply: resolved.textToApply,
+            lineCount: resolved.lineCount,
+            hasContent: resolved.hasContent,
+        };
+
+        const section = container.querySelector(
+            '.day-section.admin-licencias-bloc--day[data-day="' + day + '"]'
+        );
+        if (!section) continue;
+
+        const lineBadge = section.querySelector('.js-admin-day-line-badge');
+        if (lineBadge) {
+            lineBadge.textContent = String(resolved.lineCount);
+            if (resolved.lineCount > 0) {
+                lineBadge.title =
+                    resolved.lineCount === 1 ? '1 línea' : resolved.lineCount + ' líneas';
+            } else {
+                lineBadge.removeAttribute('title');
+            }
+        }
+
+        const root = section.querySelector('.day-license-split-root[data-day-mounted="1"]');
+        if (!root || typeof dayLicenseSplitApplyMergedText !== 'function') continue;
+        if (editingDayRoot && editingDayRoot === root) continue;
+
+        let current = '';
+        if (typeof dayLicenseSplitGetMergedText === 'function') {
+            current = dayLicenseSplitGetMergedText(root);
+        }
+        if (
+            typeof normalizeDraftCompare === 'function' &&
+            normalizeDraftCompare(current) === normalizeDraftCompare(resolved.textToApply)
+        ) {
+            continue;
+        }
+        dayLicenseSplitApplyMergedText(root, resolved.textToApply);
+    }
+}
+
 function adminLicRefreshDaysUiLight(licenseId) {
+    try {
+        adminLicSyncDaysNotepadsFromLicenses(licenseId);
+    } catch (_eSyncDays) {
+        /* ignore: el refresh de reportes/expiración sigue */
+    }
     refreshDuplicateEmailHighlights(licenseId);
     scheduleRefreshAdminLicenciasReportCounts();
     scheduleAdminLicExpiryRefreshAllVisibleDayRows();
@@ -2265,11 +2383,22 @@ function adminLicensePartsCountAsReport(p) {
     }
     const canon = adminLicenseSplitCanonicalStatusFromStored(sb);
     const eff = canon || sb;
+    if (adminLicenseNormalizeStatusKey(eff) === 'solucionada') return false;
     if (adminLicenseStatusTierFromStored(eff) === 'bad') return true;
     return adminLicenseNormalizeStatusKey(eff) !== '';
 }
 
 function adminLicenseStatusBadDisplayLabel(statusBad) {
+    const raw = String(statusBad != null ? statusBad : '').trim();
+    if (
+        typeof adminLicenseIsWarrantyPendingBad === 'function' &&
+        adminLicenseIsWarrantyPendingBad(raw)
+    ) {
+        return 'Garantía';
+    }
+    if (adminLicenseNormalizeStatusKey(raw) === adminLicenseNormalizeStatusKey(ADMIN_LICENSE_PENDIENTE_GARANTIA_VALUE)) {
+        return 'Garantía';
+    }
     const canon = adminLicenseSplitCanonicalStatusFromStored(statusBad);
     const k = adminLicenseNormalizeStatusKey(canon);
     for (let i = 0; i < ADMIN_LICENSE_STATUS_OPTIONS_BAD.length; i++) {
@@ -2310,6 +2439,32 @@ function adminLicenseCollectReportEntriesFromNotepadText(text, sourceLabel, lice
 
 function adminLicenseCountReportsInNotepadText(text) {
     return adminLicenseCollectReportEntriesFromNotepadText(text, '', NaN, null).length;
+}
+
+function adminLicenseCountWarrantyPendingInNotepadText(text) {
+    const raw = String(text != null ? text : '')
+        .replace(/\r\n/g, '\n')
+        .replace(/\r/g, '\n');
+    if (!raw.trim()) return 0;
+    let n = 0;
+    raw.split('\n').forEach(function (line) {
+        const p = parseAdminLicenseLineToSplitParts(String(line != null ? line : ''));
+        if (
+            p &&
+            typeof adminLicenseIsWarrantyPendingBad === 'function' &&
+            adminLicenseIsWarrantyPendingBad(p.statusBad)
+        ) {
+            n += 1;
+        }
+    });
+    return n;
+}
+
+function adminLicenseSplitCountWarrantyPendingShells(scopeEl) {
+    if (!scopeEl || !scopeEl.querySelectorAll) return 0;
+    return scopeEl.querySelectorAll(
+        '.license-split-editor__status-select-shell--warranty-pending'
+    ).length;
 }
 
 /** Nombre de producto para etiquetas de Reportes. */
@@ -2653,7 +2808,7 @@ window.adminLicenseReportesRefreshPanelNow = adminLicenseReportesRefreshPanelNow
 
 /**
  * Avisa al cliente (in-app + push) al contestar un reporte.
- * outcome: 'buena' | 'warranty_pending' | 'warranty_replaced'
+ * outcome: 'buena' | 'warranty_pending' | 'warranty_replaced' | 'solucionada'
  */
 async function adminLicenseNotifyReportAnswered(licenseId, opts) {
     opts = opts || {};
@@ -2717,12 +2872,96 @@ function adminLicensePackWarrantyPendingBad(statusBad) {
     return ADMIN_LICENSE_WARRANTY_PENDING_BAD_PREFIX + canon;
 }
 
-/** Badge: caída sin stock de garantía — pendiente. */
+/** Badge: caída sin stock de garantía — pendiente (campo oculto «pendiente garantía»). */
 function adminLicenseWarrantyPendingBadgeHtml() {
     return (
-        '<span class="user-lic-warranty-pending-badge license-split-editor__status license-split-editor__status-bad" title="Sin stock de garantía: pendiente hasta que haya gar. Entregá el repuesto desde el día.">' +
-        '<i class="fas fa-hourglass-half" aria-hidden="true"></i> Pendiente garantía</span>'
+        '<span class="user-lic-warranty-pending-badge" data-lic-pendiente-garantia="1" title="Pendiente de garantía (sin stock). Clic si ya se solucionó: la fila vuelve a — (neutro).">' +
+        '<i class="fas fa-hourglass-half" aria-hidden="true"></i> Garantía</span>'
     );
+}
+
+/** Clic en el badge «Garantía»: la cuenta ya se solucionó → estado neutro (—) y guardar. */
+async function adminLicClearWarrantyPendingFromRow(row) {
+    if (!row || window.__adminLicClearPendingInFlight) return;
+    if (
+        !window.confirm(
+            '¿Estás seguro de cambiar el estado?\n\nSe entiende que la cuenta ya se solucionó: la fila queda en — (neutro) y el cliente la ve normal en su portal.'
+        )
+    ) {
+        return;
+    }
+    window.__adminLicClearPendingInFlight = true;
+    try {
+        const dayRoot = row.closest ? row.closest('.day-license-split-root') : null;
+        let getMerged;
+        let applyMerged;
+        let ord = -1;
+        if (dayRoot) {
+            ord = dayLicenseSplitGetRowElements(dayRoot).indexOf(row);
+            getMerged = function () {
+                return dayLicenseSplitGetMergedText(dayRoot);
+            };
+            applyMerged = function (txt) {
+                dayLicenseSplitApplyMergedText(dayRoot, txt);
+            };
+        } else if (row.closest && row.closest('#adminLicenciasStructuredRows')) {
+            ord = adminLicenseSplitGetRowElements().indexOf(row);
+            getMerged = adminLicenseSplitGetMergedNotes;
+            applyMerged = function (txt) {
+                /* force: el foco está en el badge (dentro del root) y bloquearía el re-render */
+                adminLicenseSplitApplyMergedText(txt, { force: true });
+            };
+        } else {
+            return;
+        }
+        if (ord < 0) {
+            showError('No se encontró la fila (actualiza la página).');
+            return;
+        }
+        const oldMerged = getMerged();
+        const lines = oldMerged === '' ? [] : oldMerged.split('\n');
+        if (ord >= lines.length) {
+            showError('Índice de fila fuera de rango.');
+            return;
+        }
+        const p = parseAdminLicenseLineToSplitParts(lines[ord]);
+        const next = lines.slice();
+        next[ord] = buildAdminLicenseStorageLine(p.cred, p.user, p.statusGood || '', '', p.extra);
+        applyMerged(next.join('\n'));
+        const saveRes =
+            typeof window.adminLicenciasSaveCurrentLicenseNotesImmediate === 'function'
+                ? await window.adminLicenciasSaveCurrentLicenseNotesImmediate()
+                : { success: false };
+        if (!saveRes || !saveRes.success) {
+            applyMerged(oldMerged);
+            showError('No se pudo guardar el cambio de estado.');
+            return;
+        }
+        showSuccess('Estado actualizado: la fila quedó en — (neutro).');
+        try {
+            scheduleRefreshAdminLicenciasReportCounts();
+        } catch (_cnt) {}
+        try {
+            scheduleAdminLicExpiryRefreshAllVisibleDayRows();
+        } catch (_exp) {}
+    } finally {
+        window.__adminLicClearPendingInFlight = false;
+    }
+}
+
+function adminLicensePaintWarrantyPendingBadgeYellow(badge) {
+    if (!badge || !badge.style || typeof badge.style.setProperty !== 'function') return;
+    /* Amarillo pintado (fondo), texto oscuro — igual que admin «antes» / foto referencia */
+    badge.style.setProperty('color', '#111827', 'important');
+    badge.style.setProperty('-webkit-text-fill-color', '#111827', 'important');
+    badge.style.setProperty('border', 'none', 'important');
+    badge.style.setProperty('background', '#eab308', 'important');
+    badge.style.setProperty('box-shadow', 'none', 'important');
+    const icon = badge.querySelector('.fa-hourglass-half, .fas, i');
+    if (icon && icon.style && typeof icon.style.setProperty === 'function') {
+        icon.style.setProperty('color', '#111827', 'important');
+        icon.style.setProperty('-webkit-text-fill-color', '#111827', 'important');
+    }
 }
 
 function adminLicenseApplyWarrantyPendingRowUi(row, badShell, packedPending) {
@@ -2732,8 +2971,41 @@ function adminLicenseApplyWarrantyPendingRowUi(row, badShell, packedPending) {
             ? String(packedPending).trim()
             : adminLicensePackWarrantyPendingBad('caida o suspendida');
     row.dataset.licWarrantyPendingBad = packed;
+    row.dataset.licPendienteGarantia = '1';
     badShell.innerHTML = adminLicenseWarrantyPendingBadgeHtml();
     badShell.classList.add('license-split-editor__status-select-shell--warranty-pending');
+    const badge = badShell.querySelector('.user-lic-warranty-pending-badge');
+    if (badge) {
+        badge.classList.remove(
+            'license-split-editor__status',
+            'license-split-editor__status-bad',
+            'license-split-editor__status--tier-good',
+            'license-split-editor__status--tier-bad',
+            'license-split-editor__status--tier-neutral'
+        );
+        adminLicensePaintWarrantyPendingBadgeYellow(badge);
+    }
+    if (
+        badge &&
+        typeof adminLicIsAdminDayToolsPage === 'function' &&
+        adminLicIsAdminDayToolsPage()
+    ) {
+        badge.classList.add('user-lic-warranty-pending-badge--clickable');
+        badge.setAttribute('role', 'button');
+        badge.tabIndex = 0;
+        badge.setAttribute('aria-label', 'Pendiente de garantía. Activar para volver la fila a estado neutro si ya se solucionó.');
+        badge.addEventListener('click', function (ev) {
+            ev.preventDefault();
+            ev.stopPropagation();
+            void adminLicClearWarrantyPendingFromRow(row);
+        });
+        badge.addEventListener('keydown', function (ev) {
+            if (ev.key === 'Enter' || ev.key === ' ') {
+                ev.preventDefault();
+                void adminLicClearWarrantyPendingFromRow(row);
+            }
+        });
+    }
 }
 
 async function adminLicenseReportesApplyBuenaResolved(entry, selEl) {
@@ -2779,7 +3051,8 @@ async function adminLicenseReportesApplyBuenaResolved(entry, selEl) {
             const domRowLic = licRows[bIdx] || null;
             const prevLic = adminLicensePrevGoodPackForBuenaMark(p, rawLineLic, domRowLic);
             let newExtraLic = adminLicensePortalGreenEmbedInExtra(p.extra, prevLic.canon);
-            newExtraLic = adminLicensePortalBadEmbedInExtra(newExtraLic, p._prevBadForBuena || p.statusBad);
+            /* Quitar el reporte: no guardar _u_bad para poder deshacer; «Buena» es confirmación definitiva. */
+            newExtraLic = adminLicensePortalStripTagSegments(newExtraLic, PORTAL_BAD_EXTRA_PREFIX);
             const newLine = buildAdminLicenseStorageLine(p.cred, p.user, 'ok', prevLic.pack, newExtraLic);
             const oldMerged = licMergedStr;
             lines[bIdx] = newLine;
@@ -2824,7 +3097,8 @@ async function adminLicenseReportesApplyBuenaResolved(entry, selEl) {
             }
             const prevDay = adminLicensePrevGoodPackForBuenaMark(p, rawLineDay, domRowDay);
             let newExtraDay = adminLicensePortalGreenEmbedInExtra(p.extra, prevDay.canon);
-            newExtraDay = adminLicensePortalBadEmbedInExtra(newExtraDay, p._prevBadForBuena || p.statusBad);
+            /* Quitar el reporte: no guardar _u_bad para poder deshacer; «Buena» es confirmación definitiva. */
+            newExtraDay = adminLicensePortalStripTagSegments(newExtraDay, PORTAL_BAD_EXTRA_PREFIX);
             const newLine = buildAdminLicenseStorageLine(p.cred, p.user, 'ok', prevDay.pack, newExtraDay);
             const oldDay = dayMergedStr;
             dayLines[bIdx] = newLine;
@@ -3283,7 +3557,7 @@ function adminLicenseResolveBadCredentialHintForDayReport(entry) {
     return line != null ? String(line).trim() : String(entry.cuenta || '').trim();
 }
 
-/** ID de cuenta vendida/asignada en ese día mismo producto — por correo de la credencial. */
+/** ID de cuenta vendida/asignada en ese día mismo producto — por correo o identificador de la credencial. */
 function adminLicenseResolveBadAccountIdForDayReport(entry) {
     if (!entry || entry.origin !== 'day' || !Number.isFinite(entry.dayNum)) {
         return null;
@@ -3293,12 +3567,12 @@ function adminLicenseResolveBadAccountIdForDayReport(entry) {
     }
     const credHint = adminLicenseResolveBadCredentialHintForDayReport(entry);
     const p = parseAdminLicenseLineToSplitParts(String(credHint || '').trim() || String(entry.cuenta || ''));
-    const nested = /\S+@\S+\.\S+/.exec(String(p.cred || '').trim());
-    if (!nested) {
-        return null;
-    }
-    const needle = normalizeAccountEmailKey(nested[0]);
-    if (!needle) {
+    const cred = String(p.cred || '').trim();
+    const nested = /\S+@\S+\.\S+/.exec(cred);
+    const needleEmail = nested ? normalizeAccountEmailKey(nested[0]) : '';
+    const firstTok = cred ? String(cred.split(/\s+/)[0] || '').trim().toLowerCase() : '';
+    const needleIdent = needleEmail ? '' : firstTok;
+    if (!needleEmail && !needleIdent) {
         return null;
     }
     const accs = getSoldAccountsForDayNumber(entry.licenseId, entry.dayNum);
@@ -3306,9 +3580,19 @@ function adminLicenseResolveBadAccountIdForDayReport(entry) {
         return null;
     }
     for (let i = 0; i < accs.length; i++) {
-        if (normalizeAccountEmailKey(accs[i].email) === needle) {
-            const sid = accs[i].id;
+        const acc = accs[i];
+        if (needleEmail && normalizeAccountEmailKey(acc.email) === needleEmail) {
+            const sid = acc.id;
             return sid != null && Number.isFinite(Number(sid)) ? Number(sid) : null;
+        }
+        if (needleIdent) {
+            const ident = String(acc.account_identifier != null ? acc.account_identifier : '')
+                .trim()
+                .toLowerCase();
+            if (ident && ident === needleIdent) {
+                const sid = acc.id;
+                return sid != null && Number.isFinite(Number(sid)) ? Number(sid) : null;
+            }
         }
     }
     return null;
@@ -3364,6 +3648,7 @@ async function adminLicenseReportesApplyWarrantyReplace(entry, selEl) {
             return;
         }
         const badP = parseAdminLicenseLineToSplitParts(dayLines[bIdx]);
+        const oldFullLine = dayLines[bIdx];
         const oldCred = String(badP.cred || '').trim();
         const credHint = adminLicenseResolveBadCredentialHintForDayReport(entry) || oldCred;
         const badAccId = adminLicenseResolveBadAccountIdForDayReport(entry);
@@ -3378,7 +3663,8 @@ async function adminLicenseReportesApplyWarrantyReplace(entry, selEl) {
                 },
                 body: JSON.stringify({
                     bad_account_id: badAccId != null ? badAccId : null,
-                    credential_hint: credHint
+                    credential_hint: credHint,
+                    bad_day_line: oldFullLine
                 }),
                 credentials: 'same-origin'
             }
@@ -3391,7 +3677,10 @@ async function adminLicenseReportesApplyWarrantyReplace(entry, selEl) {
             const noStock =
                 resp.status === 409 &&
                 /gar\.|garant[ií]a|Sin stock|disponibles|existencias|reserva/i.test(errMsg);
-            if (noStock) {
+            const accountMissing =
+                resp.status === 400 &&
+                /cuenta marcada como mala|no se encontr[oó] la cuenta/i.test(errMsg);
+            if (noStock || accountMissing) {
                 const pendingBad = adminLicensePackWarrantyPendingBad(
                     badP.statusBad || 'caida o suspendida'
                 );
@@ -3423,7 +3712,7 @@ async function adminLicenseReportesApplyWarrantyReplace(entry, selEl) {
                         oldDay,
                         dayRoot
                     );
-                    showError(errMsg || 'Sin stock de garantía y no se pudo guardar el pendiente.');
+                    showError(errMsg || 'No se pudo guardar el estado Pendiente.');
                     adminLicenseReportesUndoSelect(selEl, sigK);
                     return;
                 }
@@ -3431,7 +3720,9 @@ async function adminLicenseReportesApplyWarrantyReplace(entry, selEl) {
                     delete window.__adminReportesMalaSelectionBySig[sigK];
                 }
                 showSuccess(
-                    'Sin stock de garantía: se quitó de Reportes y quedó pendiente. Cuando haya gar., entregá el repuesto desde el día.'
+                    accountMissing
+                        ? 'Pendiente: la cuenta no está enlazada en inventario. Se quitó de Reportes; cuando esté vendida/asignada podés entregar el repuesto desde el día.'
+                        : 'Pendiente: sin stock (gar.). Se quitó de Reportes; cuando haya stock entregá el repuesto desde el día.'
                 );
                 try {
                     void adminLicenseNotifyReportAnswered(entry.licenseId, {
@@ -3461,18 +3752,31 @@ async function adminLicenseReportesApplyWarrantyReplace(entry, selEl) {
         const reporter =
             String(data.reporter_username != null ? data.reporter_username : '').trim() ||
             'anonimo';
-        const prevFromBad = adminLicensePackPrevGoodBad(badP.statusGood || badP.prevGoodRestore);
+        // Tras entregar garantía: repuesto + estados en — (neutro), sin badge «Buena».
+        let restoreGood = String(badP.statusGood || badP.prevGoodRestore || '').trim();
+        if (adminLicenseNormalizeStatusKey(restoreGood) === 'ok') {
+            restoreGood = String(badP.prevGoodRestore || '').trim();
+        }
+        if (adminLicenseNormalizeStatusKey(restoreGood) === 'ok') {
+            restoreGood = '';
+        }
         const replacedLine = buildAdminLicenseStorageLine(
             newCred,
             reporter,
-            'ok',
-            prevFromBad,
+            restoreGood,
+            '',
             badP.extra
         );
         const oldDayMerged = dayMergedStr;
         dayLines[bIdx] = replacedLine;
         const newDayText = dayLines.join('\n');
         adminLicenseReportesWriteDayNotepadLocal(entry.licenseId, dayNum, newDayText, dayRoot);
+        // El servidor ya quitó el repuesto del bloc Licencias y puso la caída en Caídas.
+        try {
+            adminLicApplyWarrantyDeliveryServerBlocs(entry.licenseId, data);
+        } catch (_suspErr) {
+            adminLicLogError('adminLicenseReportesApplyWarrantyReplace suspended', _suspErr);
+        }
         const saved = await persistDayNotepadRawText(entry.licenseId, dayNum, newDayText);
         if (!saved) {
             adminLicenseReportesWriteDayNotepadLocal(
@@ -3489,7 +3793,7 @@ async function adminLicenseReportesApplyWarrantyReplace(entry, selEl) {
             await loadLicenses({ skipGridRender: true, skipDaysRefresh: true });
         } catch (_loadErr) {}
 
-        showSuccess('Cuenta sustituida desde la reserva gar. y guardada.');
+        showSuccess('Garantía entregada: repuesto en el día y cuenta mala en Caídas.');
         if (window.__adminReportesMalaSelectionBySig) {
             delete window.__adminReportesMalaSelectionBySig[sigK];
         }
@@ -3499,6 +3803,9 @@ async function adminLicenseReportesApplyWarrantyReplace(entry, selEl) {
         }
         if (typeof window.refreshAdminDuplicateHighlightsIfActive === 'function') {
             window.refreshAdminDuplicateHighlightsIfActive();
+        }
+        if (typeof window.updateSuspendedBlocLineCountBadge === 'function') {
+            window.updateSuspendedBlocLineCountBadge();
         }
     } catch (err) {
         adminLicLogError('adminLicenseReportesApplyWarrantyReplace', err);
@@ -3971,6 +4278,9 @@ async function adminLicEnsureLicenseAccountsHydrated(licenseId) {
 async function loadLicenses(options) {
     options = options || {};
     const includeMode = adminLicResolveLicensesIncludeMode(options);
+    /* Marca de tiempo del snapshot: si un PUT /notes se despacha después de iniciar
+       este fetch, la respuesta es potencialmente obsoleta para los blocs. */
+    const licensesFetchStartedAt = Date.now();
     const ac = new AbortController();
     const t = setTimeout(() => ac.abort(), LICENSES_FETCH_TIMEOUT_MS);
     try {
@@ -4003,6 +4313,7 @@ async function loadLicenses(options) {
         
         if (data.success) {
             const prevLicenses = licenses;
+            window.__adminLicLicensesSnapshotAt = licensesFetchStartedAt;
             if (data.licenses_rev != null) {
                 __adminLicLastRev = String(data.licenses_rev);
             }
@@ -6794,9 +7105,10 @@ function createReportesGridButtonHtml() {
             aria-label="Reportes: ver cuentas con estado rojo">
             <div class="license-card-header">
                 <h3 class="license-name">
-                    <span class="full-text">Reportes<span id="adminLicenciasReportesTotalBadge" class="license-card-report-total-badge" hidden role="status" aria-live="polite" aria-label="Sin reportes pendientes"><span class="license-card-report-total-badge__num">0</span></span></span>
+                    <span class="full-text">Reportes</span>
                     <span class="first-letter">R</span>
                     <span class="compact-label">Rep</span>
+                    <span id="adminLicenciasReportesTotalBadge" class="license-card-report-total-badge" hidden role="status" aria-live="polite" aria-label="Sin reportes pendientes"><span class="license-card-report-total-badge__num">0</span></span>
                 </h3>
             </div>
         </button>`;
@@ -9848,9 +10160,15 @@ function normalizeAccountEmailKey(email) {
 }
 
 function adminWarrantyLookupAccountIdByCredParts(licenseId, parts) {
-    const pk = adminMainBlocCredEmailKeyFromParsedLine(parts || {});
     const lidNum = Number(licenseId);
-    if (!pk || !Number.isFinite(lidNum) || lidNum === AGGREGATE_LICENSE_ID) {
+    if (!Number.isFinite(lidNum) || lidNum === AGGREGATE_LICENSE_ID) {
+        return '';
+    }
+    const pk = adminMainBlocCredEmailKeyFromParsedLine(parts || {});
+    const credRaw = String(parts && parts.cred != null ? parts.cred : '').trim();
+    const firstTok = credRaw ? String(credRaw.split(/\s+/)[0] || '').trim().toLowerCase() : '';
+    const identNeedle = pk ? '' : firstTok;
+    if (!pk && !identNeedle) {
         return '';
     }
     const L = licenses.find(function (lic) {
@@ -9861,9 +10179,17 @@ function adminWarrantyLookupAccountIdByCredParts(licenseId, parts) {
     }
     for (let i = 0; i < L.accounts.length; i++) {
         const acc = L.accounts[i];
-        if (!acc || acc.email == null || acc.id == null) continue;
-        if (normalizeAccountEmailKey(acc.email) === pk) {
+        if (!acc || acc.id == null) continue;
+        if (pk && acc.email != null && normalizeAccountEmailKey(acc.email) === pk) {
             return String(acc.id).trim();
+        }
+        if (identNeedle) {
+            const ident = String(acc.account_identifier != null ? acc.account_identifier : '')
+                .trim()
+                .toLowerCase();
+            if (ident && ident === identNeedle) {
+                return String(acc.id).trim();
+            }
         }
     }
     return '';
@@ -10941,17 +11267,62 @@ function adminLicIsAdminDayToolsPage() {
     );
 }
 
+const ADMIN_LICENSE_DAY_BAD_ACTION_BUENA = '__admin_buena__';
+const ADMIN_LICENSE_DAY_BAD_ACTION_MALA = '__admin_mala__';
 const ADMIN_LICENSE_DAY_BAD_ACTION_DAR_GARANTIA = '__admin_dar_garantia__';
 const ADMIN_LICENSE_DAY_BAD_ACTION_NUEVA_CONTRASENA = '__admin_nueva_contrasena__';
 
 function adminLicDayIsBadSelectActionValue(v) {
     const k = String(v || '').trim();
-    return k === ADMIN_LICENSE_DAY_BAD_ACTION_DAR_GARANTIA || k === ADMIN_LICENSE_DAY_BAD_ACTION_NUEVA_CONTRASENA;
+    return (
+        k === ADMIN_LICENSE_DAY_BAD_ACTION_BUENA ||
+        k === ADMIN_LICENSE_DAY_BAD_ACTION_MALA ||
+        k === ADMIN_LICENSE_DAY_BAD_ACTION_DAR_GARANTIA ||
+        k === ADMIN_LICENSE_DAY_BAD_ACTION_NUEVA_CONTRASENA
+    );
+}
+
+/** Entrada compatible con el panel Reportes (buena / caida) desde una fila de Día N. */
+function adminLicDayMakeReportEntry(dayRoot, rowOrdinalZeroBased) {
+    if (!dayRoot) return null;
+    const lid = parseInt(dayRoot.dataset.licenseId, 10);
+    const dayNum = parseInt(dayRoot.dataset.day, 10);
+    if (!Number.isFinite(lid) || lid === AGGREGATE_LICENSE_ID || !Number.isFinite(dayNum)) {
+        return null;
+    }
+    if (rowOrdinalZeroBased == null || rowOrdinalZeroBased < 0) return null;
+    const parts =
+        typeof adminLicWarrantyDayRowLineParts === 'function'
+            ? adminLicWarrantyDayRowLineParts(dayRoot, rowOrdinalZeroBased)
+            : {};
+    const cuenta = String(parts.cred != null ? parts.cred : '').trim();
+    const user = String(parts.user != null ? parts.user : '').trim();
+    return {
+        sourceLabel:
+            typeof adminLicenseReportesSourceLabel === 'function'
+                ? adminLicenseReportesSourceLabel(lid, dayNum)
+                : 'Día ' + dayNum,
+        cuenta: cuenta,
+        user: user,
+        status:
+            typeof adminLicenseStatusBadDisplayLabel === 'function'
+                ? adminLicenseStatusBadDisplayLabel(parts.statusBad)
+                : String(parts.statusBad || '').trim() || '—',
+        origin: 'day',
+        dayNum: dayNum,
+        licenseId: lid,
+        badRowIndex: rowOrdinalZeroBased,
+        fromLazy: false,
+    };
 }
 
 function adminLicDayAppendBadSelectActionOptions(selBad) {
-    if (!selBad || !adminLicIsAdminDayToolsPage()) return;
+    /* Solo sobre un <select> real: el badge «Garantía» comparte la clase status-bad
+       y un <option> fuera de un select se renderiza como texto plano. */
+    if (!selBad || selBad.tagName !== 'SELECT' || !adminLicIsAdminDayToolsPage()) return;
     const actions = [
+        { v: ADMIN_LICENSE_DAY_BAD_ACTION_BUENA, label: 'buena' },
+        { v: ADMIN_LICENSE_DAY_BAD_ACTION_MALA, label: 'mala' },
         { v: ADMIN_LICENSE_DAY_BAD_ACTION_DAR_GARANTIA, label: 'Dar garantía inmediatamente' },
         { v: ADMIN_LICENSE_DAY_BAD_ACTION_NUEVA_CONTRASENA, label: 'Nueva contraseña' }
     ];
@@ -10967,7 +11338,7 @@ function adminLicDayAppendBadSelectActionOptions(selBad) {
 
 function adminLicDayWireBadSelectActions(row, dayRoot) {
     if (!row || !dayRoot || !adminLicIsAdminDayToolsPage()) return;
-    const selBad = row.querySelector('.license-split-editor__status-bad');
+    const selBad = row.querySelector('select.license-split-editor__status-bad');
     if (!selBad || selBad.dataset.adminLicDayActionsWired === '1') return;
     selBad.dataset.adminLicDayActionsWired = '1';
     adminLicDayAppendBadSelectActionOptions(selBad);
@@ -10977,10 +11348,19 @@ function adminLicDayWireBadSelectActions(row, dayRoot) {
     selBad.addEventListener('change', function () {
         const v = String(selBad.value || '').trim();
         if (!adminLicDayIsBadSelectActionValue(v)) return;
-        selBad.value = '';
+        const prev = selBad.getAttribute('data-lic-sel-bad-prev');
+        selBad.value = prev != null ? String(prev) : '';
         const rows = dayLicenseSplitGetRowElements(dayRoot);
         const ord = rows.indexOf(row);
         if (ord < 0) return;
+        if (v === ADMIN_LICENSE_DAY_BAD_ACTION_BUENA) {
+            void adminLicDayApplyBuenaResolved(dayRoot, ord);
+            return;
+        }
+        if (v === ADMIN_LICENSE_DAY_BAD_ACTION_MALA) {
+            void adminLicDayApplyMalaResolved(dayRoot, ord);
+            return;
+        }
         if (v === ADMIN_LICENSE_DAY_BAD_ACTION_DAR_GARANTIA) {
             void adminLicDayApplyImmediateWarranty(dayRoot, ord);
             return;
@@ -10991,10 +11371,38 @@ function adminLicDayWireBadSelectActions(row, dayRoot) {
     });
 }
 
+async function adminLicDayApplyBuenaResolved(dayRoot, rowOrdinalZeroBased) {
+    const entry = adminLicDayMakeReportEntry(dayRoot, rowOrdinalZeroBased);
+    if (!entry) {
+        showError('Fila no válida para marcar como buena.');
+        return;
+    }
+    if (typeof adminLicenseReportesApplyBuenaResolved !== 'function') {
+        showError('No está disponible la acción buena.');
+        return;
+    }
+    await adminLicenseReportesApplyBuenaResolved(entry, null);
+}
+
+async function adminLicDayApplyMalaResolved(dayRoot, rowOrdinalZeroBased) {
+    const entry = adminLicDayMakeReportEntry(dayRoot, rowOrdinalZeroBased);
+    if (!entry) {
+        showError('Fila no válida para marcar como mala.');
+        return;
+    }
+    if (typeof adminLicenseReportesApplyWarrantyReplace !== 'function') {
+        showError('No está disponible la acción mala.');
+        return;
+    }
+    await adminLicenseReportesApplyWarrantyReplace(entry, null);
+}
+
 function adminLicDayEnsureBadSelectActions(row, dayRoot) {
     if (!row || !dayRoot || !adminLicIsAdminDayToolsPage()) return;
     adminLicDayToolsCleanupMisplaced(row);
     adminLicDayWireBadSelectActions(row, dayRoot);
+    const selBad = row.querySelector('select.license-split-editor__status-bad');
+    if (selBad) adminLicDayAppendBadSelectActionOptions(selBad);
 }
 
 async function adminLicDayPromptAndApplyNewPassword(dayRoot, rowOrdinalZeroBased) {
@@ -11084,13 +11492,6 @@ async function adminLicDayApplyImmediateWarranty(dayRoot, rowOrdinalZeroBased) {
         showError('Activa en el grid la misma licencia a la que pertenece esta fila.');
         return;
     }
-    const taS = document.getElementById('adminLicenciasSuspendedNotepad');
-    const suspRoot = document.getElementById('adminLicenciasSuspendedSplitRoot');
-    if (!taS || !suspRoot || parseInt(taS.dataset.licenseId, 10) !== licenseId) {
-        showError('Abre el bloc Caídas del mismo producto para registrar la cuenta mala.');
-        return;
-    }
-
     const dayMergedStr = dayLicenseSplitGetMergedText(dayRoot);
     const dayLines = dayMergedStr === '' ? [] : dayMergedStr.split('\n');
     const bIdx = rowOrdinalZeroBased;
@@ -11116,7 +11517,8 @@ async function adminLicDayApplyImmediateWarranty(dayRoot, rowOrdinalZeroBased) {
             },
             body: JSON.stringify({
                 bad_account_id: parseInt(ctx.accountIdStr, 10),
-                credential_hint: credHint
+                credential_hint: credHint,
+                bad_day_line: oldFullLine
             }),
             credentials: 'same-origin'
         });
@@ -11124,7 +11526,47 @@ async function adminLicDayApplyImmediateWarranty(dayRoot, rowOrdinalZeroBased) {
             return {};
         });
         if (!resp.ok || !data.success) {
-            showError(data.error || 'No se pudo entregar la cuenta de garantía.');
+            const errMsg = String(data.error || '');
+            const noStock =
+                resp.status === 409 &&
+                /gar\.|garant[ií]a|Sin stock|disponibles|existencias|reserva/i.test(errMsg);
+            const accountMissing =
+                resp.status === 400 &&
+                /cuenta marcada como mala|no se encontr[oó] la cuenta/i.test(errMsg);
+            if (noStock || accountMissing) {
+                const pendingBad = adminLicensePackWarrantyPendingBad(
+                    badP.statusBad || 'caida o suspendida'
+                );
+                const pendingLine = buildAdminLicenseStorageLine(
+                    badP.cred,
+                    badP.user,
+                    badP.statusGood || '',
+                    pendingBad,
+                    badP.extra
+                );
+                const pendingLines = dayLines.slice();
+                pendingLines[bIdx] = pendingLine;
+                dayLicenseSplitApplyMergedText(dayRoot, pendingLines.join('\n'));
+                const savePend =
+                    typeof window.adminLicenciasSaveCurrentLicenseNotesImmediate === 'function'
+                        ? await window.adminLicenciasSaveCurrentLicenseNotesImmediate()
+                        : { success: false };
+                if (!savePend || !savePend.success) {
+                    dayLicenseSplitApplyMergedText(dayRoot, dayMergedStr);
+                    showError(errMsg || 'No se pudo guardar Pendiente.');
+                    return;
+                }
+                showSuccess(
+                    accountMissing
+                        ? 'Pendiente: la cuenta no está enlazada en inventario.'
+                        : 'Pendiente: sin stock (gar.).'
+                );
+                try {
+                    scheduleRefreshAdminLicenciasReportCounts();
+                } catch (_cnt) {}
+                return;
+            }
+            showError(errMsg || 'No se pudo entregar la cuenta de garantía.');
             return;
         }
 
@@ -11133,30 +11575,31 @@ async function adminLicDayApplyImmediateWarranty(dayRoot, rowOrdinalZeroBased) {
             .replace(/\n/g, ' ')
             .trim();
         const reporter = String(data.reporter_username != null ? data.reporter_username : '').trim() || 'anonimo';
-        const prevFromBad = adminLicensePackPrevGoodBad(badP.statusGood || badP.prevGoodRestore);
-        const replacedLine = buildAdminLicenseStorageLine(newCred, reporter, 'ok', prevFromBad, badP.extra);
+        // Tras entregar garantía: repuesto + estados en — (neutro), sin badge «Buena».
+        let restoreGood = String(badP.statusGood || badP.prevGoodRestore || '').trim();
+        if (adminLicenseNormalizeStatusKey(restoreGood) === 'ok') {
+            restoreGood = String(badP.prevGoodRestore || '').trim();
+        }
+        if (adminLicenseNormalizeStatusKey(restoreGood) === 'ok') {
+            restoreGood = '';
+        }
+        const replacedLine = buildAdminLicenseStorageLine(newCred, reporter, restoreGood, '', badP.extra);
         const newDayLines = dayLines.slice();
         newDayLines[bIdx] = replacedLine;
 
-        const oldSuspMerged = suspendedLicenseSplitGetMergedText(suspRoot);
-        const suspLines = oldSuspMerged === '' ? [] : oldSuspMerged.split('\n');
-        while (suspLines.length && suspLines[suspLines.length - 1] === '') {
-            suspLines.pop();
-        }
-        suspLines.push(oldFullLine);
-        const newSuspMerged = suspLines.join('\n');
-
         const oldDayMerged = dayMergedStr;
         dayLicenseSplitApplyMergedText(dayRoot, newDayLines.join('\n'));
-        suspendedLicenseSplitApplyMergedText(suspRoot, newSuspMerged);
 
-        const saveRes =
-            typeof window.adminLicenciasSaveCurrentLicenseNotesImmediate === 'function'
-                ? await window.adminLicenciasSaveCurrentLicenseNotesImmediate()
-                : { success: false };
-        if (!saveRes || !saveRes.success) {
+        // El servidor ya quitó el repuesto del bloc Licencias y puso la caída en Caídas.
+        try {
+            adminLicApplyWarrantyDeliveryServerBlocs(licenseId, data);
+        } catch (_suspErr) {
+            adminLicLogError('adminLicDayApplyImmediateWarranty suspended', _suspErr);
+        }
+
+        const savedDay = await persistDayNotepadRawText(licenseId, dayNum, newDayLines.join('\n'));
+        if (!savedDay) {
             dayLicenseSplitApplyMergedText(dayRoot, oldDayMerged);
-            suspendedLicenseSplitApplyMergedText(suspRoot, oldSuspMerged);
             showError('No se pudo guardar tras la garantía. Recarga Licencias.');
             return;
         }
@@ -11703,14 +12146,49 @@ const ADMIN_LICENSE_STATUS_OPTIONS_GOOD = [
     { v: 'no renovar', label: 'No renovar' }
 ];
 
-/** Estados «rojos» (columna propia). */
+/** Estados «rojos» (columna propia). Alineado con el portal (incluye «Repetida»). */
 const ADMIN_LICENSE_STATUS_OPTIONS_BAD = [
     { v: '', label: '—' },
     { v: 'caida o suspendida', label: 'Caída o suspendida' },
     { v: 'no reproduce', label: 'No reproduce' },
     { v: 'error de contraseña', label: 'Error de contraseña' },
-    { v: 'otro', label: 'Otro' }
+    { v: 'repetida', label: 'Repetida' },
+    { v: 'otro', label: 'Otro' },
+    { v: 'solucionada', label: 'Solucionada' },
+    /* Oculto: solo sale el badge cuando no hay stock de garantía. */
+    { v: 'pendiente garantia', label: 'Garantía', hidden: true }
 ];
+
+/** Valor canónico del campo oculto «pendiente garantía». */
+const ADMIN_LICENSE_PENDIENTE_GARANTIA_VALUE = 'pendiente garantia';
+
+function adminLicenseShouldIncludeBadOption(opt, currentBadRaw) {
+    if (!opt) return false;
+    if (opt.hidden !== true) return true;
+    const cur = String(currentBadRaw != null ? currentBadRaw : '').trim();
+    if (!cur) return false;
+    const ov = String(opt.v != null ? opt.v : '').trim();
+    if (!ov) return false;
+    return (
+        ov === cur ||
+        adminLicenseNormalizeStatusKey(ov) === adminLicenseNormalizeStatusKey(cur)
+    );
+}
+
+function adminLicenseAppendBadStatusOptions(selBad, currentBadRaw) {
+    if (!selBad) return;
+    ADMIN_LICENSE_STATUS_OPTIONS_BAD.forEach(function (opt) {
+        if (!adminLicenseShouldIncludeBadOption(opt, currentBadRaw)) return;
+        const o = document.createElement('option');
+        o.value = opt.v;
+        o.textContent = opt.label;
+        if (opt.hidden === true) {
+            o.hidden = true;
+            o.disabled = true;
+        }
+        selBad.appendChild(o);
+    });
+}
 
 /** Todas las opciones conocidas (p. ej. canonical desde texto guardado). */
 const ADMIN_LICENSE_STATUS_OPTIONS = ADMIN_LICENSE_STATUS_OPTIONS_GOOD.concat(
@@ -11904,7 +12382,7 @@ function adminLicenseRefreshGoodStatusSelectsForLicense(licenseId) {
         });
     adminLicenseBulkModalEnsureSelects(true, licenseId);
 }
-/* Incluye «repetida» solo para colorear datos viejos; ya no está en el desplegable. */
+/* Claves rojas conocidas (desplegable + datos viejos). */
 const ADMIN_LICENSE_STATUS_BAD_KEYS = new Set(
     [
         'caida o suspendida',
@@ -11928,24 +12406,189 @@ function adminLicenseStatusIsKnownGoodOption(st) {
 /** Badge admin: reporte resuelto como buena (mismo criterio visual que el portal). */
 function adminLicenseReportesBuenaBadgeHtml() {
     return (
-        '<span class="user-lic-buena-revisada-badge license-split-editor__status license-split-editor__status-bad license-split-editor__status--tier-good" title="Marcada buena desde Reportes. El usuario ve «Buena» en su portal.">' +
+        '<span class="user-lic-buena-revisada-badge user-lic-buena-revisada-badge--clickable license-split-editor__status license-split-editor__status-bad license-split-editor__status--tier-good" data-lic-buena-badge="1" role="button" tabindex="0" title="Clic para volver a — (neutro). El usuario también puede quitar Buena en su portal.">' +
         '<i class="fas fa-check-circle" aria-hidden="true"></i> Buena</span>'
     );
 }
 
+/** Badge: garantía ya entregada (mismo verde/resaltado que Buena; icono escudo). */
+function adminLicenseWarrantyEntregadaBadgeHtml() {
+    return (
+        '<span class="user-lic-garantia-entregada-badge user-lic-garantia-entregada-badge--clickable license-split-editor__status license-split-editor__status-bad license-split-editor__status--tier-good" data-lic-garantia-entregada-badge="1" role="button" tabindex="0" title="Garantía entregada. Clic para volver a — (neutro).">' +
+        '<i class="fas fa-shield-alt" aria-hidden="true"></i> Entregada</span>'
+    );
+}
+
+/** Badge admin: cuenta cuadrada / solucionada (fondo blanco). */
+function adminLicenseSolucionadaBadgeHtml() {
+    return (
+        '<span class="user-lic-solucionada-badge user-lic-solucionada-badge--admin user-lic-solucionada-badge--clickable license-split-editor__status license-split-editor__status-bad" data-lic-solucionada-badge="1" role="button" tabindex="0" title="Solucionada. Clic para volver a — (neutro). Se limpia sola al otro día.">' +
+        '<i class="fas fa-check" aria-hidden="true"></i> Solucionada</span>'
+    );
+}
+
+function adminLicenseApplySolucionadaRowUi(row, badShell) {
+    if (!row || !badShell) return;
+    row.dataset.licSolucionada = '1';
+    badShell.innerHTML = adminLicenseSolucionadaBadgeHtml();
+    const badge = badShell.querySelector('[data-lic-solucionada-badge="1"]');
+    if (badge) {
+        badge.addEventListener('click', function (ev) {
+            ev.preventDefault();
+            ev.stopPropagation();
+            void adminLicClearSolucionadaFromRow(row);
+        });
+        badge.addEventListener('keydown', function (ev) {
+            if (ev.key === 'Enter' || ev.key === ' ') {
+                ev.preventDefault();
+                void adminLicClearSolucionadaFromRow(row);
+            }
+        });
+    }
+}
+
+async function adminLicClearSolucionadaFromRow(row) {
+    if (!row || window.__adminLicClearSolucionadaInFlight) return;
+    window.__adminLicClearSolucionadaInFlight = true;
+    try {
+        const dayRoot = row.closest ? row.closest('.day-license-split-root') : null;
+        let getMerged;
+        let applyMerged;
+        let ord = -1;
+        if (dayRoot) {
+            ord = dayLicenseSplitGetRowElements(dayRoot).indexOf(row);
+            getMerged = function () {
+                return dayLicenseSplitGetMergedText(dayRoot);
+            };
+            applyMerged = function (txt) {
+                dayLicenseSplitApplyMergedText(dayRoot, txt);
+            };
+        } else if (row.closest && row.closest('#adminLicenciasStructuredRows')) {
+            ord = adminLicenseSplitGetRowElements().indexOf(row);
+            getMerged = adminLicenseSplitGetMergedNotes;
+            applyMerged = function (txt) {
+                adminLicenseSplitApplyMergedText(txt, { force: true });
+            };
+        } else {
+            return;
+        }
+        if (ord < 0) {
+            showError('No se encontró la fila (actualiza la página).');
+            return;
+        }
+        const oldMerged = getMerged();
+        const lines = oldMerged === '' ? [] : oldMerged.split('\n');
+        if (ord >= lines.length) {
+            showError('Índice de fila fuera de rango.');
+            return;
+        }
+        const p = parseAdminLicenseLineToSplitParts(lines[ord]);
+        const next = lines.slice();
+        next[ord] = buildAdminLicenseStorageLine(p.cred, p.user, p.statusGood || '', '', p.extra);
+        applyMerged(next.join('\n'));
+        const saveRes =
+            typeof window.adminLicenciasSaveCurrentLicenseNotesImmediate === 'function'
+                ? await window.adminLicenciasSaveCurrentLicenseNotesImmediate()
+                : { success: false };
+        if (!saveRes || !saveRes.success) {
+            applyMerged(oldMerged);
+            showError('No se pudo guardar el cambio de estado.');
+            return;
+        }
+        try {
+            delete row.dataset.licSolucionada;
+        } catch (_e) {}
+        showSuccess('Estado actualizado: la fila quedó en — (neutro).');
+        try {
+            scheduleRefreshAdminLicenciasReportCounts();
+        } catch (_cnt) {}
+    } finally {
+        window.__adminLicClearSolucionadaInFlight = false;
+    }
+}
+
+async function adminLicMarkSolucionadaFromSelect(row, selBad) {
+    if (!row || !selBad) return;
+    const badShell = selBad.closest('.license-split-editor__status-select-shell--bad');
+    if (!badShell) return;
+    adminLicenseApplySolucionadaRowUi(row, badShell);
+    const saveRes =
+        typeof window.adminLicenciasSaveCurrentLicenseNotesImmediate === 'function'
+            ? await window.adminLicenciasSaveCurrentLicenseNotesImmediate()
+            : { success: false };
+    if (!saveRes || !saveRes.success) {
+        showError('No se pudo guardar «Solucionada».');
+        return;
+    }
+    const dayRoot = row.closest ? row.closest('.day-license-split-root') : null;
+    let licenseId = NaN;
+    let dayNum = null;
+    let username = '';
+    let credHint = '';
+    if (dayRoot) {
+        licenseId = parseInt(dayRoot.getAttribute('data-license-id') || '', 10);
+        dayNum = parseInt(dayRoot.getAttribute('data-day') || '', 10);
+        const ord = dayLicenseSplitGetRowElements(dayRoot).indexOf(row);
+        const parts = ord >= 0 ? adminLicWarrantyDayRowLineParts(dayRoot, ord) : null;
+        if (parts) {
+            username = String(parts.user || '').trim();
+            credHint = String(parts.cred || '').trim();
+        }
+    } else {
+        const ta = document.getElementById('adminLicenciasNotepadByLicense');
+        licenseId = ta ? parseInt(ta.dataset.licenseId || '', 10) : NaN;
+        const p = adminLicenseSplitReadRow(row);
+        username = String((p && p.user) || '').trim();
+        const credTa = document.getElementById('adminLicenciasNotepadByLicense');
+        if (credTa) {
+            const idx = adminLicenseSplitGetRowElements().indexOf(row);
+            const lines = String(credTa.value || '').split('\n');
+            if (idx >= 0 && lines[idx] != null) credHint = String(lines[idx]).trim();
+        }
+    }
+    if (Number.isFinite(licenseId) && licenseId > 0) {
+        try {
+            void adminLicenseNotifyReportAnswered(licenseId, {
+                outcome: 'solucionada',
+                username: username,
+                credentialHint: credHint,
+                day: Number.isFinite(dayNum) ? dayNum : null,
+                productName:
+                    typeof adminLicenseReportesProductName === 'function'
+                        ? adminLicenseReportesProductName(licenseId)
+                        : '',
+            });
+        } catch (_n) {}
+    }
+    showSuccess('Marcada como Solucionada.');
+    try {
+        scheduleRefreshAdminLicenciasReportCounts();
+    } catch (_c) {}
+}
+
 /**
- * Fila con statusGood=ok por resolución de Reportes: badge Buena (sin select rojo)
+ * Fila con statusGood=ok: badge Buena o Entregada (sin select rojo)
  * y verde bloqueado con el estado de renovación previo.
  */
-function adminLicenseApplyReportesBuenaRowUi(row, selGood, badShell, prevGoodRestore) {
+function adminLicenseApplyReportesBuenaRowUi(row, selGood, badShell, prevGoodRestore, opts) {
     if (!row || !badShell) return;
+    const o = opts || {};
+    const isEntregada = o.warrantyEntregada === true;
     row.dataset.licReportesBuena = '1';
     row.dataset.licOrigGood = 'ok';
+    if (isEntregada) {
+        row.dataset.licWarrantyEntregada = '1';
+    } else {
+        try {
+            delete row.dataset.licWarrantyEntregada;
+        } catch (_eWe) {}
+    }
     const prev = String(prevGoodRestore != null ? prevGoodRestore : '').trim();
-    const packed =
-        typeof adminLicensePackPrevGoodBad === 'function'
-            ? adminLicensePackPrevGoodBad(prev)
-            : '';
+    const packed = isEntregada
+        ? adminLicensePackWarrantyEntregadaBad(prev)
+        : typeof adminLicensePackPrevGoodBad === 'function'
+          ? adminLicensePackPrevGoodBad(prev)
+          : '';
     if (packed) {
         row.dataset.licPrevGoodPack = packed;
     } else {
@@ -11953,7 +12596,25 @@ function adminLicenseApplyReportesBuenaRowUi(row, selGood, badShell, prevGoodRes
             delete row.dataset.licPrevGoodPack;
         } catch (_ePack) {}
     }
-    badShell.innerHTML = adminLicenseReportesBuenaBadgeHtml();
+    badShell.innerHTML = isEntregada
+        ? adminLicenseWarrantyEntregadaBadgeHtml()
+        : adminLicenseReportesBuenaBadgeHtml();
+    const badge = badShell.querySelector(
+        '[data-lic-buena-badge="1"], [data-lic-garantia-entregada-badge="1"]'
+    );
+    if (badge) {
+        badge.addEventListener('click', function (ev) {
+            ev.preventDefault();
+            ev.stopPropagation();
+            void adminLicClearBuenaOrEntregadaFromRow(row);
+        });
+        badge.addEventListener('keydown', function (ev) {
+            if (ev.key === 'Enter' || ev.key === ' ') {
+                ev.preventDefault();
+                void adminLicClearBuenaOrEntregadaFromRow(row);
+            }
+        });
+    }
     if (selGood) {
         const showVal =
             (typeof adminLicenseSplitCanonicalGoodFromStored === 'function'
@@ -11968,11 +12629,80 @@ function adminLicenseApplyReportesBuenaRowUi(row, selGood, badShell, prevGoodRes
         }
         selGood.disabled = true;
         selGood.setAttribute('aria-disabled', 'true');
-        selGood.title = 'Renovación guardada. Reportes marcó esta fila como buena.';
+        selGood.title = isEntregada
+            ? 'Renovación guardada. Garantía entregada (badge Entregada).'
+            : 'Renovación guardada. Reportes marcó esta fila como buena.';
         selGood.classList.add('user-lic-status-good--buena-locked');
         if (typeof adminLicenseSplitApplyGoodSelectTierClass === 'function') {
             adminLicenseSplitApplyGoodSelectTierClass(selGood);
         }
+    }
+}
+
+/** Clic en Buena / Entregada: restaura verde previo y deja rojo en — (neutro). */
+async function adminLicClearBuenaOrEntregadaFromRow(row) {
+    if (!row || window.__adminLicClearBuenaInFlight) return;
+    window.__adminLicClearBuenaInFlight = true;
+    try {
+        const dayRoot = row.closest ? row.closest('.day-license-split-root') : null;
+        let getMerged;
+        let applyMerged;
+        let ord = -1;
+        if (dayRoot) {
+            ord = dayLicenseSplitGetRowElements(dayRoot).indexOf(row);
+            getMerged = function () {
+                return dayLicenseSplitGetMergedText(dayRoot);
+            };
+            applyMerged = function (txt) {
+                dayLicenseSplitApplyMergedText(dayRoot, txt);
+            };
+        } else if (row.closest && row.closest('#adminLicenciasStructuredRows')) {
+            ord = adminLicenseSplitGetRowElements().indexOf(row);
+            getMerged = adminLicenseSplitGetMergedNotes;
+            applyMerged = function (txt) {
+                adminLicenseSplitApplyMergedText(txt, { force: true });
+            };
+        } else {
+            return;
+        }
+        if (ord < 0) {
+            showError('No se encontró la fila (actualiza la página).');
+            return;
+        }
+        const oldMerged = getMerged();
+        const lines = oldMerged === '' ? [] : oldMerged.split('\n');
+        if (ord >= lines.length) {
+            showError('Índice de fila fuera de rango.');
+            return;
+        }
+        const p = parseAdminLicenseLineToSplitParts(lines[ord]);
+        let prevGood = String(p.prevGoodRestore || '').trim();
+        if (!prevGood && p.statusBad) {
+            const un = adminLicenseUnpackPrevGoodFromBad(p.statusBad);
+            if (un && un.prevGood) prevGood = un.prevGood;
+        }
+        if (!prevGood && row.dataset && row.dataset.licPrevGoodPack) {
+            const un2 = adminLicenseUnpackPrevGoodFromBad(row.dataset.licPrevGoodPack);
+            if (un2 && un2.prevGood) prevGood = un2.prevGood;
+        }
+        const next = lines.slice();
+        next[ord] = buildAdminLicenseStorageLine(p.cred, p.user, prevGood || '', '', p.extra);
+        applyMerged(next.join('\n'));
+        const saveRes =
+            typeof window.adminLicenciasSaveCurrentLicenseNotesImmediate === 'function'
+                ? await window.adminLicenciasSaveCurrentLicenseNotesImmediate()
+                : { success: false };
+        if (!saveRes || !saveRes.success) {
+            applyMerged(oldMerged);
+            showError('No se pudo guardar el cambio de estado.');
+            return;
+        }
+        showSuccess('Estado actualizado: la fila quedó en — (neutro).');
+        try {
+            scheduleRefreshAdminLicenciasReportCounts();
+        } catch (_cnt) {}
+    } finally {
+        window.__adminLicClearBuenaInFlight = false;
     }
 }
 
@@ -12003,6 +12733,7 @@ function adminLicenseStatusTierFromStored(statusText) {
     const k = adminLicenseNormalizeStatusKey(raw);
     if (!k) return 'neutral';
     if (/^otro[-:\s]/i.test(raw) || k === 'otro') return 'bad';
+    if (k === 'solucionada') return 'solucionada';
     if (ADMIN_LICENSE_STATUS_GOOD_KEYS.has(k)) return 'good';
     if (ADMIN_LICENSE_STATUS_BAD_KEYS.has(k)) return 'bad';
     return 'neutral';
@@ -12038,22 +12769,66 @@ function adminLicenseSplitApplyGoodSelectTierClass(selGood) {
     selGood.classList.add('license-split-editor__status--tier-' + tier);
 }
 
+function adminLicenseSplitPaintBadSelectTier(selBad, tier) {
+    if (!selBad || !selBad.style || typeof selBad.style.setProperty !== 'function') return;
+    if (selBad.tagName !== 'SELECT') return;
+    if (tier === 'bad') {
+        selBad.style.setProperty('color', '#ffffff', 'important');
+        selBad.style.setProperty('-webkit-text-fill-color', '#ffffff', 'important');
+        selBad.style.setProperty('background-color', '#dc2626', 'important');
+        selBad.style.setProperty(
+            'background-image',
+            'linear-gradient(45deg, transparent 50%, #ffffff 50%), linear-gradient(135deg, #ffffff 50%, transparent 50%)',
+            'important'
+        );
+        selBad.style.setProperty('background-position', 'calc(100% - 0.65rem) 50%, calc(100% - 0.45rem) 50%', 'important');
+        selBad.style.setProperty('background-size', '0.28rem 0.28rem, 0.28rem 0.28rem', 'important');
+        selBad.style.setProperty('background-repeat', 'no-repeat', 'important');
+        return;
+    }
+    if (tier === 'solucionada') {
+        selBad.style.setProperty('color', '#ffffff', 'important');
+        selBad.style.setProperty('-webkit-text-fill-color', '#ffffff', 'important');
+        selBad.style.setProperty('background-color', 'transparent', 'important');
+        selBad.style.setProperty(
+            'background-image',
+            'linear-gradient(45deg, transparent 50%, #ffffff 50%), linear-gradient(135deg, #ffffff 50%, transparent 50%)',
+            'important'
+        );
+        selBad.style.setProperty('background-position', 'calc(100% - 0.65rem) 50%, calc(100% - 0.45rem) 50%', 'important');
+        selBad.style.setProperty('background-size', '0.28rem 0.28rem, 0.28rem 0.28rem', 'important');
+        selBad.style.setProperty('background-repeat', 'no-repeat', 'important');
+        return;
+    }
+    selBad.style.removeProperty('color');
+    selBad.style.removeProperty('-webkit-text-fill-color');
+    selBad.style.removeProperty('background-color');
+    selBad.style.removeProperty('background-image');
+    selBad.style.removeProperty('background-position');
+    selBad.style.removeProperty('background-size');
+    selBad.style.removeProperty('background-repeat');
+}
+
 function adminLicenseSplitApplyBadSelectTierClass(selBad, otroCombined) {
     if (!selBad) return;
     const tier = adminLicenseStatusTierFromStored(adminLicenseSplitEffectiveStatusForTier(selBad, otroCombined));
     selBad.classList.remove(
         'license-split-editor__status--tier-good',
         'license-split-editor__status--tier-bad',
-        'license-split-editor__status--tier-neutral'
+        'license-split-editor__status--tier-neutral',
+        'license-split-editor__status--tier-solucionada'
     );
-    selBad.classList.add('license-split-editor__status--tier-' + tier);
+    const cssTier = tier === 'solucionada' ? 'solucionada' : tier === 'bad' ? 'bad' : tier === 'good' ? 'good' : 'neutral';
+    selBad.classList.add('license-split-editor__status--tier-' + cssTier);
+    adminLicenseSplitPaintBadSelectTier(selBad, tier);
     if (otroCombined) {
         otroCombined.classList.remove(
             'license-split-editor__otro-combined--tier-good',
             'license-split-editor__otro-combined--tier-bad',
             'license-split-editor__otro-combined--tier-neutral'
         );
-        otroCombined.classList.add('license-split-editor__otro-combined--tier-' + tier);
+        const otTier = tier === 'bad' ? 'bad' : 'neutral';
+        otroCombined.classList.add('license-split-editor__otro-combined--tier-' + otTier);
     }
     adminLicenseSplitSyncReportIcon(selBad, otroCombined);
 }
@@ -12076,6 +12851,38 @@ function scheduleRefreshAdminLicenciasReportCounts() {
 function adminLicenseSplitCountReportShells(scopeEl) {
     if (!scopeEl || !scopeEl.querySelectorAll) return 0;
     return scopeEl.querySelectorAll('.license-split-editor__status-select-shell--report').length;
+}
+
+function adminLicenseRefreshDayPendienteGarantiaBadge(badge, day, wrap) {
+    if (!badge) return;
+    let n = wrap ? adminLicenseSplitCountWarrantyPendingShells(wrap) : 0;
+    if ((!wrap || n === 0) && day != null && day !== '') {
+        const lazy = typeof __adminLicDaysLazyMeta !== 'undefined' ? __adminLicDaysLazyMeta : null;
+        const meta = lazy && lazy.byDay ? lazy.byDay[String(day)] : null;
+        if (meta && meta.textToApply != null) {
+            const nLazy = adminLicenseCountWarrantyPendingInNotepadText(meta.textToApply);
+            if (nLazy > n) n = nLazy;
+        }
+    }
+    const numEl = badge.querySelector('.admin-licencias-report-header-badge__num');
+    if (n > 0) {
+        badge.hidden = false;
+        if (numEl) numEl.textContent = String(n);
+        const bt =
+            n === 1
+                ? '1 cuenta pendiente de garantía (sin stock) en el día ' + day
+                : n + ' cuentas pendientes de garantía (sin stock) en el día ' + day;
+        badge.title = bt;
+        badge.setAttribute('aria-label', bt);
+    } else {
+        badge.hidden = true;
+        if (numEl) numEl.textContent = '0';
+        badge.removeAttribute('title');
+        badge.setAttribute(
+            'aria-label',
+            'Sin pendientes de garantía en el día ' + (day || '')
+        );
+    }
 }
 
 function refreshAdminLicenciasReportCounts() {
@@ -12151,6 +12958,16 @@ function refreshAdminLicenciasReportCounts() {
             badge.removeAttribute('title');
             badge.setAttribute('aria-label', 'Sin reportes pendientes en el día ' + (day || ''));
         }
+
+        const pendBadge =
+            (section &&
+                section.querySelector(
+                    '.js-admin-day-pendiente-garantia-badge[data-day="' + String(day) + '"]'
+                )) ||
+            document.querySelector(
+                '.js-admin-day-pendiente-garantia-badge[data-day="' + String(day) + '"]'
+            );
+        adminLicenseRefreshDayPendienteGarantiaBadge(pendBadge, day, wrap);
     });
 
     const nTotalLocal = nMain + nDaysSum;
@@ -12406,6 +13223,12 @@ function adminLicenseSplitWireDualStatusNoteLink(selGood, selBad, noteInput, otr
                     /* ignore */
                 }
             });
+        } else if (adminLicenseNormalizeStatusKey(v) === 'solucionada') {
+            const rowSol = selBad.closest('.license-split-editor__row');
+            if (rowSol) {
+                void adminLicMarkSolucionadaFromSelect(rowSol, selBad);
+                return;
+            }
         }
         syncFromBad();
     });
@@ -12465,6 +13288,12 @@ function adminLicenseSplitWireBadOnlyStatusNoteLink(selBad, noteInput, otroCombi
                     /* ignore */
                 }
             });
+        } else if (adminLicenseNormalizeStatusKey(v) === 'solucionada') {
+            const rowSol = selBad.closest('.license-split-editor__row');
+            if (rowSol) {
+                void adminLicMarkSolucionadaFromSelect(rowSol, selBad);
+                return;
+            }
         }
         syncFromBad();
     });
@@ -12501,6 +13330,7 @@ function adminLicenseParseRowTailFields(cred, user, seg3, seg4) {
 }
 
 const LICENSE_PREV_GOOD_BAD_PREFIX = '__prev_good:';
+const LICENSE_WARRANTY_ENTREGADA_BAD_PREFIX = '__warranty_entregada:';
 const PORTAL_GREEN_EXTRA_PREFIX = '_u_green:';
 const PORTAL_BAD_EXTRA_PREFIX = '_u_bad:';
 const AUTO_MES_EXTRA_PREFIX = '_auto_mes:';
@@ -12618,9 +13448,21 @@ function adminLicenseUnpackPrevGoodFromBad(badRaw) {
     const s = String(badRaw || '').trim();
     if (s.indexOf(LICENSE_PREV_GOOD_BAD_PREFIX) === 0) {
         const prev = s.slice(LICENSE_PREV_GOOD_BAD_PREFIX.length).trim();
-        return { visibleBad: '', prevGood: adminLicenseSplitCanonicalGoodFromStored(prev) || prev };
+        return {
+            visibleBad: '',
+            prevGood: adminLicenseSplitCanonicalGoodFromStored(prev) || prev,
+            warrantyEntregada: false
+        };
     }
-    return { visibleBad: s, prevGood: '' };
+    if (s.indexOf(LICENSE_WARRANTY_ENTREGADA_BAD_PREFIX) === 0) {
+        const prev = s.slice(LICENSE_WARRANTY_ENTREGADA_BAD_PREFIX.length).trim();
+        return {
+            visibleBad: '',
+            prevGood: adminLicenseSplitCanonicalGoodFromStored(prev) || prev,
+            warrantyEntregada: true
+        };
+    }
+    return { visibleBad: s, prevGood: '', warrantyEntregada: false };
 }
 
 function adminLicensePackPrevGoodBad(prevGood) {
@@ -12628,6 +13470,22 @@ function adminLicensePackPrevGoodBad(prevGood) {
     if (!p || adminLicenseNormalizeStatusKey(p) === 'ok') return '';
     const canon = adminLicenseSplitCanonicalGoodFromStored(p) || p;
     return LICENSE_PREV_GOOD_BAD_PREFIX + canon;
+}
+
+function adminLicenseIsWarrantyEntregadaBad(statusBad) {
+    return String(statusBad != null ? statusBad : '')
+        .trim()
+        .indexOf(LICENSE_WARRANTY_ENTREGADA_BAD_PREFIX) === 0;
+}
+
+/** Tras entregar garantía: ok + segmento «Entregada» (verde previo opcional). */
+function adminLicensePackWarrantyEntregadaBad(prevGood) {
+    const p = String(prevGood || '').trim();
+    if (!p || adminLicenseNormalizeStatusKey(p) === 'ok') {
+        return LICENSE_WARRANTY_ENTREGADA_BAD_PREFIX;
+    }
+    const canon = adminLicenseSplitCanonicalGoodFromStored(p) || p;
+    return LICENSE_WARRANTY_ENTREGADA_BAD_PREFIX + canon;
 }
 
 /** Al marcar «Buena» desde reportes: no perder renovar / mes a mes guardado en la columna verde. */
@@ -12697,20 +13555,34 @@ function adminLicenseSplitParseBadStoredSegment(badRaw) {
             selValue: '',
             otroDetail: '',
             prevGood: '',
-            warrantyPendingPacked: rawIn
+            warrantyPendingPacked: rawIn,
+            warrantyEntregada: false
         };
     }
     const unpacked = adminLicenseUnpackPrevGoodFromBad(badRaw);
     const s = String(unpacked.visibleBad || '').trim();
-    if (!s) return { selValue: '', otroDetail: '', prevGood: unpacked.prevGood || '' };
+    if (!s) {
+        return {
+            selValue: '',
+            otroDetail: '',
+            prevGood: unpacked.prevGood || '',
+            warrantyEntregada: !!unpacked.warrantyEntregada
+        };
+    }
     const m = s.match(/^otro-?\s*(.*)$/i);
     if (m) {
-        return { selValue: 'otro', otroDetail: (m[1] || '').trim(), prevGood: unpacked.prevGood || '' };
+        return {
+            selValue: 'otro',
+            otroDetail: (m[1] || '').trim(),
+            prevGood: unpacked.prevGood || '',
+            warrantyEntregada: false
+        };
     }
     return {
         selValue: adminLicenseSplitCanonicalBadFromStored(s) || s,
         otroDetail: '',
-        prevGood: unpacked.prevGood || ''
+        prevGood: unpacked.prevGood || '',
+        warrantyEntregada: false
     };
 }
 
@@ -12725,11 +13597,22 @@ function adminLicenseDualFromStoredSegments(cred, user, goodRaw, badRaw, extra) 
         otroDetail: badParsed.otroDetail,
         prevGoodRestore: badParsed.prevGood || '',
         warrantyPendingPacked: badParsed.warrantyPendingPacked || '',
+        warrantyEntregada: !!badParsed.warrantyEntregada,
         extra: extra
     };
 }
 
 function adminLicenseMigrateLegacyFourPartToDual(cred, user, seg3, seg4) {
+    /* Línea de 5 campos que perdió el último segmento vacío: si el 4.º trae un
+       estado empaquetado de columna roja, es statusBad (no notas internas). */
+    const s4 = String(seg4 != null ? seg4 : '').trim();
+    if (
+        s4.indexOf(ADMIN_LICENSE_WARRANTY_PENDING_BAD_PREFIX) === 0 ||
+        s4.indexOf(LICENSE_WARRANTY_ENTREGADA_BAD_PREFIX) === 0 ||
+        s4.indexOf(LICENSE_PREV_GOOD_BAD_PREFIX) === 0
+    ) {
+        return adminLicenseDualFromStoredSegments(cred, user, seg3, s4, '');
+    }
     const legacy = adminLicenseParseRowTailFields(cred, user, seg3, seg4);
     const st = legacy.status;
     const stForTier =
@@ -12872,6 +13755,8 @@ function adminLicenseSplitReadRow(row) {
         adminLicenseNormalizeStatusKey(goodVal) === 'ok'
     ) {
         statusBad = String((row.dataset && row.dataset.licPrevGoodPack) || '').trim();
+    } else if (row.dataset && row.dataset.licSolucionada === '1') {
+        statusBad = 'solucionada';
     }
     return {
         user: u ? u.value : '',
@@ -12924,6 +13809,7 @@ function adminLicenseBulkFillStatusSelect(sel, optionsList, forceOpt) {
     sel.dataset.licBulkFilled = '1';
     sel.innerHTML = '';
     optionsList.forEach(function (opt) {
+        if (opt && opt.hidden === true) return;
         const o = document.createElement('option');
         o.value = opt.v;
         o.textContent = opt.label;
@@ -14252,13 +15138,8 @@ function adminLicenseSplitCreateRow(
     selBad.title =
         'Incidencia o problema (caída, no reproduce, otro). Con «Otro», describa el detalle a la derecha.';
     selBad.setAttribute('aria-label', 'Estado de incidencia o problema');
-    ADMIN_LICENSE_STATUS_OPTIONS_BAD.forEach(function (opt) {
-        const o = document.createElement('option');
-        o.value = opt.v;
-        o.textContent = opt.label;
-        selBad.appendChild(o);
-    });
     const sbRawMain = initialStatusBad != null ? String(initialStatusBad).trim() : '';
+    adminLicenseAppendBadStatusOptions(selBad, sbRawMain);
     let sb = sbRawMain;
     if (typeof adminLicenseIsWarrantyPendingBad === 'function' && adminLicenseIsWarrantyPendingBad(sbRawMain)) {
         row.dataset.licWarrantyPendingBad = sbRawMain;
@@ -14312,16 +15193,32 @@ function adminLicenseSplitCreateRow(
     const isWarrantyPendingMain =
         typeof adminLicenseIsWarrantyPendingBad === 'function' &&
         adminLicenseIsWarrantyPendingBad(sbRawMain);
+    const isSolucionadaMain =
+        !isReportesBuenaMain &&
+        !isWarrantyPendingMain &&
+        adminLicenseNormalizeStatusKey(sbRawMain) === 'solucionada';
     if (isReportesBuenaMain) {
         let prevRestMain = '';
+        let isEntregadaMain = false;
         const unPgMain = adminLicenseUnpackPrevGoodFromBad(sbRawMain);
         if (unPgMain && unPgMain.prevGood) prevRestMain = unPgMain.prevGood;
-        adminLicenseApplyReportesBuenaRowUi(row, selGood, badShell, prevRestMain);
+        if (unPgMain && unPgMain.warrantyEntregada) isEntregadaMain = true;
+        if (!isEntregadaMain && adminLicenseIsWarrantyEntregadaBad(sbRawMain)) {
+            isEntregadaMain = true;
+        }
+        adminLicenseApplyReportesBuenaRowUi(row, selGood, badShell, prevRestMain, {
+            warrantyEntregada: isEntregadaMain
+        });
         if (selGood) {
             adminLicenseSplitWireDualStatusNoteLink(selGood, null, n, otroCombined);
         }
     } else if (isWarrantyPendingMain) {
         adminLicenseApplyWarrantyPendingRowUi(row, badShell, sbRawMain);
+        if (selGood) {
+            adminLicenseSplitWireDualStatusNoteLink(selGood, null, n, otroCombined);
+        }
+    } else if (isSolucionadaMain) {
+        adminLicenseApplySolucionadaRowUi(row, badShell);
         if (selGood) {
             adminLicenseSplitWireDualStatusNoteLink(selGood, null, n, otroCombined);
         }
@@ -14600,7 +15497,9 @@ function adminLicenseSplitApplyMergedText(text, opts) {
             adminLicenseNormalizeStatusKey(p.statusGood || '') === 'ok' &&
             p.prevGoodRestore
         ) {
-            badForRowMain = adminLicensePackPrevGoodBad(p.prevGoodRestore) || badForRowMain;
+            badForRowMain = p.warrantyEntregada
+                ? adminLicensePackWarrantyEntregadaBad(p.prevGoodRestore)
+                : adminLicensePackPrevGoodBad(p.prevGoodRestore) || badForRowMain;
         }
         wrap.appendChild(
             adminLicenseSplitCreateRow(
@@ -14870,13 +15769,8 @@ function dayLicenseSplitCreateRow(
     selBad.title =
         'Incidencia o problema (caída, no reproduce, otro). Con «Otro», describa el detalle a la derecha.';
     selBad.setAttribute('aria-label', 'Estado de incidencia o problema');
-    ADMIN_LICENSE_STATUS_OPTIONS_BAD.forEach(function (opt) {
-        const o = document.createElement('option');
-        o.value = opt.v;
-        o.textContent = opt.label;
-        selBad.appendChild(o);
-    });
     const sbRaw = initialStatusBad != null ? String(initialStatusBad).trim() : '';
+    adminLicenseAppendBadStatusOptions(selBad, sbRaw);
     let sb = sbRaw;
     if (typeof adminLicenseIsWarrantyPendingBad === 'function' && adminLicenseIsWarrantyPendingBad(sbRaw)) {
         row.dataset.licWarrantyPendingBad = sbRaw;
@@ -14933,11 +15827,20 @@ function dayLicenseSplitCreateRow(
     const isWarrantyPending =
         typeof adminLicenseIsWarrantyPendingBad === 'function' &&
         adminLicenseIsWarrantyPendingBad(sbRaw);
+    const isSolucionada =
+        !isReportesBuena &&
+        !isWarrantyPending &&
+        adminLicenseNormalizeStatusKey(sbRaw) === 'solucionada';
     if (isReportesBuena) {
         let prevRest = '';
+        let isEntregada = false;
         const unPg = adminLicenseUnpackPrevGoodFromBad(sbRaw);
         if (unPg && unPg.prevGood) prevRest = unPg.prevGood;
-        adminLicenseApplyReportesBuenaRowUi(row, selGood, badShell, prevRest);
+        if (unPg && unPg.warrantyEntregada) isEntregada = true;
+        if (!isEntregada && adminLicenseIsWarrantyEntregadaBad(sbRaw)) isEntregada = true;
+        adminLicenseApplyReportesBuenaRowUi(row, selGood, badShell, prevRest, {
+            warrantyEntregada: isEntregada
+        });
         if (selGood) {
             adminLicenseSplitWireDualStatusNoteLink(selGood, null, n, otroCombined);
         }
@@ -14948,12 +15851,23 @@ function dayLicenseSplitCreateRow(
         } else {
             /* sin select rojo: solo verde si existe */
         }
+    } else if (isSolucionada) {
+        adminLicenseApplySolucionadaRowUi(row, badShell);
+        if (selGood) {
+            adminLicenseSplitWireDualStatusNoteLink(selGood, null, n, otroCombined);
+        }
     } else if (selGood) {
         adminLicenseSplitWireDualStatusNoteLink(selGood, selBad, n, otroCombined);
     } else {
         adminLicenseSplitWireBadOnlyStatusNoteLink(selBad, n, otroCombined);
     }
-    if (rootOpt && adminLicIsAdminDayToolsPage() && !isReportesBuena && !isWarrantyPending) {
+    if (
+        rootOpt &&
+        adminLicIsAdminDayToolsPage() &&
+        !isReportesBuena &&
+        !isWarrantyPending &&
+        !isSolucionada
+    ) {
         adminLicDayWireBadSelectActions(row, rootOpt);
     }
     return row;
@@ -15147,7 +16061,9 @@ function dayLicenseSplitApplyMergedText(root, text, options) {
             adminLicenseNormalizeStatusKey(p.statusGood || '') === 'ok' &&
             p.prevGoodRestore
         ) {
-            badForRow = adminLicensePackPrevGoodBad(p.prevGoodRestore) || badForRow;
+            badForRow = p.warrantyEntregada
+                ? adminLicensePackWarrantyEntregadaBad(p.prevGoodRestore)
+                : adminLicensePackPrevGoodBad(p.prevGoodRestore) || badForRow;
         }
         wrap.appendChild(
             dayLicenseSplitCreateRow(
@@ -15513,13 +16429,8 @@ function suspendedLicenseSplitCreateRow(initialExtra, initialStatusBad, initialO
     selBad.title =
         'Incidencia o problema (caída, no reproduce, otro). Con «Otro», describa el detalle a la derecha.';
     selBad.setAttribute('aria-label', 'Estado de incidencia (cuenta caída o suspendida)');
-    ADMIN_LICENSE_STATUS_OPTIONS_BAD.forEach(function (opt) {
-        const o = document.createElement('option');
-        o.value = opt.v;
-        o.textContent = opt.label;
-        selBad.appendChild(o);
-    });
     const sb = initialStatusBad != null ? String(initialStatusBad).trim() : '';
+    adminLicenseAppendBadStatusOptions(selBad, sb);
     if (sb && !adminLicenseStatusIsKnownBadOption(sb)) {
         const o = document.createElement('option');
         o.value = sb;
@@ -16072,13 +16983,8 @@ function expiredLicenseSplitCreateRow(initialExtra, initialStatusBad, initialOtr
     selBad.title =
         'Incidencia o problema (vencida, no reproduce, otro). Con «Otro», describa el detalle a la derecha.';
     selBad.setAttribute('aria-label', 'Estado de incidencia (cuenta vencida o sin renovar)');
-    ADMIN_LICENSE_STATUS_OPTIONS_BAD.forEach(function (opt) {
-        const o = document.createElement('option');
-        o.value = opt.v;
-        o.textContent = opt.label;
-        selBad.appendChild(o);
-    });
     const sb = initialStatusBad != null ? String(initialStatusBad).trim() : '';
+    adminLicenseAppendBadStatusOptions(selBad, sb);
     if (sb && !adminLicenseStatusIsKnownBadOption(sb)) {
         const o = document.createElement('option');
         o.value = sb;
@@ -16665,13 +17571,8 @@ function changesLicenseSplitCreateRow(initialExtra, initialStatusGood, initialSt
     selBad.title =
         'Incidencia o problema. Con «Otro», describa el detalle a la derecha.';
     selBad.setAttribute('aria-label', 'Estado de incidencia (cambios)');
-    ADMIN_LICENSE_STATUS_OPTIONS_BAD.forEach(function (opt) {
-        const o = document.createElement('option');
-        o.value = opt.v;
-        o.textContent = opt.label;
-        selBad.appendChild(o);
-    });
     const sb = initialStatusBad != null ? String(initialStatusBad).trim() : '';
+    adminLicenseAppendBadStatusOptions(selBad, sb);
     if (sb && !adminLicenseStatusIsKnownBadOption(sb)) {
         const o = document.createElement('option');
         o.value = sb;
@@ -20973,6 +21874,117 @@ async function persistDayNotepadRawText(licenseId, day, rawText) {
 }
 
 /**
+ * Aplica los blocs que el servidor ya actualizó al entregar una garantía
+ * (license_notes sin el repuesto entregado y suspended_notes con la caída):
+ * caché en memoria, localStorage del notepad y DOM si el bloc abierto es de esta
+ * licencia — así la reconciliación local no re-empuja el texto viejo al servidor.
+ */
+function adminLicApplyWarrantyDeliveryServerBlocs(licenseId, data) {
+    if (!data || typeof data !== 'object') return;
+    const hasLic = Object.prototype.hasOwnProperty.call(data, 'license_notes');
+    const hasSusp = Object.prototype.hasOwnProperty.call(data, 'suspended_notes');
+    if (!hasLic && !hasSusp) return;
+    const licText = hasLic ? String(data.license_notes != null ? data.license_notes : '') : undefined;
+    const suspText = hasSusp
+        ? String(data.suspended_notes != null ? data.suspended_notes : '')
+        : undefined;
+    if (typeof window.patchLicenseNotesCache === 'function') {
+        window.patchLicenseNotesCache(licenseId, undefined, licText, suspText, undefined);
+    }
+    try {
+        if (hasLic) {
+            localStorage.setItem('admin_licencias_bloc_license_' + licenseId + '_v1', licText);
+            localStorage.removeItem('admin_licencias_license_creds_draft_' + licenseId + '_v1');
+        }
+        if (hasSusp) {
+            localStorage.setItem('admin_licencias_bloc_suspended_' + licenseId + '_v1', suspText);
+        }
+    } catch (_lsErr) {}
+    try {
+        const taL = document.getElementById('adminLicenciasNotepadByLicense');
+        if (
+            hasLic &&
+            taL &&
+            parseInt(taL.dataset.licenseId, 10) === licenseId &&
+            typeof window.adminLicenseSplitApplyMergedText === 'function'
+        ) {
+            window.adminLicenseSplitApplyMergedText(licText, { force: true });
+        }
+    } catch (_uiLic) {}
+    try {
+        const taS = document.getElementById('adminLicenciasSuspendedNotepad');
+        const suspRoot = document.getElementById('adminLicenciasSuspendedSplitRoot');
+        if (
+            hasSusp &&
+            taS &&
+            suspRoot &&
+            parseInt(taS.dataset.licenseId, 10) === licenseId &&
+            typeof suspendedLicenseSplitApplyMergedText === 'function'
+        ) {
+            suspendedLicenseSplitApplyMergedText(suspRoot, suspText);
+        }
+    } catch (_uiSusp) {}
+    if (hasLic && typeof window.updateLicenseBlocLineCountBadge === 'function') {
+        window.updateLicenseBlocLineCountBadge();
+    }
+    if (typeof window.updateSuspendedBlocLineCountBadge === 'function') {
+        window.updateSuspendedBlocLineCountBadge();
+    }
+}
+
+/** Añade una línea al bloc Caídas (p. ej. cuenta mala tras entregar garantía desde Reportes). */
+async function adminLicenseAppendSuspendedNotesLine(licenseId, lineRaw) {
+    if (licenseId === AGGREGATE_LICENSE_ID) return false;
+    const line = String(lineRaw != null ? lineRaw : '').replace(/\r\n/g, '\n');
+    if (!String(line).trim()) return true;
+    const L = typeof licenses !== 'undefined' ? licenses.find(function (x) {
+        return x && x.id === licenseId;
+    }) : null;
+    const cur = L && L.suspended_notes != null ? String(L.suspended_notes).replace(/\r\n/g, '\n') : '';
+    const lines = cur === '' ? [] : cur.split('\n');
+    while (lines.length && lines[lines.length - 1] === '') {
+        lines.pop();
+    }
+    lines.push(line);
+    const newText = lines.join('\n');
+    try {
+        const data = await adminLicFetchJson(`/tienda/api/licenses/${licenseId}/notes`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ suspended_notes: newText }),
+        });
+        if (!(data && data.success)) {
+            if (typeof showError === 'function') {
+                showError((data && data.error) || 'No se pudo guardar la línea en Caídas.');
+            }
+            return false;
+        }
+        if (L) {
+            L.suspended_notes = newText;
+        }
+        try {
+            const taS = document.getElementById('adminLicenciasSuspendedNotepad');
+            const suspRoot = document.getElementById('adminLicenciasSuspendedSplitRoot');
+            if (
+                taS &&
+                suspRoot &&
+                parseInt(taS.dataset.licenseId, 10) === licenseId &&
+                typeof suspendedLicenseSplitApplyMergedText === 'function'
+            ) {
+                suspendedLicenseSplitApplyMergedText(suspRoot, newText);
+            }
+        } catch (_uiSusp) {}
+        return true;
+    } catch (e) {
+        adminLicLogError('adminLicenseAppendSuspendedNotesLine', e);
+        if (typeof showError === 'function') {
+            showError(adminLicFormatFetchError(e, 'No se pudo guardar la línea en Caídas.'));
+        }
+        return false;
+    }
+}
+
+/**
  * Sincroniza el bloc de un día con el servidor: borrar línea = borrar cuenta;
  * mismas reglas de parseo que el bloc Licencias.
  * options.skipReload: no llama loadLicenses (el llamador hace un único refresh, p. ej. al cambiar de producto).
@@ -21539,6 +22551,7 @@ async function loadAllDaysSoldAccounts(licenseId) {
                         </div>
                         <span class="day-account-badge admin-licencias-notepad-line-badge js-admin-day-line-badge"${lineCount > 0 ? ` title="${badgeText}"` : ''}>${lineCount}</span>
                         <span class="admin-licencias-report-header-badge js-admin-day-report-badge" data-day="${day}" hidden role="status" aria-live="polite" aria-label="Sin reportes pendientes en el día ${day}">Reportes <span class="admin-licencias-report-header-badge__num">0</span></span>
+                        <span class="admin-licencias-report-header-badge admin-licencias-report-header-badge--pendiente-garantia js-admin-day-pendiente-garantia-badge" data-day="${day}" hidden role="status" aria-live="polite" aria-label="Sin pendientes de garantía en el día ${day}">Garantía <span class="admin-licencias-report-header-badge__num">0</span></span>
                     </div>
                 </div>
                 <div class="day-accounts-list" data-day-lazy="1"></div>
@@ -23881,7 +24894,13 @@ function showError(message, optErr) {
     if (typeof adminLicIsIgnorableFetchError === 'function') {
         if (adminLicIsIgnorableFetchError(optErr || message)) return;
     }
-    alert('✗ ' + message);
+    var text = message != null ? String(message).trim() : '';
+    if (!text) return;
+    if (typeof adminLicShowFloatingToast === 'function') {
+        adminLicShowFloatingToast(text, { kind: 'error', durationMs: 10000 });
+        return;
+    }
+    alert('✗ ' + text);
 }
 
 // Actualizar contador de archivados (Menú2 y licencias admin)
@@ -24348,21 +25367,30 @@ function toggleSaldoClientesInfoTip() {
 function adminSaldoClientesFormatStoreBalance(client) {
     if (!client) return '—';
     const tp = client.tipo_precio ? String(client.tipo_precio).toLowerCase() : '';
-    let prepaid = '—';
+    let prepaidAmt = 0;
+    let prepaidLabel = '';
     if (tp === 'usd') {
-        prepaid = Math.floor(Number(client.saldo_usd) || 0) + ' USD';
+        prepaidAmt = Math.floor(Number(client.saldo_usd) || 0);
+        if (prepaidAmt > 0) prepaidLabel = prepaidAmt + ' USD';
     } else if (tp === 'cop') {
-        prepaid = Math.floor(Number(client.saldo_cop) || 0) + ' COP';
+        prepaidAmt = Math.floor(Number(client.saldo_cop) || 0);
+        if (prepaidAmt > 0) prepaidLabel = prepaidAmt + ' COP';
     }
     const licDebt = Number(client.license_saldo);
-    if (Number.isFinite(licDebt) && licDebt > 1e-9) {
-        const debtTxt =
+    const hasDebt = Number.isFinite(licDebt) && licDebt > 1e-9;
+    let debtTxt = '';
+    if (hasDebt) {
+        debtTxt =
             Math.abs(licDebt - Math.round(licDebt)) < 1e-9
                 ? String(Math.round(licDebt))
                 : String(Number(licDebt.toFixed(2)));
-        return prepaid + ' · Debe ' + debtTxt;
     }
-    return prepaid;
+    // Solo saldo a favor (sin cero): «185000 COP». Solo deuda: «Debe 185000».
+    // Ambos: «185000 COP · Debe 5000». Sin nada: «—».
+    if (prepaidLabel && hasDebt) return prepaidLabel + ' · Debe ' + debtTxt;
+    if (prepaidLabel) return prepaidLabel;
+    if (hasDebt) return 'Debe ' + debtTxt;
+    return '—';
 }
 
 function adminSaldoClientesFindCachedClient(userId) {

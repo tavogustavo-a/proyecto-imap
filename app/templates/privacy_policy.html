@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+{% block title %}Política de privacidad — {{ brand_name }}{% endblock %}
+
+{% block content %}
+<article class="privacy-page" lang="es">
+  {% set back_href = url_for('main_bp.home') %}
+  {% include 'includes/page_back_link.html' %}
+  <h1 class="privacy-page__title">Política de privacidad</h1>
+  <p class="privacy-page__meta">Última actualización: {{ privacy_updated }}</p>
+
+  <h2>1. Responsable</h2>
+  <p>
+    El responsable del tratamiento es el operador de la plataforma
+    <strong>{{ brand_name }}</strong>{% if brand_host and brand_host[0:1].isalpha() %} ({{ brand_host }}){% endif %}.
+    Para consultas sobre privacidad podés contactarnos a través de los canales de soporte
+    disponibles en el sitio o la app (por ejemplo, chat de soporte si tu cuenta lo tiene habilitado).
+  </p>
+
+  <h2>2. Datos que podemos tratar</h2>
+  <ul>
+    <li><strong>Cuenta:</strong> usuario, correo asociado a la cuenta, contraseña (almacenada de forma segura / no en texto plano usable), preferencias y permisos.</li>
+    <li><strong>Uso del servicio:</strong> consultas de códigos/correos que vos indicás, historial de actividad de tienda/licencias según tu plan, y registros técnicos necesarios para prestar el servicio.</li>
+    <li><strong>Sesión:</strong> cookies o tokens de sesión para mantener el inicio de sesión.</li>
+    <li><strong>App Android:</strong> token de notificaciones push (FCM), identificadores técnicos del dispositivo necesarios para enviar avisos, y datos de sesión si iniciás sesión en la app.</li>
+    <li><strong>Comunicaciones:</strong> si activás avisos (app, push, email u otros canales que configures), usamos esos datos solo para enviarte esas notificaciones.</li>
+  </ul>
+
+  <h2>3. Finalidades</h2>
+  <ul>
+    <li>Prestar el servicio de consulta de códigos, tienda, licencias y funciones relacionadas.</li>
+    <li>Autenticar usuarios, proteger la cuenta y prevenir abusos.</li>
+    <li>Enviar notificaciones que hayas habilitado (por ejemplo caducidad, recargas, avisos de tienda).</li>
+    <li>Mantener y mejorar la seguridad y el funcionamiento del sitio y la app.</li>
+    <li>Cumplir obligaciones legales cuando corresponda.</li>
+  </ul>
+
+  <h2>4. Base / naturaleza del tratamiento</h2>
+  <p>
+    Tratamos los datos porque son necesarios para ejecutar el servicio que solicitás
+    (cuenta y funciones contratadas/habilitadas) y, cuando aplica, porque vos activás
+    opciones concretas (por ejemplo notificaciones push o email).
+  </p>
+
+  <h2>5. Conservación</h2>
+  <p>
+    Conservamos la información mientras la cuenta esté activa y el tiempo adicional
+    que sea necesario para seguridad, resolución de incidentes o exigencias legales.
+    Podés solicitar el cierre o la revisión de tu cuenta mediante soporte.
+  </p>
+
+  <h2>6. Encargados y terceros</h2>
+  <p>
+    Podemos usar proveedores que ayudan a operar el servicio, por ejemplo:
+  </p>
+  <ul>
+    <li>Alojamiento del servidor y bases de datos.</li>
+    <li>Google Firebase Cloud Messaging (FCM) para notificaciones push en Android.</li>
+    <li>Servicios de correo o mensajería si están configurados en tu instalación.</li>
+  </ul>
+  <p>
+    Estos proveedores tratan datos solo en la medida necesaria para su función.
+    Google Play / Google también pueden tratar datos según sus propias políticas
+    cuando descargás o usás la app desde Play Store.
+  </p>
+
+  <h2>7. Seguridad</h2>
+  <p>
+    Aplicamos medidas razonables (cifrado en tránsito cuando usás HTTPS, control de acceso,
+    sesiones y buenas prácticas de servidor). Ningún sistema es 100&nbsp;% seguro;
+    te pedimos proteger tu usuario y contraseña.
+  </p>
+
+  <h2>8. Derechos</h2>
+  <p>
+    Según la legislación aplicable, podés solicitar acceso, rectificación, actualización
+    o eliminación de datos de tu cuenta, y oponerte a tratamientos opcionales
+    (por ejemplo desactivar notificaciones en la app o en tu panel).
+    Para ejercer estos derechos, contactá soporte desde el sitio o la app.
+  </p>
+
+  <h2>9. Menores</h2>
+  <p>
+    El servicio está dirigido a usuarios con capacidad para contratar/usar cuentas de este tipo.
+    No está pensado para niños. Si detectamos una cuenta indebida, podremos suspenderla.
+  </p>
+
+  <h2>10. Cambios</h2>
+  <p>
+    Podemos actualizar esta política. La fecha de “Última actualización” indica la versión vigente.
+    El uso continuado del sitio o la app tras un cambio relevante implica que tomaste conocimiento
+    de la nueva versión publicada en esta página.
+  </p>
+
+  <h2>11. Contacto</h2>
+  <p>
+    Para consultas sobre esta política, usá los canales de soporte del sitio o de la app.
+    {% if site_url %}
+    <br>Sitio: <a href="{{ site_url }}">{{ site_url }}</a>
+    {% endif %}
+  </p>
+</article>
+{% endblock %}

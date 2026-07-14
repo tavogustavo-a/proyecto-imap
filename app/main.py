@@ -132,6 +132,79 @@ def favicon():
         )
     return '', 404
 
+
+@main_bp.route('/privacidad', methods=['GET'])
+def privacy_policy():
+    """Política de privacidad genérica por proyecto (DOMINIO.txt / branding)."""
+    from datetime import date
+    from urllib.parse import urlparse
+
+    from flask import current_app
+
+    from branding_domain import brand_suffix_from_hostname, load_site_branding
+
+    def _is_public_host(hostname: str) -> bool:
+        h = (hostname or '').strip().lower().rstrip('.')
+        if not h:
+            return False
+        if h in ('localhost', '127.0.0.1', '0.0.0.0', '::1'):
+            return False
+        if h.startswith('127.') or h.endswith('.local'):
+            return False
+        # IPv4 literal
+        parts = h.split('.')
+        if len(parts) == 4 and all(p.isdigit() for p in parts):
+            return False
+        # Debe parecer dominio (tener un punto y empezar con letra)
+        if '.' not in h or not h[0].isalpha():
+            return False
+        return True
+
+    def _pretty_brand(suffix: str, host: str) -> str:
+        s = (suffix or '').strip().lower()
+        if s and not s.isdigit() and any(c.isalpha() for c in s):
+            return s[:1].upper() + s[1:]
+        if _is_public_host(host):
+            label = host.split('.')[0]
+            if label and label[0].isalpha() and not label.isdigit():
+                return label[:1].upper() + label[1:]
+        return 'esta plataforma'
+
+    branding = load_site_branding() or {}
+    site_url = (branding.get('site_url') or '').strip().rstrip('/')
+    host = (branding.get('hostname_no_www') or branding.get('hostname') or '').strip().lower()
+    brand_suffix = (branding.get('brand_suffix') or '').strip()
+
+    if not _is_public_host(host):
+        host = ''
+        site_url = ''
+        brand_suffix = ''
+        cfg_url = (current_app.config.get('PUBLIC_SITE_URL') or '').strip().rstrip('/')
+        try:
+            cfg_host = (urlparse(cfg_url).hostname or '').lower() if cfg_url else ''
+        except Exception:
+            cfg_host = ''
+        if _is_public_host(cfg_host):
+            host = cfg_host[4:] if cfg_host.startswith('www.') else cfg_host
+            site_url = cfg_url
+            brand_suffix = brand_suffix_from_hostname(host)
+
+    brand_name = _pretty_brand(brand_suffix, host)
+    if not _is_public_host(host):
+        host = ''
+        site_url = ''
+    elif site_url and not _is_public_host(urlparse(site_url).hostname or ''):
+        site_url = f'https://{host}'
+
+    return render_template(
+        'privacy_policy.html',
+        brand_name=brand_name,
+        brand_host=host,
+        site_url=site_url,
+        privacy_updated=date.today().isoformat(),
+    )
+
+
 @main_bp.route("/", methods=["GET"])
 def home():
     from flask import session, request

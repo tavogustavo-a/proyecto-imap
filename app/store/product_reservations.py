@@ -521,17 +521,18 @@ def _assign_one_unit_for_product(product, user, venta, sold_bloc_moves, cuentas_
         max_take = max(0, n_avail - reserve)
         if max_take <= 0:
             continue
-        account = avail_ordered[0]
-        _public_checkout_assign_license_account(
-            account,
-            license_row,
-            user,
-            venta,
-            product,
-            sold_bloc_moves,
-            cuentas_asignadas,
-        )
-        return account, license_row
+        for account in avail_ordered[:max_take]:
+            # False = otra compra concurrente la reclamó primero; probar la siguiente.
+            if _public_checkout_assign_license_account(
+                account,
+                license_row,
+                user,
+                venta,
+                product,
+                sold_bloc_moves,
+                cuentas_asignadas,
+            ):
+                return account, license_row
     return None, None
 
 

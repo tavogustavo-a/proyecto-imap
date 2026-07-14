@@ -431,14 +431,49 @@ def notify_balance_recharge_updated(
                 broadcast_admin=broadcast_admin,
                 origin_pid=origin_pid,
             ):
-                logger.warning(
-                    'SSE recargas: publish Redis falló en pid=%s; otros workers no verán el evento.',
-                    origin_pid,
+                # Reintentar en segundo plano: sin esto, los clientes SSE de otros
+                # workers se quedan sin el evento hasta recargar la página.
+                _schedule_redis_publish_retry(
+                    payload,
+                    user_id,
+                    broadcast_admin=broadcast_admin,
+                    origin_pid=origin_pid,
                 )
             return
         _local_deliver(payload, user_id, broadcast_admin=broadcast_admin)
     except Exception as exc:
         logger.warning('No se pudo publicar evento de recarga: %s', exc)
+
+
+def _schedule_redis_publish_retry(
+    payload: dict[str, Any],
+    user_id: int | None,
+    *,
+    broadcast_admin: bool,
+    origin_pid: int,
+) -> None:
+    """Reintenta el publish Redis fallido en un hilo daemon (1s y 5s)."""
+
+    def _retry() -> None:
+        for delay in (1.0, 5.0):
+            time.sleep(delay)
+            if _redis_publish_envelope(
+                payload,
+                user_id,
+                broadcast_admin=broadcast_admin,
+                origin_pid=origin_pid,
+            ):
+                return
+        logger.warning(
+            'SSE recargas: publish Redis falló (con reintentos) en pid=%s; '
+            'otros workers no verán el evento.',
+            origin_pid,
+        )
+
+    try:
+        threading.Thread(target=_retry, daemon=True).start()
+    except Exception as exc:
+        logger.warning('SSE recargas: no se pudo programar reintento Redis: %s', exc)
 
 
 def notify_from_recharge_row(
@@ -462,6 +497,15 @@ def notify_from_recharge_row(
     try:
         from app.store.store_event_notify import notify_balance_recharge_event
 
+        # Este commit debe persistir SOLO la notificación: el caller ya debió
+        # commitear su transacción. Si llegan objetos sucios ajenos, dejar rastro.
+        pending = len(db.session.dirty) + len(db.session.new) + len(db.session.deleted)
+        if pending:
+            logger.warning(
+                'notify_from_recharge_row: sesión con %s cambios pendientes ajenos '
+                'antes de crear la notificación (caller sin commit previo).',
+                pending,
+            )
         notify_balance_recharge_event(row, reason=reason)
         db.session.commit()
     except Exception as exc:
@@ -470,6 +514,34 @@ def notify_from_recharge_row(
             db.session.rollback()
         except Exception:
             pass
+
+
+def recharge_db_revision_token(user_id: int | None = None) -> str:
+    """
+    Revisión barata en BD para el fallback multi-worker sin Redis: si otro worker
+    procesó una recarga, el token cambia y el stream SSE emite un aviso en el
+    siguiente heartbeat (en vez de perder el evento).
+    """
+    try:
+        from sqlalchemy import func as sa_fn
+
+        from app.store.models import BalanceRecharge
+
+        # Cerrar la transacción anterior para leer datos frescos (stream de larga vida).
+        db.session.rollback()
+        q = db.session.query(
+            sa_fn.count(BalanceRecharge.id),
+            sa_fn.max(BalanceRecharge.id),
+            sa_fn.max(BalanceRecharge.created_at),
+            sa_fn.max(BalanceRecharge.reviewed_at),
+        )
+        if user_id is not None:
+            q = q.filter(BalanceRecharge.user_id == int(user_id))
+        row = q.first()
+        return '|'.join(str(x) for x in (row or ()))
+    except Exception as exc:
+        logger.debug('recharge_db_revision_token: %s', exc)
+        return ''
 
 
 def recharge_events_heartbeat_seconds() -> int:

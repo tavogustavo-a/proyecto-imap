@@ -24,6 +24,22 @@
     var userLicPortalDeferredRev = null;
     var userLicPortalRowAutosaveFlush = null;
     var userLicPortalRowAutosaveHasPending = null;
+    /* PUTs de fila en vuelo: mientras haya alguno, no aplicar re-render por portal_rev
+       (evita que un refresh SSE pise la edición cuyo guardado aún no confirmó el servidor). */
+    var userLicPortalRowSavesInFlight = 0;
+
+    function userLicPortalRowSaveFinished() {
+        userLicPortalRowSavesInFlight = Math.max(0, userLicPortalRowSavesInFlight - 1);
+        if (!userLicPortalRowSavesInFlight) {
+            window.setTimeout(function () {
+                try {
+                    userLicPortalTryCatchUpRevRefresh();
+                } catch (e) {
+                    /* noop */
+                }
+            }, 350);
+        }
+    }
     var userLicCaducidadNotifyTimer = null;
     var userLicCaducidadNotifyBarWired = false;
     var userLicCaducidadNotifyPrefsMem = {
@@ -278,6 +294,10 @@
         { v: 'error de contraseña', label: 'Error de contraseña' },
         { v: 'repetida', label: 'Repetida' },
         { v: 'otro', label: 'Otro' },
+        /* Solo badge cuando soporte marcó solucionada (no se ofrece al cliente). */
+        { v: 'solucionada', label: 'Solucionada', hidden: true },
+        /* Oculto: solo se muestra el badge cuando no hay stock de garantía. */
+        { v: 'pendiente garantia', label: 'Garantía', hidden: true },
     ];
 
     var USER_LICENSE_DAY_BAD_ACTION_NUEVA_CONTRASENA = '__user_nueva_contrasena__';
@@ -509,6 +529,12 @@
             var ov = opt.v != null ? String(opt.v) : '';
             var nk = normalizeStatusKey(ov);
             var sel = false;
+            if (opt.hidden === true) {
+                /* Campo oculto (p. ej. pendiente garantía): solo si ya es el valor actual. */
+                if (!(cur !== '' && (ov === cur || (nk === curKey && nk !== '')))) {
+                    return;
+                }
+            }
             if (cur === '' && ov === '') {
                 sel = true;
             } else if (cur !== '') {
@@ -585,20 +611,70 @@
     }
 
     function userLicBuenaRevisadaBadgeHtml(prevGoodRestore, prevBadRestore) {
+        /* Badge Buena: clic → vuelve a — (neutro), mismo flujo que Entregada. */
         return (
-            '<button type="button" class="user-lic-buena-revisada-badge license-split-editor__status license-split-editor__status-bad license-split-editor__status--tier-good" data-user-lic-prev-good="' +
+            '<span class="user-lic-buena-revisada-badge user-lic-buena-revisada-badge--clickable license-split-editor__status license-split-editor__status-bad license-split-editor__status--tier-good" data-user-lic-buena-badge="1" data-user-lic-prev-good="' +
             escAttr(prevGoodRestore || '') +
             '" data-user-lic-prev-bad="' +
             escAttr(prevBadRestore || '') +
-            '" title="Marcada por soporte. Pulsa para quitar «Buena» y volver al estado anterior (renovación y reporte).">' +
-            '<i class="fas fa-check-circle" aria-hidden="true"></i> Buena</button>'
+            '" role="button" tabindex="0" title="Clic para volver a — (neutro).">' +
+            '<i class="fas fa-check-circle" aria-hidden="true"></i> Buena</span>'
         );
+    }
+
+    function userLicGarantiaEntregadaBadgeHtml(prevGoodRestore, prevBadRestore) {
+        return (
+            '<span class="user-lic-garantia-entregada-badge user-lic-garantia-entregada-badge--clickable license-split-editor__status license-split-editor__status-bad license-split-editor__status--tier-good" data-user-lic-entregada-badge="1" data-user-lic-prev-good="' +
+            escAttr(prevGoodRestore || '') +
+            '" data-user-lic-prev-bad="' +
+            escAttr(prevBadRestore || '') +
+            '" role="button" tabindex="0" title="Garantía entregada. Clic para volver a — (neutro).">' +
+            '<i class="fas fa-shield-alt" aria-hidden="true"></i> Entregada</span>'
+        );
+    }
+
+    function userLicSolucionadaBadgeHtml() {
+        return (
+            '<span class="user-lic-solucionada-badge user-lic-solucionada-badge--portal user-lic-solucionada-badge--clickable license-split-editor__status license-split-editor__status-bad license-split-editor__status--tier-good" data-user-lic-solucionada-badge="1" role="button" tabindex="0" title="Solucionada. Clic para volver a — (neutro).">' +
+            '<i class="fas fa-check" aria-hidden="true"></i> Solucionada</span>'
+        );
+    }
+
+    function userLicFinishRevertSolucionada(row) {
+        if (!row) return;
+        var badShell = row.querySelector('.license-split-editor__status-select-shell--bad');
+        var badge = badShell && badShell.querySelector('.user-lic-solucionada-badge');
+        if (badge && badShell) {
+            var bid =
+                row.getAttribute('data-user-lic-bad-select-id') ||
+                'user-lic-sb-' + Date.now();
+            var sbSel = document.createElement('select');
+            sbSel.id = bid;
+            sbSel.name = bid;
+            sbSel.className =
+                'license-split-editor__status license-split-editor__status-bad license-split-editor__status--tier-neutral';
+            sbSel.setAttribute('autocomplete', 'off');
+            sbSel.setAttribute('aria-label', 'Reportar problema o incidencia');
+            sbSel.innerHTML = statusOptionsInnerHtml(OPT_LICENSE_BAD, '');
+            userLicAppendBadSelectActionOptions(sbSel);
+            badge.replaceWith(sbSel);
+        }
+        row.removeAttribute('data-user-lic-solucionada');
+        syncOtroShell(row);
+        applyDualTierUi(row);
+        userLicSyncRowSignalClasses(row);
+        var splitRoot = row.closest('.day-license-split-root');
+        if (splitRoot) userLicSyncDayBundleCredsStripes(splitRoot);
     }
 
     function userLicFinishRevertBuenaRevisada(row, sgRestored, sbRestored) {
         if (!row) return;
         var badShell = row.querySelector('.license-split-editor__status-select-shell--bad');
-        var badge = badShell && badShell.querySelector('.user-lic-buena-revisada-badge');
+        var badge =
+            badShell &&
+            badShell.querySelector(
+                '.user-lic-buena-revisada-badge, .user-lic-garantia-entregada-badge'
+            );
         var goodSel = row.querySelector('select.license-split-editor__status-good');
         if (badge && badShell) {
             var bid =
@@ -623,6 +699,7 @@
             goodSel.innerHTML = statusOptionsInnerHtml(OPT_LICENSE_GOOD, sgRestored || '');
         }
         row.removeAttribute('data-user-lic-buena-revisada');
+        row.removeAttribute('data-user-lic-warranty-entregada');
         if (sgRestored) {
             row.setAttribute('data-user-lic-saved-good', sgRestored);
         }
@@ -667,6 +744,7 @@
                     ? persistOpts
                     : { statusGoodOverride: persistOpts };
             var revertBuenaRevisada = opts.revertBuenaRevisada === true;
+            var revertSolucionada = opts.revertSolucionada === true;
             var lid = Number(row.getAttribute('data-lic-row-license-id'));
             var dayNum = Number(row.getAttribute('data-lic-row-day'));
             var ordinal = Number(row.getAttribute('data-lic-row-ordinal'));
@@ -676,12 +754,20 @@
             var sbEl = row.querySelector('select.license-split-editor__status-bad');
             var otEl = row.querySelector('.license-split-editor__otro-combined');
             var isBuenaRow = row.getAttribute('data-user-lic-buena-revisada') === '1';
+            var isSolucionadaRow = row.getAttribute('data-user-lic-solucionada') === '1';
             if (!Number.isFinite(lid) || lid <= 0 || !Number.isFinite(dayNum) || !Number.isFinite(ordinal)) {
                 return;
             }
             if (revertBuenaRevisada) {
-                if (!row.querySelector('.user-lic-buena-revisada-badge')) return;
-            } else if (!isBuenaRow && !sbEl) {
+                if (
+                    !row.querySelector(
+                        '.user-lic-buena-revisada-badge, .user-lic-garantia-entregada-badge'
+                    )
+                )
+                    return;
+            } else if (revertSolucionada) {
+                if (!row.querySelector('.user-lic-solucionada-badge')) return;
+            } else if (!isBuenaRow && !isSolucionadaRow && !sbEl) {
                 return;
             }
             var statusGoodVal = '';
@@ -721,6 +807,23 @@
             };
             if (isBuenaRow && !revertBuenaRevisada) {
                 payload.preserve_buena_revisada = true;
+            } else if (isSolucionadaRow && !revertSolucionada) {
+                payload.preserve_solucionada = true;
+                if (
+                    statusGoodVal &&
+                    normalizeStatusKey(statusGoodVal) !== normalizeStatusKey('ok')
+                ) {
+                    payload.status_good = statusGoodVal;
+                }
+            } else if (revertSolucionada) {
+                payload.revert_solucionada = true;
+                payload.status_bad = '';
+                if (
+                    statusGoodVal &&
+                    normalizeStatusKey(statusGoodVal) !== normalizeStatusKey('ok')
+                ) {
+                    payload.status_good = statusGoodVal;
+                }
             } else if (
                 !revertBuenaRevisada &&
                 statusGoodVal &&
@@ -732,7 +835,9 @@
                 var canonRevertGood = userLicCanonicalPortalGood(statusGoodVal);
                 if (canonRevertGood) payload.status_good = canonRevertGood;
                 var prevBadAttr = row.getAttribute('data-user-lic-prev-bad') || '';
-                var badgeEl = row.querySelector('.user-lic-buena-revisada-badge');
+                var badgeEl = row.querySelector(
+                    '.user-lic-buena-revisada-badge, .user-lic-garantia-entregada-badge'
+                );
                 if (!prevBadAttr && badgeEl) {
                     prevBadAttr = badgeEl.getAttribute('data-user-lic-prev-bad') || '';
                 }
@@ -743,6 +848,7 @@
                 payload.status_good = statusGoodVal;
             }
 
+            userLicPortalRowSavesInFlight += 1;
             fetch(patchUrl, {
                 method: 'PUT',
                 headers: userLicJsonHeaders(),
@@ -766,13 +872,16 @@
                         });
                 })
                 .then(function (res) {
-                    var badgePending = row.querySelector('.user-lic-buena-revisada-badge');
+                    userLicPortalRowSaveFinished();
+                    var badgePending = row.querySelector(
+                        '.user-lic-buena-revisada-badge, .user-lic-garantia-entregada-badge'
+                    );
                     if (badgePending) {
                         badgePending.disabled = false;
                         badgePending.classList.remove('user-lic-buena-revisada-badge--pending');
                     }
                     if (res.ok && res.data && res.data.success) {
-                        if (revertBuenaRevisada || badgePending) {
+                        if (revertBuenaRevisada) {
                             var sgRestored =
                                 (res.data && res.data.green_select_value
                                     ? String(res.data.green_select_value).trim()
@@ -791,6 +900,8 @@
                                     badgePending.getAttribute('data-user-lic-prev-bad') || '';
                             }
                             userLicFinishRevertBuenaRevisada(row, sgRestored, sbRestored);
+                        } else if (revertSolucionada) {
+                            userLicFinishRevertSolucionada(row);
                         } else {
                             var greenSaved =
                                 res.data && res.data.green_select_value != null
@@ -832,7 +943,10 @@
                     }
                 })
                 .catch(function () {
-                    var badgeErr = row.querySelector('.user-lic-buena-revisada-badge');
+                    userLicPortalRowSaveFinished();
+                    var badgeErr = row.querySelector(
+                        '.user-lic-buena-revisada-badge, .user-lic-garantia-entregada-badge'
+                    );
                     if (badgeErr) {
                         badgeErr.disabled = false;
                         badgeErr.classList.remove('user-lic-buena-revisada-badge--pending');
@@ -882,29 +996,6 @@
                 }
             });
         }
-
-        rootEl.addEventListener(
-            'click',
-            function (ev) {
-                var badge = ev.target.closest('.user-lic-buena-revisada-badge');
-                if (!badge || badge.disabled) return;
-                var row = badge.closest('.user-lic-license-row-edit');
-                if (!row || !rootEl.contains(row)) return;
-                ev.preventDefault();
-                ev.stopPropagation();
-                badge.disabled = true;
-                badge.classList.add('user-lic-buena-revisada-badge--pending');
-                var sgKeep =
-                    userLicCanonicalPortalGood(badge.getAttribute('data-user-lic-prev-good')) ||
-                    userLicCanonicalPortalGood(row.getAttribute('data-user-lic-saved-good')) ||
-                    '';
-                persistRow(row, {
-                    revertBuenaRevisada: true,
-                    statusGoodOverride: sgKeep || undefined,
-                });
-            },
-            true
-        );
 
         rootEl.addEventListener(
             'change',
@@ -958,6 +1049,54 @@
                 if (ev.target.classList.contains('user-lic-note-client')) {
                     schedulePersist(row);
                 }
+            },
+            true
+        );
+
+        rootEl.addEventListener(
+            'click',
+            function (ev) {
+                var badgeSol = ev.target.closest('.user-lic-solucionada-badge--clickable');
+                if (badgeSol && rootEl.contains(badgeSol)) {
+                    var rowSol = badgeSol.closest('.user-lic-license-row-edit');
+                    if (!rowSol) return;
+                    ev.preventDefault();
+                    ev.stopPropagation();
+                    persistRow(rowSol, { revertSolucionada: true });
+                    return;
+                }
+                var badge = ev.target.closest(
+                    '.user-lic-buena-revisada-badge--clickable, .user-lic-garantia-entregada-badge--clickable'
+                );
+                if (!badge || !rootEl.contains(badge)) return;
+                var row = badge.closest('.user-lic-license-row-edit');
+                if (!row) return;
+                ev.preventDefault();
+                ev.stopPropagation();
+                var prevGood =
+                    badge.getAttribute('data-user-lic-prev-good') ||
+                    row.getAttribute('data-user-lic-saved-good') ||
+                    '';
+                persistRow(row, {
+                    revertBuenaRevisada: true,
+                    statusGoodOverride: prevGood,
+                });
+            },
+            true
+        );
+
+        rootEl.addEventListener(
+            'keydown',
+            function (ev) {
+                if (ev.key !== 'Enter' && ev.key !== ' ') return;
+                var badge =
+                    ev.target.closest('.user-lic-solucionada-badge--clickable') ||
+                    ev.target.closest(
+                        '.user-lic-buena-revisada-badge--clickable, .user-lic-garantia-entregada-badge--clickable'
+                    );
+                if (!badge || !rootEl.contains(badge)) return;
+                ev.preventDefault();
+                badge.click();
             },
             true
         );
@@ -1044,10 +1183,23 @@
         var curOd = row.otro_detail != null ? String(row.otro_detail).trim() : '';
         var isGarantia = normalizeStatusKey(curSg) === normalizeStatusKey('garantia');
         var isWarrantyPending = row.warranty_pending === true;
+        var isWarrantyEntregada =
+            !isGarantia &&
+            !isWarrantyPending &&
+            row.warranty_entregada === true;
+        var isSolucionada =
+            !isGarantia &&
+            !isWarrantyPending &&
+            !isWarrantyEntregada &&
+            (row.solucionada === true ||
+                normalizeStatusKey(curSb) === normalizeStatusKey('solucionada'));
         var isBuenaRevisada =
             !isGarantia &&
             !isWarrantyPending &&
+            !isWarrantyEntregada &&
+            !isSolucionada &&
             (row.buena_revisada_readonly === true || normalizeStatusKey(curSg) === normalizeStatusKey('ok'));
+        var isOkBadgeRow = isBuenaRevisada || isWarrantyEntregada;
         var prevGoodRestore =
             row.prev_good_restore != null ? String(row.prev_good_restore).trim() : '';
         var prevBadRestore =
@@ -1055,12 +1207,12 @@
         var greenFromApi =
             row.green_select_value != null ? String(row.green_select_value).trim() : '';
 
-        var goodSelectValue = isBuenaRevisada
+        var goodSelectValue = isOkBadgeRow
             ? greenFromApi || prevGoodRestore
             : greenFromApi || curSg;
         var gTier = isGarantia
             ? 'good'
-            : isBuenaRevisada
+            : isOkBadgeRow
               ? String(goodSelectValue || '').trim()
                   ? 'good'
                   : 'neutral'
@@ -1117,10 +1269,10 @@
                   gid +
                   '" class="license-split-editor__status license-split-editor__status-good license-split-editor__status--tier-' +
                   gTier +
-                  (isBuenaRevisada ? ' user-lic-status-good--buena-locked' : '') +
+                  (isOkBadgeRow ? ' user-lic-status-good--buena-locked' : '') +
                   '" autocomplete="off" aria-label="Estado favorable (renovación)"' +
-                  (isBuenaRevisada
-                      ? ' disabled aria-disabled="true" title="Renovación guardada. Pulsa «Buena» en la columna de reportes para editar."'
+                  (isOkBadgeRow
+                      ? ' disabled aria-disabled="true" title="Renovación guardada. Soporte confirmó el estado (Buena / Entregada)."'
                       : renewalPendingLockAttrs) +
                   '>' +
                   statusOptionsInnerHtml(userLicPortalGoodOptionsForLicense(lm), goodSelectValue) +
@@ -1161,10 +1313,12 @@
             ' data-lic-row-ordinal="' +
             escAttr(String(ordStored)) +
             '"' +
-            (isBuenaRevisada ? ' data-user-lic-buena-revisada="1"' : '') +
+            (isBuenaRevisada || isWarrantyEntregada ? ' data-user-lic-buena-revisada="1"' : '') +
+            (isWarrantyEntregada ? ' data-user-lic-warranty-entregada="1"' : '') +
+            (isSolucionada ? ' data-user-lic-solucionada="1"' : '') +
             (renewalPending ? ' data-user-lic-renewal-pending="1"' : '') +
             ' data-user-lic-saved-good="' +
-            escAttr(isBuenaRevisada ? prevGoodRestore : goodSelectValue || curSg) +
+            escAttr(isOkBadgeRow ? prevGoodRestore : goodSelectValue || curSg) +
             '"' +
             ' data-user-lic-bad-select-id="' +
             escAttr(bid) +
@@ -1188,8 +1342,12 @@
             (isWarrantyPending ? ' license-split-editor__status-select-shell--warranty-pending' : '') +
             '">' +
             (isWarrantyPending
-                ? '<span class="user-lic-warranty-pending-badge license-split-editor__status license-split-editor__status-bad" title="Soporte recibió tu reporte: pendiente de stock de garantía.">' +
-                  '<i class="fas fa-hourglass-half" aria-hidden="true"></i> Pendiente garantía</span>'
+                ? '<span class="user-lic-warranty-pending-badge" data-lic-pendiente-garantia="1" title="Soporte recibió tu reporte: pendiente de stock de garantía.">' +
+                  '<i class="fas fa-hourglass-half" aria-hidden="true"></i> Garantía</span>'
+                : isWarrantyEntregada
+                ? userLicGarantiaEntregadaBadgeHtml(prevGoodRestore, prevBadRestore)
+                : isSolucionada
+                ? userLicSolucionadaBadgeHtml()
                 : isBuenaRevisada
                 ? userLicBuenaRevisadaBadgeHtml(prevGoodRestore, prevBadRestore)
                 : '<select id="' +
@@ -2591,6 +2749,7 @@
 
     function userLicPortalCanApplyPortalRevRefresh() {
         if (userLicPortalIsProveedorDirty()) return false;
+        if (userLicPortalRowSavesInFlight > 0) return false;
         if (userLicPortalRowAutosaveHasPending && userLicPortalRowAutosaveHasPending()) return false;
         var ae = document.activeElement;
         if (ae && ae.closest && ae.closest('.user-lic-license-row-edit')) return false;
@@ -2716,7 +2875,13 @@
 
     function userLicRowSignalClassFromDom(rowEl) {
         if (!rowEl) return '';
-        if (rowEl.querySelector('.user-lic-buena-revisada-badge')) return 'user-lic-row--signal-buena';
+        if (
+            rowEl.querySelector(
+                '.user-lic-buena-revisada-badge, .user-lic-garantia-entregada-badge'
+            )
+        ) {
+            return 'user-lic-row--signal-buena';
+        }
         if (rowEl.querySelector('.user-lic-garantia-badge')) return 'user-lic-row--signal-garantia';
         if (rowEl.querySelector('.user-lic-warranty-pending-badge')) {
             return 'user-lic-row--signal-pendiente-garantia';
@@ -2809,17 +2974,31 @@
 
     function userLicRowIsBuena(row) {
         if (!row || userLicRowIsGarantia(row) || userLicRowIsWarrantyPending(row)) return false;
+        if (row.warranty_entregada === true) return true;
         if (row.buena_revisada_readonly === true) return true;
         return normalizeStatusKey(row.status_good || '') === normalizeStatusKey('ok');
     }
 
     function userLicRowIsReporte(row) {
-        if (!row || userLicRowIsBuena(row) || userLicRowIsGarantia(row) || userLicRowIsWarrantyPending(row)) {
+        if (
+            !row ||
+            userLicRowIsBuena(row) ||
+            userLicRowIsGarantia(row) ||
+            userLicRowIsWarrantyPending(row) ||
+            row.solucionada === true
+        ) {
             return false;
         }
         if (row.tier_bad === 'bad') return true;
         var sb = String(row.status_bad != null ? row.status_bad : '').trim();
-        if (!sb || sb.indexOf('__prev_good:') === 0 || sb.indexOf('__') === 0) return false;
+        if (
+            !sb ||
+            sb.indexOf('__prev_good:') === 0 ||
+            sb.indexOf('__') === 0 ||
+            normalizeStatusKey(sb) === normalizeStatusKey('solucionada')
+        ) {
+            return false;
+        }
         return normalizeStatusKey(sb) !== '';
     }
 
@@ -2855,7 +3034,7 @@
         }
         if (counts.pendienteGarantia > 0) {
             parts.push(
-                '<span class="user-lic-day-cnt-badge user-lic-day-cnt-badge--pendiente-garantia" role="status" aria-live="polite">pendiente garantía ' +
+                '<span class="user-lic-day-cnt-badge user-lic-day-cnt-badge--pendiente-garantia" role="status" aria-live="polite">pendiente ' +
                     String(counts.pendienteGarantia) +
                     '</span>'
             );
@@ -5042,7 +5221,31 @@
         var badge = document.getElementById('userLicReportesTotalBadge');
         var numEl = badge ? badge.querySelector('.license-card-report-total-badge__num') : null;
         if (numEl) numEl.textContent = String(n);
-        if (badge) badge.hidden = n <= 0;
+        if (badge) {
+            badge.hidden = n <= 0;
+            if (n > 0) {
+                var tt =
+                    n === 1
+                        ? '1 reporte pendiente'
+                        : n + ' reportes pendientes';
+                badge.title = tt;
+                badge.setAttribute('aria-label', tt);
+            } else {
+                badge.removeAttribute('title');
+                badge.setAttribute('aria-label', 'Sin reportes pendientes');
+            }
+        }
+        var btn = document.querySelector('.user-lic-license-card--reportes');
+        if (btn) {
+            var base =
+                n > 0
+                    ? n === 1
+                        ? 'Reportes: 1 incidencia — ver lista'
+                        : 'Reportes: ' + n + ' incidencias — ver lista'
+                    : 'Reportes: incidencias en tus licencias asignadas';
+            btn.title = base;
+            btn.setAttribute('aria-label', base);
+        }
     }
 
     function userLicRenderReportesTableSection(outer, tableBody, metaEl, rows, q, emptyLabel, oneLabel, manyLabel, emptyRowHtml) {
@@ -5185,10 +5388,10 @@
                     ' aria-expanded="false" aria-controls="userLicReportesPanel"' +
                     ' aria-label="Reportes: incidencias en tus licencias asignadas">' +
                     '<div class="license-card-header">' +
-                    '<h3 class="license-name"><span class="full-text">Reportes' +
+                    '<h3 class="license-name"><span class="full-text">Reportes</span>' +
+                    '<span class="first-letter">R</span>' +
                     '<span id="userLicReportesTotalBadge" class="license-card-report-total-badge" hidden role="status" aria-live="polite">' +
-                    '<span class="license-card-report-total-badge__num">0</span></span></span>' +
-                    '<span class="first-letter">R</span></h3>' +
+                    '<span class="license-card-report-total-badge__num">0</span></span></h3>' +
                     '</div></button>'
             );
         }

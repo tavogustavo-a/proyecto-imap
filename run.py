@@ -166,6 +166,24 @@ def start_scheduler_if_needed():
                 )
 
                 _scheduler.add_job(
+                    func=license_warranty_auto_deliver_job,
+                    trigger='interval',
+                    minutes=1,
+                    id='license_warranty_auto_deliver',
+                    replace_existing=True,
+                    next_run_time=datetime.now(timezone.utc) + timedelta(seconds=90),
+                )
+
+                _scheduler.add_job(
+                    func=release_stale_renewal_reservations_job,
+                    trigger='interval',
+                    minutes=2,
+                    id='release_stale_renewal_reservations',
+                    replace_existing=True,
+                    next_run_time=datetime.now(timezone.utc) + timedelta(seconds=120),
+                )
+
+                _scheduler.add_job(
                     func=hourly_sqlite_backup_job,
                     trigger='interval',
                     hours=1,
@@ -935,6 +953,39 @@ def license_day_renewal_midnight_job():
             app.logger.warning("Licencias renovación día (medianoche CO): %s", e)
 
 
+def license_warranty_auto_deliver_job():
+    """Cada minuto: si hay stock gar. con ≥5 min, entrega pendientes de garantía."""
+    with app.app_context():
+        try:
+            from app.store.license_warranty_auto_deliver_job import (
+                run_license_warranty_auto_deliver_pipeline,
+            )
+
+            r = run_license_warranty_auto_deliver_pipeline()
+            if r.get('delivered'):
+                app.logger.info(
+                    "Garantía auto-entrega: delivered=%s scanned=%s",
+                    r.get('delivered', 0),
+                    r.get('scanned_lines', 0),
+                )
+        except Exception as e:
+            db.session.rollback()
+            app.logger.warning("Garantía auto-entrega: %s", e)
+
+
+def release_stale_renewal_reservations_job():
+    """Cada 2 min: libera reservas de renovación vencidas (carritos abandonados),
+    para que no dependa de que algún endpoint dispare la limpieza."""
+    with app.app_context():
+        try:
+            from app.store.routes import _renewal_release_stale_reservations
+
+            _renewal_release_stale_reservations()
+        except Exception as e:
+            db.session.rollback()
+            app.logger.warning("Liberar reservas renovación vencidas: %s", e)
+
+
 def sync_month_to_month_changes_midnight_job():
     """Alias: misma tubería que license_day_renewal_midnight_job (compatibilidad)."""
     license_day_renewal_midnight_job()
@@ -1077,6 +1128,24 @@ def main():
             id='license_day_renewal_midnight',
             replace_existing=True,
             timezone=ZoneInfo('America/Bogota'),
+        )
+
+        scheduler.add_job(
+            func=license_warranty_auto_deliver_job,
+            trigger='interval',
+            minutes=1,
+            id='license_warranty_auto_deliver',
+            replace_existing=True,
+            next_run_time=datetime.now(timezone.utc) + timedelta(seconds=90),
+        )
+
+        scheduler.add_job(
+            func=release_stale_renewal_reservations_job,
+            trigger='interval',
+            minutes=2,
+            id='release_stale_renewal_reservations',
+            replace_existing=True,
+            next_run_time=datetime.now(timezone.utc) + timedelta(seconds=120),
         )
 
         scheduler.add_job(

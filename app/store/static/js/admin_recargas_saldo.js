@@ -3522,13 +3522,21 @@
           : it.mult_cop_to_usd;
     var mult = fmtMultiplier(multRaw);
     var multPart = mult && mult !== '—' ? 'x' + escapeHtml(mult) + '→ ' : '→ ';
+    var pendingPart = '';
+    if (Number(it.pending_auto_total) > 0) {
+      pendingPart =
+        ' <span class="text-muted" title="Recargas auto-acumuladas sin verificar: el cliente ya las ve en su total, pero no se convierten hasta confirmarlas.">(+' +
+        escapeHtml(fmtAccumSourceInline(it.pending_auto_total, it.payment_currency)) +
+        ' sin verificar)</span>';
+    }
     return (
       '<span class="admin-pm-accum-preview">' +
       escapeHtml(fmtAccumSourceInline(it.total_accumulated, it.payment_currency)) +
       multPart +
       '<strong>' +
       escapeHtml(fmtAccumAmount(it.preview_credit, it.preview_credit_currency)) +
-      '</strong></span>'
+      '</strong></span>' +
+      pendingPart
     );
   }
 
@@ -3552,7 +3560,8 @@
     'Convierte el saldo acumulado al tipo de moneda del usuario y lo acredita en su cuenta. ¿Continuar?';
 
   function renderAccumConvertButton(it) {
-    var convertDisabled = it.preview_error ? ' disabled' : '';
+    var noConfirmed = !(Number(it.total_accumulated) > 0);
+    var convertDisabled = it.preview_error || noConfirmed ? ' disabled' : '';
     return (
       '<button type="button" class="btn-panel btn-green btn-sm admin-pm-accum-convert admin-pm-accum-convert--icon"' +
       ' title="' +

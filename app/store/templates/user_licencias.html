@@ -4,7 +4,28 @@
 
 {% block head %}
   {{ super() }}
-  <link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}?v=20260711-vibrate-sound">
+{% endblock %}
+{% block page_styles %}
+  {{ super() }}
+  <link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}?v={{ licencias_static_version }}">
+  <style>
+    /* Portal usuario: mismo «Garantía» amarillo pintado que admin (solo icono + texto) */
+    .admin-licencias-page.user-licencias-shell .user-lic-warranty-pending-badge,
+    .admin-licencias-page.user-licencias-shell .user-lic-warranty-pending-badge[data-lic-pendiente-garantia='1'] {
+      color: #111827 !important;
+      -webkit-text-fill-color: #111827 !important;
+      background: #eab308 !important;
+      border: none !important;
+      box-shadow: none !important;
+      font-weight: 700;
+    }
+    .admin-licencias-page.user-licencias-shell .user-lic-warranty-pending-badge .fa-hourglass-half,
+    .admin-licencias-page.user-licencias-shell .user-lic-warranty-pending-badge > .fas {
+      color: #111827 !important;
+      -webkit-text-fill-color: #111827 !important;
+      background: transparent !important;
+    }
+  </style>
 {% endblock %}
 
 {% macro format_license_price_num(n) -%}
@@ -251,6 +272,6 @@
 {% block scripts %}
 {{ super() }}
 <script src="{{ url_for('static', filename='js/menu_busqueda.js') }}" defer></script>
-<script src="{{ url_for('store_bp.static', filename='js/licencias_shared.js') }}?v=20260711-vibrate-sound" defer></script>
-  <script src="{{ url_for('store_bp.static', filename='js/user_licencias.js') }}?v=20260711-vibrate-sound" defer></script>
+<script src="{{ url_for('store_bp.static', filename='js/licencias_shared.js') }}?v={{ licencias_static_version }}" defer></script>
+  <script src="{{ url_for('store_bp.static', filename='js/user_licencias.js') }}?v={{ licencias_static_version }}" defer></script>
 {% endblock %}

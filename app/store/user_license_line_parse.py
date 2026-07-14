@@ -12,6 +12,7 @@ from typing import Any, Dict, List, Optional, Tuple
 LICENSE_LINE_FIELD_SEP = '\x1f'
 PREV_GOOD_BAD_PREFIX = '__prev_good:'
 WARRANTY_PENDING_BAD_PREFIX = '__warranty_pending:'
+WARRANTY_ENTREGADA_BAD_PREFIX = '__warranty_entregada:'
 PORTAL_GREEN_EXTRA_PREFIX = '_u_green:'
 PORTAL_BAD_EXTRA_PREFIX = '_u_bad:'
 AUTO_MES_EXTRA_PREFIX = '_auto_mes:'
@@ -41,6 +42,8 @@ OPTIONS_BAD_VALUES = [
     'caida',
     'suspendida',
     'repetida',
+    'pendiente garantia',
+    'solucionada',
 ]
 
 
@@ -93,8 +96,27 @@ def _canonical_status_from_stored(st: str) -> str:
     return raw
 
 
+# Incidencias rojas (reportes). «solucionada» / pendiente garantía no cuentan como reporte.
+_STATUS_BAD_REPORT_KEYS = {
+    normalize_status_key(x)
+    for x in (
+        'caida o suspendida',
+        'no reproduce',
+        'error de contraseña',
+        'otro',
+        'caida',
+        'suspendida',
+        'repetida',
+    )
+    if x
+}
 ADMIN_LICENSE_STATUS_GOOD_KEYS = {normalize_status_key(x) for x in OPTIONS_GOOD_VALUES if x}
-ADMIN_LICENSE_STATUS_BAD_KEYS = {normalize_status_key(x) for x in OPTIONS_BAD_VALUES if x}
+ADMIN_LICENSE_STATUS_BAD_KEYS = set(_STATUS_BAD_REPORT_KEYS)
+SOLUCIONADA_STATUS_KEY = normalize_status_key('solucionada')
+
+
+def is_solucionada_status(status_bad: Any) -> bool:
+    return normalize_status_key(status_bad) == SOLUCIONADA_STATUS_KEY
 
 
 def admin_license_status_tier_from_stored(status_text: Optional[str]) -> str:
@@ -106,6 +128,8 @@ def admin_license_status_tier_from_stored(status_text: Optional[str]) -> str:
         return 'bad'
     if k in ADMIN_LICENSE_STATUS_GOOD_KEYS:
         return 'good'
+    if k == SOLUCIONADA_STATUS_KEY:
+        return 'solucionada'
     if k in ADMIN_LICENSE_STATUS_BAD_KEYS:
         return 'bad'
     return 'neutral'
@@ -120,11 +144,19 @@ def unpack_prev_good_from_bad_segment(bad_raw: str) -> Tuple[str, str]:
         prev = s[len(PREV_GOOD_BAD_PREFIX) :].strip()
         prev = _canonical_good_from_stored(prev) or prev
         return '', prev
+    if s.startswith(WARRANTY_ENTREGADA_BAD_PREFIX):
+        prev = s[len(WARRANTY_ENTREGADA_BAD_PREFIX) :].strip()
+        prev = _canonical_good_from_stored(prev) or prev
+        return '', prev
     return s, ''
 
 
 def is_warranty_pending_bad(bad_raw: Any) -> bool:
     return str(bad_raw or '').strip().startswith(WARRANTY_PENDING_BAD_PREFIX)
+
+
+def is_warranty_entregada_bad(bad_raw: Any) -> bool:
+    return str(bad_raw or '').strip().startswith(WARRANTY_ENTREGADA_BAD_PREFIX)
 
 
 def unpack_warranty_pending_from_bad(bad_raw: str) -> Tuple[str, str]:
@@ -135,6 +167,16 @@ def unpack_warranty_pending_from_bad(bad_raw: str) -> Tuple[str, str]:
     return '', s
 
 
+def unpack_warranty_entregada_from_bad(bad_raw: str) -> Tuple[str, str]:
+    """Devuelve (visible_bad vacío, prev_good). Solo si el segmento es garantía entregada."""
+    s = str(bad_raw or '').strip()
+    if not is_warranty_entregada_bad(s):
+        return s, ''
+    prev = s[len(WARRANTY_ENTREGADA_BAD_PREFIX) :].strip()
+    prev = _canonical_good_from_stored(prev) or prev
+    return '', prev
+
+
 def pack_warranty_pending_bad(status_bad: str = '') -> str:
     raw = str(status_bad or '').strip()
     if is_warranty_pending_bad(raw):
@@ -143,6 +185,17 @@ def pack_warranty_pending_bad(status_bad: str = '') -> str:
         return WARRANTY_PENDING_BAD_PREFIX + 'caida o suspendida'
     canon = _canonical_bad_from_stored(raw) or raw
     return WARRANTY_PENDING_BAD_PREFIX + canon
+
+
+def pack_warranty_entregada_bad(prev_good: str = '') -> str:
+    """Marca fila «ok» como garantía entregada (badge Entregada), con verde previo opcional."""
+    pg = str(prev_good or '').strip()
+    if pg and normalize_status_key(pg) == 'ok':
+        pg = ''
+    if not pg:
+        return WARRANTY_ENTREGADA_BAD_PREFIX
+    canon = _canonical_good_from_stored(pg) or pg
+    return WARRANTY_ENTREGADA_BAD_PREFIX + canon
 
 
 def pack_prev_good_bad_segment(prev_good: str) -> str:
@@ -166,10 +219,15 @@ def parse_bad_stored_segment(bad_raw: str) -> Dict[str, str]:
 
 def dual_from_stored_segments(cred: str, user: str, good_raw: str, bad_raw: str, extra: str) -> Dict[str, Any]:
     packed_pending = ''
+    warranty_entregada = False
     raw_bad = str(bad_raw or '').strip()
     if is_warranty_pending_bad(raw_bad):
         packed_pending = raw_bad
         visible_bad, prev_good = '', ''
+        bp = {'selValue': '', 'otroDetail': ''}
+    elif is_warranty_entregada_bad(raw_bad):
+        warranty_entregada = True
+        visible_bad, prev_good = unpack_warranty_entregada_from_bad(raw_bad)
         bp = {'selValue': '', 'otroDetail': ''}
     else:
         visible_bad, prev_good = unpack_prev_good_from_bad_segment(bad_raw)
@@ -185,11 +243,12 @@ def dual_from_stored_segments(cred: str, user: str, good_raw: str, bad_raw: str,
         'extra': (extra or '').strip(),
         'prevGoodRestore': prev_good,
         'warrantyPendingPacked': packed_pending,
+        'warrantyEntregada': warranty_entregada,
     }
 
 
 def effective_bad_for_tier(status_bad: str, otro_detail: str) -> str:
-    if is_warranty_pending_bad(status_bad):
+    if is_warranty_pending_bad(status_bad) or is_warranty_entregada_bad(status_bad):
         return ''
     visible_bad, _prev = unpack_prev_good_from_bad_segment(status_bad)
     sv = str(visible_bad or '').strip()
@@ -220,20 +279,20 @@ def dual_to_storage_line(dual: Dict[str, Any]) -> str:
     else:
         bad_seg = effective_bad_for_tier(sb_sel, od)
         if normalize_status_key(sg) == 'ok':
-            prev_bad_save = str(dual.get('prevBadRestore') or '').strip()
-            if not prev_bad_save:
-                prev_bad_save = effective_bad_for_tier(sb_sel, od)
-            if not prev_bad_save:
-                prev_bad_save = portal_bad_from_extra(extra)
+            # «Buena» / «Entregada»: se quita el reporte; no re-embeber _u_bad para deshacer.
             prev_pack = str(dual.get('prevGoodRestore') or '').strip()
             if not prev_pack:
                 _, prev_pack = unpack_prev_good_from_bad_segment(bad_seg)
             if not prev_pack:
                 prev_pack = portal_green_from_extra(extra)
-            packed_prev = pack_prev_good_bad_segment(prev_pack)
-            bad_seg = packed_prev if packed_prev else ''
-            if prev_bad_save:
-                extra = portal_bad_embed_in_extra(extra, prev_bad_save)
+            if dual.get('warrantyEntregada') or is_warranty_entregada_bad(sb_sel) or is_warranty_entregada_bad(
+                str(dual.get('statusBad') or '')
+            ):
+                bad_seg = pack_warranty_entregada_bad(prev_pack)
+            else:
+                packed_prev = pack_prev_good_bad_segment(prev_pack)
+                bad_seg = packed_prev if packed_prev else ''
+            extra = portal_strip_bad_from_extra(extra)
     green_tag = ''
     if normalize_status_key(sg) == 'ok':
         green_tag = str(dual.get('prevGoodRestore') or '').strip() or portal_green_from_extra(extra)
@@ -466,6 +525,8 @@ def validate_portal_user_status_values(
     visible_sb, _prev_sb = unpack_prev_good_from_bad_segment(sb_req)
     nk_sb = normalize_status_key(visible_sb) if visible_sb else ''
     if visible_sb:
+        if nk_sb == SOLUCIONADA_STATUS_KEY:
+            raise ValueError('Solo soporte puede marcar «Solucionada».')
         if nk_sb == 'otro':
             canon_sb = 'otro'
         else:
@@ -564,7 +625,13 @@ def _prev_good_restore_from_dual(dual: Dict[str, Any]) -> str:
     prev = str(dual.get('prevGoodRestore') or '').strip()
     if prev:
         return prev
-    _, prev = unpack_prev_good_from_bad_segment(str(dual.get('statusBad') or ''))
+    sb = str(dual.get('statusBad') or '').strip()
+    if is_warranty_entregada_bad(sb):
+        _, prev = unpack_warranty_entregada_from_bad(sb)
+        prev = str(prev or '').strip()
+        if prev:
+            return prev
+    _, prev = unpack_prev_good_from_bad_segment(sb)
     prev = str(prev or '').strip()
     if prev:
         return prev
@@ -691,6 +758,13 @@ def parse_row_tail_fields(cred: str, user: str, seg3: str, seg4: str) -> Dict[st
 
 
 def migrate_legacy_four_part_to_dual(cred: str, user: str, seg3: str, seg4: str) -> Dict[str, Any]:
+    # Línea de 5 campos que perdió el último segmento vacío: si el 4.º trae un
+    # estado empaquetado de columna roja, es statusBad (no notas internas).
+    s4 = str(seg4 or '').strip()
+    if s4.startswith(
+        (WARRANTY_PENDING_BAD_PREFIX, WARRANTY_ENTREGADA_BAD_PREFIX, PREV_GOOD_BAD_PREFIX)
+    ):
+        return dual_from_stored_segments(cred, user, seg3, s4, '')
     legacy = parse_row_tail_fields(cred, user, seg3, seg4)
     st = legacy['status']
     st_for_tier = ('otro-' + str(legacy['otroDetail']).strip()) if str(st).lower() == 'otro' and legacy.get('otroDetail') else st
@@ -830,7 +904,9 @@ def credential_matches_account(raw_cred: str, email: str, account_identifier: st
     aid = str(account_identifier or '').strip().lower()
     if em and em in c:
         return True
-    if aid and aid in c:
+    # Identificador: solo por token completo (subcadena da falsos positivos con
+    # identificadores cortos, p. ej. «max» dentro de «maxwell@…»).
+    if aid and aid in _credential_tokens(c):
         return True
     if em:
         prefix = em.split('@', 1)[0]
@@ -839,6 +915,11 @@ def credential_matches_account(raw_cred: str, email: str, account_identifier: st
         if prefix and prefix == first:
             return True
     return False
+
+
+def _credential_tokens(cred_lower: str) -> List[str]:
+    """Tokens de una credencial: separadores usuales espacio, :, |, /, ;, coma."""
+    return [t for t in re.split(r'[\s:|/;,]+', cred_lower) if t]
 
 
 def line_visible_for_assignee_account(
@@ -903,6 +984,8 @@ for _raw, _es in (
     ('caida', 'Caída o suspendida'),
     ('suspendida', 'Caída o suspendida'),
     ('repetida', 'Repetida'),
+    ('pendiente garantia', 'Garantía'),
+    ('solucionada', 'Solucionada'),
 ):
     _BAD_KEY_TO_LABEL[normalize_status_key(_raw)] = _es
 
@@ -970,14 +1053,16 @@ def dual_to_portal_readonly_row(
     gv = _spanish_good_label(sg) if sg else ''
     bv = ''
     if is_warranty_pending:
-        bv = 'Pendiente garantía'
+        bv = 'Garantía'
     elif sb_sel or od:
         bv = _spanish_bad_label(sb_sel, od)
 
     lt_good = 'good' if sg else 'neutral'
+    is_solucionada = is_solucionada_status(sb_sel) and not is_warranty_pending
     lt_bad = 'bad' if tier_bad == 'bad' else 'neutral'
     canon_g = (_canonical_good_from_stored(sg) or sg).strip() if sg else ''
     is_ok = normalize_status_key(canon_g) == 'ok'
+    warranty_entregada = bool(dual.get('warrantyEntregada'))
     green_select = resolve_portal_green_select_value(dual, stripped)
     prev_restore = green_select if is_ok else ''
     prev_bad_restore = _prev_bad_restore_from_dual(dual) if is_ok else ''
@@ -1001,8 +1086,10 @@ def dual_to_portal_readonly_row(
         'prev_good_restore': prev_restore,
         'prev_bad_restore': prev_bad_restore,
         'green_select_value': green_select,
-        'buena_revisada_readonly': is_ok,
+        'buena_revisada_readonly': is_ok and not warranty_entregada,
+        'warranty_entregada': warranty_entregada,
         'warranty_pending': is_warranty_pending,
+        'solucionada': is_solucionada,
         'phys_line_index': int(phys_idx),
         'row_ordinal': int(row_ordinal) if row_ordinal is not None else 0,
     }

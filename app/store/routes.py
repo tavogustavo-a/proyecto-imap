@@ -20,6 +20,7 @@ from sqlalchemy.orm import joinedload, selectinload
 from sqlalchemy import func as sa_func, or_
 from app.store.models import ToolInfo, HtmlInfo, YouTubeListing, StoreSetting
 import requests
+import threading
 import time
 import secrets
 import os
@@ -1054,7 +1055,7 @@ def _record_portal_renewal_blocked_activity(
 USER_LIC_CADUCIDAD_VIEW_MAX_DAYS = 5
 
 # Cache bust único: Admin Licencias + portal /licencias (evita CSS/JS mezclados en producción).
-LICENCIAS_STATIC_VERSION = '20260628-notes-hidden-fix-v1'
+LICENCIAS_STATIC_VERSION = '20260713-garantia-blocs-v1'
 
 
 def _billing_user_for_store_debt_limit(user_obj):
@@ -4759,10 +4760,69 @@ def api_user_store_menu_balance():
 
 
 # Validación de cupones
+def _ensure_coupon_redemptions_table():
+    try:
+        from sqlalchemy import inspect
+        from app.store.models import CouponRedemption
+
+        insp = inspect(db.engine)
+        if 'store_coupon_redemptions' not in insp.get_table_names():
+            CouponRedemption.__table__.create(db.engine)
+    except Exception:
+        db.session.rollback()
+
+
+def _coupon_uses_by_user(coupon_id, user_id) -> int:
+    from app.store.models import CouponRedemption
+
+    _ensure_coupon_redemptions_table()
+    try:
+        return int(
+            CouponRedemption.query.filter_by(
+                coupon_id=int(coupon_id), user_id=int(user_id)
+            ).count()
+        )
+    except Exception:
+        db.session.rollback()
+        return 0
+
+
+# Anti fuerza bruta de códigos de cupón (en memoria, por usuario).
+_COUPON_VALIDATE_ATTEMPTS: dict = {}
+_COUPON_VALIDATE_LOCK = threading.Lock()
+_COUPON_VALIDATE_MAX = 15
+_COUPON_VALIDATE_WINDOW_SEC = 300
+
+
+def _coupon_validate_rate_limited(user_id) -> bool:
+    key = f'u:{int(user_id or 0)}'
+    now = time.time()
+    with _COUPON_VALIDATE_LOCK:
+        bucket = [
+            t
+            for t in _COUPON_VALIDATE_ATTEMPTS.get(key, [])
+            if now - t < _COUPON_VALIDATE_WINDOW_SEC
+        ]
+        if len(bucket) >= _COUPON_VALIDATE_MAX:
+            _COUPON_VALIDATE_ATTEMPTS[key] = bucket
+            return True
+        bucket.append(now)
+        _COUPON_VALIDATE_ATTEMPTS[key] = bucket
+    return False
+
+
 @store_bp.route('/validate_coupon', methods=['POST'])
+@store_access_required
 def validate_coupon():
     """Validar un cupón para la tienda pública"""
     try:
+        user_id = session.get('user_id')
+        if _coupon_validate_rate_limited(user_id):
+            return jsonify({
+                'success': False,
+                'error': 'Demasiados intentos de cupón. Espera unos minutos.',
+            }), 429
+
         data = request.get_json()
         if not data:
             return jsonify({'success': False, 'error': 'Datos no válidos'})
@@ -4791,7 +4851,12 @@ def validate_coupon():
             expiration_date = created_at_col + timedelta(days=coupon.duration_days)
             if colombia_now > expiration_date:
                 return jsonify({'success': False, 'error': 'Cupón expirado'})
-        
+
+        # Límite de usos por usuario
+        if coupon.max_uses_per_user and user_id:
+            if _coupon_uses_by_user(coupon.id, user_id) >= int(coupon.max_uses_per_user):
+                return jsonify({'success': False, 'error': 'Ya usaste este cupón el máximo de veces permitido.'})
+
         # Verificar si hay productos en el carrito
         if not products:
             return jsonify({'success': False, 'error': 'No hay productos en el carrito'})
@@ -4890,9 +4955,92 @@ def update_subuser_access():
     return jsonify({'success': True, 'can_access_store': subuser.can_access_store})
 
 
+def _checkout_coupon_server_side(cupon_data, productos, total_pre_descuento, user=None):
+    """
+    Revalida en servidor el cupón enviado por el navegador durante el checkout.
+    Devuelve ({'coupon_id': int, 'pids': set, 'cop': float, 'usd': float} | None, error | None).
+    """
+    coupon = None
+    try:
+        cid = int((cupon_data or {}).get('id'))
+    except (TypeError, ValueError):
+        cid = None
+    if cid:
+        coupon = Coupon.query.get(cid)
+    if coupon is None:
+        code = str((cupon_data or {}).get('nombre') or '').strip().upper()
+        if code:
+            coupon = Coupon.query.filter_by(name=code).first()
+    if not coupon or not coupon.enabled:
+        return None, 'El cupón ya no es válido. Quítalo del carrito e inténtalo de nuevo.'
+    if coupon.duration_days and coupon.created_at:
+        colombia_now = get_colombia_datetime()
+        created_at_col = utc_to_colombia(coupon.created_at)
+        if colombia_now > created_at_col + timedelta(days=coupon.duration_days):
+            return None, 'El cupón ya expiró. Quítalo del carrito e inténtalo de nuevo.'
+    if coupon.min_amount and float(coupon.min_amount) > 0:
+        if float(total_pre_descuento or 0) < float(coupon.min_amount):
+            return None, f'El cupón requiere un monto mínimo de ${coupon.min_amount}.'
+    if coupon.max_uses_per_user and user is not None:
+        if _coupon_uses_by_user(coupon.id, user.id) >= int(coupon.max_uses_per_user):
+            return None, 'Ya usaste este cupón el máximo de veces permitido.'
+    pids_carrito = set()
+    for p in productos or []:
+        try:
+            pids_carrito.add(int(p.get('id')))
+        except (TypeError, ValueError):
+            continue
+    if coupon.products:
+        elegibles = {int(cp.id) for cp in coupon.products} & pids_carrito
+    else:
+        elegibles = set(pids_carrito)
+    if not elegibles:
+        return None, 'Este cupón no aplica a los productos del carrito.'
+    return (
+        {
+            'coupon_id': int(coupon.id),
+            'pids': elegibles,
+            'cop': max(0.0, float(coupon.discount_cop or 0)),
+            'usd': max(0.0, float(coupon.discount_usd or 0)),
+        },
+        None,
+    )
+
+
+# Un checkout a la vez por usuario: dos POST simultáneos (doble clic, dos
+# pestañas) no deben poder generar dos ventas/cobros.
+_CHECKOUT_USER_LOCKS: dict = {}
+_CHECKOUT_USER_LOCKS_GUARD = threading.Lock()
+
+
+def _acquire_checkout_lock(user_id):
+    with _CHECKOUT_USER_LOCKS_GUARD:
+        lock = _CHECKOUT_USER_LOCKS.setdefault(int(user_id or 0), threading.Lock())
+    return lock if lock.acquire(blocking=False) else None
+
+
 @store_bp.route('/procesar_pago', methods=['POST'])
 @store_access_required
 def procesar_pago():
+    uid = session.get('user_id')
+    if not uid:
+        u = User.query.filter_by(username=session.get('username') or '').first()
+        uid = u.id if u else 0
+    if not uid:
+        return jsonify({'success': False, 'error': 'Usuario no autenticado'}), 401
+    lock = _acquire_checkout_lock(uid)
+    if lock is None:
+        return jsonify({
+            'success': False,
+            'error': 'Ya hay un pago en proceso. Espera a que termine.',
+        }), 429
+    try:
+        return _procesar_pago_core()
+    finally:
+        lock.release()
+
+
+def _procesar_pago_core():
     from collections import defaultdict
     from datetime import datetime, timedelta
     from app.store.models import Product, Sale, License, LicenseAccount
@@ -4920,6 +5068,80 @@ def procesar_pago():
     productos = data.get('productos', [])
     if not productos:
         return jsonify({'success': False, 'error': 'No hay productos'}), 400
+
+    # --- Precio y moneda SIEMPRE del servidor: se ignora lo que mande el navegador ---
+    productos_catalogo, tipo_catalogo = catalog_products_for_store_user(user)
+    catalogo_por_id = {}
+    for _cp in productos_catalogo:
+        try:
+            catalogo_por_id[int(_cp.id)] = _cp
+        except (TypeError, ValueError):
+            continue
+
+    def _linea_cantidad_servidor(item):
+        """Cantidad real de la línea (misma regla que la asignación de cuentas)."""
+        if item.get('es_renovar_cuenta_cliente'):
+            return 1
+        raw_ren_q = item.get('renovacion_account_ids') or []
+        if isinstance(raw_ren_q, list) and raw_ren_q:
+            n_ids = 0
+            for x in raw_ren_q:
+                try:
+                    int(x)
+                    n_ids += 1
+                except (TypeError, ValueError):
+                    continue
+            if n_ids:
+                return n_ids
+        try:
+            q = int(item.get('cantidad', 1) or 1)
+        except (TypeError, ValueError):
+            q = 1
+        return max(1, q)
+
+    for _p in productos:
+        try:
+            _pid = int(_p.get('id'))
+        except (TypeError, ValueError):
+            return jsonify({'success': False, 'error': 'Producto no válido en el pedido'}), 400
+        _prod_srv = catalogo_por_id.get(_pid)
+        if _prod_srv is None:
+            if tipo_catalogo:
+                return jsonify(
+                    {
+                        'success': False,
+                        'error': (
+                            'Hay productos que ya no están disponibles en tu catálogo. '
+                            'Recarga la tienda y quítalos del carrito.'
+                        ),
+                    }
+                ), 400
+            _prod_srv = Product.query.get(_pid)
+            if not _prod_srv:
+                return jsonify({'success': False, 'error': 'Producto no válido en el pedido'}), 400
+        try:
+            _final_cop = max(
+                0.0,
+                float(_prod_srv.price_cop or 0)
+                - float(getattr(_prod_srv, 'discount_cop_extra', 0) or 0),
+            )
+        except (TypeError, ValueError):
+            _final_cop = 0.0
+        try:
+            _final_usd = max(
+                0.0,
+                float(_prod_srv.price_usd or 0)
+                - float(getattr(_prod_srv, 'discount_usd_extra', 0) or 0),
+            )
+        except (TypeError, ValueError):
+            _final_usd = 0.0
+        # Misma regla que la tienda pública: COP si hay precio COP; si no, USD.
+        if _final_cop > 0:
+            _p['moneda'] = 'COP'
+            _p['precio_unitario'] = _final_cop
+        else:
+            _p['moneda'] = 'USD'
+            _p['precio_unitario'] = _final_usd
 
     archived_pids = _product_ids_with_archived_license()
     for _p in productos:
@@ -5039,13 +5261,51 @@ def procesar_pago():
                 }
             ), 409
 
-    total_cop = 0
-    total_usd = 0
-    for p in productos:
-        if p.get('moneda') == 'COP':
-            total_cop += p.get('cantidad', 1) * p.get('precio_unitario', 0)
-        elif p.get('moneda') == 'USD':
-            total_usd += p.get('cantidad', 1) * p.get('precio_unitario', 0)
+    def _totales_servidor():
+        tc = 0.0
+        tu = 0.0
+        for item in productos:
+            q_linea = _linea_cantidad_servidor(item)
+            unit = float(item.get('precio_unitario') or 0)
+            if item.get('moneda') == 'COP':
+                tc += q_linea * unit
+            else:
+                tu += q_linea * unit
+        return tc, tu
+
+    total_cop, total_usd = _totales_servidor()
+
+    # Cupón: se revalida en servidor y el descuento se aplica al precio unitario.
+    cupon_req = data.get('cupon_aplicado') or None
+    if cupon_req:
+        descuentos_cupon, cupon_err = _checkout_coupon_server_side(
+            cupon_req, productos, total_cop + total_usd, user=user
+        )
+        if cupon_err:
+            return jsonify({'success': False, 'error': cupon_err}), 400
+        for p in productos:
+            if int(p.get('id')) not in descuentos_cupon['pids']:
+                continue
+            unit = float(p.get('precio_unitario') or 0)
+            if p.get('moneda') == 'COP':
+                p['precio_unitario'] = max(0.0, unit - descuentos_cupon['cop'])
+            else:
+                p['precio_unitario'] = max(0.0, unit - descuentos_cupon['usd'])
+        total_cop, total_usd = _totales_servidor()
+        # Registrar el uso en la misma transacción del checkout: si la compra
+        # se revierte, el uso también; si se confirma, cuenta para max_uses_per_user.
+        try:
+            from app.store.models import CouponRedemption
+
+            _ensure_coupon_redemptions_table()
+            db.session.add(
+                CouponRedemption(
+                    coupon_id=int(descuentos_cupon['coupon_id']),
+                    user_id=int(user.id),
+                )
+            )
+        except Exception:
+            current_app.logger.exception('No se pudo registrar el uso del cupón')
 
     from decimal import Decimal
     from app.store.transaction_amount_limits import (
@@ -5243,7 +5503,7 @@ def procesar_pago():
                                 ],
                             }
                         ), 409
-                    _public_checkout_assign_license_account(
+                    if not _public_checkout_assign_license_account(
                         account,
                         lic_row,
                         user,
@@ -5251,7 +5511,26 @@ def procesar_pago():
                         producto,
                         sold_bloc_moves,
                         cuentas_asignadas,
-                    )
+                    ):
+                        # Otra compra concurrente la tomó primero: nunca entregarla dos veces.
+                        db.session.rollback()
+                        em = (account.email or '').strip() or 'cuenta'
+                        return jsonify(
+                            {
+                                'success': False,
+                                'error': (
+                                    'Una o más cuentas de renovación ya no están disponibles '
+                                    '(fueron vendidas). Se quitarán del carrito.'
+                                ),
+                                'renovacion_perdidas': [
+                                    {
+                                        'account_id': account.id,
+                                        'email': em,
+                                        'message': 'La cuenta ya fue vendida o ya no está disponible.',
+                                    }
+                                ],
+                            }
+                        ), 409
                     proveedor_sales_by_license[int(lic_row.id)] += 1
                     _track_proveedor_daily_sale(lic_row, producto, venta, p)
                     cuentas_asignadas_producto += 1
@@ -5299,7 +5578,7 @@ def procesar_pago():
                 accounts = avail_ordered[:take]
 
                 for account in accounts:
-                    _public_checkout_assign_license_account(
+                    if not _public_checkout_assign_license_account(
                         account,
                         license,
                         user,
@@ -5307,7 +5586,10 @@ def procesar_pago():
                         producto,
                         sold_bloc_moves,
                         cuentas_asignadas,
-                    )
+                    ):
+                        # Tomada por otra compra concurrente: se salta; si al final
+                        # faltan cuentas, el checkout completo se revierte con 409.
+                        continue
                     proveedor_sales_by_license[int(license.id)] += 1
                     _track_proveedor_daily_sale(license, producto, venta, p)
                     cuentas_asignadas_producto += 1
@@ -5936,9 +6218,12 @@ def _renewal_release_stale_reservations():
     cutoff = datetime.utcnow() - timedelta(minutes=RENEWAL_RESERVE_TTL_MINUTES)
     stale = LicenseAccount.query.filter(
         LicenseAccount.renewal_reserved_user_id.isnot(None),
-        LicenseAccount.renewal_reserved_at.isnot(None),
-        LicenseAccount.renewal_reserved_at < cutoff,
         LicenseAccount.status == 'available',
+        or_(
+            # Reserva inválida sin fecha: nunca expiraría; se libera también.
+            LicenseAccount.renewal_reserved_at.is_(None),
+            LicenseAccount.renewal_reserved_at < cutoff,
+        ),
     ).all()
     if not stale:
         return
@@ -6004,8 +6289,38 @@ def _renewal_reserve_accounts(user_id, account_ids):
                 }
             )
             continue
-        acc.renewal_reserved_user_id = user_id
-        acc.renewal_reserved_at = now
+        # Reclamo atómico: UPDATE condicional para que dos carritos simultáneos
+        # no reserven la misma cuenta (solo gana uno; el otro recibe failed).
+        cutoff = now - timedelta(minutes=RENEWAL_RESERVE_TTL_MINUTES)
+        claimed = (
+            db.session.query(LicenseAccount)
+            .filter(
+                LicenseAccount.id == aid,
+                LicenseAccount.status == 'available',
+                or_(
+                    LicenseAccount.renewal_reserved_user_id.is_(None),
+                    LicenseAccount.renewal_reserved_user_id == int(user_id),
+                    LicenseAccount.renewal_reserved_at.is_(None),
+                    LicenseAccount.renewal_reserved_at < cutoff,
+                ),
+            )
+            .update(
+                {
+                    'renewal_reserved_user_id': int(user_id),
+                    'renewal_reserved_at': now,
+                },
+                synchronize_session=False,
+            )
+        )
+        if not claimed:
+            failed.append(
+                {
+                    'account_id': aid,
+                    'email': em or str(aid),
+                    'message': 'Otro usuario la reservó hace un instante.',
+                }
+            )
+            continue
         reserved.append(aid)
     if reserved or failed:
         db.session.commit()
@@ -6337,7 +6652,6 @@ def api_renovacion_carrito_reservas_stream():
 
 
 @store_bp.route('/api/renovacion/reservar', methods=['POST'])
-@csrf_exempt_route
 @store_access_required
 def api_store_renovacion_reservar():
     """Vincular cuentas al carrito del usuario hasta procesar pago."""
@@ -6356,7 +6670,6 @@ def api_store_renovacion_reservar():
 
 
 @store_bp.route('/api/renovacion/liberar', methods=['POST'])
-@csrf_exempt_route
 @store_access_required
 def api_store_renovacion_liberar():
     """Quitar reserva al sacar cuentas del carrito."""
@@ -7531,6 +7844,33 @@ def api_user_balance_recharge_submit():
         )
         return jsonify({'success': False, 'message': dup_message}), 409
 
+    # Carrera: dos fotos distintas del mismo comprobante enviadas a la vez pueden
+    # pasar ambas el chequeo previo. Tras el commit sobrevive solo una.
+    if receipt_no:
+        from app.store.balance_recharge_credit import resolve_receipt_duplicates_after_commit
+        from app.store.balance_recharge_events import notify_from_recharge_row as _notify_rr
+
+        survived, reverted_ids = resolve_receipt_duplicates_after_commit(row.id)
+        for _rid in reverted_ids:
+            try:
+                _vrow = BalanceRecharge.query.get(int(_rid))
+                if _vrow is not None:
+                    _notify_rr(_vrow, reason='duplicate_reverted')
+            except Exception:
+                current_app.logger.warning(
+                    'SSE recarga duplicada revertida id=%s falló', _rid, exc_info=True
+                )
+        if not survived:
+            return jsonify(
+                {
+                    'success': False,
+                    'message': (
+                        'Este comprobante ya se envió en otra solicitud. '
+                        'No se puede acreditar dos veces.'
+                    ),
+                }
+            ), 409
+
     try:
         from app.store.balance_recharge_email_scheduler import ensure_email_verification_scheduled
 
@@ -7561,6 +7901,8 @@ def api_user_balance_recharge_events():
     import queue as queue_mod
 
     from app.store.balance_recharge_events import (
+        balance_recharge_events_redis_enabled,
+        recharge_db_revision_token,
         recharge_events_heartbeat_seconds,
         subscribe_user_recharge_events,
         unsubscribe_user_recharge_events,
@@ -7577,17 +7919,35 @@ def api_user_balance_recharge_events():
         return jsonify({'success': False, 'message': 'Sin acceso'}), 403
 
     def generate():
-        q = subscribe_user_recharge_events(int(billing.id))
+        bid = int(billing.id)
+        q = subscribe_user_recharge_events(bid)
+        # Sin Redis, eventos de otros workers no llegan a este proceso: sondear
+        # una revisión ligera en BD en cada heartbeat para no perderlos.
+        use_db_fallback = not balance_recharge_events_redis_enabled()
+        last_rev = recharge_db_revision_token(bid) if use_db_fallback else ''
         try:
             yield f"data: {json.dumps({'type': 'connected'})}\n\n"
             while True:
                 try:
                     line = q.get(timeout=recharge_events_heartbeat_seconds())
                     yield f"data: {line}\n\n"
+                    if use_db_fallback:
+                        last_rev = recharge_db_revision_token(bid)
                 except queue_mod.Empty:
+                    if use_db_fallback:
+                        rev = recharge_db_revision_token(bid)
+                        if rev and rev != last_rev:
+                            last_rev = rev
+                            payload = {
+                                'type': 'recharge_update',
+                                'reason': 'db_poll',
+                                'user_id': bid,
+                            }
+                            yield f"data: {json.dumps(payload)}\n\n"
+                            continue
                     yield ": heartbeat\n\n"
         finally:
-            unsubscribe_user_recharge_events(int(billing.id), q)
+            unsubscribe_user_recharge_events(bid, q)
 
     return Response(
         stream_with_context(generate()),
@@ -7608,6 +7968,8 @@ def api_admin_balance_recharge_events():
     import queue as queue_mod
 
     from app.store.balance_recharge_events import (
+        balance_recharge_events_redis_enabled,
+        recharge_db_revision_token,
         recharge_events_heartbeat_seconds,
         subscribe_admin_recharge_events,
         unsubscribe_admin_recharge_events,
@@ -7615,13 +7977,24 @@ def api_admin_balance_recharge_events():
 
     def generate():
         q = subscribe_admin_recharge_events()
+        use_db_fallback = not balance_recharge_events_redis_enabled()
+        last_rev = recharge_db_revision_token() if use_db_fallback else ''
         try:
             yield f"data: {json.dumps({'type': 'connected'})}\n\n"
             while True:
                 try:
                     line = q.get(timeout=recharge_events_heartbeat_seconds())
                     yield f"data: {line}\n\n"
+                    if use_db_fallback:
+                        last_rev = recharge_db_revision_token()
                 except queue_mod.Empty:
+                    if use_db_fallback:
+                        rev = recharge_db_revision_token()
+                        if rev and rev != last_rev:
+                            last_rev = rev
+                            payload = {'type': 'recharge_update', 'reason': 'db_poll'}
+                            yield f"data: {json.dumps(payload)}\n\n"
+                            continue
                     yield ": heartbeat\n\n"
         finally:
             unsubscribe_admin_recharge_events(q)
@@ -7996,6 +8369,19 @@ def api_binance_pay_webhook():
                     notify_from_recharge_row(row, reason=sse_reason)
         else:
             db.session.rollback()
+            # No se acreditó: responder FAIL para que Binance reintente, salvo
+            # estados terminales donde reintentar jamás acreditará.
+            fresh = BalanceRecharge.query.get(row.id)
+            st_now = (fresh.status or '').lower() if fresh else ''
+            if st_now in ('approved', 'rejected', 'accumulated', 'accum_converted'):
+                return jsonify({'returnCode': 'SUCCESS', 'returnMessage': None})
+            current_app.logger.warning(
+                'Binance Pay webhook: PAY_SUCCESS sin acreditar orden %s (status=%s); '
+                'se responde FAIL para reintento.',
+                trade_no,
+                st_now or 'desconocido',
+            )
+            return jsonify({'returnCode': 'FAIL', 'returnMessage': 'not credited'}), 500
     except Exception as exc:
         db.session.rollback()
         current_app.logger.exception('Binance Pay webhook finalize failed: %s', exc)
@@ -9078,7 +9464,12 @@ def api_admin_balance_recharge_email_verify(recharge_id):
         current_app.logger.error('Error verificando recarga por correo %s: %s', recharge_id, exc, exc_info=True)
         return jsonify({'success': False, 'message': 'Error al consultar correos.'}), 500
 
-    applied = result.get('status') == 'matched' and (row_status == 'approved' or row.admin_verified is True)
+    # Releer el estado: la verificación pudo acreditar la fila (row_status quedó viejo).
+    db.session.refresh(row)
+    status_after = (row.status or '').lower()
+    applied = result.get('status') == 'matched' and (
+        status_after == 'approved' or row.admin_verified is True
+    )
     return jsonify({
         'success': True,
         'recharge_id': recharge_id,

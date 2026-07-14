@@ -26,6 +26,7 @@ KIND_WA_DIGEST_FALLBACK = 'whatsapp_digest_fallback'
 KIND_ADMIN_BALANCE_RECHARGE = 'admin_balance_recharge'
 KIND_ADMIN_RESERVATION = 'admin_product_reservation'
 KIND_ADMIN_WA_DIGEST_FALLBACK = 'admin_whatsapp_digest_fallback'
+KIND_ADMIN_STOCK_UPLOAD = 'admin_stock_upload'
 
 # Motivos SSE de recarga que sí interesan al cliente (crédito / rechazo / confirmación).
 _RECHARGE_NOTIFY_REASONS = frozenset(
@@ -42,6 +43,7 @@ _RECHARGE_NOTIFY_REASONS = frozenset(
         'email_matched_accum',
         'email_confirmed_auto',
         'accum_converted',
+        'binance_pay',
         'binance_pay_paid',
         'binance_pay_completed',
         'binance_pay_confirmed',
@@ -549,3 +551,47 @@ def notify_whatsapp_digest_undelivered(
         )
     except Exception as ex:
         current_app.logger.warning('notify_whatsapp_digest_undelivered email: %s', ex)
+
+
+def notify_admin_stock_upload(
+    *,
+    product_name: str,
+    created: int,
+    license_id: Optional[int] = None,
+    product_id: Optional[int] = None,
+    actor_user_id: Optional[int] = None,
+    commit: bool = False,
+) -> int:
+    """Avisa a admin/soporte cuando se suben cuentas nuevas al bloc Licencias."""
+    n = int(created or 0)
+    if n <= 0:
+        return 0
+    pname = str(product_name or '').strip() or 'Producto'
+    if n == 1:
+        title = 'Stock: 1 cuenta - %s' % pname
+        body = 'Se subió 1 cuenta de «%s».' % pname
+    else:
+        title = 'Stock: %s cuentas - %s' % (n, pname)
+        body = 'Se subieron %s cuentas de «%s».' % (n, pname)
+    created_n = notify_admins_app(
+        kind=KIND_ADMIN_STOCK_UPLOAD,
+        title=title[:200],
+        body=body,
+        payload={
+            'product_name': pname,
+            'created': n,
+            'license_id': license_id,
+            'product_id': product_id,
+            'url': '/tienda/admin',
+        },
+        exclude_user_id=actor_user_id,
+        type_key='stock_upload',
+    )
+    if commit and created_n:
+        try:
+            db.session.commit()
+        except Exception as ex:
+            db.session.rollback()
+            logger.warning('notify_admin_stock_upload commit: %s', ex)
+            return 0
+    return created_n

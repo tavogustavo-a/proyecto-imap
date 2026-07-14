@@ -1,11 +1,23 @@
 # ============================================================
 # DOMINIO DEL PROYECTO (única fuente)
 # ============================================================
-# Escribe abajo la URL pública (una sola línea, sin #).
+# 1) URL pública (obligatoria) — una línea sin #
+# 2) Opcionales (clave=valor), una por línea:
+#      applicationId=com.tupremiumm.app   # package de Google Play / App Links
+#      package=com.otra.app               # alias de applicationId
+#      appName=Mi Tienda                  # nombre visible en el teléfono
+#      appIdSuffix=mitienda               # solo si NO pones applicationId
+#                                         # (genera com.mitienda.app)
+#
 # De aquí se derivan:
-#   - Apps Android (Capacitor + nativa): nombre, App Links, SERVER_URL
-#   - Servidor: SOCKETIO_CORS_ORIGINS y ANDROID_APP_PACKAGE (si no están en .env)
-# Las huellas SHA-256 del keystore sí van en .env (ANDROID_APP_SHA256_FINGERPRINTS).
+#   - Apps Android (nativa): nombre, package, App Links, SERVER_URL
+#   - Servidor: SOCKETIO_CORS_ORIGINS y ANDROID_APP_PACKAGE
+# Las huellas SHA-256 del keystore sí van en .env
+# (ANDROID_APP_SHA256_FINGERPRINTS).
+#
+# Para otra marca/app: cambia URL + applicationId (+ appName) y recompila.
 # ============================================================
 
 https://tupremiumm.com
+applicationId=com.tupremiumm.app
+appName=tupremiumm

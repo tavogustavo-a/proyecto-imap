@@ -15,9 +15,10 @@ from app import db
 KIND_BUENA = 'license_report_buena'
 KIND_WARRANTY_REPLACED = 'license_warranty_replaced'
 KIND_WARRANTY_PENDING = 'license_warranty_pending'
+KIND_SOLUCIONADA = 'license_report_solucionada'
 KIND_ADMIN_REPORT_NEW = 'admin_license_report_new'
 
-_VALID_OUTCOMES = frozenset({'buena', 'warranty_replaced', 'warranty_pending'})
+_VALID_OUTCOMES = frozenset({'buena', 'warranty_replaced', 'warranty_pending', 'solucionada'})
 _ADMIN_REPORT_KINDS = frozenset({'caida', 'garantia', 'incidencia'})
 
 
@@ -258,6 +259,15 @@ def notify_license_report_answered(
         )
         if cred_old:
             body += f'\n\nCuenta: {cred_old}'
+    elif oc == 'solucionada':
+        kind = KIND_SOLUCIONADA
+        title = f'Cuenta solucionada: {pname}'
+        body = (
+            f'Soporte marcó tu cuenta de «{pname}» como solucionada{day_bit}. '
+            f'El estado queda así hasta el próximo día (salvo que lo cambien).'
+        )
+        if cred_old:
+            body += f'\n\nCuenta: {cred_old}'
     elif oc == 'warranty_replaced':
         kind = KIND_WARRANTY_REPLACED
         title = f'Garantía entregada: {pname}'
@@ -295,6 +305,28 @@ def notify_license_report_answered(
         payload_json=json.dumps(payload, ensure_ascii=False),
     )
     db.session.add(notif)
+
+    if oc == 'solucionada':
+        try:
+            from app.store.routes import _billing_user_for_store_debt_limit
+            from app.store.user_license_activity import append_portal_license_activity_record
+
+            billing_for_log = (_billing_user_for_store_debt_limit(user) or user)
+            if billing_for_log is not None:
+                append_portal_license_activity_record(
+                    billing_for_log,
+                    'solucionada',
+                    '%s · solucionada' % pname,
+                    detail=cred_old or None,
+                    extra={
+                        'license_id': getattr(license_obj, 'id', None),
+                        'product_name': pname,
+                        'cred_hint': cred_old,
+                        'day': day,
+                    },
+                )
+        except Exception as log_err:
+            current_app.logger.warning('log solucionada historial: %s', log_err)
 
     try:
         from app.store.license_report_answer_email_batch import (

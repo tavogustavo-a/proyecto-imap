@@ -106,14 +106,11 @@ html, body {
   font-size: var(--lic-line-fs, 0.875rem);
   font-weight: 500;
   line-height: var(--lic-line-lh, 1.45);
-  cursor: pointer;
+  cursor: default;
   white-space: nowrap;
   text-align: center;
   align-self: stretch;
-}
-
-.user-lic-buena-revisada-badge:hover {
-  background: rgba(34, 197, 94, 0.12);
+  user-select: none;
 }
 
 .user-lic-buena-revisada-badge--pending {
@@ -124,6 +121,129 @@ html, body {
 .user-lic-buena-revisada-badge .fa-check-circle {
   flex-shrink: 0;
   font-size: 0.82em;
+}
+
+/* Garantía entregada: mismo verde/resaltado que Buena, icono escudo + «Entregada» */
+.user-lic-garantia-entregada-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.25rem;
+  margin: 0;
+  padding: 0 0.3rem;
+  box-sizing: border-box;
+  width: 100%;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: var(--lic-line-box, 1.27rem);
+  height: var(--lic-line-box, 1.27rem);
+  max-height: var(--lic-line-box, 1.27rem);
+  border: var(--lic-border-w, 2px) solid rgba(34, 197, 94, 0.55);
+  border-radius: 3px;
+  background: transparent;
+  color: #86efac;
+  font-size: var(--lic-line-fs, 0.875rem);
+  font-weight: 500;
+  line-height: var(--lic-line-lh, 1.45);
+  cursor: default;
+  white-space: nowrap;
+  text-align: center;
+  align-self: stretch;
+  user-select: none;
+}
+
+.user-lic-garantia-entregada-badge .fa-shield-alt {
+  flex-shrink: 0;
+  font-size: 0.82em;
+  color: #86efac;
+}
+
+/* Solucionada: admin letra blanca / portal verde; clic → — */
+.user-lic-solucionada-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.25rem;
+  margin: 0;
+  padding: 0 0.3rem;
+  box-sizing: border-box;
+  width: 100%;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: var(--lic-line-box, 1.27rem);
+  height: var(--lic-line-box, 1.27rem);
+  max-height: var(--lic-line-box, 1.27rem);
+  border-radius: 3px;
+  font-size: var(--lic-line-fs, 0.875rem);
+  font-weight: 600;
+  line-height: var(--lic-line-lh, 1.45);
+  cursor: default;
+  white-space: nowrap;
+  text-align: center;
+  align-self: stretch;
+  user-select: none;
+}
+
+.user-lic-solucionada-badge--admin {
+  border: var(--lic-border-w, 2px) solid rgba(255, 255, 255, 0.45);
+  background: transparent;
+  color: #ffffff;
+}
+
+.user-lic-solucionada-badge--admin .fa-check {
+  color: #ffffff;
+  font-size: 0.82em;
+}
+
+.user-lic-solucionada-badge--portal {
+  border: var(--lic-border-w, 2px) solid rgba(34, 197, 94, 0.55);
+  background: transparent;
+  color: #86efac;
+}
+
+.user-lic-solucionada-badge--portal .fa-check {
+  color: #86efac;
+  font-size: 0.82em;
+}
+
+.user-lic-solucionada-badge--clickable {
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.user-lic-solucionada-badge--admin.user-lic-solucionada-badge--clickable:hover,
+.user-lic-solucionada-badge--admin.user-lic-solucionada-badge--clickable:focus-visible {
+  background: rgba(255, 255, 255, 0.12) !important;
+  color: #ffffff !important;
+  outline: none;
+}
+
+.user-lic-solucionada-badge--portal.user-lic-solucionada-badge--clickable:hover,
+.user-lic-solucionada-badge--portal.user-lic-solucionada-badge--clickable:focus-visible {
+  background: rgba(22, 101, 52, 0.35) !important;
+  color: #bbf7d0 !important;
+  outline: none;
+}
+
+select.license-split-editor__status-bad.license-split-editor__status--tier-solucionada {
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+  background-color: transparent !important;
+}
+
+.user-lic-buena-revisada-badge--clickable,
+.user-lic-garantia-entregada-badge--clickable {
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.user-lic-buena-revisada-badge--clickable:hover,
+.user-lic-buena-revisada-badge--clickable:focus-visible,
+.user-lic-garantia-entregada-badge--clickable:hover,
+.user-lic-garantia-entregada-badge--clickable:focus-visible {
+  background: rgba(22, 101, 52, 0.35) !important;
+  color: #bbf7d0 !important;
+  outline: none;
 }
 
 .user-lic-garantia-badge {
@@ -157,13 +277,18 @@ html, body {
   font-size: 0.82em;
 }
 
-.user-lic-warranty-pending-badge {
+/* Garantía pendiente: amarillo pintado (fondo), sin línea; icono + texto oscuros */
+.user-lic-warranty-pending-badge,
+.admin-licencias-page .license-notepads-wrap .user-lic-warranty-pending-badge,
+.admin-licencias-page .license-notepads-wrap .user-lic-warranty-pending-badge.license-split-editor__status-bad,
+.admin-licencias-page .license-changes-products-container .user-lic-warranty-pending-badge,
+.admin-licencias-page .license-changes-products-container .user-lic-warranty-pending-badge.license-split-editor__status-bad {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 0.25rem;
   margin: 0;
-  padding: 0 0.3rem;
+  padding: 0 0.35rem;
   box-sizing: border-box;
   width: 100%;
   flex: 1 1 auto;
@@ -171,12 +296,14 @@ html, body {
   min-height: var(--lic-line-box, 1.27rem);
   height: var(--lic-line-box, 1.27rem);
   max-height: var(--lic-line-box, 1.27rem);
-  border: var(--lic-border-w, 2px) solid rgba(245, 158, 11, 0.65);
+  border: none !important;
   border-radius: 3px;
-  background: rgba(245, 158, 11, 0.1);
-  color: #fbbf24;
+  background: #eab308 !important;
+  box-shadow: none !important;
+  color: #111827 !important;
+  -webkit-text-fill-color: #111827 !important;
   font-size: var(--lic-line-fs, 0.875rem);
-  font-weight: 600;
+  font-weight: 700;
   line-height: var(--lic-line-lh, 1.45);
   white-space: nowrap;
   text-align: center;
@@ -187,6 +314,22 @@ html, body {
 .user-lic-warranty-pending-badge .fa-hourglass-half {
   flex-shrink: 0;
   font-size: 0.82em;
+  color: #111827 !important;
+  -webkit-text-fill-color: #111827 !important;
+}
+
+/* Admin: badge «Garantía» un poco más pequeño y clicable (volver a — si ya se solucionó) */
+.user-lic-warranty-pending-badge--clickable {
+  font-size: calc(var(--lic-line-fs, 0.875rem) * 0.88);
+  cursor: pointer;
+}
+
+.user-lic-warranty-pending-badge--clickable:hover,
+.user-lic-warranty-pending-badge--clickable:focus-visible {
+  background: #facc15 !important;
+  color: #111827 !important;
+  -webkit-text-fill-color: #111827 !important;
+  outline: none;
 }
 
 .admin-licencias-page.user-licencias-shell
@@ -1462,6 +1605,9 @@ html, body {
     z-index: 1;
     gap: 0.12rem !important;
   }
+  /* Día N + badges Reportes/Pendiente: el corrimiento del título a la izquierda
+     solo aplica en pantallas pequeñas (ver @media max-width: 768px). En grandes
+     el título permanece centrado aunque haya badges. */
   /* El scroll horizontal solo en el cuerpo (filas/credenciales), no en la franja azul */
   .admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
     .license-notepads-wrap
@@ -1795,6 +1941,12 @@ html, body {
   }
   .admin-licencias-report-header-badge__num {
     font-variant-numeric: tabular-nums;
+  }
+  .admin-licencias-report-header-badge--pendiente-garantia {
+    background: rgba(120, 53, 15, 0.92);
+    border-color: rgba(251, 191, 36, 0.65);
+    color: #fde68a;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
   }
 
   .license-card-report-total-badge {
@@ -3564,12 +3716,25 @@ html, body {
     color: rgba(255, 255, 255, 0.45) !important;
     -webkit-text-fill-color: rgba(255, 255, 255, 0.45) !important;
   }
-  .admin-licencias-page .license-changes-products-container .license-split-editor__row select.license-split-editor__status {
+  .admin-licencias-page .license-changes-products-container .license-split-editor__row select.license-split-editor__status:not(.license-split-editor__status--tier-bad):not(.license-split-editor__status--tier-good) {
     cursor: pointer;
     background-color: transparent !important;
     font-size: calc(var(--lic-line-fs, 0.875rem) * 0.92) !important;
     background-image: linear-gradient(45deg, transparent 50%, rgba(147, 197, 253, 0.65) 50%),
       linear-gradient(135deg, rgba(147, 197, 253, 0.65) 50%, transparent 50%) !important;
+    background-position: calc(100% - 0.65rem) 50%, calc(100% - 0.45rem) 50% !important;
+    background-size: 0.28rem 0.28rem, 0.28rem 0.28rem !important;
+    background-repeat: no-repeat !important;
+    padding-right: 1.15rem !important;
+  }
+  .admin-licencias-page .license-changes-products-container .license-split-editor__row select.license-split-editor__status.license-split-editor__status--tier-bad {
+    cursor: pointer;
+    color: #ffffff !important;
+    -webkit-text-fill-color: #ffffff !important;
+    background-color: #dc2626 !important;
+    font-size: calc(var(--lic-line-fs, 0.875rem) * 0.92) !important;
+    background-image: linear-gradient(45deg, transparent 50%, #ffffff 50%),
+      linear-gradient(135deg, #ffffff 50%, transparent 50%) !important;
     background-position: calc(100% - 0.65rem) 50%, calc(100% - 0.45rem) 50% !important;
     background-size: 0.28rem 0.28rem, 0.28rem 0.28rem !important;
     background-repeat: no-repeat !important;
@@ -3644,9 +3809,15 @@ html, body {
     border-color: rgba(34, 197, 94, 0.55) !important;
   }
   .admin-licencias-page .license-changes-products-container .license-split-editor__status.license-split-editor__status--tier-bad {
-    color: #fca5a5 !important;
-    -webkit-text-fill-color: #fca5a5 !important;
-    border-color: rgba(239, 68, 68, 0.6) !important;
+    color: #ffffff !important;
+    -webkit-text-fill-color: #ffffff !important;
+    border-color: rgba(185, 28, 28, 0.95) !important;
+    background-color: #dc2626 !important;
+    background-image: linear-gradient(45deg, transparent 50%, #ffffff 50%),
+      linear-gradient(135deg, #ffffff 50%, transparent 50%) !important;
+    background-position: calc(100% - 0.65rem) 50%, calc(100% - 0.45rem) 50% !important;
+    background-size: 0.28rem 0.28rem, 0.28rem 0.28rem !important;
+    background-repeat: no-repeat !important;
   }
   .admin-licencias-page .license-changes-products-container .license-split-editor__otro-combined.license-split-editor__otro-combined--tier-bad {
     border-color: rgba(239, 68, 68, 0.65) !important;
@@ -4081,9 +4252,15 @@ html, body {
     border-color: rgba(34, 197, 94, 0.55) !important;
   }
   .admin-licencias-page .license-notepads-wrap .license-split-editor__status.license-split-editor__status--tier-bad {
-    color: #fca5a5 !important;
-    -webkit-text-fill-color: #fca5a5 !important;
-    border-color: rgba(239, 68, 68, 0.6) !important;
+    color: #ffffff !important;
+    -webkit-text-fill-color: #ffffff !important;
+    border-color: rgba(185, 28, 28, 0.95) !important;
+    background-color: #dc2626 !important;
+    background-image: linear-gradient(45deg, transparent 50%, #ffffff 50%),
+      linear-gradient(135deg, #ffffff 50%, transparent 50%) !important;
+    background-position: calc(100% - 0.65rem) 50%, calc(100% - 0.45rem) 50% !important;
+    background-size: 0.28rem 0.28rem, 0.28rem 0.28rem !important;
+    background-repeat: no-repeat !important;
   }
   .admin-licencias-page .license-notepads-wrap .license-split-editor__otro-combined.license-split-editor__otro-combined--tier-bad {
     border-color: rgba(239, 68, 68, 0.65) !important;
@@ -4092,6 +4269,36 @@ html, body {
     color: #f3f4f6 !important;
     -webkit-text-fill-color: #f3f4f6 !important;
     border-color: rgba(59, 130, 246, 0.28) !important;
+  }
+  /* Badge «Garantía» pendiente: amarillo pintado (no hereda blanco/rojo de status) */
+  .admin-licencias-page
+    .license-notepads-wrap
+    .license-split-editor__status.user-lic-warranty-pending-badge,
+  .admin-licencias-page
+    .license-notepads-wrap
+    .license-split-editor__status-bad.user-lic-warranty-pending-badge,
+  .admin-licencias-page
+    .license-notepads-wrap
+    .user-lic-warranty-pending-badge[data-lic-pendiente-garantia='1'],
+  .admin-licencias-page
+    .license-notepads-wrap
+    #licenseAllDaysContainer
+    .user-lic-warranty-pending-badge,
+  .admin-licencias-page
+    .license-notepads-wrap
+    #licenseAllDaysContainer
+    .user-lic-warranty-pending-badge
+    .fa-hourglass-half,
+  .admin-licencias-page
+    .license-notepads-wrap
+    .user-lic-warranty-pending-badge
+    .fa-hourglass-half {
+    color: #111827 !important;
+    -webkit-text-fill-color: #111827 !important;
+    border: none !important;
+    border-color: transparent !important;
+    background: #eab308 !important;
+    box-shadow: none !important;
   }
   /* Detalle «otro»: texto siempre claro; el tier solo ajusta el borde. */
   .admin-licencias-page .license-notepads-wrap .license-split-editor__otro-combined.license-split-editor__otro-combined--tier-neutral {
@@ -4816,6 +5023,56 @@ html, body {
       font-size: 0.58rem !important;
       margin-left: 0 !important;
     }
+
+    /* Móvil: Día 2–31 con Reportes + Pendiente → título a la izquierda.
+       Si falta uno de los dos, el título sigue centrado.
+       Día 1: a la izquierda si está cualquiera de los dos. */
+    .admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+      .license-notepads-wrap
+      #licenseAllDaysContainer
+      .admin-licencias-bloc--day:not([data-day='1'])
+      .admin-licencias-bloc-header:has(.js-admin-day-report-badge:not([hidden])):has(
+        .js-admin-day-pendiente-garantia-badge:not([hidden])
+      )
+      .admin-licencias-bloc-title,
+    .admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+      .license-notepads-wrap
+      #licenseAllDaysContainer
+      .admin-licencias-bloc--day[data-day='1']
+      .admin-licencias-bloc-header:has(.admin-licencias-report-header-badge:not([hidden]))
+      .admin-licencias-bloc-title {
+      grid-column: 1;
+      justify-self: start;
+      text-align: left;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    /* Portal usuario: misma lógica con badges reportes / pendiente */
+    .admin-licencias-page.user-licencias-shell
+      .user-lic-bundle-wrap
+      .admin-licencias-bloc--day:not([data-user-day='1'])
+      .admin-licencias-bloc-header:has(.user-lic-day-cnt-badge--reportes):has(
+        .user-lic-day-cnt-badge--pendiente-garantia
+      )
+      .admin-licencias-bloc-title,
+    .admin-licencias-page.user-licencias-shell
+      .user-lic-bundle-wrap
+      .admin-licencias-bloc--day[data-user-day='1']
+      .admin-licencias-bloc-header:has(
+        .user-lic-day-cnt-badge--reportes,
+        .user-lic-day-cnt-badge--pendiente-garantia
+      )
+      .admin-licencias-bloc-title {
+      grid-column: 1;
+      justify-self: start;
+      text-align: left;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
     .admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
       .license-notepads-wrap
       #licenseAllDaysContainer
@@ -5393,11 +5650,36 @@ html, body {
     color: rgba(255, 255, 255, 0.45) !important;
     -webkit-text-fill-color: rgba(255, 255, 255, 0.45) !important;
   }
-  .admin-licencias-page .license-notepads-wrap .license-split-editor__row select.license-split-editor__status {
+  .admin-licencias-page .license-notepads-wrap .license-split-editor__row select.license-split-editor__status:not(.license-split-editor__status--tier-bad):not(.license-split-editor__status--tier-good) {
     background-color: transparent !important;
     font-size: calc(var(--lic-line-fs, 0.875rem) * 0.92) !important;
     background-image: linear-gradient(45deg, transparent 50%, rgba(147, 197, 253, 0.65) 50%),
       linear-gradient(135deg, rgba(147, 197, 253, 0.65) 50%, transparent 50%) !important;
+    background-position: calc(100% - 0.65rem) 50%, calc(100% - 0.45rem) 50% !important;
+    background-size: 0.28rem 0.28rem, 0.28rem 0.28rem !important;
+    background-repeat: no-repeat !important;
+    padding-right: 1.15rem !important;
+  }
+  .admin-licencias-page .license-notepads-wrap .license-split-editor__row select.license-split-editor__status.license-split-editor__status--tier-bad {
+    color: #ffffff !important;
+    -webkit-text-fill-color: #ffffff !important;
+    background-color: #dc2626 !important;
+    font-size: calc(var(--lic-line-fs, 0.875rem) * 0.92) !important;
+    background-image: linear-gradient(45deg, transparent 50%, #ffffff 50%),
+      linear-gradient(135deg, #ffffff 50%, transparent 50%) !important;
+    background-position: calc(100% - 0.65rem) 50%, calc(100% - 0.45rem) 50% !important;
+    background-size: 0.28rem 0.28rem, 0.28rem 0.28rem !important;
+    background-repeat: no-repeat !important;
+    padding-right: 1.15rem !important;
+    border-color: rgba(185, 28, 28, 0.95) !important;
+  }
+  .admin-licencias-page .license-notepads-wrap .license-split-editor__row select.license-split-editor__status.license-split-editor__status--tier-good {
+    color: #86efac !important;
+    -webkit-text-fill-color: #86efac !important;
+    background-color: transparent !important;
+    font-size: calc(var(--lic-line-fs, 0.875rem) * 0.92) !important;
+    background-image: linear-gradient(45deg, transparent 50%, rgba(134, 239, 172, 0.85) 50%),
+      linear-gradient(135deg, rgba(134, 239, 172, 0.85) 50%, transparent 50%) !important;
     background-position: calc(100% - 0.65rem) 50%, calc(100% - 0.45rem) 50% !important;
     background-size: 0.28rem 0.28rem, 0.28rem 0.28rem !important;
     background-repeat: no-repeat !important;
@@ -11227,10 +11509,81 @@ html, body {
     display: none !important;
   }
 
-  .license-card.admin-licencias-reportes-toggle .license-card-report-total-badge {
+  .license-card.admin-licencias-reportes-toggle .license-card-report-total-badge,
+  .license-card.user-lic-license-card--reportes .license-card-report-total-badge {
     background: rgba(0, 0, 0, 0.25);
     border-color: rgba(254, 226, 226, 0.5);
     color: #fff;
+  }
+
+  /* Contraído (solo «R»): globito visible fuera de .full-text */
+  .licencias-container.collapsed
+    .license-card.admin-licencias-reportes-toggle,
+  .licencias-container.collapsed
+    .license-card.user-lic-license-card--reportes {
+    position: relative !important;
+    overflow: visible !important;
+  }
+
+  .licencias-container.collapsed
+    .license-card.admin-licencias-reportes-toggle
+    .license-card-header,
+  .licencias-container.collapsed
+    .license-card.user-lic-license-card--reportes
+    .license-card-header,
+  .licencias-container.collapsed
+    .license-card.admin-licencias-reportes-toggle
+    .license-name,
+  .licencias-container.collapsed
+    .license-card.user-lic-license-card--reportes
+    .license-name {
+    overflow: visible !important;
+  }
+
+  .licencias-container.collapsed .license-card-report-total-badge {
+    position: absolute !important;
+    top: -0.42rem !important;
+    right: -0.72rem !important;
+    left: auto !important;
+    margin: 0 !important;
+    min-width: 0.78rem !important;
+    width: auto !important;
+    max-width: 1rem !important;
+    height: 0.78rem !important;
+    padding: 0 0.14rem !important;
+    border-radius: 999px !important;
+    border-width: 1px !important;
+    font-size: 0.48rem !important;
+    font-weight: 700 !important;
+    line-height: 0.78rem !important;
+    letter-spacing: 0 !important;
+    z-index: 6;
+    pointer-events: none;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+    background: #b91c1c !important;
+    border-color: rgba(254, 202, 202, 0.75) !important;
+    color: #fff !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    transform: translateX(0);
+  }
+
+  /* Espacio a la derecha del chip R para que el globito no tape la letra */
+  .licencias-container.collapsed
+    .license-card.admin-licencias-reportes-toggle,
+  .licencias-container.collapsed
+    .license-card.user-lic-license-card--reportes {
+    margin-right: 0.45rem !important;
+  }
+
+  .licencias-container.collapsed .license-card-report-total-badge[hidden] {
+    display: none !important;
+  }
+
+  .licencias-container.collapsed .license-card-report-total-badge__num {
+    font-size: inherit !important;
+    line-height: inherit !important;
   }
 
   /* Vista historial / reportes / cambios: ocultar bloc notas / licencias / días / caídas (solo tarjetas + panel) */
@@ -26195,6 +26548,24 @@ body .card.product-texture-bg::before,
 
 .admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
   #licenseAllDaysContainer
+  .license-split-editor__status-select-shell--bad
+  > .user-lic-warranty-pending-badge,
+.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+  .license-notepads-wrap
+  #licenseAllDaysContainer
+  .license-split-editor__status-select-shell--bad
+  > .user-lic-warranty-pending-badge {
+  flex: 1 1 auto;
+  min-width: 5.75rem;
+  width: auto !important;
+  max-width: none;
+  color: #111827 !important;
+  -webkit-text-fill-color: #111827 !important;
+  background: #eab308 !important;
+}
+
+.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+  #licenseAllDaysContainer
   .admin-lic-day-red-tools,
 .admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
   .license-notepads-wrap
@@ -39981,4 +40352,79 @@ body .store-front-main .store-products-wrap--view-compact .card.product-texture-
   max-width: 100% !important;
   min-width: 0 !important;
   margin: 0 !important;
+}
+
+/* Admin/portal: «Garantía» amarillo pintado; «Caída» rojo pintado (prioridad final) */
+.admin-licencias-page
+  .user-lic-warranty-pending-badge
+  .fa-hourglass-half,
+.admin-licencias-page
+  .user-lic-warranty-pending-badge
+  > .fas {
+  color: #111827 !important;
+  -webkit-text-fill-color: #111827 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+.admin-licencias-page
+  .user-lic-warranty-pending-badge,
+.admin-licencias-page
+  .user-lic-warranty-pending-badge[data-lic-pendiente-garantia='1'],
+.admin-licencias-page
+  .license-split-editor__status-select-shell--warranty-pending
+  > .user-lic-warranty-pending-badge {
+  color: #111827 !important;
+  -webkit-text-fill-color: #111827 !important;
+  border-color: transparent !important;
+  background: #eab308 !important;
+  box-shadow: none !important;
+}
+
+.admin-licencias-page
+  select.license-split-editor__status.license-split-editor__status--tier-bad,
+.admin-licencias-page
+  select.license-split-editor__status-bad.license-split-editor__status--tier-bad {
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+  background-color: #dc2626 !important;
+  background-image: linear-gradient(45deg, transparent 50%, #ffffff 50%),
+    linear-gradient(135deg, #ffffff 50%, transparent 50%) !important;
+  background-position: calc(100% - 0.65rem) 50%, calc(100% - 0.45rem) 50% !important;
+  background-size: 0.28rem 0.28rem, 0.28rem 0.28rem !important;
+  background-repeat: no-repeat !important;
+  border-color: rgba(185, 28, 28, 0.95) !important;
+}
+
+/* Portal usuario: mismo badge «Garantía» (solo icono + texto, amarillo pintado) */
+.admin-licencias-page.user-licencias-shell
+  .user-lic-bundle-wrap
+  .user-lic-warranty-pending-badge,
+.admin-licencias-page.user-licencias-shell
+  .user-lic-bundle-wrap
+  .user-lic-warranty-pending-badge[data-lic-pendiente-garantia='1'],
+.admin-licencias-page.user-licencias-shell
+  .user-lic-bundle-wrap
+  .license-split-editor__status-select-shell--warranty-pending
+  > .user-lic-warranty-pending-badge {
+  color: #111827 !important;
+  -webkit-text-fill-color: #111827 !important;
+  border: none !important;
+  border-color: transparent !important;
+  background: #eab308 !important;
+  box-shadow: none !important;
+  font-weight: 700;
+}
+
+.admin-licencias-page.user-licencias-shell
+  .user-lic-bundle-wrap
+  .user-lic-warranty-pending-badge
+  .fa-hourglass-half,
+.admin-licencias-page.user-licencias-shell
+  .user-lic-bundle-wrap
+  .user-lic-warranty-pending-badge
+  > .fas {
+  color: #111827 !important;
+  -webkit-text-fill-color: #111827 !important;
+  background: transparent !important;
 }

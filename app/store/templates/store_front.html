@@ -769,7 +769,7 @@
 {% block scripts %}
 <meta name="clear_trigger_log_url" content="{{ url_for('admin_bp.clear_trigger_log') }}">
 <script src="{{ url_for('store_bp.static', filename='js/store_config.js') }}?v=20260709-store-prefs-bd" defer></script>
-<script src="{{ url_for('store_bp.static', filename='js/store_front.js') }}?v=20260709-store-view-only" defer></script>
+<script src="{{ url_for('store_bp.static', filename='js/store_front.js') }}?v=20260713-carrito-xss-v1" defer></script>
 {% if not store_view_only|default(false) %}
 <script src="{{ url_for('store_bp.static', filename='js/store_renovacion.js') }}?v=20260520-buena-revisada" defer></script>
 {% endif %}

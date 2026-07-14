@@ -74,6 +74,12 @@ from .routes import (
     store_access_required,
 )
 
+# OJO: \x1f (separador de campos de línea) cuenta como whitespace para str.strip()
+# en Python; recortar líneas de bloc solo con estos caracteres para no perder el
+# separador final (si se pierde, el estado rojo se re-interpreta como notas).
+_BLOC_WS = ' \t\r\n'
+
+
 def user_licencias_precio_required(f):
     """
     Usuarios con tipo de precio USD o COP como cliente; o soporte licencias (user_prices);
@@ -2403,7 +2409,27 @@ def api_user_license_account_client_notes(account_id):
             return _reject_user_licencias_api('Usuario no encontrado.', 403)
         if _user_store_view_only(user_obj):
             return _json_licencias_view_only_forbidden()
+        # Misma política que el resto del portal (endpoint mutante).
+        admin_username = current_app.config.get('ADMIN_USER', 'admin')
+        if user_obj.username == admin_username:
+            return _reject_user_licencias_api('Los administradores usan Admin Licencias.', 403)
+        blocked_users = ['soporte', 'soporte1', 'soporte2', 'soporte3']
+        if (user_obj.username or '').lower() in blocked_users:
+            return _reject_user_licencias_api('No tienes permiso.', 403)
+        if user_obj.parent_id is not None:
+            if not user_obj.can_access_store:
+                return _reject_user_licencias_api('Sin acceso.', 403)
+            pu = User.query.get(user_obj.parent_id)
+            if not pu:
+                return _reject_user_licencias_api('Usuario principal no encontrado.', 403)
+        if not _eligible_tienda_user_licencias_portal(user_obj):
+            return _reject_user_licencias_api(
+                'Necesitas tipo de precio USD o COP o permiso de soporte licencias.',
+                403,
+            )
         assignee_ids, _ = _user_licencias_viewer_scope(user_obj)
+        if not assignee_ids:
+            return _reject_user_licencias_api('Sin acceso.', 403)
 
         account = LicenseAccount.query.get(account_id)
         if not account or account.assigned_to_user_id not in assignee_ids:
@@ -2548,9 +2574,8 @@ def api_user_license_day_row_status():
                     {
                         'success': False,
                         'error': 'Debes usar la ficha de la cuenta inventario para cambiar estos estados.',
-                    },
-                    403,
-                )
+                    }
+                ), 403
             raw_lines, visible = collect_visible_day_line_targets_username_only(day_text_s, allowed_names)
 
         if row_ordinal < 0 or row_ordinal >= len(visible):
@@ -2615,11 +2640,24 @@ def api_user_license_day_row_status():
         m2m = bool(getattr(license_row, 'month_to_month', False))
         revert_buena = bool(data.get('revert_buena_revisada'))
         preserve_buena = bool(data.get('preserve_buena_revisada'))
-        if not m2m and 'status_good' in data and not revert_buena and not preserve_buena:
+        revert_solucionada = bool(data.get('revert_solucionada'))
+        preserve_solucionada = bool(data.get('preserve_solucionada'))
+        # No descartar status_good en flujos de solucionada: esas ramas lo usan
+        # explícitamente aunque la licencia no sea mes a mes.
+        if (
+            not m2m
+            and 'status_good' in data
+            and not revert_buena
+            and not preserve_buena
+            and not revert_solucionada
+            and not preserve_solucionada
+        ):
             data = dict(data)
             data.pop('status_good', None)
 
         try:
+            from app.store.user_license_line_parse import is_solucionada_status
+
             if preserve_buena and normalize_status_key(
                 str(dual_base.get('statusGood') or '')
             ) == 'ok':
@@ -2630,6 +2668,40 @@ def api_user_license_day_row_status():
                 otro_use = ''
                 dual_base = dict(dual_base)
                 dual_base['prevGoodRestore'] = _prev_good_restore_from_dual(dual_base)
+                # Conservar badge Entregada al editar solo notas / sin revertir.
+                if dual_base.get('warrantyEntregada'):
+                    dual_base['warrantyEntregada'] = True
+            elif revert_solucionada and is_solucionada_status(dual_base.get('statusBad')):
+                status_good_in = data.get('status_good') if 'status_good' in data else None
+                if status_good_in is None:
+                    canon_good = str(dual_base.get('statusGood') or '').strip()
+                    canon_sb = ''
+                    otro_use = ''
+                else:
+                    canon_good, canon_sb, otro_use = apply_portal_user_status_update(
+                        dual_base,
+                        status_good_in,
+                        '',
+                        '',
+                        revert_buena_revisada=False,
+                        status_good_omitted=False,
+                    )
+                    canon_sb = ''
+                    otro_use = ''
+            elif preserve_solucionada and is_solucionada_status(dual_base.get('statusBad')):
+                if 'status_good' not in data:
+                    canon_good = str(dual_base.get('statusGood') or '').strip()
+                else:
+                    canon_good, _sb_ign, _od_ign = apply_portal_user_status_update(
+                        dual_base,
+                        data.get('status_good'),
+                        '',
+                        '',
+                        revert_buena_revisada=False,
+                        status_good_omitted=False,
+                    )
+                canon_sb = 'solucionada'
+                otro_use = ''
             else:
                 status_good_in = data.get('status_good') if 'status_good' in data else None
                 canon_good, canon_sb, otro_use = apply_portal_user_status_update(
@@ -2680,6 +2752,8 @@ def api_user_license_day_row_status():
             from app.store.user_license_line_parse import portal_strip_bad_from_extra as _strip_bad_ex
 
             merged_dual['extra'] = _strip_bad_ex(str(merged_dual.get('extra') or ''))
+            merged_dual['warrantyEntregada'] = False
+            merged_dual.pop('warrantyPendingPacked', None)
 
         new_line = dual_to_storage_line(merged_dual)
         new_day_text = rebuild_day_notepad_lines_with_physical_index(raw_lines, phys_idx, new_line)
@@ -3665,7 +3739,7 @@ def _sync_inventory_accounts_from_license_notes(license_row):
     notes = getattr(license_row, 'license_notes', None) or ''
     lines_list = []
     for line in str(notes).replace('\r\n', '\n').split('\n'):
-        s = str(line).strip()
+        s = str(line).strip(_BLOC_WS)
         if s:
             lines_list.append(s)
 
@@ -3799,7 +3873,7 @@ def _license_notes_inventory_lines_list(note_text):
     """Líneas no vacías del bloc «Licencias» (misma semántica que _sync_inventory_accounts_from_license_notes)."""
     out = []
     for line in str(note_text or '').replace('\r\n', '\n').split('\n'):
-        s = str(line).strip()
+        s = str(line).strip(_BLOC_WS)
         if s:
             out.append(s)
     return out
@@ -3885,17 +3959,17 @@ def _append_line_to_license_day_notepad(license_row, calendar_day_int, line_text
         except Exception:
             dm = {}
     cur = dm.get(day_key)
-    cur_s = str(cur).rstrip() if cur is not None else ''
-    add = str(line_text).strip()
+    cur_s = str(cur).rstrip(_BLOC_WS) if cur is not None else ''
+    add = str(line_text).strip(_BLOC_WS)
     if cur_s:
         existing_lines = [
-            str(ln).strip()
+            str(ln).strip(_BLOC_WS)
             for ln in str(cur_s).replace('\r\n', '\n').split('\n')
             if str(ln).strip()
         ]
         if add in existing_lines:
             return
-        dm[day_key] = (cur_s + '\n' + add).strip()
+        dm[day_key] = (cur_s + '\n' + add).strip(_BLOC_WS)
     else:
         dm[day_key] = add
     license_row.day_notepads_json = json.dumps(dm, ensure_ascii=False)
@@ -3933,7 +4007,7 @@ def _remove_first_matching_line_from_license_day_notepads(license_row, fp_triple
         if dk not in dm:
             continue
         cur = dm.get(dk)
-        cur_s = str(cur).strip() if cur is not None else ''
+        cur_s = str(cur).strip(_BLOC_WS) if cur is not None else ''
         if not cur_s:
             continue
         lines = [ln for ln in str(cur_s).replace('\r\n', '\n').split('\n') if str(ln).strip()]
@@ -3952,7 +4026,7 @@ def _remove_first_matching_line_from_license_day_notepads(license_row, fp_triple
             new_lines.append(ln)
         if removed_here:
             if new_lines:
-                dm[dk] = '\n'.join(new_lines).strip()
+                dm[dk] = '\n'.join(new_lines).strip(_BLOC_WS)
             else:
                 dm.pop(dk, None)
             license_row.day_notepads_json = (
@@ -3990,7 +4064,7 @@ def _extract_line_from_license_day_notepad(license_row, day_int, fp_triple, is_n
 
     dk = str(day_i)
     cur = dm.get(dk)
-    cur_s = str(cur).strip() if cur is not None else ''
+    cur_s = str(cur).strip(_BLOC_WS) if cur is not None else ''
     if not cur_s:
         return None
 
@@ -4018,7 +4092,7 @@ def _extract_line_from_license_day_notepad(license_row, day_int, fp_triple, is_n
         return None
 
     if new_lines:
-        dm[dk] = '\n'.join(new_lines).strip()
+        dm[dk] = '\n'.join(new_lines).strip(_BLOC_WS)
     else:
         dm.pop(dk, None)
     license_row.day_notepads_json = _json.dumps(dm, ensure_ascii=False) if dm else None
@@ -4889,6 +4963,36 @@ def api_put_license_notes(license_id):
                 process_pending_reservations_for_product(product_id_for_res)
             except Exception as res_ex:
                 current_app.logger.warning('process_pending_reservations_for_product: %s', res_ex)
+        if inv_sync_result and int(inv_sync_result.get('created') or 0) > 0:
+            try:
+                from flask_login import current_user
+
+                from app.store.store_event_notify import notify_admin_stock_upload
+
+                pname = ''
+                try:
+                    if license_obj.product is not None:
+                        pname = str(license_obj.product.name or '').strip()
+                except Exception:
+                    pname = ''
+                if not pname:
+                    pname = 'Producto'
+                actor_id = None
+                try:
+                    if current_user and getattr(current_user, 'is_authenticated', False):
+                        actor_id = int(current_user.id)
+                except Exception:
+                    actor_id = None
+                notify_admin_stock_upload(
+                    product_name=pname,
+                    created=int(inv_sync_result.get('created') or 0),
+                    license_id=int(license_obj.id),
+                    product_id=product_id_for_res,
+                    actor_user_id=actor_id,
+                    commit=True,
+                )
+            except Exception as stock_n_ex:
+                current_app.logger.warning('notify_admin_stock_upload: %s', stock_n_ex)
         body = {
             'success': True,
             'licenses_rev': _admin_licenses_revision_fingerprint(archived_only=False),
@@ -5301,11 +5405,13 @@ def _warranty_reserve_for_product(product):
 
 def _sellable_license_accounts_public(license_row):
     """
-    Unidades vendibles en tienda/checkout para una licencia: solo cuentas con status ``available``
-    menos la reserva ``gar.`` (``warranty_days``). Coincide con la lógica de ``procesar_pago``.
+    Unidades vendibles en tienda/checkout para una licencia: cuentas ``available``
+    menos la reserva ``gar.`` (``warranty_days``): ``max(0, available - gar.)``.
+    Es exactamente la misma regla que aplica ``procesar_pago`` (``max_take``), para
+    que la tienda nunca muestre existencias que el checkout va a rechazar.
 
-    Si hay menos disponibles que la reserva gar., no se bloquea toda la venta: se venden las que
-    hay (no se puede mantener el colchón completo con tan poco stock).
+    Si ``available <= gar.`` todo el stock es colchón de garantía: se muestra 0
+    vendible (el colchón sigue disponible para entregar garantías).
 
     Las líneas del bloc ``license_notes`` no sustituyen filas en ``store_license_accounts``:
     hasta que existan cuentas ``available``, el público muestra 0 vendible (evita 409 tras «4 existencias»).
@@ -5320,11 +5426,7 @@ def _sellable_license_accounts_public(license_row):
     if avail <= 0:
         return 0
     reserve = _license_warranty_days_public(license_row)
-    if reserve <= 0:
-        return avail
-    if avail <= reserve:
-        return avail
-    return avail - reserve
+    return max(0, avail - reserve)
 
 
 def _compute_public_sellable_stock_for_product(product):
@@ -5436,11 +5538,161 @@ def _credential_email_normalized_from_plain(cred_plain):
 _EMAIL_IN_CRED_CRE = re.compile(r'([\w.+-]+@[\w.-]+\.[A-Za-z]{2,})', re.ASCII)
 
 
+def _credential_identifier_token_from_plain(cred_plain):
+    """Primer token de la credencial cuando no es un correo (p. ej. account_identifier)."""
+    if not cred_plain:
+        return None
+    s = str(cred_plain).strip()
+    if not s:
+        return None
+    if _credential_email_normalized_from_plain(s):
+        return None
+    tok = s.split()[0].strip() if s.split() else ''
+    if not tok or '@' in tok:
+        return None
+    return tok
+
+
+def _find_sold_assigned_license_account_for_warranty(license_id, cred_hint=None, bad_account_id=None):
+    """
+    Resuelve la cuenta mala vendida/asignada por id, email o account_identifier.
+    Devuelve (LicenseAccount|None, http_error_tuple|None) donde http_error_tuple es
+    (jsonify_payload, status) si hay conflicto (p. ej. varios matches).
+    """
+    from app.store.models import LicenseAccount
+
+    ok_st = {'assigned', 'sold'}
+    bad_acc = None
+    try:
+        if bad_account_id is not None and str(bad_account_id).strip() != '':
+            bid = int(bad_account_id)
+            bad_acc = LicenseAccount.query.filter_by(id=bid, license_id=license_id).first()
+    except (TypeError, ValueError):
+        bad_acc = None
+
+    cred = (cred_hint or '').strip()
+    if bad_acc is None and cred:
+        email_key = _credential_email_normalized_from_plain(cred)
+        if email_key:
+            lk = email_key.lower()
+            candidates = (
+                LicenseAccount.query.filter(
+                    LicenseAccount.license_id == license_id,
+                    LicenseAccount.email.isnot(None),
+                )
+                .filter(sa_func.lower(LicenseAccount.email) == lk)
+                .all()
+            )
+            matches = [
+                ca
+                for ca in candidates
+                if (ca.status or '').lower() in ok_st and ca.assigned_to_user_id is not None
+            ]
+            if len(matches) == 1:
+                bad_acc = matches[0]
+            elif len(matches) > 1:
+                return None, (
+                    {
+                        'success': False,
+                        'error': (
+                            'Hay varias cuentas vendidas con el mismo correo en esta licencia. '
+                            'Indica «bad_account_id» (id interno en inventario) desde la API.'
+                        ),
+                    },
+                    409,
+                )
+
+        if bad_acc is None:
+            ident = _credential_identifier_token_from_plain(cred)
+            if ident:
+                ik = ident.lower()
+                candidates = (
+                    LicenseAccount.query.filter(
+                        LicenseAccount.license_id == license_id,
+                        LicenseAccount.account_identifier.isnot(None),
+                    )
+                    .filter(sa_func.lower(LicenseAccount.account_identifier) == ik)
+                    .all()
+                )
+                matches = [
+                    ca
+                    for ca in candidates
+                    if (ca.status or '').lower() in ok_st and ca.assigned_to_user_id is not None
+                ]
+                if len(matches) == 1:
+                    bad_acc = matches[0]
+                elif len(matches) > 1:
+                    return None, (
+                        {
+                            'success': False,
+                            'error': (
+                                'Hay varias cuentas vendidas con el mismo identificador en esta licencia. '
+                                'Indica «bad_account_id» (id interno en inventario) desde la API.'
+                            ),
+                        },
+                        409,
+                    )
+
+    return bad_acc, None
+
+
+def _warranty_remove_replacement_from_inventory_bloc(license_obj, replacement, slot_before):
+    """
+    Tras entregar una garantía: quita del bloc «Licencias» la línea del repuesto entregado
+    (igual que una venta) y re-sincroniza las cuentas ``available`` con el texto restante.
+    Sin esto la línea seguiría en el bloc y el siguiente guardado recrearía la unidad vendible.
+    """
+    removed = False
+    try:
+        sb = int(slot_before) if slot_before is not None else None
+    except (TypeError, ValueError):
+        sb = None
+    if sb is not None and sb >= 1:
+        lines = _license_notes_inventory_lines_list(getattr(license_obj, 'license_notes', None))
+        if sb <= len(lines):
+            removed = _remove_license_inventory_lines_at_ordinals(license_obj, [sb])
+    if not removed:
+        product = getattr(license_obj, 'product', None)
+        if product is None:
+            from app.store.models import Product as _ProductForWarranty
+
+            product = _ProductForWarranty.query.get(license_obj.product_id)
+        is_nf = _product_name_is_netflix(getattr(product, 'name', None) if product else None)
+        fp = _normalize_inventory_fingerprint(
+            getattr(replacement, 'email', None),
+            getattr(replacement, 'password', None),
+            getattr(replacement, 'account_identifier', None),
+        )
+        removed = _remove_first_license_inventory_line_matching_fingerprint(
+            license_obj, fp, is_nf
+        )
+    if removed:
+        _sync_inventory_accounts_from_license_notes(license_obj)
+    return removed
+
+
+def _append_license_suspended_notes_line(license_obj, line_text):
+    """Añade la línea de la cuenta mala al bloc «Caídas / Suspendidas» (suspended_notes)."""
+    line = str(line_text or '').replace('\r\n', ' ').replace('\n', ' ').strip(_BLOC_WS)
+    if not line:
+        return False
+    cur = str(getattr(license_obj, 'suspended_notes', None) or '').strip(_BLOC_WS)
+    lines = cur.split('\n') if cur else []
+    while lines and not str(lines[-1]).strip(_BLOC_WS):
+        lines.pop()
+    lines.append(line)
+    license_obj.suspended_notes = '\n'.join(lines)
+    return True
+
+
 def _pick_next_warranty_replacement_license_account(license_row):
     """
     Misma política que el checkout: disponibles ordenados por id asc; las últimas `gar.`
     (warranty_days) filas son colchón y no salen en venta — la primera cuenta de ese bloque es
     la disponible más antigua dentro de la reserva (listo para entregar garantía).
+
+    Si solo quedan cuentas del colchón (available <= gar.), igual se puede entregar garantía:
+    todo el stock disponible es reserva.
     Devuelve (LicenseAccount|None, error_code_str|None).
     """
     from app.store.models import LicenseAccount
@@ -5459,9 +5711,10 @@ def _pick_next_warranty_replacement_license_account(license_row):
         if _renewal_account_unreserved_for_public_sale(a)
     ]
     n = len(avail)
-    if n <= reserve:
+    if n <= 0:
         return None, 'empty_warranty_pool'
-    pick_idx = n - reserve
+    # Colchón = últimas min(reserve, n). Si n <= reserve, todo el stock es reserva.
+    pick_idx = max(0, n - reserve)
     return avail[pick_idx], None
 
 
@@ -5483,46 +5736,20 @@ def api_deliver_warranty_replacement(license_id):
         data = request.get_json(silent=True) or {}
         raw_bad_id = data.get('bad_account_id')
         cred_hint = (data.get('credential_hint') or data.get('bad_credential_plain') or '').strip()
+        # strip(_BLOC_WS): no quitar \x1f (separador de campos de la línea del día)
+        bad_day_line = (
+            str(data.get('bad_day_line') or '')
+            .replace('\r\n', ' ')
+            .replace('\n', ' ')
+            .strip(_BLOC_WS)
+        )
 
-        bad_acc = None
-        try:
-            if raw_bad_id is not None and str(raw_bad_id).strip() != '':
-                bid = int(raw_bad_id)
-                bad_acc = LicenseAccount.query.filter_by(id=bid, license_id=license_id).first()
-        except (TypeError, ValueError):
-            bad_acc = None
-
-        email_key = None
-        if bad_acc is None and cred_hint:
-            email_key = _credential_email_normalized_from_plain(cred_hint)
-            if email_key:
-                lk = email_key.lower()
-                candidates = (
-                    LicenseAccount.query.filter(
-                        LicenseAccount.license_id == license_id,
-                        LicenseAccount.email.isnot(None),
-                    )
-                    .filter(sa_func.lower(LicenseAccount.email) == lk)
-                    .all()
-                )
-                ok_st = {'assigned', 'sold'}
-                matches = [
-                    ca
-                    for ca in candidates
-                    if (ca.status or '').lower() in ok_st and ca.assigned_to_user_id is not None
-                ]
-                if len(matches) == 1:
-                    bad_acc = matches[0]
-                elif len(matches) > 1:
-                    return jsonify(
-                        {
-                            'success': False,
-                            'error': (
-                                'Hay varias cuentas vendidas con el mismo correo en esta licencia. '
-                                'Indica «bad_account_id» (id interno en inventario) desde la API.'
-                            ),
-                        }
-                    ), 409
+        bad_acc, conflict = _find_sold_assigned_license_account_for_warranty(
+            license_id, cred_hint=cred_hint, bad_account_id=raw_bad_id
+        )
+        if conflict is not None:
+            payload, status = conflict
+            return jsonify(payload), status
 
         if bad_acc is None:
             return jsonify(
@@ -5562,10 +5789,24 @@ def api_deliver_warranty_replacement(license_id):
                 {'success': False, 'error': msgs.get(werr or '', 'Sin stock para garantía.')}
             ), 409
 
+        replacement_slot_before = getattr(replacement, 'inventory_bloc_ord', None)
+
+        if not _claim_license_account_for_delivery(replacement):
+            db.session.rollback()
+            return jsonify(
+                {
+                    'success': False,
+                    'error': (
+                        'La cuenta de reserva acaba de ser tomada por otra operación. '
+                        'Inténtalo de nuevo.'
+                    ),
+                }
+            ), 409
+
         old_at = bad_acc.assigned_at
         old_ex = bad_acc.expires_at
         old_cred_plain = '{} {}'.format(
-            str(bad_acc.email or '').strip(),
+            str(bad_acc.email or '').strip() or str(bad_acc.account_identifier or '').strip(),
             str(bad_acc.password or '').replace('\r\n', ' ').replace('\n', ' ').strip(),
         ).strip()
 
@@ -5579,9 +5820,21 @@ def api_deliver_warranty_replacement(license_id):
         replacement.updated_at = datetime.utcnow()
 
         new_cred_plain = '{} {}'.format(
-            str(replacement.email or '').strip(),
+            str(replacement.email or '').strip() or str(replacement.account_identifier or '').strip(),
             str(replacement.password or '').replace('\r\n', ' ').replace('\n', ' ').strip(),
         ).strip()
+
+        # El repuesto sale del bloc Licencias (como en una venta) y la caída queda en Caídas.
+        _warranty_remove_replacement_from_inventory_bloc(
+            license_obj, replacement, replacement_slot_before
+        )
+        replacement.inventory_bloc_ord = None
+        from app.store.user_license_line_parse import LICENSE_LINE_FIELD_SEP as _LFS
+
+        suspended_line = bad_day_line or _LFS.join(
+            [old_cred_plain, reporter_name or 'anonimo', '', 'caida o suspendida', '']
+        )
+        _append_license_suspended_notes_line(license_obj, suspended_line)
 
         try:
             from app.store.license_report_notify import notify_license_report_answered
@@ -5643,6 +5896,8 @@ def api_deliver_warranty_replacement(license_id):
                 'new_account_identifier': str(replacement.account_identifier or '').strip(),
                 'replacement_account_id': replacement.id,
                 'notified': True,
+                'license_notes': getattr(license_obj, 'license_notes', None) or '',
+                'suspended_notes': getattr(license_obj, 'suspended_notes', None) or '',
             }
         )
     except Exception as e:
@@ -5671,7 +5926,7 @@ def api_notify_license_report_answered(license_id):
 
         data = request.get_json(silent=True) or {}
         outcome = str(data.get('outcome') or '').strip().lower()
-        if outcome not in ('buena', 'warranty_replaced', 'warranty_pending'):
+        if outcome not in ('buena', 'warranty_replaced', 'warranty_pending', 'solucionada'):
             return jsonify({'success': False, 'error': 'outcome inválido.'}), 400
 
         raw_uid = data.get('user_id')
@@ -5743,6 +5998,27 @@ def api_get_product_stock(product_id):
         current_app.logger.error(f'Error al obtener stock del producto {product_id}: {str(e)}')
         return jsonify({'success': False, 'error': str(e)}), 500
 
+def _claim_license_account_for_delivery(account):
+    """
+    Reclama la cuenta de forma atómica: UPDATE condicional que solo pasa a
+    'assigned' si sigue 'available'. Si otra compra/garantía concurrente la tomó
+    primero, devuelve False (evita sobreventa / entregar la misma cuenta dos veces).
+    """
+    from app.store.models import LicenseAccount
+
+    if account is None or getattr(account, 'id', None) is None:
+        return False
+    claimed = (
+        db.session.query(LicenseAccount)
+        .filter(
+            LicenseAccount.id == int(account.id),
+            LicenseAccount.status == 'available',
+        )
+        .update({'status': 'assigned'}, synchronize_session=False)
+    )
+    return bool(claimed)
+
+
 def _public_checkout_assign_license_account(
     account,
     license_row,
@@ -5752,8 +6028,15 @@ def _public_checkout_assign_license_account(
     sold_bloc_moves,
     cuentas_asignadas,
 ):
-    """Asigna una cuenta de inventario tras venta/renovación en tienda pública."""
+    """
+    Asigna una cuenta de inventario tras venta/renovación en tienda pública.
+    Devuelve True si la cuenta se reclamó y asignó; False si otra transacción
+    concurrente la tomó primero (el llamador debe saltarla o abortar).
+    """
     from app.store.models import LicenseAccount
+
+    if not _claim_license_account_for_delivery(account):
+        return False
 
     slot_before = account.inventory_bloc_ord
     raw_ln = None
@@ -5851,6 +6134,8 @@ def _public_checkout_assign_license_account(
                 getattr(account, 'id', None),
                 exc_info=True,
             )
+
+    return True
 
 
 @store_bp.route('/api/products/stock/rev', methods=['GET'])

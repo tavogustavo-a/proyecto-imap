@@ -82,6 +82,7 @@
 
     if (
       kind === 'license_report_buena' ||
+      kind === 'license_report_solucionada' ||
       kind === 'license_warranty_replaced' ||
       kind === 'license_warranty_pending'
     ) {
@@ -107,6 +108,16 @@
         renewal: false,
         licenseReport: true,
         adminReport: true,
+      };
+    }
+
+    if (kind === 'admin_stock_upload') {
+      return {
+        title: title,
+        body: bodyText,
+        renewal: false,
+        adminOps: true,
+        stockUpload: true,
       };
     }
 

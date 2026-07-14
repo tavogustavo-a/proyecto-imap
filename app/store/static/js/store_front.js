@@ -909,6 +909,11 @@ document.addEventListener('DOMContentLoaded', function() {
     return d.innerHTML;
   }
 
+  /** Para valores dentro de atributos HTML (src, title…): escapa también comillas. */
+  function tiendaEscapeAttr(str) {
+    return tiendaEscapeHtmlParaModal(str).replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+
   function tiendaEmailEsCredencialInterna(email) {
     const e = String(email || '').toLowerCase().trim();
     return e.endsWith('@store.internal') || /^inv\.l\d+\./i.test(e);
@@ -1113,14 +1118,15 @@ document.addEventListener('DOMContentLoaded', function() {
             '</div>'
           : '';
 
+      // Nombre/logo escapados: pueden venir de BD o de un carrito manipulado en localStorage.
       div.innerHTML = `
         <button class="btn-eliminar-producto" title="Eliminar producto" data-id="${producto.id}" data-es-renovacion="${esRen}" data-es-renovar-cuenta="${esRenCuenta}" data-line-uid="${lineUid}">×</button>
         <div class="carrito-producto-superior">
           <div class="carrito-producto-logo-wrap">
-            <img src="${producto.logo}" alt="logo" class="carrito-producto-logo">
+            <img src="${tiendaEscapeAttr(producto.logo || '')}" alt="logo" class="carrito-producto-logo">
             ${logoBadge}
           </div>
-          <span class="carrito-producto-nombre">${producto.nombre}</span>
+          <span class="carrito-producto-nombre">${tiendaEscapeHtmlParaModal(producto.nombre || '')}</span>
         </div>
         ${cuentaClienteSub}
         <div class="carrito-producto-inferior">

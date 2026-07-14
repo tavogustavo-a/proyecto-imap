@@ -184,6 +184,12 @@ def apply_positive_credit_against_license_debts(
         if parent:
             billing = parent
 
+    # Bloqueo de fila: dos abonos simultáneos (recargas, admin) leen-modifican-escriben
+    # el saldo; sin lock uno pisa al otro y se acredita menos.
+    locked = User.query.filter_by(id=billing.id).with_for_update().first()
+    if locked is not None:
+        billing = locked
+
     cur = (currency or _currency_for_user(billing)).strip().upper()
     if cur not in ('USD', 'COP'):
         cur = _currency_for_user(billing)

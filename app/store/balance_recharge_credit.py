@@ -49,6 +49,97 @@ def lock_balance_recharge(recharge_id: int) -> BalanceRecharge | None:
     )
 
 
+def _cas_recharge_status(recharge_id: int, from_status: str, to_status: str) -> bool:
+    """
+    Transición de estado atómica (UPDATE condicional): solo pasa a ``to_status``
+    si la fila sigue en ``from_status``. Devuelve False si otra transacción
+    concurrente la procesó primero (evita acreditar dos veces incluso donde
+    ``with_for_update`` no aplica, p. ej. SQLite).
+    """
+    updated = (
+        db.session.query(BalanceRecharge)
+        .filter(
+            BalanceRecharge.id == int(recharge_id),
+            BalanceRecharge.status == from_status,
+        )
+        .update({'status': to_status}, synchronize_session=False)
+    )
+    return bool(updated)
+
+
+def resolve_receipt_duplicates_after_commit(row_id: int) -> tuple[bool, list[int]]:
+    """
+    Tras el commit de una recarga nueva: si por una carrera dos solicitudes activas
+    comparten ``receipt_number`` (misma consignación con otra foto enviada a la vez),
+    sobrevive solo la de menor id y las demás se revierten (con débito si hubo
+    auto-crédito). El chequeo previo de duplicados no cubre esa ventana porque
+    ambas peticiones pasan la validación antes de que la otra haga commit.
+
+    Devuelve (row_sigue_activa, ids_revertidos). El caller emite SSE por los
+    ids revertidos.
+    """
+    from app.store.balance_recharge_analyzer import _recharge_duplicate_blocks
+
+    row = BalanceRecharge.query.get(int(row_id))
+    receipt = (getattr(row, 'receipt_number', None) or '').strip() if row else ''
+    if not row or not receipt:
+        return True, []
+    if not _recharge_duplicate_blocks(row):
+        # Otra petición concurrente ya la revirtió.
+        return False, []
+
+    activos = [
+        r
+        for r in BalanceRecharge.query.filter_by(receipt_number=receipt).all()
+        if _recharge_duplicate_blocks(r)
+    ]
+    if len(activos) <= 1:
+        return True, []
+
+    keep_id = min(int(r.id) for r in activos)
+    survived = int(row.id) == keep_id
+    nota = (
+        'Comprobante duplicado: otra solicitud activa ya usa el mismo número de '
+        'comprobante. Revertida automáticamente.'
+    )
+    reverted_ids: list[int] = []
+    for r in sorted(activos, key=lambda x: int(x.id)):
+        if int(r.id) == keep_id:
+            continue
+        locked = lock_balance_recharge(r.id)
+        if not locked:
+            continue
+        st = (locked.status or '').lower()
+        if st == 'auto_credited' and locked.admin_verified is None:
+            target = User.query.filter_by(id=locked.user_id).with_for_update().first()
+            credited = (
+                locked.amount_credited
+                if locked.amount_credited is not None
+                else locked.amount_claimed
+            )
+            amt = float(credited) if credited is not None else 0.0
+            if target and amt > 0:
+                apply_user_balance_debit(
+                    target, (locked.currency or 'COP').strip().upper(), amt
+                )
+            locked.status = 'rejected'
+            locked.admin_verified = False
+        elif st == 'auto_accumulated' and locked.admin_verified is None:
+            locked.status = 'rejected'
+            locked.admin_verified = False
+        elif st == 'pending':
+            locked.status = 'rejected'
+        else:
+            # approved/accumulated (decisión admin) o pending_binance_pay: no tocar.
+            db.session.commit()
+            continue
+        locked.admin_note = nota
+        locked.reviewed_at = datetime.utcnow()
+        db.session.commit()
+        reverted_ids.append(int(locked.id))
+    return survived, reverted_ids
+
+
 def try_email_match_finalize(
     recharge_id: int,
     result: dict[str, Any] | None = None,
@@ -75,6 +166,8 @@ def try_email_match_finalize(
             return False, None
 
         if is_accumulator_method_id(row.payment_method_id or ''):
+            if not _cas_recharge_status(row.id, 'pending', 'accumulated'):
+                return False, None
             row.status = 'accumulated'
             row.amount_claimed = amount
             row.reviewed_at = now
@@ -89,6 +182,8 @@ def try_email_match_finalize(
         if not target:
             return False, None
 
+        if not _cas_recharge_status(row.id, 'pending', 'approved'):
+            return False, None
         cur = (row.currency or 'COP').strip().upper()
         apply_user_balance_credit(target, cur, float(amount))
         row.status = 'approved'
@@ -151,6 +246,8 @@ def try_binance_pay_webhook_finalize(
     if not target:
         return False, None
 
+    if not _cas_recharge_status(row.id, 'pending_binance_pay', 'approved'):
+        return False, None
     now = datetime.utcnow()
     cur = (row.currency or 'COP').strip().upper()
     apply_user_balance_credit(target, cur, float(amount))
@@ -198,6 +295,8 @@ def try_admin_approve_finalize(
 
     now = datetime.utcnow()
     if to_accumulated:
+        if not _cas_recharge_status(row.id, 'pending', 'accumulated'):
+            return False, 'already_processed'
         row.status = 'accumulated'
         row.amount_claimed = amount_val
         row.admin_note = admin_note
@@ -209,6 +308,8 @@ def try_admin_approve_finalize(
     if not target:
         return False, 'user_not_found'
 
+    if not _cas_recharge_status(row.id, 'pending', 'approved'):
+        return False, 'already_processed'
     cur = (row.currency or 'COP').strip().upper()
     apply_user_balance_credit(target, cur, float(amount_val))
     row.status = 'approved'

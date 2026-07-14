@@ -98,6 +98,8 @@ def portal_bad_label_readable(canon_bad: str) -> str:
         normalize_status_key('no reproduce'): 'No reproduce',
         normalize_status_key('error de contraseña'): 'Error de contraseña',
         normalize_status_key('otro'): 'Otro',
+        normalize_status_key('solucionada'): 'Solucionada',
+        normalize_status_key('repetida'): 'Repetida',
     }
     return m.get(k, s)
 
@@ -455,6 +457,8 @@ def _tipo_visual(tipo_raw: str) -> str:
         return 'Pago / abono'
     if t == 'incidencia_limpia':
         return 'Actualización estado'
+    if t == 'solucionada':
+        return 'Solucionada'
     if t == 'entrega':
         return 'Entrega'
     return tipo_raw or 'Actividad'
@@ -935,6 +939,7 @@ def portal_log_status_changes(
     pname = product_name or 'Producto'
     nk_caida = normalize_status_key('caida o suspendida')
     nk_garantia = normalize_status_key('garantia')
+    nk_solucionada = normalize_status_key('solucionada')
     cred_s = str(cred_hint or dual_base.get('cred') or '').strip().replace('\n', ' ')
     cred_short = cred_s[:120]
 
@@ -942,7 +947,18 @@ def portal_log_status_changes(
 
     # Incidencias / columna roja
     if nk_new_sb != nk_old_sb:
-        if nk_new_sb == nk_caida and canon_sb.strip():
+        if nk_new_sb == nk_solucionada:
+            # Solo soporte marca solucionada (API admin/notify); no loguear como incidencia.
+            pass
+        elif nk_old_sb == nk_solucionada and not canon_sb.strip():
+            append_portal_license_activity_record(
+                viewer_user_row,
+                'incidencia_limpia',
+                '%s: quitó Solucionada (vuelve a —).' % pname,
+                detail=None,
+                extra=ctx,
+            )
+        elif nk_new_sb == nk_caida and canon_sb.strip():
             hint = _email_from_cred_hint(cred_short) or cred_short or 'cuenta'
             append_portal_license_activity_record(
                 viewer_user_row,
