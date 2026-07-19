@@ -18,8 +18,8 @@ function initializePasswordToggle(passwordInputId, toggleButtonId) {
 }
 
 /**
- * 5 toques rápidos en el título del login de usuario → /auth/login (admin).
- * Sirve en web y en la WebView de la app (el login nativo está desactivado).
+ * 5 toques rápidos en el título (o zona marcada) del login de usuario → /auth/login.
+ * pointerup funciona mejor en WebView Android que solo "click".
  */
 function wireAdminUnlockByTaps(el) {
   if (!el || el.getAttribute("data-admin-taps-wired") === "1") return;
@@ -29,11 +29,15 @@ function wireAdminUnlockByTaps(el) {
 
   let taps = 0;
   let started = 0;
-  const WINDOW_MS = 2500;
+  let lastTapAt = 0;
+  const WINDOW_MS = 3000;
   const NEEDED = 5;
 
-  el.addEventListener("click", function () {
+  function onTap() {
     const now = Date.now();
+    // pointerup + click del mismo toque no deben contar dos veces
+    if (now - lastTapAt < 80) return;
+    lastTapAt = now;
     if (taps === 0 || now - started > WINDOW_MS) {
       taps = 1;
       started = now;
@@ -44,12 +48,13 @@ function wireAdminUnlockByTaps(el) {
       taps = 0;
       window.location.href = url;
     }
-  });
+  }
+
+  el.addEventListener("pointerup", onTap);
+  el.addEventListener("click", onTap);
 }
 
-// Esperar a que el DOM esté listo para asegurar que los elementos existen
-// antes de intentar inicializar los toggles.
-document.addEventListener('DOMContentLoaded', function() {
+function initLoginsPage() {
     // Intentar inicializar toggle para login de admin
     initializePasswordToggle("adminPasswordField", "toggleAdminPass");
     
@@ -76,4 +81,10 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     wireAdminUnlockByTaps(document.getElementById("userLoginTitle"));
-}); 
+}
+
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", initLoginsPage);
+} else {
+  initLoginsPage();
+} 
