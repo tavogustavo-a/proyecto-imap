@@ -140,6 +140,28 @@
     </div>
   </section>
 
+  <section id="adminLicenciasVerificarPanel" class="admin-licencias-reportes-panel admin-licencias-verificar-panel d-none" role="region" aria-label="Bloc compartido Verificar/Arreglar" aria-hidden="true">
+    <div class="admin-licencias-reportes-inner">
+      <div class="admin-licencias-verificar-head">
+        <div class="admin-licencias-verificar-head-start">
+          <span class="admin-licencias-verificar-icon" aria-hidden="true"><i class="fas fa-tools"></i></span>
+          <label class="admin-licencias-verificar-check admin-licencias-verificar-check--verified" title="Marcar como verificado">
+            <input type="checkbox" id="adminLicenciasVerificarCheck" autocomplete="off">
+            <span class="admin-licencias-verificar-check__btn">Verificado</span>
+          </label>
+          <label class="admin-licencias-verificar-check admin-licencias-verificar-check--pending" title="Marcar pendiente Verificar/Arreglar">
+            <input type="checkbox" id="adminLicenciasVerificarPendingCheck" autocomplete="off">
+            <span class="admin-licencias-verificar-check__btn">Verificar/Arreglar</span>
+          </label>
+        </div>
+        <span id="adminLicenciasVerificarStatus" class="admin-licencias-verificar-status" role="status" aria-live="polite"></span>
+      </div>
+      <label for="adminLicenciasVerificarTextarea" class="sr-only">Bloc compartido entre administrador y soportes</label>
+      <textarea id="adminLicenciasVerificarTextarea" name="admin_lic_verificar_textarea" class="admin-licencias-verificar-textarea" rows="16" spellcheck="false" autocomplete="off" placeholder="Bloc compartido entre el administrador y los soportes… se guarda automáticamente y se sincroniza en tiempo real."></textarea>
+      <p class="admin-licencias-reportes-meta">Compartido con los soportes con permiso «Soporte licencias». Se guarda automáticamente.</p>
+    </div>
+  </section>
+
   <section id="adminLicenciasCambiosPanel" class="admin-licencias-cambios-panel d-none" role="region" aria-label="Cambios mes a mes por producto" aria-hidden="true">
     <div class="admin-licencias-cambios-inner">
       <div class="license-changes-notepad-wrap">

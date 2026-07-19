@@ -652,6 +652,244 @@ def _save_proveedor_service_warranty_on_user(user_obj, license_id, warranty_days
     return True, None
 
 
+def _proveedor_lines_matching_license(license_lines, license_id):
+    """Líneas de inventario proveedor ligadas a un license_id (excluye anónimo)."""
+    try:
+        key = str(int(license_id))
+    except (TypeError, ValueError):
+        return []
+    if not key or key == '0':
+        return []
+    out = []
+    for item in license_lines or []:
+        if not isinstance(item, dict):
+            continue
+        svc = _proveedor_normalize_service_id(
+            item.get('service') if item.get('service') is not None else item.get('license_id')
+        )
+        if svc == key:
+            out.append(item)
+    return out
+
+
+def _proveedor_sellable_count_from_user_prices(user_prices, license_id):
+    """
+    Unidades vendibles de un proveedor para una licencia:
+    ``max(0, líneas_del_servicio - gar_del_proveedor)``.
+    Requiere el servicio habilitado en ``proveedor_services``.
+    """
+    from app.store.proveedor_user_data import proveedor_inventory_from_user_prices
+
+    up = user_prices if isinstance(user_prices, dict) else {}
+    if not up.get('proveedor'):
+        return 0
+    try:
+        lid = int(license_id)
+    except (TypeError, ValueError):
+        return 0
+    if lid <= 0:
+        return 0
+    key = str(lid)
+    services = _proveedor_normalize_services_map(up.get('proveedor_services'))
+    if key not in services:
+        return 0
+    inv = proveedor_inventory_from_user_prices(up)
+    n = len(_proveedor_lines_matching_license(inv.get('license_lines'), lid))
+    if n <= 0:
+        return 0
+    reserve = _proveedor_service_entry_warranty_days(services.get(key))
+    return max(0, n - reserve)
+
+
+def _proveedor_public_sellable_stock_for_license(license_id):
+    """Suma stock vendible de todos los proveedores activos para una licencia."""
+    total = 0
+    for user_row in User.query.filter(User.parent_id.is_(None)).all():
+        up = user_row.user_prices if isinstance(user_row.user_prices, dict) else {}
+        if not up.get('proveedor'):
+            continue
+        total += _proveedor_sellable_count_from_user_prices(up, license_id)
+    return int(total)
+
+
+def _proveedor_public_warranty_reserve_for_license(license_id):
+    """Reserva gar. efectiva de proveedores (mínimo entre gar. y líneas) para mensajes de stock."""
+    from app.store.proveedor_user_data import proveedor_inventory_from_user_prices
+
+    total = 0
+    try:
+        lid = int(license_id)
+    except (TypeError, ValueError):
+        return 0
+    if lid <= 0:
+        return 0
+    key = str(lid)
+    for user_row in User.query.filter(User.parent_id.is_(None)).all():
+        up = user_row.user_prices if isinstance(user_row.user_prices, dict) else {}
+        if not up.get('proveedor'):
+            continue
+        services = _proveedor_normalize_services_map(up.get('proveedor_services'))
+        if key not in services:
+            continue
+        inv = proveedor_inventory_from_user_prices(up)
+        n = len(_proveedor_lines_matching_license(inv.get('license_lines'), lid))
+        if n <= 0:
+            continue
+        wd = _proveedor_service_entry_warranty_days(services.get(key))
+        total += min(wd, n)
+    return int(total)
+
+
+def _proveedor_provider_users_with_sellable(license_id):
+    """Proveedores (usuarios raíz) con al menos 1 unidad vendible para la licencia."""
+    out = []
+    for user_row in User.query.filter(User.parent_id.is_(None)).order_by(User.id.asc()).all():
+        up = user_row.user_prices if isinstance(user_row.user_prices, dict) else {}
+        if not up.get('proveedor'):
+            continue
+        if _proveedor_sellable_count_from_user_prices(up, license_id) > 0:
+            out.append(user_row)
+    return out
+
+
+def take_proveedor_inventory_line_for_sale(user_obj, license_id):
+    """
+    Quita la primera línea vendible (fuera del colchón gar.) del inventario del proveedor,
+    la mueve al día Colombia actual y devuelve ``{cred, service, provider_user_id}`` o None.
+    """
+    from app.store.proveedor_user_data import (
+        proveedor_inventory_from_user_prices,
+        save_proveedor_inventory_on_user,
+    )
+
+    if not user_obj:
+        return None
+    up = user_obj.user_prices if isinstance(user_obj.user_prices, dict) else {}
+    if not up.get('proveedor'):
+        return None
+    try:
+        lid = int(license_id)
+    except (TypeError, ValueError):
+        return None
+    if lid <= 0:
+        return None
+    key = str(lid)
+    services = _proveedor_normalize_services_map(up.get('proveedor_services'))
+    if key not in services:
+        return None
+    reserve = _proveedor_service_entry_warranty_days(services.get(key))
+
+    inv = proveedor_inventory_from_user_prices(up)
+    lic_lines = list(inv.get('license_lines') or [])
+    match_indices = [
+        i
+        for i, e in enumerate(lic_lines)
+        if isinstance(e, dict)
+        and _proveedor_normalize_service_id(
+            e.get('service') if e.get('service') is not None else e.get('license_id')
+        )
+        == key
+    ]
+    sellable_n = max(0, len(match_indices) - reserve)
+    if sellable_n <= 0:
+        return None
+
+    # Tomar del frente (primera línea del servicio); el colchón queda al final.
+    for _attempt in range(sellable_n):
+        if not match_indices:
+            return None
+        take_i = match_indices[0]
+        entry = lic_lines[take_i] if 0 <= take_i < len(lic_lines) else None
+        cred = str((entry or {}).get('cred') or '').strip()
+        lic_lines.pop(take_i)
+        match_indices = [
+            i
+            for i, e in enumerate(lic_lines)
+            if isinstance(e, dict)
+            and _proveedor_normalize_service_id(
+                e.get('service') if e.get('service') is not None else e.get('license_id')
+            )
+            == key
+        ]
+        if not cred:
+            continue
+
+        day = int(get_colombia_datetime().day)
+        if day < 1:
+            day = 1
+        if day > 31:
+            day = 31
+        day_key = str(day)
+        day_lines = dict(inv.get('day_lines') or {})
+        day_bucket = list(day_lines.get(day_key) or [])
+        day_bucket.append({'service': key, 'cred': cred})
+        day_lines[day_key] = day_bucket
+
+        save_proveedor_inventory_on_user(
+            user_obj,
+            license_lines=lic_lines,
+            day_lines=day_lines,
+            expired_lines=inv.get('expired_lines'),
+            suspended_lines=inv.get('suspended_lines'),
+        )
+        return {
+            'cred': cred,
+            'service': key,
+            'provider_user_id': int(user_obj.id),
+        }
+
+    # Persist limpieza de líneas vacías si hubo.
+    save_proveedor_inventory_on_user(
+        user_obj,
+        license_lines=lic_lines,
+        day_lines=inv.get('day_lines'),
+        expired_lines=inv.get('expired_lines'),
+        suspended_lines=inv.get('suspended_lines'),
+    )
+    return None
+
+
+def _proveedor_bump_sales_count_for_user_license(
+    provider_user_id, license_id, quantity=1, buyer_user_id=None
+):
+    """Suma ventas solo al proveedor que aportó la línea de inventario."""
+    from sqlalchemy.orm.attributes import flag_modified
+    from app.store.purchase_history_stats import _proveedor_self_buyer_ids
+
+    try:
+        uid = int(provider_user_id)
+        lid = int(license_id)
+        qty = int(quantity)
+    except (TypeError, ValueError):
+        return
+    if uid <= 0 or lid <= 0 or qty <= 0:
+        return
+    if buyer_user_id is not None:
+        try:
+            if int(buyer_user_id) in _proveedor_self_buyer_ids(uid):
+                return
+        except (TypeError, ValueError):
+            pass
+    user_row = User.query.get(uid)
+    if not user_row:
+        return
+    up = user_row.user_prices if isinstance(user_row.user_prices, dict) else {}
+    if not up.get('proveedor'):
+        return
+    key = str(lid)
+    saved = _proveedor_normalize_services_map(up.get('proveedor_services'))
+    if key not in saved:
+        return
+    entry = dict(saved.get(key) or {})
+    entry['sales_count'] = _proveedor_service_entry_sales_count(entry) + qty
+    saved[key] = entry
+    new_up = dict(up)
+    new_up['proveedor_services'] = saved
+    user_row.user_prices = new_up
+    flag_modified(user_row, 'user_prices')
+    db.session.commit()
+
+
 PROVEEDOR_SERVICE_ANONIMO = 'anonimo'
 
 
@@ -1055,7 +1293,7 @@ def _record_portal_renewal_blocked_activity(
 USER_LIC_CADUCIDAD_VIEW_MAX_DAYS = 5
 
 # Cache bust único: Admin Licencias + portal /licencias (evita CSS/JS mezclados en producción).
-LICENCIAS_STATIC_VERSION = '20260713-garantia-blocs-v1'
+LICENCIAS_STATIC_VERSION = '20260718-proveedor-lic-title-center-v12'
 
 
 def _billing_user_for_store_debt_limit(user_obj):
@@ -5334,6 +5572,8 @@ def _procesar_pago_core():
     sold_bloc_moves = []
     checkout_sale_ids = []
     proveedor_sales_by_license = defaultdict(int)
+    # Ventas tomadas del inventario de un proveedor concreto: (user_id, license_id) -> qty
+    proveedor_sales_by_provider_license = defaultdict(int)
     proveedor_daily_events = []
 
     def _track_proveedor_daily_sale(license_row, producto, venta, cart_item):
@@ -5594,6 +5834,90 @@ def _procesar_pago_core():
                     _track_proveedor_daily_sale(license, producto, venta, p)
                     cuentas_asignadas_producto += 1
 
+                # Fallback: inventario de proveedores (gar. del proveedor, no del producto).
+                while cuentas_asignadas_producto < cuentas_necesarias:
+                    took_from_provider = False
+                    for prov_user in _proveedor_provider_users_with_sellable(license.id):
+                        if cuentas_asignadas_producto >= cuentas_necesarias:
+                            break
+                        locked_prov = (
+                            User.query.filter_by(id=int(prov_user.id))
+                            .with_for_update()
+                            .first()
+                        )
+                        if not locked_prov:
+                            continue
+                        taken = take_proveedor_inventory_line_for_sale(
+                            locked_prov, license.id
+                        )
+                        if not taken:
+                            continue
+                        account = _create_license_account_available_from_cred(
+                            license, taken.get('cred') or ''
+                        )
+                        if not account:
+                            # Devolver la línea al inventario del proveedor.
+                            try:
+                                from app.store.proveedor_user_data import (
+                                    proveedor_inventory_from_user_prices,
+                                    save_proveedor_inventory_on_user,
+                                )
+
+                                _inv = proveedor_inventory_from_user_prices(
+                                    locked_prov.user_prices
+                                )
+                                _lic = list(_inv.get('license_lines') or [])
+                                _lic.insert(
+                                    0,
+                                    {
+                                        'service': str(taken.get('service') or license.id),
+                                        'cred': str(taken.get('cred') or ''),
+                                    },
+                                )
+                                _day = dict(_inv.get('day_lines') or {})
+                                _dk = str(int(get_colombia_datetime().day))
+                                _bucket = list(_day.get(_dk) or [])
+                                _cred = str(taken.get('cred') or '').strip()
+                                for _bi in range(len(_bucket) - 1, -1, -1):
+                                    if str((_bucket[_bi] or {}).get('cred') or '').strip() == _cred:
+                                        _bucket.pop(_bi)
+                                        break
+                                _day[_dk] = _bucket
+                                save_proveedor_inventory_on_user(
+                                    locked_prov,
+                                    license_lines=_lic,
+                                    day_lines=_day,
+                                    expired_lines=_inv.get('expired_lines'),
+                                    suspended_lines=_inv.get('suspended_lines'),
+                                )
+                            except Exception:
+                                current_app.logger.exception(
+                                    'Checkout: no se pudo devolver línea proveedor ilegible '
+                                    'license_id=%s provider_user_id=%s',
+                                    license.id,
+                                    locked_prov.id,
+                                )
+                            continue
+                        if not _public_checkout_assign_license_account(
+                            account,
+                            license,
+                            user,
+                            venta,
+                            producto,
+                            sold_bloc_moves,
+                            cuentas_asignadas,
+                            enqueue_admin_bloc_move=False,
+                        ):
+                            continue
+                        proveedor_sales_by_provider_license[
+                            (int(locked_prov.id), int(license.id))
+                        ] += 1
+                        _track_proveedor_daily_sale(license, producto, venta, p)
+                        cuentas_asignadas_producto += 1
+                        took_from_provider = True
+                    if not took_from_provider:
+                        break
+
             asignadas_por_producto[producto.id] += cuentas_asignadas_producto
 
         for _pid, _need in cantidad_por_producto.items():
@@ -5621,6 +5945,21 @@ def _procesar_pago_core():
             proveedor_daily_events,
             user.id,
         )
+        for (prov_uid, prov_lid), prov_qty in proveedor_sales_by_provider_license.items():
+            try:
+                _proveedor_bump_sales_count_for_user_license(
+                    prov_uid,
+                    prov_lid,
+                    prov_qty,
+                    buyer_user_id=user.id,
+                )
+            except Exception as prov_src_exc:
+                current_app.logger.warning(
+                    'proveedor sales bump (inventario) user=%s license_id=%s: %s',
+                    prov_uid,
+                    prov_lid,
+                    prov_src_exc,
+                )
         try:
             from app.store.balance_recharge_events import notify_balance_recharge_updated
 
@@ -15041,6 +15380,7 @@ from app.store.routes_licencias import (  # noqa: E402
     _apply_public_checkout_bloc_moves_to_licenses,
     _billing_row_for_bulk_license_client,
     _compute_public_sellable_stock_for_product,
+    _create_license_account_available_from_cred,
     _debt_increment_per_bulk_license_sale,
     _ensure_license_account_sale_id_column,
     _ensure_license_changes_notes_column,

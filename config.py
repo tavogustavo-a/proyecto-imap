@@ -175,8 +175,9 @@ class Config:
     # Legacy (ya no disponible en proyectos nuevos). Se mantiene por compatibilidad.
     FCM_SERVER_KEY = os.getenv("FCM_SERVER_KEY", None)
 
-    # App Links: package desde DOMINIO.txt (applicationId=... o com.<marca>.app).
-    # Huellas SHA-256 sí van en .env (son del keystore, no del dominio).
+    # App Links: package desde DOMINIO.txt → com.<dominio>.app (+ legado Capacitor).
+    # No hace falta ANDROID_APP_PACKAGE en .env salvo override puntual.
+    # Huellas SHA-256 sí van en .env (keystore / Play App Signing).
     ANDROID_APP_PACKAGE = (
         os.getenv("ANDROID_APP_PACKAGE")
         or _site.get("android_app_package")

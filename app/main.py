@@ -65,12 +65,19 @@ def android_assetlinks():
     """
     Digital Asset Links para App Links (deep links verificados).
     ANDROID_APP_PACKAGE: uno o varios packages separados por coma
-      (nativa + Capacitor).
-    ANDROID_APP_SHA256_FINGERPRINTS: huellas SHA-256 del/los keystore(s),
-      separadas por coma. Formato: AA:BB:CC:...
+      (nativa + Capacitor). Viene de DOMINIO.txt → config.
+    ANDROID_APP_SHA256_FINGERPRINTS: huellas SHA-256 (keystore local +
+      certificado «Firma de apps» de Play), separadas por coma. Formato AA:BB:…
+    Respuesta sin cookies/sesión: Google no sigue redirects ni tolera bien
+    Set-Cookie en este endpoint.
     """
-    from flask import current_app, jsonify
+    import json
     import os
+
+    from flask import current_app, g, make_response
+
+    # Evitar CSRF cookie (SeaSurf) en este endpoint público.
+    g._assetlinks_clean = True
 
     raw_packages = (
         current_app.config.get('ANDROID_APP_PACKAGE')
@@ -80,7 +87,7 @@ def android_assetlinks():
     packages = []
     for part in str(raw_packages).replace(';', ',').split(','):
         pkg = part.strip()
-        if pkg:
+        if pkg and pkg not in packages:
             packages.append(pkg)
 
     raw = (
@@ -90,32 +97,41 @@ def android_assetlinks():
     )
     fingerprints = []
     for part in str(raw).replace(';', ',').split(','):
-        fp = part.strip().upper()
+        fp = part.strip().upper().replace(' ', '')
         if not fp:
             continue
         # Normalizar sin separadores → con :
         if ':' not in fp and len(fp) == 64:
             fp = ':'.join(fp[i : i + 2] for i in range(0, 64, 2))
-        fingerprints.append(fp)
+        if fp not in fingerprints:
+            fingerprints.append(fp)
 
     if not fingerprints or not packages:
-        # Sin huellas configuradas: respuesta vacía (App Links no se verifican aún)
-        return jsonify([]), 200
+        payload = []
+    else:
+        payload = [
+            {
+                'relation': ['delegate_permission/common.handle_all_urls'],
+                'target': {
+                    'namespace': 'android_app',
+                    'package_name': package,
+                    'sha256_cert_fingerprints': fingerprints,
+                },
+            }
+            for package in packages
+        ]
 
-    payload = [
-        {
-            'relation': ['delegate_permission/common.handle_all_urls'],
-            'target': {
-                'namespace': 'android_app',
-                'package_name': package,
-                'sha256_cert_fingerprints': fingerprints,
-            },
-        }
-        for package in packages
-    ]
-    resp = jsonify(payload)
+    body = json.dumps(payload, separators=(',', ':'), ensure_ascii=True)
+    resp = make_response(body, 200)
     resp.headers['Content-Type'] = 'application/json'
+    resp.headers['Cache-Control'] = 'public, max-age=3600'
+    resp.headers['X-Content-Type-Options'] = 'nosniff'
+    # No sesión / no Vary Cookie en App Links
+    resp.headers.pop('Vary', None)
     return resp
+
+
+android_assetlinks._csrf_exempt = True
 
 
 @main_bp.route('/favicon.ico')

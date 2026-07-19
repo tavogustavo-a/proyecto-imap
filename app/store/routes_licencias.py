@@ -973,9 +973,16 @@ def _portal_accounts_revision_fingerprint(user_obj):
     assignee_ids, allowed_names = _user_licencias_viewer_scope(user_obj)
     co = get_colombia_datetime()
     utc_now = datetime.now(timezone.utc)
+    verificar_sig = ''
+    try:
+        if _user_store_soporte_licencias_flag(user_obj):
+            verificar_sig = _verificar_arreglar_rev_sig()
+    except Exception:
+        verificar_sig = ''
     if not assignee_ids:
         empty_key = (
             f'v:2|co:{co.date().isoformat()}|utc:{utc_now.date().isoformat()}|empty'
+            f'|verificar:{verificar_sig}'
         )
         return hashlib.sha256(empty_key.encode('utf-8')).hexdigest()[:24]
 
@@ -993,6 +1000,7 @@ def _portal_accounts_revision_fingerprint(user_obj):
         f'utc:{utc_now.date().isoformat()}',
         f'saldo:{billing_saldo:.4f}',
         'names:' + '|'.join(sorted(allowed_names)),
+        f'verificar:{verificar_sig}',
     ]
 
     acct_rows = (
@@ -1081,6 +1089,97 @@ def _text_revision_sig(val):
     return hashlib.sha256(str(val or '').encode('utf-8')).hexdigest()[:16]
 
 
+# Bloc compartido «Verificar/Arreglar» (admin + usuarios con permiso soporte_licencias).
+VERIFICAR_ARREGLAR_SETTING_KEY = 'licencias_verificar_arreglar_v1'
+VERIFICAR_ARREGLAR_MAX_CHARS = 200000
+
+
+def _verificar_arreglar_parse_raw(raw):
+    """
+    Compatibilidad: value plano (solo texto) o JSON
+    ``{"text": "...", "verified": bool, "pending": bool}``.
+    """
+    text = ''
+    verified = False
+    pending = False
+    if raw is None:
+        return text, verified, pending
+    s = str(raw)
+    if not s:
+        return text, verified, pending
+    stripped = s.lstrip()
+    if stripped.startswith('{'):
+        try:
+            data = json.loads(s)
+            if isinstance(data, dict):
+                text = str(data.get('text') or '')
+                verified = bool(data.get('verified'))
+                pending = bool(data.get('pending'))
+                if verified:
+                    pending = False
+                return text, verified, pending
+        except Exception:
+            pass
+    return s, False, False
+
+
+def _verificar_arreglar_encode(text, verified, pending):
+    if verified:
+        pending = False
+    return json.dumps(
+        {
+            'text': str(text or ''),
+            'verified': bool(verified),
+            'pending': bool(pending),
+        },
+        ensure_ascii=False,
+        separators=(',', ':'),
+    )
+
+
+def _verificar_arreglar_read():
+    """Texto compartido + flags + firma de revisión."""
+    from app.store.models import StoreSetting
+
+    row = StoreSetting.query.filter_by(key=VERIFICAR_ARREGLAR_SETTING_KEY).first()
+    raw = row.value if (row is not None and row.value is not None) else ''
+    text, verified, pending = _verificar_arreglar_parse_raw(raw)
+    rev = _text_revision_sig(
+        '%s|%s|%s' % (1 if verified else 0, 1 if pending else 0, text)
+    )
+    return text, rev, verified, pending
+
+
+def _verificar_arreglar_rev_sig():
+    try:
+        return _verificar_arreglar_read()[1]
+    except Exception:
+        return ''
+
+
+def _verificar_arreglar_notify_listo(actor_user_id=None):
+    """Aviso in-app + push a admin y soportes: «Verificar/Arreglar listo»."""
+    from app.store.store_event_notify import notify_admins_app
+
+    excl = None
+    if actor_user_id is not None:
+        try:
+            excl = int(actor_user_id)
+        except (TypeError, ValueError):
+            excl = None
+    notify_admins_app(
+        kind='admin_verificar_arreglar_done',
+        title='Verificar/Arreglar listo',
+        body='El bloc Verificar/Arreglar quedó listo (verificado).',
+        payload={
+            'url': '/tienda/licencias',
+            'admin_url': '/tienda/admin',
+            'verified': True,
+        },
+        exclude_user_id=excl,
+    )
+
+
 def _admin_licenses_revision_fingerprint(*, archived_only=False):
     """
     Hash ligero para admin licencias: detecta cambios en licencias, cuentas y productos
@@ -1097,6 +1196,7 @@ def _admin_licenses_revision_fingerprint(*, archived_only=False):
         f'mode:{"archived" if archived_only else "all"}',
         f'co:{co.date().isoformat()}',
         f'utc:{utc_now.date().isoformat()}',
+        f'verificar:{_verificar_arreglar_rev_sig()}',
     ]
 
     q = License.query.order_by(License.id.asc())
@@ -2044,6 +2144,15 @@ def _admin_proveedor_inventory_providers_list():
         if not up.get('proveedor'):
             continue
         inv = _proveedor_inventory_from_user_prices(up)
+        from app.store.routes import (
+            _proveedor_normalize_services_map,
+            _proveedor_service_entry_warranty_days,
+        )
+
+        services_norm = _proveedor_normalize_services_map(up.get('proveedor_services'))
+        services_warranty = {}
+        for skey, sentry in services_norm.items():
+            services_warranty[str(skey)] = _proveedor_service_entry_warranty_days(sentry)
         providers.append(
             {
                 'user_id': user_row.id,
@@ -2058,6 +2167,7 @@ def _admin_proveedor_inventory_providers_list():
                 'suspended_notes': inv.get('suspended_notes') or '',
                 'enabled_license_ids': _proveedor_enabled_license_ids_from_user_prices(up),
                 'services_catalog': _proveedor_services_catalog_for_user(user_row),
+                'services_warranty': services_warranty,
             }
         )
     return providers
@@ -3332,6 +3442,110 @@ def api_admin_licenses_stream():
         )
     except Exception as e:
         current_app.logger.exception('api_admin_licenses_stream')
+        err = jsonify({'success': False, 'error': str(e)})
+        _attach_private_no_cache_headers(err)
+        return err, 500
+
+
+@store_bp.route('/api/licencias/verificar-arreglar', methods=['GET'])
+@admin_or_soporte_licencias_required
+def api_licencias_verificar_arreglar_get():
+    """Bloc compartido «Verificar/Arreglar» (admin + soportes con permiso soporte_licencias)."""
+    try:
+        db.session.expire_all()
+        text, rev, verified, pending = _verificar_arreglar_read()
+        ok = jsonify(
+            {
+                'success': True,
+                'text': text,
+                'rev': rev,
+                'verified': verified,
+                'pending': pending,
+            }
+        )
+        _attach_private_no_cache_headers(ok)
+        return ok
+    except Exception as e:
+        current_app.logger.exception('api_licencias_verificar_arreglar_get')
+        err = jsonify({'success': False, 'error': str(e)})
+        _attach_private_no_cache_headers(err)
+        return err, 500
+
+
+@store_bp.route('/api/licencias/verificar-arreglar', methods=['PUT'])
+@admin_or_soporte_licencias_required
+def api_licencias_verificar_arreglar_put():
+    """Guardar texto y/o flags del bloc (parcial). Al marcar verified notifica al admin."""
+    try:
+        from app.store.models import StoreSetting
+
+        data = request.get_json(silent=True) or {}
+        if not isinstance(data, dict):
+            return jsonify({'success': False, 'error': 'JSON inválido.'}), 400
+
+        has_text = 'text' in data
+        has_verified = 'verified' in data
+        has_pending = 'pending' in data
+        if not (has_text or has_verified or has_pending):
+            return jsonify(
+                {'success': False, 'error': 'Envía text, verified y/o pending.'}
+            ), 400
+
+        row = StoreSetting.query.filter_by(key=VERIFICAR_ARREGLAR_SETTING_KEY).first()
+        cur_text, cur_verified, cur_pending = _verificar_arreglar_parse_raw(
+            row.value if row is not None else ''
+        )
+
+        text = cur_text
+        verified = cur_verified
+        pending = cur_pending
+
+        if has_text:
+            text = str(data.get('text') if data.get('text') is not None else '')
+            if len(text) > VERIFICAR_ARREGLAR_MAX_CHARS:
+                return jsonify(
+                    {'success': False, 'error': 'El texto es demasiado largo.'}
+                ), 400
+
+        if has_verified:
+            verified = bool(data.get('verified'))
+        if has_pending:
+            pending = bool(data.get('pending'))
+
+        # Estados mutuamente excluyentes en la práctica: verificado gana.
+        if verified:
+            pending = False
+        elif has_pending and pending:
+            verified = False
+
+        became_verified = bool(verified) and not bool(cur_verified)
+        encoded = _verificar_arreglar_encode(text, verified, pending)
+
+        if row is None:
+            row = StoreSetting(key=VERIFICAR_ARREGLAR_SETTING_KEY, value=encoded)
+            db.session.add(row)
+        else:
+            row.value = encoded
+
+        if became_verified:
+            actor_id = session.get('user_id')
+            _verificar_arreglar_notify_listo(actor_id)
+
+        db.session.commit()
+        _text, rev, verified_out, pending_out = _verificar_arreglar_read()
+        ok = jsonify(
+            {
+                'success': True,
+                'rev': rev,
+                'verified': verified_out,
+                'pending': pending_out,
+            }
+        )
+        _attach_private_no_cache_headers(ok)
+        return ok
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.exception('api_licencias_verificar_arreglar_put')
         err = jsonify({'success': False, 'error': str(e)})
         _attach_private_no_cache_headers(err)
         return err, 500
@@ -5392,47 +5606,54 @@ def _compute_stock_for_product(product):
 
 
 def _warranty_reserve_for_product(product):
-    """Unidades reservadas como garantía (suma de gar. por licencia activa del producto)."""
+    """
+    Unidades reservadas como garantía (admin ``License.warranty_days`` + gar. de
+    proveedores con líneas para esas licencias).
+    """
     from app.store.models import License
+    from app.store.routes import _proveedor_public_warranty_reserve_for_license
 
     _ensure_license_warranty_days_column()
     lic_rows = License.query.filter_by(product_id=product.id, enabled=True).all()
     total = 0
     for lic in lic_rows:
         total += _license_warranty_days_public(lic)
+        total += _proveedor_public_warranty_reserve_for_license(lic.id)
     return total
 
 
 def _sellable_license_accounts_public(license_row):
     """
-    Unidades vendibles en tienda/checkout para una licencia: cuentas ``available``
-    menos la reserva ``gar.`` (``warranty_days``): ``max(0, available - gar.)``.
-    Es exactamente la misma regla que aplica ``procesar_pago`` (``max_take``), para
-    que la tienda nunca muestre existencias que el checkout va a rechazar.
+    Unidades vendibles en tienda/checkout para una licencia:
 
-    Si ``available <= gar.`` todo el stock es colchón de garantía: se muestra 0
-    vendible (el colchón sigue disponible para entregar garantías).
+    1. Inventario admin: ``max(0, LicenseAccount available - License.warranty_days)``.
+    2. Inventario proveedor: ``max(0, líneas_proveedor - gar_del_proveedor)`` sumado
+       por cada proveedor con ese servicio habilitado.
 
-    Las líneas del bloc ``license_notes`` no sustituyen filas en ``store_license_accounts``:
-    hasta que existan cuentas ``available``, el público muestra 0 vendible (evita 409 tras «4 existencias»).
+    Misma regla que ``procesar_pago``, para que la tienda no muestre existencias
+    que el checkout va a rechazar.
     """
     from app.store.models import LicenseAccount
+    from app.store.routes import _proveedor_public_sellable_stock_for_license
 
     _renewal_release_stale_reservations()
     avail_rows = LicenseAccount.query.filter_by(
         license_id=license_row.id, status='available'
     ).all()
     avail = sum(1 for a in avail_rows if _renewal_account_unreserved_for_public_sale(a))
-    if avail <= 0:
-        return 0
-    reserve = _license_warranty_days_public(license_row)
-    return max(0, avail - reserve)
+    admin_sellable = 0
+    if avail > 0:
+        reserve = _license_warranty_days_public(license_row)
+        admin_sellable = max(0, avail - reserve)
+    provider_sellable = _proveedor_public_sellable_stock_for_license(license_row.id)
+    return int(admin_sellable + provider_sellable)
 
 
 def _compute_public_sellable_stock_for_product(product):
     """
-    Existencias en tienda y tope de venta por producto: suma, por cada licencia activa, las
-    unidades vendibles reales ``max(0, available - gar.)``. Debe igualar lo que puede asignar ``procesar_pago``.
+    Existencias en tienda y tope de venta por producto: suma, por cada licencia activa,
+    unidades vendibles de inventario admin + proveedores. Debe igualar lo que puede
+    asignar ``procesar_pago``.
     """
     _ensure_license_expired_notes_and_month_columns()
     from app.store.models import License
@@ -6019,6 +6240,43 @@ def _claim_license_account_for_delivery(account):
     return bool(claimed)
 
 
+def _create_license_account_available_from_cred(license_row, cred):
+    """
+    Crea una ``LicenseAccount`` ``available`` a partir de una credencial de texto
+    (p. ej. línea de inventario proveedor). ``inventory_bloc_ord`` queda NULL.
+    """
+    from app.store.models import LicenseAccount, Product
+
+    product = getattr(license_row, 'product', None)
+    if product is None:
+        product = Product.query.get(license_row.product_id)
+    is_nf = _product_name_is_netflix(getattr(product, 'name', None) if product else None)
+    tup = _inventory_tuple_from_license_notes_line(cred, license_row.id, is_nf)
+    if not tup:
+        return None
+    email, password, identifier = tup
+    email = (email or '').strip().lower()[:120]
+    password = (password or '')[:200]
+    identifier = (identifier or '')[:200]
+    if not password or not identifier:
+        return None
+    now = datetime.utcnow()
+    acc = LicenseAccount(
+        license_id=license_row.id,
+        email=email,
+        password=password,
+        account_identifier=identifier,
+        status='available',
+        inventory_bloc_ord=None,
+        expires_at=now + _license_account_term_timedelta(license_row),
+        created_at=now,
+        updated_at=now,
+    )
+    db.session.add(acc)
+    db.session.flush()
+    return acc
+
+
 def _public_checkout_assign_license_account(
     account,
     license_row,
@@ -6027,11 +6285,16 @@ def _public_checkout_assign_license_account(
     producto,
     sold_bloc_moves,
     cuentas_asignadas,
+    *,
+    enqueue_admin_bloc_move=True,
 ):
     """
     Asigna una cuenta de inventario tras venta/renovación en tienda pública.
     Devuelve True si la cuenta se reclamó y asignó; False si otra transacción
     concurrente la tomó primero (el llamador debe saltarla o abortar).
+
+    ``enqueue_admin_bloc_move=False``: venta desde inventario proveedor (el día
+    ya se movió en ``user_prices``; no tocar blocs admin).
     """
     from app.store.models import LicenseAccount
 
@@ -6095,24 +6358,25 @@ def _public_checkout_assign_license_account(
     if sale_cal_day > 31:
         sale_cal_day = 31
 
-    day_line = _dual_storage_line_public_checkout_sale(
-        getattr(user, 'username', '') or '',
-        raw_ln,
-        account,
-    )
-    sold_bloc_moves.append(
-        {
-            'license_obj': license_row,
-            'inventory_slot': sb,
-            'storage_line_for_day': day_line,
-            'sold_account_fp': _normalize_inventory_fingerprint(
-                getattr(account, 'email', None),
-                getattr(account, 'password', None),
-                getattr(account, 'account_identifier', None),
-            ),
-            'sale_calendar_day': sale_cal_day,
-        }
-    )
+    if enqueue_admin_bloc_move:
+        day_line = _dual_storage_line_public_checkout_sale(
+            getattr(user, 'username', '') or '',
+            raw_ln,
+            account,
+        )
+        sold_bloc_moves.append(
+            {
+                'license_obj': license_row,
+                'inventory_slot': sb,
+                'storage_line_for_day': day_line,
+                'sold_account_fp': _normalize_inventory_fingerprint(
+                    getattr(account, 'email', None),
+                    getattr(account, 'password', None),
+                    getattr(account, 'account_identifier', None),
+                ),
+                'sale_calendar_day': sale_cal_day,
+            }
+        )
 
     cuentas_asignadas.append(
         {

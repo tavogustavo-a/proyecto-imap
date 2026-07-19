@@ -121,6 +121,16 @@
       };
     }
 
+    if (kind === 'admin_verificar_arreglar_done') {
+      return {
+        title: title || 'Verificar/Arreglar listo',
+        body: bodyText,
+        renewal: false,
+        adminOps: true,
+        verificarArreglar: true,
+      };
+    }
+
     if (kind === 'store_purchase' || kind === 'store_renewal') {
       var spName = String(payload.product_name || '').trim();
       if (!bodyText && spName) {
@@ -468,6 +478,20 @@
               global.location.href = goA;
             }
           } catch (eNavA) {}
+        } else if (display.verificarArreglar) {
+          try {
+            var pathV = String((global.location && global.location.pathname) || '');
+            var onAdmin = pathV.indexOf('/tienda/admin') === 0;
+            var goV = onAdmin
+              ? (payload && payload.admin_url) || '/tienda/admin'
+              : (payload && payload.url) || '/tienda/licencias';
+            if (onAdmin) {
+              var verBtn = document.getElementById('adminLicenciasVerificarBtn');
+              if (verBtn) verBtn.click();
+            } else if (pathV.indexOf('/tienda/licencias') !== 0) {
+              global.location.href = goV;
+            }
+          } catch (eNavV) {}
         } else if (display.waDigestFallback || display.storePurchase) {
           try {
             var goH =

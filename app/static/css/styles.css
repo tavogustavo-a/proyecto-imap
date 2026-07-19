@@ -17,7 +17,7 @@ body.theme-active {
   background-size: cover;
 }
 
-/* LOG: Esta regla controla el ancho y margen general del contenedor principal. Si el layout se descuadra, revisa aquÌ. */
+/* LOG: Esta regla controla el ancho y margen general del contenedor principal. Si el layout se descuadra, revisa aquù. */
 body:has(.search-page-container) > .container {
   width: 100%;
   text-align: center;
@@ -35,7 +35,7 @@ body:has(.search-page-container) > .container {
   --user-text-color: #111;
 }
 
-/* Estilos para campos del formulario de creaciÛn IMAP2 */
+/* Estilos para campos del formulario de creaciùn IMAP2 */
 .imap2-port-input {
   width: 90px;
   flex-shrink: 0;
@@ -110,7 +110,7 @@ body.theme-active.tema3 {
   color: var(--text-color);
 }
 
-/* Fondo personalizado IMAP2 (URL en --imap2-user-bg-image vÌa JS; sin <style> inline en plantilla) */
+/* Fondo personalizado IMAP2 (URL en --imap2-user-bg-image vùa JS; sin <style> inline en plantilla) */
 body.theme-active.imap2-dynamic-custom-bg {
   background-image: var(--imap2-user-bg-image, none) !important;
   background-size: cover !important;
@@ -120,7 +120,7 @@ body.theme-active.imap2-dynamic-custom-bg {
 }
 
 /* ========== Tarjetas (card/admin-card) ========== */
-/* LOG: Los popups usan esta clase base. Cambios aquÌ afectan el padding, borde y radio de muchas secciones. */
+/* LOG: Los popups usan esta clase base. Cambios aquù afectan el padding, borde y radio de muchas secciones. */
 .card, .admin-card {
   background-color: var(--card-bg) !important;
   color: var(--text-color) !important;
@@ -179,7 +179,7 @@ body.theme-active.imap2-dynamic-custom-bg {
   word-wrap: break-word;
   overflow-wrap: anywhere;
   white-space: normal;
-  /* AÒadir fondo blanco (o el de las tarjetas) */
+  /* Aùadir fondo blanco (o el de las tarjetas) */
   background-color: var(--card-bg, #fff);
 }
 
@@ -198,7 +198,7 @@ textarea {
   border: 1px solid #ddd;
 }
 
-/* Estilo para inputs de API vinculada con borde m·s grueso */
+/* Estilo para inputs de API vinculada con borde mùs grueso */
 .api-input {
   border: 2px solid #111 !important;
   border-radius: 6px !important;
@@ -254,7 +254,7 @@ button.admin-global-api-info-btn i {
   color: #dc3545;
 }
 
-/* Estilos especÌficos para inputs en edit_imap2.html */
+/* Estilos especùficos para inputs en edit_imap2.html */
 .imap2-edit-form {
   padding: 0 0.5rem;
   box-sizing: border-box;
@@ -281,7 +281,7 @@ button.admin-global-api-info-btn i {
   box-shadow: 0 0 0 2px rgba(33, 150, 243, 0.1);
 }
 
-/* Asegurar que el campo de descripciÛn tenga el mismo estilo que los dem·s */
+/* Asegurar que el campo de descripciùn tenga el mismo estilo que los demùs */
 .imap2-edit-form input[type="text"]#description,
 .imap2-edit-form input[type="text"][name="description"] {
   width: 100%;
@@ -320,7 +320,7 @@ button.admin-global-api-info-btn i {
   padding-right: 0.5rem;
 }
 
-/* En pantallas pequeÒas: mantener en la misma lÌnea con gap reducido */
+/* En pantallas pequeùas: mantener en la misma lùnea con gap reducido */
 @media (max-width: 600px) {
   .d-flex.imap2-create-row,
   .imap2-create-row.d-flex {
@@ -518,29 +518,29 @@ input[type="submit"],
   color: #fff;
 }
 
-/* Campo de b˙squeda "gordo" y con bordes redondeados (RESTAURADO) */
+/* Campo de bùsqueda "gordo" y con bordes redondeados (RESTAURADO) */
 .search-input {
-  font-size: 0.9rem;       /* Fuente m·s grande */
+  font-size: 0.9rem;       /* Fuente mùs grande */
   font-weight: 600;        /* "Grueso" */
-  height: 36px;            /* M·s alto */
+  height: 36px;            /* Mùs alto */
   border-radius: 30px;     /* Bordes redondeados */
-  border: 2px solid #ccc;  /* Un poco m·s grueso */
+  border: 2px solid #ccc;  /* Un poco mùs grueso */
   padding: 0 15px;
   width: 100%;
   box-sizing: border-box;
-  /* Reset explÌcito por si acaso */
+  /* Reset explùcito por si acaso */
   max-width: none;
   min-width: 190px;
 }
 
-/* ========== Otros estilos (b˙squeda, tablas, etc.) ========== */
+/* ========== Otros estilos (bùsqueda, tablas, etc.) ========== */
 .search-container {
   max-width: 800px;
   margin: 0 auto;
   text-align: center;
 }
 
-/* Estilos especÌficos para search-container en formularios */
+/* Estilos especùficos para search-container en formularios */
 .search-container.form-search {
   display: flex;
   gap: 0.5rem;
@@ -556,7 +556,7 @@ input[type="submit"],
 }
 
 /* 
-   DefiniciÛn para search-field 
+   Definiciùn para search-field 
 */
 .search-field {
   display: flex;
@@ -582,7 +582,7 @@ input[type="submit"],
   }
 }
 
-/* Tablas SOLO para la administraciÛn */
+/* Tablas SOLO para la administraciùn */
 .admin-table {
   width: 100%;
   border-collapse: collapse;
@@ -599,19 +599,19 @@ input[type="submit"],
   white-space: normal;
 }
 
-/* Intentar apuntar especÌficamente a la columna de posiciÛn (suponiendo que es la 4ta) */
+/* Intentar apuntar especùficamente a la columna de posiciùn (suponiendo que es la 4ta) */
 .admin-table th:nth-child(4),
 .admin-table td:nth-child(4) {
-    max-width: 80px; /* Ancho m·ximo m·s restrictivo */
+    max-width: 80px; /* Ancho mùximo mùs restrictivo */
     width: 80px; /* Ancho fijo */
-    overflow: hidden; /* Ocultar desbordamiento si a˙n ocurre */
-    text-overflow: ellipsis; /* AÒadir puntos suspensivos */
+    overflow: hidden; /* Ocultar desbordamiento si aùn ocurre */
+    text-overflow: ellipsis; /* Aùadir puntos suspensivos */
 }
 
-/* Intentar apuntar especÌficamente a la columna de usuario (suponiendo que es la 2da) */
+/* Intentar apuntar especùficamente a la columna de usuario (suponiendo que es la 2da) */
 .admin-table th:nth-child(2),
 .admin-table td:nth-child(2) {
-    max-width: 150px; /* Ancho m·ximo */
+    max-width: 150px; /* Ancho mùximo */
     overflow: hidden;
     text-overflow: ellipsis;
 }
@@ -639,7 +639,7 @@ input[type="submit"],
   }
 }
 
-/* Asegurar que los admin-card en la p·gina de usuarios tengan el mismo estilo */
+/* Asegurar que los admin-card en la pùgina de usuarios tengan el mismo estilo */
 .usuarios-page .container-max-width-900 .admin-card {
   background-color: var(--card-bg) !important;
   color: var(--text-color) !important;
@@ -653,7 +653,7 @@ input[type="submit"],
   box-sizing: border-box;
 }
 
-/* Margen superior especÌfico para el segundo admin-card (eliminaciÛn masiva) - Pantallas grandes */
+/* Margen superior especùfico para el segundo admin-card (eliminaciùn masiva) - Pantallas grandes */
 @media (min-width: 769px) {
   .usuarios-page .container-max-width-900.mt-2 {
     margin-top: 1.5rem !important;
@@ -679,12 +679,12 @@ input[type="submit"],
     margin: 0.1rem auto;
   }
   
-  /* Regla especÌfica solo para la p·gina de usuarios */
+  /* Regla especùfica solo para la pùgina de usuarios */
   .usuarios-page .admin-card {
     margin: 0.8rem auto;
   }
   
-  /* En mÛviles, reducir el margen superior del contenedor */
+  /* En mùviles, reducir el margen superior del contenedor */
   .usuarios-page .container-max-width-900.mt-2 {
     margin-top: 1.5rem;
   }
@@ -698,7 +698,7 @@ input[type="submit"],
    NUEVO: media query ~320px
 ========================= */
 @media (max-width: 320px) {
-  /* Ajustes especiales en pantallas muy pequeÒas */
+  /* Ajustes especiales en pantallas muy pequeùas */
   .container {
     width: 94%;
     margin: 0 auto;
@@ -723,7 +723,7 @@ input[type="submit"],
   .flash-message {
     font-size: 0.85rem;
   }
-  /* Ajusta si tienes m·s elementos */
+  /* Ajusta si tienes mùs elementos */
 }
 
 /* Estilos movidos de admin_dashboard.html */
@@ -738,15 +738,15 @@ input[type="submit"],
   }
 }
 
-/* --- INICIO: Estilo para Resultados en MÛviles --- */
+/* --- INICIO: Estilo para Resultados en Mùviles --- */
 @media (max-width: 767px) { /* Puedes ajustar este breakpoint */
-  /* ... otras reglas mÛviles ... */
+  /* ... otras reglas mùviles ... */
   #search-results {
     word-wrap: break-word;
     overflow-wrap: break-word;
   }
 
-   /* Desactivar el escalado en mÛviles para que ocupe m·s ancho */
+   /* Desactivar el escalado en mùviles para que ocupe mùs ancho */
   .scaled-content {
       transform: none; /* <<< Desactivar escalado */
       transform-origin: initial; /* <<< Restablecer origen */
@@ -775,7 +775,7 @@ input[type="submit"],
   }
   /* -- FIN MANTENER -- */
 }
-/* --- FIN: Estilo para Resultados en MÛviles --- */
+/* --- FIN: Estilo para Resultados en Mùviles --- */
 
 /* Estilos movidos de base.html */
 body {
@@ -802,13 +802,13 @@ noscript p {
   margin-top:2rem;
 }
 
-/* Estilos para formularios especÌficos (movidos de inline) */
+/* Estilos para formularios especùficos (movidos de inline) */
 .form-container-narrow {
   max-width: 500px;
   margin: 2rem auto;
 }
 
-/* Sobrescribir estilos para la p·gina de cambiar credenciales */
+/* Sobrescribir estilos para la pùgina de cambiar credenciales */
 .change-creds-card {
   max-width: 750px !important;
   margin: 0.001rem auto !important;
@@ -848,12 +848,12 @@ noscript p {
   /* Hereda colores y otros estilos de .btn-red, .btn-blue, etc. */
 }
 
-/* LOG: Flexbox global, pero excluimos editar cupÛn donde interfiere */
+/* LOG: Flexbox global, pero excluimos editar cupùn donde interfiere */
 .d-flex {
   display: flex;
 }
 
-/* Reactivar flex solo para el header del botÛn Volver en editar cupÛn */
+/* Reactivar flex solo para el header del botùn Volver en editar cupùn */
 .store-light.maxw-800 .d-flex.align-items-center.justify-content-between {
   display: flex !important;
 }
@@ -882,7 +882,7 @@ noscript p {
   flex: 1;
 }
 
-/* LOG: M·rgenes y paddings globales. Si hay mucho o poco espacio, revisa estas utilidades. */
+/* LOG: Mùrgenes y paddings globales. Si hay mucho o poco espacio, revisa estas utilidades. */
 .gap-05 { gap: 0.5rem; }
 .gap-1 { gap: 1rem; }
 .gap-075 { gap: 0.75rem; }
@@ -897,7 +897,7 @@ noscript p {
 .mt-4 { margin-top: 4rem; }
 .mb-04 { margin-bottom: 0.4rem; }
 
-/* BotÛn men˙ admin: "Cerrar sesiÛn y limpiar cookies" (todas las plantillas) */
+/* Botùn menù admin: "Cerrar sesiùn y limpiar cookies" (todas las plantillas) */
 #btnLogoutAllAndClearCookies.mobile-menu-btn {
   white-space: nowrap;
 }
@@ -927,7 +927,7 @@ noscript p {
 .text-decoration-none { text-decoration: none; }
 .vertical-align-middle { vertical-align: middle; }
 
-/* Estilos especÌficos movidos de admin_dashboard.html */
+/* Estilos especùficos movidos de admin_dashboard.html */
 .twofa-info-box {
   background: #fff;
   border: 2px solid #ccc;
@@ -976,7 +976,7 @@ noscript p {
   margin-bottom: 0.3rem; 
 }
 
-/* Estilos movidos de edit_service.html - APLICADOS A CLASE ESPECÕFICA */
+/* Estilos movidos de edit_service.html - APLICADOS A CLASE ESPECùFICA */
 .search-container.form-search input[type="search"] {
   flex-grow: 1;
   margin-bottom: 0; 
@@ -992,7 +992,7 @@ noscript p {
 /* li { margin-bottom: 0.5rem; padding-bottom: 0.5rem; border-bottom: 1px solid #eee; } */ /* Comentado: Regla demasiado general? */
 /* li:last-child { border-bottom: none; } */ /* Comentado: Regla demasiado general? */
 
-/* Estilo para listas especÌficas (Regex/Filtros en edit_service) */
+/* Estilo para listas especùficas (Regex/Filtros en edit_service) */
 .styled-list {
     border: 1px solid #eee;
     border-radius: 4px;
@@ -1117,7 +1117,7 @@ noscript p {
 
 /* Clases para edit_service.html */
 .service-name-input {
-  width: 70%; /* Mantenemos width especÌfico */
+  width: 70%; /* Mantenemos width especùfico */
   /* Hereda otros estilos de input */
 }
 
@@ -1152,7 +1152,7 @@ noscript p {
   padding-left: 0;
 }
 
-/* NOTA: El estilo din·mico border-left en alias-list-item debe permanecer inline */
+/* NOTA: El estilo dinùmico border-left en alias-list-item debe permanecer inline */
 .alias-list-item {
   margin-bottom: 1rem;
   padding-left: 0.8rem;
@@ -1269,7 +1269,7 @@ noscript p {
 }
 
 .alias-action-buttons > .btn-small {
-  /* PodrÌamos aÒadir estilos base para btn-small si no existen */
+  /* Podrùamos aùadir estilos base para btn-small si no existen */
 }
 .alias-action-buttons > .btn-add-icon {
   background: #9c27b0;
@@ -1292,7 +1292,7 @@ noscript p {
 }
 
 /* Estilos base para Popups */
-/* LOG: Los popups usan esta clase base. Si el popup se ve mal, revisa aquÌ. */
+/* LOG: Los popups usan esta clase base. Si el popup se ve mal, revisa aquù. */
 .popup-base {
   display: none;
   position: fixed;
@@ -1318,7 +1318,7 @@ noscript p {
   padding-bottom: 0.5rem;
 }
 
-/* Estilos para botÛn de cerrar (X) en modales */
+/* Estilos para botùn de cerrar (X) en modales */
 .btn-close {
   background: none;
   border: none;
@@ -1344,7 +1344,7 @@ noscript p {
   background-color: #e0e0e0;
 }
 
-/* LOG: Estas clases pueden eliminar bordes y fondos de popups. Si ves popups transparentes o sin borde, revisa aquÌ. */
+/* LOG: Estas clases pueden eliminar bordes y fondos de popups. Si ves popups transparentes o sin borde, revisa aquù. */
 .popup-small {
   max-width: 400px;
   width: 90%;
@@ -1396,7 +1396,7 @@ noscript p {
 #editAliasPopup button {
   margin: 0.5rem 0.25rem !important;
 }
-/* Pantallas grandes - mantener el diseÒo de dos lÌneas */
+/* Pantallas grandes - mantener el diseùo de dos lùneas */
 @media (min-width: 768px) {
   .position-visibility-container {
     display: flex !important;
@@ -1413,7 +1413,7 @@ noscript p {
     flex: 0 0 auto !important;
   }
   
-  /* Botones m·s compactos en pantallas grandes */
+  /* Botones mùs compactos en pantallas grandes */
   .edit-service-buttons .btn-green,
   .edit-service-buttons .btn-red {
     margin: 0 !important;
@@ -1424,7 +1424,7 @@ noscript p {
   }
 }
 
-/* En pantallas pequeÒas, layout optimizado */
+/* En pantallas pequeùas, layout optimizado */
 @media (max-width: 767px) {
   .position-visibility-container {
     display: flex !important;
@@ -1433,16 +1433,16 @@ noscript p {
     align-items: flex-end !important;
   }
   
-  /* PosiciÛn y dropdown en la primera lÌnea - mantener horizontal */
+  /* Posiciùn y dropdown en la primera lùnea - mantener horizontal */
   .position-visibility-container > div:not(.edit-service-buttons) {
     display: flex !important;
     flex-direction: row !important; /* Mantener horizontal */
     align-items: center !important; /* Centrar verticalmente */
-    gap: 0.3rem !important; /* Gap m·s pequeÒo en mÛviles */
+    gap: 0.3rem !important; /* Gap mùs pequeùo en mùviles */
     flex: 0 0 auto !important;
   }
   
-  /* Botones en la segunda lÌnea, centrados */
+  /* Botones en la segunda lùnea, centrados */
   .position-visibility-container .edit-service-buttons {
     flex: 1 1 100% !important;
     justify-content: center !important;
@@ -1502,10 +1502,10 @@ noscript p {
   border-radius: 4px;
   padding: 0.3rem;
   box-sizing: border-box; /* Incluir padding en width */
-  max-width: 300px; /* AÒadido max-width para limitar inputs en popups */
+  max-width: 300px; /* Aùadido max-width para limitar inputs en popups */
 }
 
-/* Input m·s ancho especÌficamente para el campo de nombre de alias */
+/* Input mùs ancho especùficamente para el campo de nombre de alias */
 #aliasPopup .alias-name-input,
 #editAliasPopup input.popup-input {
   max-width: 100% !important; /* Usar todo el ancho disponible del contenedor */
@@ -1518,9 +1518,9 @@ noscript p {
   cursor: pointer;
 }
 
-/* Contornos blancos para las 4 secciones de configuraciÛn de colores */
+/* Contornos blancos para las 4 secciones de configuraciùn de colores */
 
-/* 1. SecciÛn Colores de Alias */
+/* 1. Secciùn Colores de Alias */
 .alias-colors-section {
   border: 2px solid #ffffff !important;
   border-radius: 12px !important;
@@ -1529,7 +1529,7 @@ noscript p {
   background: rgba(255, 255, 255) !important;
 }
 
-/* Alinear vista previa en la misma lÌnea */
+/* Alinear vista previa en la misma lùnea */
 .alias-colors-section .d-flex.gap-05,
 .click-colors-section .d-flex.gap-05,
 .normal-colors-section .d-flex.gap-05 {
@@ -1558,7 +1558,7 @@ noscript p {
   white-space: nowrap !important;
 }
 
-/* 2. SecciÛn Cuando se da clic */
+/* 2. Secciùn Cuando se da clic */
 .click-colors-section {
   border: 2px solid #ffffff !important;
   border-radius: 12px !important;
@@ -1567,7 +1567,7 @@ noscript p {
   background: rgba(255, 255, 255) !important;
 }
 
-/* 3. SecciÛn Sin darle clic */
+/* 3. Secciùn Sin darle clic */
 .normal-colors-section {
   border: 2px solid #ffffff !important;
   border-radius: 12px !important;
@@ -1576,7 +1576,7 @@ noscript p {
   background: rgba(255, 255, 255) !important;
 }
 
-/* 4. SecciÛn Crear Nuevo Servicio */
+/* 4. Secciùn Crear Nuevo Servicio */
 .create-service-section {
   border: 2px solid #ffffff !important;
   border-radius: 12px !important;
@@ -1626,7 +1626,7 @@ noscript p {
   max-height: 40px !important;
 }
 
-/* Ajustes especÌficos para mÛviles */
+/* Ajustes especùficos para mùviles */
 @media (max-width: 400px) {
   .popup-grid {
     grid-template-columns: repeat(5, 1fr) !important;
@@ -1670,6 +1670,13 @@ noscript p {
 .login-container-zoomed {
   max-width: 400px;
   margin: 2rem auto;
+}
+
+.login-title-tap-target {
+  cursor: default;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
 }
 
 .text-center { text-align: center; }
@@ -1721,7 +1728,7 @@ noscript p {
   padding-left: 1em;
 }
 
-/* Clases especÌficas para email.html */
+/* Clases especùficas para email.html */
 .no-shrink { flex-shrink: 0; }
 
 .text-small { font-size: 0.9rem; }
@@ -1754,7 +1761,7 @@ noscript p {
   padding: 3px;
 }
 
-/* Ajustar paginaciÛn en email.html para pantallas pequeÒas */
+/* Ajustar paginaciùn en email.html para pantallas pequeùas */
 @media (max-width: 768px) {
   .pagination-info-wrapper {
     display: flex;
@@ -1786,7 +1793,7 @@ noscript p {
 
 /* Reutilizamos .popup-base, .popup-small, .popup-medium, .popup-overlay, 
    .popup-button-confirm, .popup-button-cancel de edit_service.html 
-   AÒadimos estilos especÌficos si es necesario */
+   Aùadimos estilos especùficos si es necesario */
 
 .modal-list-container {
   max-height: 300px;
@@ -1800,7 +1807,7 @@ noscript p {
   margin-bottom: 1rem;
 }
 
-/* Estilos para Ìtems dentro de modales (si son comunes) */
+/* Estilos para ùtems dentro de modales (si son comunes) */
 .modal-list-item {
   padding: 6px;
 }
@@ -1814,7 +1821,7 @@ noscript p {
 }
 
 .modal-list-item small {
-  /* Estilos para descripciÛn pequeÒa */
+  /* Estilos para descripciùn pequeùa */
 }
 
 .modal-list-item em.locked-indicator {
@@ -1875,18 +1882,18 @@ noscript p {
 /* Responsive styles for edit_service.html header buttons */
 @media (max-width: 600px) { /* O el breakpoint que prefieras */
   .edit-service-header-container {
-    flex-wrap: wrap; /* Permitir que el tÌtulo y los botones se envuelvan */
+    flex-wrap: wrap; /* Permitir que el tùtulo y los botones se envuelvan */
     gap: 0.5rem; 
   }
   .edit-service-header-buttons button {
-     /* Quitar margen derecho y aÒadir margen inferior si se envuelven */
+     /* Quitar margen derecho y aùadir margen inferior si se envuelven */
     margin-right: 0 !important; 
     margin-left: 0; /* Asegurar que no haya margen izquierdo extra */
     margin-bottom: 0.5rem; /* Espacio si se envuelve debajo */
   }
 }
 
-/* Sobrescribir/AÒadir estilos de .admin-card especÌficos para search.html si es necesario */
+/* Sobrescribir/Aùadir estilos de .admin-card especùficos para search.html si es necesario */
 .search-page-container .admin-card {
   width: 100%;
   box-sizing: border-box;
@@ -1986,7 +1993,7 @@ noscript p {
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.15);
 }
 
-/* Estilo para botÛn de servicio seleccionado (persistente) */
+/* Estilo para botùn de servicio seleccionado (persistente) */
 .service-btn-selected {
   transform: translateY(0) scale(0.98) !important;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4) !important;
@@ -1996,7 +2003,7 @@ noscript p {
 }
 
 .service-btn-selected::after {
-  content: '?';
+  content: "\2713";
   position: absolute;
   top: 5px;
   right: 8px;
@@ -2005,6 +2012,7 @@ noscript p {
   font-weight: bold;
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
   pointer-events: none;
+  line-height: 1;
 }
 
 /* Focus effect para accesibilidad */
@@ -2021,7 +2029,7 @@ noscript p {
   filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.3));
 }
 
-/* Efecto en las im·genes cuando se hace hover en el botÛn */
+/* Efecto en las imùgenes cuando se hace hover en el botùn */
 .service-btn:hover img {
   transform: scale(1.1);
   filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.4));
@@ -2046,7 +2054,7 @@ noscript p {
   box-sizing: border-box;
 }
 
-/* Estilos para elementos dentro del p·rrafo personalizado */
+/* Estilos para elementos dentro del pùrrafo personalizado */
 .main-message-wrapper img {
   max-width: 100% !important;
   height: auto !important;
@@ -2111,7 +2119,7 @@ noscript p {
   backdrop-filter: blur(2px);
 }
 
-/* Estilos especÌficos para el popup de alias en search.html */
+/* Estilos especùficos para el popup de alias en search.html */
 #aliasPopup {
   display: none;
   position: fixed !important;
@@ -2137,7 +2145,7 @@ noscript p {
   color: inherit; /* Heredar del popup, pero los items lo sobrescriben con !important */
 }
 
-/* Estilos especÌficos para el popup de alias en edit_service.html */
+/* Estilos especùficos para el popup de alias en edit_service.html */
 .edit-service-page #aliasPopup,
 .form-container-wide.edit-service-page #aliasPopup,
 div.edit-service-page #aliasPopup {
@@ -2156,7 +2164,7 @@ body .edit-service-page #aliasPopup {
   width: auto !important;
 }
 
-#aliasPopup .alias-popup-close { /* Selector m·s especÌfico */
+#aliasPopup .alias-popup-close { /* Selector mùs especùfico */
   position: absolute;
   top: 10px;
   right: 15px;
@@ -2186,7 +2194,7 @@ body .edit-service-page #aliasPopup {
   animation: modalFadeIn 0.3s ease-out;
 }
 
-/* OVERRIDE ESPECÕFICO PARA EDIT SERVICE - DEBE IR AL FINAL */
+/* OVERRIDE ESPECùFICO PARA EDIT SERVICE - DEBE IR AL FINAL */
 .edit-service-page #aliasPopup.popup-visible,
 .edit-service-page #aliasPopup[style*="display: block"] {
   padding: 0 !important;
@@ -2196,7 +2204,7 @@ body .edit-service-page #aliasPopup {
   min-width: 300px !important;
 }
 
-/* AnimaciÛn de entrada del modal */
+/* Animaciùn de entrada del modal */
 @keyframes modalFadeIn {
   from {
     opacity: 0;
@@ -2208,12 +2216,12 @@ body .edit-service-page #aliasPopup {
   }
 }
 
-/* Media query especÌfica para el popup de alias en search.html */
+/* Media query especùfica para el popup de alias en search.html */
 @media (max-width: 600px) {
   #aliasPopup,
   #aliasPopup.popup-visible,
   #aliasPopup[style*="display: block"] {
-    max-width: 87% !important; /* Aumentado para m·s ancho en mÛvil */
+    max-width: 87% !important; /* Aumentado para mùs ancho en mùvil */
     width: 87% !important; /* Asegurar que use el ancho completo disponible */
     position: fixed !important;
     top: 50% !important;
@@ -2221,7 +2229,7 @@ body .edit-service-page #aliasPopup {
     transform: translate(-50%, -50%) !important;
     margin: 0 !important;
   }
-  /* Ajuste espaciado botones de servicio en mÛvil */
+  /* Ajuste espaciado botones de servicio en mùvil */
   .services-row { 
     gap: 0.05rem; /* Mantenido gap para espaciado vertical *AZQSDW
     /* justify-content: flex-start; /* Opcional: alinear a la izquierda si prefieres */
@@ -2231,7 +2239,7 @@ body .edit-service-page #aliasPopup {
     /* Eliminado flex y max-width para que hereden el 100% de ancho */
   } 
   
-  /* Efectos m·s suaves en mÛvil para botones de servicios */
+  /* Efectos mùs suaves en mùvil para botones de servicios */
   .service-btn:hover {
     transform: translateY(-1px) scale(1.01);
     box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15);
@@ -2246,24 +2254,24 @@ body .edit-service-page #aliasPopup {
   }
 }
 
-/* Estilos modo oscuro especÌficos de search.html */
-.dark-mode .search-page-container .admin-card { /* M·s especÌfico */
+/* Estilos modo oscuro especùficos de search.html */
+.dark-mode .search-page-container .admin-card { /* Mùs especùfico */
   background-color: rgba(55,55,55,0.9);
   color: #fff;
 }
 
-.dark-mode .service-btn { /* Ya podrÌa existir globalmente */
+.dark-mode .service-btn { /* Ya podrùa existir globalmente */
   /* background-color: #444; */ /* Comentado: Se aplica inline */
   /* color: #fff; */ /* Ya aplicado por defecto en .service-btn? */
 }
 
-.dark-mode .btn-search { /* Ya podrÌa existir globalmente */
+.dark-mode .btn-search { /* Ya podrùa existir globalmente */
   /* background-color: #444; */
   /* color: #fff; */
   /* border: 2px solid #444; */
 }
 
-/* Clases especÌficas para cabecera de search.html */
+/* Clases especùficas para cabecera de search.html */
 .search-header-actions {
   text-align: right;
   margin-bottom: 1rem;
@@ -2276,16 +2284,16 @@ body .edit-service-page #aliasPopup {
 
 .info-text-small {
   /* Combinar con .mt-1 */
-  /* color: #333; */ /* Quitado, deberÌa heredar o manejar con dark-mode */
+  /* color: #333; */ /* Quitado, deberùa heredar o manejar con dark-mode */
   font-size: 0.9rem;
 }
 
 .max-width-400 { max-width: 400px; }
 
-/* Estilos especÌficos movidos de parrafos.html */
+/* Estilos especùficos movidos de parrafos.html */
 .textarea-paragraph {
-  /* PodrÌamos combinar d-block, w-100, resize-vertical aquÌ */
-  /* Pero usar clases de utilidad es m·s flexible */
+  /* Podrùamos combinar d-block, w-100, resize-vertical aquù */
+  /* Pero usar clases de utilidad es mùs flexible */
 }
 .paragraph-status-text {
   color: #666;
@@ -2298,26 +2306,26 @@ body .edit-service-page #aliasPopup {
   padding: 0.4rem 0.8rem;
   border-radius: 5px;
   text-decoration: none;
-  display: inline-block; /* AÒadido para padding */
+  display: inline-block; /* Aùadido para padding */
 }
 
 .w-100 { width: 98%; } /* Ancho completo */
 .text-right { text-align: right; }
 
-/* Estilos especÌficos movidos de admin_dashboard.html */
+/* Estilos especùficos movidos de admin_dashboard.html */
 .info-text-small {
   /* color: #333; */ /* Color heredado o manejado por dark-mode */
   font-size: 0.9rem;
 }
 .max-width-400 { max-width: 400px; }
 
-/* Estilos especÌficos movidos de parrafos.html */
+/* Estilos especùficos movidos de parrafos.html */
 .hr-margin-1 { margin-top: 1rem; margin-bottom: 1rem; }
 .hr-margin-15 { margin-top: 1.5rem; margin-bottom: 1.5rem; }
 .hr-margin-08 { margin-top: 0.8rem; margin-bottom: 0.8rem; }
 
 .paragraph-status-text {
-  color: #666; /* Mantenido color especÌfico */
+  color: #666; /* Mantenido color especùfico */
 }
 .link-button-thick-blue {
   background: #2196f3;
@@ -2329,7 +2337,7 @@ body .edit-service-page #aliasPopup {
   display: inline-block;
 }
 
-/* Estilos especÌficos para edit_service.html */
+/* Estilos especùficos para edit_service.html */
 .heading-service-edit { font-size: 1.5rem; }
 .align-items-end { align-items: flex-end; }
 .gap-1-5 { gap: 1.5rem; }
@@ -2338,7 +2346,7 @@ body .edit-service-page #aliasPopup {
 .word-break-all { word-break: break-all; }
 .width-70pc { width: 70%; }
 
-/* Estilos especÌficos para admin_dashboard.html */
+/* Estilos especùficos para admin_dashboard.html */
 .admin-dashboard-title {
   font-size: 1.5rem;
 }
@@ -2348,16 +2356,16 @@ body .edit-service-page #aliasPopup {
 }
 
 .popup-visible {
-    display: block !important; /* Usamos !important aquÌ para asegurar que anule .popup-base */
+    display: block !important; /* Usamos !important aquù para asegurar que anule .popup-base */
 }
 /* O si el popup usa flex: */
 .popup-visible-flex {
     display: flex !important;
 }
 
-/* Clases especÌficas para usuarios.html */
+/* Clases especùficas para usuarios.html */
 .input-password-short {
-  width: 150px; /* Ancho especÌfico */
+  width: 150px; /* Ancho especùfico */
   padding-right: 30px; /* Espacio para el icono */
 }
 
@@ -2372,7 +2380,7 @@ body .edit-service-page #aliasPopup {
 
 .password-toggle-icon-edit {
   position: absolute;
-  left: 160px; /* PosiciÛn especÌfica del popup editar */
+  left: 160px; /* Posiciùn especùfica del popup editar */
   top: 50%;
   transform: translateY(-50%);
   cursor: pointer;
@@ -2408,12 +2416,12 @@ body .edit-service-page #aliasPopup {
 
 .mb-04 { margin-bottom: 0.4rem; }
 
-/* Botones especÌficos para gestiÛn de correos en sub-usuarios */
+/* Botones especùficos para gestiùn de correos en sub-usuarios */
 .select-all-emails, .deselect-all-emails, .save-subuser-emails {
   /* Heredan estilos de .btn-green, .btn-orange, .btn-blue respectivamente */
 }
 
-/* Botones especÌficos para gestiÛn de herramientas en sub-usuarios */
+/* Botones especùficos para gestiùn de herramientas en sub-usuarios */
 .select-all-tools, .deselect-all-tools {
   /* Heredan estilos de .btn-green, .btn-orange respectivamente */
 }
@@ -2423,14 +2431,14 @@ body .edit-service-page #aliasPopup {
   opacity: 0.8;
 }
 
-/* Clase general para botones pequeÒos */
+/* Clase general para botones pequeùos */
 .btn-small {
   padding: 0.25rem 0.5rem;
   font-size: 0.875rem;
   border-radius: 3px;
 }
 
-/* SecciÛn de formulario */
+/* Secciùn de formulario */
 .form-section {
   margin-bottom: 1rem;
 }
@@ -2469,7 +2477,7 @@ body .edit-service-page #aliasPopup {
   transform: scale(1.1);
 }
 
-/* Clases especÌficas para search.html */
+/* Clases especùficas para search.html */
 #spinner { 
   display: none; /* Oculto inicialmente */
 }
@@ -2482,12 +2490,12 @@ body .edit-service-page #aliasPopup {
   height: 70px;
 }
 
-/* Estilo especÌfico para herramientas p˙blicas - no aplica a tienda */
+/* Estilo especùfico para herramientas pùblicas - no aplica a tienda */
 .public-tools-container .search-form-container {
   margin: 3rem auto 0.1rem auto; /* margin-top: 3rem, margin-bottom: 0.1rem */
 }
 
-/* Los estilos de .alias-popup-item se aplican din·micamente desde JavaScript */
+/* Los estilos de .alias-popup-item se aplican dinùmicamente desde JavaScript */
 
 .select-min-width-200 {
   min-width: 200px;
@@ -2501,8 +2509,8 @@ body .edit-service-page #aliasPopup {
 /* --- Estilos para resultados de Regex (generados por JS) --- */
 .regex-result-container {
   background: #ffffff;
-  border-radius: 6px; /* AÒadir borde redondeado */
-  padding: 15px 1rem 15px 1rem; /* Espacio arriba y m·rgenes laterales como admin-card */
+  border-radius: 6px; /* Aùadir borde redondeado */
+  padding: 15px 1rem 15px 1rem; /* Espacio arriba y mùrgenes laterales como admin-card */
   margin: 0 0 0.5rem 0;
   max-width: 100%;
   overflow-x: hidden;
@@ -2521,7 +2529,7 @@ body .edit-service-page #aliasPopup {
 .regex-result-copy-btn,
 .regex-result-open-link-btn {
   margin-left: 1rem;
-  /* Estado normal ahora usa el color que antes tenÌa COPIADO */
+  /* Estado normal ahora usa el color que antes tenùa COPIADO */
   background: linear-gradient(135deg, #764ba2 0%, #667eea 100%) !important;
   /* Asegurar que no hay efectos de destello */
   overflow: visible !important;
@@ -2534,10 +2542,10 @@ body .edit-service-page #aliasPopup {
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
 }
 
-/* Los efectos hover, active y focus ahora se heredan autom·ticamente 
+/* Los efectos hover, active y focus ahora se heredan automùticamente 
    de las clases .search-page .btn-search.btn-rounded */
 
-/* Eliminar efecto de brillo para botones regex - solo colores sÛlidos */
+/* Eliminar efecto de brillo para botones regex - solo colores sùlidos */
 .regex-result-copy-btn::before,
 .regex-result-open-link-btn::before,
 .search-page .regex-result-copy-btn::before,
@@ -2556,7 +2564,7 @@ body .edit-service-page #aliasPopup {
   left: -100% !important;
 }
 
-/* BotÛn limpiar con mismo estilo que botones de servicio */
+/* Botùn limpiar con mismo estilo que botones de servicio */
 #email-search-clear-btn {
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
   border: none !important;
@@ -2579,7 +2587,7 @@ body .edit-service-page #aliasPopup {
   box-shadow: 0 3px 10px rgba(102, 126, 234, 0.4) !important;
 }
 
-/* Eliminar destello del botÛn limpiar y otros botones grises */
+/* Eliminar destello del botùn limpiar y otros botones grises */
 #email-search-clear-btn::before,
 .btn-grey::before,
 .btn-grey:hover::before {
@@ -2611,7 +2619,7 @@ body .edit-service-page #aliasPopup {
   margin-top: 0.75rem; /* Reducir margen superior */
 }
 
-/* Estilos para m˙ltiples cÛdigos SMS - todo en la misma lÌnea */
+/* Estilos para mùltiples cùdigos SMS - todo en la misma lùnea */
 .sms-code-container {
   display: flex !important;
   align-items: center !important;
@@ -2654,7 +2662,7 @@ body .edit-service-page #aliasPopup {
 }
 
 
-/* ? NUEVO: Estilos para cÛdigo 2FA - CSP Compliant */
+/* ? NUEVO: Estilos para cùdigo 2FA - CSP Compliant */
 .twofa-code-display {
   background: #f8f9fa;
   border: none;
@@ -2711,13 +2719,13 @@ body .edit-service-page #aliasPopup {
   padding: 0.5rem 1rem;
 }
 
-/* --- Ajustes MÛviles para Regex Results --- */
+/* --- Ajustes Mùviles para Regex Results --- */
 @media (max-width: 768px) {
-  /* Solo aplicar display:block a regex-result-code que NO estÈ dentro de sms-code-container */
+  /* Solo aplicar display:block a regex-result-code que NO estù dentro de sms-code-container */
   .regex-result-code:not(.sms-code-text) {
-     font-size: 1.2rem; /* Reducir tamaÒo fuente cÛdigo */
-     display: block; /* Hacer que ocupe su lÌnea */
-     margin-bottom: 0.75rem; /* M·s margen inferior */
+     font-size: 1.2rem; /* Reducir tamaùo fuente cùdigo */
+     display: block; /* Hacer que ocupe su lùnea */
+     margin-bottom: 0.75rem; /* Mùs margen inferior */
   }
   
   /* Asegurar que sms-code-text dentro de sms-code-container mantenga inline/inline-block */
@@ -2726,36 +2734,36 @@ body .edit-service-page #aliasPopup {
     margin-bottom: 0 !important;
   }
   
-  /* Ajustes especÌficos para mÛvil - los estilos base se heredan de btn-search.btn-rounded */
+  /* Ajustes especùficos para mùvil - los estilos base se heredan de btn-search.btn-rounded */
   .regex-result-copy-btn,
   .regex-result-open-link-btn {
-      margin-left: 0; /* Sin margen izquierdo en mÛvil */
+      margin-left: 0; /* Sin margen izquierdo en mùvil */
        margin-right: 0.5rem; /* Espacio entre botones si se envuelven */
        margin-top: 0.25rem; /* Espacio superior si se envuelven */
   }
   
-  /* En mÛvil, los cÛdigos SMS pueden envolverse solo si es necesario */
+  /* En mùvil, los cùdigos SMS pueden envolverse solo si es necesario */
   .sms-code-container {
     flex-wrap: wrap;
     justify-content: flex-start;
   }
 }
 
-/* --- Estilos para secciones de p·rrafos (parrafos.html) --- */
+/* --- Estilos para secciones de pùrrafos (parrafos.html) --- */
 /* Eliminadas reglas para .paragraph-section ya que ahora se usa .admin-card */
 
-/* Regla m·s especÌfica para inputs dentro de popups */
+/* Regla mùs especùfica para inputs dentro de popups */
 .popup-base input[type="text"]:not([name*='search']),
 .popup-base input[type="password"],
 .popup-base input[type="number"],
 .popup-base input[type="email"],
 .popup-base textarea,
 .popup-base select {
-    max-width: 220px; /* Reducido a˙n m·s el max-width para popups */
+    max-width: 220px; /* Reducido aùn mùs el max-width para popups */
     width: 100%;
 }
 
-/* Asegurarse que el input de posiciÛn en popups tambiÈn se vea afectado */
+/* Asegurarse que el input de posiciùn en popups tambiùn se vea afectado */
 .popup-base .position-input-small {
     max-width: 60px; /* Mantenido */
     width: 60px;
@@ -2763,34 +2771,34 @@ body .edit-service-page #aliasPopup {
 
 /* --- Ajustes adicionales para usuarios.html --- */
 
-/* Input de Usuario en CREAR USUARIO (Formulario en p·gina) */
+/* Input de Usuario en CREAR USUARIO (Formulario en pùgina) */
 .admin-card form input[name='username'] {
-  max-width: 180px !important; /* Reducido a˙n m·s */
+  max-width: 180px !important; /* Reducido aùn mùs */
   width: 100%;
 }
 
-/* Input de PosiciÛn en CREAR USUARIO (Formulario en p·gina) */
+/* Input de Posiciùn en CREAR USUARIO (Formulario en pùgina) */
 .admin-card form input[name='position'] {
-  width: 50px !important; /* Muy pequeÒo */
+  width: 50px !important; /* Muy pequeùo */
   max-width: 24px !important;
   flex-grow: 0 !important; /* Asegurar que no se estire */
 }
 
 /* Input de Usuario en EDITAR USUARIO (Popup) */
 .popup-base input[name='username'] {
-    max-width: 180px !important; /* Reducido m·s */
+    max-width: 180px !important; /* Reducido mùs */
     width: 100%;
 }
 
-/* Input de ContraseÒa en EDITAR USUARIO (Popup) */
+/* Input de Contraseùa en EDITAR USUARIO (Popup) */
 .popup-base input[name='new_password'] {
-    max-width: 180px !important; /* Reducido m·s */
+    max-width: 180px !important; /* Reducido mùs */
     width: 100%;
 }
 
-/* Input de PosiciÛn en EDITAR USUARIO (Popup) */
+/* Input de Posiciùn en EDITAR USUARIO (Popup) */
 .popup-base input[name='position'] {
-    max-width: 50px !important; /* Muy pequeÒo */
+    max-width: 50px !important; /* Muy pequeùo */
     width: 50px !important;
 }
 
@@ -2800,10 +2808,10 @@ body .edit-service-page #aliasPopup {
   /* Mantenemos flex-grow: 1 por la clase */
 }
 
-/* Input de PosiciÛn en CREAR USUARIO (por atributo name) */
+/* Input de Posiciùn en CREAR USUARIO (por atributo name) */
 /* Dentro de una fila flex */
 .admin-card form .d-flex input[name='position'] {
-  width: 55px !important;   /* Muy pequeÒo */
+  width: 55px !important;   /* Muy pequeùo */
   max-width: 55px !important;
   flex: 0 0 55px !important; /* No crecer, No encoger, Base 55px */
   padding: 0.4rem;         /* Consistencia en padding */
@@ -2812,13 +2820,13 @@ body .edit-service-page #aliasPopup {
 /* --- Ajustes para Popup Editar Usuario (id=editUserPopup) --- */
 
 /* Limitar ancho de inputs con .flex-grow-1 DENTRO del popup */
-#editUserPopup .flex-grow-1 { /* Asumiendo que el popup tambiÈn usa .flex-grow-1 */
+#editUserPopup .flex-grow-1 { /* Asumiendo que el popup tambiùn usa .flex-grow-1 */
   max-width: 200px !important;
   min-width: 150px;
 }
 
-/* Input de PosiciÛn DENTRO del popup */
-#editUserPopup input[name='position'] { /* Asumiendo name='position' tambiÈn en popup */
+/* Input de Posiciùn DENTRO del popup */
+#editUserPopup input[name='position'] { /* Asumiendo name='position' tambiùn en popup */
   width: 55px !important;
   max-width: 55px !important;
   flex: 0 0 55px !important;
@@ -2850,7 +2858,7 @@ body .edit-service-page #aliasPopup {
   width: 120px;
 }
 
-/* --- FIN Estilos especÌficos para admin_dashboard.html --- */
+/* --- FIN Estilos especùficos para admin_dashboard.html --- */
 
 /* Solo contenido puro para filtros en modo oscuro - sin estilos visuales */
 body.dark-mode .filter-match {
@@ -2926,7 +2934,7 @@ body.dark-mode .filter-match * {
 }
 
 .visibility-btn-on-no-usuarios-no-visible {
-  background-color: #9c27b0; /* P˙rpura */
+  background-color: #9c27b0; /* Pùrpura */
   border-color: #9c27b0;
 }
 
@@ -2941,12 +2949,12 @@ body.dark-mode .filter-match * {
   border: 1px solid #ccc; 
   border-radius: 4px; 
   vertical-align: middle;
-  /* AÒadimos max-width para evitar desbordes */
+  /* Aùadimos max-width para evitar desbordes */
   max-width: 100%; 
-  height: auto; /* Mantiene proporciÛn */
+  height: auto; /* Mantiene proporciùn */
 }
 
-/* Estilo para el botÛn de eliminar icono de servicio */
+/* Estilo para el botùn de eliminar icono de servicio */
 .delete-service-icon-btn {
   background: #f44336; 
   border: 2px solid #f44336; 
@@ -2956,11 +2964,11 @@ body.dark-mode .filter-match * {
   border-radius: 4px; 
   cursor: pointer; 
   vertical-align: middle;
-  line-height: 1; /* Ajuste para botones pequeÒos */
-  font-size: 0.9em; /* Ajuste para botones pequeÒos */
+  line-height: 1; /* Ajuste para botones pequeùos */
+  font-size: 0.9em; /* Ajuste para botones pequeùos */
 }
 
-/* ... aÒadir m·s colores si es necesario ... */
+/* ... aùadir mùs colores si es necesario ... */
 
 /* Clase para ocultar visualmente pero mantener accesible (Screen Reader Only) */
 .sr-only {
@@ -2971,7 +2979,7 @@ body.dark-mode .filter-match * {
   margin: -1px;
   overflow: hidden;
   clip: rect(0, 0, 0, 0);
-  white-space: nowrap; /* Evitar que el texto se divida en m˙ltiples lÌneas */
+  white-space: nowrap; /* Evitar que el texto se divida en mùltiples lùneas */
   border: 0;
 }
 
@@ -3017,7 +3025,7 @@ body.dark-mode .filter-match * {
   overflow-x: visible; /* Cambiar a visible para evitar conflictos */
 }
 
-/* En la p·gina de b˙squeda: evitar que el texto del correo se desborde */
+/* En la pùgina de bùsqueda: evitar que el texto del correo se desborde */
 .search-page-container .admin-card {
   overflow-x: hidden !important;
   overflow-wrap: break-word !important;
@@ -3111,7 +3119,7 @@ body #popupFilter.popup-base.popup-small {
   box-shadow: none !important;
 }
 
-/* LOG: Los popups usan esta clase base. Si el popup se ve mal, revisa aquÌ. */
+/* LOG: Los popups usan esta clase base. Si el popup se ve mal, revisa aquù. */
 #editUserPopup.popup-base,
 #editUserPopup.popup-base.popup-medium,
 #editUserPopup.popup-base.popup-small {
@@ -3324,7 +3332,7 @@ body #popupFilter.popup-base.popup-small {
   border-radius: 6px !important;
 }
 
-/* Mejorar botÛn Iniciar SesiÛn (enlace) para que sea m·s discreto y elegante */
+/* Mejorar botùn Iniciar Sesiùn (enlace) para que sea mùs discreto y elegante */
 a.btn-search.btn-rounded {
   color: #fff !important;
   border: 0.1px solid #90caf9 !important;
@@ -3367,8 +3375,8 @@ a.btn-search.btn-rounded:hover {
   gap: 0.75rem !important;
 }
 
-/* ========== Estilos para GestiÛn de Correos en manage_subusers.html ========== */
-/* Contenedor del textarea de b˙squeda con botÛn X */
+/* ========== Estilos para Gestiùn de Correos en manage_subusers.html ========== */
+/* Contenedor del textarea de bùsqueda con botùn X */
 .search-textarea-wrapper {
   position: relative;
   width: 100%;
@@ -3376,7 +3384,7 @@ a.btn-search.btn-rounded:hover {
   overflow: hidden;
 }
 
-/* Textarea de b˙squeda con padding para el botÛn X */
+/* Textarea de bùsqueda con padding para el botùn X */
 .search-textarea-wrapper textarea {
   padding-right: 35px;
   box-sizing: border-box;
@@ -3384,7 +3392,7 @@ a.btn-search.btn-rounded:hover {
   max-width: 100%;
 }
 
-/* BotÛn X para limpiar b˙squeda */
+/* Botùn X para limpiar bùsqueda */
 .search-textarea-clear-btn {
   position: absolute;
   right: 8px;
@@ -3407,7 +3415,7 @@ a.btn-search.btn-rounded:hover {
   color: #333;
 }
 
-/* Select de paginaciÛn pequeÒo */
+/* Select de paginaciùn pequeùo */
 .select-small {
   font-size: 0.9rem;
 }
@@ -3419,12 +3427,12 @@ a.btn-search.btn-rounded:hover {
   font-size: 0.85rem;
 }
 
-/* Botones pequeÒos en gestiÛn de correos */
+/* Botones pequeùos en gestiùn de correos */
 .btn-small-font {
   font-size: 0.85rem;
 }
 
-/* Clase para mostrar/ocultar el botÛn X */
+/* Clase para mostrar/ocultar el botùn X */
 .search-textarea-clear-btn.show {
   display: flex;
 }
@@ -3456,7 +3464,7 @@ a.btn-search.btn-rounded:hover {
   color: red !important;
 }
 
-/* Clase para botÛn inline-block */
+/* Clase para botùn inline-block */
 .btn-inline-block {
   display: inline-block !important;
 }
@@ -3553,7 +3561,7 @@ a.btn-search.btn-rounded:hover {
 
 /* ================== ESTILOS PARA ADMIN DASHBOARD ================== */
 
-/* Estilos especÌficos para admin_dashboard.html */
+/* Estilos especùficos para admin_dashboard.html */
 .admin-card {
   border: none !important;
   border-radius: 8px !important;
@@ -3625,17 +3633,17 @@ a.btn-search.btn-rounded:hover {
   font-size: 0.9em;
 }
 /* =========== ESTILOS PARA SERVICIOS ================== */
-/* Botones de servicios sin m·rgenes para mejor alineaciÛn */
+/* Botones de servicios sin mùrgenes para mejor alineaciùn */
 .edit-service, 
 .link-regex-service, 
 .link-filter-service, 
 .add-service-icon-btn, 
 .delete-service {
   margin: 0 !important;
-  margin-right: 2px !important; /* Espaciado mÌnimo entre botones */
+  margin-right: 2px !important; /* Espaciado mùnimo entre botones */
 }
 
-/* En pantallas pequeÒas, eliminar completamente el espaciado */
+/* En pantallas pequeùas, eliminar completamente el espaciado */
 @media (max-width: 768px) {
   .edit-service, 
   .link-regex-service, 
@@ -3649,33 +3657,33 @@ a.btn-search.btn-rounded:hover {
 
 /* =========== ESTILOS PARA USUARIOS ================== */
 
-/* Estilo especÌfico para usuarios.html */
+/* Estilo especùfico para usuarios.html */
 .popup-overlay-hidden {
   display: none;
 }
 
-/* BOTONES DE ACCI”N M¡S PEQUE—OS Y COMPACTOS */
+/* BOTONES DE ACCIùN MùS PEQUEùOS Y COMPACTOS */
 .btn-blue, .btn-red, .btn-orange, .btn-green {
   padding: 2px 7px !important;
   min-width: 60px !important;
   border-radius: 6px !important;
 }
 
-/* GAP ENTRE BOTONES M¡S PEQUE—O */
+/* GAP ENTRE BOTONES MùS PEQUEùO */
 .user-item-actions,
 .user-item > div[style*="display:flex"] {
   display: flex;
   gap: 0.3rem !important;
 }
 
-/* CONTENEDOR DE USUARIO AJUSTADO Y FUENTE M¡S PEQUE—A */
+/* CONTENEDOR DE USUARIO AJUSTADO Y FUENTE MùS PEQUEùA */
 .user-item {
   font-size: 0.97rem !important;
   padding: 0.35rem 0.3rem !important;
   overflow: hidden !important;
 }
 
-/* AJUSTE RESPONSIVE PARA M”VIL */
+/* AJUSTE RESPONSIVE PARA MùVIL */
 @media (max-width: 600px) {
   .user-item {
     font-size: 0.90rem !important;
@@ -3686,7 +3694,7 @@ a.btn-search.btn-rounded:hover {
   }
 }
 
-/* Ajuste para el botÛn Men˙ en la plantilla de b˙squeda */
+/* Ajuste para el botùn Menù en la plantilla de bùsqueda */
 .menu-toggle-container,
 #menuToggleBtn {
   margin-left: 0.5rem !important;
@@ -3717,7 +3725,7 @@ a.btn-search.btn-rounded:hover {
     align-items: center !important;
     flex-direction: column !important;
   }
-  /* TÌtulo + ? en la misma lÌnea (no apilar) */
+  /* Tùtulo + ? en la misma lùnea (no apilar) */
   .admin-card h3.admin-api-section-title {
     flex-direction: row !important;
     flex-wrap: nowrap !important;
@@ -3846,7 +3854,7 @@ a.btn-search.btn-rounded:hover {
   }
 }
 
-/* ===== ESTILOS PARA B⁄SQUEDA DE USUARIOS EN A—ADIR CORREOS MASIVAMENTE ===== */
+/* ===== ESTILOS PARA BùSQUEDA DE USUARIOS EN AùADIR CORREOS MASIVAMENTE ===== */
 .bulk-add-emails-user-item {
   background-color: #ffffff !important;
   border: 1.5px solid #e5e7eb !important;
@@ -3928,8 +3936,8 @@ a.btn-search.btn-rounded:hover {
   background-color: rgba(255, 255, 255, 0.2);
 }
 
-/* ===== ESTILOS PROFESIONALES PARA B⁄SQUEDA ===== */
-/* Campo de b˙squeda con contorno similar a la foto */
+/* ===== ESTILOS PROFESIONALES PARA BùSQUEDA ===== */
+/* Campo de bùsqueda con contorno similar a la foto */
 .search-input {
   background: #ffffff !important;
   border: 2px solid #d1d5db !important;
@@ -3955,7 +3963,7 @@ a.btn-search.btn-rounded:hover {
   font-weight: 400 !important;
 }
 
-/* BotÛn de b˙squeda especÌfico para la p·gina principal de consultas */
+/* Botùn de bùsqueda especùfico para la pùgina principal de consultas */
 .btn-search-main {
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
   border: none !important;
@@ -4000,7 +4008,7 @@ a.btn-search.btn-rounded:hover {
   box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.3) !important;
 }
 
-/* Contenedor de formulario de b˙squeda con contorno blanco */
+/* Contenedor de formulario de bùsqueda con contorno blanco */
 .search-form-container {
   margin: 10px auto !important;
   background: rgba(255, 255, 255, 0.95) !important;
@@ -4022,13 +4030,13 @@ a.btn-search.btn-rounded:hover {
 /* Contenedor principal de resultados */
 
 
-/* Estilo para el n˙mero de resultado (cÛdigo) */
+/* Estilo para el nùmero de resultado (cùdigo) */
 .regex-result-container .mail-content pre,
 .regex-result-container .mail-content div {
   margin: 16px 0 !important;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08) !important;
   letter-spacing: 2px !important;
-  /* Evitar desbordamiento: que el texto respete m·rgenes izquierda y derecha */
+  /* Evitar desbordamiento: que el texto respete mùrgenes izquierda y derecha */
   max-width: 100% !important;
   width: 100% !important;
   min-width: 0 !important; /* Permite que elementos flex/grid se contraigan */
@@ -4041,7 +4049,7 @@ a.btn-search.btn-rounded:hover {
   overflow: hidden !important;
 }
 
-/* Contenedor de resultados y contenido de correo: respetar m·rgenes */
+/* Contenedor de resultados y contenido de correo: respetar mùrgenes */
 #search-results,
 .search-page-container #search-results,
 .regex-result-container,
@@ -4097,7 +4105,7 @@ a.btn-search.btn-rounded:hover {
   box-sizing: border-box !important;
 }
 
-/* BotÛn copiar mejorado */
+/* Botùn copiar mejorado */
 .regex-result-container button {
   border: none !important;
   border-radius: 12px !important;
@@ -4113,13 +4121,13 @@ a.btn-search.btn-rounded:hover {
   margin: 8px !important;
 }
 
-/* Efecto hover eliminado de botones del contenedor - ahora est·ticos */
+/* Efecto hover eliminado de botones del contenedor - ahora estùticos */
 
-/* Responsive para mÛviles */
+/* Responsive para mùviles */
 @media (max-width: 768px) {
   .regex-result-container {
     width: 100% !important; /* Asegurar que no exceda el padre */
-    max-width: 100vw !important; /* LÌmite viewport m·s estricto */
+    max-width: 100vw !important; /* Lùmite viewport mùs estricto */
     margin-left: auto !important;
     margin-right: auto !important;
   }
@@ -4148,7 +4156,7 @@ a.btn-search.btn-rounded:hover {
   }
 }
 
-/* Para pantallas muy pequeÒas */
+/* Para pantallas muy pequeùas */
 @media (max-width: 480px) {
   .search-form-container {
     padding: 8px !important;
@@ -4159,7 +4167,7 @@ a.btn-search.btn-rounded:hover {
     gap: 4px !important;
   }
   
-  /* Solo contenido puro para filtros en pantallas pequeÒas - sin estilos visuales */
+  /* Solo contenido puro para filtros en pantallas pequeùas - sin estilos visuales */
   .filter-match {
     background: #ffffff !important; /* Fondo blanco para consistencia */
     border: none !important;
@@ -4184,7 +4192,7 @@ a.btn-search.btn-rounded:hover {
   }
 }
 
-/* DESTELLO ELIMINADO - Los botones de men˙ ahora tienen colores est·ticos */
+/* DESTELLO ELIMINADO - Los botones de menù ahora tienen colores estùticos */
 
 .search-page #menuToggleBtn:active,
 .search-page #menu2ToggleBtn:active,
@@ -4211,7 +4219,7 @@ a.btn-search.btn-rounded:hover {
   white-space: nowrap;
 }
 
-/* Contenedor con contorno para secciones de configuraciÛn de servicios */
+/* Contenedor con contorno para secciones de configuraciùn de servicios */
 
 
 .service-config-section h4 {
@@ -4258,7 +4266,7 @@ a.btn-search.btn-rounded:hover {
   transform: translateY(-1px);
 }
 
-/* Estilos para campos de posiciÛn y visibilidad en edit_service.html - ELIMINADO: duplicado */
+/* Estilos para campos de posiciùn y visibilidad en edit_service.html - ELIMINADO: duplicado */
 
 .visibility-select {
   min-width: 120px !important;
@@ -4269,16 +4277,16 @@ a.btn-search.btn-rounded:hover {
   background-color: white;
 }
 
-/* Contenedor responsive para posiciÛn y visibilidad - DEFINICI”N PRINCIPAL */
+/* Contenedor responsive para posiciùn y visibilidad - DEFINICIùN PRINCIPAL */
 .position-visibility-container {
   display: flex !important;
-  flex-wrap: wrap !important; /* Permitir que los botones bajen a la siguiente lÌnea */
+  flex-wrap: wrap !important; /* Permitir que los botones bajen a la siguiente lùnea */
   gap: 1rem !important;
   align-items: flex-end !important;
   justify-content: flex-start !important;
 }
 
-/* Los primeros dos divs (posiciÛn y dropdown) en la primera lÌnea */
+/* Los primeros dos divs (posiciùn y dropdown) en la primera lùnea */
 .position-visibility-container > div:nth-child(1),
 .position-visibility-container > div:nth-child(2) {
   display: flex !important;
@@ -4288,16 +4296,16 @@ a.btn-search.btn-rounded:hover {
   flex: 0 0 auto !important; /* No crecer ni encogerse */
 }
 
-/* Labels en lÌnea con sus campos */
+/* Labels en lùnea con sus campos */
 .position-visibility-container > div:nth-child(1) label,
 .position-visibility-container > div:nth-child(2) label {
   margin: 0 !important;
   white-space: nowrap !important; /* Evitar que el texto se rompa */
 }
 
-/* Los botones van en su propia lÌnea */
+/* Los botones van en su propia lùnea */
 .position-visibility-container .edit-service-buttons {
-  flex: 1 1 100% !important; /* Ocupar toda la lÌnea siguiente */
+  flex: 1 1 100% !important; /* Ocupar toda la lùnea siguiente */
   display: flex !important;
   justify-content: center !important;
   gap: 1rem !important;
@@ -4317,7 +4325,7 @@ a.btn-search.btn-rounded:hover {
   }
 }
 
-/* En pantallas muy pequeÒas, a˙n mantener en lÌnea pero m·s compacto */
+/* En pantallas muy pequeùas, aùn mantener en lùnea pero mùs compacto */
 @media (max-width: 480px) {
   .position-visibility-container {
     gap: 0.3rem !important;
@@ -4360,8 +4368,8 @@ a.btn-search.btn-rounded:hover {
   margin-top: 0.5rem;
 }
 
-/* Clases para alias popup items - Aplicar siempre, no solo en mÛvil */
-/* Selector m·s especÌfico para evitar herencia del color del padre */
+/* Clases para alias popup items - Aplicar siempre, no solo en mùvil */
+/* Selector mùs especùfico para evitar herencia del color del padre */
 #aliasPopup #aliasListContainer .alias-popup-item,
 #aliasPopup .alias-popup-item,
 .alias-popup-item {
@@ -4378,14 +4386,14 @@ a.btn-search.btn-rounded:hover {
   cursor: pointer !important;
 }
 
-/* Asegurar que el texto dentro de alias-popup-item tambiÈn sea blanco */
+/* Asegurar que el texto dentro de alias-popup-item tambiùn sea blanco */
 #aliasPopup #aliasListContainer .alias-popup-item span,
 #aliasPopup .alias-popup-item span,
 .alias-popup-item span {
   color: #fff !important;
 }
 
-/* Media query para pantallas grandes - Replicar estilos de mÛvil */
+/* Media query para pantallas grandes - Replicar estilos de mùvil */
 @media (min-width: 769px) {
   #aliasPopup #aliasListContainer .alias-popup-item,
   #aliasPopup .alias-popup-item,
@@ -4403,7 +4411,7 @@ a.btn-search.btn-rounded:hover {
     cursor: pointer !important;
   }
   
-  /* Asegurar que el texto dentro de alias-popup-item tambiÈn sea blanco en pantallas grandes */
+  /* Asegurar que el texto dentro de alias-popup-item tambiùn sea blanco en pantallas grandes */
   #aliasPopup #aliasListContainer .alias-popup-item span,
   #aliasPopup .alias-popup-item span,
   .alias-popup-item span {
@@ -4452,7 +4460,7 @@ a.btn-search.btn-rounded:hover {
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
 }
 
-/* Estilos para labels e inputs pequeÒos en formulario IMAP2 */
+/* Estilos para labels e inputs pequeùos en formulario IMAP2 */
 .imap2-label-small {
   font-size: 0.85rem;
 }
@@ -4461,13 +4469,13 @@ a.btn-search.btn-rounded:hover {
   font-size: 0.9rem;
 }
 
-/* Estilos para botones de paginaciÛn deshabilitados */
+/* Estilos para botones de paginaciùn deshabilitados */
 .pagination-disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
 
-/* Estilos para b˙squeda y mostrar en secciÛn 2FA (igual que herramientas) */
+/* Estilos para bùsqueda y mostrar en secciùn 2FA (igual que herramientas) */
 .card .productos-buscar-mostrar {
   display: flex;
   flex-wrap: wrap;
@@ -4491,12 +4499,12 @@ a.btn-search.btn-rounded:hover {
   line-height: 1.5;
 }
 
-/* Estilos para secciÛn 2FA en edit_imap2.html y manage_my_page.html - igual que sms.html */
+/* Estilos para secciùn 2FA en edit_imap2.html y manage_my_page.html - igual que sms.html */
 .twofa-section-card {
   margin-top: 1rem;
 }
 
-/* Asegurar espaciado adecuado despuÈs de tablas en edit_imap2 */
+/* Asegurar espaciado adecuado despuùs de tablas en edit_imap2 */
 .card.mt-2 + .twofa-section-card,
 .card.mt-2 + .admin-card.twofa-section-card {
   margin-top: 1rem !important;
@@ -4512,7 +4520,7 @@ a.btn-search.btn-rounded:hover {
   margin-bottom: 0;
 }
 
-/* Espaciado especÌfico: cuando un card con tabla est· seguido por el div de 2FA */
+/* Espaciado especùfico: cuando un card con tabla estù seguido por el div de 2FA */
 .card.mt-2 + .admin-card.twofa-section-card.mt-2 {
   margin-top: 1rem !important;
 }
@@ -4562,12 +4570,12 @@ a.btn-search.btn-rounded:hover {
   line-height: 1.5;
 }
 
-/* Estilos para secciÛn de fondo personalizado en edit_imap2.html */
+/* Estilos para secciùn de fondo personalizado en edit_imap2.html */
 .imap2-background-section {
   border-top: 1px solid #ddd;
 }
 
-/* Estilos para items de p·ginas en my_pages_list.html */
+/* Estilos para items de pùginas en my_pages_list.html */
 .my-pages-item {
   background-color: #ffffff !important;
   border: none !important;
@@ -4576,7 +4584,7 @@ a.btn-search.btn-rounded:hover {
   padding: 0.5rem 0.75rem !important;
 }
 
-/* Estilos para pantallas pequeÒas (max-width: 768px) - mantener contorno visible */
+/* Estilos para pantallas pequeùas (max-width: 768px) - mantener contorno visible */
 @media (max-width: 768px) {
   .my-pages-item {
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1),
@@ -4586,7 +4594,7 @@ a.btn-search.btn-rounded:hover {
   }
 }
 
-/* Asegurar que el contorno blanco sea visible en pantallas grandes (m·s de 720px) */
+/* Asegurar que el contorno blanco sea visible en pantallas grandes (mùs de 720px) */
 @media (min-width: 721px) {
   .my-pages-item {
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1),
@@ -4643,7 +4651,7 @@ a.btn-search.btn-rounded:hover {
   background-color: rgba(255, 255, 255, 0.2);
 }
 
-/* Estilos para dropdown de b˙squeda de usuarios en edit_imap2.html */
+/* Estilos para dropdown de bùsqueda de usuarios en edit_imap2.html */
 .user-search-results-dropdown {
   position: absolute;
   top: 100%;
@@ -4678,7 +4686,7 @@ a.btn-search.btn-rounded:hover {
   position: relative;
 }
 
-/* En pantallas pequeÒas: botÛn abajo (solo para admin_dashboard) */
+/* En pantallas pequeùas: botùn abajo (solo para admin_dashboard) */
 @media (max-width: 600px) {
   .imap2-create-btn {
     margin-top: 0.5rem;
@@ -4686,7 +4694,7 @@ a.btn-search.btn-rounded:hover {
   }
 }
 
-/* Estilos responsivos para formulario de creaciÛn IMAP2 */
+/* Estilos responsivos para formulario de creaciùn IMAP2 */
 @media (max-width: 600px) {
   #createImap2Form .d-flex.flex-wrap {
     flex-direction: column;
@@ -4816,7 +4824,7 @@ a.btn-search.btn-rounded:hover {
   display: block !important;
 }
 
-/* Clase para bordes de colores din·micos usando CSS variables */
+/* Clase para bordes de colores dinùmicos usando CSS variables */
 .alias-item-border {
   border-left: 4px solid var(--alias-border-color, #ccc);
 }
@@ -4824,27 +4832,29 @@ a.btn-search.btn-rounded:hover {
 /* ===== Pie de sitio + pol?tica de privacidad ===== */
 .site-footer {
   width: 100%;
-  margin-top: 1.5rem;
-  padding: 1rem 1rem 1.35rem;
+  margin-top: 1rem;
+  padding: 0.55rem 1rem 0.85rem;
   text-align: center;
   box-sizing: border-box;
 }
 .site-footer__nav {
   display: inline-flex;
   flex-wrap: wrap;
-  gap: 0.75rem 1.25rem;
+  gap: 0.4rem 0.85rem;
   justify-content: center;
   align-items: center;
 }
 .site-footer__link {
   color: rgba(255, 255, 255, 0.85);
-  text-decoration: underline;
-  text-underline-offset: 2px;
-  font-size: 0.9rem;
+  text-decoration: none;
+  font-size: 0.62rem;
+  line-height: 1.3;
+  font-weight: 400;
 }
 .site-footer__link:hover,
 .site-footer__link:focus {
   color: #fff;
+  text-decoration: none;
 }
 body:not(.theme-active) .site-footer__link {
   color: #374151;
@@ -4881,7 +4891,7 @@ body:not(.theme-active) .site-footer__link {
 .site-back-link:focus {
   text-decoration: underline;
 }
-/* Compat: por si alguna plantilla a˙n usa las clases viejas de privacidad */
+/* Compat: por si alguna plantilla aùn usa las clases viejas de privacidad */
 .privacy-page__nav {
   display: flex;
   justify-content: flex-end;

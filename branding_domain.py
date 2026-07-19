@@ -1,6 +1,8 @@
 """
 Dominio del proyecto (misma fuente que las apps móviles).
 
+Todo sale de DOMINIO.txt (URL + opcionales). No hay marca hardcodeada aquí.
+
 Prioridad de lectura:
   1) DOMINIO.txt en la raíz del repo
   2) mobile/DOMINIO.txt
@@ -8,11 +10,11 @@ Prioridad de lectura:
 
 Formato de DOMINIO.txt:
   - Una línea con la URL pública (obligatoria)
+    https://ejemplo.com → package com.ejemplo.app
   - Opcionales (clave=valor):
-      applicationId=com.tupremiumm.app   # package de Play / App Links
-      package=com.tupremiumm.app         # alias de applicationId
-      appName=tupremiumm                 # nombre visible de la app
-      appIdSuffix=tupremiumm             # solo si no pones applicationId
+      appName=Mi Tienda                  # nombre visible; si falta, usa el label del dominio
+      applicationId=com.otro.app         # solo para forzar otro package
+      appIdSuffix=mitienda               # solo si no hay URL usable
 """
 from __future__ import annotations
 
@@ -106,7 +108,7 @@ def normalize_site_url(raw):
 
 
 def brand_suffix_from_hostname(hostname):
-    """tupremiumm.com → tupremiumm | tienda.ejemplo.com → tienda"""
+    """ejemplo.com → ejemplo | tienda.ejemplo.com → tienda"""
     h = (hostname or "").lower().strip()
     h = h[4:] if h.startswith("www.") else h
     if not h:
@@ -159,6 +161,8 @@ def load_site_branding():
     if not app_name:
         app_name = suffix
 
+    # Por defecto: com.<label-del-dominio>.app (desde la URL de DOMINIO.txt).
+    # applicationId= en DOMINIO.txt solo si hace falta forzar otro package.
     explicit_pkg = sanitize_application_id(
         extras.get("applicationid")
         or extras.get("application_id")
@@ -177,7 +181,7 @@ def load_site_branding():
         if o and o not in origins:
             origins.append(o)
 
-    # Package principal (Play) + legado Capacitor si aún se usa.
+    # Package principal (desde dominio) + legado Capacitor si aún se usa.
     packages = [application_id]
     legacy = "com.imap.storeclient"
     if legacy not in packages:

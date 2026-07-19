@@ -1,4 +1,4 @@
-/* Reset/Base */
+﻿/* Reset/Base */
 html, body {
     margin: 0;
     padding: 0;
@@ -12418,6 +12418,8 @@ select.license-split-editor__status-bad.license-split-editor__status--tier-soluc
       rgba(90, 20, 20, 0) 100%
     );
   }
+
+  /* (estado Verificar/Arreglar: ver reglas globales al final de store.css) */
 
   /* Efectos hover y active removidos - solo funciona el estado .active al hacer clic */
   
@@ -27704,6 +27706,44 @@ body .card.product-texture-bg::before,
   margin-top: 0.15rem !important;
   margin-bottom: 0.12rem !important;
 }
+/* Cabecera Licencias (proveedor): mismo clic plegable que Día / Vencidas / Caídas */
+.admin-licencias-page.user-licencias-shell .user-lic-proveedor-wrap .user-lic-proveedor-lic-header.user-lic-day-header-toggle {
+  cursor: pointer;
+  user-select: none;
+}
+/* Título «Licencias» centrado en la franja (badge a la derecha) */
+.admin-licencias-page.user-licencias-shell .user-lic-proveedor-wrap .user-lic-proveedor-lic-bloc .user-lic-proveedor-lic-header {
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center !important;
+  justify-content: stretch !important;
+  gap: 0.12rem;
+  flex-wrap: nowrap !important;
+}
+.admin-licencias-page.user-licencias-shell .user-lic-proveedor-wrap .user-lic-proveedor-lic-bloc .user-lic-proveedor-lic-header .admin-licencias-bloc-title {
+  grid-column: 1 / -1;
+  grid-row: 1;
+  justify-self: center;
+  text-align: center !important;
+  flex: none !important;
+  width: auto;
+  max-width: 100%;
+  z-index: 0;
+  pointer-events: none;
+}
+.admin-licencias-page.user-licencias-shell .user-lic-proveedor-wrap .user-lic-proveedor-lic-bloc .user-lic-proveedor-lic-header .admin-licencias-bloc-header-actions {
+  grid-column: 2;
+  grid-row: 1;
+  justify-self: end;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  flex: 0 0 auto !important;
+}
+.admin-licencias-page.user-licencias-shell .user-lic-proveedor-wrap .user-lic-proveedor-lic-bloc.collapsed > .user-lic-proveedor-lic-body,
+.admin-licencias-page.user-licencias-shell .user-lic-proveedor-wrap .user-lic-proveedor-lic-bloc.collapsed > .day-accounts-list {
+  display: none !important;
+}
 .admin-licencias-page.user-licencias-shell .user-lic-proveedor-wrap .user-lic-proveedor-days > .admin-licencias-bloc--day:first-child {
   margin-top: 0.12rem !important;
 }
@@ -40427,4 +40467,288 @@ body .store-front-main .store-products-wrap--view-compact .card.product-texture-
   color: #111827 !important;
   -webkit-text-fill-color: #111827 !important;
   background: transparent !important;
+}
+
+/* ============================================================
+   Bloc compartido «Verificar/Arreglar» (admin y portal soporte)
+   ============================================================ */
+/* Checkboxes Verificado / Verificar-Arreglar: solo dentro del panel del botón */
+.admin-licencias-verificar-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.6rem;
+  flex-wrap: wrap;
+}
+
+.admin-licencias-verificar-head-start {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.admin-licencias-verificar-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #93c5fd;
+  font-size: 1rem;
+  width: 1.4rem;
+  flex: 0 0 auto;
+}
+
+.admin-licencias-verificar-check {
+  display: inline-flex;
+  align-items: center;
+  margin: 0;
+  cursor: pointer;
+  user-select: none;
+}
+
+.admin-licencias-verificar-check input {
+  position: absolute;
+  opacity: 0;
+  width: 1px;
+  height: 1px;
+  pointer-events: none;
+}
+
+.admin-licencias-verificar-check__btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.28rem 0.7rem;
+  border-radius: 7px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  line-height: 1.2;
+  border: 1px solid transparent;
+  color: #fff;
+  transition: background 0.15s ease, border-color 0.15s ease, transform 0.12s ease;
+}
+
+.admin-licencias-verificar-check__btn::before {
+  content: "";
+  width: 0.85rem;
+  height: 0.85rem;
+  border-radius: 3px;
+  border: 1.5px solid rgba(255, 255, 255, 0.85);
+  background: transparent;
+  box-sizing: border-box;
+  flex: 0 0 auto;
+}
+
+.admin-licencias-verificar-check input:checked + .admin-licencias-verificar-check__btn::before {
+  content: "\2713";
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.72rem;
+  font-weight: 800;
+  line-height: 1;
+  color: #14532d;
+  background: #fff;
+  border-color: #fff;
+}
+
+.admin-licencias-verificar-check--verified .admin-licencias-verificar-check__btn {
+  background: linear-gradient(180deg, #16a34a 0%, #0f6b32 100%);
+  border-color: rgba(134, 239, 172, 0.45);
+}
+
+.admin-licencias-verificar-check--verified input:checked + .admin-licencias-verificar-check__btn {
+  background: linear-gradient(180deg, #22c55e 0%, #15803d 100%);
+  border-color: rgba(187, 247, 208, 0.7);
+  transform: translateY(-1px);
+}
+
+.admin-licencias-verificar-check--pending .admin-licencias-verificar-check__btn {
+  background: linear-gradient(180deg, #ca8a04 0%, #854d0e 100%);
+  border-color: rgba(253, 224, 71, 0.4);
+}
+
+.admin-licencias-verificar-check--pending input:checked + .admin-licencias-verificar-check__btn {
+  background: linear-gradient(180deg, #eab308 0%, #a16207 100%);
+  border-color: rgba(254, 240, 138, 0.7);
+  transform: translateY(-1px);
+}
+
+.admin-licencias-verificar-check--pending input:checked + .admin-licencias-verificar-check__btn::before {
+  color: #713f12;
+}
+
+.admin-licencias-verificar-check input:disabled + .admin-licencias-verificar-check__btn {
+  opacity: 0.55;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.admin-licencias-verificar-status {
+  font-size: 0.8rem;
+  color: rgba(148, 163, 184, 0.95);
+  white-space: nowrap;
+}
+
+.admin-licencias-verificar-textarea {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 320px;
+  resize: vertical;
+  background: #020617 !important;
+  border: 1px solid rgba(59, 130, 246, 0.35) !important;
+  border-radius: 8px !important;
+  color: #f1f5f9 !important;
+  padding: 0.6rem 0.75rem;
+  font-size: 0.92rem;
+  line-height: 1.5;
+}
+
+.admin-licencias-verificar-textarea:focus {
+  outline: none;
+  border-color: rgba(147, 197, 253, 0.75) !important;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.25);
+}
+
+.admin-licencias-verificar-textarea::placeholder {
+  color: rgba(148, 163, 184, 0.75);
+}
+
+.admin-licencias-verificar-textarea[readonly] {
+  opacity: 0.75;
+  cursor: not-allowed;
+}
+
+/* Portal: tarjeta Verificar/Arreglar con el mismo rojo oscuro que Reportes */
+.admin-licencias-page.user-licencias-shell .licenses-grid .license-card.user-lic-license-card--verificar {
+  background: linear-gradient(189deg, #4a1010 0%, #1c0808 100%) !important;
+  border: 1px solid rgba(200, 72, 72, 0.45) !important;
+}
+.admin-licencias-page.user-licencias-shell .licenses-grid .license-card.user-lic-license-card--verificar::before {
+  background: linear-gradient(
+    352deg,
+    #0000008c 0%,
+    rgb(72 10 10) 50%,
+    rgba(90, 20, 20, 0) 100%
+  );
+}
+.admin-licencias-page.user-licencias-shell .licenses-grid .license-card.user-lic-license-card--verificar.active,
+.admin-licencias-page.user-licencias-shell .licenses-grid .license-card.user-lic-license-card--verificar.user-lic-verificar-toggle--open {
+  background: linear-gradient(176deg, #9b2828 0%, #6b1818 100%) !important;
+  border: 1px solid rgba(255, 200, 200, 0.4) !important;
+  color: #ffffff !important;
+  transform: translateY(-1px);
+}
+.admin-licencias-page.user-licencias-shell .licenses-grid .license-card.user-lic-license-card--verificar.active::before,
+.admin-licencias-page.user-licencias-shell .licenses-grid .license-card.user-lic-license-card--verificar.user-lic-verificar-toggle--open::before {
+  opacity: 1.5;
+  background: linear-gradient(
+    135deg,
+    rgba(255, 220, 220, 0.22) 0%,
+    rgba(255, 120, 120, 0.1) 50%,
+    rgba(255, 255, 255, 0) 100%
+  );
+}
+.admin-licencias-page.user-licencias-shell .licenses-grid .license-card.user-lic-license-card--verificar.active .license-name,
+.admin-licencias-page.user-licencias-shell .licenses-grid .license-card.user-lic-license-card--verificar.user-lic-verificar-toggle--open .license-name {
+  color: #ffffff !important;
+}
+
+/*
+ * Estado Verificar/Arreglar (amarillo/verde): SIEMPRE visible en el botón del grid
+ * (admin + portal /tienda/licencias). Debe ganar al rojo base del portal (más específico).
+ */
+html[data-admin-va-state="pending"] #adminLicenciasVerificarBtn,
+.admin-licencias-page[data-va-state="pending"] #adminLicenciasVerificarBtn,
+.admin-licencias-shell[data-va-state="pending"] #adminLicenciasVerificarBtn,
+#adminLicenciasVerificarBtn.is-pending,
+#adminLicenciasVerificarBtn[data-va-state="pending"],
+.license-card.admin-licencias-verificar-toggle.is-pending,
+.license-card.admin-licencias-verificar-toggle[data-va-state="pending"],
+/* Portal usuario: misma cadena que el rojo base + estado */
+html[data-user-va-state="pending"] .admin-licencias-page.user-licencias-shell .licenses-grid .license-card.user-lic-license-card--verificar,
+.admin-licencias-page.user-licencias-shell[data-va-state="pending"] .licenses-grid .license-card.user-lic-license-card--verificar,
+.admin-licencias-page.user-licencias-shell .licenses-grid .license-card.user-lic-license-card--verificar.is-pending,
+.admin-licencias-page.user-licencias-shell .licenses-grid .license-card.user-lic-license-card--verificar[data-va-state="pending"],
+.admin-licencias-page.user-licencias-shell .licenses-grid .license-card.user-lic-license-card--verificar.is-pending.active,
+.admin-licencias-page.user-licencias-shell .licenses-grid .license-card.user-lic-license-card--verificar[data-va-state="pending"].active,
+.admin-licencias-page.user-licencias-shell .licenses-grid .license-card.user-lic-license-card--verificar.is-pending.user-lic-verificar-toggle--open,
+.admin-licencias-page.user-licencias-shell .licenses-grid .license-card.user-lic-license-card--verificar[data-va-state="pending"].user-lic-verificar-toggle--open {
+  background: linear-gradient(176deg, #ca8a04 0%, #a16207 55%, #713f12 100%) !important;
+  border: 1px solid rgba(254, 240, 138, 0.65) !important;
+  color: #fff !important;
+}
+html[data-admin-va-state="pending"] #adminLicenciasVerificarBtn::before,
+#adminLicenciasVerificarBtn.is-pending::before,
+#adminLicenciasVerificarBtn[data-va-state="pending"]::before,
+.license-card.admin-licencias-verificar-toggle.is-pending::before,
+html[data-user-va-state="pending"] .admin-licencias-page.user-licencias-shell .licenses-grid .license-card.user-lic-license-card--verificar::before,
+.admin-licencias-page.user-licencias-shell[data-va-state="pending"] .licenses-grid .license-card.user-lic-license-card--verificar::before,
+.admin-licencias-page.user-licencias-shell .licenses-grid .license-card.user-lic-license-card--verificar.is-pending::before,
+.admin-licencias-page.user-licencias-shell .licenses-grid .license-card.user-lic-license-card--verificar[data-va-state="pending"]::before {
+  background: linear-gradient(
+    135deg,
+    rgba(254, 240, 138, 0.28) 0%,
+    rgba(202, 138, 4, 0.12) 50%,
+    rgba(255, 255, 255, 0) 100%
+  ) !important;
+  opacity: 1 !important;
+}
+
+html[data-admin-va-state="verified"] #adminLicenciasVerificarBtn,
+.admin-licencias-page[data-va-state="verified"] #adminLicenciasVerificarBtn,
+.admin-licencias-shell[data-va-state="verified"] #adminLicenciasVerificarBtn,
+#adminLicenciasVerificarBtn.is-verified,
+#adminLicenciasVerificarBtn[data-va-state="verified"],
+.license-card.admin-licencias-verificar-toggle.is-verified,
+.license-card.admin-licencias-verificar-toggle[data-va-state="verified"],
+html[data-user-va-state="verified"] .admin-licencias-page.user-licencias-shell .licenses-grid .license-card.user-lic-license-card--verificar,
+.admin-licencias-page.user-licencias-shell[data-va-state="verified"] .licenses-grid .license-card.user-lic-license-card--verificar,
+.admin-licencias-page.user-licencias-shell .licenses-grid .license-card.user-lic-license-card--verificar.is-verified,
+.admin-licencias-page.user-licencias-shell .licenses-grid .license-card.user-lic-license-card--verificar[data-va-state="verified"],
+.admin-licencias-page.user-licencias-shell .licenses-grid .license-card.user-lic-license-card--verificar.is-verified.active,
+.admin-licencias-page.user-licencias-shell .licenses-grid .license-card.user-lic-license-card--verificar[data-va-state="verified"].active,
+.admin-licencias-page.user-licencias-shell .licenses-grid .license-card.user-lic-license-card--verificar.is-verified.user-lic-verificar-toggle--open,
+.admin-licencias-page.user-licencias-shell .licenses-grid .license-card.user-lic-license-card--verificar[data-va-state="verified"].user-lic-verificar-toggle--open {
+  background: linear-gradient(176deg, #22c55e 0%, #166534 55%, #0a3d1f 100%) !important;
+  border: 1px solid rgba(187, 247, 208, 0.65) !important;
+  color: #fff !important;
+}
+html[data-admin-va-state="verified"] #adminLicenciasVerificarBtn::before,
+#adminLicenciasVerificarBtn.is-verified::before,
+#adminLicenciasVerificarBtn[data-va-state="verified"]::before,
+.license-card.admin-licencias-verificar-toggle.is-verified::before,
+html[data-user-va-state="verified"] .admin-licencias-page.user-licencias-shell .licenses-grid .license-card.user-lic-license-card--verificar::before,
+.admin-licencias-page.user-licencias-shell[data-va-state="verified"] .licenses-grid .license-card.user-lic-license-card--verificar::before,
+.admin-licencias-page.user-licencias-shell .licenses-grid .license-card.user-lic-license-card--verificar.is-verified::before,
+.admin-licencias-page.user-licencias-shell .licenses-grid .license-card.user-lic-license-card--verificar[data-va-state="verified"]::before {
+  background: linear-gradient(
+    135deg,
+    rgba(187, 247, 208, 0.3) 0%,
+    rgba(34, 197, 94, 0.12) 50%,
+    rgba(255, 255, 255, 0) 100%
+  ) !important;
+  opacity: 1 !important;
+}
+
+html[data-admin-va-state="pending"] #adminLicenciasVerificarBtn .license-name,
+html[data-admin-va-state="verified"] #adminLicenciasVerificarBtn .license-name,
+#adminLicenciasVerificarBtn.is-pending .license-name,
+#adminLicenciasVerificarBtn.is-verified .license-name,
+html[data-user-va-state="pending"] .admin-licencias-page.user-licencias-shell .licenses-grid .license-card.user-lic-license-card--verificar .license-name,
+html[data-user-va-state="verified"] .admin-licencias-page.user-licencias-shell .licenses-grid .license-card.user-lic-license-card--verificar .license-name,
+.admin-licencias-page.user-licencias-shell .licenses-grid .license-card.user-lic-license-card--verificar.is-pending .license-name,
+.admin-licencias-page.user-licencias-shell .licenses-grid .license-card.user-lic-license-card--verificar.is-verified .license-name {
+  color: #ffffff !important;
+}
+
+/* Portal: modo Verificar/Arreglar (oculta cuentas, muestra el bloc) */
+.admin-licencias-page.user-licencias-shell.user-lic-verificar-mode .user-licencias-view-wrap {
+  display: none !important;
+}
+.admin-licencias-page.user-licencias-shell.user-lic-verificar-mode #userLicVerificarPanel {
+  display: block !important;
 }

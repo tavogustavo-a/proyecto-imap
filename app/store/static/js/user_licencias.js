@@ -55,7 +55,10 @@
     var userLicRenewalBalanceWarningsCache = [];
     var USER_LIC_PORTAL_PROVEEDOR_FILTER = 'proveedor';
     var USER_LIC_PORTAL_REPORTES_FILTER = 'reportes';
+    var USER_LIC_PORTAL_VERIFICAR_FILTER = 'verificar';
     var userLicPortalProveedorEnabled = false;
+    /* Permiso soporte_licencias: habilita el bloc compartido Verificar/Arreglar. */
+    var userLicPortalSoporteLicenciasEnabled = false;
     var userLicPortalProveedorCache = {
         license_notes: '',
         day_notepads: {},
@@ -193,6 +196,7 @@
     function normalizePortalServiceFilterKey(filterRaw) {
         if (filterRaw === USER_LIC_PORTAL_PROVEEDOR_FILTER) return USER_LIC_PORTAL_PROVEEDOR_FILTER;
         if (filterRaw === USER_LIC_PORTAL_REPORTES_FILTER) return USER_LIC_PORTAL_REPORTES_FILTER;
+        if (filterRaw === USER_LIC_PORTAL_VERIFICAR_FILTER) return USER_LIC_PORTAL_VERIFICAR_FILTER;
         if (filterRaw === 'all' || filterRaw == null || filterRaw === 'vencimientos') return 'all';
         return String(filterRaw);
     }
@@ -218,20 +222,23 @@
         if (fk === 'all') {
             var t = gridHost.querySelector('.user-lic-license-card--todos');
             if (t) t.classList.add('active');
-            return;
-        }
-        if (fk === USER_LIC_PORTAL_PROVEEDOR_FILTER) {
+        } else if (fk === USER_LIC_PORTAL_PROVEEDOR_FILTER) {
             var provCard = gridHost.querySelector('.user-lic-license-card--proveedor');
             if (provCard) provCard.classList.add('active');
-            return;
-        }
-        if (fk === USER_LIC_PORTAL_REPORTES_FILTER) {
+        } else if (fk === USER_LIC_PORTAL_REPORTES_FILTER) {
             var repCard = gridHost.querySelector('.user-lic-license-card--reportes');
             if (repCard) repCard.classList.add('active');
-            return;
+        } else if (fk === USER_LIC_PORTAL_VERIFICAR_FILTER) {
+            var verCard = gridHost.querySelector('.user-lic-license-card--verificar');
+            if (verCard) verCard.classList.add('active');
+        } else {
+            var b = gridCardByFilterKey(gridHost, fk);
+            if (b) b.classList.add('active');
         }
-        var b = gridCardByFilterKey(gridHost, fk);
-        if (b) b.classList.add('active');
+        /* Mantener amarillo/verde del botón Verificar/Arreglar con cualquier filtro. */
+        try {
+            userLicVerificarSyncCardState();
+        } catch (_eVaActMark) {}
     }
 
     function setCaducidadToolbarActive(active) {
@@ -2814,6 +2821,19 @@
         } else {
             userLicPortalSetReportesMode(false, outer);
         }
+        if (userLicPortalSoporteLicenciasEnabled) {
+            wireUserLicVerificarPanel(outer);
+            userLicVerificarSyncCardState();
+        }
+        if (effFilter === USER_LIC_PORTAL_VERIFICAR_FILTER) {
+            userLicPortalSetVerificarMode(true, outer);
+            void userLicVerificarFetchFromServer();
+        } else {
+            userLicPortalSetVerificarMode(false, outer);
+            if (userLicPortalSoporteLicenciasEnabled) {
+                void userLicVerificarFetchFromServer();
+            }
+        }
         userLicRefreshReportesUi(outer);
     }
 
@@ -3701,6 +3721,13 @@
                 var sv = portalDayCollapsedRead(sk, day);
                 if (sv === 'true') sec.classList.add('collapsed');
                 else if (sv === 'false') sec.classList.remove('collapsed');
+                var hdr = sec.querySelector('.user-lic-day-header-toggle');
+                if (hdr) {
+                    hdr.setAttribute(
+                        'aria-expanded',
+                        sec.classList.contains('collapsed') ? 'false' : 'true'
+                    );
+                }
             });
             userLicPortalSyncExpandAllToolbar(bundleWrap);
         });
@@ -4131,9 +4158,62 @@
         );
     }
 
+    /** Colchón gar. oculto en UI; se reinyecta al guardar. */
+    var userLicProveedorHiddenGarLines = [];
+
+    function userLicProveedorPartitionLinesByGar(lines) {
+        var list = Array.isArray(lines) ? lines.slice() : [];
+        var bySvc = {};
+        list.forEach(function (entry, idx) {
+            if (!entry || !String(entry.cred || '').trim()) return;
+            var svc = userLicProveedorNormalizeServiceId(
+                entry.service != null ? entry.service : PROVEEDOR_SERVICE_ANONIMO
+            );
+            if (!bySvc[svc]) bySvc[svc] = [];
+            bySvc[svc].push(idx);
+        });
+        var hide = Object.create(null);
+        Object.keys(bySvc).forEach(function (svc) {
+            if (svc === PROVEEDOR_SERVICE_ANONIMO || svc === 'anónimo' || svc === 'anonymous') {
+                return;
+            }
+            var gar = 0;
+            var item = (userLicProveedorProductsCache || []).find(function (p) {
+                return String(p.license_id) === String(svc);
+            });
+            if (item) {
+                gar = parseInt(userLicProveedorWarrantyUi(item.warranty_days), 10) || 0;
+            }
+            if (gar <= 0) return;
+            var idxs = bySvc[svc];
+            var hideN = Math.min(gar, idxs.length);
+            var i;
+            for (i = 0; i < hideN; i += 1) {
+                hide[idxs[idxs.length - 1 - i]] = true;
+            }
+        });
+        var visible = [];
+        var hidden = [];
+        list.forEach(function (entry, idx) {
+            if (!entry || !String(entry.cred || '').trim()) return;
+            var copy = {
+                service: userLicProveedorNormalizeServiceId(
+                    entry.service != null ? entry.service : PROVEEDOR_SERVICE_ANONIMO
+                ),
+                cred: entry.cred,
+            };
+            if (hide[idx]) hidden.push(copy);
+            else visible.push(copy);
+        });
+        return { visible: visible, hidden: hidden };
+    }
+
     function userLicProveedorLinesForBlock(blockKey, dayNum) {
         if (blockKey === 'license') {
-            return userLicPortalProveedorCache.license_lines || [];
+            var all = userLicPortalProveedorCache.license_lines || [];
+            var part = userLicProveedorPartitionLinesByGar(all);
+            userLicProveedorHiddenGarLines = part.hidden;
+            return part.visible;
         }
         var dl = userLicPortalProveedorCache.day_lines || {};
         var arr = dl[String(dayNum)];
@@ -4771,14 +4851,26 @@
 
     function renderProveedorInventorySheet() {
         var licLines = userLicProveedorLinesForBlock('license', null);
-        var licCount = userLicProveedorCountStructuredLines(licLines);
+        var licCount = userLicProveedorSellableLicenseCount(licLines);
+        var licRaw = licCount + (userLicProveedorHiddenGarLines || []).length;
+        var licTitle =
+            licCount === 1
+                ? '1 vendible (igual que tienda)'
+                : licCount +
+                  ' vendibles (igual que tienda)' +
+                  (licRaw > licCount ? ' · ' + licRaw + ' en inventario (resto en gar. ocultas)' : '');
         var licBadge =
             '<span class="day-account-badge admin-licencias-notepad-line-badge"' +
-            (licCount > 0 ? ' title="' + escAttr(licCount === 1 ? '1 línea' : licCount + ' líneas') + '"' : '') +
+            (licCount > 0 || licRaw > 0 ? ' title="' + escAttr(licTitle) + '"' : '') +
             '>' +
             String(licCount) +
             '</span>';
         var proveedorSheetKey = USER_LIC_PORTAL_PROVEEDOR_FILTER;
+        var licCollapsedClass = '';
+        var licSv = portalDayCollapsedRead(proveedorSheetKey, 'licencias');
+        if (licSv === 'true') licCollapsedClass = ' collapsed';
+        else if (licSv === 'false') licCollapsedClass = '';
+        else licCollapsedClass = licCount === 0 ? ' collapsed' : '';
         var daysHtml = '';
         var d;
         for (d = 1; d <= 31; d += 1) {
@@ -4791,14 +4883,19 @@
             USER_LIC_PORTAL_PROVEEDOR_FILTER +
             '" data-default-scroll-day="1">' +
             '<div class="license-notepads-wrap user-lic-bundle-wrap user-lic-proveedor-wrap">' +
-            '<section class="admin-licencias-bloc admin-licencias-bloc--license user-lic-proveedor-lic-bloc" aria-label="Licencias del proveedor">' +
-            '<div class="admin-licencias-bloc-header user-lic-proveedor-lic-header">' +
+            '<section class="day-section admin-licencias-bloc admin-licencias-bloc--license user-lic-readonly-day user-lic-proveedor-lic-bloc' +
+            licCollapsedClass +
+            '" data-user-day="licencias" aria-label="Licencias del proveedor">' +
+            '<div class="day-section-header admin-licencias-bloc-header user-lic-day-header-toggle user-lic-proveedor-lic-header" role="button" tabindex="0" aria-expanded="' +
+            (licCollapsedClass ? 'false' : 'true') +
+            '" title="Plegar o desplegar Licencias">' +
             '<span class="admin-licencias-bloc-title">Licencias</span>' +
-            '<div class="admin-licencias-bloc-header-actions">' +
+            '<div class="admin-licencias-bloc-header-actions user-lic-day-header-actions">' +
             licBadge +
             '</div></div>' +
+            '<div class="day-accounts-list user-lic-proveedor-lic-body">' +
             userLicProveedorRenderSplitBlockHtml('license', null) +
-            '</section>' +
+            '</div></section>' +
             '<div id="userLicProveedorDaysContainer" class="license-all-days-container user-lic-proveedor-days">' +
             daysHtml +
             '</div>' +
@@ -5216,6 +5313,354 @@
         }
     }
 
+    /* ============================================================
+       Bloc compartido «Verificar/Arreglar» (portal soporte ↔ admin).
+       ============================================================ */
+    var USER_LIC_VERIFICAR_SAVE_DEBOUNCE_MS = 800;
+    var userLicVerificarLastRev = null;
+    var userLicVerificarDirty = false;
+    var userLicVerificarSaveTimer = null;
+    var userLicVerificarSaving = false;
+    var userLicVerificarPendingServer = null;
+    var userLicVerificarStatusTimer = null;
+    var userLicVerificarReadOnly = false;
+    var userLicVerificarVerified = false;
+    var userLicVerificarPending = false;
+    var userLicVerificarFlagsSaving = false;
+
+    function userLicVerificarTextarea() {
+        return document.getElementById('userLicVerificarTextarea');
+    }
+
+    function userLicVerificarApiUrl() {
+        var outer = document.getElementById('userLicenciasTableOuter');
+        return (outer && outer.getAttribute('data-verificar-url')) || '/tienda/api/licencias/verificar-arreglar';
+    }
+
+    function userLicVerificarSetStatus(text, transient) {
+        var el = document.getElementById('userLicVerificarStatus');
+        if (!el) return;
+        el.textContent = text || '';
+        if (userLicVerificarStatusTimer) {
+            window.clearTimeout(userLicVerificarStatusTimer);
+            userLicVerificarStatusTimer = null;
+        }
+        if (text && transient) {
+            userLicVerificarStatusTimer = window.setTimeout(function () {
+                if (el.textContent === text) el.textContent = '';
+            }, 2500);
+        }
+    }
+
+    function userLicVerificarMarkReadOnly() {
+        userLicVerificarReadOnly = true;
+        var ta = userLicVerificarTextarea();
+        if (ta) ta.readOnly = true;
+        var chkV = document.getElementById('userLicVerificarCheck');
+        var chkP = document.getElementById('userLicVerificarPendingCheck');
+        if (chkV) chkV.disabled = true;
+        if (chkP) chkP.disabled = true;
+        userLicVerificarSetStatus('Solo lectura');
+    }
+
+    function userLicVerificarSyncCardState() {
+        var verified = !!userLicVerificarVerified;
+        var pending = !verified && !!userLicVerificarPending;
+        var state = verified ? 'verified' : pending ? 'pending' : 'normal';
+        try {
+            document.documentElement.setAttribute('data-user-va-state', state);
+            var shell = document.querySelector('.user-licencias-shell');
+            if (shell) shell.setAttribute('data-va-state', state);
+            sessionStorage.setItem('user_va_card_state', state);
+        } catch (_eVaShellU) {}
+        var btn = document.querySelector('.user-lic-license-card--verificar');
+        if (!btn) return;
+        btn.classList.toggle('is-verified', verified);
+        btn.classList.toggle('is-pending', pending);
+        btn.setAttribute('data-va-state', state);
+    }
+
+    function userLicVerificarSyncCheckboxUi() {
+        var chkV = document.getElementById('userLicVerificarCheck');
+        var chkP = document.getElementById('userLicVerificarPendingCheck');
+        var pendingOn = !userLicVerificarVerified && !!userLicVerificarPending;
+        var verifiedOn = !!userLicVerificarVerified;
+        if (chkV) {
+            if (document.activeElement !== chkV) {
+                chkV.checked = verifiedOn;
+            }
+            /* Con Verificar/Arreglar activo, Verificado queda deshabilitado. */
+            chkV.disabled = !!userLicVerificarReadOnly || pendingOn;
+        }
+        if (chkP) {
+            if (document.activeElement !== chkP) {
+                chkP.checked = pendingOn;
+            }
+            /* Con Verificado activo, Verificar/Arreglar queda deshabilitado. */
+            chkP.disabled = !!userLicVerificarReadOnly || verifiedOn;
+        }
+        userLicVerificarSyncCardState();
+    }
+
+    function userLicVerificarApplyServerPayload(payload) {
+        var text = String((payload && payload.text) || '');
+        var rev = payload && payload.rev != null ? String(payload.rev) : null;
+        var verified = !!(payload && payload.verified);
+        var pending = !!(payload && payload.pending);
+        var ta = userLicVerificarTextarea();
+        var focused = ta && document.activeElement === ta;
+        if (userLicVerificarDirty || userLicVerificarSaving || focused) {
+            userLicVerificarPendingServer = {
+                text: text,
+                rev: rev,
+                verified: verified,
+                pending: pending,
+            };
+            if (!userLicVerificarFlagsSaving) {
+                userLicVerificarVerified = verified;
+                userLicVerificarPending = pending;
+                userLicVerificarSyncCheckboxUi();
+            }
+            return;
+        }
+        userLicVerificarPendingServer = null;
+        userLicVerificarLastRev = rev;
+        userLicVerificarVerified = verified;
+        userLicVerificarPending = pending;
+        if (ta && ta.value !== text) {
+            ta.value = text;
+        }
+        userLicVerificarSyncCheckboxUi();
+    }
+
+    function userLicVerificarFetchFromServer() {
+        var url = userLicVerificarApiUrl();
+        var sep = url.indexOf('?') === -1 ? '?' : '&';
+        return fetch(url + sep + '_t=' + Date.now(), {
+            credentials: 'same-origin',
+            cache: 'no-store',
+        })
+            .then(function (r) {
+                return r.json().then(
+                    function (d) {
+                        return { httpOk: r.ok, data: d };
+                    },
+                    function () {
+                        return { httpOk: r.ok, data: null };
+                    }
+                );
+            })
+            .then(function (res) {
+                var data = res.data;
+                if (!res.httpOk || !data || !data.success) return;
+                var rev = data.rev != null ? String(data.rev) : '';
+                if (rev !== userLicVerificarLastRev || userLicVerificarLastRev === null) {
+                    userLicVerificarApplyServerPayload(data);
+                } else {
+                    userLicVerificarVerified = !!data.verified;
+                    userLicVerificarPending = !!data.pending;
+                    userLicVerificarSyncCheckboxUi();
+                }
+            })
+            .catch(function () {});
+    }
+
+    function userLicVerificarRealtimeRefresh() {
+        if (!userLicPortalSoporteLicenciasEnabled) return;
+        void userLicVerificarFetchFromServer();
+    }
+
+    function userLicVerificarPutFlags(body) {
+        if (userLicVerificarReadOnly) return;
+        userLicVerificarFlagsSaving = true;
+        userLicVerificarSetStatus('Guardando…');
+        return fetch(userLicVerificarApiUrl(), {
+            method: 'PUT',
+            credentials: 'same-origin',
+            headers: userLicJsonHeaders(),
+            body: JSON.stringify(body),
+        })
+            .then(function (r) {
+                return r.json().then(
+                    function (d) {
+                        return { status: r.status, httpOk: r.ok, data: d };
+                    },
+                    function () {
+                        return { status: r.status, httpOk: r.ok, data: null };
+                    }
+                );
+            })
+            .then(function (res) {
+                if (res.status === 403) {
+                    userLicVerificarMarkReadOnly();
+                    return;
+                }
+                if (!res.httpOk || !res.data || !res.data.success) {
+                    userLicVerificarSetStatus('No se pudo guardar');
+                    userLicVerificarSyncCheckboxUi();
+                    return;
+                }
+                userLicVerificarLastRev = res.data.rev != null ? String(res.data.rev) : null;
+                userLicVerificarVerified = !!res.data.verified;
+                userLicVerificarPending = !!res.data.pending;
+                userLicVerificarSyncCheckboxUi();
+                userLicVerificarSetStatus('Guardado ✓', true);
+            })
+            .catch(function () {
+                userLicVerificarSetStatus('Sin conexión');
+                userLicVerificarSyncCheckboxUi();
+            })
+            .finally(function () {
+                userLicVerificarFlagsSaving = false;
+            });
+    }
+
+    function userLicVerificarSaveNow() {
+        var ta = userLicVerificarTextarea();
+        if (!ta || userLicVerificarReadOnly || userLicVerificarSaving) return;
+        userLicVerificarSaving = true;
+        var snapshot = ta.value;
+        userLicVerificarSetStatus('Guardando…');
+        fetch(userLicVerificarApiUrl(), {
+            method: 'PUT',
+            credentials: 'same-origin',
+            headers: userLicJsonHeaders(),
+            body: JSON.stringify({ text: snapshot }),
+        })
+            .then(function (r) {
+                return r.json().then(
+                    function (d) {
+                        return { status: r.status, httpOk: r.ok, data: d };
+                    },
+                    function () {
+                        return { status: r.status, httpOk: r.ok, data: null };
+                    }
+                );
+            })
+            .then(function (res) {
+                if (res.status === 403) {
+                    userLicVerificarMarkReadOnly();
+                    return;
+                }
+                if (!res.httpOk || !res.data || !res.data.success) {
+                    userLicVerificarSetStatus('No se pudo guardar');
+                    return;
+                }
+                userLicVerificarLastRev = res.data.rev != null ? String(res.data.rev) : null;
+                if (res.data.verified != null) userLicVerificarVerified = !!res.data.verified;
+                if (res.data.pending != null) userLicVerificarPending = !!res.data.pending;
+                userLicVerificarSyncCheckboxUi();
+                if (ta.value === snapshot) {
+                    userLicVerificarDirty = false;
+                    userLicVerificarSetStatus('Guardado ✓', true);
+                } else {
+                    userLicVerificarScheduleSave();
+                }
+            })
+            .catch(function () {
+                userLicVerificarSetStatus('Sin conexión: reintentando…');
+                userLicVerificarScheduleSave();
+            })
+            .finally(function () {
+                userLicVerificarSaving = false;
+                if (!userLicVerificarDirty && userLicVerificarPendingServer) {
+                    var pend = userLicVerificarPendingServer;
+                    userLicVerificarPendingServer = null;
+                    userLicVerificarApplyServerPayload(pend);
+                }
+            });
+    }
+
+    function userLicVerificarScheduleSave() {
+        if (userLicVerificarReadOnly) return;
+        if (userLicVerificarSaveTimer) window.clearTimeout(userLicVerificarSaveTimer);
+        userLicVerificarSaveTimer = window.setTimeout(function () {
+            userLicVerificarSaveTimer = null;
+            userLicVerificarSaveNow();
+        }, USER_LIC_VERIFICAR_SAVE_DEBOUNCE_MS);
+    }
+
+    function userLicVerificarFlushSave() {
+        if (!userLicVerificarDirty || userLicVerificarReadOnly) return;
+        if (userLicVerificarSaveTimer) {
+            window.clearTimeout(userLicVerificarSaveTimer);
+            userLicVerificarSaveTimer = null;
+        }
+        userLicVerificarSaveNow();
+    }
+
+    function wireUserLicVerificarPanel(outer) {
+        var ta = userLicVerificarTextarea();
+        if (ta && ta.getAttribute('data-verificar-wired') !== '1') {
+            ta.setAttribute('data-verificar-wired', '1');
+            if (outer && outer.getAttribute('data-licencias-view-only') === '1') {
+                userLicVerificarMarkReadOnly();
+            }
+            ta.addEventListener('input', function () {
+                userLicVerificarDirty = true;
+                userLicVerificarScheduleSave();
+            });
+            ta.addEventListener('blur', function () {
+                userLicVerificarFlushSave();
+                if (!userLicVerificarDirty && userLicVerificarPendingServer) {
+                    var pend = userLicVerificarPendingServer;
+                    userLicVerificarPendingServer = null;
+                    userLicVerificarApplyServerPayload(pend);
+                }
+            });
+        }
+
+        var chkV = document.getElementById('userLicVerificarCheck');
+        if (chkV && chkV.getAttribute('data-verificar-wired') !== '1') {
+            chkV.setAttribute('data-verificar-wired', '1');
+            chkV.addEventListener('change', function () {
+                userLicVerificarVerified = !!chkV.checked;
+                if (userLicVerificarVerified) userLicVerificarPending = false;
+                userLicVerificarSyncCheckboxUi();
+                void userLicVerificarPutFlags({ verified: !!chkV.checked });
+            });
+        }
+
+        var chkP = document.getElementById('userLicVerificarPendingCheck');
+        if (chkP && chkP.getAttribute('data-verificar-wired') !== '1') {
+            chkP.setAttribute('data-verificar-wired', '1');
+            chkP.addEventListener('change', function () {
+                userLicVerificarPending = !!chkP.checked;
+                if (userLicVerificarPending) userLicVerificarVerified = false;
+                userLicVerificarSyncCheckboxUi();
+                void userLicVerificarPutFlags({ pending: !!chkP.checked });
+            });
+        }
+
+        userLicVerificarSyncCheckboxUi();
+        if (userLicPortalSoporteLicenciasEnabled) {
+            void userLicVerificarFetchFromServer();
+        }
+    }
+
+    function userLicPortalSetVerificarMode(on, outer) {
+        var shell = outer && outer.closest ? outer.closest('.user-licencias-shell') : null;
+        var panel = document.getElementById('userLicVerificarPanel');
+        var btn = document.querySelector('.user-lic-license-card--verificar');
+        if (shell) shell.classList.toggle('user-lic-verificar-mode', !!on);
+        if (panel) {
+            panel.classList.toggle('d-none', !on);
+            panel.hidden = !on;
+            panel.setAttribute('aria-hidden', on ? 'false' : 'true');
+        }
+        if (btn) {
+            btn.classList.toggle('active', !!on);
+            btn.classList.toggle('user-lic-verificar-toggle--open', !!on);
+            btn.setAttribute('aria-expanded', on ? 'true' : 'false');
+        }
+        /* Color de estado del botón (verde/amarillo) se mantiene aunque cierres el panel. */
+        userLicVerificarSyncCardState();
+        if (!on) {
+            userLicVerificarFlushSave();
+        }
+    }
+
+
     function userLicSyncReportesBadge(preferCache) {
         var n = userLicCollectReportEntries(null, preferCache).length;
         var badge = document.getElementById('userLicReportesTotalBadge');
@@ -5396,6 +5841,30 @@
             );
         }
 
+        if (userLicPortalSoporteLicenciasEnabled) {
+            var vaVerified = !!userLicVerificarVerified;
+            var vaPending = !vaVerified && !!userLicVerificarPending;
+            var vaState = vaVerified ? 'verified' : vaPending ? 'pending' : 'normal';
+            var vaClass = vaVerified ? ' is-verified' : vaPending ? ' is-pending' : '';
+            parts.push(
+                '<button type="button" class="license-card license-card--aggregate license-card--panel-toggle user-lic-license-card-btn user-lic-license-card--verificar user-lic-verificar-toggle' +
+                    vaClass +
+                    '"' +
+                    ' data-va-state="' +
+                    vaState +
+                    '"' +
+                    ' data-user-license-filter="' +
+                    USER_LIC_PORTAL_VERIFICAR_FILTER +
+                    '" title="Verificar/Arreglar: bloc compartido con el administrador"' +
+                    ' aria-expanded="false" aria-controls="userLicVerificarPanel"' +
+                    ' aria-label="Verificar/Arreglar: bloc compartido con el administrador">' +
+                    '<div class="license-card-header">' +
+                    '<h3 class="license-name"><span class="full-text">Verificar/Arreglar</span>' +
+                    '<span class="first-letter">V</span></h3>' +
+                    '</div></button>'
+            );
+        }
+
         return parts.join('');
     }
 
@@ -5428,7 +5897,7 @@
             });
             return;
         }
-        if (licSel === USER_LIC_PORTAL_REPORTES_FILTER) {
+        if (licSel === USER_LIC_PORTAL_REPORTES_FILTER || licSel === USER_LIC_PORTAL_VERIFICAR_FILTER) {
             container.querySelectorAll('.user-lic-account-sheet').forEach(function (art) {
                 art.style.display = 'none';
             });
@@ -5533,6 +6002,11 @@
                     ? USER_LIC_PORTAL_REPORTES_FILTER
                     : 'all';
             }
+            if (s === USER_LIC_PORTAL_VERIFICAR_FILTER) {
+                return gridCardByFilterKey(gridHost, USER_LIC_PORTAL_VERIFICAR_FILTER)
+                    ? USER_LIC_PORTAL_VERIFICAR_FILTER
+                    : 'all';
+            }
             if (!gridHost) return 'all';
             return gridCardByFilterKey(gridHost, s) ? s : 'all';
         } catch (_e2) {
@@ -5585,6 +6059,7 @@
             })) {
                 return;
             }
+            userLicPortalSetVerificarMode(false, container);
             userLicPortalSetReportesMode(true, container);
             userLicRenderReportesPanel(container);
             syncServiceFilterGridCards(gridHost, USER_LIC_PORTAL_REPORTES_FILTER);
@@ -5592,7 +6067,37 @@
             return;
         }
 
+        if (licenseNorm === USER_LIC_PORTAL_VERIFICAR_FILTER) {
+            container.dataset.userLicActiveFilter = USER_LIC_PORTAL_VERIFICAR_FILTER;
+            if (!skipPersist) {
+                persistUserLicPortalServiceFilter(USER_LIC_PORTAL_VERIFICAR_FILTER);
+            }
+            if (portalRebuildAfterProveedorFlush(function (forceRebuild) {
+                var hostV = container.closest('.user-licencias-shell') || document.body;
+                var gridHostElV = gridHost || hostV.querySelector('#userLicenciasGridHost');
+                var gridInnerV = gridHostElV ? gridHostElV.querySelector('#userLicenciasGrid') : null;
+                rebuildUserLicPortalMainContent(
+                    container,
+                    hostV,
+                    gridInnerV,
+                    gridHostElV,
+                    { filter: USER_LIC_PORTAL_VERIFICAR_FILTER },
+                    forceRebuild
+                );
+            })) {
+                return;
+            }
+            userLicPortalSetReportesMode(false, container);
+            userLicPortalSetVerificarMode(true, container);
+            wireUserLicVerificarPanel(container);
+            void userLicVerificarFetchFromServer();
+            syncServiceFilterGridCards(gridHost, USER_LIC_PORTAL_VERIFICAR_FILTER);
+            userLicCaducidadSyncShellLayoutClass();
+            return;
+        }
+
         userLicPortalSetReportesMode(false, container);
+        userLicPortalSetVerificarMode(false, container);
 
         container.dataset.userLicActiveFilter = licenseNorm;
         delete container.dataset.userLicCaducidadServiceFilter;
@@ -5680,13 +6185,16 @@
                 var art = headerToggle.closest('.user-lic-account-sheet');
                 if (section && bundle && art) {
                     section.classList.toggle('collapsed');
+                    var isCollapsedNow = section.classList.contains('collapsed');
                     var dAttr = section.getAttribute('data-user-day');
                     if (dAttr != null) {
-                        userLicPortalPersistDayCollapsed(art, dAttr, section.classList.contains('collapsed'));
+                        userLicPortalPersistDayCollapsed(art, dAttr, isCollapsedNow);
                     }
+                    headerToggle.setAttribute('aria-expanded', isCollapsedNow ? 'false' : 'true');
                     if (
-                        section.classList.contains('user-lic-proveedor-day') &&
-                        !section.classList.contains('collapsed')
+                        (section.classList.contains('user-lic-proveedor-day') ||
+                            section.classList.contains('user-lic-proveedor-lic-bloc')) &&
+                        !isCollapsedNow
                     ) {
                         userLicProveedorInitSplitBlocks(outer);
                     }
@@ -6092,7 +6600,11 @@
             day_lines: userLicPortalProveedorCache.day_lines || {},
         };
         if (!outer) return out;
-        out.license_lines = userLicProveedorCollectLinesFromBlock(outer, 'license', null);
+        var visibleLic = userLicProveedorCollectLinesFromBlock(outer, 'license', null);
+        var hiddenGar = Array.isArray(userLicProveedorHiddenGarLines)
+            ? userLicProveedorHiddenGarLines
+            : [];
+        out.license_lines = visibleLic.concat(hiddenGar);
         out.expired_lines = userLicProveedorCollectExtraFromSection(outer, 'expired');
         out.suspended_lines = userLicProveedorCollectExtraFromSection(outer, 'suspended');
         out.license_notes = userLicProveedorLinesToCredsText(out.license_lines);
@@ -6347,6 +6859,59 @@
         return Number.isFinite(n) && n >= 0 ? String(n) : '0';
     }
 
+    /**
+     * Contador de badge Licencias del proveedor: vendibles (líneas − gar. por servicio),
+     * igual criterio que tienda pública. Anónimo no resta gar.
+     */
+    function userLicProveedorSellableLicenseCount(licLines) {
+        // licLines ya viene filtrado (sin colchón); el badge es su longitud.
+        return userLicProveedorCountStructuredLines(licLines);
+    }
+
+    function userLicProveedorRefreshLicBlocBadge() {
+        var sheet = document.querySelector('.user-lic-account-sheet--proveedor');
+        if (!sheet) return;
+        var badge = sheet.querySelector('.user-lic-proveedor-lic-bloc .admin-licencias-notepad-line-badge');
+        if (!badge) return;
+        var licLines = userLicProveedorLinesForBlock('license', null);
+        var sellable = userLicProveedorSellableLicenseCount(licLines);
+        var rawN = sellable + (userLicProveedorHiddenGarLines || []).length;
+        badge.textContent = String(sellable);
+        badge.title =
+            sellable === 1
+                ? '1 vendible (igual que tienda)'
+                : sellable +
+                  ' vendibles (igual que tienda)' +
+                  (rawN > sellable ? ' · ' + rawN + ' en inventario (resto en gar. ocultas)' : '');
+    }
+
+    function userLicProveedorRerenderLicenseBlock() {
+        var outer = document.getElementById('userLicenciasTableOuter');
+        if (!outer) return;
+        var section = outer.querySelector('.user-lic-proveedor-lic-bloc');
+        if (!section) return;
+        var body =
+            section.querySelector('.user-lic-proveedor-lic-body') ||
+            section.querySelector('.day-accounts-list');
+        var header = section.querySelector('.admin-licencias-bloc-header');
+        var html = userLicProveedorRenderSplitBlockHtml('license', null);
+        if (body) {
+            body.innerHTML = html;
+        } else {
+            var oldSplit = section.querySelector('.user-lic-proveedor-split');
+            if (oldSplit) oldSplit.remove();
+            if (header) {
+                header.insertAdjacentHTML('afterend', html);
+            } else {
+                section.insertAdjacentHTML('beforeend', html);
+            }
+        }
+        userLicProveedorSyncServiceRowsForBlock(outer, 'license', null);
+        var block = section.querySelector('.user-lic-proveedor-split');
+        if (block) userLicProveedorScheduleAutosizeCredsForBlock(block);
+        userLicProveedorRefreshLicBlocBadge();
+    }
+
     function userLicRenderProveedorGestionarProductosModal(products) {
         userLicCloseProveedorGestionarProductosModal();
         var list = Array.isArray(products) ? products.slice() : [];
@@ -6504,6 +7069,7 @@
                 if (item) item.warranty_days = n;
                 var span = btn.querySelector('.gestion-productos-position-span');
                 if (span) span.textContent = String(n);
+                userLicProveedorRerenderLicenseBlock();
             })
             .catch(function () {
                 window.alert('Error de conexión al guardar la reserva gar.');
@@ -6565,11 +7131,24 @@
             userLicPortalColombiaClock = data.portal_colombia_clock;
         }
         userLicPortalProveedorEnabled = !!(apiOk && data.proveedor);
+        if (apiOk && data.soporte_licencias != null) {
+            userLicPortalSoporteLicenciasEnabled = !!data.soporte_licencias;
+        } else if (outer && outer.getAttribute('data-soporte-licencias') === '1') {
+            userLicPortalSoporteLicenciasEnabled = true;
+        }
         userLicSyncProveedorGestionarProductosBtn(userLicPortalProveedorEnabled);
 
         if (gridInner && gridHostEl) {
             gridInner.innerHTML = renderUserLicenciasGrid(summaryList);
-            setGridVisible(gridHostEl, accounts.length > 0 || userLicPortalProveedorEnabled);
+            setGridVisible(
+                gridHostEl,
+                accounts.length > 0 || userLicPortalProveedorEnabled || userLicPortalSoporteLicenciasEnabled
+            );
+            if (userLicPortalSoporteLicenciasEnabled) {
+                wireUserLicVerificarPanel(outer);
+                userLicVerificarSyncCardState();
+                void userLicVerificarFetchFromServer();
+            }
         }
 
         userLicPortalAccountsCache = accounts;
@@ -6598,7 +7177,15 @@
             userLicRenewalNotifyRunCheck();
         };
         if (userLicPortalProveedorEnabled && proveedorUrl) {
-            userLicPortalLoadProveedorInventory(proveedorUrl).then(boot);
+            var productsUrl =
+                outer.getAttribute('data-proveedor-products-url') ||
+                '/tienda/api/user/proveedor-products';
+            Promise.all([
+                userLicPortalLoadProveedorInventory(proveedorUrl),
+                userLicFetchProveedorProducts(productsUrl).catch(function () {
+                    return userLicProveedorProductsCache || [];
+                }),
+            ]).then(boot);
         } else {
             boot();
         }
@@ -6638,6 +7225,7 @@
         wireSearchFilter(outer);
         wireLicenseStatusAutosave(outer);
         wireUserLicCredsCopyNormalize(outer);
+        wireUserLicVerificarPanel(outer);
         wireUserLicWarrantyHistoryModal(host, outer);
         wireUserLicFullCredModal(host, outer);
         wireUserLicDaysToolbar(outer);
@@ -6690,6 +7278,7 @@
             return;
         }
         if (rev === userLicPortalLastRev) return;
+        userLicVerificarRealtimeRefresh();
         if (!userLicPortalCanApplyPortalRevRefresh()) {
             userLicPortalDeferredRev = rev;
             userLicReportesLightRealtimeRefresh(ctx);

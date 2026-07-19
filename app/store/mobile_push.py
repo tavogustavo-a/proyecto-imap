@@ -301,6 +301,7 @@ def _on_store_notification_insert(mapper, connection, target):
               if str(kind) in (
                   'admin_license_report_new',
                   'admin_product_reservation',
+                  'admin_verificar_arreglar_done',
               )
               else (
                   '/tienda/licencias'

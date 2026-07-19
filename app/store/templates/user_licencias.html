@@ -205,7 +205,7 @@
     <div id="userLicenciasGrid" class="licenses-grid"></div>
   </div>
 
-  <div id="userLicenciasTableOuter" class="user-licencias-view-wrap w-100{% if licencias_view_only|default(false) %} user-licencias-view-only{% endif %}" data-api-url="{{ url_for('store_bp.api_user_my_license_accounts') }}" data-rev-url="{{ url_for('store_bp.api_user_my_license_portal_rev') }}" data-stream-url="{{ url_for('store_bp.api_user_my_license_portal_stream') }}" data-day-status-url="{{ url_for('store_bp.api_user_license_day_row_status') }}" data-warranty-incidents-url="{{ url_for('store_bp.api_user_license_warranty_incidents') }}" data-proveedor-url="{{ url_for('store_bp.api_user_proveedor_inventory_get') }}" data-proveedor-products-url="{{ url_for('store_bp.api_user_proveedor_products_get') }}" data-licencias-view-only="{% if licencias_view_only|default(false) %}1{% else %}0{% endif %}">
+  <div id="userLicenciasTableOuter" class="user-licencias-view-wrap w-100{% if licencias_view_only|default(false) %} user-licencias-view-only{% endif %}" data-api-url="{{ url_for('store_bp.api_user_my_license_accounts') }}" data-rev-url="{{ url_for('store_bp.api_user_my_license_portal_rev') }}" data-stream-url="{{ url_for('store_bp.api_user_my_license_portal_stream') }}" data-day-status-url="{{ url_for('store_bp.api_user_license_day_row_status') }}" data-warranty-incidents-url="{{ url_for('store_bp.api_user_license_warranty_incidents') }}" data-proveedor-url="{{ url_for('store_bp.api_user_proveedor_inventory_get') }}" data-proveedor-products-url="{{ url_for('store_bp.api_user_proveedor_products_get') }}" data-verificar-url="{{ url_for('store_bp.api_licencias_verificar_arreglar_get') }}" data-licencias-view-only="{% if licencias_view_only|default(false) %}1{% else %}0{% endif %}"{% if soporte_licencias_nav|default(false) %} data-soporte-licencias="1"{% endif %}>
     <p class="text-center user-licencias-empty py-4 mb-0" id="userLicenciasLoadingMsg">Cargando licencias…</p>
   </div>
 
@@ -229,6 +229,28 @@
         </table>
       </div>
       <p class="admin-licencias-reportes-meta" id="userLicReportesMeta" aria-live="polite"></p>
+    </div>
+  </section>
+
+  <section id="userLicVerificarPanel" class="admin-licencias-reportes-panel user-lic-verificar-panel d-none" role="region" aria-label="Bloc compartido Verificar/Arreglar" aria-hidden="true" hidden>
+    <div class="admin-licencias-reportes-inner">
+      <div class="admin-licencias-verificar-head">
+        <div class="admin-licencias-verificar-head-start">
+          <span class="admin-licencias-verificar-icon" aria-hidden="true"><i class="fas fa-tools"></i></span>
+          <label class="admin-licencias-verificar-check admin-licencias-verificar-check--verified" title="Marcar como verificado / terminado">
+            <input type="checkbox" id="userLicVerificarCheck" autocomplete="off">
+            <span class="admin-licencias-verificar-check__btn">Verificado</span>
+          </label>
+          <label class="admin-licencias-verificar-check admin-licencias-verificar-check--pending" title="Marcar pendiente: hay que terminar Verificar/Arreglar">
+            <input type="checkbox" id="userLicVerificarPendingCheck" autocomplete="off">
+            <span class="admin-licencias-verificar-check__btn">Verificar/Arreglar</span>
+          </label>
+        </div>
+        <span id="userLicVerificarStatus" class="admin-licencias-verificar-status" role="status" aria-live="polite"></span>
+      </div>
+      <label for="userLicVerificarTextarea" class="sr-only">Bloc compartido entre administrador y soportes</label>
+      <textarea id="userLicVerificarTextarea" name="user_lic_verificar_textarea" class="admin-licencias-verificar-textarea" rows="16" spellcheck="false" autocomplete="off" placeholder="Bloc compartido con el administrador… se guarda automáticamente y se sincroniza en tiempo real."></textarea>
+      <p class="admin-licencias-reportes-meta">Compartido con el administrador y los demás soportes. Se guarda automáticamente.</p>
     </div>
   </section>
 

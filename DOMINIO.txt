@@ -1,23 +1,17 @@
 # ============================================================
-# DOMINIO DEL PROYECTO (única fuente)
+# DOMINIO DEL PROYECTO (única fuente de marca / package / URL)
 # ============================================================
 # 1) URL pública (obligatoria) — una línea sin #
-# 2) Opcionales (clave=valor), una por línea:
-#      applicationId=com.tupremiumm.app   # package de Google Play / App Links
-#      package=com.otra.app               # alias de applicationId
-#      appName=Mi Tienda                  # nombre visible en el teléfono
-#      appIdSuffix=mitienda               # solo si NO pones applicationId
-#                                         # (genera com.mitienda.app)
+#    https://ejemplo.com  →  package Android: com.ejemplo.app
 #
-# De aquí se derivan:
-#   - Apps Android (nativa): nombre, package, App Links, SERVER_URL
-#   - Servidor: SOCKETIO_CORS_ORIGINS y ANDROID_APP_PACKAGE
-# Las huellas SHA-256 del keystore sí van en .env
-# (ANDROID_APP_SHA256_FINGERPRINTS).
+# 2) Opcionales (clave=valor):
+#      appName=Mi Tienda          # nombre en el teléfono (si falta = label del dominio)
+#      applicationId=com.otro.app # solo para forzar otro package
+#      appIdSuffix=mitienda       # solo si no hay URL usable
 #
-# Para otra marca/app: cambia URL + applicationId (+ appName) y recompila.
+# De aquí salen: app Android, App Links, CORS, SERVER_URL.
+# Las huellas SHA-256 van en .env (ANDROID_APP_SHA256_FINGERPRINTS).
 # ============================================================
 
 https://tupremiumm.com
-applicationId=com.tupremiumm.app
 appName=tupremiumm

@@ -609,6 +609,26 @@ def create_app(config_class_passed=None):
     # Aplicar exenciones de CSRF después de registrar todos los blueprints
     apply_csrf_exemptions()
 
+    @app.after_request
+    def _strip_cookies_from_assetlinks(response):
+        """Google App Links: assetlinks.json debe ir sin Set-Cookie ni sesión."""
+        from flask import g, request
+
+        try:
+            path = (request.path or '').rstrip('/')
+            if path == '/.well-known/assetlinks.json' or getattr(g, '_assetlinks_clean', False):
+                try:
+                    while 'Set-Cookie' in response.headers:
+                        response.headers.remove('Set-Cookie')
+                except Exception:
+                    response.headers.pop('Set-Cookie', None)
+                response.headers['Cache-Control'] = 'public, max-age=3600'
+                if 'Content-Type' not in response.headers:
+                    response.headers['Content-Type'] = 'application/json'
+        except Exception:
+            pass
+        return response
+
     # ✅ VERIFICACIÓN GLOBAL DE REVOCACIÓN DE SESIONES (Cerrar sesión de todos)
     @app.before_request
     def check_global_session_revocation():

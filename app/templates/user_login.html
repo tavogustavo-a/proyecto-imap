@@ -3,7 +3,11 @@
 {% block content %}
 <div class="login-container-zoomed">
   <div class="card text-center">
-    <h3>Iniciar Sesión</h3>
+    <h3
+      id="userLoginTitle"
+      data-admin-login-url="{{ url_for('auth_bp.login') }}"
+      class="login-title-tap-target"
+    >Iniciar Sesión</h3>
 
     <form method="POST" class="mt-1">
       <!-- Campo oculto para CSRF (si lo usas) -->

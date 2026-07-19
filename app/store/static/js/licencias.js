@@ -508,6 +508,11 @@ function adminLicArchivedQuerySuffix() {
 
 function adminLicRefreshFromRealtimeSignal() {
     if (typeof window !== 'undefined' && window.__adminLicPageUnloading) return;
+    try {
+        if (typeof adminLicVerificarRealtimeRefresh === 'function') {
+            adminLicVerificarRealtimeRefresh();
+        }
+    } catch (_eVerRt) {}
     if (__adminLicDaysRealtimeRefreshBusy) return;
     __adminLicDaysRealtimeRefreshBusy = true;
     loadLicenses({ skipGridRender: true })
@@ -561,6 +566,14 @@ function adminLicApplyRealtimeUiAfterLicensesFetch() {
             window.__adminReportesRenderIfVisible();
         }
     } catch (_eRep) {}
+    try {
+        if (typeof adminLicVerificarSyncCardState === 'function') {
+            adminLicVerificarSyncCardState();
+        }
+        if (typeof adminLicVerificarRealtimeRefresh === 'function') {
+            adminLicVerificarRealtimeRefresh();
+        }
+    } catch (_eVerRt2) {}
 }
 
 function onAdminLicensesSseMessage(data) {
@@ -1948,13 +1961,18 @@ function setupAdminUserLabelSearchModal() {
 function syncAdminHistorialShellMode() {
     const rep = document.getElementById('adminLicenciasReportesPanel');
     const cam = document.getElementById('adminLicenciasCambiosPanel');
+    const ver = document.getElementById('adminLicenciasVerificarPanel');
     const shell = document.querySelector('.admin-licencias-shell');
     if (!shell) {
         return;
     }
     const reportesOpen = rep && !rep.classList.contains('d-none');
     const cambiosOpen = cam && !cam.classList.contains('d-none');
-    shell.classList.toggle('admin-licencias-historial-mode', reportesOpen || cambiosOpen);
+    const verificarOpen = ver && !ver.classList.contains('d-none');
+    shell.classList.toggle(
+        'admin-licencias-historial-mode',
+        reportesOpen || cambiosOpen || verificarOpen
+    );
 }
 
 function getAdminLicenciasCambiosToolbarBtn() {
@@ -2076,10 +2094,45 @@ function closeAdminLicenciasReportesPanelUi() {
         btn.classList.remove('active');
     }
     try {
+        closeAdminLicenciasVerificarPanelUi();
+    } catch (_verClose) {}
+    try {
         syncAdminHistorialShellMode();
     } catch (_repClose) {}
     window.__adminReportesSelectInteracting = false;
     window.__adminReportesRenderDeferred = false;
+}
+
+/** Cierra el bloc compartido Verificar/Arreglar (panel hermano de Reportes). */
+function closeAdminLicenciasVerificarPanelUi() {
+    const panel = document.getElementById('adminLicenciasVerificarPanel');
+    const btn = document.getElementById('adminLicenciasVerificarBtn');
+    if (panel && !panel.classList.contains('d-none')) {
+        panel.classList.add('d-none');
+        panel.setAttribute('aria-hidden', 'true');
+        if (typeof adminLicVerificarFlushSave === 'function') {
+            adminLicVerificarFlushSave();
+        }
+    }
+    if (btn) {
+        btn.setAttribute('aria-expanded', 'false');
+        btn.classList.remove('admin-licencias-reportes-toggle--open');
+        btn.classList.remove('active');
+    }
+    /* El color verde/amarillo es estado global: debe seguir visible aunque el panel esté cerrado. */
+    try {
+        if (typeof adminLicVerificarSyncCardState === 'function') {
+            adminLicVerificarSyncCardState();
+        }
+    } catch (_verSyncClose) {}
+    try {
+        syncAdminHistorialShellMode();
+    } catch (_verClose2) {}
+}
+
+function adminLicVerificarPanelIsOpen() {
+    const panel = document.getElementById('adminLicenciasVerificarPanel');
+    return !!(panel && !panel.classList.contains('d-none'));
 }
 
 function adminLicenseReportesPanelIsOpen() {
@@ -4120,6 +4173,7 @@ function setupAdminLicenciasReportes() {
         const reportesBtn = document.getElementById('adminLicenciasReportesBtn');
         if (isHidden) {
             closeAdminLicenciasCambiosPanelUi();
+            closeAdminLicenciasVerificarPanelUi();
             syncAdminHistorialShellMode();
             document.querySelectorAll('.license-card').forEach(function (c) {
                 c.classList.remove('active');
@@ -4187,6 +4241,369 @@ function wireAdminLicenciasReportesButton() {
     });
 }
 
+/* ============================================================
+   Bloc compartido «Verificar/Arreglar» (admin ↔ soportes).
+   Texto global en servidor; autosave con debounce y sincronización
+   en tiempo real vía el rev de licencias (SSE/poll existente).
+   ============================================================ */
+const ADMIN_LIC_VERIFICAR_API_URL = '/tienda/api/licencias/verificar-arreglar';
+const ADMIN_LIC_VERIFICAR_SAVE_DEBOUNCE_MS = 800;
+
+let __adminLicVerificarLastRev = null;
+let __adminLicVerificarDirty = false;
+let __adminLicVerificarSaveTimer = null;
+let __adminLicVerificarSaving = false;
+let __adminLicVerificarPendingServer = null;
+let __adminLicVerificarStatusTimer = null;
+let __adminLicVerificarReadOnly = false;
+let __adminLicVerificarVerified = false;
+let __adminLicVerificarPending = false;
+let __adminLicVerificarFlagsSaving = false;
+
+function adminLicVerificarTextarea() {
+    return document.getElementById('adminLicenciasVerificarTextarea');
+}
+
+function adminLicVerificarSetStatus(text, transient) {
+    const el = document.getElementById('adminLicenciasVerificarStatus');
+    if (!el) return;
+    el.textContent = text || '';
+    if (__adminLicVerificarStatusTimer) {
+        clearTimeout(__adminLicVerificarStatusTimer);
+        __adminLicVerificarStatusTimer = null;
+    }
+    if (text && transient) {
+        __adminLicVerificarStatusTimer = setTimeout(function () {
+            if (el.textContent === text) el.textContent = '';
+        }, 2500);
+    }
+}
+
+function adminLicVerificarMarkReadOnly() {
+    __adminLicVerificarReadOnly = true;
+    const ta = adminLicVerificarTextarea();
+    if (ta) ta.readOnly = true;
+    const chk = document.getElementById('adminLicenciasVerificarCheck');
+    const chkP = document.getElementById('adminLicenciasVerificarPendingCheck');
+    if (chk) chk.disabled = true;
+    if (chkP) chkP.disabled = true;
+    adminLicVerificarSetStatus('Solo lectura');
+}
+
+/** Pinta la tarjeta del grid según verified / pending (siempre, aunque otro producto esté activo). */
+function adminLicVerificarSyncCardState() {
+    const verified = !!__adminLicVerificarVerified;
+    const pending = !verified && !!__adminLicVerificarPending;
+    const state = verified ? 'verified' : pending ? 'pending' : 'normal';
+    try {
+        document.documentElement.setAttribute('data-admin-va-state', state);
+        const shell = document.querySelector('.admin-licencias-shell, .admin-licencias-page');
+        if (shell) shell.setAttribute('data-va-state', state);
+        sessionStorage.setItem('admin_va_card_state', state);
+    } catch (_eVaShell) {}
+    const btn = document.getElementById('adminLicenciasVerificarBtn');
+    if (!btn) return;
+    btn.classList.toggle('is-verified', verified);
+    btn.classList.toggle('is-pending', pending);
+    btn.setAttribute('data-va-state', state);
+}
+
+function adminLicVerificarSyncCheckboxUi() {
+    const chk = document.getElementById('adminLicenciasVerificarCheck');
+    const chkP = document.getElementById('adminLicenciasVerificarPendingCheck');
+    const pendingOn = !__adminLicVerificarVerified && !!__adminLicVerificarPending;
+    const verifiedOn = !!__adminLicVerificarVerified;
+    if (chk) {
+        if (document.activeElement !== chk) {
+            chk.checked = verifiedOn;
+        }
+        /* Con Verificar/Arreglar activo, Verificado queda deshabilitado. */
+        chk.disabled = !!__adminLicVerificarReadOnly || pendingOn;
+    }
+    if (chkP) {
+        if (document.activeElement !== chkP) {
+            chkP.checked = pendingOn;
+        }
+        /* Con Verificado activo, Verificar/Arreglar queda deshabilitado. */
+        chkP.disabled = !!__adminLicVerificarReadOnly || verifiedOn;
+    }
+    adminLicVerificarSyncCardState();
+}
+
+/** Aplica payload del servidor si no hay edición local en curso. */
+function adminLicVerificarApplyServerPayload(payload) {
+    const text = String((payload && payload.text) || '');
+    const rev = payload && payload.rev != null ? String(payload.rev) : null;
+    const verified = !!(payload && payload.verified);
+    const pending = !!(payload && payload.pending);
+    const ta = adminLicVerificarTextarea();
+    const focused = ta && document.activeElement === ta;
+    if (__adminLicVerificarDirty || __adminLicVerificarSaving || focused) {
+        __adminLicVerificarPendingServer = {
+            text: text,
+            rev: rev,
+            verified: verified,
+            pending: pending,
+        };
+        /* Flags sí se sincronizan aunque se esté escribiendo texto. */
+        if (!__adminLicVerificarFlagsSaving) {
+            __adminLicVerificarVerified = verified;
+            __adminLicVerificarPending = pending;
+            adminLicVerificarSyncCheckboxUi();
+        }
+        return;
+    }
+    __adminLicVerificarPendingServer = null;
+    __adminLicVerificarLastRev = rev;
+    __adminLicVerificarVerified = verified;
+    __adminLicVerificarPending = pending;
+    if (ta && ta.value !== text) {
+        ta.value = text;
+    }
+    adminLicVerificarSyncCheckboxUi();
+}
+
+async function adminLicVerificarFetchFromServer() {
+    try {
+        const resp = await fetch(ADMIN_LIC_VERIFICAR_API_URL + '?_t=' + Date.now(), {
+            credentials: 'same-origin',
+            cache: 'no-store',
+        });
+        const data = await resp.json().catch(function () {
+            return null;
+        });
+        if (!resp.ok || !data || !data.success) return;
+        const rev = data.rev != null ? String(data.rev) : '';
+        if (rev !== __adminLicVerificarLastRev || __adminLicVerificarLastRev === null) {
+            adminLicVerificarApplyServerPayload(data);
+        } else {
+            /* Misma rev: igual sincronizar flags/color (p. ej. tras re-render del grid). */
+            __adminLicVerificarVerified = !!data.verified;
+            __adminLicVerificarPending = !!data.pending;
+            adminLicVerificarSyncCheckboxUi();
+        }
+    } catch (_eVerFetch) {}
+}
+
+/** Refresco en tiempo real: siempre sincroniza flags/color; el texto solo si el panel está abierto. */
+function adminLicVerificarRealtimeRefresh() {
+    if (!document.getElementById('adminLicenciasVerificarBtn') && !adminLicVerificarTextarea()) {
+        return;
+    }
+    void adminLicVerificarFetchFromServer();
+}
+
+async function adminLicVerificarPutFlags(body) {
+    if (__adminLicVerificarReadOnly) return;
+    __adminLicVerificarFlagsSaving = true;
+    adminLicVerificarSetStatus('Guardando…');
+    try {
+        const resp = await fetch(ADMIN_LIC_VERIFICAR_API_URL, {
+            method: 'PUT',
+            credentials: 'same-origin',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': typeof getCSRFToken === 'function' ? getCSRFToken() : '',
+            },
+            body: JSON.stringify(body),
+        });
+        const data = await resp.json().catch(function () {
+            return null;
+        });
+        if (resp.status === 403) {
+            adminLicVerificarMarkReadOnly();
+            return;
+        }
+        if (!resp.ok || !data || !data.success) {
+            adminLicVerificarSetStatus('No se pudo guardar');
+            adminLicVerificarSyncCheckboxUi();
+            return;
+        }
+        __adminLicVerificarLastRev = data.rev != null ? String(data.rev) : null;
+        __adminLicVerificarVerified = !!data.verified;
+        __adminLicVerificarPending = !!data.pending;
+        adminLicVerificarSyncCheckboxUi();
+        adminLicVerificarSetStatus('Guardado ✓', true);
+    } catch (_eVerFlags) {
+        adminLicVerificarSetStatus('Sin conexión');
+        adminLicVerificarSyncCheckboxUi();
+    } finally {
+        __adminLicVerificarFlagsSaving = false;
+    }
+}
+
+async function adminLicVerificarSaveNow() {
+    const ta = adminLicVerificarTextarea();
+    if (!ta || __adminLicVerificarReadOnly) return;
+    if (__adminLicVerificarSaving) return;
+    __adminLicVerificarSaving = true;
+    const snapshot = ta.value;
+    adminLicVerificarSetStatus('Guardando…');
+    try {
+        const resp = await fetch(ADMIN_LIC_VERIFICAR_API_URL, {
+            method: 'PUT',
+            credentials: 'same-origin',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': typeof getCSRFToken === 'function' ? getCSRFToken() : '',
+            },
+            body: JSON.stringify({ text: snapshot }),
+        });
+        const data = await resp.json().catch(function () {
+            return null;
+        });
+        if (resp.status === 403) {
+            adminLicVerificarMarkReadOnly();
+            return;
+        }
+        if (!resp.ok || !data || !data.success) {
+            adminLicVerificarSetStatus('No se pudo guardar');
+            return;
+        }
+        __adminLicVerificarLastRev = data.rev != null ? String(data.rev) : null;
+        if (data.verified != null) __adminLicVerificarVerified = !!data.verified;
+        if (data.pending != null) __adminLicVerificarPending = !!data.pending;
+        adminLicVerificarSyncCheckboxUi();
+        if (ta.value === snapshot) {
+            __adminLicVerificarDirty = false;
+            adminLicVerificarSetStatus('Guardado ✓', true);
+        } else {
+            adminLicVerificarScheduleSave();
+        }
+    } catch (_eVerSave) {
+        adminLicVerificarSetStatus('Sin conexión: reintentando…');
+        adminLicVerificarScheduleSave();
+    } finally {
+        __adminLicVerificarSaving = false;
+        if (!__adminLicVerificarDirty && __adminLicVerificarPendingServer) {
+            const pend = __adminLicVerificarPendingServer;
+            __adminLicVerificarPendingServer = null;
+            adminLicVerificarApplyServerPayload(pend);
+        }
+    }
+}
+
+function adminLicVerificarScheduleSave() {
+    if (__adminLicVerificarReadOnly) return;
+    if (__adminLicVerificarSaveTimer) clearTimeout(__adminLicVerificarSaveTimer);
+    __adminLicVerificarSaveTimer = setTimeout(function () {
+        __adminLicVerificarSaveTimer = null;
+        void adminLicVerificarSaveNow();
+    }, ADMIN_LIC_VERIFICAR_SAVE_DEBOUNCE_MS);
+}
+
+function adminLicVerificarFlushSave() {
+    if (!__adminLicVerificarDirty || __adminLicVerificarReadOnly) return;
+    if (__adminLicVerificarSaveTimer) {
+        clearTimeout(__adminLicVerificarSaveTimer);
+        __adminLicVerificarSaveTimer = null;
+    }
+    void adminLicVerificarSaveNow();
+}
+
+function openAdminLicenciasVerificarPanelUi() {
+    const panel = document.getElementById('adminLicenciasVerificarPanel');
+    const btn = document.getElementById('adminLicenciasVerificarBtn');
+    if (!panel) return;
+    closeAdminLicenciasReportesPanelUi();
+    closeAdminLicenciasCambiosPanelUi();
+    document.querySelectorAll('.license-card').forEach(function (c) {
+        c.classList.remove('active');
+    });
+    if (btn) {
+        btn.classList.add('active');
+        btn.classList.add('admin-licencias-reportes-toggle--open');
+        btn.setAttribute('aria-expanded', 'true');
+    }
+    panel.classList.remove('d-none');
+    panel.setAttribute('aria-hidden', 'false');
+    syncAdminHistorialShellMode();
+    try {
+        localStorage.setItem(ADMIN_LICENCIAS_SIDEBAR_MODE_KEY, 'verificar');
+    } catch (_eVerMode) {}
+    void adminLicVerificarFetchFromServer();
+}
+
+function setupAdminLicenciasVerificar() {
+    const ta = adminLicVerificarTextarea();
+    if (ta && ta.getAttribute('data-verificar-wired') !== '1') {
+        ta.setAttribute('data-verificar-wired', '1');
+        ta.addEventListener('input', function () {
+            __adminLicVerificarDirty = true;
+            adminLicVerificarScheduleSave();
+        });
+        ta.addEventListener('blur', function () {
+            adminLicVerificarFlushSave();
+            if (!__adminLicVerificarDirty && __adminLicVerificarPendingServer) {
+                const pend = __adminLicVerificarPendingServer;
+                __adminLicVerificarPendingServer = null;
+                adminLicVerificarApplyServerPayload(pend);
+            }
+        });
+    }
+
+    const chk = document.getElementById('adminLicenciasVerificarCheck');
+    if (chk && chk.getAttribute('data-verificar-wired') !== '1') {
+        chk.setAttribute('data-verificar-wired', '1');
+        chk.addEventListener('change', function () {
+            __adminLicVerificarVerified = !!chk.checked;
+            if (__adminLicVerificarVerified) __adminLicVerificarPending = false;
+            adminLicVerificarSyncCheckboxUi();
+            void adminLicVerificarPutFlags({ verified: !!chk.checked });
+        });
+    }
+
+    const chkP = document.getElementById('adminLicenciasVerificarPendingCheck');
+    if (chkP && chkP.getAttribute('data-verificar-wired') !== '1') {
+        chkP.setAttribute('data-verificar-wired', '1');
+        chkP.addEventListener('change', function () {
+            __adminLicVerificarPending = !!chkP.checked;
+            if (__adminLicVerificarPending) __adminLicVerificarVerified = false;
+            adminLicVerificarSyncCheckboxUi();
+            void adminLicVerificarPutFlags({ pending: !!chkP.checked });
+        });
+    }
+
+    window.__adminVerificarOnButtonClick = function () {
+        if (adminLicVerificarPanelIsOpen()) {
+            closeAdminLicenciasVerificarPanelUi();
+            try {
+                localStorage.removeItem(ADMIN_LICENCIAS_SIDEBAR_MODE_KEY);
+            } catch (_eVerMode2) {}
+            if (typeof restoreActiveProductLicenseCardFromStorage === 'function') {
+                restoreActiveProductLicenseCardFromStorage();
+            }
+            return;
+        }
+        openAdminLicenciasVerificarPanelUi();
+    };
+
+    /* Carga inicial de flags para pintar la tarjeta del grid. */
+    void adminLicVerificarFetchFromServer();
+}
+
+/** El botón se recrea con cada render del grid: re-enlazar clic y reaplicar color. */
+function wireAdminLicenciasVerificarButton() {
+    const btn = document.getElementById('adminLicenciasVerificarBtn');
+    if (!btn) return;
+    btn.addEventListener('click', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (typeof window.__adminVerificarOnButtonClick === 'function') {
+            window.__adminVerificarOnButtonClick();
+        }
+    });
+    /* Si aún no llegó el fetch, recuperar último estado visual de la sesión. */
+    if (!__adminLicVerificarVerified && !__adminLicVerificarPending) {
+        try {
+            const cached = sessionStorage.getItem('admin_va_card_state');
+            if (cached === 'pending') __adminLicVerificarPending = true;
+            else if (cached === 'verified') __adminLicVerificarVerified = true;
+        } catch (_eVaCache) {}
+    }
+    adminLicVerificarSyncCardState();
+}
+
 function setupEventListeners() {
     // Búsqueda
     const searchInput = document.getElementById('adminStoreSearch');
@@ -4200,6 +4617,7 @@ function setupEventListeners() {
     setupMoveToChangesToolbarButton();
     setupAdminUserLabelSearchModal();
     setupAdminLicenciasReportes();
+    setupAdminLicenciasVerificar();
     setupAdminLicenseBulkEditUi();
     setupAdminLicProveedorMergedUi();
     setupProveedorMergedBlocCollapse();
@@ -4455,6 +4873,7 @@ function renderLicensesGrid() {
     if (!window.IS_ARCHIVED_MODE) {
         licensesHtml += createAdminProveedorGridButtonHtml();
         licensesHtml += createReportesGridButtonHtml();
+        licensesHtml += createVerificarArreglarGridButtonHtml();
     }
     
     // Agregar el campo de entrada al final de todas las tarjetas
@@ -4669,6 +5088,7 @@ function renderLicensesGrid() {
     // Agregar event listeners a las tarjetas
     addLicenseCardListeners();
     wireAdminLicenciasReportesButton();
+    wireAdminLicenciasVerificarButton();
     
     try {
     if (typeof window.initAdminLicenciasNotepad === 'function') {
@@ -4913,42 +5333,161 @@ function adminLicProveedorVisibleLinesFromProvider(providerRow) {
     return [];
 }
 
-function adminLicProveedorLinesForLicense(licenseId) {
+function adminLicProveedorLinesForLicense(licenseId, opts) {
+    const onlySellable = !(opts && opts.includeGarCushion === true);
     const out = [];
     if (licenseId == null || String(licenseId) === String(ADMIN_PROVEEDOR_FILTER)) return out;
     adminProveedorProviders.forEach(function (p) {
         if (!adminLicProveedorEnabledForLicense(p, licenseId)) return;
         const structured = Array.isArray(p.license_lines) ? p.license_lines : [];
+        let matching = [];
         if (structured.length) {
             structured.forEach(function (entry) {
                 if (!adminLicProveedorLineMatchesLicense(entry, licenseId)) return;
-                out.push({
-                    username: (p && p.username) || '—',
-                    user_id: p && p.user_id,
-                    line: entry.cred,
-                    service: entry.service,
-                });
+                matching.push(entry);
             });
-            return;
+        } else {
+            String((p && p.license_notes) || '')
+                .replace(/\r\n/g, '\n')
+                .split('\n')
+                .forEach(function (line) {
+                    const t = String(line).trim();
+                    if (!t) return;
+                    matching.push({ service: String(licenseId), cred: line });
+                });
         }
-        const text = String((p && p.license_notes) || '');
-        text.replace(/\r\n/g, '\n')
-            .split('\n')
-            .forEach(function (line) {
-                const t = String(line).trim();
-                if (!t) return;
-                out.push({
-                    username: (p && p.username) || '—',
-                    user_id: p && p.user_id,
-                    line: line,
-                });
+        if (onlySellable) {
+            const part = adminLicProveedorPartitionLinesByGar(matching, function () {
+                return adminLicProveedorWarrantyForLicense(p, licenseId);
             });
+            matching = part.visible;
+        }
+        matching.forEach(function (entry) {
+            out.push({
+                username: (p && p.username) || '—',
+                user_id: p && p.user_id,
+                line: entry.cred,
+                service: entry.service,
+            });
+        });
     });
     return out;
 }
 
+/** Reserva gar. del proveedor para una licencia (igual que tienda pública). */
+function adminLicProveedorWarrantyForLicense(providerRow, licenseId) {
+    if (!providerRow || licenseId == null) return 0;
+    const map = providerRow.services_warranty;
+    if (!map || typeof map !== 'object') return 0;
+    const raw = map[String(licenseId)];
+    const n = parseInt(raw, 10);
+    if (!Number.isFinite(n) || n <= 0) return 0;
+    return Math.min(3650, n);
+}
+
+/**
+ * Separa inventario proveedor: vendibles (visibles) vs colchón gar. (oculto).
+ * El colchón son las últimas N líneas de cada servicio (N = gar.); anónimo no oculta.
+ */
+function adminLicProveedorPartitionLinesByGar(lines, warrantyForService) {
+    const list = Array.isArray(lines) ? lines.slice() : [];
+    const bySvc = {};
+    list.forEach(function (entry, idx) {
+        if (!entry || !String(entry.cred || '').trim()) return;
+        let svc = String(
+            entry.service != null
+                ? entry.service
+                : entry.license_id != null
+                  ? entry.license_id
+                  : PROVEEDOR_SERVICE_ANONIMO
+        )
+            .trim()
+            .toLowerCase();
+        if (!svc || svc === 'anónimo' || svc === 'anonymous') svc = PROVEEDOR_SERVICE_ANONIMO;
+        if (!bySvc[svc]) bySvc[svc] = [];
+        bySvc[svc].push(idx);
+    });
+    const hide = Object.create(null);
+    Object.keys(bySvc).forEach(function (svc) {
+        if (adminLicProveedorIsAnonimoService(svc)) return;
+        let gar = 0;
+        try {
+            gar = Math.max(0, parseInt(warrantyForService(svc), 10) || 0);
+        } catch (_e) {
+            gar = 0;
+        }
+        const idxs = bySvc[svc];
+        const hideN = Math.min(gar, idxs.length);
+        let i;
+        for (i = 0; i < hideN; i += 1) {
+            hide[idxs[idxs.length - 1 - i]] = true;
+        }
+    });
+    const visible = [];
+    const hidden = [];
+    list.forEach(function (entry, idx) {
+        if (!entry || !String(entry.cred || '').trim()) return;
+        const copy = {
+            service:
+                entry.service != null
+                    ? entry.service
+                    : entry.license_id != null
+                      ? entry.license_id
+                      : PROVEEDOR_SERVICE_ANONIMO,
+            cred: entry.cred,
+        };
+        if (hide[idx]) hidden.push(copy);
+        else visible.push(copy);
+    });
+    return { visible: visible, hidden: hidden };
+}
+
+/** Líneas brutas de un proveedor para una licencia. */
+function adminLicProveedorRawLineCountForProviderLicense(providerRow, licenseId) {
+    if (!adminLicProveedorEnabledForLicense(providerRow, licenseId)) return 0;
+    const structured = Array.isArray(providerRow.license_lines) ? providerRow.license_lines : [];
+    if (structured.length) {
+        let n = 0;
+        structured.forEach(function (entry) {
+            if (adminLicProveedorLineMatchesLicense(entry, licenseId)) n += 1;
+        });
+        return n;
+    }
+    return String((providerRow && providerRow.license_notes) || '')
+        .replace(/\r\n/g, '\n')
+        .split('\n')
+        .filter(function (line) {
+            return String(line).trim() !== '';
+        }).length;
+}
+
+/**
+ * Unidades vendibles proveedor (tienda): max(0, líneas - gar.).
+ * El badge admin usa esto para quedar parejo con «existencias» de la tienda.
+ */
+function adminLicProveedorSellableCountForProviderLicense(providerRow, licenseId) {
+    const raw = adminLicProveedorRawLineCountForProviderLicense(providerRow, licenseId);
+    if (raw <= 0) return 0;
+    const reserve = adminLicProveedorWarrantyForLicense(providerRow, licenseId);
+    return Math.max(0, raw - reserve);
+}
+
 function adminLicProveedorLineCountForLicense(licenseId) {
-    return adminLicProveedorLinesForLicense(licenseId).length;
+    let total = 0;
+    if (licenseId == null || String(licenseId) === String(ADMIN_PROVEEDOR_FILTER)) return 0;
+    adminProveedorProviders.forEach(function (p) {
+        total += adminLicProveedorSellableCountForProviderLicense(p, licenseId);
+    });
+    return total;
+}
+
+function adminLicProveedorRawLineCountForLicense(licenseId) {
+    let total = 0;
+    if (licenseId == null || String(licenseId) === String(ADMIN_PROVEEDOR_FILTER)) return 0;
+    adminProveedorProviders.forEach(function (p) {
+        total += adminLicProveedorRawLineCountForProviderLicense(p, licenseId);
+    });
+    return total;
 }
 
 function adminLicProveedorCountLines(textOrLines) {
@@ -5307,7 +5846,15 @@ function adminLicProveedorServicesCatalog(providerRow) {
 function adminLicProveedorLinesFromProvider(providerRow, blockKey, dayNum) {
     if (!providerRow) return [];
     if (blockKey === 'license') {
-        return Array.isArray(providerRow.license_lines) ? providerRow.license_lines.slice() : [];
+        const all = Array.isArray(providerRow.license_lines)
+            ? providerRow.license_lines.slice()
+            : [];
+        const part = adminLicProveedorPartitionLinesByGar(all, function (svc) {
+            return adminLicProveedorWarrantyForLicense(providerRow, svc);
+        });
+        // Conservar colchón para reinyectarlo al guardar (no se muestra en UI).
+        providerRow._garHiddenLicenseLines = part.hidden;
+        return part.visible;
     }
     const dl = providerRow.day_lines || {};
     const arr = dl[String(dayNum)];
@@ -6132,9 +6679,13 @@ function adminLicProveedorCollectSoldFromSection(section) {
 
 function adminLicProveedorCollectProviderFromSection(section, providerRow) {
     const soldLines = adminLicProveedorCollectSoldFromSection(section);
+    const visibleLic = adminLicProveedorCollectBlockFromSection(section, 'license', null);
+    const hiddenGar = Array.isArray(providerRow && providerRow._garHiddenLicenseLines)
+        ? providerRow._garHiddenLicenseLines
+        : [];
     return {
         user_id: providerRow.user_id,
-        license_lines: adminLicProveedorCollectBlockFromSection(section, 'license', null),
+        license_lines: visibleLic.concat(hiddenGar),
         day_lines: adminLicProveedorDayLinesFromSoldLines(soldLines),
         expired_lines: adminLicProveedorCollectExtraFromSection(section, 'expired'),
         suspended_lines: adminLicProveedorCollectExtraFromSection(section, 'suspended'),
@@ -6988,8 +7539,14 @@ function adminLicRefreshProveedorMergedBloc(licenseId) {
     body.innerHTML = bodyHtml;
     adminLicProveedorAutosizeReadonlyCredsInRoot(body);
     if (badge) {
-        badge.textContent = String(lines.length);
-        badge.title = lines.length === 1 ? '1 línea proveedor' : lines.length + ' líneas proveedor';
+        const sellable = adminLicProveedorLineCountForLicense(licenseId);
+        const rawN = lines.length;
+        badge.textContent = String(sellable);
+        badge.title =
+            sellable === 1
+                ? '1 vendible (igual que tienda)'
+                : sellable + ' vendibles (igual que tienda)' +
+                  (rawN > sellable ? ' · ' + rawN + ' en inventario (resto en gar.)' : '');
         badge.hidden = false;
     }
     restoreProveedorMergedBlocState(licenseId);
@@ -7021,6 +7578,9 @@ async function activateAdminProveedorCard(card, skipScroll) {
     if (!card || !inputContainer) return;
     closeAdminLicenciasReportesPanelUi();
     closeAdminLicenciasCambiosPanelUi();
+    try {
+        closeAdminLicenciasVerificarPanelUi();
+    } catch (_eVaCloseProv) {}
     syncAdminHistorialShellMode();
     try {
         localStorage.removeItem(ADMIN_LICENCIAS_SIDEBAR_MODE_KEY);
@@ -7030,6 +7590,16 @@ async function activateAdminProveedorCard(card, skipScroll) {
         c.classList.remove('active');
     });
     card.classList.add('active');
+    try {
+        if (typeof adminLicVerificarSyncCardState === 'function') {
+            adminLicVerificarSyncCardState();
+            requestAnimationFrame(function () {
+                try {
+                    adminLicVerificarSyncCardState();
+                } catch (_eVaRafP) {}
+            });
+        }
+    } catch (_eVaProv) {}
     try {
         localStorage.setItem('selectedLicenseId', ADMIN_PROVEEDOR_FILTER);
     } catch (e2) {}
@@ -7109,6 +7679,31 @@ function createReportesGridButtonHtml() {
                     <span class="first-letter">R</span>
                     <span class="compact-label">Rep</span>
                     <span id="adminLicenciasReportesTotalBadge" class="license-card-report-total-badge" hidden role="status" aria-live="polite" aria-label="Sin reportes pendientes"><span class="license-card-report-total-badge__num">0</span></span>
+                </h3>
+            </div>
+        </button>`;
+}
+
+/** Botón Verificar/Arreglar: bloc compartido admin ↔ soportes (mismo estilo que Reportes). */
+function createVerificarArreglarGridButtonHtml() {
+    const verified = !!__adminLicVerificarVerified;
+    const pending = !verified && !!__adminLicVerificarPending;
+    const state = verified ? 'verified' : pending ? 'pending' : 'normal';
+    const stateClass = verified ? ' is-verified' : pending ? ' is-pending' : '';
+    return `
+        <button type="button"
+            class="license-card license-card--aggregate license-card--panel-toggle admin-licencias-reportes-toggle admin-licencias-verificar-toggle${stateClass}"
+            id="adminLicenciasVerificarBtn"
+            data-va-state="${state}"
+            title="Verificar/Arreglar: bloc compartido con los soportes"
+            aria-expanded="false"
+            aria-controls="adminLicenciasVerificarPanel"
+            aria-label="Verificar/Arreglar: bloc compartido con los soportes">
+            <div class="license-card-header">
+                <h3 class="license-name">
+                    <span class="full-text">Verificar/Arreglar</span>
+                    <span class="first-letter">V</span>
+                    <span class="compact-label">Ver</span>
                 </h3>
             </div>
         </button>`;
@@ -7323,6 +7918,9 @@ async function activateLicenseCard(card, licenseId, skipScroll = false, options)
     if (!preserveSidebar) {
         closeAdminLicenciasReportesPanelUi();
         closeAdminLicenciasCambiosPanelUi();
+        try {
+            closeAdminLicenciasVerificarPanelUi();
+        } catch (_eVaCloseAct) {}
         syncAdminHistorialShellMode();
         try {
             localStorage.removeItem(ADMIN_LICENCIAS_SIDEBAR_MODE_KEY);
@@ -7339,6 +7937,18 @@ async function activateLicenseCard(card, licenseId, skipScroll = false, options)
     
     // Activar la tarjeta seleccionada
     card.classList.add('active');
+
+    /* Reaplicar color de estado Verificar/Arreglar (no depende de estar seleccionado). */
+    try {
+        if (typeof adminLicVerificarSyncCardState === 'function') {
+            adminLicVerificarSyncCardState();
+            requestAnimationFrame(function () {
+                try {
+                    adminLicVerificarSyncCardState();
+                } catch (_eVaRaf) {}
+            });
+        }
+    } catch (_eVaAct) {}
     
     // Guardar la tarjeta seleccionada
     localStorage.setItem('selectedLicenseId', licenseId.toString());
@@ -7519,6 +8129,31 @@ function restoreAdminLicenciasUiAfterGridRender() {
         try {
             localStorage.removeItem(ADMIN_LICENCIAS_SIDEBAR_MODE_KEY);
         } catch (e3) {}
+    } else if (mode === 'verificar') {
+        const verPanel = document.getElementById('adminLicenciasVerificarPanel');
+        const verBtn = document.getElementById('adminLicenciasVerificarBtn');
+        if (verPanel && verBtn) {
+            closeAdminLicenciasCambiosPanelUi();
+            closeAdminLicenciasReportesPanelUi();
+            document.querySelectorAll('.license-card').forEach(function (c) {
+                if (c.classList.contains('license-card--panel-toggle')) {
+                    return;
+                }
+                c.classList.remove('active');
+            });
+            verBtn.classList.add('active');
+            verBtn.classList.add('admin-licencias-reportes-toggle--open');
+            verBtn.setAttribute('aria-expanded', 'true');
+            verPanel.classList.remove('d-none');
+            verPanel.setAttribute('aria-hidden', 'false');
+            syncAdminHistorialShellMode();
+            void adminLicVerificarFetchFromServer();
+            restoreSelectedLicense({ preserveSidebar: true });
+            return;
+        }
+        try {
+            localStorage.removeItem(ADMIN_LICENCIAS_SIDEBAR_MODE_KEY);
+        } catch (e3v) {}
     } else if (mode === 'cambios') {
         const camPanel = document.getElementById('adminLicenciasCambiosPanel');
         if (camPanel) {
@@ -20249,19 +20884,29 @@ function updateLicenseBlocLineCountBadge() {
               ? pad.value
               : editablePlainTextForPipeNormalize(pad);
     const n = countNonEmptyLinesInText(raw);
-    const provN = adminLicProveedorLineCountForLicense(lid);
-    const totalN = n + provN;
+    const provSellable = adminLicProveedorLineCountForLicense(lid);
+    const provRaw = adminLicProveedorRawLineCountForLicense(lid);
+    const totalN = n + provSellable;
     if (totalN > 0) {
-        if (provN > 0 && n > 0) {
-            badge.textContent = String(n) + '+' + String(provN);
+        if (provSellable > 0 && n > 0) {
+            badge.textContent = String(n) + '+' + String(provSellable);
             badge.title =
                 n +
                 (n === 1 ? ' propia + ' : ' propias + ') +
-                provN +
-                (provN === 1 ? ' proveedor' : ' proveedor');
-        } else if (provN > 0) {
-            badge.textContent = String(provN);
-            badge.title = provN === 1 ? '1 línea proveedor' : provN + ' líneas proveedor';
+                provSellable +
+                (provSellable === 1 ? ' vendible proveedor' : ' vendibles proveedor') +
+                (provRaw > provSellable
+                    ? ' (' + provRaw + ' en inventario, resto en gar.)'
+                    : '');
+        } else if (provSellable > 0) {
+            badge.textContent = String(provSellable);
+            badge.title =
+                provSellable === 1
+                    ? '1 vendible proveedor'
+                    : provSellable + ' vendibles proveedor' +
+                      (provRaw > provSellable
+                          ? ' (' + provRaw + ' en inventario, resto en gar.)'
+                          : '');
         } else {
             badge.textContent = String(n);
             badge.title = n === 1 ? '1 línea' : n + ' líneas';
