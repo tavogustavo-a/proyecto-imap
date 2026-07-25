@@ -169,6 +169,12 @@ document.addEventListener('DOMContentLoaded', function() {
       note.textContent =
         'Tu renovación fue procesada. Revisa tus licencias en la tienda si ya tienes acceso.';
       modalBody.appendChild(note);
+    } else if (status === 'cancelled') {
+      const note = document.createElement('p');
+      note.className = 'purchase-licencias-reversed-note';
+      note.textContent =
+        'Cancelaste esta renovación y el saldo fue devuelto a tu cuenta.';
+      modalBody.appendChild(note);
     } else {
       const note = document.createElement('p');
       note.className = 'purchase-licencias-empty';

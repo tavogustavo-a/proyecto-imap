@@ -4,7 +4,7 @@
 
 {% block head %}
   {{ super() }}
-  <link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}">
+  <link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}?v=20260721-anuncios-row-gap">
   <meta name="csrf_token" content="{{ csrf_token() }}">
 {% endblock %}
 {% block content %}
@@ -93,8 +93,8 @@
     </div>
   </div>
 
-  <!-- Tarjeta: Añadir Producto -->
-  <div class="store-light add-product-container">
+  <!-- Tarjeta: Añadir Producto (mismo ancho que Cupones / Crear Cupón) -->
+  <div class="store-light add-product-container maxw-800 mx-auto mt-2 br-8">
     <div class="table-wrapper-store">
       <h3 class="text-center mb-1">Añadir Producto</h3>
       <form action="{{ url_for('store_bp.create_product') }}" method="POST" class="d-flex flex-column gap-03 align-items-center" id="newProductForm">
@@ -207,6 +207,97 @@
       </div>
     </form>
   </div>
+  <!-- Contorno Anuncios (ancho completo del área de contenido) -->
+  <div class="store-light add-coupon-container anuncios-admin-panel maxw-800 mx-auto mt-2 br-8" id="anunciosAdminPanel">
+    <div class="anuncios-admin-panel__header">
+      <h2 class="anuncios-admin-panel__title">Anuncios</h2>
+    </div>
+    <div class="anuncios-admin-panel__body">
+      <form id="newAnuncioForm" class="anuncios-admin-form d-flex flex-column gap-00 mb-01" autocomplete="off">
+        <div class="d-flex align-items-center mb-1 w-100">
+          <label for="anuncioTitulo" class="sr-only">Título del anuncio</label>
+          <input type="text" id="anuncioTitulo" name="anuncio_titulo" placeholder="Título (solo identificación interna)" class="coupon-input w-100" required autocomplete="off">
+        </div>
+        <div class="d-flex align-items-center mb-1 w-100">
+          <label for="anuncioTiempo" class="sr-only">Tiempo del anuncio</label>
+          <select id="anuncioTiempo" name="anuncio_tiempo" class="coupon-input w-100" autocomplete="off">
+            <option value="indefinido" selected>Indefinido</option>
+            <option value="1d">1 día</option>
+            <option value="3d">3 días</option>
+            <option value="7d">7 días</option>
+            <option value="10d">10 días</option>
+            <option value="1m">1 mes</option>
+            <option value="personalizado">Personalizado</option>
+          </select>
+        </div>
+        <div id="anuncioTiempoPersonalizado" class="d-flex align-items-center mb-1 w-100 gap-1rem d-none" hidden>
+          <label for="anuncioDias" class="sr-only">Días personalizados</label>
+          <input type="number" id="anuncioDias" name="anuncio_dias" placeholder="Días (ej. 0.1)" min="0" step="any" class="coupon-input flex-1" autocomplete="off">
+          <label for="anuncioHoras" class="sr-only">Horas personalizadas</label>
+          <input type="number" id="anuncioHoras" name="anuncio_horas" placeholder="Horas (ej. 0.5)" min="0" step="any" class="coupon-input flex-1" autocomplete="off">
+        </div>
+        <div class="d-flex align-items-center mb-1 w-100">
+          <label for="anuncioHtml" class="sr-only">Contenido HTML del anuncio</label>
+          <textarea id="anuncioHtml" name="anuncio_html" placeholder="Campo HTML" class="coupon-input w-100 min-h-60 p-05" rows="5" required autocomplete="off"></textarea>
+        </div>
+        <div class="d-flex align-items-center mb-1 w-100 gap-03">
+          <input type="checkbox" id="anuncioApareceAlIngresar" name="anuncio_aparece_al_ingresar" value="1" class="align-items-center" autocomplete="off">
+          <label for="anuncioApareceAlIngresar" class="m-0">Aparece en la tienda apenas se ingrese</label>
+        </div>
+        <div class="d-flex justify-content-center w-100">
+          <button type="submit" id="anuncioSubmitBtn" class="btn-green btn-panel minw-160">Crear Anuncio</button>
+        </div>
+      </form>
+      <div id="anunciosAdminList" class="anuncios-admin-list mt-2 mb-01" aria-live="polite">
+        <p class="text-center text-muted mb-0" id="anunciosAdminEmpty">No hay anuncios aún.</p>
+      </div>
+    </div>
+  </div>
+</div>
+<!-- Modal editar anuncio -->
+<div id="anuncioEditModal" class="modal d-none fixed-full bg-modal z-1000" tabindex="-1" hidden>
+  <div class="modal-content bg-white mx-auto p-20 w-90 maxw-500 br-8 rel anuncios-edit-modal-content">
+    <button type="button" id="anuncioEditModalClose" class="modal-close-btn" aria-label="Cerrar">
+      <i class="fas fa-times"></i>
+    </button>
+    <h3 class="text-center mb-1">Editar Anuncio</h3>
+    <form id="editAnuncioForm" class="anuncios-admin-form d-flex flex-column gap-00" autocomplete="off">
+      <input type="hidden" id="editAnuncioId" name="edit_anuncio_id" value="">
+      <div class="d-flex align-items-center mb-1 w-100">
+        <label for="editAnuncioTitulo" class="sr-only">Título del anuncio</label>
+        <input type="text" id="editAnuncioTitulo" name="edit_anuncio_titulo" placeholder="Título (solo identificación interna)" class="coupon-input w-100" required autocomplete="off">
+      </div>
+      <div class="d-flex align-items-center mb-1 w-100">
+        <label for="editAnuncioTiempo" class="sr-only">Tiempo del anuncio</label>
+        <select id="editAnuncioTiempo" name="edit_anuncio_tiempo" class="coupon-input w-100" autocomplete="off">
+          <option value="indefinido">Indefinido</option>
+          <option value="1d">1 día</option>
+          <option value="3d">3 días</option>
+          <option value="7d">7 días</option>
+          <option value="10d">10 días</option>
+          <option value="1m">1 mes</option>
+          <option value="personalizado">Personalizado</option>
+        </select>
+      </div>
+      <div id="editAnuncioTiempoPersonalizado" class="d-flex align-items-center mb-1 w-100 gap-1rem d-none" hidden>
+        <label for="editAnuncioDias" class="sr-only">Días personalizados</label>
+        <input type="number" id="editAnuncioDias" name="edit_anuncio_dias" placeholder="Días (ej. 0.1)" min="0" step="any" class="coupon-input flex-1" autocomplete="off">
+        <label for="editAnuncioHoras" class="sr-only">Horas personalizadas</label>
+        <input type="number" id="editAnuncioHoras" name="edit_anuncio_horas" placeholder="Horas (ej. 0.5)" min="0" step="any" class="coupon-input flex-1" autocomplete="off">
+      </div>
+      <div class="d-flex align-items-center mb-1 w-100">
+        <label for="editAnuncioHtml" class="sr-only">Contenido HTML del anuncio</label>
+        <textarea id="editAnuncioHtml" name="edit_anuncio_html" placeholder="Campo HTML" class="coupon-input w-100 min-h-60 p-05" rows="5" required autocomplete="off"></textarea>
+      </div>
+      <div class="d-flex align-items-center mb-1 w-100 gap-03">
+        <input type="checkbox" id="editAnuncioApareceAlIngresar" name="edit_anuncio_aparece_al_ingresar" value="1" class="align-items-center" autocomplete="off">
+        <label for="editAnuncioApareceAlIngresar" class="m-0">Aparece en la tienda apenas se ingrese</label>
+      </div>
+      <div class="d-flex justify-content-center w-100 mt-1">
+        <button type="submit" id="editAnuncioSubmitBtn" class="btn-green btn-panel minw-160">Guardar cambios</button>
+      </div>
+    </form>
+  </div>
 </div>
 <!-- Modal para mostrar productos -->
 <div id="productsModal" class="modal d-none fixed-full bg-modal z-1000" tabindex="-1">
@@ -238,4 +329,5 @@
   <script src="{{ url_for('store_bp.static', filename='js/admin_store.js') }}?v=20260421-no-onclick" defer></script>
   <script src="{{ url_for('store_bp.static', filename='js/productos.js') }}" defer></script>
   <script src="{{ url_for('store_bp.static', filename='js/cupones.js') }}" defer></script>
+  <script src="{{ url_for('store_bp.static', filename='js/anuncios_admin.js') }}?v=20260721-days-float" defer></script>
 {% endblock %} 

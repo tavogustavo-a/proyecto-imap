@@ -4,7 +4,7 @@
 
 {% block head %}
   {{ super() }}
-  <link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}">
+  <link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}?v=20260725-tool-public">
 {% endblock %}
 {% block content %}
 <div class="store-light maxw-800 mx-auto br-8">
@@ -34,6 +34,26 @@
       <div class="mb-3">
         <label for="percent" class="form-label text-center d-block">Porcentaje (%)</label>
         <input type="number" name="percent" id="percent" class="form-control" min="0" step="any" required value="{{ tool.percent }}" autocomplete="off">
+      </div>
+      <div class="mb-3 text-center">
+        <label class="d-inline-flex align-items-center gap-05 edit-tool-public-label" for="is_public">
+          <input type="checkbox" name="is_public" id="is_public" value="1" {% if tool.is_public %}checked{% endif %} autocomplete="off">
+          <span>Acceso público con link (sin login)</span>
+        </label>
+      </div>
+      <div id="toolPublicLinkBox" class="mb-3 edit-tool-public-link-box{% if not tool.is_public %} d-none{% endif %}" {% if not tool.is_public %}hidden{% endif %} data-saved-public="{% if tool.is_public %}1{% else %}0{% endif %}">
+        <label class="form-label text-center d-block mb-1" for="toolPublicUrl">Link público de esta herramienta</label>
+        <div class="d-flex flex-wrap gap-05 justify-content-center align-items-center">
+          <input type="text" id="toolPublicUrl" class="form-control edit-tool-public-url" readonly value="{{ public_url }}" autocomplete="off">
+          <button type="button" id="btnCopyToolPublicUrl" class="btn-panel btn-blue btn-sm">Copiar</button>
+          <a id="btnOpenToolPublicUrl" href="{{ public_url }}" class="btn-panel btn-green btn-sm{% if not tool.is_public %} disabled{% endif %}" target="_blank" rel="noopener"{% if not tool.is_public %} aria-disabled="true" tabindex="-1"{% endif %}>Abrir</a>
+        </div>
+        <p id="toolPublicSaveHint" class="text-center mb-0 mt-1 edit-tool-public-hint{% if tool.is_public %} d-none{% endif %}" {% if tool.is_public %}hidden{% endif %}>
+          Marca el checkbox y pulsa <strong>Guardar</strong> para activar el link. Luego ya puedes abrirlo o copiarlo.
+        </p>
+        <p id="toolPublicActiveHint" class="text-center mb-0 mt-1 edit-tool-public-hint{% if not tool.is_public %} d-none{% endif %}" {% if not tool.is_public %}hidden{% endif %}>
+          Link activo: cualquiera con esta URL puede usar la herramienta (sin login).
+        </p>
       </div>
     </form>
     <div class="mt-3 w-100">
@@ -88,4 +108,79 @@
 {% block scripts %}
 {{ super() }}
 <script src="{{ url_for('store_bp.static', filename='js/edit_tool_users.js') }}" defer></script>
-{% endblock %} 
+<script>
+(function () {
+  var cb = document.getElementById('is_public');
+  var box = document.getElementById('toolPublicLinkBox');
+  var btn = document.getElementById('btnCopyToolPublicUrl');
+  var openBtn = document.getElementById('btnOpenToolPublicUrl');
+  var input = document.getElementById('toolPublicUrl');
+  var saveHint = document.getElementById('toolPublicSaveHint');
+  var activeHint = document.getElementById('toolPublicActiveHint');
+  var savedPublic = box && box.getAttribute('data-saved-public') === '1';
+
+  function setOpenEnabled(on) {
+    if (!openBtn) return;
+    if (on) {
+      openBtn.classList.remove('disabled');
+      openBtn.removeAttribute('aria-disabled');
+      openBtn.removeAttribute('tabindex');
+    } else {
+      openBtn.classList.add('disabled');
+      openBtn.setAttribute('aria-disabled', 'true');
+      openBtn.setAttribute('tabindex', '-1');
+    }
+  }
+
+  if (cb && box) {
+    function sync() {
+      var on = !!cb.checked;
+      box.classList.toggle('d-none', !on);
+      box.hidden = !on;
+      var ready = on && savedPublic;
+      setOpenEnabled(ready);
+      if (saveHint) {
+        saveHint.classList.toggle('d-none', ready);
+        saveHint.hidden = ready;
+      }
+      if (activeHint) {
+        activeHint.classList.toggle('d-none', !ready);
+        activeHint.hidden = !ready;
+      }
+    }
+    cb.addEventListener('change', sync);
+    sync();
+  }
+  if (openBtn) {
+    openBtn.addEventListener('click', function (e) {
+      if (openBtn.classList.contains('disabled') || openBtn.getAttribute('aria-disabled') === 'true') {
+        e.preventDefault();
+        alert('Primero marca el checkbox y pulsa Guardar para activar el link público.');
+      }
+    });
+  }
+  if (btn && input) {
+    btn.addEventListener('click', function () {
+      if (!savedPublic || (cb && !cb.checked)) {
+        alert('Primero marca el checkbox y pulsa Guardar para activar el link público.');
+        return;
+      }
+      var v = input.value || '';
+      if (!v) return;
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(v).then(function () {
+          btn.textContent = 'Copiado';
+          setTimeout(function () { btn.textContent = 'Copiar'; }, 1200);
+        }).catch(function () {
+          input.select();
+          document.execCommand('copy');
+        });
+      } else {
+        input.select();
+        document.execCommand('copy');
+      }
+    });
+  }
+})();
+</script>
+{% endblock %}

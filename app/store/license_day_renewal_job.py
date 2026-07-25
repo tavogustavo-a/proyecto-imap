@@ -83,6 +83,8 @@ def _route_dual_line_to_changes_or_expired(
     expired_cur: str,
     seen_changes: set,
     seen_expired: set,
+    *,
+    reason: str = '',
 ) -> Tuple[str, str, bool]:
     """Quita la fila del día y la añade a Cambios (mes a mes) o Vencidas."""
     m2m = bool(getattr(lic, 'month_to_month', False))
@@ -94,6 +96,7 @@ def _route_dual_line_to_changes_or_expired(
     ln = _build_storage_line(cred, uname, '', '', '')
     if not ln:
         return changes_cur, expired_cur, False
+    already = (m2m and cred_k in seen_changes) or ((not m2m) and cred_k in seen_expired)
     if m2m:
         if cred_k not in seen_changes:
             changes_cur = _append_bloc_line(changes_cur, ln)
@@ -102,7 +105,61 @@ def _route_dual_line_to_changes_or_expired(
         if cred_k not in seen_expired:
             expired_cur = _append_bloc_line(expired_cur, ln)
             seen_expired.add(cred_k)
+    if not already:
+        _log_moved_to_bloc_for_dual(
+            lic,
+            dual,
+            destination='cambios' if m2m else 'vencidas',
+            reason=reason,
+        )
     return changes_cur, expired_cur, True
+
+
+def _log_moved_to_bloc_for_dual(
+    lic,
+    dual: Dict[str, Any],
+    *,
+    destination: str,
+    reason: str = '',
+    account_id: Optional[int] = None,
+) -> None:
+    """Escribe en historial del cliente el paso a Cambios/Vencidas."""
+    try:
+        from app.store.user_license_activity import (
+            log_portal_moved_to_bloc,
+            resolve_portal_activity_viewer_by_username,
+        )
+    except Exception:
+        return
+    uname = str(dual.get('user') or '').strip()
+    viewer = resolve_portal_activity_viewer_by_username(uname)
+    if not viewer and account_id:
+        try:
+            from app.models.user import User
+            from app.store.models import LicenseAccount
+
+            acc = db.session.get(LicenseAccount, int(account_id))
+            if acc and getattr(acc, 'assigned_to_user_id', None):
+                viewer = db.session.get(User, int(acc.assigned_to_user_id))
+        except Exception:
+            viewer = None
+    if not viewer:
+        return
+    pname = getattr(getattr(lic, 'product', None), 'name', None) or 'Producto'
+    cred = str(dual.get('cred') or '').strip()
+    green = str(dual.get('statusGood') or '').strip()
+    reason_s = str(reason or '').strip()
+    if not reason_s and green:
+        reason_s = 'Estado verde: %s' % green
+    log_portal_moved_to_bloc(
+        viewer,
+        product_name=pname,
+        cred_hint=cred,
+        destination=destination,
+        license_id=int(getattr(lic, 'id', 0) or 0) or None,
+        account_id=account_id,
+        reason=reason_s,
+    )
 
 
 def clear_solucionada_statuses_overnight() -> Dict[str, Any]:
@@ -343,7 +400,13 @@ def process_day_renewals_for_calendar_day(
                         pass
                 elif _charge_fail_should_route_to_bloc(msg):
                     changes_cur, expired_cur, _moved = _route_dual_line_to_changes_or_expired(
-                        lic, dual, changes_cur, expired_cur, seen_changes, seen_expired
+                        lic,
+                        dual,
+                        changes_cur,
+                        expired_cur,
+                        seen_changes,
+                        seen_expired,
+                        reason='Sin saldo / límite de deuda para renovar',
                     )
                     routed_charge_failed += 1
                     lic_changed = True
@@ -392,7 +455,13 @@ def process_day_renewals_for_calendar_day(
                         pass
                 elif _charge_fail_should_route_to_bloc(msg):
                     changes_cur, expired_cur, _moved = _route_dual_line_to_changes_or_expired(
-                        lic, dual, changes_cur, expired_cur, seen_changes, seen_expired
+                        lic,
+                        dual,
+                        changes_cur,
+                        expired_cur,
+                        seen_changes,
+                        seen_expired,
+                        reason='Sin saldo / límite de deuda para renovar (mes a mes)',
                     )
                     routed_charge_failed += 1
                     lic_changed = True
@@ -491,8 +560,15 @@ def route_unrenewed_day_lines_on_renewal_day(
                 new_day_lines.append(line)
                 continue
 
+            green_label = str(green or '').strip() or '—'
             changes_cur, expired_cur, moved = _route_dual_line_to_changes_or_expired(
-                lic, dual, changes_cur, expired_cur, seen_changes, seen_expired
+                lic,
+                dual,
+                changes_cur,
+                expired_cur,
+                seen_changes,
+                seen_expired,
+                reason='Cierre del día · estado: %s' % green_label,
             )
             if not moved:
                 new_day_lines.append(line)
@@ -592,11 +668,27 @@ def sync_expired_accounts_by_renewal_policy() -> Dict[str, Any]:
                     continue
                 changes_cur = _append_bloc_line(changes_cur, ln)
                 seen_changes.add(cred_k)
+                dest = 'cambios'
             else:
                 if cred_k in seen_expired:
                     continue
                 expired_cur = _append_bloc_line(expired_cur, ln)
                 seen_expired.add(cred_k)
+                dest = 'vencidas'
+
+            dual_hit = _dual_hit or {
+                'cred': cred,
+                'user': uname,
+                'statusGood': green or '',
+            }
+            _log_moved_to_bloc_for_dual(
+                lic,
+                dual_hit,
+                destination=dest,
+                reason='Cuenta vencida (expires_at) · estado: %s'
+                % (str(green or '').strip() or '—'),
+                account_id=int(getattr(acc, 'id', 0) or 0) or None,
+            )
 
             if day_key_hit and _remove_line_from_day_map(day_map, cred_k, day_key_hit):
                 lic_touched = True

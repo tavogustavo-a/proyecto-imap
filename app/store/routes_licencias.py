@@ -5093,13 +5093,39 @@ def api_put_license_notes(license_id):
             else:
                 license_obj.license_notes = incoming
         if 'suspended_notes' in data:
-            license_obj.suspended_notes = (
+            _old_susp = getattr(license_obj, 'suspended_notes', None) or ''
+            _new_susp = (
                 data['suspended_notes'] if data['suspended_notes'] is not None else ''
             )
+            try:
+                from app.store.user_license_activity import log_admin_inventory_bloc_additions
+
+                log_admin_inventory_bloc_additions(
+                    license_obj,
+                    bloc_key='suspended_notes',
+                    old_text=_old_susp,
+                    new_text=_new_susp,
+                )
+            except Exception:
+                current_app.logger.exception('historial admin Caídas')
+            license_obj.suspended_notes = _new_susp
         if 'expired_notes' in data:
-            license_obj.expired_notes = (
+            _old_exp = getattr(license_obj, 'expired_notes', None) or ''
+            _new_exp = (
                 data['expired_notes'] if data['expired_notes'] is not None else ''
             )
+            try:
+                from app.store.user_license_activity import log_admin_inventory_bloc_additions
+
+                log_admin_inventory_bloc_additions(
+                    license_obj,
+                    bloc_key='expired_notes',
+                    old_text=_old_exp,
+                    new_text=_new_exp,
+                )
+            except Exception:
+                current_app.logger.exception('historial admin Vencidas')
+            license_obj.expired_notes = _new_exp
         if 'month_to_month' in data:
             v = data['month_to_month']
             license_obj.month_to_month = bool(v) if v is not None else False
@@ -5116,9 +5142,22 @@ def api_put_license_notes(license_id):
             v = data['renew_customer_account']
             license_obj.renew_customer_account = bool(v) if v is not None else False
         if 'changes_notes' in data:
-            license_obj.changes_notes = (
+            _old_ch = getattr(license_obj, 'changes_notes', None) or ''
+            _new_ch = (
                 data['changes_notes'] if data['changes_notes'] is not None else ''
             )
+            try:
+                from app.store.user_license_activity import log_admin_inventory_bloc_additions
+
+                log_admin_inventory_bloc_additions(
+                    license_obj,
+                    bloc_key='changes_notes',
+                    old_text=_old_ch,
+                    new_text=_new_ch,
+                )
+            except Exception:
+                current_app.logger.exception('historial admin Cambios')
+            license_obj.changes_notes = _new_ch
         if 'customer_renewal_notes' in data:
             license_obj.customer_renewal_notes = (
                 data['customer_renewal_notes']

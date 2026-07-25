@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+
+{% block title %}{{ tool.title }}{% endblock %}
+
+{% block head %}
+  {{ super() }}
+  <link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}?v=20260725-tool-public">
+{% endblock %}
+
+{% block content %}
+<div class="container container-max-width-900 store-light public-tools-container mx-auto br-8">
+  <h2 class="text-center mt-2 mb-3">{{ tool.title }}</h2>
+  <div class="card herramienta-accordion tool-public-one-card">
+    <div class="accordion-header d-flex align-items-center justify-content-between w-100" style="display:none!important" aria-hidden="true">
+      <span>• {{ tool.title }}</span>
+    </div>
+    <div class="accordion-body">
+      <div class="tool-calculator-form-container">{{ tool.text | rewrite_external_images | safe }}</div>
+      <form class="form-calc-porcentaje" autocomplete="off" name="formCalcPorcentaje">
+        <div class="d-flex align-items-end gap-1 mb-1 tool-calculator-form-row">
+          <div class="flex-2">
+            <label for="x-{{ tool.id }}" class="sr-only">Número X (Porcentaje: {{ tool.percent }}%)</label>
+            <input type="number" step="any" min="0" class="form-control input-x" id="x-{{ tool.id }}" name="x-{{ tool.id }}" placeholder="Ingresa un número" autocomplete="off">
+          </div>
+          <div class="flex-1">
+            <label for="resultadoPorcentaje-{{ tool.id }}">Resultado</label>
+            <input type="text" class="form-control resultado-porcentaje" readonly placeholder="0" name="resultado_porcentaje" id="resultadoPorcentaje-{{ tool.id }}" autocomplete="off">
+          </div>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script src="{{ url_for('store_bp.static', filename='js/menu_herramientas.js') }}?v=20260725-tool-public" defer></script>
+{% endblock %}

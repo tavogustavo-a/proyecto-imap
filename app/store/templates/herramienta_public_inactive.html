@@ -1,0 +1,14 @@
+{% extends "errors/error_base.html" %}
+
+{% block title %}Herramienta no disponible{% endblock %}
+
+{% block content %}
+  <div class="err-icon" aria-hidden="true">?</div>
+  <h1>Herramienta no disponible</h1>
+  <p>Esta herramienta aún no está abierta al público, o se desactivó temporalmente.</p>
+  <p>Si eres administrador, actívala en editar herramienta y guarda los cambios.</p>
+  <div class="err-actions">
+    <a class="err-btn" href="{{ url_for('store_bp.store_front') }}">Ir al inicio</a>
+    <button type="button" class="err-btn err-btn--soft" id="errRetryBtn">Reintentar</button>
+  </div>
+{% endblock %}

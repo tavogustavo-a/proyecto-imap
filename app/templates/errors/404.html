@@ -1,0 +1,14 @@
+{% extends "errors/error_base.html" %}
+
+{% block title %}Página no disponible{% endblock %}
+
+{% block content %}
+  <div class="err-icon" aria-hidden="true">?</div>
+  <h1>Página no disponible</h1>
+  <p>No encontramos lo que buscas, o ya no está disponible.</p>
+  <p>Puedes volver al inicio o intentar de nuevo en un momento.</p>
+  <div class="err-actions">
+    <a class="err-btn" href="{{ home_url }}">Ir al inicio</a>
+    <button type="button" class="err-btn err-btn--soft" id="errRetryBtn">Reintentar</button>
+  </div>
+{% endblock %}

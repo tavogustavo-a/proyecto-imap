@@ -1719,6 +1719,24 @@
         return entries;
     }
 
+    /** Renovar / mes a mes: siguen solas; no hace falta aviso de «faltan N días». */
+    function rowHasAutoRenewGreen(row) {
+        var sg = normalizeStatusKey((row && row.status_good) || '');
+        return (
+            sg === normalizeStatusKey('renovar 1 mes mas') ||
+            sg === normalizeStatusKey('dejar mes a mes')
+        );
+    }
+
+    function accountHasAutoRenewGreen(acc) {
+        var entries = portalRowEntriesAllDays(acc);
+        var i;
+        for (i = 0; i < entries.length; i += 1) {
+            if (rowHasAutoRenewGreen(entries[i].row)) return true;
+        }
+        return false;
+    }
+
     /** Filas visibles del portal con el día de calendario (1–31) para guardar estado. */
     function portalRowEntriesForAccount(acc) {
         var dl = acc.day_lines || {};
@@ -1768,6 +1786,7 @@
             var lm = licenseMetaFromAccount(acc);
             var ri;
             for (ri = 0; ri < entries.length; ri += 1) {
+                if (rowHasAutoRenewGreen(entries[ri].row)) continue;
                 var entryLeft = accountDaysUntilExpiryUi(acc, co);
                 if (entryLeft == null) {
                     entryLeft = daysUntilCalendarSaleDay(entries[ri].saleDay, co);
@@ -2423,6 +2442,8 @@
 
         for (ai = 0; ai < accounts.length; ai += 1) {
             var acc = accounts[ai];
+            /* Mes a mes / renovar: aviso de caducidad innecesario; el de saldo cubre el riesgo. */
+            if (accountHasAutoRenewGreen(acc)) continue;
             var left = accountDaysUntilExpiryUi(acc);
             if (left == null || left < 0 || left > fromDays) continue;
             var notifyKey = userLicCaducidadNotifyAccountKey(acc, left);

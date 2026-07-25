@@ -75,6 +75,29 @@ class Coupon(db.Model):
     products = db.relationship('Product', secondary='coupon_products', backref='coupons')
 
 
+class StoreAnnouncement(db.Model):
+    """Anuncios de tienda (banner rotativo + modal al ingresar)."""
+    __tablename__ = 'store_announcements'
+
+    id = db.Column(db.Integer, primary_key=True)
+    title = db.Column(db.String(200), nullable=False)
+    html_content = db.Column(db.Text, nullable=False, default='')
+    # indefinido | 1d | 3d | 7d | 10d | 1m | personalizado
+    duration_preset = db.Column(db.String(24), nullable=False, default='indefinido')
+    # Decimales permitidos (ej. 0.1 día ≈ 2h 24min)
+    custom_days = db.Column(db.Float, nullable=True)
+    custom_hours = db.Column(db.Float, nullable=True)
+    show_on_entry = db.Column(db.Boolean, nullable=False, default=False, index=True)
+    enabled = db.Column(db.Boolean, nullable=False, default=True, index=True)
+    starts_at = db.Column(db.DateTime, nullable=True)
+    expires_at = db.Column(db.DateTime, nullable=True, index=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    def __repr__(self):
+        return f'<StoreAnnouncement id={self.id} title={self.title!r}>'
+
+
 class CouponRedemption(db.Model):
     """Uso de cupón en un checkout: permite aplicar max_uses_per_user en servidor."""
     __tablename__ = 'store_coupon_redemptions'
@@ -152,6 +175,7 @@ class ToolInfo(db.Model):
     text = db.Column(db.Text, nullable=False)
     percent = db.Column(db.Float, nullable=False, default=0)
     enabled = db.Column(db.Boolean, default=True, index=True)
+    is_public = db.Column(db.Boolean, default=False, index=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     # Relación con usuarios que pueden ver la herramienta

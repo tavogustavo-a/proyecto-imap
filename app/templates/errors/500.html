@@ -1,0 +1,14 @@
+{% extends "errors/error_base.html" %}
+
+{% block title %}Algo salió mal{% endblock %}
+
+{% block content %}
+  <div class="err-icon" aria-hidden="true">!</div>
+  <h1>Algo salió mal</h1>
+  <p>La página se detuvo un momento. No es un problema de tu enlace.</p>
+  <p>Espera unos segundos y vuelve a intentar.</p>
+  <div class="err-actions">
+    <button type="button" class="err-btn" id="errRetryBtn">Reintentar</button>
+    <a class="err-btn err-btn--soft" href="{{ home_url }}">Ir al inicio</a>
+  </div>
+{% endblock %}

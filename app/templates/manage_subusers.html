@@ -392,4 +392,8 @@
 {# {{ super() }} #} {# Comentado porque base.html no tiene scripts en este bloque #}
 <script src="{{ url_for('static', filename='js/manage_subusers.js') }}"></script>
 <script src="{{ url_for('static', filename='js/menu_busqueda.js') }}" defer></script>
+{% if session.get('logged_in') and current_user and not is_admin %}
+<div id="anuncioEntryDismissScope" hidden data-user-id="{{ current_user.id }}"></div>
+<script src="{{ url_for('store_bp.static', filename='js/anuncios_entry_modal.js') }}?v=20260722-login-only" defer></script>
+{% endif %}
 {% endblock scripts %}

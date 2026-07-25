@@ -508,5 +508,9 @@
 
 <script src="{{ url_for('static', filename='js/clear_trigger_logs.js') }}" defer></script>
 <script src="{{ url_for('static', filename='js/logout_all_cookies_btn.js') }}" defer></script>
+{% if session.get('logged_in') and current_user_id and not is_admin %}
+<div id="anuncioEntryDismissScope" hidden data-user-id="{{ current_user_id }}"></div>
+<script src="{{ url_for('store_bp.static', filename='js/anuncios_entry_modal.js') }}?v=20260722-login-only" defer></script>
+{% endif %}
 
 {% endblock %}

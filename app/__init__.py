@@ -395,9 +395,13 @@ def create_app(config_class_passed=None):
             _ensure_license_expired_notes_and_month_columns()
             ensure_product_reservation_schema()
             ensure_customer_account_renewal_schema()
+            from app.store.announcements import ensure_store_announcements_schema
             from app.store.email_notify_prefs import ensure_user_email_notify_enabled_column
+            from app.store.tool_info_schema import ensure_tool_info_is_public_column
 
+            ensure_store_announcements_schema()
             ensure_user_email_notify_enabled_column()
+            ensure_tool_info_is_public_column()
             if repaired_accum:
                 app.logger.debug(
                     f"Esquema: {repaired_accum} acumulación(es) legacy reparada(s)"
@@ -719,5 +723,49 @@ def create_app(config_class_passed=None):
     @app.template_filter("sanitize_message_html")
     def sanitize_message_html_filter(value):
         return sanitize_admin_message_html(value)
+
+    from flask import jsonify, render_template, request, send_from_directory
+
+    def _error_home_url():
+        try:
+            from flask import url_for
+            if session.get('logged_in'):
+                return url_for('store_bp.store_front')
+            return url_for('user_auth_bp.login')
+        except Exception:
+            return '/tienda/'
+
+    def _wants_json_error():
+        path = request.path or ''
+        if path.startswith('/api/') or path.startswith('/tienda/api/'):
+            return True
+        best = request.accept_mimetypes.best_match(['application/json', 'text/html'])
+        return (
+            best == 'application/json'
+            and request.accept_mimetypes[best] > request.accept_mimetypes['text/html']
+        )
+
+    @app.route('/offline', endpoint='offline_page')
+    def offline_page():
+        return render_template('errors/offline.html', home_url=_error_home_url())
+
+    @app.route('/sw.js', endpoint='service_worker')
+    def service_worker():
+        resp = send_from_directory(app.static_folder, 'sw.js', mimetype='application/javascript')
+        resp.headers['Service-Worker-Allowed'] = '/'
+        resp.headers['Cache-Control'] = 'no-cache'
+        return resp
+
+    @app.errorhandler(404)
+    def handle_404(err):
+        if _wants_json_error():
+            return jsonify({'error': 'not_found', 'message': 'No encontrado'}), 404
+        return render_template('errors/404.html', home_url=_error_home_url()), 404
+
+    @app.errorhandler(500)
+    def handle_500(err):
+        if _wants_json_error():
+            return jsonify({'error': 'server_error', 'message': 'Error interno'}), 500
+        return render_template('errors/500.html', home_url=_error_home_url()), 500
 
     return app

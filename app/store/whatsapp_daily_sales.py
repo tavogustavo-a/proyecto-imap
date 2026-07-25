@@ -487,6 +487,236 @@ def _saldo_inicio_con_total_hoy(saldo_before: float, day_total: float) -> str:
     return f'Saldo al inicio del día: al día ($0) menos {menos} de hoy'
 
 
+# Recargas acreditadas que cuentan para el resumen diario (historial + WhatsApp).
+_RECHARGE_SUMMARY_STATUSES = ('approved', 'auto_credited')
+
+
+def _format_recharge_plain_amount(amount: float) -> str:
+    try:
+        val = float(amount or 0)
+    except (TypeError, ValueError):
+        val = 0.0
+    abs_val = abs(val)
+    if abs(abs_val - round(abs_val)) < 1e-9:
+        return f'{int(round(abs_val)):,}'.replace(',', '.')
+    return f'{abs_val:.2f}'.replace('.', ',')
+
+
+def _format_recharge_summary_line(recharges: list[dict[str, Any]]) -> str | None:
+    """
+    1 recarga → recargas hoy: 30.000
+    N recargas → recargas hoy: 30.000, 50.000, 60.000
+    """
+    if not recharges:
+        return None
+    parts = [_format_recharge_plain_amount(r.get('amount') or 0) for r in recharges]
+    return f'recargas hoy: {", ".join(parts)}'
+
+
+def _recharge_row_amount_and_currency(row) -> tuple[float, str] | None:
+    st = (getattr(row, 'status', None) or '').strip().lower()
+    if st not in _RECHARGE_SUMMARY_STATUSES:
+        return None
+    amt = getattr(row, 'amount_credited', None)
+    if amt is None:
+        amt = getattr(row, 'amount_claimed', None)
+    try:
+        amount = float(amt) if amt is not None else 0.0
+    except (TypeError, ValueError):
+        return None
+    if amount <= 1e-9:
+        return None
+    cur = (getattr(row, 'currency', None) or 'COP').strip().upper() or 'COP'
+    return amount, cur
+
+
+def _recharge_row_event_dt(row):
+    return (
+        getattr(row, 'event_at', None)
+        or getattr(row, 'reviewed_at', None)
+        or getattr(row, 'created_at', None)
+    )
+
+
+def _credited_recharges_on_co_date(
+    billing_user: User,
+    co_date: date,
+) -> list[dict[str, Any]]:
+    """Recargas acreditadas del día CO (titular + subusuarios; live + archivadas)."""
+    from app.store.models import BalanceRecharge, BalanceRechargeHistorialSnapshot
+
+    user_ids = _store_account_user_ids(billing_user) or {int(billing_user.id)}
+    out: list[dict[str, Any]] = []
+    seen_live_ids: set[int] = set()
+
+    live_rows = (
+        BalanceRecharge.query.filter(
+            BalanceRecharge.user_id.in_(list(user_ids)),
+            BalanceRecharge.status.in_(list(_RECHARGE_SUMMARY_STATUSES)),
+        )
+        .order_by(BalanceRecharge.id.asc())
+        .all()
+    )
+    for row in live_rows:
+        parsed = _recharge_row_amount_and_currency(row)
+        if not parsed:
+            continue
+        dt = _recharge_row_event_dt(row)
+        if not dt:
+            continue
+        try:
+            row_co = utc_to_colombia(dt).date()
+        except Exception:
+            continue
+        if row_co != co_date:
+            continue
+        amount, cur = parsed
+        rid = int(row.id) if getattr(row, 'id', None) else None
+        if rid is not None:
+            seen_live_ids.add(rid)
+        out.append(
+            {
+                'amount': amount,
+                'currency': cur,
+                'sort_ts': float(dt.timestamp()) if hasattr(dt, 'timestamp') else 0.0,
+            }
+        )
+
+    try:
+        from app.store.balance_recharge_historial_snapshot import ensure_snapshot_table
+
+        ensure_snapshot_table()
+        archived = (
+            BalanceRechargeHistorialSnapshot.query.filter(
+                BalanceRechargeHistorialSnapshot.user_id.in_(list(user_ids)),
+                BalanceRechargeHistorialSnapshot.status.in_(
+                    list(_RECHARGE_SUMMARY_STATUSES)
+                ),
+            )
+            .order_by(BalanceRechargeHistorialSnapshot.id.asc())
+            .all()
+        )
+    except Exception as exc:
+        logger.warning('credited_recharges archivadas: %s', exc)
+        archived = []
+
+    for row in archived:
+        live_rid = getattr(row, 'recharge_id', None)
+        if live_rid is not None:
+            try:
+                if int(live_rid) in seen_live_ids:
+                    continue
+            except (TypeError, ValueError):
+                pass
+        parsed = _recharge_row_amount_and_currency(row)
+        if not parsed:
+            continue
+        dt = _recharge_row_event_dt(row)
+        if not dt:
+            continue
+        try:
+            row_co = utc_to_colombia(dt).date()
+        except Exception:
+            continue
+        if row_co != co_date:
+            continue
+        amount, cur = parsed
+        out.append(
+            {
+                'amount': amount,
+                'currency': cur,
+                'sort_ts': float(dt.timestamp()) if hasattr(dt, 'timestamp') else 0.0,
+            }
+        )
+
+    out.sort(key=lambda x: float(x.get('sort_ts') or 0))
+    return out
+
+
+def _recharges_map_for_historial(
+    *,
+    viewer_billing_user_id: int | None = None,
+    all_users: bool = False,
+) -> dict[tuple[int, date], list[dict[str, Any]]]:
+    """Mapa (billing_id, co_date) → recargas acreditadas (para días solo-recarga)."""
+    from app.store.models import BalanceRecharge, BalanceRechargeHistorialSnapshot
+    from app.store.routes import _billing_user_for_store_debt_limit
+
+    out: dict[tuple[int, date], list[dict[str, Any]]] = {}
+
+    def _accept_user(uid: int) -> User | None:
+        u = User.query.get(int(uid))
+        if not u:
+            return None
+        billing = _billing_user_for_store_debt_limit(u) or u
+        if (
+            not all_users
+            and viewer_billing_user_id
+            and int(billing.id) != int(viewer_billing_user_id)
+        ):
+            return None
+        return billing
+
+    def _add_row(row) -> None:
+        uid = getattr(row, 'user_id', None)
+        if uid is None:
+            return
+        billing = _accept_user(int(uid))
+        if not billing:
+            return
+        parsed = _recharge_row_amount_and_currency(row)
+        if not parsed:
+            return
+        dt = _recharge_row_event_dt(row)
+        if not dt:
+            return
+        try:
+            co_date = utc_to_colombia(dt).date()
+        except Exception:
+            return
+        amount, cur = parsed
+        key = (int(billing.id), co_date)
+        out.setdefault(key, []).append(
+            {
+                'amount': amount,
+                'currency': cur,
+                'sort_ts': float(dt.timestamp()) if hasattr(dt, 'timestamp') else 0.0,
+            }
+        )
+
+    live_rows = BalanceRecharge.query.filter(
+        BalanceRecharge.status.in_(list(_RECHARGE_SUMMARY_STATUSES))
+    ).all()
+    seen_live_ids = {int(r.id) for r in live_rows if getattr(r, 'id', None)}
+    for row in live_rows:
+        _add_row(row)
+
+    try:
+        from app.store.balance_recharge_historial_snapshot import ensure_snapshot_table
+
+        ensure_snapshot_table()
+        archived = BalanceRechargeHistorialSnapshot.query.filter(
+            BalanceRechargeHistorialSnapshot.status.in_(list(_RECHARGE_SUMMARY_STATUSES))
+        ).all()
+    except Exception as exc:
+        logger.warning('recharges_map archivadas: %s', exc)
+        archived = []
+
+    for row in archived:
+        live_rid = getattr(row, 'recharge_id', None)
+        if live_rid is not None:
+            try:
+                if int(live_rid) in seen_live_ids:
+                    continue
+            except (TypeError, ValueError):
+                pass
+        _add_row(row)
+
+    for key in out:
+        out[key].sort(key=lambda x: float(x.get('sort_ts') or 0))
+    return out
+
+
 def _snapshot_day_total(snapshots: list[SalePurchaseSnapshot]) -> float:
     total = 0.0
     for snap in snapshots:
@@ -832,6 +1062,7 @@ def build_daily_summary_lines(
     *,
     co_date: date | None = None,
     include_failed_renewals: bool = False,
+    recharges: list[dict[str, Any]] | None = None,
 ) -> list[str] | None:
     renewals_summary = _section_summary_line('Renovaciones', snapshots, is_renewal=True)
     purchases_summary = _section_summary_line(
@@ -859,17 +1090,30 @@ def build_daily_summary_lines(
     if include_failed_renewals and billing_user and co_date:
         failed_lines = _failed_renewal_historial_lines(billing_user, co_date)
 
-    if not header_lines and not warranty_lines and not failed_lines:
+    day_recharges: list[dict[str, Any]] = list(recharges or [])
+    if not day_recharges and billing_user and co_date:
+        day_recharges = _credited_recharges_on_co_date(billing_user, co_date)
+    recharge_line = _format_recharge_summary_line(day_recharges)
+
+    if not header_lines and not warranty_lines and not failed_lines and not recharge_line:
         return None
 
     day_total = _snapshot_day_total(snapshots)
+    recharge_total = 0.0
+    for r in day_recharges:
+        try:
+            recharge_total += float(r.get('amount') or 0)
+        except (TypeError, ValueError):
+            continue
+
     saldo_before = 0.0
     saldo_after = 0.0
     has_balance = bool(billing_user) and bool(header_lines)
     if billing_user and has_balance:
         currency = _billing_currency(billing_user)
         saldo_after = _billing_prepaid_balance(billing_user, currency)
-        saldo_before = saldo_after + day_total
+        # Compras restan saldo; recargas lo aumentan → reconstruir saldo al inicio.
+        saldo_before = saldo_after + day_total - recharge_total
 
     lines: list[str] = list(header_lines)
 
@@ -885,14 +1129,21 @@ def build_daily_summary_lines(
         lines.extend(warranty_lines)
 
     if has_balance:
-        lines.extend(
+        balance_block: list[str] = ['']
+        if recharge_line:
+            balance_block.append(recharge_line)
+        balance_block.extend(
             [
-                '',
                 f'Total hoy: {_format_whatsapp_amount(day_total)}',
                 _saldo_inicio_con_total_hoy(saldo_before, day_total),
                 f'Saldo final: {_format_whatsapp_saldo_line(saldo_after)}',
             ]
         )
+        lines.extend(balance_block)
+    elif recharge_line:
+        if lines:
+            lines.append('')
+        lines.append(recharge_line)
 
     if failed_lines:
         if lines:
@@ -967,6 +1218,10 @@ def build_purchase_history_daily_summary_items(
         viewer_billing_user_id=viewer_billing_user_id,
         all_users=all_users,
     )
+    recharge_map = _recharges_map_for_historial(
+        viewer_billing_user_id=viewer_billing_user_id,
+        all_users=all_users,
+    )
 
     items_out: list[dict[str, Any]] = []
 
@@ -975,16 +1230,23 @@ def build_purchase_history_daily_summary_items(
         co_date: date,
         snaps: list[SalePurchaseSnapshot],
         billing_user: User,
+        day_recharges: list[dict[str, Any]] | None = None,
     ) -> None:
         summary_lines = build_daily_summary_lines(
             snaps,
             billing_user,
             co_date=co_date,
             include_failed_renewals=True,
+            recharges=day_recharges,
         )
         if not summary_lines:
             return
         sort_ts = _daily_summary_sort_ts(snaps, co_date)
+        if (not snaps) and day_recharges:
+            try:
+                sort_ts = max(float(r.get('sort_ts') or 0) for r in day_recharges)
+            except (TypeError, ValueError):
+                pass
         fecha_str = 'Fecha no disponible'
         try:
             fecha_col = utc_to_colombia(datetime.utcfromtimestamp(sort_ts))
@@ -1011,7 +1273,7 @@ def build_purchase_history_daily_summary_items(
             }
         )
 
-    all_keys = set(groups.keys()) | set(warranty_map.keys())
+    all_keys = set(groups.keys()) | set(warranty_map.keys()) | set(recharge_map.keys())
     for billing_id, co_date in sorted(
         all_keys, key=lambda k: (k[1], k[0]), reverse=True
     ):
@@ -1019,7 +1281,10 @@ def build_purchase_history_daily_summary_items(
         if not billing_user:
             continue
         snaps = groups.get((billing_id, co_date), [])
-        _append_summary_item(billing_id, co_date, snaps, billing_user)
+        day_recharges = recharge_map.get((billing_id, co_date), [])
+        _append_summary_item(
+            billing_id, co_date, snaps, billing_user, day_recharges=day_recharges
+        )
 
     return items_out
 

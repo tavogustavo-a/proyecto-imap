@@ -1,0 +1,14 @@
+{% extends "errors/error_base.html" %}
+
+{% block title %}Sin conexión{% endblock %}
+
+{% block content %}
+  <div class="err-icon" aria-hidden="true">⌀</div>
+  <h1>Sin conexión</h1>
+  <p>No hay internet o el servidor no responde ahora.</p>
+  <p>Cuando vuelva la conexión, pulsa reintentar. No hace falta copiar ni abrir ningún enlace.</p>
+  <div class="err-actions">
+    <button type="button" class="err-btn" id="errRetryBtn">Reintentar</button>
+    <a class="err-btn err-btn--soft" href="{{ home_url }}">Ir al inicio</a>
+  </div>
+{% endblock %}

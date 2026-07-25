@@ -25,6 +25,8 @@ _PORTAL_ACTIVITY_EXTRA_KEYS = frozenset(
         'new_cred',
         'product_name',
         'wa_digest_pending',
+        'destination',
+        'outcome',
     }
 )
 _PORTAL_ACTIVITY_STR_EXTRA_MAX = {
@@ -446,11 +448,19 @@ def _tipo_visual(tipo_raw: str) -> str:
         return 'Garantía entregada'
     if t in ('incidencia', 'reporte_o_incidencia'):
         return 'Reporte / incidencia'
+    if t == 'no_renovar':
+        return 'No renovar'
+    if t == 'movido_cambios':
+        return 'Cambios'
+    if t == 'movido_vencidas':
+        return 'Vencidas'
     if t in (
         'renovacion_estado',
         'renovacion_gestion',
         'renovacion_saldo',
         'renovacion_tienda',
+        'renovacion_cuenta_cliente',
+        'renovacion_cuenta_rechazada',
     ):
         return 'Renovación'
     if t in ('abono_admin', 'abono_recarga', 'pago_cuenta'):
@@ -462,6 +472,181 @@ def _tipo_visual(tipo_raw: str) -> str:
     if t == 'entrega':
         return 'Entrega'
     return tipo_raw or 'Actividad'
+
+
+def resolve_portal_activity_viewer_by_username(username: str) -> Any:
+    """Usuario de historial a partir del nombre en la línea del bloc."""
+    from sqlalchemy import func as sa_func
+
+    from app.models.user import User
+
+    un = str(username or '').strip()
+    if not un or un.lower() in ('anonimo', 'anónimo', 'generico', 'genérico'):
+        return None
+    return User.query.filter(sa_func.lower(User.username) == un.lower()).first()
+
+
+def log_portal_moved_to_bloc(
+    viewer_user_row: Any,
+    *,
+    product_name: str,
+    cred_hint: str = '',
+    destination: str,
+    license_id: Optional[int] = None,
+    account_id: Optional[int] = None,
+    reason: str = '',
+) -> None:
+    """Historial cuando una cuenta pasa a Cambios o Vencidas."""
+    if not viewer_user_row:
+        return
+    dest = str(destination or '').strip().lower()
+    if dest not in ('cambios', 'vencidas'):
+        return
+    tipo = 'movido_cambios' if dest == 'cambios' else 'movido_vencidas'
+    pname = str(product_name or 'Producto').strip() or 'Producto'
+    hint = (
+        _email_from_cred_hint(cred_hint)
+        or str(cred_hint or '').strip()[:120]
+        or 'cuenta'
+    )
+    summary = '%s · %s' % (pname, hint)
+    detail_bits = []
+    if reason:
+        detail_bits.append(str(reason).strip()[:400])
+    detail_bits.append(
+        'Pasó a Cambios (mes a mes).' if dest == 'cambios' else 'Pasó a Vencidas.'
+    )
+    append_portal_license_activity_record(
+        viewer_user_row,
+        tipo,
+        summary,
+        detail=' '.join(detail_bits),
+        extra={
+            'license_id': license_id,
+            'account_id': account_id,
+            'cred_hint': str(cred_hint or '')[:140],
+            'destination': dest,
+        },
+    )
+
+
+def log_admin_inventory_bloc_additions(
+    license_row: Any,
+    *,
+    bloc_key: str,
+    old_text: str,
+    new_text: str,
+) -> None:
+    """
+    Si admin agrega líneas a Caídas / Vencidas / Cambios, registra en historial
+    del usuario de esa fila (cuando el username es identificable).
+    """
+    from app.store.user_license_line_parse import parse_admin_license_line_to_split_parts
+
+    key = str(bloc_key or '').strip().lower()
+    dest_map = {
+        'suspended_notes': ('portal_caida', 'Caída / cuenta suspendida (admin)'),
+        'expired_notes': ('movido_vencidas', 'Pasó a Vencidas (admin).'),
+        'changes_notes': ('movido_cambios', 'Pasó a Cambios (admin).'),
+    }
+    if key not in dest_map:
+        return
+    tipo, detail_default = dest_map[key]
+    dest = 'cambios' if key == 'changes_notes' else ('vencidas' if key == 'expired_notes' else '')
+
+    def _cred_keys(text: str) -> set:
+        keys = set()
+        for line in str(text or '').replace('\r\n', '\n').split('\n'):
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                dual = parse_admin_license_line_to_split_parts(line)
+            except Exception:
+                continue
+            cred = str(dual.get('cred') or '').strip()
+            if cred:
+                keys.add(cred.lower())
+        return keys
+
+    old_keys = _cred_keys(old_text)
+    pname = getattr(getattr(license_row, 'product', None), 'name', None) or 'Producto'
+    lid = int(getattr(license_row, 'id', 0) or 0) or None
+
+    for line in str(new_text or '').replace('\r\n', '\n').split('\n'):
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            dual = parse_admin_license_line_to_split_parts(line)
+        except Exception:
+            continue
+        cred = str(dual.get('cred') or '').strip()
+        if not cred or cred.lower() in old_keys:
+            continue
+        viewer = resolve_portal_activity_viewer_by_username(str(dual.get('user') or ''))
+        if not viewer:
+            continue
+        hint = _email_from_cred_hint(cred) or cred[:120]
+        if dest:
+            log_portal_moved_to_bloc(
+                viewer,
+                product_name=pname,
+                cred_hint=cred,
+                destination=dest,
+                license_id=lid,
+                reason=detail_default,
+            )
+        else:
+            append_portal_license_activity_record(
+                viewer,
+                tipo,
+                '%s · %s' % (pname, hint),
+                detail=detail_default,
+                extra={'license_id': lid, 'cred_hint': cred[:140]},
+            )
+
+
+def log_customer_account_renewal_activity(
+    viewer_user_row: Any,
+    *,
+    product_name: str,
+    account_email: str,
+    outcome: str,
+    detail: str = '',
+    license_id: Optional[int] = None,
+) -> None:
+    """Historial de renovación con cuenta del cliente (solicitud / OK / rechazo)."""
+    if not viewer_user_row:
+        return
+    oc = str(outcome or '').strip().lower()
+    pname = str(product_name or 'Producto').strip() or 'Producto'
+    em = str(account_email or '').strip().lower() or 'cuenta'
+    if oc == 'received':
+        tipo = 'renovacion_cuenta_cliente'
+        summary = '%s · %s' % (pname, em)
+        det = 'Solicitud de renovación con tu cuenta recibida.'
+    elif oc == 'completed':
+        tipo = 'renovacion_cuenta_cliente'
+        summary = '%s · %s' % (pname, em)
+        det = 'Renovación con tu cuenta completada.'
+    elif oc == 'rejected':
+        tipo = 'renovacion_cuenta_rechazada'
+        summary = '%s · %s' % (pname, em)
+        det = str(detail or '').strip() or 'Renovación con tu cuenta no procesada.'
+    else:
+        return
+    append_portal_license_activity_record(
+        viewer_user_row,
+        tipo,
+        summary,
+        detail=det[:2000],
+        extra={
+            'license_id': license_id,
+            'cred_hint': em[:140],
+            'outcome': oc,
+        },
+    )
 
 
 def build_user_license_activity_timeline_rows(
@@ -1010,7 +1195,8 @@ def portal_log_status_changes(
                 extra=ctx,
             )
 
-    # Renovación — columna verde (garantía lleva tipo aparte para historial / modal)
+    # Renovación / no renovar — columna verde (garantía lleva tipo aparte)
+    nk_no_renovar = normalize_status_key('no renovar')
     if nk_new_sg != nk_old_sg and canon_good.strip():
         if nk_new_sg == nk_garantia:
             hint = _email_from_cred_hint(cred_short) or cred_short or 'cuenta'
@@ -1029,6 +1215,15 @@ def portal_log_status_changes(
                 license_id=license_id,
                 calendar_day=calendar_day,
                 detail='',
+            )
+        elif nk_new_sg == nk_no_renovar:
+            hint = _email_from_cred_hint(cred_short) or cred_short or 'cuenta'
+            append_portal_license_activity_record(
+                viewer_user_row,
+                'no_renovar',
+                '%s · %s' % (pname, hint),
+                detail='Marcaste No renovar. Al cerrar el día pasará a Cambios o Vencidas.',
+                extra=ctx,
             )
         elif nk_new_sg in renew_nk:
             append_portal_license_activity_record(

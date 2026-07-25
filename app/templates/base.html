@@ -56,6 +56,13 @@
   <script src="{{ url_for('static', filename='js/code_protection.js') }}" defer></script>
   {% endif %} #}
   
+  <script>
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', function () {
+      navigator.serviceWorker.register('{{ url_for("service_worker") }}').catch(function () {});
+    });
+  }
+  </script>
   <script src="{{ url_for('static', filename='js/main.js') }}?v=20260712-mobile-kb-ux" defer></script>
   <script src="{{ url_for('static', filename='js/loading_overlay.js') }}" defer></script>
   <script src="{{ url_for('store_bp.static', filename='js/store_fetch_json.js') }}?v=20260610" defer></script>

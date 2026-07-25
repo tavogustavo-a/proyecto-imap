@@ -1293,7 +1293,7 @@ def _record_portal_renewal_blocked_activity(
 USER_LIC_CADUCIDAD_VIEW_MAX_DAYS = 5
 
 # Cache bust único: Admin Licencias + portal /licencias (evita CSS/JS mezclados en producción).
-LICENCIAS_STATIC_VERSION = '20260718-proveedor-lic-title-center-v12'
+LICENCIAS_STATIC_VERSION = '20260722-caducidad-skip-autorenew'
 
 
 def _billing_user_for_store_debt_limit(user_obj):
@@ -2115,6 +2115,94 @@ def list_coupons():
         })
     return jsonify({'coupons': data})
 
+@store_bp.route('/admin/anuncios/list', methods=['GET'])
+@admin_required
+def admin_anuncios_list():
+    from app.store.announcements import ensure_store_announcements_schema, list_announcements_admin
+
+    ensure_store_announcements_schema()
+    return jsonify({'success': True, 'announcements': list_announcements_admin()})
+
+
+@store_bp.route('/admin/anuncios/create', methods=['POST'])
+@admin_required
+def admin_anuncios_create():
+    from app.store.announcements import create_announcement_from_payload, ensure_store_announcements_schema
+
+    ensure_store_announcements_schema()
+    data = request.get_json(silent=True) or {}
+    row, err = create_announcement_from_payload(data)
+    if err:
+        return jsonify({'success': False, 'error': err}), 400
+    return jsonify({'success': True, 'id': int(row.id)})
+
+
+@store_bp.route('/admin/anuncios/update/<int:announcement_id>', methods=['POST'])
+@admin_required
+def admin_anuncios_update(announcement_id):
+    from app.store.announcements import ensure_store_announcements_schema, update_announcement_from_payload
+    from app.store.models import StoreAnnouncement
+
+    ensure_store_announcements_schema()
+    row = StoreAnnouncement.query.get_or_404(announcement_id)
+    data = request.get_json(silent=True) or {}
+    ok, err = update_announcement_from_payload(row, data)
+    if not ok:
+        return jsonify({'success': False, 'error': err}), 400
+    return jsonify({'success': True})
+
+
+@store_bp.route('/admin/anuncios/toggle/<int:announcement_id>', methods=['POST'])
+@admin_required
+def admin_anuncios_toggle(announcement_id):
+    from app.store.announcements import ensure_store_announcements_schema
+    from app.store.models import StoreAnnouncement
+
+    ensure_store_announcements_schema()
+    row = StoreAnnouncement.query.get_or_404(announcement_id)
+    row.enabled = not bool(row.enabled)
+    db.session.commit()
+    return jsonify({
+        'success': True,
+        'new_state': 'OFF' if row.enabled else 'ON',
+        'new_class': 'action-red' if row.enabled else 'action-green',
+        'enabled': bool(row.enabled),
+    })
+
+
+@store_bp.route('/api/anuncios/active', methods=['GET'])
+@store_access_required
+def api_anuncios_active():
+    """Anuncios vivos para el banner (solo usuarios logueados; no admin)."""
+    from app.store.announcements import (
+        list_live_announcements,
+        viewer_can_see_store_announcements,
+    )
+
+    payload = {'success': True, 'announcements': []}
+    if viewer_can_see_store_announcements():
+        payload['announcements'] = list_live_announcements()
+    resp = jsonify(payload)
+    resp.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, private'
+    return resp
+
+
+@store_bp.route('/api/anuncios/on-entry', methods=['GET'])
+def api_anuncios_on_entry():
+    """Modal al ingresar: solo usuarios logueados (no admin ni invitados)."""
+    from app.store.announcements import (
+        list_live_announcements,
+        viewer_can_see_store_announcements,
+    )
+
+    payload = {'success': True, 'announcements': []}
+    if viewer_can_see_store_announcements():
+        payload['announcements'] = list_live_announcements(on_entry_only=True)
+    resp = jsonify(payload)
+    resp.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, private'
+    return resp
+
+
 @store_bp.route('/admin/coupons/create', methods=['POST'])
 @admin_required
 def create_coupon():
@@ -2327,6 +2415,7 @@ def export_tools_config():
                 "text": tool.text,
                 "percent": tool.percent,
                 "enabled": tool.enabled,
+                "is_public": bool(getattr(tool, 'is_public', False)),
                 "user_usernames": user_usernames
             }
             config_data["tools"].append(tool_dict)
@@ -2461,7 +2550,8 @@ def import_tools_config():
                     title=tool_data.get('title'),
                     text=tool_data.get('text'),
                     percent=tool_data.get('percent', 0),
-                    enabled=tool_data.get('enabled', True)
+                    enabled=tool_data.get('enabled', True),
+                    is_public=bool(tool_data.get('is_public', False)),
                 )
                 db.session.add(new_tool)
                 db.session.flush()
@@ -3156,6 +3246,9 @@ def delete_tool(tool_id):
 @store_bp.route('/admin/herramientas/editar/<int:tool_id>', methods=['GET', 'POST'], endpoint='edit_tool')
 @admin_required
 def edit_tool(tool_id):
+    from app.store.tool_info_schema import ensure_tool_info_is_public_column
+
+    ensure_tool_info_is_public_column()
     tool = ToolInfo.query.get_or_404(tool_id)
     admin_username = current_app.config.get('ADMIN_USER')
 
@@ -3166,6 +3259,7 @@ def edit_tool(tool_id):
             tool.percent = float(request.form.get('percent', tool.percent))
         except Exception:
             pass
+        tool.is_public = request.form.get('is_public') in ('1', 'on', 'true', 'yes')
         user_ids_str = request.form.getlist('user_ids')
         user_ids = [int(uid) for uid in user_ids_str]
 
@@ -3183,7 +3277,7 @@ def edit_tool(tool_id):
         
         db.session.commit()
         flash('Herramienta actualizada y usuarios vinculados.', 'success')
-        return redirect(url_for('store_bp.admin_tools'))
+        return redirect(url_for('store_bp.edit_tool', tool_id=tool.id))
 
     page = request.args.get('page', 1, type=int)
     per_page = request.args.get('per_page', 5, type=int)
@@ -3195,13 +3289,29 @@ def edit_tool(tool_id):
     
     pagination = users_query.paginate(page=page, per_page=per_page, error_out=False)
     users = pagination.items
+    public_url = url_for('store_bp.tool_public_one', tool_id=tool.id, _external=True)
 
     return render_template('editar_herramienta.html',
                            tool=tool,
                            users=users,
                            pagination=pagination,
                            search_query=search_query,
-                           per_page=per_page)
+                           per_page=per_page,
+                           public_url=public_url)
+
+
+@store_bp.route('/herramientas-public/<int:tool_id>', endpoint='tool_public_one')
+def tool_public_one(tool_id):
+    """Acceso libre a una herramienta marcada como pública (sin login)."""
+    from app.store.tool_info_schema import ensure_tool_info_is_public_column
+
+    ensure_tool_info_is_public_column()
+    tool = ToolInfo.query.get_or_404(tool_id)
+    if not tool.enabled:
+        abort(404)
+    if not bool(getattr(tool, 'is_public', False)):
+        return render_template('herramienta_public_inactive.html', tool=tool), 404
+    return render_template('herramienta_public_one.html', tool=tool)
 
 @store_bp.route('/admin/herramientas/<int:tool_id>/usuarios', methods=['GET'], endpoint='get_tool_users')
 @admin_required

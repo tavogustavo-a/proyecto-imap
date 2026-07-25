@@ -6371,8 +6371,12 @@ select.license-split-editor__status-bad.license-split-editor__status--tier-soluc
   
   /* Estilos para el contenedor de añadir producto */
   .add-product-container {
-    max-width: 500px;
-    margin: 0 auto 2.5rem auto;
+    max-width: 800px !important;
+    margin-left: auto;
+    margin-right: auto;
+    margin-bottom: 0;
+    width: 100%;
+    box-sizing: border-box;
   }
   
   .add-product-container .table-wrapper-store {
@@ -7425,7 +7429,7 @@ select.license-split-editor__status-bad.license-split-editor__status--tier-soluc
 
   .renovar-cuenta-cliente-status--warn {
     background: rgba(234, 179, 8, 0.15);
-    color: #fde68a;
+    color: #111;
     border: 1px solid rgba(250, 204, 21, 0.35);
   }
 
@@ -9908,6 +9912,39 @@ select.license-split-editor__status-bad.license-split-editor__status--tier-soluc
   .herramientas-admin-page .herramientas-admin-toolbar {
     padding-top: 0.15rem;
     margin-top: 0;
+  }
+
+  .edit-tool-public-label {
+    cursor: pointer;
+    user-select: none;
+    font-weight: 600;
+  }
+
+  .edit-tool-public-link-box {
+    width: 100%;
+    max-width: 36rem;
+    margin-left: auto;
+    margin-right: auto;
+    padding: 0.75rem 0.85rem;
+    border-radius: 10px;
+    background: rgba(25, 118, 210, 0.08);
+    border: 1px solid rgba(25, 118, 210, 0.22);
+  }
+
+  .edit-tool-public-url {
+    flex: 1 1 14rem;
+    min-width: 12rem;
+    max-width: 100%;
+  }
+
+  .edit-tool-public-hint {
+    font-size: 0.82rem;
+    color: #334155;
+  }
+
+  .tool-public-one-card .accordion-body {
+    display: block !important;
+    padding: 1rem 0.85rem 1.1rem;
   }
 
   .store-light.maxw-800.configuraciones-admin-page {
@@ -40751,4 +40788,274 @@ html[data-user-va-state="verified"] .admin-licencias-page.user-licencias-shell .
 }
 .admin-licencias-page.user-licencias-shell.user-lic-verificar-mode #userLicVerificarPanel {
   display: block !important;
+}
+
+/* === Anuncios (admin + banner tienda) === */
+.anuncios-admin-panel {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0 !important;
+  overflow: hidden;
+}
+.anuncios-admin-panel__header {
+  padding: 0.85rem 1rem;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.12);
+  background: rgba(255, 255, 255, 0.55);
+  text-align: center;
+}
+.anuncios-admin-panel__title {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: #111;
+  text-align: center !important;
+  line-height: 1.2;
+}
+.anuncios-admin-panel__body {
+  padding: 0.85rem 1rem 1rem;
+  box-sizing: border-box;
+  width: 100%;
+}
+.anuncios-admin-form {
+  width: 100%;
+  max-width: none;
+}
+.anuncios-admin-form .coupon-input,
+.anuncios-edit-modal-content .coupon-input {
+  width: 100%;
+  box-sizing: border-box;
+}
+.anuncios-admin-list {
+  width: 100%;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  max-height: 320px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  padding: 0.15rem 0;
+}
+.anuncios-admin-row {
+  display: flex !important;
+  flex-direction: row !important;
+  flex-wrap: nowrap !important;
+  align-items: center !important;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.75rem 0.85rem;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  border-radius: 8px;
+  background: #fff;
+  min-width: 0;
+}
+.anuncios-admin-row:first-child {
+  border-top: 1px solid rgba(0, 0, 0, 0.1);
+}
+.anuncios-admin-row__title {
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: 100%;
+  font-weight: 600;
+  color: #111;
+  white-space: nowrap !important;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  word-break: normal;
+  overflow-wrap: normal;
+}
+.anuncios-admin-row__actions,
+.anuncios-admin-panel .anuncios-admin-row__actions.action-stack,
+.store-light .anuncios-admin-row__actions.action-stack {
+  display: flex !important;
+  flex-direction: row !important;
+  flex-wrap: nowrap !important;
+  align-items: center !important;
+  justify-content: flex-end !important;
+  gap: 0.4rem !important;
+  flex: 0 0 auto !important;
+  width: auto !important;
+  max-width: none !important;
+  min-width: 0;
+  background: transparent !important;
+  padding: 0 !important;
+  margin: 0 !important;
+}
+.anuncios-admin-panel .anuncios-admin-row__actions .action-btn,
+.store-light .anuncios-admin-row__actions .action-btn {
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: center;
+  width: auto !important;
+  min-width: 3.25rem;
+  margin: 0 !important;
+  white-space: nowrap;
+}
+body.anuncio-edit-modal-open {
+  overflow: hidden;
+}
+.anuncios-edit-modal-content {
+  max-width: 520px !important;
+}
+.store-anuncios-panel {
+  --anuncio-panel: #1c2433;
+  --anuncio-panel-2: #2a3448;
+  --anuncio-ink: #121820;
+  --anuncio-accent: #f0a14a;
+  --anuncio-accent-strong: #e8892a;
+  --anuncio-soft: #f4f7fb;
+  /* Mismo tope que .store-light (contorno blanco de la tienda) */
+  width: 100%;
+  max-width: 1000px !important;
+  box-sizing: border-box;
+  padding: 0 !important;
+  margin: 0.85rem auto;
+  overflow: hidden;
+  border-radius: 18px !important;
+  border: 1px solid rgba(240, 161, 74, 0.28) !important;
+  background:
+    radial-gradient(120% 80% at 100% 0%, rgba(240, 161, 74, 0.16), transparent 55%),
+    linear-gradient(165deg, var(--anuncio-panel-2), var(--anuncio-panel) 52%, var(--anuncio-ink)) !important;
+  color: var(--anuncio-soft);
+  box-shadow: 0 12px 28px rgba(18, 24, 32, 0.22);
+  font-family: Manrope, system-ui, sans-serif;
+}
+.store-anuncios-zig {
+  height: 10px;
+  background: repeating-linear-gradient(
+    135deg,
+    var(--anuncio-accent) 0 11px,
+    var(--anuncio-ink) 11px 22px
+  );
+}
+.store-anuncios-panel__header {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 1rem 1rem 0.45rem;
+  border-bottom: none;
+  background: transparent;
+  text-align: left;
+}
+.store-anuncios-kicker {
+  margin: 0;
+  font-family: "Bebas Neue", Impact, sans-serif;
+  letter-spacing: 0.08em;
+  font-size: clamp(1.8rem, 5vw, 2.5rem);
+  line-height: 0.95;
+  color: var(--anuncio-accent);
+  text-shadow: none;
+}
+.store-anuncios-icon {
+  flex: 0 0 auto;
+  width: 36px;
+  height: 36px;
+  margin: 0;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: linear-gradient(145deg, #ffd89a, var(--anuncio-accent) 55%, var(--anuncio-accent-strong));
+  box-shadow: 0 2px 8px rgba(18, 24, 32, 0.28);
+  color: #1c2433;
+  font-size: 0.95rem;
+}
+.store-anuncios-panel__body {
+  padding: 0.65rem 1rem 0.85rem;
+}
+.store-anuncios-title {
+  margin: 0;
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: #fff;
+  text-align: center;
+}
+.store-anuncios-carousel {
+  position: relative;
+  display: flex;
+  align-items: stretch;
+  gap: 0.35rem;
+}
+.store-anuncios-stage {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 3.25rem;
+  padding: 0.85rem 0.75rem;
+  border: 1px solid rgba(244, 247, 251, 0.14);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.07);
+  color: var(--anuncio-soft);
+  word-break: break-word;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: manipulation;
+  text-align: center;
+  line-height: 1.45;
+}
+.store-anuncios-arrow {
+  flex: 0 0 auto;
+  align-self: center;
+  width: 2.15rem;
+  height: 2.15rem;
+  border: 1.5px solid rgba(244, 247, 251, 0.22);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--anuncio-soft);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  line-height: 1;
+  box-shadow: none;
+}
+.store-anuncios-arrow:hover {
+  background: var(--anuncio-accent);
+  border-color: var(--anuncio-accent);
+  color: #1c2433;
+}
+.store-anuncios-arrow:active {
+  transform: scale(0.96);
+}
+.store-anuncios-dots {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 0.45rem;
+  margin-top: 0.55rem;
+  min-height: 1rem;
+}
+.store-anuncios-dot {
+  width: 0.55rem;
+  height: 0.55rem;
+  padding: 0;
+  border: none;
+  border-radius: 999px;
+  background: rgba(244, 247, 251, 0.28);
+  cursor: pointer;
+  transition: background 0.15s ease, transform 0.15s ease;
+}
+.store-anuncios-dot:hover {
+  background: rgba(244, 247, 251, 0.5);
+}
+.store-anuncios-dot.is-active {
+  background: var(--anuncio-accent);
+  transform: scale(1.15);
+}
+.store-anuncios--paused .store-anuncios-stage {
+  outline: 2px dashed var(--anuncio-accent);
+}
+@media (max-width: 520px) {
+  .store-anuncios-arrow {
+    width: 1.9rem;
+    height: 1.9rem;
+    font-size: 0.85rem;
+  }
+}
+.store-front-coupons-wrap {
+  margin-top: 0.5rem;
+  padding: 0;
 }

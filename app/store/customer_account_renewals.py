@@ -616,6 +616,19 @@ def notify_customer_account_renewal_received(user, product, email):
         payload_json=None,
     )
     db.session.add(notif)
+    try:
+        from app.store.user_license_activity import log_customer_account_renewal_activity
+
+        pid = getattr(product, 'id', None)
+        log_customer_account_renewal_activity(
+            user,
+            product_name=pname,
+            account_email=em,
+            outcome='received',
+            license_id=_primary_license_id_for_product(pid) if pid else None,
+        )
+    except Exception:
+        current_app.logger.exception('historial renovación cuenta cliente (received)')
     return notif
 
 
@@ -780,6 +793,115 @@ def refund_customer_account_renewal_sale(user, _product, sale_id):
         user.saldo_usd = 0
     apply_user_balance_credit(user, currency, amount)
     return True, 'refunded', {'currency': currency, 'amount': amount}
+
+
+def list_user_pending_customer_renewals(user):
+    """Renovaciones «Renovar tu cuenta» pagadas y aún pendientes del usuario (cancelables en tienda)."""
+    from app.store.models import CustomerAccountRenewalOrder, Product, Sale
+
+    ensure_customer_account_renewal_schema()
+    rows = (
+        CustomerAccountRenewalOrder.query.filter_by(user_id=int(user.id), status='pending')
+        .order_by(CustomerAccountRenewalOrder.created_at.asc(), CustomerAccountRenewalOrder.id.asc())
+        .all()
+    )
+    currency = _user_store_currency(user)
+    out = []
+    for r in rows:
+        prod = Product.query.get(r.product_id)
+        sale = Sale.query.get(r.sale_id) if r.sale_id else None
+        out.append(
+            {
+                'id': r.id,
+                'product_id': r.product_id,
+                'product_name': getattr(prod, 'name', None) or f'Producto {r.product_id}',
+                'customer_email': (r.customer_email or '').strip(),
+                'amount': float(sale.total_price or 0) if sale else 0.0,
+                'currency': currency,
+                'created_at': r.created_at.isoformat() if r.created_at else None,
+            }
+        )
+    return out
+
+
+def notify_admin_customer_account_renewal_cancelled(user, product, email):
+    """Correo al admin cuando el cliente cancela su renovación pendiente (saldo devuelto)."""
+    from app.store.whatsapp_web_service import (
+        resolve_whatsapp_admin_alert_email,
+        send_whatsapp_alert_email,
+    )
+
+    admin_email = resolve_whatsapp_admin_alert_email()
+    if not admin_email:
+        return False
+
+    pname = getattr(product, 'name', None) or 'Producto'
+    uname = getattr(user, 'username', None) or 'cliente'
+    em = (email or '').strip()
+    subject = f'Renovación cancelada por el cliente — {pname}'
+    body = (
+        f'El cliente canceló su solicitud de renovación pendiente y el saldo fue devuelto.\n\n'
+        f'Producto: {pname}\n'
+        f'Cliente: {uname}\n'
+        f'Cuenta: {em}\n\n'
+        f'La fila se quitó del bloc «Cuentas para renovar»; no hay nada que procesar.'
+    )
+    return send_whatsapp_alert_email(admin_email, subject, body)
+
+
+def cancel_customer_account_renewal_by_user(user, order_id):
+    """
+    El cliente cancela su renovación pendiente (se retractó / no quiere esperar):
+    devuelve el saldo, marca el pedido como cancelado y quita la fila del bloc admin.
+    Devuelve (ok, error_msg, refund_info).
+    """
+    from app.store.models import CustomerAccountRenewalOrder, Product
+
+    ensure_customer_account_renewal_schema()
+    order = CustomerAccountRenewalOrder.query.filter_by(
+        id=int(order_id), user_id=int(user.id)
+    ).first()
+    if not order:
+        return False, 'Renovación no encontrada.', None
+
+    status = (order.status or 'pending').strip().lower()
+    if status == 'completed':
+        return False, 'Esa renovación ya fue completada; no se puede cancelar.', None
+    if status != 'pending':
+        return False, 'La renovación ya fue procesada o cancelada.', None
+
+    product = Product.query.get(order.product_id)
+    refund_ok, refund_reason, refund_info = refund_customer_account_renewal_sale(
+        user, product, order.sale_id
+    )
+    if not refund_ok and refund_reason not in ('already_refunded',):
+        db.session.rollback()
+        if refund_reason == 'sale_not_found':
+            return False, 'No se encontró la compra asociada para devolver el saldo.', None
+        if refund_reason == 'zero_amount':
+            return False, 'La compra no tiene monto válido para devolver.', None
+        return False, 'No se pudo devolver el saldo. Intenta de nuevo o contacta soporte.', None
+
+    order.status = 'cancelled'
+    order.processed_at = datetime.utcnow()
+    order.admin_notes = 'Cancelada por el cliente (saldo devuelto).'
+    if order.product_id:
+        remove_customer_renewal_email_from_product_notes(
+            int(order.product_id), order.customer_email
+        )
+    db.session.commit()
+
+    try:
+        from app.store.balance_recharge_events import notify_balance_recharge_updated
+
+        notify_balance_recharge_updated(int(user.id), reason='customer_renewal_cancelled')
+    except Exception:
+        pass
+    try:
+        notify_admin_customer_account_renewal_cancelled(user, product, order.customer_email)
+    except Exception as ex:
+        current_app.logger.warning('aviso admin renovación cancelada: %s', ex)
+    return True, None, refund_info
 
 
 def _reject_result_payload(
@@ -959,6 +1081,18 @@ def complete_customer_account_renewal_from_admin(license_id, credential, client_
     queue_customer_renewal_notify(
         user, 'completed', product, account_email, day=day
     )
+    try:
+        from app.store.user_license_activity import log_customer_account_renewal_activity
+
+        log_customer_account_renewal_activity(
+            user,
+            product_name=getattr(product, 'name', None) or 'Producto',
+            account_email=account_email,
+            outcome='completed',
+            license_id=int(license_id) if license_id else None,
+        )
+    except Exception:
+        current_app.logger.exception('historial renovación cuenta cliente (completed)')
     db.session.commit()
     return True, {
         'order_id': int(order.id),
@@ -1095,6 +1229,19 @@ def reject_customer_account_renewal_from_admin(license_id, credential, client_us
     queue_customer_renewal_notify(
         user, 'rejected', product, account_email, reason=reason_txt
     )
+    try:
+        from app.store.user_license_activity import log_customer_account_renewal_activity
+
+        log_customer_account_renewal_activity(
+            user,
+            product_name=getattr(product, 'name', None) or 'Producto',
+            account_email=account_email,
+            outcome='rejected',
+            detail=reason_txt,
+            license_id=int(license_id) if license_id else None,
+        )
+    except Exception:
+        current_app.logger.exception('historial renovación cuenta cliente (rejected)')
     if product_id_for_notes:
         remove_customer_renewal_email_from_product_notes(product_id_for_notes, account_email)
     db.session.commit()
@@ -1119,6 +1266,8 @@ def customer_account_renewal_status_label(status):
         return 'Renovación completada'
     if s == 'rejected':
         return 'Renovación rechazada'
+    if s == 'cancelled':
+        return 'Renovación cancelada (saldo devuelto)'
     return 'Renovación en proceso'
 
 
