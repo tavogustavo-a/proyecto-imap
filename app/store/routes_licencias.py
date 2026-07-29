@@ -162,6 +162,15 @@ def user_licencias():
             'caducidad_notify_from_days': 5,
             'whatsapp_admin_only': True,
         }
+    store_front_ui_prefs = {}
+    try:
+        from app.store.routes import _sanitize_store_front_ui_prefs
+
+        sp = getattr(user, 'store_front_ui_prefs', None) if user else None
+        if isinstance(sp, dict):
+            store_front_ui_prefs = _sanitize_store_front_ui_prefs(sp)
+    except Exception:
+        store_front_ui_prefs = {}
     resp = make_response(render_template(
         'user_licencias.html',
         title='Licencias',
@@ -174,6 +183,7 @@ def user_licencias():
         proveedor_nav=proveedor_nav,
         licencias_view_only=licencias_view_only,
         notify_prefs=notify_prefs,
+        store_front_ui_prefs=store_front_ui_prefs,
         licencias_static_version=LICENCIAS_STATIC_VERSION,
     ))
     _attach_document_no_store_headers(resp)
@@ -792,6 +802,7 @@ def _portal_renewal_balance_warnings_for_accounts(billing_user, accounts_list):
     nk_mes = normalize_status_key('dejar mes a mes')
     co = get_colombia_datetime()
     warnings = []
+    candidates = []
     seen = set()
     lic_cache = {}
 
@@ -834,31 +845,59 @@ def _portal_renewal_balance_warnings_for_accounts(billing_user, accounts_list):
                 dedupe = (lid, account_id, d, sg)
                 if dedupe in seen:
                     continue
-                blocked, reason = _license_account_auto_renewal_charge_blocked(
-                    billing_user, lic
-                )
-                if not blocked:
-                    continue
                 seen.add(dedupe)
-                up = (
-                    billing_user.user_prices
-                    if isinstance(billing_user.user_prices, dict)
-                    else {}
-                )
-                tipo = (up.get('tipo_precio') or 'COP').strip().upper()
-                warnings.append(
+                candidates.append(
                     {
-                        'key': f'{lid}:{account_id or "v"}:{d}:{sg}',
+                        'lid': lid,
+                        'lic': lic,
                         'account_id': account_id,
-                        'license_id': lid,
                         'calendar_day': d,
+                        'sg': sg,
                         'days_left': days_left,
-                        'credential_preview': label,
-                        'reason': reason or 'saldo_insuficiente',
-                        'message': _renewal_block_user_message(reason, tipo),
-                        'urgent': days_left <= 1,
+                        'label': label,
                     }
                 )
+
+    # Simular el cobro secuencial del job (más próximas primero): cada unidad
+    # que sí cabe consume saldo/límite para las siguientes. Evaluar cada
+    # renovación aislada ocultaba avisos cuando el saldo alcanzaba para una
+    # sola de varias renovaciones de la misma ventana.
+    candidates.sort(key=lambda c: (c['days_left'], c['calendar_day'], c['lid']))
+    up = (
+        billing_user.user_prices
+        if isinstance(billing_user.user_prices, dict)
+        else {}
+    )
+    tipo = str(up.get('tipo_precio') or '').strip().upper()
+    if tipo not in ('USD', 'COP'):
+        tipo = ''
+    consumed = 0.0
+    for c in candidates:
+        blocked, reason = _license_account_auto_renewal_charge_blocked(
+            billing_user, c['lic'], extra_pending=consumed
+        )
+        if not blocked:
+            product = getattr(c['lic'], 'product', None)
+            try:
+                consumed += float(
+                    _debt_increment_per_bulk_license_sale(product, billing_user)
+                )
+            except (TypeError, ValueError):
+                pass
+            continue
+        warnings.append(
+            {
+                'key': f"{c['lid']}:{c['account_id'] or 'v'}:{c['calendar_day']}:{c['sg']}",
+                'account_id': c['account_id'],
+                'license_id': c['lid'],
+                'calendar_day': c['calendar_day'],
+                'days_left': c['days_left'],
+                'credential_preview': c['label'],
+                'reason': reason or 'saldo_insuficiente',
+                'message': _renewal_block_user_message(reason, tipo),
+                'urgent': c['days_left'] <= 1,
+            }
+        )
     return warnings
 
 
@@ -885,7 +924,10 @@ def _license_portal_effective_saldo(billing_user):
     except (TypeError, ValueError):
         base = 0.0
     up = billing_user.user_prices if isinstance(getattr(billing_user, 'user_prices', None), dict) else {}
-    tipo = str(up.get('tipo_precio') or 'COP').strip().upper()
+    tipo = str(up.get('tipo_precio') or '').strip().upper()
+    if tipo not in ('USD', 'COP'):
+        # Sin moneda configurada no hay wallet prepago definido que sumar.
+        return base
     field = 'saldo_usd' if tipo == 'USD' else 'saldo_cop'
     try:
         prepaid = float(getattr(billing_user, field, 0) or 0)
@@ -963,7 +1005,8 @@ def _license_account_debt_allocation(billing_user, accounts):
 def _portal_accounts_revision_fingerprint(user_obj):
     """
     Hash ligero para sondeo del portal: mismos disparadores que la vista completa
-    (cuentas, licencias, notas, saldo, día Colombia/UTC) sin parsear blocs día 1–31.
+    (cuentas, licencias, notas, saldo, día Colombia/UTC, servicios proveedor) sin
+    parsear blocs día 1–31.
     """
     import hashlib
     import json as _json
@@ -979,12 +1022,6 @@ def _portal_accounts_revision_fingerprint(user_obj):
             verificar_sig = _verificar_arreglar_rev_sig()
     except Exception:
         verificar_sig = ''
-    if not assignee_ids:
-        empty_key = (
-            f'v:2|co:{co.date().isoformat()}|utc:{utc_now.date().isoformat()}|empty'
-            f'|verificar:{verificar_sig}'
-        )
-        return hashlib.sha256(empty_key.encode('utf-8')).hexdigest()[:24]
 
     billing_user = user_obj
     if user_obj.parent_id:
@@ -993,14 +1030,63 @@ def _portal_accounts_revision_fingerprint(user_obj):
             billing_user = pu_b
     billing_saldo = _license_portal_effective_saldo(billing_user)
 
+    # Servicios proveedor: al autorizar Apple TV / etc. el portal debe refrescar el catálogo.
+    proveedor_sig = ''
+    try:
+        bup = (
+            billing_user.user_prices
+            if isinstance(getattr(billing_user, 'user_prices', None), dict)
+            else {}
+        )
+        prov_on = '1' if bup.get('proveedor') else '0'
+        svc_raw = bup.get('proveedor_services')
+        svc_keys = []
+        renew_lids = []
+        if isinstance(svc_raw, dict):
+            for k, v in svc_raw.items():
+                has_renew = isinstance(v, dict) and bool(v.get('renew_customer'))
+                svc_keys.append(f'{k}{"r" if has_renew else ""}')
+                if has_renew:
+                    try:
+                        renew_lids.append(int(k))
+                    except (TypeError, ValueError):
+                        pass
+        svc_keys.sort()
+        renew_sig = ''
+        if prov_on == '1' and renew_lids:
+            renew_rows = (
+                License.query.filter(License.id.in_(sorted(renew_lids)))
+                .order_by(License.id.asc())
+                .all()
+            )
+            renew_bits = []
+            for lic_r in renew_rows:
+                txt = getattr(lic_r, 'customer_renewal_notes', None) or ''
+                renew_bits.append(
+                    f'{lic_r.id}:'
+                    + hashlib.sha1(str(txt).encode('utf-8')).hexdigest()[:10]
+                )
+            renew_sig = ','.join(renew_bits)
+        proveedor_sig = f'{prov_on}:' + ','.join(svc_keys) + f'|rn:{renew_sig}'
+    except Exception:
+        proveedor_sig = ''
+
+    if not assignee_ids:
+        empty_key = (
+            f'v:4|co:{co.date().isoformat()}|utc:{utc_now.date().isoformat()}|empty'
+            f'|verificar:{verificar_sig}|prov:{proveedor_sig}'
+        )
+        return hashlib.sha256(empty_key.encode('utf-8')).hexdigest()[:24]
+
     viewer_id = int(user_obj.id)
     parts = [
-        'v:2',
+        'v:4',
         f'co:{co.date().isoformat()}',
         f'utc:{utc_now.date().isoformat()}',
         f'saldo:{billing_saldo:.4f}',
         'names:' + '|'.join(sorted(allowed_names)),
         f'verificar:{verificar_sig}',
+        f'prov:{proveedor_sig}',
     ]
 
     acct_rows = (
@@ -2049,6 +2135,18 @@ def api_user_proveedor_inventory_put():
             suspended_notes=data.get('suspended_notes'),
         )
         db.session.commit()
+        try:
+            from app.store.product_reservations import process_pending_reservations_for_product
+            from app.store.routes import _proveedor_products_list_for_user
+
+            for item in _proveedor_products_list_for_user(user_obj) or []:
+                pid = item.get('product_id')
+                if pid:
+                    process_pending_reservations_for_product(int(pid))
+        except Exception as res_ex:
+            current_app.logger.warning(
+                'api_user_proveedor_inventory_put reservas: %s', res_ex
+            )
         inv = _proveedor_inventory_payload_for_user(user_obj)
         ok = jsonify({'success': True, **inv})
         _attach_private_no_cache_headers(ok)
@@ -2056,6 +2154,310 @@ def api_user_proveedor_inventory_put():
     except Exception as e:
         db.session.rollback()
         current_app.logger.exception('api_user_proveedor_inventory_put')
+        err = jsonify({'success': False, 'error': str(e)})
+        _attach_private_no_cache_headers(err)
+        return err, 500
+
+
+def _user_proveedor_customer_renewal_guard(user_obj, license_id):
+    """Permiso «Renovar tu cuenta» del proveedor para esa licencia."""
+    from app.store.routes import _proveedor_renew_customer_license_ids
+
+    try:
+        lid = int(license_id)
+    except (TypeError, ValueError):
+        return _reject_user_licencias_api('Licencia inválida.', 400)
+    if lid <= 0 or lid not in set(_proveedor_renew_customer_license_ids(user_obj)):
+        return _reject_user_licencias_api(
+            'No tienes permiso para renovar cuentas de este servicio.', 403
+        )
+    return None
+
+
+@store_bp.route('/api/user/proveedor/customer-renewal/complete', methods=['POST'])
+def api_user_proveedor_customer_renewal_complete():
+    """Proveedor pasa una fila de «Cuentas para renovar» al día y completa el pedido."""
+    from app.store.models import License
+    from app.store.customer_account_renewals import (
+        complete_customer_account_renewal_from_admin,
+        customer_renewal_client_username_for_admin,
+        extract_email_from_renewal_credential,
+        find_pending_customer_renewal_order,
+    )
+    from app.store.user_license_line_parse import (
+        LICENSE_LINE_FIELD_SEP,
+        parse_admin_license_line_to_split_parts,
+    )
+    from app.store.routes import (
+        _proveedor_bump_renewals_count_for_user_license,
+        _proveedor_customer_renewals_payload_for_user,
+    )
+
+    try:
+        user_obj = User.query.get(session.get('user_id'))
+        guard = _user_proveedor_api_guard(user_obj)
+        if guard is not None:
+            return guard
+        if _user_store_view_only(user_obj):
+            return _json_licencias_view_only_forbidden()
+        data = request.get_json(silent=True) or {}
+        guard2 = _user_proveedor_customer_renewal_guard(user_obj, data.get('license_id'))
+        if guard2 is not None:
+            return guard2
+        license_id = int(data.get('license_id'))
+        credential = str(data.get('credential') or '').strip()
+        if not credential:
+            return _reject_user_licencias_api('Falta la credencial de la cuenta.', 400)
+        client_hint = str(data.get('client_username') or '').strip()
+
+        license_row = License.query.get(license_id)
+        if not license_row or not getattr(license_row, 'enabled', False):
+            return _reject_user_licencias_api('Licencia no encontrada.', 404)
+
+        account_email = (extract_email_from_renewal_credential(credential) or '').lower()
+        if not account_email:
+            return _reject_user_licencias_api(
+                'No se pudo identificar el correo de la cuenta.', 400
+            )
+        order = find_pending_customer_renewal_order(license_id, account_email, client_hint)
+        if not order:
+            return _reject_user_licencias_api(
+                'No hay solicitud pendiente de renovación para esa cuenta.', 404
+            )
+
+        day = None
+        try:
+            day = int(data.get('day'))
+        except (TypeError, ValueError):
+            day = None
+        if not day or day < 1 or day > 31:
+            day = int(get_colombia_datetime().day)
+
+        # Quitar la fila del bloc «Cuentas para renovar» conservando sus notas.
+        raw_notes = getattr(license_row, 'customer_renewal_notes', None) or ''
+        cred_lower = credential.lower()
+        target_parts = None
+        kept = []
+        for line in raw_notes.split('\n'):
+            if target_parts is None and line.strip():
+                try:
+                    parts = parse_admin_license_line_to_split_parts(line)
+                except Exception:
+                    parts = None
+                if parts:
+                    line_cred = (parts.get('cred') or '').strip().lower()
+                    line_email = (
+                        extract_email_from_renewal_credential(line_cred) or ''
+                    ).lower()
+                    if line_cred == cred_lower or (
+                        account_email and line_email == account_email
+                    ):
+                        target_parts = parts
+                        continue
+            kept.append(line)
+        if target_parts is None:
+            return _reject_user_licencias_api(
+                'No se encontró la fila pendiente para esa cuenta.', 404
+            )
+
+        try:
+            username_login = (
+                customer_renewal_client_username_for_admin(
+                    license_id, credential, client_hint
+                )
+                or ''
+            )
+        except Exception:
+            username_login = ''
+        if not username_login:
+            username_login = client_hint
+
+        cred_final = (target_parts.get('cred') or '').strip() or credential
+        extra_notes = (target_parts.get('extra') or '').strip()
+        if username_login or extra_notes:
+            day_line = LICENSE_LINE_FIELD_SEP.join(
+                [cred_final, username_login, '', '', extra_notes]
+            )
+        else:
+            day_line = cred_final
+
+        # Quitar del bloc compartido y pasar al día del proveedor (+ notepad admin).
+        # No hacer commit todavía: si complete falla, rollback restaura las notas.
+        license_row.customer_renewal_notes = '\n'.join(kept)
+        _append_line_to_license_day_notepad(license_row, day, day_line)
+        try:
+            from app.store.routes import (
+                _proveedor_inventory_payload_for_user,
+                _proveedor_append_customer_renewal_day_line,
+            )
+
+            # Al día del proveedor va solo la credencial (igual que una venta de tienda);
+            # la línea con usuario/notas (day_line) es para el bloc de días del admin.
+            _proveedor_append_customer_renewal_day_line(
+                user_obj, license_id, day, cred_final
+            )
+        except Exception:
+            current_app.logger.exception(
+                'proveedor: no se pudo agregar renovación al día del inventario'
+            )
+            db.session.rollback()
+            return _reject_user_licencias_api(
+                'No se pudo guardar la cuenta en tu día. Intenta de nuevo.', 500
+            )
+
+        ok, result = complete_customer_account_renewal_from_admin(
+            license_id, credential, username_login or client_hint, day=day
+        )
+        if not ok:
+            db.session.rollback()
+            return jsonify({'success': False, 'error': result}), 400
+        # complete() a veces retorna ok sin commit (already_completed); asegurar notas/día.
+        try:
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+            current_app.logger.exception('commit tras complete renovación proveedor')
+            return _reject_user_licencias_api(
+                'La renovación se marcó, pero no se pudo guardar el día. Recarga e intenta.',
+                500,
+            )
+
+        try:
+            _proveedor_bump_renewals_count_for_user_license(user_obj, license_id)
+        except Exception:
+            current_app.logger.exception('bump renewals_count proveedor')
+        try:
+            from app.store.user_license_activity import (
+                append_portal_license_activity_record,
+            )
+
+            prod = getattr(license_row, 'product', None)
+            pname = getattr(prod, 'name', None) or f'Licencia #{license_id}'
+            append_portal_license_activity_record(
+                user_obj,
+                'renovacion_cuenta_cliente',
+                f'{pname} · {account_email}',
+                detail=f'Renovaste la cuenta de un cliente (día {day}).',
+                extra={
+                    'license_id': license_id,
+                    'outcome': 'completed_by_proveedor',
+                    'cred_hint': account_email[:140],
+                },
+            )
+        except Exception:
+            current_app.logger.exception('historial proveedor renovación completada')
+
+        inv_payload = {}
+        try:
+            inv_payload = _proveedor_inventory_payload_for_user(user_obj) or {}
+        except Exception:
+            current_app.logger.exception('payload inventario tras renovación proveedor')
+
+        payload = {
+            'success': True,
+            'day': day,
+            'client_username': username_login,
+            'customer_renewals': _proveedor_customer_renewals_payload_for_user(user_obj),
+        }
+        for k in (
+            'day_lines',
+            'day_notepads',
+            'license_lines',
+            'license_notes',
+            'expired_lines',
+            'expired_notes',
+            'suspended_lines',
+            'suspended_notes',
+            'services_catalog',
+        ):
+            if k in inv_payload:
+                payload[k] = inv_payload[k]
+        if isinstance(result, dict):
+            payload.update(result)
+            payload['success'] = True
+        ok_resp = jsonify(payload)
+        _attach_private_no_cache_headers(ok_resp)
+        return ok_resp
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.exception('api_user_proveedor_customer_renewal_complete')
+        err = jsonify({'success': False, 'error': str(e)})
+        _attach_private_no_cache_headers(err)
+        return err, 500
+
+
+@store_bp.route('/api/user/proveedor/customer-renewal/reject', methods=['POST'])
+def api_user_proveedor_customer_renewal_reject():
+    """Proveedor rechaza una fila de «Cuentas para renovar»: reembolso y aviso al cliente."""
+    from app.store.customer_account_renewals import (
+        extract_email_from_renewal_credential,
+        reject_customer_account_renewal_from_admin,
+    )
+    from app.store.models import License
+    from app.store.routes import _proveedor_customer_renewals_payload_for_user
+
+    try:
+        user_obj = User.query.get(session.get('user_id'))
+        guard = _user_proveedor_api_guard(user_obj)
+        if guard is not None:
+            return guard
+        if _user_store_view_only(user_obj):
+            return _json_licencias_view_only_forbidden()
+        data = request.get_json(silent=True) or {}
+        guard2 = _user_proveedor_customer_renewal_guard(user_obj, data.get('license_id'))
+        if guard2 is not None:
+            return guard2
+        license_id = int(data.get('license_id'))
+        credential = str(data.get('credential') or '').strip()
+        if not credential:
+            return _reject_user_licencias_api('Falta la credencial de la cuenta.', 400)
+        client_hint = str(data.get('client_username') or '').strip()
+        reason = str(data.get('reason') or '').strip()
+
+        ok, result = reject_customer_account_renewal_from_admin(
+            license_id, credential, client_hint, reason
+        )
+        if not ok:
+            return jsonify({'success': False, 'error': result}), 400
+
+        try:
+            from app.store.user_license_activity import (
+                append_portal_license_activity_record,
+            )
+
+            license_row = License.query.get(license_id)
+            prod = getattr(license_row, 'product', None) if license_row else None
+            pname = getattr(prod, 'name', None) or f'Licencia #{license_id}'
+            account_email = (
+                extract_email_from_renewal_credential(credential) or credential
+            ).lower()
+            append_portal_license_activity_record(
+                user_obj,
+                'renovacion_cuenta_rechazada',
+                f'{pname} · {account_email}',
+                detail=(reason or 'Renovación rechazada por proveedor.')[:2000],
+                extra={
+                    'license_id': license_id,
+                    'outcome': 'rejected_by_proveedor',
+                    'cred_hint': str(account_email)[:140],
+                },
+            )
+        except Exception:
+            current_app.logger.exception('historial proveedor renovación rechazada')
+
+        payload = {
+            'success': True,
+            'customer_renewals': _proveedor_customer_renewals_payload_for_user(user_obj),
+        }
+        if isinstance(result, dict):
+            payload.update(result)
+            payload['success'] = True
+        ok_resp = jsonify(payload)
+        _attach_private_no_cache_headers(ok_resp)
+        return ok_resp
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.exception('api_user_proveedor_customer_renewal_reject')
         err = jsonify({'success': False, 'error': str(e)})
         _attach_private_no_cache_headers(err)
         return err, 500
@@ -2218,6 +2620,18 @@ def api_admin_proveedor_inventory_put():
             suspended_notes=data.get('suspended_notes'),
         )
         db.session.commit()
+        try:
+            from app.store.product_reservations import process_pending_reservations_for_product
+            from app.store.routes import _proveedor_products_list_for_user
+
+            for item in _proveedor_products_list_for_user(user_obj) or []:
+                pid = item.get('product_id')
+                if pid:
+                    process_pending_reservations_for_product(int(pid))
+        except Exception as res_ex:
+            current_app.logger.warning(
+                'api_admin_proveedor_inventory_put reservas: %s', res_ex
+            )
         inv = _proveedor_inventory_from_user_prices(
             user_obj.user_prices if isinstance(user_obj.user_prices, dict) else {}
         )
@@ -4139,8 +4553,27 @@ def _remove_first_license_inventory_line_matching_fingerprint(license_row, fp_tr
     Quita la primera línea del bloc Licencias cuyo (email/pass/identificador)
     coincide con la cuenta vendida. Usado si no hay ordinal fiable (`inventory_bloc_ord`).
     """
-    if not fp_triple or fp_triple == ('', '', ''):
+    found = _find_first_license_inventory_line_matching_fingerprint(
+        license_row, fp_triple, is_netflix
+    )
+    if not found:
         return False
+    _idx, _line = found
+    lines = _license_notes_inventory_lines_list(getattr(license_row, 'license_notes', None))
+    if _idx < 0 or _idx >= len(lines):
+        return False
+    del lines[_idx]
+    license_row.license_notes = '\n'.join(lines) if lines else ''
+    return True
+
+
+def _find_first_license_inventory_line_matching_fingerprint(license_row, fp_triple, is_netflix):
+    """
+    Devuelve ``(índice_0based, línea_raw)`` de la primera línea del bloc Licencias
+    cuya huella coincida, o ``None``.
+    """
+    if not fp_triple or fp_triple == ('', '', ''):
+        return None
     lines = _license_notes_inventory_lines_list(getattr(license_row, 'license_notes', None))
     for i, line in enumerate(lines):
         tup = _inventory_tuple_from_license_notes_line(line, license_row.id, is_netflix)
@@ -4148,10 +4581,8 @@ def _remove_first_license_inventory_line_matching_fingerprint(license_row, fp_tr
             continue
         le, lp, lid = tup
         if _normalize_inventory_fingerprint(le, lp, lid) == fp_triple:
-            del lines[i]
-            license_row.license_notes = '\n'.join(lines) if lines else ''
-            return True
-    return False
+            return i, line
+    return None
 
 
 def _append_line_to_license_day_notepad(license_row, calendar_day_int, line_text):
@@ -4649,13 +5080,35 @@ def _debt_increment_per_bulk_license_sale(product, billing_user):
         return max(0.0, pusd - du)
     if tipo == 'COP':
         return max(0.0, pc - dc)
+    # Sin tipo_precio: solo si hay una moneda con precio (no adivinar COP vs USD).
     if pusd > 0 and pc <= 0:
         return max(0.0, pusd - du)
     if pc > 0 and pusd <= 0:
         return max(0.0, pc - dc)
-    if pc >= pusd:
-        return max(0.0, pc - dc)
-    return max(0.0, pusd - du)
+    return 0.0
+
+
+def _bulk_license_sale_currency(product, billing_user):
+    """Moneda del cobro de _debt_increment_per_bulk_license_sale (misma rama).
+
+    Sin tipo_precio, si el producto tiene precio en una sola moneda el cobro
+    usó esa; registrar la venta con la moneda del perfil (o COP por defecto)
+    marcaba montos USD como COP.
+    """
+    if not product or not billing_user:
+        return ''
+    up = getattr(billing_user, 'user_prices', None)
+    cfg = up if isinstance(up, dict) else {}
+    tipo = (cfg.get('tipo_precio') or '').strip().upper()
+    if tipo in ('USD', 'COP'):
+        return tipo
+    pc = float(getattr(product, 'price_cop', 0) or 0)
+    pusd = float(getattr(product, 'price_usd', 0) or 0)
+    if pusd > 0 and pc <= 0:
+        return 'USD'
+    if pc > 0 and pusd <= 0:
+        return 'COP'
+    return ''
 
 
 @store_bp.route('/api/admin/licenses/run-day-renewal', methods=['POST'])
@@ -4764,6 +5217,7 @@ def api_license_admin_bulk_delivery_debt(license_id):
         try:
             from app.store.purchase_history_stats import _currency_from_user_row
 
+            _sale_currency = _bulk_license_sale_currency(product, billing_target)
             _proveedor_record_license_sale(
                 license_id,
                 qty,
@@ -4771,7 +5225,7 @@ def api_license_admin_bulk_delivery_debt(license_id):
                 product_name=(product.name or 'Producto'),
                 line_amount=delta,
                 is_renewal=False,
-                currency=_currency_from_user_row(billing_target),
+                currency=_sale_currency or _currency_from_user_row(billing_target),
                 sold_at=datetime.utcnow(),
                 source='admin_bulk_delivery',
             )
@@ -5206,6 +5660,9 @@ def api_put_license_notes(license_id):
             inv_sync_result = _sync_inventory_accounts_from_license_notes(license_obj)
 
         product_id_for_res = int(license_obj.product_id)
+        license_notes_saved_value = (
+            (license_obj.license_notes or '') if 'license_notes' in data else None
+        )
         db.session.commit()
         if inv_sync_result and (
             inv_sync_result.get('created') or inv_sync_result.get('updated')
@@ -5252,6 +5709,16 @@ def api_put_license_notes(license_id):
         }
         if inv_sync_result is not None:
             body['inventory_sync'] = inv_sync_result
+        # Si al cumplir reservas se vendieron líneas del bloc, devolver el texto final
+        # para que el panel no re-escriba la línea vendida en el próximo autoguardado.
+        if license_notes_saved_value is not None:
+            try:
+                db.session.expire(license_obj, ['license_notes'])
+            except Exception:
+                pass
+            final_notes = license_obj.license_notes or ''
+            if final_notes != license_notes_saved_value:
+                body['license_notes_final'] = final_notes
         return jsonify(body)
     except Exception as e:
         db.session.rollback()
@@ -5663,14 +6130,14 @@ def _warranty_reserve_for_product(product):
 
 def _sellable_license_accounts_public(license_row):
     """
-    Unidades vendibles en tienda/checkout para una licencia:
+    Unidades vendibles en inventario para una licencia (sin descontar cola de reservas):
 
     1. Inventario admin: ``max(0, LicenseAccount available - License.warranty_days)``.
+       La reserva gar. no se vende ni se muestra como existencia en tienda.
     2. Inventario proveedor: ``max(0, líneas_proveedor - gar_del_proveedor)`` sumado
        por cada proveedor con ese servicio habilitado.
 
-    Misma regla que ``procesar_pago``, para que la tienda no muestre existencias
-    que el checkout va a rechazar.
+    Misma regla de colchón que ``procesar_pago``.
     """
     from app.store.models import LicenseAccount
     from app.store.routes import _proveedor_public_sellable_stock_for_license
@@ -5688,22 +6155,69 @@ def _sellable_license_accounts_public(license_row):
     return int(admin_sellable + provider_sellable)
 
 
-def _compute_public_sellable_stock_for_product(product):
+def _compute_inventory_sellable_stock_for_product(product):
     """
-    Existencias en tienda y tope de venta por producto: suma, por cada licencia activa,
-    unidades vendibles de inventario admin + proveedores. Debe igualar lo que puede
-    asignar ``procesar_pago``.
+    Stock físico vendible (admin + proveedores tras restar gar.).
+    No descuenta pedidos en reserva; úsalo al cumplir reservas / jobs.
     """
     _ensure_license_expired_notes_and_month_columns()
     from app.store.models import License
 
+    if not product or getattr(product, 'id', None) is None:
+        return 0
     lic_rows = License.query.filter_by(product_id=product.id, enabled=True).all()
     if not lic_rows:
         return 0
     total = 0
     for lic in lic_rows:
         total += _sellable_license_accounts_public(lic)
-    return total
+    return int(total)
+
+
+def _pending_stock_reservation_qty_for_product(product_id):
+    """Unidades aún reclamadas por reservas de stock pendientes / parciales."""
+    from app.store.models import ProductReservation
+    from app.store.product_reservations import ensure_product_reservation_schema
+
+    try:
+        pid = int(product_id)
+    except (TypeError, ValueError):
+        return 0
+    if pid <= 0:
+        return 0
+    ensure_product_reservation_schema()
+    rows = (
+        ProductReservation.query.filter_by(product_id=pid, kind='stock')
+        .filter(ProductReservation.status.in_(('pending', 'awaiting_accept')))
+        .all()
+    )
+    total = 0
+    for row in rows:
+        try:
+            qty = max(0, int(row.quantity or 1))
+        except (TypeError, ValueError):
+            qty = 1
+        try:
+            done = max(0, int(row.fulfilled_quantity or 0))
+        except (TypeError, ValueError):
+            done = 0
+        total += max(0, qty - done)
+    return int(total)
+
+
+def _compute_public_sellable_stock_for_product(product):
+    """
+    Existencias en tienda y tope de venta por producto:
+
+    inventario vendible (admin + proveedores, sin contar gar.) menos la demanda
+    de «Pedidos en reserva». Así no se muestra stock que el checkout no debe
+    vender a un comprador nuevo (colchón gar. o ya pedido en reserva).
+    """
+    inventory = _compute_inventory_sellable_stock_for_product(product)
+    if inventory <= 0:
+        return 0
+    pending = _pending_stock_reservation_qty_for_product(getattr(product, 'id', None))
+    return int(max(0, inventory - pending))
 
 
 def _public_stock_snapshot():
@@ -6348,6 +6862,34 @@ def _public_checkout_assign_license_account(
         sb = None
     if sb is not None and sb >= 1:
         raw_ln = _license_notes_inventory_raw_line_at_slot_1based(license_row, sb)
+
+    # Sin ranura: buscar la línea en el bloc por huella para conservar notas (como al vender desde admin).
+    if not raw_ln and enqueue_admin_bloc_move:
+        try:
+            product = getattr(license_row, 'product', None)
+            if product is None:
+                from app.store.models import Product as _ProductForNotes
+
+                product = _ProductForNotes.query.get(license_row.product_id)
+            is_nf = _product_name_is_netflix(
+                getattr(product, 'name', None) if product else None
+            )
+            fp = _normalize_inventory_fingerprint(
+                getattr(account, 'email', None),
+                getattr(account, 'password', None),
+                getattr(account, 'account_identifier', None),
+            )
+            found = _find_first_license_inventory_line_matching_fingerprint(
+                license_row, fp, is_nf
+            )
+            if found:
+                raw_ln = found[1]
+        except Exception:
+            current_app.logger.debug(
+                'lookup inventory line notes skip account_id=%s',
+                getattr(account, 'id', None),
+                exc_info=True,
+            )
 
     if getattr(venta, 'is_renewal', False):
         try:

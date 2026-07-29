@@ -57,6 +57,191 @@
     var USER_LIC_PORTAL_REPORTES_FILTER = 'reportes';
     var USER_LIC_PORTAL_VERIFICAR_FILTER = 'verificar';
     var userLicPortalProveedorEnabled = false;
+    var userLicPendingReservations = [];
+    var userLicPendingByProduct = Object.create(null);
+    var userLicPendingResFetchTimer = null;
+    var userLicPendingResPollTimer = null;
+    var USER_LIC_PENDING_RES_POLL_MS = 8000;
+    var userLicPedidosReservaToggleWired = false;
+    var userLicPedidosReservaCollapsedMem = null;
+    var userLicPedidosReservaSaveTimer = null;
+
+    function userLicPedidosReservaCollapsedRead() {
+        if (userLicPedidosReservaCollapsedMem === true || userLicPedidosReservaCollapsedMem === false) {
+            return userLicPedidosReservaCollapsedMem;
+        }
+        var el = document.getElementById('storeFrontUiPrefsJson');
+        if (el) {
+            try {
+                var parsed = JSON.parse(String(el.textContent || '').trim() || '{}');
+                if (parsed && (parsed.pedidos_reserva_collapsed === true || parsed.pedidos_reserva_collapsed === false)) {
+                    userLicPedidosReservaCollapsedMem = !!parsed.pedidos_reserva_collapsed;
+                    return userLicPedidosReservaCollapsedMem;
+                }
+            } catch (_e) {}
+        }
+        userLicPedidosReservaCollapsedMem = false;
+        return false;
+    }
+
+    function userLicPedidosReservaCollapsedWrite(isCollapsed) {
+        userLicPedidosReservaCollapsedMem = !!isCollapsed;
+        var el = document.getElementById('storeFrontUiPrefsJson');
+        var prefs = {};
+        if (el) {
+            try {
+                prefs = JSON.parse(String(el.textContent || '').trim() || '{}') || {};
+            } catch (_e) {
+                prefs = {};
+            }
+        }
+        prefs.pedidos_reserva_collapsed = !!isCollapsed;
+        if (el) {
+            try {
+                el.textContent = JSON.stringify(prefs);
+            } catch (_e2) {}
+        }
+        if (userLicPedidosReservaSaveTimer) clearTimeout(userLicPedidosReservaSaveTimer);
+        userLicPedidosReservaSaveTimer = setTimeout(function () {
+            userLicPedidosReservaSaveTimer = null;
+            var csrf =
+                (document.querySelector('meta[name="csrf_token"]') &&
+                    document.querySelector('meta[name="csrf_token"]').getAttribute('content')) ||
+                '';
+            fetch('/tienda/api/store-front-ui-prefs', {
+                method: 'PUT',
+                credentials: 'same-origin',
+                headers: {
+                    Accept: 'application/json',
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': csrf,
+                },
+                body: JSON.stringify({ prefs: prefs }),
+            }).catch(function () {});
+        }, 420);
+    }
+
+    function userLicApplyPedidosReservaCollapsed(isCollapsed) {
+        var banner = document.getElementById('userLicPedidosReservaBanner');
+        var toggle = document.getElementById('userLicPedidosReservaToggle');
+        if (!banner) return;
+        banner.classList.toggle('is-collapsed', !!isCollapsed);
+        if (toggle) {
+            toggle.setAttribute('aria-expanded', isCollapsed ? 'false' : 'true');
+        }
+    }
+
+    function userLicWirePedidosReservaAccordion() {
+        var toggle = document.getElementById('userLicPedidosReservaToggle');
+        var banner = document.getElementById('userLicPedidosReservaBanner');
+        if (!toggle || !banner || userLicPedidosReservaToggleWired) return;
+        userLicPedidosReservaToggleWired = true;
+        userLicApplyPedidosReservaCollapsed(userLicPedidosReservaCollapsedRead());
+        toggle.addEventListener('click', function () {
+            var next = !banner.classList.contains('is-collapsed');
+            userLicApplyPedidosReservaCollapsed(next);
+            userLicPedidosReservaCollapsedWrite(next);
+        });
+    }
+
+    /* Pedidos en Renovar tu cuenta (proveedor) */
+    var userLicPedidosRenovarToggleWired = false;
+
+    function userLicApplyPedidosRenovarCollapsed(isCollapsed) {
+        var banner = document.getElementById('userLicPedidosRenovarBanner');
+        var toggle = document.getElementById('userLicPedidosRenovarToggle');
+        if (!banner) return;
+        banner.classList.toggle('is-collapsed', !!isCollapsed);
+        if (toggle) toggle.setAttribute('aria-expanded', isCollapsed ? 'false' : 'true');
+    }
+
+    function userLicWirePedidosRenovarAccordion() {
+        var toggle = document.getElementById('userLicPedidosRenovarToggle');
+        var banner = document.getElementById('userLicPedidosRenovarBanner');
+        if (!toggle || !banner || userLicPedidosRenovarToggleWired) return;
+        userLicPedidosRenovarToggleWired = true;
+        userLicApplyPedidosRenovarCollapsed(false);
+        toggle.addEventListener('click', function () {
+            userLicApplyPedidosRenovarCollapsed(!banner.classList.contains('is-collapsed'));
+        });
+    }
+
+    function userLicPendingRenewalsGrouped() {
+        var cr = userLicProveedorRenewalsCache();
+        if (!cr.enabled || !cr.items.length) return [];
+        var byProduct = Object.create(null);
+        var order = [];
+        cr.items.forEach(function (it) {
+            var pid = it.product_id != null ? String(it.product_id) : '';
+            var key = pid || String(it.license_id || '') || String(it.product_name || '');
+            if (!key) return;
+            if (!byProduct[key]) {
+                byProduct[key] = {
+                    product_id: pid,
+                    license_id: it.license_id != null ? String(it.license_id) : '',
+                    product_name: it.product_name || 'Producto',
+                    quantity: 0,
+                };
+                order.push(key);
+            }
+            byProduct[key].quantity += 1;
+            if (it.product_name) byProduct[key].product_name = it.product_name;
+            if (it.license_id != null) byProduct[key].license_id = String(it.license_id);
+        });
+        return order.map(function (k) {
+            return byProduct[k];
+        });
+    }
+
+    function userLicRenderPendingRenewalsBanner() {
+        var banner = document.getElementById('userLicPedidosRenovarBanner');
+        var list = document.getElementById('userLicPedidosRenovarList');
+        var countEl = document.getElementById('userLicPedidosRenovarCount');
+        if (!banner || !list) return;
+        var grouped = userLicPendingRenewalsGrouped();
+        if (!grouped.length || !userLicPortalProveedorEnabled) {
+            banner.classList.add('d-none');
+            banner.hidden = true;
+            list.innerHTML = '';
+            if (countEl) countEl.textContent = '0';
+            return;
+        }
+        banner.classList.remove('d-none');
+        banner.hidden = false;
+        if (countEl) countEl.textContent = String(grouped.length);
+        list.innerHTML = grouped
+            .map(function (g) {
+                var qty = String(g.quantity || 1);
+                var tip = 'Cuentas pendientes por renovar: ' + qty;
+                return (
+                    '<li><button type="button" class="admin-lic-pedidos-reserva-banner__row" data-user-license-filter="' +
+                    escAttr(USER_LIC_PORTAL_PROVEEDOR_FILTER) +
+                    '" data-renewal-product-id="' +
+                    escAttr(String(g.product_id || '')) +
+                    '">' +
+                    '<span class="admin-lic-pedidos-reserva-banner__product">' +
+                    '<span class="admin-lic-pedidos-reserva-banner__product-name">' +
+                    escHtml(g.product_name || 'Producto') +
+                    '</span>' +
+                    '</span>' +
+                    '<span class="admin-lic-pedidos-reserva-banner__qty" title="' +
+                    escAttr(tip) +
+                    '" aria-label="' +
+                    escAttr(tip) +
+                    '">x' +
+                    escHtml(qty) +
+                    '</span>' +
+                    '</button></li>'
+                );
+            })
+            .join('');
+        list.querySelectorAll('button[data-user-license-filter]').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                userLicOpenProveedorFromBanner(true);
+            });
+        });
+        userLicWirePedidosRenovarAccordion();
+    }
     /* Permiso soporte_licencias: habilita el bloc compartido Verificar/Arreglar. */
     var userLicPortalSoporteLicenciasEnabled = false;
     var userLicPortalProveedorCache = {
@@ -67,6 +252,7 @@
         expired_lines: [],
         suspended_lines: [],
         services_catalog: [{ id: 'anonimo', name: 'Anónimo' }],
+        customer_renewals: { enabled: false, items: [] },
     };
     var PROVEEDOR_SERVICE_ANONIMO = 'anonimo';
     var userLicPortalProveedorSaveTimer = null;
@@ -4870,6 +5056,381 @@
         );
     }
 
+    /* ==== Cuentas para renovar (proveedor con permiso «Renovar tu cuenta») ==== */
+
+    function userLicProveedorRenewalsCache() {
+        var cr = userLicPortalProveedorCache.customer_renewals;
+        if (!cr || typeof cr !== 'object') return { enabled: false, items: [] };
+        return { enabled: !!cr.enabled, items: Array.isArray(cr.items) ? cr.items : [] };
+    }
+
+    function userLicProveedorRenewalDefaultDay() {
+        var co = userLicPortalColombiaClock || userLicPortalColombiaClockFromBrowser();
+        var d = co && co.day != null ? parseInt(co.day, 10) : NaN;
+        if (Number.isFinite(d) && d >= 1 && d <= 31) return d;
+        return Math.max(1, Math.min(31, new Date().getDate()));
+    }
+
+    /** Solo el correo (el proveedor no ve/edita la clave ni puede agregar filas). */
+    function userLicProveedorRenewalEmailFromCred(cred) {
+        var s = String(cred || '').trim();
+        if (!s) return '';
+        var at = s.indexOf('@');
+        if (at < 0) {
+            return (s.split(/[\s:|]/)[0] || s).trim();
+        }
+        var colon = s.indexOf(':', at);
+        if (colon > at) return s.slice(0, colon).trim();
+        var sp = s.search(/\s/);
+        if (sp > at) return s.slice(0, sp).trim();
+        return s.trim();
+    }
+
+    function userLicProveedorRenewalCopyText(text, btn) {
+        var t = String(text || '').trim();
+        if (!t) return;
+        function flashOk() {
+            if (!btn) return;
+            btn.classList.add('is-copied');
+            var prev = btn.getAttribute('title') || '';
+            btn.setAttribute('title', '¡Correo copiado!');
+            window.setTimeout(function () {
+                btn.classList.remove('is-copied');
+                if (prev) btn.setAttribute('title', prev);
+            }, 1200);
+        }
+        function fallback() {
+            try {
+                var x = document.createElement('textarea');
+                x.value = t;
+                x.setAttribute('readonly', '');
+                x.style.position = 'fixed';
+                x.style.left = '-9999px';
+                document.body.appendChild(x);
+                x.select();
+                document.execCommand('copy');
+                document.body.removeChild(x);
+                flashOk();
+            } catch (_e) {
+                window.alert('No se pudo copiar el correo.');
+            }
+        }
+        if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+            navigator.clipboard.writeText(t).then(flashOk).catch(fallback);
+        } else {
+            fallback();
+        }
+    }
+
+    function userLicProveedorRenewalCredLineHtml(item, rowIndex) {
+        var email = userLicProveedorRenewalEmailFromCred(item && item.credential);
+        return (
+            '<div class="user-lic-prov-renewal-cred-line" data-renewal-email="' +
+            escAttr(email) +
+            '">' +
+            '<span class="user-lic-prov-renewal-email" title="' +
+            escAttr(email) +
+            '">' +
+            escHtml(email || '—') +
+            '</span>' +
+            '<button type="button" class="user-lic-prov-renewal-copy" title="Copiar correo" aria-label="Copiar correo ' +
+            escAttr(email) +
+            '"><i class="fas fa-copy" aria-hidden="true"></i></button>' +
+            '</div>'
+        );
+    }
+
+    function userLicProveedorRenewalRowHtml(item, rowIndex) {
+        var dayVal = userLicProveedorRenewalDefaultDay();
+        var notes = String(item.notes || '');
+        var userVal = String(item.client_username || '');
+        var product = String(item.product_name || '—');
+        var email = userLicProveedorRenewalEmailFromCred(item && item.credential);
+        var idBase = 'userLicProvRenL' + (rowIndex + 1);
+        return (
+            '<div class="license-split-editor__row license-split-editor__row--customer-renewal user-lic-prov-renewal-row" role="group" aria-label="Cuenta para renovar ' +
+            escAttr(product) +
+            '" data-renewal-license-id="' +
+            escAttr(String(item.license_id || '')) +
+            '" data-renewal-cred="' +
+            escAttr(String(item.credential || '')) +
+            '" data-renewal-email="' +
+            escAttr(email) +
+            '" data-renewal-user="' +
+            escAttr(userVal) +
+            '">' +
+            '<div class="license-split-editor__lead">' +
+            '<span class="user-lic-prov-renewal-product" title="Producto de la renovación">' +
+            escHtml(product) +
+            '</span>' +
+            '<div class="license-split-editor__day-sell-cell">' +
+            '<input type="number" id="' +
+            idBase +
+            'Day" name="' +
+            idBase +
+            '_day" class="license-split-editor__day-num user-lic-prov-renewal-day" min="1" max="31" inputmode="numeric" value="' +
+            escAttr(String(dayVal)) +
+            '" title="Día destino" aria-label="Día del mes destino">' +
+            '<button type="button" class="license-split-editor__sell-btn user-lic-prov-renewal-sell" title="Pasar esta cuenta al día indicado (renovar)" aria-label="Completar renovación"><i class="fas fa-shopping-cart" aria-hidden="true"></i></button>' +
+            '<button type="button" class="license-split-editor__reject-btn user-lic-prov-renewal-reject" title="Rechazar renovación (avisar al cliente con el motivo)" aria-label="Rechazar renovación"><i class="fas fa-times" aria-hidden="true"></i></button>' +
+            '</div></div>' +
+            '<input type="text" id="' +
+            idBase +
+            'Note" name="' +
+            idBase +
+            '_note" class="license-split-editor__note" autocomplete="off" readonly tabindex="-1" aria-label="Notas" placeholder="Notas" value="' +
+            escAttr(notes) +
+            '">' +
+            '</div>'
+        );
+    }
+
+    function userLicProveedorRenewalsBodyHtml(items) {
+        if (!items.length) {
+            return '<p class="user-lic-prov-renewal-empty mb-0">No hay cuentas pendientes por renovar.</p>';
+        }
+        var credLinesHtml = items
+            .map(function (it, idx) {
+                return userLicProveedorRenewalCredLineHtml(it, idx);
+            })
+            .join('');
+        var rowsHtml = items
+            .map(function (it, idx) {
+                return userLicProveedorRenewalRowHtml(it, idx);
+            })
+            .join('');
+        return (
+            '<div class="license-split-editor license-notepad--locked customer-renewal-license-split-root user-lic-prov-renewal-split" data-license-viz="all">' +
+            '<div class="license-split-editor__viewport">' +
+            '<div class="license-split-editor__grid">' +
+            '<div class="license-split-editor__creds-cell user-lic-prov-renewal-creds-cell" aria-label="Correos (solo lectura; usa el icono para copiar)">' +
+            '<div class="user-lic-prov-renewal-creds-list" role="list">' +
+            credLinesHtml +
+            '</div></div>' +
+            '<div class="license-split-editor__side" aria-label="Producto, día y notas por línea">' +
+            '<div class="license-split-editor__rows user-lic-prov-renewal-rows" role="region">' +
+            rowsHtml +
+            '</div></div></div></div></div>'
+        );
+    }
+
+    function userLicProveedorRenewalsSectionHtml() {
+        var cr = userLicProveedorRenewalsCache();
+        if (!cr.enabled) return '';
+        var n = cr.items.length;
+        var collapsedClass = n <= 0 ? ' collapsed' : '';
+        var sv = portalDayCollapsedRead(USER_LIC_PORTAL_PROVEEDOR_FILTER, 'renovar');
+        if (sv === 'true') collapsedClass = ' collapsed';
+        else if (sv === 'false') collapsedClass = '';
+        return (
+            '<section class="day-section admin-licencias-bloc admin-licencias-bloc--customer-renewal user-lic-readonly-day user-lic-proveedor-renewals' +
+            collapsedClass +
+            '" data-user-day="renovar" aria-label="Cuentas para renovar">' +
+            '<div class="day-section-header admin-licencias-bloc-header user-lic-day-header-toggle" role="button" tabindex="0" aria-expanded="' +
+            (collapsedClass ? 'false' : 'true') +
+            '" title="Plegar o desplegar Cuentas para renovar">' +
+            '<span class="admin-licencias-bloc-title"><span>Cuentas para renovar</span></span>' +
+            '<div class="admin-licencias-bloc-header-actions user-lic-day-header-actions">' +
+            '<span class="day-account-badge admin-licencias-notepad-line-badge user-lic-prov-renewal-badge" role="status">' +
+            String(n) +
+            '</span></div></div>' +
+            '<div class="day-accounts-list admin-licencias-customer-renewal-body user-lic-prov-renewal-body">' +
+            userLicProveedorRenewalsBodyHtml(cr.items) +
+            '</div></section>'
+        );
+    }
+
+    function userLicProveedorRerenderRenewalsSection() {
+        var sheet = document.querySelector('.user-lic-account-sheet--proveedor');
+        if (!sheet) return;
+        var section = sheet.querySelector('.user-lic-proveedor-renewals');
+        var cr = userLicProveedorRenewalsCache();
+        if (section) {
+            if (!cr.enabled) {
+                section.remove();
+                return;
+            }
+            var body = section.querySelector('.user-lic-prov-renewal-body');
+            if (body) body.innerHTML = userLicProveedorRenewalsBodyHtml(cr.items);
+            var badge = section.querySelector('.user-lic-prov-renewal-badge');
+            if (badge) badge.textContent = String(cr.items.length);
+            return;
+        }
+        if (!cr.enabled) return;
+        var days = sheet.querySelector('#userLicProveedorDaysContainer');
+        if (days) days.insertAdjacentHTML('beforebegin', userLicProveedorRenewalsSectionHtml());
+    }
+
+    function userLicProveedorRenewalActionUrl(action) {
+        var outer = document.getElementById('userLicenciasTableOuter');
+        var base = (outer && outer.getAttribute('data-proveedor-url')) || '';
+        if (base && base.indexOf('proveedor-inventory') !== -1) {
+            return base.replace('proveedor-inventory', 'proveedor/customer-renewal/' + action);
+        }
+        return '/tienda/api/user/proveedor/customer-renewal/' + action;
+    }
+
+    function userLicProveedorRerenderDaySection(dayNum) {
+        var day = parseInt(dayNum, 10);
+        if (!Number.isFinite(day) || day < 1 || day > 31) return;
+        var sheet = document.querySelector('.user-lic-account-sheet--proveedor');
+        if (!sheet) return;
+        var sec = sheet.querySelector(
+            '.user-lic-proveedor-day[data-user-day="' + String(day) + '"]'
+        );
+        if (!sec) return;
+        var wasCollapsed = sec.classList.contains('collapsed');
+        var html = renderProveedorDaySection(day, USER_LIC_PORTAL_PROVEEDOR_FILTER);
+        var wrap = document.createElement('div');
+        wrap.innerHTML = html;
+        var next = wrap.firstElementChild;
+        if (!next) return;
+        if (wasCollapsed) next.classList.add('collapsed');
+        else next.classList.remove('collapsed');
+        sec.replaceWith(next);
+        var block = next.querySelector('.user-lic-proveedor-split');
+        if (block) userLicProveedorScheduleAutosizeCredsForBlock(block);
+        /* El bloc del día es de solo lectura: dimensionar su textarea. */
+        userLicProveedorInitSplitBlocks(next);
+    }
+
+    function userLicProveedorRenewalHandleResponse(data, row) {
+        if (data && (data.day_lines || data.customer_renewals || data.license_lines)) {
+            userLicPortalMergeProveedorCache(data);
+            if (data.day_lines && data.day != null) {
+                userLicProveedorRerenderDaySection(data.day);
+            }
+        } else if (row && row.parentNode) {
+            row.remove();
+        }
+        userLicRenderPendingRenewalsBanner();
+        userLicPaintPendingRenewalCards(document.getElementById('userLicenciasGrid'));
+    }
+
+    function userLicProveedorRenewalComplete(row, btn) {
+        var lid = row.getAttribute('data-renewal-license-id');
+        var cred = row.getAttribute('data-renewal-cred') || '';
+        var usern = row.getAttribute('data-renewal-user') || '';
+        var dayInp = row.querySelector('.license-split-editor__day-num, .user-lic-prov-renewal-day');
+        var dayRaw = dayInp ? String(dayInp.value || '').trim() : '';
+        var payload = { license_id: lid, credential: cred, client_username: usern };
+        if (dayRaw !== '') {
+            var dn = parseInt(dayRaw, 10);
+            if (!Number.isFinite(dn) || dn < 1 || dn > 31) {
+                window.alert('El día debe estar entre 1 y 31.');
+                return;
+            }
+            payload.day = dn;
+        }
+        if (btn) btn.disabled = true;
+        fetch(userLicProveedorRenewalActionUrl('complete'), {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: userLicJsonHeaders(),
+            body: JSON.stringify(payload),
+        })
+            .then(function (r) {
+                return r.json().catch(function () {
+                    return { success: false };
+                });
+            })
+            .then(function (data) {
+                if (btn) btn.disabled = false;
+                if (!data || !data.success) {
+                    window.alert(
+                        (data && (data.error || data.message)) ||
+                            'No se pudo completar la renovación.'
+                    );
+                    return;
+                }
+                userLicProveedorRenewalHandleResponse(data, row);
+            })
+            .catch(function () {
+                if (btn) btn.disabled = false;
+                window.alert('Error de conexión al completar la renovación.');
+            });
+    }
+
+    function userLicProveedorRenewalReject(row, btn) {
+        var lid = row.getAttribute('data-renewal-license-id');
+        var cred = row.getAttribute('data-renewal-cred') || '';
+        var usern = row.getAttribute('data-renewal-user') || '';
+        var reason = window.prompt(
+            'Motivo del rechazo (se le mostrará al cliente y se reembolsará su pago):',
+            ''
+        );
+        if (reason === null) return;
+        reason = String(reason).trim();
+        if (!reason) {
+            window.alert('Indica un motivo para rechazar.');
+            return;
+        }
+        if (btn) btn.disabled = true;
+        fetch(userLicProveedorRenewalActionUrl('reject'), {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: userLicJsonHeaders(),
+            body: JSON.stringify({
+                license_id: lid,
+                credential: cred,
+                client_username: usern,
+                reason: reason,
+            }),
+        })
+            .then(function (r) {
+                return r.json().catch(function () {
+                    return { success: false };
+                });
+            })
+            .then(function (data) {
+                if (btn) btn.disabled = false;
+                if (!data || !data.success) {
+                    window.alert(
+                        (data && (data.error || data.message)) || 'No se pudo rechazar.'
+                    );
+                    return;
+                }
+                userLicProveedorRenewalHandleResponse(data, row);
+            })
+            .catch(function () {
+                if (btn) btn.disabled = false;
+                window.alert('Error de conexión al rechazar la renovación.');
+            });
+    }
+
+    document.addEventListener(
+        'click',
+        function (e) {
+            var copyBtn =
+                e.target.closest &&
+                e.target.closest('.user-lic-proveedor-renewals .user-lic-prov-renewal-copy');
+            if (copyBtn) {
+                e.preventDefault();
+                e.stopPropagation();
+                var line = copyBtn.closest('.user-lic-prov-renewal-cred-line');
+                var email =
+                    (line && line.getAttribute('data-renewal-email')) ||
+                    (copyBtn.getAttribute('aria-label') || '').replace(/^Copiar correo\s*/i, '');
+                userLicProveedorRenewalCopyText(email, copyBtn);
+                return;
+            }
+            var sellBtn =
+                e.target.closest &&
+                e.target.closest('.user-lic-proveedor-renewals .user-lic-prov-renewal-sell');
+            var rejectBtn =
+                e.target.closest &&
+                e.target.closest('.user-lic-proveedor-renewals .user-lic-prov-renewal-reject');
+            if (!sellBtn && !rejectBtn) return;
+            var row = (sellBtn || rejectBtn).closest('.user-lic-prov-renewal-row');
+            if (!row) return;
+            e.preventDefault();
+            e.stopPropagation();
+            if (sellBtn) userLicProveedorRenewalComplete(row, sellBtn);
+            else userLicProveedorRenewalReject(row, rejectBtn);
+        },
+        false
+    );
+
     function renderProveedorInventorySheet() {
         var licLines = userLicProveedorLinesForBlock('license', null);
         var licCount = userLicProveedorSellableLicenseCount(licLines);
@@ -4917,6 +5478,7 @@
             '<div class="day-accounts-list user-lic-proveedor-lic-body">' +
             userLicProveedorRenderSplitBlockHtml('license', null) +
             '</div></section>' +
+            userLicProveedorRenewalsSectionHtml() +
             '<div id="userLicProveedorDaysContainer" class="license-all-days-container user-lic-proveedor-days">' +
             daysHtml +
             '</div>' +
@@ -5801,8 +6363,245 @@
         });
     }
 
+    function mergeUserLicReservationSummaries(summaryList) {
+        var out = Array.isArray(summaryList) ? summaryList.slice() : [];
+        var byKey = Object.create(null);
+        out.forEach(function (s) {
+            byKey[s.filterKey] = true;
+        });
+        var products = userLicProveedorProductsCache || [];
+        var byProduct = userLicPendingByProduct || Object.create(null);
+        products.forEach(function (p) {
+            var pid = p && p.product_id != null ? Number(p.product_id) : NaN;
+            if (!Number.isFinite(pid) || pid <= 0) return;
+            var info = byProduct[String(pid)] || byProduct[pid];
+            if (!info || !(info.count > 0 || info.quantity > 0)) return;
+            var fk = 'p' + String(Math.trunc(pid));
+            if (byKey[fk]) return;
+            byKey[fk] = true;
+            out.push({
+                filterKey: fk,
+                license_id: p.license_id,
+                product_id: pid,
+                product_name: p.product_name || info.product_name || 'Producto',
+                account_count: 0,
+                product_image_url: '',
+                reservation_only: true,
+            });
+        });
+        out.sort(function (x, y) {
+            var cmp = String(x.product_name || '')
+                .toLowerCase()
+                .localeCompare(String(y.product_name || '').toLowerCase());
+            if (cmp !== 0) return cmp;
+            return String(x.filterKey).localeCompare(String(y.filterKey));
+        });
+        return out;
+    }
+
+    function userLicPaintPendingReservationCards(gridHost) {
+        var host = gridHost || document.getElementById('userLicenciasGrid');
+        if (!host) return;
+        /* En portal proveedor: no pintar productos (Apple TV, etc.) en amarillo —
+           confunde con las compras del usuario. Solo el botón Proveedor avisa. */
+        host.querySelectorAll('.user-lic-license-card-btn[data-user-license-filter]').forEach(function (card) {
+            if (card.classList.contains('user-lic-license-card--proveedor')) return;
+            card.classList.remove('is-reservation-pending');
+            var oldB = card.querySelector('.license-card-reservation-badge');
+            if (oldB) oldB.remove();
+        });
+        userLicPaintProveedorAlertCard(host);
+    }
+
+    function userLicPaintPendingRenewalCards(gridInner) {
+        userLicPaintProveedorAlertCard(gridInner);
+    }
+
+    function userLicPaintProveedorAlertCard(gridInner) {
+        var host = gridInner || document.getElementById('userLicenciasGrid');
+        if (!host) return;
+        var provCard = host.querySelector('.user-lic-license-card--proveedor');
+        if (!provCard) return;
+        /* Sin amarillo: bastan los banners de arriba. */
+        provCard.classList.remove('is-reservation-pending');
+        provCard.classList.remove('is-customer-renewal-pending');
+    }
+
+    function userLicOpenProveedorFromBanner(scrollToRenewals) {
+        var outer = document.getElementById('userLicenciasTableOuter');
+        var host =
+            (outer && outer.closest && outer.closest('.user-licencias-shell')
+                ? outer.closest('.user-licencias-shell')
+                : document
+            ).querySelector('#userLicenciasGridHost') || document.getElementById('userLicenciasGridHost');
+        if (outer) {
+            /* Activar Proveedor siempre (sin deseleccionar al repetir clic). */
+            applyLicenseFilter(outer, host, USER_LIC_PORTAL_PROVEEDOR_FILTER);
+        }
+        if (!scrollToRenewals) return;
+        window.setTimeout(function () {
+            var sec = document.querySelector('.user-lic-proveedor-renewals');
+            if (sec) {
+                sec.classList.remove('collapsed');
+                try {
+                    sec.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                } catch (_eScr) {}
+            }
+        }, 80);
+    }
+
+    function userLicRenderPendingReservationsBanner() {
+        var banner = document.getElementById('userLicPedidosReservaBanner');
+        var list = document.getElementById('userLicPedidosReservaList');
+        var countEl = document.getElementById('userLicPedidosReservaCount');
+        if (!banner || !list) return;
+        var rows = userLicPendingReservations || [];
+        if (!rows.length || !userLicPortalProveedorEnabled) {
+            banner.classList.add('d-none');
+            banner.hidden = true;
+            list.innerHTML = '';
+            if (countEl) countEl.textContent = '0';
+            return;
+        }
+        /* Proveedor: agrupar por producto (sin nombres de usuario); solo total de unidades. */
+        var byProduct = Object.create(null);
+        var order = [];
+        rows.forEach(function (r) {
+            var pid = r.product_id != null ? String(r.product_id) : '';
+            if (!pid) return;
+            var qty = parseInt(r.quantity, 10);
+            if (!Number.isFinite(qty) || qty < 1) qty = 1;
+            if (!byProduct[pid]) {
+                byProduct[pid] = {
+                    product_id: pid,
+                    product_name: r.product_name || 'Producto',
+                    quantity: 0,
+                };
+                order.push(pid);
+            }
+            byProduct[pid].quantity += qty;
+            if (r.product_name) byProduct[pid].product_name = r.product_name;
+        });
+        var grouped = order.map(function (pid) {
+            return byProduct[pid];
+        });
+
+        banner.classList.remove('d-none');
+        banner.hidden = false;
+        if (countEl) countEl.textContent = String(grouped.length);
+        list.innerHTML = grouped
+            .map(function (g) {
+                var qty = String(g.quantity || 1);
+                var tip = 'Unidades pedidas en reserva: ' + qty;
+                return (
+                    '<li><button type="button" class="admin-lic-pedidos-reserva-banner__row" data-user-license-filter="p' +
+                    escAttr(String(g.product_id || '')) +
+                    '">' +
+                    '<span class="admin-lic-pedidos-reserva-banner__product">' +
+                    '<span class="admin-lic-pedidos-reserva-banner__product-name">' +
+                    escHtml(g.product_name || 'Producto') +
+                    '</span>' +
+                    '</span>' +
+                    '<span class="admin-lic-pedidos-reserva-banner__qty" title="' +
+                    escAttr(tip) +
+                    '" aria-label="' +
+                    escAttr(tip) +
+                    '">x' +
+                    escHtml(qty) +
+                    '</span>' +
+                    '</button></li>'
+                );
+            })
+            .join('');
+        list.querySelectorAll('button[data-user-license-filter]').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                /* Abrir Proveedor (no el producto del grid: el proveedor también compra). */
+                userLicOpenProveedorFromBanner(false);
+            });
+        });
+        userLicWirePedidosReservaAccordion();
+    }
+
+    function userLicApplyPendingReservationsToGrid(gridInner, gridHostEl) {
+        userLicRenderPendingReservationsBanner();
+        userLicRenderPendingRenewalsBanner();
+        if (gridInner && userLicPortalProveedorEnabled) {
+            var summaryList = groupSummariesFromAccounts(userLicPortalAccountsCache || []);
+            gridInner.innerHTML = renderUserLicenciasGrid(summaryList);
+            setGridVisible(
+                gridHostEl || document.getElementById('userLicenciasGridHost'),
+                (userLicPortalAccountsCache && userLicPortalAccountsCache.length > 0) ||
+                    userLicPortalProveedorEnabled ||
+                    userLicPortalSoporteLicenciasEnabled ||
+                    (userLicPendingReservations && userLicPendingReservations.length > 0) ||
+                    userLicPendingRenewalsGrouped().length > 0
+            );
+            /* Re-render del grid borra .active: restaurar el filtro actual (p. ej. Proveedor en rojo). */
+            var outerEl =
+                document.getElementById('userLicenciasTableOuter') ||
+                (gridInner.closest && gridInner.closest('#userLicenciasTableOuter'));
+            var activeFilt =
+                (outerEl && outerEl.dataset && outerEl.dataset.userLicActiveFilter) ||
+                readPersistedUserLicPortalServiceFilter(
+                    gridHostEl || document.getElementById('userLicenciasGridHost')
+                );
+            syncServiceFilterGridCards(
+                gridHostEl || document.getElementById('userLicenciasGridHost'),
+                activeFilt
+            );
+        }
+        userLicPaintPendingReservationCards(gridInner);
+        userLicPaintPendingRenewalCards(gridInner);
+    }
+
+    function userLicRefreshPendingReservations(gridInner, gridHostEl) {
+        if (!userLicPortalProveedorEnabled) {
+            userLicPendingReservations = [];
+            userLicPendingByProduct = Object.create(null);
+            userLicApplyPendingReservationsToGrid(gridInner, gridHostEl);
+            return;
+        }
+        if (userLicPendingResFetchTimer) clearTimeout(userLicPendingResFetchTimer);
+        userLicPendingResFetchTimer = setTimeout(function () {
+            var gInner = gridInner || document.getElementById('userLicenciasGrid');
+            var gHost = gridHostEl || document.getElementById('userLicenciasGridHost');
+            fetch('/tienda/api/user/proveedor/product-reservations/pending', {
+                credentials: 'same-origin',
+                headers: { Accept: 'application/json' },
+                cache: 'no-store',
+            })
+                .then(function (r) {
+                    return r.json().catch(function () {
+                        return {};
+                    });
+                })
+                .then(function (data) {
+                    if (!data || !data.success) return;
+                    userLicPendingReservations = Array.isArray(data.reservations)
+                        ? data.reservations
+                        : [];
+                    userLicPendingByProduct = data.by_product || Object.create(null);
+                    userLicApplyPendingReservationsToGrid(gInner, gHost);
+                    userLicWirePedidosReservaAccordion();
+                })
+                .catch(function () {});
+        }, 120);
+    }
+
+    function userLicStartPendingReservationsPoll() {
+        if (userLicPendingResPollTimer) return;
+        userLicPendingResPollTimer = window.setInterval(function () {
+            if (document.hidden || !userLicPortalProveedorEnabled) return;
+            userLicRefreshPendingReservations(
+                document.getElementById('userLicenciasGrid'),
+                document.getElementById('userLicenciasGridHost')
+            );
+        }, USER_LIC_PENDING_RES_POLL_MS);
+    }
+
     function renderUserLicenciasGrid(summaryList) {
         var parts = [];
+        var merged = mergeUserLicReservationSummaries(summaryList);
 
         parts.push(
             '<button type="button" class="license-card license-card--aggregate user-lic-license-card-btn user-lic-license-card--todos" data-user-license-filter="all">' +
@@ -5814,14 +6613,22 @@
         );
 
         var idx;
-        for (idx = 0; idx < summaryList.length; idx += 1) {
-            var s = summaryList[idx];
+        for (idx = 0; idx < merged.length; idx += 1) {
+            var s = merged[idx];
             var name = s.product_name || '—';
+            var pidAttr =
+                s.product_id != null
+                    ? ' data-product-id="' + escAttr(String(s.product_id)) + '"'
+                    : s.filterKey && String(s.filterKey).charAt(0) === 'p'
+                      ? ' data-product-id="' + escAttr(String(s.filterKey).slice(1)) + '"'
+                      : '';
 
             parts.push(
                 '<button type="button" class="license-card user-lic-license-card-btn" data-user-license-filter="' +
                 escAttr(s.filterKey) +
-                '">' +
+                '"' +
+                pidAttr +
+                '>' +
                 '<div class="license-card-header">' +
                 '<h3 class="license-name"><span class="full-text">' +
                 escHtml(name) +
@@ -6667,6 +7474,17 @@
             payload.suspended_lines,
             payload.suspended_notes
         );
+        if (payload.customer_renewals && typeof payload.customer_renewals === 'object') {
+            userLicPortalProveedorCache.customer_renewals = {
+                enabled: !!payload.customer_renewals.enabled,
+                items: Array.isArray(payload.customer_renewals.items)
+                    ? payload.customer_renewals.items
+                    : [],
+            };
+            userLicProveedorRerenderRenewalsSection();
+            userLicRenderPendingRenewalsBanner();
+            userLicPaintPendingRenewalCards(document.getElementById('userLicenciasGrid'));
+        }
     }
 
     function userLicPortalSaveProveedorNow(outer, proveedorUrl) {
@@ -7163,7 +7981,10 @@
             gridInner.innerHTML = renderUserLicenciasGrid(summaryList);
             setGridVisible(
                 gridHostEl,
-                accounts.length > 0 || userLicPortalProveedorEnabled || userLicPortalSoporteLicenciasEnabled
+                accounts.length > 0 ||
+                    userLicPortalProveedorEnabled ||
+                    userLicPortalSoporteLicenciasEnabled ||
+                    (userLicPendingReservations && userLicPendingReservations.length > 0)
             );
             if (userLicPortalSoporteLicenciasEnabled) {
                 wireUserLicVerificarPanel(outer);
@@ -7196,6 +8017,7 @@
             rebuildUserLicPortalMainContent(outer, host, gridInner, gridHostEl, persistUi);
             userLicCaducidadNotifyRunCheck();
             userLicRenewalNotifyRunCheck();
+            userLicRefreshPendingReservations(gridInner, gridHostEl);
         };
         if (userLicPortalProveedorEnabled && proveedorUrl) {
             var productsUrl =
@@ -7211,6 +8033,50 @@
             boot();
         }
         userLicRefreshReportesUi(outer);
+    }
+
+    document.addEventListener('store-user-notifications-received', function (ev) {
+        try {
+            var items = (ev && ev.detail && ev.detail.notifications) || [];
+            var hitRes = false;
+            var hitRenew = false;
+            items.forEach(function (n) {
+                var k = String((n && n.kind) || '');
+                if (k === 'proveedor_product_reservation' || k === 'admin_product_reservation') {
+                    hitRes = true;
+                }
+                if (
+                    k === 'proveedor_customer_account_renewal' ||
+                    k === 'admin_customer_account_renewal'
+                ) {
+                    hitRenew = true;
+                }
+            });
+            if (hitRes) {
+                var gridInner = document.getElementById('userLicenciasGrid');
+                var gridHostEl = document.getElementById('userLicenciasGridHost');
+                userLicRefreshPendingReservations(gridInner, gridHostEl);
+            }
+            if (hitRenew && userLicPortalProveedorEnabled) {
+                var outer = document.getElementById('userLicenciasTableOuter');
+                var proveedorUrl = (outer && outer.getAttribute('data-proveedor-url')) || '';
+                if (proveedorUrl && typeof userLicPortalLoadProveedorInventory === 'function') {
+                    userLicPortalLoadProveedorInventory(proveedorUrl).then(function (ok) {
+                        if (ok) {
+                            userLicProveedorRerenderRenewalsSection();
+                            userLicRenderPendingRenewalsBanner();
+                            userLicPaintPendingRenewalCards(
+                                document.getElementById('userLicenciasGrid')
+                            );
+                        }
+                    });
+                }
+            }
+        } catch (_e) {}
+    });
+
+    if (document.getElementById('userLicPedidosReservaBanner')) {
+        userLicStartPendingReservationsPoll();
     }
 
     function wireUserLicCredsCopyNormalize(outer) {

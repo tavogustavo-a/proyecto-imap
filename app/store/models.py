@@ -27,6 +27,8 @@ class Sale(db.Model):
     product_id = db.Column(db.Integer, db.ForeignKey("store_products.id", ondelete='CASCADE'), nullable=False)
     quantity = db.Column(db.Integer, default=1)
     total_price = db.Column(db.Numeric(10, 2), nullable=False)
+    # USD | COP: moneda con la que se cobró (histórico; no cambia si el usuario cambia de tipo_precio)
+    currency = db.Column(db.String(3), nullable=True)
     is_renewal = db.Column(db.Boolean, default=False, nullable=False, index=True)
     # renovar_1_mes | dejar_mes_a_mes | mixto (renovación pagada en tienda)
     renewal_kind = db.Column(db.String(24), nullable=True)
@@ -43,6 +45,8 @@ class SalePurchaseSnapshot(db.Model):
     product_name = db.Column(db.String(200), nullable=False)
     quantity = db.Column(db.Integer, default=1)
     total_price = db.Column(db.Numeric(10, 2), nullable=False)
+    # USD | COP: moneda del cobro copiada de la venta (sobrevive al purge)
+    currency = db.Column(db.String(3), nullable=True)
     sale_created_at = db.Column(db.DateTime, nullable=False, index=True)
     licencias_json = db.Column(db.Text, nullable=False, default='[]')
     is_renewal = db.Column(db.Boolean, default=False, nullable=False)
@@ -69,7 +73,11 @@ class Coupon(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     description = db.Column(db.Text, nullable=True)
+    # Legacy: mínimo único (ambiguo entre monedas). Se mantiene como fallback
+    # para cupones viejos; los nuevos usan los mínimos por moneda.
     min_amount = db.Column(db.Numeric(10, 2), nullable=True)
+    min_amount_cop = db.Column(db.Numeric(10, 2), nullable=True)
+    min_amount_usd = db.Column(db.Numeric(10, 2), nullable=True)
     show_public = db.Column(db.Boolean, default=False)
     # Relación ManyToMany con productos
     products = db.relationship('Product', secondary='coupon_products', backref='coupons')

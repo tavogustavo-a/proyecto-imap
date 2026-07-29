@@ -110,6 +110,22 @@
   <!-- Interfaz de Licencias -->
   <div class="licencias-container collapsed" id="licenciasContainer">
     <div class="licencias-content">
+      <div id="adminLicPedidosReservaBanner" class="admin-lic-pedidos-reserva-banner d-none" hidden aria-live="polite">
+        <button type="button" id="adminLicPedidosReservaToggle" class="admin-lic-pedidos-reserva-banner__head" aria-expanded="true" aria-controls="adminLicPedidosReservaList">
+          <strong>Pedidos en reserva</strong>
+          <span id="adminLicPedidosReservaCount" class="sr-only">0</span>
+          <i class="fas fa-chevron-down admin-lic-pedidos-reserva-banner__chevron" aria-hidden="true"></i>
+        </button>
+        <ul id="adminLicPedidosReservaList" class="admin-lic-pedidos-reserva-banner__list"></ul>
+      </div>
+      <div id="adminLicPedidosRenovarBanner" class="admin-lic-pedidos-reserva-banner d-none" hidden aria-live="polite">
+        <button type="button" id="adminLicPedidosRenovarToggle" class="admin-lic-pedidos-reserva-banner__head" aria-expanded="true" aria-controls="adminLicPedidosRenovarList">
+          <strong>Pedidos en Renovar tu cuenta</strong>
+          <span id="adminLicPedidosRenovarCount" class="sr-only">0</span>
+          <i class="fas fa-chevron-down admin-lic-pedidos-reserva-banner__chevron" aria-hidden="true"></i>
+        </button>
+        <ul id="adminLicPedidosRenovarList" class="admin-lic-pedidos-reserva-banner__list"></ul>
+      </div>
       <!-- Grid de Licencias -->
       <div id="licensesGrid" class="licenses-grid">
         <!-- Las licencias se cargarán dinámicamente aquí -->
@@ -167,9 +183,6 @@
       <div class="license-changes-notepad-wrap">
         <div class="license-changes-panel-heading" aria-label="Cambios mes a mes">
           <div class="license-changes-mode-toolbar" role="toolbar" aria-label="Modo de listado de Cambios">
-            <div class="license-changes-toolbar-start">
-              <span class="license-changes-mode-toolbar-label" title="Cambios mes a mes" aria-label="Cambios mes a mes"><i class="fas fa-exchange-alt" aria-hidden="true"></i></span>
-            </div>
             <div class="license-changes-mode-btn-group">
               <button type="button" id="adminLicenciasToggleChangesRestoreColBtn" class="admin-licencias-toggle-notes-col-btn" title="Ocultar flecha devolver a Licencias" aria-label="Ocultar botón subir fila al bloc Licencias en Cambios" aria-pressed="false">
                 <i class="fas fa-eye-slash" aria-hidden="true"></i>

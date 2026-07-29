@@ -3,6 +3,173 @@ document.addEventListener('DOMContentLoaded', function() {
   const productCards = document.querySelectorAll('.card.product-texture-bg');
   var pendingReservationProductIds = Object.create(null);
 
+  /* Avisos in-app: evita window.alert (Chrome ofrece "no volver a preguntar" y bloquea avisos). */
+  function ensureStoreAlertModal() {
+    var existing = document.getElementById('storeAlertModal');
+    if (existing) return existing;
+    var wrap = document.createElement('div');
+    wrap.id = 'storeAlertModal';
+    wrap.className = 'store-alert-modal modal-hidden';
+    wrap.setAttribute('aria-hidden', 'true');
+    wrap.innerHTML =
+      '<div class="store-alert-modal__backdrop" data-store-alert-close="1"></div>' +
+      '<div class="store-alert-modal__dialog" role="dialog" aria-modal="true" aria-labelledby="storeAlertModalTitle">' +
+      '<h4 class="store-alert-modal__title" id="storeAlertModalTitle">Aviso</h4>' +
+      '<p class="store-alert-modal__message" id="storeAlertModalMessage"></p>' +
+      '<div class="store-alert-modal__actions">' +
+      '<button type="button" class="store-alert-modal__ok" id="storeAlertModalOk">Aceptar</button>' +
+      '</div></div>';
+    document.body.appendChild(wrap);
+    function closeStoreAlert() {
+      wrap.classList.add('modal-hidden');
+      wrap.setAttribute('aria-hidden', 'true');
+    }
+    wrap.addEventListener('click', function (ev) {
+      if (ev.target && ev.target.getAttribute('data-store-alert-close') === '1') closeStoreAlert();
+    });
+    var okBtn = document.getElementById('storeAlertModalOk');
+    if (okBtn) okBtn.addEventListener('click', closeStoreAlert);
+    document.addEventListener('keydown', function (ev) {
+      if (ev.key === 'Escape' && !wrap.classList.contains('modal-hidden')) closeStoreAlert();
+    });
+    return wrap;
+  }
+
+  function showStoreAlert(message) {
+    var wrap = ensureStoreAlertModal();
+    var msgEl = document.getElementById('storeAlertModalMessage');
+    var text = String(message == null ? '' : message);
+    if (msgEl) {
+      msgEl.textContent = '';
+      text.split(/\n+/).forEach(function (line, idx) {
+        if (idx > 0) msgEl.appendChild(document.createElement('br'));
+        msgEl.appendChild(document.createTextNode(line));
+      });
+    }
+    wrap.classList.remove('modal-hidden');
+    wrap.setAttribute('aria-hidden', 'false');
+    var okBtn = document.getElementById('storeAlertModalOk');
+    if (okBtn) {
+      try {
+        okBtn.focus();
+      } catch (_e) {}
+    }
+  }
+
+  function alert(message) {
+    showStoreAlert(message);
+  }
+
+  function ensureStoreConfirmModal() {
+    var existing = document.getElementById('storeConfirmModal');
+    if (existing) return existing;
+    var wrap = document.createElement('div');
+    wrap.id = 'storeConfirmModal';
+    wrap.className = 'store-alert-modal modal-hidden';
+    wrap.setAttribute('aria-hidden', 'true');
+    wrap.innerHTML =
+      '<div class="store-alert-modal__backdrop" data-store-confirm-close="1"></div>' +
+      '<div class="store-alert-modal__dialog" role="dialog" aria-modal="true" aria-labelledby="storeConfirmModalTitle">' +
+      '<h4 class="store-alert-modal__title" id="storeConfirmModalTitle">Confirmar compra</h4>' +
+      '<p class="store-alert-modal__message" id="storeConfirmModalMessage"></p>' +
+      '<div class="store-alert-modal__actions store-alert-modal__actions--confirm">' +
+      '<button type="button" class="store-alert-modal__cancel" id="storeConfirmModalCancel">Cancelar</button>' +
+      '<button type="button" class="store-alert-modal__ok" id="storeConfirmModalOk">Confirmar pago</button>' +
+      '</div></div>';
+    document.body.appendChild(wrap);
+    return wrap;
+  }
+
+  function showStoreConfirm(message) {
+    return new Promise(function (resolve) {
+      var wrap = ensureStoreConfirmModal();
+      var msgEl = document.getElementById('storeConfirmModalMessage');
+      var text = String(message == null ? '' : message);
+      if (msgEl) {
+        msgEl.textContent = '';
+        text.split(/\n+/).forEach(function (line, idx) {
+          if (idx > 0) msgEl.appendChild(document.createElement('br'));
+          msgEl.appendChild(document.createTextNode(line));
+        });
+      }
+      var finished = false;
+      function finish(ok) {
+        if (finished) return;
+        finished = true;
+        wrap.classList.add('modal-hidden');
+        wrap.setAttribute('aria-hidden', 'true');
+        wrap.removeEventListener('click', onBackdrop);
+        document.removeEventListener('keydown', onKey);
+        resolve(!!ok);
+      }
+      function onBackdrop(ev) {
+        if (ev.target && ev.target.getAttribute('data-store-confirm-close') === '1') {
+          finish(false);
+        }
+      }
+      function onKey(ev) {
+        if (ev.key === 'Escape' && !wrap.classList.contains('modal-hidden')) {
+          finish(false);
+        }
+      }
+      var cancelBtn = document.getElementById('storeConfirmModalCancel');
+      var okBtn = document.getElementById('storeConfirmModalOk');
+      if (cancelBtn) {
+        cancelBtn.onclick = function () {
+          finish(false);
+        };
+      }
+      if (okBtn) {
+        okBtn.onclick = function () {
+          finish(true);
+        };
+      }
+      wrap.addEventListener('click', onBackdrop);
+      document.addEventListener('keydown', onKey);
+      wrap.classList.remove('modal-hidden');
+      wrap.setAttribute('aria-hidden', 'false');
+      if (okBtn) {
+        try {
+          okBtn.focus();
+        } catch (_e) {}
+      }
+    });
+  }
+
+  function buildPagoConfirmMessage(totalCop, totalUsd) {
+    var parts = [];
+    if (totalCop > 0) parts.push('$' + formatCatalogMoneyAmount(totalCop) + ' COP');
+    if (totalUsd > 0) parts.push('$' + formatCatalogMoneyAmount(totalUsd) + ' USD');
+    var totalTxt = parts.length ? parts.join(' + ') : '$0';
+    var nItems = 0;
+    carritoPago.forEach(function (p) {
+      var q = parseInt(p.cantidad, 10);
+      if (!Number.isFinite(q) || q < 1) q = 1;
+      nItems += q;
+    });
+    var itemsTxt = nItems === 1 ? '1 unidad' : nItems + ' unidades';
+    var names = [];
+    carritoPago.forEach(function (p) {
+      var nm = String(p.nombre || p.name || 'Producto').trim();
+      if (nm && names.indexOf(nm) === -1) names.push(nm);
+    });
+    var detail =
+      names.length === 1
+        ? names[0]
+        : names.length > 1
+          ? names.slice(0, 3).join(', ') + (names.length > 3 ? '…' : '')
+          : itemsTxt;
+    return (
+      '¿Confirmas el pago de ' +
+      totalTxt +
+      '?\n\n' +
+      detail +
+      ' (' +
+      itemsTxt +
+      ').\nSe descontará de tu saldo.'
+    );
+  }
+
   function resolveProductPurchaseShell(fromEl) {
     if (!fromEl) return null;
     const card = fromEl.closest('.card.product-texture-bg.product-card');
@@ -252,6 +419,259 @@ document.addEventListener('DOMContentLoaded', function() {
   let stockByProductId = {};
   /** Tras una respuesta de /stock, cualquier producto sin fila ya no está a la venta (se trata como 0). */
   let stockPollLoadedOnce = false;
+
+  // Catálogo visible (Ver en tienda / descuentos): SSE (sin polling continuo).
+  // Fallback a poll lento solo si EventSource no está disponible / falla.
+  let catalogLastRev = null;
+  let catalogSseHandle = null;
+  let catalogPollTimer = null;
+  const CATALOG_SSE_URL = '/tienda/api/user/store-catalog/stream';
+  const CATALOG_POLL_FALLBACK_MS = 12000;
+  const CATALOG_API_URL = '/tienda/api/user/store-catalog';
+
+  function formatCatalogMoneyAmount(n) {
+    var v = Number(n);
+    if (!Number.isFinite(v)) v = 0;
+    v = Math.round(v * 100) / 100;
+    if (Math.abs(v - Math.round(v)) < 1e-9) return String(Math.round(v));
+    return String(v);
+  }
+
+  function applyCatalogProductPrices(productId, priceCop, priceUsd) {
+    var id = String(productId);
+    var card = document.querySelector('.card.product-card[data-id="' + id + '"]');
+    if (card) {
+      if (priceCop != null) card.setAttribute('data-price-cop', String(priceCop));
+      if (priceUsd != null) card.setAttribute('data-price-usd', String(priceUsd));
+      var usdEl = card.querySelector('.product-price-usd');
+      if (usdEl && priceUsd != null && TIPO_PRECIO !== 'cop') {
+        usdEl.textContent = '$' + formatCatalogMoneyAmount(priceUsd) + ' USD';
+      }
+      var copEl = card.querySelector('.product-price-cop');
+      if (copEl && priceCop != null && TIPO_PRECIO === 'cop') {
+        copEl.textContent = '$' + formatCatalogMoneyAmount(priceCop) + ' COP';
+      }
+    }
+    document
+      .querySelectorAll(
+        '.store-catalog-full-table tr[data-id="' +
+          id +
+          '"], .store-catalog-full-table tr[data-product-id="' +
+          id +
+          '"], #storeProductsTable tr[data-product-id="' +
+          id +
+          '"]'
+      )
+      .forEach(function (row) {
+        if (priceCop != null) row.setAttribute('data-price-cop', String(priceCop));
+        if (priceUsd != null) row.setAttribute('data-price-usd', String(priceUsd));
+        var cells = row.querySelectorAll('.store-products-table__price');
+        if (cells.length >= 2) {
+          if (priceCop != null) {
+            cells[0].textContent = '$' + formatCatalogMoneyAmount(priceCop) + ' COP';
+          }
+          if (priceUsd != null) {
+            cells[1].textContent = '$' + formatCatalogMoneyAmount(priceUsd) + ' USD';
+          }
+        } else if (cells.length === 1) {
+          if (TIPO_PRECIO === 'cop' && priceCop != null) {
+            cells[0].textContent = '$' + formatCatalogMoneyAmount(priceCop) + ' COP';
+          } else if (priceUsd != null) {
+            cells[0].textContent = '$' + formatCatalogMoneyAmount(priceUsd) + ' USD';
+          }
+        }
+      });
+  }
+
+  function syncStoreCatalogVisibility(snapshot) {
+    if (!snapshot || !snapshot.success) return;
+    if (snapshot.is_admin) {
+      catalogLastRev = snapshot.catalog_revision != null ? String(snapshot.catalog_revision) : catalogLastRev;
+      return;
+    }
+    var ids = Array.isArray(snapshot.product_ids) ? snapshot.product_ids : [];
+    var allowed = {};
+    ids.forEach(function (pid) {
+      allowed[String(pid)] = true;
+    });
+    var productsMap = snapshot.products && typeof snapshot.products === 'object' ? snapshot.products : {};
+
+    var missingInDom = false;
+    ids.forEach(function (pid) {
+      var sid = String(pid);
+      if (
+        !document.querySelector('.card.product-card[data-id="' + sid + '"]') &&
+        !document.querySelector(
+          '#storeCatalogFullTable tr[data-id="' +
+            sid +
+            '"], #storeCatalogFullTable tr[data-product-id="' +
+            sid +
+            '"]'
+        )
+      ) {
+        // Producto recién habilitado que no está en el HTML → recargar.
+        missingInDom = true;
+      }
+    });
+    if (missingInDom && catalogLastRev != null) {
+      window.location.reload();
+      return;
+    }
+
+    document.querySelectorAll('.card.product-card[data-id]').forEach(function (card) {
+      var sid = String(card.getAttribute('data-id') || '');
+      var show = !!allowed[sid];
+      card.classList.toggle('d-none', !show);
+      card.hidden = !show;
+      if (show && productsMap[sid]) {
+        applyCatalogProductPrices(
+          sid,
+          productsMap[sid].price_cop,
+          productsMap[sid].price_usd
+        );
+      }
+    });
+
+    document
+      .querySelectorAll(
+        '#storeCatalogFullTable tr[data-id], #storeCatalogFullTable tr[data-product-id], #storeProductsTable tr[data-product-id]'
+      )
+      .forEach(function (row) {
+        var sid = String(
+          row.getAttribute('data-id') || row.getAttribute('data-product-id') || ''
+        );
+        if (!sid) return;
+        var show = !!allowed[sid];
+        row.classList.toggle('d-none', !show);
+        row.hidden = !show;
+        if (show && productsMap[sid]) {
+          applyCatalogProductPrices(
+            sid,
+            productsMap[sid].price_cop,
+            productsMap[sid].price_usd
+          );
+        }
+      });
+
+    // Quitar del carrito lo no permitido y actualizar precios del catálogo.
+    if (Array.isArray(carritoPago) && carritoPago.length) {
+      var before = carritoPago.length;
+      var cartChanged = false;
+      carritoPago = carritoPago.filter(function (item) {
+        return item && allowed[String(item.id)];
+      });
+      if (carritoPago.length !== before) cartChanged = true;
+      carritoPago.forEach(function (item) {
+        if (!item) return;
+        var sid = String(item.id);
+        var snap = productsMap[sid];
+        if (!snap) return;
+        var pricing = pricingForUserCurrency(snap.price_cop, snap.price_usd);
+        if (
+          Number(item.precio_unitario) !== Number(pricing.precio_unitario) ||
+          String(item.moneda || '').toUpperCase() !== String(pricing.moneda || '').toUpperCase()
+        ) {
+          item.precio_unitario = pricing.precio_unitario;
+          item.moneda = pricing.moneda;
+          cartChanged = true;
+        }
+      });
+      if (cartChanged) {
+        try {
+          localStorage.setItem('carritoPago', JSON.stringify(carritoPago));
+        } catch (_eLs) {}
+        if (typeof validarCuponAutomatico === 'function' && cuponAplicado) {
+          validarCuponAutomatico();
+        }
+        if (typeof renderResumenPago === 'function') renderResumenPago();
+        if (typeof renderizarCarrito === 'function') renderizarCarrito();
+      }
+    }
+
+    catalogLastRev =
+      snapshot.catalog_revision != null ? String(snapshot.catalog_revision) : catalogLastRev;
+  }
+
+  function fetchStoreCatalogSnapshot() {
+    var req =
+      window.StoreFetchJson && window.StoreFetchJson.fetch
+        ? window.StoreFetchJson.fetch(CATALOG_API_URL)
+        : fetch(CATALOG_API_URL, {
+            method: 'GET',
+            credentials: 'same-origin',
+            headers: { Accept: 'application/json' },
+          }).then(function (r) {
+            if (!r.ok) throw new Error('HTTP ' + r.status);
+            return r.json();
+          });
+    return req
+      .then(function (data) {
+        if (!data || !data.success) return null;
+        var nextRev =
+          data.catalog_revision != null ? String(data.catalog_revision) : '';
+        if (catalogLastRev == null) {
+          // Primera lectura: alinear sin recargar.
+          syncStoreCatalogVisibility(data);
+          return data;
+        }
+        if (nextRev !== String(catalogLastRev)) {
+          syncStoreCatalogVisibility(data);
+        }
+        return data;
+      })
+      .catch(function () {
+        return null;
+      });
+  }
+
+  function onCatalogSseMessage(data) {
+    if (!data || data.type !== 'catalog' || !data.success) return;
+    syncStoreCatalogVisibility(data);
+  }
+
+  function startStoreCatalogPollFallback() {
+    if (catalogPollTimer) return;
+    fetchStoreCatalogSnapshot();
+    catalogPollTimer = window.setInterval(function () {
+      if (document.visibilityState === 'hidden') return;
+      fetchStoreCatalogSnapshot();
+    }, CATALOG_POLL_FALLBACK_MS);
+  }
+
+  function stopStoreCatalogPollFallback() {
+    if (catalogPollTimer) {
+      clearInterval(catalogPollTimer);
+      catalogPollTimer = null;
+    }
+  }
+
+  function startStoreCatalogRealtime() {
+    if (document.visibilityState !== 'visible') {
+      stopStoreCatalogRealtime();
+      return;
+    }
+    stopStoreCatalogRealtime();
+    if (
+      typeof window.StoreSseRealtime !== 'undefined' &&
+      typeof window.StoreSseRealtime.connectOrFallback === 'function'
+    ) {
+      catalogSseHandle = window.StoreSseRealtime.connectOrFallback(
+        CATALOG_SSE_URL,
+        onCatalogSseMessage,
+        startStoreCatalogPollFallback
+      );
+    } else {
+      startStoreCatalogPollFallback();
+    }
+  }
+
+  function stopStoreCatalogRealtime() {
+    if (catalogSseHandle) {
+      catalogSseHandle.close();
+      catalogSseHandle = null;
+    }
+    stopStoreCatalogPollFallback();
+  }
 
   /** Actualiza texto y color de «N existencias» en la tarjeta. */
   function applyStockBadgeVisual(stockElement, count) {
@@ -1134,8 +1554,8 @@ document.addEventListener('DOMContentLoaded', function() {
             ${cantidadBtns}
           </div>
           <div class="carrito-producto-precio">
-            <div class="carrito-precio-total">$${precioTotal} ${producto.moneda}</div>
-            <div class="carrito-precio-unitario">$${producto.precio_unitario} ${producto.moneda} c/u</div>
+            <div class="carrito-precio-total">$${formatCatalogMoneyAmount(precioTotal)} ${producto.moneda}</div>
+            <div class="carrito-precio-unitario">$${formatCatalogMoneyAmount(producto.precio_unitario)} ${producto.moneda} c/u</div>
           </div>
         </div>
       `;
@@ -1144,13 +1564,12 @@ document.addEventListener('DOMContentLoaded', function() {
       if (producto.descuento_aplicado && (producto.descuento_cop > 0 || producto.descuento_usd > 0)) {
         const descuentoDiv = document.createElement('div');
         descuentoDiv.className = 'carrito-descuento-individual';
-        
-        let descuentoTexto = '';
-        if (producto.descuento_cop > 0) {
-          descuentoTexto = `-$${producto.descuento_cop} COP`;
-        } else if (producto.descuento_usd > 0) {
-          descuentoTexto = `-$${producto.descuento_usd} USD`;
-        }
+        const discAmt = TIPO_PRECIO === 'cop'
+          ? (parseFloat(producto.descuento_cop) || 0)
+          : (parseFloat(producto.descuento_usd) || 0);
+        const descuentoTexto = discAmt > 0
+          ? `-$${discAmt} ${TIPO_PRECIO === 'cop' ? 'COP' : 'USD'}`
+          : '';
         descuentoDiv.textContent = descuentoTexto;
         // Agregar el descuento abajo de todo el producto
         div.appendChild(descuentoDiv);
@@ -1177,7 +1596,7 @@ document.addEventListener('DOMContentLoaded', function() {
         <button type="button" id="btnAplicarCuponCarritoDinamico" class="${botonClase}">${botonTexto}</button>
       </div>
       <div id="cuponInfoCarritoDinamico" class="cupon-info-carrito mt-1 ${tieneCupon ? '' : 'd-none'}">
-        <span class="cupon-aplicado-carrito">Cupón aplicado: ${tieneCupon ? cuponAplicado.nombre : ''} - $${tieneCupon ? descuentoCupon : 0} ${tieneCupon ? (cuponAplicado.descuento_cop ? 'COP' : 'USD') : ''}</span>
+        <span class="cupon-aplicado-carrito">Cupón aplicado: ${tieneCupon ? cuponAplicado.nombre : ''} - $${tieneCupon ? descuentoCupon : 0} ${tieneCupon ? (TIPO_PRECIO === 'cop' ? 'COP' : 'USD') : ''}</span>
       </div>
     `;
     lista.appendChild(cuponDiv);
@@ -1229,7 +1648,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     const totalDiv = document.createElement('div');
     totalDiv.className = 'carrito-total-div';
-    totalDiv.innerHTML = `Total: $${Math.max(0, total)}`;
+    totalDiv.innerHTML = `Total: $${formatCatalogMoneyAmount(Math.max(0, total))}`;
     lista.appendChild(totalDiv);
     // Botón procesar pago
     const btnPago = document.createElement('button');
@@ -1262,11 +1681,11 @@ document.addEventListener('DOMContentLoaded', function() {
         if (p.moneda === 'USD') totalUsd += p.cantidad * p.precio_unitario;
       });
       
-      // Aplicar descuento del cupón si existe
+      // Aplicar descuento del cupón si existe (moneda del usuario)
       if (cuponAplicado && descuentoCupon > 0) {
-        if (cuponAplicado.descuento_cop && cuponAplicado.descuento_cop > 0) {
+        if (TIPO_PRECIO === 'cop') {
           totalCop = Math.max(0, totalCop - descuentoCupon);
-        } else if (cuponAplicado.descuento_usd && cuponAplicado.descuento_usd > 0) {
+        } else {
           totalUsd = Math.max(0, totalUsd - descuentoCupon);
         }
       }
@@ -1276,7 +1695,10 @@ document.addEventListener('DOMContentLoaded', function() {
         alert(payBalanceErr);
         return;
       }
-      
+
+      showStoreConfirm(buildPagoConfirmMessage(totalCop, totalUsd)).then(function (ok) {
+        if (!ok) return;
+
       btnPago.disabled = true;
       btnPago.textContent = 'Procesando...';
       
@@ -1327,6 +1749,7 @@ document.addEventListener('DOMContentLoaded', function() {
         btnPago.disabled = false;
         btnPago.textContent = 'Procesar pago';
         alert('Error de red o servidor.');
+      });
       });
     });
     // Eventos para los botones dentro del modal
@@ -1481,9 +1904,15 @@ document.addEventListener('DOMContentLoaded', function() {
         delete existe.descuento_usd;
         delete existe.descuento_aplicado;
       } else {
-        let precio_unitario = precioCop || precioUsd;
-        let moneda = precioCop ? 'COP' : 'USD';
-        carritoPago.push({ id, nombre, logo: img, cantidad: cantidadPedida, precio_unitario, moneda });
+        var pricingAdd = pricingForUserCurrency(precioCop, precioUsd);
+        carritoPago.push({
+          id: id,
+          nombre: nombre,
+          logo: img,
+          cantidad: cantidadPedida,
+          precio_unitario: pricingAdd.precio_unitario,
+          moneda: pricingAdd.moneda,
+        });
       }
 
       capAllPurchaseQuantityInputs(id, stock);
@@ -1603,8 +2032,8 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     STORE_TIPO_REVISION =
       parseInt(saldoDataDiv.getAttribute('data-tipo-precio-revision'), 10) || 0;
-    SALDO_USD = parseInt(saldoDataDiv.getAttribute('data-saldo-usd'), 10) || 0;
-    SALDO_COP = parseInt(saldoDataDiv.getAttribute('data-saldo-cop'), 10) || 0;
+    SALDO_USD = Number(saldoDataDiv.getAttribute('data-saldo-usd')) || 0;
+    SALDO_COP = Number(saldoDataDiv.getAttribute('data-saldo-cop')) || 0;
     const pdEarly = saldoDataDiv.getAttribute('data-puede-tener-deuda');
     PUEDE_TENER_DEUDA = pdEarly === '1' || pdEarly === 'true';
     const limUsdRaw = saldoDataDiv.getAttribute('data-limite-deuda-usd');
@@ -1639,11 +2068,13 @@ document.addEventListener('DOMContentLoaded', function() {
     const amt = storeUserSaldoAmount();
     const cur = storeUserSaldoCurrencyLabel();
     const cls = className || (TIPO_PRECIO === 'cop' ? 'saldo-cop-carrito' : 'saldo-usd-carrito');
+    // Mismo formato que el resto de la tienda: toLocaleString() sin locale
+    // fijo mostraba "1.234,56" o "1,234.56" según el navegador.
     return (
       '<span class="' +
       cls +
       '">$' +
-      Number(amt).toLocaleString() +
+      formatCatalogMoneyAmount(amt) +
       ' ' +
       cur +
       '</span>'
@@ -1652,6 +2083,18 @@ document.addEventListener('DOMContentLoaded', function() {
 
   function storeCartTotalForUserCurrency(totalCop, totalUsd) {
     return TIPO_PRECIO === 'cop' ? totalCop : totalUsd;
+  }
+
+  /** Precio/moneda según el tipo de precio del cliente (no preferir COP solo por existir). */
+  function pricingForUserCurrency(precioCop, precioUsd) {
+    var cop = Number(precioCop);
+    var usd = Number(precioUsd);
+    if (!Number.isFinite(cop) || cop < 0) cop = 0;
+    if (!Number.isFinite(usd) || usd < 0) usd = 0;
+    if (TIPO_PRECIO === 'cop') {
+      return { precio_unitario: cop, moneda: 'COP' };
+    }
+    return { precio_unitario: usd, moneda: 'USD' };
   }
 
   function applyStoreSaldoFromApi(data) {
@@ -1824,14 +2267,12 @@ document.addEventListener('DOMContentLoaded', function() {
       if (producto.descuento_aplicado && (producto.descuento_cop > 0 || producto.descuento_usd > 0)) {
         const descuentoDiv = document.createElement('div');
         descuentoDiv.className = 'resumen-descuento-individual';
-        
-        let descuentoTexto = '';
-        if (producto.descuento_cop > 0) {
-          descuentoTexto = `-$${producto.descuento_cop} COP`;
-        } else if (producto.descuento_usd > 0) {
-          descuentoTexto = `-$${producto.descuento_usd} USD`;
-        }
-        descuentoDiv.textContent = descuentoTexto;
+        const discAmt = TIPO_PRECIO === 'cop'
+          ? (parseFloat(producto.descuento_cop) || 0)
+          : (parseFloat(producto.descuento_usd) || 0);
+        descuentoDiv.textContent = discAmt > 0
+          ? `-$${discAmt} ${TIPO_PRECIO === 'cop' ? 'COP' : 'USD'}`
+          : '';
         item.appendChild(descuentoDiv);
       }
 
@@ -1839,7 +2280,7 @@ document.addEventListener('DOMContentLoaded', function() {
       const totalDiv = document.createElement('div');
       totalDiv.className = 'resumen-pago-total';
       const totalProducto = producto.cantidad * producto.precio_unitario;
-      totalDiv.textContent = `${totalProducto} ${producto.moneda}`;
+      totalDiv.textContent = `${formatCatalogMoneyAmount(totalProducto)} ${producto.moneda}`;
       item.appendChild(totalDiv);
 
       // Botón eliminar (X) - va después del precio y descuento
@@ -1864,7 +2305,7 @@ document.addEventListener('DOMContentLoaded', function() {
       total = Math.max(0, total - descuentoCupon);
     }
 
-    saldoTotalGeneral.textContent = `$${total}`;
+    saldoTotalGeneral.textContent = `$${formatCatalogMoneyAmount(Math.max(0, total))}`;
     actualizarCarritoContador();
     // Guardar en localStorage
     try {
@@ -2072,11 +2513,12 @@ document.addEventListener('DOMContentLoaded', function() {
         const cupon = {
           id: data.coupon.id,
           nombre: data.coupon.name,
-          descuento_cop: data.coupon.discount_cop,
-          descuento_usd: data.coupon.discount_usd,
+          descuento_cop: parseFloat(data.coupon.discount_cop) || 0,
+          descuento_usd: parseFloat(data.coupon.discount_usd) || 0,
           descripcion: data.coupon.description,
           min_amount: data.coupon.min_amount,
-          productos_elegibles: data.eligible_products || []
+          productos_elegibles: data.eligible_products || [],
+          moneda: (data.moneda || TIPO_PRECIO || 'usd').toString().toUpperCase(),
         };
         
         // Aplicar descuentos individuales a cada producto elegible
@@ -2084,9 +2526,8 @@ document.addEventListener('DOMContentLoaded', function() {
           cupon.productos_elegibles.forEach(productoElegible => {
             const productoEnCarrito = carritoPago.find(p => p.id === productoElegible.id);
             if (productoEnCarrito) {
-              // Agregar información de descuento al producto
-              productoEnCarrito.descuento_cop = productoElegible.discount_cop;
-              productoEnCarrito.descuento_usd = productoElegible.discount_usd;
+              productoEnCarrito.descuento_cop = parseFloat(productoElegible.discount_cop) || 0;
+              productoEnCarrito.descuento_usd = parseFloat(productoElegible.discount_usd) || 0;
               productoEnCarrito.descuento_aplicado = true;
             }
           });
@@ -2162,8 +2603,8 @@ document.addEventListener('DOMContentLoaded', function() {
           data.eligible_products.forEach(productoElegible => {
             const productoEnCarrito = carritoPago.find(p => p.id === productoElegible.id);
             if (productoEnCarrito) {
-              productoEnCarrito.descuento_cop = productoElegible.discount_cop;
-              productoEnCarrito.descuento_usd = productoElegible.discount_usd;
+              productoEnCarrito.descuento_cop = parseFloat(productoElegible.discount_cop) || 0;
+              productoEnCarrito.descuento_usd = parseFloat(productoElegible.discount_usd) || 0;
               productoEnCarrito.descuento_aplicado = true;
             }
           });
@@ -2186,29 +2627,21 @@ document.addEventListener('DOMContentLoaded', function() {
       return;
     }
 
-    // Calcular descuento total basado en productos individuales
-    let descuentoTotalCop = 0;
-    let descuentoTotalUsd = 0;
+    // Descuento según moneda del usuario (no preferir COP solo porque exista).
+    var useCop = TIPO_PRECIO === 'cop';
+    var descuentoTotal = 0;
     
-    carritoPago.forEach(producto => {
-      if (producto.descuento_aplicado) {
-        if (producto.descuento_cop && producto.descuento_cop > 0) {
-          descuentoTotalCop += producto.descuento_cop * producto.cantidad;
-        }
-        if (producto.descuento_usd && producto.descuento_usd > 0) {
-          descuentoTotalUsd += producto.descuento_usd * producto.cantidad;
-        }
+    carritoPago.forEach(function (producto) {
+      if (!producto.descuento_aplicado) return;
+      var unitDisc = useCop
+        ? parseFloat(producto.descuento_cop) || 0
+        : parseFloat(producto.descuento_usd) || 0;
+      if (unitDisc > 0) {
+        descuentoTotal += unitDisc * (parseInt(producto.cantidad, 10) || 1);
       }
     });
 
-    // Usar el descuento total (COP tiene prioridad)
-    if (descuentoTotalCop > 0) {
-      descuentoCupon = descuentoTotalCop;
-    } else if (descuentoTotalUsd > 0) {
-      descuentoCupon = descuentoTotalUsd;
-    } else {
-      descuentoCupon = 0;
-    }
+    descuentoCupon = Math.round(descuentoTotal * 100) / 100;
   }
 
   function mostrarCuponAplicado() {
@@ -2217,11 +2650,10 @@ document.addEventListener('DOMContentLoaded', function() {
     const btnAplicar = document.getElementById('btnAplicarCupon');
     const btnQuitar = document.getElementById('btnQuitarCupon');
     const cuponInput = document.getElementById('cuponInput');
+    const monedaLabel = TIPO_PRECIO === 'cop' ? 'COP' : 'USD';
 
     if (cuponInfo && cuponAplicadoSpan) {
-      const descuentoText = (cuponAplicado.descuento_cop && cuponAplicado.descuento_cop > 0) ? 
-        `$${descuentoCupon} COP` : 
-        `$${descuentoCupon} USD`;
+      const descuentoText = `$${descuentoCupon} ${monedaLabel}`;
       cuponAplicadoSpan.textContent = `Cupón aplicado: ${cuponAplicado.nombre} - ${descuentoText}`;
       cuponInfo.style.display = 'block';
     }
@@ -2242,9 +2674,7 @@ document.addEventListener('DOMContentLoaded', function() {
       const cuponInputCarritoDinamico = document.getElementById('cuponInputCarritoDinamico');
 
       if (cuponAplicadoCarritoDinamico) {
-        const descuentoTextCarrito = (cuponAplicado.descuento_cop && cuponAplicado.descuento_cop > 0) ? 
-          `$${descuentoCupon} COP` : 
-          `$${descuentoCupon} USD`;
+        const descuentoTextCarrito = `$${descuentoCupon} ${TIPO_PRECIO === 'cop' ? 'COP' : 'USD'}`;
         cuponAplicadoCarritoDinamico.textContent = `Cupón aplicado: ${cuponAplicado.nombre} - ${descuentoTextCarrito}`;
       }
       
@@ -2421,11 +2851,11 @@ document.addEventListener('DOMContentLoaded', function() {
         if (p.moneda === 'USD') totalUsd += p.cantidad * p.precio_unitario;
       });
       
-      // Aplicar descuento del cupón si existe
+      // Aplicar descuento del cupón si existe (moneda del usuario)
       if (cuponAplicado && descuentoCupon > 0) {
-        if (cuponAplicado.descuento_cop && cuponAplicado.descuento_cop > 0) {
+        if (TIPO_PRECIO === 'cop') {
           totalCop = Math.max(0, totalCop - descuentoCupon);
-        } else if (cuponAplicado.descuento_usd && cuponAplicado.descuento_usd > 0) {
+        } else {
           totalUsd = Math.max(0, totalUsd - descuentoCupon);
         }
       }
@@ -2435,6 +2865,9 @@ document.addEventListener('DOMContentLoaded', function() {
         alert(payBalanceErr);
         return;
       }
+
+      showStoreConfirm(buildPagoConfirmMessage(totalCop, totalUsd)).then(function (ok) {
+        if (!ok) return;
 
       btnProcesarPago.disabled = true;
       btnProcesarPago.textContent = 'Validando...';
@@ -2506,6 +2939,7 @@ document.addEventListener('DOMContentLoaded', function() {
           btnProcesarPago.textContent = 'Procesar pago';
           alert('Error de conexión al validar el correo.');
         });
+      });
     });
   }
   
@@ -2523,6 +2957,7 @@ document.addEventListener('DOMContentLoaded', function() {
   renderResumenPago();
   renderizarCarrito();
   refreshStoreFrontSaldoFromApi();
+  startStoreCatalogRealtime();
 
   window.addEventListener('store-menu-balance-updated', function (ev) {
     applyStoreSaldoFromApi(ev && ev.detail ? ev.detail : null);
@@ -2533,22 +2968,27 @@ document.addEventListener('DOMContentLoaded', function() {
 
   window.addEventListener('balance-recharge-realtime', function () {
     refreshStoreFrontSaldoFromApi();
+    fetchStoreCatalogSnapshot();
   });
 
   document.addEventListener('visibilitychange', function () {
     if (document.visibilityState === 'visible') {
       refreshStoreFrontSaldoFromApi();
+      startStoreCatalogRealtime();
       if (
         window.StoreUserNotifications &&
         typeof window.StoreUserNotifications.start === 'function'
       ) {
         window.StoreUserNotifications.start();
       }
-    } else if (
-      window.StoreUserNotifications &&
-      typeof window.StoreUserNotifications.stop === 'function'
-    ) {
-      window.StoreUserNotifications.stop();
+    } else {
+      stopStoreCatalogRealtime();
+      if (
+        window.StoreUserNotifications &&
+        typeof window.StoreUserNotifications.stop === 'function'
+      ) {
+        window.StoreUserNotifications.stop();
+      }
     }
   });
 
@@ -2744,14 +3184,16 @@ document.addEventListener('DOMContentLoaded', function() {
           pendingReservationProductIds[pid] = true;
           syncAllProductReserveUi();
           loadDetailedReservations();
+          var maxRes =
+            data.reservation && data.reservation.max_reservable != null
+              ? parseInt(data.reservation.max_reservable, 10)
+              : NaN;
+          if (!Number.isFinite(maxRes) || maxRes < 1) maxRes = cantidad;
+          /* Aviso claro de tope por saldo (más entendible que «saldo anclado»). */
           alert(
-            wasPending
-              ? 'Reserva actualizada (x' +
-                  cantidad +
-                  '). Solo hay un pedido activo por producto; se reemplazó la cantidad anterior.'
-              : 'Reserva registrada (x' +
-                  cantidad +
-                  '). Cuando haya stock se procesará automáticamente. El saldo queda anclado hasta cancelar.'
+            'Con tu saldo disponible solo puedes reservar hasta ' +
+              maxRes +
+              ' cuenta(s) de este producto.'
           );
         })
         .catch(function () {
@@ -2968,15 +3410,44 @@ document.addEventListener('DOMContentLoaded', function() {
     var del = t.closest ? t.closest('.reserva-pendiente-eliminar') : null;
     if (del) {
       var idDel = del.getAttribute('data-res-id');
-      reservaApiPost('/tienda/api/product-reservations/' + encodeURIComponent(String(idDel)) + '/cancel', {}).then(
-        function (data) {
-          if (!data || !data.success) {
-            alert((data && data.error) || 'No se pudo eliminar la reserva.');
-          }
+      if (!idDel) return;
+      if (del.disabled) return;
+      del.disabled = true;
+      /* Quitar al instante de la UI; el API confirma en segundo plano. */
+      var removed = detailedReservationsCache.filter(function (x) {
+        return String(x.id) === String(idDel);
+      })[0];
+      detailedReservationsCache = detailedReservationsCache.filter(function (x) {
+        return String(x.id) !== String(idDel);
+      });
+      if (removed && removed.product_id != null) {
+        var stillPending = detailedReservationsCache.some(function (x) {
+          return (
+            String(x.product_id) === String(removed.product_id) &&
+            (x.kind === 'stock' || !x.kind)
+          );
+        });
+        var pidRm = parseInt(removed.product_id, 10);
+        if (Number.isFinite(pidRm) && !stillPending) {
+          delete pendingReservationProductIds[pidRm];
+        }
+      }
+      renderAllReservationLists();
+      syncAllProductReserveUi();
+      reservaApiPost(
+        '/tienda/api/product-reservations/' + encodeURIComponent(String(idDel)) + '/cancel',
+        {}
+      ).then(function (data) {
+        if (!data || !data.success) {
+          alert((data && data.error) || 'No se pudo eliminar la reserva.');
           loadDetailedReservations();
           loadPendingProductReservations();
+          return;
         }
-      );
+        /* Sync suave por si hay otro cambio concurrente; no bloquea el ×. */
+        loadDetailedReservations();
+        loadPendingProductReservations();
+      });
       return;
     }
     var acc = t.closest ? t.closest('.reserva-pendiente-aceptar') : null;
@@ -3271,8 +3742,7 @@ document.addEventListener('DOMContentLoaded', function() {
     var img = shell.img();
     var precioCop = shell.priceCop();
     var precioUsd = shell.priceUsd();
-    var precio_unitario = precioCop || precioUsd;
-    var moneda = precioCop ? 'COP' : 'USD';
+    var pricingRen = pricingForUserCurrency(precioCop, precioUsd);
     if (cuponAplicado) {
       cuponAplicado = null;
       descuentoCupon = 0;
@@ -3283,8 +3753,8 @@ document.addEventListener('DOMContentLoaded', function() {
       nombre: nombre,
       logo: img,
       cantidad: 1,
-      precio_unitario: precio_unitario,
-      moneda: moneda,
+      precio_unitario: pricingRen.precio_unitario,
+      moneda: pricingRen.moneda,
       es_renovar_cuenta_cliente: true,
       customer_credential: credential,
       customer_email: emNorm,
@@ -3392,15 +3862,14 @@ document.addEventListener('DOMContentLoaded', function() {
       if (!card) return null;
       const precioCop = parseFloat(card.getAttribute('data-price-cop')) || 0;
       const precioUsd = parseFloat(card.getAttribute('data-price-usd')) || 0;
-      const precio_unitario = precioCop || precioUsd;
-      const moneda = precioCop ? 'COP' : 'USD';
+      const pricing = pricingForUserCurrency(precioCop, precioUsd);
       const img = card.getAttribute('data-img') || '';
       const nombre =
         (card.querySelector('.product-name') || card.querySelector('.mt-05') || {}).textContent ||
         '';
       return {
-        precio_unitario: precio_unitario,
-        moneda: moneda,
+        precio_unitario: pricing.precio_unitario,
+        moneda: pricing.moneda,
         logo: img,
         nombre: String(nombre).trim(),
       };

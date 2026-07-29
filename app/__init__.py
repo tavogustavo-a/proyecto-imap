@@ -363,6 +363,25 @@ def create_app(config_class_passed=None):
                         dialect,
                     )
 
+                ucols = _cols("users")
+                if "can_view_announcements" not in ucols:
+                    if dialect == "postgresql":
+                        ann_sql = (
+                            "ALTER TABLE users ADD COLUMN can_view_announcements "
+                            "BOOLEAN NOT NULL DEFAULT FALSE"
+                        )
+                    else:
+                        ann_sql = (
+                            "ALTER TABLE users ADD COLUMN can_view_announcements "
+                            "INTEGER NOT NULL DEFAULT 0"
+                        )
+                    db.session.execute(text(ann_sql))
+                    db.session.commit()
+                    app.logger.info(
+                        "Esquema: columna can_view_announcements añadida a users (%s)",
+                        dialect,
+                    )
+
                 try:
                     from app.store.email_notify_prefs import ensure_store_notify_prefs_columns
 
@@ -388,6 +407,9 @@ def create_app(config_class_passed=None):
             repaired_accum = normalize_unreviewed_accumulations()
             ensure_sale_schema()
             ensure_snapshot_table()
+            from app.store.routes import ensure_coupon_min_amount_columns
+
+            ensure_coupon_min_amount_columns()
             from app.store.customer_account_renewals import ensure_customer_account_renewal_schema
             from app.store.product_reservations import ensure_product_reservation_schema
             from app.store.routes import _ensure_license_expired_notes_and_month_columns
@@ -723,6 +745,19 @@ def create_app(config_class_passed=None):
     @app.template_filter("sanitize_message_html")
     def sanitize_message_html_filter(value):
         return sanitize_admin_message_html(value)
+
+    @app.template_filter("money_amount")
+    def money_amount_filter(value):
+        """Precio para UI: enteros sin decimales; si no, hasta 2 decimales (1.5 → 1.5, no 1)."""
+        try:
+            n = float(value or 0)
+        except (TypeError, ValueError):
+            return '0'
+        n = round(n + 0.0, 2)
+        if abs(n - round(n)) < 1e-9:
+            return str(int(round(n)))
+        s = f'{n:.2f}'.rstrip('0').rstrip('.')
+        return s or '0'
 
     from flask import jsonify, render_template, request, send_from_directory
 

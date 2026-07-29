@@ -225,6 +225,8 @@ class User(db.Model):
     can_manage_subusers = db.Column(db.Boolean, default=False, nullable=False)
     is_support = db.Column(db.Boolean, default=False, nullable=False)
     can_use_coupons = db.Column(db.Boolean, default=False, nullable=False)
+    # Sub-usuarios: ver anuncios de tienda solo si el padre lo permite.
+    can_view_announcements = db.Column(db.Boolean, default=False, nullable=False, server_default='0')
     
     # --- NUEVOS CAMPOS para Proyectos Vinculados ---
     master_token = db.Column(db.String(100), unique=True, nullable=True, index=True)

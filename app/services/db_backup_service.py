@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Copias de seguridad de la base SQLite (horario + panel admin).
+Copias de seguridad de la base SQLite (diaria + panel admin).
 Mantiene hasta N archivos auto_*.db (FIFO: al superar el máximo se borran los más antiguos).
 """
 import logging
@@ -159,9 +159,61 @@ def prune_auto_backups(app=None) -> int:
     return removed
 
 
+def _disk_free_bytes(path: str) -> int | None:
+    try:
+        return shutil.disk_usage(str(path)).free
+    except OSError:
+        return None
+
+
+def _notify_admins_disk_low(free_bytes: int, required_bytes: int) -> None:
+    """Aviso en la campana de la tienda (admin + soporte) cuando queda poco disco."""
+    try:
+        from app.extensions import db
+        from app.store.store_event_notify import notify_admins_app
+
+        free_mb = int(free_bytes // (1024 * 1024))
+        req_mb = int(required_bytes // (1024 * 1024))
+        notify_admins_app(
+            kind='admin_disk_space_low',
+            title='⚠ Espacio en disco bajo en el servidor',
+            body=(
+                f'Quedan {free_mb} MB libres y se necesitan al menos {req_mb} MB. '
+                'La copia de seguridad automática se omitió. '
+                'Libera espacio en el servidor: si el disco se llena, la tienda no podrá '
+                'registrar ventas, reservas ni recargas.'
+            ),
+            payload={'free_mb': free_mb, 'required_mb': req_mb, 'url': '/tienda/admin'},
+        )
+        try:
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+    except Exception as ex:
+        log.warning('aviso disco bajo: %s', ex)
+
+
+def check_free_disk_for_backup(app=None, db_size_bytes: int = 0) -> tuple[bool, int, int]:
+    """
+    Verifica el espacio libre en el disco de los backups.
+    Requiere lo mayor entre MIN_FREE_DISK_MB y 3× el tamaño de la BD.
+    Retorna (hay_espacio, libres_bytes, requerido_bytes).
+    """
+    app = app or current_app
+    min_free_mb = max(50, int(app.config.get('MIN_FREE_DISK_MB', 500)))
+    required = max(int(min_free_mb) * 1024 * 1024, 3 * int(db_size_bytes or 0))
+    bd = backups_directory(app)
+    free = _disk_free_bytes(str(bd))
+    if free is None:
+        # Sin lectura fiable del disco: no bloquear el backup.
+        return True, -1, required
+    return free >= required, free, required
+
+
 def create_auto_backup_now(app=None) -> str | None:
     """
     Crea un backup automático con nombre auto_YYYYMMDD_HHMMSS.db y aplica rotación.
+    Si queda poco espacio en disco, omite la copia y avisa al admin en la tienda.
     Retorna ruta absoluta del fichero creado, o None si no aplica (no SQLite / error).
     """
     app = app or current_app
@@ -176,6 +228,21 @@ def create_auto_backup_now(app=None) -> str | None:
     try:
         if not os.path.isfile(src):
             log.warning('Auto backup: no existe el fichero BD en %s — se omite.', src)
+            return None
+        try:
+            db_size = os.path.getsize(src)
+        except OSError:
+            db_size = 0
+        ok_space, free, required = check_free_disk_for_backup(app, db_size)
+        if not ok_space:
+            log.warning(
+                'Auto backup omitido: poco espacio en disco (libres %s MB, requerido %s MB).',
+                free // (1024 * 1024),
+                required // (1024 * 1024),
+            )
+            # Rotar igualmente por si liberar copias viejas ayuda.
+            prune_auto_backups(app)
+            _notify_admins_disk_low(free, required)
             return None
         _sqlite_backup_file(src, str(dest))
         prune_auto_backups(app)
@@ -194,6 +261,19 @@ def create_manual_backup_now(app=None) -> str | None:
     app = app or current_app
     src = get_resolved_sqlite_database_path(app)
     if not src or not os.path.isfile(src):
+        return None
+    try:
+        db_size = os.path.getsize(src)
+    except OSError:
+        db_size = 0
+    ok_space, free, required = check_free_disk_for_backup(app, db_size)
+    if not ok_space:
+        log.warning(
+            'Backup manual rechazado: poco espacio en disco (libres %s MB, requerido %s MB).',
+            free // (1024 * 1024),
+            required // (1024 * 1024),
+        )
+        _notify_admins_disk_low(free, required)
         return None
     ts = datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')
     bd = backups_directory(app)
@@ -350,5 +430,5 @@ def delete_all_backups_except_latest(app=None) -> tuple[bool, str]:
 
 
 def scheduled_backup_tick(app=None):
-    """Llamada desde APScheduler (hourly)."""
+    """Llamada desde APScheduler (diaria)."""
     create_auto_backup_now(app)

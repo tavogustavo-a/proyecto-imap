@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 
 
 def viewer_can_see_store_announcements() -> bool:
-    """Solo usuarios logueados (no admin, no invitados)."""
+    """Solo usuarios logueados (no admin, no invitados). Sub-usuarios: requiere permiso del padre."""
     if not session.get('logged_in'):
         return False
     admin_username = (current_app.config.get('ADMIN_USER') or 'admin').strip()
@@ -31,6 +31,10 @@ def viewer_can_see_store_announcements() -> bool:
     if not user:
         return False
     if (user.username or '').strip() == admin_username:
+        return False
+    if getattr(user, 'parent_id', None) is not None and not bool(
+        getattr(user, 'can_view_announcements', False)
+    ):
         return False
     return True
 
@@ -197,14 +201,73 @@ def apply_duration_fields(
     )
 
 
+def purge_expired_announcements() -> int:
+    """
+    Elimina anuncios con fecha de vencimiento cumplida.
+    Los indefinidos (expires_at IS NULL) no se tocan.
+    Aplica a personalizado y presets con días (1d, 3d, 7d, 10d, 1m).
+    """
+    ensure_store_announcements_schema()
+    now = datetime.utcnow()
+    # Sanar filas con duración acotada pero sin expires_at (datos viejos / bug).
+    try:
+        orphan_timed = (
+            StoreAnnouncement.query.filter(
+                StoreAnnouncement.duration_preset.isnot(None),
+                StoreAnnouncement.duration_preset != 'indefinido',
+                StoreAnnouncement.expires_at.is_(None),
+            ).all()
+        )
+        for row in orphan_timed:
+            start = row.starts_at or row.created_at or now
+            if not row.starts_at:
+                row.starts_at = start
+            row.expires_at = compute_expires_at(
+                normalize_duration_preset(row.duration_preset),
+                custom_days=float(row.custom_days or 0),
+                custom_hours=float(row.custom_hours or 0),
+                starts_at=start,
+            )
+        if orphan_timed:
+            db.session.commit()
+    except Exception:
+        db.session.rollback()
+        logger.exception('purge_expired_announcements: no se pudo sanar expires_at')
+
+    try:
+        expired = (
+            StoreAnnouncement.query.filter(
+                StoreAnnouncement.expires_at.isnot(None),
+                StoreAnnouncement.expires_at <= now,
+            ).all()
+        )
+        if not expired:
+            return 0
+        n = 0
+        for row in expired:
+            db.session.delete(row)
+            n += 1
+        db.session.commit()
+        if n:
+            logger.info('Anuncios vencidos eliminados: %s', n)
+        return n
+    except Exception:
+        db.session.rollback()
+        logger.exception('purge_expired_announcements falló')
+        return 0
+
+
 def list_announcements_admin() -> list[dict[str, Any]]:
     ensure_store_announcements_schema()
+    purge_expired_announcements()
     rows = StoreAnnouncement.query.order_by(StoreAnnouncement.id.desc()).all()
     return [serialize_announcement(r) for r in rows]
 
 
 def list_live_announcements(*, on_entry_only: bool = False) -> list[dict[str, Any]]:
     ensure_store_announcements_schema()
+    # No purgar aquí: el vencido ya no se muestra (filtro expires_at).
+    # El borrado físico corre a las 03:00 CO (scheduler) o al listar en admin.
     now = datetime.utcnow()
     q = StoreAnnouncement.query.filter(StoreAnnouncement.enabled.is_(True))
     if on_entry_only:

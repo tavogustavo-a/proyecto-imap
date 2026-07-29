@@ -32,7 +32,11 @@ class Config:
     SQLALCHEMY_DATABASE_URI = DATABASE_URI
     # Copias automáticas SQLite (instance/backups)
     BACKUPS_DIR = os.path.join(basedir, 'instance', 'backups')
-    AUTO_BACKUP_MAX_FILES = int(os.getenv('AUTO_BACKUP_MAX_FILES', '100'))
+    AUTO_BACKUP_MAX_FILES = int(os.getenv('AUTO_BACKUP_MAX_FILES', '5'))
+    # Espacio libre mínimo en disco (MB) para crear backups y avisar al admin si falta.
+    MIN_FREE_DISK_MB = int(os.getenv('MIN_FREE_DISK_MB', '500'))
+    # Umbral (GB) bajo el cual se pausan ventas y subidas de archivos del chat, con aviso al admin.
+    DISK_SPACE_MIN_FREE_GB = float(os.getenv('DISK_SPACE_MIN_FREE_GB', '2'))
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     # Limitar conexiones por worker (evita saturar PostgreSQL con varios procesos Gunicorn).
     if str(DATABASE_URI).startswith('postgresql'):

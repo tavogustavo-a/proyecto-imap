@@ -13,7 +13,10 @@
     <form id="editUserProductsForm" class="edit-role-form d-flex flex-column lign-items-center" data-user-id="{{ user.id }}">
       <div class="d-flex align-items-center justify-content-between w-100">
         <h3 class="text-center mb-1 edit-role-title">Productos Asociados - {{ user.username }}</h3>
-        <a href="{{ url_for('admin_bp.manage_permissions_page') }}" class="btn-panel btn-blue edit-role-back-btn">Volver</a>
+        <div class="d-flex align-items-center gap-1">
+          <span id="editUserProductsSaveStatus" class="text-muted small" hidden></span>
+          <a href="{{ url_for('admin_bp.manage_permissions_page') }}" class="btn-panel btn-blue edit-role-back-btn">Volver</a>
+        </div>
       </div>
       <input type="hidden" name="user_id" id="userId" value="{{ user.id }}">
       <input type="hidden" id="tipoPrecioDisplay" value="{{ tipo_precio }}">
@@ -40,8 +43,8 @@
               <td><input type="checkbox" name="visible_{{ p.id }}" {% if p.id in productos_ids %}checked{% endif %}></td>
               <td>
                 <div class="edit-role-discount-inputs">
-                  <input type="number" name="discount_cop_extra_{{ p.id }}" value="{{ p.discount_cop_extra if p.discount_cop_extra is not none else 0 }}" placeholder="COP" class="edit-role-discount-input-small">
-                  <input type="number" name="discount_usd_extra_{{ p.id }}" value="{{ p.discount_usd_extra if p.discount_usd_extra is not none else 0 }}" placeholder="USD" class="edit-role-discount-input-small">
+                  <input type="number" step="1" min="0" name="discount_cop_extra_{{ p.id }}" value="{{ p.discount_cop_extra if p.discount_cop_extra is not none else 0 }}" placeholder="COP" class="edit-role-discount-input-small" inputmode="decimal">
+                  <input type="number" step="0.01" min="0" name="discount_usd_extra_{{ p.id }}" value="{{ p.discount_usd_extra if p.discount_usd_extra is not none else 0 }}" placeholder="USD" class="edit-role-discount-input-small" inputmode="decimal">
                 </div>
               </td>
               <td class="td-final-price">
@@ -63,7 +66,7 @@
 
 {% block scripts %}
 {{ super() }}
-<script src="{{ url_for('store_bp.static', filename='js/edit_user_products.js') }}"></script>
+<script src="{{ url_for('store_bp.static', filename='js/edit_user_products.js') }}?v=20260729-catalog-live"></script>
 {% endblock %}
 
 {% macro format_number(n) %}
@@ -72,6 +75,6 @@
     {%- if n % 1 == 0 -%}
         {{ n|int }}
     {%- else -%}
-        {{ ('%.2f' % n).replace('.00','').replace('0$', '') }}
+        {{ ('%.2f' % n).rstrip('0').rstrip('.') }}
     {%- endif -%}
 {% endmacro %}

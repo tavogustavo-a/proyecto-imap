@@ -25,6 +25,9 @@ KIND_BALANCE_RECHARGE = 'balance_recharge'
 KIND_WA_DIGEST_FALLBACK = 'whatsapp_digest_fallback'
 KIND_ADMIN_BALANCE_RECHARGE = 'admin_balance_recharge'
 KIND_ADMIN_RESERVATION = 'admin_product_reservation'
+KIND_PROVEEDOR_RESERVATION = 'proveedor_product_reservation'
+KIND_ADMIN_CUSTOMER_RENEWAL = 'admin_customer_account_renewal'
+KIND_PROVEEDOR_CUSTOMER_RENEWAL = 'proveedor_customer_account_renewal'
 KIND_ADMIN_WA_DIGEST_FALLBACK = 'admin_whatsapp_digest_fallback'
 KIND_ADMIN_STOCK_UPLOAD = 'admin_stock_upload'
 
@@ -159,6 +162,35 @@ def _cred_lines_from_licencias(licencias: Any) -> list[str]:
     return out
 
 
+def _fmt_money_notify(n) -> str:
+    """Enteros con separador de miles; si hay centavos, hasta 2 decimales (1.5 → 1.5, no 2)."""
+    try:
+        v = round(float(n or 0) + 0.0, 2)
+    except (TypeError, ValueError):
+        return '0'
+    if abs(v - round(v)) < 1e-9:
+        return f'{int(round(v)):,}'.replace(',', '.')
+    return ('%.2f' % v).rstrip('0').rstrip('.')
+
+
+def _buyer_currency_label(user) -> str:
+    """Moneda de facturación (USD/COP); sub-usuario hereda la del padre. '' si no hay."""
+    from app.models.user import User
+
+    u = user
+    for _ in range(2):
+        if not u:
+            return ''
+        up = getattr(u, 'user_prices', None)
+        if isinstance(up, dict):
+            tp = str(up.get('tipo_precio') or '').strip().upper()
+            if tp in ('USD', 'COP'):
+                return tp
+        pid = getattr(u, 'parent_id', None)
+        u = User.query.get(pid) if pid else None
+    return ''
+
+
 def notify_store_purchases_for_sale_ids(sale_ids: list[int]) -> int:
     """Opción 5: 1 toast por venta de checkout normal (compra o renovación tienda)."""
     from app.models.user import User
@@ -212,17 +244,19 @@ def notify_store_purchases_for_sale_ids(sale_ids: list[int]) -> int:
             kind = KIND_STORE_PURCHASE
             title = f'Compra lista: {pname}'
             body = f'Tu compra de «{pname}» está lista ({qty} cuenta(s)).'
+        user = User.query.get(int(sale.user_id))
+        if not user:
+            continue
         if total:
             try:
-                body += f'\nTotal: ${total:,.0f}'.replace(',', '.')
+                cur_label = _buyer_currency_label(user)
+                body += f'\nTotal: ${_fmt_money_notify(total)}'
+                if cur_label:
+                    body += f' {cur_label}'
             except Exception:
                 pass
         if creds:
             body += '\n\n' + ('\n'.join(creds[:8]))
-
-        user = User.query.get(int(sale.user_id))
-        if not user:
-            continue
         _add_notification(
             user_id=int(user.id),
             kind=kind,
@@ -331,7 +365,8 @@ def notify_balance_recharge_event(row, *, reason: str) -> None:
         return
 
     status = str(getattr(row, 'status', '') or '').strip().lower()
-    cur = str(getattr(row, 'currency', 'COP') or 'COP').strip().upper()
+    cur_raw = str(getattr(row, 'currency', '') or '').strip().upper()
+    cur = cur_raw if cur_raw in ('USD', 'COP') else ''
     amount = getattr(row, 'amount_credited', None)
     if amount is None:
         amount = getattr(row, 'amount_claimed', None)
@@ -339,7 +374,8 @@ def notify_balance_recharge_event(row, *, reason: str) -> None:
         amount_f = float(amount or 0)
     except (TypeError, ValueError):
         amount_f = 0.0
-    amount_s = f'{amount_f:,.0f}'.replace(',', '.') if amount_f else '—'
+    amount_s = _fmt_money_notify(amount_f) if amount_f else '—'
+    amt_label = f'${amount_s} {cur}'.rstrip()
 
     rejected = (
         'reject' in rk
@@ -348,13 +384,13 @@ def notify_balance_recharge_event(row, *, reason: str) -> None:
     )
     if rejected:
         title = 'Recarga rechazada'
-        body = f'Tu solicitud de recarga por ${amount_s} {cur} fue rechazada.'
+        body = f'Tu solicitud de recarga por {amt_label} fue rechazada.'
         note = str(getattr(row, 'admin_note', '') or '').strip()
         if note:
             body += f'\n\nMotivo: {note[:300]}'
     else:
         title = 'Recarga acreditada'
-        body = f'Se acreditaron ${amount_s} {cur} a tu saldo.'
+        body = f'Se acreditaron {amt_label} a tu saldo.'
 
     _add_notification(
         user_id=int(user.id),
@@ -374,13 +410,13 @@ def notify_balance_recharge_event(row, *, reason: str) -> None:
     uname = str(getattr(user, 'username', None) or '').strip() or f'user#{user.id}'
     if rejected:
         admin_title = f'Recarga rechazada: {uname}'
-        admin_body = f'{uname}: solicitud por ${amount_s} {cur} rechazada.'
+        admin_body = f'{uname}: solicitud por {amt_label} rechazada.'
         note = str(getattr(row, 'admin_note', '') or '').strip()
         if note:
             admin_body += f'\nMotivo: {note[:300]}'
     else:
         admin_title = f'Recarga acreditada: {uname}'
-        admin_body = f'{uname}: se acreditaron ${amount_s} {cur}.'
+        admin_body = f'{uname}: se acreditaron {amt_label}.'
     notify_admins_app(
         kind=KIND_ADMIN_BALANCE_RECHARGE,
         title=admin_title,

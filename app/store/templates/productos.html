@@ -58,9 +58,9 @@
               {% endif %}
             </td>
             <td class="name-col">{{ p.name }}</td>
-            <td class="price-col">{{ '$%d'|format(p.price_cop|round|int) }}</td>
+            <td class="price-col">{{ '$%s'|format(p.price_cop|money_amount) }} COP</td>
             <td class="price-col">
-              <div class="productos-usd-color">${{ p.price_usd|int }} USD</div>
+              <div class="productos-usd-color">${{ p.price_usd|money_amount }} USD</div>
             </td>
             <td class="actions-col">
               <div class="action-stack">
@@ -104,7 +104,7 @@
         <label for="productPriceCop" class="sr-only">Precio COP</label>
         <input type="number" id="productPriceCop" step="1" name="price_cop" placeholder="Precio COP" autocomplete="off" required>
         <label for="productPriceUsd" class="sr-only">Precio USD</label>
-        <input type="number" id="productPriceUsd" step="1" name="price_usd" placeholder="Precio USD" autocomplete="off" required>
+        <input type="number" id="productPriceUsd" step="0.01" min="0" name="price_usd" placeholder="Precio USD" autocomplete="off" required>
         <div class="image-select-container">
             <div class="grid-overlay" id="imageGridOverlay"></div>
             <label for="imageSelect" class="sr-only">Seleccionar imagen</label>
@@ -180,9 +180,9 @@
       </div>
       <div class="d-flex align-items-center mb-1 w-100 gap-1rem">
         <label for="discountCop" class="sr-only">Descuento COP</label>
-        <input type="number" id="discountCop" name="discount_cop" placeholder="Descuento COP" required class="coupon-input flex-1" autocomplete="off">
+        <input type="number" id="discountCop" name="discount_cop" placeholder="Descuento COP" min="0" step="1" required class="coupon-input flex-1" autocomplete="off">
         <label for="discountUsd" class="sr-only">Descuento USD</label>
-        <input type="number" id="discountUsd" name="discount_usd" placeholder="Descuento USD" required class="coupon-input flex-1" autocomplete="off">
+        <input type="number" id="discountUsd" name="discount_usd" placeholder="Descuento USD" min="0" step="0.01" required class="coupon-input flex-1" autocomplete="off">
       </div>
       <div class="d-flex align-items-center mb-1 w-100 gap-1rem">
         <label for="durationDays" class="sr-only">Duración en días</label>
@@ -195,8 +195,12 @@
         <input type="hidden" name="products_hidden" id="productsHiddenInput">
       </div>
       <div class="d-flex align-items-center mb-1 w-100">
-        <label for="minAmount" class="sr-only">Cuentas mínimo</label>
-        <input type="number" id="minAmount" name="min_amount" placeholder="Cuentas mínimo (opcional)" min="0" step="0.01" class="coupon-input w-100" autocomplete="off">
+        <label for="minAmountCop" class="sr-only">Monto mínimo COP</label>
+        <input type="number" id="minAmountCop" name="min_amount_cop" placeholder="Monto mínimo COP (opcional)" min="0" step="1" class="coupon-input w-100" autocomplete="off">
+      </div>
+      <div class="d-flex align-items-center mb-1 w-100">
+        <label for="minAmountUsd" class="sr-only">Monto mínimo USD</label>
+        <input type="number" id="minAmountUsd" name="min_amount_usd" placeholder="Monto mínimo USD (opcional)" min="0" step="0.01" class="coupon-input w-100" autocomplete="off">
       </div>
       <div class="d-flex align-items-center mb-1 w-100">
         <label for="couponDescription" class="sr-only">Descripción del cupón</label>
@@ -326,8 +330,8 @@
 {% endblock %}
 {% block scripts %}
   {{ super() }}
-  <script src="{{ url_for('store_bp.static', filename='js/admin_store.js') }}?v=20260421-no-onclick" defer></script>
+  <script src="{{ url_for('store_bp.static', filename='js/admin_store.js') }}?v=20260729-cupon-decimal" defer></script>
   <script src="{{ url_for('store_bp.static', filename='js/productos.js') }}" defer></script>
-  <script src="{{ url_for('store_bp.static', filename='js/cupones.js') }}" defer></script>
-  <script src="{{ url_for('store_bp.static', filename='js/anuncios_admin.js') }}?v=20260721-days-float" defer></script>
+  <script src="{{ url_for('store_bp.static', filename='js/cupones.js') }}?v=20260729-min-por-moneda" defer></script>
+  <script src="{{ url_for('store_bp.static', filename='js/anuncios_admin.js') }}?v=20260729-purge-expired" defer></script>
 {% endblock %} 

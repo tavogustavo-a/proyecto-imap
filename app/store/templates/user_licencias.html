@@ -202,6 +202,22 @@
   <div id="userLicCaducidadAlertStack" class="user-lic-caducidad-alert-stack" aria-live="polite" aria-label="Alertas de notificación" hidden></div>
 
   <div id="userLicenciasGridHost" class="licencias-container user-licencias-grid-host mb-3 w-100 d-none" hidden aria-hidden="true">
+    <div id="userLicPedidosReservaBanner" class="admin-lic-pedidos-reserva-banner d-none" hidden aria-live="polite">
+      <button type="button" id="userLicPedidosReservaToggle" class="admin-lic-pedidos-reserva-banner__head" aria-expanded="true" aria-controls="userLicPedidosReservaList">
+        <strong>Pedidos en reserva</strong>
+        <span id="userLicPedidosReservaCount" class="sr-only">0</span>
+        <i class="fas fa-chevron-down admin-lic-pedidos-reserva-banner__chevron" aria-hidden="true"></i>
+      </button>
+      <ul id="userLicPedidosReservaList" class="admin-lic-pedidos-reserva-banner__list"></ul>
+    </div>
+    <div id="userLicPedidosRenovarBanner" class="admin-lic-pedidos-reserva-banner d-none" hidden aria-live="polite">
+      <button type="button" id="userLicPedidosRenovarToggle" class="admin-lic-pedidos-reserva-banner__head" aria-expanded="true" aria-controls="userLicPedidosRenovarList">
+        <strong>Pedidos en Renovar tu cuenta</strong>
+        <span id="userLicPedidosRenovarCount" class="sr-only">0</span>
+        <i class="fas fa-chevron-down admin-lic-pedidos-reserva-banner__chevron" aria-hidden="true"></i>
+      </button>
+      <ul id="userLicPedidosRenovarList" class="admin-lic-pedidos-reserva-banner__list"></ul>
+    </div>
     <div id="userLicenciasGrid" class="licenses-grid"></div>
   </div>
 
@@ -295,6 +311,8 @@
 {{ super() }}
 <script src="{{ url_for('static', filename='js/menu_busqueda.js') }}" defer></script>
 <script src="{{ url_for('store_bp.static', filename='js/licencias_shared.js') }}?v={{ licencias_static_version }}" defer></script>
+  <div id="storeFrontUiPrefsJson" hidden class="embedded-page-json">{{ (store_front_ui_prefs or {})|tojson }}</div>
+  <div id="storeFrontPrefsScope" hidden data-user-id="{{ current_user.id if current_user else '' }}" data-persist-server="1"></div>
   <script src="{{ url_for('store_bp.static', filename='js/user_licencias.js') }}?v={{ licencias_static_version }}" defer></script>
 {% if session.get('logged_in') and current_user and not is_admin %}
 <div id="anuncioEntryDismissScope" hidden data-user-id="{{ current_user.id }}"></div>

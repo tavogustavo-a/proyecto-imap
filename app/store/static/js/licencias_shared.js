@@ -858,6 +858,7 @@ function showAdminLicenciasNotificacionesModal() {
     '          <label class="admin-lic-notify-prefs-check"><input type="checkbox" id="adminNotifyTypeLicenseReport" checked autocomplete="off"> <span>Reportes de clientes</span></label>' +
     '          <label class="admin-lic-notify-prefs-check"><input type="checkbox" id="adminNotifyTypeBalanceRecharge" checked autocomplete="off"> <span>Recargas (acreditada / rechazada)</span></label>' +
     '          <label class="admin-lic-notify-prefs-check"><input type="checkbox" id="adminNotifyTypeReservation" checked autocomplete="off"> <span>Reservas</span></label>' +
+    '          <label class="admin-lic-notify-prefs-check"><input type="checkbox" id="adminNotifyTypeCustomerRenewal" checked autocomplete="off"> <span>Cuentas para renovar</span></label>' +
     '          <label class="admin-lic-notify-prefs-check"><input type="checkbox" id="adminNotifyTypeStockUpload" checked autocomplete="off"> <span>Cuentas subidas (stock nuevo)</span></label>' +
     '          <label class="admin-lic-notify-prefs-check"><input type="checkbox" id="adminNotifyTypeWaDigest" checked autocomplete="off"> <span>Fallback WhatsApp (app + correo)</span></label>' +
     '        </div>' +
@@ -902,6 +903,7 @@ function adminLicenciasWireNotifyPrefsModal(modalOverlay) {
   var chkReport = modalOverlay.querySelector('#adminNotifyTypeLicenseReport');
   var chkRecharge = modalOverlay.querySelector('#adminNotifyTypeBalanceRecharge');
   var chkReservation = modalOverlay.querySelector('#adminNotifyTypeReservation');
+  var chkCustomerRenewal = modalOverlay.querySelector('#adminNotifyTypeCustomerRenewal');
   var chkStock = modalOverlay.querySelector('#adminNotifyTypeStockUpload');
   var chkWa = modalOverlay.querySelector('#adminNotifyTypeWaDigest');
   var statusEl = modalOverlay.querySelector('#adminLicNotifyPrefsSaveStatus');
@@ -934,6 +936,7 @@ function adminLicenciasWireNotifyPrefsModal(modalOverlay) {
     if (chkReport) chkReport.checked = types.license_report !== false;
     if (chkRecharge) chkRecharge.checked = types.balance_recharge !== false;
     if (chkReservation) chkReservation.checked = types.reservation !== false;
+    if (chkCustomerRenewal) chkCustomerRenewal.checked = types.customer_renewal !== false;
     if (chkStock) chkStock.checked = types.stock_upload !== false;
     if (chkWa) chkWa.checked = types.wa_digest !== false;
     try {
@@ -955,6 +958,7 @@ function adminLicenciasWireNotifyPrefsModal(modalOverlay) {
         license_report: chkReport ? !!chkReport.checked : true,
         balance_recharge: chkRecharge ? !!chkRecharge.checked : true,
         reservation: chkReservation ? !!chkReservation.checked : true,
+        customer_renewal: chkCustomerRenewal ? !!chkCustomerRenewal.checked : true,
         stock_upload: chkStock ? !!chkStock.checked : true,
         wa_digest: chkWa ? !!chkWa.checked : true,
       },

@@ -225,12 +225,18 @@ document.addEventListener('DOMContentLoaded', () => {
             tbody.innerHTML = '<tr><td colspan="7" class="text-center">No hay cupones aún.</td></tr>';
             return;
         }
+        const fmtMoney = function (n) {
+            const v = Math.round((Number(n) || 0) * 100) / 100;
+            return Math.abs(v - Math.round(v)) < 1e-9
+                ? String(Math.round(v))
+                : String(Number(v.toFixed(2)));
+        };
         for (const c of coupons) {
             const tr = document.createElement('tr');
             tr.innerHTML = `
               <td>${c.name}</td>
-              <td>$${parseInt(c.discount_cop)} COP</td>
-              <td>$${parseInt(c.discount_usd)} USD</td>
+              <td>$${fmtMoney(c.discount_cop)} COP</td>
+              <td>$${fmtMoney(c.discount_usd)} USD</td>
               <td>${c.products.map(p=>p.name).join(', ')}</td>
               <td>${c.duration_days} días</td>
               <td>${c.max_uses_per_user}</td>

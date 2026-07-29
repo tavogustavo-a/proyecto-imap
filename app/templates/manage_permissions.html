@@ -6,7 +6,7 @@
 {% block head %}
 <meta name="csrf_token" content="{{ csrf_token() }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/store.css') }}">
-<link rel="stylesheet" href="{{ url_for('static', filename='css/manage_permissions.css') }}?v=20260703-reserva-otrodia-perm-v12">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/manage_permissions.css') }}?v=20260728-proveedor-renovar-v1">
 <link rel="stylesheet" href="{{ url_for('static', filename='fontawesome/css/all.min.css') }}">
 {% endblock %}
 
@@ -394,5 +394,5 @@
 <script src="{{ url_for('store_bp.static', filename='js/menu_tienda.js') }}" defer></script>
 <script src="{{ url_for('static', filename='js/clear_trigger_logs.js') }}" defer></script>
 <script src="{{ url_for('static', filename='js/logout_all_cookies_btn.js') }}" defer></script>
-<script src="{{ url_for('static', filename='js/manage_permissions.js') }}?v=20260703-reserva-otrodia-perm-v12" defer></script>
+<script src="{{ url_for('static', filename='js/manage_permissions.js') }}?v=20260729-tipo-precio-confirm" defer></script>
 {% endblock %}

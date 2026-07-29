@@ -288,18 +288,234 @@ def remove_customer_renewal_email_from_product_notes(product_id, email) -> bool:
     for license_obj in _licenses_for_customer_renewal(product_id):
         existing = getattr(license_obj, 'customer_renewal_notes', None) or ''
         kept = []
+        lic_changed = False
         for ln in existing.replace('\r\n', '\n').split('\n'):
             if not ln.strip():
                 continue
             cred_part = ln.split(sep)[0] if sep in ln else ln
             line_em = extract_email_from_renewal_credential(cred_part)
             if line_em and line_em.lower() == em:
-                changed = True
+                lic_changed = True
                 continue
             kept.append(ln)
-        if changed:
+        if lic_changed:
             license_obj.customer_renewal_notes = '\n'.join(kept)
+            changed = True
     return changed
+
+
+def _enabled_licenses_for_product(product_id):
+    """Todas las licencias habilitadas del producto (Cambios / inventario viven por licencia)."""
+    from app.store.models import License
+
+    if not product_id:
+        return []
+    return (
+        License.query.filter_by(product_id=int(product_id), enabled=True)
+        .order_by(License.position.asc(), License.id.asc())
+        .all()
+    )
+
+
+def _filter_bloc_text_excluding_email(text, email):
+    """
+    Quita líneas cuyo correo en cred coincida.
+    Devuelve (texto_nuevo, removidas, notas_visibles_de_lineas_quitadas).
+    """
+    from app.store.user_license_line_parse import (
+        LICENSE_LINE_FIELD_SEP,
+        parse_admin_license_line_to_split_parts,
+        user_visible_notes_from_extra,
+    )
+
+    em = (email or '').strip().lower()
+    if not em:
+        return str(text or ''), 0, []
+    sep = LICENSE_LINE_FIELD_SEP
+    kept = []
+    removed = 0
+    notes_out = []
+    for ln in str(text or '').replace('\r\n', '\n').split('\n'):
+        if not ln.strip():
+            continue
+        cred_part = ln.split(sep)[0] if sep in ln else ln
+        line_em = extract_email_from_renewal_credential(cred_part)
+        if line_em and line_em.lower() == em:
+            removed += 1
+            try:
+                dual = parse_admin_license_line_to_split_parts(ln)
+                note = user_visible_notes_from_extra(str(dual.get('extra') or ''))
+                if note:
+                    notes_out.append(note)
+            except Exception:
+                pass
+            continue
+        kept.append(ln)
+    return '\n'.join(kept), removed, notes_out
+
+
+def _merge_linked_notes(parts) -> str:
+    """Une notas únicas (orden de aparición), separadas por · como en el resto de blocs."""
+    seen = set()
+    out = []
+    for raw in parts or []:
+        n = str(raw or '').strip()
+        if not n:
+            continue
+        key = n.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(n)
+    return ' · '.join(out)
+
+
+def _remove_available_license_accounts_by_email(license_obj, email) -> int:
+    """Borra LicenseAccount available cuyo email coincida (inventario no vendido)."""
+    from app.store.models import LicenseAccount
+
+    em = (email or '').strip().lower()
+    if not em or not license_obj:
+        return 0
+    removed = 0
+    rows = LicenseAccount.query.filter_by(
+        license_id=int(license_obj.id),
+        status='available',
+    ).all()
+    for acc in rows:
+        acc_em = (getattr(acc, 'email', None) or '').strip().lower()
+        if acc_em and acc_em == em:
+            db.session.delete(acc)
+            removed += 1
+    return removed
+
+
+def _remove_email_from_proveedor_unsold_inventory(license_ids, email) -> int:
+    """Quita líneas no vendidas del inventario proveedor que matchean el correo."""
+    from app.models.user import User
+    from app.store.proveedor_user_data import (
+        proveedor_inventory_from_user_prices,
+        save_proveedor_inventory_on_user,
+    )
+    from app.store.routes import _proveedor_normalize_service_id
+
+    em = (email or '').strip().lower()
+    lids = {str(int(x)) for x in (license_ids or []) if x}
+    if not em or not lids:
+        return 0
+    removed_total = 0
+    candidates = (
+        User.query.filter(User.parent_id.is_(None), User.user_prices.isnot(None))
+        .order_by(User.id.asc())
+        .all()
+    )
+    for user_row in candidates:
+        up = user_row.user_prices if isinstance(user_row.user_prices, dict) else {}
+        if not up.get('proveedor'):
+            continue
+        inv = proveedor_inventory_from_user_prices(up)
+        lic_lines = list(inv.get('license_lines') or [])
+        if not lic_lines:
+            continue
+        kept = []
+        removed_here = 0
+        for entry in lic_lines:
+            if not isinstance(entry, dict):
+                kept.append(entry)
+                continue
+            svc = _proveedor_normalize_service_id(
+                entry.get('service')
+                if entry.get('service') is not None
+                else entry.get('license_id')
+            )
+            if svc not in lids:
+                kept.append(entry)
+                continue
+            cred = str(entry.get('cred') or '')
+            line_em = extract_email_from_renewal_credential(cred)
+            if line_em and line_em.lower() == em:
+                removed_here += 1
+                continue
+            kept.append(entry)
+        if removed_here:
+            save_proveedor_inventory_on_user(user_row, license_lines=kept)
+            removed_total += removed_here
+    return removed_total
+
+
+def remove_renewed_account_from_changes_and_unsold_inventory(product_id, email) -> dict:
+    """
+    Tras renovar cuenta del cliente: saca el correo de Cambios (admin/soporte)
+    y del inventario aún no vendido (bloc Licencias + cuentas available + proveedor).
+
+    Conserva las notas visibles de esas líneas en ``linked_notes`` (como al comprar).
+    No toca sold/assigned ni day_notepads (historial ya vendido).
+    """
+    em = (email or '').strip().lower()
+    out = {
+        'changes_removed': 0,
+        'inventory_removed': 0,
+        'accounts_removed': 0,
+        'proveedor_removed': 0,
+        'linked_notes': '',
+    }
+    if not em or not product_id:
+        return out
+
+    try:
+        from app.store.routes_licencias import _sync_inventory_accounts_from_license_notes
+    except Exception:
+        _sync_inventory_accounts_from_license_notes = None
+
+    license_ids = []
+    notes_parts = []
+    for license_obj in _enabled_licenses_for_product(product_id):
+        license_ids.append(int(license_obj.id))
+
+        new_changes, n_ch, notes_ch = _filter_bloc_text_excluding_email(
+            getattr(license_obj, 'changes_notes', None), em
+        )
+        if n_ch:
+            license_obj.changes_notes = new_changes or None
+            out['changes_removed'] += n_ch
+            notes_parts.extend(notes_ch)
+
+        new_inv, n_inv, notes_inv = _filter_bloc_text_excluding_email(
+            getattr(license_obj, 'license_notes', None), em
+        )
+        if n_inv:
+            license_obj.license_notes = new_inv or ''
+            out['inventory_removed'] += n_inv
+            notes_parts.extend(notes_inv)
+            if _sync_inventory_accounts_from_license_notes:
+                try:
+                    _sync_inventory_accounts_from_license_notes(license_obj)
+                except Exception as sync_ex:
+                    try:
+                        current_app.logger.warning(
+                            'sync inventario tras renovar cuenta: %s', sync_ex
+                        )
+                    except Exception:
+                        pass
+
+        out['accounts_removed'] += _remove_available_license_accounts_by_email(
+            license_obj, em
+        )
+
+    try:
+        out['proveedor_removed'] = _remove_email_from_proveedor_unsold_inventory(
+            license_ids, em
+        )
+    except Exception as prov_ex:
+        try:
+            current_app.logger.warning(
+                'quitar proveedor tras renovar cuenta: %s', prov_ex
+            )
+        except Exception:
+            pass
+
+    out['linked_notes'] = _merge_linked_notes(notes_parts)
+    return out
 
 
 def assert_customer_renewal_email_allowed_for_checkout(product, email, user_id=None):
@@ -423,7 +639,9 @@ def validate_customer_renewal_from_cart_item(product, email=None, password=None,
     return em, pw, cred_line, None
 
 
-def build_customer_renewal_storage_line(email, password, username, credential_line=None):
+def build_customer_renewal_storage_line(
+    email, password, username, credential_line=None, linked_notes=None
+):
     from app.store.user_license_line_parse import LICENSE_LINE_FIELD_SEP
 
     cred = (credential_line or '').strip()
@@ -432,7 +650,8 @@ def build_customer_renewal_storage_line(email, password, username, credential_li
         pw = (password or '').strip()
         cred = (em + ' ' + pw).strip() if pw else em
     user = (username or 'anonimo').strip() or 'anonimo'
-    return LICENSE_LINE_FIELD_SEP.join([cred, user, '', '', ''])
+    extra = (linked_notes or '').strip()
+    return LICENSE_LINE_FIELD_SEP.join([cred, user, '', '', extra])
 
 
 def customer_renewal_buyer_label(user):
@@ -516,18 +735,38 @@ def customer_renewal_notes_for_api(license_row):
     return enrich_customer_renewal_notes_for_display(raw, getattr(license_row, 'id', None))
 
 
-def append_customer_renewal_notes_for_checkout(product, user, email, password, credential_line=None):
+def append_customer_renewal_notes_for_checkout(
+    product, user, email, password, credential_line=None, linked_notes=None
+):
     """Añade la cuenta comprada al bloc admin «Cuentas para renovar» (sin inventario)."""
     if not product or not getattr(product, 'id', None):
         return
     buyer_label = customer_renewal_buyer_label(user)
     line = build_customer_renewal_storage_line(
-        email, password, buyer_label, credential_line=credential_line
+        email,
+        password,
+        buyer_label,
+        credential_line=credential_line,
+        linked_notes=linked_notes,
     )
+    em = (email or '').strip().lower()
+    from app.store.user_license_line_parse import LICENSE_LINE_FIELD_SEP
+
+    sep = LICENSE_LINE_FIELD_SEP
     for license_obj in _licenses_for_customer_renewal(product.id):
         existing = getattr(license_obj, 'customer_renewal_notes', None) or ''
         lines = [ln for ln in existing.replace('\r\n', '\n').split('\n') if ln.strip()]
-        if line not in lines:
+        # Si ya hay fila del mismo correo, actualizar notas vinculadas (no duplicar).
+        replaced = False
+        if em:
+            for i, ln in enumerate(lines):
+                cred_part = ln.split(sep)[0] if sep in ln else ln
+                line_em = extract_email_from_renewal_credential(cred_part)
+                if line_em and line_em.lower() == em:
+                    lines[i] = line
+                    replaced = True
+                    break
+        if not replaced and line not in lines:
             lines.append(line)
         license_obj.customer_renewal_notes = '\n'.join(lines)
 
@@ -660,6 +899,144 @@ def notify_admin_customer_account_renewal_pending(user, product, email):
     return send_whatsapp_alert_email(admin_email, subject, body)
 
 
+def _iter_proveedor_users_for_renew_customer(product, license_id=None):
+    """Usuarios raíz con proveedor y «Renovar tu cuenta» habilitado para el producto/licencia."""
+    from app.models.user import User
+    from app.store.models import License
+    from app.store.routes import _proveedor_normalize_services_map
+
+    if not product or not getattr(product, 'id', None):
+        return []
+    lid_filter = None
+    if license_id is not None:
+        try:
+            lid_filter = str(int(license_id))
+        except (TypeError, ValueError):
+            lid_filter = None
+    if lid_filter:
+        lic_ids = {lid_filter}
+    else:
+        lic_ids = {
+            str(int(lid))
+            for (lid,) in db.session.query(License.id)
+            .filter(License.product_id == int(product.id), License.enabled.is_(True))
+            .all()
+            if lid
+        }
+    if not lic_ids:
+        return []
+    candidates = (
+        User.query.filter(User.parent_id.is_(None), User.user_prices.isnot(None))
+        .order_by(User.id.asc())
+        .all()
+    )
+    out = []
+    for user_row in candidates:
+        up = user_row.user_prices if isinstance(user_row.user_prices, dict) else {}
+        if not up.get('proveedor'):
+            continue
+        services = _proveedor_normalize_services_map(up.get('proveedor_services'))
+        matched = False
+        for key in lic_ids:
+            entry = services.get(key)
+            if isinstance(entry, dict) and entry.get('renew_customer'):
+                matched = True
+                break
+        if matched:
+            out.append(user_row)
+    return out
+
+
+def notify_admins_and_proveedores_customer_account_renewal_app(
+    user, product, email, *, license_id=None
+):
+    """
+    Aviso in-app + push (móvil/navegador) a admin/soporte y a proveedores
+    con permiso «Renovar tu cuenta» para ese servicio.
+    """
+    from app.store.store_event_notify import (
+        KIND_ADMIN_CUSTOMER_RENEWAL,
+        KIND_PROVEEDOR_CUSTOMER_RENEWAL,
+        _add_notification,
+        notify_admins_app,
+    )
+
+    pname = getattr(product, 'name', None) or 'Producto'
+    uname = str(getattr(user, 'username', None) or '').strip() or 'cliente'
+    em = (email or '').strip()
+    lid = license_id
+    if lid is None:
+        try:
+            lid = _primary_license_id_for_product(getattr(product, 'id', None))
+        except Exception:
+            lid = None
+
+    admin_title = f'Cuenta para renovar — {pname}'
+    if uname and uname not in admin_title:
+        admin_title = f'{admin_title} — {uname}'[:200]
+    admin_body = (
+        f'Cliente: {uname}\n'
+        f'Cuenta: {em}\n'
+        f'Revisa el bloc «Cuentas para renovar».'
+    ).strip()
+    admin_payload = {
+        'product_id': getattr(product, 'id', None),
+        'product_name': pname,
+        'license_id': lid,
+        'customer_user_id': getattr(user, 'id', None),
+        'customer_username': uname,
+        'account_email': em,
+        'event': 'pending',
+        'url': '/tienda/admin',
+    }
+    try:
+        notify_admins_app(
+            kind=KIND_ADMIN_CUSTOMER_RENEWAL,
+            title=admin_title[:200],
+            body=admin_body[:4000],
+            payload=admin_payload,
+            exclude_user_id=getattr(user, 'id', None),
+            type_key='customer_renewal',
+        )
+    except Exception as ex:
+        current_app.logger.warning(
+            'notify_admins customer_account_renewal_app: %s', ex
+        )
+
+    prov_title = f'Cuenta para renovar: {pname}'
+    prov_body = (
+        f'Nueva solicitud en «Cuentas para renovar».\n'
+        f'Ábrela en Licencias → Proveedor.'
+    )
+    prov_payload = {
+        'product_id': getattr(product, 'id', None),
+        'product_name': pname,
+        'license_id': lid,
+        'event': 'pending',
+        'url': '/tienda/licencias',
+    }
+    try:
+        # Sin filtro de licencia: la fila se agrega a TODAS las licencias del producto
+        # con «Renovar tu cuenta», así que debe avisar a proveedores de cualquiera.
+        for dest in _iter_proveedor_users_for_renew_customer(product, license_id=None):
+            did = int(getattr(dest, 'id', 0) or 0)
+            if not did:
+                continue
+            if getattr(user, 'id', None) is not None and int(user.id) == did:
+                continue
+            _add_notification(
+                user_id=did,
+                kind=KIND_PROVEEDOR_CUSTOMER_RENEWAL,
+                title=prov_title[:200],
+                body=prov_body[:4000],
+                payload=prov_payload,
+            )
+    except Exception as ex:
+        current_app.logger.warning(
+            'notify_proveedores customer_account_renewal_app: %s', ex
+        )
+
+
 def extract_email_from_renewal_credential(credential):
     c = (credential or '').strip()
     if not c:
@@ -755,12 +1132,54 @@ def find_pending_customer_renewal_order(license_id, customer_email, client_usern
 
 
 def _user_store_currency(user):
-    up = getattr(user, 'user_prices', None) or {}
-    if isinstance(up, dict):
-        tp = (up.get('tipo_precio') or 'COP').strip().upper()
-        if tp in ('USD', 'COP'):
-            return tp
-    return 'COP'
+    """USD/COP del perfil (sub-usuario hereda del padre); None si no hay moneda."""
+    from app.models.user import User
+
+    u = user
+    for _ in range(2):
+        if not u:
+            return None
+        up = getattr(u, 'user_prices', None)
+        if isinstance(up, dict):
+            tp = str(up.get('tipo_precio') or '').strip().upper()
+            if tp in ('USD', 'COP'):
+                return tp
+        pid = getattr(u, 'parent_id', None)
+        u = User.query.get(pid) if pid else None
+    return None
+
+
+def _infer_sale_currency_from_product(sale, product):
+    """Infere USD/COP de una venta vieja sin currency por el precio unitario.
+
+    Devuelve '' si no se puede decidir sin ambigüedad.
+    """
+    try:
+        qty = max(1, int(getattr(sale, 'quantity', 1) or 1))
+        unit = float(sale.total_price or 0) / qty
+    except (TypeError, ValueError, ZeroDivisionError):
+        return ''
+    if unit <= 0 or not product:
+        return ''
+
+    def _close(a, b):
+        return abs(float(a) - float(b)) <= 0.01
+
+    try:
+        p_usd = float(getattr(product, 'price_usd', 0) or 0)
+    except (TypeError, ValueError):
+        p_usd = 0.0
+    try:
+        p_cop = float(getattr(product, 'price_cop', 0) or 0)
+    except (TypeError, ValueError):
+        p_cop = 0.0
+    match_usd = p_usd > 0 and _close(unit, p_usd)
+    match_cop = p_cop > 0 and _close(unit, p_cop)
+    if match_usd and not match_cop:
+        return 'USD'
+    if match_cop and not match_usd:
+        return 'COP'
+    return ''
 
 
 def refund_customer_account_renewal_sale(user, _product, sale_id):
@@ -776,6 +1195,18 @@ def refund_customer_account_renewal_sale(user, _product, sale_id):
     if not sale:
         return False, 'sale_not_found', None
 
+    # Moneda del cobro original (persistida en la venta). Para ventas viejas
+    # sin currency, inferirla comparando el precio unitario con los precios del
+    # producto: si el perfil cambió de COP a USD entre compra y reembolso, usar
+    # el perfil abonaría la magnitud COP en el wallet USD (20 000 COP → 20 000 USD).
+    currency = str(getattr(sale, 'currency', '') or '').strip().upper()
+    if currency not in ('USD', 'COP'):
+        currency = _infer_sale_currency_from_product(sale, _product)
+    if currency not in ('USD', 'COP'):
+        currency = _user_store_currency(user)
+    if currency not in ('USD', 'COP'):
+        return False, 'sin_tipo_precio', None
+
     snap, newly_reversed = mark_sale_reversed_in_session(sale.id)
     if not newly_reversed:
         if snap and bool(getattr(snap, 'is_reversed', False)):
@@ -786,7 +1217,6 @@ def refund_customer_account_renewal_sale(user, _product, sale_id):
     if amount <= 0:
         return False, 'zero_amount', None
 
-    currency = _user_store_currency(user)
     if user.saldo_cop is None:
         user.saldo_cop = 0
     if user.saldo_usd is None:
@@ -805,11 +1235,16 @@ def list_user_pending_customer_renewals(user):
         .order_by(CustomerAccountRenewalOrder.created_at.asc(), CustomerAccountRenewalOrder.id.asc())
         .all()
     )
-    currency = _user_store_currency(user)
+    profile_currency = _user_store_currency(user) or ''
     out = []
     for r in rows:
         prod = Product.query.get(r.product_id)
         sale = Sale.query.get(r.sale_id) if r.sale_id else None
+        # Moneda real del cobro (la misma que usará el reembolso al cancelar);
+        # el perfil solo como último recurso para ventas viejas sin currency.
+        row_currency = str(getattr(sale, 'currency', '') or '').strip().upper()
+        if row_currency not in ('USD', 'COP'):
+            row_currency = profile_currency
         out.append(
             {
                 'id': r.id,
@@ -817,7 +1252,7 @@ def list_user_pending_customer_renewals(user):
                 'product_name': getattr(prod, 'name', None) or f'Producto {r.product_id}',
                 'customer_email': (r.customer_email or '').strip(),
                 'amount': float(sale.total_price or 0) if sale else 0.0,
-                'currency': currency,
+                'currency': row_currency,
                 'created_at': r.created_at.isoformat() if r.created_at else None,
             }
         )
@@ -880,6 +1315,8 @@ def cancel_customer_account_renewal_by_user(user, order_id):
             return False, 'No se encontró la compra asociada para devolver el saldo.', None
         if refund_reason == 'zero_amount':
             return False, 'La compra no tiene monto válido para devolver.', None
+        if refund_reason == 'sin_tipo_precio':
+            return False, 'Tu cuenta no tiene tipo de precio (USD/COP); contacta al administrador para la devolución.', None
         return False, 'No se pudo devolver el saldo. Intenta de nuevo o contacta soporte.', None
 
     order.status = 'cancelled'
@@ -1076,6 +1513,16 @@ def complete_customer_account_renewal_from_admin(license_id, credential, client_
     if note_bits:
         order.admin_notes = ', '.join(note_bits)
 
+    # Defensa: por si quedó en Cambios / inventario entre el pago y completar.
+    try:
+        remove_renewed_account_from_changes_and_unsold_inventory(
+            int(order.product_id), account_email
+        )
+    except Exception:
+        current_app.logger.exception(
+            'cleanup Cambios/inventario al completar renovación cuenta'
+        )
+
     from app.store.customer_renewal_notify_batch import queue_customer_renewal_notify
 
     queue_customer_renewal_notify(
@@ -1201,6 +1648,8 @@ def reject_customer_account_renewal_from_admin(license_id, credential, client_us
             return False, 'No se pudo registrar la reversión de la compra.'
         if refund_reason == 'zero_amount':
             return False, 'La venta no tiene monto válido para devolver.'
+        if refund_reason == 'sin_tipo_precio':
+            return False, 'El cliente no tiene tipo de precio (USD/COP) configurado; configúralo antes de devolver el saldo.'
         return False, 'No se pudo devolver el saldo al cliente.'
 
     if status == 'rejected':

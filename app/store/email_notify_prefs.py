@@ -28,6 +28,7 @@ ADMIN_NOTIFY_TYPE_DEFAULTS: dict[str, bool] = {
     'license_report': True,
     'balance_recharge': True,
     'reservation': True,
+    'customer_renewal': True,
     'wa_digest': True,
     'stock_upload': True,
 }
@@ -36,6 +37,7 @@ KIND_TO_ADMIN_TYPE: dict[str, str] = {
     'admin_license_report_new': 'license_report',
     'admin_balance_recharge': 'balance_recharge',
     'admin_product_reservation': 'reservation',
+    'admin_customer_account_renewal': 'customer_renewal',
     'admin_whatsapp_digest_fallback': 'wa_digest',
     'admin_stock_upload': 'stock_upload',
 }

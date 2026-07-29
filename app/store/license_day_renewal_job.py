@@ -86,14 +86,18 @@ def _route_dual_line_to_changes_or_expired(
     *,
     reason: str = '',
 ) -> Tuple[str, str, bool]:
-    """Quita la fila del día y la añade a Cambios (mes a mes) o Vencidas."""
+    """Quita la fila del día y la añade a Cambios (mes a mes) o Vencidas (conserva notas)."""
+    from app.store.user_license_line_parse import user_visible_notes_from_extra
+
     m2m = bool(getattr(lic, 'month_to_month', False))
     cred = str(dual.get('cred') or '').strip()
     cred_k = _line_cred_key(cred)
     if not cred_k:
         return changes_cur, expired_cur, False
     uname = str(dual.get('user') or '').strip() or 'anonimo'
-    ln = _build_storage_line(cred, uname, '', '', '')
+    # Igual que al comprar: las notas van con la cuenta (sin tags verdes de portal).
+    notes = user_visible_notes_from_extra(str(dual.get('extra') or ''))
+    ln = _build_storage_line(cred, uname, '', '', notes)
     if not ln:
         return changes_cur, expired_cur, False
     already = (m2m and cred_k in seen_changes) or ((not m2m) and cred_k in seen_expired)
@@ -252,7 +256,11 @@ def run_license_day_renewal_pipeline() -> Dict[str, Any]:
         renew_stats = _merge_renew_stats(renew_stats, day_renew)
         charged_keys |= _normalize_charged_keys(day_renew.get('charged_keys'))
 
-        day_route = route_unrenewed_day_lines_on_renewal_day(day_num, charged_keys)
+        day_route = route_unrenewed_day_lines_on_renewal_day(
+            day_num,
+            charged_keys,
+            ym_tag=renewal_ym_tag(co_now, int(day_num), overflow_run=overflow_run),
+        )
         route_stats = _merge_route_stats(route_stats, day_route)
 
         day_strip = strip_day_bloc_lines_present_in_side_blocs_for_calendar_day(day_num)
@@ -387,7 +395,7 @@ def process_day_renewals_for_calendar_day(
             if nk == _green_nk(GREEN_RENOVAR):
                 ok, msg = _try_renew_line(lic, dual, line, now_utc, co_now, ym_tag, renew_once=True)
                 if ok:
-                    dual_out = _dual_after_renovar_once_charged(dual)
+                    dual_out = _dual_after_renovar_once_charged(dual, ym_tag)
                     new_lines.append(dual_to_storage_line(dual_out))
                     charged += 1
                     lic_changed = True
@@ -512,12 +520,14 @@ def process_day_renewals_for_calendar_day(
 
 
 def route_unrenewed_day_lines_on_renewal_day(
-    calendar_day: int, charged_keys: set
+    calendar_day: int, charged_keys: set, ym_tag: str = ''
 ) -> Dict[str, Any]:
     """
     Tras cobrar renovar/mes a mes el día N, las filas que siguen en el bloc del día N
     con verde «—», «no renovar» u otro (no renovar/mes a mes) pasan a Cambios o Vencidas.
-    Las filas cobradas como «renovar 1 mes más» quedan en «—» pero no se mueven.
+    Las filas cobradas como «renovar 1 mes más» quedan en «—» pero no se mueven
+    (protegidas por charged_keys en la misma corrida y por el tag _auto_mes del
+    mes en curso en re-ejecuciones del pipeline).
     """
     from app.store.models import License
     from app.store.user_license_line_parse import parse_admin_license_line_to_split_parts
@@ -557,6 +567,11 @@ def route_unrenewed_day_lines_on_renewal_day(
             cred = str(dual.get('cred') or '').strip()
             cred_k = _line_cred_key(cred)
             if cred_k and (int(lic.id), cred_k) in charged_keys:
+                new_day_lines.append(line)
+                continue
+
+            # Ya cobrada este mes (re-ejecución del pipeline): no mover.
+            if ym_tag and _auto_mes_already(str(dual.get('extra') or ''), ym_tag):
                 new_day_lines.append(line)
                 continue
 
@@ -628,20 +643,30 @@ def sync_expired_accounts_by_renewal_policy() -> Dict[str, Any]:
         lic_touched = False
 
         if m2m:
+            expired_lines = [
+                ln.strip(BLOC_WS)
+                for ln in expired_cur.split('\n')
+                if ln.strip(BLOC_WS)
+            ]
             from_expired: List[str] = []
-            for line in expired_cur.split('\n'):
-                line = line.strip(BLOC_WS)
-                if not line:
-                    continue
+            kept_expired: List[str] = []
+            for line in expired_lines:
                 cred_part = line.split(LICENSE_LINE_SEP)[0] if LICENSE_LINE_SEP in line else line
                 kex = _line_cred_key(cred_part)
-                if not kex or kex in seen_changes:
+                if not kex:
+                    kept_expired.append(line)
+                    continue
+                if kex in seen_changes:
+                    # Ya está en Cambios: no dejar el duplicado en Vencidas.
                     continue
                 from_expired.append(line)
                 seen_changes.add(kex)
-            if from_expired:
+            if len(kept_expired) != len(expired_lines):
                 for fl in from_expired:
                     changes_cur = _append_bloc_line(changes_cur, fl)
+                # Quitar de Vencidas lo migrado: antes la línea quedaba
+                # duplicada en ambos blocs indefinidamente.
+                expired_cur = '\n'.join(kept_expired)
                 lic_touched = True
 
         for acc in accounts:
@@ -659,7 +684,12 @@ def sync_expired_accounts_by_renewal_policy() -> Dict[str, Any]:
                 continue
 
             uname = _username_for_account(acc)
-            ln = _build_storage_line(cred, uname, '', '', '')
+            from app.store.user_license_line_parse import user_visible_notes_from_extra
+
+            notes = ''
+            if _dual_hit:
+                notes = user_visible_notes_from_extra(str(_dual_hit.get('extra') or ''))
+            ln = _build_storage_line(cred, uname, '', '', notes)
             if not ln:
                 continue
 
@@ -698,6 +728,8 @@ def sync_expired_accounts_by_renewal_policy() -> Dict[str, Any]:
         if lic_touched:
             if m2m:
                 lic.changes_notes = changes_cur.strip(BLOC_WS)
+                # Persistir también Vencidas: en m2m las líneas migran a Cambios.
+                lic.expired_notes = expired_cur.strip(BLOC_WS)
             else:
                 lic.expired_notes = expired_cur.strip(BLOC_WS)
             lic.day_notepads_json = json.dumps(day_map, ensure_ascii=False) if day_map else None
@@ -710,14 +742,21 @@ def sync_expired_accounts_by_renewal_policy() -> Dict[str, Any]:
 # --- Cobro y extensión ---
 
 
-def _dual_after_renovar_once_charged(dual: Dict[str, Any]) -> Dict[str, Any]:
-    """Tras cobrar «renovar 1 mes más», dejar el verde en — (vacío) en admin y portal."""
+def _dual_after_renovar_once_charged(dual: Dict[str, Any], ym_tag: str = '') -> Dict[str, Any]:
+    """Tras cobrar «renovar 1 mes más», dejar el verde en — (vacío) en admin y portal.
+
+    Se persiste el tag _auto_mes:YYYY-MM como marca de cobro: si el pipeline se
+    re-ejecuta el mismo día (p. ej. re-lanzado por admin tras una recarga), el
+    enrutado no debe mover esta fila ya cobrada a Cambios/Vencidas (antes la
+    única protección era charged_keys, que solo vive en memoria).
+    """
     from app.store.user_license_line_parse import user_visible_notes_from_extra
 
     dual_out = dict(dual)
     dual_out['statusGood'] = ''
     dual_out['prevGoodRestore'] = ''
-    dual_out['extra'] = user_visible_notes_from_extra(str(dual_out.get('extra') or ''))
+    notes_only = user_visible_notes_from_extra(str(dual_out.get('extra') or ''))
+    dual_out['extra'] = _append_auto_mes_tag(notes_only, ym_tag) if ym_tag else notes_only
     return dual_out
 
 

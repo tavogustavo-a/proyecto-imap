@@ -262,6 +262,11 @@
   text-align: center;
   line-height: 1;
 }
+.admin-lic-proveedor-ventas-item__count--renew {
+  background: #dcfce7;
+  color: #15803d;
+  gap: 0.15rem;
+}
 .admin-lic-proveedor-ventas-reset-btn {
   flex: 0 0 auto;
   box-sizing: border-box;

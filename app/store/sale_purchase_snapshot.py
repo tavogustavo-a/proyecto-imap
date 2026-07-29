@@ -245,10 +245,11 @@ def _ensure_column(table_name, column_name, ddl_fragment):
 
 
 def ensure_sale_schema():
-    """Columnas de renovación en ventas (tipo 1 mes / mes a mes)."""
+    """Columnas de renovación en ventas (tipo 1 mes / mes a mes) + moneda del cobro."""
     bool_false = _bool_default_false()
     _ensure_column('store_sales', 'is_renewal', f'is_renewal BOOLEAN DEFAULT {bool_false} NOT NULL')
     _ensure_column('store_sales', 'renewal_kind', 'renewal_kind VARCHAR(24)')
+    _ensure_column('store_sales', 'currency', 'currency VARCHAR(3)')
 
 
 def ensure_snapshot_table():
@@ -268,6 +269,11 @@ def ensure_snapshot_table():
                 'store_sale_purchase_snapshots',
                 'renewal_kind',
                 'renewal_kind VARCHAR(24)',
+            )
+            _ensure_column(
+                'store_sale_purchase_snapshots',
+                'currency',
+                'currency VARCHAR(3)',
             )
     except Exception as exc:
         logger.warning('No se pudo asegurar tabla store_sale_purchase_snapshots: %s', exc)
@@ -317,6 +323,9 @@ def upsert_snapshot_for_sale(sale, mark_purged=False):
     snap.product_name = product.name if product else f'Producto #{sale.product_id}'
     snap.quantity = sale.quantity or 1
     snap.total_price = sale.total_price
+    _sale_cur = str(getattr(sale, 'currency', '') or '').strip().upper()
+    if _sale_cur in ('USD', 'COP'):
+        snap.currency = _sale_cur
     snap.sale_created_at = sale.created_at or datetime.utcnow()
     snap.is_renewal = bool(getattr(sale, 'is_renewal', False))
     snap.renewal_kind = getattr(sale, 'renewal_kind', None)

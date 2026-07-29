@@ -168,7 +168,7 @@ def _store_user_unit_price(user, product):
     from app.store.routes import catalog_products_for_store_user
 
     _, tipo = catalog_products_for_store_user(user)
-    tipo_l = (tipo or 'USD').upper()
+    tipo_l = (tipo or '').strip().upper()
     cop = Decimal(str(getattr(product, 'price_cop', 0) or 0))
     usd = Decimal(str(getattr(product, 'price_usd', 0) or 0))
     disc_cop = Decimal(str(getattr(product, 'discount_cop_extra', 0) or 0))
@@ -177,7 +177,11 @@ def _store_user_unit_price(user, product):
     final_usd = max(Decimal(0), usd - disc_usd)
     if tipo_l == 'COP':
         return final_cop, final_usd, 'COP', final_cop
-    return final_cop, final_usd, 'USD', final_usd
+    if tipo_l == 'USD':
+        return final_cop, final_usd, 'USD', final_usd
+    # Sin tipo_precio no se cotiza en USD por defecto: moneda vacía y monto 0
+    # para que los flujos de reserva rechacen la operación explícitamente.
+    return final_cop, final_usd, '', Decimal(0)
 
 
 def _reservation_kind_label(kind):
@@ -282,6 +286,7 @@ def create_product_reservation(user, product, quantity=1):
     if not prod or not prod.enabled:
         return None, 'Producto no disponible.'
 
+    # Existencias libres (ya descuenta gar. y cola de reservas). Si hay libres, comprar.
     sellable = _compute_public_sellable_stock_for_product(prod)
     if sellable > 0:
         return None, 'Hay existencias disponibles; usa «Añadir» para comprar.'
@@ -313,6 +318,8 @@ def create_product_reservation(user, product, quantity=1):
             cat_prod = p
             break
     price_cop, price_usd, currency, unit = _store_user_unit_price(user, cat_prod)
+    if currency not in ('USD', 'COP'):
+        return None, 'Tu cuenta no tiene tipo de precio (USD/COP) configurado.'
 
     max_qty, _cur, _unit_f = _max_reservable_quantity(user, cat_prod)
     if max_qty <= 0:
@@ -350,7 +357,15 @@ def create_product_reservation(user, product, quantity=1):
     )
     db.session.add(row)
     db.session.commit()
-    return _reservation_to_dict(row), None
+    _schedule_stock_reservation_placed_notify(
+        user_id=int(user.id),
+        product_id=int(prod.id),
+        reservation_id=int(row.id),
+        is_update=False,
+    )
+    info = _reservation_to_dict(row)
+    info['max_reservable'] = int(max_qty)
+    return info, None
 
 
 def _reservation_to_dict(row):
@@ -1002,6 +1017,376 @@ def _notify_admins_reservation_app(user, product, title, body, *, reservation_id
         current_app.logger.warning('_notify_admins_reservation_app: %s', ex)
 
 
+def _iter_proveedor_users_for_product(product):
+    """Usuarios raíz con proveedor activo y servicio habilitado para el producto."""
+    from app.models.user import User
+    from app.store.models import License
+    from app.store.routes import _proveedor_normalize_services_map
+
+    if not product or not getattr(product, 'id', None):
+        return []
+    lic_ids = {
+        str(int(lid))
+        for (lid,) in db.session.query(License.id)
+        .filter(License.product_id == int(product.id), License.enabled.is_(True))
+        .all()
+        if lid
+    }
+    if not lic_ids:
+        return []
+    candidates = (
+        User.query.filter(User.parent_id.is_(None), User.user_prices.isnot(None))
+        .order_by(User.id.asc())
+        .all()
+    )
+    out = []
+    for user_row in candidates:
+        up = user_row.user_prices if isinstance(user_row.user_prices, dict) else {}
+        if not up.get('proveedor'):
+            continue
+        services = _proveedor_normalize_services_map(up.get('proveedor_services'))
+        if any(k in services for k in lic_ids):
+            out.append(user_row)
+    return out
+
+
+def _schedule_stock_reservation_placed_notify(
+    *,
+    user_id,
+    product_id,
+    reservation_id,
+    is_update=False,
+    prev_quantity=None,
+):
+    """Notifica admin/proveedores en segundo plano para no frenar la tienda."""
+    import threading
+
+    try:
+        app = current_app._get_current_object()
+    except Exception:
+        return
+
+    def _job():
+        with app.app_context():
+            try:
+                from app.models.user import User
+                from app.store.models import Product, ProductReservation
+
+                user = User.query.get(int(user_id))
+                product = Product.query.get(int(product_id))
+                reservation = ProductReservation.query.get(int(reservation_id))
+                if not user or not product or not reservation:
+                    return
+                _notify_stock_reservation_placed(
+                    user,
+                    product,
+                    reservation,
+                    is_update=bool(is_update),
+                    prev_quantity=prev_quantity,
+                )
+                try:
+                    db.session.commit()
+                except Exception:
+                    db.session.rollback()
+            except Exception as ex:
+                try:
+                    current_app.logger.warning(
+                        'notify reserva async: %s', ex
+                    )
+                except Exception:
+                    pass
+
+    threading.Thread(
+        target=_job,
+        daemon=True,
+        name='reserva-stock-notify',
+    ).start()
+
+
+def _schedule_stock_reservation_cancelled_notify(
+    *,
+    user_id,
+    product_id,
+    reservation_id,
+    quantity,
+):
+    """Notifica cancelación a admin/proveedores en segundo plano (no frena el ×)."""
+    import threading
+
+    try:
+        app = current_app._get_current_object()
+    except Exception:
+        return
+
+    def _job():
+        with app.app_context():
+            try:
+                from app.models.user import User
+                from app.store.models import Product
+
+                user = User.query.get(int(user_id))
+                product = Product.query.get(int(product_id))
+                if not user or not product:
+                    return
+                qty = max(1, int(quantity or 1))
+                pname = getattr(product, 'name', None) or 'Producto'
+                extra = {
+                    'quantity': qty,
+                    'event': 'cancelled',
+                }
+                _notify_admins_reservation_app(
+                    user,
+                    product,
+                    f'Reserva cancelada: {pname}',
+                    f'Se canceló un pedido en reserva de «{pname}» (x{qty}).',
+                    reservation_id=int(reservation_id),
+                    extra_payload=extra,
+                )
+                _notify_proveedores_reservation_app(
+                    user,
+                    product,
+                    f'Reserva cancelada: {pname}',
+                    f'Se canceló un pedido en reserva de «{pname}» (x{qty}).',
+                    reservation_id=int(reservation_id),
+                    extra_payload=extra,
+                )
+                try:
+                    db.session.commit()
+                except Exception:
+                    db.session.rollback()
+            except Exception as ex:
+                try:
+                    current_app.logger.warning(
+                        'notify cancel reserva async: %s', ex
+                    )
+                except Exception:
+                    pass
+
+    threading.Thread(
+        target=_job,
+        daemon=True,
+        name='reserva-cancel-notify',
+    ).start()
+
+
+def _notify_proveedores_reservation_app(user, product, title, body, *, reservation_id=None, extra_payload=None):
+    """Aviso a proveedores con el servicio del producto habilitado (sin datos del cliente)."""
+    try:
+        from app.store.store_event_notify import (
+            KIND_PROVEEDOR_RESERVATION,
+            _add_notification,
+        )
+
+        pname = getattr(product, 'name', None) or 'Producto'
+        qty = 1
+        if isinstance(extra_payload, dict):
+            try:
+                qty = max(1, int(extra_payload.get('quantity') or 1))
+            except (TypeError, ValueError):
+                qty = 1
+        event = ''
+        if isinstance(extra_payload, dict):
+            event = str(extra_payload.get('event') or '').strip()
+        if event == 'updated':
+            prov_title = f'Reserva actualizada: {pname}'[:200]
+            prov_body = (
+                f'Hay un pedido en reserva de «{pname}» por x{qty} unidad(es). '
+                f'Sube stock en Licencias → Proveedor para cumplirlo.'
+            )
+        elif event == 'cancelled':
+            prov_title = f'Reserva cancelada: {pname}'[:200]
+            prov_body = f'Se canceló un pedido en reserva de «{pname}» (x{qty}).'
+        elif event == 'fulfilled':
+            prov_title = f'Reserva cumplida: {pname}'[:200]
+            prov_body = f'Se cumplió un pedido en reserva de «{pname}».'
+        else:
+            prov_title = f'Pedido en reserva: {pname}'[:200]
+            prov_body = (
+                f'Pedido en reserva de «{pname}» x{qty}. '
+                f'Sube stock en Licencias → Proveedor para cumplirlo.'
+            )
+        payload = {
+            'reservation_id': reservation_id,
+            'product_id': getattr(product, 'id', None),
+            'product_name': pname,
+            'quantity': qty,
+            'url': '/tienda/licencias',
+            'event': event or 'placed',
+        }
+        if isinstance(extra_payload, dict):
+            for k, v in extra_payload.items():
+                if k in ('customer_user_id', 'customer_username', 'customer_id', 'username'):
+                    continue
+                payload[k] = v
+        excl = getattr(user, 'id', None)
+        for dest in _iter_proveedor_users_for_product(product):
+            did = int(getattr(dest, 'id', 0) or 0)
+            if not did or (excl is not None and int(excl) == did):
+                continue
+            _add_notification(
+                user_id=did,
+                kind=KIND_PROVEEDOR_RESERVATION,
+                title=prov_title,
+                body=prov_body[:4000],
+                payload=payload,
+            )
+    except Exception as ex:
+        current_app.logger.warning('_notify_proveedores_reservation_app: %s', ex)
+
+
+def _notify_stock_reservation_placed(user, product, reservation, *, is_update=False, prev_quantity=None):
+    """Notifica admin/soporte y proveedores cuando hay un pedido en reserva (o se actualiza)."""
+    qty = int(getattr(reservation, 'quantity', 1) or 1)
+    pname = getattr(product, 'name', None) or 'Producto'
+    uname = str(getattr(user, 'username', None) or '').strip() or f'user#{getattr(user, "id", "")}'
+    if is_update:
+        title = f'Reserva actualizada: {pname}'
+        prev = int(prev_quantity or 0)
+        body = f'{uname} actualizó la reserva de «{pname}» a x{qty}' + (
+            f' (antes x{prev}).' if prev and prev != qty else '.'
+        )
+        event = 'updated'
+    else:
+        title = f'Pedido en reserva: {pname}'
+        body = f'{uname} pidió en reserva «{pname}» x{qty}. Sube stock en Licencias para cumplirlo.'
+        event = 'placed'
+    extra = {
+        'quantity': qty,
+        'event': event,
+        'license_id': getattr(reservation, 'license_id', None),
+    }
+    _notify_admins_reservation_app(
+        user,
+        product,
+        title,
+        body,
+        reservation_id=getattr(reservation, 'id', None),
+        extra_payload=extra,
+    )
+    _notify_proveedores_reservation_app(
+        user,
+        product,
+        title,
+        body,
+        reservation_id=getattr(reservation, 'id', None),
+        extra_payload=extra,
+    )
+
+
+def _pending_stock_reservation_row_dict(row, product=None, customer=None):
+    pname = getattr(product, 'name', None) if product is not None else None
+    uname = str(getattr(customer, 'username', None) or '').strip() if customer is not None else ''
+    return {
+        'id': int(row.id),
+        'product_id': int(row.product_id) if row.product_id else None,
+        'license_id': int(row.license_id) if getattr(row, 'license_id', None) else None,
+        'product_name': pname or 'Producto',
+        'customer_user_id': int(row.user_id) if row.user_id else None,
+        'customer_username': uname or f'user#{row.user_id}',
+        'quantity': int(getattr(row, 'quantity', 1) or 1),
+        'status': str(getattr(row, 'status', '') or 'pending'),
+        'created_at': row.created_at.isoformat() if getattr(row, 'created_at', None) else None,
+    }
+
+
+def list_pending_stock_reservations(*, product_ids=None, limit=100):
+    """Cola de reservas stock pendientes (admin o filtrada por productos)."""
+    from app.models.user import User
+    from app.store.models import Product, ProductReservation
+
+    ensure_product_reservation_schema()
+    q = ProductReservation.query.filter(
+        ProductReservation.kind == 'stock',
+        ProductReservation.status.in_(('pending', 'awaiting_accept')),
+    )
+    if product_ids is not None:
+        ids = []
+        for raw in product_ids or []:
+            try:
+                ids.append(int(raw))
+            except (TypeError, ValueError):
+                continue
+        if not ids:
+            return []
+        q = q.filter(ProductReservation.product_id.in_(ids))
+    rows = (
+        q.order_by(ProductReservation.created_at.asc(), ProductReservation.id.asc())
+        .limit(max(1, min(int(limit or 100), 300)))
+        .all()
+    )
+    if not rows:
+        return []
+    pids = {int(r.product_id) for r in rows if r.product_id}
+    uids = {int(r.user_id) for r in rows if r.user_id}
+    products = {
+        int(p.id): p
+        for p in Product.query.filter(Product.id.in_(pids)).all()
+    } if pids else {}
+    users = {
+        int(u.id): u
+        for u in User.query.filter(User.id.in_(uids)).all()
+    } if uids else {}
+    return [
+        _pending_stock_reservation_row_dict(
+            r,
+            products.get(int(r.product_id)) if r.product_id else None,
+            users.get(int(r.user_id)) if r.user_id else None,
+        )
+        for r in rows
+    ]
+
+
+def list_pending_stock_reservations_for_proveedor(user_obj, limit=100):
+    """Reservas pendientes solo de productos cuyo servicio tiene habilitado el proveedor."""
+    from app.store.models import License
+    from app.store.routes import _proveedor_normalize_services_map
+
+    if not user_obj:
+        return []
+    up = user_obj.user_prices if isinstance(user_obj.user_prices, dict) else {}
+    if not up.get('proveedor'):
+        return []
+    services = _proveedor_normalize_services_map(up.get('proveedor_services'))
+    lic_ids = []
+    for key in services.keys():
+        try:
+            lid = int(key)
+        except (TypeError, ValueError):
+            continue
+        if lid > 0:
+            lic_ids.append(lid)
+    if not lic_ids:
+        return []
+    product_ids = [
+        int(pid)
+        for (pid,) in db.session.query(License.product_id)
+        .filter(License.id.in_(lic_ids), License.enabled.is_(True))
+        .distinct()
+        .all()
+        if pid
+    ]
+    return list_pending_stock_reservations(product_ids=product_ids, limit=limit)
+
+
+def pending_reservation_counts_by_product(rows=None):
+    """Mapa product_id -> {count, quantity} desde filas de list_pending_stock_reservations."""
+    out = {}
+    for row in rows or []:
+        try:
+            pid = int(row.get('product_id'))
+        except (TypeError, ValueError):
+            continue
+        if pid <= 0:
+            continue
+        ent = out.setdefault(pid, {'count': 0, 'quantity': 0, 'product_name': row.get('product_name')})
+        ent['count'] += 1
+        try:
+            ent['quantity'] += int(row.get('quantity') or 0)
+        except (TypeError, ValueError):
+            pass
+    return out
+
+
 def _notify_reservation_fulfilled(user, product, account, reservation_id):
     from app.store.models import StoreUserNotification
 
@@ -1032,6 +1417,15 @@ def _notify_reservation_fulfilled(user, product, account, reservation_id):
         title,
         f'Reserva lista.\nCredencial:\n{cred}',
         reservation_id=reservation_id,
+        extra_payload={'event': 'fulfilled', 'quantity': 1},
+    )
+    _notify_proveedores_reservation_app(
+        user,
+        product,
+        f'Reserva cumplida: {pname}',
+        f'Se cumplió un pedido en reserva de «{pname}».',
+        reservation_id=reservation_id,
+        extra_payload={'event': 'fulfilled', 'quantity': 1},
     )
     return notif
 
@@ -1177,7 +1571,7 @@ def _process_one_stock_reservation(reservation):
     """
     from app.models.user import User
     from app.store.models import Product
-    from app.store.routes import _compute_public_sellable_stock_for_product
+    from app.store.routes import _compute_inventory_sellable_stock_for_product
 
     rid = getattr(reservation, 'id', None)
     if not rid:
@@ -1207,7 +1601,8 @@ def _process_one_stock_reservation(reservation):
     unit = reservation.price_cop if currency == 'COP' else reservation.price_usd
     amount = Decimal(str(unit or 0)) * qty
 
-    sellable = _compute_public_sellable_stock_for_product(product)
+    # Inventario real (gar. ya restada); no usar stock público (que descuenta esta cola).
+    sellable = _compute_inventory_sellable_stock_for_product(product)
     if sellable <= 0:
         return 'stop'
 
@@ -1425,6 +1820,8 @@ def create_next_day_reservation(user, product, quantity):
             cat_prod = p
             break
     price_cop, price_usd, currency, unit = _store_user_unit_price(user, cat_prod)
+    if currency not in ('USD', 'COP'):
+        return None, 'Tu cuenta no tiene tipo de precio (USD/COP) configurado.'
 
     amount = Decimal(str(unit or 0)) * qty
     ok_pay, pay_err = _user_can_pay_reservation(user, currency, amount)
@@ -1499,14 +1896,30 @@ def cancel_product_reservation(user, reservation_id):
     from app.store.models import ProductReservation
 
     ensure_product_reservation_schema()
-    row = ProductReservation.query.filter_by(id=int(reservation_id), user_id=int(user.id)).first()
-    if not row:
+    # Lock de fila y re-chequeo de status: sin esto la cancelación corría en
+    # paralelo con el procesador (que sí bloquea) y podía sobrescribir a
+    # 'cancelled' una reserva recién cobrada y cumplida (cobro sin entrega).
+    row = _lock_product_reservation(int(reservation_id))
+    if not row or int(getattr(row, 'user_id', 0) or 0) != int(user.id):
         return False, 'Reserva no encontrada.'
     if row.status not in ('pending', 'awaiting_accept'):
         return False, 'La reserva ya fue procesada o cancelada.'
+    kind = (getattr(row, 'kind', 'stock') or 'stock')
+    product_id = int(row.product_id) if row.product_id else None
+    rid = int(row.id)
+    qty = int(getattr(row, 'quantity', 1) or 1)
+    user_id = int(user.id)
     row.status = 'cancelled'
     row.cancelled_at = datetime.utcnow()
     db.session.commit()
+    # Notificar en background: el × de la tienda no debe esperar avisos a admin/proveedor.
+    if kind == 'stock' and product_id:
+        _schedule_stock_reservation_cancelled_notify(
+            user_id=user_id,
+            product_id=product_id,
+            reservation_id=rid,
+            quantity=qty,
+        )
     return True, None
 
 
@@ -1515,8 +1928,12 @@ def update_next_day_reservation_quantity(user, reservation_id, quantity):
     from app.store.models import Product, ProductReservation
 
     ensure_product_reservation_schema()
-    row = ProductReservation.query.filter_by(id=int(reservation_id), user_id=int(user.id)).first()
-    if not row or (getattr(row, 'kind', 'stock') or 'stock') != 'next_day':
+    row = _lock_product_reservation(int(reservation_id))
+    if (
+        not row
+        or int(getattr(row, 'user_id', 0) or 0) != int(user.id)
+        or (getattr(row, 'kind', 'stock') or 'stock') != 'next_day'
+    ):
         return None, 'Reserva no encontrada.'
     if row.status not in ('pending', 'awaiting_accept'):
         return None, 'La reserva ya fue procesada o cancelada.'
@@ -1551,8 +1968,8 @@ def update_reservation_quantity(user, reservation_id, quantity):
     from app.store.models import Product, ProductReservation
 
     ensure_product_reservation_schema()
-    row = ProductReservation.query.filter_by(id=int(reservation_id), user_id=int(user.id)).first()
-    if not row:
+    row = _lock_product_reservation(int(reservation_id))
+    if not row or int(getattr(row, 'user_id', 0) or 0) != int(user.id):
         return None, 'Reserva no encontrada.'
     kind = (getattr(row, 'kind', 'stock') or 'stock')
     if kind == 'next_day':
@@ -1588,12 +2005,23 @@ def update_reservation_quantity(user, reservation_id, quantity):
     if not ok_pay:
         return None, 'No se puede cambiar: no tienes suficiente saldo. ' + (pay_err or '')
 
+    prev_qty = int(getattr(row, 'quantity', 1) or 1)
     row.quantity = qty
     row.status = 'pending'
     row.offered_quantity = None
     row.last_error = None
     db.session.commit()
-    return _reservation_to_dict(row), None
+    if prev_qty != qty:
+        _schedule_stock_reservation_placed_notify(
+            user_id=int(user.id),
+            product_id=int(prod_row.id),
+            reservation_id=int(row.id),
+            is_update=True,
+            prev_quantity=prev_qty,
+        )
+    info = _reservation_to_dict(row)
+    info['max_reservable'] = int(max_qty)
+    return info, None
 
 
 def _notify_next_day_result(user, product, reservation, requested, fulfilled, creds):
@@ -1720,6 +2148,7 @@ def _fulfill_next_day_units(reservation, user, product, qty):
         product_id=product.id,
         quantity=qty,
         total_price=amount,
+        currency=currency if currency in ('USD', 'COP') else None,
         is_renewal=False,
     )
     db.session.add(venta)
@@ -1760,6 +2189,17 @@ def _fulfill_next_day_units(reservation, user, product, qty):
 
     _apply_public_checkout_bloc_moves_to_licenses(sold_bloc_moves)
 
+    # Lock de fila (FOR UPDATE en Postgres) para no pisar débitos/abonos
+    # concurrentes de otros workers al recalcular el saldo.
+    from app.models.user import User as _User
+
+    user = (
+        db.session.query(_User)
+        .filter_by(id=int(user.id))
+        .populate_existing()
+        .with_for_update()
+        .one()
+    )
     if currency == 'COP':
         user.saldo_cop = Decimal(str(user.saldo_cop or 0)) - amount
     else:
@@ -1796,7 +2236,7 @@ def _process_one_next_day_reservation(reservation):
     """Procesa una reserva programada llegada su fecha; parcial requiere aceptación del cliente."""
     from app.models.user import User
     from app.store.models import Product
-    from app.store.routes import _compute_public_sellable_stock_for_product
+    from app.store.routes import _compute_inventory_sellable_stock_for_product
 
     rid = getattr(reservation, 'id', None)
     if not rid:
@@ -1819,7 +2259,7 @@ def _process_one_next_day_reservation(reservation):
     unit = reservation.price_cop if currency == 'COP' else reservation.price_usd
     amount = Decimal(str(unit or 0)) * qty
 
-    sellable = _compute_public_sellable_stock_for_product(product)
+    sellable = _compute_inventory_sellable_stock_for_product(product)
     if sellable <= 0:
         prev = reservation.last_error or ''
         reservation.last_error = 'Sin stock disponible; se reintentará.'
@@ -1910,7 +2350,7 @@ def _process_one_next_day_reservation(reservation):
 def accept_reservation_offer(user, reservation_id):
     """El cliente acepta el cambio (cantidad parcial ofrecida): stock u otro día."""
     from app.store.models import Product
-    from app.store.routes import _compute_public_sellable_stock_for_product
+    from app.store.routes import _compute_inventory_sellable_stock_for_product
 
     ensure_product_reservation_schema()
     row = _lock_product_reservation(reservation_id)
@@ -1927,7 +2367,7 @@ def accept_reservation_offer(user, reservation_id):
         return None, 'Producto no disponible.'
 
     offered = int(row.offered_quantity or 0)
-    sellable = _compute_public_sellable_stock_for_product(product)
+    sellable = _compute_inventory_sellable_stock_for_product(product)
     qty = min(offered, sellable) if offered > 0 else min(int(row.quantity or 1), sellable)
     if qty <= 0:
         row.status = 'pending'

@@ -254,7 +254,7 @@ def _proveedor_services_map_from_user_prices(user_prices):
 
 
 def _proveedor_normalize_services_map(raw):
-    """Mapa license_id (str) -> { sales_limit, warranty_days, sales_count }."""
+    """Mapa license_id (str) -> { sales_limit, warranty_days, sales_count, renew_customer, renewals_count }."""
     if not isinstance(raw, dict):
         return {}
     out = {}
@@ -268,6 +268,8 @@ def _proveedor_normalize_services_map(raw):
         limit = None
         warranty_days = 0
         sales_count = 0
+        renew_customer = False
+        renewals_count = 0
         if isinstance(val, dict):
             lim_raw = val.get('sales_limit')
             if lim_raw is None:
@@ -291,10 +293,19 @@ def _proveedor_normalize_services_map(raw):
                     sales_count = max(0, int(float(sc_raw)))
                 except (TypeError, ValueError):
                     sales_count = 0
+            renew_customer = bool(val.get('renew_customer'))
+            rc_raw = val.get('renewals_count')
+            if rc_raw is not None and rc_raw != '':
+                try:
+                    renewals_count = max(0, int(float(rc_raw)))
+                except (TypeError, ValueError):
+                    renewals_count = 0
         out[str(lid)] = {
             'sales_limit': limit,
             'warranty_days': warranty_days,
             'sales_count': sales_count,
+            'renew_customer': renew_customer,
+            'renewals_count': renewals_count,
         }
     return out
 
@@ -486,6 +497,7 @@ def _proveedor_reset_sales_count_on_user(user_obj, license_id):
         return False, 'Servicio no habilitado para este proveedor.'
     entry = dict(saved.get(key) or {})
     entry['sales_count'] = 0
+    entry['renewals_count'] = 0
     saved[key] = entry
     new_up = dict(up)
     new_up['proveedor_services'] = saved
@@ -530,6 +542,8 @@ def _proveedor_sales_stats_services_for_user(user_obj):
                 'price_usd': price_usd,
                 'sales_count': _proveedor_service_entry_sales_count(entry),
                 'sales_limit': entry.get('sales_limit'),
+                'renew_customer': bool(entry.get('renew_customer')),
+                'renewals_count': max(0, int(entry.get('renewals_count') or 0)),
                 'position': int(getattr(lic, 'position', 0) or 0),
             }
         )
@@ -615,6 +629,7 @@ def _proveedor_products_list_for_user(user_obj):
         out.append(
             {
                 'license_id': lid,
+                'product_id': int(prod.id) if prod and getattr(prod, 'id', None) else None,
                 'product_name': name,
                 'position': int(getattr(lic, 'position', 0) or 0),
                 'warranty_days': _proveedor_service_entry_warranty_days(entry),
@@ -1047,7 +1062,138 @@ def _proveedor_inventory_payload_for_user(user_obj):
     up = user_obj.user_prices if isinstance(getattr(user_obj, 'user_prices', None), dict) else {}
     payload = _proveedor_inventory_from_user_prices(up)
     payload['services_catalog'] = _proveedor_services_catalog_for_user(user_obj)
+    payload['customer_renewals'] = _proveedor_customer_renewals_payload_for_user(user_obj)
     return payload
+
+
+def _proveedor_renew_customer_license_ids(user_obj):
+    """IDs de licencias donde el proveedor tiene habilitado «Renovar tu cuenta»."""
+    up = user_obj.user_prices if isinstance(getattr(user_obj, 'user_prices', None), dict) else {}
+    if not up.get('proveedor'):
+        return []
+    saved = _proveedor_normalize_services_map(up.get('proveedor_services'))
+    out = []
+    for key, entry in saved.items():
+        if isinstance(entry, dict) and entry.get('renew_customer'):
+            try:
+                out.append(int(key))
+            except (TypeError, ValueError):
+                continue
+    return sorted(out)
+
+
+def _proveedor_customer_renewals_payload_for_user(user_obj):
+    """Filas pendientes de «Cuentas para renovar» de los servicios con renovación habilitada."""
+    from app.store.models import License
+    from app.store.customer_account_renewals import customer_renewal_notes_for_api
+    from app.store.user_license_line_parse import parse_admin_license_line_to_split_parts
+
+    lids = _proveedor_renew_customer_license_ids(user_obj)
+    payload = {'enabled': bool(lids), 'items': []}
+    if not lids:
+        return payload
+    rows = (
+        License.query.options(joinedload(License.product))
+        .filter(License.id.in_(lids), License.enabled.is_(True))
+        .order_by(License.id.asc())
+        .all()
+    )
+    for lic in rows:
+        try:
+            text = customer_renewal_notes_for_api(lic)
+        except Exception:
+            text = getattr(lic, 'customer_renewal_notes', None) or ''
+        prod = getattr(lic, 'product', None)
+        pname = (prod.name if prod else None) or f'Licencia #{lic.id}'
+        for line in str(text or '').split('\n'):
+            if not line.strip():
+                continue
+            try:
+                parts = parse_admin_license_line_to_split_parts(line)
+            except Exception:
+                continue
+            cred = (parts.get('cred') or '').strip()
+            if not cred:
+                continue
+            payload['items'].append({
+                'license_id': int(lic.id),
+                'product_id': int(lic.product_id) if getattr(lic, 'product_id', None) else None,
+                'product_name': pname,
+                'credential': cred,
+                'client_username': (parts.get('user') or '').strip(),
+                'notes': (parts.get('extra') or '').strip(),
+            })
+    return payload
+
+
+def _proveedor_bump_renewals_count_for_user_license(user_obj, license_id, quantity=1):
+    """Suma renovaciones completadas al contador del servicio del proveedor."""
+    from sqlalchemy.orm.attributes import flag_modified
+
+    try:
+        key = str(int(license_id))
+    except (TypeError, ValueError):
+        return
+    up = user_obj.user_prices if isinstance(getattr(user_obj, 'user_prices', None), dict) else {}
+    saved = _proveedor_normalize_services_map(up.get('proveedor_services'))
+    if key not in saved:
+        return
+    try:
+        qty = max(1, int(quantity))
+    except (TypeError, ValueError):
+        qty = 1
+    entry = dict(saved.get(key) or {})
+    try:
+        prev = max(0, int(entry.get('renewals_count') or 0))
+    except (TypeError, ValueError):
+        prev = 0
+    entry['renewals_count'] = prev + qty
+    saved[key] = entry
+    new_up = dict(up)
+    new_up['proveedor_services'] = saved
+    user_obj.user_prices = new_up
+    flag_modified(user_obj, 'user_prices')
+    db.session.commit()
+
+
+def _proveedor_append_customer_renewal_day_line(user_obj, license_id, day, cred_line):
+    """Añade la cuenta renovada al Día N del inventario del proveedor (lo que ve en portal)."""
+    from app.store.proveedor_user_data import (
+        proveedor_inventory_from_user_prices,
+        save_proveedor_inventory_on_user,
+    )
+
+    if not user_obj:
+        raise ValueError('usuario requerido')
+    try:
+        lid = int(license_id)
+        d = int(day)
+    except (TypeError, ValueError):
+        raise ValueError('license_id/day inválidos')
+    if lid <= 0 or d < 1 or d > 31:
+        raise ValueError('license_id/day fuera de rango')
+    cred = str(cred_line or '').strip()
+    if not cred:
+        raise ValueError('credencial vacía')
+
+    up = user_obj.user_prices if isinstance(getattr(user_obj, 'user_prices', None), dict) else {}
+    inv = proveedor_inventory_from_user_prices(up)
+    day_key = str(d)
+    day_lines = dict(inv.get('day_lines') or {})
+    bucket = list(day_lines.get(day_key) or [])
+    already = any(
+        isinstance(e, dict) and str(e.get('cred') or '').strip() == cred for e in bucket
+    )
+    if not already:
+        bucket.append({'service': str(lid), 'cred': cred})
+        day_lines[day_key] = bucket
+        save_proveedor_inventory_on_user(
+            user_obj,
+            license_lines=inv.get('license_lines'),
+            day_lines=day_lines,
+            expired_lines=inv.get('expired_lines'),
+            suspended_lines=inv.get('suspended_lines'),
+        )
 
 
 def _save_proveedor_inventory_on_user(
@@ -1140,20 +1286,29 @@ def _store_prepaid_debt_limit_error(user_obj, total_cop, total_usd):
         tu = float(total_usd or 0)
     except (TypeError, ValueError):
         tu = 0.0
+    # Deuda combinada: prepago negativo + cuenta licencias (users.saldo).
+    # Si solo se mirara el prepago, el cliente podría deber hasta 2× el límite
+    # (una vez por checkout y otra por renovaciones automáticas).
+    try:
+        licencias_debt = max(0.0, float(getattr(user_obj, 'saldo', 0) or 0))
+    except (TypeError, ValueError):
+        licencias_debt = 0.0
     if tc > 0:
         lim_cop = _user_debt_limit_effective(user_obj, 'cop')
         if lim_cop is not None:
             saldo_cop = float(getattr(user_obj, 'saldo_cop', 0) or 0)
-            if (saldo_cop - tc) < -lim_cop:
+            prepaid_debt_after = max(0.0, -(saldo_cop - tc))
+            if (prepaid_debt_after + licencias_debt) > lim_cop + 1e-9:
                 return (
-                    f'Supera el límite de deuda COP ({int(lim_cop)}). '
+                    f'Supera el límite de deuda COP ({lim_cop:g}). '
                     'Ajusta el pedido o el saldo.'
                 )
     if tu > 0:
         lim_usd = _user_debt_limit_effective(user_obj, 'usd')
         if lim_usd is not None:
             saldo_usd = float(getattr(user_obj, 'saldo_usd', 0) or 0)
-            if (saldo_usd - tu) < -lim_usd:
+            prepaid_debt_after = max(0.0, -(saldo_usd - tu))
+            if (prepaid_debt_after + licencias_debt) > lim_usd + 1e-9:
                 return (
                     f'Supera el límite de deuda USD ({lim_usd:g}). '
                     'Ajusta el pedido o el saldo.'
@@ -1161,10 +1316,13 @@ def _store_prepaid_debt_limit_error(user_obj, total_cop, total_usd):
     return None
 
 
-def _license_account_auto_renewal_charge_blocked(billing_user, lic):
+def _license_account_auto_renewal_charge_blocked(billing_user, lic, extra_pending=0.0):
     """
     True si la renovación automática no puede cobrar (prepago insuficiente o supera
     límite de deuda en cuenta «Licencias» ``users.saldo``). No aplica a ventas manuales admin.
+
+    ``extra_pending``: monto (misma moneda del perfil) ya comprometido por otras
+    renovaciones de la misma ventana; permite simular el cobro secuencial del job.
     """
     if not billing_user or not lic:
         return True, 'sin_usuario'
@@ -1172,21 +1330,37 @@ def _license_account_auto_renewal_charge_blocked(billing_user, lic):
     unit = float(_debt_increment_per_bulk_license_sale(product, billing_user))
     if unit <= 0:
         return True, 'precio_cero'
+    try:
+        pending = max(0.0, float(extra_pending or 0))
+    except (TypeError, ValueError):
+        pending = 0.0
     up = billing_user.user_prices if isinstance(billing_user.user_prices, dict) else {}
-    tipo = (up.get('tipo_precio') or 'COP').strip().upper()
+    tipo = str(up.get('tipo_precio') or '').strip().upper()
+    if tipo not in ('USD', 'COP'):
+        # Sin moneda configurada no se puede saber de qué wallet cobrar.
+        return True, 'sin_tipo_precio'
     if not _user_puede_tener_deuda_effective(billing_user):
         if tipo == 'USD':
             prepaid = float(getattr(billing_user, 'saldo_usd', 0) or 0)
         else:
             prepaid = float(getattr(billing_user, 'saldo_cop', 0) or 0)
-        if prepaid < unit - 1e-9:
+        if prepaid < unit + pending - 1e-9:
             return True, 'saldo_insuficiente'
         return False, ''
     prev = float(getattr(billing_user, 'saldo', 0) or 0)
+    # Deuda combinada (misma fórmula que _license_portal_effective_saldo):
+    # cuenta licencias + prepago tienda en negativo. Mirar solo users.saldo
+    # permitía deber hasta 2× el límite entre ambos bolsillos.
+    prepaid_field = 'saldo_usd' if tipo == 'USD' else 'saldo_cop'
+    try:
+        prepaid = float(getattr(billing_user, prepaid_field, 0) or 0)
+    except (TypeError, ValueError):
+        prepaid = 0.0
+    prev_effective = prev + (-prepaid if prepaid < -1e-9 else 0.0)
     lim = _user_debt_limit_effective(
         billing_user, 'usd' if tipo == 'USD' else 'cop'
     )
-    if lim is not None and (prev + unit) > lim + 1e-9:
+    if lim is not None and (prev_effective + pending + unit) > lim + 1e-9:
         return True, 'supera_limite_deuda'
     return False, ''
 
@@ -1199,7 +1373,9 @@ def _apply_license_account_auto_renewal_charge(billing_user, lic):
     product = getattr(lic, 'product', None)
     unit = float(_debt_increment_per_bulk_license_sale(product, billing_user))
     up = billing_user.user_prices if isinstance(billing_user.user_prices, dict) else {}
-    tipo = (up.get('tipo_precio') or 'COP').strip().upper()
+    tipo = str(up.get('tipo_precio') or '').strip().upper()
+    if tipo not in ('USD', 'COP'):
+        return False, 'sin_tipo_precio'
     if not _user_puede_tener_deuda_effective(billing_user):
         if tipo == 'USD':
             billing_user.saldo_usd = float(getattr(billing_user, 'saldo_usd', 0) or 0) - unit
@@ -1211,16 +1387,26 @@ def _apply_license_account_auto_renewal_charge(billing_user, lic):
     return True, 'debt'
 
 
-def _renewal_block_user_message(reason: str, currency: str = 'COP') -> str:
-    cur = (currency or 'COP').strip().upper()
+def _renewal_block_user_message(reason: str, currency: str = '') -> str:
+    cur = str(currency or '').strip().upper()
     if reason == 'supera_limite_deuda':
         return (
             'No tienes saldo suficiente para la renovación (supera el límite de deuda '
             'en cuenta Licencias). La cuenta no se renovará y pasará a Cambios o Vencidas.'
         )
-    if reason == 'saldo_insuficiente':
+    if reason == 'sin_tipo_precio':
         return (
-            f'No tienes saldo suficiente en {cur} para la renovación. '
+            'Tu cuenta no tiene tipo de precio (USD/COP) configurado; no se pudo '
+            'cobrar la renovación. Contacta al administrador.'
+        )
+    if reason == 'saldo_insuficiente':
+        if cur in ('USD', 'COP'):
+            return (
+                f'No tienes saldo suficiente en {cur} para la renovación. '
+                'La cuenta no se renovará y pasará a vencidas si no recargas.'
+            )
+        return (
+            'No tienes saldo suficiente para la renovación. '
             'La cuenta no se renovará y pasará a vencidas si no recargas.'
         )
     return (
@@ -1245,7 +1431,9 @@ def _record_portal_renewal_blocked_activity(
         from app.store.user_license_activity import append_portal_license_activity_record
 
         up = billing_user.user_prices if isinstance(billing_user.user_prices, dict) else {}
-        tipo = (up.get('tipo_precio') or 'COP').strip().upper()
+        tipo = str(up.get('tipo_precio') or '').strip().upper()
+        if tipo not in ('USD', 'COP'):
+            tipo = ''
         msg = _renewal_block_user_message(reason, tipo)
         hint = str(cred_hint or '').strip()[:140]
         summary = 'Renovación automática no realizada'
@@ -1293,7 +1481,7 @@ def _record_portal_renewal_blocked_activity(
 USER_LIC_CADUCIDAD_VIEW_MAX_DAYS = 5
 
 # Cache bust único: Admin Licencias + portal /licencias (evita CSS/JS mezclados en producción).
-LICENCIAS_STATIC_VERSION = '20260722-caducidad-skip-autorenew'
+LICENCIAS_STATIC_VERSION = '20260729-audit-fixes'
 
 
 def _billing_user_for_store_debt_limit(user_obj):
@@ -1427,6 +1615,9 @@ def _sanitize_admin_licencias_ui_prefs(raw):
     mg = raw.get('main_grid_collapsed')
     if mg is True or mg is False:
         out['main_grid_collapsed'] = mg
+    prc = raw.get('pedidos_reserva_collapsed')
+    if prc is True or prc is False:
+        out['pedidos_reserva_collapsed'] = prc
     ad = raw.get('admin_days')
     if isinstance(ad, dict):
         clean_ad = {}
@@ -1579,6 +1770,8 @@ def _sanitize_store_front_ui_prefs(raw):
         out['showPriceTable'] = bool(raw['showPriceTable'])
     if raw.get('priceTableCollapsed') is True or raw.get('priceTableCollapsed') is False:
         out['priceTableCollapsed'] = bool(raw['priceTableCollapsed'])
+    if raw.get('pedidos_reserva_collapsed') is True or raw.get('pedidos_reserva_collapsed') is False:
+        out['pedidos_reserva_collapsed'] = bool(raw['pedidos_reserva_collapsed'])
     view = raw.get('storeView')
     if view == 'table':
         view = 'list'
@@ -2203,41 +2396,123 @@ def api_anuncios_on_entry():
     return resp
 
 
+def _coupon_parse_number(value, *, integer=False, allow_none=False, default=0):
+    """Parsea un campo numérico de cupón. Devuelve (ok, valor_o_mensaje).
+
+    Rechaza valores no numéricos y negativos (en SQLite un string no numérico
+    quedaría guardado tal cual y rompería el checkout con 500).
+    """
+    if value in (None, '', 'null'):
+        return True, (None if allow_none else default)
+    try:
+        num = float(str(value).strip().replace(',', '.'))
+    except (TypeError, ValueError):
+        return False, 'Valor numérico inválido.'
+    if num != num or num in (float('inf'), float('-inf')):
+        return False, 'Valor numérico inválido.'
+    if num < 0:
+        return False, 'No se permiten valores negativos.'
+    if integer:
+        return True, int(num)
+    return True, round(num, 2)
+
+
+def ensure_coupon_min_amount_columns():
+    """Migración ligera: mínimos del cupón separados por moneda (COP/USD)."""
+    from app.store.sale_purchase_snapshot import _ensure_column
+
+    _ensure_column('store_coupons', 'min_amount_cop', 'min_amount_cop NUMERIC(10, 2)')
+    _ensure_column('store_coupons', 'min_amount_usd', 'min_amount_usd NUMERIC(10, 2)')
+
+
+def _coupon_min_amount_for_currency(coupon, currency):
+    """Mínimo del cupón en la moneda del comprador (o legacy min_amount)."""
+    cur = str(currency or '').strip().upper()
+    per_cur = getattr(
+        coupon, 'min_amount_usd' if cur == 'USD' else 'min_amount_cop', None
+    )
+    try:
+        if per_cur is not None and float(per_cur) > 0:
+            return float(per_cur)
+    except (TypeError, ValueError):
+        pass
+    # Fallback legacy: cupones viejos con un único min_amount para ambas monedas.
+    try:
+        legacy = getattr(coupon, 'min_amount', None)
+        if legacy is not None and float(legacy) > 0:
+            return float(legacy)
+    except (TypeError, ValueError):
+        pass
+    return 0.0
+
+
+def _coupon_parse_fields(data):
+    """Valida los campos numéricos de crear/editar cupón.
+
+    Devuelve (ok, dict_o_mensaje) con claves: discount_cop, discount_usd,
+    duration_days, max_uses_per_user, min_amount, min_amount_cop, min_amount_usd.
+    """
+    specs = (
+        ('discount_cop', {'default': 0}),
+        ('discount_usd', {'default': 0}),
+        ('duration_days', {'integer': True, 'default': 1}),
+        ('max_uses_per_user', {'integer': True, 'allow_none': True}),
+        ('min_amount', {'allow_none': True}),
+        ('min_amount_cop', {'allow_none': True}),
+        ('min_amount_usd', {'allow_none': True}),
+    )
+    labels = {
+        'discount_cop': 'Descuento COP',
+        'discount_usd': 'Descuento USD',
+        'duration_days': 'Duración (días)',
+        'max_uses_per_user': 'Usos máximos por usuario',
+        'min_amount': 'Monto mínimo',
+        'min_amount_cop': 'Monto mínimo COP',
+        'min_amount_usd': 'Monto mínimo USD',
+    }
+    out = {}
+    for key, kwargs in specs:
+        ok, val = _coupon_parse_number(data.get(key), **kwargs)
+        if not ok:
+            return False, f'{labels[key]}: {val}'
+        out[key] = val
+    if out['duration_days'] is not None and out['duration_days'] < 1:
+        out['duration_days'] = 1
+    return True, out
+
+
 @store_bp.route('/admin/coupons/create', methods=['POST'])
 @admin_required
 def create_coupon():
     data = request.json
-    name = data.get('coupon_name', '').strip()
-    discount_cop = data.get('discount_cop', 0)
-    discount_usd = data.get('discount_usd', 0)
+    name = (data.get('coupon_name', '') or '').strip()
     product_ids = data.get('products', [])
-    duration_days = data.get('duration_days', 1)
-    max_uses_per_user = data.get('max_uses_per_user')
-    if max_uses_per_user in (None, '', 'null'):
-        max_uses_per_user = None
     description = data.get('description', '')
-    min_amount = data.get('min_amount', None)
-    if min_amount in (None, '', 'null'):
-        min_amount = None
+    ok_nums, nums = _coupon_parse_fields(data)
+    if not ok_nums:
+        return jsonify({'success': False, 'error': nums}), 400
     if not name or not product_ids:
         return jsonify({'success': False, 'error': 'Nombre y productos requeridos.'}), 400
-    if Coupon.query.filter_by(name=name).first():
+    # Normalizar código a mayúsculas para que coincida con lo que escribe el cliente.
+    name = name.upper()
+    if _coupon_lookup_by_code(name, enabled_only=False):
         return jsonify({'success': False, 'error': 'Ya existe un cupón con ese nombre.'}), 400
-    # Obtener la fecha actual en zona horaria de Colombia
-    # Usar módulo centralizado de timezone
-    colombia_now = get_colombia_datetime()
-    
+
+    # created_at se guarda en UTC (default del modelo); la validación de
+    # vencimiento usa utc_to_colombia, así que guardar hora Bogotá aquí hacía
+    # expirar los cupones ~5 horas antes.
+    ensure_coupon_min_amount_columns()
     coupon = Coupon(
         name=name,
-        discount_cop=discount_cop,
-        discount_usd=discount_usd,
-        duration_days=duration_days,
-        max_uses_per_user=max_uses_per_user,
+        discount_cop=nums['discount_cop'],
+        discount_usd=nums['discount_usd'],
+        duration_days=nums['duration_days'],
+        max_uses_per_user=nums['max_uses_per_user'],
         description=description,
-        min_amount=min_amount,
+        min_amount=nums['min_amount'],
+        min_amount_cop=nums['min_amount_cop'],
+        min_amount_usd=nums['min_amount_usd'],
         enabled=True,
-        created_at=colombia_now,
-        updated_at=colombia_now
     )
     coupon.products = Product.query.filter(Product.id.in_(product_ids)).all()
     db.session.add(coupon)
@@ -2291,13 +2566,29 @@ def editar_cupon(coupon_id):
         # Usar módulo centralizado de timezone
         created_at_col = utc_to_colombia(coupon.created_at)
     if request.method == 'POST':
-        coupon.name = request.form.get('coupon_name', '').strip()
-        coupon.discount_cop = request.form.get('discount_cop', 0)
-        coupon.discount_usd = request.form.get('discount_usd', 0)
-        coupon.duration_days = request.form.get('duration_days', 1)
-        coupon.max_uses_per_user = request.form.get('max_uses_per_user', 1)
+        ok_nums, nums = _coupon_parse_fields(request.form)
+        if not ok_nums:
+            flash('Error al actualizar cupón: ' + str(nums), 'danger')
+            return render_template(
+                'editar_cupon.html',
+                coupon=coupon,
+                products=products,
+                coupon_product_ids=coupon_product_ids,
+                created_at_col=created_at_col,
+            )
+        raw_name = (request.form.get('coupon_name', '') or '').strip()
+        coupon.name = raw_name.upper() if raw_name else coupon.name
+        coupon.discount_cop = nums['discount_cop']
+        coupon.discount_usd = nums['discount_usd']
+        coupon.duration_days = nums['duration_days']
+        coupon.max_uses_per_user = nums['max_uses_per_user']
         coupon.description = request.form.get('description', '')
-        coupon.min_amount = request.form.get('min_amount') or None
+        ensure_coupon_min_amount_columns()
+        coupon.min_amount_cop = nums['min_amount_cop']
+        coupon.min_amount_usd = nums['min_amount_usd']
+        # El formulario ya maneja mínimos por moneda: retirar el legacy para que
+        # no reviva como fallback si el admin borra ambos mínimos.
+        coupon.min_amount = None
         selected_products = request.form.getlist('products')
         coupon.products = Product.query.filter(Product.id.in_(selected_products)).all() if selected_products else []
         try:
@@ -2310,17 +2601,35 @@ def editar_cupon(coupon_id):
     return render_template('editar_cupon.html', coupon=coupon, products=products, coupon_product_ids=coupon_product_ids, created_at_col=created_at_col)
 
 @store_bp.route('/admin/coupons/update', methods=['POST'])
+@admin_required
 def update_coupon():
     data = request.get_json()
     coupon_id = data.get('coupon_id')
     coupon = Coupon.query.get_or_404(coupon_id)
-    coupon.name = data.get('coupon_name', coupon.name)
-    coupon.discount_cop = data.get('discount_cop', coupon.discount_cop)
-    coupon.discount_usd = data.get('discount_usd', coupon.discount_usd)
-    coupon.duration_days = data.get('duration_days', coupon.duration_days)
-    coupon.max_uses_per_user = data.get('max_uses_per_user', coupon.max_uses_per_user)
-    coupon.description = data.get('description', coupon.description)
-    coupon.min_amount = data.get('min_amount', coupon.min_amount)
+    raw_name = (data.get('coupon_name') or '').strip()
+    if raw_name:
+        coupon.name = raw_name.upper()
+    ensure_coupon_min_amount_columns()
+    for key, kwargs in (
+        ('discount_cop', {}),
+        ('discount_usd', {}),
+        ('duration_days', {'integer': True, 'default': 1}),
+        ('max_uses_per_user', {'integer': True, 'allow_none': True}),
+        ('min_amount', {'allow_none': True}),
+        ('min_amount_cop', {'allow_none': True}),
+        ('min_amount_usd', {'allow_none': True}),
+    ):
+        if key not in data:
+            continue
+        ok_num, val = _coupon_parse_number(data.get(key), **kwargs)
+        if not ok_num:
+            return jsonify({'success': False, 'error': f'{key}: {val}'}), 400
+        setattr(coupon, key, val)
+    if 'min_amount_cop' in data or 'min_amount_usd' in data:
+        # El cliente ya trabaja con mínimos por moneda: retirar el legacy.
+        coupon.min_amount = None
+    if 'description' in data:
+        coupon.description = data.get('description')
     coupon.show_public = bool(data.get('show_public', False))
     # Actualizar productos asociados si es necesario
     product_ids = data.get('products', [])
@@ -4677,13 +4986,17 @@ def admin_backup():
 @store_bp.route('/admin/backup/manual', methods=['POST'])
 @admin_required
 def admin_backup_manual():
-    """Crea una copia manual inmediata (no cuenta para la rotación de 100 autos)."""
+    """Crea una copia manual inmediata (no cuenta para la rotación de autos)."""
     from app.services import db_backup_service as bk
     path = bk.create_manual_backup_now()
     if path:
         flash('Copia manual creada: ' + os.path.basename(path), 'success')
     else:
-        flash('No se pudo crear la copia. Comprueba que la BD sea SQLite y exista el archivo.', 'danger')
+        flash(
+            'No se pudo crear la copia. Comprueba que la BD sea SQLite, exista el archivo '
+            'y que haya espacio libre suficiente en el disco.',
+            'danger',
+        )
     return redirect(url_for('store_bp.admin_backup'))
 
 
@@ -5092,6 +5405,197 @@ def add_balance():
     return jsonify(payload)
 
 
+def build_store_user_catalog_snapshot(user):
+    """
+    Snapshot ligero del catálogo visible para el usuario (ids + precios finales).
+    Sirve para sincronizar la tienda en casi tiempo real al marcar/desmarcar
+    «Ver en tienda» o cambiar descuentos adicionales.
+    """
+    if not user:
+        return {
+            'success': True,
+            'catalog_revision': 0,
+            'product_ids': [],
+            'products': {},
+        }
+    products, _tipo = catalog_products_for_store_user(user)
+    rev = 0
+    if isinstance(getattr(user, 'user_prices', None), dict):
+        try:
+            rev = int(user.user_prices.get('catalog_revision') or 0)
+        except (TypeError, ValueError):
+            rev = 0
+    products_map = {}
+    ids = []
+    for p in products or []:
+        try:
+            pid = int(p.id)
+        except (TypeError, ValueError):
+            continue
+        ids.append(pid)
+        try:
+            price_cop = max(
+                0.0,
+                round(
+                    float(p.price_cop or 0)
+                    - float(getattr(p, 'discount_cop_extra', 0) or 0),
+                    2,
+                ),
+            )
+        except (TypeError, ValueError):
+            price_cop = 0.0
+        try:
+            price_usd = max(
+                0.0,
+                round(
+                    float(p.price_usd or 0)
+                    - float(getattr(p, 'discount_usd_extra', 0) or 0),
+                    2,
+                ),
+            )
+        except (TypeError, ValueError):
+            price_usd = 0.0
+        products_map[str(pid)] = {
+            'id': pid,
+            'price_cop': price_cop,
+            'price_usd': price_usd,
+        }
+    return {
+        'success': True,
+        'catalog_revision': rev,
+        'product_ids': ids,
+        'products': products_map,
+    }
+
+
+def _store_user_catalog_payload_for_session_user():
+    """Payload de catálogo para el usuario de sesión (admin o cliente)."""
+    if not session.get('logged_in'):
+        return None, (jsonify({'success': False, 'error': 'No autenticado'}), 401)
+    uid = session.get('user_id')
+    if not uid:
+        return None, (jsonify({'success': False, 'error': 'No autenticado'}), 401)
+    user = User.query.get(uid)
+    if not user:
+        return None, (jsonify({'success': False, 'error': 'Usuario no encontrado'}), 404)
+    admin_username = current_app.config.get('ADMIN_USER', 'admin')
+    if user.username == admin_username:
+        rows = public_store_products_query().order_by(Product.name).all()
+        products_map = {}
+        ids = []
+        for p in rows:
+            pid = int(p.id)
+            ids.append(pid)
+            products_map[str(pid)] = {
+                'id': pid,
+                'price_cop': float(p.price_cop or 0),
+                'price_usd': float(p.price_usd or 0),
+            }
+        return (
+            {
+                'success': True,
+                'catalog_revision': 0,
+                'product_ids': ids,
+                'products': products_map,
+                'is_admin': True,
+            },
+            None,
+        )
+    return build_store_user_catalog_snapshot(user), None
+
+
+def _store_catalog_stream_fingerprint(payload: dict) -> str:
+    """Huella ligera: solo emite SSE cuando cambia lo visible o los precios."""
+    parts = [str((payload or {}).get('catalog_revision') or 0)]
+    products = (payload or {}).get('products') or {}
+    for pid in sorted((payload or {}).get('product_ids') or []):
+        row = products.get(str(pid)) or {}
+        parts.append(
+            f"{pid}:{row.get('price_cop')}:{row.get('price_usd')}"
+        )
+    return '|'.join(parts)
+
+
+@store_bp.route('/api/user/store-catalog', methods=['GET'])
+@csrf_exempt_route
+def api_user_store_catalog():
+    """Catálogo visible del usuario logueado (fallback / lectura puntual)."""
+    payload, err = _store_user_catalog_payload_for_session_user()
+    if err is not None:
+        return err
+    return jsonify(payload)
+
+
+@store_bp.route('/api/user/store-catalog/stream')
+@csrf_exempt_route
+def api_user_store_catalog_stream():
+    """
+    SSE: catálogo visible (Ver en tienda / precios).
+    Envía snapshot al conectar y luego solo si cambia; heartbeat si no.
+    Ciclo ~40 s; EventSource reconecta (mismo patrón que stock).
+    """
+    if not session.get('logged_in') or not session.get('user_id'):
+        return jsonify({'success': False, 'error': 'No autenticado'}), 401
+    uid = int(session.get('user_id'))
+
+    @stream_with_context
+    def generate():
+        last_fp = None
+        yield f"data: {json.dumps({'type': 'connected'})}\n\n"
+        # ~20 * 2s ≈ 40s por petición; EventSource vuelve a abrir.
+        for _ in range(20):
+            try:
+                db.session.expire_all()
+                user = User.query.get(uid)
+                if not user:
+                    yield f"data: {json.dumps({'type': 'error', 'success': False, 'error': 'Usuario no encontrado'})}\n\n"
+                    break
+                admin_username = current_app.config.get('ADMIN_USER', 'admin')
+                if user.username == admin_username:
+                    rows = public_store_products_query().order_by(Product.name).all()
+                    products_map = {}
+                    ids = []
+                    for p in rows:
+                        pid = int(p.id)
+                        ids.append(pid)
+                        products_map[str(pid)] = {
+                            'id': pid,
+                            'price_cop': float(p.price_cop or 0),
+                            'price_usd': float(p.price_usd or 0),
+                        }
+                    payload = {
+                        'success': True,
+                        'catalog_revision': 0,
+                        'product_ids': ids,
+                        'products': products_map,
+                        'is_admin': True,
+                    }
+                else:
+                    payload = build_store_user_catalog_snapshot(user)
+                fp = _store_catalog_stream_fingerprint(payload)
+                if fp != last_fp:
+                    last_fp = fp
+                    out = dict(payload)
+                    out['type'] = 'catalog'
+                    yield f"data: {json.dumps(out)}\n\n"
+                else:
+                    yield ": heartbeat\n\n"
+            except Exception as e:
+                current_app.logger.error('Error en stream catálogo tienda: %s', e)
+                yield f"data: {json.dumps({'type': 'error', 'success': False, 'error': str(e)})}\n\n"
+            time.sleep(2)
+
+    return Response(
+        generate(),
+        mimetype='text/event-stream',
+        headers={
+            'Cache-Control': 'no-cache',
+            'Connection': 'keep-alive',
+            'X-Accel-Buffering': 'no',
+        },
+    )
+
+
 @store_bp.route('/api/user/store-menu-balance', methods=['GET'])
 @csrf_exempt_route
 def api_user_store_menu_balance():
@@ -5108,16 +5612,50 @@ def api_user_store_menu_balance():
 
 
 # Validación de cupones
+_coupon_redemptions_table_ready = False
+
+
 def _ensure_coupon_redemptions_table():
+    """Crea solo store_coupon_redemptions; silenciosa ante lock SQLite."""
+    global _coupon_redemptions_table_ready
+    if _coupon_redemptions_table_ready:
+        return
     try:
-        from sqlalchemy import inspect
-        from app.store.models import CouponRedemption
+        from sqlalchemy import inspect, text
 
         insp = inspect(db.engine)
-        if 'store_coupon_redemptions' not in insp.get_table_names():
-            CouponRedemption.__table__.create(db.engine)
+        if 'store_coupon_redemptions' in insp.get_table_names():
+            _coupon_redemptions_table_ready = True
+            return
+        dialect = getattr(db.engine.dialect, 'name', '') or ''
+        if dialect == 'postgresql':
+            ddl = """
+                CREATE TABLE IF NOT EXISTS store_coupon_redemptions (
+                    id SERIAL PRIMARY KEY,
+                    coupon_id INTEGER NOT NULL REFERENCES store_coupons(id) ON DELETE CASCADE,
+                    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                    created_at TIMESTAMP WITHOUT TIME ZONE
+                )
+            """
+        else:
+            ddl = """
+                CREATE TABLE IF NOT EXISTS store_coupon_redemptions (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    coupon_id INTEGER NOT NULL,
+                    user_id INTEGER NOT NULL,
+                    created_at DATETIME,
+                    FOREIGN KEY(coupon_id) REFERENCES store_coupons(id) ON DELETE CASCADE,
+                    FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+                )
+            """
+        with db.engine.begin() as conn:
+            conn.execute(text(ddl))
+        _coupon_redemptions_table_ready = True
     except Exception:
-        db.session.rollback()
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
 
 
 def _coupon_uses_by_user(coupon_id, user_id) -> int:
@@ -5159,6 +5697,33 @@ def _coupon_validate_rate_limited(user_id) -> bool:
     return False
 
 
+def _coupon_lookup_by_code(coupon_code, *, enabled_only=True):
+    """Busca cupón por nombre sin importar mayúsculas/minúsculas."""
+    from sqlalchemy import func as sa_func
+
+    code = str(coupon_code or '').strip()
+    if not code:
+        return None
+    q = Coupon.query.filter(sa_func.lower(Coupon.name) == code.lower())
+    if enabled_only:
+        q = q.filter(Coupon.enabled.is_(True))
+    return q.first()
+
+
+def _coupon_discount_for_currency(coupon, moneda):
+    """Descuento del cupón en la moneda del carrito (USD/COP)."""
+    m = str(moneda or '').strip().upper()
+    if m == 'COP':
+        try:
+            return max(0.0, float(coupon.discount_cop or 0))
+        except (TypeError, ValueError):
+            return 0.0
+    try:
+        return max(0.0, float(coupon.discount_usd or 0))
+    except (TypeError, ValueError):
+        return 0.0
+
+
 @store_bp.route('/validate_coupon', methods=['POST'])
 @store_access_required
 def validate_coupon():
@@ -5175,21 +5740,20 @@ def validate_coupon():
         if not data:
             return jsonify({'success': False, 'error': 'Datos no válidos'})
             
-        coupon_code = data.get('coupon_code', '').strip().upper()
+        coupon_code = data.get('coupon_code', '').strip()
         products = data.get('products', [])  # Lista de IDs de productos en el carrito
         
         if not coupon_code:
             return jsonify({'success': False, 'error': 'Código de cupón requerido'})
         
-        # Buscar el cupón (buscar por name que es el código del cupón)
-        coupon = Coupon.query.filter_by(name=coupon_code, enabled=True).first()
+        coupon = _coupon_lookup_by_code(coupon_code, enabled_only=True)
         
         if not coupon:
             return jsonify({'success': False, 'error': 'Cupón no válido o expirado'})
         
         # Verificar si el cupón ha expirado usando zona horaria de Colombia
         if coupon.duration_days and coupon.created_at:
-            from datetime import datetime, timedelta
+            from datetime import timedelta
             # Usar módulo centralizado de timezone
             colombia_now = get_colombia_datetime()
             
@@ -5214,53 +5778,81 @@ def validate_coupon():
             coupon_product_ids = [p.id for p in coupon.products]
             if not any(int(pid) in coupon_product_ids for pid in products):
                 return jsonify({'success': False, 'error': 'Este cupón no aplica a los productos seleccionados'})
+
+        # Moneda del usuario (para min_amount y descuento mostrado)
+        user = User.query.get(user_id) if user_id else None
+        _, tipo_cat = catalog_products_for_store_user(user) if user else (None, None)
+        moneda_user = (tipo_cat or 'USD').strip().upper()
+        if moneda_user not in ('USD', 'COP'):
+            moneda_user = 'USD'
         
-        # Verificar monto mínimo si está configurado
-        if coupon.min_amount and coupon.min_amount > 0:
-            # Calcular total del carrito (esto debería venir del frontend)
-            total_amount = data.get('total_amount', 0)
-            if total_amount < float(coupon.min_amount):
-                return jsonify({'success': False, 'error': f'El cupón requiere un monto mínimo de ${coupon.min_amount} COP'})
+        # Verificar monto mínimo si está configurado (en la moneda del perfil)
+        _min_user = _coupon_min_amount_for_currency(coupon, moneda_user)
+        if _min_user > 0:
+            try:
+                total_amount = float(data.get('total_amount', 0) or 0)
+            except (TypeError, ValueError):
+                total_amount = 0.0
+            if total_amount < _min_user:
+                return jsonify({
+                    'success': False,
+                    'error': (
+                        f'El cupón requiere un monto mínimo de '
+                        f'${_min_user:g} {moneda_user}'
+                    ),
+                })
         
+        discount_cop = _coupon_discount_for_currency(coupon, 'COP')
+        discount_usd = _coupon_discount_for_currency(coupon, 'USD')
+
         # Obtener productos elegibles para el descuento
         eligible_products = []
         if coupon.products:
             coupon_product_ids = [p.id for p in coupon.products]
             for pid in products:
                 if int(pid) in coupon_product_ids:
-                    # Buscar el producto para obtener su información
                     product = Product.query.get(int(pid))
                     if product:
                         eligible_products.append({
                             'id': product.id,
                             'name': product.name,
-                            'discount_cop': float(coupon.discount_cop) if coupon.discount_cop else 0,
-                            'discount_usd': float(coupon.discount_usd) if coupon.discount_usd else 0
+                            'discount_cop': discount_cop,
+                            'discount_usd': discount_usd,
                         })
         else:
-            # Si no hay productos específicos, el cupón aplica a todos
             for pid in products:
                 product = Product.query.get(int(pid))
                 if product:
                     eligible_products.append({
                         'id': product.id,
                         'name': product.name,
-                        'discount_cop': float(coupon.discount_cop) if coupon.discount_cop else 0,
-                        'discount_usd': float(coupon.discount_usd) if coupon.discount_usd else 0
+                        'discount_cop': discount_cop,
+                        'discount_usd': discount_usd,
                     })
         
-        # Retornar información del cupón válido con productos elegibles
         return jsonify({
             'success': True,
             'coupon': {
                 'id': coupon.id,
                 'name': coupon.name,
-                'discount_cop': coupon.discount_cop,
-                'discount_usd': coupon.discount_usd,
+                'discount_cop': discount_cop,
+                'discount_usd': discount_usd,
                 'description': coupon.description,
-                'min_amount': coupon.min_amount
+                # Mínimo efectivo en la moneda del comprador (por moneda o legacy).
+                'min_amount': (_min_user if _min_user > 0 else None),
+                'min_amount_cop': (
+                    float(coupon.min_amount_cop)
+                    if getattr(coupon, 'min_amount_cop', None) is not None
+                    else None
+                ),
+                'min_amount_usd': (
+                    float(coupon.min_amount_usd)
+                    if getattr(coupon, 'min_amount_usd', None) is not None
+                    else None
+                ),
             },
-            'eligible_products': eligible_products
+            'eligible_products': eligible_products,
+            'moneda': moneda_user,
         })
     except Exception as e:
         return jsonify({'success': False, 'error': f'Error interno: {str(e)}'})
@@ -5316,9 +5908,9 @@ def _checkout_coupon_server_side(cupon_data, productos, total_pre_descuento, use
     if cid:
         coupon = Coupon.query.get(cid)
     if coupon is None:
-        code = str((cupon_data or {}).get('nombre') or '').strip().upper()
+        code = str((cupon_data or {}).get('nombre') or '').strip()
         if code:
-            coupon = Coupon.query.filter_by(name=code).first()
+            coupon = _coupon_lookup_by_code(code, enabled_only=False)
     if not coupon or not coupon.enabled:
         return None, 'El cupón ya no es válido. Quítalo del carrito e inténtalo de nuevo.'
     if coupon.duration_days and coupon.created_at:
@@ -5326,9 +5918,31 @@ def _checkout_coupon_server_side(cupon_data, productos, total_pre_descuento, use
         created_at_col = utc_to_colombia(coupon.created_at)
         if colombia_now > created_at_col + timedelta(days=coupon.duration_days):
             return None, 'El cupón ya expiró. Quítalo del carrito e inténtalo de nuevo.'
-    if coupon.min_amount and float(coupon.min_amount) > 0:
-        if float(total_pre_descuento or 0) < float(coupon.min_amount):
-            return None, f'El cupón requiere un monto mínimo de ${coupon.min_amount}.'
+    # Moneda del perfil: el mínimo y el descuento deben ir en esa moneda.
+    _, tipo_cat = catalog_products_for_store_user(user) if user else (None, None)
+    moneda = (tipo_cat or '').strip().upper()
+    if moneda not in ('USD', 'COP'):
+        # Inferir por líneas del carrito ya normalizadas en servidor.
+        monedas = {
+            str(p.get('moneda') or '').strip().upper()
+            for p in (productos or [])
+            if str(p.get('moneda') or '').strip()
+        }
+        if 'USD' in monedas and 'COP' not in monedas:
+            moneda = 'USD'
+        elif 'COP' in monedas and 'USD' not in monedas:
+            moneda = 'COP'
+        else:
+            return None, (
+                'No se pudo determinar la moneda del cupón. '
+                'Configura USD/COP en el perfil.'
+            )
+    _min_cur = _coupon_min_amount_for_currency(coupon, moneda)
+    if _min_cur > 0:
+        if float(total_pre_descuento or 0) < _min_cur:
+            return None, (
+                f'El cupón requiere un monto mínimo de ${_min_cur:g} {moneda}.'
+            )
     if coupon.max_uses_per_user and user is not None:
         if _coupon_uses_by_user(coupon.id, user.id) >= int(coupon.max_uses_per_user):
             return None, 'Ya usaste este cupón el máximo de veces permitido.'
@@ -5348,8 +5962,9 @@ def _checkout_coupon_server_side(cupon_data, productos, total_pre_descuento, use
         {
             'coupon_id': int(coupon.id),
             'pids': elegibles,
-            'cop': max(0.0, float(coupon.discount_cop or 0)),
-            'usd': max(0.0, float(coupon.discount_usd or 0)),
+            'cop': _coupon_discount_for_currency(coupon, 'COP'),
+            'usd': _coupon_discount_for_currency(coupon, 'USD'),
+            'moneda': moneda,
         },
         None,
     )
@@ -5483,8 +6098,19 @@ def _procesar_pago_core():
             )
         except (TypeError, ValueError):
             _final_usd = 0.0
-        # Misma regla que la tienda pública: COP si hay precio COP; si no, USD.
-        if _final_cop > 0:
+        # Redondeo a 2 decimales (1.5 - 0.5 = 1.00).
+        _final_cop = round(_final_cop + 0.0, 2)
+        _final_usd = round(_final_usd + 0.0, 2)
+        # Cobrar en la moneda del perfil (USD/COP). Nunca aceptar la moneda que
+        # mande el navegador: sin tipo_precio el comprador podría elegir pagar
+        # price_usd desde saldo_usd o price_cop desde saldo_cop a conveniencia.
+        _tp_pay = (tipo_catalogo or '').strip().upper()
+        if _tp_pay not in ('USD', 'COP'):
+            return jsonify({
+                'success': False,
+                'error': 'Tu cuenta no tiene tipo de precio (USD/COP) configurado.',
+            }), 400
+        if _tp_pay == 'COP':
             _p['moneda'] = 'COP'
             _p['precio_unitario'] = _final_cop
         else:
@@ -5626,8 +6252,27 @@ def _procesar_pago_core():
     # Cupón: se revalida en servidor y el descuento se aplica al precio unitario.
     cupon_req = data.get('cupon_aplicado') or None
     if cupon_req:
+        # Mínimo del cupón contra el total de la moneda del perfil (no COP+USD).
+        _, _tipo_pay = catalog_products_for_store_user(user)
+        _tp_pay = (_tipo_pay or '').strip().upper()
+        if _tp_pay not in ('USD', 'COP'):
+            _mons = {
+                str(p.get('moneda') or '').strip().upper()
+                for p in productos
+                if str(p.get('moneda') or '').strip()
+            }
+            if 'USD' in _mons and 'COP' not in _mons:
+                _tp_pay = 'USD'
+            elif 'COP' in _mons and 'USD' not in _mons:
+                _tp_pay = 'COP'
+            else:
+                return jsonify({
+                    'success': False,
+                    'error': 'Tu cuenta no tiene tipo de precio (USD/COP) configurado.',
+                }), 400
+        _total_min = total_usd if _tp_pay == 'USD' else total_cop
         descuentos_cupon, cupon_err = _checkout_coupon_server_side(
-            cupon_req, productos, total_cop + total_usd, user=user
+            cupon_req, productos, _total_min, user=user
         )
         if cupon_err:
             return jsonify({'success': False, 'error': cupon_err}), 400
@@ -5636,9 +6281,9 @@ def _procesar_pago_core():
                 continue
             unit = float(p.get('precio_unitario') or 0)
             if p.get('moneda') == 'COP':
-                p['precio_unitario'] = max(0.0, unit - descuentos_cupon['cop'])
+                p['precio_unitario'] = max(0.0, round(unit - descuentos_cupon['cop'], 2))
             else:
-                p['precio_unitario'] = max(0.0, unit - descuentos_cupon['usd'])
+                p['precio_unitario'] = max(0.0, round(unit - descuentos_cupon['usd'], 2))
         total_cop, total_usd = _totales_servidor()
         # Registrar el uso en la misma transacción del checkout: si la compra
         # se revierte, el uso también; si se confirma, cuenta para max_uses_per_user.
@@ -5666,6 +6311,23 @@ def _procesar_pago_core():
         return jsonify({'success': False, 'error': TRANSACTION_AMOUNT_LIMIT_MESSAGE}), 400
     if Decimal(str(total_usd or 0)) > MAX_TRANSACTION_AMOUNT_USD:
         return jsonify({'success': False, 'error': TRANSACTION_AMOUNT_LIMIT_MESSAGE}), 400
+
+    # Bloquear la fila del usuario (SELECT ... FOR UPDATE en Postgres; no-op en
+    # SQLite): el lock en memoria _CHECKOUT_USER_LOCKS solo protege dentro de
+    # un proceso, y dos checkouts simultáneos en workers distintos podían
+    # validar el mismo saldo y debitar ambos (doble gasto).
+    user = (
+        db.session.query(User)
+        .filter_by(id=int(user.id))
+        .populate_existing()
+        .with_for_update()
+        .one()
+    )
+
+    # Redondear antes de validar/debitar: los totales se acumulan en float y
+    # sin esto la deriva binaria (3 × 1.1 = 3.3000000000000003) se persiste.
+    total_cop = round(float(total_cop or 0), 2)
+    total_usd = round(float(total_usd or 0), 2)
 
     if user.saldo_cop is None:
         user.saldo_cop = 0
@@ -5734,11 +6396,13 @@ def _procesar_pago_core():
                     cantidad = 1
                 cantidad = max(1, cantidad)
 
+            _moneda_venta = str(p.get('moneda') or '').strip().upper()
             venta = Sale(
                 user_id=user.id,
                 product_id=producto.id,
                 quantity=cantidad,
                 total_price=cantidad * p.get('precio_unitario', 0),
+                currency=_moneda_venta if _moneda_venta in ('USD', 'COP') else None,
                 is_renewal=bool(renewal_account_ids),
             )
             db.session.add(venta)
@@ -5753,8 +6417,10 @@ def _procesar_pago_core():
                     append_customer_renewal_notes_for_checkout,
                     create_customer_account_renewal_order,
                     notify_admin_customer_account_renewal_pending,
+                    notify_admins_and_proveedores_customer_account_renewal_app,
                     notify_customer_account_renewal_received,
                     product_allows_customer_account_renewal,
+                    remove_renewed_account_from_changes_and_unsold_inventory,
                     validate_customer_renewal_from_cart_item,
                 )
 
@@ -5779,10 +6445,34 @@ def _procesar_pago_core():
                 venta.is_renewal = True
                 venta.renewal_kind = 'customer_account'
                 create_customer_account_renewal_order(user, producto, venta, em, pw)
+                # Primero saca de Cambios/inventario y conserva notas vinculadas (como en compra).
+                linked_notes = ''
+                try:
+                    clean = remove_renewed_account_from_changes_and_unsold_inventory(
+                        producto.id, em
+                    )
+                    linked_notes = (clean or {}).get('linked_notes') or ''
+                except Exception as clean_ex:
+                    current_app.logger.warning(
+                        'cleanup Cambios/inventario al renovar cuenta: %s', clean_ex
+                    )
                 append_customer_renewal_notes_for_checkout(
-                    producto, user, em, pw, credential_line=cred_line
+                    producto,
+                    user,
+                    em,
+                    pw,
+                    credential_line=cred_line,
+                    linked_notes=linked_notes,
                 )
                 notify_admin_customer_account_renewal_pending(user, producto, em)
+                try:
+                    notify_admins_and_proveedores_customer_account_renewal_app(
+                        user, producto, em
+                    )
+                except Exception as ren_app_ex:
+                    current_app.logger.warning(
+                        'aviso app renovación cuenta cliente: %s', ren_app_ex
+                    )
                 notify_customer_account_renewal_received(user, producto, em)
                 cuentas_asignadas.append(
                     {
@@ -6047,8 +6737,8 @@ def _procesar_pago_core():
 
         _apply_public_checkout_bloc_moves_to_licenses(sold_bloc_moves)
 
-        user.saldo_cop -= total_cop
-        user.saldo_usd -= total_usd
+        user.saldo_cop = round(float(user.saldo_cop or 0) - total_cop, 2)
+        user.saldo_usd = round(float(user.saldo_usd or 0) - total_usd, 2)
         db.session.commit()
         _proveedor_finalize_checkout_license_sales(
             proveedor_sales_by_license,
@@ -6155,6 +6845,76 @@ def api_product_reservar(product_id):
     if err:
         return jsonify({'success': False, 'error': err}), 400
     return jsonify({'success': True, 'reservation': reservation})
+
+
+@store_bp.route('/api/admin/product-reservations/pending', methods=['GET'])
+@admin_or_soporte_licencias_required
+def api_admin_pending_product_reservations_queue():
+    """Cola de pedidos en reserva (stock) para pintar servicios y avisos en admin."""
+    from app.store.product_reservations import (
+        ensure_product_reservation_schema,
+        list_pending_stock_reservations,
+        pending_reservation_counts_by_product,
+    )
+
+    ensure_product_reservation_schema()
+    rows = list_pending_stock_reservations(limit=200)
+    return jsonify(
+        {
+            'success': True,
+            'reservations': rows,
+            'by_product': pending_reservation_counts_by_product(rows),
+        }
+    )
+
+
+@store_bp.route('/api/user/proveedor/product-reservations/pending', methods=['GET'])
+@store_access_required
+def api_proveedor_pending_product_reservations_queue():
+    """Cola de reservas de productos cuyo servicio tiene habilitado el proveedor."""
+    from app.store.product_reservations import (
+        ensure_product_reservation_schema,
+        list_pending_stock_reservations_for_proveedor,
+        pending_reservation_counts_by_product,
+    )
+    from app.store.routes_licencias import _user_proveedor_api_guard
+
+    ensure_product_reservation_schema()
+    user = User.query.get(session.get('user_id'))
+    if not user:
+        return jsonify({'success': False, 'error': 'Usuario no autenticado.'}), 401
+    guard = _user_proveedor_api_guard(user)
+    if guard is not None:
+        return guard
+    rows = list_pending_stock_reservations_for_proveedor(user, limit=200)
+    # Proveedor: solo producto + unidades (sin cliente). Agrupado por product_id.
+    by_product = pending_reservation_counts_by_product(rows)
+    grouped = []
+    seen = set()
+    for row in rows:
+        try:
+            pid = int(row.get('product_id'))
+        except (TypeError, ValueError):
+            continue
+        if pid in seen:
+            continue
+        seen.add(pid)
+        info = by_product.get(pid) or {}
+        grouped.append(
+            {
+                'product_id': pid,
+                'product_name': info.get('product_name') or row.get('product_name') or 'Producto',
+                'quantity': int(info.get('quantity') or 0),
+                'count': int(info.get('count') or 0),
+            }
+        )
+    return jsonify(
+        {
+            'success': True,
+            'reservations': grouped,
+            'by_product': by_product,
+        }
+    )
 
 
 @store_bp.route('/api/user/product-reservations/pending', methods=['GET'])
@@ -6380,9 +7140,15 @@ def api_mobile_push_token():
     if not token:
         return jsonify({'success': False, 'error': 'Token vacío.'}), 400
     try:
-        upsert_push_token(user.id, token, platform=platform, device_label=device_label)
+        row = upsert_push_token(user.id, token, platform=platform, device_label=device_label)
+        if row is None:
+            return jsonify({'success': False, 'error': 'No se pudo guardar el token.'}), 503
         return jsonify({'success': True})
     except Exception as ex:
+        from app.store.mobile_push import _is_transient_sqlite_schema_error
+
+        if _is_transient_sqlite_schema_error(ex):
+            return jsonify({'success': False, 'error': 'No se pudo guardar el token.'}), 503
         current_app.logger.warning('api_mobile_push_token: %s', ex)
         return jsonify({'success': False, 'error': 'No se pudo guardar el token.'}), 500
 
@@ -7817,7 +8583,16 @@ def api_user_balance_recharge_submit():
 
     billing = _balance_recharge_viewer_billing_user(user)
     _, tipo_precio = catalog_products_for_store_user(billing or user)
-    tp = (tipo_precio or 'COP').upper()
+    tp = (tipo_precio or '').strip().upper()
+    if tp not in ('USD', 'COP'):
+        # Sin tipo de precio la recarga caía en silencio a saldo_cop.
+        return jsonify({
+            'success': False,
+            'message': (
+                'Tu cuenta no tiene tipo de precio (USD/COP) configurado; '
+                'no es posible registrar recargas. Contacta al administrador.'
+            ),
+        }), 400
 
     from app.store.balance_recharge_rate_limit import balance_recharge_submit_rate_limit_error
 
@@ -11000,9 +11775,14 @@ def send_chat_message():
             # Es FormData (con o sin archivos)
             message = request.form.get('message', '').strip()
             recipient_id = request.form.get('recipient_id')
-            
 
-            
+            # Con poco disco: bloquear subida de archivos (texto sigue permitido).
+            if 'file_0' in request.files:
+                from app.services.disk_space_guard import CHAT_UPLOAD_BLOCKED_MSG, disk_space_low
+
+                if disk_space_low():
+                    return jsonify({'status': 'error', 'message': CHAT_UPLOAD_BLOCKED_MSG}), 507
+
             # Obtener todos los archivos (file_0, file_1, file_2, etc.)
             files = []
             index = 0
@@ -12518,7 +13298,13 @@ def send_audio_message():
         # Verificar que se haya enviado un archivo de audio
         if 'audio' not in request.files:
             return jsonify({'status': 'error', 'message': 'No se envió archivo de audio'}), 400
-        
+
+        # Con poco disco: bloquear audios (consumen espacio como cualquier archivo).
+        from app.services.disk_space_guard import CHAT_UPLOAD_BLOCKED_MSG, disk_space_low
+
+        if disk_space_low():
+            return jsonify({'status': 'error', 'message': CHAT_UPLOAD_BLOCKED_MSG}), 507
+
         audio_file = request.files['audio']
         recipient_id = request.form.get('recipient_id')
         
@@ -15489,6 +16275,7 @@ def get_my_sms_messages():
 from app.store.routes_licencias import (  # noqa: E402
     _apply_public_checkout_bloc_moves_to_licenses,
     _billing_row_for_bulk_license_client,
+    _compute_inventory_sellable_stock_for_product,
     _compute_public_sellable_stock_for_product,
     _create_license_account_available_from_cred,
     _debt_increment_per_bulk_license_sale,

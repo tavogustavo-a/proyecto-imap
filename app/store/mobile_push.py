@@ -14,105 +14,136 @@ from app.extensions import db
 
 logger = logging.getLogger(__name__)
 
+# Evita martillar CREATE TABLE en cada notificación / cancelación.
+_mobile_push_schema_ready = False
+
+
+def _is_transient_sqlite_schema_error(ex) -> bool:
+    msg = str(ex or '').lower()
+    return (
+        'database is locked' in msg
+        or 'no such table' in msg
+        or 'locked' in msg
+    )
+
 
 def ensure_mobile_push_schema():
+    """Crea solo store_mobile_push_tokens (nunca db.create_all: spamea otras tablas)."""
+    global _mobile_push_schema_ready
+    if _mobile_push_schema_ready:
+        return True
     try:
-        from app.store.models import MobilePushToken  # noqa: F401
-
         insp = inspect(db.engine)
-        tables = set(insp.get_table_names())
-        if 'store_mobile_push_tokens' not in tables:
-            db.create_all()
-            # create_all may no-op if metadata already loaded partially
-            if 'store_mobile_push_tokens' not in set(inspect(db.engine).get_table_names()):
-                dialect = getattr(db.engine.dialect, 'name', '') or ''
-                if dialect == 'postgresql':
-                    db.session.execute(
-                        text(
-                            """
-                            CREATE TABLE IF NOT EXISTS store_mobile_push_tokens (
-                                id SERIAL PRIMARY KEY,
-                                user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-                                token VARCHAR(512) NOT NULL,
-                                platform VARCHAR(20) NOT NULL DEFAULT 'android',
-                                device_label VARCHAR(120),
-                                created_at TIMESTAMP WITHOUT TIME ZONE,
-                                updated_at TIMESTAMP WITHOUT TIME ZONE,
-                                CONSTRAINT uq_store_mobile_push_token UNIQUE (token)
-                            )
-                            """
-                        )
-                    )
-                else:
-                    db.session.execute(
-                        text(
-                            """
-                            CREATE TABLE IF NOT EXISTS store_mobile_push_tokens (
-                                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                                user_id INTEGER NOT NULL,
-                                token VARCHAR(512) NOT NULL UNIQUE,
-                                platform VARCHAR(20) NOT NULL DEFAULT 'android',
-                                device_label VARCHAR(120),
-                                created_at DATETIME,
-                                updated_at DATETIME,
-                                FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
-                            )
-                            """
-                        )
-                    )
-                db.session.commit()
+        if 'store_mobile_push_tokens' in set(insp.get_table_names()):
+            _mobile_push_schema_ready = True
+            return True
+        dialect = getattr(db.engine.dialect, 'name', '') or ''
+        if dialect == 'postgresql':
+            ddl = """
+                CREATE TABLE IF NOT EXISTS store_mobile_push_tokens (
+                    id SERIAL PRIMARY KEY,
+                    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                    token VARCHAR(512) NOT NULL,
+                    platform VARCHAR(20) NOT NULL DEFAULT 'android',
+                    device_label VARCHAR(120),
+                    created_at TIMESTAMP WITHOUT TIME ZONE,
+                    updated_at TIMESTAMP WITHOUT TIME ZONE,
+                    CONSTRAINT uq_store_mobile_push_token UNIQUE (token)
+                )
+            """
+        else:
+            ddl = """
+                CREATE TABLE IF NOT EXISTS store_mobile_push_tokens (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id INTEGER NOT NULL,
+                    token VARCHAR(512) NOT NULL UNIQUE,
+                    platform VARCHAR(20) NOT NULL DEFAULT 'android',
+                    device_label VARCHAR(120),
+                    created_at DATETIME,
+                    updated_at DATETIME,
+                    FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+                )
+            """
+        with db.engine.begin() as conn:
+            conn.execute(text(ddl))
+        _mobile_push_schema_ready = True
+        return True
     except Exception as ex:
         try:
             db.session.rollback()
         except Exception:
             pass
+        # Lock / tabla aún no lista: silencio (no dump de SQL de otras tablas).
+        if _is_transient_sqlite_schema_error(ex):
+            return False
         try:
-            current_app.logger.warning('ensure_mobile_push_schema: %s', ex)
+            current_app.logger.debug('ensure_mobile_push_schema: %s', ex)
         except Exception:
-            logger.warning('ensure_mobile_push_schema: %s', ex)
+            logger.debug('ensure_mobile_push_schema: %s', ex)
+        return False
 
 
 def upsert_push_token(user_id: int, token: str, platform: str = 'android', device_label: str | None = None):
     from app.store.models import MobilePushToken
 
-    ensure_mobile_push_schema()
+    if not ensure_mobile_push_schema():
+        return None
     token = (token or '').strip()
     if not token or not user_id:
         return None
     platform = (platform or 'android').strip().lower()[:20] or 'android'
-    row = MobilePushToken.query.filter_by(token=token).first()
-    now = datetime.utcnow()
-    if row:
-        row.user_id = int(user_id)
-        row.platform = platform
-        if device_label:
-            row.device_label = device_label[:120]
-        row.updated_at = now
-    else:
-        row = MobilePushToken(
-            user_id=int(user_id),
-            token=token,
-            platform=platform,
-            device_label=(device_label or '')[:120] or None,
-            created_at=now,
-            updated_at=now,
-        )
-        db.session.add(row)
-    db.session.commit()
-    return row
+    try:
+        row = MobilePushToken.query.filter_by(token=token).first()
+        now = datetime.utcnow()
+        if row:
+            row.user_id = int(user_id)
+            row.platform = platform
+            if device_label:
+                row.device_label = device_label[:120]
+            row.updated_at = now
+        else:
+            row = MobilePushToken(
+                user_id=int(user_id),
+                token=token,
+                platform=platform,
+                device_label=(device_label or '')[:120] or None,
+                created_at=now,
+                updated_at=now,
+            )
+            db.session.add(row)
+        db.session.commit()
+        return row
+    except Exception as ex:
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
+        if _is_transient_sqlite_schema_error(ex):
+            return None
+        raise
 
 
 def send_fcm_to_user(user_id: int, title: str, body: str, data: dict | None = None) -> int:
     """Envía push FCM (HTTP v1 con service account, o legacy si hay FCM_SERVER_KEY)."""
-    ensure_mobile_push_schema()
+    if not ensure_mobile_push_schema():
+        return 0
 
     from app.store.models import MobilePushToken
 
-    tokens = [
-        r.token
-        for r in MobilePushToken.query.filter_by(user_id=int(user_id)).all()
-        if (r.token or '').strip()
-    ]
+    try:
+        tokens = [
+            r.token
+            for r in MobilePushToken.query.filter_by(user_id=int(user_id)).all()
+            if (r.token or '').strip()
+        ]
+    except Exception as ex:
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
+        if _is_transient_sqlite_schema_error(ex):
+            return 0
+        raise
     if not tokens:
         return 0
 
@@ -301,6 +332,7 @@ def _on_store_notification_insert(mapper, connection, target):
               if str(kind) in (
                   'admin_license_report_new',
                   'admin_product_reservation',
+                  'admin_customer_account_renewal',
                   'admin_verificar_arreglar_done',
               )
               else (
@@ -310,6 +342,12 @@ def _on_store_notification_insert(mapper, connection, target):
                       or str(kind) in (
                           'store_purchase',
                           'store_renewal',
+                          'proveedor_product_reservation',
+                          'proveedor_customer_account_renewal',
+                          'customer_account_renewal_received',
+                          'customer_account_renewal_completed',
+                          'customer_account_renewal_rejected',
+                          'customer_account_renewal_batch',
                       )
                   )
                   else (
@@ -348,7 +386,9 @@ def _on_store_notification_insert(mapper, connection, target):
                             return
                         send_fcm_to_user(user_id, title, body, data=data)
                     except Exception as ex:
-                        app.logger.debug('mobile push after_insert: %s', ex)
+                        # Lock / tabla push ausente: ruido esperado en SQLite concurrente.
+                        if not _is_transient_sqlite_schema_error(ex):
+                            app.logger.debug('mobile push after_insert: %s', ex)
 
             threading.Thread(target=_job, daemon=True).start()
     except Exception:
@@ -366,3 +406,8 @@ def register_mobile_push_listeners():
 
     event.listen(StoreUserNotification, 'after_insert', _on_store_notification_insert)
     _listener_ready = True
+    # Intentar crear la tabla al arrancar (si hay lock, se reintenta en silencio después).
+    try:
+        ensure_mobile_push_schema()
+    except Exception:
+        pass

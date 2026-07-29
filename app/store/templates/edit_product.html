@@ -13,9 +13,9 @@
     <label for="editProductName" class="text-center w-100">Nombre</label>
     <input type="text" name="name" value="{{ product.name }}" required class="edit-product-input" id="editProductName" {% if product.is_preset %}readonly{% endif %} autocomplete="off">
     <label for="editProductPriceCop" class="text-center w-100">Precio COP</label>
-    <input type="number" step="1" name="price_cop" value="{{ '%d'|format(product.price_cop) }}" required class="edit-product-input" id="editProductPriceCop" autocomplete="off">
+    <input type="number" step="1" name="price_cop" value="{{ product.price_cop|money_amount }}" required class="edit-product-input" id="editProductPriceCop" autocomplete="off">
     <label for="editProductPriceUsd" class="text-center w-100">Precio USD</label>
-    <input type="number" step="1" name="price_usd" value="{{ '%d'|format(product.price_usd) }}" required class="edit-product-input" id="editProductPriceUsd" autocomplete="off">
+    <input type="number" step="0.01" min="0" name="price_usd" value="{{ product.price_usd|money_amount }}" required class="edit-product-input" id="editProductPriceUsd" autocomplete="off">
     <div class="text-center w-100">Imagen</div>
     <div class="image-select-container edit-product-image-container">
       <div class="grid-overlay" id="imageGridOverlay"></div>

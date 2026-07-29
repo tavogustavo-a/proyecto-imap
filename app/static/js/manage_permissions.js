@@ -787,6 +787,9 @@ document.addEventListener("DOMContentLoaded", function() {
   let userPricesData = {}; // { userId: { tipo_precio, soporte_licencias, puede_tener_deuda, recarga_automatica, proveedor, limite_deuda_usd, limite_deuda_cop } }
   let userPricesBaseline = {}; // Snapshot inicial por userId para detectar cambios reales
   let userPricesSaveInFlight = {};
+  // user_id -> true cuando el admin ya aceptó liquidar el saldo de cuenta
+  // Licencias al cambiar el tipo de precio (aviso "este saldo desaparecerá").
+  const userPricesConfirmSaldoReset = {};
   let userPricesStatusHideTimer = null;
   let allUsersForPrices = []; // Todos los usuarios cargados
   let filteredUsersForPrices = []; // Usuarios filtrados por búsqueda
@@ -805,12 +808,21 @@ document.addEventListener("DOMContentLoaded", function() {
     return null;
   }
 
+  /** Enteros sin decimales; si no, hasta 2 (1.5 → "1.5", no "1"). */
+  function formatMoneyAmount(value) {
+    var v = Number(value);
+    if (!Number.isFinite(v)) v = 0;
+    v = Math.round(v * 100) / 100;
+    if (Math.abs(v - Math.round(v)) < 1e-9) return String(Math.round(v));
+    return String(v);
+  }
+
   function formatDebtLimitBtnLabel(limite, tipoPrecioLower) {
     const cur = String(tipoPrecioLower || '').toUpperCase();
     if (limite == null || !Number.isFinite(Number(limite))) {
       return 'Límite deuda';
     }
-    return `Límite: ${Math.floor(Number(limite))} ${cur}`;
+    return `Límite: ${formatMoneyAmount(limite)} ${cur}`;
   }
 
   function syncUserDebtLimitButton(btn, userId, userData, tipoPrecioLower) {
@@ -830,7 +842,7 @@ document.addEventListener("DOMContentLoaded", function() {
     btn.setAttribute(
       'title',
       lim != null
-        ? `Máximo préstamo: ${Math.floor(lim)} ${tp.toUpperCase()}`
+        ? `Máximo préstamo: ${formatMoneyAmount(lim)} ${tp.toUpperCase()}`
         : 'Definir monto máximo de deuda (préstamo)'
     );
     btn.setAttribute('data-user-id', String(userId));
@@ -902,6 +914,11 @@ document.addEventListener("DOMContentLoaded", function() {
     } else if (!String(limitInp.value || '').trim()) {
       limitInp.placeholder = 'Ilimitado';
     }
+    const renewCb = row.querySelector('.user-proveedor-service-renew-cb');
+    if (renewCb) {
+      renewCb.disabled = !on;
+      if (!on) renewCb.checked = false;
+    }
   }
 
   function filterUserProveedorServicesList() {
@@ -930,7 +947,9 @@ document.addEventListener("DOMContentLoaded", function() {
     }
     const head = document.createElement('div');
     head.className = 'user-proveedor-services-head';
-    head.innerHTML = '<span></span><span>Servicio</span><span>Límite</span>';
+    head.innerHTML =
+      '<span></span><span>Servicio</span><span>Límite</span>' +
+      '<span class="user-proveedor-services-head-renew" title="Renovar tu cuenta">🔄 Renovar</span>';
     userProveedorServicesList.appendChild(head);
 
     userProveedorModalServices.forEach(function (svc) {
@@ -972,9 +991,25 @@ document.addEventListener("DOMContentLoaded", function() {
         syncUserProveedorServiceRowLimit(row);
       });
 
+      const renewCell = document.createElement('span');
+      renewCell.className = 'user-proveedor-service-renew-cell';
+      const renewCb = document.createElement('input');
+      renewCb.type = 'checkbox';
+      renewCb.className = 'user-proveedor-service-renew-cb';
+      renewCb.id = fieldKey + '_renew';
+      renewCb.name = fieldKey + '_renew';
+      renewCb.checked = !!(svc && svc.renew_customer);
+      renewCb.title = 'Renovar tu cuenta: permitir al proveedor renovar cuentas de clientes de este servicio';
+      renewCb.setAttribute(
+        'aria-label',
+        'Renovar tu cuenta para ' + String((svc && svc.name) || 'servicio')
+      );
+      renewCell.appendChild(renewCb);
+
       row.appendChild(cb);
       row.appendChild(nameSpan);
       row.appendChild(limitInp);
+      row.appendChild(renewCell);
       syncUserProveedorServiceRowLimit(row);
       userProveedorServicesList.appendChild(row);
     });
@@ -998,10 +1033,12 @@ document.addEventListener("DOMContentLoaded", function() {
           if (Number.isFinite(n) && n >= 0) salesLimit = n;
         }
       }
+      const renewCb = row.querySelector('.user-proveedor-service-renew-cb');
       out.push({
         license_id: lid,
         enabled: enabled,
         sales_limit: salesLimit,
+        renew_customer: !!(renewCb && renewCb.checked),
       });
     });
     return out;
@@ -1335,14 +1372,14 @@ document.addEventListener("DOMContentLoaded", function() {
     const main = container.querySelector('.user-saldo-principal');
     if (!main) return;
     let inactive = container.querySelector('.user-saldo-inactivo');
-    const cop = Math.floor(Number(saldoCop) || 0);
-    const usd = Math.floor(Number(saldoUsd) || 0);
+    const cop = Number(saldoCop) || 0;
+    const usd = Number(saldoUsd) || 0;
     const tp = (tipoPrecioLower || '').toLowerCase();
     let text = '';
     if (tp === 'usd' && cop !== 0) {
-      text = `COP guardado: ${cop.toLocaleString('es-CO')}`;
+      text = `COP guardado: ${formatMoneyAmount(cop)}`;
     } else if (tp === 'cop' && usd !== 0) {
-      text = `USD guardado: ${usd}`;
+      text = `USD guardado: ${formatMoneyAmount(usd)}`;
     }
     if (text) {
       if (!inactive) {
@@ -1420,6 +1457,10 @@ document.addEventListener("DOMContentLoaded", function() {
       upd.limite_deuda_usd = userData.limite_deuda_usd;
       upd.limite_deuda_cop = userData.limite_deuda_cop;
     }
+    if (userPricesConfirmSaldoReset[userId]) {
+      upd.confirm_saldo_licencias_reset = true;
+      delete userPricesConfirmSaldoReset[userId];
+    }
     return upd;
   }
 
@@ -1486,6 +1527,35 @@ document.addEventListener("DOMContentLoaded", function() {
         return res.json();
       })
       .then(function (data) {
+        if (
+          data.status === 'ok' &&
+          Array.isArray(data.needs_confirmation) &&
+          data.needs_confirmation.length > 0
+        ) {
+          const nc = data.needs_confirmation[0];
+          const saldoNum = Number(nc.saldo) || 0;
+          const kindTxt = saldoNum > 0 ? 'una deuda' : 'un saldo a favor';
+          const oldCur = nc.old_tipo || 'la moneda anterior';
+          const msg =
+            'El usuario "' + (nc.username || userId) + '" tiene ' + kindTxt +
+            ' en cuenta Licencias de $' + formatMoneyAmount(Math.abs(saldoNum)) +
+            ' ' + oldCur + '.\n\n' +
+            'Al cambiar el tipo de precio a ' + (nc.new_tipo || '—') +
+            ' este saldo DESAPARECERÁ (quedará en 0), porque está expresado ' +
+            'en la moneda anterior.\n\n¿Aceptar y continuar?';
+          if (window.confirm(msg)) {
+            userPricesConfirmSaldoReset[userId] = true;
+            showUserPricesStatus('Aplicando cambio…', 'text-info');
+            // Diferido: reintentar dentro del mismo then bloquearía la promesa en curso.
+            setTimeout(function () {
+              saveUserPricesRow(userId);
+            }, 0);
+            return;
+          }
+          revertUserPricesUiFromBaseline(userId);
+          showUserPricesStatus('Cambio de tipo de precio cancelado', 'text-warning');
+          return;
+        }
         if (data.status === 'ok' && (data.updated_count || 0) > 0) {
           userPricesBaseline[userId] = userPricesSnapshotFromData(userPricesData[userId]);
           const u = allUsersForPrices.find(function (x) {
@@ -1917,9 +1987,9 @@ document.addEventListener("DOMContentLoaded", function() {
       if (tipoPrecioSaldo) {
         // Usuario tiene tipo_precio configurado, mostrar saldo según tipo de precio
         if (tipoPrecioSaldo === 'usd') {
-          saldoText.textContent = `${Math.floor(user.saldo_usd || 0)} USD`;
+          saldoText.textContent = `${formatMoneyAmount(user.saldo_usd || 0)} USD`;
         } else if (tipoPrecioSaldo === 'cop') {
-          saldoText.textContent = `${Math.floor(user.saldo_cop || 0)} COP`;
+          saldoText.textContent = `${formatMoneyAmount(user.saldo_cop || 0)} COP`;
         } else {
           saldoText.textContent = '-';
         }
@@ -2288,9 +2358,9 @@ document.addEventListener("DOMContentLoaded", function() {
     if (balanceModalCurrentEl) {
       const c = ctx || {};
       if (tp === 'usd') {
-        balanceModalCurrentEl.textContent = `Saldo actual: ${Math.floor(Number(c.saldoUsd) || 0)} USD`;
+        balanceModalCurrentEl.textContent = `Saldo actual: ${formatMoneyAmount(c.saldoUsd)} USD`;
       } else if (tp === 'cop') {
-        balanceModalCurrentEl.textContent = `Saldo actual: ${Math.floor(Number(c.saldoCop) || 0)} COP`;
+        balanceModalCurrentEl.textContent = `Saldo actual: ${formatMoneyAmount(c.saldoCop)} COP`;
       } else {
         balanceModalCurrentEl.textContent = '';
       }
@@ -2435,9 +2505,9 @@ document.addEventListener("DOMContentLoaded", function() {
             const main = saldoWrap && saldoWrap.querySelector('.user-saldo-principal');
             if (main) {
               if (tipoPrecio === 'usd') {
-                main.textContent = `${parseInt(data.new_saldo_usd, 10)} USD`;
+                main.textContent = `${formatMoneyAmount(data.new_saldo_usd)} USD`;
               } else if (tipoPrecio === 'cop') {
-                main.textContent = `${parseInt(data.new_saldo_cop, 10)} COP`;
+                main.textContent = `${formatMoneyAmount(data.new_saldo_cop)} COP`;
               } else {
                 main.textContent = '-';
               }
@@ -2508,7 +2578,8 @@ document.addEventListener("DOMContentLoaded", function() {
     if (modalDebtLimitAmount) {
       modalDebtLimitAmount.step = tp === 'usd' ? '0.01' : '1';
       const lim = debtLimitForUserData(ud, tp);
-      modalDebtLimitAmount.value = lim != null ? String(Math.floor(lim)) : '';
+      // Sin Math.floor: truncaba centavos USD y al guardar sobrescribía el límite real.
+      modalDebtLimitAmount.value = lim != null ? formatMoneyAmount(lim) : '';
     }
     if (debtLimitModalOverlay) debtLimitModalOverlay.classList.remove('d-none');
   });
@@ -2668,9 +2739,9 @@ document.addEventListener("DOMContentLoaded", function() {
       var main = saldoWrap && saldoWrap.querySelector('.user-saldo-principal');
       if (main) {
         if (tipoPrecio === 'usd') {
-          main.textContent = Math.floor(Number(user.saldo_usd) || 0) + ' USD';
+          main.textContent = formatMoneyAmount(user.saldo_usd) + ' USD';
         } else if (tipoPrecio === 'cop') {
-          main.textContent = Math.floor(Number(user.saldo_cop) || 0) + ' COP';
+          main.textContent = formatMoneyAmount(user.saldo_cop) + ' COP';
         } else {
           main.textContent = '-';
         }

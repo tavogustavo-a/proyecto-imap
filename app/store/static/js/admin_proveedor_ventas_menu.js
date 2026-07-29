@@ -99,6 +99,8 @@
         }
         filtered.forEach(function (svc) {
             var count = Math.max(0, parseInt(svc.sales_count, 10) || 0);
+            var renewCount = Math.max(0, parseInt(svc.renewals_count, 10) || 0);
+            var showRenew = !!svc.renew_customer || renewCount > 0;
             var item = document.createElement('div');
             item.className = 'admin-lic-proveedor-ventas-item';
             item.setAttribute('role', 'listitem');
@@ -107,6 +109,11 @@
                 '<span class="admin-lic-proveedor-ventas-item__name">' +
                 escHtml(svc.name || '—') +
                 '</span>' +
+                (showRenew
+                    ? '<span class="admin-lic-proveedor-ventas-item__count admin-lic-proveedor-ventas-item__count--renew" aria-live="polite" aria-atomic="true" title="Renovadas (renovar tu cuenta)">🔄 ' +
+                      escHtml(String(renewCount)) +
+                      '</span>'
+                    : '') +
                 '<span class="admin-lic-proveedor-ventas-item__count" aria-live="polite" aria-atomic="true" title="Vendidas">' +
                 escHtml(String(count)) +
                 '</span>' +
@@ -124,13 +131,19 @@
         var totalSold = filtered.reduce(function (acc, svc) {
             return acc + Math.max(0, parseInt(svc.sales_count, 10) || 0);
         }, 0);
+        var totalRenewed = filtered.reduce(function (acc, svc) {
+            return acc + Math.max(0, parseInt(svc.renewals_count, 10) || 0);
+        }, 0);
         if (meta) {
             meta.textContent =
                 filtered.length +
                 (filtered.length === 1 ? ' servicio' : ' servicios') +
                 ' · ' +
                 totalSold +
-                (totalSold === 1 ? ' vendida' : ' vendidas');
+                (totalSold === 1 ? ' vendida' : ' vendidas') +
+                (totalRenewed > 0
+                    ? ' · ' + totalRenewed + (totalRenewed === 1 ? ' renovada' : ' renovadas')
+                    : '');
         }
     }
 

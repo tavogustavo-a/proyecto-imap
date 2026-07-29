@@ -264,14 +264,15 @@ def _currency_from_user_row(user_row, parents_by_id=None):
     if user_row.parent_id and parents_by_id:
         parent = parents_by_id.get(user_row.parent_id)
         if parent and isinstance(getattr(parent, 'user_prices', None), dict):
-            tp = parent.user_prices.get('tipo_precio')
+            # Normalizar: un 'usd' o ' USD ' guardado a mano no debe caer a COP.
+            tp = str(parent.user_prices.get('tipo_precio') or '').strip().upper()
             if tp in ('USD', 'COP'):
-                return str(tp).upper()
+                return tp
     up = getattr(user_row, 'user_prices', None)
     if isinstance(up, dict):
-        tp = up.get('tipo_precio')
+        tp = str(up.get('tipo_precio') or '').strip().upper()
         if tp in ('USD', 'COP'):
-            return str(tp).upper()
+            return tp
     return 'COP'
 
 
@@ -337,12 +338,15 @@ def compute_purchase_history_stats(scope='all', user_id=None, date_from=None, da
     by_currency = defaultdict(lambda: {'ventas': 0, 'renovaciones': 0, 'total': 0.0})
     by_product_sales = defaultdict(lambda: {'ventas': 0, 'renovaciones': 0, 'proveedores': 0, 'total': 0.0})
 
-    def _record_sale(user_id, amount, is_ren, pname, product_id=None):
+    def _record_sale(user_id, amount, is_ren, pname, product_id=None, sale_currency=None):
         nonlocal sales_count, renewals_count
         sales_count += 1
         if is_ren:
             renewals_count += 1
-        cur = currency_cache.get(user_id, 'COP')
+        # Moneda persistida en la venta (histórica); si falta, la del perfil actual.
+        cur = str(sale_currency or '').strip().upper()
+        if cur not in ('USD', 'COP'):
+            cur = currency_cache.get(user_id, 'COP')
         amt = float(amount or 0)
         cur_bucket = by_currency[cur]
         cur_bucket['ventas'] += 1
@@ -418,6 +422,7 @@ def compute_purchase_history_stats(scope='all', user_id=None, date_from=None, da
             bool(getattr(sale, 'is_renewal', False)),
             pname,
             sale.product_id,
+            sale_currency=getattr(sale, 'currency', None),
         )
 
     for snap in snaps_list:
@@ -431,6 +436,7 @@ def compute_purchase_history_stats(scope='all', user_id=None, date_from=None, da
             bool(getattr(snap, 'is_renewal', False)),
             snap.product_name or '—',
             snap.product_id,
+            sale_currency=getattr(snap, 'currency', None),
         )
 
     activity_totals = defaultdict(int)

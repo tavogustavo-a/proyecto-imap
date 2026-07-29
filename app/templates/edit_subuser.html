@@ -57,6 +57,14 @@
       </label>
       <small class="text-secondary">Si está activado, el sub-usuario podrá aplicar cupones en la tienda.</small>
     </div>
+    <div class="form-section mt-1">
+      <label class="d-flex align-items-center gap-03" for="canViewAnnouncementsCheckbox">
+        <input type="checkbox" id="canViewAnnouncementsCheckbox" name="can_view_announcements" {% if sub_user.can_view_announcements %}checked{% endif %}>
+        ¿Deseas que el sub-usuario pueda ver los anuncios?
+        <span id="announcements-permission-status" class="ml-1 text-success"></span>
+      </label>
+      <small class="text-secondary">Si está activado, el sub-usuario verá los anuncios de la tienda. Si no, nunca se le mostrarán.</small>
+    </div>
   {% endif %}
   
   <!-- Permiso de chat -->

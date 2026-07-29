@@ -5089,6 +5089,19 @@ function renderLicensesGrid() {
     addLicenseCardListeners();
     wireAdminLicenciasReportesButton();
     wireAdminLicenciasVerificarButton();
+    try {
+        if (typeof adminLicPaintPendingReservationCards === 'function') {
+            adminLicPaintPendingReservationCards();
+        }
+        if (typeof adminLicRefreshPendingReservations === 'function') {
+            adminLicRefreshPendingReservations();
+        }
+        if (typeof adminLicRefreshPendingRenewalsBanner === 'function') {
+            adminLicRefreshPendingRenewalsBanner();
+        }
+    } catch (resPendErr) {
+        adminLicLogError('pedidos reserva UI:', resPendErr);
+    }
     
     try {
     if (typeof window.initAdminLicenciasNotepad === 'function') {
@@ -7633,6 +7646,10 @@ function createLicenseCard(license) {
         return '';
     }
     const productNameSafe = license.product_name != null ? String(license.product_name) : '';
+    const productIdAttr =
+        license.product_id != null && license.product_id !== ''
+            ? ' data-product-id="' + String(license.product_id) + '"'
+            : '';
 
     if (license.isAggregate) {
         return `
@@ -7651,7 +7668,7 @@ function createLicenseCard(license) {
     const compactLabel = adminLicCompactProductLabel(productNameSafe);
     
     return `
-        <div class="license-card" data-license-id="${license.id}">
+        <div class="license-card" data-license-id="${license.id}"${productIdAttr}>
             <div class="license-card-header">
                 <h3 class="license-name">
                     <span class="full-text">${productNameSafe}</span>
@@ -7760,17 +7777,8 @@ function addLicenseCardListeners() {
             if (rawId === ADMIN_PROVEEDOR_FILTER) {
                 if (!card.classList.contains('active')) {
                     void activateAdminProveedorCard(card, true);
-                } else {
-                    const inputContainer = document.getElementById('licenseAccountsInputContainer');
-                    adminDupHighlightDeactivate();
-                    try {
-                        localStorage.removeItem('selectedLicenseId');
-                    } catch (eRm) {}
-                    if (inputContainer) {
-                        inputContainer.classList.add('d-none');
-                    }
-                    card.classList.remove('active');
                 }
+                /* Ya activo: no deseleccionar al repetir clic. */
                 return;
             }
 
@@ -7778,37 +7786,15 @@ function addLicenseCardListeners() {
             const license = licenses.find(l => l.id === licenseId);
             const isActive = card.classList.contains('active');
             
-            // Remover clase active de todas las tarjetas
-            cards.forEach(c => c.classList.remove('active'));
-            
-            // Obtener el contenedor
-            const inputContainer = document.getElementById('licenseAccountsInputContainer');
-            
-            // Si la tarjeta no estaba activa, activarla y mostrar las cuentas
-            if (!isActive && license) {
+            // Si ya está activo, mantenerlo (no deseleccionar al repetir clic).
+            if (isActive) {
+                return;
+            }
+
+            if (license) {
                 void activateLicenseCard(card, licenseId, true).catch(function (err) {
                     adminLicLogError('Error al activar licencia:', err);
                 });
-            } else {
-                const prevRaw = inputContainer && inputContainer.dataset.activeLicenseId;
-                const prevId = prevRaw != null && prevRaw !== '' ? parseInt(prevRaw, 10) : NaN;
-                void (async function () {
-                    try {
-                        if (!Number.isNaN(prevId)) {
-                            await flushDayNotepadsBeforeLicenseSwitch(prevId);
-                        }
-                    } catch (err) {
-                        adminLicLogError('Error al guardar blocs del día:', err);
-                    }
-                    if (window.AdminLicenciasNotepad && typeof window.AdminLicenciasNotepad.flushLicense === 'function') {
-                        window.AdminLicenciasNotepad.flushLicense();
-                    }
-                    adminDupHighlightDeactivate();
-                    localStorage.removeItem('selectedLicenseId');
-                    if (inputContainer) {
-                        inputContainer.classList.add('d-none');
-                    }
-                })();
             }
         });
     });
@@ -18908,7 +18894,13 @@ async function changesLicenseSplitRestoreRowToLicense(row) {
         showError('Marca «Terminado» en la columna verde antes de devolver la cuenta a Licencias.');
         return;
     }
-    const lineToMove = buildAdminLicenseStorageLine(cred, '', '', '', '').trim();
+    const lineToMove = buildAdminLicenseStorageLine(
+        cred,
+        '',
+        '',
+        '',
+        r.extra != null ? r.extra : ''
+    ).trim();
     if (!lineToMove) {
         showError('No hay datos válidos para mover.');
         return;
@@ -19039,7 +19031,14 @@ async function adminLicenseSplitMoveRowToChanges(row) {
         showError('Esta fila no tiene credencial.');
         return;
     }
-    const lineToMove = buildAdminLicenseStorageLine(cred, '', '', '', '').trim();
+    const rMove = adminLicenseSplitReadRow(row);
+    const lineToMove = buildAdminLicenseStorageLine(
+        cred,
+        '',
+        '',
+        '',
+        rMove.extra != null ? rMove.extra : ''
+    ).trim();
     if (!lineToMove) {
         showError('No hay datos válidos para mover.');
         return;
@@ -20883,7 +20882,21 @@ function updateLicenseBlocLineCountBadge() {
             : pad.tagName === 'TEXTAREA'
               ? pad.value
               : editablePlainTextForPipeNormalize(pad);
-    const n = countNonEmptyLinesInText(raw);
+    const nRaw = countNonEmptyLinesInText(raw);
+    let warranty = 0;
+    try {
+        const lic =
+            typeof licenses !== 'undefined' && Array.isArray(licenses)
+                ? licenses.find(function (L) {
+                      return L && String(L.id) === String(lid);
+                  })
+                : null;
+        warranty = Math.max(0, parseInt(licenseWarrantyDaysUi(lic), 10) || 0);
+    } catch (_eWd) {
+        warranty = 0;
+    }
+    // Igual que tienda: las últimas N del bloc Licencias son colchón gar. (no vendibles).
+    const n = Math.max(0, nRaw - Math.min(warranty, nRaw));
     const provSellable = adminLicProveedorLineCountForLicense(lid);
     const provRaw = adminLicProveedorRawLineCountForLicense(lid);
     const totalN = n + provSellable;
@@ -20892,30 +20905,46 @@ function updateLicenseBlocLineCountBadge() {
             badge.textContent = String(n) + '+' + String(provSellable);
             badge.title =
                 n +
-                (n === 1 ? ' propia + ' : ' propias + ') +
+                (n === 1 ? ' propia vendible + ' : ' propias vendibles + ') +
                 provSellable +
                 (provSellable === 1 ? ' vendible proveedor' : ' vendibles proveedor') +
+                (nRaw > n ? ' · ' + (nRaw - n) + ' propia(s) en gar.' : '') +
                 (provRaw > provSellable
-                    ? ' (' + provRaw + ' en inventario, resto en gar.)'
+                    ? ' (' + provRaw + ' en inventario proveedor, resto en gar.)'
                     : '');
         } else if (provSellable > 0) {
             badge.textContent = String(provSellable);
             badge.title =
-                provSellable === 1
+                (nRaw > 0
+                    ? nRaw +
+                      (nRaw === 1 ? ' propia en gar. · ' : ' propias en gar. · ')
+                    : '') +
+                (provSellable === 1
                     ? '1 vendible proveedor'
-                    : provSellable + ' vendibles proveedor' +
-                      (provRaw > provSellable
-                          ? ' (' + provRaw + ' en inventario, resto en gar.)'
-                          : '');
+                    : provSellable + ' vendibles proveedor') +
+                (provRaw > provSellable
+                    ? ' (' + provRaw + ' en inventario, resto en gar.)'
+                    : '');
         } else {
             badge.textContent = String(n);
-            badge.title = n === 1 ? '1 línea' : n + ' líneas';
+            badge.title =
+                n === 1
+                    ? '1 vendible (igual que tienda)'
+                    : n + ' vendibles (igual que tienda)' +
+                      (nRaw > n ? ' · ' + (nRaw - n) + ' en gar.' : '');
         }
         badge.hidden = false;
     } else {
         badge.hidden = false;
         badge.textContent = '0';
-        badge.removeAttribute('title');
+        badge.title =
+            nRaw > 0
+                ? nRaw +
+                  (nRaw === 1
+                      ? ' línea en gar. (no vendible en tienda)'
+                      : ' líneas en gar. (no vendibles en tienda)')
+                : '';
+        if (!badge.title) badge.removeAttribute('title');
     }
 }
 
@@ -22137,7 +22166,15 @@ async function adminCustomerRenewalSplitSellRowToDay(row, opts) {
             }
         } catch (notifyErr) {
             adminLicLogError('customer-renewal complete notify', notifyErr);
-            notifyMsg = ' No se pudo avisar al cliente; revisa la conexión.';
+            var real =
+                (notifyErr && notifyErr.data && (notifyErr.data.error || notifyErr.data.message)) ||
+                (notifyErr && notifyErr.message) ||
+                '';
+            if (real && !/Error HTTP|conexión|fetch/i.test(String(real))) {
+                notifyMsg = ' Aviso: ' + String(real);
+            } else {
+                notifyMsg = ' No se pudo avisar al cliente; revisa la conexión.';
+            }
         }
 
         if (!quiet) {
@@ -26009,17 +26046,24 @@ function toggleSaldoClientesInfoTip() {
     }
 }
 
+function adminSaldoClientesFormatMoneyNum(n) {
+    const v = Math.round((Number(n) || 0) * 100) / 100;
+    return Math.abs(v - Math.round(v)) < 1e-9
+        ? String(Math.round(v))
+        : String(Number(v.toFixed(2)));
+}
+
 function adminSaldoClientesFormatStoreBalance(client) {
     if (!client) return '—';
     const tp = client.tipo_precio ? String(client.tipo_precio).toLowerCase() : '';
     let prepaidAmt = 0;
     let prepaidLabel = '';
     if (tp === 'usd') {
-        prepaidAmt = Math.floor(Number(client.saldo_usd) || 0);
-        if (prepaidAmt > 0) prepaidLabel = prepaidAmt + ' USD';
+        prepaidAmt = Number(client.saldo_usd) || 0;
+        if (prepaidAmt > 0) prepaidLabel = adminSaldoClientesFormatMoneyNum(prepaidAmt) + ' USD';
     } else if (tp === 'cop') {
-        prepaidAmt = Math.floor(Number(client.saldo_cop) || 0);
-        if (prepaidAmt > 0) prepaidLabel = prepaidAmt + ' COP';
+        prepaidAmt = Number(client.saldo_cop) || 0;
+        if (prepaidAmt > 0) prepaidLabel = adminSaldoClientesFormatMoneyNum(prepaidAmt) + ' COP';
     }
     const licDebt = Number(client.license_saldo);
     const hasDebt = Number.isFinite(licDebt) && licDebt > 1e-9;
@@ -26104,8 +26148,19 @@ function adminSaldoClientesPromptAmount(title, opts) {
     const raw =
         typeof window.prompt === 'function' ? window.prompt(title, '') : null;
     if (raw === null || raw === undefined) return null;
-    const t = String(raw).trim().replace(',', '.');
+    let t = String(raw).trim();
     if (!t) return null;
+    // Solo dígitos con decimal opcional (coma o punto, máx. 2 cifras) y signo.
+    // Rechaza separadores de miles: "20.000" se interpretaba como 20 y se
+    // acreditaba/descontaba un monto equivocado en silencio.
+    if (!/^[+-]?\d+(?:[.,]\d{1,2})?$/.test(t)) {
+        showError(
+            'Formato inválido. Escribe el monto sin separador de miles ' +
+            '(ej. 20000 o 1.50).'
+        );
+        return null;
+    }
+    t = t.replace(',', '.');
     const x = Number(t);
     if (!Number.isFinite(x) || x === 0) {
         showError('Indica un importe numérico distinto de cero.');
@@ -27985,3 +28040,354 @@ function adminLicSearchRenderResults(term) {
         if (term.trim().length >= 2) adminLicSearchRenderResults(term);
     });
 })();
+
+/** Pedidos en reserva (tienda pública): banner + botón servicio amarillo. */
+var __adminLicPendingReservations = [];
+var __adminLicPendingByProduct = Object.create(null);
+var __adminLicPendingResFetchTimer = null;
+var __adminLicPendingResPollTimer = null;
+var ADMIN_LIC_PENDING_RES_POLL_MS = 8000;
+var __adminLicPedidosReservaToggleWired = false;
+
+function adminLicApplyPedidosReservaCollapsed(isCollapsed) {
+    var banner = document.getElementById('adminLicPedidosReservaBanner');
+    var toggle = document.getElementById('adminLicPedidosReservaToggle');
+    if (!banner) return;
+    banner.classList.toggle('is-collapsed', !!isCollapsed);
+    if (toggle) {
+        toggle.setAttribute('aria-expanded', isCollapsed ? 'false' : 'true');
+    }
+}
+
+function adminLicWirePedidosReservaAccordion() {
+    var toggle = document.getElementById('adminLicPedidosReservaToggle');
+    var banner = document.getElementById('adminLicPedidosReservaBanner');
+    if (!toggle || !banner || __adminLicPedidosReservaToggleWired) return;
+    __adminLicPedidosReservaToggleWired = true;
+    var initial = false;
+    try {
+        if (typeof licenciasUiPedidosReservaCollapsedRead === 'function') {
+            initial = !!licenciasUiPedidosReservaCollapsedRead();
+        }
+    } catch (_eInit) {}
+    adminLicApplyPedidosReservaCollapsed(initial);
+    toggle.addEventListener('click', function () {
+        var next = !banner.classList.contains('is-collapsed');
+        adminLicApplyPedidosReservaCollapsed(next);
+        try {
+            if (typeof licenciasUiPedidosReservaCollapsedWrite === 'function') {
+                licenciasUiPedidosReservaCollapsedWrite(next);
+            }
+        } catch (_eSave) {}
+    });
+}
+
+function adminLicPaintPendingReservationCards() {
+    var grid = document.getElementById('licensesGrid');
+    if (!grid) return;
+    /* Sin amarillo en productos: bastan los banners de arriba. */
+    grid.querySelectorAll('.license-card[data-license-id]').forEach(function (card) {
+        if (card.classList.contains('license-card--panel-toggle')) return;
+        if (card.classList.contains('admin-lic-license-card--proveedor')) return;
+        card.classList.remove('is-reservation-pending');
+        var nameEl = card.querySelector('.license-name');
+        if (!nameEl) return;
+        var badge = nameEl.querySelector('.license-card-reservation-badge');
+        if (badge) badge.remove();
+    });
+}
+
+function adminLicRenderPendingReservationsBanner() {
+    var banner = document.getElementById('adminLicPedidosReservaBanner');
+    var list = document.getElementById('adminLicPedidosReservaList');
+    var countEl = document.getElementById('adminLicPedidosReservaCount');
+    if (!banner || !list) return;
+    var rows = __adminLicPendingReservations || [];
+    if (!rows.length) {
+        banner.classList.add('d-none');
+        banner.hidden = true;
+        list.innerHTML = '';
+        if (countEl) countEl.textContent = '0';
+        return;
+    }
+    banner.classList.remove('d-none');
+    banner.hidden = false;
+    if (countEl) countEl.textContent = String(rows.length);
+    list.innerHTML = rows
+        .map(function (r) {
+            var pid = r.product_id != null ? String(r.product_id) : '';
+            var lid = r.license_id != null ? String(r.license_id) : '';
+            var qty = String(r.quantity || 1);
+            var uname = String(r.customer_username || 'cliente');
+            var tip = 'Unidades del pedido: ' + qty;
+            return (
+                '<li><button type="button" class="admin-lic-pedidos-reserva-banner__row" data-product-id="' +
+                adminLicEscHtml(pid) +
+                '" data-license-id="' +
+                adminLicEscHtml(lid) +
+                '">' +
+                '<span class="admin-lic-pedidos-reserva-banner__product">' +
+                '<span class="admin-lic-pedidos-reserva-banner__product-name">' +
+                adminLicEscHtml(r.product_name || 'Producto') +
+                '</span>' +
+                '<span class="admin-lic-pedidos-reserva-banner__user">: ' +
+                adminLicEscHtml(uname) +
+                '</span>' +
+                '</span>' +
+                '<span class="admin-lic-pedidos-reserva-banner__qty" title="' +
+                adminLicEscHtml(tip) +
+                '" aria-label="' +
+                adminLicEscHtml(tip) +
+                '">x' +
+                adminLicEscHtml(qty) +
+                '</span>' +
+                '</button></li>'
+            );
+        })
+        .join('');
+    list.querySelectorAll('button[data-product-id]').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            adminLicOpenServiceFromBanner(
+                btn.getAttribute('data-license-id'),
+                btn.getAttribute('data-product-id')
+            );
+        });
+    });
+}
+
+function adminLicOpenServiceFromBanner(licenseIdAttr, productIdAttr) {
+    var lid = licenseIdAttr || '';
+    var pid = productIdAttr || '';
+    if (!lid && pid) {
+        var match = (licenses || []).find(function (L) {
+            return String(L.product_id) === String(pid);
+        });
+        if (match) lid = String(match.id);
+    }
+    if (!lid) return;
+    var card = document.querySelector(
+        '.license-card[data-license-id="' + lid + '"]:not(.license-card--panel-toggle)'
+    );
+    if (!card) return;
+    /* Activar siempre (sin toggle/deseleccionar). */
+    if (String(lid) === String(ADMIN_PROVEEDOR_FILTER)) {
+        void activateAdminProveedorCard(card, true);
+        return;
+    }
+    var licenseId = parseInt(lid, 10);
+    if (!Number.isFinite(licenseId)) return;
+    void activateLicenseCard(card, licenseId, true).catch(function (err) {
+        adminLicLogError('Error al activar licencia desde banner:', err);
+    });
+}
+
+function adminLicRefreshPendingReservations() {
+    if (window.IS_ARCHIVED_MODE) return;
+    if (__adminLicPendingResFetchTimer) {
+        clearTimeout(__adminLicPendingResFetchTimer);
+    }
+    __adminLicPendingResFetchTimer = setTimeout(function () {
+        fetch('/tienda/api/admin/product-reservations/pending', {
+            credentials: 'same-origin',
+            headers: { Accept: 'application/json' },
+            cache: 'no-store',
+        })
+            .then(function (r) {
+                return r.json().catch(function () {
+                    return {};
+                });
+            })
+            .then(function (data) {
+                if (!data || !data.success) return;
+                __adminLicPendingReservations = Array.isArray(data.reservations)
+                    ? data.reservations
+                    : [];
+                __adminLicPendingByProduct = data.by_product || Object.create(null);
+                adminLicPaintPendingReservationCards();
+                adminLicRenderPendingReservationsBanner();
+                adminLicWirePedidosReservaAccordion();
+            })
+            .catch(function () {});
+    }, 120);
+}
+
+function adminLicStartPendingReservationsPoll() {
+    if (__adminLicPendingResPollTimer || window.IS_ARCHIVED_MODE) return;
+    __adminLicPendingResPollTimer = setInterval(function () {
+        if (document.hidden) return;
+        adminLicRefreshPendingReservations();
+    }, ADMIN_LIC_PENDING_RES_POLL_MS);
+}
+
+document.addEventListener('store-user-notifications-received', function (ev) {
+    try {
+        var items = (ev && ev.detail && ev.detail.notifications) || [];
+        var hit = items.some(function (n) {
+            return String((n && n.kind) || '') === 'admin_product_reservation';
+        });
+        if (hit) adminLicRefreshPendingReservations();
+    } catch (_e) {}
+});
+
+if (document.getElementById('adminLicPedidosReservaBanner')) {
+    adminLicWirePedidosReservaAccordion();
+    adminLicRefreshPendingReservations();
+    adminLicStartPendingReservationsPoll();
+}
+
+/** Pedidos en Renovar tu cuenta: banner amarillo + botón producto. */
+var __adminLicPendingRenewals = [];
+var __adminLicPendingRenewalsByLicense = Object.create(null);
+var __adminLicPedidosRenovarToggleWired = false;
+
+function adminLicCountCustomerRenewalLines(text) {
+    return String(text || '')
+        .split('\n')
+        .filter(function (ln) {
+            return String(ln || '').trim() !== '';
+        }).length;
+}
+
+function adminLicParseCustomerRenewalUser(line) {
+    var raw = String(line || '');
+    if (raw.indexOf(LICENSE_LINE_FIELD_SEP) === -1) return '';
+    var parts = raw.split(LICENSE_LINE_FIELD_SEP);
+    return String((parts[1] || '').trim());
+}
+
+function adminLicBuildPendingRenewalsFromLicenses(list) {
+    var rows = [];
+    var byLid = Object.create(null);
+    (list || []).forEach(function (L) {
+        if (!L || !L.renew_customer_account) return;
+        var notes = L.customer_renewal_notes != null ? String(L.customer_renewal_notes) : '';
+        var lines = notes.split('\n').filter(function (ln) {
+            return String(ln || '').trim() !== '';
+        });
+        if (!lines.length) return;
+        var lid = L.id != null ? String(L.id) : '';
+        var pid = L.product_id != null ? String(L.product_id) : '';
+        var pname = L.product_name || L.name || 'Producto';
+        byLid[lid] = { count: lines.length, product_id: pid };
+        lines.forEach(function (ln) {
+            rows.push({
+                license_id: lid,
+                product_id: pid,
+                product_name: pname,
+                customer_username: adminLicParseCustomerRenewalUser(ln) || 'cliente',
+                quantity: 1,
+            });
+        });
+    });
+    __adminLicPendingRenewals = rows;
+    __adminLicPendingRenewalsByLicense = byLid;
+}
+
+function adminLicApplyPedidosRenovarCollapsed(isCollapsed) {
+    var banner = document.getElementById('adminLicPedidosRenovarBanner');
+    var toggle = document.getElementById('adminLicPedidosRenovarToggle');
+    if (!banner) return;
+    banner.classList.toggle('is-collapsed', !!isCollapsed);
+    if (toggle) toggle.setAttribute('aria-expanded', isCollapsed ? 'false' : 'true');
+}
+
+function adminLicWirePedidosRenovarAccordion() {
+    var toggle = document.getElementById('adminLicPedidosRenovarToggle');
+    var banner = document.getElementById('adminLicPedidosRenovarBanner');
+    if (!toggle || !banner || __adminLicPedidosRenovarToggleWired) return;
+    __adminLicPedidosRenovarToggleWired = true;
+    adminLicApplyPedidosRenovarCollapsed(false);
+    toggle.addEventListener('click', function () {
+        adminLicApplyPedidosRenovarCollapsed(!banner.classList.contains('is-collapsed'));
+    });
+}
+
+function adminLicPaintPendingRenewalCards() {
+    var grid = document.getElementById('licensesGrid');
+    if (!grid) return;
+    /* Sin amarillo en productos: bastan los banners de arriba. */
+    grid.querySelectorAll('.license-card[data-license-id]').forEach(function (card) {
+        if (card.classList.contains('license-card--panel-toggle')) return;
+        if (card.classList.contains('admin-lic-license-card--proveedor')) return;
+        card.classList.remove('is-customer-renewal-pending');
+    });
+}
+
+function adminLicRenderPendingRenewalsBanner() {
+    var banner = document.getElementById('adminLicPedidosRenovarBanner');
+    var list = document.getElementById('adminLicPedidosRenovarList');
+    var countEl = document.getElementById('adminLicPedidosRenovarCount');
+    if (!banner || !list) return;
+    var rows = __adminLicPendingRenewals || [];
+    if (!rows.length) {
+        banner.classList.add('d-none');
+        banner.hidden = true;
+        list.innerHTML = '';
+        if (countEl) countEl.textContent = '0';
+        return;
+    }
+    banner.classList.remove('d-none');
+    banner.hidden = false;
+    if (countEl) countEl.textContent = String(rows.length);
+    list.innerHTML = rows
+        .map(function (r) {
+            var lid = r.license_id != null ? String(r.license_id) : '';
+            var pid = r.product_id != null ? String(r.product_id) : '';
+            var uname = String(r.customer_username || 'cliente');
+            var tip = 'Cuenta pendiente por renovar';
+            return (
+                '<li><button type="button" class="admin-lic-pedidos-reserva-banner__row" data-product-id="' +
+                adminLicEscHtml(pid) +
+                '" data-license-id="' +
+                adminLicEscHtml(lid) +
+                '">' +
+                '<span class="admin-lic-pedidos-reserva-banner__product">' +
+                '<span class="admin-lic-pedidos-reserva-banner__product-name">' +
+                adminLicEscHtml(r.product_name || 'Producto') +
+                '</span>' +
+                '<span class="admin-lic-pedidos-reserva-banner__user">: ' +
+                adminLicEscHtml(uname) +
+                '</span>' +
+                '</span>' +
+                '<span class="admin-lic-pedidos-reserva-banner__qty" title="' +
+                adminLicEscHtml(tip) +
+                '" aria-label="' +
+                adminLicEscHtml(tip) +
+                '">x1</span>' +
+                '</button></li>'
+            );
+        })
+        .join('');
+    list.querySelectorAll('button[data-license-id]').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            adminLicOpenServiceFromBanner(
+                btn.getAttribute('data-license-id'),
+                btn.getAttribute('data-product-id')
+            );
+        });
+    });
+}
+
+function adminLicRefreshPendingRenewalsBanner() {
+    if (window.IS_ARCHIVED_MODE) return;
+    adminLicBuildPendingRenewalsFromLicenses(licenses || []);
+    adminLicPaintPendingRenewalCards();
+    adminLicRenderPendingRenewalsBanner();
+    adminLicWirePedidosRenovarAccordion();
+}
+
+document.addEventListener('store-user-notifications-received', function (ev) {
+    try {
+        var items = (ev && ev.detail && ev.detail.notifications) || [];
+        var hit = items.some(function (n) {
+            return String((n && n.kind) || '') === 'admin_customer_account_renewal';
+        });
+        if (hit && typeof loadLicenses === 'function') {
+            void loadLicenses({ skipGridRender: true, skipDaysRefresh: true });
+        }
+    } catch (_eRen) {}
+});
+
+if (document.getElementById('adminLicPedidosRenovarBanner')) {
+    adminLicWirePedidosRenovarAccordion();
+}

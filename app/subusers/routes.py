@@ -1889,6 +1889,28 @@ def update_subuser_coupons_permission():
     return jsonify({"status": "ok", "can_use_coupons": sub_user.can_use_coupons})
 
 
+@subuser_bp.route("/update_subuser_announcements_permission", methods=["POST"])
+def update_subuser_announcements_permission():
+    """
+    Actualiza el permiso de ver anuncios de tienda para un sub-usuario.
+    """
+    if not can_access_subusers():
+        return jsonify({"status": "error", "message": "No autorizado"}), 403
+
+    data = request.get_json()
+    subuser_id = data.get("subuser_id")
+    can_view_announcements = data.get("can_view_announcements", False)
+
+    sub_user = User.query.get_or_404(subuser_id)
+    parent_user = User.query.get(sub_user.parent_id)
+    if not parent_user or (session.get("user_id") != parent_user.id and session.get("username") != current_app.config.get("ADMIN_USER", "admin")):
+        return jsonify({"status": "error", "message": "No tienes permiso para modificar este sub-usuario."}), 403
+
+    sub_user.can_view_announcements = bool(can_view_announcements)
+    db.session.commit()
+    return jsonify({"status": "ok", "can_view_announcements": sub_user.can_view_announcements})
+
+
 @subuser_bp.route("/update_subuser_chat_permission", methods=["POST"])
 def update_subuser_chat_permission():
     """

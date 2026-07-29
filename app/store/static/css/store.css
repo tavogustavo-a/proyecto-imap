@@ -7034,6 +7034,188 @@ select.license-split-editor__status-bad.license-split-editor__status--tier-soluc
     align-self: center;
   }
 
+  /* Pedidos en reserva: naranja completo (sin overlay azul/morado del ::before) */
+  .admin-licencias-page .licenses-grid .license-card.is-reservation-pending,
+  .admin-licencias-page.user-licencias-shell .licenses-grid .license-card.is-reservation-pending,
+  .admin-licencias-page .licenses-grid .license-card.is-reservation-pending.active,
+  .admin-licencias-page.user-licencias-shell .licenses-grid .license-card.is-reservation-pending.active,
+  .licencias-container .license-card.is-reservation-pending,
+  .licencias-container .license-card.is-reservation-pending.active,
+  .admin-licencias-page .licenses-grid .license-card.is-customer-renewal-pending,
+  .admin-licencias-page.user-licencias-shell .licenses-grid .license-card.is-customer-renewal-pending,
+  .admin-licencias-page .licenses-grid .license-card.is-customer-renewal-pending.active,
+  .admin-licencias-page.user-licencias-shell .licenses-grid .license-card.is-customer-renewal-pending.active,
+  .licencias-container .license-card.is-customer-renewal-pending,
+  .licencias-container .license-card.is-customer-renewal-pending.active {
+    background: linear-gradient(135deg, #ca8a04 0%, #eab308 100%) !important;
+    border: 1px solid rgba(253, 224, 71, 0.75) !important;
+    color: #111827 !important;
+    box-shadow: 0 2px 10px rgba(234, 179, 8, 0.35) !important;
+  }
+  .admin-licencias-page .licenses-grid .license-card.is-reservation-pending::before,
+  .admin-licencias-page.user-licencias-shell .licenses-grid .license-card.is-reservation-pending::before,
+  .admin-licencias-page .licenses-grid .license-card.is-reservation-pending.active::before,
+  .admin-licencias-page.user-licencias-shell .licenses-grid .license-card.is-reservation-pending.active::before,
+  .licencias-container .license-card.is-reservation-pending::before,
+  .licencias-container .license-card.is-reservation-pending.active::before,
+  .admin-licencias-page .licenses-grid .license-card.is-customer-renewal-pending::before,
+  .admin-licencias-page.user-licencias-shell .licenses-grid .license-card.is-customer-renewal-pending::before,
+  .admin-licencias-page .licenses-grid .license-card.is-customer-renewal-pending.active::before,
+  .admin-licencias-page.user-licencias-shell .licenses-grid .license-card.is-customer-renewal-pending.active::before,
+  .licencias-container .license-card.is-customer-renewal-pending::before,
+  .licencias-container .license-card.is-customer-renewal-pending.active::before {
+    background: linear-gradient(
+      135deg,
+      rgba(255, 255, 255, 0.22) 0%,
+      rgba(202, 138, 4, 0.12) 45%,
+      rgba(255, 255, 255, 0) 100%
+    ) !important;
+    opacity: 1 !important;
+  }
+  .admin-licencias-page .licenses-grid .license-card.is-reservation-pending .license-name,
+  .admin-licencias-page.user-licencias-shell .licenses-grid .license-card.is-reservation-pending .license-name,
+  .admin-licencias-page .licenses-grid .license-card.is-reservation-pending .full-text,
+  .admin-licencias-page.user-licencias-shell .licenses-grid .license-card.is-reservation-pending .full-text,
+  .admin-licencias-page .licenses-grid .license-card.is-reservation-pending .first-letter,
+  .admin-licencias-page.user-licencias-shell .licenses-grid .license-card.is-reservation-pending .first-letter,
+  .admin-licencias-page .licenses-grid .license-card.is-reservation-pending .compact-label,
+  .admin-licencias-page.user-licencias-shell .licenses-grid .license-card.is-reservation-pending .compact-label,
+  .licencias-container .license-card.is-reservation-pending .license-name,
+  .licencias-container .license-card.is-reservation-pending .full-text,
+  .licencias-container .license-card.is-reservation-pending .first-letter,
+  .licencias-container .license-card.is-reservation-pending .compact-label,
+  .admin-licencias-page .licenses-grid .license-card.is-customer-renewal-pending .license-name,
+  .admin-licencias-page.user-licencias-shell .licenses-grid .license-card.is-customer-renewal-pending .license-name,
+  .admin-licencias-page .licenses-grid .license-card.is-customer-renewal-pending .full-text,
+  .admin-licencias-page.user-licencias-shell .licenses-grid .license-card.is-customer-renewal-pending .full-text,
+  .admin-licencias-page .licenses-grid .license-card.is-customer-renewal-pending .first-letter,
+  .admin-licencias-page.user-licencias-shell .licenses-grid .license-card.is-customer-renewal-pending .first-letter,
+  .admin-licencias-page .licenses-grid .license-card.is-customer-renewal-pending .compact-label,
+  .admin-licencias-page.user-licencias-shell .licenses-grid .license-card.is-customer-renewal-pending .compact-label,
+  .licencias-container .license-card.is-customer-renewal-pending .license-name,
+  .licencias-container .license-card.is-customer-renewal-pending .full-text,
+  .licencias-container .license-card.is-customer-renewal-pending .first-letter,
+  .licencias-container .license-card.is-customer-renewal-pending .compact-label {
+    color: #111827 !important;
+    text-shadow: none !important;
+  }
+  .admin-lic-pedidos-reserva-banner {
+    width: 100%;
+    box-sizing: border-box;
+    margin: 0 0 0.45rem;
+    padding: 0.45rem 0.7rem 0.4rem;
+    border-radius: 10px;
+    background: linear-gradient(135deg, rgba(202, 138, 4, 0.18), rgba(234, 179, 8, 0.12));
+    border: 1px solid rgba(202, 138, 4, 0.45);
+    color: #111827;
+  }
+  .admin-lic-pedidos-reserva-banner__head {
+    appearance: none;
+    border: none;
+    background: transparent;
+    color: inherit;
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.45rem;
+    margin: 0 0 0.2rem;
+    padding: 0.1rem 0.15rem;
+    text-align: center;
+    cursor: pointer;
+    font: inherit;
+    position: relative;
+  }
+  .admin-lic-pedidos-reserva-banner__head strong {
+    display: block;
+    flex: 1 1 auto;
+    text-align: center;
+    font-size: 0.95rem;
+  }
+  .admin-lic-pedidos-reserva-banner__chevron {
+    flex: 0 0 auto;
+    font-size: 0.72rem;
+    color: #92400e;
+    transition: transform 0.18s ease;
+  }
+  .admin-lic-pedidos-reserva-banner.is-collapsed .admin-lic-pedidos-reserva-banner__chevron {
+    transform: rotate(-90deg);
+  }
+  .admin-lic-pedidos-reserva-banner.is-collapsed .admin-lic-pedidos-reserva-banner__head {
+    margin-bottom: 0;
+  }
+  .admin-lic-pedidos-reserva-banner.is-collapsed .admin-lic-pedidos-reserva-banner__list {
+    display: none;
+  }
+  .admin-lic-pedidos-reserva-banner__list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    max-height: 7.5rem;
+    overflow-x: hidden;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .admin-lic-pedidos-reserva-banner__list li {
+    padding: 0.18rem 0;
+    border-top: 1px solid rgba(17, 24, 39, 0.08);
+    font-size: 0.86rem;
+    line-height: 1.25;
+  }
+  .admin-lic-pedidos-reserva-banner__list li:first-child {
+    border-top: none;
+  }
+  .admin-lic-pedidos-reserva-banner__list button.admin-lic-pedidos-reserva-banner__row {
+    appearance: none;
+    border: none;
+    background: transparent;
+    color: inherit;
+    padding: 0;
+    margin: 0;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    min-width: 0;
+  }
+  .admin-lic-pedidos-reserva-banner__product {
+    min-width: 0;
+    flex: 1 1 auto;
+    font-weight: 400;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .admin-lic-pedidos-reserva-banner__product-name {
+    font-weight: 600;
+  }
+  .admin-lic-pedidos-reserva-banner__user {
+    font-weight: 400;
+  }
+  .admin-lic-pedidos-reserva-banner__list button.admin-lic-pedidos-reserva-banner__row:hover .admin-lic-pedidos-reserva-banner__product {
+    text-decoration: underline;
+  }
+  .admin-lic-pedidos-reserva-banner__qty {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
+    min-width: 1.35rem;
+    height: 1.35rem;
+    padding: 0 0.38rem;
+    border-radius: 999px;
+    background: #ca8a04;
+    color: #111827;
+    font-size: 0.68rem;
+    font-weight: 700;
+    line-height: 1;
+    cursor: help;
+  }
+
   .product-stock-reserve-row .btn-reservar-producto-tienda {
     background: linear-gradient(135deg, #ca8a04 0%, #eab308 100%);
     color: #111827;
@@ -7230,6 +7412,92 @@ select.license-split-editor__status-bad.license-split-editor__status--tier-soluc
   .reserva-pendiente-editar:hover,
   .reserva-pendiente-eliminar:hover {
     filter: brightness(1.25);
+  }
+
+  /* Aviso in-app (reemplaza window.alert en la tienda) */
+  .store-alert-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 12050;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .store-alert-modal.modal-hidden {
+    display: none;
+  }
+
+  .store-alert-modal__backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.72);
+  }
+
+  .store-alert-modal__dialog {
+    position: relative;
+    width: min(22rem, calc(100vw - 2rem));
+    background: linear-gradient(160deg, #0f1e3d 0%, #0b1220 60%);
+    border: 1px solid rgba(6, 182, 212, 0.5);
+    border-radius: 0.6rem;
+    padding: 0.95rem 1.05rem 1.05rem;
+    color: #e2e8f0;
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.55);
+  }
+
+  .store-alert-modal__title {
+    margin: 0 0 0.45rem;
+    font-size: 1rem;
+    font-weight: 700;
+  }
+
+  .store-alert-modal__message {
+    margin: 0;
+    font-size: 0.9rem;
+    line-height: 1.45;
+    color: #cbd5e1;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+
+  .store-alert-modal__actions {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: 0.9rem;
+  }
+
+  .store-alert-modal__actions--confirm {
+    gap: 0.55rem;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+  }
+
+  .store-alert-modal__cancel {
+    background: transparent;
+    color: #cbd5e1;
+    border: 1px solid rgba(148, 163, 184, 0.55);
+    border-radius: 6px;
+    font-weight: 600;
+    padding: 0.4rem 0.95rem;
+    cursor: pointer;
+  }
+
+  .store-alert-modal__cancel:hover {
+    background: rgba(148, 163, 184, 0.12);
+  }
+
+  .store-alert-modal__ok {
+    background: linear-gradient(135deg, #0e7490 0%, #06b6d4 100%);
+    color: #fff;
+    border: none;
+    border-radius: 6px;
+    font-weight: 700;
+    padding: 0.4rem 1rem;
+    cursor: pointer;
+  }
+
+  .store-alert-modal__ok:hover {
+    filter: brightness(1.08);
   }
 
   /* Modal editar reserva */
@@ -9547,6 +9815,7 @@ select.license-split-editor__status-bad.license-split-editor__status--tier-soluc
     color: #1e3a5f;
     font-size: 0.92rem;
     line-height: 1.35;
+    text-align: center;
   }
   
   /* Ajustes para pantallas muy pequeñas - evitar desbordamiento */
@@ -27709,6 +27978,43 @@ body .card.product-texture-bg::before,
   color: #ffffff !important;
 }
 
+/* Proveedor con cuentas para renovar (o reservas): el amarillo debe ganar al rojo oscuro */
+.admin-licencias-page.user-licencias-shell .licenses-grid .license-card.user-lic-license-card--proveedor.is-customer-renewal-pending,
+.admin-licencias-page.user-licencias-shell .licenses-grid .license-card.user-lic-license-card--proveedor.is-customer-renewal-pending.active,
+.admin-licencias-page.user-licencias-shell .licenses-grid .license-card.user-lic-license-card--proveedor.is-reservation-pending,
+.admin-licencias-page.user-licencias-shell .licenses-grid .license-card.user-lic-license-card--proveedor.is-reservation-pending.active {
+  background: linear-gradient(135deg, #ca8a04 0%, #eab308 100%) !important;
+  border: 1px solid rgba(253, 224, 71, 0.75) !important;
+  color: #111827 !important;
+  box-shadow: 0 2px 10px rgba(234, 179, 8, 0.35) !important;
+  transform: none;
+}
+.admin-licencias-page.user-licencias-shell .licenses-grid .license-card.user-lic-license-card--proveedor.is-customer-renewal-pending::before,
+.admin-licencias-page.user-licencias-shell .licenses-grid .license-card.user-lic-license-card--proveedor.is-customer-renewal-pending.active::before,
+.admin-licencias-page.user-licencias-shell .licenses-grid .license-card.user-lic-license-card--proveedor.is-reservation-pending::before,
+.admin-licencias-page.user-licencias-shell .licenses-grid .license-card.user-lic-license-card--proveedor.is-reservation-pending.active::before {
+  opacity: 1 !important;
+  background: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.22) 0%,
+    rgba(202, 138, 4, 0.12) 45%,
+    rgba(255, 255, 255, 0) 100%
+  ) !important;
+}
+.admin-licencias-page.user-licencias-shell .licenses-grid .license-card.user-lic-license-card--proveedor.is-customer-renewal-pending .license-name,
+.admin-licencias-page.user-licencias-shell .licenses-grid .license-card.user-lic-license-card--proveedor.is-customer-renewal-pending.active .license-name,
+.admin-licencias-page.user-licencias-shell .licenses-grid .license-card.user-lic-license-card--proveedor.is-customer-renewal-pending .full-text,
+.admin-licencias-page.user-licencias-shell .licenses-grid .license-card.user-lic-license-card--proveedor.is-customer-renewal-pending .first-letter,
+.admin-licencias-page.user-licencias-shell .licenses-grid .license-card.user-lic-license-card--proveedor.is-customer-renewal-pending .compact-label,
+.admin-licencias-page.user-licencias-shell .licenses-grid .license-card.user-lic-license-card--proveedor.is-reservation-pending .license-name,
+.admin-licencias-page.user-licencias-shell .licenses-grid .license-card.user-lic-license-card--proveedor.is-reservation-pending.active .license-name,
+.admin-licencias-page.user-licencias-shell .licenses-grid .license-card.user-lic-license-card--proveedor.is-reservation-pending .full-text,
+.admin-licencias-page.user-licencias-shell .licenses-grid .license-card.user-lic-license-card--proveedor.is-reservation-pending .first-letter,
+.admin-licencias-page.user-licencias-shell .licenses-grid .license-card.user-lic-license-card--proveedor.is-reservation-pending .compact-label {
+  color: #111827 !important;
+  text-shadow: none !important;
+}
+
 /* Portal proveedor: mismo ancho completo y rejilla que Admin Licencias (#licenseAllDaysContainer) */
 .admin-licencias-page.user-licencias-shell .user-lic-proveedor-wrap {
   width: 100% !important;
@@ -29462,6 +29768,241 @@ html.admin-lic-bulk-modal--lock body {
   font-weight: 700;
   text-align: center;
   line-height: 1;
+}
+.admin-lic-proveedor-ventas-item__count--renew {
+  background: #dcfce7;
+  color: #15803d;
+  gap: 0.15rem;
+}
+
+/* Cuentas para renovar en portal proveedor: título centrado (badge a la derecha) */
+.admin-licencias-page.user-licencias-shell .user-lic-proveedor-wrap .user-lic-proveedor-renewals .admin-licencias-bloc-header,
+.user-lic-proveedor-renewals .admin-licencias-bloc-header {
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center !important;
+  justify-content: stretch !important;
+  gap: 0.12rem;
+  flex-wrap: nowrap !important;
+}
+.admin-licencias-page.user-licencias-shell .user-lic-proveedor-wrap .user-lic-proveedor-renewals .admin-licencias-bloc-header .admin-licencias-bloc-title,
+.user-lic-proveedor-renewals .admin-licencias-bloc-header .admin-licencias-bloc-title {
+  grid-column: 1 / -1;
+  grid-row: 1;
+  justify-self: center;
+  text-align: center !important;
+  flex: none !important;
+  width: auto;
+  max-width: 100%;
+  z-index: 0;
+  pointer-events: none;
+}
+.admin-licencias-page.user-licencias-shell .user-lic-proveedor-wrap .user-lic-proveedor-renewals .admin-licencias-bloc-header .admin-licencias-bloc-header-actions,
+.user-lic-proveedor-renewals .admin-licencias-bloc-header .admin-licencias-bloc-header-actions {
+  grid-column: 2;
+  grid-row: 1;
+  justify-self: end;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  flex: 0 0 auto !important;
+}
+.user-lic-proveedor-renewals .user-lic-prov-renewal-body {
+  padding: 0 !important;
+  margin: 0 !important;
+  background: transparent !important;
+  border: none !important;
+}
+.user-lic-proveedor-renewals .user-lic-prov-renewal-split {
+  width: 100%;
+}
+/* Correos solo lectura + icono copiar (sin textarea editable / sin agregar filas) */
+.user-lic-proveedor-renewals .user-lic-prov-renewal-creds-cell {
+  align-self: start !important;
+  flex: 0 0 auto !important;
+  height: auto !important;
+  background: #000000 !important;
+  min-width: 0 !important;
+}
+.user-lic-proveedor-renewals .user-lic-prov-renewal-creds-list {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  min-height: 0;
+}
+.user-lic-proveedor-renewals .user-lic-prov-renewal-cred-line {
+  display: flex;
+  align-items: center;
+  gap: 0.28rem;
+  min-height: var(--lic-row-stride, 1.35rem);
+  height: var(--lic-row-stride, 1.35rem);
+  padding: 0 var(--lic-pad-x, 0.22rem);
+  box-sizing: border-box;
+  border-bottom: var(--lic-border-w, 1px) solid rgba(59, 130, 246, 0.48);
+  background: #000000;
+}
+.user-lic-proveedor-renewals .user-lic-prov-renewal-cred-line:last-child {
+  border-bottom: none;
+}
+.user-lic-proveedor-renewals .user-lic-prov-renewal-email {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #ffffff;
+  font-size: var(--lic-line-fs, 0.875rem);
+  line-height: 1.2;
+  user-select: text;
+  cursor: text;
+}
+.user-lic-proveedor-renewals .user-lic-prov-renewal-copy {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.35rem;
+  height: 1.2rem;
+  margin: 0;
+  padding: 0;
+  border: 1px solid rgba(147, 197, 253, 0.35);
+  border-radius: 3px;
+  background: rgba(59, 130, 246, 0.18);
+  color: #bfdbfe;
+  cursor: pointer;
+  font-size: 0.62rem;
+  line-height: 1;
+}
+.user-lic-proveedor-renewals .user-lic-prov-renewal-copy:hover {
+  background: rgba(59, 130, 246, 0.38);
+  border-color: rgba(147, 197, 253, 0.65);
+  color: #eff6ff;
+}
+.user-lic-proveedor-renewals .user-lic-prov-renewal-copy.is-copied {
+  background: rgba(22, 163, 74, 0.35);
+  border-color: rgba(74, 222, 128, 0.65);
+  color: #bbf7d0;
+}
+.user-lic-proveedor-renewals .user-lic-prov-renewal-split .license-split-editor__side,
+.user-lic-proveedor-renewals .user-lic-prov-renewal-split .license-split-editor__rows {
+  align-self: start !important;
+  height: auto !important;
+}
+.user-lic-proveedor-renewals .user-lic-prov-renewal-split .license-split-editor__viewport,
+.user-lic-proveedor-renewals .user-lic-prov-renewal-split .license-split-editor__grid {
+  height: auto !important;
+  min-height: 0 !important;
+  align-items: start !important;
+}
+.user-lic-proveedor-renewals .user-lic-prov-renewal-empty {
+  padding: 0.45rem 0.6rem;
+  color: #64748b;
+  font-size: 0.83rem;
+}
+/* Misma fila del admin + etiqueta de producto (Amazon Prime, etc.) */
+.user-lic-proveedor-renewals .license-split-editor__row.license-split-editor__row--customer-renewal {
+  grid-template-columns: auto minmax(5rem, 1fr);
+  min-width: 0;
+}
+.user-lic-proveedor-renewals .license-split-editor__row--customer-renewal .license-split-editor__lead {
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  gap: 0.28rem;
+  flex: 0 0 auto;
+  min-width: 0;
+  width: auto;
+}
+.user-lic-proveedor-renewals .user-lic-prov-renewal-product {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  max-width: 7.5rem;
+  padding: 0 0.28rem;
+  font-size: 0.68rem;
+  font-weight: 700;
+  line-height: 1.15;
+  color: #93c5fd;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  align-self: stretch;
+}
+.user-lic-proveedor-renewals .license-split-editor__day-sell-cell {
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  gap: 0.2rem;
+  padding: 0 0.1rem;
+  box-sizing: border-box;
+}
+.user-lic-proveedor-renewals .license-split-editor__day-num {
+  flex: 0 0 auto;
+  width: 2.35rem !important;
+  min-width: 2.2rem !important;
+  max-width: 2.75rem;
+  text-align: center;
+  padding: 0 0.08rem;
+  box-sizing: border-box;
+  -moz-appearance: textfield;
+  color: #ffffff;
+  -webkit-text-fill-color: #ffffff;
+  caret-color: #ffffff;
+  border: 1px solid rgba(59, 130, 246, 0.42);
+  background: rgba(15, 23, 42, 0.55);
+  border-radius: 3px;
+  font-size: 0.75rem;
+}
+.user-lic-proveedor-renewals .license-split-editor__day-num::-webkit-outer-spin-button,
+.user-lic-proveedor-renewals .license-split-editor__day-num::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+.user-lic-proveedor-renewals .license-split-editor__sell-btn,
+.user-lic-proveedor-renewals .license-split-editor__reject-btn {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  width: auto;
+  padding: 0 0.18rem;
+  margin: 0;
+  border-radius: 3px;
+  cursor: pointer;
+  font-size: 0.62rem;
+  line-height: 1;
+  box-sizing: border-box;
+}
+.user-lic-proveedor-renewals .license-split-editor__sell-btn {
+  border: 1px solid rgba(59, 130, 246, 0.5);
+  background: rgba(59, 130, 246, 0.22);
+  color: rgba(243, 244, 246, 0.95);
+}
+.user-lic-proveedor-renewals .license-split-editor__sell-btn:hover {
+  background: rgba(59, 130, 246, 0.38);
+  border-color: rgba(147, 197, 253, 0.65);
+}
+.user-lic-proveedor-renewals .license-split-editor__reject-btn {
+  border: 1px solid rgba(239, 68, 68, 0.55);
+  background: rgba(239, 68, 68, 0.22);
+  color: rgba(254, 226, 226, 0.98);
+}
+.user-lic-proveedor-renewals .license-split-editor__reject-btn:hover {
+  background: rgba(239, 68, 68, 0.38);
+  border-color: rgba(252, 165, 165, 0.7);
+}
+.user-lic-proveedor-renewals .license-split-editor__sell-btn:disabled,
+.user-lic-proveedor-renewals .license-split-editor__reject-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.user-lic-proveedor-renewals .license-split-editor__user-wrap {
+  display: none !important;
+}
+.user-lic-proveedor-renewals .license-split-editor__user,
+.user-lic-proveedor-renewals .license-split-editor__note {
+  min-width: 0;
 }
 .admin-lic-proveedor-ventas-reset-btn {
   flex: 0 0 auto;

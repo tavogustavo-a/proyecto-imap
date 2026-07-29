@@ -2,7 +2,7 @@
 
 {% block title %}Tienda Pública{% endblock %}
 
-{% block head %}{{ super() }}<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Manrope:wght@500;700;800&display=swap" rel="stylesheet"><link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}?v=20260722-renew-warn-black"><link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/chat_soporte.css') }}"><meta name="csrf_token" content="{{ csrf_token() }}">{% endblock %}
+{% block head %}{{ super() }}<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Manrope:wght@500;700;800&display=swap" rel="stylesheet"><link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}?v=20260726-store-alert-modal"><link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/chat_soporte.css') }}"><meta name="csrf_token" content="{{ csrf_token() }}">{% endblock %}
 {% block content %}
 <div class="container container-max-width-900 store-light store-front-main">
   {% set blocked_users = ['soporte','soporte1','soporte2','soporte3'] %}
@@ -157,13 +157,7 @@
   </div>
 
   {% if products and current_user and not current_user.parent_id %}
-  {% set tipo_precio_table = 'usd' %}
-  {% if current_user.user_prices and current_user.user_prices is mapping %}
-    {% set tipo_precio_table_raw = current_user.user_prices.get('tipo_precio') %}
-    {% if tipo_precio_table_raw %}
-      {% set tipo_precio_table = tipo_precio_table_raw.lower() %}
-    {% endif %}
-  {% endif %}
+  {% set tipo_precio_table = (tipo_precio_store|default('usd'))|lower %}
   <div id="storePriceTablePanel" class="store-price-table-panel" hidden>
     <div class="store-price-table-panel__toolbar">
       <span class="store-price-table-panel__title">Cuentas y precios</span>
@@ -199,8 +193,8 @@
         {% for p in products %}
           {% set discount_cop = p.discount_cop_extra|default(0)|float %}
           {% set discount_usd = p.discount_usd_extra|default(0)|float %}
-          {% set calculated_price_cop = p.price_cop|float - discount_cop %}
-          {% set calculated_price_usd = p.price_usd|float - discount_usd %}
+          {% set calculated_price_cop = (p.price_cop|float - discount_cop)|round(2) %}
+          {% set calculated_price_usd = (p.price_usd|float - discount_usd)|round(2) %}
           {% set final_price_cop = [calculated_price_cop, 0]|max %}
           {% set final_price_usd = [calculated_price_usd, 0]|max %}
           {% set ps = product_stock_initial|default({}) %}
@@ -221,12 +215,12 @@
               {% if product_m2m %}Sí{% else %}No{% endif %}
             </td>
             {% if is_admin %}
-              <td class="store-products-table__price">${{ p.price_cop|int }} COP</td>
-              <td class="store-products-table__price">${{ p.price_usd|int }} USD</td>
+              <td class="store-products-table__price">${{ p.price_cop|money_amount }} COP</td>
+              <td class="store-products-table__price">${{ p.price_usd|money_amount }} USD</td>
             {% elif tipo_precio_table == 'cop' %}
-              <td class="store-products-table__price">${{ final_price_cop|int }} COP</td>
+              <td class="store-products-table__price">${{ final_price_cop|money_amount }} COP</td>
             {% else %}
-              <td class="store-products-table__price">${{ final_price_usd|int }} USD</td>
+              <td class="store-products-table__price">${{ final_price_usd|money_amount }} USD</td>
             {% endif %}
           </tr>
         {% endfor %}
@@ -253,23 +247,7 @@
 
   <div id="storeProductsWrap" class="store-products-wrap store-products-wrap--view-grid d-flex flex-wrap gap-1">
     {# is_admin ya está disponible desde el context processor #}
-    {% set tipo_precio = 'usd' %}
-    {% if current_user %}
-      {% if current_user.user_prices and current_user.user_prices is mapping %}
-        {% set tipo_precio_raw = current_user.user_prices.get('tipo_precio') %}
-        {% if tipo_precio_raw %}
-          {% set tipo_precio = tipo_precio_raw.lower() %}
-        {% endif %}
-      {% elif current_user.parent_id %}
-        {% set parent = User.query.get(current_user.parent_id) %}
-        {% if parent and parent.user_prices and parent.user_prices is mapping %}
-          {% set parent_tipo_precio_raw = parent.user_prices.get('tipo_precio') %}
-          {% if parent_tipo_precio_raw %}
-            {% set tipo_precio = parent_tipo_precio_raw.lower() %}
-          {% endif %}
-        {% endif %}
-      {% endif %}
-    {% endif %}
+    {% set tipo_precio = (tipo_precio_store|default('usd'))|lower %}
     <div id="storeCatalogFullTableWrap" class="store-catalog-full-table-wrap" hidden aria-hidden="true">
       <div class="store-catalog-full-table-scroll" tabindex="0" role="region" aria-label="Catálogo en tabla desplazable horizontalmente">
         <table id="storeCatalogFullTable" class="store-products-table store-catalog-full-table" aria-label="Catálogo de cuentas y precios">
@@ -296,8 +274,8 @@
             {% for p in products %}
               {% set discount_cop_v6 = p.discount_cop_extra|default(0)|float %}
               {% set discount_usd_v6 = p.discount_usd_extra|default(0)|float %}
-              {% set calculated_price_cop_v6 = p.price_cop|float - discount_cop_v6 %}
-              {% set calculated_price_usd_v6 = p.price_usd|float - discount_usd_v6 %}
+              {% set calculated_price_cop_v6 = (p.price_cop|float - discount_cop_v6)|round(2) %}
+              {% set calculated_price_usd_v6 = (p.price_usd|float - discount_usd_v6)|round(2) %}
               {% set final_price_cop_v6 = [calculated_price_cop_v6, 0]|max %}
               {% set final_price_usd_v6 = [calculated_price_usd_v6, 0]|max %}
               {% set ps_v6 = product_stock_initial|default({}) %}
@@ -333,12 +311,12 @@
                 </td>
                 {% if current_user and not current_user.parent_id %}
                   {% if is_admin %}
-                    <td class="store-products-table__price">${{ p.price_cop|int }} COP</td>
-                    <td class="store-products-table__price">${{ p.price_usd|int }} USD</td>
+                    <td class="store-products-table__price">${{ p.price_cop|money_amount }} COP</td>
+                    <td class="store-products-table__price">${{ p.price_usd|money_amount }} USD</td>
                   {% elif tipo_precio == 'cop' %}
-                    <td class="store-products-table__price">${{ final_price_cop_v6|int }} COP</td>
+                    <td class="store-products-table__price">${{ final_price_cop_v6|money_amount }} COP</td>
                   {% else %}
-                    <td class="store-products-table__price">${{ final_price_usd_v6|int }} USD</td>
+                    <td class="store-products-table__price">${{ final_price_usd_v6|money_amount }} USD</td>
                   {% endif %}
                   <td class="store-products-table__stock">
                     <span class="product-stock-info{% if _sock_v6 <= 0 %} product-stock-info--zero{% endif %}" data-product-id="{{ p.id }}" data-initial-stock="{{ _sock_v6 }}">{{ _sock_v6 }} existencias</span>
@@ -385,8 +363,8 @@
     {% for p in products %}
       {% set discount_cop = p.discount_cop_extra|default(0)|float %}
       {% set discount_usd = p.discount_usd_extra|default(0)|float %}
-      {% set calculated_price_cop = p.price_cop|float - discount_cop %}
-      {% set calculated_price_usd = p.price_usd|float - discount_usd %}
+      {% set calculated_price_cop = (p.price_cop|float - discount_cop)|round(2) %}
+      {% set calculated_price_usd = (p.price_usd|float - discount_usd)|round(2) %}
       {% set final_price_cop = [calculated_price_cop, 0]|max %}
       {% set final_price_usd = [calculated_price_usd, 0]|max %}
       {% set ps = product_stock_initial|default({}) %}
@@ -460,18 +438,18 @@
           {% if current_user and not current_user.parent_id %}
             <div class="product-price-col">
               {% if is_admin %}
-                <span class="product-price-cop">${{ p.price_cop|int }} COP</span>
-                <span class="product-price-usd">${{ p.price_usd|int }} USD</span>
+                <span class="product-price-cop">${{ p.price_cop|money_amount }} COP</span>
+                <span class="product-price-usd">${{ p.price_usd|money_amount }} USD</span>
               {% elif tipo_precio == 'cop' %}
                 {% set discount_cop = p.discount_cop_extra|default(0)|float %}
-                {% set calculated_price_cop = p.price_cop|float - discount_cop %}
+                {% set calculated_price_cop = (p.price_cop|float - discount_cop)|round(2) %}
                 {% set final_price_cop = [calculated_price_cop, 0]|max %}
-                <span class="product-price-cop">${{ final_price_cop|int }} COP</span>
+                <span class="product-price-cop">${{ final_price_cop|money_amount }} COP</span>
               {% else %}
                 {% set discount_usd = p.discount_usd_extra|default(0)|float %}
-                {% set calculated_price_usd = p.price_usd|float - discount_usd %}
+                {% set calculated_price_usd = (p.price_usd|float - discount_usd)|round(2) %}
                 {% set final_price_usd = [calculated_price_usd, 0]|max %}
-                <span class="product-price-usd">${{ final_price_usd|int }} USD</span>
+                <span class="product-price-usd">${{ final_price_usd|money_amount }} USD</span>
               {% endif %}
               <span class="product-price-period product-price-period--with-price">{{ product_billing_period }}</span>
             </div>
@@ -510,9 +488,9 @@
           <span class="saldo-label">Saldo disponible:</span>
           <div class="saldo-amounts" id="resumenSaldoAmounts">
             {% if tipo_precio_store == 'cop' %}
-              <span class="saldo-cop">${{ saldo_cop|default(0)|int }} COP</span>
+              <span class="saldo-cop">${{ saldo_cop|default(0)|money_amount }} COP</span>
             {% else %}
-              <span class="saldo-usd">${{ saldo_usd|default(0)|int }} USD</span>
+              <span class="saldo-usd">${{ saldo_usd|default(0)|money_amount }} USD</span>
             {% endif %}
           </div>
         </div>
@@ -786,7 +764,7 @@
   </div>
 </div>
 {% endif %}
-<div id="userSaldoData" class="user-saldo-data-hidden" data-tipo-precio="{{ tipo_precio_store|default('usd') }}" data-tipo-precio-revision="{{ tipo_precio_revision|default(0)|int }}" data-saldo-usd="{{ saldo_usd|default(0)|int }}" data-saldo-cop="{{ saldo_cop|default(0)|int }}" data-puede-tener-deuda="{% if puede_tener_deuda|default(false) %}1{% else %}0{% endif %}" data-limite-deuda-usd="{% if limite_deuda_usd is not none %}{{ limite_deuda_usd|int }}{% endif %}" data-limite-deuda-cop="{% if limite_deuda_cop is not none %}{{ limite_deuda_cop|int }}{% endif %}" data-store-view-only="{% if store_view_only|default(false) %}1{% else %}0{% endif %}"></div>
+<div id="userSaldoData" class="user-saldo-data-hidden" data-tipo-precio="{{ tipo_precio_store|default('usd') }}" data-tipo-precio-revision="{{ tipo_precio_revision|default(0)|int }}" data-saldo-usd="{{ saldo_usd|default(0)|money_amount }}" data-saldo-cop="{{ saldo_cop|default(0)|money_amount }}" data-puede-tener-deuda="{% if puede_tener_deuda|default(false) %}1{% else %}0{% endif %}" data-limite-deuda-usd="{% if limite_deuda_usd is not none %}{{ limite_deuda_usd|money_amount }}{% endif %}" data-limite-deuda-cop="{% if limite_deuda_cop is not none %}{{ limite_deuda_cop|money_amount }}{% endif %}" data-store-view-only="{% if store_view_only|default(false) %}1{% else %}0{% endif %}"></div>
 
 
 {% endblock %}
@@ -794,7 +772,7 @@
 {% block scripts %}
 <meta name="clear_trigger_log_url" content="{{ url_for('admin_bp.clear_trigger_log') }}">
 <script src="{{ url_for('store_bp.static', filename='js/store_config.js') }}?v=20260709-store-prefs-bd" defer></script>
-<script src="{{ url_for('store_bp.static', filename='js/store_front.js') }}?v=20260713-carrito-xss-v1" defer></script>
+<script src="{{ url_for('store_bp.static', filename='js/store_front.js') }}?v=20260729-money-fmt" defer></script>
 {% if not store_view_only|default(false) %}
 <script src="{{ url_for('store_bp.static', filename='js/store_renovacion.js') }}?v=20260520-buena-revisada" defer></script>
 {% endif %}

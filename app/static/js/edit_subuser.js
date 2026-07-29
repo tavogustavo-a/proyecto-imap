@@ -316,6 +316,50 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
 
+    // --- Permiso de ver anuncios (can_view_announcements) ---
+    const canViewAnnouncementsCheckbox = document.getElementById('canViewAnnouncementsCheckbox');
+    const announcementsPermissionStatus = document.getElementById('announcements-permission-status');
+    if (canViewAnnouncementsCheckbox) {
+      canViewAnnouncementsCheckbox.addEventListener('change', function() {
+        const subuserId = document.querySelector('[data-subuser-id]')?.dataset?.subuserId || null;
+        if (!subuserId) return;
+        fetch('/subusers/update_subuser_announcements_permission', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': getCsrfToken()
+          },
+          body: JSON.stringify({
+            subuser_id: parseInt(subuserId, 10),
+            can_view_announcements: canViewAnnouncementsCheckbox.checked
+          })
+        })
+        .then(response => response.json())
+        .then(data => {
+          if (data.status === 'ok') {
+            if (announcementsPermissionStatus) {
+              announcementsPermissionStatus.textContent = canViewAnnouncementsCheckbox.checked
+                ? 'Permiso de anuncios activado'
+                : 'Permiso de anuncios desactivado';
+              announcementsPermissionStatus.style.color = canViewAnnouncementsCheckbox.checked ? 'green' : 'red';
+              setTimeout(() => { announcementsPermissionStatus.textContent = ''; }, 2000);
+            }
+          } else {
+            if (announcementsPermissionStatus) {
+              announcementsPermissionStatus.textContent = 'Error al guardar';
+              announcementsPermissionStatus.style.color = 'red';
+            }
+          }
+        })
+        .catch(err => {
+          if (announcementsPermissionStatus) {
+            announcementsPermissionStatus.textContent = 'Error de red al guardar';
+            announcementsPermissionStatus.style.color = 'red';
+          }
+        });
+      });
+    }
+
     // --- Permiso de chat (can_chat) ---
     const canChatCheckbox = document.getElementById('canChatCheckbox');
     const chatPermissionStatus = document.getElementById('chat-permission-status');

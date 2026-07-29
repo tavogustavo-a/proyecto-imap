@@ -335,4 +335,10 @@
   }
   syncCustom(tiempoEl, customWrap);
   loadList();
+  // Refrescar lista para que los vencidos (personalizado / con días) desaparezcan solos.
+  setInterval(function () {
+    if (document.hidden) return;
+    if (editModal && !editModal.classList.contains('d-none') && !editModal.hidden) return;
+    loadList();
+  }, 30000);
 })();

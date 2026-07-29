@@ -184,12 +184,32 @@ def start_scheduler_if_needed():
                 )
 
                 _scheduler.add_job(
-                    func=hourly_sqlite_backup_job,
+                    func=purge_expired_store_announcements_job,
+                    trigger='cron',
+                    hour=3,
+                    minute=0,
+                    timezone='America/Bogota',
+                    id='purge_expired_store_announcements',
+                    replace_existing=True,
+                )
+
+                _scheduler.add_job(
+                    func=daily_sqlite_backup_job,
                     trigger='interval',
-                    hours=1,
-                    id='hourly_sqlite_auto_backup',
+                    hours=24,
+                    id='daily_sqlite_auto_backup',
                     replace_existing=True,
                     next_run_time=datetime.now(timezone.utc) + timedelta(minutes=3),
+                )
+
+                _scheduler.add_job(
+                    func=disk_space_check_job,
+                    trigger='cron',
+                    hour=3,
+                    minute=10,
+                    timezone='America/Bogota',
+                    id='disk_space_check',
+                    replace_existing=True,
                 )
             
             import atexit
@@ -986,13 +1006,27 @@ def release_stale_renewal_reservations_job():
             app.logger.warning("Liberar reservas renovación vencidas: %s", e)
 
 
+def purge_expired_store_announcements_job():
+    """Purga diaria (03:00 America/Bogota) de anuncios de tienda ya vencidos."""
+    with app.app_context():
+        try:
+            from app.store.announcements import purge_expired_announcements
+
+            n = purge_expired_announcements()
+            if n:
+                app.logger.info("Anuncios vencidos purgados: %s", n)
+        except Exception as e:
+            db.session.rollback()
+            app.logger.warning("Purga anuncios vencidos: %s", e)
+
+
 def sync_month_to_month_changes_midnight_job():
     """Alias: misma tubería que license_day_renewal_midnight_job (compatibilidad)."""
     license_day_renewal_midnight_job()
 
 
-def hourly_sqlite_backup_job():
-    """Copia horaria de la base SQLite (rotación de auto_*.db)."""
+def daily_sqlite_backup_job():
+    """Copia diaria de la base SQLite (rotación de auto_*.db, máx. AUTO_BACKUP_MAX_FILES)."""
     with app.app_context():
         try:
             from app.services.db_backup_service import scheduled_backup_tick
@@ -1001,6 +1035,20 @@ def hourly_sqlite_backup_job():
         except Exception as e:
             try:
                 app.logger.warning("Copia automática BD: %s", e)
+            except Exception:
+                pass
+
+
+def disk_space_check_job():
+    """Vigila el espacio libre y avisa al admin si baja del umbral (aviso auto-limitado)."""
+    with app.app_context():
+        try:
+            from app.services.disk_space_guard import disk_space_low
+
+            disk_space_low()
+        except Exception as e:
+            try:
+                app.logger.warning("Chequeo espacio disco: %s", e)
             except Exception:
                 pass
 
@@ -1149,12 +1197,32 @@ def main():
         )
 
         scheduler.add_job(
-            func=hourly_sqlite_backup_job,
+            func=purge_expired_store_announcements_job,
+            trigger='cron',
+            hour=3,
+            minute=0,
+            timezone='America/Bogota',
+            id='purge_expired_store_announcements',
+            replace_existing=True,
+        )
+
+        scheduler.add_job(
+            func=daily_sqlite_backup_job,
             trigger='interval',
-            hours=1,
-            id='hourly_sqlite_auto_backup',
+            hours=24,
+            id='daily_sqlite_auto_backup',
             replace_existing=True,
             next_run_time=datetime.now(timezone.utc) + timedelta(minutes=3),
+        )
+
+        scheduler.add_job(
+            func=disk_space_check_job,
+            trigger='cron',
+            hour=3,
+            minute=10,
+            timezone='America/Bogota',
+            id='disk_space_check',
+            replace_existing=True,
         )
 
     

@@ -170,13 +170,29 @@
       };
     }
 
-    if (kind === 'admin_product_reservation') {
+    if (kind === 'admin_product_reservation' || kind === 'proveedor_product_reservation') {
+      var ev = String((payload && payload.event) || '').trim();
+      var isPlaced = ev === 'placed' || ev === 'updated' || /pedido en reserva|reserva actualizada/i.test(title);
       return {
         title: title,
         body: bodyText,
         renewal: false,
         adminReservation: true,
-        adminOps: true,
+        proveedorReservation: kind === 'proveedor_product_reservation',
+        reservationPlaced: isPlaced,
+        adminOps: kind === 'admin_product_reservation',
+      };
+    }
+
+    if (kind === 'admin_customer_account_renewal' || kind === 'proveedor_customer_account_renewal') {
+      return {
+        title: title,
+        body: bodyText,
+        renewal: true,
+        customerAccountRenewalOps: true,
+        adminCustomerRenewal: kind === 'admin_customer_account_renewal',
+        proveedorCustomerRenewal: kind === 'proveedor_customer_account_renewal',
+        adminOps: kind === 'admin_customer_account_renewal',
       };
     }
 
@@ -470,14 +486,32 @@
           } catch (eNav2) {}
         } else if (display.adminReservation) {
           try {
-            var goA = (payload && payload.url) || '/tienda/admin';
-            if (
-              goA &&
-              String((global.location && global.location.pathname) || '').indexOf('/tienda/admin') !== 0
-            ) {
+            var goA =
+              (payload && payload.url) ||
+              (display.proveedorReservation ? '/tienda/licencias' : '/tienda/admin');
+            var pathA = String((global.location && global.location.pathname) || '');
+            if (display.proveedorReservation) {
+              if (pathA.indexOf('/tienda/licencias') !== 0) {
+                global.location.href = goA;
+              }
+            } else if (goA && pathA.indexOf('/tienda/admin') !== 0) {
               global.location.href = goA;
             }
           } catch (eNavA) {}
+        } else if (display.customerAccountRenewalOps) {
+          try {
+            var goRen =
+              (payload && payload.url) ||
+              (display.proveedorCustomerRenewal ? '/tienda/licencias' : '/tienda/admin');
+            var pathRen = String((global.location && global.location.pathname) || '');
+            if (display.proveedorCustomerRenewal) {
+              if (pathRen.indexOf('/tienda/licencias') !== 0) {
+                global.location.href = goRen;
+              }
+            } else if (goRen && pathRen.indexOf('/tienda/admin') !== 0) {
+              global.location.href = goRen;
+            }
+          } catch (eNavRen) {}
         } else if (display.verificarArreglar) {
           try {
             var pathV = String((global.location && global.location.pathname) || '');

@@ -1527,7 +1527,8 @@ def update_user_prices_ajax():
         
         updated_count = 0
         errors = []
-        
+        needs_confirmation = []
+
         for update_data in updates:
             user_id = update_data.get("user_id")
             if not user_id:
@@ -1564,7 +1565,11 @@ def update_user_prices_ajax():
             if nuevo_tipo_precio:
                 new_tipo = str(nuevo_tipo_precio).strip().upper()
                 if new_tipo not in ("USD", "COP"):
-                    new_tipo = ""
+                    errors.append(
+                        f"Usuario {user_id}: tipo_precio inválido "
+                        f"({nuevo_tipo_precio!r}); solo se acepta USD o COP"
+                    )
+                    continue
 
             tipo_precio_changed = False
             if nuevo_tipo_precio is not None:
@@ -1574,6 +1579,34 @@ def update_user_prices_ajax():
                     tipo_precio_changed = True
 
             if tipo_precio_changed:
+                # El saldo/deuda de cuenta Licencias (users.saldo) no tiene
+                # moneda: quedó expresado en la moneda anterior y mezclarlo 1:1
+                # con la nueva corrompe montos. Exigir confirmación del admin
+                # ("este saldo desaparecerá") y liquidarlo a 0 al confirmar.
+                try:
+                    saldo_licencias = float(getattr(user, "saldo", 0) or 0)
+                except (TypeError, ValueError):
+                    saldo_licencias = 0.0
+                if abs(saldo_licencias) > 1e-9:
+                    if not bool(update_data.get("confirm_saldo_licencias_reset")):
+                        needs_confirmation.append({
+                            "user_id": int(user.id),
+                            "username": user.username,
+                            "saldo": round(saldo_licencias, 2),
+                            "old_tipo": old_tipo,
+                            "new_tipo": new_tipo,
+                        })
+                        continue
+                    user.saldo = 0
+                    current_app.logger.info(
+                        "tipo_precio %s→%s usuario %s: saldo licencias %.2f "
+                        "liquidado a 0 con confirmación del admin",
+                        old_tipo or "—",
+                        new_tipo or "—",
+                        user.username,
+                        saldo_licencias,
+                    )
+
                 import time
 
                 from app.store.routes import _renewal_release_all_reservations_for_user
@@ -1581,9 +1614,12 @@ def update_user_prices_ajax():
                 _renewal_release_all_reservations_for_user(user_id)
                 new_user_prices["tipo_precio_revision"] = int(time.time())
 
-            # Actualizar tipo_precio y opcionalmente soporte_licencias
+            # Actualizar tipo_precio y opcionalmente soporte_licencias.
+            # Persistir siempre el valor normalizado (new_tipo): guardar el
+            # crudo ('usd', ' USD ') rompía las comparaciones estrictas y
+            # dejaba al usuario como "sin tipo de precio".
             if nuevo_tipo_precio:
-                new_user_prices['tipo_precio'] = nuevo_tipo_precio
+                new_user_prices['tipo_precio'] = new_tipo
             elif 'tipo_precio' in new_user_prices:
                 # Si se envía None o vacío, eliminar tipo_precio
                 del new_user_prices['tipo_precio']
@@ -1658,6 +1694,7 @@ def update_user_prices_ajax():
                     "status": "ok",
                     "message": "No hay cambios para guardar",
                     "updated_count": 0,
+                    "needs_confirmation": needs_confirmation or None,
                 })
 
             db.session.commit()
@@ -1665,7 +1702,8 @@ def update_user_prices_ajax():
                 "status": "ok",
                 "message": f"Se actualizaron {updated_count} usuario(s) correctamente",
                 "updated_count": updated_count,
-                "errors": errors if errors else None
+                "errors": errors if errors else None,
+                "needs_confirmation": needs_confirmation or None,
             })
         except Exception as e:
             db.session.rollback()
@@ -1699,7 +1737,7 @@ def _enabled_store_licenses_for_proveedor_catalog():
 
 
 def _normalize_proveedor_services_map(raw):
-    """Mapa license_id (str) -> { sales_limit: int|None, warranty_days: int, sales_count: int } (None = ilimitado)."""
+    """Mapa license_id (str) -> { sales_limit: int|None, warranty_days: int, sales_count: int, renew_customer: bool, renewals_count: int } (None = ilimitado)."""
     if not isinstance(raw, dict):
         return {}
     out = {}
@@ -1713,6 +1751,8 @@ def _normalize_proveedor_services_map(raw):
         limit = None
         warranty_days = 0
         sales_count = 0
+        renew_customer = False
+        renewals_count = 0
         if isinstance(val, dict):
             lim_raw = val.get("sales_limit")
             if lim_raw is None:
@@ -1736,10 +1776,19 @@ def _normalize_proveedor_services_map(raw):
                     sales_count = max(0, int(float(sc_raw)))
                 except (TypeError, ValueError):
                     sales_count = 0
+            renew_customer = bool(val.get("renew_customer"))
+            rc_raw = val.get("renewals_count")
+            if rc_raw is not None and rc_raw != "":
+                try:
+                    renewals_count = max(0, int(float(rc_raw)))
+                except (TypeError, ValueError):
+                    renewals_count = 0
         out[str(lid)] = {
             "sales_limit": limit,
             "warranty_days": warranty_days,
             "sales_count": sales_count,
+            "renew_customer": renew_customer,
+            "renewals_count": renewals_count,
         }
     return out
 
@@ -1768,6 +1817,7 @@ def _proveedor_services_payload_for_user(user_obj):
                 "name": name,
                 "enabled": enabled,
                 "sales_limit": limit,
+                "renew_customer": bool(entry.get("renew_customer")) if entry else False,
             }
         )
     return services
@@ -1853,10 +1903,17 @@ def user_proveedor_services_ajax_post():
                 sales_count = max(0, int(float(prev_sc or 0)))
             except (TypeError, ValueError):
                 sales_count = 0
+            prev_rc = prev.get("renewals_count")
+            try:
+                renewals_count = max(0, int(float(prev_rc or 0)))
+            except (TypeError, ValueError):
+                renewals_count = 0
             new_map[str(lid)] = {
                 "sales_limit": limit,
                 "warranty_days": warranty_days,
                 "sales_count": sales_count,
+                "renew_customer": bool(item.get("renew_customer")),
+                "renewals_count": renewals_count,
             }
 
         new_user_prices = dict(user.user_prices) if user.user_prices else {}
@@ -2143,23 +2200,45 @@ def edit_user_products(user_id):
             if len(productos_permitidos_enabled) < len(productos_permitidos):
                 productos_permitidos = productos_permitidos_enabled
             
+            # Normalizar descuentos (claves str, floats >= 0 redondeados a 2 decimales).
+            descuentos_norm = {}
+            raw_disc = descuentos_productos_data if isinstance(descuentos_productos_data, dict) else {}
+            for raw_key, raw_val in raw_disc.items():
+                try:
+                    lid = int(raw_key)
+                except (TypeError, ValueError):
+                    continue
+                if lid <= 0:
+                    continue
+                entry = raw_val if isinstance(raw_val, dict) else {}
+                try:
+                    d_cop = max(0.0, round(float(entry.get('cop', 0) or 0), 2))
+                except (TypeError, ValueError):
+                    d_cop = 0.0
+                try:
+                    d_usd = max(0.0, round(float(entry.get('usd', 0) or 0), 2))
+                except (TypeError, ValueError):
+                    d_usd = 0.0
+                descuentos_norm[str(lid)] = {'cop': d_cop, 'usd': d_usd}
+            descuentos_productos_data = descuentos_norm
+
             # Validar precios finales solo para productos que tienen descuentos configurados
             errores = []
             for prod in productos_objs:
                 cop = float(prod.price_cop)
                 usd = float(prod.price_usd)
-                d_extra = descuentos_productos_data.get(str(prod.id)) or descuentos_productos_data.get(int(prod.id)) or {}
+                d_extra = descuentos_productos_data.get(str(prod.id)) or {}
                 d_cop_extra = float(d_extra.get('cop', 0) or 0)
                 d_usd_extra = float(d_extra.get('usd', 0) or 0)
                 
                 # Solo validar si hay descuento configurado (mayor a 0)
                 if d_cop_extra > 0 or d_usd_extra > 0:
                     if tipo_precio == 'COP':
-                        final_cop = cop - d_cop_extra
+                        final_cop = round(cop - d_cop_extra, 2)
                         if final_cop <= 0:
                             errores.append(f"El precio final en COP para '{prod.name}' debe ser mayor a 0 (actual: {final_cop})")
                     else:
-                        final_usd = usd - d_usd_extra
+                        final_usd = round(usd - d_usd_extra, 2)
                         if final_usd < 0.1:
                             errores.append(f"El precio final en USD para '{prod.name}' debe ser mayor a 0.1 (actual: {final_usd})")
             
@@ -2182,6 +2261,11 @@ def edit_user_products(user_id):
             # Actualizar solo los campos necesarios, preservando el resto
             new_user_prices['productos_permitidos'] = productos_permitidos_int
             new_user_prices['descuentos_productos'] = descuentos_productos_data
+            try:
+                prev_cat_rev = int(new_user_prices.get('catalog_revision') or 0)
+            except (TypeError, ValueError):
+                prev_cat_rev = 0
+            new_user_prices['catalog_revision'] = prev_cat_rev + 1
             
             # Restaurar tipo_precio si existía
             if tipo_precio_existente:
@@ -2196,7 +2280,12 @@ def edit_user_products(user_id):
             
             try:
                 db.session.commit()
-                return jsonify({'status': 'ok', 'message': 'Productos asociados actualizados correctamente.'})
+                return jsonify({
+                    'status': 'ok',
+                    'message': 'Productos asociados actualizados correctamente.',
+                    'catalog_revision': int(new_user_prices.get('catalog_revision') or 0),
+                    'productos_permitidos': productos_permitidos_int,
+                })
             except Exception as e:
                 db.session.rollback()
                 current_app.logger.error(f"Error al guardar productos asociados del usuario: {e}", exc_info=True)

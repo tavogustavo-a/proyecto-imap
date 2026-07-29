@@ -10,6 +10,7 @@ function adminLicEnsurePrefsObject() {
   if (!adminLicenciasUiPrefs) {
     adminLicenciasUiPrefs = {
       main_grid_collapsed: null,
+      pedidos_reserva_collapsed: null,
       admin_days: {},
       personal_collapsed: {},
       license_collapsed: {},
@@ -36,6 +37,9 @@ function adminLicBootstrapUiPrefsFromDom() {
     if (!parsed || typeof parsed !== 'object') return;
     if (parsed.main_grid_collapsed === true || parsed.main_grid_collapsed === false) {
       adminLicenciasUiPrefs.main_grid_collapsed = parsed.main_grid_collapsed;
+    }
+    if (parsed.pedidos_reserva_collapsed === true || parsed.pedidos_reserva_collapsed === false) {
+      adminLicenciasUiPrefs.pedidos_reserva_collapsed = parsed.pedidos_reserva_collapsed;
     }
     if (parsed.admin_days && typeof parsed.admin_days === 'object') {
       adminLicenciasUiPrefs.admin_days = parsed.admin_days;
@@ -347,5 +351,18 @@ function licenciasUiMainGridCollapsedWrite(isCollapsed) {
   try {
     localStorage.setItem(keys.scoped, isCollapsed ? 'true' : 'false');
   } catch (_mgW) {}
+  scheduleAdminLicenciasUiPrefsSave();
+}
+
+function licenciasUiPedidosReservaCollapsedRead() {
+  adminLicEnsurePrefsObject();
+  if (adminLicenciasUiPrefs.pedidos_reserva_collapsed === true) return true;
+  if (adminLicenciasUiPrefs.pedidos_reserva_collapsed === false) return false;
+  return false;
+}
+
+function licenciasUiPedidosReservaCollapsedWrite(isCollapsed) {
+  adminLicEnsurePrefsObject();
+  adminLicenciasUiPrefs.pedidos_reserva_collapsed = !!isCollapsed;
   scheduleAdminLicenciasUiPrefsSave();
 }

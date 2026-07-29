@@ -1032,6 +1032,29 @@
     return payload;
   }
 
+  /**
+   * El servidor puede vender líneas del bloc en el mismo guardado (reservas pendientes).
+   * Adopta el texto final devuelto para no re-escribir la línea vendida en el próximo autosave.
+   */
+  function adoptServerLicenseNotesFinal(licenseId, data, sentMerged) {
+    if (!data || !data.success || data.license_notes_final == null) return;
+    var finalText = String(data.license_notes_final);
+    if (finalText === String(sentMerged != null ? sentMerged : '')) return;
+    if (typeof window.patchLicenseNotesCache === 'function') {
+      window.patchLicenseNotesCache(licenseId, undefined, finalText);
+    }
+    saveLicenseForId(licenseId, finalText);
+    clearLicenseCredsDraft(licenseId);
+    var taL = getEl('adminLicenciasNotepadByLicense');
+    var isActive = taL && String(taL.dataset.licenseId) === String(licenseId);
+    var userEditing =
+      typeof window.adminLicenciasUserEditingMainLicenseSplit === 'function' &&
+      window.adminLicenciasUserEditingMainLicenseSplit();
+    if (isActive && !userEditing && typeof window.adminLicenseSplitApplyMergedText === 'function') {
+      window.adminLicenseSplitApplyMergedText(finalText, { force: true });
+    }
+  }
+
   function persistLicenseBlocNotesToServer(licenseId) {
     if (String(licenseId) === '0') return Promise.resolve({ success: false, error: 'aggregate' });
     var taL = getEl('adminLicenciasNotepadByLicense');
@@ -1067,6 +1090,7 @@
             clearLicenseCredsDraft(licenseId);
           }
         }
+        adoptServerLicenseNotesFinal(licenseId, data, merged);
         return data;
       })
       .catch(function (err) {
@@ -1158,6 +1182,7 @@
             clearLicenseCredsDraft(licenseId);
           }
         }
+        adoptServerLicenseNotesFinal(licenseId, data, licenseNotesPayload);
       })
       .catch(function (err) {
         if (typeof showError === 'function') {
@@ -1244,6 +1269,7 @@
             clearLicenseCredsDraft(licenseId);
           }
         }
+        adoptServerLicenseNotesFinal(licenseId, data, licenseNotesPayload);
         return data;
       })
       .catch(function (err) {

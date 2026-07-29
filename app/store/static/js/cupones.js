@@ -187,7 +187,8 @@ document.addEventListener('DOMContentLoaded', function() {
         duration_days: formData.get('duration_days'),
         max_uses_per_user: formData.get('max_uses_per_user') || null,
         description: formData.get('description'),
-        min_amount: formData.get('min_amount')
+        min_amount_cop: formData.get('min_amount_cop') || null,
+        min_amount_usd: formData.get('min_amount_usd') || null
       };
       // Mostrar indicador de carga
       const submitBtn = couponForm.querySelector('button[type="submit"]');
@@ -313,11 +314,13 @@ function renderCouponsTable(coupons) {
         tr.appendChild(tdName);
         
         const tdCop = document.createElement('td');
-        tdCop.textContent = `$${parseInt(c.discount_cop)} COP`;
+        const copN = Number(c.discount_cop) || 0;
+        tdCop.textContent = '$' + (Math.abs(copN - Math.round(copN)) < 1e-9 ? String(Math.round(copN)) : String(Number(copN.toFixed(2)))) + ' COP';
         tr.appendChild(tdCop);
         
         const tdUsd = document.createElement('td');
-        tdUsd.textContent = `$${parseInt(c.discount_usd)} USD`;
+        const usdN = Number(c.discount_usd) || 0;
+        tdUsd.textContent = '$' + (Math.abs(usdN - Math.round(usdN)) < 1e-9 ? String(Math.round(usdN)) : String(Number(usdN.toFixed(2)))) + ' USD';
         tr.appendChild(tdUsd);
         
         const tdDuration = document.createElement('td');
@@ -489,7 +492,8 @@ if (editCouponForm) {
       duration_days: durationDays,
       max_uses_per_user: formData.get('max_uses_per_user'),
       description: formData.get('description'),
-      min_amount: formData.get('min_amount') || null,
+      min_amount_cop: formData.get('min_amount_cop') || null,
+      min_amount_usd: formData.get('min_amount_usd') || null,
       expiration_date: formattedExpirationDate,
       show_public: document.getElementById('show_public').checked
     };
