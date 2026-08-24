@@ -46,6 +46,12 @@ class Config:
             'pool_pre_ping': True,
             'pool_recycle': int(os.getenv('SQLALCHEMY_POOL_RECYCLE', '300')),
         }
+    elif str(DATABASE_URI).startswith('sqlite'):
+        # Espera corta ante lock: con gevent, el wait de SQLite (código C) congela
+        # TODO el proceso; 5s evita frisadas largas y WAL reduce los choques.
+        SQLALCHEMY_ENGINE_OPTIONS = {
+            'connect_args': {'timeout': int(os.getenv('SQLITE_BUSY_TIMEOUT', '5'))},
+        }
 
     TWOFA_KEY = os.getenv("TWOFA_KEY")
     if not TWOFA_KEY:
@@ -194,3 +200,37 @@ class Config:
     # Chatbot respuestas-preguntas (opcional, capa gratuita de Google / Groq)
     GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", None)
     GROQ_API_KEY = os.getenv("GROQ_API_KEY", None)
+
+    # CSP: sin 'unsafe-inline' en script-src (JS en archivos externos).
+    # En producción el header lo pone nginx; Flask solo si CONTENT_SECURITY_POLICY_FROM_APP=1.
+    _CSP_DEFAULT = (
+        "default-src 'self'; "
+        "media-src 'self' data: blob:; "
+        "script-src 'self' https://apis.google.com https://accounts.google.com "
+        "https://cdn.socket.io https://cdnjs.cloudflare.com https://code.iconify.design; "
+        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://www.gstatic.com; "
+        "img-src 'self' data: blob: https://cdn.jsdelivr.net https://api.iconify.design "
+        "https://raw.githubusercontent.com https://github.com https://*.github.com "
+        "https://*.disney-plus.net https://*.mail.disneyplus.com https://*.mail2.disneyplus.com "
+        "https://*.hbo.com https://*.hbomax.com https://*.vix.com https://braze-images.com "
+        "https://*.crunchyroll.com https://cdn-web-assets.dyspatch.io https://*.canva.com "
+        "https://*.pplusstatic.com https://m.media-amazon.com https://*.primevideo.com "
+        "https://*.scdn.co https://*.netflix.net https://*.nflxext.com https://*.nflximg.net "
+        "https://image.tmdb.org https://openweathermap.org "
+        "https://lh3.googleusercontent.com https://drive.google.com; "
+        "font-src 'self' https://fonts.gstatic.com https://*.scdn.co https://*.nflxext.com; "
+        "connect-src 'self' https://www.googleapis.com https://api.themoviedb.org "
+        "https://api.iconify.design https://tupremiumm.com wss://tupremiumm.com "
+        "ws://tupremiumm.com https://cdn.socket.io https://cdnjs.cloudflare.com; "
+        "frame-ancestors 'self'; "
+        "frame-src 'self' https://drive.google.com https://www.youtube.com "
+        "https://www.youtube-nocookie.com; "
+        "form-action 'self'; "
+        "base-uri 'self'; "
+        "object-src 'none'"
+    )
+    CONTENT_SECURITY_POLICY = (os.getenv("CONTENT_SECURITY_POLICY") or "").strip() or _CSP_DEFAULT
+    CONTENT_SECURITY_POLICY_FROM_APP = (
+        (os.getenv("CONTENT_SECURITY_POLICY_FROM_APP") or "").strip().lower()
+        in ("1", "true", "yes", "on")
+    ) or (FLASK_ENV == "development")

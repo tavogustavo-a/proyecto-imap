@@ -136,12 +136,58 @@ def list_subusers_ajax():
              sub_q = User.query.filter(User.parent_id.isnot(None))
         else:
             # Situación inesperada o usuario normal sin padre (ya manejado)
-             return jsonify({"status": "ok", "subusers": []}), 200 # Devuelve vacío si no hay query builder
+             return jsonify({
+                 "status": "ok",
+                 "subusers": [],
+                 "pagination": {
+                     "page": 1,
+                     "per_page": 0,
+                     "total": 0,
+                     "pages": 1,
+                     "has_prev": False,
+                     "has_next": False,
+                     "prev_num": None,
+                     "next_num": None,
+                 },
+             }), 200
 
-    subusers = sub_q.order_by(User.username.asc()).all() 
-    
-    # Usar la función auxiliar si existe y tiene sentido, o formatear aquí
-    # Revertimos al formateo simple original
+    page = request.args.get("page", 1, type=int)
+    per_page_param = (request.args.get("per_page", "all") or "all").strip().lower()
+    sub_q = sub_q.order_by(User.username.asc())
+
+    pagination_meta = {
+        "page": 1,
+        "per_page": 0,
+        "total": 0,
+        "pages": 1,
+        "has_prev": False,
+        "has_next": False,
+        "prev_num": None,
+        "next_num": None,
+    }
+
+    if per_page_param == "all":
+        subusers = sub_q.all()
+        pagination_meta["per_page"] = len(subusers)
+        pagination_meta["total"] = len(subusers)
+    else:
+        try:
+            per_page = max(1, int(per_page_param))
+        except (TypeError, ValueError):
+            per_page = 10
+        pagination = sub_q.paginate(page=page, per_page=per_page, error_out=False)
+        subusers = pagination.items
+        pagination_meta = {
+            "page": pagination.page,
+            "per_page": pagination.per_page,
+            "total": pagination.total,
+            "pages": pagination.pages or 1,
+            "has_prev": pagination.has_prev,
+            "has_next": pagination.has_next,
+            "prev_num": pagination.prev_num,
+            "next_num": pagination.next_num,
+        }
+
     data = []
     for su in subusers:
         data.append({
@@ -151,7 +197,7 @@ def list_subusers_ajax():
         })
 
     # Ya no devolvemos parent_emails
-    return jsonify({"status": "ok", "subusers": data}), 200
+    return jsonify({"status": "ok", "subusers": data, "pagination": pagination_meta}), 200
 
 
 @subuser_bp.route("/create_subuser_ajax", methods=["POST"])

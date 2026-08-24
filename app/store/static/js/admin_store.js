@@ -39,7 +39,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 return;
             }
             grid.innerHTML = ''; 
-            for (let i = 1; i <= 37; i++) {
+            for (let i = 1; i <= 41; i++) {
                 const imgEl = document.createElement('img');
                 imgEl.src = `${staticImagesPath}stream${i}.png`;
                 imgEl.alt = `stream${i}.png`;

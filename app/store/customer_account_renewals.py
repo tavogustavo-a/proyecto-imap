@@ -109,6 +109,122 @@ CUSTOMER_RENEWAL_CHECKOUT_BLOCKED_MSG = (
 
 CUSTOMER_RENEWAL_ALREADY_COMPLETED_MSG = 'Esta cuenta ya fue renovada.'
 
+CUSTOMER_RENEWAL_IN_INVENTORY_MSG = (
+    'Esa cuenta ya está en el inventario de Licencias. '
+    'No puedes usar «Renovar tu cuenta»; esa sería una renovación normal del inventario.'
+)
+
+CUSTOMER_RENEWAL_IN_OTHER_PRODUCT_MSG = (
+    'Esa cuenta ya está registrada en «{product}». '
+    'No puedes usar «Renovar tu cuenta» aquí; usa la renovación normal desde la tienda.'
+)
+
+
+def _email_in_bloc_text(text, email) -> bool:
+    em = (email or '').strip().lower()
+    if not em:
+        return False
+    for line in str(text or '').replace('\r\n', '\n').split('\n'):
+        if not line.strip():
+            continue
+        line_em = extract_email_from_renewal_credential(line)
+        if line_em and line_em.lower() == em:
+            return True
+    return False
+
+
+def _email_in_day_notepads_json(raw_json, email) -> bool:
+    import json
+
+    try:
+        day_map = json.loads(raw_json or '{}')
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return False
+    if not isinstance(day_map, dict):
+        return False
+    for day_text in day_map.values():
+        if _email_in_bloc_text(day_text, email):
+            return True
+    return False
+
+
+def find_customer_renewal_email_in_store(email):
+    """
+    Busca el correo en cualquier producto/licencia habilitada de la tienda.
+    Devuelve None o {'product_id', 'product_name', 'place'}.
+    """
+    from app.store.models import License, LicenseAccount, Product
+
+    em = (email or '').strip().lower()
+    if not em:
+        return None
+
+    licenses = (
+        License.query.join(Product)
+        .filter(License.enabled.is_(True), Product.enabled.is_(True))
+        .order_by(License.product_id.asc(), License.id.asc())
+        .all()
+    )
+    bloc_fields = (
+        ('license_notes', 'inventory'),
+        ('changes_notes', 'changes'),
+        ('suspended_notes', 'suspended'),
+        ('expired_notes', 'expired'),
+    )
+    for lic in licenses:
+        pid = int(lic.product_id)
+        pname = ''
+        try:
+            pname = (lic.product.name or '').strip() if lic.product else ''
+        except Exception:
+            pass
+        for field, place in bloc_fields:
+            if _email_in_bloc_text(getattr(lic, field, None), em):
+                return {'product_id': pid, 'product_name': pname, 'place': place}
+        if _email_in_day_notepads_json(getattr(lic, 'day_notepads_json', None), em):
+            return {'product_id': pid, 'product_name': pname, 'place': 'day'}
+
+    acc = (
+        LicenseAccount.query.join(License)
+        .join(Product)
+        .filter(
+            License.enabled.is_(True),
+            Product.enabled.is_(True),
+            func.lower(LicenseAccount.email) == em,
+            LicenseAccount.status.in_(('available', 'assigned', 'sold')),
+        )
+        .first()
+    )
+    if acc and acc.license:
+        lic = acc.license
+        pname = ''
+        try:
+            pname = (lic.product.name or '').strip() if lic.product else ''
+        except Exception:
+            pass
+        place = 'inventory' if (acc.status or '') == 'available' else 'sold'
+        return {
+            'product_id': int(lic.product_id),
+            'product_name': pname,
+            'place': place,
+        }
+    return None
+
+
+def customer_renewal_in_store_block_message(hit, current_product_id):
+    """Mensaje al bloquear «Renovar tu cuenta» porque el correo ya existe en la tienda."""
+    if not hit:
+        return CUSTOMER_RENEWAL_IN_INVENTORY_MSG
+    pname = (hit.get('product_name') or '').strip() or 'otro producto'
+    pid = hit.get('product_id')
+    try:
+        same_product = pid is not None and int(pid) == int(current_product_id)
+    except (TypeError, ValueError):
+        same_product = False
+    if same_product:
+        return CUSTOMER_RENEWAL_IN_INVENTORY_MSG
+    return CUSTOMER_RENEWAL_IN_OTHER_PRODUCT_MSG.format(product=pname)
+
 
 def extract_first_customer_renewal_email(text):
     """Primer correo válido en el texto; ignora basura antes/después."""
@@ -122,19 +238,66 @@ def extract_first_customer_renewal_email(text):
     return m.group(0).strip().lower()
 
 
+def customer_renewal_email_in_product_inventory(product_id, email) -> bool:
+    """
+    True si el correo ya está en el bloc admin «Licencias» (inventario) del producto,
+    sin importar mayúsculas/minúsculas. También mira cuentas available sincronizadas.
+    """
+    from app.store.models import LicenseAccount
+
+    em = (email or '').strip().lower()
+    if not em or not product_id:
+        return False
+    for lic in _enabled_licenses_for_product(product_id):
+        if _email_in_bloc_text(getattr(lic, 'license_notes', None), em):
+            return True
+        hit = (
+            LicenseAccount.query.filter(
+                LicenseAccount.license_id == int(lic.id),
+                LicenseAccount.status == 'available',
+                func.lower(LicenseAccount.email) == em,
+            ).first()
+        )
+        if hit:
+            return True
+    return False
+
+
+def customer_renewal_email_in_store_license_data(email) -> bool:
+    """True si el correo aparece en inventario, días, cambios o cuentas de cualquier producto."""
+    return find_customer_renewal_email_in_store(email) is not None
+
+
 def customer_renewal_email_in_product_queue(product_id, email) -> bool:
     """True si el correo ya está en el bloc admin «Cuentas para renovar» del producto."""
     em = (email or '').strip().lower()
     if not em or not product_id:
         return False
     for lic in _licenses_for_customer_renewal(product_id):
-        notes = getattr(lic, 'customer_renewal_notes', None) or ''
-        for line in notes.replace('\r\n', '\n').split('\n'):
-            if not line.strip():
-                continue
-            line_em = extract_email_from_renewal_credential(line)
-            if line_em and line_em.lower() == em:
-                return True
+        if _email_in_bloc_text(getattr(lic, 'customer_renewal_notes', None), em):
+            return True
+    return False
+
+
+def customer_renewal_email_in_store_queue(email) -> bool:
+    """True si el correo está en «Cuentas para renovar» de cualquier producto."""
+    from app.store.models import License, Product
+
+    em = (email or '').strip().lower()
+    if not em:
+        return False
+    rows = (
+        License.query.join(Product)
+        .filter(
+            License.enabled.is_(True),
+            Product.enabled.is_(True),
+            License.renew_customer_account.is_(True),
+        )
+        .all()
+    )
+    for lic in rows:
+        if _email_in_bloc_text(getattr(lic, 'customer_renewal_notes', None), em):
+            return True
     return False
 
 
@@ -152,6 +315,24 @@ def customer_renewal_email_has_pending_order(product_id, email) -> bool:
         ).first()
         is not None
     )
+
+
+def customer_renewal_email_has_pending_order_storewide(email, user_id=None) -> bool:
+    from app.store.models import CustomerAccountRenewalOrder
+
+    em = (email or '').strip().lower()
+    if not em:
+        return False
+    q = CustomerAccountRenewalOrder.query.filter(
+        func.lower(CustomerAccountRenewalOrder.customer_email) == em,
+        CustomerAccountRenewalOrder.status == 'pending',
+    )
+    if user_id is not None:
+        try:
+            q = q.filter(CustomerAccountRenewalOrder.user_id == int(user_id))
+        except (TypeError, ValueError):
+            pass
+    return q.first() is not None
 
 
 def get_latest_customer_renewal_order(product_id, email, user_id=None):
@@ -197,11 +378,14 @@ def customer_renewal_email_recently_completed(product_id, email, user_id=None) -
 def customer_renewal_checkout_block_reason(product_id, email, user_id=None):
     """
     (reason_code, message) si el checkout debe bloquearse; None si puede continuar.
-    reason_code: 'already_renewed' | 'pending'
+    reason_code: 'in_inventory' | 'already_renewed' | 'pending'
     """
     em = (email or '').strip().lower()
     if not em or not product_id:
         return None
+    hit = find_customer_renewal_email_in_store(em)
+    if hit:
+        return 'in_inventory', customer_renewal_in_store_block_message(hit, product_id)
     if customer_renewal_email_recently_completed(int(product_id), em, user_id=user_id):
         return 'already_renewed', CUSTOMER_RENEWAL_ALREADY_COMPLETED_MSG
     if customer_renewal_email_blocks_checkout(int(product_id), em, user_id=user_id):
@@ -211,17 +395,30 @@ def customer_renewal_checkout_block_reason(product_id, email, user_id=None):
 
 def customer_renewal_email_blocks_checkout(product_id, email, user_id=None) -> bool:
     """
-    Bloquea solo renovaciones realmente pendientes.
+    Bloquea solo renovaciones realmente pendientes (en cualquier producto).
     Tras un rechazo (aunque quede línea obsoleta en el bloc admin) se permite reintentar.
     """
     em = (email or '').strip().lower()
     if not em or not product_id:
         return False
-    if customer_renewal_email_has_pending_order(int(product_id), em):
+    if customer_renewal_email_has_pending_order_storewide(em, user_id=user_id):
         return True
-    if not customer_renewal_email_in_product_queue(int(product_id), em):
+    if not customer_renewal_email_in_store_queue(em):
         return False
     latest = get_latest_customer_renewal_order(int(product_id), em, user_id=user_id)
+    if not latest:
+        # Hay fila en cola de otro producto: bloquear duplicado.
+        from app.store.models import CustomerAccountRenewalOrder
+
+        q = CustomerAccountRenewalOrder.query.filter(
+            func.lower(CustomerAccountRenewalOrder.customer_email) == em,
+        )
+        if user_id is not None:
+            try:
+                q = q.filter(CustomerAccountRenewalOrder.user_id == int(user_id))
+            except (TypeError, ValueError):
+                pass
+        latest = q.order_by(CustomerAccountRenewalOrder.created_at.desc()).first()
     if not latest:
         return True
     return (latest.status or 'pending').strip().lower() == 'pending'
@@ -655,12 +852,9 @@ def build_customer_renewal_storage_line(
 
 
 def customer_renewal_buyer_label(user):
-    """Nombre visible en admin: nombre completo del cliente o, si no hay, usuario de login."""
+    """Nombre visible en admin: solo el usuario de login (no el nombre completo)."""
     if not user:
         return 'anonimo'
-    full = (getattr(user, 'full_name', None) or '').strip()
-    if full:
-        return full
     un = (getattr(user, 'username', None) or '').strip()
     return un or 'anonimo'
 
@@ -680,8 +874,8 @@ def _buyer_matches_renewal_label(buyer, label):
 
 def enrich_customer_renewal_notes_for_display(notes_text, license_id):
     """
-    Alinea la columna usuario con el cliente del pedido pagado (nombre completo o login).
-    Corrige filas antiguas que guardaron username de prueba distinto al comprador real.
+    Alinea la columna usuario con el login del comprador del pedido pagado.
+    Corrige filas antiguas que guardaron nombre completo u otro texto distinto al username.
     """
     from app.models.user import User
     from app.store.models import CustomerAccountRenewalOrder, License
@@ -711,10 +905,20 @@ def enrich_customer_renewal_notes_for_display(notes_text, license_id):
             CustomerAccountRenewalOrder.query.filter(
                 CustomerAccountRenewalOrder.product_id == product_id,
                 func.lower(CustomerAccountRenewalOrder.customer_email) == email,
+                CustomerAccountRenewalOrder.status == 'pending',
             )
             .order_by(CustomerAccountRenewalOrder.created_at.desc())
             .first()
         )
+        if not order:
+            order = (
+                CustomerAccountRenewalOrder.query.filter(
+                    CustomerAccountRenewalOrder.product_id == product_id,
+                    func.lower(CustomerAccountRenewalOrder.customer_email) == email,
+                )
+                .order_by(CustomerAccountRenewalOrder.created_at.desc())
+                .first()
+            )
         if not order:
             out.append(ln)
             continue
@@ -728,11 +932,27 @@ def enrich_customer_renewal_notes_for_display(notes_text, license_id):
 
 
 def customer_renewal_notes_for_api(license_row):
-    """Texto del bloc «Cuentas para renovar» con nombres de cliente alineados al pedido."""
+    """Texto del bloc «Cuentas para renovar» con login del comprador (no nombre completo)."""
     if not license_row:
         return ''
     raw = getattr(license_row, 'customer_renewal_notes', None) or ''
-    return enrich_customer_renewal_notes_for_display(raw, getattr(license_row, 'id', None))
+    enriched = enrich_customer_renewal_notes_for_display(raw, getattr(license_row, 'id', None))
+    # Persistir corrección (p. ej. full_name → username) para banner y guardados posteriores.
+    if enriched != raw:
+        try:
+            from app.extensions import db
+
+            license_row.customer_renewal_notes = enriched
+            db.session.add(license_row)
+            db.session.commit()
+        except Exception:
+            try:
+                from app.extensions import db as _db
+
+                _db.session.rollback()
+            except Exception:
+                pass
+    return enriched
 
 
 def append_customer_renewal_notes_for_checkout(
@@ -869,6 +1089,64 @@ def notify_customer_account_renewal_received(user, product, email):
     except Exception:
         current_app.logger.exception('historial renovación cuenta cliente (received)')
     return notif
+
+
+def schedule_customer_renewal_checkout_notifies(jobs):
+    """
+    Tras commit del pago: avisos admin/proveedores/cliente en background.
+    Así «Procesando...» no espera SMTP/push/esquema de notificaciones.
+    jobs: iterable de dicts {user_id, product_id, email}.
+    """
+    import threading
+
+    payload = []
+    for job in jobs or []:
+        if not isinstance(job, dict):
+            continue
+        try:
+            uid = int(job.get('user_id'))
+            pid = int(job.get('product_id'))
+        except (TypeError, ValueError):
+            continue
+        em = (job.get('email') or '').strip()
+        if not uid or not pid or not em:
+            continue
+        payload.append({'user_id': uid, 'product_id': pid, 'email': em})
+    if not payload:
+        return
+
+    app = current_app._get_current_object()
+
+    def _run():
+        with app.app_context():
+            from app.models.user import User
+            from app.store.models import Product
+
+            for job in payload:
+                try:
+                    user = User.query.get(job['user_id'])
+                    product = Product.query.get(job['product_id'])
+                    em = job['email']
+                    if not user or not product:
+                        continue
+                    notify_admin_customer_account_renewal_pending(user, product, em)
+                    try:
+                        notify_admins_and_proveedores_customer_account_renewal_app(
+                            user, product, em
+                        )
+                    except Exception as ren_app_ex:
+                        current_app.logger.warning(
+                            'aviso app renovación cuenta cliente (bg): %s', ren_app_ex
+                        )
+                    notify_customer_account_renewal_received(user, product, em)
+                    db.session.commit()
+                except Exception:
+                    db.session.rollback()
+                    current_app.logger.exception(
+                        'schedule_customer_renewal_checkout_notifies job=%s', job
+                    )
+
+    threading.Thread(target=_run, daemon=True, name='customer-renewal-checkout-notify').start()
 
 
 def notify_admin_customer_account_renewal_pending(user, product, email):

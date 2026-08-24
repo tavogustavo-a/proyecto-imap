@@ -420,6 +420,89 @@ def _ensure_license_account_sale_id_column():
         current_app.logger.warning('No se pudo asegurar columna sale_id en cuentas: %s', e)
 
 
+def _ensure_license_account_sold_price_columns():
+    """Precio histórico de entrega manual (devoluciones sin Sale)."""
+    try:
+        from sqlalchemy import inspect, text
+
+        inspector = inspect(db.engine)
+        if 'store_license_accounts' not in inspector.get_table_names():
+            return
+        cols = {c['name'] for c in inspector.get_columns('store_license_accounts')}
+        changed = False
+        if 'sold_unit_price' not in cols:
+            db.session.execute(
+                text(
+                    'ALTER TABLE store_license_accounts '
+                    'ADD COLUMN sold_unit_price NUMERIC(14, 6)'
+                )
+            )
+            changed = True
+        if 'sold_currency' not in cols:
+            db.session.execute(
+                text(
+                    'ALTER TABLE store_license_accounts '
+                    'ADD COLUMN sold_currency VARCHAR(3)'
+                )
+            )
+            changed = True
+        if changed:
+            db.session.commit()
+    except Exception as e:
+        current_app.logger.warning(
+            'No se pudo asegurar columnas sold_unit_price/sold_currency: %s', e
+        )
+
+
+def _stamp_license_account_sold_price(
+    account,
+    license_row=None,
+    billing_user=None,
+    *,
+    force=False,
+):
+    """
+    Guarda el precio unitario cobrado al entregar manualmente.
+    No sobrescribe un precio ya persistido ni cuentas ligadas a Sale.
+    """
+    if account is None:
+        return False
+    if getattr(account, 'sale_id', None):
+        return False
+    try:
+        existing_price = float(getattr(account, 'sold_unit_price', None) or 0)
+    except (TypeError, ValueError):
+        existing_price = 0.0
+    existing_cur = str(getattr(account, 'sold_currency', None) or '').strip().upper()
+    if not force and existing_price > 0 and existing_cur in ('USD', 'COP'):
+        return False
+
+    lic = license_row or getattr(account, 'license', None)
+    product = getattr(lic, 'product', None) if lic is not None else None
+    if product is None and lic is not None and getattr(lic, 'product_id', None):
+        from app.store.models import Product as _ProductStamp
+
+        product = _ProductStamp.query.get(lic.product_id)
+    if billing_user is None:
+        uid = getattr(account, 'assigned_to_user_id', None)
+        if uid is None:
+            return False
+        assigned = User.query.get(int(uid))
+        if assigned is None:
+            return False
+        billing_user = _billing_user_for_store_debt_limit(assigned) or assigned
+    if not product or not billing_user:
+        return False
+
+    unit = float(_debt_increment_per_bulk_license_sale(product, billing_user) or 0)
+    currency = _bulk_license_sale_currency(product, billing_user)
+    if unit <= 0 or currency not in ('USD', 'COP'):
+        return False
+    account.sold_unit_price = unit
+    account.sold_currency = currency
+    return True
+
+
 def _ensure_license_account_inventory_bloc_ord_column():
     """Posición de línea en bloc Licencias (inventory_bloc_ord); una unidad por línea física."""
     try:
@@ -515,6 +598,7 @@ def _store_bp_ensure_license_account_sale_id_schema():
         return
     _ensure_license_account_sale_id_column()
     _ensure_license_account_inventory_bloc_ord_column()
+    _ensure_license_account_sold_price_columns()
     _STORE_LICENSE_ACCOUNT_SALE_ID_SCHEMA_ENSURED = True
 
 
@@ -937,6 +1021,19 @@ def _license_portal_effective_saldo(billing_user):
     return base + prepaid_debt
 
 
+def _license_portal_effective_currency(billing_user):
+    """Moneda de la deuda mostrada en el portal según el perfil efectivo."""
+    if not billing_user:
+        return ''
+    up = (
+        billing_user.user_prices
+        if isinstance(getattr(billing_user, 'user_prices', None), dict)
+        else {}
+    )
+    currency = str(up.get('tipo_precio') or '').strip().upper()
+    return currency if currency in ('USD', 'COP') else ''
+
+
 def _dedupe_drift_license_accounts(accts):
     """Drift: doble sync admin (PUT + JS) pudo crear dos cuentas sold iguales el mismo día.
     Mismo criterio en portal y en admin para que el reparto de deuda coincida."""
@@ -1029,6 +1126,7 @@ def _portal_accounts_revision_fingerprint(user_obj):
         if pu_b:
             billing_user = pu_b
     billing_saldo = _license_portal_effective_saldo(billing_user)
+    billing_currency = _license_portal_effective_currency(billing_user)
 
     # Servicios proveedor: al autorizar Apple TV / etc. el portal debe refrescar el catálogo.
     proveedor_sig = ''
@@ -1084,6 +1182,7 @@ def _portal_accounts_revision_fingerprint(user_obj):
         f'co:{co.date().isoformat()}',
         f'utc:{utc_now.date().isoformat()}',
         f'saldo:{billing_saldo:.4f}',
+        f'currency:{billing_currency}',
         'names:' + '|'.join(sorted(allowed_names)),
         f'verificar:{verificar_sig}',
         f'prov:{proveedor_sig}',
@@ -1594,6 +1693,13 @@ def _sync_license_day_notepad_accounts(license_row, day_num, day_text):
 
     existing = _sold_accounts_for_license_month_day(license_row.id, day_i)
     by_key = {_day_account_inventory_sync_key(a.email, a.account_identifier): a for a in existing}
+    refunded_keys = {
+        _day_account_inventory_sync_key(a.email, a.account_identifier)
+        for a in LicenseAccount.query.filter_by(
+            license_id=license_row.id,
+            status='refunded',
+        ).all()
+    }
 
     if not str(day_text or '').strip():
         for acc in existing:
@@ -1614,6 +1720,8 @@ def _sync_license_day_notepad_accounts(license_row, day_num, day_text):
         assigned_at = sale_local
 
     for sync_key, p in parsed_map.items():
+        if sync_key in refunded_keys:
+            continue
         match = by_key.get(sync_key)
         if match:
             if (match.email or '').lower() != p['email']:
@@ -1627,6 +1735,7 @@ def _sync_license_day_notepad_accounts(license_row, day_num, day_text):
             if str(match.status or '').lower() not in ('sold', 'assigned'):
                 match.status = 'sold'
             _apply_portal_assignee_from_line_username(match, p['assign_username'])
+            _stamp_license_account_sold_price(match, license_row)
             continue
 
         acc = LicenseAccount(
@@ -1641,6 +1750,7 @@ def _sync_license_day_notepad_accounts(license_row, day_num, day_text):
         db.session.add(acc)
         db.session.flush()
         _apply_portal_assignee_from_line_username(acc, p['assign_username'])
+        _stamp_license_account_sold_price(acc, license_row)
 
 
 def _portal_merge_customer_renewal_orders_for_user(out, assignee_ids, allowed_names, user_obj, billing_saldo):
@@ -1848,6 +1958,7 @@ def _user_my_license_accounts_list_for_portal(user_obj):
         if pu_b:
             billing_user = pu_b
     billing_saldo = _license_portal_effective_saldo(billing_user)
+    billing_currency = _license_portal_effective_currency(billing_user)
 
     accts = (
         LicenseAccount.query.options(
@@ -1992,6 +2103,8 @@ def _user_my_license_accounts_list_for_portal(user_obj):
     _portal_merge_customer_renewal_orders_for_user(
         out, assignee_ids, allowed_names, user_obj, billing_saldo
     )
+    for row in out:
+        row['billing_currency'] = billing_currency
     return out
 
 
@@ -4567,6 +4680,68 @@ def _remove_first_license_inventory_line_matching_fingerprint(license_row, fp_tr
     return True
 
 
+def _drop_recently_sold_lines_from_incoming_notes(license_row, current_text, incoming_text):
+    """
+    Filtra de un guardado del bloc «Licencias» las líneas que NO están en el bloc
+    actual (BD) y cuya credencial coincide con una cuenta vendida/asignada en los
+    últimos minutos. Evita que un guardado con contenido viejo (pestaña admin
+    abierta durante una venta/renovación) reviva la línea recién vendida.
+    """
+    from app.store.models import LicenseAccount
+
+    incoming_lines = str(incoming_text or '').replace('\r\n', '\n').split('\n')
+    if not any(ln.strip(_BLOC_WS) for ln in incoming_lines):
+        return incoming_text
+
+    current_set = set(_license_notes_inventory_lines_list(current_text))
+    cutoff = datetime.utcnow() - timedelta(minutes=10)
+    recent = (
+        LicenseAccount.query.filter(
+            LicenseAccount.license_id == int(license_row.id),
+            LicenseAccount.status.in_(('assigned', 'sold')),
+            LicenseAccount.assigned_at.isnot(None),
+            LicenseAccount.assigned_at >= cutoff,
+        )
+        .all()
+    )
+    if not recent:
+        return incoming_text
+
+    product = getattr(license_row, 'product', None)
+    is_nf = _product_name_is_netflix(getattr(product, 'name', None) if product else None)
+    sold_fps = {
+        _normalize_inventory_fingerprint(
+            getattr(a, 'email', None),
+            getattr(a, 'password', None),
+            getattr(a, 'account_identifier', None),
+        )
+        for a in recent
+    }
+    sold_fps.discard(('', '', ''))
+    if not sold_fps:
+        return incoming_text
+
+    kept = []
+    dropped = 0
+    for raw in incoming_lines:
+        s = raw.strip(_BLOC_WS)
+        if s and s not in current_set:
+            tup = _inventory_tuple_from_license_notes_line(s, license_row.id, is_nf)
+            if tup and _normalize_inventory_fingerprint(*tup) in sold_fps:
+                dropped += 1
+                continue
+        kept.append(raw)
+    if dropped:
+        current_app.logger.info(
+            'Bloc Licencias %s: se omitieron %s línea(s) de cuentas recién vendidas '
+            '(guardado con contenido desactualizado).',
+            license_row.id,
+            dropped,
+        )
+        return '\n'.join(kept)
+    return incoming_text
+
+
 def _find_first_license_inventory_line_matching_fingerprint(license_row, fp_triple, is_netflix):
     """
     Devuelve ``(índice_0based, línea_raw)`` de la primera línea del bloc Licencias
@@ -5213,6 +5388,38 @@ def api_license_admin_bulk_delivery_debt(license_id):
         delta = unit * qty
         prev = float(getattr(billing_target, 'saldo', 0) or 0)
         billing_target.saldo = prev + delta
+        # Sella precio histórico en cuentas manuales recién cobradas (devoluciones).
+        try:
+            from app.store.models import LicenseAccount
+
+            assignee_ids = [int(billing_target.id)]
+            for child in User.query.filter_by(parent_id=int(billing_target.id)).all():
+                if getattr(child, 'id', None):
+                    assignee_ids.append(int(child.id))
+            pending = (
+                LicenseAccount.query.filter(
+                    LicenseAccount.license_id == int(license_id),
+                    LicenseAccount.assigned_to_user_id.in_(assignee_ids),
+                    sa_func.lower(sa_func.coalesce(LicenseAccount.status, '')).in_(
+                        ('sold', 'assigned')
+                    ),
+                )
+                .order_by(LicenseAccount.id.desc())
+                .limit(max(qty * 3, qty))
+                .all()
+            )
+            stamped = 0
+            for acc in pending:
+                if stamped >= qty:
+                    break
+                if _stamp_license_account_sold_price(acc, lic_row, billing_target):
+                    stamped += 1
+        except Exception as stamp_exc:
+            current_app.logger.warning(
+                'stamp sold price tras bulk delivery license_id=%s: %s',
+                license_id,
+                stamp_exc,
+            )
         db.session.commit()
         try:
             from app.store.purchase_history_stats import _currency_from_user_row
@@ -5525,15 +5732,38 @@ def api_put_license_notes(license_id):
         license_obj = License.query.get_or_404(license_id)
         data = request.get_json(silent=True) or {}
         if getattr(g, 'license_support_restricted_mode', False):
+            # suspended_notes incluido: soporte mueve cuentas de Cambios a Caídas
+            # (flecha roja y edición masiva); sin esta clave el PUT atómico vaciaba
+            # Cambios pero descartaba las líneas nuevas de Caídas (pérdida de datos).
             allowed_keys = {
                 'changes_notes',
+                'suspended_notes',
                 'month_to_month',
                 'allow_reservation',
                 'renew_customer_account',
                 'license_notes',
+                'license_notes_force_empty',
                 'customer_renewal_notes',
             }
             data = {k: v for k, v in data.items() if k in allowed_keys}
+
+        def _record_soporte_movement(bloc_key, old_text, new_text):
+            """Solo usuarios soporte alimentan la sección «Movimientos soporte»."""
+            if not getattr(g, 'license_support_restricted_mode', False):
+                return
+            try:
+                from app.store.license_bloc_movements import record_soporte_bloc_movements
+
+                record_soporte_bloc_movements(
+                    license_obj,
+                    bloc_key=bloc_key,
+                    old_text=old_text,
+                    new_text=new_text,
+                    actor_user_id=session.get('user_id'),
+                )
+            except Exception:
+                current_app.logger.exception('movimientos soporte %s', bloc_key)
+
         if 'personal_notes' in data:
             license_obj.personal_notes = (
                 data['personal_notes'] if data['personal_notes'] is not None else ''
@@ -5545,6 +5775,17 @@ def api_put_license_notes(license_id):
             if not str(incoming).strip() and str(current).strip() and not force_empty:
                 pass
             else:
+                # Guardado obsoleto: si la página tenía el bloc de ANTES de una venta,
+                # no dejar que reviva una línea recién vendida/renovada (duplicado).
+                try:
+                    incoming = _drop_recently_sold_lines_from_incoming_notes(
+                        license_obj, current, incoming
+                    )
+                except Exception:
+                    current_app.logger.exception(
+                        'guard líneas vendidas license_id=%s', license_id
+                    )
+                _record_soporte_movement('license_notes', current, incoming)
                 license_obj.license_notes = incoming
         if 'suspended_notes' in data:
             _old_susp = getattr(license_obj, 'suspended_notes', None) or ''
@@ -5562,6 +5803,7 @@ def api_put_license_notes(license_id):
                 )
             except Exception:
                 current_app.logger.exception('historial admin Caídas')
+            _record_soporte_movement('suspended_notes', _old_susp, _new_susp)
             license_obj.suspended_notes = _new_susp
         if 'expired_notes' in data:
             _old_exp = getattr(license_obj, 'expired_notes', None) or ''
@@ -5579,6 +5821,7 @@ def api_put_license_notes(license_id):
                 )
             except Exception:
                 current_app.logger.exception('historial admin Vencidas')
+            _record_soporte_movement('expired_notes', _old_exp, _new_exp)
             license_obj.expired_notes = _new_exp
         if 'month_to_month' in data:
             v = data['month_to_month']
@@ -5611,12 +5854,19 @@ def api_put_license_notes(license_id):
                 )
             except Exception:
                 current_app.logger.exception('historial admin Cambios')
+            _record_soporte_movement('changes_notes', _old_ch, _new_ch)
             license_obj.changes_notes = _new_ch
         if 'customer_renewal_notes' in data:
-            license_obj.customer_renewal_notes = (
+            from app.store.customer_account_renewals import enrich_customer_renewal_notes_for_display
+
+            _cr_raw = (
                 data['customer_renewal_notes']
                 if data['customer_renewal_notes'] is not None
                 else ''
+            )
+            # Siempre guardar username de login (nunca full_name tipo «hide»).
+            license_obj.customer_renewal_notes = enrich_customer_renewal_notes_for_display(
+                _cr_raw, getattr(license_obj, 'id', None)
             )
 
         if 'day_notepads' in data and isinstance(data['day_notepads'], dict):
@@ -5675,8 +5925,6 @@ def api_put_license_notes(license_id):
                 current_app.logger.warning('process_pending_reservations_for_product: %s', res_ex)
         if inv_sync_result and int(inv_sync_result.get('created') or 0) > 0:
             try:
-                from flask_login import current_user
-
                 from app.store.store_event_notify import notify_admin_stock_upload
 
                 pname = ''
@@ -5687,10 +5935,8 @@ def api_put_license_notes(license_id):
                     pname = ''
                 if not pname:
                     pname = 'Producto'
-                actor_id = None
                 try:
-                    if current_user and getattr(current_user, 'is_authenticated', False):
-                        actor_id = int(current_user.id)
+                    actor_id = int(session['user_id']) if session.get('user_id') else None
                 except Exception:
                     actor_id = None
                 notify_admin_stock_upload(
@@ -6579,6 +6825,9 @@ def api_deliver_warranty_replacement(license_id):
 
         old_at = bad_acc.assigned_at
         old_ex = bad_acc.expires_at
+        old_sale_id = bad_acc.sale_id
+        old_sold_unit_price = bad_acc.sold_unit_price
+        old_sold_currency = bad_acc.sold_currency
         old_cred_plain = '{} {}'.format(
             str(bad_acc.email or '').strip() or str(bad_acc.account_identifier or '').strip(),
             str(bad_acc.password or '').replace('\r\n', ' ').replace('\n', ' ').strip(),
@@ -6589,6 +6838,9 @@ def api_deliver_warranty_replacement(license_id):
 
         replacement.status = 'assigned'
         replacement.assigned_to_user_id = uid
+        replacement.sale_id = old_sale_id
+        replacement.sold_unit_price = old_sold_unit_price
+        replacement.sold_currency = old_sold_currency
         replacement.assigned_at = old_at or datetime.utcnow()
         replacement.expires_at = old_ex or (datetime.utcnow() + _license_account_term_timedelta(license_obj))
         replacement.updated_at = datetime.utcnow()
@@ -6716,11 +6968,12 @@ def api_notify_license_report_answered(license_id):
         if not user:
             return jsonify(
                 {
-                    'success': False,
+                    'success': True,
                     'error': 'No se encontró el usuario del reporte para notificar.',
                     'notified': False,
+                    'skipped': 'user_not_found',
                 }
-            ), 404
+            )
 
         day = data.get('day')
         try:
@@ -7170,6 +7423,8 @@ def api_update_license_account(account_id):
                 account.account_identifier = account_identifier
             if has_assign:
                 _apply_portal_assignee_from_line_username(account, data.get('assign_username'))
+                if str(account.status or '').lower() in ('sold', 'assigned'):
+                    _stamp_license_account_sold_price(account, account.license)
 
             db.session.commit()
             return jsonify({'success': True})
@@ -7207,6 +7462,7 @@ def api_mark_account_sold(account_id):
         account.status = 'sold'
         if 'assign_username' in data:
             _apply_portal_assignee_from_line_username(account, data.get('assign_username'))
+        _stamp_license_account_sold_price(account, account.license)
 
         db.session.commit()
         
@@ -7291,3 +7547,73 @@ def api_initialize_licenses():
         db.session.rollback()
         current_app.logger.exception('api_initialize_licenses')
         return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@store_bp.route(
+    '/api/accounts/<int:account_id>/partial-refund/preview',
+    methods=['GET'],
+)
+@admin_or_soporte_licencias_required
+def api_license_account_partial_refund_preview(account_id):
+    """Calcula una devolución sin modificar saldo, cuenta ni blocs."""
+    from app.store.license_account_refunds import RefundError, build_refund_preview
+
+    try:
+        payload = build_refund_preview(account_id, request.args.get('charged_days'))
+        response = jsonify(payload)
+        _attach_private_no_cache_headers(response)
+        return response
+    except RefundError as exc:
+        response = jsonify(
+            {'success': False, 'error': exc.message, 'code': exc.code}
+        )
+        _attach_private_no_cache_headers(response)
+        return response, exc.status_code
+    except Exception:
+        current_app.logger.exception('api_license_account_partial_refund_preview')
+        response = jsonify(
+            {'success': False, 'error': 'No se pudo calcular la devolución.'}
+        )
+        _attach_private_no_cache_headers(response)
+        return response, 500
+
+
+@store_bp.route(
+    '/api/accounts/<int:account_id>/partial-refund/execute',
+    methods=['POST'],
+)
+@admin_or_soporte_licencias_required
+def api_license_account_partial_refund_execute(account_id):
+    """Ejecuta una sola vez la devolución parcial y conserva la cuenta."""
+    from app.store.license_account_refunds import RefundError, execute_refund
+
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return jsonify(
+            {'success': False, 'error': 'Se requiere un cuerpo JSON.', 'code': 'invalid_json'}
+        ), 400
+    try:
+        payload = execute_refund(
+            account_id,
+            charged_days=data.get('charged_days'),
+            manual_refund_amount=data.get('manual_refund_amount', data.get('manual_amount')),
+            manual_unit_price=data.get('manual_unit_price'),
+            custom_message=data.get('custom_message', data.get('message')),
+            actor_admin_user_id=int(session['user_id']),
+        )
+        response = jsonify(payload)
+        _attach_private_no_cache_headers(response)
+        return response
+    except RefundError as exc:
+        response = jsonify(
+            {'success': False, 'error': exc.message, 'code': exc.code}
+        )
+        _attach_private_no_cache_headers(response)
+        return response, exc.status_code
+    except Exception:
+        current_app.logger.exception('api_license_account_partial_refund_execute')
+        response = jsonify(
+            {'success': False, 'error': 'No se pudo ejecutar la devolución.'}
+        )
+        _attach_private_no_cache_headers(response)
+        return response, 500

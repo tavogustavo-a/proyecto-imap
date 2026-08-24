@@ -187,14 +187,14 @@
               <button type="button" id="adminLicenciasToggleChangesRestoreColBtn" class="admin-licencias-toggle-notes-col-btn" title="Ocultar flecha devolver a Licencias" aria-label="Ocultar botón subir fila al bloc Licencias en Cambios" aria-pressed="false">
                 <i class="fas fa-eye-slash" aria-hidden="true"></i>
               </button>
-              <button type="button" id="adminLicenciasToggleChangesStatusColBtn" class="admin-licencias-toggle-notes-col-btn" title="Ocultar columnas Terminado e incidencias" aria-label="Ocultar columnas Terminado (verde) e incidencias (rojo) en Cambios" aria-pressed="false">
-                <i class="fas fa-eye-slash" aria-hidden="true"></i>
-              </button>
               <button type="button" id="adminLicenciasToggleChangesNotesColBtn" class="admin-licencias-toggle-notes-col-btn" title="Ocultar columna Notas" aria-label="Ocultar columna Notas en Cambios" aria-pressed="false">
                 <i class="fas fa-eye-slash" aria-hidden="true"></i>
               </button>
               <button type="button" id="adminLicenciasToggleAllChangesSectionsBtn" class="admin-licencias-toggle-notes-col-btn admin-licencias-days-expand-all-btn admin-licencias-changes-expand-all-btn" title="Plegar todos los productos en Cambios" aria-label="Plegar todas las secciones de Cambios" aria-expanded="true">
                 <i class="fas fa-chevron-up" aria-hidden="true"></i>
+              </button>
+              <button type="button" id="adminLicenciasChangesBulkEditBtn" class="admin-lic-bulk-toolbar-btn" title="Edición masiva en Cambios" aria-label="Edición masiva en Cambios">
+                <i class="fas fa-users" aria-hidden="true"></i>
               </button>
               <button type="button" class="license-changes-mode-btn license-changes-mode-btn--active" data-changes-list-mode="only_with_lines" id="licenseChangesModeOnlyBtn" aria-pressed="true" title="Solo productos con líneas en Cambios (vencidos)">Cambios vencidos</button>
               <button type="button" class="license-changes-mode-btn" data-changes-list-mode="all_month_to_month" id="licenseChangesModeAllBtn" aria-pressed="false" title="Todos los productos del grid (vacíos incluidos; para añadir manualmente)">Todos los productos</button>
@@ -206,59 +206,107 @@
     </div>
   </section>
 
-  <div id="adminLicenciasBulkModal" class="admin-lic-bulk-modal" hidden aria-hidden="true">
-    <div class="admin-lic-bulk-modal__backdrop" data-admin-lic-bulk-dismiss="1"></div>
-    <div class="admin-lic-bulk-modal__panel" role="dialog" aria-modal="true" aria-labelledby="adminLicenciasBulkModalTitle">
-      <div class="admin-lic-bulk-modal__head">
+  <div id="adminLicenciasBulkModal" class="admin-lic-bulk-modal user-lic-warranty-modal" hidden aria-hidden="true">
+    <div class="admin-lic-bulk-modal__backdrop user-lic-warranty-modal__backdrop" data-admin-lic-bulk-dismiss="1"></div>
+    <div class="admin-lic-bulk-modal__panel user-lic-warranty-modal__dialog" role="dialog" aria-modal="true" aria-labelledby="adminLicenciasBulkModalTitle">
+      <div class="user-lic-warranty-modal__header admin-lic-bulk-modal__head">
         <div class="admin-lic-bulk-modal__title-row">
-          <h2 id="adminLicenciasBulkModalTitle" class="admin-lic-bulk-modal__title">Edición masiva</h2>
+          <h2 id="adminLicenciasBulkModalTitle" class="user-lic-warranty-modal__title admin-lic-bulk-modal__title mb-0">Edición masiva</h2>
           <button type="button" class="admin-lic-bulk-modal__info-btn" id="adminLicBulkInfoBtn" title="Qué hace la edición masiva" aria-label="Información sobre edición masiva"><i class="fas fa-info-circle" aria-hidden="true"></i></button>
         </div>
-        <button type="button" class="admin-lic-bulk-modal__close" data-admin-lic-bulk-dismiss="1" title="Cerrar" aria-label="Cerrar"><i class="fas fa-times" aria-hidden="true"></i></button>
+        <button type="button" class="user-lic-warranty-modal__close admin-lic-bulk-modal__close" data-admin-lic-bulk-dismiss="1" title="Cerrar" aria-label="Cerrar">&times;</button>
       </div>
-      <div class="admin-lic-bulk-modal__rows" id="adminLicBulkModalFields">
-        <div class="admin-lic-bulk-modal__field admin-lic-bulk-modal__field--inline admin-lic-bulk-modal__field--qty-day-row">
-          <div class="admin-lic-bulk-modal__inline-pair" id="adminLicBulkDayField">
-            <label for="adminLicBulkDay" class="admin-lic-bulk-modal__label-plain">Día</label>
-            <input type="number" id="adminLicBulkDay" class="form-control admin-lic-bulk-modal__input admin-lic-bulk-modal__input--qty" min="1" max="31" aria-label="Día del mes (1–31)">
+      <div class="user-lic-warranty-modal__body admin-lic-bulk-modal__body" id="adminLicBulkModalFields">
+        <div class="admin-lic-bulk-modal__rows">
+          <dl class="admin-lic-bulk-modal__preview" aria-label="Día y cantidad">
+            <div class="admin-lic-bulk-modal__preview-card" id="adminLicBulkDayField">
+              <dt><label for="adminLicBulkDay" class="admin-lic-bulk-modal__label-plain">Día</label></dt>
+              <dd>
+                <input type="number" id="adminLicBulkDay" class="form-control admin-lic-bulk-modal__input admin-lic-bulk-modal__input--qty" min="1" max="31" aria-label="Día del mes (1–31)">
+              </dd>
+            </div>
+            <div class="admin-lic-bulk-modal__preview-card">
+              <dt><label for="adminLicBulkRowCount" class="admin-lic-bulk-modal__label-plain">Cantidad</label></dt>
+              <dd>
+                <input type="number" id="adminLicBulkRowCount" class="form-control admin-lic-bulk-modal__input admin-lic-bulk-modal__input--qty" min="1" value="1" aria-label="Cuántas licencias con credencial editar, desde arriba">
+              </dd>
+            </div>
+            <div class="admin-lic-bulk-modal__preview-card admin-lic-bulk-modal__preview-card--user">
+              <dt><label for="adminLicBulkUser" class="admin-lic-bulk-modal__label-plain">Usuario/cliente</label></dt>
+              <dd>
+                <input type="text" id="adminLicBulkUser" class="form-control admin-lic-bulk-modal__input" value="anonimo" placeholder="anonimo" autocomplete="off" aria-label="Usuario o cliente">
+              </dd>
+            </div>
+            <div class="admin-lic-bulk-modal__preview-card admin-lic-bulk-modal__preview-card--statuses" aria-label="Estados">
+              <div class="admin-lic-bulk-modal__status-inline-block" id="adminLicBulkGoodStatusBlock">
+                <label for="adminLicBulkSelGood" class="admin-lic-bulk-modal__label-plain admin-lic-bulk-modal__label-plain--status">Estado verde</label>
+                <select id="adminLicBulkSelGood" class="form-control admin-lic-bulk-modal__input license-split-editor__status license-split-editor__status-good" title="Estado verde (columna buena)" aria-label="Estado verde"></select>
+              </div>
+              <div class="admin-lic-bulk-modal__status-inline-block">
+                <label for="adminLicBulkSelBad" class="admin-lic-bulk-modal__label-plain admin-lic-bulk-modal__label-plain--status">Estado rojo</label>
+                <select id="adminLicBulkSelBad" class="form-control admin-lic-bulk-modal__input license-split-editor__status license-split-editor__status-bad" title="Estado rojo (incidencia)" aria-label="Estado rojo"></select>
+              </div>
+            </div>
+          </dl>
+          <div class="admin-lic-bulk-modal__field admin-lic-bulk-modal__field--otro-follow">
+            <div id="adminLicBulkOtroWrap" class="admin-lic-bulk-modal__otro-wrap" hidden>
+              <label for="adminLicBulkOtro">Detalle «Otro»</label>
+              <input type="text" id="adminLicBulkOtro" class="form-control admin-lic-bulk-modal__input" placeholder="des.. problema" autocomplete="off">
+            </div>
           </div>
-          <div class="admin-lic-bulk-modal__inline-pair">
-            <label for="adminLicBulkRowCount" class="admin-lic-bulk-modal__label-plain">Cantidad</label>
-            <input type="number" id="adminLicBulkRowCount" class="form-control admin-lic-bulk-modal__input admin-lic-bulk-modal__input--qty" min="1" value="1" aria-label="Cuántas licencias con credencial editar, desde arriba">
+          <div class="admin-lic-bulk-modal__field admin-lic-bulk-modal__field--stack">
+            <label for="adminLicBulkNote" class="admin-lic-bulk-modal__label-plain admin-lic-bulk-modal__message-label">Notas (opcional)</label>
+            <input type="text" id="adminLicBulkNote" class="form-control admin-lic-bulk-modal__input" placeholder="Notas (opcional)" autocomplete="off" aria-label="Notas (opcional)">
+          </div>
+          <div class="admin-lic-bulk-modal__field admin-lic-bulk-modal__field--stack admin-lic-bulk-modal__field--add-creds">
+            <label for="adminLicBulkAddCreds" class="admin-lic-bulk-modal__label-plain admin-lic-bulk-modal__label-plain--stack admin-lic-bulk-modal__message-label">Agregar licencias</label>
+            <textarea id="adminLicBulkAddCreds" class="form-control admin-lic-bulk-modal__input admin-lic-bulk-modal__textarea" rows="3" placeholder="Correo y contraseña, una por línea" autocomplete="off" aria-label="Agregar licencias al final del bloc"></textarea>
           </div>
         </div>
-        <div class="admin-lic-bulk-modal__field admin-lic-bulk-modal__field--user-status-line">
-          <div class="admin-lic-bulk-modal__user-inline">
-            <label for="adminLicBulkUser" class="admin-lic-bulk-modal__label-plain">Usuario/cliente</label>
-            <input type="text" id="adminLicBulkUser" class="form-control admin-lic-bulk-modal__input admin-lic-bulk-modal__input--user-inline" value="anonimo" placeholder="anonimo" autocomplete="off" aria-label="Usuario o cliente">
+        <div class="admin-lic-bulk-modal__footer admin-lic-bulk-modal__actions">
+          <button type="button" class="admin-lic-expiry-adjust-modal__action admin-lic-expiry-adjust-modal__action--save" id="adminLicBulkApplyBtn">Aplicar a selección</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="adminLicChangesBulkModal" class="admin-lic-bulk-modal user-lic-warranty-modal" hidden aria-hidden="true">
+    <div class="admin-lic-bulk-modal__backdrop user-lic-warranty-modal__backdrop" data-admin-lic-changes-bulk-dismiss="1"></div>
+    <div class="admin-lic-bulk-modal__panel user-lic-warranty-modal__dialog" role="dialog" aria-modal="true" aria-labelledby="adminLicChangesBulkModalTitle">
+      <div class="user-lic-warranty-modal__header admin-lic-bulk-modal__head">
+        <div class="admin-lic-bulk-modal__title-row">
+          <h2 id="adminLicChangesBulkModalTitle" class="user-lic-warranty-modal__title admin-lic-bulk-modal__title mb-0">Edición masiva — Cambios</h2>
+        </div>
+        <button type="button" class="user-lic-warranty-modal__close admin-lic-bulk-modal__close" data-admin-lic-changes-bulk-dismiss="1" title="Cerrar" aria-label="Cerrar">&times;</button>
+      </div>
+      <div class="user-lic-warranty-modal__body admin-lic-bulk-modal__body">
+        <div class="admin-lic-bulk-modal__rows">
+          <p id="adminLicChangesBulkSummary" class="admin-lic-bulk-modal__label-plain" role="status" aria-live="polite"></p>
+          <div class="admin-lic-bulk-modal__field admin-lic-bulk-modal__field--stack">
+            <label for="adminLicChangesBulkPassword" class="admin-lic-bulk-modal__label-plain admin-lic-bulk-modal__message-label">Nueva contraseña (opcional)</label>
+            <input type="text" id="adminLicChangesBulkPassword" class="form-control admin-lic-bulk-modal__input" placeholder="Solo filas con correo y contraseña; las de solo correo se ignoran" autocomplete="off" aria-label="Nueva contraseña para las filas seleccionadas">
           </div>
-          <div class="admin-lic-bulk-modal__status-inline-group" aria-label="Estados">
-            <div class="admin-lic-bulk-modal__status-inline-block" id="adminLicBulkGoodStatusBlock">
-              <label for="adminLicBulkSelGood" class="admin-lic-bulk-modal__label-plain admin-lic-bulk-modal__label-plain--status">Estado verde</label>
-              <select id="adminLicBulkSelGood" class="form-control admin-lic-bulk-modal__input license-split-editor__status license-split-editor__status-good" title="Estado verde (columna buena)" aria-label="Estado verde"></select>
+          <div class="admin-lic-bulk-modal__preview-card admin-lic-bulk-modal__preview-card--statuses" aria-label="Estados">
+            <div class="admin-lic-bulk-modal__status-inline-block">
+              <label for="adminLicChangesBulkSelGood" class="admin-lic-bulk-modal__label-plain admin-lic-bulk-modal__label-plain--status">Estado verde</label>
+              <select id="adminLicChangesBulkSelGood" class="form-control admin-lic-bulk-modal__input license-split-editor__status license-split-editor__status-good" title="Terminado: filas con incidencia roja van a Caídas; sin incidencia vuelven a Licencias" aria-label="Estado verde (Terminado)"></select>
             </div>
             <div class="admin-lic-bulk-modal__status-inline-block">
-              <label for="adminLicBulkSelBad" class="admin-lic-bulk-modal__label-plain admin-lic-bulk-modal__label-plain--status">Estado rojo</label>
-              <select id="adminLicBulkSelBad" class="form-control admin-lic-bulk-modal__input license-split-editor__status license-split-editor__status-bad" title="Estado rojo (incidencia)" aria-label="Estado rojo"></select>
+              <label for="adminLicChangesBulkSelBad" class="admin-lic-bulk-modal__label-plain admin-lic-bulk-modal__label-plain--status">Estado rojo</label>
+              <select id="adminLicChangesBulkSelBad" class="form-control admin-lic-bulk-modal__input license-split-editor__status license-split-editor__status-bad" title="Incidencia a marcar en todas las filas seleccionadas" aria-label="Estado rojo (incidencia)"></select>
             </div>
           </div>
-        </div>
-        <div class="admin-lic-bulk-modal__field admin-lic-bulk-modal__field--otro-follow">
-          <div id="adminLicBulkOtroWrap" class="admin-lic-bulk-modal__otro-wrap" hidden>
-            <label for="adminLicBulkOtro">Detalle «Otro»</label>
-            <input type="text" id="adminLicBulkOtro" class="form-control admin-lic-bulk-modal__input" placeholder="des.. problema" autocomplete="off">
+          <div class="admin-lic-bulk-modal__field admin-lic-bulk-modal__field--otro-follow">
+            <div id="adminLicChangesBulkOtroWrap" class="admin-lic-bulk-modal__otro-wrap" hidden>
+              <label for="adminLicChangesBulkOtro">Detalle «Otro»</label>
+              <input type="text" id="adminLicChangesBulkOtro" class="form-control admin-lic-bulk-modal__input" placeholder="des.. problema" autocomplete="off">
+            </div>
           </div>
+          <p class="admin-lic-bulk-modal__label-plain"><strong>Terminado</strong> (sin rojo) → <strong>Licencias</strong>. Incidencia <strong>roja</strong> (con o sin Terminado) → <strong>Caídas</strong>. Solo contraseña deja las filas en Cambios.</p>
         </div>
-        <div class="admin-lic-bulk-modal__field admin-lic-bulk-modal__field--stack">
-          <input type="text" id="adminLicBulkNote" class="form-control admin-lic-bulk-modal__input" placeholder="Notas (opcional)" autocomplete="off" aria-label="Notas (opcional)">
+        <div class="admin-lic-bulk-modal__footer admin-lic-bulk-modal__actions">
+          <button type="button" class="admin-lic-expiry-adjust-modal__action admin-lic-expiry-adjust-modal__action--save" id="adminLicChangesBulkApplyBtn">Aplicar a selección</button>
         </div>
-        <div class="admin-lic-bulk-modal__field admin-lic-bulk-modal__field--stack admin-lic-bulk-modal__field--add-creds">
-          <label for="adminLicBulkAddCreds" class="admin-lic-bulk-modal__label-plain admin-lic-bulk-modal__label-plain--stack">Agregar licencias</label>
-          <textarea id="adminLicBulkAddCreds" class="form-control admin-lic-bulk-modal__input admin-lic-bulk-modal__textarea" rows="3" placeholder="Correo y contraseña, una por línea" autocomplete="off" aria-label="Agregar licencias al final del bloc"></textarea>
-        </div>
-      </div>
-      <div class="admin-lic-bulk-modal__footer">
-        <button type="button" class="btn-blue menu-btn-worksheet" id="adminLicBulkApplyBtn">Aplicar a selección</button>
       </div>
     </div>
   </div>
@@ -353,6 +401,60 @@
         <div class="admin-lic-expiry-adjust-modal__actions">
           <button type="button" id="adminLicExpiryAdjustCancel" class="admin-lic-expiry-adjust-modal__action admin-lic-expiry-adjust-modal__action--cancel">Cancelar</button>
           <button type="button" id="adminLicExpiryAdjustSave" class="admin-lic-expiry-adjust-modal__action admin-lic-expiry-adjust-modal__action--save" disabled>Guardar</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="adminLicRefundModal" class="user-lic-warranty-modal admin-lic-refund-modal d-none" aria-hidden="true" inert>
+    <div class="user-lic-warranty-modal__backdrop" data-admin-lic-refund-dismiss="1"></div>
+    <div class="user-lic-warranty-modal__dialog admin-lic-refund-modal__dialog" role="dialog" aria-modal="true" aria-labelledby="adminLicRefundModalTitle" aria-describedby="adminLicRefundAccount">
+      <div class="user-lic-warranty-modal__header">
+        <h2 id="adminLicRefundModalTitle" class="user-lic-warranty-modal__title mb-0">Devolución</h2>
+        <button type="button" id="adminLicRefundModalClose" class="user-lic-warranty-modal__close" aria-label="Cerrar">&times;</button>
+      </div>
+      <div class="user-lic-warranty-modal__body admin-lic-refund-modal__body">
+        <p id="adminLicRefundAccount" class="admin-lic-refund-modal__account"></p>
+        <dl class="admin-lic-refund-modal__preview" aria-label="Vista previa de devolución">
+          <div class="admin-lic-refund-modal__preview-charged">
+            <dt><label for="adminLicRefundChargedDays">Días cobrados</label></dt>
+            <dd class="admin-lic-refund-modal__charged-controls">
+              <select id="adminLicRefundChargedDays" class="form-control admin-lic-refund-modal__control admin-lic-refund-modal__charged-select" aria-label="Días cobrados">
+                {% for refund_day in range(31) %}<option value="{{ refund_day }}">{{ refund_day }}</option>{% endfor %}
+              </select>
+              <input type="number" id="adminLicRefundCustomDays" class="form-control admin-lic-refund-modal__control admin-lic-refund-modal__custom-days" min="0" step="1" aria-label="Días cobrados personalizados" hidden>
+            </dd>
+          </div>
+          <div class="admin-lic-refund-modal__preview-returned"><dt>Días devueltos</dt><dd id="adminLicRefundReturnedDays">—</dd></div>
+          <div class="admin-lic-refund-modal__preview-price">
+            <dt class="admin-lic-refund-modal__price-title">
+              <span>Precio licencia</span>
+              <button type="button" id="adminLicRefundManualToggle" class="admin-lic-refund-modal__manual-toggle" aria-label="Usar precio manual" aria-expanded="false" title="Usar precio manual">
+                <i class="fas fa-pen" aria-hidden="true"></i>
+              </button>
+            </dt>
+            <dd id="adminLicRefundPrice">—</dd>
+          </div>
+          <div class="admin-lic-refund-modal__preview-amount"><dt>Monto devolución</dt><dd id="adminLicRefundAmount">—</dd></div>
+        </dl>
+        <div id="adminLicRefundManualAmountWrap" class="admin-lic-refund-modal__field admin-lic-refund-modal__field--inline" hidden>
+          <div class="admin-lic-refund-modal__inline-row">
+            <label for="adminLicRefundManualAmount">Precio manual <span aria-hidden="true">*</span> <span id="adminLicRefundManualInfo" class="admin-lic-refund-modal__info" role="img" tabindex="0" aria-label="Información sobre el precio manual" title="Reemplaza el valor original de la cuenta para esta devolución.">i</span></label>
+            <input type="text" id="adminLicRefundManualAmount" class="form-control admin-lic-refund-modal__control admin-lic-refund-modal__manual-input" inputmode="decimal" autocomplete="off" placeholder="Ej. 12.50" aria-describedby="adminLicRefundManualHelp">
+          </div>
+          <small id="adminLicRefundManualHelp" class="admin-lic-refund-modal__sr-only">Reemplaza el valor original de la cuenta para esta devolución. En el historial aparecerán el valor de la cuenta y el saldo devuelto.</small>
+        </div>
+        <div class="admin-lic-refund-modal__field">
+          <label for="adminLicRefundMessage" class="admin-lic-refund-modal__message-label">Mensaje al cliente</label>
+          <textarea id="adminLicRefundMessage" class="form-control admin-lic-refund-modal__control" rows="3"></textarea>
+        </div>
+        <p id="adminLicRefundStatus" class="admin-lic-refund-modal__status" role="status" aria-live="polite"></p>
+        <div id="adminLicRefundConfirm" class="admin-lic-refund-modal__confirm" role="alert" hidden>
+          <strong>Confirmación final</strong>
+          <p id="adminLicRefundConfirmText"></p>
+        </div>
+        <div class="admin-lic-refund-modal__actions">
+          <button type="button" id="adminLicRefundSubmit" class="admin-lic-expiry-adjust-modal__action admin-lic-expiry-adjust-modal__action--save" disabled>Revisar devolución</button>
         </div>
       </div>
     </div>

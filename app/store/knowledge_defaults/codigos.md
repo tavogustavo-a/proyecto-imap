@@ -1,7 +1,23 @@
-# Códigos (búsqueda IMAP / páginas públicas)
+# Códigos y mensajes
 
-- **Inicio / Códigos:** la ruta raíz `/` (menú «Códigos») es la página de **búsqueda de códigos** en correos: el usuario elige servicio, filtro y busca mensajes en buzones IMAP configurados.
-- **Páginas personalizadas:** rutas como `/codigos4`, `/pagina2`, etc. provienen de servidores **IMAP2** (`route_path` en administración). También pueden usarse **dominios personalizados** que apuntan a esa página.
-- **Permisos:** según el usuario puede buscar solo correos permitidos o cualquier correo (`can_search_any`). Los administradores configuran servicios, filtros y regex en el panel admin.
-- **SMS:** si el servicio SMS está activo, aparece la opción de consultar SMS vinculados a números permitidos.
-- **No confundir** con el generador de códigos aleatorios de las hojas de cálculo admin (herramienta interna distinta).
+- La pantalla **Códigos** ayuda a encontrar códigos recibidos en tus buzones de correo.
+- Elige el servicio correcto, escribe un correo permitido y pulsa buscar.
+- Cada usuario solo puede consultar los correos y servicios que tiene autorizados.
+- Algunos servicios también permiten consultar mensajes de texto vinculados.
+
+## Cómo consultar
+1. Abre Códigos y selecciona el servicio correcto.
+2. Escribe el correo permitido que recibirá el mensaje.
+3. Pulsa buscar y espera unos segundos mientras se revisan los mensajes.
+4. Si tienes varias páginas disponibles, entra en la indicada para ese servicio.
+
+## Si no aparece un código
+- Confirma que el correo está bien escrito y autorizado para tu usuario.
+- Revisa que elegiste el servicio y filtro adecuados.
+- Un mensaje puede tardar en llegar al buzón o todavía no estar disponible.
+- Si el servicio usa mensajes de texto, confirma que el número esté permitido.
+- El asistente explica estas validaciones, pero no puede leer ni repetir cuerpos de correos, SMS o códigos de verificación.
+
+## Si todavía necesitas ayuda
+- Indica a soporte qué servicio elegiste y si aparece algún aviso.
+- Nunca compartas contraseñas ni códigos de verificación en el chat.

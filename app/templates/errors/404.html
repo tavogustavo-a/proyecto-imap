@@ -9,6 +9,9 @@
   <p>Puedes volver al inicio o intentar de nuevo en un momento.</p>
   <div class="err-actions">
     <a class="err-btn" href="{{ home_url }}">Ir al inicio</a>
-    <button type="button" class="err-btn err-btn--soft" id="errRetryBtn">Reintentar</button>
+    <form method="get" action="" class="err-retry-form">
+      <input type="hidden" name="_retry" value="1">
+      <button type="submit" class="err-btn err-btn--soft" id="errRetryBtn">Reintentar</button>
+    </form>
   </div>
 {% endblock %}

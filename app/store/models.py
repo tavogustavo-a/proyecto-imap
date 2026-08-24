@@ -628,10 +628,13 @@ class LicenseAccount(db.Model):
     # Correo opcional en inventario bloc: usar '' cuando la línea no trae formato email.
     email = db.Column(db.String(120), nullable=False, default='')
     password = db.Column(db.String(200), nullable=False)  # Ej: "3dw9k65tz"
-    status = db.Column(db.String(20), default='available')  # 'available', 'assigned', 'sold'
+    status = db.Column(db.String(20), default='available')  # available, assigned, sold, refunded
     assigned_to_user_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='SET NULL'), nullable=True)
     # Venta en tienda pública que originó la asignación (historial de compras / credenciales por compra).
     sale_id = db.Column(db.Integer, db.ForeignKey('store_sales.id', ondelete='SET NULL'), nullable=True, index=True)
+    # Precio unitario cobrado al entregar (manual admin o checkout sin Sale utilizable).
+    sold_unit_price = db.Column(db.Numeric(14, 6), nullable=True)
+    sold_currency = db.Column(db.String(3), nullable=True)
     assigned_at = db.Column(db.DateTime, nullable=True)
     expires_at = db.Column(db.DateTime, nullable=True)  # Fecha de expiración (1 mes)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
@@ -673,6 +676,75 @@ class LicenseAccount(db.Model):
         exp = _license_account_expiry_as_utc_aware(self.expires_at)
         delta = exp - datetime.now(timezone.utc)
         return delta.days if delta.days > 0 else 0
+
+
+class LicenseAccountRefund(db.Model):
+    """Devolución definitiva de una cuenta, conservada como comprobante auditable."""
+    __tablename__ = 'store_license_account_refunds'
+    __table_args__ = (
+        db.UniqueConstraint(
+            'license_account_id',
+            name='uq_store_license_account_refund_account',
+        ),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    license_account_id = db.Column(
+        db.Integer,
+        db.ForeignKey('store_license_accounts.id', ondelete='RESTRICT'),
+        nullable=False,
+        index=True,
+    )
+    license_id = db.Column(
+        db.Integer,
+        db.ForeignKey('store_licenses.id', ondelete='RESTRICT'),
+        nullable=False,
+        index=True,
+    )
+    sale_id = db.Column(db.Integer, nullable=True, index=True)
+    sale_snapshot_id = db.Column(db.Integer, nullable=True, index=True)
+    user_id = db.Column(
+        db.Integer,
+        db.ForeignKey('users.id', ondelete='RESTRICT'),
+        nullable=False,
+        index=True,
+    )
+    billing_user_id = db.Column(
+        db.Integer,
+        db.ForeignKey('users.id', ondelete='RESTRICT'),
+        nullable=False,
+        index=True,
+    )
+    actor_admin_user_id = db.Column(
+        db.Integer,
+        db.ForeignKey('users.id', ondelete='RESTRICT'),
+        nullable=False,
+        index=True,
+    )
+    billing_period_days = db.Column(db.Integer, nullable=False, default=30)
+    detected_charged_days = db.Column(db.Integer, nullable=False, default=0)
+    charged_days = db.Column(db.Integer, nullable=False)
+    charged_days_overridden = db.Column(db.Boolean, nullable=False, default=False)
+    returned_days = db.Column(db.Integer, nullable=False)
+    historical_quantity = db.Column(db.Integer, nullable=True)
+    historical_total = db.Column(db.Numeric(14, 2), nullable=True)
+    historical_unit_price = db.Column(db.Numeric(14, 6), nullable=True)
+    refund_amount = db.Column(db.Numeric(14, 2), nullable=False)
+    debt_applied = db.Column(db.Numeric(14, 2), nullable=False, default=0)
+    prepaid_applied = db.Column(db.Numeric(14, 2), nullable=False, default=0)
+    currency = db.Column(db.String(3), nullable=False)
+    pricing_source = db.Column(db.String(24), nullable=False)
+    product_name = db.Column(db.String(200), nullable=False, default='Licencia')
+    custom_message = db.Column(db.Text, nullable=True)
+    day_removed = db.Column(db.Integer, nullable=True)
+    removed_day_line = db.Column(db.Text, nullable=True)
+    audit_note = db.Column(db.Text, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False, index=True)
+
+    account = db.relationship('LicenseAccount', foreign_keys=[license_account_id])
+    user = db.relationship('User', foreign_keys=[user_id])
+    billing_user = db.relationship('User', foreign_keys=[billing_user_id])
+    actor_admin = db.relationship('User', foreign_keys=[actor_admin_user_id])
 
 
 class ProductReservation(db.Model):

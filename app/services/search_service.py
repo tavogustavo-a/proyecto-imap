@@ -112,6 +112,414 @@ def validate_and_sanitize_external_response(data, project_name):
         return None
 
 
+def _friendly_linked_api_connect_error(exc, url_stripped):
+    """Traduce errores de red de requests a un mensaje claro para el admin."""
+    host = ""
+    try:
+        host = (urlparse(url_stripped).hostname or "").strip()
+    except Exception:
+        host = ""
+    host_hint = f" ({host})" if host else ""
+    text = str(exc or "").lower()
+    name = exc.__class__.__name__ if exc is not None else ""
+
+    if isinstance(exc, requests.Timeout) or "timed out" in text or "timeout" in text:
+        return "El servidor no respondió a tiempo (más de 10s). Revisa que esté en línea."
+    if isinstance(exc, requests.exceptions.SSLError) or "ssl" in text or "certificate" in text:
+        return "Error de certificado SSL/HTTPS. Revisa que la URL use https correcto."
+    if (
+        isinstance(exc, requests.exceptions.ConnectionError)
+        or name in ("ConnectionError", "ConnectTimeoutError", "NewConnectionError", "NameResolutionError")
+        or "nameresolution" in text
+        or "name or service not known" in text
+        or "getaddrinfo failed" in text
+        or "failed to resolve" in text
+        or "nodename nor servname" in text
+    ):
+        if (
+            "nameresolution" in text
+            or "name or service not known" in text
+            or "getaddrinfo failed" in text
+            or "failed to resolve" in text
+            or "nodename nor servname" in text
+        ):
+            return (
+                f"No se encontró el dominio{host_hint}. "
+                "Revisa la URL (ejemplo: https://tudominio.com/api/external/search)."
+            )
+        if "connection refused" in text or "actively refused" in text:
+            return f"El servidor rechazó la conexión{host_hint}. ¿Está apagado o el puerto es incorrecto?"
+        return (
+            f"No se pudo conectar con el servidor{host_hint}. "
+            "Revisa que la URL sea correcta y que el otro proyecto esté accesible."
+        )
+    if isinstance(exc, requests.exceptions.InvalidURL) or "invalid url" in text:
+        return "La URL no es válida. Debe verse así: https://tudominio.com/api/external/search"
+    if isinstance(exc, requests.exceptions.TooManyRedirects):
+        return "Demasiadas redirecciones. Revisa la URL del endpoint."
+    return "No se pudo conectar con el otro proyecto. Revisa la URL e inténtalo de nuevo."
+
+
+def _suggested_external_search_url(url_stripped):
+    """Si la URL no apunta al endpoint, sugiere la forma correcta."""
+    try:
+        p = urlparse((url_stripped or "").strip())
+        if not p.scheme or not p.netloc:
+            return "https://otroproyecto.com/api/external/search"
+        path = (p.path or "").rstrip("/")
+        if path.endswith("/api/external/search"):
+            return None
+        return f"{p.scheme}://{p.netloc}/api/external/search"
+    except Exception:
+        return "https://otroproyecto.com/api/external/search"
+
+
+def _linked_api_response_looks_valid(data, response):
+    """
+    True solo si la respuesta parece el API /api/external/search de este proyecto.
+    Evita marcar como OK páginas HTML (dominios en venta, parkings, etc.) que dan HTTP 200.
+    """
+    if not isinstance(data, dict):
+        return False
+    if "results" in data and isinstance(data.get("results"), list):
+        return True
+    # Errores JSON conocidos del endpoint (la ruta existe aunque falle auth/datos).
+    err = data.get("error")
+    if isinstance(err, str) and err.strip():
+        ctype = ""
+        try:
+            ctype = str((response.headers or {}).get("Content-Type") or "").lower()
+        except Exception:
+            ctype = ""
+        if "json" in ctype or data.get("results") is not None:
+            return True
+        known = (
+            "invalid token",
+            "missing token",
+            "rate limit",
+            "unauthorized",
+            "disabled",
+            "invalid email",
+            "payload too large",
+            "invalid request host",
+            "service_id",
+        )
+        low = err.lower()
+        if any(k in low for k in known):
+            return True
+    return False
+
+
+def _friendly_linked_api_http_error(status, err_msg, url_stripped):
+    """Mensajes claros según el código HTTP del remoto."""
+    suggested = _suggested_external_search_url(url_stripped)
+    path = ""
+    try:
+        path = (urlparse(url_stripped).path or "").strip() or "/"
+    except Exception:
+        path = "/"
+    missing_endpoint = not path.rstrip("/").endswith("/api/external/search")
+    tip = ""
+    if suggested and missing_endpoint:
+        tip = f" Prueba con: {suggested}"
+
+    if status == 400:
+        detail = f" ({err_msg})" if err_msg else ""
+        return f"El remoto rechazó la petición{detail}. Revisa URL y token."
+    if status == 401:
+        return "La URL responde, pero el token no es válido. Copia de nuevo el token del otro proyecto."
+    if status == 403:
+        low = (err_msg or "").lower()
+        if "disabled" in low:
+            return "La URL/token llegan, pero el usuario remoto está deshabilitado."
+        if "security" in low or "unauthorized" in low:
+            return (
+                "La URL/token llegan, pero el remoto rechazó la autorización "
+                "(el usuario de origen debe coincidir con el del token o con el nombre del dominio)."
+            )
+        if "permission" in low or "permiso" in low or "correo" in low:
+            return (
+                "La URL/token llegan, pero el remoto no permitió esa consulta de prueba. "
+                "Eso no siempre indica fallo: revisa permisos del usuario remoto."
+            )
+        return (
+            "La URL/token llegan, pero el remoto rechazó la prueba"
+            + (f" ({err_msg})." if err_msg else ".")
+        )
+    if status == 404:
+        return (
+            "No se encontró esa ruta en el otro proyecto."
+            + (tip or " La URL debe terminar en /api/external/search")
+        )
+    if status == 405:
+        return (
+            "Esa dirección no acepta la prueba (método no permitido)."
+            + (
+                tip
+                or " Debes usar la URL completa del API, no solo el dominio "
+                "(…/api/external/search)."
+            )
+        )
+    if status == 408:
+        return "El remoto tardó demasiado en responder. Inténtalo de nuevo."
+    if status == 413:
+        return "El remoto rechazó la petición por tamaño. Revisa la URL del API."
+    if status == 429:
+        return "El otro proyecto está limitando peticiones. Espera un momento e inténtalo de nuevo."
+    if status == 502:
+        return "El otro proyecto no está disponible ahora (puerta de enlace / proxy). Inténtalo más tarde."
+    if status == 503:
+        return "El otro proyecto está en mantenimiento o sobrecargado. Inténtalo más tarde."
+    if status == 504:
+        return "El otro proyecto no respondió a tiempo (gateway). Inténtalo más tarde."
+    if status >= 500:
+        return f"El otro proyecto tuvo un error interno (código {status}). Revisa ese servidor."
+    if status >= 400:
+        detail = f": {err_msg}" if err_msg else ""
+        return (
+            f"El remoto respondió con error (código {status}){detail}."
+            + (tip if missing_endpoint else "")
+        )
+    detail = f": {err_msg}" if err_msg else ""
+    return f"Respuesta inesperada del remoto (código {status}){detail}."
+
+
+def test_linked_project_api(url, token, *, origin_user=None, origin_domain=None, project_name=None):
+    """
+    Prueba URL + token de un proyecto vinculado (mismo endpoint que la búsqueda real).
+
+    Returns:
+        (ok: bool, message: str)
+    """
+    label = (project_name or "API vinculada").strip() or "API vinculada"
+    url_stripped = (url or "").strip()
+    token_stripped = (token or "").strip()
+    if not url_stripped or not token_stripped:
+        return False, f"«{label}»: faltan URL o token."
+    if not url_stripped.startswith(("http://", "https://")):
+        return False, f"«{label}»: la URL debe empezar por http:// o https://"
+    parsed = urlparse(url_stripped)
+    host = (parsed.hostname or "").strip()
+    if not host or "." not in host:
+        return False, (
+            f"«{label}»: la URL no parece un dominio válido"
+            + (f" («{host}»)." if host else ".")
+            + " Usa algo como https://otroproyecto.com/api/external/search"
+        )
+    if not validate_external_url_ssrf(url_stripped):
+        return False, (
+            f"«{label}»: esa URL no está permitida "
+            "(no se puede usar localhost ni redes internas)."
+        )
+
+    payload = {
+        "token": token_stripped,
+        "email_to_search": "linked-api-probe@example.com",
+        "origin_user": (origin_user or "").strip() or "probe",
+        "origin_domain": (origin_domain or "").strip() or "unknown",
+    }
+    try:
+        response = requests.post(url_stripped, json=payload, timeout=10)
+    except requests.RequestException as e:
+        return False, f"«{label}»: {_friendly_linked_api_connect_error(e, url_stripped)}"
+
+    status = response.status_code
+    ctype = str((response.headers or {}).get("Content-Type") or "").lower()
+    err_msg = ""
+    data = None
+    try:
+        data = response.json()
+        if isinstance(data, dict):
+            err_msg = str(data.get("error") or data.get("message") or "").strip()
+    except ValueError:
+        data = None
+
+    # Página web / parking (p. ej. tudominio.com) suele devolver HTML 200: no es el API.
+    if data is None or not isinstance(data, dict):
+        if "html" in ctype or (response.text or "").lstrip()[:15].lower().startswith(
+            ("<!doctype", "<html")
+        ):
+            return False, (
+                f"«{label}»: esa URL respondió con una página web, no con el API de códigos. "
+                "Usa la URL real del otro proyecto terminada en /api/external/search "
+                "(no un dominio de ejemplo ni una web genérica)."
+            )
+        return False, (
+            f"«{label}»: la respuesta no es JSON del API. "
+            "Revisa que la URL sea …/api/external/search del otro proyecto IMAP."
+        )
+
+    if status == 200:
+        if isinstance(data.get("results"), list):
+            return True, f"«{label}»: conexión correcta. URL y token válidos."
+        if _linked_api_response_looks_valid(data, response):
+            return True, f"«{label}»: conexión correcta. URL y token válidos."
+        return False, (
+            f"«{label}»: el servidor respondió 200, pero no parece el API de búsqueda. "
+            "Revisa la URL (debe ser /api/external/search del otro proyecto)."
+        )
+
+    # 401/403 JSON del API real: la URL es correcta; falla token o autorización.
+    if status in (401, 403) and _linked_api_response_looks_valid(data, response):
+        msg = _friendly_linked_api_http_error(status, err_msg, url_stripped)
+        return False, f"«{label}»: {msg}"
+
+    if not _linked_api_response_looks_valid(data, response):
+        return False, (
+            f"«{label}»: la respuesta no parece el API de códigos (código {status}). "
+            "Revisa la URL completa …/api/external/search."
+        )
+
+    msg = _friendly_linked_api_http_error(status, err_msg, url_stripped)
+    return False, f"«{label}»: {msg}"
+
+
+def _friendly_linked_licenses_api_http_error(status, err_msg="", url=""):
+    """Igual que códigos, pero con tip de /api/external/licenses/search."""
+    tip = (
+        " Usa la URL completa del otro proyecto terminada en "
+        "/api/external/licenses/search (no solo el dominio)."
+    )
+    path = (urlparse(url or "").path or "").rstrip("/")
+    missing_endpoint = path in ("", "/")
+    if status == 405:
+        return (
+            "Ese servidor no acepta POST en esa URL (error 405)."
+            + (tip if missing_endpoint else " Revisa que la URL sea …/api/external/licenses/search.")
+        )
+    if status == 404:
+        return (
+            "No se encontró el endpoint del API de licencias (404)."
+            + tip
+        )
+    if status in (401, 403):
+        base = "Token inválido o no autorizado."
+        if err_msg:
+            return f"{base} ({err_msg})"
+        return base
+    if status >= 500:
+        detail = f" Detalle: {err_msg}" if err_msg else ""
+        return f"El servidor remoto falló (código {status}).{detail}"
+    if err_msg:
+        detail = f": {err_msg}"
+        return (
+            f"El remoto respondió con error (código {status}){detail}."
+            + (tip if missing_endpoint else "")
+        )
+    detail = f": {err_msg}" if err_msg else ""
+    return f"Respuesta inesperada del remoto (código {status}){detail}."
+
+
+def test_linked_licenses_api(url, token, *, origin_user=None, origin_domain=None, project_name=None):
+    """
+    Prueba URL + token de un API de licencias vinculado.
+
+    Misma mecánica que proyectos vinculados (códigos), pero espera
+    /api/external/licenses/search y mensajes orientados a licencias.
+
+    Returns:
+        (ok: bool, message: str)
+    """
+    label = (project_name or "API de licencias").strip() or "API de licencias"
+    url_stripped = (url or "").strip()
+    token_stripped = (token or "").strip()
+    if not url_stripped or not token_stripped:
+        return False, f"«{label}»: faltan URL o token."
+    if not url_stripped.startswith(("http://", "https://")):
+        return False, f"«{label}»: la URL debe empezar por http:// o https://"
+    parsed = urlparse(url_stripped)
+    host = (parsed.hostname or "").strip()
+    path = (parsed.path or "").rstrip("/")
+    if not host or "." not in host:
+        return False, (
+            f"«{label}»: la URL no parece un dominio válido"
+            + (f" («{host}»)." if host else ".")
+            + " Usa algo como https://otroproyecto.com/api/external/licenses/search"
+        )
+    if not validate_external_url_ssrf(url_stripped):
+        return False, (
+            f"«{label}»: esa URL no está permitida "
+            "(no se puede usar localhost ni redes internas)."
+        )
+
+    payload = {
+        "token": token_stripped,
+        "email_to_search": "linked-licenses-api-probe@example.com",
+        "origin_user": (origin_user or "").strip() or "probe",
+        "origin_domain": (origin_domain or "").strip() or "unknown",
+        "scope": "licenses",
+    }
+    try:
+        response = requests.post(url_stripped, json=payload, timeout=10)
+    except requests.RequestException as e:
+        connect_msg = _friendly_linked_api_connect_error(e, url_stripped).replace(
+            "/api/external/search", "/api/external/licenses/search"
+        )
+        return False, f"«{label}»: {connect_msg}"
+
+    status = response.status_code
+    ctype = str((response.headers or {}).get("Content-Type") or "").lower()
+    err_msg = ""
+    data = None
+    try:
+        data = response.json()
+        if isinstance(data, dict):
+            err_msg = str(data.get("error") or data.get("message") or "").strip()
+    except ValueError:
+        data = None
+
+    if data is None or not isinstance(data, dict):
+        if "html" in ctype or (response.text or "").lstrip()[:15].lower().startswith(
+            ("<!doctype", "<html")
+        ):
+            return False, (
+                f"«{label}»: esa URL respondió con una página web, no con el API de licencias. "
+                "Usa la URL real del otro proyecto terminada en /api/external/licenses/search "
+                "(no un dominio de ejemplo ni una web genérica)."
+            )
+        return False, (
+            f"«{label}»: la respuesta no es JSON del API de licencias. "
+            "Revisa que la URL sea …/api/external/licenses/search del otro proyecto IMAP."
+        )
+
+    path_is_licenses = path.endswith("/api/external/licenses/search")
+    scope_is_licenses = str(data.get("scope") or "").strip().lower() == "licenses"
+    looks_like_codes_only = (
+        path.endswith("/api/external/search")
+        and not path_is_licenses
+        and not scope_is_licenses
+    )
+
+    if status == 200:
+        if looks_like_codes_only and isinstance(data.get("results"), list):
+            return False, (
+                f"«{label}»: esa URL es el API de códigos, no el de licencias. "
+                "Usa …/api/external/licenses/search (botón Mi API de licencias del otro proyecto)."
+            )
+        if isinstance(data.get("results"), list) or (
+            _linked_api_response_looks_valid(data, response)
+            and (path_is_licenses or scope_is_licenses)
+        ):
+            return True, f"«{label}»: conexión correcta. URL y token de licencias válidos."
+        return False, (
+            f"«{label}»: el servidor respondió 200, pero no parece el API de licencias. "
+            "Revisa la URL (debe ser /api/external/licenses/search del otro proyecto)."
+        )
+
+    if status in (401, 403) and _linked_api_response_looks_valid(data, response):
+        msg = _friendly_linked_licenses_api_http_error(status, err_msg, url_stripped)
+        return False, f"«{label}»: {msg}"
+
+    if not _linked_api_response_looks_valid(data, response):
+        return False, (
+            f"«{label}»: la respuesta no parece el API de licencias (código {status}). "
+            "Revisa la URL completa …/api/external/licenses/search."
+        )
+
+    msg = _friendly_linked_licenses_api_http_error(status, err_msg, url_stripped)
+    return False, f"«{label}»: {msg}"
+
+
 def search_linked_projects_only(to_address, user, service_id=None):
     """
     Solo consulta las URLs configuradas en proyectos vinculados (otro servidor/proyecto).
@@ -728,6 +1136,18 @@ def _process_mails(all_mails, filters, regexes, user_searching, searched_address
             if cut_before_str:
                 apply_cut_before_html(mail, cut_before_str)
 
+            # Crunchyroll login: ocultar «THIS WAS NOT ME» y centrar «THIS WAS ME».
+            if _is_crunchyroll_login_confirm_filter(matched_filter):
+                _normalize_crunchyroll_login_action_buttons(mail)
+
+            # Netflix: Aprobar, Obtener código, o actualizar Hogar.
+            if (
+                _is_netflix_approve_session_filter(matched_filter)
+                or _looks_like_netflix_get_code_mail(mail)
+                or _looks_like_netflix_hogar_mail(mail)
+            ):
+                _normalize_netflix_approve_session_content(mail)
+
             mail["filter_matched"] = True
             if _is_netflix_login_6_digits_filter(matched_filter):
                 mail["filter_code"] = (
@@ -737,6 +1157,18 @@ def _process_mails(all_mails, filters, regexes, user_searching, searched_address
                         "html": body_html_before,
                     })
                 )
+            elif _is_universal_activation_filter(matched_filter):
+                mail["filter_code"] = (
+                    _extract_universal_activation_code(mail)
+                    or _extract_universal_activation_code({
+                        "text": body_text_before,
+                        "html": body_html_before,
+                    })
+                )
+                # Evitar el HTML del mail (tablas/imagen/blanco extra); el front usa filter_code.
+                if mail.get("filter_code"):
+                    mail["html"] = ""
+                    mail["text"] = ""
             else:
                 mail["filter_code"] = None
         else:
@@ -900,6 +1332,445 @@ def _is_netflix_login_6_digits_filter(matched_filter) -> bool:
     )
 
 
+def _is_netflix_approve_session_filter(matched_filter) -> bool:
+    """Netflix con CTA «Obtener código» o «Aprobar» (nueva solicitud / viaje)."""
+    if matched_filter is None:
+        return False
+    sender = _normalize_for_filter_match(getattr(matched_filter, "sender", ""))
+    blob = _normalize_for_filter_match(
+        " ".join(
+            [
+                getattr(matched_filter, "keyword", None) or "",
+                getattr(matched_filter, "description", None) or "",
+            ]
+        )
+    )
+    if "aprueba la nueva solicitud" in blob:
+        return True
+    if "codigo de acceso temporal" in blob or "temporary access code" in blob:
+        return True
+    if (
+        "actualizar tu hogar" in blob
+        or "solicitaste actualizar" in blob
+        or "actualizar hogar" in blob
+        or "update your home" in blob
+    ):
+        return True
+    if "netflix.com" not in sender:
+        return False
+    return (
+        "aprobar sesion" in blob
+        or "solicitud netflix" in blob
+        or "codigo netflix viaje" in blob
+        or "codigo de acceso temporal" in blob
+        or "temporary access code" in blob
+        or ("approve" in blob and "sign" in blob)
+    )
+
+
+_NF_APPROVE_LABELS = (
+    "aprobar",
+    "approve",
+)
+_NF_DECLINE_LABELS = (
+    "rechazar",
+    "decline",
+    "deny",
+    "reject",
+)
+_NF_DEVICE_NAME_HINTS = (
+    "tv",
+    "iphone",
+    "ipad",
+    "android",
+    "windows",
+    "mac",
+    "chrome",
+    "playstation",
+    "xbox",
+    "smart",
+    "lg ",
+    "samsung",
+    "sony",
+    "roku",
+    "fire",
+    "browser",
+    "tablet",
+    "movil",
+    "phone",
+    "webos",
+    "tizen",
+    "hisense",
+    "vizio",
+    "tcl",
+    "philips",
+    "apple tv",
+    "fire tv",
+    "smart tv",
+)
+_NF_IN_MAIL_DATE_RE = re.compile(
+    r"(?is)("
+    r"\d{1,2}\s+de\s+(?:ene(?:ro)?|feb(?:rero)?|mar(?:zo)?|abr(?:il)?|may(?:o)?|"
+    r"jun(?:io)?|jul(?:io)?|ago(?:sto)?|sep(?:tiembre)?|set(?:iembre)?|"
+    r"oct(?:ubre)?|nov(?:iembre)?|dic(?:iembre)?)"
+    r"|(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|"
+    r"jul(?:y)?|aug(?:ust)?|sep(?:tember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)"
+    r"\s+\d{1,2}"
+    r").{0,48}(?:a\.\s*m\.|p\.\s*m\.|am|pm)?.{0,16}(?:gmt|utc)"
+)
+
+
+def _nf_label_is_approve(label: str) -> bool:
+    n = _normalize_for_filter_match(label)
+    if not n:
+        return False
+    if n in _NF_APPROVE_LABELS:
+        return True
+    return n.startswith("aprobar") or n.startswith("approve")
+
+
+def _nf_label_is_decline(label: str) -> bool:
+    n = _normalize_for_filter_match(label)
+    if not n:
+        return False
+    return any(token in n for token in _NF_DECLINE_LABELS)
+
+
+def _nf_text_is_in_mail_date(raw: str) -> bool:
+    if not raw:
+        return False
+    if _NF_IN_MAIL_DATE_RE.search(raw):
+        return True
+    n = _normalize_for_filter_match(raw)
+    return bool(re.search(r"gmt[+\-]?\d{1,2}", n))
+
+
+def _netflix_mail_has_approve_decline_buttons(mail) -> bool:
+    """Plantilla «Aprueba la nueva solicitud…»: botones Aprobar / Rechazar."""
+    html = mail.get("html") or ""
+    text = mail.get("text") or ""
+    blob = _normalize_for_filter_match(html + " " + text)
+    has_approve = any(tok in blob for tok in ("aprobar", "approve"))
+    has_decline = any(tok in blob for tok in _NF_DECLINE_LABELS)
+    return has_approve and has_decline
+
+
+_NF_GET_CODE_CTA_TOKENS = (
+    "obtener codigo",
+    "obtener enlace",
+    "get code",
+    "get link",
+)
+_NF_HOGAR_CTA_TOKENS = (
+    "si, la envie yo",
+    "si la envie yo",
+    "la envie yo",
+    "yes, i sent it",
+    "yes i sent it",
+    "i sent it",
+)
+
+
+def _nf_label_matches_tokens(label: str, tokens) -> bool:
+    n = _normalize_for_filter_match(label)
+    return bool(n) and any(token in n for token in tokens)
+
+
+def _looks_like_netflix_get_code_mail(mail) -> bool:
+    """Correo Netflix «Obtener código» / acceso temporal."""
+    if _netflix_mail_has_approve_decline_buttons(mail):
+        return False
+    html = mail.get("html") or ""
+    text = mail.get("text") or ""
+    blob = _normalize_for_filter_match(html + " " + text)
+    has_cta = any(tok in blob for tok in _NF_GET_CODE_CTA_TOKENS)
+    has_expire = ("vence" in blob or "expires" in blob) and (
+        "minuto" in blob or "minute" in blob
+    )
+    return has_cta and has_expire
+
+
+def _looks_like_netflix_hogar_mail(mail) -> bool:
+    """Correo Netflix «¿Solicitaste actualizar tu Hogar?»: Sí, la envié yo."""
+    if _netflix_mail_has_approve_decline_buttons(mail):
+        return False
+    html = mail.get("html") or ""
+    text = mail.get("text") or ""
+    blob = _normalize_for_filter_match(html + " " + text)
+    has_cta = any(tok in blob for tok in _NF_HOGAR_CTA_TOKENS)
+    has_expire = ("vence" in blob or "expires" in blob) and (
+        "minuto" in blob or "minute" in blob
+    )
+    return has_cta and has_expire
+
+
+def _nf_shorten_expire_notice(raw: str) -> str:
+    """Deja solo «vence en N minutos.» (sin asterisco ni «El enlace»)."""
+    if not raw:
+        return ""
+    m = re.search(r"(?i)vence\s+en\s+(\d+)\s+minutos?", raw)
+    if m:
+        return f"vence en {m.group(1)} minutos."
+    m = re.search(r"(?i)expires?\s+in\s+(\d+)\s+minutes?", raw)
+    if m:
+        return f"vence en {m.group(1)} minutos."
+    return ""
+
+
+def _nf_full_expire_notice(raw: str) -> str:
+    """Conserva «* El enlace vence en N minutos.»."""
+    if not raw:
+        return ""
+    m = re.search(r"(?i)\*?\s*el\s+enlace\s+vence\s+en\s+(\d+)\s+minutos?\.?", raw)
+    if m:
+        mins = m.group(1)
+        return f"* El enlace vence en {mins} minutos."
+    m = re.search(r"(?i)\*?\s*the\s+link\s+expires?\s+in\s+(\d+)\s+minutes?\.?", raw)
+    if m:
+        mins = m.group(1)
+        return f"* El enlace vence en {mins} minutos."
+    short = _nf_shorten_expire_notice(raw)
+    if short:
+        return f"* El enlace {short}"
+    return ""
+
+
+def _nf_build_approve_button_html(href: str, label: str) -> str:
+    """Botón rojo sin borde blanco (el contorno lo da la tarjeta de resultado)."""
+    import html as html_module
+
+    safe_href = html_module.escape(href or "#", quote=True)
+    safe_label = html_module.escape(label)
+    inner = (
+        f'<a href="{safe_href}" target="_blank" rel="noopener noreferrer" '
+        'style="text-decoration:none;display:flex;align-items:center;justify-content:center;'
+        'height:48px;margin:0;padding:0;line-height:1;color:#fff;border:0;outline:none;">'
+        f"{safe_label}</a>"
+        if href
+        else (
+            '<span style="display:flex;align-items:center;justify-content:center;'
+            'height:48px;margin:0;padding:0;line-height:1;color:#fff;">'
+            f"{safe_label}</span>"
+        )
+    )
+    return (
+        '<table cellpadding="0" cellspacing="0" border="0" role="presentation" '
+        'style="border:0;border-collapse:collapse;border-spacing:0;outline:none;'
+        "background-color:rgb(229,9,20);width:100%;height:48px;margin:8px 0 0;"
+        'border-radius:0;box-shadow:none;filter:none;">'
+        "<tbody><tr>"
+        '<td align="center" valign="middle" style="border:0;outline:none;height:48px;padding:0;'
+        "font-family:Helvetica Neue,Roboto,Segoe UI,sans-serif;font-weight:700;font-size:16px;"
+        'line-height:1;color:#fff;background-color:rgb(229,9,20);vertical-align:middle;">'
+        f"{inner}</td></tr></tbody></table>"
+    )
+
+
+def _nf_extract_device_name_from_soup(soup) -> str:
+    best = ""
+    for node in soup.find_all(["p", "td", "div", "span", "strong", "b", "h1", "h2", "h3"]):
+        if node.find("a"):
+            continue
+        raw = " ".join((node.get_text(" ", strip=True) or "").split())
+        if not raw or len(raw) > 80:
+            continue
+        if _nf_label_is_approve(raw) or _nf_label_is_decline(raw):
+            continue
+        if _nf_text_is_in_mail_date(raw):
+            continue
+        raw_n = _normalize_for_filter_match(raw)
+        hinted = any(h.strip() in raw_n for h in _NF_DEVICE_NAME_HINTS) or " - " in raw
+        if not hinted:
+            continue
+        # Preferir el nodo más corto (p. ej. «LG - Smart TV» frente al td padre).
+        if not best or len(raw) < len(best):
+            best = raw
+    return best
+
+
+def _normalize_netflix_new_sign_in_request_content(mail):
+    """
+    Correo «Aprueba la nueva solicitud de inicio de sesión»:
+    deja nombre del equipo + botón Aprobar; oculta icono, fecha in-mail y Rechazar.
+    """
+    import html as html_module
+
+    html = mail.get("html") or ""
+    text = mail.get("text") or ""
+    device_name = ""
+    approve_label = ""
+    approve_href = ""
+    button_html = ""
+
+    if html.strip():
+        try:
+            from bs4 import BeautifulSoup
+
+            soup = BeautifulSoup(html, "html.parser")
+            device_name = _nf_extract_device_name_from_soup(soup)
+            for anchor in soup.find_all("a"):
+                label = " ".join((anchor.get_text(" ", strip=True) or "").split())
+                if _nf_label_is_decline(label):
+                    continue
+                if not _nf_label_is_approve(label):
+                    continue
+                approve_label = label
+                approve_href = (anchor.get("href") or "").strip()
+                break
+        except Exception:
+            pass
+
+    if not device_name or not approve_label:
+        plain = text or _plain_text_from_html(html)
+        if not approve_label:
+            m = re.search(r"\b(Aprobar|Approve)\b", plain, flags=re.I)
+            if m:
+                approve_label = m.group(1)
+        if not device_name:
+            for line in re.split(r"[\n\r]+", plain):
+                raw = " ".join(line.split())
+                if not raw or len(raw) > 80:
+                    continue
+                if _nf_label_is_approve(raw) or _nf_label_is_decline(raw):
+                    continue
+                if _nf_text_is_in_mail_date(raw):
+                    continue
+                raw_n = _normalize_for_filter_match(raw)
+                if " - " in raw or any(h.strip() in raw_n for h in _NF_DEVICE_NAME_HINTS):
+                    device_name = raw
+                    break
+
+    if approve_label:
+        button_html = _nf_build_approve_button_html(approve_href, approve_label)
+
+    if not button_html and not device_name:
+        return
+
+    pieces = [
+        '<div class="nf-sign-in-cta" style="text-align:center;padding:0;max-width:100%;'
+        'margin:0 auto;box-shadow:none;filter:none;">'
+    ]
+    if device_name:
+        pieces.append(
+            '<p style="font-family:Helvetica Neue,Roboto,Segoe UI,sans-serif;font-size:16px;'
+            'font-weight:700;line-height:20px;color:#221f1f;margin:0 0 8px;text-align:center;">'
+            f"{html_module.escape(device_name)}</p>"
+        )
+    if button_html:
+        pieces.append(button_html)
+    pieces.append("</div>")
+    mail["html"] = "".join(pieces)
+
+    text_parts = []
+    if device_name:
+        text_parts.append(device_name)
+    if approve_label:
+        text_parts.append(approve_label)
+    if approve_href:
+        text_parts.append(approve_href)
+    mail["text"] = "\n".join(text_parts)
+
+
+def _normalize_netflix_approve_session_content(mail):
+    """
+    Deja el CTA (Obtener código / Get code) y «vence en N minutos.».
+    Quita avatar, «Solicitud de…» y la fecha incrustada del correo.
+    Si el correo es Aprobar/Rechazar (nueva solicitud), deja equipo + Aprobar.
+    Conserva formatted_date (Fecha: … de la consulta).
+    """
+    html = mail.get("html") or ""
+    text = mail.get("text") or ""
+    if not html.strip() and not text.strip():
+        return
+
+    if _netflix_mail_has_approve_decline_buttons(mail):
+        _normalize_netflix_new_sign_in_request_content(mail)
+        return
+
+    is_hogar = _looks_like_netflix_hogar_mail(mail)
+    cta_tokens = _NF_HOGAR_CTA_TOKENS + _NF_GET_CODE_CTA_TOKENS
+    cta_label = ""
+    cta_href = ""
+    expire_source = text or _plain_text_from_html(html)
+
+    if html.strip():
+        try:
+            from bs4 import BeautifulSoup
+
+            soup = BeautifulSoup(html, "html.parser")
+            for anchor in soup.find_all("a"):
+                label = " ".join((anchor.get_text(" ", strip=True) or "").split())
+                if not _nf_label_matches_tokens(label, cta_tokens):
+                    continue
+                cta_label = label
+                cta_href = (anchor.get("href") or "").strip()
+                if _nf_label_matches_tokens(label, _NF_HOGAR_CTA_TOKENS):
+                    is_hogar = True
+                break
+            expire_source = soup.get_text(" ", strip=True) or expire_source
+        except Exception:
+            pass
+
+    if not cta_label:
+        plain = expire_source or text or _plain_text_from_html(html)
+        if is_hogar:
+            m = re.search(
+                r"(S[ií],?\s+la\s+envi[eé]\s+yo|Yes,?\s+I\s+sent\s+it)",
+                plain,
+                flags=re.I,
+            )
+        else:
+            m = re.search(
+                r"(Obtener\s+c[oó]digo|Obtener\s+enlace|Get\s+Code|Get\s+Link)",
+                plain,
+                flags=re.I,
+            )
+        if m:
+            cta_label = " ".join(m.group(1).split())
+
+    if is_hogar:
+        expire_text = _nf_full_expire_notice(expire_source) or _nf_full_expire_notice(
+            text or _plain_text_from_html(html)
+        )
+    else:
+        expire_text = _nf_shorten_expire_notice(expire_source)
+        if not expire_text:
+            expire_text = _nf_shorten_expire_notice(text or _plain_text_from_html(html))
+
+    button_html = ""
+    if cta_label:
+        button_html = _nf_build_approve_button_html(cta_href, cta_label)
+
+    if not button_html and not expire_text:
+        return
+
+    pieces = [
+        '<div class="nf-sign-in-cta" style="text-align:center;padding:0;max-width:100%;'
+        'margin:0 auto;box-shadow:none;filter:none;">'
+    ]
+    if button_html:
+        pieces.append(button_html)
+    if expire_text:
+        import html as html_module
+
+        pieces.append(
+            '<p style="font-family:Helvetica Neue,Roboto,Segoe UI,sans-serif;font-size:12px;'
+            'line-height:15px;color:#696666;margin:10px 0 0;text-align:center;">'
+            f"{html_module.escape(expire_text)}</p>"
+        )
+    pieces.append("</div>")
+    mail["html"] = "".join(pieces)
+
+    text_parts = []
+    if cta_label:
+        text_parts.append(cta_label)
+    if cta_href:
+        text_parts.append(cta_href)
+    if expire_text:
+        text_parts.append(expire_text)
+    mail["text"] = "\n".join(text_parts)
+
+
 def _extract_six_digit_code_from_text(combined: str):
     if not combined:
         return None
@@ -920,6 +1791,84 @@ def _extract_six_digit_code_from_mail(mail_dict):
     ]
     combined = " ".join(p for p in parts if p).strip()
     return _extract_six_digit_code_from_text(combined)
+
+
+def _is_universal_activation_filter(matched_filter) -> bool:
+    """Código de activación Universal+ (On Demand / universalplus)."""
+    if matched_filter is None:
+        return False
+    sender = (getattr(matched_filter, "sender", None) or "").lower()
+    blob = " ".join(
+        [
+            sender,
+            (getattr(matched_filter, "keyword", None) or "").lower(),
+            (getattr(matched_filter, "description", None) or "").lower(),
+        ]
+    )
+    if "universal" not in blob and "universalplus" not in sender:
+        return False
+    return any(
+        token in blob
+        for token in ("on demand", "activaci", "iniciar sesion", "iniciar sesión", "codigo", "código")
+    )
+
+
+def _extract_universal_activation_code(mail_dict):
+    """
+    Extrae el código de activación (p. ej. JU2EHK) del HTML/texto ya filtrado.
+    Prioriza <h1>/<strong>; luego tokens con letras+dígitos; evita palabras tipo DEMAND.
+    """
+    html = mail_dict.get("html") or ""
+    text = mail_dict.get("text") or ""
+    _skip = {
+        "DEMAND", "UNIVERSAL", "ONDEMAND", "CODIGO", "CÓDIGO", "ACTIVAR",
+        "ACTIVATION", "ACCOUNT", "CUENTA", "SESSION", "SESION", "SESIÓN",
+    }
+
+    def _rank_token(token: str):
+        t = (token or "").upper()
+        if not re.fullmatch(r"[A-Z0-9]{4,10}", t) or t in _skip or t.isdigit():
+            return None
+        has_letter = bool(re.search(r"[A-Z]", t))
+        has_digit = bool(re.search(r"[0-9]", t))
+        if has_letter and has_digit:
+            return (0, t)  # preferido: JU2EHK
+        if has_letter:
+            return (1, t)  # solo letras (último recurso)
+        return None
+
+    preferred = []
+    fallback = []
+
+    def _add(token: str):
+        ranked = _rank_token(token)
+        if not ranked:
+            return
+        priority, t = ranked
+        (preferred if priority == 0 else fallback).append(t)
+
+    if html.strip():
+        try:
+            from bs4 import BeautifulSoup
+
+            soup = BeautifulSoup(html, "html.parser")
+            for tag in soup.find_all(["h1", "h2", "strong", "b"]):
+                raw = "".join((tag.get_text() or "").split())
+                _add(raw)
+            if not preferred and not fallback:
+                plain = soup.get_text(" ", strip=True)
+                for m in re.finditer(r"\b([A-Za-z0-9]{4,10})\b", plain):
+                    _add(m.group(1))
+        except Exception:
+            pass
+
+    if not preferred and not fallback and text:
+        for m in re.finditer(r"\b([A-Za-z0-9]{4,10})\b", text):
+            _add(m.group(1))
+
+    if preferred:
+        return preferred[0]
+    return fallback[0] if fallback else None
 
 
 def apply_cut_after_html(mail, cut_str):
@@ -966,6 +1915,124 @@ def apply_cut_before_html(mail, cut_str):
         else:
             # Si no hay contenido después del corte, mantener el cut_str
             mail["text"] = cut_str
+
+
+_CR_NOT_ME_LABELS = (
+    'this was not me',
+    'esto no fui yo',
+    'no fui yo',
+    'no fuiste tú',
+    'no fuiste tu',
+)
+_CR_WAS_ME_LABELS = (
+    'this was me',
+    'sí fui yo',
+    'si fui yo',
+    'fui yo',
+)
+
+
+def _is_crunchyroll_login_confirm_filter(matched_filter):
+    """Filtros de confirmación de inicio de sesión de Crunchyroll (EN/ES)."""
+    if not matched_filter:
+        return False
+    sender = (getattr(matched_filter, 'sender', None) or '').lower()
+    blob = ' '.join(
+        [
+            sender,
+            (getattr(matched_filter, 'keyword', None) or '').lower(),
+            (getattr(matched_filter, 'description', None) or '').lower(),
+        ]
+    )
+    if 'crunchyroll' not in blob:
+        return False
+    return any(
+        token in blob
+        for token in (
+            'login',
+            'inicio de sesi',
+            'confirma tu nuevo',
+            'confirm your new',
+        )
+    )
+
+
+def _crunchyroll_link_label(anchor):
+    return ' '.join((anchor.get_text(' ', strip=True) or '').split()).lower()
+
+
+def _normalize_crunchyroll_login_action_buttons(mail):
+    """
+    En consultas Crunchyroll de login: quita «THIS WAS NOT ME» y centra «THIS WAS ME».
+    """
+    html = mail.get('html') or ''
+    text = mail.get('text') or ''
+    low = html.lower()
+    if 'this was' not in low and 'fui yo' not in low:
+        # Solo texto plano
+        if text:
+            lines = []
+            for line in text.splitlines():
+                ll = line.strip().lower()
+                if any(lab in ll for lab in _CR_NOT_ME_LABELS):
+                    continue
+                lines.append(line)
+            mail['text'] = '\n'.join(lines)
+        return
+
+    try:
+        from bs4 import BeautifulSoup
+    except Exception:
+        return
+
+    soup = BeautifulSoup(html, 'html.parser')
+    changed = False
+
+    for anchor in list(soup.find_all('a')):
+        label = _crunchyroll_link_label(anchor)
+        if not any(lab in label for lab in _CR_NOT_ME_LABELS):
+            continue
+        cell = anchor.find_parent('td')
+        if cell is not None:
+            cell.decompose()
+        else:
+            anchor.decompose()
+        changed = True
+
+    for anchor in soup.find_all('a'):
+        label = _crunchyroll_link_label(anchor)
+        if not any(lab in label for lab in _CR_WAS_ME_LABELS):
+            continue
+        cell = anchor.find_parent('td')
+        row = anchor.find_parent('tr')
+        table = anchor.find_parent('table')
+        if cell is not None:
+            cell['align'] = 'center'
+            style = (cell.get('style') or '').rstrip()
+            if 'text-align' not in style.lower():
+                cell['style'] = (style + (';' if style else '') + 'text-align:center;')
+            changed = True
+        if row is not None:
+            row['align'] = 'center'
+            changed = True
+        if table is not None:
+            table['align'] = 'center'
+            style = (table.get('style') or '').rstrip()
+            if 'margin' not in style.lower():
+                table['style'] = (style + (';' if style else '') + 'margin:0 auto;')
+            changed = True
+
+    if changed:
+        mail['html'] = str(soup)
+
+    if text:
+        lines = []
+        for line in text.splitlines():
+            ll = line.strip().lower()
+            if any(lab in ll for lab in _CR_NOT_ME_LABELS):
+                continue
+            lines.append(line)
+        mail['text'] = '\n'.join(lines)
 
 
 def _format_date(mail):

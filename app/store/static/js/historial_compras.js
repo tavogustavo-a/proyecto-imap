@@ -490,6 +490,27 @@ document.addEventListener('DOMContentLoaded', function() {
     return tail ? core + ' ' + tail : core;
   }
 
+  function refundDetailText(row) {
+    if (!row || !row.is_refund_event) return '';
+    const refunded = Math.max(0, parseInt(row.refund_days, 10) || 0);
+    const charged = Math.max(0, parseInt(row.charged_days, 10) || 0);
+    const period = Math.max(1, parseInt(row.billing_period_days, 10) || charged + refunded || 30);
+    const detected = Math.max(0, parseInt(row.detected_charged_days, 10) || 0);
+    const days = charged + ' días cobrados · ' + refunded + ' días devueltos de ' + period;
+    const audit = row.charged_days_overridden
+      ? ' · Ajuste manual: sistema ' + detected + ', registrado ' + charged +
+        (row.refund_actor ? ' por ' + row.refund_actor : '')
+      : ' · Detectado automáticamente';
+    const amount = row.total_display || formatMoney(row.refund_amount || row.total);
+    const currency = String(row.currency || '').trim().toUpperCase();
+    const unitRaw = Number(row.unit_price || 0);
+    const unit =
+      Number.isFinite(unitRaw) && unitRaw > 0
+        ? formatMoney(unitRaw) + (currency ? ' ' + currency : '')
+        : '—';
+    return days + audit + ' · Valor cuenta: ' + unit + ' · Saldo devuelto: ' + amount;
+  }
+
   function mergeFreshRechargeHistorial(freshItems) {
     if (!Array.isArray(freshItems) || !freshItems.length) return;
     const byId = {};
@@ -525,9 +546,13 @@ document.addEventListener('DOMContentLoaded', function() {
       const td = document.createElement('td');
       td.colSpan = showUserColumn ? 6 : 5;
       td.className = 'text-center';
-      td.textContent = showUserColumn
-        ? 'No hay compras registradas.'
-        : 'No tienes compras registradas aún.';
+      if (isAdvFilterActive() || (inputBusqueda && inputBusqueda.value.trim())) {
+        td.textContent = 'Ninguna fila coincide con el filtro actual.';
+      } else {
+        td.textContent = showUserColumn
+          ? 'No hay compras registradas.'
+          : 'No tienes compras registradas aún.';
+      }
       tr.appendChild(td);
       tbody.appendChild(tr);
     } else {
@@ -546,6 +571,8 @@ document.addEventListener('DOMContentLoaded', function() {
           } else {
             tr.className += ' purchase-history-recharge-row--success';
           }
+        } else if (row.is_refund_event) {
+          tr.className = 'purchase-history-refund-row';
         } else if (row.is_reservation_fulfilled) {
           tr.className =
             row.reservation_kind === 'next_day'
@@ -577,6 +604,11 @@ document.addEventListener('DOMContentLoaded', function() {
             'purchase-history-recharge-status purchase-history-recharge-status--' +
             (failed ? 'failed' : 'success');
           span.textContent = failed ? 'Fallido' : 'Exitoso';
+          licBtnCell.appendChild(span);
+        } else if (row.is_refund_event) {
+          const span = document.createElement('span');
+          span.className = 'purchase-history-refund-status';
+          span.textContent = 'Devuelto';
           licBtnCell.appendChild(span);
         } else if (row.is_customer_account_renewal || row.has_customer_renewal_detail) {
           const btn = document.createElement('button');
@@ -674,6 +706,21 @@ document.addEventListener('DOMContentLoaded', function() {
             rechargeIcon +
             '" aria-hidden="true"></i> ' +
             escapeHtml(productoTexto) +
+            '</span>';
+        } else if (row.is_refund_event) {
+          productoCell =
+            '<span class="purchase-history-refund-product">' +
+            '<span><i class="fas fa-undo-alt" aria-hidden="true"></i> ' +
+            escapeHtml(productoTexto) +
+            '</span>' +
+            '<small class="purchase-history-refund-detail">' +
+            escapeHtml(refundDetailText(row)) +
+            '</small>' +
+            (row.custom_message
+              ? '<small class="purchase-history-refund-message">' +
+                escapeHtml(row.custom_message) +
+                '</small>'
+              : '') +
             '</span>';
         } else if (row.is_renewal) {
           var renewalTitle = 'Renovación';
@@ -774,40 +821,253 @@ document.addEventListener('DOMContentLoaded', function() {
     renderPaginacion();
   }
 
-  function filtrar() {
-    const q = inputBusqueda.value.trim().toLowerCase();
-    if (!q) {
-      datosFiltrados = [...datos];
-    } else {
-      datosFiltrados = datos.filter(function (row) {
-        const hay = [];
-        hay.push(row.fecha, rechargeProductoDisplay(row), row.cantidad, formatMoney(row.total));
-        if (row.total_display) hay.push(row.total_display);
-        if (row.id != null) hay.push(String(row.id));
-        if (row.product_id != null) hay.push(String(row.product_id));
-        if (showUserColumn) {
-          if (row.usuario != null) hay.push(String(row.usuario));
-          if (row.user_id != null) hay.push(String(row.user_id));
-        }
-        if (row.is_customer_account_renewal || row.has_customer_renewal_detail) {
-          if (row.customer_renewal_email) hay.push(row.customer_renewal_email);
-          if (row.customer_renewal_status_label) hay.push(row.customer_renewal_status_label);
-          if (isCustomerRenewalRejected(row)) hay.push('rechazada');
-        }
-        if (Array.isArray(row.licencias)) {
-          row.licencias.forEach(function (lic) {
-            if (lic.email) hay.push(lic.email);
-            if (lic.identifier) hay.push(lic.identifier);
-          });
-        }
-        return hay.some(function (s) {
-          return String(s || '')
-            .toLowerCase()
-            .includes(q);
-        });
+  const PH_FILTER_KIND_LABELS = {
+    daily_summary: 'Resumen diario',
+    proveedor_daily: 'Venta diaria proveedor',
+    accounts: 'Cuentas',
+    reservation_cancelled: 'Reserva cancelada',
+    reservation_fulfilled: 'Compra reservada',
+    renewal: 'Renovaciones',
+    recharge: 'Recargas',
+    refund: 'Devoluciones',
+    rejected: 'Rechazadas',
+  };
+
+  let phAdvFilter = {
+    user: '',
+    text: '',
+    kinds: {},
+  };
+
+  const phFilterBtn = document.getElementById('phComprasFilterBtn');
+  const phFilterModal = document.getElementById('phComprasFilterModal');
+  const phFilterModalClose = document.getElementById('phComprasFilterModalClose');
+  const phFilterApply = document.getElementById('phComprasFilterApply');
+  const phFilterReset = document.getElementById('phComprasFilterReset');
+  const phFilterUserInput = document.getElementById('phComprasFilterUser');
+  const phFilterUserList = document.getElementById('phComprasFilterUserList');
+  const phFilterTextInput = document.getElementById('phComprasFilterText');
+  const phFilterChip = document.getElementById('phComprasFilterClearChip');
+  const phFilterChipLabel = document.getElementById('phComprasFilterChipLabel');
+  const phFilterPresetBtns = phFilterModal
+    ? phFilterModal.querySelectorAll('.purchase-history-filter-preset')
+    : [];
+
+  function rowSearchHaystack(row) {
+    const hay = [];
+    hay.push(row.fecha, rechargeProductoDisplay(row), row.cantidad, formatMoney(row.total));
+    if (row.total_display) hay.push(row.total_display);
+    if (row.is_refund_event) {
+      hay.push(refundDetailText(row), row.custom_message, row.currency);
+    }
+    if (row.id != null) hay.push(String(row.id));
+    if (row.product_id != null) hay.push(String(row.product_id));
+    if (showUserColumn) {
+      if (row.usuario != null) hay.push(String(row.usuario));
+      if (row.user_id != null) hay.push(String(row.user_id));
+    }
+    if (row.is_customer_account_renewal || row.has_customer_renewal_detail) {
+      if (row.customer_renewal_email) hay.push(row.customer_renewal_email);
+      if (row.customer_renewal_status_label) hay.push(row.customer_renewal_status_label);
+      if (isCustomerRenewalRejected(row)) hay.push('rechazada');
+    }
+    if (Array.isArray(row.licencias)) {
+      row.licencias.forEach(function (lic) {
+        if (lic.email) hay.push(lic.email);
+        if (lic.identifier) hay.push(lic.identifier);
+        if (lic.password) hay.push(lic.password);
       });
     }
+    if (row.daily_summary_text) hay.push(row.daily_summary_text);
+    return hay;
+  }
+
+  function rowMatchesTextQuery(row, q) {
+    if (!q) return true;
+    return rowSearchHaystack(row).some(function (s) {
+      return String(s || '')
+        .toLowerCase()
+        .includes(q);
+    });
+  }
+
+  function rowHasAccounts(row) {
+    if (!row) return false;
+    if (row.is_customer_account_renewal || row.has_customer_renewal_detail) return true;
+    if (row.has_licencias) return true;
+    return Array.isArray(row.licencias) && row.licencias.length > 0;
+  }
+
+  function rowMatchesKind(row, kind) {
+    switch (kind) {
+      case 'daily_summary':
+        /* Solo resumen de cliente; el de proveedor tiene su propia ayuda. */
+        return !!(row.is_daily_summary && !row.is_proveedor_daily_summary);
+      case 'proveedor_daily':
+        return !!row.is_proveedor_daily_summary;
+      case 'accounts':
+        return rowHasAccounts(row);
+      case 'reservation_cancelled':
+        return !!row.is_reservation_event;
+      case 'reservation_fulfilled':
+        return !!row.is_reservation_fulfilled;
+      case 'renewal':
+        return !!(row.is_customer_account_renewal || row.has_customer_renewal_detail);
+      case 'recharge':
+        return !!row.is_recharge_event;
+      case 'refund':
+        return !!row.is_refund_event;
+      case 'rejected':
+        return (
+          isCustomerRenewalRejected(row) ||
+          !!(row.is_recharge_event && (row.is_recharge_rejected || row.is_recharge_reverted))
+        );
+      default:
+        return true;
+    }
+  }
+
+  function selectedFilterKinds() {
+    return Object.keys(phAdvFilter.kinds).filter(function (k) {
+      return !!phAdvFilter.kinds[k];
+    });
+  }
+
+  function isAdvFilterActive() {
+    return !!(
+      (phAdvFilter.user && phAdvFilter.user.trim()) ||
+      (phAdvFilter.text && phAdvFilter.text.trim()) ||
+      selectedFilterKinds().length
+    );
+  }
+
+  function rowMatchesAdvFilter(row) {
+    const userQ = String(phAdvFilter.user || '')
+      .trim()
+      .toLowerCase();
+    if (userQ) {
+      const uname = String(row.usuario || '')
+        .trim()
+        .toLowerCase();
+      const uid = row.user_id != null ? String(row.user_id) : '';
+      if (!(uname.includes(userQ) || uid === userQ)) return false;
+    }
+    const textQ = String(phAdvFilter.text || '')
+      .trim()
+      .toLowerCase();
+    if (textQ && !rowMatchesTextQuery(row, textQ)) return false;
+    const kinds = selectedFilterKinds();
+    if (kinds.length && !kinds.some(function (k) {
+      return rowMatchesKind(row, k);
+    })) {
+      return false;
+    }
+    return true;
+  }
+
+  function populateFilterUserDatalist() {
+    if (!phFilterUserList || !showUserColumn) return;
+    const seen = {};
+    const names = [];
+    datos.forEach(function (row) {
+      const u = String(row.usuario || '').trim();
+      if (!u || seen[u.toLowerCase()]) return;
+      seen[u.toLowerCase()] = true;
+      names.push(u);
+    });
+    names.sort(function (a, b) {
+      return a.localeCompare(b, 'es', { sensitivity: 'base' });
+    });
+    phFilterUserList.innerHTML = names
+      .map(function (n) {
+        return '<option value="' + escapeHtml(n) + '"></option>';
+      })
+      .join('');
+  }
+
+  function syncFilterPresetButtons() {
+    phFilterPresetBtns.forEach(function (btn) {
+      const kind = btn.getAttribute('data-ph-filter-kind') || '';
+      btn.classList.toggle('is-selected', !!phAdvFilter.kinds[kind]);
+      btn.setAttribute('aria-pressed', phAdvFilter.kinds[kind] ? 'true' : 'false');
+    });
+  }
+
+  function fillFilterModalFromState() {
+    if (phFilterUserInput) phFilterUserInput.value = phAdvFilter.user || '';
+    if (phFilterTextInput) phFilterTextInput.value = phAdvFilter.text || '';
+    syncFilterPresetButtons();
+  }
+
+  function readFilterModalIntoState() {
+    phAdvFilter.user = phFilterUserInput ? phFilterUserInput.value.trim() : '';
+    phAdvFilter.text = phFilterTextInput ? phFilterTextInput.value.trim() : '';
+  }
+
+  function advFilterChipSummary() {
+    const parts = [];
+    if (phAdvFilter.user) parts.push('Usuario: ' + phAdvFilter.user);
+    if (phAdvFilter.text) parts.push('«' + phAdvFilter.text + '»');
+    selectedFilterKinds().forEach(function (k) {
+      parts.push(PH_FILTER_KIND_LABELS[k] || k);
+    });
+    return parts.length ? parts.join(' · ') : 'Filtro activo';
+  }
+
+  function updateFilterChrome() {
+    const active = isAdvFilterActive();
+    if (phFilterBtn) phFilterBtn.classList.toggle('is-active', active);
+    if (phFilterChip) {
+      if (active) {
+        phFilterChip.hidden = false;
+        if (phFilterChipLabel) phFilterChipLabel.textContent = advFilterChipSummary();
+      } else {
+        phFilterChip.hidden = true;
+      }
+    }
+  }
+
+  function openPhFilterModal() {
+    if (!phFilterModal) return;
+    populateFilterUserDatalist();
+    fillFilterModalFromState();
+    phFilterModal.classList.remove('modal-hidden');
+    phFilterModal.setAttribute('aria-hidden', 'false');
+    const focusEl = phFilterUserInput || phFilterTextInput || phFilterApply;
+    if (focusEl) {
+      try {
+        focusEl.focus();
+      } catch (_e) {}
+    }
+  }
+
+  function closePhFilterModal() {
+    if (!phFilterModal) return;
+    phFilterModal.classList.add('modal-hidden');
+    phFilterModal.setAttribute('aria-hidden', 'true');
+    if (phFilterBtn) {
+      try {
+        phFilterBtn.focus();
+      } catch (_e2) {}
+    }
+  }
+
+  function clearAdvFilter(andApply) {
+    phAdvFilter = { user: '', text: '', kinds: {} };
+    fillFilterModalFromState();
+    updateFilterChrome();
+    if (andApply !== false) filtrar();
+  }
+
+  function filtrar() {
+    const q = inputBusqueda ? inputBusqueda.value.trim().toLowerCase() : '';
+    datosFiltrados = datos.filter(function (row) {
+      if (!rowMatchesAdvFilter(row)) return false;
+      if (!q) return true;
+      return rowMatchesTextQuery(row, q);
+    });
     paginaActual = 1;
+    updateFilterChrome();
     actualizar();
   }
 
@@ -815,6 +1075,53 @@ document.addEventListener('DOMContentLoaded', function() {
     inputBusqueda.addEventListener('input', filtrar);
     inputBusqueda.addEventListener('search', filtrar);
   }
+
+  if (phFilterBtn) {
+    phFilterBtn.addEventListener('click', openPhFilterModal);
+  }
+  if (phFilterModalClose) {
+    phFilterModalClose.addEventListener('click', closePhFilterModal);
+  }
+  if (phFilterModal) {
+    phFilterModal.addEventListener('click', function (ev) {
+      if (ev.target === phFilterModal) closePhFilterModal();
+    });
+  }
+  phFilterPresetBtns.forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      const kind = btn.getAttribute('data-ph-filter-kind') || '';
+      if (!kind) return;
+      if (phAdvFilter.kinds[kind]) {
+        delete phAdvFilter.kinds[kind];
+      } else {
+        phAdvFilter.kinds[kind] = true;
+      }
+      syncFilterPresetButtons();
+    });
+  });
+  if (phFilterApply) {
+    phFilterApply.addEventListener('click', function () {
+      readFilterModalIntoState();
+      closePhFilterModal();
+      filtrar();
+    });
+  }
+  if (phFilterReset) {
+    phFilterReset.addEventListener('click', function () {
+      clearAdvFilter(true);
+      closePhFilterModal();
+    });
+  }
+  if (phFilterChip) {
+    phFilterChip.addEventListener('click', function () {
+      clearAdvFilter(true);
+    });
+  }
+  document.addEventListener('keydown', function (ev) {
+    if (ev.key !== 'Escape') return;
+    if (!phFilterModal || phFilterModal.classList.contains('modal-hidden')) return;
+    closePhFilterModal();
+  });
 
   if (selectPageSize) {
     selectPageSize.addEventListener('change', function () {

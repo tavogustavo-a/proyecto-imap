@@ -43,22 +43,32 @@
     </div>
 
     <!-- Búsqueda AJAX de usuarios (solo principales, no sub-usuarios) -->
-    <form 
-      id="userSearchForm"
-      class="d-flex gap-05"
-    >
-      <label for="userSearchInput" class="sr-only">Buscar usuario</label>
-      <input
-        type="search"
-        id="userSearchInput"
-        placeholder="Buscar usuario..."
-        class="flex-grow-1"
-        autocomplete="off"
-      >
-    </form>
+    <div class="d-flex flex-wrap align-items-center mb-2 gap-1 usuarios-list-toolbar">
+      <form id="userSearchForm" class="d-flex gap-05 flex-grow-1">
+        <label for="userSearchInput" class="sr-only">Buscar usuario</label>
+        <input
+          type="search"
+          id="userSearchInput"
+          placeholder="Buscar usuario..."
+          class="flex-grow-1"
+          autocomplete="off"
+        >
+      </form>
+      <div>
+        <label for="showUserCount" class="sr-only">Mostrar cantidad usuarios</label>
+        <select id="showUserCount" class="form-select usuarios-per-page-select" autocomplete="off">
+          <option value="5">5</option>
+          <option value="10">10</option>
+          <option value="20">20</option>
+          <option value="50">50</option>
+          <option value="all" selected>Todos</option>
+        </select>
+      </div>
+    </div>
 
     <!-- Contenedor donde se pintan los usuarios con admin_users.js -->
     <div id="userListContainer" class="usuarios-scroll-responsive"></div>
+    <div class="d-flex justify-content-center mt-2 pagination-buttons" id="userListPagination"></div>
 
     <hr>
 
@@ -366,7 +376,7 @@
 <!-- Overlay para cerrar el popup al hacer clic fuera -->
 <div id="editUserOverlay" class="popup-overlay popup-overlay-hidden"></div>
 
-<script src="{{ url_for('static', filename='js/admin_users.js') }}"></script>
+<script src="{{ url_for('static', filename='js/admin_users.js') }}?v=20260806-users-sync-scroll"></script>
 <script src="{{ url_for('static', filename='js/menu_busqueda.js') }}" defer></script>
 <script src="{{ url_for('static', filename='js/clear_trigger_logs.js') }}" defer></script>
 <script src="{{ url_for('static', filename='js/logout_all_cookies_btn.js') }}" defer></script>

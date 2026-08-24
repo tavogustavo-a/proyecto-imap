@@ -368,20 +368,34 @@
   {% endif %}
 
   <!-- CONTORNO 2: Búsqueda y Listado de Sub-usuarios -->
-  <div class="admin-card">
+  <div class="admin-card subusers-list-card">
     <h4 class="mt-0">Buscar Sub-usuarios</h4>
-    <form id="searchSubusersForm" class="d-flex gap-05 mb-05">
-      <input
-        type="text"
-        id="searchSubusersInput"
-        placeholder="Buscar sub-usuario..."
-        class="flex-grow-1"
-        autocomplete="off"
-      >
-      <button type="submit" class="btn-search">Limpiar</button>
-    </form>
+    <div class="d-flex flex-wrap align-items-center mb-2 gap-1 subusers-list-toolbar">
+      <form id="searchSubusersForm" class="d-flex gap-05 flex-grow-1 mb-0">
+        <label for="searchSubusersInput" class="sr-only">Buscar sub-usuario</label>
+        <input
+          type="search"
+          id="searchSubusersInput"
+          placeholder="Buscar sub-usuario..."
+          class="flex-grow-1"
+          autocomplete="off"
+        >
+        <button type="submit" class="btn-search">Limpiar</button>
+      </form>
+      <div>
+        <label for="showSubuserCount" class="sr-only">Mostrar cantidad sub-usuarios</label>
+        <select id="showSubuserCount" class="form-select usuarios-per-page-select" autocomplete="off">
+          <option value="5">5</option>
+          <option value="10">10</option>
+          <option value="20">20</option>
+          <option value="50">50</option>
+          <option value="all" selected>Todos</option>
+        </select>
+      </div>
+    </div>
 
-    <div id="subusersContainer"></div>
+    <div id="subusersContainer" class="subusers-scroll-responsive"></div>
+    <div class="d-flex justify-content-center mt-2 pagination-buttons" id="subuserListPagination"></div>
   </div>
 
 </div>
@@ -390,7 +404,7 @@
 
 {% block scripts %}
 {# {{ super() }} #} {# Comentado porque base.html no tiene scripts en este bloque #}
-<script src="{{ url_for('static', filename='js/manage_subusers.js') }}"></script>
+<script src="{{ url_for('static', filename='js/manage_subusers.js') }}?v=20260806-subusers-style"></script>
 <script src="{{ url_for('static', filename='js/menu_busqueda.js') }}" defer></script>
 {% if session.get('logged_in') and current_user and not is_admin %}
 <div id="anuncioEntryDismissScope" hidden data-user-id="{{ current_user.id }}"></div>

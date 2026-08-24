@@ -98,6 +98,23 @@
         <div class="text-center">
           <button type="button" id="addEmailsBtn" class="btn-blue">Añadir Correos</button>
         </div>
+        <div class="text-center mt-05 d-flex justify-content-center align-items-center gap-05 flex-wrap unique-emails-toggle-row">
+          <label class="d-inline-flex align-items-center gap-05 mb-0 unique-emails-toggle-label" for="uniqueAllowedEmailsCheckbox">
+            <input
+              type="checkbox"
+              id="uniqueAllowedEmailsCheckbox"
+              {% if user.unique_allowed_emails %}checked{% endif %}
+              autocomplete="off"
+            >
+            <span>Correos únicos para este usuario</span>
+          </label>
+          <button type="button" id="uniqueAllowedEmailsInfoBtn" class="btn-panel btn-blue admin-global-api-info-btn" title="Qué hace correos únicos" aria-label="Información sobre correos únicos" aria-controls="uniqueAllowedEmailsInfoModal" aria-haspopup="dialog">
+            <i class="fas fa-info-circle" aria-hidden="true"></i>
+          </button>
+        </div>
+        <div class="text-center mt-03">
+          <span id="uniqueAllowedEmailsMsg" class="text-italic text-small" hidden></span>
+        </div>
         {# Aplicadas clases margen y texto #}
         <div class="text-center mt-05">
           <span id="addEmailsMsg" class="text-italic text-success"></span>
@@ -244,6 +261,27 @@
   <button type="button" class="popup-button-cancel" id="closeSubusersFiltersModalBtn">Cerrar</button>
 </div>
 
+{# --- MODAL CORREOS ÚNICOS --- #}
+<div id="uniqueAllowedEmailsInfoModal" class="popup-base popup-small popup-hide" role="dialog" aria-modal="true" aria-labelledby="uniqueAllowedEmailsInfoTitle" hidden>
+  <div class="popup-modal-header">
+    <h4 id="uniqueAllowedEmailsInfoTitle" class="mt-0 mb-0 flex-grow-1 text-center">
+      <i class="fas fa-info-circle" aria-hidden="true"></i> Correos únicos
+    </h4>
+    <button type="button" class="btn-close" id="closeUniqueAllowedEmailsInfoBtn" aria-label="Cerrar información">
+      <i class="fas fa-times" aria-hidden="true"></i>
+    </button>
+  </div>
+  <div class="mb-1 text-left text-small" style="line-height:1.45; padding: 0 0.35rem;">
+    <p class="mb-05"><strong>Qué hace:</strong> si está marcado, los correos que añadas <strong>manualmente</strong> a este usuario no pueden compartirse con otros clientes (usuarios principales).</p>
+    <p class="mb-05"><strong>Al añadir manualmente:</strong> si otro cliente ya tiene ese correo, se le quita de inmediato y queda solo en este usuario (el más reciente que lo toma).</p>
+    <p class="mb-05"><strong>Licencias:</strong> no aplica. Los correos que entran o salen por Licencias se gestionan aparte y no usan esta exclusividad.</p>
+    <p class="mb-0"><strong>Sub-usuarios:</strong> un sub-usuario sí puede tener el correo si su padre lo tiene.</p>
+  </div>
+  <div class="d-flex justify-content-center">
+    <button type="button" class="popup-button-confirm" id="okUniqueAllowedEmailsInfoBtn">Entendido</button>
+  </div>
+</div>
+
 {# --- MODALES PARA APIs VINCULADAS --- #}
 <div id="linkedApisInfoModal" class="popup-base popup-small popup-hide" role="dialog" aria-modal="true" aria-labelledby="linkedApisInfoTitle" hidden>
   <div class="popup-modal-header">
@@ -324,5 +362,5 @@
 {# --- AÑADIR CARGA DEL NUEVO SCRIPT EXTERNO --- #}
 {% block scripts %}
 {# {{ super() }} #}
-<script src="{{ url_for('static', filename='js/admin_user_emails.js') }}"></script>
+<script src="{{ url_for('static', filename='js/admin_user_emails.js') }}?v=20260806-unique-emails"></script>
 {% endblock scripts %}

@@ -89,21 +89,17 @@
       color: #0f172a;
     }
     .err-btn:hover { filter: brightness(1.06); }
+    .err-retry-form {
+      display: inline;
+      margin: 0;
+      padding: 0;
+    }
   </style>
 </head>
 <body>
   <main class="err-card" role="main">
     {% block content %}{% endblock %}
   </main>
-  <script>
-    (function () {
-      var retry = document.getElementById('errRetryBtn');
-      if (retry) {
-        retry.addEventListener('click', function () {
-          window.location.reload();
-        });
-      }
-    })();
-  </script>
+  <script src="{{ url_for('static', filename='js/error_page.js') }}?v=20260801-retry-nav" defer></script>
 </body>
 </html>

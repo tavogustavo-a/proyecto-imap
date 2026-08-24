@@ -445,7 +445,11 @@ document.addEventListener("DOMContentLoaded", function() {
       .then(data => {
         if (data.status === "ok") {
           if(addEmailsMsg) {
-              addEmailsMsg.textContent = `${data.added_count || 0} añadidos, ${data.skipped_count || 0} omitidos. Recargando lista...`;
+              let msg = `${data.added_count || 0} añadidos`;
+              if (data.skipped_count) msg += `, ${data.skipped_count} omitidos`;
+              if (data.removed_elsewhere) msg += `. Quitados de otros clientes: ${data.removed_elsewhere}`;
+              msg += ". Recargando lista...";
+              addEmailsMsg.textContent = msg;
               addEmailsMsg.classList.remove('text-color-orange', 'text-color-red');
               addEmailsMsg.classList.add('text-color-green');
           }
@@ -468,6 +472,85 @@ document.addEventListener("DOMContentLoaded", function() {
     });
   }
   // ======= FIN AÑADIR CORREOS =======
+
+  // ======= CORREOS ÚNICOS PARA ESTE USUARIO =======
+  const uniqueAllowedEmailsCheckbox = document.getElementById("uniqueAllowedEmailsCheckbox");
+  const uniqueAllowedEmailsMsg = document.getElementById("uniqueAllowedEmailsMsg");
+  const uniqueAllowedEmailsInfoBtn = document.getElementById("uniqueAllowedEmailsInfoBtn");
+  const uniqueAllowedEmailsInfoModal = document.getElementById("uniqueAllowedEmailsInfoModal");
+  const closeUniqueAllowedEmailsInfoBtn = document.getElementById("closeUniqueAllowedEmailsInfoBtn");
+  const okUniqueAllowedEmailsInfoBtn = document.getElementById("okUniqueAllowedEmailsInfoBtn");
+
+  function setUniqueEmailsMsg(text, kind) {
+    if (!uniqueAllowedEmailsMsg) return;
+    if (!text) {
+      uniqueAllowedEmailsMsg.hidden = true;
+      uniqueAllowedEmailsMsg.textContent = "";
+      return;
+    }
+    uniqueAllowedEmailsMsg.hidden = false;
+    uniqueAllowedEmailsMsg.textContent = text;
+    uniqueAllowedEmailsMsg.classList.remove("text-color-green", "text-color-red", "text-color-orange");
+    if (kind === "ok") uniqueAllowedEmailsMsg.classList.add("text-color-green");
+    else if (kind === "err") uniqueAllowedEmailsMsg.classList.add("text-color-red");
+    else uniqueAllowedEmailsMsg.classList.add("text-color-orange");
+  }
+
+  function openUniqueEmailsInfoModal() {
+    if (!uniqueAllowedEmailsInfoModal) return;
+    uniqueAllowedEmailsInfoModal.removeAttribute("hidden");
+    uniqueAllowedEmailsInfoModal.classList.remove("popup-hide");
+    uniqueAllowedEmailsInfoModal.classList.add("popup-show");
+  }
+
+  function closeUniqueEmailsInfoModal() {
+    if (!uniqueAllowedEmailsInfoModal) return;
+    uniqueAllowedEmailsInfoModal.classList.remove("popup-show");
+    uniqueAllowedEmailsInfoModal.classList.add("popup-hide");
+    uniqueAllowedEmailsInfoModal.setAttribute("hidden", "");
+  }
+
+  if (uniqueAllowedEmailsInfoBtn) {
+    uniqueAllowedEmailsInfoBtn.addEventListener("click", function (e) {
+      e.preventDefault();
+      openUniqueEmailsInfoModal();
+    });
+  }
+  if (closeUniqueAllowedEmailsInfoBtn) {
+    closeUniqueAllowedEmailsInfoBtn.addEventListener("click", closeUniqueEmailsInfoModal);
+  }
+  if (okUniqueAllowedEmailsInfoBtn) {
+    okUniqueAllowedEmailsInfoBtn.addEventListener("click", closeUniqueEmailsInfoModal);
+  }
+
+  if (uniqueAllowedEmailsCheckbox) {
+    uniqueAllowedEmailsCheckbox.addEventListener("change", function () {
+      const enabled = !!uniqueAllowedEmailsCheckbox.checked;
+      uniqueAllowedEmailsCheckbox.disabled = true;
+      setUniqueEmailsMsg("Guardando...", "wait");
+      fetch("/admin/toggle_unique_allowed_emails_ajax", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-CSRFToken": getCsrfToken() },
+        body: JSON.stringify({ user_id: parseInt(userId, 10), enabled: enabled })
+      })
+        .then(handleFetchResponse)
+        .then(function (data) {
+          if (data.status !== "ok") {
+            throw new Error(data.message || "No se pudo guardar");
+          }
+          uniqueAllowedEmailsCheckbox.checked = !!data.unique_allowed_emails;
+          setUniqueEmailsMsg(data.message || "Guardado.", "ok");
+        })
+        .catch(function (err) {
+          uniqueAllowedEmailsCheckbox.checked = !enabled;
+          setUniqueEmailsMsg("Error: " + (err.message || err), "err");
+        })
+        .finally(function () {
+          uniqueAllowedEmailsCheckbox.disabled = false;
+        });
+    });
+  }
+  // ======= FIN CORREOS ÚNICOS =======
 
   // ======= ACCESO A REGEX (Usuario Principal) =======
   const openRegexModalBtn = document.getElementById("openRegexModalBtn");
@@ -1239,17 +1322,18 @@ document.addEventListener("DOMContentLoaded", function() {
   const popups = [
     'regexModal', 'filtersModal', 'subusersModal', 
     'subusersRegexModal', 'subusersFiltersModal',
-    'myApiModal', 'editLinkedApiModal', 'linkedApisInfoModal'
+    'myApiModal', 'editLinkedApiModal', 'linkedApisInfoModal',
+    'uniqueAllowedEmailsInfoModal'
   ];
   popups.forEach(function(popupId) {
     const popup = document.getElementById(popupId);
     if (popup) {
       document.addEventListener('mousedown', function(e) {
         if (popup.classList.contains('popup-show') || popup.classList.contains('popup-visible')) {
-          if (!popup.contains(e.target) && !e.target.closest('.open-alias-popup') && !e.target.closest('#showMyApiBtn') && !e.target.closest('#linkedApisInfoBtn') && !e.target.closest('.edit-project-btn')) {
+          if (!popup.contains(e.target) && !e.target.closest('.open-alias-popup') && !e.target.closest('#showMyApiBtn') && !e.target.closest('#linkedApisInfoBtn') && !e.target.closest('#uniqueAllowedEmailsInfoBtn') && !e.target.closest('.edit-project-btn')) {
             popup.classList.remove('popup-show', 'popup-visible');
             popup.classList.add('popup-hide');
-            if (popupId === 'linkedApisInfoModal') {
+            if (popupId === 'linkedApisInfoModal' || popupId === 'uniqueAllowedEmailsInfoModal') {
               popup.setAttribute('hidden', '');
             }
           }
@@ -1349,7 +1433,10 @@ document.addEventListener("DOMContentLoaded", function() {
           <strong>${escapeHtml(p.name)}</strong><br>
           <small class="text-muted">${escapeHtml(p.url)}</small>
         </div>
-        <div class="d-flex gap-05 mr-05">
+        <div class="d-flex gap-05 mr-05 align-items-center flex-wrap">
+          <button type="button" class="btn-blue btn-imap-action btn-imap-small test-project-btn" data-id="${p.id}">
+            Probar
+          </button>
           <button type="button" class="btn-panel btn-orange btn-sm edit-project-btn" data-id="${p.id}" data-name="${escapeHtml(p.name)}" data-api-url="${escapeHtml(p.url)}" data-token="${escapeHtml(p.token)}">
             <i class="fas fa-edit"></i>
           </button>
@@ -1369,6 +1456,39 @@ document.addEventListener("DOMContentLoaded", function() {
         editApiToken.value = btn.dataset.token;
         editLinkedApiModal.classList.remove("popup-hide");
         editLinkedApiModal.classList.add("popup-show");
+      });
+    });
+
+    linkedApisList.querySelectorAll(".test-project-btn").forEach(btn => {
+      btn.addEventListener("click", () => {
+        const projectId = btn.dataset.id;
+        if (!projectId) return;
+        const originalText = btn.textContent;
+        btn.disabled = true;
+        btn.textContent = "Probando...";
+        fetch(`/admin/user/linked_projects/${projectId}/test`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-CSRFToken": getCsrfToken()
+          },
+          body: JSON.stringify({})
+        })
+        .then(handleFetchResponse)
+        .then(data => {
+          if (data.status === "ok") {
+            alert("✅ " + (data.message || "Conexión correcta."));
+          } else {
+            alert("❌ " + (data.message || "No se pudo probar la conexión."));
+          }
+        })
+        .catch(function () {
+          alert("❌ No se pudo completar la prueba. Revisa tu conexión e inténtalo de nuevo.");
+        })
+        .finally(() => {
+          btn.disabled = false;
+          btn.textContent = originalText;
+        });
       });
     });
 

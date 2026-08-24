@@ -52,6 +52,129 @@ def _historial_show_individual_sale_row(*, is_reversed, renewal_kind, snap_row):
     return False
 
 
+def _refund_historial_amount_display(amount, currency: str) -> str:
+    try:
+        value = float(amount or 0)
+    except (TypeError, ValueError):
+        value = 0.0
+    if abs(value - round(value)) < 1e-9:
+        body = f'{int(round(value)):,}'.replace(',', '.')
+    else:
+        body = f'{value:,.2f}'.replace(',', '_').replace('.', ',').replace('_', '.')
+    return f'${body} {str(currency or "").strip().upper()}'
+
+
+def _build_license_refund_historial_items(
+    *,
+    billing_user_id: int | None = None,
+    all_users: bool = False,
+) -> list[dict]:
+    """Construye una fila por devolución para usuario o administrador."""
+    from app.store import models
+
+    model = getattr(models, 'LicenseAccountRefund', None)
+    if model is None:
+        return []
+    q = model.query
+    if not all_users and billing_user_id is not None:
+        q = q.filter(model.billing_user_id == int(billing_user_id))
+
+    rows: list[dict] = []
+    for refund in q.order_by(model.created_at.desc(), model.id.desc()).all():
+        created_at = getattr(refund, 'created_at', None)
+        fecha_str = 'Fecha no disponible'
+        if created_at:
+            fecha_str = utc_to_colombia(created_at).strftime('%y/%m/%d %I:%M:%S %p')
+        try:
+            amount = float(getattr(refund, 'refund_amount', None) or 0)
+            refunded_days = max(
+                0,
+                int(
+                    getattr(refund, 'refunded_days', None)
+                    or getattr(refund, 'returned_days', None)
+                    or 0
+                ),
+            )
+            charged_days = max(0, int(getattr(refund, 'charged_days', None) or 0))
+            detected_charged_days = max(
+                0,
+                int(getattr(refund, 'detected_charged_days', None) or charged_days),
+            )
+            billing_period_days = max(
+                1,
+                int(
+                    getattr(refund, 'billing_period_days', None)
+                    or (charged_days + refunded_days)
+                    or 30
+                ),
+            )
+            unit_price = float(
+                getattr(refund, 'unit_price', None)
+                or getattr(refund, 'historical_unit_price', None)
+                or 0
+            )
+        except (TypeError, ValueError):
+            continue
+        currency = str(getattr(refund, 'currency', None) or '').strip().upper()
+        if amount < 0 or currency not in ('COP', 'USD'):
+            continue
+        owner_id = getattr(refund, 'user_id', None)
+        billing_id = getattr(refund, 'billing_user_id', None)
+        actor_id = getattr(refund, 'actor_admin_user_id', None)
+        owner = User.query.get(int(owner_id)) if owner_id is not None else None
+        billing = User.query.get(int(billing_id)) if billing_id is not None else None
+        actor = User.query.get(int(actor_id)) if actor_id is not None else None
+        product_name = str(
+            getattr(refund, 'product_name', None) or 'Licencia'
+        ).strip()
+        rows.append(
+            {
+                'id': f'license-refund-{refund.id}',
+                'fecha': fecha_str,
+                'producto': f'Devolución — {product_name}',
+                'cantidad': refunded_days,
+                'total': amount,
+                'total_display': _refund_historial_amount_display(amount, currency),
+                'licencias': [],
+                'has_licencias': False,
+                'is_refund_event': True,
+                'refund_days': refunded_days,
+                'charged_days': charged_days,
+                'billing_period_days': billing_period_days,
+                'detected_charged_days': detected_charged_days,
+                'charged_days_overridden': bool(
+                    getattr(refund, 'charged_days_overridden', False)
+                    or charged_days != detected_charged_days
+                ),
+                'refund_actor': (
+                    getattr(actor, 'username', None)
+                    or getattr(actor, 'email', None)
+                    or 'Administrador'
+                ),
+                'refund_amount': amount,
+                'unit_price': unit_price,
+                'currency': currency,
+                'custom_message': str(
+                    getattr(refund, 'custom_message', None) or ''
+                ).strip(),
+                'sale_id': getattr(refund, 'sale_id', None),
+                'license_id': getattr(refund, 'license_id', None),
+                'account_id': (
+                    getattr(refund, 'account_id', None)
+                    or getattr(refund, 'license_account_id', None)
+                ),
+                'user_id': int(billing_id) if billing_id is not None else owner_id,
+                'usuario': (
+                    (owner.username if owner else None)
+                    or (billing.username if billing else None)
+                    or '—'
+                ),
+                'sort_ts': created_at.timestamp() if created_at else 0.0,
+            }
+        )
+    return rows
+
+
 @store_bp.route('/admin/purchase_history')
 @admin_required
 def admin_purchase_history():
@@ -252,6 +375,16 @@ def historial_compras_usuario():
         )
 
     if mostrar_usuario_comprador:
+        compras_info.extend(_build_license_refund_historial_items(all_users=True))
+    else:
+        billing = _balance_recharge_viewer_billing_user(user) or user
+        compras_info.extend(
+            _build_license_refund_historial_items(
+                billing_user_id=int(billing.id),
+            )
+        )
+
+    if mostrar_usuario_comprador:
         from app.store.purchase_history_cleanup import (
             cleanup_log_product_label,
             get_cleanup_logs,
@@ -351,10 +484,12 @@ def historial_compras_usuario():
         )
         mostrar_historial_licencias = True
         historial_licencias_es_admin = True
-    elif _eligible_tienda_user_licencias_portal(user):
+    elif _eligible_tienda_user_licencias_portal(user) or viewer_is_proveedor:
         from app.store.user_license_activity import build_user_license_activity_timeline_rows
 
-        assignee_ids, _ = _user_licencias_viewer_scope(user)
+        assignee_ids = []
+        if _eligible_tienda_user_licencias_portal(user):
+            assignee_ids, _ = _user_licencias_viewer_scope(user)
         license_timeline_rows = build_user_license_activity_timeline_rows(
             assignee_ids, user, utc_to_colombia_fn=utc_to_colombia
         )

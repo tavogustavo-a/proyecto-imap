@@ -11,9 +11,17 @@ from sqlalchemy import inspect, text
 
 from app.extensions import db
 
+# Tras el primer ensure exitoso, no re-inspeccionar el esquema en cada clic.
+_PRODUCT_RESERVATION_SCHEMA_READY = False
+_DUE_NEXT_DAY_LOCK = None
+_DUE_NEXT_DAY_RUNNING = False
+
 
 def ensure_product_reservation_schema():
     """Crea tablas/columnas de reservas si faltan (SQLite / arranque)."""
+    global _PRODUCT_RESERVATION_SCHEMA_READY
+    if _PRODUCT_RESERVATION_SCHEMA_READY:
+        return
     try:
         from app.store.models import License, ProductReservation, StoreUserNotification
 
@@ -67,6 +75,7 @@ def ensure_product_reservation_schema():
                     added = True
             if added:
                 db.session.commit()
+        _PRODUCT_RESERVATION_SCHEMA_READY = True
     except Exception as ex:
         db.session.rollback()
         current_app.logger.warning('ensure_product_reservation_schema: %s', ex)
@@ -163,12 +172,54 @@ def user_next_day_products_map(user, products):
     return flags
 
 
+def _pricing_root_user(user):
+    """Usuario cuyos precios/descuentos aplican (padre si es sub-usuario)."""
+    if not user:
+        return None
+    if getattr(user, 'parent_id', None):
+        from app.models.user import User
+
+        parent = User.query.get(user.parent_id)
+        return parent or user
+    return user
+
+
+def _user_tipo_precio(user):
+    root = _pricing_root_user(user)
+    up = getattr(root, 'user_prices', None) if root else None
+    if not isinstance(up, dict):
+        return None
+    tipo = up.get('tipo_precio')
+    return tipo if tipo in ('USD', 'COP') else None
+
+
+def _apply_user_discounts_to_product(user, product):
+    """Aplica discount_*_extra del user_prices al producto (sin cargar todo el catálogo)."""
+    if not product:
+        return product
+    root = _pricing_root_user(user)
+    disc_map = {}
+    up = getattr(root, 'user_prices', None) if root else None
+    if isinstance(up, dict):
+        disc_map = up.get('descuentos_productos') or {}
+    try:
+        pid = int(product.id)
+    except (TypeError, ValueError, AttributeError):
+        pid = None
+    d = {}
+    if pid is not None:
+        d = disc_map.get(str(pid)) or disc_map.get(pid) or {}
+    if not isinstance(d, dict):
+        d = {}
+    product.discount_cop_extra = d.get('cop', 0)
+    product.discount_usd_extra = d.get('usd', 0)
+    return product
+
+
 def _store_user_unit_price(user, product):
     """Precio unitario según moneda del usuario (con descuentos de catálogo)."""
-    from app.store.routes import catalog_products_for_store_user
-
-    _, tipo = catalog_products_for_store_user(user)
-    tipo_l = (tipo or '').strip().upper()
+    _apply_user_discounts_to_product(user, product)
+    tipo_l = (_user_tipo_precio(user) or '').strip().upper()
     cop = Decimal(str(getattr(product, 'price_cop', 0) or 0))
     usd = Decimal(str(getattr(product, 'price_usd', 0) or 0))
     disc_cop = Decimal(str(getattr(product, 'discount_cop_extra', 0) or 0))
@@ -309,19 +360,11 @@ def create_product_reservation(user, product, quantity=1):
     if existing:
         return update_reservation_quantity(user, existing.id, qty)
 
-    from app.store.routes import catalog_products_for_store_user
-
-    products, _tipo = catalog_products_for_store_user(user)
-    cat_prod = prod
-    for p in products or []:
-        if int(p.id) == int(prod.id):
-            cat_prod = p
-            break
-    price_cop, price_usd, currency, unit = _store_user_unit_price(user, cat_prod)
+    price_cop, price_usd, currency, unit = _store_user_unit_price(user, prod)
     if currency not in ('USD', 'COP'):
         return None, 'Tu cuenta no tiene tipo de precio (USD/COP) configurado.'
 
-    max_qty, _cur, _unit_f = _max_reservable_quantity(user, cat_prod)
+    max_qty, _cur, _unit_f = _max_reservable_quantity(user, prod)
     if max_qty <= 0:
         return None, (
             'No tienes saldo disponible para reservar. '
@@ -460,16 +503,9 @@ def _max_reservable_quantity(user, product, exclude_reservation_id=None):
     from app.store.routes import (
         _user_debt_limit_effective,
         _user_puede_tener_deuda_effective,
-        catalog_products_for_store_user,
     )
 
-    products, _tipo = catalog_products_for_store_user(user)
-    cat_prod = product
-    for p in products or []:
-        if int(p.id) == int(product.id):
-            cat_prod = p
-            break
-    _pc, _pu, currency, unit_raw = _store_user_unit_price(user, cat_prod)
+    _pc, _pu, currency, unit_raw = _store_user_unit_price(user, product)
     unit = Decimal(str(unit_raw or 0))
     if unit <= 0:
         return 0, (currency or 'USD').upper(), float(unit)
@@ -1811,15 +1847,7 @@ def create_next_day_reservation(user, product, quantity):
     if unit_limit is not None and qty > unit_limit:
         return None, f'Supera el límite permitido para este producto ({unit_limit}).'
 
-    from app.store.routes import catalog_products_for_store_user
-
-    products, _tipo = catalog_products_for_store_user(user)
-    cat_prod = prod
-    for p in products or []:
-        if int(p.id) == int(prod.id):
-            cat_prod = p
-            break
-    price_cop, price_usd, currency, unit = _store_user_unit_price(user, cat_prod)
+    price_cop, price_usd, currency, unit = _store_user_unit_price(user, prod)
     if currency not in ('USD', 'COP'):
         return None, 'Tu cuenta no tiene tipo de precio (USD/COP) configurado.'
 
@@ -2423,6 +2451,49 @@ def process_due_next_day_reservations():
             db.session.rollback()
             current_app.logger.exception('reserva otro día %s: %s', row.id, ex)
     return done
+
+
+def schedule_process_due_next_day_reservations():
+    """
+    Dispara el procesado de reservas vencidas en segundo plano.
+    Evita que el listado de reservas (tras un clic) espere emails/SMTP.
+    """
+    import threading
+
+    global _DUE_NEXT_DAY_LOCK, _DUE_NEXT_DAY_RUNNING
+    if _DUE_NEXT_DAY_LOCK is None:
+        _DUE_NEXT_DAY_LOCK = threading.Lock()
+    with _DUE_NEXT_DAY_LOCK:
+        if _DUE_NEXT_DAY_RUNNING:
+            return
+        _DUE_NEXT_DAY_RUNNING = True
+
+    try:
+        app = current_app._get_current_object()
+    except Exception:
+        with _DUE_NEXT_DAY_LOCK:
+            _DUE_NEXT_DAY_RUNNING = False
+        return
+
+    def _run():
+        global _DUE_NEXT_DAY_RUNNING
+        try:
+            with app.app_context():
+                process_due_next_day_reservations()
+        except Exception:
+            try:
+                current_app.logger.exception('schedule_process_due_next_day_reservations')
+            except Exception:
+                pass
+        finally:
+            with _DUE_NEXT_DAY_LOCK:
+                _DUE_NEXT_DAY_RUNNING = False
+
+    threading.Thread(
+        target=_run,
+        daemon=True,
+        name='reserva-nextday-due',
+    ).start()
 
 
 def fulfilled_reservation_historial_suffix(kind):

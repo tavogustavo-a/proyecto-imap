@@ -11,7 +11,8 @@
   {% endblock %}
 
   <link rel="icon" href="{{ url_for('static', filename='images/favicon.svg') }}?v=20241220" type="image/svg+xml">
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}?v=20260714-service-check">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}?v=20260808-icon-dark">
+  <meta name="service-worker-url" content="{{ url_for('service_worker') }}">
   {% block page_styles %}{% endblock %}
   {% if is_admin %}
   <meta name="archived-licenses-count-url" content="{{ url_for('store_bp.api_archived_licenses_count') }}">
@@ -48,6 +49,7 @@
   {% include 'includes/site_footer.html' %}
 
   {% if is_admin %}
+  {% include 'includes/footer_social_links_modal.html' %}
   {% include 'includes/admin_proveedor_ventas_modals.html' %}
   {% endif %}
 
@@ -56,15 +58,9 @@
   <script src="{{ url_for('static', filename='js/code_protection.js') }}" defer></script>
   {% endif %} #}
   
-  <script>
-  if ('serviceWorker' in navigator) {
-    window.addEventListener('load', function () {
-      navigator.serviceWorker.register('{{ url_for("service_worker") }}').catch(function () {});
-    });
-  }
-  </script>
+  <script src="{{ url_for('static', filename='js/register_service_worker.js') }}?v=20260730-csp" defer></script>
   <script src="{{ url_for('static', filename='js/main.js') }}?v=20260712-mobile-kb-ux" defer></script>
-  <script src="{{ url_for('static', filename='js/loading_overlay.js') }}" defer></script>
+  <script src="{{ url_for('static', filename='js/loading_overlay.js') }}?v=20260730-csp" defer></script>
   <script src="{{ url_for('store_bp.static', filename='js/store_fetch_json.js') }}?v=20260610" defer></script>
   <script src="{{ url_for('store_bp.static', filename='js/store_sse_realtime.js') }}?v=20260622-sse-unified" defer></script>
   {% if session.get('logged_in') %}
@@ -72,6 +68,7 @@
   {% endif %}
   <script src="{{ url_for('store_bp.static', filename='js/store_menu_saldo_realtime.js') }}?v=20260610-fetch" defer></script>
   {% if is_admin %}
+  <script src="{{ url_for('static', filename='js/footer_social_links.js') }}?v=20260807-footer-apps" defer></script>
   <script src="{{ url_for('store_bp.static', filename='js/admin_archivados_menu_count.js') }}?v=20260622-archived-sse" defer></script>
   <script src="{{ url_for('store_bp.static', filename='js/admin_proveedor_ventas_menu.js') }}?v=20260728-proveedor-renovar-v1" defer></script>
   {% endif %}

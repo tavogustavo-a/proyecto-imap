@@ -363,6 +363,74 @@ def toggle_dark_mode():
     flash(f"Modo oscuro: {new_val}", "info")
     return redirect(url_for("admin_bp.dashboard"))
 
+
+def _normalize_footer_social_url(raw):
+    """Normaliza URL de WhatsApp/Telegram/Android/iOS del pie; vacío limpia el enlace."""
+    s = str(raw or "").strip()
+    if not s:
+        return ""
+    if not (
+        s.startswith("http://")
+        or s.startswith("https://")
+        or s.startswith("tg:")
+        or s.startswith("whatsapp:")
+        or s.startswith("market:")
+        or s.startswith("itms-apps:")
+    ):
+        s = "https://" + s
+    return s[:500]
+
+
+@admin_bp.route("/api/footer-social-links", methods=["GET", "POST"])
+@admin_required
+def api_footer_social_links():
+    """URLs del pie (WhatsApp / Telegram / app Android / app iOS) para usuarios (no sub-usuarios)."""
+    if request.method == "GET":
+        return jsonify(
+            {
+                "success": True,
+                "whatsapp_url": (get_site_setting("footer_whatsapp_url", "") or "").strip(),
+                "telegram_url": (get_site_setting("footer_telegram_url", "") or "").strip(),
+                "android_url": (get_site_setting("footer_android_url", "") or "").strip(),
+                "ios_url": (get_site_setting("footer_ios_url", "") or "").strip(),
+            }
+        )
+
+    data = request.get_json(silent=True) or {}
+    # Aceptar alias por si el cliente envía nombres distintos
+    wa = _normalize_footer_social_url(
+        data.get("whatsapp_url", data.get("footer_whatsapp_url"))
+    )
+    tg = _normalize_footer_social_url(
+        data.get("telegram_url", data.get("footer_telegram_url"))
+    )
+    android = _normalize_footer_social_url(
+        data.get("android_url", data.get("footer_android_url"))
+    )
+    ios = _normalize_footer_social_url(
+        data.get("ios_url", data.get("footer_ios_url"))
+    )
+    set_site_setting("footer_whatsapp_url", wa)
+    set_site_setting("footer_telegram_url", tg)
+    set_site_setting("footer_android_url", android)
+    set_site_setting("footer_ios_url", ios)
+    # Releer para confirmar persistencia (evita “guardado” fantasma)
+    saved_wa = (get_site_setting("footer_whatsapp_url", "") or "").strip()
+    saved_tg = (get_site_setting("footer_telegram_url", "") or "").strip()
+    saved_android = (get_site_setting("footer_android_url", "") or "").strip()
+    saved_ios = (get_site_setting("footer_ios_url", "") or "").strip()
+    return jsonify(
+        {
+            "success": True,
+            "whatsapp_url": saved_wa,
+            "telegram_url": saved_tg,
+            "android_url": saved_android,
+            "ios_url": saved_ios,
+            "message": "Enlaces del pie guardados.",
+        }
+    )
+
+
 # --- Rutas para Importar/Exportar Configuración --- (AÑADIDO AL FINAL)
 
 @admin_bp.route('/export_config')

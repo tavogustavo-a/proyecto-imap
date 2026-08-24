@@ -110,7 +110,7 @@
             <label for="imageSelect" class="sr-only">Seleccionar imagen</label>
             <select name="image_filename" id="imageSelect" class="visually-hidden-select" autocomplete="off">
                 <option value="none" selected>Ninguno</option>
-                {% for img_num in range(1, 38) %}
+                {% for img_num in range(1, 42) %}
                 <option value="stream{{ img_num }}.png">stream{{ img_num }}.png</option>
                 {% endfor %}
             </select>
@@ -330,7 +330,7 @@
 {% endblock %}
 {% block scripts %}
   {{ super() }}
-  <script src="{{ url_for('store_bp.static', filename='js/admin_store.js') }}?v=20260729-cupon-decimal" defer></script>
+  <script src="{{ url_for('store_bp.static', filename='js/admin_store.js') }}?v=20260808-stream41" defer></script>
   <script src="{{ url_for('store_bp.static', filename='js/productos.js') }}" defer></script>
   <script src="{{ url_for('store_bp.static', filename='js/cupones.js') }}?v=20260729-min-por-moneda" defer></script>
   <script src="{{ url_for('store_bp.static', filename='js/anuncios_admin.js') }}?v=20260729-purge-expired" defer></script>

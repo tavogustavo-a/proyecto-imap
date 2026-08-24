@@ -5,6 +5,9 @@ document.addEventListener("DOMContentLoaded", function() {
   const userSearchForm = document.getElementById("userSearchForm");
   const userSearchInput = document.getElementById("userSearchInput");
   const userListContainer = document.getElementById("userListContainer");
+  const showUserCount = document.getElementById("showUserCount");
+  const paginationContainer = document.getElementById("userListPagination")
+    || document.querySelector(".usuarios-page .pagination-buttons");
 
   const createUserBtn = document.getElementById("createUserBtn");
   const newUsername = document.getElementById("newUsername");
@@ -37,75 +40,118 @@ document.addEventListener("DOMContentLoaded", function() {
   const btnVolverPanelTopUser = document.getElementById("btnVolverPanelTopUser");
   const btnVolverPanelBottomUser = document.getElementById("btnVolverPanelBottomUser");
 
-  // Buscar usuarios
-  if (userSearchForm && userSearchInput && userListContainer) {
-    userSearchForm.addEventListener("submit", function(e) {
-      e.preventDefault();
-      userSearchInput.value = "";
-      fetch(`/admin/search_users_ajax?query=`, {
-        method: "GET",
-        headers: { "X-CSRFToken": getCsrfToken() }
-      })
+  let currentPage = 1;
+
+  function clearPagination() {
+    if (!paginationContainer) return;
+    while (paginationContainer.firstChild) {
+      paginationContainer.removeChild(paginationContainer.firstChild);
+    }
+  }
+
+  function updatePagination(pagination) {
+    clearPagination();
+    if (!paginationContainer || !pagination) return;
+
+    const prevButton = document.createElement("button");
+    prevButton.type = "button";
+    prevButton.className = "btn-panel btn-blue";
+    prevButton.textContent = "< Anterior";
+    prevButton.disabled = !pagination.has_prev;
+    prevButton.addEventListener("click", function () {
+      if (pagination.has_prev) fetchUsers(pagination.prev_num);
+    });
+    paginationContainer.appendChild(prevButton);
+
+    const pageInfo = document.createElement("span");
+    pageInfo.className = "mx-2";
+    pageInfo.textContent = `Página ${pagination.page} de ${pagination.pages}`;
+    paginationContainer.appendChild(pageInfo);
+
+    const nextButton = document.createElement("button");
+    nextButton.type = "button";
+    nextButton.className = "btn-panel btn-blue";
+    nextButton.textContent = "Siguiente >";
+    nextButton.disabled = !pagination.has_next;
+    nextButton.addEventListener("click", function () {
+      if (pagination.has_next) fetchUsers(pagination.next_num);
+    });
+    paginationContainer.appendChild(nextButton);
+  }
+
+  function paintUsers(users) {
+    if (!userListContainer) return;
+    while (userListContainer.firstChild) {
+      userListContainer.removeChild(userListContainer.firstChild);
+    }
+    const track = document.createElement("div");
+    track.className = "user-list-track";
+    track.appendChild(renderUserItems(users || []));
+    userListContainer.appendChild(track);
+  }
+
+  function fetchUsers(page) {
+    if (!userListContainer) return Promise.resolve();
+    const pageNum = parseInt(page, 10) || 1;
+    currentPage = pageNum;
+    const query = userSearchInput ? userSearchInput.value.trim() : "";
+    const perPage = showUserCount ? showUserCount.value : "all";
+    let url = `/admin/search_users_ajax?query=${encodeURIComponent(query)}&per_page=${encodeURIComponent(perPage)}`;
+    if (perPage !== "all") {
+      url += `&page=${pageNum}`;
+    }
+    return fetch(url, {
+      method: "GET",
+      headers: { "X-CSRFToken": getCsrfToken() }
+    })
       .then(res => res.json())
       .then(data => {
         if (data.status === "ok") {
-          // Limpiar contenedor
-          while(userListContainer.firstChild) {
-            userListContainer.removeChild(userListContainer.firstChild);
+          paintUsers(data.users);
+          if (perPage !== "all") {
+            updatePagination(data.pagination);
+          } else {
+            clearPagination();
           }
-          // Agregar elementos directamente sin usar innerHTML
-          const fragment = renderUserItems(data.users);
-          userListContainer.appendChild(fragment);
         } else {
           alert("Error: " + data.message);
         }
       })
-      .catch(err => console.error("Error limpiar usuarios:", err));
+      .catch(err => console.error("Error fetchUsers:", err));
+  }
+
+  // Buscar usuarios (submit limpia búsqueda y recarga)
+  if (userSearchForm && userSearchInput && userListContainer) {
+    userSearchForm.addEventListener("submit", function(e) {
+      e.preventDefault();
+      userSearchInput.value = "";
+      fetchUsers(1);
     });
   }
 
   // --- Búsqueda instantánea de usuarios ---
   if (userSearchInput && userListContainer) {
     let searchTimeout = null;
-    
-    // Función de búsqueda reutilizable
+
     function performSearch() {
       clearTimeout(searchTimeout);
-      searchTimeout = setTimeout(() => {
-        const query = userSearchInput.value.trim();
-        fetch(`/admin/search_users_ajax?query=${encodeURIComponent(query)}`, {
-          method: "GET",
-          headers: { "X-CSRFToken": getCsrfToken() }
-        })
-        .then(res => res.json())
-        .then(data => {
-          if (data.status === "ok") {
-            // Limpiar contenedor
-          while(userListContainer.firstChild) {
-            userListContainer.removeChild(userListContainer.firstChild);
-          }
-          // Agregar elementos directamente sin usar innerHTML
-          const fragment = renderUserItems(data.users);
-          userListContainer.appendChild(fragment);
-          } else {
-            alert("Error: " + data.message);
-          }
-        })
-        .catch(err => console.error("Error searchUsers:", err));
-      }, 150); // Reducido de 200ms a 150ms para mejor respuesta
+      searchTimeout = setTimeout(() => fetchUsers(1), 150);
     }
-    
-    // Múltiples listeners para compatibilidad con Chrome y otros navegadores
+
     userSearchInput.addEventListener('input', performSearch);
     userSearchInput.addEventListener('keyup', function(e) {
-      // Evitar búsqueda en teclas especiales
       if (e.key === 'Enter' || e.key === 'Escape' || e.key === 'Tab') {
         return;
       }
       performSearch();
     });
-    // Para campos type="search" en Chrome
     userSearchInput.addEventListener('search', performSearch);
+  }
+
+  if (showUserCount) {
+    showUserCount.addEventListener("change", function () {
+      fetchUsers(1);
+    });
   }
 
   // Función para verificar si un email ya existe
@@ -172,13 +218,7 @@ document.addEventListener("DOMContentLoaded", function() {
       .then(res => res.json())
       .then(data => {
         if (data.status === "ok") {
-          // Limpiar contenedor
-          while(userListContainer.firstChild) {
-            userListContainer.removeChild(userListContainer.firstChild);
-          }
-          // Agregar elementos directamente sin usar innerHTML
-          const fragment = renderUserItems(data.users);
-          userListContainer.appendChild(fragment);
+          fetchUsers(1);
           // limpiar
           newUsername.value = "";
           newUserPassword.value = "";
@@ -282,13 +322,7 @@ document.addEventListener("DOMContentLoaded", function() {
       .then(res => res.json())
       .then(data => {
         if (data.status === "ok") {
-          // Limpiar contenedor
-          while(userListContainer.firstChild) {
-            userListContainer.removeChild(userListContainer.firstChild);
-          }
-          // Agregar elementos directamente sin usar innerHTML
-          const fragment = renderUserItems(data.users);
-          userListContainer.appendChild(fragment);
+          fetchUsers(currentPage);
           // Ocultar popup y overlay al guardar correctamente
           editUserPopup.classList.remove('popup-show');
           editUserPopup.classList.add('popup-hide');
@@ -332,7 +366,51 @@ document.addEventListener("DOMContentLoaded", function() {
   // Delegación de eventos optimizada en el contenedor de usuarios
   userListContainer.addEventListener("click", function(e) {
     const target = e.target;
-    
+
+    // Duplicar usuario (icono junto al nombre)
+    const duplicateBtn = target.classList.contains("duplicate-user-btn")
+      ? target
+      : target.closest(".duplicate-user-btn");
+    if (duplicateBtn) {
+      e.preventDefault();
+      e.stopPropagation();
+
+      if (duplicateBtn.disabled) return;
+
+      const userId = duplicateBtn.getAttribute("data-id");
+      const username = duplicateBtn.getAttribute("data-username") || "";
+      if (!confirm(`¿Estás seguro de duplicar el usuario "${username}"?`)) {
+        return;
+      }
+
+      duplicateBtn.disabled = true;
+      fetch("/admin/duplicate_user_ajax", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-CSRFToken": getCsrfToken()
+        },
+        body: JSON.stringify({ user_id: parseInt(userId) })
+      })
+      .then(res => res.json())
+      .then(data => {
+        if (data.status === "ok") {
+          fetchUsers(currentPage);
+          if (data.message) alert(data.message);
+        } else {
+          alert("Error: " + data.message);
+        }
+      })
+      .catch(err => {
+        console.error("Error duplicateUser:", err);
+        alert("Error al duplicar el usuario. Intenta nuevamente.");
+      })
+      .finally(() => {
+        duplicateBtn.disabled = false;
+      });
+      return;
+    }
+
     // Toggle user On/Off
     if (target.classList.contains("toggle-user")) {
       e.preventDefault();
@@ -362,13 +440,7 @@ document.addEventListener("DOMContentLoaded", function() {
       })
       .then(data => {
         if (data.status === "ok") {
-          // Limpiar contenedor
-          while(userListContainer.firstChild) {
-            userListContainer.removeChild(userListContainer.firstChild);
-          }
-          // Agregar elementos directamente sin usar innerHTML
-          const fragment = renderUserItems(data.users);
-          userListContainer.appendChild(fragment);
+          fetchUsers(currentPage);
         } else {
           alert("Error: " + data.message);
         }
@@ -417,13 +489,7 @@ document.addEventListener("DOMContentLoaded", function() {
       .then(res => res.json())
       .then(data => {
         if (data.status === "ok") {
-          // Limpiar contenedor
-          while(userListContainer.firstChild) {
-            userListContainer.removeChild(userListContainer.firstChild);
-          }
-          // Agregar elementos directamente sin usar innerHTML
-          const fragment = renderUserItems(data.users);
-          userListContainer.appendChild(fragment);
+          fetchUsers(currentPage);
         } else {
           alert("Error: " + data.message);
         }
@@ -511,29 +577,7 @@ document.addEventListener("DOMContentLoaded", function() {
   });
 
   // Al cargar la página, inicializamos la lista
-  initUserList();
-
-  function initUserList() {
-    fetch("/admin/search_users_ajax", {
-      method: "GET",
-      headers: { "X-CSRFToken": getCsrfToken() }
-    })
-    .then(res => res.json())
-    .then(data => {
-      if (data.status === "ok") {
-        // Limpiar contenedor
-        while(userListContainer.firstChild) {
-          userListContainer.removeChild(userListContainer.firstChild);
-        }
-        // Agregar elementos directamente sin usar innerHTML
-        const fragment = renderUserItems(data.users);
-        userListContainer.appendChild(fragment);
-      } else {
-        alert("Error: " + data.message);
-      }
-    })
-    .catch(err => console.error("Error initUserList:", err));
-  }
+  fetchUsers(1);
 
   // Función helper para escapar HTML y prevenir XSS
   function escapeHtml(text) {
@@ -557,11 +601,28 @@ document.addEventListener("DOMContentLoaded", function() {
       userItem.style.setProperty('--user-bg-color', userBgColor);
       userItem.style.setProperty('--user-text-color', '#333333');
       
+      const rowInner = document.createElement('div');
+      rowInner.className = 'user-item-row';
+
       const usernameDiv = document.createElement('div');
+      usernameDiv.className = 'user-item-name';
       const strong = document.createElement('strong');
       strong.textContent = escapeHtml(u.username);
       usernameDiv.appendChild(strong);
-      userItem.appendChild(usernameDiv);
+
+      // Icono pequeño para duplicar la configuración del usuario
+      const duplicateBtn = document.createElement('button');
+      duplicateBtn.type = 'button';
+      duplicateBtn.className = 'duplicate-user-btn';
+      duplicateBtn.dataset.id = u.id;
+      duplicateBtn.dataset.username = escapeHtml(u.username || '');
+      duplicateBtn.title = 'Duplicar usuario (copia su configuración)';
+      const duplicateIcon = document.createElement('i');
+      duplicateIcon.classList.add('fas', 'fa-clone');
+      duplicateBtn.appendChild(duplicateIcon);
+      usernameDiv.appendChild(duplicateBtn);
+
+      rowInner.appendChild(usernameDiv);
       
       const actionsDiv = document.createElement('div');
       actionsDiv.className = 'user-item-actions';
@@ -610,7 +671,8 @@ document.addEventListener("DOMContentLoaded", function() {
       deleteBtn.appendChild(icon);
       actionsDiv.appendChild(deleteBtn);
       
-      userItem.appendChild(actionsDiv);
+      rowInner.appendChild(actionsDiv);
+      userItem.appendChild(rowInner);
       container.appendChild(userItem);
     });
     
@@ -902,7 +964,7 @@ document.addEventListener("DOMContentLoaded", function() {
 
   // Cargar usuarios al iniciar
   if (bulkAddEmailsUserSearch) {
-    fetch("/admin/search_users_ajax?query=", {
+    fetch("/admin/search_users_ajax?query=&per_page=all", {
       method: "GET",
       headers: { "X-CSRFToken": getCsrfToken() }
     })
@@ -931,7 +993,7 @@ document.addEventListener("DOMContentLoaded", function() {
       clearTimeout(searchTimeoutBulkAdd);
       searchTimeoutBulkAdd = setTimeout(() => {
         if (query) {
-          fetch(`/admin/search_users_ajax?query=${encodeURIComponent(query)}`, {
+          fetch(`/admin/search_users_ajax?query=${encodeURIComponent(query)}&per_page=all`, {
             method: "GET",
             headers: { "X-CSRFToken": getCsrfToken() }
           })

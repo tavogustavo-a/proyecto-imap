@@ -9,6 +9,9 @@
   <p>Si eres administrador, actívala en editar herramienta y guarda los cambios.</p>
   <div class="err-actions">
     <a class="err-btn" href="{{ url_for('store_bp.store_front') }}">Ir al inicio</a>
-    <button type="button" class="err-btn err-btn--soft" id="errRetryBtn">Reintentar</button>
+    <form method="get" action="" class="err-retry-form">
+      <input type="hidden" name="_retry" value="1">
+      <button type="submit" class="err-btn err-btn--soft" id="errRetryBtn">Reintentar</button>
+    </form>
   </div>
 {% endblock %}

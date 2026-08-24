@@ -1,0 +1,24 @@
+{# Modal admin: URLs WhatsApp / Telegram / Android / iOS del pie #}
+<div id="footerSocialLinksModal" class="popup-base popup-small popup-hide footer-social-links-modal" role="dialog" aria-modal="true" aria-labelledby="footerSocialLinksModalTitle" hidden>
+  <div class="popup-modal-header">
+    <h4 id="footerSocialLinksModalTitle" class="mt-0 mb-0 flex-grow-1 text-center">Enlaces del pie</h4>
+    <button type="button" class="btn-close" id="closeFooterSocialLinksModalBtn" aria-label="Cerrar modal">
+      <i class="fas fa-times" aria-hidden="true"></i>
+    </button>
+  </div>
+  <p class="text-small mb-1 text-center">WhatsApp y Telegram: usuarios normales. Android e iOS: también para sub-usuarios. Deja vacío un campo para ocultar su icono.</p>
+  <div class="mb-1 text-center footer-social-links-modal__fields">
+    <label for="footerWhatsappUrlInput" class="d-block mb-03"><i class="fab fa-whatsapp" aria-hidden="true"></i> URL WhatsApp</label>
+    <input type="text" id="footerWhatsappUrlInput" class="w-100 mb-05 text-center api-input" placeholder="https://wa.me/57XXXXXXXXXX" autocomplete="off" inputmode="url">
+    <label for="footerTelegramUrlInput" class="d-block mb-03"><i class="fab fa-telegram-plane" aria-hidden="true"></i> URL Telegram</label>
+    <input type="text" id="footerTelegramUrlInput" class="w-100 mb-05 text-center api-input" placeholder="https://t.me/tu_canal" autocomplete="off" inputmode="url">
+    <label for="footerAndroidUrlInput" class="d-block mb-03"><i class="fab fa-android" aria-hidden="true"></i> URL app Android</label>
+    <input type="text" id="footerAndroidUrlInput" class="w-100 mb-05 text-center api-input" placeholder="https://play.google.com/store/apps/details?id=..." autocomplete="off" inputmode="url">
+    <label for="footerIosUrlInput" class="d-block mb-03"><i class="fab fa-apple" aria-hidden="true"></i> URL app iOS</label>
+    <input type="text" id="footerIosUrlInput" class="w-100 text-center api-input" placeholder="https://apps.apple.com/app/id..." autocomplete="off" inputmode="url">
+  </div>
+  <p id="footerSocialLinksMsg" class="text-small text-center mb-05" role="status" hidden></p>
+  <div class="d-flex justify-content-center gap-05">
+    <button type="button" class="popup-button-confirm" id="saveFooterSocialLinksBtn">Guardar</button>
+  </div>
+</div>

@@ -1,8 +1,8 @@
 {% extends "base.html" %}
 
-{% block title %}Chatbot respuestas-preguntas{% endblock %}
+{% block title %}Chat de respuestas o dudas{% endblock %}
 
-{% block head %}{{ super() }}<link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}?v=20260611-logout-cookies-label">{% endblock %}
+{% block head %}{{ super() }}<meta name="csrf_token" content="{{ csrf_token() }}"><link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}?v=20260729-chatbot-secure-voice">{% endblock %}
 {% block content %}
 <div class="container container-max-width-900 store-light store-front-main px-2 pb-3 chatbot-rp-page"
      {% if is_admin %}
@@ -44,7 +44,7 @@
   {% endif %}
 
   <header class="chatbot-rp-header mt-2 mb-2">
-    <h1 class="chatbot-rp-title"><i class="fas fa-robot" aria-hidden="true"></i> {% if is_admin %}Chatbot — centro de integraciones{% else %}Chatbot respuestas{% endif %}</h1>
+    <h1 class="chatbot-rp-title"><i class="fas fa-robot" aria-hidden="true"></i> Chat de respuestas o dudas</h1>
   </header>
 
   {% if is_admin %}
@@ -59,7 +59,7 @@
       <section class="chatbot-rp-chat-card" aria-label="Conversación">
         <div id="chatbotRpMessages" class="chatbot-rp-messages" role="log" aria-live="polite"></div>
         <form id="chatbotRpForm" class="chatbot-rp-input-row">
-          <button type="button" id="chatbotRpMicBtn" class="btn-panel btn-blue chatbot-rp-mic" title="Iniciar o detener conversación por voz en tiempo real" aria-label="Conversación por voz" aria-pressed="false">
+          <button type="button" id="chatbotRpMicBtn" class="btn-panel btn-blue chatbot-rp-mic" title="Iniciar o detener voz (micrófono y respuesta)" aria-label="Iniciar o detener voz" aria-pressed="false">
             <i class="fas fa-microphone" aria-hidden="true"></i>
           </button>
           <label for="chatbotRpInput" class="sr-only">Tu pregunta</label>
@@ -69,7 +69,16 @@
           </button>
         </form>
         <div class="chatbot-rp-options">
-          <label class="chatbot-rp-check"><input type="checkbox" id="chatbotRpVoiceRealtime" checked> Escuchar respuestas del asistente (voz en tiempo real)</label>
+          <label class="chatbot-rp-voice-field" for="chatbotRpVoiceSelect">Voz
+            <select id="chatbotRpVoiceSelect" class="chatbot-rp-voice-select" aria-label="Voz española"></select>
+          </label>
+          <label class="chatbot-rp-voice-field" for="chatbotRpVoiceRate">Velocidad
+            <select id="chatbotRpVoiceRate" class="chatbot-rp-voice-select" aria-label="Velocidad de voz">
+              <option value="0.9">Suave</option>
+              <option value="0.96" selected>Natural</option>
+              <option value="1.05">Rápida</option>
+            </select>
+          </label>
           <span id="chatbotRpMicStatus" class="chatbot-rp-mic-status" aria-live="polite"></span>
         </div>
       </section>
@@ -81,7 +90,7 @@
     {% include 'includes/chatbot_hub_modules_panel.html' %}
     <aside id="chatbotRpKnowledgeBlock" class="chatbot-rp-knowledge-card mt-3" aria-labelledby="chatbotRpKnowledgeTitle">
       <h2 id="chatbotRpKnowledgeTitle" class="chatbot-rp-section-title">Base de conocimiento</h2>
-      <p class="chatbot-rp-knowledge-hint">Pega resúmenes de NotebookLM, guías o notas. El bot los usará al responder en «Asistente».</p>
+      <p class="chatbot-rp-knowledge-hint">Pega resúmenes de NotebookLM, guías o notas. El bot los usará según la visibilidad elegida. No pegues contraseñas, tokens, correos privados ni datos de clientes.</p>
       <form id="chatbotRpKnowledgeForm" class="chatbot-rp-knowledge-form">
         <div class="chatbot-rp-field">
           <label for="chatbotRpKnowTitle">Título</label>
@@ -95,19 +104,28 @@
           <label for="chatbotRpKnowContent">Contenido / resumen</label>
           <textarea id="chatbotRpKnowContent" class="form-control" rows="6" required placeholder="Pega aquí el texto extraído del video o tus apuntes…"></textarea>
         </div>
+        <div class="chatbot-rp-field">
+          <label for="chatbotRpKnowVisibility">Quién puede usar este conocimiento</label>
+          <select id="chatbotRpKnowVisibility" class="form-control">
+            <option value="admin" selected>Solo administrador</option>
+            <option value="user">Usuarios autenticados y administrador</option>
+          </select>
+        </div>
         <button type="submit" class="btn-panel btn-blue w-100">Guardar en la base</button>
       </form>
       <ul id="chatbotRpSourcesList" class="chatbot-rp-sources-list">
         {% for s in knowledge_sources %}
-        <li><span class="chatbot-rp-src-type">{{ s.type }}</span> {{ s.title }}</li>
+        <li><span class="chatbot-rp-src-type">{{ s.type }}</span><span class="chatbot-rp-src-scope">{{ s.visibility }}</span> {{ s.title }}</li>
         {% endfor %}
       </ul>
     </aside>
   </div>
   {% endif %}
-  {# Meta embebida sin <script> (CSP estricto) #}
-  <div id="chatbot-rp-meta" hidden class="embedded-page-json"
-       data-chatbot-rp-meta="{{ {'askUrl': url_for('store_bp.api_chatbot_respuestas_ask'), 'knowledgeUrl': url_for('store_bp.api_chatbot_respuestas_knowledge'), 'isAdmin': is_admin}|tojson|e }}"></div>
+  {# Meta en atributos planos: tojson dentro de comillas dobles se corta y deja askUrl vacío. #}
+  <div id="chatbot-rp-meta" hidden
+       data-ask-url="{{ url_for('store_bp.api_chatbot_respuestas_ask') }}"
+       data-knowledge-url="{{ url_for('store_bp.api_chatbot_respuestas_knowledge') }}"
+       data-is-admin="{{ '1' if is_admin else '0' }}"></div>
 </div>
 {% endblock %}
 {% block scripts %}
@@ -116,5 +134,5 @@
 <script src="{{ url_for('static', filename='js/clear_trigger_logs.js') }}" defer></script>
 <script src="{{ url_for('static', filename='js/logout_all_cookies_btn.js') }}?v=20260611-logout-cookies-label" defer></script>
 {% endif %}
-<script src="{{ url_for('store_bp.static', filename='js/chatbot_respuestas.js') }}?v=20260522-csp-meta" defer></script>
+<script src="{{ url_for('store_bp.static', filename='js/chatbot_respuestas.js') }}?v=20260729-chatbot-listen-btn-only" defer></script>
 {% endblock %}

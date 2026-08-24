@@ -986,6 +986,7 @@ for _raw, _es in (
     ('repetida', 'Repetida'),
     ('pendiente garantia', 'Garantía'),
     ('solucionada', 'Solucionada'),
+    ('devolucion', 'Devolución'),
 ):
     _BAD_KEY_TO_LABEL[normalize_status_key(_raw)] = _es
 

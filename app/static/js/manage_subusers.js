@@ -34,11 +34,94 @@ document.addEventListener("DOMContentLoaded", function() {
   const searchForm = document.getElementById("searchSubusersForm");
   const searchInput = document.getElementById("searchSubusersInput");
   const subusersContainer = document.getElementById("subusersContainer");
+  const showSubuserCount = document.getElementById("showSubuserCount");
+  const subuserPaginationContainer = document.getElementById("subuserListPagination");
   const btnVolverBusqueda = document.getElementById("btnVolverBusqueda");
+  let currentSubuserPage = 1;
+
+  function clearSubuserPagination() {
+    if (!subuserPaginationContainer) return;
+    while (subuserPaginationContainer.firstChild) {
+      subuserPaginationContainer.removeChild(subuserPaginationContainer.firstChild);
+    }
+  }
+
+  function updateSubuserPagination(pagination) {
+    clearSubuserPagination();
+    if (!subuserPaginationContainer || !pagination) return;
+
+    const prevButton = document.createElement("button");
+    prevButton.type = "button";
+    prevButton.className = "btn-panel btn-blue";
+    prevButton.textContent = "< Anterior";
+    prevButton.disabled = !pagination.has_prev;
+    prevButton.addEventListener("click", function () {
+      if (pagination.has_prev) fetchSubusers(pagination.prev_num);
+    });
+    subuserPaginationContainer.appendChild(prevButton);
+
+    const pageInfo = document.createElement("span");
+    pageInfo.className = "mx-2";
+    pageInfo.textContent = `Página ${pagination.page} de ${pagination.pages}`;
+    subuserPaginationContainer.appendChild(pageInfo);
+
+    const nextButton = document.createElement("button");
+    nextButton.type = "button";
+    nextButton.className = "btn-panel btn-blue";
+    nextButton.textContent = "Siguiente >";
+    nextButton.disabled = !pagination.has_next;
+    nextButton.addEventListener("click", function () {
+      if (pagination.has_next) fetchSubusers(pagination.next_num);
+    });
+    subuserPaginationContainer.appendChild(nextButton);
+  }
+
+  function fetchSubusers(page) {
+    if (!subusersContainer) return Promise.resolve();
+    const pageNum = parseInt(page, 10) || 1;
+    currentSubuserPage = pageNum;
+    const query = searchInput ? searchInput.value.trim() : "";
+    const perPage = showSubuserCount ? showSubuserCount.value : "all";
+    let url = `/subusers/list_subusers_ajax?query=${encodeURIComponent(query)}&per_page=${encodeURIComponent(perPage)}`;
+    if (perPage !== "all") {
+      url += `&page=${pageNum}`;
+    }
+    return fetch(url, {
+      method: "GET",
+      headers: { "X-CSRFToken": getCsrfToken() }
+    })
+      .then(r => r.json())
+      .then(data => {
+        if (data.status === "ok") {
+          renderSubusers(data.subusers || []);
+          if (perPage !== "all") {
+            updateSubuserPagination(data.pagination);
+          } else {
+            clearSubuserPagination();
+          }
+        } else {
+          const errorP = document.createElement("p");
+          errorP.classList.add("error-message-text");
+          errorP.textContent = `Error: ${data.message}`;
+          subusersContainer.innerHTML = "";
+          subusersContainer.appendChild(errorP);
+          clearSubuserPagination();
+        }
+      })
+      .catch(err => {
+        console.error("Error cargando subusuarios:", err);
+        const errorP = document.createElement("p");
+        errorP.classList.add("error-message-text");
+        errorP.textContent = `Error al cargar subusuarios: ${err}`;
+        subusersContainer.innerHTML = "";
+        subusersContainer.appendChild(errorP);
+        clearSubuserPagination();
+      });
+  }
 
   // Al cargar => listar sub-usuarios
-  if(subusersContainer) { // Asegurarse que el contenedor existe antes de cargar
-      loadAllSubusers();
+  if(subusersContainer) {
+      fetchSubusers(1);
   } else {
       console.error("Contenedor #subusersContainer no encontrado al cargar.");
   }
@@ -85,7 +168,7 @@ document.addEventListener("DOMContentLoaded", function() {
             subUsername.value = "";
             subPassword.value = "";
             createSubuserMsg.textContent = "";
-            renderSubusers(data.subusers || []);
+            fetchSubusers(1);
           } else {
             createSubuserMsg.textContent = "Error: " + data.message;
           }
@@ -103,32 +186,10 @@ document.addEventListener("DOMContentLoaded", function() {
         let searchTimeout = null;
         searchInput.addEventListener('input', function() {
           clearTimeout(searchTimeout);
-          searchTimeout = setTimeout(() => {
-            const q = searchInput.value.trim().toLowerCase();
-            fetch(`/subusers/list_subusers_ajax?query=${encodeURIComponent(q)}`, {
-              method:"GET",
-              headers: { "X-CSRFToken": getCsrfToken() }
-            })
-            .then(r=>r.json())
-            .then(data=>{
-              if(data.status==="ok"){
-                renderSubusers(data.subusers || []);
-              } else {
-                const errorP = document.createElement('p');
-                errorP.classList.add('error-message-text');
-                errorP.textContent = `Error: ${data.message}`;
-                subusersContainer.innerHTML = '';
-                subusersContainer.appendChild(errorP);
-              }
-            })
-            .catch(err=>{
-              const errorP = document.createElement('p');
-              errorP.classList.add('error-message-text');
-              errorP.textContent = `Error: ${err}`;
-              subusersContainer.innerHTML = '';
-              subusersContainer.appendChild(errorP);
-            });
-          }, 200);
+          searchTimeout = setTimeout(() => fetchSubusers(1), 200);
+        });
+        searchInput.addEventListener('search', function() {
+          fetchSubusers(1);
         });
       }
       // Botón Limpiar
@@ -138,37 +199,20 @@ document.addEventListener("DOMContentLoaded", function() {
         limpiarBtn.textContent = 'Limpiar';
         limpiarBtn.addEventListener('click', function(e) {
           searchInput.value = '';
-          searchInput.dispatchEvent(new Event('input'));
+          fetchSubusers(1);
         });
       }
   } // Fin if (searchForm)
 
-  // 3) CARGAR TODOS
-  function loadAllSubusers(){
-    fetch("/subusers/list_subusers_ajax", { 
-      method:"GET",
-      headers:{ "X-CSRFToken": getCsrfToken() }
-    })
-    .then(r=>r.json())
-    .then(data=>{
-      if(data.status==="ok"){
-        renderSubusers(data.subusers || []);
-      } else {
-        const errorP = document.createElement('p');
-        errorP.classList.add('error-message-text');
-        errorP.textContent = `Error: ${data.message}`;
-        subusersContainer.innerHTML = '';
-        subusersContainer.appendChild(errorP);
-      }
-    })
-    .catch(err=> { 
-        console.error("Error cargando subusuarios:", err);
-        const errorP = document.createElement('p');
-        errorP.classList.add('error-message-text');
-        errorP.textContent = `Error al cargar subusuarios: ${err}`;
-        subusersContainer.innerHTML = '';
-        subusersContainer.appendChild(errorP);
+  if (showSubuserCount) {
+    showSubuserCount.addEventListener("change", function () {
+      fetchSubusers(1);
     });
+  }
+
+  // 3) CARGAR TODOS (compat)
+  function loadAllSubusers(){
+    fetchSubusers(1);
   }
 
   // 4) RENDER SUB-USUARIOS
@@ -184,6 +228,8 @@ document.addEventListener("DOMContentLoaded", function() {
     
     // Limpiar contenedor
     subusersContainer.innerHTML = '';
+    const track = document.createElement('div');
+    track.className = 'user-list-track';
     
     subuserList.forEach(su => {
       const card = document.createElement('div');
@@ -194,7 +240,7 @@ document.addEventListener("DOMContentLoaded", function() {
       
       const usernameDiv = document.createElement('div');
       usernameDiv.classList.add('subuser-card-username');
-      usernameDiv.textContent = escapeHtml(su.username);
+      usernameDiv.textContent = su.username || '';
       content.appendChild(usernameDiv);
       
       const actionsDiv = document.createElement('div');
@@ -221,23 +267,27 @@ document.addEventListener("DOMContentLoaded", function() {
       toggleBtn.setAttribute('data-id', su.id);
       actionsDiv.appendChild(toggleBtn);
       
-      // Botón Eliminar
+      // Botón Eliminar (icono, como en usuarios)
       const deleteBtn = document.createElement('button');
-      deleteBtn.classList.add('btn-red', 'delete-subuser');
+      deleteBtn.classList.add('btn-panel', 'btn-red', 'btn-sm', 'delete-subuser');
       deleteBtn.setAttribute('data-id', su.id);
-      deleteBtn.textContent = 'Eliminar';
+      deleteBtn.title = 'Eliminar';
+      const trashIcon = document.createElement('i');
+      trashIcon.classList.add('fas', 'fa-trash');
+      deleteBtn.appendChild(trashIcon);
       actionsDiv.appendChild(deleteBtn);
       
       content.appendChild(actionsDiv);
       card.appendChild(content);
-      subusersContainer.appendChild(card);
+      track.appendChild(card);
     });
+    subusersContainer.appendChild(track);
   }
 
   // 5) Delegación de eventos
   if(subusersContainer) { // Verificar que el contenedor existe
       subusersContainer.addEventListener("click", function(e) {
-        const target = e.target; 
+        const target = e.target.closest("button") || e.target; 
 
         // Toggle Subuser Enable/Disable
         if(target.classList.contains("toggle-subuser")) {
@@ -258,7 +308,7 @@ document.addEventListener("DOMContentLoaded", function() {
           .then(r => r.json())
           .then(data => {
             if(data.status === "ok") {
-              renderSubusers(data.subusers || []); 
+              fetchSubusers(currentSubuserPage);
             } else {
               alert("Error al cambiar estado: " + data.message);
             }
@@ -270,9 +320,10 @@ document.addEventListener("DOMContentLoaded", function() {
         }
 
         // Delete Subuser
-        if(target.classList.contains("delete-subuser")) {
+        const deleteBtn = e.target.closest(".delete-subuser");
+        if(deleteBtn) {
           e.preventDefault();
-          const subId = target.getAttribute("data-id");
+          const subId = deleteBtn.getAttribute("data-id");
           if(!confirm("¿Deseas eliminar este sub-usuario? Esta acción no se puede deshacer.")) return;
 
           fetch("/subusers/delete_subuser_ajax", {
@@ -286,7 +337,7 @@ document.addEventListener("DOMContentLoaded", function() {
           .then(r => r.json())
           .then(data => {
             if(data.status === "ok") {
-              renderSubusers(data.subusers || []);
+              fetchSubusers(currentSubuserPage);
             } else {
               alert("Error al eliminar: " + data.message);
             }

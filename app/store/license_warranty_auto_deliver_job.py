@@ -137,6 +137,9 @@ def _deliver_one_pending_line(
 
     old_at = bad_acc.assigned_at
     old_ex = bad_acc.expires_at
+    old_sale_id = bad_acc.sale_id
+    old_sold_unit_price = bad_acc.sold_unit_price
+    old_sold_currency = bad_acc.sold_currency
     old_cred_plain = '{} {}'.format(
         str(bad_acc.email or '').strip() or str(bad_acc.account_identifier or '').strip(),
         str(bad_acc.password or '').replace('\r\n', ' ').replace('\n', ' ').strip(),
@@ -147,6 +150,9 @@ def _deliver_one_pending_line(
 
     replacement.status = 'assigned'
     replacement.assigned_to_user_id = uid
+    replacement.sale_id = old_sale_id
+    replacement.sold_unit_price = old_sold_unit_price
+    replacement.sold_currency = old_sold_currency
     replacement.assigned_at = old_at or datetime.utcnow()
     replacement.expires_at = old_ex or (datetime.utcnow() + _license_account_term_timedelta(license_obj))
     replacement.updated_at = datetime.utcnow()

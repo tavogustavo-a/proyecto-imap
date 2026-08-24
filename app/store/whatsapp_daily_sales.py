@@ -157,6 +157,16 @@ def has_pending_daily_digests_ready(config: WhatsAppConfig, co_now=None) -> bool
         co_date = _snapshot_co_date(snap)
         if co_date and _co_date_ready_for_send(co_date, config, co_now):
             return True
+    # Movimientos de soporte sin resumen enviado (días sin ventas también cuentan).
+    try:
+        from app.store.license_bloc_movements import pending_movement_digest_recipients
+
+        if pending_movement_digest_recipients(
+            ready_fn=lambda d: _co_date_ready_for_send(d, config, co_now),
+        ):
+            return True
+    except Exception:
+        logger.exception('pending movimientos soporte ready')
     return False
 
 
@@ -717,9 +727,199 @@ def _recharges_map_for_historial(
     return out
 
 
+def _license_refund_model():
+    """Obtiene el modelo sin impedir el arranque durante despliegues escalonados."""
+    from app.store import models
+
+    return getattr(models, 'LicenseAccountRefund', None)
+
+
+def _refund_row_event_dt(row):
+    return getattr(row, 'created_at', None)
+
+
+def _refund_row_to_event(row) -> dict[str, Any] | None:
+    """Normaliza una devolución manteniendo su moneda original, sin conversión FX."""
+    try:
+        amount = float(getattr(row, 'refund_amount', None) or 0)
+        refunded_days = max(
+            0,
+            int(
+                getattr(row, 'refunded_days', None)
+                or getattr(row, 'returned_days', None)
+                or 0
+            ),
+        )
+        charged_days = max(0, int(getattr(row, 'charged_days', None) or 0))
+        detected_charged_days = max(
+            0,
+            int(getattr(row, 'detected_charged_days', None) or charged_days),
+        )
+        billing_period_days = max(
+            1,
+            int(
+                getattr(row, 'billing_period_days', None)
+                or (charged_days + refunded_days)
+                or 30
+            ),
+        )
+        unit_price = float(
+            getattr(row, 'unit_price', None)
+            or getattr(row, 'historical_unit_price', None)
+            or 0
+        )
+    except (TypeError, ValueError):
+        return None
+    currency = str(getattr(row, 'currency', None) or '').strip().upper()
+    if amount < 0 or currency not in ('COP', 'USD'):
+        return None
+    dt = _refund_row_event_dt(row)
+    return {
+        'id': getattr(row, 'id', None),
+        'user_id': getattr(row, 'user_id', None),
+        'billing_user_id': getattr(row, 'billing_user_id', None),
+        'license_id': getattr(row, 'license_id', None),
+        'account_id': (
+            getattr(row, 'account_id', None)
+            or getattr(row, 'license_account_id', None)
+        ),
+        'sale_id': getattr(row, 'sale_id', None),
+        'product_name': str(getattr(row, 'product_name', None) or 'Licencia').strip(),
+        'billing_period_days': billing_period_days,
+        'detected_charged_days': detected_charged_days,
+        'charged_days': charged_days,
+        'charged_days_overridden': bool(
+            getattr(row, 'charged_days_overridden', False)
+            or charged_days != detected_charged_days
+        ),
+        'refunded_days': refunded_days,
+        'unit_price': unit_price,
+        'amount': amount,
+        'prepaid_amount': float(
+            getattr(row, 'prepaid_applied', None)
+            if getattr(row, 'prepaid_applied', None) is not None
+            else amount
+        ),
+        'debt_amount': float(getattr(row, 'debt_applied', None) or 0),
+        'currency': currency,
+        'custom_message': str(getattr(row, 'custom_message', None) or '').strip(),
+        'created_at': dt,
+        'sort_ts': float(dt.timestamp()) if dt and hasattr(dt, 'timestamp') else 0.0,
+    }
+
+
+def _refunds_map_for_historial(
+    *,
+    viewer_billing_user_id: int | None = None,
+    all_users: bool = False,
+) -> dict[tuple[int, date], list[dict[str, Any]]]:
+    """Mapa (billing_id, fecha CO) de devoluciones, también para días sin compras."""
+    model = _license_refund_model()
+    if model is None:
+        return {}
+    q = model.query
+    if not all_users and viewer_billing_user_id:
+        q = q.filter(model.billing_user_id == int(viewer_billing_user_id))
+    out: dict[tuple[int, date], list[dict[str, Any]]] = {}
+    for row in q.order_by(model.created_at.asc(), model.id.asc()).all():
+        event = _refund_row_to_event(row)
+        if not event or not event['created_at'] or event['billing_user_id'] is None:
+            continue
+        try:
+            co_date = utc_to_colombia(event['created_at']).date()
+            billing_id = int(event['billing_user_id'])
+        except (TypeError, ValueError):
+            continue
+        out.setdefault((billing_id, co_date), []).append(event)
+    return out
+
+
+def _refunds_on_co_date(
+    billing_user: User,
+    co_date: date,
+) -> list[dict[str, Any]]:
+    return _refunds_map_for_historial(
+        viewer_billing_user_id=int(billing_user.id),
+    ).get((int(billing_user.id), co_date), [])
+
+
+def _format_refund_summary_lines(refunds: list[dict[str, Any]]) -> list[str]:
+    lines: list[str] = []
+    for refund in refunds:
+        try:
+            days = max(0, int(refund.get('refunded_days') or 0))
+            amount = float(refund.get('amount') or 0)
+        except (TypeError, ValueError):
+            continue
+        currency = str(refund.get('currency') or '').strip().upper()
+        if amount < 0 or currency not in ('COP', 'USD'):
+            continue
+        line = (
+            f'Devolución de {days} días · '
+            f'{_format_whatsapp_amount(amount)} {currency}'
+        )
+        if refund.get('charged_days_overridden'):
+            line += (
+                f' · ajuste manual: {refund.get("detected_charged_days", 0)} '
+                f'→ {refund.get("charged_days", 0)} días cobrados'
+            )
+        lines.append(line)
+    return lines
+
+
+def _refund_total_for_currency(
+    refunds: list[dict[str, Any]],
+    currency: str,
+) -> float:
+    target = str(currency or '').strip().upper()
+    total = 0.0
+    for refund in refunds:
+        if str(refund.get('currency') or '').strip().upper() != target:
+            continue
+        try:
+            total += float(refund.get('prepaid_amount') or 0)
+        except (TypeError, ValueError):
+            continue
+    return total
+
+
+def _recharge_total_for_currency(
+    recharges: list[dict[str, Any]],
+    currency: str,
+) -> float:
+    target = str(currency or '').strip().upper()
+    total = 0.0
+    for recharge in recharges:
+        if str(recharge.get('currency') or '').strip().upper() != target:
+            continue
+        try:
+            total += float(recharge.get('amount') or 0)
+        except (TypeError, ValueError):
+            continue
+    return total
+
+
 def _snapshot_day_total(snapshots: list[SalePurchaseSnapshot]) -> float:
     total = 0.0
     for snap in snapshots:
+        try:
+            total += float(snap.total_price or 0)
+        except (TypeError, ValueError):
+            continue
+    return total
+
+
+def _snapshot_day_total_for_currency(
+    snapshots: list[SalePurchaseSnapshot],
+    currency: str,
+) -> float:
+    """Suma únicamente ventas de una moneda; nunca mezcla COP y USD."""
+    target = str(currency or '').strip().upper()
+    total = 0.0
+    for snap in snapshots:
+        snap_currency = str(getattr(snap, 'currency', None) or target).strip().upper()
+        if snap_currency != target:
+            continue
         try:
             total += float(snap.total_price or 0)
         except (TypeError, ValueError):
@@ -919,6 +1119,15 @@ def _warranty_summary_lines(events: list[dict[str, Any]]) -> list[str]:
 
 def _mark_warranty_digests_sent(billing_user: User, co_date: date) -> bool:
     """Quita wa_digest_pending de garantia_entrega de ese día CO. True si hubo cambios."""
+    # Mismo ciclo de vida del resumen: al resolverse (enviado / sin teléfono /
+    # deshabilitado / abandonado) se marcan también los movimientos de soporte
+    # incluidos en él, para no reenviarlos como resumen solo-movimientos.
+    try:
+        from app.store.license_bloc_movements import mark_movements_whatsapp_sent
+
+        mark_movements_whatsapp_sent(billing_user, co_date)
+    except Exception:
+        logger.exception('mark movimientos soporte WA')
     changed = False
     user_ids = _store_account_user_ids(billing_user) or {int(billing_user.id)}
     users = User.query.filter(User.id.in_(list(user_ids))).all()
@@ -1063,6 +1272,7 @@ def build_daily_summary_lines(
     co_date: date | None = None,
     include_failed_renewals: bool = False,
     recharges: list[dict[str, Any]] | None = None,
+    refunds: list[dict[str, Any]] | None = None,
 ) -> list[str] | None:
     renewals_summary = _section_summary_line('Renovaciones', snapshots, is_renewal=True)
     purchases_summary = _section_summary_line(
@@ -1095,7 +1305,30 @@ def build_daily_summary_lines(
         day_recharges = _credited_recharges_on_co_date(billing_user, co_date)
     recharge_line = _format_recharge_summary_line(day_recharges)
 
-    if not header_lines and not warranty_lines and not failed_lines and not recharge_line:
+    day_refunds: list[dict[str, Any]] = list(refunds or [])
+    if not day_refunds and billing_user and co_date:
+        day_refunds = _refunds_on_co_date(billing_user, co_date)
+    refund_lines = _format_refund_summary_lines(day_refunds)
+
+    # Movimientos de blocs hechos por usuarios soporte (solo admin y soporte los ven).
+    movement_lines: list[str] = []
+    if billing_user and co_date:
+        try:
+            from app.store.license_bloc_movements import daily_movements_summary_lines
+
+            movement_lines = daily_movements_summary_lines(billing_user, co_date)
+        except Exception:
+            logger.exception('movimientos soporte en resumen diario')
+            movement_lines = []
+
+    if (
+        not header_lines
+        and not warranty_lines
+        and not failed_lines
+        and not recharge_line
+        and not refund_lines
+        and not movement_lines
+    ):
         return None
 
     day_total = _snapshot_day_total(snapshots)
@@ -1108,14 +1341,22 @@ def build_daily_summary_lines(
 
     saldo_before = 0.0
     saldo_after = 0.0
-    has_balance = bool(billing_user) and bool(header_lines)
+    has_balance = bool(billing_user) and bool(header_lines or refund_lines)
     if billing_user and has_balance:
         currency = _billing_currency(billing_user)
+        day_total = _snapshot_day_total_for_currency(snapshots, currency)
+        recharge_total = _recharge_total_for_currency(day_recharges, currency)
+        refund_total = _refund_total_for_currency(day_refunds, currency)
         saldo_after = _billing_prepaid_balance(billing_user, currency)
-        # Compras restan saldo; recargas lo aumentan → reconstruir saldo al inicio.
-        saldo_before = saldo_after + day_total - recharge_total
+        # Final = inicio - compras + recargas + devoluciones.
+        saldo_before = saldo_after + day_total - recharge_total - refund_total
 
     lines: list[str] = list(header_lines)
+
+    if refund_lines:
+        if lines:
+            lines.append('')
+        lines.extend(refund_lines)
 
     license_lines = _collect_all_summary_license_lines(snapshots)
     if license_lines:
@@ -1149,6 +1390,12 @@ def build_daily_summary_lines(
         if lines:
             lines.append('')
         lines.extend(failed_lines)
+
+    if movement_lines:
+        if lines:
+            lines.append('----------------------')
+            lines.append('')
+        lines.extend(movement_lines)
 
     return lines
 
@@ -1222,6 +1469,26 @@ def build_purchase_history_daily_summary_items(
         viewer_billing_user_id=viewer_billing_user_id,
         all_users=all_users,
     )
+    refund_map = _refunds_map_for_historial(
+        viewer_billing_user_id=viewer_billing_user_id,
+        all_users=all_users,
+    )
+
+    # Días con movimientos de soporte pero sin compras: también generan fila de resumen.
+    movement_keys: set[tuple[int, date]] = set()
+    try:
+        from app.store.license_bloc_movements import movement_summary_billing_keys
+
+        for bid, iso in movement_summary_billing_keys(
+            viewer_billing_user_id=viewer_billing_user_id,
+            all_users=all_users,
+        ):
+            try:
+                movement_keys.add((int(bid), date.fromisoformat(str(iso))))
+            except (TypeError, ValueError):
+                continue
+    except Exception:
+        logger.exception('movimientos soporte en historial')
 
     items_out: list[dict[str, Any]] = []
 
@@ -1231,6 +1498,7 @@ def build_purchase_history_daily_summary_items(
         snaps: list[SalePurchaseSnapshot],
         billing_user: User,
         day_recharges: list[dict[str, Any]] | None = None,
+        day_refunds: list[dict[str, Any]] | None = None,
     ) -> None:
         summary_lines = build_daily_summary_lines(
             snaps,
@@ -1238,6 +1506,7 @@ def build_purchase_history_daily_summary_items(
             co_date=co_date,
             include_failed_renewals=True,
             recharges=day_recharges,
+            refunds=day_refunds,
         )
         if not summary_lines:
             return
@@ -1245,6 +1514,14 @@ def build_purchase_history_daily_summary_items(
         if (not snaps) and day_recharges:
             try:
                 sort_ts = max(float(r.get('sort_ts') or 0) for r in day_recharges)
+            except (TypeError, ValueError):
+                pass
+        if (not snaps) and day_refunds:
+            try:
+                sort_ts = max(
+                    sort_ts,
+                    max(float(r.get('sort_ts') or 0) for r in day_refunds),
+                )
             except (TypeError, ValueError):
                 pass
         fecha_str = 'Fecha no disponible'
@@ -1273,7 +1550,13 @@ def build_purchase_history_daily_summary_items(
             }
         )
 
-    all_keys = set(groups.keys()) | set(warranty_map.keys()) | set(recharge_map.keys())
+    all_keys = (
+        set(groups.keys())
+        | set(warranty_map.keys())
+        | set(recharge_map.keys())
+        | set(refund_map.keys())
+        | movement_keys
+    )
     for billing_id, co_date in sorted(
         all_keys, key=lambda k: (k[1], k[0]), reverse=True
     ):
@@ -1282,8 +1565,14 @@ def build_purchase_history_daily_summary_items(
             continue
         snaps = groups.get((billing_id, co_date), [])
         day_recharges = recharge_map.get((billing_id, co_date), [])
+        day_refunds = refund_map.get((billing_id, co_date), [])
         _append_summary_item(
-            billing_id, co_date, snaps, billing_user, day_recharges=day_recharges
+            billing_id,
+            co_date,
+            snaps,
+            billing_user,
+            day_recharges=day_recharges,
+            day_refunds=day_refunds,
         )
 
     return items_out
@@ -1563,6 +1852,77 @@ def send_pending_daily_digests_for_config(
                 outcome='error',
                 reason=str(exc),
             )
+
+    # Resúmenes solo-movimientos: días con actividad de soporte pero sin ventas
+    # pendientes para ese destinatario (admin o usuario soporte).
+    try:
+        from app.store.license_bloc_movements import (
+            mark_movements_whatsapp_sent,
+            pending_movement_digest_recipients,
+        )
+        from app.store.whatsapp_user_notify_prefs import (
+            user_receives_whatsapp_notifications,
+        )
+
+        handled_keys = {
+            (int(bid), cd) for (bid, cd) in groups.keys()
+        }
+        recipients = pending_movement_digest_recipients(
+            ready_fn=lambda d: _co_date_ready_for_send(d, config, co_now),
+            force=force,
+        )
+        for recipient, mov_co_date in recipients:
+            if (int(recipient.id), mov_co_date) in handled_keys:
+                continue
+            if not user_receives_whatsapp_notifications(recipient):
+                mark_movements_whatsapp_sent(recipient, mov_co_date)
+                continue
+            mov_phone = resolve_phone(recipient)
+            if not mov_phone:
+                mark_movements_whatsapp_sent(recipient, mov_co_date)
+                continue
+            mov_body = build_daily_sales_whatsapp_message(
+                customer_name=customer_name_fn(recipient),
+                co_date=mov_co_date,
+                snapshots=[],
+                billing_user=recipient,
+            )
+            if not mov_body:
+                mark_movements_whatsapp_sent(recipient, mov_co_date)
+                continue
+            try:
+                result = send_text_message(
+                    resolve_config_base_url(config),
+                    resolve_config_api_key(config),
+                    config_evolution_instance(config),
+                    mov_phone,
+                    mov_body,
+                )
+                if result.get('success'):
+                    mark_movements_whatsapp_sent(recipient, mov_co_date)
+                    stats['daily_sent'] += 1
+                    logger.info(
+                        'WhatsApp movimientos soporte user=%s fecha=%s',
+                        recipient.username,
+                        mov_co_date.isoformat(),
+                    )
+                    time.sleep(_next_pause_sec())
+                else:
+                    stats['daily_errors'] += 1
+                    logger.warning(
+                        'WhatsApp movimientos soporte falló user=%s: %s',
+                        recipient.username,
+                        result.get('error'),
+                    )
+            except Exception as mexc:
+                stats['daily_errors'] += 1
+                logger.warning(
+                    'WhatsApp movimientos soporte excepción user=%s: %s',
+                    recipient.username,
+                    mexc,
+                )
+    except Exception as mov_exc:
+        logger.exception('resúmenes solo-movimientos: %s', mov_exc)
 
     try:
         db.session.commit()

@@ -159,20 +159,16 @@ document.addEventListener("DOMContentLoaded", function() {
       container.classList.add('popup-visible'); 
       grid.innerHTML = "";
   
-      for(let i=1;i<=37;i++){
+      for(let i=1;i<=41;i++){
         const fileName=`stream${i}.png`;
-        const div=document.createElement("div");
-        div.className = "icon-grid-item";
-  
         const img=document.createElement("img");
         img.src=decideIconPath(fileName);
-        div.appendChild(img);
-  
-        div.addEventListener("click",()=>{
+        img.alt=fileName;
+        img.title=fileName;
+        img.addEventListener("click",()=>{
           addAliasIcon(aliasId,fileName);
         });
-  
-        grid.appendChild(div);
+        grid.appendChild(img);
       }
     }
   

@@ -1,7 +1,99 @@
-{# Pie de sitio: enlaces legales públicos (Play Store / privacidad). #}
+{# Pie de sitio: redes + enlaces legales. Sub-usuarios: solo iconos Android/iOS. Oculto en pantallas de login. #}
+{% set _hide_footer_eps = [
+  'auth_bp.login',
+  'user_auth_bp.login',
+  'auth_bp.twofa',
+  'auth_bp.forgot_password',
+] %}
+{% set android_url = (site_settings.get('footer_android_url') or '')|trim %}
+{% set ios_url = (site_settings.get('footer_ios_url') or '')|trim %}
+{% if is_subuser and request.endpoint not in _hide_footer_eps and (android_url or ios_url) %}
 <footer class="site-footer" role="contentinfo">
-  <nav class="site-footer__nav" aria-label="Enlaces legales">
-    <a class="site-footer__link" href="{{ url_for('main_bp.privacy_policy') }}">Política de privacidad</a>
-    <a class="site-footer__link" href="{{ url_for('main_bp.account_deletion_request') }}">Eliminar cuenta</a>
+  <nav class="site-footer__nav" aria-label="Enlaces del pie">
+    {% if android_url %}
+    <a class="site-footer__social-btn site-footer__social-btn--android"
+       href="{{ android_url }}"
+       target="_blank"
+       rel="noopener noreferrer"
+       title="App para Android"
+       aria-label="App para Android">
+      <i class="fab fa-android" aria-hidden="true"></i>
+    </a>
+    {% endif %}
+    {% if ios_url %}
+    <a class="site-footer__social-btn site-footer__social-btn--ios"
+       href="{{ ios_url }}"
+       target="_blank"
+       rel="noopener noreferrer"
+       title="App para iOS"
+       aria-label="App para iOS">
+      <i class="fab fa-apple" aria-hidden="true"></i>
+    </a>
+    {% endif %}
   </nav>
 </footer>
+{% elif not is_subuser and request.endpoint not in _hide_footer_eps %}
+{% set wa_url = (site_settings.get('footer_whatsapp_url') or '')|trim %}
+{% set tg_url = (site_settings.get('footer_telegram_url') or '')|trim %}
+<footer class="site-footer" role="contentinfo">
+  <nav class="site-footer__nav" aria-label="Enlaces del pie">
+    <a class="site-footer__link" href="{{ url_for('main_bp.privacy_policy') }}">Política de privacidad</a>
+    <a class="site-footer__link" href="{{ url_for('main_bp.account_deletion_request') }}">Eliminar cuenta</a>
+    {% if wa_url %}
+    <a class="site-footer__social-btn site-footer__social-btn--whatsapp"
+       href="{{ wa_url }}"
+       target="_blank"
+       rel="noopener noreferrer"
+       title="WhatsApp"
+       aria-label="WhatsApp">
+      <i class="fab fa-whatsapp" aria-hidden="true"></i>
+    </a>
+    {% endif %}
+    {% if tg_url %}
+    <a class="site-footer__social-btn site-footer__social-btn--telegram"
+       href="{{ tg_url }}"
+       target="_blank"
+       rel="noopener noreferrer"
+       title="Telegram"
+       aria-label="Telegram">
+      <i class="fab fa-telegram-plane" aria-hidden="true"></i>
+    </a>
+    {% endif %}
+    {% if android_url %}
+    <a class="site-footer__social-btn site-footer__social-btn--android"
+       href="{{ android_url }}"
+       target="_blank"
+       rel="noopener noreferrer"
+       title="App para Android"
+       aria-label="App para Android">
+      <i class="fab fa-android" aria-hidden="true"></i>
+    </a>
+    {% endif %}
+    {% if ios_url %}
+    <a class="site-footer__social-btn site-footer__social-btn--ios"
+       href="{{ ios_url }}"
+       target="_blank"
+       rel="noopener noreferrer"
+       title="App para iOS"
+       aria-label="App para iOS">
+      <i class="fab fa-apple" aria-hidden="true"></i>
+    </a>
+    {% endif %}
+    {% if is_admin %}
+    <button type="button"
+            id="footerSocialLinksBtn"
+            class="site-footer__social-config-btn"
+            title="Configurar enlaces del pie (WhatsApp, Telegram, Android, iOS)"
+            aria-label="Configurar enlaces del pie"
+            aria-controls="footerSocialLinksModal"
+            aria-haspopup="dialog">
+      <i class="fab fa-whatsapp" aria-hidden="true"></i>
+      <i class="fab fa-telegram-plane" aria-hidden="true"></i>
+      <i class="fab fa-android" aria-hidden="true"></i>
+      <i class="fab fa-apple" aria-hidden="true"></i>
+      <span>Editar</span>
+    </button>
+    {% endif %}
+  </nav>
+</footer>
+{% endif %}

@@ -95,10 +95,15 @@ def _log_accounts_newly_paid(
     if not newly_paid_ids:
         return
 
-    tipo = 'abono_admin' if source == 'admin' else 'abono_recarga'
-    source_label = (
-        'abono del admin' if source == 'admin' else 'recarga / abono de saldo'
-    )
+    if source == 'admin':
+        tipo = 'abono_admin'
+        source_label = 'abono del admin'
+    elif source == 'license_refund':
+        tipo = 'devolucion_licencia'
+        source_label = 'devolución de licencia'
+    else:
+        tipo = 'abono_recarga'
+        source_label = 'recarga / abono de saldo'
     amt_txt = (
         str(int(round(amount_applied)))
         if abs(amount_applied - round(amount_applied)) < 1e-9

@@ -3501,9 +3501,17 @@ document.addEventListener('DOMContentLoaded', function() {
   });
 
   var renovarCuentaClientePendingShell = null;
+  var renovarCuentaClienteEmailCheckTimer = null;
+  var renovarCuentaClienteEmailCheckSeq = 0;
 
   function closeRenovarCuentaClienteModal() {
     var modal = document.getElementById('renovarCuentaClienteModal');
+    if (renovarCuentaClienteEmailCheckTimer) {
+      window.clearTimeout(renovarCuentaClienteEmailCheckTimer);
+      renovarCuentaClienteEmailCheckTimer = null;
+    }
+    renovarCuentaClienteEmailCheckSeq += 1;
+    setRenovarCuentaClienteBusy(false);
     if (modal) modal.classList.add('modal-hidden');
     renovarCuentaClientePendingShell = null;
     setRenovarCuentaClienteStatus('', null);
@@ -3574,13 +3582,16 @@ document.addEventListener('DOMContentLoaded', function() {
       el.setAttribute('hidden', 'hidden');
       el.classList.remove(
         'renovar-cuenta-cliente-status--warn',
-        'renovar-cuenta-cliente-status--blocked'
+        'renovar-cuenta-cliente-status--blocked',
+        'renovar-cuenta-cliente-status--checking'
       );
-      if (submitBtn) submitBtn.disabled = false;
+      if (submitBtn && submitBtn.getAttribute('aria-busy') !== 'true') {
+        submitBtn.disabled = false;
+      }
       return;
     }
     el.textContent = message;
-    el.classList.remove('d-none');
+    el.classList.remove('d-none', 'renovar-cuenta-cliente-status--checking');
     el.removeAttribute('hidden');
     el.classList.remove('renovar-cuenta-cliente-status--warn', 'renovar-cuenta-cliente-status--blocked');
     if (kind === 'blocked') {
@@ -3588,10 +3599,57 @@ document.addEventListener('DOMContentLoaded', function() {
     } else if (kind === 'warn') {
       el.classList.add('renovar-cuenta-cliente-status--warn');
     }
-    if (submitBtn) submitBtn.disabled = kind === 'blocked';
+    if (submitBtn && submitBtn.getAttribute('aria-busy') !== 'true') {
+      submitBtn.disabled = kind === 'blocked';
+    }
   }
 
-  var renovarCuentaClienteEmailCheckTimer = null;
+  function setRenovarCuentaClienteBusy(busy) {
+    var submitBtn = document.getElementById('btnRenovarCuentaClienteSubmit');
+    var cancelBtn = document.getElementById('btnRenovarCuentaClienteCancel');
+    var closeBtn = document.getElementById('closeRenovarCuentaClienteModalBtn');
+    var credInput = document.getElementById('renovarCuentaClienteCred');
+    var statusEl = document.getElementById('renovarCuentaClienteStatus');
+    var modal = document.getElementById('renovarCuentaClienteModal');
+
+    if (modal) {
+      modal.classList.toggle('renovar-cuenta-cliente-modal--busy', !!busy);
+    }
+    if (cancelBtn) cancelBtn.disabled = !!busy;
+    if (closeBtn) closeBtn.disabled = !!busy;
+    if (credInput) credInput.readOnly = !!busy;
+
+    if (!submitBtn) return;
+    if (busy) {
+      if (!submitBtn.dataset.labelDefault) {
+        submitBtn.dataset.labelDefault = submitBtn.innerHTML;
+      }
+      submitBtn.disabled = true;
+      submitBtn.setAttribute('aria-busy', 'true');
+      submitBtn.innerHTML =
+        '<i class="fas fa-spinner fa-spin" aria-hidden="true"></i> Validando…';
+      if (statusEl) {
+        statusEl.innerHTML =
+          '<i class="fas fa-spinner fa-spin" aria-hidden="true"></i> Comprobando si el correo ya está en inventario…';
+        statusEl.classList.remove(
+          'd-none',
+          'renovar-cuenta-cliente-status--warn',
+          'renovar-cuenta-cliente-status--blocked'
+        );
+        statusEl.classList.add('renovar-cuenta-cliente-status--checking');
+        statusEl.removeAttribute('hidden');
+      }
+      return;
+    }
+
+    submitBtn.removeAttribute('aria-busy');
+    if (submitBtn.dataset.labelDefault) {
+      submitBtn.innerHTML = submitBtn.dataset.labelDefault;
+    }
+    var blocked =
+      statusEl && statusEl.classList.contains('renovar-cuenta-cliente-status--blocked');
+    submitBtn.disabled = !!blocked;
+  }
 
   function scheduleRenovarCuentaClienteEmailCheck(shell) {
     if (!shell) return;
@@ -3600,20 +3658,39 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     renovarCuentaClienteEmailCheckTimer = window.setTimeout(function () {
       renovarCuentaClienteEmailCheckTimer = null;
+      var submitBtn = document.getElementById('btnRenovarCuentaClienteSubmit');
+      if (submitBtn && submitBtn.getAttribute('aria-busy') === 'true') return;
       var credLine = (document.getElementById('renovarCuentaClienteCred').value || '').trim();
       var parsed = parseRenovarCuentaClienteCredLine(credLine);
       if (!parsed.ok) {
         setRenovarCuentaClienteStatus('', null);
         return;
       }
+      var seq = ++renovarCuentaClienteEmailCheckSeq;
+      var statusEl = document.getElementById('renovarCuentaClienteStatus');
+      if (statusEl) {
+        statusEl.innerHTML =
+          '<i class="fas fa-spinner fa-spin" aria-hidden="true"></i> Comprobando correo…';
+        statusEl.classList.remove(
+          'd-none',
+          'renovar-cuenta-cliente-status--warn',
+          'renovar-cuenta-cliente-status--blocked'
+        );
+        statusEl.classList.add('renovar-cuenta-cliente-status--checking');
+        statusEl.removeAttribute('hidden');
+      }
       checkCustomerRenewalEmailAllowed(shell.id(), parsed)
         .then(function (data) {
+          if (seq !== renovarCuentaClienteEmailCheckSeq) return;
           if (!data || !data.success) {
             setRenovarCuentaClienteStatus('', null);
             return;
           }
           if (!data.allowed) {
-            var kind = data.reason === 'already_renewed' ? 'blocked' : 'warn';
+            var kind =
+              data.reason === 'already_renewed' || data.reason === 'in_inventory'
+                ? 'blocked'
+                : 'warn';
             setRenovarCuentaClienteStatus(customerRenewalBlockedMessage(data), kind);
             return;
           }
@@ -3624,6 +3701,7 @@ document.addEventListener('DOMContentLoaded', function() {
           setRenovarCuentaClienteStatus('', null);
         })
         .catch(function () {
+          if (seq !== renovarCuentaClienteEmailCheckSeq) return;
           setRenovarCuentaClienteStatus('', null);
         });
     }, 450);
@@ -3720,6 +3798,12 @@ document.addEventListener('DOMContentLoaded', function() {
     var modal = document.getElementById('renovarCuentaClienteModal');
     var nameEl = document.getElementById('renovarCuentaClienteProductName');
     if (!modal) return;
+    if (renovarCuentaClienteEmailCheckTimer) {
+      window.clearTimeout(renovarCuentaClienteEmailCheckTimer);
+      renovarCuentaClienteEmailCheckTimer = null;
+    }
+    renovarCuentaClienteEmailCheckSeq += 1;
+    setRenovarCuentaClienteBusy(false);
     renovarCuentaClientePendingShell = shell;
     setRenovarCuentaClienteStatus('', null);
     if (nameEl) nameEl.textContent = shell.name() || 'Producto';
@@ -3791,6 +3875,8 @@ document.addEventListener('DOMContentLoaded', function() {
     renovarCuentaForm.addEventListener('submit', function (e) {
       e.preventDefault();
       if (!renovarCuentaClientePendingShell) return;
+      var submitBtn = document.getElementById('btnRenovarCuentaClienteSubmit');
+      if (submitBtn && submitBtn.getAttribute('aria-busy') === 'true') return;
       var credLine = (document.getElementById('renovarCuentaClienteCred').value || '').trim();
       var parsed = parseRenovarCuentaClienteCredLine(credLine);
       if (!parsed.ok) {
@@ -3802,26 +3888,49 @@ document.addEventListener('DOMContentLoaded', function() {
         alert('El correo está pendiente para cuentas a renovar.');
         return;
       }
+      if (renovarCuentaClienteEmailCheckTimer) {
+        window.clearTimeout(renovarCuentaClienteEmailCheckTimer);
+        renovarCuentaClienteEmailCheckTimer = null;
+      }
+      renovarCuentaClienteEmailCheckSeq += 1;
+      setRenovarCuentaClienteBusy(true);
       checkCustomerRenewalEmailAllowed(shell.id(), parsed)
         .then(function (data) {
           if (!data || !data.success) {
+            setRenovarCuentaClienteBusy(false);
+            setRenovarCuentaClienteStatus('', null);
             alert((data && data.error) || 'No se pudo validar el correo.');
             return;
           }
           if (!data.allowed) {
-            var kind = data.reason === 'already_renewed' ? 'blocked' : 'warn';
+            var kind =
+              data.reason === 'already_renewed' || data.reason === 'in_inventory'
+                ? 'blocked'
+                : 'warn';
+            setRenovarCuentaClienteBusy(false);
             setRenovarCuentaClienteStatus(customerRenewalBlockedMessage(data), kind);
             return;
           }
-          confirmCustomerRenewalWarning(data.warning).then(function (ok) {
-            if (!ok) return;
+          return confirmCustomerRenewalWarning(data.warning).then(function (ok) {
+            if (!ok) {
+              setRenovarCuentaClienteBusy(false);
+              if (data.warning) {
+                setRenovarCuentaClienteStatus(String(data.warning), 'warn');
+              } else {
+                setRenovarCuentaClienteStatus('', null);
+              }
+              return;
+            }
             var emailUse = data.email || parsed.email;
             var credUse = data.credential || parsed.credential;
             addRenovarCuentaClienteToCart(shell, credUse, emailUse, parsed.password);
+            setRenovarCuentaClienteBusy(false);
             closeRenovarCuentaClienteModal();
           });
         })
         .catch(function () {
+          setRenovarCuentaClienteBusy(false);
+          setRenovarCuentaClienteStatus('', null);
           alert('Error de conexión al validar el correo.');
         });
     });

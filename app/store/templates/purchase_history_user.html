@@ -2,10 +2,11 @@
 
 {% block title %}Mi Historial de Compras{% endblock %}
 
-{% block head %}{{ super() }}<link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}?v=20260704-historial-reserva-color-v1">{% endblock %}
+{% block head %}{{ super() }}<link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}?v=20260803-historial-filtro-chip-layout">{% endblock %}
 {% block content %}
 <div class="purchase-history-page{% if mostrar_usuario_comprador %} purchase-history-admin{% endif %}"
      data-show-user-column="{{ 'true' if mostrar_usuario_comprador else 'false' }}"
+     data-viewer-is-proveedor="{{ 'true' if viewer_is_proveedor else 'false' }}"
      data-recharges-url="{{ url_for('store_bp.api_historial_compras_recharges') }}"
      {% if mostrar_usuario_comprador %}
      data-clear-trigger-log-url="{{ url_for('admin_bp.clear_trigger_log') }}"
@@ -176,21 +177,49 @@
   </div>
 
   <div class="store-light purchase-history-container purchase-history-compras-wrap mx-auto" id="purchaseHistoryComprasSection">
-    <h2 class="m-0 text-center w-100 purchase-history-page-title"><i class="fas fa-receipt"></i> Historial de Compra</h2>
+    <h2 class="m-0 text-center w-100 purchase-history-page-title purchase-history-page-title--with-filter">
+      <span class="purchase-history-page-title-row">
+        <span class="purchase-history-page-title-main">
+          <i class="fas fa-receipt" aria-hidden="true"></i>
+          <span>Historial de Compra</span>
+        </span>
+        <button type="button" id="phComprasFilterBtn" class="purchase-history-filter-icon-btn" title="Filtro del historial" aria-label="Abrir filtro del historial" aria-haspopup="dialog" aria-controls="phComprasFilterModal">
+          <i class="fas fa-filter" aria-hidden="true"></i>
+        </button>
+      </span>
+      <button type="button" id="phComprasFilterClearChip" class="purchase-history-filter-active-chip" hidden title="Quitar filtro" aria-label="Quitar filtro activo">
+        <span id="phComprasFilterChipLabel">Filtro activo</span>
+        <span aria-hidden="true">&times;</span>
+      </button>
+    </h2>
     <div class="espaciado-responsive purchase-history-compras-shell">
   {% elif session.get('logged_in') and (not session.get('username') or session.get('username').lower() not in blocked_users) %}
   <div class="store-light purchase-history-container purchase-history-compras-wrap mx-auto store-front-main px-2 pb-3" id="purchaseHistoryComprasSection">
     <div class="store-front-header espaciado-responsive purchase-history-user-header">
       <button id="menuToggleBtn" class="btn-blue menu-btn-worksheet">&#9776; Menú</button>
     </div>
-    <h2 class="m-0 text-center w-100 purchase-history-page-title"><i class="fas fa-receipt"></i> Mi Historial de Compras</h2>
+    <h2 class="m-0 text-center w-100 purchase-history-page-title purchase-history-page-title--with-filter">
+      <span class="purchase-history-page-title-row">
+        <span class="purchase-history-page-title-main">
+          <i class="fas fa-receipt" aria-hidden="true"></i>
+          <span>Mi Historial de Compras</span>
+        </span>
+        <button type="button" id="phComprasFilterBtn" class="purchase-history-filter-icon-btn" title="Filtro del historial" aria-label="Abrir filtro del historial" aria-haspopup="dialog" aria-controls="phComprasFilterModal">
+          <i class="fas fa-filter" aria-hidden="true"></i>
+        </button>
+      </span>
+      <button type="button" id="phComprasFilterClearChip" class="purchase-history-filter-active-chip" hidden title="Quitar filtro" aria-label="Quitar filtro activo">
+        <span id="phComprasFilterChipLabel">Filtro activo</span>
+        <span aria-hidden="true">&times;</span>
+      </button>
+    </h2>
     <div class="espaciado-responsive purchase-history-compras-shell">
   {% else %}
     <div class="espaciado-responsive purchase-history-compras-shell">
   {% endif %}
     <form id="form-busqueda-compras" class="purchase-history-controls" autocomplete="off">
       <label for="busquedaCompras" class="sr-only">Buscar en compras</label>
-      <input type="search" id="busquedaCompras" class="form-control purchase-history-search" placeholder="Buscar en compras y recargas..." autocomplete="off">
+      <input type="search" id="busquedaCompras" class="form-control purchase-history-search" placeholder="Buscar en compras, recargas y devoluciones..." autocomplete="off">
       <div class="purchase-history-controls-pagesize">
         <select id="historialComprasPageSize" name="historialComprasPageSize" class="form-select purchase-history-pagesize" title="Cantidad de compras por página" aria-label="Cantidad de compras por página">
           <option value="20" selected>20</option>
@@ -473,6 +502,55 @@
   </div>
   {% endif %}
 
+  <div id="phComprasFilterModal" class="purchase-licencias-modal-overlay purchase-history-filter-modal modal-hidden" role="dialog" aria-modal="true" aria-labelledby="phComprasFilterModalTitle" aria-hidden="true">
+    <div class="purchase-licencias-modal-panel purchase-history-filter-modal-panel" role="document">
+      <div class="purchase-licencias-modal-head">
+        <div>
+          <h3 id="phComprasFilterModalTitle" class="purchase-licencias-modal-title">Filtro del historial</h3>
+          {% if mostrar_usuario_comprador %}
+          <p class="purchase-licencias-modal-sub">Elige usuario y/o tipo de fila. Solo se muestra lo que coincida.</p>
+          {% endif %}
+        </div>
+        <button type="button" id="phComprasFilterModalClose" class="purchase-licencias-modal-close" aria-label="Cerrar">&times;</button>
+      </div>
+      <div class="purchase-licencias-modal-body-inner purchase-history-filter-modal-body">
+        {% if mostrar_usuario_comprador %}
+        <div class="purchase-history-filter-field">
+          <label for="phComprasFilterUser" class="form-label">Usuario</label>
+          <input type="search" id="phComprasFilterUser" class="form-control" placeholder="Escribe el usuario (ej. tavo)…" autocomplete="off" list="phComprasFilterUserList">
+          <datalist id="phComprasFilterUserList"></datalist>
+          <p class="purchase-history-filter-hint">Coincide con el nombre de la columna Usuario. Déjalo vacío para todos.</p>
+        </div>
+        {% endif %}
+        <div class="purchase-history-filter-field">
+          <label for="phComprasFilterText" class="form-label">Contiene (texto)</label>
+          <input type="search" id="phComprasFilterText" class="form-control" placeholder="Producto, correo, cuenta…" autocomplete="off">
+        </div>
+        <div class="purchase-history-filter-field">
+          <span class="form-label">Ayudas rápidas</span>
+          <div class="purchase-history-filter-presets" role="group" aria-label="Tipos de fila">
+            <button type="button" class="purchase-history-filter-preset" data-ph-filter-kind="daily_summary">Resumen diario</button>
+            {% if mostrar_usuario_comprador or viewer_is_proveedor %}
+            <button type="button" class="purchase-history-filter-preset" data-ph-filter-kind="proveedor_daily">Venta diaria proveedor</button>
+            {% endif %}
+            <button type="button" class="purchase-history-filter-preset" data-ph-filter-kind="accounts">Cuentas</button>
+            <button type="button" class="purchase-history-filter-preset" data-ph-filter-kind="reservation_cancelled">Reserva cancelada</button>
+            <button type="button" class="purchase-history-filter-preset" data-ph-filter-kind="reservation_fulfilled">Compra reservada</button>
+            <button type="button" class="purchase-history-filter-preset" data-ph-filter-kind="renewal">Renovaciones</button>
+            <button type="button" class="purchase-history-filter-preset" data-ph-filter-kind="recharge">Recargas</button>
+            <button type="button" class="purchase-history-filter-preset" data-ph-filter-kind="refund">Devoluciones</button>
+            <button type="button" class="purchase-history-filter-preset" data-ph-filter-kind="rejected">Rechazadas</button>
+          </div>
+          <p class="purchase-history-filter-hint">Puedes marcar varias. «Cuentas» = filas con licencias o renovar tu cuenta.</p>
+        </div>
+        <div class="purchase-history-filter-actions">
+          <button type="button" id="phComprasFilterApply" class="btn-panel btn-blue">Aplicar filtro</button>
+          <button type="button" id="phComprasFilterReset" class="btn-panel btn-red">Quitar filtro</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <div id="purchaseLicenciasModal" class="purchase-licencias-modal-overlay modal-hidden" role="dialog" aria-modal="true" aria-labelledby="purchaseLicenciasModalTitle" aria-hidden="true">
     <div class="purchase-licencias-modal-panel" role="document">
       <div class="purchase-licencias-modal-head">
@@ -514,5 +592,5 @@
   {% if mostrar_historial_licencias and historial_licencias_es_admin %}
   <script src="{{ url_for('store_bp.static', filename='js/historial_licencias_cleanup.js') }}?v=20260604-scope-count" defer></script>
   {% endif %}
-  <script src="{{ url_for('store_bp.static', filename='js/historial_compras.js') }}?v=20260708-store-notif-global-v1" defer></script>
+  <script src="{{ url_for('store_bp.static', filename='js/historial_compras.js') }}?v=20260803-historial-filtro-proveedor" defer></script>
 {% endblock %} 

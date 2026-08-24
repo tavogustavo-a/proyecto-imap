@@ -836,6 +836,28 @@ def _try_renew_line(
     if not charged:
         return False, charge_msg or 'cobro_fallido'
 
+    # Sin Sale, el precio histórico debe corresponder al periodo recién cobrado.
+    try:
+        from app.store.routes import _billing_user_for_store_debt_limit
+        from app.store.routes_licencias import _stamp_license_account_sold_price
+
+        assigned_user = getattr(acc, 'assigned_user', None)
+        billing_user = (
+            _billing_user_for_store_debt_limit(assigned_user)
+            if assigned_user is not None
+            else None
+        )
+        _stamp_license_account_sold_price(
+            acc,
+            lic,
+            billing_user,
+            force=True,
+        )
+    except Exception:
+        logger.exception(
+            'No se pudo sellar precio de renovación account_id=%s',
+            getattr(acc, 'id', None),
+        )
     _extend_account_one_month(acc, now_utc, lic)
     _log_auto_renewal_activity(acc, lic, dual)
     _ = (renew_once, ym_tag, co_now, raw_line)

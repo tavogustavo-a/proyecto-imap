@@ -6,9 +6,12 @@ con un registro en JSON en User.portal_license_activity_log (cambios de estado e
 from __future__ import annotations
 
 import json
+import logging
 import re
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional, Tuple
+
+logger = logging.getLogger(__name__)
 
 _CRED_EMAIL_RE = re.compile(r'\S+@\S+\.\S+')
 
@@ -24,6 +27,11 @@ _PORTAL_ACTIVITY_EXTRA_KEYS = frozenset(
         'old_cred',
         'new_cred',
         'product_name',
+        'billing_period_days',
+        'detected_charged_days',
+        'charged_days',
+        'charged_days_overridden',
+        'actor_admin_user_id',
         'wa_digest_pending',
         'destination',
         'outcome',
@@ -465,13 +473,108 @@ def _tipo_visual(tipo_raw: str) -> str:
         return 'Renovación'
     if t in ('abono_admin', 'abono_recarga', 'pago_cuenta'):
         return 'Pago / abono'
+    if t == 'devolucion_licencia':
+        return 'Devolución de licencia'
     if t == 'incidencia_limpia':
         return 'Actualización estado'
     if t == 'solucionada':
         return 'Solucionada'
     if t == 'entrega':
         return 'Entrega'
+    if t == 'venta_proveedor':
+        return 'Venta diaria proveedor'
+    if t.startswith('soporte_bloc_'):
+        return 'Movimiento soporte'
     return tipo_raw or 'Actividad'
+
+
+def _append_soporte_bloc_movements_to_timeline(
+    merged: List[Tuple[datetime, Dict[str, Any]]],
+    *,
+    utc_to_colombia_fn,
+    actor_ids: Optional[List[int]] = None,
+    include_usuario: bool = False,
+) -> None:
+    try:
+        from app.store.license_bloc_movements import build_bloc_movement_timeline_entries
+
+        for pair in build_bloc_movement_timeline_entries(
+            utc_to_colombia_fn=utc_to_colombia_fn,
+            actor_ids=actor_ids,
+            include_usuario=include_usuario,
+            retention_days=PORTAL_ACTIVITY_RETENTION_DAYS,
+        ):
+            merged.append(pair)
+    except Exception:
+        logger.exception('timeline movimientos soporte')
+
+
+def _append_proveedor_daily_to_timeline(
+    merged: List[Tuple[datetime, Dict[str, Any]]],
+    *,
+    utc_to_colombia_fn,
+    billing_user: Any = None,
+    all_users: bool = False,
+    include_usuario: bool = False,
+) -> None:
+    """Filas «Venta diaria proveedor» en Historial · Licencias (admin / proveedor)."""
+    try:
+        from app.store.proveedor_daily_summaries import build_proveedor_sales_daily_summary_items
+
+        if all_users:
+            items = build_proveedor_sales_daily_summary_items(
+                all_users=True, utc_to_colombia_fn=utc_to_colombia_fn
+            )
+        else:
+            items = build_proveedor_sales_daily_summary_items(
+                billing_user, utc_to_colombia_fn=utc_to_colombia_fn
+            )
+    except Exception:
+        logger.exception('timeline venta proveedor')
+        return
+
+    act_cutoff = datetime.utcnow() - timedelta(days=PORTAL_ACTIVITY_RETENTION_DAYS)
+    for item in items or []:
+        if not item.get('is_proveedor_daily_summary'):
+            continue
+        sort_ts = item.get('sort_ts')
+        try:
+            dt = datetime.utcfromtimestamp(float(sort_ts)) if sort_ts else None
+        except (TypeError, ValueError, OSError):
+            dt = None
+        if not dt or dt < act_cutoff:
+            continue
+        try:
+            fecha_col = utc_to_colombia_fn(dt).strftime('%Y-%m-%d %H:%M')
+        except Exception:
+            fecha_col = dt.strftime('%Y-%m-%d %H:%M')
+        qty = item.get('cantidad')
+        total = item.get('total')
+        detail_bits = []
+        if qty not in (None, '', '—'):
+            detail_bits.append(f'Cant. {qty}')
+        if total is not None:
+            try:
+                detail_bits.append('$' + format(float(total), ',.2f'))
+            except (TypeError, ValueError):
+                pass
+        body = str(item.get('daily_summary_text') or '').strip()
+        summary = str(item.get('producto') or 'Venta diaria proveedor').strip()
+        if body:
+            # Una sola línea corta en la tabla; el detalle completo sigue en Ver resumen de compras.
+            first_line = body.split('\n', 1)[0].strip()
+            if first_line and first_line != summary:
+                summary = f'{summary} · {first_line[:120]}'
+        row: Dict[str, Any] = {
+            'fecha_col': fecha_col,
+            'tipo_label': _tipo_visual('venta_proveedor'),
+            'summary': summary,
+            'detail': ' · '.join(detail_bits),
+            'sort_ts': dt,
+        }
+        if include_usuario:
+            row['usuario'] = str(item.get('usuario') or '—').strip() or '—'
+        merged.append((dt, row))
 
 
 def resolve_portal_activity_viewer_by_username(username: str) -> Any:
@@ -752,6 +855,37 @@ def build_user_license_activity_timeline_rows(
                     )
                 )
 
+    # Movimientos de inventario hechos por este usuario (si es soporte).
+    try:
+        from app.store.license_bloc_movements import (
+            _actor_ids_scope_for,
+            user_has_soporte_licencias_flag,
+        )
+
+        if user_has_soporte_licencias_flag(viewer_user_row):
+            _append_soporte_bloc_movements_to_timeline(
+                merged,
+                utc_to_colombia_fn=utc_to_colombia_fn,
+                actor_ids=_actor_ids_scope_for(viewer_user_row),
+                include_usuario=False,
+            )
+    except Exception:
+        logger.exception('timeline soporte (vista usuario)')
+
+    # Venta diaria proveedor del propio billing (si aplica).
+    try:
+        from app.store.routes import _user_store_proveedor_flag
+
+        if _user_store_proveedor_flag(viewer_user_row):
+            _append_proveedor_daily_to_timeline(
+                merged,
+                utc_to_colombia_fn=utc_to_colombia_fn,
+                billing_user=viewer_user_row,
+                include_usuario=False,
+            )
+    except Exception:
+        logger.exception('timeline proveedor (vista usuario)')
+
     merged.sort(key=lambda x: x[0], reverse=True)
 
     dedup_by_moment: Dict[Tuple[str, str, str], Dict[str, Any]] = {}
@@ -921,6 +1055,21 @@ def build_admin_store_license_activity_timeline_rows(
                     except (TypeError, ValueError, KeyError):
                         pass
             merged.append((dt, row_dict))
+
+    # Movimientos de soporte (actor en columna Usuario).
+    _append_soporte_bloc_movements_to_timeline(
+        merged,
+        utc_to_colombia_fn=utc_to_colombia_fn,
+        actor_ids=None,
+        include_usuario=True,
+    )
+    # Ventas diarias de todos los proveedores.
+    _append_proveedor_daily_to_timeline(
+        merged,
+        utc_to_colombia_fn=utc_to_colombia_fn,
+        all_users=True,
+        include_usuario=True,
+    )
 
     merged.sort(key=lambda x: x[0], reverse=True)
 

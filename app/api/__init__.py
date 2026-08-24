@@ -1228,3 +1228,41 @@ def external_search():
         return sms_response
         
     return jsonify({"results": []}), 200
+
+
+@api_bp.route("/external/licenses/search", methods=["POST"])
+@csrf_exempt_api
+def external_licenses_search():
+    """
+    API externa de licencias (probe / búsqueda futura).
+
+    Autenticación con el token de «Mi API» de licencias (site_settings),
+    independiente del master_token de códigos.
+    """
+    client_ip = get_client_ip()
+    if not check_rate_limit(client_ip):
+        return jsonify({"error": "Rate limit exceeded. Please try again later."}), 429
+
+    if not validate_request_host():
+        return jsonify({"error": "Invalid request host"}), 403
+
+    MAX_JSON_SIZE = 10 * 1024
+    if request.content_length and request.content_length > MAX_JSON_SIZE:
+        return jsonify({"error": "Payload too large"}), 413
+
+    data = request.get_json(silent=True)
+    if not data:
+        return jsonify({"error": "No data received"}), 400
+
+    token = (data.get("token") or "").strip()
+    if not token:
+        return jsonify({"error": "Missing token"}), 400
+
+    from app.admin.site_settings import get_site_setting
+
+    expected = (get_site_setting("licencias_api_master_token") or "").strip()
+    if not expected or not secrets.compare_digest(expected, token):
+        return jsonify({"error": "Invalid token"}), 401
+
+    # Stub: la búsqueda real de licencias aún no está cableada; results[] vacío = OK.
+    return jsonify({"results": [], "scope": "licenses"}), 200

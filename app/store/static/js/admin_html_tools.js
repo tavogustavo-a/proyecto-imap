@@ -795,10 +795,14 @@
     { file: 'stream31.png', label: 'Stream 31' },
     { file: 'stream32.png', label: 'Stream 32' },
     { file: 'stream33.png', label: 'Stream 33' },
-    { file: 'stream34.png', label: 'Stream 34' },
-    { file: 'stream35.png', label: 'Stream 35' },
-    { file: 'stream36.png', label: 'Stream 36' },
-    { file: 'stream37.png', label: 'Stream 37' }
+    { file: 'stream34.png', label: 'Emby' },
+    { file: 'stream35.png', label: 'Jellyfin' },
+    { file: 'stream36.png', label: 'Dramas' },
+    { file: 'stream37.png', label: 'Stream 37' },
+    { file: 'stream38.png', label: 'Stream 38' },
+    { file: 'stream39.png', label: 'Stream 39' },
+    { file: 'stream40.png', label: 'Stream 40' },
+    { file: 'stream41.png', label: 'Stream 41' }
   ];
   var iconsDropdown = document.getElementById('iconsDropdown');
   var iconsGrid = document.getElementById('iconsGrid');

@@ -50,6 +50,8 @@
     if (typeof adminLicFetchJson !== 'function') {
       return Promise.resolve({ success: false, error: 'fetch_unavailable' });
     }
+    /* Un snapshot de licencias descargado antes de este PUT no debe revertir el bloc. */
+    window.__adminLicNotesSaveDispatchedAt = Date.now();
     return adminLicFetchJson('/tienda/api/licenses/' + licenseId + '/notes', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
@@ -94,6 +96,14 @@
       clearTimeout(saveChangesOnlyTimers[k]);
       delete saveChangesOnlyTimers[k];
       saveChangesNotesImmediateForId(k);
+    });
+  }
+
+  /** Cancela autosaves de solo-Cambios sin enviar (p. ej. antes de un traslado masivo). */
+  function cancelPendingChangesNotesSaves() {
+    Object.keys(saveChangesOnlyTimers).forEach(function (k) {
+      clearTimeout(saveChangesOnlyTimers[k]);
+      delete saveChangesOnlyTimers[k];
     });
   }
 
@@ -701,6 +711,54 @@
     return normalizeBlocNotesText(stripStandaloneGenericoLines(serverText != null ? String(serverText) : ''));
   }
 
+  /*
+   * «Base» por bloc: último texto CONFIRMADO por el servidor que conoció esta pestaña.
+   * Permite distinguir ediciones locales sin guardar (base == servidor actual → local gana)
+   * de copias viejas cuando OTRA pestaña/navegador ya modificó el bloc (base != servidor
+   * actual → el servidor gana). Sin esto, una pestaña vieja re-subía líneas ya borradas.
+   */
+  function licenseServerBaseKey(id) {
+    return 'admin_licencias_bloc_license_base_' + id + '_v1';
+  }
+
+  function suspendedServerBaseKey(id) {
+    return 'admin_licencias_bloc_suspended_base_' + id + '_v1';
+  }
+
+  function saveLicenseServerBaseForId(licenseId, value) {
+    if (licenseId === null || licenseId === undefined || licenseId === '') return;
+    try {
+      localStorage.setItem(licenseServerBaseKey(licenseId), value != null ? String(value) : '');
+    } catch (e) {}
+  }
+
+  function saveSuspendedServerBaseForId(licenseId, value) {
+    if (licenseId === null || licenseId === undefined || licenseId === '') return;
+    try {
+      localStorage.setItem(suspendedServerBaseKey(licenseId), value != null ? String(value) : '');
+    } catch (e) {}
+  }
+
+  /** true = otra sesión cambió license_notes en el servidor desde la última vez que esta pestaña lo confirmó. */
+  function licenseServerChangedSinceLocal(licenseId, serverNorm) {
+    var baseRaw = readLocalStorageRaw(function () {
+      return localStorage.getItem(licenseServerBaseKey(licenseId));
+    });
+    if (baseRaw === null) return false; /* sin base conocida: conservar comportamiento (local gana) */
+    return licenseNotesServerNormalized(baseRaw) !== serverNorm;
+  }
+
+  /** true = otra sesión cambió suspended_notes en el servidor desde la última confirmación local. */
+  function suspendedServerChangedSinceLocal(licenseId, serverNorm) {
+    var baseRaw = readLocalStorageRaw(function () {
+      return localStorage.getItem(suspendedServerBaseKey(licenseId));
+    });
+    if (baseRaw === null) return false;
+    return normalizeBlocNotesText(baseRaw) !== serverNorm;
+  }
+  window.adminLicenciasSaveLicenseServerBaseForId = saveLicenseServerBaseForId;
+  window.adminLicenciasSaveSuspendedServerBaseForId = saveSuspendedServerBaseForId;
+
   function readLocalStorageRaw(readFn) {
     try {
       return readFn();
@@ -750,8 +808,17 @@
     /*
      * UI con contenido distinto al servidor: conservar UI y empujar al servidor.
      * NUNCA empujar vacío (textarea sin cargar aún) — eso borraba la BD con PUT 200.
+     * Excepción: si OTRA sesión ya cambió el servidor (base != servidor), adoptar servidor;
+     * si no, esta pestaña re-subiría líneas que la otra sesión acaba de borrar/mover.
      */
     if (openNorm !== null && serverNorm !== null && openNorm !== serverNorm && String(openNorm).trim() !== '') {
+      if (licenseServerChangedSinceLocal(licenseId, serverNorm)) {
+        applyLicenseBlocText(ta, serverRaw);
+        saveCurrentLicense(ta);
+        saveLicenseServerBaseForId(licenseId, serverRaw);
+        clearLicenseCredsDraft(licenseId);
+        return;
+      }
       saveCurrentLicense(ta);
       scheduleSaveLicenseNotesOnly(licenseId);
       return;
@@ -765,10 +832,18 @@
     ) {
       applyLicenseBlocText(ta, serverRaw);
       saveCurrentLicense(ta);
+      saveLicenseServerBaseForId(licenseId, serverRaw);
       return;
     }
 
     if (localNorm !== null && localNorm !== '' && serverNorm !== null && localNorm !== serverNorm) {
+      if (licenseServerChangedSinceLocal(licenseId, serverNorm)) {
+        applyLicenseBlocText(ta, serverRaw);
+        saveCurrentLicense(ta);
+        saveLicenseServerBaseForId(licenseId, serverRaw);
+        clearLicenseCredsDraft(licenseId);
+        return;
+      }
       applyLicenseBlocText(ta, localRaw);
       saveCurrentLicense(ta);
       scheduleSaveLicenseNotesOnly(licenseId);
@@ -789,7 +864,11 @@
     if (serverNorm !== null && serverNorm !== '') {
       applyLicenseBlocText(ta, serverRaw);
       saveCurrentLicense(ta);
+      saveLicenseServerBaseForId(licenseId, serverRaw);
       return;
+    }
+    if (serverNorm !== null && serverNorm === '') {
+      saveLicenseServerBaseForId(licenseId, '');
     }
     if (localNorm !== null && localNorm !== '') {
       applyLicenseBlocText(ta, localRaw);
@@ -819,11 +898,25 @@
         : null;
 
     if (openNorm !== null && serverNorm !== null && openNorm !== serverNorm) {
+      if (suspendedServerChangedSinceLocal(licenseId, serverNorm)) {
+        var vSrvOpen = licenseRow.suspended_notes != null ? String(licenseRow.suspended_notes) : '';
+        setLicenseBlockPlainText(el, vSrvOpen);
+        saveSuspendedForId(licenseId, vSrvOpen);
+        saveSuspendedServerBaseForId(licenseId, vSrvOpen);
+        return;
+      }
       saveCurrentSuspended(el);
       scheduleSaveNotes(licenseId);
       return;
     }
     if (localNorm !== null && serverNorm !== null && localNorm !== serverNorm) {
+      if (suspendedServerChangedSinceLocal(licenseId, serverNorm)) {
+        var vSrvLocal = licenseRow.suspended_notes != null ? String(licenseRow.suspended_notes) : '';
+        setLicenseBlockPlainText(el, vSrvLocal);
+        saveSuspendedForId(licenseId, vSrvLocal);
+        saveSuspendedServerBaseForId(licenseId, vSrvLocal);
+        return;
+      }
       setLicenseBlockPlainText(el, localRaw);
       saveCurrentSuspended(el);
       scheduleSaveNotes(licenseId);
@@ -833,6 +926,7 @@
       var v = licenseRow.suspended_notes != null ? String(licenseRow.suspended_notes) : '';
       setLicenseBlockPlainText(el, v);
       saveSuspendedForId(licenseId, v);
+      saveSuspendedServerBaseForId(licenseId, v);
       return;
     }
     loadSuspendedFromLocalOnly(licenseId, el);
@@ -1044,6 +1138,7 @@
       window.patchLicenseNotesCache(licenseId, undefined, finalText);
     }
     saveLicenseForId(licenseId, finalText);
+    saveLicenseServerBaseForId(licenseId, finalText);
     clearLicenseCredsDraft(licenseId);
     var taL = getEl('adminLicenciasNotepadByLicense');
     var isActive = taL && String(taL.dataset.licenseId) === String(licenseId);
@@ -1082,6 +1177,7 @@
         }
         if (data.success) {
           saveLicenseForId(licenseId, merged);
+          saveLicenseServerBaseForId(licenseId, merged);
           var storedDraft = loadLicenseCredsDraft(licenseId);
           if (
             storedDraft === null ||
@@ -1174,6 +1270,8 @@
         }
         if (data.success && taL && String(taL.dataset.licenseId) === String(licenseId)) {
           saveLicenseForId(licenseId, licenseMergedOrBlockText(taL));
+          saveLicenseServerBaseForId(licenseId, licenseMergedOrBlockText(taL));
+          saveSuspendedServerBaseForId(licenseId, licenseBlockText(taS));
           var storedDraft = loadLicenseCredsDraft(licenseId);
           if (
             storedDraft === null ||
@@ -1261,6 +1359,8 @@
         }
         if (data.success && taL && String(taL.dataset.licenseId) === String(licenseId)) {
           saveLicenseForId(licenseId, licenseMergedOrBlockText(taL));
+          saveLicenseServerBaseForId(licenseId, licenseMergedOrBlockText(taL));
+          saveSuspendedServerBaseForId(licenseId, licenseBlockText(taS));
           var storedDraftImm = loadLicenseCredsDraft(licenseId);
           if (
             storedDraftImm === null ||
@@ -2549,7 +2649,7 @@
     return licenseNotesServerNormalized(merged);
   }
 
-  function refreshLicenseSplitFromApi(licenseRow) {
+  function refreshLicenseSplitFromApi(licenseRow, opts) {
     if (!licenseRow || licenseRow.id == null) return;
     if (saveNotesTimer || saveLicenseNotesTimer || notesSaveInFlight || licenseNotesSaveInFlight) return;
     /* Carrera SSE vs guardado: los datos se descargaron antes de despachar el último
@@ -2573,9 +2673,49 @@
     var openNorm = licenseMainSplitMergedNormFromOpenBloc(taLicense);
 
     /*
+     * serverWins (SSE/poll tras guardar en OTRA pestaña/navegador): adoptar el texto del
+     * servidor y actualizar la copia local. Sin esto, el flujo normal re-aplica el bloc
+     * local viejo y programa un PUT que borra lo que la otra pestaña acaba de mover.
+     */
+    if (opts && opts.serverWins) {
+      var credDraftSW = loadLicenseCredsDraft(idStr);
+      if (credDraftSW !== null && String(credDraftSW).trim() !== '') return; /* borrador activo */
+      saveLicenseServerBaseForId(idStr, v);
+      if (openNorm.replace(/\r\n/g, '\n').trimEnd() === serverNorm.replace(/\r\n/g, '\n').trimEnd()) {
+        return;
+      }
+      applyLicenseBlocText(taLicense, v);
+      saveLicenseForId(idStr, licenseMergedOrBlockText(taLicense));
+      refreshLicenseLineBadge();
+      if (typeof refreshDuplicateEmailHighlights === 'function') {
+        refreshDuplicateEmailHighlights(parseInt(idStr, 10));
+      }
+      return;
+    }
+
+    /*
      * SSE / poll / hydrate: no pisar con servidor si localStorage o la UI tienen datos más recientes
      * (p. ej. recarga F5 antes del PUT, o rev SSE mientras el guardado va en vuelo).
      */
+    /* Si OTRA sesión ya cambió el servidor (base != servidor): adoptar servidor en lugar de
+       re-subir la copia local vieja (revivía líneas borradas/movidas por la otra sesión). */
+    if (
+      (localPack.norm !== null && localPack.norm !== serverNorm) ||
+      openNorm !== serverNorm
+    ) {
+      if (licenseServerChangedSinceLocal(idStr, serverNorm)) {
+        applyLicenseBlocText(taLicense, v);
+        saveLicenseForId(idStr, licenseMergedOrBlockText(taLicense));
+        saveLicenseServerBaseForId(idStr, v);
+        clearLicenseCredsDraft(idStr);
+        refreshLicenseLineBadge();
+        if (typeof refreshDuplicateEmailHighlights === 'function') {
+          refreshDuplicateEmailHighlights(parseInt(idStr, 10));
+        }
+        return;
+      }
+    }
+
     if (localPack.norm !== null && localPack.norm !== serverNorm) {
       applyLicenseBlocText(taLicense, localPack.raw);
       saveLicenseForId(idStr, licenseMergedOrBlockText(taLicense));
@@ -2612,9 +2752,13 @@
 
     var cur = openNorm.replace(/\r\n/g, '\n').trimEnd();
     var next = serverNorm.replace(/\r\n/g, '\n').trimEnd();
-    if (cur === next) return;
+    if (cur === next) {
+      saveLicenseServerBaseForId(idStr, v);
+      return;
+    }
     applyLicenseBlocText(taLicense, v);
     saveLicenseForId(idStr, licenseMergedOrBlockText(taLicense));
+    saveLicenseServerBaseForId(idStr, v);
     refreshLicenseLineBadge();
     if (typeof refreshDuplicateEmailHighlights === 'function') {
       refreshDuplicateEmailHighlights(parseInt(idStr, 10));
@@ -2626,6 +2770,14 @@
   window.adminLicenciasSaveCustomerRenewalNotesImmediate = saveCustomerRenewalNotesImmediate;
   window.adminLicenciasScheduleSaveChangesNotesOnly = scheduleSaveChangesNotesOnly;
   window.adminLicenciasFlushPendingChangesNotesSaves = flushPendingChangesNotesSaves;
+  window.adminLicenciasCancelPendingChangesNotesSaves = cancelPendingChangesNotesSaves;
+  window.adminLicenciasSaveChangesNotesImmediateForId = saveChangesNotesImmediateForId;
+  window.adminLicenciasChangesNotesSavePending = function () {
+    return Object.keys(saveChangesOnlyTimers).length > 0;
+  };
+  window.adminLicenciasChangesNotesSavePendingForId = function (licenseId) {
+    return !!saveChangesOnlyTimers[String(licenseId)];
+  };
   window.AdminLicenciasNotepad = {
     bindLicense: bindLicense,
     flushLicense: flushLicense,

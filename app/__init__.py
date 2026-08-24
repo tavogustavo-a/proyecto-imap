@@ -79,6 +79,29 @@ def create_app(config_class_passed=None):
 
     # Inicializar extensiones de base de datos
     db.init_app(app)
+
+    # SQLite: WAL + busy_timeout para menos bloqueos concurrentes (checkout vs polling).
+    try:
+        uri = str(app.config.get('SQLALCHEMY_DATABASE_URI') or '')
+        if uri.startswith('sqlite'):
+            from sqlalchemy import event
+
+            with app.app_context():
+                @event.listens_for(db.engine, 'connect')
+                def _sqlite_on_connect(dbapi_conn, connection_record):
+                    try:
+                        cur = dbapi_conn.cursor()
+                        cur.execute('PRAGMA journal_mode=WAL')
+                        cur.execute('PRAGMA busy_timeout=5000')
+                        cur.execute('PRAGMA synchronous=NORMAL')
+                        cur.close()
+                    except Exception:
+                        pass
+    except Exception as sqlite_cfg_err:
+        try:
+            app.logger.debug('SQLite pragma setup omitido: %s', sqlite_cfg_err)
+        except Exception:
+            pass
     migrate.init_app(app, db)
     # ✅ CORREGIDO: NO inicializar SocketIO aquí para evitar conflictos
     # SocketIO se maneja solo en socketio_server.py para la tienda
@@ -382,6 +405,25 @@ def create_app(config_class_passed=None):
                         dialect,
                     )
 
+                ucols = _cols("users")
+                if "unique_allowed_emails" not in ucols:
+                    if dialect == "postgresql":
+                        uae_sql = (
+                            "ALTER TABLE users ADD COLUMN unique_allowed_emails "
+                            "BOOLEAN NOT NULL DEFAULT FALSE"
+                        )
+                    else:
+                        uae_sql = (
+                            "ALTER TABLE users ADD COLUMN unique_allowed_emails "
+                            "INTEGER NOT NULL DEFAULT 0"
+                        )
+                    db.session.execute(text(uae_sql))
+                    db.session.commit()
+                    app.logger.info(
+                        "Esquema: columna unique_allowed_emails añadida a users (%s)",
+                        dialect,
+                    )
+
                 try:
                     from app.store.email_notify_prefs import ensure_store_notify_prefs_columns
 
@@ -411,12 +453,14 @@ def create_app(config_class_passed=None):
 
             ensure_coupon_min_amount_columns()
             from app.store.customer_account_renewals import ensure_customer_account_renewal_schema
+            from app.store.license_account_refunds import ensure_license_account_refund_schema
             from app.store.product_reservations import ensure_product_reservation_schema
             from app.store.routes import _ensure_license_expired_notes_and_month_columns
 
             _ensure_license_expired_notes_and_month_columns()
             ensure_product_reservation_schema()
             ensure_customer_account_renewal_schema()
+            ensure_license_account_refund_schema()
             from app.store.announcements import ensure_store_announcements_schema
             from app.store.email_notify_prefs import ensure_user_email_notify_enabled_column
             from app.store.tool_info_schema import ensure_tool_info_is_public_column
@@ -491,6 +535,10 @@ def create_app(config_class_passed=None):
             "search_message2": "",
             "search_message2_mode": "off",
             "public_access_enabled": "true",
+            "footer_whatsapp_url": "",
+            "footer_telegram_url": "",
+            "footer_android_url": "",
+            "footer_ios_url": "",
         }
         try:
             inspector2 = insp2(db.engine)
@@ -506,6 +554,10 @@ def create_app(config_class_passed=None):
                 settings_dict["search_message2"] = get_site_setting("search_message2", settings_dict["search_message2"])
                 settings_dict["search_message2_mode"] = get_site_setting("search_message2_mode", settings_dict["search_message2_mode"])
                 settings_dict["public_access_enabled"] = get_site_setting("public_access_enabled", settings_dict["public_access_enabled"])
+                settings_dict["footer_whatsapp_url"] = get_site_setting("footer_whatsapp_url", "") or ""
+                settings_dict["footer_telegram_url"] = get_site_setting("footer_telegram_url", "") or ""
+                settings_dict["footer_android_url"] = get_site_setting("footer_android_url", "") or ""
+                settings_dict["footer_ios_url"] = get_site_setting("footer_ios_url", "") or ""
         except Exception as e:
             # Usa logging.warning en lugar de print si deseas registrar este error
             pass
@@ -651,6 +703,21 @@ def create_app(config_class_passed=None):
                 response.headers['Cache-Control'] = 'public, max-age=3600'
                 if 'Content-Type' not in response.headers:
                     response.headers['Content-Type'] = 'application/json'
+        except Exception:
+            pass
+        return response
+
+    @app.after_request
+    def _add_content_security_policy(response):
+        """CSP estricto (sin script inline). Solo si CONTENT_SECURITY_POLICY_FROM_APP / desarrollo."""
+        try:
+            if not app.config.get('CONTENT_SECURITY_POLICY_FROM_APP'):
+                return response
+            if response.headers.get('Content-Security-Policy'):
+                return response
+            csp = (app.config.get('CONTENT_SECURITY_POLICY') or '').strip()
+            if csp:
+                response.headers['Content-Security-Policy'] = csp
         except Exception:
             pass
         return response

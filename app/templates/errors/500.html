@@ -8,7 +8,10 @@
   <p>La página se detuvo un momento. No es un problema de tu enlace.</p>
   <p>Espera unos segundos y vuelve a intentar.</p>
   <div class="err-actions">
-    <button type="button" class="err-btn" id="errRetryBtn">Reintentar</button>
+    <form method="get" action="" class="err-retry-form">
+      <input type="hidden" name="_retry" value="1">
+      <button type="submit" class="err-btn" id="errRetryBtn">Reintentar</button>
+    </form>
     <a class="err-btn err-btn--soft" href="{{ home_url }}">Ir al inicio</a>
   </div>
 {% endblock %}

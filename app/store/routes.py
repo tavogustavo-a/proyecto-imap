@@ -1481,7 +1481,7 @@ def _record_portal_renewal_blocked_activity(
 USER_LIC_CADUCIDAD_VIEW_MAX_DAYS = 5
 
 # Cache bust único: Admin Licencias + portal /licencias (evita CSS/JS mezclados en producción).
-LICENCIAS_STATIC_VERSION = '20260729-audit-fixes'
+LICENCIAS_STATIC_VERSION = '20260807-day-restore-choice2'
 
 
 def _billing_user_for_store_debt_limit(user_obj):
@@ -4923,6 +4923,33 @@ def get_user_worksheets():
 def admin_configurations():
     return render_template('configurations.html', title="Configuraciones")
 
+
+@store_bp.route(
+    '/admin/plex-emby-iptv-jellyfin-dramas',
+    endpoint='admin_plex_emby_media',
+)
+@admin_required
+def admin_plex_emby_media():
+    """Plantilla admin: Plex / Emby / IPTV / Jellyfin / Dramas (contenido pendiente)."""
+    return render_template(
+        'admin_plex_emby_media.html',
+        title='plex,emby,jellyfin,dramas',
+    )
+
+
+@store_bp.route(
+    '/admin/proveedores-para-anadir-fuera',
+    endpoint='admin_proveedores_anadir_fuera',
+)
+@admin_required
+def admin_proveedores_anadir_fuera():
+    """Plantilla admin: proveedores fuera (contenido pendiente)."""
+    return render_template(
+        'admin_proveedores_anadir_fuera.html',
+        title='proveedores fuera',
+    )
+
+
 @store_bp.route('/admin/sms')
 @admin_required
 def admin_sms():
@@ -6027,6 +6054,10 @@ def _procesar_pago_core():
     if not _user_can_purchase_in_store(user):
         return _json_store_purchase_forbidden()
 
+    pending_customer_renewal_notifies = []
+    # (product_id, email) de renovaciones: purga de líneas sobrantes en inventario.
+    renewal_inventory_cleanups = []
+
     data = request.get_json()
     productos = data.get('productos', [])
     if not productos:
@@ -6416,9 +6447,6 @@ def _procesar_pago_core():
                 from app.store.customer_account_renewals import (
                     append_customer_renewal_notes_for_checkout,
                     create_customer_account_renewal_order,
-                    notify_admin_customer_account_renewal_pending,
-                    notify_admins_and_proveedores_customer_account_renewal_app,
-                    notify_customer_account_renewal_received,
                     product_allows_customer_account_renewal,
                     remove_renewed_account_from_changes_and_unsold_inventory,
                     validate_customer_renewal_from_cart_item,
@@ -6464,16 +6492,13 @@ def _procesar_pago_core():
                     credential_line=cred_line,
                     linked_notes=linked_notes,
                 )
-                notify_admin_customer_account_renewal_pending(user, producto, em)
-                try:
-                    notify_admins_and_proveedores_customer_account_renewal_app(
-                        user, producto, em
-                    )
-                except Exception as ren_app_ex:
-                    current_app.logger.warning(
-                        'aviso app renovación cuenta cliente: %s', ren_app_ex
-                    )
-                notify_customer_account_renewal_received(user, producto, em)
+                pending_customer_renewal_notifies.append(
+                    {
+                        'user_id': int(user.id),
+                        'product_id': int(producto.id),
+                        'email': em,
+                    }
+                )
                 cuentas_asignadas.append(
                     {
                         'producto': producto.name,
@@ -6574,6 +6599,9 @@ def _procesar_pago_core():
                     proveedor_sales_by_license[int(lic_row.id)] += 1
                     _track_proveedor_daily_sale(lic_row, producto, venta, p)
                     cuentas_asignadas_producto += 1
+                    _ren_em = (account.email or '').strip().lower()
+                    if _ren_em:
+                        renewal_inventory_cleanups.append((int(producto.id), _ren_em))
                 asignadas_por_producto[producto.id] += cuentas_asignadas_producto
                 continue
 
@@ -6737,6 +6765,25 @@ def _procesar_pago_core():
 
         _apply_public_checkout_bloc_moves_to_licenses(sold_bloc_moves)
 
+        # Renovaciones: la cuenta ya es del cliente; purgar líneas sobrantes del
+        # mismo correo en Licencias/Cambios/proveedor (evita que quede duplicada
+        # como vendible además de la fila del Día N).
+        if renewal_inventory_cleanups:
+            from app.store.customer_account_renewals import (
+                remove_renewed_account_from_changes_and_unsold_inventory,
+            )
+
+            for _rpid, _rem in dict.fromkeys(renewal_inventory_cleanups):
+                try:
+                    remove_renewed_account_from_changes_and_unsold_inventory(_rpid, _rem)
+                except Exception as ren_clean_ex:
+                    current_app.logger.warning(
+                        'purga inventario tras renovación %s/%s: %s',
+                        _rpid,
+                        _rem,
+                        ren_clean_ex,
+                    )
+
         user.saldo_cop = round(float(user.saldo_cop or 0) - total_cop, 2)
         user.saldo_usd = round(float(user.saldo_usd or 0) - total_usd, 2)
         db.session.commit()
@@ -6766,31 +6813,88 @@ def _procesar_pago_core():
             notify_balance_recharge_updated(int(user.id), reason='store_checkout')
         except Exception:
             pass
-        if checkout_sale_ids:
-            from app.store.sale_purchase_snapshot import (
-                ensure_sale_schema,
-                sync_snapshots_for_sale_ids,
-            )
-
+        # Snapshots + avisos (compra/renovación cuenta cliente) en background:
+        # la respuesta de «Procesar pago» no espera SMTP ni historial.
+        post_sale_ids = list(checkout_sale_ids or [])
+        post_renewal_jobs = list(pending_customer_renewal_notifies or [])
+        if post_sale_ids or post_renewal_jobs:
             try:
-                ensure_sale_schema()
-                sync_snapshots_for_sale_ids(checkout_sale_ids)
-                try:
-                    from app.store.store_event_notify import notify_store_purchases_for_sale_ids
+                _app = current_app._get_current_object()
+                _buyer_id = int(user.id)
 
-                    notify_store_purchases_for_sale_ids(checkout_sale_ids)
-                    db.session.commit()
-                except Exception as nexc:
-                    current_app.logger.warning(
-                        'Notificación compra/renovación tras checkout: %s', nexc
-                    )
-                    try:
-                        db.session.rollback()
-                    except Exception:
-                        pass
-            except Exception as snap_exc:
+                def _checkout_post_notify():
+                    with _app.app_context():
+                        if post_sale_ids:
+                            try:
+                                from app.store.sale_purchase_snapshot import (
+                                    ensure_sale_schema,
+                                    sync_snapshots_for_sale_ids,
+                                )
+                                from app.store.store_event_notify import (
+                                    notify_store_purchases_for_sale_ids,
+                                )
+
+                                ensure_sale_schema()
+                                sync_snapshots_for_sale_ids(post_sale_ids)
+                                notify_store_purchases_for_sale_ids(post_sale_ids)
+                                db.session.commit()
+                            except Exception as post_ex:
+                                db.session.rollback()
+                                current_app.logger.warning(
+                                    'post-checkout snapshot/notify: %s', post_ex
+                                )
+                        if post_renewal_jobs:
+                            try:
+                                from app.models.user import User as _U
+                                from app.store.customer_account_renewals import (
+                                    notify_admin_customer_account_renewal_pending,
+                                    notify_admins_and_proveedores_customer_account_renewal_app,
+                                    notify_customer_account_renewal_received,
+                                )
+                                from app.store.models import Product as _P
+
+                                for job in post_renewal_jobs:
+                                    try:
+                                        u = _U.query.get(int(job['user_id']))
+                                        p = _P.query.get(int(job['product_id']))
+                                        em = job.get('email') or ''
+                                        if not u or not p or not em:
+                                            continue
+                                        notify_admin_customer_account_renewal_pending(
+                                            u, p, em
+                                        )
+                                        try:
+                                            notify_admins_and_proveedores_customer_account_renewal_app(
+                                                u, p, em
+                                            )
+                                        except Exception as ren_app_ex:
+                                            current_app.logger.warning(
+                                                'aviso app renovación (post-checkout): %s',
+                                                ren_app_ex,
+                                            )
+                                        notify_customer_account_renewal_received(
+                                            u, p, em
+                                        )
+                                        db.session.commit()
+                                    except Exception:
+                                        db.session.rollback()
+                                        current_app.logger.exception(
+                                            'post-checkout renewal notify job=%s', job
+                                        )
+                            except Exception as ren_bg_ex:
+                                current_app.logger.warning(
+                                    'No se pudieron enviar avisos renovación post-checkout: %s',
+                                    ren_bg_ex,
+                                )
+
+                threading.Thread(
+                    target=_checkout_post_notify,
+                    daemon=True,
+                    name=f'checkout-post-{_buyer_id}',
+                ).start()
+            except Exception as sched_ex:
                 current_app.logger.warning(
-                    'Snapshot historial compras tras checkout: %s', snap_exc
+                    'No se pudo diferir post-checkout: %s', sched_ex
                 )
     except Exception as e:
         db.session.rollback()
@@ -6835,10 +6939,21 @@ def api_product_reservar(product_id):
     if int(product_id) in archived:
         return jsonify({'success': False, 'error': 'Producto no disponible.'}), 404
 
-    products, _tipo = catalog_products_for_store_user(user)
-    allowed_ids = {p.id for p in (products or [])}
-    if int(product_id) not in allowed_ids:
-        return jsonify({'success': False, 'error': 'No tienes acceso a este producto.'}), 403
+    from app.store.product_reservations import _pricing_root_user
+
+    root = _pricing_root_user(user)
+    up = getattr(root, 'user_prices', None) if root else None
+    if not isinstance(up, dict) or up.get('tipo_precio') not in ('USD', 'COP'):
+        return jsonify(
+            {'success': False, 'error': 'Tu cuenta no tiene tipo de precio (USD/COP) configurado.'}
+        ), 403
+    if 'productos_permitidos' in up:
+        try:
+            allowed_ids = {int(x) for x in (up.get('productos_permitidos') or [])}
+        except (TypeError, ValueError):
+            allowed_ids = set()
+        if int(product_id) not in allowed_ids:
+            return jsonify({'success': False, 'error': 'No tienes acceso a este producto.'}), 403
 
     data = request.get_json(silent=True) or {}
     reservation, err = create_product_reservation(user, product, data.get('quantity', 1))
@@ -6935,7 +7050,11 @@ def api_user_pending_product_reservations():
 def api_product_reservar_otro_dia(product_id):
     """Programa una compra para el día siguiente (Colombia); valida saldo al crear."""
     from app.store.models import Product
-    from app.store.product_reservations import create_next_day_reservation, ensure_product_reservation_schema
+    from app.store.product_reservations import (
+        _pricing_root_user,
+        create_next_day_reservation,
+        ensure_product_reservation_schema,
+    )
 
     ensure_product_reservation_schema()
     user = User.query.get(session.get('user_id'))
@@ -6950,9 +7069,21 @@ def api_product_reservar_otro_dia(product_id):
     archived = _product_ids_with_archived_license()
     if int(product_id) in archived:
         return jsonify({'success': False, 'error': 'Producto no disponible.'}), 404
-    products, _tipo = catalog_products_for_store_user(user)
-    if int(product_id) not in {p.id for p in (products or [])}:
-        return jsonify({'success': False, 'error': 'No tienes acceso a este producto.'}), 403
+
+    # Acceso al producto sin cargar todo el catálogo (precios/descuentos van en create_*).
+    root = _pricing_root_user(user)
+    up = getattr(root, 'user_prices', None) if root else None
+    if not isinstance(up, dict) or up.get('tipo_precio') not in ('USD', 'COP'):
+        return jsonify(
+            {'success': False, 'error': 'Tu cuenta no tiene tipo de precio (USD/COP) configurado.'}
+        ), 403
+    if 'productos_permitidos' in up:
+        try:
+            allowed_ids = {int(x) for x in (up.get('productos_permitidos') or [])}
+        except (TypeError, ValueError):
+            allowed_ids = set()
+        if int(product_id) not in allowed_ids:
+            return jsonify({'success': False, 'error': 'No tienes acceso a este producto.'}), 403
 
     data = request.get_json(silent=True) or {}
     reservation, err = create_next_day_reservation(user, product, data.get('quantity', 1))
@@ -6968,7 +7099,7 @@ def api_user_product_reservations_list():
     from app.store.product_reservations import (
         ensure_product_reservation_schema,
         list_user_reservations_detailed,
-        process_due_next_day_reservations,
+        schedule_process_due_next_day_reservations,
     )
 
     ensure_product_reservation_schema()
@@ -6976,10 +7107,10 @@ def api_user_product_reservations_list():
     if not user:
         return jsonify({'success': False, 'error': 'Usuario no autenticado.'}), 401
     try:
-        # Oportunista: si el scheduler aún no pasó, procesa lo que ya venció.
-        process_due_next_day_reservations()
+        # Oportunista en background: no bloquea el listado con SMTP/fulfillment.
+        schedule_process_due_next_day_reservations()
     except Exception:
-        current_app.logger.exception('process_due_next_day_reservations (list)')
+        current_app.logger.exception('schedule_process_due_next_day_reservations (list)')
     return jsonify({'success': True, 'reservations': list_user_reservations_detailed(user.id)})
 
 
@@ -7065,15 +7196,18 @@ def api_check_customer_renewal_email():
     )
     if verr:
         from app.store.customer_account_renewals import (
-            CUSTOMER_RENEWAL_ALREADY_COMPLETED_MSG,
-            CUSTOMER_RENEWAL_CHECKOUT_BLOCKED_MSG,
+            customer_renewal_checkout_block_reason,
+            find_customer_renewal_email_in_store,
         )
 
         payload = {'success': True, 'allowed': False, 'error': verr}
-        if verr == CUSTOMER_RENEWAL_ALREADY_COMPLETED_MSG:
-            payload['reason'] = 'already_renewed'
-        elif verr == CUSTOMER_RENEWAL_CHECKOUT_BLOCKED_MSG:
-            payload['reason'] = 'pending'
+        block = customer_renewal_checkout_block_reason(product_id, em, user_id=user_id)
+        if block:
+            payload['reason'] = block[0]
+            if block[0] == 'in_inventory':
+                hit = find_customer_renewal_email_in_store(em)
+                if hit and hit.get('product_name'):
+                    payload['existing_product'] = hit.get('product_name')
         return jsonify(payload)
     warning = customer_renewal_checkout_warning(product, em, user_id=user_id)
     return jsonify(
@@ -11052,11 +11186,12 @@ def chatbot_respuestas_page():
         flash('No tienes acceso a esta herramienta.', 'warning')
         return redirect(url_for('main_bp.home'))
 
+    from app.store.chatbot_context import build_identity
     from app.store.chatbot_knowledge import ensure_default_knowledge, list_sources
 
     ensure_default_knowledge(current_app)
-    admin_username = current_app.config.get('ADMIN_USER', 'admin')
-    is_admin_user = user.username == admin_username
+    identity = build_identity(current_app, user, session)
+    is_admin_user = bool(identity['is_admin'])
     has_gemini = bool(os.getenv('GEMINI_API_KEY') or current_app.config.get('GEMINI_API_KEY'))
     has_groq = bool(os.getenv('GROQ_API_KEY') or current_app.config.get('GROQ_API_KEY'))
 
@@ -11072,7 +11207,6 @@ def chatbot_respuestas_page():
 
 
 @store_bp.route('/api/chatbot-respuestas/ask', methods=['POST'])
-@csrf_exempt_route
 def api_chatbot_respuestas_ask():
     if not session.get('logged_in'):
         return jsonify({'success': False, 'message': 'No autenticado'}), 401
@@ -11084,20 +11218,54 @@ def api_chatbot_respuestas_ask():
     message = (data.get('message') or '').strip()
     if not message:
         return jsonify({'success': False, 'message': 'Escribe una pregunta'}), 400
-    history = data.get('history') if isinstance(data.get('history'), list) else []
+    if len(message) > 2000:
+        return jsonify({'success': False, 'message': 'La pregunta es demasiado larga'}), 400
+
+    from app.store.chatbot_context import (
+        build_identity,
+        build_safe_live_context,
+        chatbot_rate_limited,
+    )
+
+    if chatbot_rate_limited(user.id):
+        return jsonify({
+            'success': False,
+            'message': 'Has enviado muchas preguntas seguidas. Espera un momento.',
+        }), 429
+
+    raw_history = data.get('history') if isinstance(data.get('history'), list) else []
+    history = []
+    for item in raw_history[-12:]:
+        if not isinstance(item, dict):
+            continue
+        role = item.get('role')
+        content = str(item.get('content') or '').strip()
+        if role not in ('user', 'assistant') or not content:
+            continue
+        history.append({'role': role, 'content': content[:800]})
 
     from app.store.chatbot_knowledge import generate_answer
 
     try:
-        result = generate_answer(current_app, message, history=history)
+        identity = build_identity(current_app, user, session)
+        live_context = build_safe_live_context(user, identity, message)
+        result = generate_answer(
+            current_app,
+            message,
+            history=history,
+            identity=identity,
+            live_context=live_context,
+        )
         return jsonify({'success': True, **result})
-    except Exception as e:
+    except Exception:
         current_app.logger.exception('api_chatbot_respuestas_ask')
-        return jsonify({'success': False, 'message': str(e)}), 500
+        return jsonify({
+            'success': False,
+            'message': 'No se pudo generar la respuesta. Inténtalo nuevamente.',
+        }), 500
 
 
 @store_bp.route('/api/chatbot-respuestas/knowledge', methods=['GET', 'POST'])
-@csrf_exempt_route
 def api_chatbot_respuestas_knowledge():
     if not session.get('logged_in'):
         return jsonify({'success': False, 'message': 'No autenticado'}), 401
@@ -11105,21 +11273,27 @@ def api_chatbot_respuestas_knowledge():
     if not user or not _chatbot_respuestas_user_allowed(user):
         return jsonify({'success': False, 'message': 'Sin acceso'}), 403
 
+    from app.store.chatbot_context import is_effective_admin
     from app.store.chatbot_knowledge import add_source, ensure_default_knowledge, list_sources
 
     ensure_default_knowledge(current_app)
+    effective_admin = is_effective_admin(current_app, user, session)
 
     if request.method == 'GET':
-        return jsonify({'success': True, 'sources': list_sources(current_app)})
+        allowed = {'public', 'user', 'admin'} if effective_admin else {'public', 'user'}
+        return jsonify({
+            'success': True,
+            'sources': list_sources(current_app, allowed_visibilities=allowed),
+        })
 
-    admin_username = current_app.config.get('ADMIN_USER', 'admin')
-    if user.username != admin_username:
+    if not effective_admin:
         return jsonify({'success': False, 'message': 'Solo administradores pueden añadir conocimiento'}), 403
 
     data = request.get_json(silent=True) or {}
     title = (data.get('title') or '').strip()
     content = (data.get('content') or '').strip()
     youtube_url = (data.get('youtube_url') or '').strip()
+    visibility = (data.get('visibility') or 'admin').strip().lower()
     try:
         entry = add_source(
             current_app,
@@ -11127,13 +11301,14 @@ def api_chatbot_respuestas_knowledge():
             content,
             source_type='youtube' if youtube_url else 'note',
             meta={'youtube_url': youtube_url} if youtube_url else None,
+            visibility=visibility,
         )
         return jsonify({'success': True, 'source': entry})
     except ValueError as ve:
         return jsonify({'success': False, 'message': str(ve)}), 400
-    except Exception as e:
+    except Exception:
         current_app.logger.exception('api_chatbot_respuestas_knowledge')
-        return jsonify({'success': False, 'message': str(e)}), 500
+        return jsonify({'success': False, 'message': 'No se pudo guardar el conocimiento'}), 500
 
 
 @store_bp.route('/share/worksheet/<int:worksheet_id>')

@@ -16,7 +16,13 @@ EMAIL_VERIFY_AUTO_ADMIN_NOTE = 'Verificado automáticamente.'
 BINANCE_PAY_AUTO_ADMIN_NOTE = 'Acreditado automáticamente por Binance Pay (webhook).'
 
 
-def apply_user_balance_credit(user: User, currency: str, amount: float) -> None:
+def apply_user_balance_credit(
+    user: User,
+    currency: str,
+    amount: float,
+    *,
+    source: str = 'recarga',
+) -> None:
     """Acredita saldo: primero paga deuda de licencias (FIFO), luego prepago."""
     from app.store.license_debt_credit import apply_positive_credit_against_license_debts
 
@@ -27,7 +33,7 @@ def apply_user_balance_credit(user: User, currency: str, amount: float) -> None:
     apply_positive_credit_against_license_debts(
         user,
         amt,
-        source='recarga',
+        source=source,
         currency=cur,
     )
 

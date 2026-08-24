@@ -21,6 +21,37 @@ from app.models.user import AllowedEmail, LinkedProject
 from sqlalchemy.exc import IntegrityError # Para capturar errores de unicidad
 from sqlalchemy import or_ # Importar 'or_'
 
+
+def _claim_unique_allowed_emails(owner_user, emails):
+    """
+    Si el usuario principal tiene correos únicos, elimina esos correos de
+    cualquier otro usuario excepto el dueño y sus sub-usuarios.
+
+    Solo debe usarse en altas/manuales de admin (no en sync de Licencias).
+    Devuelve cuántas filas AllowedEmail se eliminaron.
+    """
+    if not owner_user or owner_user.parent_id is not None:
+        return 0
+    if not getattr(owner_user, "unique_allowed_emails", False):
+        return 0
+    email_list = [e for e in (emails or []) if e]
+    if not email_list:
+        return 0
+
+    keep_ids = {owner_user.id}
+    keep_ids.update(
+        uid for (uid,) in User.query.filter_by(parent_id=owner_user.id).with_entities(User.id).all()
+    )
+
+    deleted = (
+        AllowedEmail.query.filter(
+            AllowedEmail.email.in_(email_list),
+            ~AllowedEmail.user_id.in_(keep_ids),
+        ).delete(synchronize_session=False)
+    )
+    return int(deleted or 0)
+
+
 # --- Función Auxiliar para obtener y formatear usuarios principales ---
 def _get_principal_users_data(admin_username):
     """Consulta y formatea la lista de usuarios principales para respuesta JSON."""
@@ -66,8 +97,11 @@ def search_users_ajax():
     """
     Devuelve en JSON la lista de usuarios PRINCIPALES (no sub-usuarios),
     excluyendo además al usuario administrador.
+    Soporta page/per_page (per_page=all por defecto, sin paginación).
     """
     query = request.args.get("query", "").strip().lower()
+    page = request.args.get("page", 1, type=int)
+    per_page_param = (request.args.get("per_page", "all") or "all").strip().lower()
     user_q = User.query
 
     # Excluir sub-usuarios => parent_id IS NULL
@@ -89,7 +123,39 @@ def search_users_ajax():
     # Se asume que el modelo User tiene un campo 'position'
     # (Si no existe, eliminar .order_by(User.position.asc()))
     user_q = user_q.order_by(User.position.asc())
-    all_users = user_q.all()
+
+    pagination_meta = {
+        "page": 1,
+        "per_page": 0,
+        "total": 0,
+        "pages": 1,
+        "has_prev": False,
+        "has_next": False,
+        "prev_num": None,
+        "next_num": None,
+    }
+
+    if per_page_param == "all":
+        all_users = user_q.all()
+        pagination_meta["per_page"] = len(all_users)
+        pagination_meta["total"] = len(all_users)
+    else:
+        try:
+            per_page = max(1, int(per_page_param))
+        except (TypeError, ValueError):
+            per_page = 10
+        pagination = user_q.paginate(page=page, per_page=per_page, error_out=False)
+        all_users = pagination.items
+        pagination_meta = {
+            "page": pagination.page,
+            "per_page": pagination.per_page,
+            "total": pagination.total,
+            "pages": pagination.pages or 1,
+            "has_prev": pagination.has_prev,
+            "has_next": pagination.has_next,
+            "prev_num": pagination.prev_num,
+            "next_num": pagination.next_num,
+        }
 
     data = []
     for u in all_users:
@@ -155,8 +221,8 @@ def search_users_ajax():
             data[-1]["reserva_otro_dia"] = False
             data[-1]["limite_deuda_usd"] = None
             data[-1]["limite_deuda_cop"] = None
-            
-    return jsonify({"status": "ok", "users": data}), 200
+
+    return jsonify({"status": "ok", "users": data, "pagination": pagination_meta}), 200
 
 
 @admin_bp.route("/create_user_ajax", methods=["POST"])
@@ -267,6 +333,200 @@ def create_user_ajax():
     except Exception as e:
         current_app.logger.error(f"Error crítico al crear usuario ajax: {e}", exc_info=True)
         db.session.rollback()
+        return jsonify({"status": "error", "message": f"Error interno del servidor: {str(e)}"}), 500
+
+
+def _generate_duplicate_username(source_username):
+    """
+    Genera un nombre único: fher -> fherduplicado1, fherduplicado2, ...
+    Si el origen ya es un duplicado (fherduplicado1) se usa la misma base (fher).
+    """
+    base = re.sub(r'duplicado\d+$', '', source_username) or source_username
+    # Respetar el límite de la columna username (80) dejando espacio al sufijo
+    max_base_len = 80 - len('duplicado') - 4
+    if len(base) > max_base_len:
+        base = base[:max_base_len]
+    prefix = f"{base}duplicado"
+    existing = User.query.filter(User.username.like(f"{prefix}%")).all()
+    max_n = 0
+    for u in existing:
+        m = re.fullmatch(re.escape(prefix) + r'(\d+)', u.username)
+        if m:
+            max_n = max(max_n, int(m.group(1)))
+    candidate = f"{prefix}{max_n + 1}"
+    while User.query.filter_by(username=candidate).first():
+        max_n += 1
+        candidate = f"{prefix}{max_n + 1}"
+    return candidate
+
+
+def _cleaned_user_prices_for_duplicate(source_prices):
+    """
+    Copia profunda de user_prices SIN datos operativos:
+    - inventario proveedor (líneas/blocs) ni resúmenes diarios
+    - contadores de ventas/renovaciones en proveedor_services (se conserva la config)
+    Mantiene: tipo_precio, precios/descuentos, productos_permitidos, descuentos_productos,
+    límites de deuda, flags (proveedor, soporte_licencias, etc.), payment_method_ids,
+    reserva_otro_dia_services, proveedor_services (solo configuración).
+    """
+    import copy as _copy
+    from app.store.proveedor_user_data import PROVEEDOR_INVENTORY_KEYS
+
+    if not isinstance(source_prices, dict):
+        return None
+    up = _copy.deepcopy(source_prices)
+    for key in PROVEEDOR_INVENTORY_KEYS:
+        up.pop(key, None)
+    up.pop('proveedor_daily_summaries', None)
+    services = up.get('proveedor_services')
+    if isinstance(services, dict):
+        for entry in services.values():
+            if isinstance(entry, dict):
+                entry['sales_count'] = 0
+                entry['renewals_count'] = 0
+    return up
+
+
+@admin_bp.route("/duplicate_user_ajax", methods=["POST"])
+@admin_required
+def duplicate_user_ajax():
+    """
+    Duplica la CONFIGURACIÓN de un usuario principal en un usuario nuevo
+    (fher -> fherduplicado1, fherduplicado2, ...).
+
+    Copia: permisos centralizados, permisos de herramientas admin (tools/htmls/
+    videos/apis), precios por usuario + productos asociados (user_prices limpio),
+    regex/filtros/servicios del usuario principal, regex/filtros por defecto para
+    sub-usuarios, APIs vinculadas, páginas IMAP2 gestionables, permisos de hojas
+    y preferencias de notificación.
+
+    NO copia: lista de correos permitidos, sub-usuarios, saldos, 2FA, tokens,
+    dispositivos recordados, datos de portal ni inventario de proveedor.
+    """
+    try:
+        data = request.get_json() or {}
+        user_id = data.get("user_id")
+        if not user_id:
+            return jsonify({"status": "error", "message": "user_id requerido"}), 400
+
+        source = User.query.get(int(user_id))
+        if not source:
+            return jsonify({"status": "error", "message": "Usuario no encontrado"}), 404
+        if source.parent_id:
+            return jsonify({"status": "error", "message": "Solo se pueden duplicar usuarios principales"}), 400
+
+        admin_username = current_app.config.get("ADMIN_USER", "admin")
+        if source.username == admin_username:
+            return jsonify({"status": "error", "message": "No se puede duplicar el usuario admin"}), 403
+
+        new_username = _generate_duplicate_username(source.username)
+
+        new_user = User(
+            username=new_username,
+            password=source.password,  # mismo hash => misma contraseña que el original
+            color=source.color,
+            position=source.position,
+            enabled=source.enabled,
+            parent_id=None,
+            email=None,
+            full_name=None,
+            phone=None,
+            # --- Gestión centralizada de permisos ---
+            can_search_any=bool(source.can_search_any),
+            can_add_own_emails=bool(source.can_add_own_emails),
+            can_bulk_delete_emails=bool(source.can_bulk_delete_emails),
+            can_manage_2fa_emails=bool(source.can_manage_2fa_emails),
+            can_create_subusers=bool(source.can_create_subusers),
+            can_chat=bool(source.can_chat),
+            can_manage_subusers=bool(source.can_manage_subusers),
+            is_support=bool(source.is_support),
+            can_access_store=bool(source.can_access_store),
+            can_use_coupons=bool(source.can_use_coupons),
+            can_view_announcements=bool(source.can_view_announcements),
+        )
+
+        # Preferencias de notificación (configuración, no datos)
+        new_user.whatsapp_notify_enabled = bool(source.whatsapp_notify_enabled)
+        new_user.email_notify_enabled = bool(source.email_notify_enabled)
+        new_user.push_notify_enabled = bool(source.push_notify_enabled)
+        new_user.inapp_notify_enabled = bool(source.inapp_notify_enabled)
+        new_user.notify_vibrate_enabled = bool(source.notify_vibrate_enabled)
+        new_user.notify_sound_enabled = bool(source.notify_sound_enabled)
+        new_user.notify_type_prefs_json = source.notify_type_prefs_json
+        new_user.caducidad_notify_enabled = bool(source.caducidad_notify_enabled)
+        new_user.caducidad_notify_from_days = source.caducidad_notify_from_days
+
+        # Gestión de precios por usuario + productos asociados (sin datos operativos)
+        new_user.user_prices = _cleaned_user_prices_for_duplicate(source.user_prices)
+
+        db.session.add(new_user)
+
+        # --- Regex / Filtros / Servicios del usuario principal ---
+        for r in source.regexes_allowed:
+            new_user.regexes_allowed.append(r)
+        for f in source.filters_allowed:
+            new_user.filters_allowed.append(f)
+        for s in source.services_allowed:
+            new_user.services_allowed.append(s)
+
+        # --- Regex / Filtros por defecto para sub-usuarios ---
+        for r in source.default_regexes_for_subusers.all():
+            new_user.default_regexes_for_subusers.append(r)
+        for f in source.default_filters_for_subusers.all():
+            new_user.default_filters_for_subusers.append(f)
+
+        # Flush para obtener el ID (necesario para vínculos M2M externos y LinkedProject)
+        db.session.flush()
+
+        # --- Gestión de permisos de herramientas admin ---
+        from app.store.models import ToolInfo, HtmlInfo, YouTubeListing, ApiInfo, WorksheetPermission
+
+        for tool in ToolInfo.query.filter(ToolInfo.usuarios_vinculados.any(id=source.id)).all():
+            tool.usuarios_vinculados.append(new_user)
+        for html in HtmlInfo.query.filter(HtmlInfo.users.any(id=source.id)).all():
+            html.users.append(new_user)
+        for yt in YouTubeListing.query.filter(YouTubeListing.users.any(id=source.id)).all():
+            yt.users.append(new_user)
+        for api in ApiInfo.query.filter(ApiInfo.users.any(id=source.id)).all():
+            api.users.append(new_user)
+
+        # --- Permisos de hojas de cálculo ---
+        for wp in WorksheetPermission.query.filter(WorksheetPermission.users.any(id=source.id)).all():
+            wp.users.append(new_user)
+
+        # --- Páginas IMAP2 gestionables ---
+        from app.models.imap2 import IMAPServer2
+
+        for srv in IMAPServer2.query.filter(IMAPServer2.allowed_users.any(id=source.id)).all():
+            srv.allowed_users.append(new_user)
+
+        # --- APIs vinculadas (proyectos) ---
+        for lp in source.linked_projects.all():
+            db.session.add(LinkedProject(
+                user_id=new_user.id,
+                name=lp.name,
+                url=lp.url,
+                token=lp.token,
+                enabled=lp.enabled,
+            ))
+
+        # NO se copian: AllowedEmail, sub-usuarios, saldos, 2FA, tokens,
+        # dispositivos, portal_license_* ni inventario proveedor.
+
+        db.session.commit()
+
+        updated_users = _get_principal_users_data(admin_username)
+        return jsonify({
+            "status": "ok",
+            "message": f"Usuario duplicado como '{new_username}'.",
+            "new_username": new_username,
+            "new_user_id": new_user.id,
+            "users": updated_users,
+        }), 200
+
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Error al duplicar usuario: {e}", exc_info=True)
         return jsonify({"status": "error", "message": f"Error interno del servidor: {str(e)}"}), 500
 
 
@@ -610,6 +870,9 @@ def user_emails_page(user_id):
         
         if new_email_objects:
             db.session.bulk_save_objects(new_email_objects)
+
+        if getattr(user, "unique_allowed_emails", False) and unique_emails:
+            _claim_unique_allowed_emails(user, unique_emails)
             
         try:
             db.session.commit()
@@ -880,6 +1143,14 @@ def bulk_add_emails_to_users_ajax():
                 else:
                     skipped_count += 1
 
+            if getattr(user, "unique_allowed_emails", False):
+                claimed = [
+                    (e or "").lower().strip()
+                    for e in emails
+                    if isinstance(e, str) and (e or "").strip() and "@" in e
+                ]
+                _claim_unique_allowed_emails(user, claimed)
+
         db.session.commit()
 
         return jsonify({
@@ -946,15 +1217,63 @@ def add_allowed_emails_ajax():
 
     # Añadir los que realmente son nuevos
     db.session.bulk_save_objects(new_email_objects)
+
+    removed_elsewhere = 0
+    if getattr(user, "unique_allowed_emails", False):
+        # Incluye también los que ya tenía: al añadir con exclusividad, reclama todos los enviados
+        removed_elsewhere = _claim_unique_allowed_emails(user, normalized_new_emails)
     
     try:
         db.session.commit()
 
-        return jsonify({"status":"ok", "added_count": actually_added_count})
+        return jsonify({
+            "status": "ok",
+            "added_count": actually_added_count,
+            "removed_elsewhere": removed_elsewhere,
+        })
     except Exception as e: # Capturar otros posibles errores
         db.session.rollback()
         current_app.logger.error(f"Error en bulk insert para añadir correos a user {user_id}: {e}")
         return jsonify({"status":"error","message":"Error al guardar los nuevos correos."}), 500
+
+
+@admin_bp.route("/toggle_unique_allowed_emails_ajax", methods=["POST"])
+@admin_required
+def toggle_unique_allowed_emails_ajax():
+    """
+    Activa/desactiva correos únicos para un usuario principal (guardado inmediato).
+    La exclusividad solo se aplica al añadir correos de forma manual; no toca licencias.
+    """
+    data = request.get_json() or {}
+    user_id = data.get("user_id")
+    enabled = bool(data.get("enabled"))
+
+    if not user_id:
+        return jsonify({"status": "error", "message": "Falta user_id."}), 400
+
+    user = User.query.get_or_404(user_id)
+    if user.parent_id is not None:
+        return jsonify({"status": "error", "message": "Solo aplica a usuarios principales."}), 403
+
+    user.unique_allowed_emails = enabled
+
+    try:
+        db.session.commit()
+        msg = (
+            "Correos únicos activados. Al añadir correos manualmente se quitarán de otros clientes."
+            if enabled
+            else "Correos únicos desactivados."
+        )
+        return jsonify({
+            "status": "ok",
+            "unique_allowed_emails": bool(user.unique_allowed_emails),
+            "removed_elsewhere": 0,
+            "message": msg,
+        })
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Error toggle unique_allowed_emails user {user_id}: {e}", exc_info=True)
+        return jsonify({"status": "error", "message": "No se pudo guardar el cambio."}), 500
 
 
 @admin_bp.route("/delete_all_allowed_emails_ajax", methods=["POST"])
@@ -2394,6 +2713,35 @@ def delete_linked_project(project_id):
         db.session.rollback()
         return jsonify({"status": "error", "message": str(e)}), 500
 
+
+def _test_linked_project_response(project):
+    """Ejecuta la prueba de conexión de un LinkedProject y devuelve jsonify."""
+    from app.services.search_service import test_linked_project_api
+
+    owner = User.query.get(project.user_id) if project.user_id else None
+    origin_user = (owner.username if owner else "") or "admin"
+    try:
+        origin_domain = request.url_root.rstrip("/")
+    except RuntimeError:
+        origin_domain = "unknown"
+    ok, message = test_linked_project_api(
+        project.url,
+        project.token,
+        origin_user=origin_user,
+        origin_domain=origin_domain,
+        project_name=project.name,
+    )
+    return jsonify({"status": "ok" if ok else "error", "message": message}), 200
+
+
+@admin_bp.route("/user/linked_projects/<int:project_id>/test", methods=["POST"])
+@admin_required
+def test_linked_project(project_id):
+    """Prueba URL + token de una API vinculada de un usuario (plantilla IMAP)."""
+    project = LinkedProject.query.get_or_404(project_id)
+    return _test_linked_project_response(project)
+
+
 @admin_bp.route("/user/<int:user_id>/master_token", methods=["GET"])
 @admin_required
 def get_master_token(user_id):
@@ -2508,3 +2856,109 @@ def manage_global_linked_project(project_id):
     except Exception as e:
         db.session.rollback()
         return jsonify({"status": "error", "message": str(e)}), 500
+
+
+@admin_bp.route("/global_linked_projects/<int:project_id>/test", methods=["POST"])
+@admin_required
+def test_global_linked_project(project_id):
+    """Prueba URL + token de una API global del administrador."""
+    admin_username = current_app.config.get("ADMIN_USER", "admin")
+    admin = User.query.filter_by(username=admin_username).first()
+    if not admin:
+        return jsonify({"status": "error", "message": "Admin no encontrado"}), 404
+
+    project = LinkedProject.query.get_or_404(project_id)
+    if project.user_id != admin.id:
+        return jsonify({"status": "error", "message": "No autorizado"}), 403
+    return _test_linked_project_response(project)
+
+
+def _admin_user_for_global_api():
+    admin_username = current_app.config.get("ADMIN_USER", "admin")
+    return User.query.filter_by(username=admin_username).first()
+
+
+_LICENCIAS_API_TOKEN_KEY = "licencias_api_master_token"
+
+
+def _get_or_create_licencias_api_token():
+    """Token propio de licencias (no usa el master_token de códigos)."""
+    from app.admin.site_settings import get_site_setting, set_site_setting
+
+    token = (get_site_setting(_LICENCIAS_API_TOKEN_KEY) or "").strip()
+    if not token:
+        token = secrets.token_hex(32)
+        set_site_setting(_LICENCIAS_API_TOKEN_KEY, token)
+    return token
+
+
+@admin_bp.route("/global_licencias_api", methods=["GET"])
+@admin_required
+def get_global_licencias_api():
+    """URL + token de «Mi API» solo para licencias (independiente de códigos)."""
+    admin = _admin_user_for_global_api()
+    if not admin:
+        return jsonify({"status": "error", "message": "Admin no encontrado"}), 404
+    token = _get_or_create_licencias_api_token()
+    base_url = request.url_root.rstrip("/")
+    return jsonify(
+        {
+            "status": "ok",
+            "token": token,
+            "api_url": f"{base_url}/api/external/licenses/search",
+        }
+    )
+
+
+@admin_bp.route("/global_licencias_api/regen_token", methods=["POST"])
+@admin_required
+def regen_global_licencias_api_token():
+    """Regenera solo el token de la API de licencias (no afecta códigos)."""
+    from app.admin.site_settings import set_site_setting
+
+    admin = _admin_user_for_global_api()
+    if not admin:
+        return jsonify({"status": "error", "message": "Admin no encontrado"}), 404
+    token = secrets.token_hex(32)
+    try:
+        set_site_setting(_LICENCIAS_API_TOKEN_KEY, token)
+        return jsonify({"status": "ok", "token": token})
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+@admin_bp.route("/global_licencias_linked/test", methods=["POST"])
+@admin_required
+def test_global_licencias_linked():
+    """
+    Prueba URL + token de una API de licencias vinculada (items en UI / futuros persistidos).
+    Body JSON: { name, url, token }
+    """
+    from app.services.search_service import test_linked_licenses_api
+
+    admin = _admin_user_for_global_api()
+    if not admin:
+        return jsonify({"status": "error", "message": "Admin no encontrado"}), 404
+
+    data = request.get_json(silent=True) or {}
+    name = (data.get("name") or "").strip()
+    url = (data.get("url") or "").strip()
+    token = (data.get("token") or "").strip()
+    if not url or not token:
+        return jsonify(
+            {"status": "error", "message": "Faltan URL o token de la API de licencias."}
+        ), 400
+
+    try:
+        origin_domain = request.url_root.rstrip("/")
+    except RuntimeError:
+        origin_domain = "unknown"
+
+    ok, message = test_linked_licenses_api(
+        url,
+        token,
+        origin_user=admin.username or "admin",
+        origin_domain=origin_domain,
+        project_name=name or "API de licencias",
+    )
+    return jsonify({"status": "ok" if ok else "error", "message": message}), 200
