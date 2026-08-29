@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="csrf_token" content="{{ csrf_token() }}">
+<title>Documentación API Partner</title>
+<style>
+  :root{
+    --bg:#0b1220; --panel:#101b2e; --panel2:#0d1626; --line:rgba(96,165,250,.28);
+    --line2:rgba(96,165,250,.45); --tx:#e8f1ff; --mut:#9fb3cc; --blue:#3b82f6;
+    --green:#22c55e; --red:#ef4444; --amber:#f59e0b; --code:#0a0f1c;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:linear-gradient(180deg,#0b1220 0%,#0e1728 100%);color:var(--tx);
+       font:15px/1.55 -apple-system,"Segoe UI",Roboto,Arial,sans-serif;padding:0 0 4rem}
+  .wrap{max-width:1080px;margin:0 auto;padding:1.2rem}
+  h1{font-size:1.45rem;margin:.4rem 0 .2rem}
+  h2{font-size:1.08rem;margin:0;padding:.5rem .8rem;background:linear-gradient(90deg,#183a65 0%,#245b98 62%,#2d70b6 100%);
+     border-top:1px solid rgba(147,197,253,.5);border-bottom:1px solid rgba(3,19,43,.9);letter-spacing:.01em}
+  h3{font-size:.95rem;margin:1rem 0 .35rem;color:#bfdbfe}
+  section{background:var(--panel);border:1px solid var(--line);border-radius:8px;overflow:hidden;margin:1rem 0}
+  .sec-body{padding: .8rem .9rem}
+  p{margin:.4rem 0}
+  .mut{color:var(--mut)}
+  code{background:var(--code);border:1px solid var(--line);border-radius:4px;padding:.08rem .35rem;font-size:.86em;color:#93c5fd}
+  pre{background:var(--code);border:1px solid var(--line);border-radius:6px;padding:.65rem .8rem;overflow:auto;
+      font-size:.8rem;line-height:1.5;color:#c7ddff;margin:.45rem 0}
+  table{width:100%;border-collapse:collapse;margin:.45rem 0;font-size:.86rem}
+  th,td{border:1px solid var(--line);padding:.3rem .5rem;text-align:left;vertical-align:top}
+  th{background:var(--panel2);color:#bfdbfe;font-weight:600}
+  .pill{display:inline-block;border-radius:999px;padding:.05rem .6rem;font-size:.75rem;font-weight:700}
+  .pill-on{background:rgba(34,197,94,.15);color:#86efac;border:1px solid rgba(34,197,94,.45)}
+  .pill-off{background:rgba(239,68,68,.15);color:#fca5a5;border:1px solid rgba(239,68,68,.45)}
+  .verb{display:inline-block;min-width:3.2rem;text-align:center;border-radius:4px;font-size:.72rem;font-weight:800;
+        padding:.1rem .3rem;margin-right:.4rem}
+  .get{background:rgba(34,197,94,.18);color:#86efac;border:1px solid rgba(34,197,94,.4)}
+  .post{background:rgba(59,130,246,.18);color:#93c5fd;border:1px solid rgba(59,130,246,.4)}
+  .ep{font-family:ui-monospace,Consolas,monospace;font-size:.86rem}
+  .live{font-size:.72rem;color:#86efac;border:1px solid rgba(34,197,94,.4);border-radius:4px;padding:.02rem .35rem;margin-left:.4rem}
+  .admin-box{background:var(--panel2);border:1px dashed var(--line2);border-radius:6px;padding:.7rem .8rem;margin:.6rem 0}
+  .row{display:flex;flex-wrap:wrap;gap:.5rem;align-items:center}
+  input[type=text]{background:#0a0f1c;border:1px solid var(--line2);color:var(--tx);border-radius:5px;padding:.35rem .55rem;min-width:14rem}
+  button{background:linear-gradient(180deg,#2f73bc,#1d5696);border:1px solid #9ac8f6;color:#fff;border-radius:5px;
+         padding:.35rem .8rem;cursor:pointer;font-weight:600}
+  button.red{background:linear-gradient(180deg,#a23b46,#762531);border-color:#f0a0a7}
+  button:disabled{opacity:.55;cursor:default}
+  .ip-item{display:inline-flex;align-items:center;gap:.4rem;background:#0a0f1c;border:1px solid var(--line);
+           border-radius:5px;padding:.15rem .5rem;margin:.15rem .25rem .15rem 0;font-family:ui-monospace,Consolas,monospace;font-size:.82rem}
+  .ip-item button{padding:0 .4rem;font-size:.8rem;background:rgba(239,68,68,.2);border:1px solid rgba(239,68,68,.5)}
+  .status-msg{font-size:.82rem;margin-left:.5rem}
+  .toc a{color:#93c5fd;text-decoration:none;margin-right:.9rem;font-size:.85rem}
+  .toc a:hover{text-decoration:underline}
+  label.switch{display:inline-flex;align-items:center;gap:.45rem;cursor:pointer;font-weight:600}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Documentación API Partner</h1>
+  <p class="mut">
+    Base: <code id="baseUrl">{{ base_url }}</code>
+    · Estado:
+    {% if api_enabled %}<span class="pill pill-on">ACTIVA</span>
+    {% else %}<span class="pill pill-off">DESACTIVADA</span>{% endif %}
+    · Esta página se genera en vivo desde la base de datos: al cambiar productos o botones se actualiza sola.
+  </p>
+  <p class="toc">
+    <a href="#auth">Autenticación</a><a href="#limites">Límites y seguridad</a><a href="#perfil">Perfil</a>
+    <a href="#productos">Productos</a><a href="#compras">Compras</a><a href="#renovaciones">Renovaciones</a>
+    <a href="#reportes">Reportes</a><a href="#codigos">Códigos</a><a href="#errores">Errores</a>
+  </p>
+
+  {% if is_admin %}
+  <section id="adminPanel">
+    <h2>Panel del administrador (solo tú ves esto)</h2>
+    <div class="sec-body">
+      <div class="admin-box">
+        <div class="row">
+          <label class="switch">
+            <input type="checkbox" id="apiEnabledChk" {% if api_enabled %}checked{% endif %}>
+            API activa
+          </label>
+          <span class="mut">Si la apagas, todos los endpoints responden <code>503 api_disabled</code>.</span>
+        </div>
+      </div>
+      <div class="admin-box">
+        <p style="margin-top:0"><strong>IPs permitidas</strong> — si la lista está vacía, se acepta cualquier IP.
+          Acepta IP exacta (<code>190.85.10.20</code>) o rango CIDR (<code>190.85.10.0/24</code>).
+          Tu IP actual: <code id="clientIp">…</code></p>
+        <div id="ipList"></div>
+        <div class="row" style="margin-top:.5rem">
+          <input type="text" id="ipInput" placeholder="IP o rango CIDR" autocomplete="off">
+          <button type="button" id="ipAddBtn">Añadir IP</button>
+          <button type="button" id="saveBtn">Guardar cambios</button>
+          <span class="status-msg" id="saveMsg" role="status"></span>
+        </div>
+      </div>
+    </div>
+  </section>
+  {% endif %}
+
+  <section id="auth">
+    <h2>1 · Autenticación</h2>
+    <div class="sec-body">
+      <p>Se usa tu usuario y contraseña de la tienda. El login devuelve dos tokens JWT:
+        <code>access</code> (válido {{ limits.access_minutes }} min, va en cada petición) y
+        <code>refresh</code> (válido {{ limits.refresh_days }} días, renueva el access sin reenviar la contraseña).
+        Si cambias tu contraseña, todos los tokens anteriores quedan invalidados.</p>
+
+      <p><span class="verb post">POST</span><span class="ep">/auth/token/</span></p>
+<pre>curl -X POST "{{ base_url }}/auth/token/" \
+  -H "Content-Type: application/json" \
+  -d '{"username": "TU_USUARIO", "password": "TU_CONTRASEÑA"}'
+
+→ {"data": {"tokens": {"access": "...", "refresh": "..."},
+            "expires_in": {{ limits.access_minutes * 60 }}, "user": {"id": 7, "username": "TU_USUARIO"}}}</pre>
+
+      <p><span class="verb post">POST</span><span class="ep">/auth/token/refresh/</span></p>
+<pre>curl -X POST "{{ base_url }}/auth/token/refresh/" \
+  -H "Content-Type: application/json" \
+  -d '{"refresh": "..."}'
+
+→ {"data": {"access": "...", "refresh": "...", "expires_in": {{ limits.access_minutes * 60 }}}}</pre>
+
+      <p>Todas las demás llamadas llevan el header <code>Authorization: Bearer &lt;access&gt;</code>.</p>
+    </div>
+  </section>
+
+  <section id="limites">
+    <h2>2 · Límites y seguridad</h2>
+    <div class="sec-body">
+      <table>
+        <tr><th>Límite</th><th>Valor</th><th>Al excederlo</th></tr>
+        <tr><td>Cuentas compradas por minuto</td><td>{{ limits.purchases_per_min }}</td><td><code>429 rate_limited</code></td></tr>
+        <tr><td>Líneas por pedido (carrito)</td><td>{{ limits.cart_lines }}</td><td><code>400 cart_limit</code></td></tr>
+        <tr><td>Consultas de códigos por minuto</td><td>{{ limits.codes_per_min }}</td><td><code>429 rate_limited</code></td></tr>
+        <tr><td>Peticiones generales por minuto</td><td>{{ limits.general_per_min }}</td><td><code>429 rate_limited</code></td></tr>
+        <tr><td>Intentos de login por minuto (por IP)</td><td>10</td><td><code>429 rate_limited</code></td></tr>
+        <tr><td>Vida del token access</td><td>{{ limits.access_minutes }} min</td><td><code>401 token_expired</code></td></tr>
+        <tr><td>Vida del token refresh</td><td>{{ limits.refresh_days }} días</td><td>volver a hacer login</td></tr>
+      </table>
+      <p class="mut">Además el administrador puede restringir por IP (lista blanca) y apagar la API por completo.
+        Con lista activa, una IP fuera de ella recibe <code>403 ip_not_allowed</code>.</p>
+    </div>
+  </section>
+
+  <section id="perfil">
+    <h2>3 · Perfil y saldo</h2>
+    <div class="sec-body">
+      <p><span class="verb get">GET</span><span class="ep">/me/</span></p>
+<pre>curl "{{ base_url }}/me/" -H "Authorization: Bearer &lt;access&gt;"
+
+→ {"data": {"user": {"id": 7, "username": "TU_USUARIO", "currency": "COP",
+            "saldo_cop": 125000.0, "saldo_usd": 0.0}}}</pre>
+      <p class="mut">Las compras se descuentan de tu saldo prepago en tu moneda (<code>currency</code>).</p>
+    </div>
+  </section>
+
+  <section id="productos">
+    <h2>4 · Productos y stock <span class="live">EN VIVO</span></h2>
+    <div class="sec-body">
+      <p><span class="verb get">GET</span><span class="ep">/store/products/</span>
+        <span class="mut">(opcional <code>?q=texto</code> para filtrar por nombre)</span></p>
+<pre>curl "{{ base_url }}/store/products/" -H "Authorization: Bearer &lt;access&gt;"
+
+→ {"data": {"currency": "COP", "products": [
+     {"id": {{ example_product.id }}, "name": "{{ example_product.name }}", "price_cop": 12000.0, "price_usd": 3.5,
+      "stock": 14, "term_days": 30, "month_to_month": false,
+      "renewal": {"customer_account": true, "inventory_search": true}} ]}}</pre>
+      <p>El precio devuelto ya incluye tus descuentos. Catálogo actual
+        ({{ products|length }} producto{{ 's' if products|length != 1 }}):</p>
+      <table>
+        <tr><th>ID</th><th>Producto</th><th>Stock vendible</th><th>Precio COP</th><th>Precio USD</th><th>Renueva cuenta del cliente</th></tr>
+        {% for p in products %}
+        <tr>
+          <td>{{ p.id }}</td><td>{{ p.name }}</td><td>{{ p.stock }}</td>
+          <td>{{ '%.0f' % p.price_cop }}</td><td>{{ '%.2f' % p.price_usd }}</td>
+          <td>{{ 'Sí' if p.renewal.customer_account else 'No' }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="6" class="mut">Sin productos públicos ahora mismo.</td></tr>
+        {% endfor %}
+      </table>
+    </div>
+  </section>
+
+  <section id="compras">
+    <h2>5 · Compras</h2>
+    <div class="sec-body">
+      <p><span class="verb post">POST</span><span class="ep">/store/purchases/</span></p>
+      <p>Pasa por el mismo checkout que la tienda web: valida stock y saldo, entrega las credenciales y descuenta tu saldo.
+        Máximo {{ limits.cart_lines }} líneas y {{ limits.purchases_per_min }} cuentas por minuto.</p>
+<pre>curl -X POST "{{ base_url }}/store/purchases/" \
+  -H "Authorization: Bearer &lt;access&gt;" -H "Content-Type: application/json" \
+  -d '{"items": [{"product_id": {{ example_product.id }}, "quantity": 2}]}'
+
+→ {"data": {"cuentas_asignadas": [
+      {"producto": "{{ example_product.name }}", "email": "cuenta1@mail.com", "password": "abc123", ...} ],
+    "saldo": {"saldo_cop": 101000.0, "saldo_usd": 0.0}}}</pre>
+      <p>Errores típicos: stock insuficiente, saldo insuficiente o producto fuera de catálogo →
+        <code>400 purchase_failed</code> con el mensaje exacto.</p>
+    </div>
+  </section>
+
+  <section id="renovaciones">
+    <h2>6 · Renovaciones</h2>
+    <div class="sec-body">
+      <h3>6.1 · Renovar una cuenta que sigue en inventario</h3>
+      <p><span class="verb post">POST</span><span class="ep">/store/renewals/search/</span> — busca por correo las cuentas renovables.</p>
+<pre>curl -X POST "{{ base_url }}/store/renewals/search/" \
+  -H "Authorization: Bearer &lt;access&gt;" -H "Content-Type: application/json" \
+  -d '{"q": "cliente1@mail.com cliente2@mail.com"}'
+
+→ {"data": {"renewable": [ {"account_id": 501, "email": "cliente1@mail.com", "product_id": {{ example_product.id }}, ...} ],
+            "rejected":  [ {"email": "cliente2@mail.com", "message": "..."} ]}}</pre>
+      <p>Luego compra esas cuentas pasando sus IDs (una unidad por ID):</p>
+<pre>{"items": [{"product_id": {{ example_product.id }}, "renovacion_account_ids": [501]}]}</pre>
+
+      <h3>6.2 · Renovar la cuenta del propio cliente (productos que lo permiten)</h3>
+<pre>{"items": [{"product_id": {{ example_product.id }}, "es_renovar_cuenta_cliente": true,
+  "customer_email": "cliente@mail.com", "customer_password": "suclave"}]}
+
+→ la solicitud queda pendiente y el administrador la completa (no es entrega instantánea).</pre>
+      <p class="mut">En la tabla de productos, la columna «Renueva cuenta del cliente» dice qué productos lo aceptan.</p>
+    </div>
+  </section>
+
+  <section id="reportes">
+    <h2>7 · Reportes de cuentas (garantía)</h2>
+    <div class="sec-body">
+      <p><span class="verb post">POST</span><span class="ep">/store/issues/</span> —
+        reporta una cuenta que compraste (caída, clave cambiada, etc.). Acepta JSON o
+        <code>multipart/form-data</code> con imagen (JPG/PNG/WEBP…, máx. 15 MB). La foto acelera la revisión.</p>
+<pre>curl -X POST "{{ base_url }}/store/issues/" \
+  -H "Authorization: Bearer &lt;access&gt;" \
+  -F "account_id=501" \
+  -F "issue=No deja iniciar sesión, pide cambiar la contraseña" \
+  -F "status_label=caida o suspendida" \
+  -F "image=@captura.jpg"
+
+→ {"data": {"reported": true, "account_id": 501, "photo": {"photo_id": 88, "status": "open"},
+            "note": "El reporte quedó registrado y el administrador fue notificado."}}</pre>
+      <p>También puedes identificar la cuenta por <code>email</code> en lugar de <code>account_id</code>.</p>
+      <p><span class="verb get">GET</span><span class="ep">/store/issues/</span> — tus reportes con su estado
+        (<code>open</code>, <code>closed</code>) y la respuesta del proveedor cuando exista.</p>
+    </div>
+  </section>
+
+  <section id="codigos">
+    <h2>8 · Códigos (correo) <span class="live">EN VIVO</span></h2>
+    <div class="sec-body">
+      <p>Cada botón agrupa filtros y reglas internas que extraen lo que se entrega
+        (código, enlace, contraseña…). <strong>Solo se exponen los nombres</strong>: los filtros y regex son internos.
+        Tu usuario debe tener permiso sobre el correo consultado (igual que en la página de Códigos).</p>
+
+      <p><span class="verb get">GET</span><span class="ep">/codes/services/</span></p>
+      <p>Botones disponibles ahora ({{ services|length }}):</p>
+      <table>
+        <tr><th>ID</th><th>Nombre del botón</th></tr>
+        {% for s in services %}
+        <tr><td>{{ s.id }}</td><td>{{ s.name }}</td></tr>
+        {% else %}
+        <tr><td colspan="2" class="mut">No hay botones visibles ahora mismo.</td></tr>
+        {% endfor %}
+      </table>
+
+      <p><span class="verb post">POST</span><span class="ep">/codes/search/</span> —
+        acepta <code>service_id</code> o <code>service</code> (nombre exacto del botón).</p>
+<pre>curl -X POST "{{ base_url }}/codes/search/" \
+  -H "Authorization: Bearer &lt;access&gt;" -H "Content-Type: application/json" \
+  -d '{"service_id": {{ example_service.id }}, "email": "cliente@mail.com"}'
+
+→ {"data": {"service": {"id": {{ example_service.id }}, "name": "{{ example_service.name }}"},
+    "email": "cliente@mail.com", "found": true,
+    "result": {"type": "mail", "subject": "...", "from": "...", "date": "...",
+               "code": "482913",            // lo entregado: código, clave o enlace
+               "matches": ["482913"],       // todas las coincidencias
+               "text": "...", "html": "..." }}}
+
+// found = false → aún no llega el correo; reintenta después.</pre>
+    </div>
+  </section>
+
+  <section id="errores">
+    <h2>9 · Errores</h2>
+    <div class="sec-body">
+<pre>{"error": {"code": "purchase_failed", "message": "No hay suficientes existencias para «{{ example_product.name }}»…"}}</pre>
+      <table>
+        <tr><th>HTTP</th><th>code</th><th>Cuándo</th></tr>
+        <tr><td>400</td><td><code>bad_request</code> / <code>cart_limit</code> / <code>purchase_failed</code></td><td>Datos inválidos, carrito grande o compra rechazada</td></tr>
+        <tr><td>401</td><td><code>auth_required</code> / <code>invalid_credentials</code> / <code>token_expired</code> / <code>token_invalid</code></td><td>Problemas de autenticación</td></tr>
+        <tr><td>403</td><td><code>forbidden</code> / <code>ip_not_allowed</code></td><td>Sin permiso o IP fuera de la lista blanca</td></tr>
+        <tr><td>404</td><td><code>not_found</code></td><td>Producto, botón o cuenta inexistente</td></tr>
+        <tr><td>429</td><td><code>rate_limited</code> / <code>checkout_busy</code></td><td>Límites de uso</td></tr>
+        <tr><td>503</td><td><code>api_disabled</code></td><td>API apagada por el administrador</td></tr>
+      </table>
+      <p class="mut">Generada: {{ generated_at.strftime('%Y-%m-%d %H:%M') }} UTC · Los datos de productos y botones se leen de la base de datos en cada visita.</p>
+    </div>
+  </section>
+</div>
+
+{% if is_admin %}
+<script>
+(function () {
+  'use strict';
+  var csrf = (document.querySelector('meta[name="csrf_token"]') || {}).content || '';
+  var base = document.getElementById('baseUrl').textContent.trim();
+  var chk = document.getElementById('apiEnabledChk');
+  var listEl = document.getElementById('ipList');
+  var input = document.getElementById('ipInput');
+  var addBtn = document.getElementById('ipAddBtn');
+  var saveBtn = document.getElementById('saveBtn');
+  var msg = document.getElementById('saveMsg');
+  var ips = [];
+
+  function renderIps() {
+    listEl.innerHTML = '';
+    if (!ips.length) {
+      listEl.innerHTML = '<span class="mut">Lista vacía: se acepta cualquier IP.</span>';
+      return;
+    }
+    ips.forEach(function (ip, i) {
+      var span = document.createElement('span');
+      span.className = 'ip-item';
+      var txt = document.createElement('span');
+      txt.textContent = ip;
+      var del = document.createElement('button');
+      del.type = 'button';
+      del.textContent = '×';
+      del.title = 'Quitar ' + ip;
+      del.addEventListener('click', function () { ips.splice(i, 1); renderIps(); });
+      span.appendChild(txt);
+      span.appendChild(del);
+      listEl.appendChild(span);
+    });
+  }
+
+  function setMsg(text, ok) {
+    msg.textContent = text;
+    msg.style.color = ok ? '#86efac' : '#fca5a5';
+    if (text) { setTimeout(function () { msg.textContent = ''; }, 4000); }
+  }
+
+  function load() {
+    fetch(base + '/admin/settings/', { credentials: 'same-origin' })
+      .then(function (r) { return r.json(); })
+      .then(function (j) {
+        var d = (j && j.data) || {};
+        ips = d.ip_whitelist || [];
+        chk.checked = !!d.enabled;
+        document.getElementById('clientIp').textContent = d.client_ip || '?';
+        renderIps();
+      })
+      .catch(function () { setMsg('No se pudo cargar la configuración', false); });
+  }
+
+  addBtn.addEventListener('click', function () {
+    var v = (input.value || '').trim();
+    if (!v) { return; }
+    if (ips.indexOf(v) === -1) { ips.push(v); }
+    input.value = '';
+    renderIps();
+  });
+  input.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') { e.preventDefault(); addBtn.click(); }
+  });
+
+  saveBtn.addEventListener('click', function () {
+    saveBtn.disabled = true;
+    fetch(base + '/admin/settings/', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf },
+      body: JSON.stringify({ enabled: chk.checked, ip_whitelist: ips })
+    })
+      .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+      .then(function (res) {
+        saveBtn.disabled = false;
+        if (res.ok && res.j.data) {
+          ips = res.j.data.ip_whitelist || [];
+          renderIps();
+          setMsg('Guardado', true);
+        } else {
+          setMsg((res.j.error && res.j.error.message) || 'Error al guardar', false);
+        }
+      })
+      .catch(function () { saveBtn.disabled = false; setMsg('Error de conexión', false); });
+  });
+
+  renderIps();
+  load();
+})();
+</script>
+{% endif %}
+</body>
+</html>

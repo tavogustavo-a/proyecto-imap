@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
+import json
 import logging
-from collections import defaultdict
 from datetime import date, datetime, time
 from typing import Any
 
@@ -397,6 +397,330 @@ def _list_proveedor_daily_summaries_for_user(
             }
         )
     return items_out
+
+
+def _co_date_utc_bounds(co_date: date) -> tuple[datetime, datetime]:
+    """Inicio/fin UTC (naive) del día calendario Colombia."""
+    from app.utils.timezone import colombia_to_utc
+
+    start = colombia_to_utc(datetime.combine(co_date, time.min)).replace(tzinfo=None)
+    end = colombia_to_utc(datetime.combine(co_date, time(23, 59, 59))).replace(tzinfo=None)
+    return start, end
+
+
+def _proveedor_license_ids(user_row: User) -> set[int]:
+    saved = _normalize_services_map(
+        (user_row.user_prices if isinstance(user_row.user_prices, dict) else {}).get(
+            'proveedor_services'
+        )
+    )
+    out: set[int] = set()
+    for key in saved:
+        try:
+            lid = int(key)
+        except (TypeError, ValueError):
+            continue
+        if lid > 0:
+            out.add(lid)
+    return out
+
+
+def _license_product_names(license_ids: set[int]) -> dict[int, str]:
+    from app.store.models import License
+    from sqlalchemy.orm import joinedload
+
+    if not license_ids:
+        return {}
+    names: dict[int, str] = {}
+    rows = (
+        License.query.options(joinedload(License.product))
+        .filter(License.id.in_(list(license_ids)))
+        .all()
+    )
+    for lic in rows:
+        prod = getattr(lic, 'product', None)
+        names[int(lic.id)] = (prod.name if prod else None) or ('Licencia #%s' % lic.id)
+    return names
+
+
+def _parse_activity_items(raw) -> list[dict]:
+    if not str(raw or '').strip():
+        return []
+    try:
+        lst = json.loads(raw) if not isinstance(raw, list) else raw
+    except Exception:
+        return []
+    return [x for x in lst if isinstance(x, dict)] if isinstance(lst, list) else []
+
+
+def _cred_hint_from_refund(row) -> str:
+    line = str(getattr(row, 'removed_day_line', None) or '').strip()
+    if line:
+        first = line.split('\n', 1)[0].strip()
+        first = first.split('\x1f', 1)[0].strip()
+        return first[:180]
+    return ''
+
+
+def build_proveedor_day_review(user_row: User, co_date: date) -> dict[str, Any]:
+    """Resumen rápido de un proveedor interno en un día Colombia (historial).
+
+    Ventas: resumen diario persistido (si existe) o recuento de ventas a terceros.
+    Garantías: entregas ``garantia_entrega`` de servicios de ese proveedor.
+    Reembolsos: devoluciones de cuentas de esos mismos servicios.
+    """
+    from app.store.models import LicenseAccountRefund, Product, Sale, SalePurchaseSnapshot
+    from app.store.purchase_history_stats import (
+        _currency_from_user_row,
+        _product_ids_for_proveedor_users,
+        _sale_counts_as_proveedor_sale,
+    )
+
+    license_ids = _proveedor_license_ids(user_row)
+    names = _license_product_names(license_ids)
+    date_key = co_date.isoformat()
+    start_utc, end_utc = _co_date_utc_bounds(co_date)
+
+    ventas = 0
+    renovaciones = 0
+    totals = {'COP': 0.0, 'USD': 0.0}
+    products: list[dict[str, Any]] = []
+
+    summaries = _summaries_map(user_row)
+    day = summaries.get(date_key) if isinstance(summaries.get(date_key), dict) else None
+    from_summary = False
+    if day and int(day.get('qty') or 0) > 0:
+        from_summary = True
+        ventas = int(day.get('qty') or 0)
+        day_totals = day.get('totals') if isinstance(day.get('totals'), dict) else {}
+        for cur in ('COP', 'USD'):
+            try:
+                totals[cur] = float(day_totals.get(cur) or 0)
+            except (TypeError, ValueError):
+                totals[cur] = 0.0
+        raw_products = day.get('products') if isinstance(day.get('products'), dict) else {}
+        for key, pdata in sorted(
+            raw_products.items(),
+            key=lambda x: (-float((x[1] or {}).get('total') or 0), x[0].lower()),
+        ):
+            if not isinstance(pdata, dict):
+                continue
+            parts = str(key).rsplit('|', 1)
+            pname = parts[0] if parts else 'Producto'
+            cur = parts[1] if len(parts) > 1 else 'COP'
+            qty = int(pdata.get('ventas') or 0)
+            ren = int(pdata.get('renovaciones') or 0)
+            renovaciones += ren
+            products.append(
+                {
+                    'producto': pname,
+                    'moneda': cur,
+                    'ventas': qty,
+                    'renovaciones': ren,
+                    'total': round(float(pdata.get('total') or 0), 2),
+                }
+            )
+
+    if not from_summary and license_ids:
+        product_ids = _product_ids_for_proveedor_users([user_row])
+        by_product: dict[tuple[str, str], dict] = {}
+        if product_ids:
+            sales_list = Sale.query.filter(
+                Sale.created_at >= start_utc,
+                Sale.created_at <= end_utc,
+                Sale.product_id.in_(list(product_ids)),
+            ).all()
+            snaps_list = SalePurchaseSnapshot.query.filter(
+                SalePurchaseSnapshot.purged_from_sales.is_(True),
+                SalePurchaseSnapshot.sale_created_at >= start_utc,
+                SalePurchaseSnapshot.sale_created_at <= end_utc,
+                SalePurchaseSnapshot.product_id.in_(list(product_ids)),
+            ).all()
+            active_sale_ids = {s.id for s in Sale.query.with_entities(Sale.id).all()}
+            product_names = {
+                int(p.id): p.name
+                for p in Product.query.filter(Product.id.in_(list(product_ids))).all()
+            }
+
+            def _add_sale(buyer_id, product_id, amount, is_ren, pname, currency):
+                nonlocal ventas, renovaciones
+                if not _sale_counts_as_proveedor_sale(buyer_id, product_id, user_row.id):
+                    return
+                cur = str(currency or '').strip().upper()
+                if cur not in ('COP', 'USD'):
+                    buyer = User.query.get(int(buyer_id)) if buyer_id else None
+                    cur = _currency_from_user_row(buyer)
+                amt = float(amount or 0)
+                ventas += 1
+                if is_ren:
+                    renovaciones += 1
+                totals[cur] = totals.get(cur, 0.0) + amt
+                bucket = by_product.setdefault(
+                    (pname, cur),
+                    {'ventas': 0, 'renovaciones': 0, 'total': 0.0},
+                )
+                bucket['ventas'] += 1
+                if is_ren:
+                    bucket['renovaciones'] += 1
+                bucket['total'] += amt
+
+            for sale in sales_list:
+                pname = product_names.get(int(sale.product_id or 0)) or (
+                    'Producto #%s' % sale.product_id
+                )
+                _add_sale(
+                    sale.user_id,
+                    sale.product_id,
+                    sale.total_price,
+                    bool(getattr(sale, 'is_renewal', False)),
+                    pname,
+                    getattr(sale, 'currency', None),
+                )
+            for snap in snaps_list:
+                if snap.sale_id and snap.sale_id in active_sale_ids:
+                    continue
+                _add_sale(
+                    snap.user_id,
+                    snap.product_id,
+                    snap.total_price,
+                    bool(getattr(snap, 'is_renewal', False)),
+                    snap.product_name or '—',
+                    getattr(snap, 'currency', None),
+                )
+            products = [
+                {
+                    'producto': k[0],
+                    'moneda': k[1],
+                    'ventas': v['ventas'],
+                    'renovaciones': v['renovaciones'],
+                    'total': round(v['total'], 2),
+                }
+                for k, v in sorted(by_product.items(), key=lambda x: -x[1]['total'])
+            ]
+
+    garantias: list[dict[str, Any]] = []
+    if license_ids:
+        users = User.query.filter(
+            User.portal_license_activity_log.like('%garantia_entrega%')
+        ).all()
+        seen: set[tuple] = set()
+        for urow in users:
+            for item in _parse_activity_items(
+                getattr(urow, 'portal_license_activity_log', None)
+            ):
+                if str(item.get('tipo') or '').strip().lower() != 'garantia_entrega':
+                    continue
+                ts_raw = item.get('ts')
+                if not ts_raw:
+                    continue
+                try:
+                    ts = datetime.fromisoformat(str(ts_raw).replace('Z', '')[:26])
+                    item_co = utc_to_colombia(ts).date()
+                except Exception:
+                    continue
+                if item_co != co_date:
+                    continue
+                extra = item.get('extra') if isinstance(item.get('extra'), dict) else {}
+                try:
+                    lid = int(extra.get('license_id') or 0)
+                except (TypeError, ValueError):
+                    lid = 0
+                if lid not in license_ids:
+                    continue
+                old_cred = str(extra.get('old_cred') or '').strip()
+                new_cred = str(extra.get('new_cred') or '').strip()
+                if (not old_cred or not new_cred) and item.get('detail'):
+                    parts = [
+                        p.strip()
+                        for p in str(item.get('detail') or '').split(
+                            '\nse dio garantia por esta\n'
+                        )
+                    ]
+                    if len(parts) == 2:
+                        old_cred = old_cred or parts[0]
+                        new_cred = new_cred or parts[1]
+                pname = (
+                    str(extra.get('product_name') or '').strip()
+                    or names.get(lid)
+                    or 'Producto'
+                )
+                key = (lid, old_cred, new_cred)
+                if key in seen:
+                    continue
+                seen.add(key)
+                garantias.append(
+                    {
+                        'producto': pname,
+                        'cuenta': old_cred[:180],
+                        'repuesto': new_cred[:180],
+                    }
+                )
+
+    reembolsos: list[dict[str, Any]] = []
+    refund_totals = {'COP': 0.0, 'USD': 0.0}
+    if license_ids:
+        try:
+            refund_rows = (
+                LicenseAccountRefund.query.filter(
+                    LicenseAccountRefund.license_id.in_(list(license_ids)),
+                    LicenseAccountRefund.created_at >= start_utc,
+                    LicenseAccountRefund.created_at <= end_utc,
+                )
+                .order_by(LicenseAccountRefund.created_at.asc())
+                .all()
+            )
+        except Exception:
+            refund_rows = []
+        for row in refund_rows:
+            try:
+                amount = float(row.refund_amount or 0)
+            except (TypeError, ValueError):
+                amount = 0.0
+            cur = str(row.currency or 'COP').strip().upper() or 'COP'
+            if cur not in refund_totals:
+                refund_totals[cur] = 0.0
+            refund_totals[cur] += amount
+            days = max(
+                0,
+                int(
+                    getattr(row, 'returned_days', None)
+                    or getattr(row, 'refunded_days', None)
+                    or 0
+                ),
+            )
+            lid = int(row.license_id or 0)
+            reembolsos.append(
+                {
+                    'producto': str(row.product_name or names.get(lid) or 'Licencia'),
+                    'cuenta': _cred_hint_from_refund(row),
+                    'dias': days,
+                    'moneda': cur,
+                    'total': round(amount, 2),
+                }
+            )
+
+    return {
+        'date': date_key,
+        'user_id': int(user_row.id),
+        'username': (user_row.username or '').strip() or str(user_row.id),
+        'from_summary': from_summary,
+        'ventas': ventas,
+        'renovaciones': renovaciones,
+        'garantias': len(garantias),
+        'reembolsos': len(reembolsos),
+        'ingresos': {
+            'COP': round(totals.get('COP') or 0, 2),
+            'USD': round(totals.get('USD') or 0, 2),
+        },
+        'reembolsos_monto': {
+            'COP': round(refund_totals.get('COP') or 0, 2),
+            'USD': round(refund_totals.get('USD') or 0, 2),
+        },
+        'productos': products,
+        'garantias_detalle': garantias,
+        'reembolsos_detalle': reembolsos,
+        'summary_text': str((day or {}).get('summary_text') or '').strip() if day else '',
+    }
 
 
 def build_proveedor_sales_daily_summary_items(

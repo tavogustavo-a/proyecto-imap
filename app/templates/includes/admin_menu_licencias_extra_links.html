@@ -15,10 +15,12 @@
 </button>
 <button id="btnSaldoClientes" type="button" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-balance-scale-right"></i> Saldo clientes</button>
 <button id="btnAdminLicenciasNotificaciones" type="button" class="btn-panel btn-blue mobile-menu-btn mb-04" title="Preferencias de avisos por tipo, vibrar y sonar" aria-haspopup="dialog" aria-controls="adminLicenciasNotificacionesModal"><i class="fas fa-bell" aria-hidden="true"></i> Notificaciones</button>
+<a href="{{ url_for('partner_api_bp.partner_api_docs') }}" class="btn-panel btn-blue mobile-menu-btn mb-04" title="Documentación en vivo y seguridad de la API pública (tienda y códigos)"><i class="fas fa-book" aria-hidden="true"></i> Documentación API</a>
 {% else %}
 <a href="{{ _admin_lic_url }}?open=gestionar-productos" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-list"></i> Gestionar Productos</a>
 <a href="{{ url_for('store_bp.admin_archivados') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-archive"></i> Archivados <span id="archivadosCount">({{ admin_archivados_count | default(0) }})</span></a>
 <a href="{{ _admin_lic_url }}?open=renovar-dia" class="btn-panel btn-blue mobile-menu-btn mb-04" title="Cobra renovaciones del día (Colombia) y mueve vencidas a Cambios o Vencidas"><i class="fas fa-calendar-check" aria-hidden="true"></i> Renovar día (manual)</a>
 <a href="{{ _admin_lic_url }}?open=saldo-clientes" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-balance-scale-right"></i> Saldo clientes</a>
 <a href="{{ _admin_lic_url }}?open=notificaciones" class="btn-panel btn-blue mobile-menu-btn mb-04" title="Preferencias de avisos por tipo, vibrar y sonar"><i class="fas fa-bell" aria-hidden="true"></i> Notificaciones</a>
+<a href="{{ url_for('partner_api_bp.partner_api_docs') }}" class="btn-panel btn-blue mobile-menu-btn mb-04" title="Documentación en vivo y seguridad de la API pública (tienda y códigos)"><i class="fas fa-book" aria-hidden="true"></i> Documentación API</a>
 {% endif %}

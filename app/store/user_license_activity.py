@@ -1310,6 +1310,15 @@ def portal_log_status_changes(
                 calendar_day=calendar_day,
                 detail=otro_use.strip() if otro_use else '',
             )
+            _request_mp_report_photo(
+                viewer_user_row,
+                license_id=license_id,
+                calendar_day=calendar_day,
+                row_ordinal=row_ordinal,
+                account_id=account_id,
+                cred_hint=cred_short,
+                status_label=portal_bad_label_readable(canon_sb),
+            )
         elif canon_sb.strip():
             det = otro_use.strip() if nk_new_sb == normalize_status_key('otro') else ''
             label = portal_bad_label_readable(canon_sb)
@@ -1334,6 +1343,15 @@ def portal_log_status_changes(
                 calendar_day=calendar_day,
                 detail=det or label,
             )
+            _request_mp_report_photo(
+                viewer_user_row,
+                license_id=license_id,
+                calendar_day=calendar_day,
+                row_ordinal=row_ordinal,
+                account_id=account_id,
+                cred_hint=cred_short,
+                status_label=label,
+            )
         elif old_sb:
             append_portal_license_activity_record(
                 viewer_user_row,
@@ -1343,6 +1361,19 @@ def portal_log_status_changes(
                 detail=None,
                 extra=ctx,
             )
+            try:
+                from app.store.license_report_photos import close_report_photos_for_row
+
+                close_report_photos_for_row(
+                    license_id,
+                    calendar_day=calendar_day,
+                    row_ordinal=row_ordinal,
+                    account_id=account_id,
+                    cred_hint=cred_short,
+                    reason='incidencia_limpia',
+                )
+            except Exception:
+                pass
 
     # Renovación / no renovar — columna verde (garantía lleva tipo aparte)
     nk_no_renovar = normalize_status_key('no renovar')
@@ -1382,6 +1413,33 @@ def portal_log_status_changes(
                 detail=None,
                 extra=ctx,
             )
+
+
+def _request_mp_report_photo(
+    viewer_user_row: Any,
+    *,
+    license_id: int,
+    calendar_day: int,
+    row_ordinal: int,
+    account_id: Optional[int],
+    cred_hint: str,
+    status_label: str,
+) -> None:
+    """Si la cuenta es del proveedor externo, pide foto al cliente (sin nombrar al proveedor)."""
+    try:
+        from app.store.license_report_photos import request_photo_if_mp_account
+
+        request_photo_if_mp_account(
+            license_id=license_id,
+            calendar_day=calendar_day,
+            row_ordinal=row_ordinal,
+            account_id=account_id,
+            cred_hint=cred_hint,
+            status_label=status_label,
+            reporter_user=viewer_user_row,
+        )
+    except Exception:
+        pass
 
 
 def _notify_admin_portal_report(

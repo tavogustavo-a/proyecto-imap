@@ -4352,6 +4352,19 @@ function setupAdminLicenciasReportes() {
                     ' aria-label="Copiar cuenta">' +
                     '<i class="fas fa-copy" aria-hidden="true"></i>' +
                     '</button>' +
+                    /* Foto adjunta al reporte (solo entradas de un día concreto) */
+                    (row.origin === 'day' && Number.isFinite(row.licenseId) && row.dayNum != null
+                        ? '<label class="lic-report-photo-btn"' +
+                          ' data-photo-license-id="' + row.licenseId + '"' +
+                          ' data-photo-day="' + row.dayNum + '"' +
+                          ' data-photo-ordinal="' + (row.badRowIndex >= 0 ? row.badRowIndex : '') + '"' +
+                          ' data-photo-cred="' + encodeURIComponent(row.cuenta || '') + '"' +
+                          ' data-photo-status="' + adminLicenseEscapeReportesHtml(row.status || '') + '"' +
+                          ' title="Foto del reporte (ver o subir)" aria-label="Foto del reporte">' +
+                          '<i class="fas fa-camera" aria-hidden="true"></i>' +
+                          '<input type="file" class="lic-report-photo-input" accept="image/jpeg,image/png,image/webp,image/gif,image/bmp,image/heic,.jpg,.jpeg,.png,.webp,.gif,.bmp,.heic" tabindex="-1" aria-hidden="true">' +
+                          '</label>'
+                        : '') +
                     '</div>' +
                     '</td>' +
                     '<td class="admin-licencias-reportes-col-user">' +
@@ -19494,20 +19507,11 @@ function changesLicenseSplitAutosizeCreds(root) {
     const cs0 = window.getComputedStyle(ta);
     const linePx = adminLicSplitParseLineHeightPx(cs0);
     const padY = (parseFloat(cs0.paddingTop) || 0) + (parseFloat(cs0.paddingBottom) || 0);
-    const estimateByLines = linePx * credLines.length + padY;
+    const estimateByLines = linePx * Math.max(1, credLines.length) + padY;
+    const rowsH = rowsEl ? Math.max(rowsEl.offsetHeight, rowsEl.scrollHeight) : 0;
 
     ta.style.minHeight = '0';
-    ta.style.height = '0px';
-    const naturalScroll = ta.scrollHeight;
-    ta.style.minHeight = '';
-    ta.style.height = '';
-
-    const cs = window.getComputedStyle(ta);
-    let minPx = parseFloat(cs.minHeight);
-    if (Number.isNaN(minPx)) minPx = 20;
-    const contentH = Math.max(naturalScroll + 2, estimateByLines);
-    const h = Math.max(minPx, contentH);
-    ta.style.height = Math.ceil(h) + 'px';
+    ta.style.height = Math.ceil(rowsH > 0 ? rowsH : estimateByLines) + 'px';
     licenseSplitSyncCredsTaContentWidth(ta);
 }
 

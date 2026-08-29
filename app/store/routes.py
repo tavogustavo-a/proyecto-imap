@@ -1481,7 +1481,7 @@ def _record_portal_renewal_blocked_activity(
 USER_LIC_CADUCIDAD_VIEW_MAX_DAYS = 5
 
 # Cache bust único: Admin Licencias + portal /licencias (evita CSS/JS mezclados en producción).
-LICENCIAS_STATIC_VERSION = '20260807-day-restore-choice2'
+LICENCIAS_STATIC_VERSION = '20260829-user-no-side-line-9'
 
 
 def _billing_user_for_store_debt_limit(user_obj):
@@ -6246,7 +6246,10 @@ def _procesar_pago_core():
                 seen_ren_val.add(aid)
                 acc = LicenseAccount.query.get(aid)
                 em = (getattr(acc, 'email', None) or '').strip() if acc else ''
-                if not acc or not _renewal_account_available_for_user(acc, user.id):
+                if not acc or not (
+                    _renewal_account_available_for_user(acc, user.id)
+                    or _mp_renewal_account_for_user(acc, user.id)
+                ):
                     renovacion_perdidas.append(
                         {
                             'account_id': aid,
@@ -6374,6 +6377,11 @@ def _procesar_pago_core():
     asignadas_por_producto = defaultdict(int)
     sold_bloc_moves = []
     checkout_sale_ids = []
+    # Proveedor Multiplataforma (API externa): las compras y solicitudes de
+    # renovación se recolectan aquí y se ejecutan AL FINAL (una sola llamada
+    # atómica), cuando el resto del pedido ya quedó validado y asignado.
+    mp_pending_purchases = []
+    mp_pending_renewals = []
     proveedor_sales_by_license = defaultdict(int)
     # Ventas tomadas del inventario de un proveedor concreto: (user_id, license_id) -> qty
     proveedor_sales_by_provider_license = defaultdict(int)
@@ -6549,6 +6557,32 @@ def _procesar_pago_core():
                                 ),
                             }
                         ), 400
+                    if _mp_renewal_account_for_user(account, user.id):
+                        # Cuenta comprada al proveedor Multiplataforma: la
+                        # renovación es una SOLICITUD a la API. Se valida ya
+                        # (si no se puede, se aborta sin cobrar) y se envía al
+                        # final del checkout, cuando todo lo demás esté listo.
+                        from app.store.multiplataforma_fulfillment import (
+                            MpPurchaseClientError,
+                            mp_validate_renewal,
+                        )
+
+                        try:
+                            mp_ren_options = mp_validate_renewal(account, producto)
+                        except MpPurchaseClientError as mp_exc:
+                            db.session.rollback()
+                            return jsonify(
+                                {'success': False, 'error': str(mp_exc)}
+                            ), 409
+                        mp_pending_renewals.append(
+                            {
+                                'account': account,
+                                'producto': producto,
+                                'options': mp_ren_options,
+                            }
+                        )
+                        cuentas_asignadas_producto += 1
+                        continue
                     if not _renewal_account_available_for_user(account, user.id):
                         db.session.rollback()
                         em = (account.email or '').strip() or 'cuenta'
@@ -6746,6 +6780,35 @@ def _procesar_pago_core():
                     if not took_from_provider:
                         break
 
+            # Respaldo final: proveedor Multiplataforma (API externa). Solo se
+            # PREPARA aquí, después de agotar TODO lo interno (stock propio de
+            # todas las licencias del producto y proveedores internos; la
+            # reserva de garantía no se vende) y si el plan está vinculado. La
+            # compra real se ejecuta al final del checkout en una sola llamada
+            # atómica, para no dejar pagos hechos si otro producto falla.
+            if cuentas_asignadas_producto < cuentas_necesarias:
+                from app.store.multiplataforma_fulfillment import (
+                    MpPurchaseClientError,
+                    mp_prepare_shortfall,
+                )
+
+                for license in licenses:
+                    if cuentas_asignadas_producto >= cuentas_necesarias:
+                        break
+                    try:
+                        mp_item = mp_prepare_shortfall(
+                            license,
+                            producto,
+                            venta,
+                            cuentas_necesarias - cuentas_asignadas_producto,
+                        )
+                    except MpPurchaseClientError as mp_exc:
+                        db.session.rollback()
+                        return jsonify({'success': False, 'error': str(mp_exc)}), 409
+                    if mp_item:
+                        mp_pending_purchases.append(mp_item)
+                        cuentas_asignadas_producto += int(mp_item['quantity'])
+
             asignadas_por_producto[producto.id] += cuentas_asignadas_producto
 
         for _pid, _need in cantidad_por_producto.items():
@@ -6762,6 +6825,30 @@ def _procesar_pago_core():
                         ),
                     }
                 ), 409
+
+        # Proveedor Multiplataforma: con TODO el pedido ya validado y asignado
+        # internamente, se envían las solicitudes de renovación y se compra el
+        # faltante en una sola llamada atómica (todo o nada). Si algo falla,
+        # el checkout completo se revierte y el cliente no paga.
+        if mp_pending_renewals or mp_pending_purchases:
+            from app.store.multiplataforma_fulfillment import (
+                MpPurchaseClientError,
+                mp_execute_pending_purchases,
+                mp_execute_pending_renewals,
+            )
+
+            try:
+                if mp_pending_renewals:
+                    mp_execute_pending_renewals(
+                        mp_pending_renewals, user, cuentas_asignadas
+                    )
+                if mp_pending_purchases:
+                    mp_execute_pending_purchases(
+                        mp_pending_purchases, user, sold_bloc_moves, cuentas_asignadas
+                    )
+            except MpPurchaseClientError as mp_exc:
+                db.session.rollback()
+                return jsonify({'success': False, 'error': str(mp_exc)}), 409
 
         _apply_public_checkout_bloc_moves_to_licenses(sold_bloc_moves)
 
@@ -6787,6 +6874,20 @@ def _procesar_pago_core():
         user.saldo_cop = round(float(user.saldo_cop or 0) - total_cop, 2)
         user.saldo_usd = round(float(user.saldo_usd or 0) - total_usd, 2)
         db.session.commit()
+
+        # Aviso proactivo: si tras comprar al proveedor Multiplataforma el
+        # saldo del vendedor quedó bajo el umbral, notificar a los admins.
+        if mp_pending_purchases:
+            try:
+                from app.store.multiplataforma_fulfillment import (
+                    check_low_balance_and_notify,
+                )
+
+                check_low_balance_and_notify()
+            except Exception:
+                current_app.logger.debug(
+                    'MP: chequeo de saldo bajo falló', exc_info=True
+                )
         _proveedor_finalize_checkout_license_sales(
             proveedor_sales_by_license,
             proveedor_daily_events,
@@ -7582,6 +7683,35 @@ def _renewal_release_stale_reservations():
     db.session.commit()
 
 
+def _mp_account_owned_by_user(account, user_id):
+    """Cuenta comprada al proveedor Multiplataforma y asignada a este usuario."""
+    if not account or not getattr(account, 'mp_sale_id', None):
+        return False
+    if (account.status or '').lower() != 'assigned':
+        return False
+    try:
+        return bool(user_id) and int(account.assigned_to_user_id or 0) == int(user_id)
+    except (TypeError, ValueError):
+        return False
+
+
+def _mp_renewal_account_for_user(account, user_id):
+    """Cuenta del proveedor Multiplataforma renovable por su dueño.
+
+    Es una cuenta ya asignada (comprada vía API, con mp_sale_id) del propio
+    usuario y cuyo plan admite renovación (solo Plex, Emby, Jellyfin e IPTV
+    cuenta completa): se renueva enviando una solicitud a la API.
+    """
+    if not _mp_account_owned_by_user(account, user_id):
+        return False
+    try:
+        from app.store.multiplataforma_fulfillment import mp_account_renewal_supported
+
+        return mp_account_renewal_supported(account)
+    except Exception:
+        return False
+
+
 def _renewal_account_available_for_user(account, user_id):
     """Disponible para renovación del usuario (available y sin reserva ajena)."""
     _renewal_release_stale_reservations()
@@ -7629,6 +7759,11 @@ def _renewal_reserve_accounts(user_id, account_ids):
         seen.add(aid)
         acc = LicenseAccount.query.get(aid)
         em = (getattr(acc, 'email', None) or '').strip() if acc else ''
+        if _mp_renewal_account_for_user(acc, user_id):
+            # Cuenta del proveedor Multiplataforma asignada al propio usuario:
+            # nadie más puede tomarla, no necesita reserva de stock.
+            reserved.append(aid)
+            continue
         if not acc or not _renewal_account_available_for_user(acc, user_id):
             failed.append(
                 {
@@ -7797,6 +7932,42 @@ def _lookup_store_renewal_accounts(emails):
                         'license_id': acc.license_id,
                     }
                 )
+            continue
+
+        # Cuentas del proveedor Multiplataforma asignadas a este usuario: se
+        # renuevan enviando una solicitud a la API (no reclaman stock). Solo
+        # Plex, Emby, Jellyfin e IPTV cuenta completa admiten renovación.
+        mp_own = [
+            r for r in rows if _mp_renewal_account_for_user(r, viewer_uid)
+        ]
+        if mp_own:
+            for acc in mp_own:
+                prod = acc.license.product
+                renewable.append(
+                    {
+                        'email': email,
+                        'account_id': acc.id,
+                        'product_id': prod.id,
+                        'product_name': prod.name,
+                        'license_id': acc.license_id,
+                    }
+                )
+            continue
+
+        mp_own_unsupported = [
+            r for r in rows if _mp_account_owned_by_user(r, viewer_uid)
+        ]
+        if mp_own_unsupported:
+            rejected.append(
+                {
+                    'email': email,
+                    'reason': 'mp_no_renewable',
+                    'message': (
+                        'Esta cuenta no admite renovación. Cuando venza, '
+                        'compra una cuenta nueva.'
+                    ),
+                }
+            )
             continue
 
         soldish = [r for r in rows if (r.status or '').lower() in ('assigned', 'sold')]

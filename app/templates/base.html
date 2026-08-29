@@ -19,6 +19,7 @@
   <meta name="archived-licenses-list-url" content="{{ url_for('store_bp.api_get_archived_licenses') }}">
   <meta name="admin-proveedor-sales-url" content="{{ url_for('store_bp.api_admin_proveedor_sales_stats_get') }}">
   <meta name="admin-proveedor-sales-reset-url" content="{{ url_for('store_bp.api_admin_proveedor_sales_stats_reset') }}">
+  <meta name="admin-proveedor-sales-day-url" content="{{ url_for('store_bp.api_admin_proveedor_sales_stats_day') }}">
   <link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/admin_proveedor_ventas_modal.css') }}?v={{ licencias_static_version }}">
   {% endif %}
 </head>
@@ -70,7 +71,7 @@
   {% if is_admin %}
   <script src="{{ url_for('static', filename='js/footer_social_links.js') }}?v=20260807-footer-apps" defer></script>
   <script src="{{ url_for('store_bp.static', filename='js/admin_archivados_menu_count.js') }}?v=20260622-archived-sse" defer></script>
-  <script src="{{ url_for('store_bp.static', filename='js/admin_proveedor_ventas_menu.js') }}?v=20260728-proveedor-renovar-v1" defer></script>
+  <script src="{{ url_for('store_bp.static', filename='js/admin_proveedor_ventas_menu.js') }}?v=20260828-proveedor-day-review" defer></script>
   {% endif %}
 
   {# Bloque para que las plantillas hijas puedan añadir sus propios scripts #}

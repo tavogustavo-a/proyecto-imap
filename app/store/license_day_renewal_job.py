@@ -616,6 +616,13 @@ def sync_expired_accounts_by_renewal_policy() -> Dict[str, Any]:
     """
     from app.store.models import License, LicenseAccount
 
+    try:
+        from app.store.routes_licencias import _ensure_license_account_mp_sale_id_column
+
+        _ensure_license_account_mp_sale_id_column()
+    except Exception:
+        pass
+
     now_utc = datetime.utcnow()
     lines_moved = 0
     license_ids: List[int] = []
@@ -639,6 +646,10 @@ def sync_expired_accounts_by_renewal_policy() -> Dict[str, Any]:
         expired_cur = (getattr(lic, 'expired_notes', None) or '').replace('\r\n', '\n')
         seen_changes = _cred_keys_in_bloc(changes_cur)
         seen_expired = _cred_keys_in_bloc(expired_cur)
+        # Caídas: destino de las cuentas del proveedor Multiplataforma vencidas.
+        suspended_cur = (getattr(lic, 'suspended_notes', None) or '').replace('\r\n', '\n')
+        seen_suspended = _cred_keys_in_bloc(suspended_cur)
+        suspended_touched = False
         day_map = _load_day_map(lic)
         lic_touched = False
 
@@ -680,6 +691,51 @@ def sync_expired_accounts_by_renewal_policy() -> Dict[str, Any]:
                 continue
 
             green, day_key_hit, _line_hit, _dual_hit = _find_green_for_account(lic, acc, day_map)
+
+            if getattr(acc, 'mp_sale_id', None):
+                # Con solicitud de renovación en revisión: esperar la
+                # respuesta del proveedor antes de moverla a Caídas.
+                try:
+                    from app.store.multiplataforma_fulfillment import (
+                        mp_account_has_pending_renewal,
+                    )
+
+                    if mp_account_has_pending_renewal(acc.id):
+                        continue
+                except Exception:
+                    pass
+                # Cuenta comprada al proveedor Multiplataforma: al vencer
+                # siempre sale del día y pasa a Caídas con nota «vencida»
+                # (así se distinguen de las cuentas propias).
+                from app.store.user_license_line_parse import (
+                    user_visible_notes_from_extra as _mp_notes_from_extra,
+                )
+
+                mp_notes = 'vencida'
+                if _dual_hit:
+                    prev = _mp_notes_from_extra(str(_dual_hit.get('extra') or ''))
+                    prev = (prev or '').strip()
+                    if prev and 'vencida' not in prev.lower():
+                        mp_notes = 'vencida | ' + prev
+                mp_uname = _username_for_account(acc)
+                mp_ln = _build_storage_line(cred, mp_uname, '', '', mp_notes)
+                if mp_ln and cred_k not in seen_suspended:
+                    suspended_cur = _append_bloc_line(suspended_cur, mp_ln)
+                    seen_suspended.add(cred_k)
+                    suspended_touched = True
+                    lines_moved += 1
+                    _log_moved_to_bloc_for_dual(
+                        lic,
+                        _dual_hit or {'cred': cred, 'user': mp_uname},
+                        destination='vencidas',
+                        reason='Cuenta del proveedor vencida (pasó a Caídas).',
+                        account_id=int(getattr(acc, 'id', 0) or 0) or None,
+                    )
+                if day_key_hit:
+                    _remove_line_from_day_map(day_map, cred_k, day_key_hit)
+                lic_touched = True
+                continue
+
             if not _green_exits_day_bloc_on_renewal_close(green):
                 continue
 
@@ -732,6 +788,8 @@ def sync_expired_accounts_by_renewal_policy() -> Dict[str, Any]:
                 lic.expired_notes = expired_cur.strip(BLOC_WS)
             else:
                 lic.expired_notes = expired_cur.strip(BLOC_WS)
+            if suspended_touched:
+                lic.suspended_notes = suspended_cur.strip(BLOC_WS)
             lic.day_notepads_json = json.dumps(day_map, ensure_ascii=False) if day_map else None
             lic.updated_at = now_utc
             license_ids.append(int(lic.id))
@@ -831,6 +889,22 @@ def _try_renew_line(
     if not acc:
         return False, 'cuenta_no_encontrada'
 
+    # Cuentas compradas al proveedor Multiplataforma: el verde solo aplica a
+    # planes renovables (Plex/Emby/Jellyfin/IPTV cuenta completa). En el resto
+    # se ignora sin cobrar (la renovación manual del proveedor crea conflictos).
+    mp_supported = False
+    if getattr(acc, 'mp_sale_id', None):
+        try:
+            from app.store.multiplataforma_fulfillment import (
+                mp_account_renewal_supported,
+            )
+
+            mp_supported = mp_account_renewal_supported(acc)
+        except Exception:
+            mp_supported = False
+        if not mp_supported:
+            return False, 'mp_no_renovable'
+
     username = str(dual.get('user') or '').strip() or 'anonimo'
     charged, charge_msg = _charge_one_month_debt(lic, username, acc=acc)
     if not charged:
@@ -860,6 +934,45 @@ def _try_renew_line(
         )
     _extend_account_one_month(acc, now_utc, lic)
     _log_auto_renewal_activity(acc, lic, dual)
+
+    # Cuenta del proveedor Multiplataforma renovable: además del cobro local,
+    # enviar la solicitud de renovación a la API (el job de renovaciones la
+    # sigue hasta que el proveedor la complete; si falla, avisa a los admins).
+    if mp_supported:
+        try:
+            from app.store.multiplataforma_fulfillment import (
+                mp_send_renewal_request_for_account,
+            )
+
+            product = getattr(lic, 'product', None)
+            ok_req, req_reason = mp_send_renewal_request_for_account(
+                acc,
+                product_name=getattr(product, 'name', '') or '',
+                user_id=int(getattr(acc, 'assigned_to_user_id', 0) or 0),
+            )
+            if not ok_req:
+                from app.store.store_event_notify import notify_admins_app
+
+                notify_admins_app(
+                    kind='admin_mp_renewal_result',
+                    title='Renovación automática sin enviar (Multiplataforma)',
+                    body=(
+                        'Se cobró la renovación de %s (%s) pero no se pudo '
+                        'enviar la solicitud al proveedor: %s. Revísala manualmente.'
+                        % (
+                            getattr(product, 'name', '') or 'producto',
+                            (acc.email or '').strip() or 'cuenta',
+                            req_reason or 'error desconocido',
+                        )
+                    ),
+                    payload={'url': '/tienda/admin'},
+                )
+        except Exception:
+            logger.exception(
+                'MP: no se pudo enviar renovación automática account_id=%s',
+                getattr(acc, 'id', None),
+            )
+
     _ = (renew_once, ym_tag, co_now, raw_line)
     return True, ''
 

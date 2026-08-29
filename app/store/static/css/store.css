@@ -6907,9 +6907,9 @@ select.license-split-editor__status-bad.license-split-editor__status--tier-soluc
       justify-content: center;
       color: #475569;
       font-size: 0.85rem;
-      margin-bottom: 1.25rem;
-      padding-bottom: 0.75rem;
-      border-bottom: 1px solid #e2e8f0;
+      margin-bottom: 0.35rem;
+      padding-bottom: 0;
+      border-bottom: none;
       width: 85%;
       margin-left: auto;
       margin-right: auto;
@@ -12104,7 +12104,7 @@ select.license-split-editor__status-bad.license-split-editor__status--tier-soluc
   }
 
   .admin-licencias-reportes-inner {
-    padding: 0.85rem 1rem 1.1rem;
+    padding: 0.85rem 0.35rem 1.1rem;
     box-sizing: border-box;
   }
 
@@ -12415,7 +12415,7 @@ select.license-split-editor__status-bad.license-split-editor__status--tier-soluc
     }
 
     .admin-licencias-reportes-inner {
-      padding: 0.65rem 0.75rem 0.9rem;
+      padding: 0.5rem 0.12rem 0.7rem;
     }
 
     .admin-licencias-reportes-hint {
@@ -12439,13 +12439,23 @@ select.license-split-editor__status-bad.license-split-editor__status--tier-soluc
 
     .admin-licencias-page .admin-licencias-reportes-panel table.admin-licencias-reportes-table thead th {
       font-size: 0.72rem !important;
-      padding: 0.4rem 0.5rem !important;
+      padding: 0.4rem 0.35rem !important;
       white-space: nowrap;
     }
 
     .admin-licencias-page .admin-licencias-reportes-panel table.admin-licencias-reportes-table tbody td {
       font-size: 0.82rem !important;
-      padding: 0.4rem 0.5rem !important;
+      padding: 0.4rem 0.35rem !important;
+    }
+
+    .admin-licencias-page .admin-licencias-reportes-panel table.admin-licencias-reportes-table thead th:first-child,
+    .admin-licencias-page .admin-licencias-reportes-panel table.admin-licencias-reportes-table tbody td:first-child {
+      padding-left: 0.28rem !important;
+    }
+
+    .admin-licencias-page .admin-licencias-reportes-panel table.admin-licencias-reportes-table thead th:last-child,
+    .admin-licencias-page .admin-licencias-reportes-panel table.admin-licencias-reportes-table tbody td:last-child {
+      padding-right: 0.28rem !important;
     }
 
     .admin-licencias-page .admin-licencias-reportes-table .admin-licencias-reportes-col-cuenta {
@@ -15552,12 +15562,12 @@ select.license-split-editor__status-bad.license-split-editor__status--tier-soluc
     /* Reducir tamaño de todos los botones de menú en pantallas pequeñas */
   /* ⭐ CONSOLIDADO: Responsive - Pantallas medianas */
   @media (max-width: 768px) {
-    .worksheet-panel #menuToggleBtn.menu-toggle-btn,
-    .worksheet-panel #menu2ToggleBtn.menu-toggle-btn,
+    .worksheet-panel:not(.admin-licencias-page) #menuToggleBtn.menu-toggle-btn,
+    .worksheet-panel:not(.admin-licencias-page) #menu2ToggleBtn.menu-toggle-btn,
     .worksheet-panel #menu3ToggleBtn.menu-toggle-btn,
     .worksheet-panel #menu4ToggleBtn.menu-toggle-btn,
-    .worksheet-panel #licensesCollapseBtn.menu-btn-worksheet,
-    .worksheet-panel #licensesDuplicatesBtn.menu-btn-worksheet {
+    .worksheet-panel:not(.admin-licencias-page) #licensesCollapseBtn.menu-btn-worksheet,
+    .worksheet-panel:not(.admin-licencias-page) #licensesDuplicatesBtn.menu-btn-worksheet {
       font-size: 22px !important;
     }
 
@@ -17859,7 +17869,7 @@ select.license-split-editor__status-bad.license-split-editor__status--tier-soluc
     }
     
     /* Reducir aún más el tamaño de todos los botones de menú en pantallas muy pequeñas */
-    .worksheet-panel #menu2ToggleBtn.menu-toggle-btn,
+    .worksheet-panel:not(.admin-licencias-page) #menu2ToggleBtn.menu-toggle-btn,
     .worksheet-panel #menu3ToggleBtn.menu-toggle-btn,
     .worksheet-panel #menu4ToggleBtn.menu-toggle-btn {
       font-size: 10px !important;
@@ -26180,15 +26190,20 @@ body .card.product-texture-bg::before,
 .admin-licencias-page.user-licencias-shell .productos-buscar-mostrar.productos-buscar-mostrar-centered {
   max-width: none !important;
   width: 100% !important;
-  margin: 0.15rem 0 0.55rem 0 !important;
+  margin: 0.15rem 0 0.75rem 0 !important;
   padding-left: 0.35rem;
   padding-right: 0.35rem;
   box-sizing: border-box;
   justify-content: stretch;
+  align-items: stretch !important;
+  height: auto !important;
 }
-.admin-licencias-page.user-licencias-shell .productos-buscar-mostrar-centered .search-container {
+.admin-licencias-page.user-licencias-shell .productos-buscar-mostrar-centered .search-container,
+.admin-licencias-page.user-licencias-shell.store-light .productos-buscar-mostrar .search-container {
   max-width: 100%;
   width: 100%;
+  height: auto !important;
+  min-height: 0 !important;
 }
 
 .user-licencias-table-wide-wrap {
@@ -26775,21 +26790,21 @@ body .card.product-texture-bg::before,
   align-items: center;
   justify-content: center;
   align-self: center;
-  width: 1.2rem;
-  min-width: 1.2rem;
-  max-width: 1.2rem;
-  height: 1.2rem;
-  min-height: 1.2rem;
-  max-height: 1.2rem;
+  width: 0.95rem;
+  min-width: 0.95rem;
+  max-width: 0.95rem;
+  height: 0.95rem;
+  min-height: 0.95rem;
+  max-height: 0.95rem;
   padding: 0;
   margin: 0;
   border: 1px solid rgba(56, 189, 248, 0.65);
-  border-radius: 0.18rem;
+  border-radius: 0.12rem;
   background: rgba(14, 165, 233, 0.22);
   color: #7dd3fc;
   cursor: pointer;
   line-height: 1;
-  font-size: 0.62rem;
+  font-size: 0.5rem;
   transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
   z-index: 2;
 }
@@ -26899,21 +26914,21 @@ body .card.product-texture-bg::before,
   align-items: center;
   justify-content: center;
   align-self: center;
-  width: 1.2rem;
-  min-width: 1.2rem;
-  max-width: 1.2rem;
-  height: 1.2rem;
-  min-height: 1.2rem;
-  max-height: 1.2rem;
+  width: 0.95rem;
+  min-width: 0.95rem;
+  max-width: 0.95rem;
+  height: 0.95rem;
+  min-height: 0.95rem;
+  max-height: 0.95rem;
   padding: 0;
   margin: 0;
   border: 1px solid rgba(251, 191, 36, 0.55);
-  border-radius: 0.18rem;
+  border-radius: 0.12rem;
   background: rgba(251, 191, 36, 0.16);
   color: #fbbf24;
   cursor: pointer;
   line-height: 1;
-  font-size: 0.62rem;
+  font-size: 0.5rem;
   transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
   z-index: 2;
 }
@@ -26925,6 +26940,71 @@ body .card.product-texture-bg::before,
 .admin-licencias-page.user-licencias-shell .user-lic-bundle-wrap .user-lic-warranty-history-btn:focus-visible {
   outline: 2px solid rgba(252, 211, 77, 0.85);
   outline-offset: 1px;
+}
+
+/* Cámara de reporte: el input file nativo nunca debe verse (solo el icono). */
+.lic-report-photo-btn {
+  position: relative;
+  overflow: hidden;
+}
+.lic-report-photo-btn .lic-report-photo-input,
+.lic-report-photo-modal-file .lic-report-photo-input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  opacity: 0 !important;
+  font-size: 0;
+  color: transparent;
+  -webkit-appearance: none;
+  appearance: none;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+.lic-report-photo-input::-webkit-file-upload-button {
+  display: none;
+  -webkit-appearance: none;
+}
+.lic-report-photo-input::file-selector-button {
+  display: none;
+}
+
+/* Cámara de reporte: mismo tamaño que el triángulo, pegada al select rojo. */
+.admin-licencias-page .license-notepads-wrap .license-split-editor__status-select-shell--bad,
+.admin-licencias-page.user-licencias-shell .user-lic-bundle-wrap .license-split-editor__status-select-shell--bad {
+  gap: 2px;
+  padding-left: 0.08rem;
+  padding-right: var(--lic-pad-x, 0.22rem);
+}
+.admin-licencias-page .license-notepads-wrap .lic-report-photo-btn,
+.admin-licencias-page.user-licencias-shell .user-lic-bundle-wrap .lic-report-photo-btn,
+.admin-licencias-reportes-cuenta-row .lic-report-photo-btn {
+  width: 1.15rem !important;
+  min-width: 1.15rem !important;
+  max-width: 1.15rem !important;
+  height: 1.15rem !important;
+  min-height: 1.15rem !important;
+  max-height: 1.15rem !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border-radius: 0.18rem;
+  font-size: 0.62rem !important;
+  align-self: center;
+}
+.admin-licencias-page .license-notepads-wrap .lic-report-photo-btn i,
+.admin-licencias-page.user-licencias-shell .user-lic-bundle-wrap .lic-report-photo-btn i,
+.admin-licencias-reportes-cuenta-row .lic-report-photo-btn i {
+  font-size: 0.62rem !important;
+  line-height: 1;
+}
+.admin-licencias-page .license-notepads-wrap .license-split-editor__status-select-shell--bad > .license-split-editor__status,
+.admin-licencias-page.user-licencias-shell .user-lic-bundle-wrap .license-split-editor__status-select-shell--bad > .license-split-editor__status {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin-right: 0;
 }
 
 .admin-licencias-page.user-licencias-shell .user-lic-bundle-wrap .user-lic-expiry-countdown {
@@ -27158,6 +27238,7 @@ body .card.product-texture-bg::before,
   width: auto !important;
   max-width: none;
   min-width: 0;
+  padding-right: 0;
   border-right: none !important;
 }
 
@@ -29574,6 +29655,9 @@ html.admin-licencias-license-support-mode .admin-licencias-shell #adminLicencias
 
 .mobile-menu-store .menu-user-info-row--name-only {
   margin-top: -0.05rem;
+  margin-bottom: 0.35rem;
+  padding-bottom: 0;
+  border-bottom: none;
 }
 
 /* --- Edición masiva (licencias admin): mismo aspecto que Todos / ojitos --- */
@@ -37404,13 +37488,18 @@ body.balance-recharge-qr-lightbox-open {
     max-width: 100%;
   }
 
-  .admin-licencias-page .productos-buscar-mostrar-centered {
+  .admin-licencias-page:not(.user-licencias-shell) .productos-buscar-mostrar-centered {
     max-width: 100% !important;
     margin: 0 auto !important;
     padding: 0 0.15rem;
   }
 
-  .admin-licencias-page .licencias-container {
+  .admin-licencias-page.user-licencias-shell .productos-buscar-mostrar.productos-buscar-mostrar-centered {
+    margin: 0.15rem 0 0.75rem 0 !important;
+    padding: 0 0.15rem;
+  }
+
+  .admin-licencias-page:not(.user-licencias-shell) .licencias-container {
     margin-top: 0 !important;
   }
 
@@ -39961,6 +40050,14 @@ body:has(.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell))
   width: auto !important;
   max-width: none !important;
 }
+.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+  #licenseAllDaysContainer
+  .license-split-editor__status-select-shell--bad
+  > .license-split-editor__status {
+  flex: 1 1 auto !important;
+  min-width: 0 !important;
+  width: auto !important;
+}
 
 .admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
   #licenseAllDaysContainer
@@ -40002,8 +40099,8 @@ body:has(.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell))
 .admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
   #licenseAllDaysContainer
   .license-split-editor__status-select-shell--bad {
-  flex: 0 0 auto !important;
-  min-width: max-content !important;
+  flex: 1 1 auto !important;
+  min-width: 0 !important;
   width: auto !important;
   overflow: visible !important;
 }
@@ -40027,20 +40124,45 @@ body:has(.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell))
 /* ==================== Admin: botón y modal de filtros de cuentas ==================== */
 .admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell) .admin-lic-adv-filter-btn {
   flex: 0 0 auto;
+  align-self: center !important;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 2.15rem;
-  height: 2.15rem;
-  margin-left: 0.45rem;
+  width: calc(1.08rem + 8px);
+  height: calc(1.08rem + 8px);
+  margin: 0 0 0 0.35rem !important;
   padding: 0;
   border: 1px solid rgba(59, 130, 246, 0.55);
-  border-radius: 0.45rem;
+  border-radius: 0.35rem;
   background: linear-gradient(180deg, #1d4ed8 0%, #1e3a8a 100%);
   color: #e0f2fe;
   cursor: pointer;
-  font-size: 0.9rem;
+  font-size: 0.72rem;
+  line-height: 1;
   transition: filter 0.15s ease, border-color 0.15s ease;
+}
+.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell) .admin-lic-adv-filter-btn i {
+  display: block;
+  line-height: 1;
+  margin: 0;
+}
+
+.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+  .productos-buscar-mostrar.productos-buscar-mostrar-centered {
+  display: flex !important;
+  flex-direction: row !important;
+  flex-wrap: nowrap !important;
+  align-items: center !important;
+}
+
+.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+  .productos-buscar-mostrar-centered
+  .search-container {
+  width: auto !important;
+  flex: 1 1 auto !important;
+  display: flex !important;
+  align-items: center !important;
+  margin: 0 !important;
 }
 .admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell) .admin-lic-adv-filter-btn:hover {
   filter: brightness(1.18);
@@ -40529,8 +40651,8 @@ body:has(.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell))
   .admin-licencias-reportes-inner {
   width: 100% !important;
   max-width: 100% !important;
-  padding-left: 0.45rem !important;
-  padding-right: 0.45rem !important;
+  padding-left: 0.12rem !important;
+  padding-right: 0.12rem !important;
   box-sizing: border-box !important;
 }
 
@@ -40736,13 +40858,13 @@ body:has(.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell))
   .user-lic-warranty-history-btn {
   display: inline-flex !important;
   visibility: visible !important;
-  width: 1.2rem !important;
-  min-width: 1.2rem !important;
-  max-width: 1.2rem !important;
-  height: 1.2rem !important;
-  min-height: 1.2rem !important;
-  max-height: 1.2rem !important;
-  font-size: 0.62rem !important;
+  width: 0.95rem !important;
+  min-width: 0.95rem !important;
+  max-width: 0.95rem !important;
+  height: 0.95rem !important;
+  min-height: 0.95rem !important;
+  max-height: 0.95rem !important;
+  font-size: 0.5rem !important;
   flex-shrink: 0 !important;
 }
 
@@ -43337,4 +43459,1367 @@ body:has(.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell))
   cursor: default !important;
   color: #ffffff !important;
   pointer-events: none !important;
+}
+
+/* Admin Licencias: Menú, Menú2 y sus tres acciones comparten la misma caja visual. */
+.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+  .admin-licencias-toolbar {
+  margin-top: 0.2rem !important;
+}
+
+.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+  .admin-licencias-toolbar
+  .admin-store-menus
+  > .admin-licencias-toolbar-btn {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  flex: 0 0 auto !important;
+  box-sizing: border-box !important;
+  width: auto !important;
+  min-width: 0 !important;
+  height: auto !important;
+  min-height: calc(1.08rem + 8px) !important;
+  max-height: none !important;
+  margin: 0 !important;
+  padding: 2px 7px !important;
+  float: none !important;
+  border: 2px solid #0d6efd !important;
+  border-radius: 6px !important;
+  font-size: 1.08rem !important;
+  font-family: sans-serif !important;
+  font-weight: 600 !important;
+  line-height: 1.25 !important;
+  letter-spacing: normal !important;
+  text-transform: none !important;
+  text-shadow: none !important;
+  vertical-align: middle !important;
+}
+
+.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+  .admin-licencias-toolbar
+  .admin-store-menus {
+  flex-wrap: nowrap !important;
+  align-items: center !important;
+  width: auto !important;
+  max-width: 100% !important;
+}
+
+.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+  .admin-licencias-toolbar
+  .admin-store-menus
+  > #menuToggleBtn.admin-licencias-menu-btn,
+.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+  .admin-licencias-toolbar
+  .admin-store-menus
+  > #menu2ToggleBtn.admin-licencias-menu-btn {
+  float: none !important;
+  display: inline-flex !important;
+  width: auto !important;
+  min-width: 83px !important;
+  max-width: none !important;
+  height: auto !important;
+  min-height: calc(1.08rem + 8px) !important;
+  max-height: none !important;
+  margin: 0 !important;
+  padding: 2px 7px !important;
+  font-size: 1.08rem !important;
+  font-family: sans-serif !important;
+  font-weight: 600 !important;
+  line-height: 1.25 !important;
+}
+
+.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+  .admin-licencias-toolbar
+  .admin-store-menus
+  > .admin-licencias-toolbar-btn--icon {
+  width: calc(1.08rem + 8px) !important;
+  min-width: calc(1.08rem + 8px) !important;
+  max-width: calc(1.08rem + 8px) !important;
+  min-height: calc(1.08rem + 8px) !important;
+  height: calc(1.08rem + 8px) !important;
+  padding: 0 !important;
+}
+
+.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+  .admin-licencias-toolbar
+  .admin-store-menus
+  > .admin-licencias-toolbar-btn
+  > i {
+  display: block !important;
+  margin: 0 !important;
+  font-size: 1em !important;
+  line-height: 1 !important;
+}
+
+/* ================== ADMIN LICENCIAS — acabado visual compacto ==================
+ * Solo cambia color, contraste, bordes y profundidad. No modifica medidas,
+ * rejillas ni alturas de la interfaz compacta.
+ */
+.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell) {
+  --admin-lic-surface: #07111f;
+  --admin-lic-surface-alt: #0a1728;
+  --admin-lic-line: rgba(96, 165, 250, 0.34);
+  --admin-lic-line-strong: rgba(96, 165, 250, 0.58);
+  --admin-lic-text: #e8f1ff;
+  --admin-lic-muted: #9fb3cc;
+  background: linear-gradient(180deg, rgba(226, 232, 240, 0.97), rgba(203, 213, 225, 0.96)) !important;
+  border-color: rgba(71, 85, 105, 0.58) !important;
+  box-shadow: 0 5px 18px rgba(2, 6, 23, 0.2) !important;
+}
+
+.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+  .productos-buscar-mostrar
+  input.form-control,
+.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+  .search-container
+  input {
+  color: #172033 !important;
+  background: rgba(255, 255, 255, 0.94) !important;
+  border-color: #8192aa !important;
+  box-shadow:
+    inset 0 1px 2px rgba(15, 23, 42, 0.08),
+    0 1px 2px rgba(15, 23, 42, 0.12) !important;
+}
+
+.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+  .licencias-container
+  .license-card {
+  color: #eaf3ff !important;
+  background: linear-gradient(180deg, #162945 0%, #0c1a30 100%) !important;
+  border-color: rgba(125, 161, 205, 0.52) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 1px 2px rgba(2, 6, 23, 0.24) !important;
+}
+
+.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+  .licencias-container
+  .license-card.active {
+  color: #ffffff !important;
+  background: linear-gradient(180deg, #2f73bc 0%, #1d5696 100%) !important;
+  border-color: #9ac8f6 !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.18),
+    0 0 0 1px rgba(96, 165, 250, 0.55),
+    0 2px 5px rgba(15, 57, 103, 0.28) !important;
+  transform: none !important;
+}
+
+.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+  .licencias-container
+  .license-card.license-card--aggregate.active {
+  background: linear-gradient(180deg, #a23b46 0%, #762531 100%) !important;
+  border-color: #f0a0a7 !important;
+}
+
+.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+  #licenseAccountsInputContainer.license-accounts-input-container {
+  background: #07111f !important;
+  box-shadow:
+    inset 0 0 0 1px rgba(96, 165, 250, 0.2),
+    0 3px 12px rgba(2, 6, 23, 0.24) !important;
+}
+
+.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+  .license-notepads-wrap {
+  background: var(--admin-lic-surface) !important;
+  border-top-color: var(--admin-lic-line-strong) !important;
+  border-bottom-color: var(--admin-lic-line-strong) !important;
+}
+
+/* Cabeceras: una misma familia cromática con jerarquía por sección. */
+.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+  .license-notepads-wrap
+  .admin-licencias-bloc-header {
+  color: #f8fbff !important;
+  background: linear-gradient(90deg, #17365f 0%, #20589a 55%, #2563a9 100%) !important;
+  border-top: 1px solid rgba(147, 197, 253, 0.62) !important;
+  border-bottom: 1px solid rgba(3, 19, 43, 0.92) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.12),
+    0 1px 2px rgba(2, 6, 23, 0.35) !important;
+  text-shadow: 0 1px 1px rgba(2, 6, 23, 0.55);
+}
+
+.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+  .license-notepads-wrap
+  .admin-licencias-bloc--personal
+  .admin-licencias-bloc-header {
+  background: linear-gradient(90deg, #243b53 0%, #35536f 58%, #3d6485 100%) !important;
+}
+
+.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+  .license-notepads-wrap
+  .admin-licencias-bloc--license
+  .admin-licencias-bloc-header {
+  background: linear-gradient(90deg, #163b68 0%, #1d5da4 58%, #256fbd 100%) !important;
+}
+
+.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+  .license-notepads-wrap
+  .admin-licencias-bloc--proveedor-merged
+  .admin-licencias-bloc-header {
+  background: linear-gradient(90deg, #124e4a 0%, #167267 58%, #168578 100%) !important;
+  border-top-color: rgba(94, 234, 212, 0.5) !important;
+}
+
+.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+  .license-notepads-wrap
+  .admin-licencias-bloc--customer-renewal
+  .admin-licencias-bloc-header {
+  background: linear-gradient(90deg, #263f62 0%, #2d5d91 58%, #3473ae 100%) !important;
+}
+
+.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+  .license-notepads-wrap
+  #licenseAllDaysContainer
+  .admin-licencias-bloc--day
+  .admin-licencias-bloc-header {
+  background: linear-gradient(90deg, #183a65 0%, #245b98 62%, #2d70b6 100%) !important;
+}
+
+.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+  .license-notepads-wrap
+  #licenseAllDaysContainer
+  .admin-licencias-bloc--day:nth-child(even)
+  .admin-licencias-bloc-header {
+  background: linear-gradient(90deg, #1b426f 0%, #2863a2 62%, #3279bf 100%) !important;
+}
+
+.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+  .license-notepads-wrap
+  .admin-licencias-bloc-title {
+  color: #f8fbff !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.01em;
+}
+
+/* Herramientas de cada cabecera: cristal oscuro legible, sin cambiar su caja. */
+.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+  .license-notepads-wrap
+  .admin-licencias-bloc-header
+  button,
+.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+  .license-notepads-wrap
+  .admin-licencias-bloc-header
+  select {
+  color: #eaf4ff !important;
+  background-color: rgba(3, 15, 32, 0.26) !important;
+  border-color: rgba(191, 219, 254, 0.44) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08) !important;
+}
+
+/* Superficie de datos: azul noche en vez de negro plano. */
+.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+  .license-notepads-wrap
+  .admin-licencias-notepad-textarea,
+.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+  .license-notepads-wrap
+  .license-split-editor,
+.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+  .license-notepads-wrap
+  .license-split-editor__creds-cell,
+.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+  .license-notepads-wrap
+  .license-split-editor__side {
+  color: var(--admin-lic-text) !important;
+  background-color: var(--admin-lic-surface) !important;
+}
+
+.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+  .license-notepads-wrap
+  .license-split-editor__row:nth-child(even) {
+  background-color: rgba(30, 58, 92, 0.18) !important;
+}
+
+.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+  .license-notepads-wrap
+  .license-split-editor__row:not(:last-child) {
+  border-bottom-color: var(--admin-lic-line) !important;
+}
+
+.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+  .license-notepads-wrap
+  .license-split-editor__side {
+  border-left-color: var(--admin-lic-line-strong) !important;
+}
+
+.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+  .license-notepads-wrap
+  #adminLicenciasLicenseSplitRoot
+  .license-split-editor__creds,
+.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+  .license-notepads-wrap
+  #adminLicenciasCustomerRenewalSplitRoot
+  .license-split-editor__creds,
+.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+  .license-notepads-wrap
+  #licenseAllDaysContainer
+  .license-split-editor__creds {
+  background-color: var(--admin-lic-surface) !important;
+  background-image:
+    linear-gradient(to top, var(--admin-lic-surface) 0, var(--admin-lic-surface) 8px, transparent 8px),
+    linear-gradient(to top, var(--admin-lic-surface) 0, var(--admin-lic-surface) calc(var(--lic-border-w) + 2px), transparent calc(var(--lic-border-w) + 2px)),
+    repeating-linear-gradient(
+      to bottom,
+      transparent 0,
+      transparent calc(var(--lic-row-stride) - var(--lic-border-w)),
+      var(--admin-lic-line) calc(var(--lic-row-stride) - var(--lic-border-w)),
+      var(--admin-lic-line) var(--lic-row-stride)
+    ) !important;
+}
+
+.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+  .license-notepads-wrap
+  .license-split-editor__row
+  input.license-split-editor__user,
+.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+  .license-notepads-wrap
+  .license-split-editor__row
+  input.license-split-editor__note,
+.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+  .license-notepads-wrap
+  .license-split-editor__row
+  input.license-split-editor__day-num,
+.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+  .license-notepads-wrap
+  .license-split-editor__row
+  input.license-split-editor__otro-combined {
+  color: var(--admin-lic-text) !important;
+  -webkit-text-fill-color: var(--admin-lic-text) !important;
+}
+
+.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+  .license-notepads-wrap
+  .license-split-editor__row
+  input:focus,
+.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+  .license-notepads-wrap
+  .license-split-editor__row
+  select:focus {
+  outline: 1px solid rgba(125, 211, 252, 0.82) !important;
+  outline-offset: -1px;
+  background-color: rgba(30, 64, 104, 0.42) !important;
+}
+
+/* Toolbar: misma dimensión, acabado menos plano. */
+.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+  .admin-licencias-toolbar
+  .admin-store-menus
+  > .admin-licencias-toolbar-btn {
+  color: #f8fbff !important;
+  background: linear-gradient(180deg, #4f67b3 0%, #374b91 100%) !important;
+  border-color: #8498dc !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.2),
+    0 1px 2px rgba(15, 23, 42, 0.28) !important;
+}
+
+.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+  .admin-licencias-notepad-line-badge,
+.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+  .day-account-badge,
+.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+  .admin-licencias-customer-renewal-line-badge {
+  color: #eaf4ff !important;
+  background: rgba(3, 15, 32, 0.34) !important;
+  border-color: rgba(191, 219, 254, 0.46) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08) !important;
+}
+
+/* Admin Licencias — Caídas/Suspendidas, Vencidas y Cambios. */
+.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+  .license-suspended-notepad-wrap,
+.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+  .license-expired-notepad-wrap,
+.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+  .license-changes-notepad-wrap,
+.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+  .license-changes-products-container {
+  color: var(--admin-lic-text) !important;
+  background: var(--admin-lic-surface) !important;
+}
+
+.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+  .license-suspended-notepad-wrap
+  .day-section.suspended-section,
+.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+  .license-expired-notepad-wrap
+  .day-section.expired-section,
+.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+  .license-changes-notepad-wrap
+  .day-section.changes-section {
+  border-color: var(--admin-lic-line-strong) !important;
+  background: var(--admin-lic-surface) !important;
+  box-shadow:
+    inset 0 0 0 1px rgba(148, 163, 184, 0.08),
+    0 1px 3px rgba(2, 6, 23, 0.3) !important;
+}
+
+.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+  .license-suspended-notepad-wrap
+  .suspended-section
+  .day-header-content {
+  color: #fff7ed !important;
+  background: linear-gradient(90deg, #7c2d2d 0%, #a13d38 58%, #b84a40 100%) !important;
+  border-top: 1px solid rgba(254, 202, 202, 0.48) !important;
+  border-bottom: 1px solid rgba(69, 10, 10, 0.9) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.12),
+    0 1px 2px rgba(2, 6, 23, 0.35) !important;
+  text-shadow: 0 1px 1px rgba(69, 10, 10, 0.62);
+}
+
+.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+  .license-expired-notepad-wrap
+  .expired-section
+  .day-header-content {
+  color: #f8fafc !important;
+  background: linear-gradient(90deg, #3d4858 0%, #536276 58%, #65758b 100%) !important;
+  border-top: 1px solid rgba(203, 213, 225, 0.45) !important;
+  border-bottom: 1px solid rgba(15, 23, 42, 0.9) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.11),
+    0 1px 2px rgba(2, 6, 23, 0.35) !important;
+  text-shadow: 0 1px 1px rgba(15, 23, 42, 0.62);
+}
+
+.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+  .license-changes-notepad-wrap
+  .changes-section
+  .day-header-content,
+.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+  .license-changes-products-container
+  .admin-licencias-bloc--changes-product
+  .admin-licencias-bloc-header {
+  color: #f5f3ff !important;
+  background: linear-gradient(90deg, #4c3a78 0%, #655098 58%, #7964ae 100%) !important;
+  border-top-color: rgba(221, 214, 254, 0.46) !important;
+  border-bottom-color: rgba(46, 16, 101, 0.75) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.11),
+    0 1px 2px rgba(2, 6, 23, 0.35) !important;
+}
+
+.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+  .license-suspended-notepad-wrap
+  .suspended-section-body.day-accounts-list,
+.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+  .license-expired-notepad-wrap
+  .expired-section-body.day-accounts-list,
+.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+  .license-changes-notepad-wrap
+  .changes-section-body.day-accounts-list,
+.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+  .license-changes-products-container
+  .changes-product-section-body.day-accounts-list {
+  background: var(--admin-lic-surface) !important;
+  border-color: var(--admin-lic-line) !important;
+}
+
+.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+  .license-changes-products-container
+  .license-split-editor,
+.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+  .license-changes-products-container
+  .license-split-editor__creds-cell,
+.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+  .license-changes-products-container
+  .license-split-editor__side {
+  color: var(--admin-lic-text) !important;
+  background-color: var(--admin-lic-surface) !important;
+}
+
+.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+  .license-changes-products-container
+  .license-split-editor__row:nth-child(even) {
+  background-color: rgba(55, 48, 107, 0.18) !important;
+}
+
+/* Archivados utiliza botones de toolbar sin la clase admin-toolbar-btn. */
+.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+  .admin-licencias-toolbar
+  .menu-btn-worksheet {
+  color: #f8fbff !important;
+  background: linear-gradient(180deg, #4f67b3 0%, #374b91 100%) !important;
+  border-color: #8498dc !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.2),
+    0 1px 2px rgba(15, 23, 42, 0.28) !important;
+}
+
+/* ================== LICENCIAS USUARIO — mismo acabado compacto ==================
+ * Se conservan las señales semánticas rojas, ámbar y verdes de cada incidencia.
+ */
+.admin-licencias-page.user-licencias-shell {
+  --user-lic-surface: #07111f;
+  --user-lic-surface-alt: #0a1728;
+  --user-lic-line: rgba(96, 165, 250, 0.34);
+  --user-lic-line-strong: rgba(96, 165, 250, 0.58);
+  --user-lic-text: #e8f1ff;
+  background: linear-gradient(180deg, rgba(226, 232, 240, 0.97), rgba(203, 213, 225, 0.96)) !important;
+  border-color: rgba(71, 85, 105, 0.58) !important;
+  box-shadow: 0 5px 18px rgba(2, 6, 23, 0.2) !important;
+}
+
+.admin-licencias-page.user-licencias-shell
+  .productos-buscar-mostrar
+  input.form-control,
+.admin-licencias-page.user-licencias-shell
+  .search-container
+  input {
+  color: #172033 !important;
+  background: rgba(255, 255, 255, 0.94) !important;
+  border-color: #8192aa !important;
+  box-shadow:
+    inset 0 1px 2px rgba(15, 23, 42, 0.08),
+    0 1px 2px rgba(15, 23, 42, 0.12) !important;
+}
+
+.admin-licencias-page.user-licencias-shell
+  .licencias-container
+  .license-card {
+  color: #eaf3ff !important;
+  background: linear-gradient(180deg, #162945 0%, #0c1a30 100%) !important;
+  border-color: rgba(125, 161, 205, 0.52) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 1px 2px rgba(2, 6, 23, 0.24) !important;
+}
+
+.admin-licencias-page.user-licencias-shell
+  .licencias-container
+  .license-card.active {
+  color: #ffffff !important;
+  background: linear-gradient(180deg, #2f73bc 0%, #1d5696 100%) !important;
+  border-color: #9ac8f6 !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.18),
+    0 0 0 1px rgba(96, 165, 250, 0.55),
+    0 2px 5px rgba(15, 57, 103, 0.28) !important;
+  transform: none !important;
+}
+
+.admin-licencias-page.user-licencias-shell
+  .user-licencias-toolbar
+  .menu-btn-worksheet {
+  color: #f8fbff !important;
+  background: linear-gradient(180deg, #4f67b3 0%, #374b91 100%) !important;
+  border-color: #8498dc !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.2),
+    0 1px 2px rgba(15, 23, 42, 0.28) !important;
+}
+
+.admin-licencias-page.user-licencias-shell
+  .license-notepads-wrap.user-lic-bundle-wrap {
+  color: var(--user-lic-text) !important;
+  background: var(--user-lic-surface) !important;
+  border-top-color: var(--user-lic-line-strong) !important;
+  border-bottom-color: var(--user-lic-line-strong) !important;
+}
+
+/* Azul normal; las cabeceras con signal-* conservan sus colores propios. */
+.admin-licencias-page.user-licencias-shell
+  .user-lic-bundle-wrap
+  .day-section.user-lic-readonly-day:not(.user-lic-day--signal-reportes):not(
+    .user-lic-day--signal-pendiente-garantia
+  ):not(.user-lic-day--signal-buena)
+  > .admin-licencias-bloc-header {
+  color: #f8fbff !important;
+  background: linear-gradient(90deg, #183a65 0%, #245b98 62%, #2d70b6 100%) !important;
+  border-top: 1px solid rgba(147, 197, 253, 0.58) !important;
+  border-bottom: 1px solid rgba(3, 19, 43, 0.92) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.11),
+    0 1px 2px rgba(2, 6, 23, 0.32) !important;
+  text-shadow: 0 1px 1px rgba(2, 6, 23, 0.55);
+}
+
+.admin-licencias-page.user-licencias-shell
+  .user-lic-bundle-wrap
+  .day-section.user-lic-readonly-day:not(.user-lic-day--signal-reportes):not(
+    .user-lic-day--signal-pendiente-garantia
+  ):not(.user-lic-day--signal-buena):nth-child(even)
+  > .admin-licencias-bloc-header {
+  background: linear-gradient(90deg, #1b426f 0%, #2863a2 62%, #3279bf 100%) !important;
+}
+
+.admin-licencias-page.user-licencias-shell
+  .user-lic-bundle-wrap
+  .admin-licencias-bloc-header
+  button {
+  color: #eaf4ff !important;
+  background-color: rgba(3, 15, 32, 0.26) !important;
+  border-color: rgba(191, 219, 254, 0.44) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08) !important;
+}
+
+.admin-licencias-page.user-licencias-shell
+  .user-lic-bundle-wrap
+  .license-split-editor,
+.admin-licencias-page.user-licencias-shell
+  .user-lic-bundle-wrap
+  .license-split-editor__creds-cell,
+.admin-licencias-page.user-licencias-shell
+  .user-lic-bundle-wrap
+  .license-split-editor__side,
+.admin-licencias-page.user-licencias-shell
+  .user-lic-bundle-wrap
+  .day-accounts-list {
+  color: var(--user-lic-text) !important;
+  background-color: var(--user-lic-surface) !important;
+}
+
+.admin-licencias-page.user-licencias-shell
+  .user-lic-bundle-wrap
+  .license-split-editor__row:not([class*='user-lic-row--signal-']):nth-child(even) {
+  background-color: rgba(30, 58, 92, 0.18) !important;
+}
+
+.admin-licencias-page.user-licencias-shell
+  .user-lic-bundle-wrap
+  .license-split-editor__row {
+  border-bottom-color: var(--user-lic-line) !important;
+}
+
+.admin-licencias-page.user-licencias-shell
+  .user-lic-bundle-wrap
+  .license-split-editor__side {
+  border-left-color: var(--user-lic-line-strong) !important;
+}
+
+/* Portal: el icono de 4 rayas ya separa credencial y herramientas; sin raya azul. */
+.admin-licencias-page.user-licencias-shell
+  .user-lic-bundle-wrap
+  .license-split-editor__side,
+#userLicenciasTableOuter
+  .user-lic-account-sheet--vencimientos
+  .user-lic-caducidad-split
+  .license-split-editor__side {
+  border-left: 0 !important;
+}
+
+.admin-licencias-page.user-licencias-shell
+  .user-lic-bundle-wrap
+  .license-split-editor__creds.user-lic-creds-ro {
+  color: var(--user-lic-text) !important;
+  -webkit-text-fill-color: var(--user-lic-text) !important;
+  background-color: var(--user-lic-surface) !important;
+  background-image:
+    linear-gradient(to top, var(--user-lic-surface) 0, var(--user-lic-surface) calc(var(--lic-border-w) + 2px), transparent calc(var(--lic-border-w) + 2px)),
+    repeating-linear-gradient(
+      to bottom,
+      transparent 0,
+      transparent calc(var(--lic-row-stride) - var(--lic-border-w)),
+      var(--user-lic-line) calc(var(--lic-row-stride) - var(--lic-border-w)),
+      var(--user-lic-line) var(--lic-row-stride)
+    ) !important;
+}
+
+/* ================== REJILLA LICENCIAS — un solo trazo por unión ==================
+ * Cada separación vertical pertenece únicamente a la celda izquierda. El borde
+ * inferior pertenece a la grilla, para que la última fila vuelva a cerrar.
+ */
+.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+  .license-notepads-wrap
+  .license-split-editor__creds-cell,
+.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+  .license-changes-products-container
+  .license-split-editor__creds-cell,
+.admin-licencias-page.user-licencias-shell
+  .user-lic-bundle-wrap
+  .license-split-editor__creds-cell {
+  border-right: 0 !important;
+}
+
+.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+  .license-notepads-wrap
+  .license-split-editor__side,
+.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+  .license-changes-products-container
+  .license-split-editor__side,
+.admin-licencias-page.user-licencias-shell
+  .user-lic-bundle-wrap
+  .license-split-editor__side {
+  border-right: 0 !important;
+}
+
+.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+  .license-split-editor__row
+  > .license-split-editor__lead,
+.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+  .license-split-editor__row
+  > .license-split-editor__user-wrap,
+.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+  .license-split-editor__row
+  > .license-split-editor__status-wrap,
+.admin-licencias-page.user-licencias-shell
+  .license-split-editor__row
+  > .license-split-editor__lead,
+.admin-licencias-page.user-licencias-shell
+  .license-split-editor__row
+  > .license-split-editor__user-wrap,
+.admin-licencias-page.user-licencias-shell
+  .license-split-editor__row
+  > .license-split-editor__status-wrap {
+  border-left: 0 !important;
+}
+
+.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+  .license-split-editor__row
+  > .license-split-editor__note,
+.admin-licencias-page.user-licencias-shell
+  .license-split-editor__row
+  > .license-split-editor__note,
+.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+  .license-split-editor__status-select-shell--bad,
+.admin-licencias-page.user-licencias-shell
+  .license-split-editor__status-select-shell--bad {
+  border-left: 0 !important;
+}
+
+/* Cambios tenía un separador reforzado de 3 px entre selects; vuelve al mismo
+   trazo de la rejilla para que no parezca una línea doble. */
+.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+  .license-changes-products-container
+  .license-split-editor__status-select-shell--good {
+  border-right-width: var(--lic-border-w, 2px) !important;
+  border-right-color: var(--admin-lic-line-strong) !important;
+}
+
+/* Cierre inferior: la línea vive en la última fila (a la altura de las
+   verticales), no debajo de la grilla. Si el bloque siguiente es un título,
+   esa cabecera hace de puente y la última fila no dibuja borde. */
+.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+  .license-notepads-wrap
+  .license-split-editor__grid,
+.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+  .license-changes-products-container
+  .license-split-editor__grid,
+.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+  .license-suspended-notepad-wrap
+  .license-split-editor__grid,
+.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+  .license-expired-notepad-wrap
+  .license-split-editor__grid,
+.admin-licencias-page.user-licencias-shell
+  .user-lic-bundle-wrap
+  .license-split-editor__grid {
+  border-bottom: 0 !important;
+}
+
+.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+  .license-notepads-wrap
+  .license-split-editor__row:last-child,
+.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+  .license-changes-products-container
+  .license-split-editor__row:last-child,
+.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+  .license-suspended-notepad-wrap
+  .license-split-editor__row:last-child,
+.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+  .license-expired-notepad-wrap
+  .license-split-editor__row:last-child,
+.admin-licencias-page.user-licencias-shell
+  .user-lic-bundle-wrap
+  .license-split-editor__row:last-child {
+  border-bottom: var(--lic-border-w, 2px) solid var(--admin-lic-line, var(--user-lic-line, rgba(96, 165, 250, 0.34))) !important;
+}
+
+.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+  .license-notepads-wrap
+  #licenseAllDaysContainer
+  .admin-licencias-bloc--day:not(:last-child)
+  .license-split-editor__row:last-child,
+.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+  .license-changes-products-container
+  .admin-licencias-bloc--changes-product:not(:last-child)
+  .license-split-editor__row:last-child,
+.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+  .license-suspended-notepad-wrap
+  .day-section:not(:last-child)
+  .license-split-editor__row:last-child,
+.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+  .license-expired-notepad-wrap
+  .day-section:not(:last-child)
+  .license-split-editor__row:last-child,
+.admin-licencias-page.user-licencias-shell
+  .user-lic-bundle-wrap
+  .day-section:not(:last-child)
+  .license-split-editor__row:last-child {
+  border-bottom: 0 !important;
+}
+
+.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+  .license-notepads-wrap
+  #licenseAllDaysContainer
+  .admin-licencias-bloc--day:not(:last-child),
+.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+  .license-changes-products-container
+  .admin-licencias-bloc--changes-product:not(:last-child),
+.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+  .license-suspended-notepad-wrap
+  .day-section:not(:last-child),
+.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+  .license-expired-notepad-wrap
+  .day-section:not(:last-child),
+.admin-licencias-page.user-licencias-shell
+  .user-lic-bundle-wrap
+  .day-section:not(:last-child) {
+  margin-bottom: 0 !important;
+  border-bottom: 0 !important;
+}
+
+.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+  .license-notepads-wrap
+  #licenseAllDaysContainer
+  .admin-licencias-bloc--day + .admin-licencias-bloc--day,
+.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+  .license-changes-products-container
+  .admin-licencias-bloc--changes-product + .admin-licencias-bloc--changes-product,
+.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+  .license-suspended-notepad-wrap
+  .day-section + .day-section,
+.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+  .license-expired-notepad-wrap
+  .day-section + .day-section,
+.admin-licencias-page.user-licencias-shell
+  .user-lic-bundle-wrap
+  .day-section + .day-section {
+  margin-top: 0 !important;
+}
+
+.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+  .license-notepads-wrap
+  #licenseAllDaysContainer
+  .admin-licencias-bloc--day + .admin-licencias-bloc--day
+  > .admin-licencias-bloc-header,
+.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+  .license-changes-products-container
+  .admin-licencias-bloc--changes-product + .admin-licencias-bloc--changes-product
+  > .admin-licencias-bloc-header,
+.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+  .license-suspended-notepad-wrap
+  .day-section + .day-section
+  > .day-section-header,
+.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+  .license-expired-notepad-wrap
+  .day-section + .day-section
+  > .day-section-header,
+.admin-licencias-page.user-licencias-shell
+  .user-lic-bundle-wrap
+  .day-section + .day-section
+  > .admin-licencias-bloc-header {
+  margin-top: 0 !important;
+  border-radius: 0 !important;
+  border-top: 0 !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.11) !important;
+}
+
+/* Cambios: la altura la marcan las filas; el textarea no deja colchón
+   debajo de la última licencia ni antes del siguiente título. */
+.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+  .license-changes-products-container
+  .license-split-editor__grid {
+  align-items: start !important;
+}
+.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+  .license-changes-products-container
+  .license-split-editor__side {
+  align-self: start !important;
+}
+.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+  .license-changes-products-container
+  .license-split-editor__creds-cell {
+  position: relative !important;
+  align-self: stretch !important;
+  overflow: hidden !important;
+  min-height: 0 !important;
+  height: auto !important;
+  max-height: none !important;
+}
+.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+  .license-changes-products-container
+  .license-split-editor__creds {
+  position: absolute !important;
+  inset: 0 !important;
+  height: 100% !important;
+  min-height: 0 !important;
+  max-height: 100% !important;
+  overflow: hidden !important;
+}
+.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+  .license-changes-products-container
+  .admin-licencias-bloc--changes-product:last-child,
+.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+  .license-changes-products-container
+  .admin-licencias-bloc--changes-product:last-child
+  .changes-product-section-body,
+.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+  .license-changes-products-container
+  .admin-licencias-bloc--changes-product:last-child
+  .license-split-editor,
+.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+  .license-changes-products-container
+  .admin-licencias-bloc--changes-product:last-child
+  .license-split-editor__viewport,
+.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+  .license-changes-products-container
+  .admin-licencias-bloc--changes-product:last-child
+  .license-split-editor__grid {
+  margin-bottom: 0 !important;
+  padding-bottom: 0 !important;
+}
+
+/* Admin + Archivados: cabeceras Día 1–31 y el resto al ras y cuadradas
+   (mismo bloque que Licencias usuario, sin “pastilla” redonda). */
+.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+  .license-notepads-wrap
+  .admin-licencias-bloc,
+.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+  .license-notepads-wrap
+  #licenseAllDaysContainer
+  .admin-licencias-bloc--day,
+.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+  .license-notepads-wrap
+  #licenseAllDaysContainer
+  .day-section,
+.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+  .license-suspended-notepad-wrap
+  .day-section.suspended-section,
+.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+  .license-expired-notepad-wrap
+  .day-section.expired-section,
+.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+  .license-changes-products-container
+  .admin-licencias-bloc--changes-product {
+  margin: 0 !important;
+  margin-top: 0 !important;
+  margin-bottom: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  overflow: hidden;
+}
+
+.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+  .license-notepads-wrap
+  .admin-licencias-bloc-header,
+.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+  .license-notepads-wrap
+  #licenseAllDaysContainer
+  .admin-licencias-bloc--day
+  .admin-licencias-bloc-header,
+.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+  .license-suspended-notepad-wrap
+  .day-header-content,
+.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+  .license-expired-notepad-wrap
+  .day-header-content,
+.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+  .license-changes-products-container
+  .admin-licencias-bloc--changes-product
+  .admin-licencias-bloc-header {
+  border-radius: 0 !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.11) !important;
+}
+
+.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+  .license-notepads-wrap
+  #licenseAllDaysContainer
+  .admin-licencias-bloc--day
+  .admin-licencias-bloc-header {
+  background: linear-gradient(90deg, #183a65 0%, #245b98 62%, #2d70b6 100%) !important;
+}
+
+.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+  .license-notepads-wrap
+  #licenseAllDaysContainer
+  .admin-licencias-bloc--day:nth-child(even)
+  .admin-licencias-bloc-header {
+  background: linear-gradient(90deg, #1b426f 0%, #2863a2 62%, #3279bf 100%) !important;
+}
+
+.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+  .license-suspended-notepad-wrap
+  .day-section.suspended-section,
+.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+  .license-expired-notepad-wrap
+  .day-section.expired-section {
+  border-left: none !important;
+  border-right: none !important;
+  border-top: none !important;
+}
+
+/* Reportes, vencimientos y paneles auxiliares: misma superficie, sin alterar layout. */
+.admin-licencias-page.user-licencias-shell
+  .admin-licencias-reportes-panel,
+.admin-licencias-page.user-licencias-shell
+  .user-lic-account-sheet--vencimientos,
+.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+  .admin-licencias-reportes-panel,
+.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+  #adminLicenciasVerificarPanel {
+  border-color: rgba(96, 165, 250, 0.42) !important;
+  background: linear-gradient(180deg, #0b1729 0%, #07111f 100%) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    0 3px 12px rgba(2, 6, 23, 0.24) !important;
+}
+
+/* --- proveedores fuera: integración API Multiplataforma --- */
+.admin-proveedores-anadir-fuera-page .admin-proveedores-anadir-fuera-shell,
+.admin-plex-emby-media-page .admin-plex-emby-media-shell {
+  padding: 0.85rem 1.15rem 1.2rem;
+  box-sizing: border-box;
+}
+.admin-proveedores-anadir-fuera-page .mp-api-card {
+  background: #ffffff;
+  border: 2px solid #94a3b8;
+  border-radius: 10px;
+  padding: 1rem 1.1rem;
+  margin: 0 0.35rem 1rem;
+  text-align: center;
+}
+.admin-proveedores-anadir-fuera-page .mp-api-card-title {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  font-weight: 700;
+  color: #0f172a;
+  margin-bottom: 0.7rem;
+  flex-wrap: wrap;
+}
+.admin-proveedores-anadir-fuera-page .mp-api-card-toggle {
+  cursor: pointer;
+  user-select: none;
+  border-radius: 6px;
+  padding: 0.15rem 0.25rem;
+}
+.admin-proveedores-anadir-fuera-page .mp-api-card-toggle:hover {
+  background: #f1f5f9;
+}
+.admin-proveedores-anadir-fuera-page .mp-api-card-toggle:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 2px;
+}
+.admin-proveedores-anadir-fuera-page .mp-api-card-chevron {
+  font-size: 0.78rem;
+  color: #475569;
+  transition: transform 0.15s ease;
+}
+.admin-proveedores-anadir-fuera-page .mp-api-card.is-collapsed > .mp-api-card-toggle {
+  margin-bottom: 0;
+}
+.admin-proveedores-anadir-fuera-page .mp-api-card.is-collapsed > .mp-api-card-toggle .mp-api-card-chevron {
+  transform: rotate(-90deg);
+}
+.admin-proveedores-anadir-fuera-page .mp-api-card.is-collapsed > .mp-api-card-body {
+  display: none !important;
+}
+.admin-proveedores-anadir-fuera-page .mp-api-provider.is-collapsed > .mp-api-card > .mp-api-card-toggle {
+  margin-bottom: 0;
+}
+.admin-proveedores-anadir-fuera-page .mp-api-provider.is-collapsed > .mp-api-card > .mp-api-card-toggle .mp-api-card-chevron {
+  transform: rotate(-90deg);
+}
+.admin-proveedores-anadir-fuera-page .mp-api-provider.is-collapsed > .mp-api-card > .mp-api-card-body,
+.admin-proveedores-anadir-fuera-page .mp-api-provider.is-collapsed > .mp-api-provider-rest {
+  display: none !important;
+}
+.admin-proveedores-anadir-fuera-page .mp-api-profile-block {
+  margin-top: 0.85rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid #cbd5e1;
+}
+.admin-proveedores-anadir-fuera-page .mp-api-title-btn {
+  margin-left: 0;
+}
+.admin-proveedores-anadir-fuera-page .mp-api-chip {
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 0.14rem 0.55rem;
+  border-radius: 999px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.admin-proveedores-anadir-fuera-page .mp-api-chip--off {
+  background: #e2e8f0;
+  color: #475569;
+}
+.admin-proveedores-anadir-fuera-page .mp-api-chip--saved {
+  background: #fef3c7;
+  color: #92400e;
+}
+.admin-proveedores-anadir-fuera-page .mp-api-chip--ok {
+  background: #dcfce7;
+  color: #166534;
+}
+.admin-proveedores-anadir-fuera-page .mp-api-chip--err {
+  background: #fee2e2;
+  color: #991b1b;
+}
+.admin-proveedores-anadir-fuera-page .mp-api-form-row {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.2rem;
+  margin: 0 auto 0.6rem;
+  width: 100%;
+  max-width: 280px;
+}
+.admin-proveedores-anadir-fuera-page .mp-api-form-row label {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #334155;
+}
+.admin-proveedores-anadir-fuera-page .mp-api-form-row input {
+  border: 1.5px solid #94a3b8;
+  border-radius: 6px;
+  padding: 0.4rem 0.6rem;
+  font-size: 0.95rem;
+  background: #fff;
+  color: #0f172a;
+  width: 100%;
+  box-sizing: border-box;
+  text-align: center;
+}
+.admin-proveedores-anadir-fuera-page .mp-api-form-row input:focus {
+  outline: none;
+  border-color: #2563eb;
+}
+.admin-proveedores-anadir-fuera-page .mp-api-actions {
+  display: flex;
+  flex-wrap: nowrap;
+  justify-content: center;
+  align-items: stretch;
+  gap: 0.4rem;
+  margin: 0 auto 0.5rem;
+  width: 100%;
+  max-width: 360px;
+}
+.admin-proveedores-anadir-fuera-page .mp-api-actions .btn-panel,
+.admin-proveedores-anadir-fuera-page .mp-api-title-btn,
+.admin-proveedores-anadir-fuera-page .mp-api-threshold-row .btn-panel {
+  flex: 1 1 0;
+  min-width: 0;
+  width: auto;
+  margin: 0 !important;
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  white-space: nowrap;
+  padding: 2px 8px !important;
+  font-size: 0.8rem !important;
+  line-height: 1.15 !important;
+  height: auto !important;
+  min-height: 0 !important;
+  max-height: none !important;
+  border-radius: 6px;
+}
+.admin-proveedores-anadir-fuera-page .mp-api-title-btn,
+.admin-proveedores-anadir-fuera-page .mp-api-threshold-row .btn-panel {
+  flex: 0 0 auto;
+}
+.admin-proveedores-anadir-fuera-page .mp-api-actions .btn-panel i,
+.admin-proveedores-anadir-fuera-page .mp-api-title-btn i,
+.admin-proveedores-anadir-fuera-page .mp-api-threshold-row .btn-panel i {
+  margin-right: 0.28rem;
+  font-size: 0.75rem;
+}
+.admin-proveedores-anadir-fuera-page .mp-api-message {
+  margin: 0.4rem auto 0.2rem;
+  font-size: 0.88rem;
+  font-weight: 600;
+  border-radius: 6px;
+  padding: 0.45rem 0.65rem;
+  max-width: 420px;
+  text-align: center;
+}
+.admin-proveedores-anadir-fuera-page .mp-api-message--ok {
+  background: #dcfce7;
+  color: #166534;
+}
+.admin-proveedores-anadir-fuera-page .mp-api-message--warn {
+  background: #fef3c7;
+  color: #92400e;
+}
+.admin-proveedores-anadir-fuera-page .mp-api-message--error {
+  background: #fee2e2;
+  color: #991b1b;
+}
+.admin-proveedores-anadir-fuera-page .mp-api-message--info {
+  background: #e0f2fe;
+  color: #075985;
+}
+.admin-proveedores-anadir-fuera-page .mp-api-hint {
+  font-size: 0.78rem;
+  color: #64748b;
+  margin: 0.35rem 0 0;
+}
+.admin-proveedores-anadir-fuera-page .mp-api-profile-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 0.6rem;
+}
+.admin-proveedores-anadir-fuera-page .mp-api-profile-grid > div {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.1rem;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 0.5rem 0.65rem;
+}
+.admin-proveedores-anadir-fuera-page .mp-api-label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.admin-proveedores-anadir-fuera-page .mp-api-platforms-wrap {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.45rem;
+}
+.admin-proveedores-anadir-fuera-page .mp-api-platform-btn {
+  font-size: 0.9rem;
+}
+.admin-proveedores-anadir-fuera-page .mp-api-market-wrap {
+  margin-top: 0.9rem;
+}
+.admin-proveedores-anadir-fuera-page .mp-api-market-title {
+  margin-bottom: 0.4rem;
+}
+.admin-proveedores-anadir-fuera-page .mp-api-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+.admin-proveedores-anadir-fuera-page .mp-api-table th,
+.admin-proveedores-anadir-fuera-page .mp-api-table td {
+  border: 1px solid #e2e8f0;
+  padding: 0.4rem 0.6rem;
+  text-align: center;
+  color: #0f172a;
+}
+.admin-proveedores-anadir-fuera-page .mp-api-table th {
+  background: #f1f5f9;
+  font-weight: 700;
+}
+.admin-proveedores-anadir-fuera-page .mp-api-btn-busy {
+  opacity: 0.6;
+  pointer-events: none;
+}
+.admin-proveedores-anadir-fuera-page .mp-api-platform-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  width: 100%;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 0.35rem 0.6rem;
+}
+.admin-proveedores-anadir-fuera-page .mp-api-platform-linked {
+  font-size: 0.8rem;
+  color: #94a3b8;
+  text-align: right;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 55%;
+}
+.admin-proveedores-anadir-fuera-page .mp-api-platform-linked--on {
+  color: #15803d;
+  font-weight: 600;
+}
+.admin-proveedores-anadir-fuera-page .mp-api-low-balance-warn {
+  margin: 0.6rem 0 0;
+  padding: 0.45rem 0.6rem;
+  border-radius: 8px;
+  border: 1px solid #fecaca;
+  background: #fef2f2;
+  color: #b91c1c;
+  font-size: 0.85rem;
+  font-weight: 600;
+  text-align: center;
+}
+.admin-proveedores-anadir-fuera-page .mp-api-threshold-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  margin-top: 0.6rem;
+  flex-wrap: wrap;
+}
+.admin-proveedores-anadir-fuera-page .mp-api-threshold-row input {
+  width: 160px;
+  padding: 0.3rem 0.5rem;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  background: #fff;
+  color: #0f172a;
+  font-size: 0.85rem;
+  text-align: center;
+}
+.admin-proveedores-anadir-fuera-page .mp-api-link-select {
+  width: 100%;
+  max-width: 220px;
+  padding: 0.25rem 0.4rem;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  background: #fff;
+  color: #0f172a;
+  font-size: 0.85rem;
+}
+
+/* Menú / Menú2 en proveedores fuera y plex-emby: mismo tamaño, sin float. */
+.admin-proveedores-anadir-fuera-page .admin-proveedores-anadir-fuera-shell > .d-flex.justify-content-between,
+.admin-plex-emby-media-page .admin-plex-emby-media-shell > .d-flex.justify-content-between {
+  padding-left: 0;
+  margin-left: -0.4rem;
+  justify-content: flex-start !important;
+}
+.admin-proveedores-anadir-fuera-page #menuToggleBtn.menu-toggle-btn,
+.admin-proveedores-anadir-fuera-page #menu2ToggleBtn.menu-toggle-btn,
+.admin-plex-emby-media-page #menuToggleBtn.menu-toggle-btn,
+.admin-plex-emby-media-page #menu2ToggleBtn.menu-toggle-btn {
+  float: none !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  box-sizing: border-box !important;
+  margin: 0 !important;
+  padding: 2px 8px !important;
+  min-width: 86px !important;
+  width: auto !important;
+  height: auto !important;
+  min-height: calc(1rem + 8px) !important;
+  max-height: none !important;
+  font-size: 1rem !important;
+  font-family: sans-serif !important;
+  font-weight: 600 !important;
+  line-height: 1.25 !important;
+  letter-spacing: normal !important;
+  text-transform: none !important;
+  vertical-align: middle !important;
+}
+@media (max-width: 768px) {
+  .admin-proveedores-anadir-fuera-page #menuToggleBtn.menu-toggle-btn,
+  .admin-proveedores-anadir-fuera-page #menu2ToggleBtn.menu-toggle-btn,
+  .admin-plex-emby-media-page #menuToggleBtn.menu-toggle-btn,
+  .admin-plex-emby-media-page #menu2ToggleBtn.menu-toggle-btn {
+    min-width: 78px !important;
+    padding: 2px 7px !important;
+    font-size: 0.92rem !important;
+    min-height: calc(0.92rem + 8px) !important;
+  }
 }

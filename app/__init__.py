@@ -503,6 +503,10 @@ def create_app(config_class_passed=None):
     from app.store.api import api_bp as store_api_bp
     app.register_blueprint(store_api_bp, url_prefix="/api/store")
 
+    # API Partner propia (tienda + códigos) con documentación en vivo
+    from app.store.partner_api import partner_api_bp
+    app.register_blueprint(partner_api_bp, url_prefix="/api/partner/v1")
+
     from app.main import main_bp
     app.register_blueprint(main_bp)
 

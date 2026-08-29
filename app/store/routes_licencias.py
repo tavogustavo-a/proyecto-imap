@@ -522,6 +522,26 @@ def _ensure_license_account_inventory_bloc_ord_column():
             'No se pudo asegurar columna inventory_bloc_ord en cuentas: %s', e
         )
 
+def _ensure_license_account_mp_sale_id_column():
+    """sale_id del proveedor Multiplataforma en cuentas compradas vía API externa."""
+    try:
+        from sqlalchemy import inspect, text
+
+        inspector = inspect(db.engine)
+        if 'store_license_accounts' not in inspector.get_table_names():
+            return
+        cols = {c['name'] for c in inspector.get_columns('store_license_accounts')}
+        if 'mp_sale_id' not in cols:
+            db.session.execute(
+                text('ALTER TABLE store_license_accounts ADD COLUMN mp_sale_id INTEGER')
+            )
+            db.session.commit()
+    except Exception as e:
+        current_app.logger.warning(
+            'No se pudo asegurar columna mp_sale_id en cuentas: %s', e
+        )
+
+
 def _ensure_user_portal_license_activity_log_column():
     """Historial vista Licencias cliente: lista JSON portal_license_activity_log en users."""
     try:
@@ -599,6 +619,7 @@ def _store_bp_ensure_license_account_sale_id_schema():
     _ensure_license_account_sale_id_column()
     _ensure_license_account_inventory_bloc_ord_column()
     _ensure_license_account_sold_price_columns()
+    _ensure_license_account_mp_sale_id_column()
     _STORE_LICENSE_ACCOUNT_SALE_ID_SCHEMA_ENSURED = True
 
 
@@ -2055,11 +2076,25 @@ def _user_my_license_accounts_list_for_portal(user_obj):
         except Exception:
             product_image_url = ''
 
+        # Cuenta del proveedor Multiplataforma sin renovación admitida: el
+        # portal oculta los verdes «renovar 1 mes más / dejar mes a mes».
+        mp_greens_blocked = False
+        if getattr(acc, 'mp_sale_id', None):
+            try:
+                from app.store.multiplataforma_fulfillment import (
+                    mp_account_renewal_supported,
+                )
+
+                mp_greens_blocked = not mp_account_renewal_supported(acc)
+            except Exception:
+                mp_greens_blocked = True
+
         out.append({
             'account_id': acc.id,
             'license_id': lic_id_eff,
             'product_id': prod_id_eff,
             'product_name': pname,
+            'renewal_greens_blocked': mp_greens_blocked,
             'product_image_filename': img_fn,
             'product_image_url': product_image_url,
             'credential_preview': _mask_license_cred_preview(acc.account_identifier, acc.email),
@@ -2838,6 +2873,46 @@ def api_admin_proveedor_sales_stats_reset():
         return err, 500
 
 
+@store_bp.route('/api/admin/proveedor-sales-stats/day', methods=['GET'])
+@admin_or_soporte_licencias_required
+def api_admin_proveedor_sales_stats_day():
+    """Revisión rápida de un proveedor interno en un día (ventas, garantías, reembolsos)."""
+    from datetime import date as date_cls
+
+    from app.store.proveedor_daily_summaries import build_proveedor_day_review
+
+    try:
+        try:
+            uid = int(request.args.get('user_id') or 0)
+        except (TypeError, ValueError):
+            uid = 0
+        if uid <= 0:
+            return jsonify({'success': False, 'error': 'Indica el proveedor.'}), 400
+        user_row = User.query.get(uid)
+        if not user_row or user_row.parent_id:
+            return jsonify({'success': False, 'error': 'Proveedor no encontrado.'}), 404
+        up = user_row.user_prices if isinstance(user_row.user_prices, dict) else {}
+        if not up.get('proveedor'):
+            return jsonify({'success': False, 'error': 'Ese usuario no es proveedor.'}), 400
+        raw_date = str(request.args.get('date') or '').strip()[:10]
+        if raw_date:
+            try:
+                co_date = date_cls.fromisoformat(raw_date)
+            except ValueError:
+                return jsonify({'success': False, 'error': 'Fecha inválida.'}), 400
+        else:
+            co_date = utc_to_colombia(datetime.utcnow()).date()
+        review = build_proveedor_day_review(user_row, co_date)
+        ok = jsonify({'success': True, 'review': review})
+        _attach_private_no_cache_headers(ok)
+        return ok
+    except Exception as e:
+        current_app.logger.exception('api_admin_proveedor_sales_stats_day')
+        err = jsonify({'success': False, 'error': str(e)})
+        _attach_private_no_cache_headers(err)
+        return err, 500
+
+
 @store_bp.route('/api/admin/proveedor-sales-stats/rev', methods=['GET'])
 @admin_or_soporte_licencias_required
 def api_admin_proveedor_sales_stats_rev():
@@ -3292,6 +3367,23 @@ def api_user_license_day_row_status():
             data = dict(data)
             data.pop('status_good', None)
 
+        # Cuentas del proveedor Multiplataforma sin renovación admitida (solo
+        # Plex/Emby/Jellyfin/IPTV cuenta completa la admiten): descartar los
+        # verdes de renovar; la renovación manual del proveedor crea conflictos.
+        if account is not None and 'status_good' in data:
+            try:
+                from app.store.multiplataforma_fulfillment import (
+                    mp_account_renewal_supported,
+                )
+
+                if getattr(account, 'mp_sale_id', None) and not mp_account_renewal_supported(account):
+                    _sg = str(data.get('status_good') or '').strip().lower()
+                    if 'renovar 1 mes' in _sg or 'mes a mes' in _sg:
+                        data = dict(data)
+                        data.pop('status_good', None)
+            except Exception:
+                pass
+
         try:
             from app.store.user_license_line_parse import is_solucionada_status
 
@@ -3599,6 +3691,338 @@ def api_admin_license_warranty_incidents():
         return jsonify({'success': True, 'incidents': incidents})
     except Exception as e:
         current_app.logger.exception('api_admin_license_warranty_incidents')
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+# ---------------------------------------------------------------------------
+# Fotos adjuntas a reportes de incidencia (bloc Días)
+# ---------------------------------------------------------------------------
+
+def _report_photo_portal_user_or_reject():
+    """Valida el usuario del portal para fotos de reporte. Devuelve (user, assignee_ids, error_response)."""
+    if not session.get('logged_in'):
+        return None, None, _reject_user_licencias_api('Debes iniciar sesión.', 401)
+    user_obj = User.query.get(session.get('user_id'))
+    if not user_obj:
+        return None, None, _reject_user_licencias_api('Usuario no encontrado.', 403)
+    admin_username = current_app.config.get('ADMIN_USER', 'admin')
+    if user_obj.username == admin_username:
+        return None, None, _reject_user_licencias_api('Los administradores usan Admin Licencias.', 403)
+    if user_obj.parent_id is not None:
+        if not user_obj.can_access_store:
+            return None, None, _reject_user_licencias_api('Sin acceso.', 403)
+    if not _eligible_tienda_user_licencias_portal(user_obj):
+        return None, None, _reject_user_licencias_api(
+            'Necesitas tipo de precio USD o COP o permiso de soporte licencias.', 403
+        )
+    assignee_ids, _ = _user_licencias_viewer_scope(user_obj)
+    if not assignee_ids:
+        return None, None, _reject_user_licencias_api('Sin acceso.', 403)
+    return user_obj, assignee_ids, None
+
+
+def _report_photo_create_from_request(uploader_user, assignee_ids=None):
+    """Lógica común de subida (portal y admin). Devuelve (payload, status_code)."""
+    from app.store.models import License, LicenseAccount
+    from app.store.license_report_photos import (
+        create_report_photo,
+        photo_to_dict,
+        send_report_to_multiplataforma,
+    )
+
+    file_storage = request.files.get('image') or request.files.get('file')
+    if file_storage is None or not getattr(file_storage, 'filename', ''):
+        return {'success': False, 'error': 'Adjunta una imagen.'}, 400
+
+    form = request.form
+    try:
+        license_id = int(form.get('license_id'))
+        calendar_day = int(form.get('calendar_day'))
+    except (TypeError, ValueError):
+        return {'success': False, 'error': 'Parámetros incompletos.'}, 400
+    if calendar_day < 1 or calendar_day > 31:
+        return {'success': False, 'error': 'Día del calendario inválido.'}, 400
+
+    row_ordinal = None
+    if str(form.get('row_ordinal') or '').strip() != '':
+        try:
+            row_ordinal = int(form.get('row_ordinal'))
+        except (TypeError, ValueError):
+            row_ordinal = None
+
+    account = None
+    if str(form.get('account_id') or '').strip() != '':
+        try:
+            account = LicenseAccount.query.get(int(form.get('account_id')))
+        except (TypeError, ValueError):
+            account = None
+        if account is None:
+            return {'success': False, 'error': 'Cuenta no encontrada.'}, 404
+        if account.license_id != license_id:
+            return {'success': False, 'error': 'La cuenta no coincide con la licencia.'}, 400
+        if assignee_ids is not None and account.assigned_to_user_id not in assignee_ids:
+            return {'success': False, 'error': 'Cuenta no disponible.'}, 403
+
+    license_row = License.query.get(license_id)
+    if not license_row:
+        return {'success': False, 'error': 'Licencia no encontrada.'}, 404
+
+    photo, err = create_report_photo(
+        license_id=license_id,
+        calendar_day=calendar_day,
+        row_ordinal=row_ordinal,
+        account_id=getattr(account, 'id', None),
+        cred_hint=str(form.get('cred_hint') or '')[:300],
+        status_label=str(form.get('status_label') or '')[:120],
+        uploader_user=uploader_user,
+        reporter_user_id=getattr(uploader_user, 'id', None) if assignee_ids is not None else None,
+        file_storage=file_storage,
+    )
+    if err:
+        db.session.rollback()
+        return {'success': False, 'error': err}, 400
+
+    # Si la fila previa (awaiting) tenía account_id y el form no lo trajo, úsalo.
+    if account is None and photo.account_id:
+        account = LicenseAccount.query.get(int(photo.account_id))
+
+    mp_warning = None
+    if account is not None and getattr(account, 'mp_sale_id', None):
+        ok, mp_err = send_report_to_multiplataforma(
+            photo, account, issue_text=str(form.get('detail') or '')[:500]
+        )
+        if not ok and mp_err:
+            mp_warning = 'La foto se guardó, pero el reporte aún no se pudo completar. Inténtalo de nuevo.'
+
+    db.session.commit()
+    payload = {'success': True, 'photo': photo_to_dict(photo)}
+    if mp_warning:
+        payload['mp_warning'] = mp_warning
+    return payload, 200
+
+
+@store_bp.route('/api/user/license-report-photo', methods=['POST'])
+def api_user_license_report_photo_upload():
+    """Portal: subir la foto del reporte (estado rojo) de una línea del bloc."""
+    try:
+        user_obj, assignee_ids, err_resp = _report_photo_portal_user_or_reject()
+        if err_resp is not None:
+            return err_resp
+        payload, code = _report_photo_create_from_request(user_obj, assignee_ids=assignee_ids)
+        return jsonify(payload), code
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.exception('api_user_license_report_photo_upload')
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@store_bp.route('/api/admin/license-report-photo', methods=['POST'])
+@admin_or_soporte_licencias_required
+def api_admin_license_report_photo_upload():
+    """Admin/soporte: subir o reemplazar la foto de un reporte."""
+    try:
+        user_obj = User.query.get(session.get('user_id'))
+        payload, code = _report_photo_create_from_request(user_obj, assignee_ids=None)
+        return jsonify(payload), code
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.exception('api_admin_license_report_photo_upload')
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@store_bp.route('/api/admin/license-report-photos', methods=['GET'])
+@admin_or_soporte_licencias_required
+def api_admin_license_report_photos_list():
+    """Admin: fotos abiertas de una licencia (Días, panel Reportes, archivados)."""
+    try:
+        from app.store.license_report_photos import open_photos_for_license, photo_to_dict
+
+        try:
+            license_id = int(request.args.get('license_id'))
+        except (TypeError, ValueError):
+            return jsonify({'success': False, 'error': 'license_id requerido.'}), 400
+        day_raw = request.args.get('calendar_day')
+        calendar_day = None
+        if day_raw is not None and str(day_raw).strip() != '':
+            try:
+                calendar_day = int(day_raw)
+            except (TypeError, ValueError):
+                calendar_day = None
+        photos = open_photos_for_license(license_id, calendar_day=calendar_day)
+        return jsonify({'success': True, 'photos': [photo_to_dict(p) for p in photos]})
+    except Exception as e:
+        current_app.logger.exception('api_admin_license_report_photos_list')
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@store_bp.route('/api/user/license-report-photos', methods=['GET'])
+def api_user_license_report_photos_list():
+    """Portal: fotos abiertas del propio usuario (o de su grupo) en una licencia."""
+    try:
+        from app.store.license_report_photos import open_photos_for_license, photo_to_dict
+
+        user_obj, assignee_ids, err_resp = _report_photo_portal_user_or_reject()
+        if err_resp is not None:
+            return err_resp
+        try:
+            license_id = int(request.args.get('license_id'))
+        except (TypeError, ValueError):
+            return jsonify({'success': False, 'error': 'license_id requerido.'}), 400
+        day_raw = request.args.get('calendar_day')
+        calendar_day = None
+        if day_raw is not None and str(day_raw).strip() != '':
+            try:
+                calendar_day = int(day_raw)
+            except (TypeError, ValueError):
+                calendar_day = None
+        photos = open_photos_for_license(license_id, calendar_day=calendar_day)
+        visible = [
+            p for p in photos
+            if (p.uploader_user_id in assignee_ids)
+            or _report_photo_account_in_scope(p.account_id, assignee_ids)
+        ]
+        return jsonify({'success': True, 'photos': [photo_to_dict(p) for p in visible]})
+    except Exception as e:
+        current_app.logger.exception('api_user_license_report_photos_list')
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+def _report_photo_account_in_scope(account_id, assignee_ids):
+    if not account_id or not assignee_ids:
+        return False
+    from app.store.models import LicenseAccount
+
+    acc = LicenseAccount.query.get(int(account_id))
+    return bool(acc and acc.assigned_to_user_id in assignee_ids)
+
+
+@store_bp.route('/api/license-report-photo/<int:photo_id>/file', methods=['GET'])
+def api_license_report_photo_file(photo_id):
+    """Sirve la imagen del reporte con permisos (admin/soporte o dueño de la línea)."""
+    try:
+        import os as _os
+        from flask import send_file
+        from app.store.models import LicenseReportPhoto
+        from app.store.license_report_photos import (
+            ensure_report_photos_schema,
+            report_photo_upload_dir,
+        )
+
+        if not session.get('logged_in'):
+            return jsonify({'success': False, 'error': 'Debes iniciar sesión.'}), 401
+        viewer = User.query.get(session.get('user_id'))
+        if not viewer:
+            return jsonify({'success': False, 'error': 'Usuario no encontrado.'}), 403
+
+        ensure_report_photos_schema()
+        photo = LicenseReportPhoto.query.get(photo_id)
+        if not photo or not photo.stored_name:
+            return jsonify({'success': False, 'error': 'Imagen no disponible.'}), 404
+
+        admin_username = current_app.config.get('ADMIN_USER', 'admin')
+        viewer_prices = viewer.user_prices if isinstance(getattr(viewer, 'user_prices', None), dict) else {}
+        is_admin_or_support = (
+            viewer.username == admin_username
+            or not session.get('is_user')
+            or bool(viewer_prices.get('soporte_licencias'))
+            or str(viewer.username or '').lower() in ('soporte', 'soporte1', 'soporte2', 'soporte3')
+        )
+        if not is_admin_or_support:
+            assignee_ids, _ = _user_licencias_viewer_scope(viewer)
+            allowed = bool(assignee_ids) and (
+                (photo.uploader_user_id in assignee_ids)
+                or _report_photo_account_in_scope(photo.account_id, assignee_ids)
+            )
+            if not allowed:
+                return jsonify({'success': False, 'error': 'Sin permiso.'}), 403
+
+        path = _os.path.join(report_photo_upload_dir(), photo.stored_name)
+        if not _os.path.isfile(path):
+            return jsonify({'success': False, 'error': 'El archivo ya no existe.'}), 404
+        resp = make_response(send_file(path))
+        return _attach_private_no_cache_headers(resp)
+    except Exception as e:
+        current_app.logger.exception('api_license_report_photo_file')
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@store_bp.route('/api/license-report-photo/<int:photo_id>/delete', methods=['POST'])
+def api_license_report_photo_delete_file(photo_id):
+    """Elimina la imagen (cliente o admin). El reporte sigue abierto pidiendo foto nueva."""
+    try:
+        from app.store.models import LicenseReportPhoto
+        from app.store.license_report_photos import (
+            ensure_report_photos_schema,
+            remove_photo_file_keep_report,
+        )
+
+        if not session.get('logged_in'):
+            return jsonify({'success': False, 'error': 'Debes iniciar sesión.'}), 401
+        viewer = User.query.get(session.get('user_id'))
+        if not viewer:
+            return jsonify({'success': False, 'error': 'Usuario no encontrado.'}), 403
+
+        ensure_report_photos_schema()
+        photo = LicenseReportPhoto.query.get(photo_id)
+        if not photo:
+            return jsonify({'success': False, 'error': 'Foto no encontrada.'}), 404
+
+        admin_username = current_app.config.get('ADMIN_USER', 'admin')
+        viewer_prices = viewer.user_prices if isinstance(getattr(viewer, 'user_prices', None), dict) else {}
+        is_admin_or_support = (
+            viewer.username == admin_username
+            or not session.get('is_user')
+            or bool(viewer_prices.get('soporte_licencias'))
+            or str(viewer.username or '').lower() in ('soporte', 'soporte1', 'soporte2', 'soporte3')
+        )
+        if not is_admin_or_support:
+            assignee_ids, _ = _user_licencias_viewer_scope(viewer)
+            allowed = bool(assignee_ids) and (
+                (photo.uploader_user_id in assignee_ids)
+                or (photo.reporter_user_id in assignee_ids)
+                or _report_photo_account_in_scope(photo.account_id, assignee_ids)
+            )
+            if not allowed:
+                return jsonify({'success': False, 'error': 'Sin permiso.'}), 403
+
+        if photo.status == 'closed':
+            return jsonify({'success': True})
+        remove_photo_file_keep_report(photo)
+        db.session.commit()
+        return jsonify({'success': True})
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.exception('api_license_report_photo_delete_file')
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@store_bp.route('/api/admin/license-report-photo/<int:photo_id>/close', methods=['POST'])
+@admin_or_soporte_licencias_required
+def api_admin_license_report_photo_close(photo_id):
+    """Admin: cierra manualmente una foto de reporte (borra imagen y reporte MP pendiente)."""
+    try:
+        from app.store.models import LicenseReportPhoto
+        from app.store.license_report_photos import (
+            _mp_delete_remote_report,
+            delete_photo_file,
+            ensure_report_photos_schema,
+        )
+
+        ensure_report_photos_schema()
+        photo = LicenseReportPhoto.query.get(photo_id)
+        if not photo:
+            return jsonify({'success': False, 'error': 'Foto no encontrada.'}), 404
+        if photo.status == 'open':
+            _mp_delete_remote_report(photo)
+            delete_photo_file(photo)
+            photo.status = 'closed'
+            photo.closed_reason = 'manual'
+            photo.closed_at = datetime.utcnow()
+            db.session.commit()
+        return jsonify({'success': True})
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.exception('api_admin_license_report_photo_close')
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
@@ -6398,7 +6822,17 @@ def _sellable_license_accounts_public(license_row):
         reserve = _license_warranty_days_public(license_row)
         admin_sellable = max(0, avail - reserve)
     provider_sellable = _proveedor_public_sellable_stock_for_license(license_row.id)
-    return int(admin_sellable + provider_sellable)
+
+    # Proveedor Multiplataforma (API externa): stock del plan vinculado, con
+    # caché. En el checkout solo se usa cuando lo propio quedó en ceros.
+    mp_sellable = 0
+    try:
+        from app.store.multiplataforma_fulfillment import mp_public_stock_for_license
+
+        mp_sellable = mp_public_stock_for_license(license_row)
+    except Exception:
+        mp_sellable = 0
+    return int(admin_sellable + provider_sellable + mp_sellable)
 
 
 def _compute_inventory_sellable_stock_for_product(product):
@@ -6862,6 +7296,18 @@ def api_deliver_warranty_replacement(license_id):
         )
         _append_license_suspended_notes_line(license_obj, suspended_line)
 
+        # Garantía entregada → cerrar foto del reporte (y reporte MP pendiente).
+        try:
+            from app.store.license_report_photos import close_report_photos_for_row
+
+            close_report_photos_for_row(
+                license_id,
+                cred_hint=cred_hint or old_cred_plain,
+                reason='warranty_replaced',
+            )
+        except Exception as ph_err:
+            current_app.logger.warning('cerrar fotos de reporte (garantía): %s', ph_err)
+
         try:
             from app.store.license_report_notify import notify_license_report_answered
 
@@ -6980,6 +7426,21 @@ def api_notify_license_report_answered(license_id):
             day_n = int(day) if day is not None and str(day).strip() != '' else None
         except (TypeError, ValueError):
             day_n = None
+
+        # Reporte resuelto → borrar la foto adjunta (y el reporte pendiente en
+        # Multiplataforma, para no hacerles perder tiempo si ya lo solucionamos).
+        if outcome in ('buena', 'warranty_replaced', 'solucionada'):
+            try:
+                from app.store.license_report_photos import close_report_photos_for_row
+
+                close_report_photos_for_row(
+                    license_id,
+                    calendar_day=day_n,
+                    cred_hint=str(data.get('credential_hint') or data.get('credential') or ''),
+                    reason=outcome,
+                )
+            except Exception as ph_err:
+                current_app.logger.warning('cerrar fotos de reporte: %s', ph_err)
 
         notif = notify_license_report_answered(
             user=user,

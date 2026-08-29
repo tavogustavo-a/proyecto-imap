@@ -21,6 +21,14 @@
       <div id="adminLicProveedorVentasList" class="admin-lic-proveedor-ventas-list" role="list" aria-label="Ventas por servicio del proveedor"></div>
     </div>
     <p class="admin-lic-proveedor-ventas-modal__meta mb-0" id="adminLicProveedorVentasMeta" aria-live="polite"></p>
+    <div class="admin-lic-proveedor-ventas-day" id="adminLicProveedorVentasDay">
+      <label for="adminLicProveedorVentasDayDate" class="admin-lic-proveedor-ventas-day__label">
+        <i class="fas fa-calendar-alt" aria-hidden="true"></i>
+        Revisar día
+      </label>
+      <input type="date" id="adminLicProveedorVentasDayDate" class="form-control admin-lic-proveedor-ventas-day__input" aria-label="Fecha para revisar ventas, garantías y reembolsos del proveedor">
+      <div id="adminLicProveedorVentasDayBody" class="admin-lic-proveedor-ventas-day__body" aria-live="polite"></div>
+    </div>
   </div>
 </div>
 
@@ -34,6 +42,7 @@
     <div class="admin-lic-bulk-info-modal__body">
       <p class="admin-lic-bulk-info-modal__lead">Contador operativo por servicio: sube con cada venta en tienda o entrega masiva del admin. Puedes resetearlo a cero con el botón <i class="fas fa-undo" aria-hidden="true"></i> junto a cada servicio.</p>
       <p class="admin-lic-bulk-info-modal__text"><strong>No es lo mismo que el historial de estadísticas.</strong> Allí las ventas del período se calculan desde la base de datos (solo ventas a terceros) y los resúmenes diarios son un registro persistido por día. Este contador es acumulado desde el último reset y puede diferir si hubo ventas antes del resumen, reset manual o limpieza masiva del historial.</p>
+      <p class="admin-lic-bulk-info-modal__text">El calendario de abajo consulta ese historial de un día (Colombia): cuentas vendidas, garantías entregadas y reembolsos de los servicios de ese proveedor. Si borraste el resumen de ese día, las ventas se reconstruyen desde las compras; garantías y reembolsos siguen en el registro de cada cuenta.</p>
     </div>
     <div class="admin-lic-bulk-info-modal__footer">
       <button type="button" class="btn-blue menu-btn-worksheet" id="adminLicProveedorVentasInfoOkBtn" data-admin-lic-proveedor-ventas-info-dismiss="1">Entendido</button>

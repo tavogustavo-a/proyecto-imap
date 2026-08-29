@@ -64,6 +64,7 @@ from . import routes
 from . import routes_whatsapp  # noqa: F401 — registra rutas WhatsApp en store_bp
 from . import routes_licencias  # noqa: F401 — registra rutas licencias en store_bp
 from . import routes_historial  # noqa: F401 — registra rutas historial compras en store_bp
+from . import routes_multiplataforma  # noqa: F401 — registra rutas API Multiplataforma en store_bp
 
 try:
     from app.store.mobile_push import register_mobile_push_listeners

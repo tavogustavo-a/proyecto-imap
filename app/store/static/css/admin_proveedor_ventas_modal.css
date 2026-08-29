@@ -108,7 +108,7 @@
   position: relative;
   z-index: 1;
   width: min(36rem, 100%);
-  max-height: min(88vh, 34rem);
+  max-height: min(92vh, 44rem);
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -305,4 +305,101 @@
   font-size: 0.74rem;
   color: #64748b;
   text-align: right;
+}
+
+.admin-lic-proveedor-ventas-day {
+  flex: 0 0 auto;
+  margin-top: 0.65rem;
+  padding-top: 0.55rem;
+  border-top: 1px solid #e2e8f0;
+}
+.admin-lic-proveedor-ventas-day__label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin: 0 0 0.35rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #1e40af;
+}
+.admin-lic-proveedor-ventas-day__input {
+  width: 100%;
+  max-width: 12.5rem;
+  font-size: 0.86rem;
+  margin-bottom: 0.45rem;
+}
+.admin-lic-proveedor-ventas-day__body {
+  font-size: 0.78rem;
+  color: #334155;
+  max-height: 11.5rem;
+  overflow: auto;
+}
+.admin-lic-proveedor-ventas-day__empty,
+.admin-lic-proveedor-ventas-day__loading,
+.admin-lic-proveedor-ventas-day__error {
+  margin: 0;
+  color: #64748b;
+}
+.admin-lic-proveedor-ventas-day__error {
+  color: #b91c1c;
+}
+.admin-lic-proveedor-ventas-day__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  margin: 0 0 0.4rem;
+}
+.admin-lic-proveedor-ventas-day__chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.18rem 0.45rem;
+  border-radius: 999px;
+  background: #f1f5f9;
+  color: #0f172a;
+  font-size: 0.72rem;
+  font-weight: 600;
+  line-height: 1.2;
+}
+.admin-lic-proveedor-ventas-day__chip--money {
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+.admin-lic-proveedor-ventas-day__chip--ok {
+  background: #dcfce7;
+  color: #15803d;
+}
+.admin-lic-proveedor-ventas-day__chip--warn {
+  background: #ffedd5;
+  color: #c2410c;
+}
+.admin-lic-proveedor-ventas-day__chip--refund {
+  background: #fee2e2;
+  color: #b91c1c;
+}
+.admin-lic-proveedor-ventas-day__block {
+  margin: 0 0 0.4rem;
+}
+.admin-lic-proveedor-ventas-day__block:last-child {
+  margin-bottom: 0;
+}
+.admin-lic-proveedor-ventas-day__block-title {
+  margin: 0 0 0.15rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: #64748b;
+}
+.admin-lic-proveedor-ventas-day__row {
+  margin: 0;
+  padding: 0.12rem 0;
+  border-bottom: 1px solid #f1f5f9;
+  word-break: break-word;
+}
+.admin-lic-proveedor-ventas-day__row:last-child {
+  border-bottom: none;
+}
+.admin-lic-proveedor-ventas-day__muted {
+  color: #64748b;
 }

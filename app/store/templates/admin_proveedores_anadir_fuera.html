@@ -4,7 +4,7 @@
 
 {% block head %}
   {{ super() }}
-  <link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}">
+  <link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}?v=20260828-mp-collapse3">
   <meta name="csrf_token" content="{{ csrf_token() }}">
 {% endblock %}
 
@@ -33,13 +33,78 @@
 
   <div id="menuOverlay" class="menu-overlay"></div>
 
-  <div class="store-light maxw-800 mx-auto br-8 admin-proveedores-anadir-fuera-shell">
-    <div class="d-flex gap-05 mb-1 flex-wrap">
-      <button id="menuToggleBtn" type="button" class="btn-panel btn-blue" title="Menú de navegación" aria-label="Abrir menú de navegación">&#9776; Menú</button>
-      <button id="menu2ToggleBtn" type="button" class="btn-panel btn-blue" title="Menú secundario" aria-label="Abrir segundo menú">&#9776; Menú2</button>
+  <div class="store-light maxw-800 mx-auto br-8 admin-proveedores-anadir-fuera-shell"
+       id="mpApiRoot"
+       data-url-status="{{ url_for('store_bp.admin_mp_api_status') }}"
+       data-url-save="{{ url_for('store_bp.admin_mp_api_save_credentials') }}"
+       data-url-test="{{ url_for('store_bp.admin_mp_api_test') }}"
+       data-url-platforms="{{ url_for('store_bp.admin_mp_api_platforms') }}"
+       data-url-links="{{ url_for('store_bp.admin_mp_api_links') }}"
+       data-url-threshold="{{ url_for('store_bp.admin_mp_api_save_threshold') }}">
+    <div class="d-flex justify-content-between align-items-center mb-1">
+      <div class="d-flex gap-05">
+        <button id="menuToggleBtn" class="btn-panel btn-blue menu-toggle-btn" title="Menú de navegación" aria-label="Abrir menú de navegación">&#9776; Menú</button>
+        <button id="menu2ToggleBtn" class="btn-panel btn-blue menu-toggle-btn" title="Menú secundario" aria-label="Abrir segundo menú">&#9776; Menú2</button>
+      </div>
     </div>
-    <h1 class="h4 mb-1">proveedores fuera</h1>
-    <p class="text-muted mb-0">Plantilla lista. Aquí irá el contenido cuando lo definamos.</p>
+    <!-- Proveedor Multiplataforma: el título Conexión API contrae todo el bloque -->
+    <div class="mp-api-provider" data-mp-collapse-key="multiplataforma">
+      <div class="mp-api-card">
+        <div class="mp-api-card-title mp-api-card-toggle" role="button" tabindex="0" aria-expanded="true" aria-controls="mpApiProviderBody" title="Contraer o expandir Multiplataforma">
+          <i class="fas fa-chevron-down mp-api-card-chevron" aria-hidden="true"></i>
+          <i class="fas fa-plug" aria-hidden="true"></i> Conexión API
+          <span id="mpApiStatusChip" class="mp-api-chip mp-api-chip--off">Sin configurar</span>
+        </div>
+        <div id="mpApiConexionBody" class="mp-api-card-body">
+          <div class="mp-api-form-row">
+            <input type="text" id="mpApiUsername" autocomplete="off" placeholder="Usuario vendedor" aria-label="Usuario vendedor">
+          </div>
+          <div class="mp-api-form-row">
+            <input type="password" id="mpApiPassword" autocomplete="new-password" placeholder="Contraseña" aria-label="Contraseña">
+          </div>
+          <div class="mp-api-actions">
+            <button id="mpApiSaveBtn" type="button" class="btn-panel btn-blue"><i class="fas fa-save"></i> Guardar</button>
+            <button id="mpApiTestBtn" type="button" class="btn-panel btn-blue"><i class="fas fa-satellite-dish"></i> Probar conexión</button>
+          </div>
+          <p id="mpApiMessage" class="mp-api-message hidden"></p>
+          <div id="mpApiProfileCard" class="mp-api-profile-block hidden">
+            <div class="mp-api-card-title"><i class="fas fa-wallet" aria-hidden="true"></i> Cuenta del vendedor</div>
+            <div class="mp-api-profile-grid">
+              <div><span class="mp-api-label">Usuario</span><span id="mpProfileUsername">—</span></div>
+              <div><span class="mp-api-label">Saldo</span><span id="mpProfileBalance">—</span></div>
+              <div><span class="mp-api-label">Comisión</span><span id="mpProfileCommission">—</span></div>
+              <div><span class="mp-api-label">Moneda</span><span id="mpProfileCurrency">—</span></div>
+            </div>
+            <p id="mpApiLowBalanceWarn" class="mp-api-low-balance-warn hidden"></p>
+            <div class="mp-api-threshold-row">
+              <span class="mp-api-label">Aviso de saldo bajo</span>
+              <input type="number" id="mpApiThresholdInput" min="0" step="1000" placeholder="Umbral (0 = sin aviso)" aria-label="Umbral de saldo bajo">
+              <button id="mpApiThresholdSaveBtn" type="button" class="btn-panel btn-blue" title="Guardar umbral"><i class="fas fa-save"></i></button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div id="mpApiProviderBody" class="mp-api-provider-rest">
+        <div class="mp-api-card">
+          <div class="mp-api-card-title">
+            <i class="fas fa-layer-group" aria-hidden="true"></i> Plataformas y stock
+            <button id="mpApiLoadPlatformsBtn" type="button" class="btn-panel btn-blue mp-api-title-btn"><i class="fas fa-sync"></i> Cargar</button>
+          </div>
+          <div class="mp-api-card-body">
+            <div id="mpApiPlatformsWrap" class="mp-api-platforms-wrap">
+              <p class="text-muted mb-0">Pulsa «Cargar» para consultar las plataformas disponibles.</p>
+            </div>
+            <div id="mpApiMarketWrap" class="mp-api-market-wrap hidden">
+              <div class="mp-api-card-title mp-api-market-title">
+                <span id="mpApiMarketName">Planes</span>
+              </div>
+              <div id="mpApiMarketTableWrap"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 </div>
 {% endblock %}
@@ -49,4 +114,5 @@
   <script src="{{ url_for('store_bp.static', filename='js/menu_tienda.js') }}" defer></script>
   <script src="{{ url_for('static', filename='js/clear_trigger_logs.js') }}" defer></script>
   <script src="{{ url_for('static', filename='js/logout_all_cookies_btn.js') }}" defer></script>
+  <script src="{{ url_for('store_bp.static', filename='js/admin_proveedores_fuera.js') }}?v=20260828-mp-collapse3" defer></script>
 {% endblock %}

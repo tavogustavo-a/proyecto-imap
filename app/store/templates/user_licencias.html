@@ -315,6 +315,7 @@
   <div id="storeFrontUiPrefsJson" hidden class="embedded-page-json">{{ (store_front_ui_prefs or {})|tojson }}</div>
   <div id="storeFrontPrefsScope" hidden data-user-id="{{ current_user.id if current_user else '' }}" data-persist-server="1"></div>
   <script src="{{ url_for('store_bp.static', filename='js/user_licencias.js') }}?v={{ licencias_static_version }}" defer></script>
+  <script src="{{ url_for('store_bp.static', filename='js/license_report_photos.js') }}?v={{ licencias_static_version }}" defer></script>
 {% if session.get('logged_in') and current_user and not is_admin %}
 <div id="anuncioEntryDismissScope" hidden data-user-id="{{ current_user.id }}"></div>
 <script src="{{ url_for('store_bp.static', filename='js/anuncios_entry_modal.js') }}?v=20260722-login-only" defer></script>

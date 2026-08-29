@@ -676,6 +676,17 @@
     }
 
     function userLicPortalGoodOptionsForLicense(lm) {
+        /* Cuenta del proveedor externo sin renovación admitida: no ofrecer
+           «Renovar 1 mes más» ni «Dejar mes a mes» (crean conflictos). */
+        if (lm && lm.renewal_greens_blocked) {
+            return OPT_LICENSE_GOOD.filter(function (opt) {
+                var k = normalizeStatusKey(opt.v);
+                return (
+                    k !== normalizeStatusKey('renovar 1 mes mas') &&
+                    k !== normalizeStatusKey('dejar mes a mes')
+                );
+            });
+        }
         if (userLicPortalShouldShowGoodCol(lm)) return OPT_LICENSE_GOOD;
         return OPT_LICENSE_GOOD.filter(function (opt) {
             var k = normalizeStatusKey(opt.v);

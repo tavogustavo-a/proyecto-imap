@@ -642,6 +642,9 @@ class LicenseAccount(db.Model):
     # Posición 1-based en el bloc «Licencias» (license_notes): una unidad por línea aunque la credencial se repita.
     # NULL = creada fuera del sync del bloc (p. ej. API POST manual).
     inventory_bloc_ord = db.Column(db.Integer, nullable=True, index=True)
+    # sale_id de la compra en la API Multiplataforma (proveedor externo).
+    # NULL = cuenta propia; con valor = comprada al proveedor (vence a Caídas como «vencida»).
+    mp_sale_id = db.Column(db.Integer, nullable=True, index=True)
     # Reserva temporal en carrito de renovación (tienda pública).
     renewal_reserved_user_id = db.Column(
         db.Integer, db.ForeignKey('users.id', ondelete='SET NULL'), nullable=True, index=True
@@ -676,6 +679,49 @@ class LicenseAccount(db.Model):
         exp = _license_account_expiry_as_utc_aware(self.expires_at)
         delta = exp - datetime.now(timezone.utc)
         return delta.days if delta.days > 0 else 0
+
+
+class LicenseReportPhoto(db.Model):
+    """Foto adjunta a un reporte de incidencia de una línea del bloc Días.
+
+    La foto vive mientras el reporte está abierto; al resolverse (buena,
+    solucionada, garantía o respuesta del proveedor) el archivo se borra del
+    disco y la fila queda cerrada (auditoría corta, se poda por job).
+    Si la cuenta fue comprada a Multiplataforma, el reporte también se envía
+    a su API (imagen obligatoria) y aquí se guarda el seguimiento.
+    """
+    __tablename__ = 'store_license_report_photos'
+    id = db.Column(db.Integer, primary_key=True)
+    license_id = db.Column(db.Integer, nullable=False, index=True)
+    calendar_day = db.Column(db.Integer, nullable=False)
+    row_ordinal = db.Column(db.Integer, nullable=True)
+    account_id = db.Column(db.Integer, nullable=True, index=True)
+    cred_hint = db.Column(db.String(300), nullable=True)
+    status_label = db.Column(db.String(120), nullable=True)  # p. ej. «error de contraseña»
+    # Quien reportó la incidencia (para pedirle la foto y avisarle al completarse)
+    reporter_user_id = db.Column(db.Integer, nullable=True)
+    remind_count = db.Column(db.Integer, nullable=False, default=0)
+    last_reminded_at = db.Column(db.DateTime, nullable=True)
+    uploader_user_id = db.Column(db.Integer, nullable=True)
+    uploader_username = db.Column(db.String(80), nullable=True)
+    original_name = db.Column(db.String(200), nullable=True)
+    stored_name = db.Column(db.String(300), nullable=True)  # NULL cuando el archivo ya se borró
+    # awaiting = reporte MP a la espera de que suban la foto | open = con foto | closed = resuelto
+    status = db.Column(db.String(12), nullable=False, default='open', index=True)
+    closed_reason = db.Column(db.String(60), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    closed_at = db.Column(db.DateTime, nullable=True)
+    # Seguimiento del reporte en la API Multiplataforma (solo cuentas con mp_sale_id)
+    mp_platform = db.Column(db.String(30), nullable=True)
+    mp_issue_id = db.Column(db.Integer, nullable=True, index=True)
+    mp_status = db.Column(db.String(20), nullable=True)  # sent | answered | failed
+    mp_answer = db.Column(db.Text, nullable=True)
+    mp_error = db.Column(db.Text, nullable=True)
+    mp_sent_at = db.Column(db.DateTime, nullable=True)
+    mp_answered_at = db.Column(db.DateTime, nullable=True)
+
+    def __repr__(self):
+        return f'<LicenseReportPhoto {self.id} lic={self.license_id} d{self.calendar_day} {self.status}>'
 
 
 class LicenseAccountRefund(db.Model):

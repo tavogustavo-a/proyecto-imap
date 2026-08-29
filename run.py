@@ -184,12 +184,31 @@ def start_scheduler_if_needed():
                 )
 
                 _scheduler.add_job(
+                    func=multiplataforma_renewals_check_job,
+                    trigger='interval',
+                    minutes=10,
+                    id='multiplataforma_renewals_check',
+                    replace_existing=True,
+                    next_run_time=datetime.now(timezone.utc) + timedelta(minutes=2),
+                )
+
+                _scheduler.add_job(
                     func=purge_expired_store_announcements_job,
                     trigger='cron',
                     hour=3,
                     minute=0,
                     timezone='America/Bogota',
                     id='purge_expired_store_announcements',
+                    replace_existing=True,
+                )
+
+                _scheduler.add_job(
+                    func=cleanup_license_report_photos_job,
+                    trigger='cron',
+                    hour=3,
+                    minute=20,
+                    timezone='America/Bogota',
+                    id='cleanup_license_report_photos',
                     replace_existing=True,
                 )
 
@@ -1006,6 +1025,64 @@ def release_stale_renewal_reservations_job():
             app.logger.warning("Liberar reservas renovación vencidas: %s", e)
 
 
+def multiplataforma_renewals_check_job():
+    """Cada 10 min: revisa solicitudes de renovación enviadas al proveedor
+    Multiplataforma; al aprobarse extiende la cuenta y avisa, si no, avisa a
+    los admins. No llama a la API cuando no hay solicitudes pendientes."""
+    with app.app_context():
+        try:
+            from app.store.multiplataforma_fulfillment import (
+                process_pending_mp_renewals,
+            )
+
+            r = process_pending_mp_renewals()
+            if r.get('processed'):
+                app.logger.info(
+                    "Renovaciones Multiplataforma: processed=%s pending=%s",
+                    r.get('processed', 0),
+                    r.get('pending', 0),
+                )
+        except Exception as e:
+            db.session.rollback()
+            app.logger.warning("Renovaciones Multiplataforma: %s", e)
+        try:
+            from app.store.license_report_photos import process_mp_report_answers
+
+            rep = process_mp_report_answers()
+            if rep.get('processed'):
+                app.logger.info(
+                    "Reportes Multiplataforma respondidos: %s", rep.get('processed')
+                )
+        except Exception as e:
+            db.session.rollback()
+            app.logger.warning("Reportes Multiplataforma: %s", e)
+        try:
+            from app.store.license_report_photos import process_photo_reminders
+
+            rem = process_photo_reminders()
+            if rem.get('reminded'):
+                app.logger.info(
+                    "Recordatorios foto reporte: %s", rem.get('reminded')
+                )
+        except Exception as e:
+            db.session.rollback()
+            app.logger.warning("Recordatorios foto reporte: %s", e)
+
+
+def cleanup_license_report_photos_job():
+    """Diario: borra fotos de reporte huérfanas y poda filas cerradas viejas."""
+    with app.app_context():
+        try:
+            from app.store.license_report_photos import cleanup_report_photos
+
+            r = cleanup_report_photos()
+            if r.get('orphan_files') or r.get('stale_closed') or r.get('force_closed'):
+                app.logger.info("Limpieza fotos reporte: %s", r)
+        except Exception as e:
+            db.session.rollback()
+            app.logger.warning("Limpieza fotos reporte: %s", e)
+
+
 def purge_expired_store_announcements_job():
     """Purga diaria (03:00 America/Bogota) de anuncios de tienda ya vencidos."""
     with app.app_context():
@@ -1197,12 +1274,31 @@ def main():
         )
 
         scheduler.add_job(
+            func=multiplataforma_renewals_check_job,
+            trigger='interval',
+            minutes=10,
+            id='multiplataforma_renewals_check',
+            replace_existing=True,
+            next_run_time=datetime.now(timezone.utc) + timedelta(minutes=2),
+        )
+
+        scheduler.add_job(
             func=purge_expired_store_announcements_job,
             trigger='cron',
             hour=3,
             minute=0,
             timezone='America/Bogota',
             id='purge_expired_store_announcements',
+            replace_existing=True,
+        )
+
+        scheduler.add_job(
+            func=cleanup_license_report_photos_job,
+            trigger='cron',
+            hour=3,
+            minute=20,
+            timezone='America/Bogota',
+            id='cleanup_license_report_photos',
             replace_existing=True,
         )
 

@@ -1,38 +1,15 @@
-{# Pie de sitio: redes + enlaces legales. Sub-usuarios: solo iconos Android/iOS. Oculto en pantallas de login. #}
+{# Pie de sitio: redes + enlaces legales.
+   Solo usuarios principales logueados (admin incluido).
+   Sub-usuarios y visitantes sin sesión no ven nada. Oculto en pantallas de login. #}
 {% set _hide_footer_eps = [
   'auth_bp.login',
   'user_auth_bp.login',
   'auth_bp.twofa',
   'auth_bp.forgot_password',
 ] %}
+{% if session.get('logged_in') and current_user_obj and not is_subuser and request.endpoint not in _hide_footer_eps %}
 {% set android_url = (site_settings.get('footer_android_url') or '')|trim %}
 {% set ios_url = (site_settings.get('footer_ios_url') or '')|trim %}
-{% if is_subuser and request.endpoint not in _hide_footer_eps and (android_url or ios_url) %}
-<footer class="site-footer" role="contentinfo">
-  <nav class="site-footer__nav" aria-label="Enlaces del pie">
-    {% if android_url %}
-    <a class="site-footer__social-btn site-footer__social-btn--android"
-       href="{{ android_url }}"
-       target="_blank"
-       rel="noopener noreferrer"
-       title="App para Android"
-       aria-label="App para Android">
-      <i class="fab fa-android" aria-hidden="true"></i>
-    </a>
-    {% endif %}
-    {% if ios_url %}
-    <a class="site-footer__social-btn site-footer__social-btn--ios"
-       href="{{ ios_url }}"
-       target="_blank"
-       rel="noopener noreferrer"
-       title="App para iOS"
-       aria-label="App para iOS">
-      <i class="fab fa-apple" aria-hidden="true"></i>
-    </a>
-    {% endif %}
-  </nav>
-</footer>
-{% elif not is_subuser and request.endpoint not in _hide_footer_eps %}
 {% set wa_url = (site_settings.get('footer_whatsapp_url') or '')|trim %}
 {% set tg_url = (site_settings.get('footer_telegram_url') or '')|trim %}
 <footer class="site-footer" role="contentinfo">

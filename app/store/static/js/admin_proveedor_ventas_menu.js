@@ -53,6 +53,231 @@
         );
     }
 
+    function dayApiUrl() {
+        return metaUrl('admin-proveedor-sales-day-url', '/tienda/api/admin/proveedor-sales-stats/day');
+    }
+
+    function colombiaTodayIso() {
+        try {
+            return new Intl.DateTimeFormat('en-CA', {
+                timeZone: 'America/Bogota',
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit',
+            }).format(new Date());
+        } catch (_err) {
+            var d = new Date();
+            var m = String(d.getMonth() + 1).padStart(2, '0');
+            var day = String(d.getDate()).padStart(2, '0');
+            return d.getFullYear() + '-' + m + '-' + day;
+        }
+    }
+
+    function formatMoneyPlain(n, cur) {
+        var x = Number(n) || 0;
+        var abs = Math.abs(x - Math.round(x)) < 0.005;
+        var s = abs
+            ? String(Math.round(x))
+            : x.toFixed(2).replace('.', ',');
+        if (abs) {
+            s = s.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+        } else {
+            var parts = s.split(',');
+            parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+            s = parts.join(',');
+        }
+        return '$' + s + ' ' + (cur || 'COP');
+    }
+
+    function ensureDayDateDefault() {
+        var inp = document.getElementById('adminLicProveedorVentasDayDate');
+        if (!inp) return '';
+        if (!inp.value) inp.value = colombiaTodayIso();
+        return inp.value;
+    }
+
+    var __dayAbort = null;
+
+    function renderDayReview(data) {
+        var body = document.getElementById('adminLicProveedorVentasDayBody');
+        if (!body) return;
+        if (!data) {
+            body.innerHTML = '<p class="admin-lic-proveedor-ventas-day__empty">Elige un proveedor y una fecha.</p>';
+            return;
+        }
+        var chips = [];
+        chips.push(
+            '<span class="admin-lic-proveedor-ventas-day__chip">' +
+                escHtml(String(data.ventas || 0)) +
+                ' vendida' +
+                (Number(data.ventas) === 1 ? '' : 's') +
+                '</span>'
+        );
+        if (Number(data.renovaciones) > 0) {
+            chips.push(
+                '<span class="admin-lic-proveedor-ventas-day__chip admin-lic-proveedor-ventas-day__chip--ok">' +
+                    escHtml(String(data.renovaciones)) +
+                    ' renovada' +
+                    (Number(data.renovaciones) === 1 ? '' : 's') +
+                    '</span>'
+            );
+        }
+        chips.push(
+            '<span class="admin-lic-proveedor-ventas-day__chip admin-lic-proveedor-ventas-day__chip--warn">' +
+                escHtml(String(data.garantias || 0)) +
+                ' garantía' +
+                (Number(data.garantias) === 1 ? '' : 's') +
+                '</span>'
+        );
+        chips.push(
+            '<span class="admin-lic-proveedor-ventas-day__chip admin-lic-proveedor-ventas-day__chip--refund">' +
+                escHtml(String(data.reembolsos || 0)) +
+                ' reembolso' +
+                (Number(data.reembolsos) === 1 ? '' : 's') +
+                '</span>'
+        );
+        var ingresos = data.ingresos || {};
+        ['COP', 'USD'].forEach(function (cur) {
+            if (Number(ingresos[cur]) > 0) {
+                chips.push(
+                    '<span class="admin-lic-proveedor-ventas-day__chip admin-lic-proveedor-ventas-day__chip--money">' +
+                        escHtml(formatMoneyPlain(ingresos[cur], cur)) +
+                        '</span>'
+                );
+            }
+        });
+        var refundAmt = data.reembolsos_monto || {};
+        ['COP', 'USD'].forEach(function (cur) {
+            if (Number(refundAmt[cur]) > 0) {
+                chips.push(
+                    '<span class="admin-lic-proveedor-ventas-day__chip admin-lic-proveedor-ventas-day__chip--refund">Dev. ' +
+                        escHtml(formatMoneyPlain(refundAmt[cur], cur)) +
+                        '</span>'
+                );
+            }
+        });
+
+        var html = '<div class="admin-lic-proveedor-ventas-day__chips">' + chips.join('') + '</div>';
+        var productos = Array.isArray(data.productos) ? data.productos : [];
+        if (productos.length) {
+            html +=
+                '<div class="admin-lic-proveedor-ventas-day__block"><p class="admin-lic-proveedor-ventas-day__block-title">Vendidas</p>';
+            productos.forEach(function (p) {
+                html +=
+                    '<p class="admin-lic-proveedor-ventas-day__row">' +
+                    escHtml(p.producto || '—') +
+                    ' · ' +
+                    escHtml(String(p.ventas || 0)) +
+                    (Number(p.renovaciones) > 0 ? ' (' + escHtml(String(p.renovaciones)) + ' ren.)' : '') +
+                    ' · ' +
+                    escHtml(formatMoneyPlain(p.total, p.moneda)) +
+                    '</p>';
+            });
+            html += '</div>';
+        }
+        var gdet = Array.isArray(data.garantias_detalle) ? data.garantias_detalle : [];
+        if (gdet.length) {
+            html +=
+                '<div class="admin-lic-proveedor-ventas-day__block"><p class="admin-lic-proveedor-ventas-day__block-title">Garantías</p>';
+            gdet.forEach(function (g) {
+                html +=
+                    '<p class="admin-lic-proveedor-ventas-day__row"><strong>' +
+                    escHtml(g.producto || 'Producto') +
+                    '</strong> · ' +
+                    escHtml(g.cuenta || '—') +
+                    ' <span class="admin-lic-proveedor-ventas-day__muted">→</span> ' +
+                    escHtml(g.repuesto || '—') +
+                    '</p>';
+            });
+            html += '</div>';
+        }
+        var rdet = Array.isArray(data.reembolsos_detalle) ? data.reembolsos_detalle : [];
+        if (rdet.length) {
+            html +=
+                '<div class="admin-lic-proveedor-ventas-day__block"><p class="admin-lic-proveedor-ventas-day__block-title">Reembolsos</p>';
+            rdet.forEach(function (r) {
+                html +=
+                    '<p class="admin-lic-proveedor-ventas-day__row"><strong>' +
+                    escHtml(r.producto || 'Licencia') +
+                    '</strong>' +
+                    (r.cuenta ? ' · ' + escHtml(r.cuenta) : '') +
+                    (Number(r.dias) > 0 ? ' · ' + escHtml(String(r.dias)) + ' d' : '') +
+                    ' · ' +
+                    escHtml(formatMoneyPlain(r.total, r.moneda)) +
+                    '</p>';
+            });
+            html += '</div>';
+        }
+        if (
+            !productos.length &&
+            !gdet.length &&
+            !rdet.length &&
+            !Number(data.ventas) &&
+            !Number(data.garantias) &&
+            !Number(data.reembolsos)
+        ) {
+            html +=
+                '<p class="admin-lic-proveedor-ventas-day__empty">Sin movimiento ese día en el historial de este proveedor.</p>';
+        }
+        body.innerHTML = html;
+    }
+
+    function loadDayReview() {
+        var body = document.getElementById('adminLicProveedorVentasDayBody');
+        var provider = getActiveProvider();
+        var dateIso = ensureDayDateDefault();
+        if (!body) return;
+        if (!provider || !provider.user_id || !dateIso) {
+            renderDayReview(null);
+            return;
+        }
+        if (__dayAbort && typeof __dayAbort.abort === 'function') {
+            try {
+                __dayAbort.abort();
+            } catch (_e) {}
+        }
+        var ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
+        __dayAbort = ctrl;
+        body.innerHTML = '<p class="admin-lic-proveedor-ventas-day__loading">Cargando el día…</p>';
+        var url =
+            dayApiUrl() +
+            '?user_id=' +
+            encodeURIComponent(String(provider.user_id)) +
+            '&date=' +
+            encodeURIComponent(dateIso) +
+            '&_t=' +
+            Date.now();
+        fetch(url, {
+            credentials: 'same-origin',
+            cache: 'no-store',
+            headers: { Accept: 'application/json' },
+            signal: ctrl ? ctrl.signal : undefined,
+        })
+            .then(function (res) {
+                return res.json().then(function (data) {
+                    return { ok: res.ok, data: data };
+                });
+            })
+            .then(function (pack) {
+                if (ctrl && __dayAbort !== ctrl) return;
+                if (!pack.ok || !pack.data || !pack.data.success) {
+                    throw new Error(
+                        (pack.data && (pack.data.error || pack.data.message)) ||
+                            'No se pudo cargar el día.'
+                    );
+                }
+                renderDayReview(pack.data.review);
+            })
+            .catch(function (err) {
+                if (err && err.name === 'AbortError') return;
+                if (ctrl && __dayAbort !== ctrl) return;
+                body.innerHTML =
+                    '<p class="admin-lic-proveedor-ventas-day__error">' +
+                    escHtml((err && err.message) || 'No se pudo cargar el día.') +
+                    '</p>';
+            });
+    }
+
     function getActiveProvider() {
         if (!__cache || !__cache.length) return null;
         var uid = __activeUserId;
@@ -248,9 +473,13 @@
                 searchInp.value = '';
             }
             if (controls) controls.hidden = true;
+            var dayWrap = document.getElementById('adminLicProveedorVentasDay');
+            if (dayWrap) dayWrap.hidden = true;
             return;
         }
         if (controls) controls.hidden = false;
+        var dayWrapShow = document.getElementById('adminLicProveedorVentasDay');
+        if (dayWrapShow) dayWrapShow.hidden = false;
         sel.disabled = false;
         if (searchInp) searchInp.disabled = false;
         __cache.forEach(function (p) {
@@ -325,6 +554,8 @@
             .then(function () {
                 syncProviderSelect();
                 renderList();
+                ensureDayDateDefault();
+                loadDayReview();
                 startRealtime();
             })
             .catch(function (err) {
@@ -482,6 +713,10 @@
                 if (e.target && e.target.id === 'adminLicProveedorVentasProviderSelect') {
                     __activeUserId = e.target.value;
                     renderList();
+                    loadDayReview();
+                }
+                if (e.target && e.target.id === 'adminLicProveedorVentasDayDate') {
+                    loadDayReview();
                 }
             },
             false

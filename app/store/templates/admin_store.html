@@ -8,7 +8,7 @@
 {% endblock %}
 {% block page_styles %}
   {{ super() }}
-  <link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}?v={{ licencias_static_version }}">
+  <link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}?v={{ licencias_static_version }}-admin-toolbar6">
   <style>
     /* Garantía: amarillo pintado; Caída: rojo pintado (después de styles.css) */
     .admin-licencias-page .user-lic-warranty-pending-badge,
@@ -56,15 +56,15 @@
   {% else %}
   <div class="admin-licencias-toolbar d-flex flex-wrap align-items-center gap-2 w-100">
     <div class="d-flex gap-05 admin-store-menus">
-      <button id="menuToggleBtn" class="btn-blue menu-btn-worksheet">&#9776; Menú</button>
-      <button id="menu2ToggleBtn" class="btn-blue menu-btn-worksheet">&#9776; Menú2</button>
-      <button type="button" id="licensesCollapseBtn" class="btn-blue menu-btn-worksheet licenses-collapse-btn licenses-collapse-btn--toolbar" title="Contraer o expandir licencias" aria-label="Contraer o expandir licencias">
+      <button type="button" id="menuToggleBtn" class="btn-panel btn-blue menu-toggle-btn admin-licencias-menu-btn admin-licencias-toolbar-btn" aria-label="Abrir menú principal">&#9776; Menú</button>
+      <button type="button" id="menu2ToggleBtn" class="btn-panel btn-blue menu-toggle-btn admin-licencias-menu-btn admin-licencias-toolbar-btn" aria-label="Abrir segundo menú">&#9776; Menú2</button>
+      <button type="button" id="licensesCollapseBtn" class="btn-blue menu-btn-worksheet licenses-collapse-btn licenses-collapse-btn--toolbar admin-licencias-toolbar-btn admin-licencias-toolbar-btn--icon" title="Contraer o expandir licencias" aria-label="Contraer o expandir licencias">
         <i class="fas fa-chevron-down" id="collapseIcon" aria-hidden="true"></i>
       </button>
-      <button type="button" id="licensesDuplicatesBtn" class="btn-blue menu-btn-worksheet licenses-duplicates-btn licenses-duplicates-btn--toolbar" title="Marcar repetidos en amarillo: mismo inicio de credencial hasta el primer espacio en Licencias, Días, Caídas, Vencidas y Cambios (se marcan todas las coincidencias; el pulsó enfoque va a la segunda aparición)." aria-label="Alternar duplicados por primer token; todas las líneas repetidas en amarillo." aria-pressed="false">
+      <button type="button" id="licensesDuplicatesBtn" class="btn-blue menu-btn-worksheet licenses-duplicates-btn licenses-duplicates-btn--toolbar admin-licencias-toolbar-btn admin-licencias-toolbar-btn--icon" title="Marcar repetidos en amarillo: mismo inicio de credencial hasta el primer espacio en Licencias, Días, Caídas, Vencidas y Cambios (se marcan todas las coincidencias; el pulsó enfoque va a la segunda aparición)." aria-label="Alternar duplicados por primer token; todas las líneas repetidas en amarillo." aria-pressed="false">
         <i class="fas fa-clone" aria-hidden="true"></i>
       </button>
-      <button type="button" id="licensesMoveToChangesBtn" class="btn-blue menu-btn-worksheet" title="Ir al listado de Cambios por producto. Si tienes una fila enfocada en Licencias, también la envía a Cambios." aria-label="Ver listado de Cambios o enviar fila enfocada de Licencias a Cambios" aria-expanded="false" aria-controls="adminLicenciasCambiosPanel">
+      <button type="button" id="licensesMoveToChangesBtn" class="btn-blue menu-btn-worksheet admin-licencias-toolbar-btn admin-licencias-toolbar-btn--icon" title="Ir al listado de Cambios por producto. Si tienes una fila enfocada en Licencias, también la envía a Cambios." aria-label="Ver listado de Cambios o enviar fila enfocada de Licencias a Cambios" aria-expanded="false" aria-controls="adminLicenciasCambiosPanel">
         <i class="fas fa-exchange-alt" aria-hidden="true"></i>
       </button>
     </div>
@@ -472,6 +472,7 @@
   <script src="{{ url_for('store_bp.static', filename='js/admin_licencias_ui_prefs.js') }}?v={{ licencias_static_version }}" defer></script>
   <script src="{{ url_for('store_bp.static', filename='js/licencias.js') }}?v={{ licencias_static_version }}" defer></script>
   <script src="{{ url_for('store_bp.static', filename='js/admin_licencias_notepad.js') }}?v={{ licencias_static_version }}" defer></script>
+  <script src="{{ url_for('store_bp.static', filename='js/license_report_photos.js') }}?v={{ licencias_static_version }}" defer></script>
   <script src="{{ url_for('static', filename='js/clear_trigger_logs.js') }}" defer></script>
   <script src="{{ url_for('static', filename='js/logout_all_cookies_btn.js') }}" defer></script>
 {% endblock %} 

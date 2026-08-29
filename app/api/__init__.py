@@ -53,6 +53,68 @@ def _user_has_allowed_email(user, email_normalized: str) -> bool:
             return True
     return False
 
+
+def _is_support_user(user) -> bool:
+    """
+    True si el usuario es de soporte: username soporte, soporte1, soporte2, ...
+    o con el permiso de soporte activado (is_support). Los usuarios de soporte
+    quedan exentos de la restricción de «Correos únicos».
+    """
+    if not user:
+        return False
+    username = (user.username or "").strip().lower()
+    if re.fullmatch(r"soporte\d*", username):
+        return True
+    return bool(getattr(user, "is_support", False))
+
+
+def _email_reserved_for_other_user(user, email_normalized: str) -> bool:
+    """
+    True si el correo está en la lista de un usuario principal con
+    «Correos únicos para este usuario» activo y el consultante NO es ese
+    principal ni uno de sus sub-usuarios. En ese caso el correo queda
+    reservado: nadie más puede consultarlo, ni con can_search_any.
+    (Admin y soporte se validan fuera de este helper.)
+    """
+    if not user:
+        return False
+    en = (email_normalized or "").strip().lower()
+    if not en:
+        return False
+    try:
+        from app.utils.allowed_email import normalize_allowed_email
+
+        extracted = normalize_allowed_email(en)
+    except Exception:
+        extracted = None
+    candidates = [en]
+    if extracted and extracted not in candidates:
+        candidates.append(extracted)
+
+    owner_ids = {
+        row[0]
+        for row in db.session.query(AllowedEmail.user_id)
+        .filter(func.lower(func.trim(AllowedEmail.email)).in_(candidates))
+        .all()
+    }
+    if not owner_ids:
+        return False
+
+    owners = User.query.filter(User.id.in_(owner_ids)).all()
+    reserved_principal_ids = set()
+    for owner in owners:
+        principal = owner
+        if owner.parent_id:
+            principal = User.query.get(owner.parent_id) or owner
+        if getattr(principal, "unique_allowed_emails", False):
+            reserved_principal_ids.add(principal.id)
+
+    if not reserved_principal_ids:
+        return False
+
+    requester_principal_id = user.parent_id if user.parent_id else user.id
+    return requester_principal_id not in reserved_principal_ids
+
 # ===== SEGURIDAD: Rate Limiting =====
 # Almacenar requests por IP con timestamps
 _rate_limit_store = {}
@@ -497,6 +559,10 @@ def search_mails():
     if is_admin:
         pass
     else:
+        # Correos únicos: reservados para su dueño (y sub-usuarios). Aplica
+        # incluso con can_search_any; solo admin y soporte quedan exentos.
+        if not _is_support_user(user) and _email_reserved_for_other_user(user, email_normalized):
+            return jsonify({"error": "No tienes permiso para consultar este correo específico."}), 403
         # Usuario normal: lista permitida localmente O resultado del proyecto vinculado (mismo service_id).
         # Basta con que el correo esté permitido en el proyecto que realmente consulta el buzón (p. ej. solo proyecto 1).
         if not user.can_search_any:
@@ -539,6 +605,10 @@ def search_sms_messages(email_to_search, user=None, origin_domain=None):
         # Solo el ADMIN_USER oficial tiene acceso total
         if user.username == admin_username and user.parent_id is None:
             is_admin_user = True
+        
+        # Correos únicos: reservados para su dueño (y sub-usuarios); soporte exento
+        if not is_admin_user and not _is_support_user(user) and _email_reserved_for_other_user(user, email_normalized):
+            return jsonify({"error": "No tienes permiso al consultar este correo."}), 403
         
         # Si es admin, puede consultar sin restricciones
         if is_admin_user:
@@ -710,6 +780,9 @@ def get_2fa_code_for_email(email):
 
         if not is_admin:
             if not user.enabled:
+                return jsonify({"error": "No tienes permiso al consultar este correo."}), 403
+            # Correos únicos: reservados para su dueño (y sub-usuarios); soporte exento
+            if not _is_support_user(user) and _email_reserved_for_other_user(user, email_normalized):
                 return jsonify({"error": "No tienes permiso al consultar este correo."}), 403
             if not user.can_search_any:
                 if not _user_has_allowed_email(user, email_normalized):
@@ -1200,6 +1273,9 @@ def external_search():
     if is_admin_project_b:
         pass
     else:
+        # Correos únicos: reservados para su dueño (y sub-usuarios); soporte exento
+        if not _is_support_user(user) and _email_reserved_for_other_user(user, email_normalized):
+            return jsonify({"error": "No tienes permiso para consultar este correo específico."}), 403
         # Usuario no admin: ya se rechazó inhabilitado arriba; aquí solo lista + vinculado
         if not user.can_search_any:
             is_allowed = _user_has_allowed_email(user, email_normalized)
