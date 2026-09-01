@@ -1215,7 +1215,13 @@ def external_search():
         # Usar mismo tiempo de respuesta aunque el token sea inválido
         secrets.compare_digest("dummy", "dummy")
         return jsonify({"error": "Invalid token"}), 401
-    
+
+    from app.store.partner_api import partner_external_ip_forbidden
+
+    ip_deny = partner_external_ip_forbidden(user)
+    if ip_deny is not None:
+        return ip_deny
+
     # Verificar si es admin oficial del proyecto B ANTES de validar enabled
     admin_username = current_app.config.get("ADMIN_USER", "admin")
     is_admin_project_b = (user.username == admin_username and user.parent_id is None)
@@ -1337,8 +1343,24 @@ def external_licenses_search():
     from app.admin.site_settings import get_site_setting
 
     expected = (get_site_setting("licencias_api_master_token") or "").strip()
-    if not expected or not secrets.compare_digest(expected, token):
-        return jsonify({"error": "Invalid token"}), 401
+    user = None
+    if expected and secrets.compare_digest(expected, token):
+        user = None
+    else:
+        all_users = User.query.filter(User.master_token.isnot(None)).all()
+        for u in all_users:
+            if u.master_token and secrets.compare_digest(u.master_token, token):
+                user = u
+                break
+        if not user:
+            secrets.compare_digest("dummy", "dummy")
+            return jsonify({"error": "Invalid token"}), 401
+
+    from app.store.partner_api import partner_external_ip_forbidden
+
+    ip_deny = partner_external_ip_forbidden(user)
+    if ip_deny is not None:
+        return ip_deny
 
     # Stub: la búsqueda real de licencias aún no está cableada; results[] vacío = OK.
     return jsonify({"results": [], "scope": "licenses"}), 200

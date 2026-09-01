@@ -1292,14 +1292,7 @@ document.addEventListener("DOMContentLoaded", function() {
   }
 
   // ======= BOTONES DE NAVEGACIÓN 'VOLVER' ========
-  const btnVolverUsuarios = document.getElementById("btnVolverUsuarios");
   const btnVolverPanel = document.getElementById("btnVolverPanel");
-  if (btnVolverUsuarios) {
-    btnVolverUsuarios.addEventListener("click", function() {
-      const url = this.getAttribute("data-url");
-      if (url) window.location.href = url;
-    });
-  }
   if (btnVolverPanel) {
     btnVolverPanel.addEventListener("click", function() {
       const url = this.getAttribute("data-url");
@@ -1346,14 +1339,13 @@ document.addEventListener("DOMContentLoaded", function() {
   const linkedApisList = document.getElementById("linkedApisList");
   const addLinkedApiBtn = document.getElementById("addLinkedApiBtn");
   const newApiNameInput = document.getElementById("newApiNameInput");
-  const newApiUrlInput = document.getElementById("newApiUrlInput");
+  const newApiIpInput = document.getElementById("newApiIpInput");
   const newApiTokenInput = document.getElementById("newApiTokenInput");
   const linkedApiMsg = document.getElementById("linkedApiMsg");
 
   const myApiModal = document.getElementById("myApiModal");
   const showMyApiBtn = document.getElementById("showMyApiBtn");
   const closeMyApiModalBtn = document.getElementById("closeMyApiModalBtn");
-  const myApiUrlDisplay = document.getElementById("myApiUrlDisplay");
   const myApiTokenDisplay = document.getElementById("myApiTokenDisplay");
   const regenMasterTokenBtn = document.getElementById("regenMasterTokenBtn");
 
@@ -1393,9 +1385,16 @@ document.addEventListener("DOMContentLoaded", function() {
   const closeEditApiModalBtn = document.getElementById("closeEditApiModalBtn");
   const editApiId = document.getElementById("editApiId");
   const editApiName = document.getElementById("editApiName");
-  const editApiUrl = document.getElementById("editApiUrl");
+  const editApiIp = document.getElementById("editApiIp");
   const editApiToken = document.getElementById("editApiToken");
   const saveEditApiBtn = document.getElementById("saveEditApiBtn");
+
+  function maskToken(t) {
+    const s = String(t || "");
+    if (!s) return "";
+    if (s.length <= 10) return "••••••••";
+    return s.slice(0, 6) + "…" + s.slice(-4);
+  }
 
   function fetchLinkedProjects() {
     if (!linkedApisList) return;
@@ -1431,13 +1430,13 @@ document.addEventListener("DOMContentLoaded", function() {
       div.innerHTML = `
         <div class="flex-grow-1 ml-05 text-left">
           <strong>${escapeHtml(p.name)}</strong><br>
-          <small class="text-muted">${escapeHtml(p.url)}</small>
+          <small class="text-muted">Token ${escapeHtml(maskToken(p.token))}</small>
         </div>
         <div class="d-flex gap-05 mr-05 align-items-center flex-wrap">
           <button type="button" class="btn-blue btn-imap-action btn-imap-small test-project-btn" data-id="${p.id}">
             Probar
           </button>
-          <button type="button" class="btn-panel btn-orange btn-sm edit-project-btn" data-id="${p.id}" data-name="${escapeHtml(p.name)}" data-api-url="${escapeHtml(p.url)}" data-token="${escapeHtml(p.token)}">
+          <button type="button" class="btn-panel btn-orange btn-sm edit-project-btn" data-id="${p.id}" data-name="${escapeHtml(p.name)}" data-token="${escapeHtml(p.token)}">
             <i class="fas fa-edit"></i>
           </button>
           <button type="button" class="btn-panel btn-red btn-sm delete-project-btn" data-id="${p.id}">
@@ -1452,7 +1451,7 @@ document.addEventListener("DOMContentLoaded", function() {
       btn.addEventListener("click", () => {
         editApiId.value = btn.dataset.id;
         editApiName.value = btn.dataset.name;
-        editApiUrl.value = btn.dataset.apiUrl;
+        if (editApiIp) editApiIp.value = "";
         editApiToken.value = btn.dataset.token;
         editLinkedApiModal.classList.remove("popup-hide");
         editLinkedApiModal.classList.add("popup-show");
@@ -1516,9 +1515,9 @@ document.addEventListener("DOMContentLoaded", function() {
   if (addLinkedApiBtn) {
     addLinkedApiBtn.addEventListener("click", () => {
       const name = newApiNameInput.value.trim();
-      const url = newApiUrlInput.value.trim();
+      const ip = newApiIpInput ? newApiIpInput.value.trim() : "";
       const token = newApiTokenInput.value.trim();
-      if (!name || !url || !token) {
+      if (!name || !ip || !token) {
         linkedApiMsg.textContent = "Faltan datos obligatorios.";
         linkedApiMsg.className = "text-italic text-danger";
         return;
@@ -1529,7 +1528,7 @@ document.addEventListener("DOMContentLoaded", function() {
       fetch(`/admin/user/${userId}/linked_projects`, {
         method: "POST",
         headers: { "Content-Type": "application/json", "X-CSRFToken": getCsrfToken() },
-        body: JSON.stringify({ name, url, token })
+        body: JSON.stringify({ name, ip, token })
       })
       .then(handleFetchResponse)
       .then(data => {
@@ -1537,7 +1536,7 @@ document.addEventListener("DOMContentLoaded", function() {
           linkedApiMsg.textContent = "API agregada correctamente.";
           linkedApiMsg.className = "text-italic text-success";
           newApiNameInput.value = "";
-          newApiUrlInput.value = "";
+          if (newApiIpInput) newApiIpInput.value = "";
           newApiTokenInput.value = "";
           fetchLinkedProjects();
         } else {
@@ -1562,7 +1561,6 @@ document.addEventListener("DOMContentLoaded", function() {
       .then(handleFetchResponse)
       .then(data => {
         if (data.status === "ok") {
-          myApiUrlDisplay.value = data.api_url;
           myApiTokenDisplay.value = data.token;
           myApiModal.classList.remove("popup-hide");
           myApiModal.classList.add("popup-show");
@@ -1627,9 +1625,9 @@ document.addEventListener("DOMContentLoaded", function() {
     saveEditApiBtn.addEventListener("click", () => {
       const projectId = editApiId.value;
       const name = editApiName.value.trim();
-      const url = editApiUrl.value.trim();
+      const ip = editApiIp ? editApiIp.value.trim() : "";
       const token = editApiToken.value.trim();
-      if (!name || !url || !token) {
+      if (!name || !token) {
         alert("Faltan datos obligatorios.");
         return;
       }
@@ -1637,7 +1635,7 @@ document.addEventListener("DOMContentLoaded", function() {
       fetch(`/admin/user/linked_projects/${projectId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json", "X-CSRFToken": getCsrfToken() },
-        body: JSON.stringify({ name, url, token })
+        body: JSON.stringify({ name, token, ip })
       })
       .then(handleFetchResponse)
       .then(data => {

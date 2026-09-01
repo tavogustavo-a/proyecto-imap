@@ -564,6 +564,12 @@ def search_linked_projects_only(to_address, user, service_id=None):
                     f"recursos internos: {url_stripped}"
                 )
                 continue
+            try:
+                here = (flask_request.url_root or "").rstrip("/").lower()
+            except RuntimeError:
+                here = ""
+            if here and url_stripped.rstrip("/").lower().startswith(here):
+                continue
             payload = {
                 "token": project.token,
                 "email_to_search": to_address,

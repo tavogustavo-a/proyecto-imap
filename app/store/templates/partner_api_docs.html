@@ -1,61 +1,690 @@
-<!DOCTYPE html>
-<html lang="es">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="csrf_token" content="{{ csrf_token() }}">
-<title>Documentación API Partner</title>
-<style>
-  :root{
-    --bg:#0b1220; --panel:#101b2e; --panel2:#0d1626; --line:rgba(96,165,250,.28);
-    --line2:rgba(96,165,250,.45); --tx:#e8f1ff; --mut:#9fb3cc; --blue:#3b82f6;
-    --green:#22c55e; --red:#ef4444; --amber:#f59e0b; --code:#0a0f1c;
-  }
-  *{box-sizing:border-box}
-  body{margin:0;background:linear-gradient(180deg,#0b1220 0%,#0e1728 100%);color:var(--tx);
-       font:15px/1.55 -apple-system,"Segoe UI",Roboto,Arial,sans-serif;padding:0 0 4rem}
-  .wrap{max-width:1080px;margin:0 auto;padding:1.2rem}
-  h1{font-size:1.45rem;margin:.4rem 0 .2rem}
-  h2{font-size:1.08rem;margin:0;padding:.5rem .8rem;background:linear-gradient(90deg,#183a65 0%,#245b98 62%,#2d70b6 100%);
-     border-top:1px solid rgba(147,197,253,.5);border-bottom:1px solid rgba(3,19,43,.9);letter-spacing:.01em}
-  h3{font-size:.95rem;margin:1rem 0 .35rem;color:#bfdbfe}
-  section{background:var(--panel);border:1px solid var(--line);border-radius:8px;overflow:hidden;margin:1rem 0}
-  .sec-body{padding: .8rem .9rem}
-  p{margin:.4rem 0}
-  .mut{color:var(--mut)}
-  code{background:var(--code);border:1px solid var(--line);border-radius:4px;padding:.08rem .35rem;font-size:.86em;color:#93c5fd}
-  pre{background:var(--code);border:1px solid var(--line);border-radius:6px;padding:.65rem .8rem;overflow:auto;
-      font-size:.8rem;line-height:1.5;color:#c7ddff;margin:.45rem 0}
-  table{width:100%;border-collapse:collapse;margin:.45rem 0;font-size:.86rem}
-  th,td{border:1px solid var(--line);padding:.3rem .5rem;text-align:left;vertical-align:top}
-  th{background:var(--panel2);color:#bfdbfe;font-weight:600}
-  .pill{display:inline-block;border-radius:999px;padding:.05rem .6rem;font-size:.75rem;font-weight:700}
-  .pill-on{background:rgba(34,197,94,.15);color:#86efac;border:1px solid rgba(34,197,94,.45)}
-  .pill-off{background:rgba(239,68,68,.15);color:#fca5a5;border:1px solid rgba(239,68,68,.45)}
-  .verb{display:inline-block;min-width:3.2rem;text-align:center;border-radius:4px;font-size:.72rem;font-weight:800;
-        padding:.1rem .3rem;margin-right:.4rem}
-  .get{background:rgba(34,197,94,.18);color:#86efac;border:1px solid rgba(34,197,94,.4)}
-  .post{background:rgba(59,130,246,.18);color:#93c5fd;border:1px solid rgba(59,130,246,.4)}
-  .ep{font-family:ui-monospace,Consolas,monospace;font-size:.86rem}
-  .live{font-size:.72rem;color:#86efac;border:1px solid rgba(34,197,94,.4);border-radius:4px;padding:.02rem .35rem;margin-left:.4rem}
-  .admin-box{background:var(--panel2);border:1px dashed var(--line2);border-radius:6px;padding:.7rem .8rem;margin:.6rem 0}
-  .row{display:flex;flex-wrap:wrap;gap:.5rem;align-items:center}
-  input[type=text]{background:#0a0f1c;border:1px solid var(--line2);color:var(--tx);border-radius:5px;padding:.35rem .55rem;min-width:14rem}
-  button{background:linear-gradient(180deg,#2f73bc,#1d5696);border:1px solid #9ac8f6;color:#fff;border-radius:5px;
-         padding:.35rem .8rem;cursor:pointer;font-weight:600}
-  button.red{background:linear-gradient(180deg,#a23b46,#762531);border-color:#f0a0a7}
-  button:disabled{opacity:.55;cursor:default}
-  .ip-item{display:inline-flex;align-items:center;gap:.4rem;background:#0a0f1c;border:1px solid var(--line);
-           border-radius:5px;padding:.15rem .5rem;margin:.15rem .25rem .15rem 0;font-family:ui-monospace,Consolas,monospace;font-size:.82rem}
-  .ip-item button{padding:0 .4rem;font-size:.8rem;background:rgba(239,68,68,.2);border:1px solid rgba(239,68,68,.5)}
-  .status-msg{font-size:.82rem;margin-left:.5rem}
-  .toc a{color:#93c5fd;text-decoration:none;margin-right:.9rem;font-size:.85rem}
-  .toc a:hover{text-decoration:underline}
-  label.switch{display:inline-flex;align-items:center;gap:.45rem;cursor:pointer;font-weight:600}
-</style>
-</head>
-<body>
-<div class="wrap">
+{% extends "base.html" %}
+
+{% block title %}Documentación API Partner{% endblock %}
+
+{% block head %}
+  {{ super() }}
+  <meta name="csrf_token" content="{{ csrf_token() }}">
+{% endblock %}
+
+{% block page_styles %}
+  {{ super() }}
+  <link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}?v={{ licencias_static_version }}">
+  <style>
+    body.theme-active {
+      background: linear-gradient(180deg, #0b1220 0%, #0e1728 100%) !important;
+    }
+    body:has(.partner-docs-page) > .container {
+      max-width: none !important;
+      width: 100% !important;
+      margin: 0 !important;
+      padding: 0 !important;
+      background: transparent !important;
+      box-shadow: none !important;
+    }
+    .partner-docs-page {
+      --pd-bg: #0b1220;
+      --pd-panel: #101b2e;
+      --pd-panel2: #0d1626;
+      --pd-line: rgba(96, 165, 250, .28);
+      --pd-line2: rgba(96, 165, 250, .45);
+      --pd-tx: #e8f1ff;
+      --pd-mut: #9fb3cc;
+      --pd-code: #0a0f1c;
+      --card-bg: #0d1626;
+      --card-border: rgba(96, 165, 250, .28);
+      --text-color: #e8f1ff;
+      color: var(--pd-tx);
+      padding-bottom: 4rem;
+    }
+    .partner-docs-nav {
+      max-width: 1080px;
+      margin: 0 auto;
+      padding: .85rem 1.2rem 0;
+      background: transparent !important;
+      border: none !important;
+      box-shadow: none !important;
+      border-radius: 0 !important;
+      color: inherit !important;
+    }
+    .partner-docs {
+      max-width: 1080px;
+      margin: 0 auto;
+      padding: 1.2rem;
+      font: 15px/1.55 -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+    }
+    .partner-docs h1 { font-size: 1.45rem; margin: .4rem 0 .2rem; }
+    .partner-docs h2 {
+      font-size: 1.08rem; margin: 0; padding: .5rem .8rem;
+      background: linear-gradient(90deg, #183a65 0%, #245b98 62%, #2d70b6 100%);
+      border-top: 1px solid rgba(147, 197, 253, .5);
+      border-bottom: 1px solid rgba(3, 19, 43, .9);
+      letter-spacing: .01em;
+    }
+    .partner-docs h3 { font-size: .95rem; margin: 1rem 0 .35rem; color: #bfdbfe; }
+    .partner-docs section {
+      background: var(--pd-panel);
+      border: 1px solid var(--pd-line);
+      border-radius: 8px;
+      overflow: hidden;
+      margin: 1rem 0;
+    }
+    .partner-docs .sec-body { padding: .8rem .9rem; }
+    .partner-docs p { margin: .4rem 0; }
+    .partner-docs .mut { color: var(--pd-mut); }
+    .partner-docs code {
+      background: var(--pd-code);
+      border: 1px solid var(--pd-line);
+      border-radius: 4px;
+      padding: .08rem .35rem;
+      font-size: .86em;
+      color: #93c5fd;
+    }
+    .partner-docs pre {
+      background: var(--pd-code);
+      border: 1px solid var(--pd-line);
+      border-radius: 6px;
+      padding: .65rem .8rem;
+      overflow: auto;
+      font-size: .8rem;
+      line-height: 1.5;
+      color: #c7ddff;
+      margin: .45rem 0;
+    }
+    .partner-docs table { width: 100%; border-collapse: collapse; margin: .45rem 0; font-size: .86rem; }
+    .partner-docs th, .partner-docs td {
+      border: 1px solid var(--pd-line);
+      padding: .3rem .5rem;
+      text-align: left;
+      vertical-align: top;
+    }
+    .partner-docs th { background: var(--pd-panel2); color: #bfdbfe; font-weight: 600; }
+    .partner-docs .pill {
+      display: inline-block; border-radius: 999px; padding: .05rem .6rem;
+      font-size: .75rem; font-weight: 700;
+    }
+    .partner-docs .pill-on {
+      background: rgba(34, 197, 94, .15); color: #86efac;
+      border: 1px solid rgba(34, 197, 94, .45);
+    }
+    .partner-docs .pill-off {
+      background: rgba(239, 68, 68, .15); color: #fca5a5;
+      border: 1px solid rgba(239, 68, 68, .45);
+    }
+    .partner-docs .verb {
+      display: inline-block; min-width: 3.2rem; text-align: center;
+      border-radius: 4px; font-size: .72rem; font-weight: 800;
+      padding: .1rem .3rem; margin-right: .4rem;
+    }
+    .partner-docs .get {
+      background: rgba(34, 197, 94, .18); color: #86efac;
+      border: 1px solid rgba(34, 197, 94, .4);
+    }
+    .partner-docs .post {
+      background: rgba(59, 130, 246, .18); color: #93c5fd;
+      border: 1px solid rgba(59, 130, 246, .4);
+    }
+    .partner-docs .ep { font-family: ui-monospace, Consolas, monospace; font-size: .86rem; }
+    .partner-docs .live {
+      font-size: .72rem; color: #86efac;
+      border: 1px solid rgba(34, 197, 94, .4);
+      border-radius: 4px; padding: .02rem .35rem; margin-left: .4rem;
+    }
+    .partner-docs .ip-add-row,
+    .partner-docs .api-add-row {
+      overflow: visible;
+    }
+    .partner-docs .admin-box {
+      background: var(--pd-panel2);
+      border: 1px dashed var(--pd-line2);
+      border-radius: 6px;
+      padding: .7rem .8rem;
+      margin: .6rem 0;
+      overflow: visible;
+    }
+    .partner-docs .ip-add-row {
+      display: flex;
+      flex-direction: row;
+      flex-wrap: nowrap;
+      gap: .45rem;
+      align-items: center;
+      margin-top: .5rem;
+    }
+    .partner-docs .ip-add-row #ipInput,
+    .partner-docs .ip-add-row #ipAddBtn,
+    .partner-docs .ip-add-row .pd-owner-picker-btn {
+      box-sizing: border-box;
+      height: 2.15rem;
+      min-height: 2.15rem;
+      max-height: 2.15rem;
+      margin: 0 !important;
+      font-size: .9rem;
+      line-height: 1.25;
+      border-radius: 5px;
+    }
+    .partner-docs .ip-add-row #ipInput {
+      padding: 0 .55rem !important;
+    }
+    .partner-docs .ip-add-row .pd-owner-picker {
+      flex: 0 1 14rem;
+      width: auto !important;
+      min-width: 10rem !important;
+      max-width: 18rem;
+    }
+    .partner-docs .ip-add-row #ipInput {
+      flex: 1 1 auto;
+      width: auto !important;
+      min-width: 8rem !important;
+    }
+    .partner-docs .ip-add-row #ipAddBtn {
+      flex: 0 0 auto;
+      white-space: nowrap;
+      padding: 0 .8rem !important;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 600;
+      cursor: pointer;
+      background: linear-gradient(180deg, #2f73bc, #1d5696);
+      border: 1px solid #9ac8f6;
+      color: #fff;
+    }
+    .partner-docs .api-add-row {
+      display: flex;
+      flex-direction: row;
+      flex-wrap: nowrap;
+      gap: .45rem;
+      align-items: center;
+      margin-top: .5rem;
+    }
+    .partner-docs .api-add-row .pd-owner-picker,
+    .partner-docs .api-add-row .api-input,
+    .partner-docs .api-add-row button {
+      box-sizing: border-box;
+    }
+    .partner-docs .api-add-row .pd-owner-picker-btn,
+    .partner-docs .api-add-row .api-input,
+    .partner-docs .api-add-row button:not(.pd-owner-picker-btn) {
+      height: 2.15rem;
+      min-height: 2.15rem;
+      max-height: 2.15rem;
+      margin: 0 !important;
+      font-size: .9rem;
+      line-height: 1.25;
+      border-radius: 5px;
+    }
+    .partner-docs .api-add-row .pd-owner-picker {
+      flex: 0 1 14rem;
+      width: auto !important;
+      min-width: 10rem !important;
+      max-width: 18rem;
+    }
+    .partner-docs .api-add-row .api-input {
+      flex: 1 1 auto;
+      width: auto !important;
+      min-width: 8rem !important;
+      padding: 0 .55rem !important;
+    }
+    .partner-docs .api-add-row button:not(.pd-owner-picker-btn) {
+      flex: 0 0 auto;
+      white-space: nowrap;
+      padding: 0 .65rem !important;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 600;
+      cursor: pointer;
+      background: linear-gradient(180deg, #2f73bc, #1d5696);
+      border: 1px solid #9ac8f6;
+      color: #fff;
+    }
+    @media (max-width: 480px) {
+      .partner-docs .api-add-row {
+        flex-wrap: wrap;
+      }
+      .partner-docs .api-add-row .pd-owner-picker,
+      .partner-docs .api-add-row .api-input {
+        flex: 1 1 calc(50% - .25rem);
+        min-width: 0 !important;
+        max-width: none;
+        width: auto !important;
+      }
+      .partner-docs .api-add-row button:not(.pd-owner-picker-btn) {
+        flex: 0 0 100%;
+        align-self: center;
+        margin: 0 auto !important;
+      }
+    }
+    .partner-docs #saveMsg {
+      min-height: 1.2em;
+      margin: .35rem 0 0;
+    }
+    @media (max-width: 480px) {
+      .partner-docs .ip-add-row {
+        flex-wrap: wrap;
+      }
+      .partner-docs .ip-add-row .pd-owner-picker,
+      .partner-docs .ip-add-row #ipInput {
+        flex: 1 1 calc(50% - .25rem);
+        min-width: 0 !important;
+        max-width: none;
+        width: auto !important;
+      }
+      .partner-docs .ip-add-row #ipAddBtn {
+        flex: 0 0 100%;
+        align-self: center;
+        margin: 0 auto;
+      }
+    }
+    .partner-docs input[type=text],
+    .partner-docs input[type="text"],
+    .partner-docs input[type=search]:not(.pd-owner-picker-input),
+    .partner-docs #ipInput {
+      background: #0a0f1c !important;
+      border: 1px solid var(--pd-line2) !important;
+      color: var(--pd-tx) !important;
+      -webkit-text-fill-color: var(--pd-tx);
+      caret-color: var(--pd-tx);
+      border-radius: 5px;
+      padding: .35rem .55rem;
+      min-width: 14rem;
+      width: auto;
+      color-scheme: dark;
+    }
+    .partner-docs .ip-add-row #ipInput {
+      padding: 0 .55rem !important;
+    }
+    .partner-docs input[type=text]::placeholder,
+    .partner-docs #ipInput::placeholder {
+      color: var(--pd-mut) !important;
+      opacity: 1;
+    }
+    .partner-docs input[type=text]:focus,
+    .partner-docs #ipInput:focus {
+      outline: none;
+      border-color: #93c5fd !important;
+      box-shadow: 0 0 0 2px rgba(147, 197, 253, .18);
+    }
+    .partner-docs input[type=text]:-webkit-autofill,
+    .partner-docs #ipInput:-webkit-autofill {
+      -webkit-box-shadow: 0 0 0 1000px #0a0f1c inset !important;
+      -webkit-text-fill-color: #e8f1ff !important;
+      caret-color: #e8f1ff;
+    }
+    .partner-docs .pd-owner-picker {
+      position: relative;
+      overflow: visible;
+    }
+    .partner-docs .pd-owner-picker-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: .4rem;
+      width: 100%;
+      min-width: 0;
+      padding: 0 .55rem;
+      margin: 0 !important;
+      background: #0a0f1c !important;
+      border: 1px solid var(--pd-line2) !important;
+      color: #7b93b8 !important;
+      border-radius: 5px;
+      cursor: pointer;
+      font-weight: 600;
+      text-align: left;
+      box-sizing: border-box;
+    }
+    .partner-docs .pd-owner-picker.has-value .pd-owner-picker-btn {
+      color: var(--pd-tx) !important;
+    }
+    .partner-docs .pd-owner-picker-btn:hover,
+    .partner-docs .pd-owner-picker-btn:focus {
+      outline: none;
+      border-color: #93c5fd !important;
+      box-shadow: 0 0 0 2px rgba(147, 197, 253, .12);
+      color: var(--pd-tx) !important;
+    }
+    .partner-docs .pd-owner-picker-btn .fa-user {
+      flex: 0 0 auto;
+      font-size: .78rem;
+      opacity: .85;
+    }
+    .partner-docs .pd-owner-picker-btn-label {
+      flex: 1 1 auto;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .partner-docs .pd-owner-picker-btn .fa-chevron-down {
+      flex: 0 0 auto;
+      font-size: .65rem;
+      opacity: .7;
+    }
+    .partner-docs .pd-owner-picker--modal {
+      width: 100%;
+      max-width: none;
+      text-align: left;
+      margin-bottom: .5rem;
+    }
+    .pd-owner-picker-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 10050;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 1rem;
+      background: rgba(4, 10, 22, .72);
+    }
+    .pd-owner-picker-overlay[hidden] {
+      display: none !important;
+    }
+    body.pd-owner-picker-open {
+      overflow: hidden;
+    }
+    .pd-owner-picker-dialog {
+      width: min(22rem, 100%);
+      max-height: min(28rem, 86vh);
+      display: flex;
+      flex-direction: column;
+      background: #101b2e;
+      border: 1px solid rgba(96, 165, 250, .4);
+      border-radius: 10px;
+      box-shadow: 0 16px 40px rgba(0, 0, 0, .5);
+      overflow: hidden;
+      color: #e8f1ff;
+    }
+    .pd-owner-picker-dialog-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: .5rem;
+      padding: .7rem .85rem .55rem;
+      border-bottom: 1px solid rgba(96, 165, 250, .2);
+    }
+    .pd-owner-picker-dialog-head h4 {
+      margin: 0;
+      font-size: .95rem;
+      color: #e8f1ff;
+    }
+    .pd-owner-picker-dialog-close {
+      background: none;
+      border: none;
+      color: #93c5fd;
+      font-size: 1.35rem;
+      line-height: 1;
+      cursor: pointer;
+      width: 1.8rem;
+      height: 1.8rem;
+      padding: 0;
+    }
+    .pd-owner-picker-overlay .pd-owner-picker-input {
+      display: block;
+      width: calc(100% - 1.7rem);
+      margin: .7rem .85rem .45rem;
+      box-sizing: border-box;
+      height: 2.15rem;
+      padding: 0 .55rem;
+      background: #0a0f1c !important;
+      border: 1px solid rgba(96, 165, 250, .45) !important;
+      color: #e8f1ff !important;
+      border-radius: 5px;
+      color-scheme: dark;
+    }
+    .pd-owner-picker-overlay .pd-owner-picker-input:focus {
+      outline: none;
+      border-color: #93c5fd !important;
+      box-shadow: 0 0 0 2px rgba(147, 197, 253, .12);
+    }
+    .pd-owner-picker-overlay .pd-owner-picker-results {
+      flex: 1 1 auto;
+      overflow-x: hidden;
+      overflow-y: auto;
+      min-height: 8rem;
+      max-height: 16rem;
+      margin: 0 .55rem .7rem;
+      border: 1px solid rgba(96, 165, 250, .2);
+      border-radius: 6px;
+      background: #0a0f1c;
+    }
+    .pd-owner-picker-row {
+      display: block;
+      width: 100%;
+      padding: .5rem .7rem;
+      margin: 0 !important;
+      border: none;
+      border-bottom: 1px solid rgba(96, 165, 250, .14);
+      background: transparent !important;
+      color: #e8f1ff !important;
+      text-align: left;
+      cursor: pointer;
+      font-size: .9rem;
+      line-height: 1.35;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      box-sizing: border-box;
+    }
+    .pd-owner-picker-row:last-child {
+      border-bottom: none;
+    }
+    .pd-owner-picker-row:hover,
+    .pd-owner-picker-row:focus {
+      background: #152238 !important;
+      outline: none;
+    }
+    .pd-owner-picker-empty {
+      margin: 0;
+      padding: .7rem .75rem;
+      font-size: .82rem;
+      color: #7b93b8;
+    }
+    .partner-docs .ip-item .ip-owner {
+      color: #93c5fd;
+      font-family: inherit;
+      font-size: .8rem;
+    }
+    .partner-docs .partner-docs-api-licencias h3.admin-api-section-title {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: .45rem;
+      flex-wrap: wrap;
+      font-size: 1rem;
+      margin: 0 0 .45rem;
+      color: var(--pd-tx);
+    }
+    .partner-docs .partner-docs-api-licencias .api-input {
+      background: #0a0f1c !important;
+      border: 1px solid var(--pd-line2) !important;
+      color: var(--pd-tx) !important;
+      min-width: 10rem;
+    }
+    .partner-docs .linked-api-item {
+      background-color: #0a0f1c !important;
+      background: #0a0f1c !important;
+      border: 1px solid var(--pd-line) !important;
+      border-radius: 6px;
+      color: var(--pd-tx) !important;
+    }
+    .partner-docs .linked-api-item strong,
+    .partner-docs .linked-api-item small {
+      color: inherit;
+    }
+    .partner-docs .linked-api-item .text-muted { color: var(--pd-mut) !important; }
+    .partner-docs-page .popup-base {
+      background: #101b2e !important;
+      color: #e8f1ff !important;
+      border: 1px solid rgba(96, 165, 250, .35);
+      overflow: visible;
+    }
+    .partner-docs-page .popup-base h4,
+    .partner-docs-page .popup-base label,
+    .partner-docs-page .popup-base p {
+      color: #e8f1ff !important;
+    }
+    .partner-docs-page .popup-base .pd-owner-picker-btn {
+      height: 2.15rem;
+      width: 100%;
+      background: #0a0f1c !important;
+      border: 1px solid rgba(96, 165, 250, .45) !important;
+      color: #7b93b8 !important;
+    }
+    .partner-docs-page .popup-base .pd-owner-picker.has-value .pd-owner-picker-btn {
+      color: #e8f1ff !important;
+    }
+    .partner-docs-page .popup-base .api-input,
+    .partner-docs-page .popup-base input[type=text],
+    .partner-docs-page .popup-base input[type=search] {
+      background: #0a0f1c !important;
+      border: 1px solid rgba(96, 165, 250, .45) !important;
+      color: #e8f1ff !important;
+    }
+    .partner-docs-page .alert-info {
+      background: rgba(59, 130, 246, .16) !important;
+      color: #bfdbfe !important;
+      border-color: rgba(96, 165, 250, .35) !important;
+    }
+    .partner-docs .sec-body > .admin-box button:not(#ipAddBtn):not(.pd-owner-picker-btn),
+    .partner-docs .ip-item button {
+      background: linear-gradient(180deg, #2f73bc, #1d5696);
+      border: 1px solid #9ac8f6;
+      color: #fff;
+      border-radius: 5px;
+      padding: .35rem .8rem;
+      cursor: pointer;
+      font-weight: 600;
+    }
+    .partner-docs .ip-item button {
+      padding: 0 .4rem;
+      font-size: .8rem;
+      background: rgba(239, 68, 68, .2);
+      border: 1px solid rgba(239, 68, 68, .5);
+    }
+    .partner-docs .ip-item {
+      display: inline-flex; align-items: center; gap: .4rem;
+      background: #0a0f1c; border: 1px solid var(--pd-line);
+      border-radius: 5px; padding: .15rem .5rem; margin: .15rem .25rem .15rem 0;
+      font-family: ui-monospace, Consolas, monospace; font-size: .82rem;
+    }
+    .partner-docs .ip-item.is-off {
+      opacity: .55;
+      border-color: rgba(239, 68, 68, .45);
+    }
+    .partner-docs .ip-item.is-off .ip-owner {
+      color: #fca5a5;
+    }
+    .partner-docs .status-msg { font-size: .82rem; margin-left: .5rem; }
+    .partner-docs .toc a { color: #93c5fd; text-decoration: none; margin-right: .9rem; font-size: .85rem; }
+    .partner-docs .toc a:hover { text-decoration: underline; }
+    .partner-docs label.switch { display: inline-flex; align-items: center; gap: .45rem; cursor: pointer; font-weight: 600; }
+  </style>
+{% endblock %}
+
+{% block content %}
+{% set blocked_users = ['soporte', 'soporte1', 'soporte2', 'soporte3'] %}
+{% set current_user = current_user if current_user is defined else current_user_obj %}
+<div class="partner-docs-page"
+     {% if is_admin %}data-clear-trigger-log-url="{{ url_for('admin_bp.clear_trigger_log') }}"
+     data-logout-all-cookies-url="{{ url_for('admin_bp.logout_all_and_clear_cookies') }}"{% endif %}>
+
+{% if session.get('logged_in') and (not session.get('username') or session.get('username').lower() not in blocked_users) %}
+  <div class="partner-docs-nav">
+    {% if is_admin %}
+      <div class="d-flex gap-05">
+        <button type="button" id="menuToggleBtn" class="btn-panel btn-blue menu-toggle-btn" title="Menú de navegación" aria-label="Abrir menú de navegación">&#9776; Menú</button>
+        <button type="button" id="menu2ToggleBtn" class="btn-panel btn-blue menu-toggle-btn" title="Menú secundario" aria-label="Abrir segundo menú">&#9776; Menú2</button>
+      </div>
+    {% else %}
+      <button type="button" id="menuToggleBtn" class="btn-panel btn-blue menu-toggle-btn" aria-label="Abrir menú de usuario">&#9776; Menú</button>
+    {% endif %}
+  </div>
+
+  {% if is_admin %}
+  <div id="mobileMenu" class="mobile-menu-store hidden">
+    <div class="menu-user-info-row menu-user-info-row--name-only menu-sidebar-heading-name">
+      <span class="menu-user-name">{{ session.get('username', 'Admin') }}</span>
+    </div>
+    {% include 'includes/admin_menu_primary_links.html' %}
+    <button id="btnClearTriggerLogMenu" type="button" class="btn-panel btn-red mobile-menu-btn mb-04"><i class="fas fa-trash"></i> Limpiar Logs</button>
+    <a href="{{ url_for('auth_bp.logout') }}" class="btn-panel btn-red mobile-menu-btn mb-04"><i class="fas fa-sign-out-alt"></i> Cerrar Sesión</a>
+    <button id="btnLogoutAllAndClearCookies" type="button" class="btn-panel btn-red mobile-menu-btn mb-04" data-url="{{ url_for('admin_bp.logout_all_and_clear_cookies') }}"><i class="fas fa-cookie-bite"></i> Cerrar sesión y limpiar cookies</button>
+  </div>
+  <div id="mobileMenu2" class="mobile-menu-store hidden">
+    <div class="menu-user-info-row menu-user-info-row--name-only menu-sidebar-heading-name">
+      <span class="menu-user-name">Menú</span>
+    </div>
+    {% include 'includes/admin_menu_secondary_links.html' %}
+    {% include 'includes/admin_menu_licencias_extra_links.html' %}
+  </div>
+  {% else %}
+  <div id="mobileMenu" class="mobile-menu-store hidden">
+    <div class="menu-user-info-row menu-user-info-row--name-only menu-sidebar-heading-name">
+      <span class="menu-user-name">{{ session.get('username', 'Invitado') }}</span>
+    </div>
+    {% set user_object = current_user %}
+    {% set current_user_id = session.get("user_id") %}
+    {% if not user_object and current_user_id %}
+      {% set user_object = User.query.get(current_user_id) %}
+    {% endif %}
+    {% if user_object %}
+      {% set show_store = False %}
+      {% if user_object.parent_id %}
+        {% if user_object.can_access_store %}
+          {% set parent_nav = User.query.get(user_object.parent_id) %}
+          {% if parent_nav and parent_nav.user_prices and (
+            parent_nav.user_prices.get('tipo_precio') in ['USD', 'COP']
+            or parent_nav.user_prices.get('soporte_licencias')
+          ) %}
+            {% set show_store = True %}
+          {% endif %}
+        {% endif %}
+      {% elif user_object.user_prices and (
+        user_object.user_prices.get('tipo_precio') in ['USD', 'COP']
+        or user_object.user_prices.get('soporte_licencias')
+      ) %}
+        {% set show_store = True %}
+      {% endif %}
+      {% if show_store %}
+        <a href="{{ url_for('store_bp.store_front') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-store"></i> Tienda</a>
+        <a href="{{ url_for('store_bp.user_licencias') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-link"></i> Licencias</a>
+        <a href="{{ url_for('store_bp.historial_compras_usuario') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-receipt"></i> Mi Historial de Compras</a>
+        {% include 'includes/store_user_menu_recargas_link.html' %}
+        {% include 'includes/store_user_menu_chatbot_link.html' %}
+      {% endif %}
+      {% if user_object.has_public_tools_access() %}
+        <a href="{{ url_for('store_bp.tools_public') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-tools"></i> Herramientas</a>
+      {% endif %}
+    {% endif %}
+    {% include 'includes/store_user_menu_api_docs_link.html' %}
+    <a href="{{ url_for('main_bp.home') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-code"></i> Códigos</a>
+    {% if is_user and current_user %}
+      {% if current_user.is_support %}
+        <a href="{{ url_for('store_bp.support_dashboard') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-headset"></i> Chat de Soporte Admin</a>
+      {% elif current_user.can_chat %}
+        <a href="{{ url_for('store_bp.user_chat_soporte') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-headset"></i> Chat de Soporte</a>
+      {% endif %}
+    {% endif %}
+    {% if is_user and user_object and user_object.can_create_subusers %}
+      <a href="{{ url_for('subuser_bp.manage_subusers') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-users"></i> Sub-usuarios</a>
+    {% endif %}
+    {% if is_user and current_user and not current_user.parent_id and user_has_worksheet_access(current_user) %}
+      <a href="{{ url_for('store_bp.user_work_sheets') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-table"></i> Hojas de Cálculo</a>
+    {% endif %}
+    {% if is_user and current_user and current_user.managed_imap2_pages|length > 0 %}
+      <a href="{{ url_for('user_auth_bp.my_pages_list') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-file-alt"></i> Gestionar mi página</a>
+    {% endif %}
+    {% if is_user %}
+      <a href="{{ url_for('user_auth_bp.logout') }}" class="btn-panel btn-red mobile-menu-btn mb-04"><i class="fas fa-sign-out-alt"></i> Cerrar Sesión</a>
+    {% else %}
+      <a href="{{ url_for('user_auth_bp.logout') }}" class="btn-panel btn-red mobile-menu-btn mb-04"><i class="fas fa-sign-out-alt"></i> Cerrar Sesión</a>
+    {% endif %}
+    {% include 'includes/store_user_menu_saldo_block.html' %}
+  </div>
+  {% endif %}
+  <div id="menuOverlay" class="menu-overlay"></div>
+{% endif %}
+
+<div class="partner-docs">
   <h1>Documentación API Partner</h1>
   <p class="mut">
     Base: <code id="baseUrl">{{ base_url }}</code>
@@ -67,7 +696,8 @@
   <p class="toc">
     <a href="#auth">Autenticación</a><a href="#limites">Límites y seguridad</a><a href="#perfil">Perfil</a>
     <a href="#productos">Productos</a><a href="#compras">Compras</a><a href="#renovaciones">Renovaciones</a>
-    <a href="#reportes">Reportes</a><a href="#codigos">Códigos</a><a href="#errores">Errores</a>
+    <a href="#reportes">Reportes</a><a href="#codigos">Códigos</a>
+    <a href="#errores">Errores</a>{% if is_admin %}<a href="#apiLicenciasAdmin">API licencias</a>{% endif %}
   </p>
 
   {% if is_admin %}
@@ -84,17 +714,26 @@
         </div>
       </div>
       <div class="admin-box">
-        <p style="margin-top:0"><strong>IPs permitidas</strong> — si la lista está vacía, se acepta cualquier IP.
-          Acepta IP exacta (<code>190.85.10.20</code>) o rango CIDR (<code>190.85.10.0/24</code>).
+        <p style="margin-top:0"><strong>IPs permitidas</strong> — la lista no puede quedar vacía: sin IPs vinculadas la API no acepta ninguna conexión.
+          Cada IP o rango CIDR (<code>190.85.10.20</code> / <code>190.85.10.0/24</code>) debe tener un usuario dueño.
+          Esta misma lista vale para la API Partner, para <strong>Mi API</strong> de Códigos (API Para Proyectos Vinculados, más abajo) y para <strong>Mi API</strong> de licencias.
           Tu IP actual: <code id="clientIp">…</code></p>
         <div id="ipList"></div>
-        <div class="row" style="margin-top:.5rem">
+        <div class="ip-add-row">
+          <div class="pd-owner-picker" data-owner-picker>
+            <input type="hidden" id="ipUserSelect" value="">
+            <button type="button" id="ipOwnerSearch" class="pd-owner-picker-btn" data-placeholder="Buscar usuario dueño…" aria-haspopup="dialog" aria-label="Buscar usuario dueño">
+              <i class="fas fa-user" aria-hidden="true"></i>
+              <span class="pd-owner-picker-btn-label">Buscar usuario dueño…</span>
+              <i class="fas fa-chevron-down" aria-hidden="true"></i>
+            </button>
+          </div>
           <input type="text" id="ipInput" placeholder="IP o rango CIDR" autocomplete="off">
           <button type="button" id="ipAddBtn">Añadir IP</button>
-          <button type="button" id="saveBtn">Guardar cambios</button>
-          <span class="status-msg" id="saveMsg" role="status"></span>
         </div>
+        <p class="status-msg" id="saveMsg" role="status"></p>
       </div>
+      {% include 'includes/admin_api_licencias_panels.html' %}
     </div>
   </section>
   {% endif %}
@@ -106,21 +745,31 @@
         <code>access</code> (válido {{ limits.access_minutes }} min, va en cada petición) y
         <code>refresh</code> (válido {{ limits.refresh_days }} días, renueva el access sin reenviar la contraseña).
         Si cambias tu contraseña, todos los tokens anteriores quedan invalidados.</p>
+      <p>Solo funciona si tu usuario tiene tipo de precio <code>COP</code> o <code>USD</code> (el mismo cuadrado de la tienda).
+        Ese valor fija la moneda de precios y de saldo en toda la API.</p>
 
       <p><span class="verb post">POST</span><span class="ep">/auth/token/</span></p>
 <pre>curl -X POST "{{ base_url }}/auth/token/" \
   -H "Content-Type: application/json" \
   -d '{"username": "TU_USUARIO", "password": "TU_CONTRASEÑA"}'
 
-→ {"data": {"tokens": {"access": "...", "refresh": "..."},
-            "expires_in": {{ limits.access_minutes * 60 }}, "user": {"id": 7, "username": "TU_USUARIO"}}}</pre>
+→ {"success": true, "data": {"tokens": {"access": "...", "refresh": "..."},
+            "expires_in": {{ limits.access_minutes * 60 }},
+            "user": {"id": 7, "username": "TU_USUARIO", "currency": "{{ example_currency }}"}}}</pre>
 
       <p><span class="verb post">POST</span><span class="ep">/auth/token/refresh/</span></p>
 <pre>curl -X POST "{{ base_url }}/auth/token/refresh/" \
   -H "Content-Type: application/json" \
   -d '{"refresh": "..."}'
 
-→ {"data": {"access": "...", "refresh": "...", "expires_in": {{ limits.access_minutes * 60 }}}}</pre>
+→ {"success": true, "data": {"access": "...", "refresh": "...", "expires_in": {{ limits.access_minutes * 60 }}}}</pre>
+
+      <p><span class="verb post">POST</span><span class="ep">/auth/token/verify/</span></p>
+<pre>curl -X POST "{{ base_url }}/auth/token/verify/" \
+  -H "Content-Type: application/json" \
+  -d '{"token": "..."}'
+
+→ {"success": true, "data": {"valid": true, "kind": "access"}}</pre>
 
       <p>Todas las demás llamadas llevan el header <code>Authorization: Bearer &lt;access&gt;</code>.</p>
     </div>
@@ -139,8 +788,9 @@
         <tr><td>Vida del token access</td><td>{{ limits.access_minutes }} min</td><td><code>401 token_expired</code></td></tr>
         <tr><td>Vida del token refresh</td><td>{{ limits.refresh_days }} días</td><td>volver a hacer login</td></tr>
       </table>
-      <p class="mut">Además el administrador puede restringir por IP (lista blanca) y apagar la API por completo.
-        Con lista activa, una IP fuera de ella recibe <code>403 ip_not_allowed</code>.</p>
+      <p class="mut">Además el administrador restringe por IP: cada IP va vinculada a un usuario y la lista no puede quedar vacía. También puede apagar la API por completo.
+        Con lista activa, una IP fuera de ella recibe <code>403 ip_not_allowed</code>.
+        Sin tipo de precio COP/USD el login responde <code>403 forbidden</code>.</p>
     </div>
   </section>
 
@@ -150,9 +800,14 @@
       <p><span class="verb get">GET</span><span class="ep">/me/</span></p>
 <pre>curl "{{ base_url }}/me/" -H "Authorization: Bearer &lt;access&gt;"
 
-→ {"data": {"user": {"id": 7, "username": "TU_USUARIO", "currency": "COP",
-            "saldo_cop": 125000.0, "saldo_usd": 0.0}}}</pre>
-      <p class="mut">Las compras se descuentan de tu saldo prepago en tu moneda (<code>currency</code>).</p>
+→ {"success": true, "data": {"user": {"id": 7, "username": "TU_USUARIO",
+            "currency": "{{ example_currency }}", "currency_prefix": "{{ example_currency }}",
+            "saldo": 125000.0, "balance": 125000.0}}}</pre>
+      <p><span class="verb post">POST</span><span class="ep">/me/password/</span> —
+        cambia la contraseña (<code>old_password</code>, <code>new_password</code>,
+        <code>new_password_confirm</code>). Invalida los tokens anteriores.</p>
+      <p class="mut">El saldo es el mismo del menú de la tienda: solo la moneda de tu cuadrado
+        (<code>currency</code>). Las compras se descuentan de ese saldo.</p>
     </div>
   </section>
 
@@ -163,24 +818,65 @@
         <span class="mut">(opcional <code>?q=texto</code> para filtrar por nombre)</span></p>
 <pre>curl "{{ base_url }}/store/products/" -H "Authorization: Bearer &lt;access&gt;"
 
-→ {"data": {"currency": "COP", "products": [
-     {"id": {{ example_product.id }}, "name": "{{ example_product.name }}", "price_cop": 12000.0, "price_usd": 3.5,
+→ {"data": {"currency": "{{ example_currency }}", "products": [
+     {"id": {{ example_product.id }}, "name": "{{ example_product.name }}",
+      "price": {{ example_price }}, "currency": "{{ example_currency }}",
       "stock": 14, "term_days": 30, "month_to_month": false,
-      "renewal": {"customer_account": true, "inventory_search": true}} ]}}</pre>
-      <p>El precio devuelto ya incluye tus descuentos. Catálogo actual
-        ({{ products|length }} producto{{ 's' if products|length != 1 }}):</p>
+      "renewal": {"customer_account": {{ 'true' if example_product.renewal.customer_account else 'false' }}, "inventory_search": true}} ]}}</pre>
+      <p>El precio ya incluye tus descuentos y sale <strong>solo en tu moneda</strong>
+        ({{ example_currency }}). No se mezclan COP y USD.</p>
+
+      {% if can_see_prices %}
+      <p>Catálogo actual para tu usuario
+        ({{ products|length }} producto{{ 's' if products|length != 1 }}, moneda {{ viewer_currency }}):</p>
       <table>
-        <tr><th>ID</th><th>Producto</th><th>Stock vendible</th><th>Precio COP</th><th>Precio USD</th><th>Renueva cuenta del cliente</th></tr>
+        <tr>
+          <th>ID</th>
+          <th>Producto</th>
+          <th>Stock vendible</th>
+          <th>Precio {{ viewer_currency }}</th>
+          <th>Renueva cuenta del cliente</th>
+        </tr>
         {% for p in products %}
         <tr>
-          <td>{{ p.id }}</td><td>{{ p.name }}</td><td>{{ p.stock }}</td>
-          <td>{{ '%.0f' % p.price_cop }}</td><td>{{ '%.2f' % p.price_usd }}</td>
+          <td>{{ p.id }}</td>
+          <td>{{ p.name }}</td>
+          <td>{{ p.stock }}</td>
+          <td>{{ p.price|money_amount }}</td>
           <td>{{ 'Sí' if p.renewal.customer_account else 'No' }}</td>
         </tr>
         {% else %}
-        <tr><td colspan="6" class="mut">Sin productos públicos ahora mismo.</td></tr>
+        <tr><td colspan="5" class="mut">Sin productos públicos ahora mismo.</td></tr>
         {% endfor %}
       </table>
+      {% elif is_admin %}
+      <p class="mut">Como administrador no tienes cuadrado COP/USD de cliente: aquí ves el catálogo sin precios.
+        Un partner autenticado solo recibe <code>price</code> en su moneda.</p>
+      <table>
+        <tr>
+          <th>ID</th>
+          <th>Producto</th>
+          <th>Stock vendible</th>
+          <th>Renueva cuenta del cliente</th>
+        </tr>
+        {% for p in products %}
+        <tr>
+          <td>{{ p.id }}</td>
+          <td>{{ p.name }}</td>
+          <td>{{ p.stock }}</td>
+          <td>{{ 'Sí' if p.renewal.customer_account else 'No' }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="4" class="mut">Sin productos públicos ahora mismo.</td></tr>
+        {% endfor %}
+      </table>
+      {% elif session.get('logged_in') %}
+      <p class="mut">No se muestra el catálogo ni los precios porque tu usuario no tiene tipo de precio COP o USD.
+        Configúralo (el mismo cuadrado de la tienda) para usar la API y ver tu saldo.</p>
+      {% else %}
+      <p class="mut">Inicia sesión con un usuario que tenga tipo de precio COP o USD para ver tu catálogo y tus precios.
+        Sin ese cuadrado la API no entrega productos ni saldo.</p>
+      {% endif %}
     </div>
   </section>
 
@@ -188,15 +884,18 @@
     <h2>5 · Compras</h2>
     <div class="sec-body">
       <p><span class="verb post">POST</span><span class="ep">/store/purchases/</span></p>
-      <p>Pasa por el mismo checkout que la tienda web: valida stock y saldo, entrega las credenciales y descuenta tu saldo.
-        Máximo {{ limits.cart_lines }} líneas y {{ limits.purchases_per_min }} cuentas por minuto.</p>
+      <p>Pasa por el mismo checkout que la tienda web: valida stock y saldo, entrega las credenciales y descuenta tu saldo
+        en tu moneda. Máximo {{ limits.cart_lines }} líneas y {{ limits.purchases_per_min }} cuentas por minuto.</p>
 <pre>curl -X POST "{{ base_url }}/store/purchases/" \
   -H "Authorization: Bearer &lt;access&gt;" -H "Content-Type: application/json" \
   -d '{"items": [{"product_id": {{ example_product.id }}, "quantity": 2}]}'
 
-→ {"data": {"cuentas_asignadas": [
+→ {"success": true, "data": {"cuentas_asignadas": [
       {"producto": "{{ example_product.name }}", "email": "cuenta1@mail.com", "password": "abc123", ...} ],
-    "saldo": {"saldo_cop": 101000.0, "saldo_usd": 0.0}}}</pre>
+    "saldo": {"currency": "{{ example_currency }}", "saldo": 101000.0}}}</pre>
+      <p><span class="verb post">POST</span><span class="ep">/store/purchases/preview/</span> —
+        valida stock y saldo <strong>sin cobrar</strong> (<code>can_checkout</code>).</p>
+      <p>También se acepta <code>plan_id</code> en lugar de <code>product_id</code> (mismo id de catálogo).</p>
       <p>Errores típicos: stock insuficiente, saldo insuficiente o producto fuera de catálogo →
         <code>400 purchase_failed</code> con el mensaje exacto.</p>
     </div>
@@ -240,7 +939,7 @@
 
 → {"data": {"reported": true, "account_id": 501, "photo": {"photo_id": 88, "status": "open"},
             "note": "El reporte quedó registrado y el administrador fue notificado."}}</pre>
-      <p>También puedes identificar la cuenta por <code>email</code> en lugar de <code>account_id</code>.</p>
+      <p>También puedes identificar la cuenta por <code>email</code>, <code>account_id</code> o <code>count_id</code>.</p>
       <p><span class="verb get">GET</span><span class="ep">/store/issues/</span> — tus reportes con su estado
         (<code>open</code>, <code>closed</code>) y la respuesta del proveedor cuando exista.</p>
     </div>
@@ -284,12 +983,12 @@
   <section id="errores">
     <h2>9 · Errores</h2>
     <div class="sec-body">
-<pre>{"error": {"code": "purchase_failed", "message": "No hay suficientes existencias para «{{ example_product.name }}»…"}}</pre>
+<pre>{"success": false, "error": {"code": "purchase_failed", "message": "No hay suficientes existencias para «{{ example_product.name }}»…"}}</pre>
       <table>
         <tr><th>HTTP</th><th>code</th><th>Cuándo</th></tr>
         <tr><td>400</td><td><code>bad_request</code> / <code>cart_limit</code> / <code>purchase_failed</code></td><td>Datos inválidos, carrito grande o compra rechazada</td></tr>
         <tr><td>401</td><td><code>auth_required</code> / <code>invalid_credentials</code> / <code>token_expired</code> / <code>token_invalid</code></td><td>Problemas de autenticación</td></tr>
-        <tr><td>403</td><td><code>forbidden</code> / <code>ip_not_allowed</code></td><td>Sin permiso o IP fuera de la lista blanca</td></tr>
+        <tr><td>403</td><td><code>forbidden</code> / <code>ip_not_allowed</code></td><td>Sin permiso, sin COP/USD o IP fuera de la lista blanca</td></tr>
         <tr><td>404</td><td><code>not_found</code></td><td>Producto, botón o cuenta inexistente</td></tr>
         <tr><td>429</td><td><code>rate_limited</code> / <code>checkout_busy</code></td><td>Límites de uso</td></tr>
         <tr><td>503</td><td><code>api_disabled</code></td><td>API apagada por el administrador</td></tr>
@@ -298,99 +997,18 @@
     </div>
   </section>
 </div>
+</div>
+{% endblock %}
 
-{% if is_admin %}
-<script>
-(function () {
-  'use strict';
-  var csrf = (document.querySelector('meta[name="csrf_token"]') || {}).content || '';
-  var base = document.getElementById('baseUrl').textContent.trim();
-  var chk = document.getElementById('apiEnabledChk');
-  var listEl = document.getElementById('ipList');
-  var input = document.getElementById('ipInput');
-  var addBtn = document.getElementById('ipAddBtn');
-  var saveBtn = document.getElementById('saveBtn');
-  var msg = document.getElementById('saveMsg');
-  var ips = [];
-
-  function renderIps() {
-    listEl.innerHTML = '';
-    if (!ips.length) {
-      listEl.innerHTML = '<span class="mut">Lista vacía: se acepta cualquier IP.</span>';
-      return;
-    }
-    ips.forEach(function (ip, i) {
-      var span = document.createElement('span');
-      span.className = 'ip-item';
-      var txt = document.createElement('span');
-      txt.textContent = ip;
-      var del = document.createElement('button');
-      del.type = 'button';
-      del.textContent = '×';
-      del.title = 'Quitar ' + ip;
-      del.addEventListener('click', function () { ips.splice(i, 1); renderIps(); });
-      span.appendChild(txt);
-      span.appendChild(del);
-      listEl.appendChild(span);
-    });
-  }
-
-  function setMsg(text, ok) {
-    msg.textContent = text;
-    msg.style.color = ok ? '#86efac' : '#fca5a5';
-    if (text) { setTimeout(function () { msg.textContent = ''; }, 4000); }
-  }
-
-  function load() {
-    fetch(base + '/admin/settings/', { credentials: 'same-origin' })
-      .then(function (r) { return r.json(); })
-      .then(function (j) {
-        var d = (j && j.data) || {};
-        ips = d.ip_whitelist || [];
-        chk.checked = !!d.enabled;
-        document.getElementById('clientIp').textContent = d.client_ip || '?';
-        renderIps();
-      })
-      .catch(function () { setMsg('No se pudo cargar la configuración', false); });
-  }
-
-  addBtn.addEventListener('click', function () {
-    var v = (input.value || '').trim();
-    if (!v) { return; }
-    if (ips.indexOf(v) === -1) { ips.push(v); }
-    input.value = '';
-    renderIps();
-  });
-  input.addEventListener('keydown', function (e) {
-    if (e.key === 'Enter') { e.preventDefault(); addBtn.click(); }
-  });
-
-  saveBtn.addEventListener('click', function () {
-    saveBtn.disabled = true;
-    fetch(base + '/admin/settings/', {
-      method: 'POST',
-      credentials: 'same-origin',
-      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf },
-      body: JSON.stringify({ enabled: chk.checked, ip_whitelist: ips })
-    })
-      .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
-      .then(function (res) {
-        saveBtn.disabled = false;
-        if (res.ok && res.j.data) {
-          ips = res.j.data.ip_whitelist || [];
-          renderIps();
-          setMsg('Guardado', true);
-        } else {
-          setMsg((res.j.error && res.j.error.message) || 'Error al guardar', false);
-        }
-      })
-      .catch(function () { saveBtn.disabled = false; setMsg('Error de conexión', false); });
-  });
-
-  renderIps();
-  load();
-})();
-</script>
-{% endif %}
-</body>
-</html>
+{% block scripts %}
+  {{ super() }}
+  {% if session.get('logged_in') %}
+  <script src="{{ url_for('store_bp.static', filename='js/menu_tienda.js') }}" defer></script>
+  {% endif %}
+  {% if is_admin %}
+  <script src="{{ url_for('static', filename='js/clear_trigger_logs.js') }}" defer></script>
+  <script src="{{ url_for('static', filename='js/logout_all_cookies_btn.js') }}" defer></script>
+  <script src="{{ url_for('store_bp.static', filename='js/partner_api_docs.js') }}?v={{ licencias_static_version }}-ipbind8" defer></script>
+  <script src="{{ url_for('static', filename='js/admin_dashboard.js') }}?v={{ licencias_static_version }}-apidocs7" defer></script>
+  {% endif %}
+{% endblock %}

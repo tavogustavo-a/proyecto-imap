@@ -1,4 +1,4 @@
-"""API Partner propia de la tienda (mismo estilo que la API de Multiplataforma).
+"""API Partner propia de la tienda.
 
 Montada en /api/partner/v1. Autenticación JWT firmada (itsdangerous) con las
 credenciales de usuario de la tienda. Seguridad: interruptor global, lista
@@ -9,7 +9,7 @@ datos: productos con stock, botones de Códigos (solo nombres), límites y
 estado. Cualquier cambio en botones o productos se refleja solo, sin editar
 nada a mano.
 
-Envelope de respuestas (igual que Multiplataforma):
+Envelope de respuestas:
   éxito → {"data": ...}
   error → {"error": {"code": "...", "message": "..."}}
 """
@@ -22,9 +22,9 @@ from collections import deque
 from datetime import datetime
 from functools import wraps
 
-from flask import Blueprint, current_app, jsonify, render_template, request, session
+from flask import Blueprint, current_app, flash, jsonify, redirect, render_template, request, session, url_for
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
-from werkzeug.security import check_password_hash
+from werkzeug.security import check_password_hash, generate_password_hash
 
 from app.extensions import db
 from app.models.user import User
@@ -72,11 +72,10 @@ def get_partner_settings():
         except (ValueError, TypeError):
             data = {}
     enabled = bool(data.get('enabled', True))
-    wl = data.get('ip_whitelist') or []
-    if not isinstance(wl, list):
-        wl = []
-    wl = [str(x).strip() for x in wl if str(x).strip()]
-    return {'enabled': enabled, 'ip_whitelist': wl}
+    raw_wl = data.get('ip_whitelist') or []
+    if not isinstance(raw_wl, list):
+        raw_wl = []
+    return {'enabled': enabled, 'ip_whitelist': _coerce_ip_bindings(raw_wl)}
 
 
 def save_partner_settings(enabled, ip_whitelist):
@@ -93,6 +92,127 @@ def save_partner_settings(enabled, ip_whitelist):
     else:
         row.value = payload
     db.session.commit()
+
+
+def upsert_partner_ip_for_user(user, ip_raw):
+    """Añade o actualiza una IP vinculada a ese usuario en Documentación API."""
+    if not user:
+        return None, "Falta el usuario dueño."
+    bound = _bind_ip_entry({
+        'ip': ip_raw,
+        'user_id': user.id,
+        'username': user.username,
+    })
+    if not bound or not bound.get('user_id'):
+        return None, "IP o rango CIDR no válido."
+    settings = get_partner_settings()
+    cleaned = []
+    seen = set()
+    for entry in settings.get('ip_whitelist') or []:
+        existing = _bind_ip_entry(entry)
+        if not existing or not existing.get('ip'):
+            continue
+        if existing['ip'] == bound['ip']:
+            continue
+        if existing['ip'] in seen:
+            continue
+        seen.add(existing['ip'])
+        cleaned.append(existing)
+    cleaned.append(bound)
+    save_partner_settings(settings.get('enabled', True), cleaned)
+    return bound, None
+
+
+def _entry_ip(entry):
+    if isinstance(entry, dict):
+        return str(entry.get('ip') or '').strip()
+    return str(entry or '').strip()
+
+
+def _coerce_ip_bindings(raw_list):
+    """Normaliza la lista guardada a [{ip, user_id, username}, ...]."""
+    out = []
+    seen = set()
+    for raw in raw_list or []:
+        if isinstance(raw, dict):
+            ip = str(raw.get('ip') or '').strip()
+            uid = raw.get('user_id')
+            uname = str(raw.get('username') or '').strip()
+            try:
+                uid = int(uid) if uid not in (None, '', 0, '0') else None
+            except (TypeError, ValueError):
+                uid = None
+        else:
+            ip = str(raw or '').strip()
+            uid, uname = None, ''
+        if not ip or ip in seen:
+            continue
+        seen.add(ip)
+        out.append({'ip': ip, 'user_id': uid, 'username': uname})
+    return out
+
+
+def _bind_ip_entry(raw):
+    """Valida IP/CIDR y resuelve el usuario dueño. None si la IP no es válida."""
+    if isinstance(raw, dict):
+        ip = _normalize_ip_entry(raw.get('ip'))
+        uid = raw.get('user_id')
+        uname = str(raw.get('username') or '').strip()
+    else:
+        ip = _normalize_ip_entry(raw)
+        uid, uname = None, ''
+    if not ip:
+        return None
+    user = None
+    if uid not in (None, '', 0, '0'):
+        try:
+            user = User.query.get(int(uid))
+        except (TypeError, ValueError):
+            user = None
+    if user is None and uname:
+        user = User.query.filter_by(username=uname).first()
+    if user is not None and getattr(user, 'parent_id', None):
+        parent = User.query.get(user.parent_id)
+        if parent:
+            user = parent
+    if user:
+        return {'ip': ip, 'user_id': int(user.id), 'username': user.username}
+    return {'ip': ip, 'user_id': None, 'username': uname}
+
+
+def _partner_ip_bind_users():
+    """Usuarios principales habilitados (no sub-usuarios) para vincular una IP."""
+    rows = (
+        User.query.filter(User.parent_id.is_(None))
+        .order_by(User.username.asc())
+        .all()
+    )
+    out = []
+    for u in rows:
+        if getattr(u, 'enabled', True) is False:
+            continue
+        out.append({'id': int(u.id), 'username': u.username, 'full_name': getattr(u, 'full_name', None) or ''})
+    return out
+
+
+def _whitelist_owner_is_enabled(entry, enabled_cache=None):
+    """False si no hay dueño o el usuario está apagado (Observador / admin)."""
+    if not isinstance(entry, dict):
+        return False
+    uid = entry.get('user_id')
+    if uid in (None, '', 0, '0'):
+        return False
+    try:
+        uid = int(uid)
+    except (TypeError, ValueError):
+        return False
+    if enabled_cache is not None and uid in enabled_cache:
+        return enabled_cache[uid]
+    user = User.query.get(uid)
+    ok = bool(user and getattr(user, 'enabled', True))
+    if enabled_cache is not None:
+        enabled_cache[uid] = ok
+    return ok
 
 
 def _normalize_ip_entry(raw):
@@ -114,21 +234,126 @@ def _ip_allowed(client_ip, whitelist):
     import ipaddress
 
     if not whitelist:
-        return True
+        return False
     try:
         ip = ipaddress.ip_address(str(client_ip).strip())
     except ValueError:
         return False
+    enabled_cache = {}
     for entry in whitelist:
+        if isinstance(entry, dict) and not entry.get('user_id'):
+            continue
+        token = _entry_ip(entry)
+        if not token:
+            continue
         try:
-            if '/' in entry:
-                if ip in ipaddress.ip_network(entry, strict=False):
-                    return True
-            elif ip == ipaddress.ip_address(entry):
+            matched = False
+            if '/' in token:
+                if ip in ipaddress.ip_network(token, strict=False):
+                    matched = True
+            elif ip == ipaddress.ip_address(token):
+                matched = True
+            if matched and _whitelist_owner_is_enabled(entry, enabled_cache):
                 return True
         except ValueError:
             continue
     return False
+
+
+def _ip_allowed_for_user(client_ip, whitelist, user):
+    """La IP debe estar en la lista, vinculada a ese usuario y el usuario encendido."""
+    if not user:
+        return False
+    if getattr(user, 'enabled', True) is False:
+        return False
+    try:
+        uid = int(user.id)
+    except (TypeError, ValueError):
+        return False
+    scoped = []
+    for entry in whitelist or []:
+        if not isinstance(entry, dict):
+            continue
+        try:
+            if int(entry.get('user_id') or 0) == uid:
+                scoped.append(entry)
+        except (TypeError, ValueError):
+            continue
+    return _ip_allowed(client_ip, scoped)
+
+
+def _ip_bound_to_disabled_owner(client_ip, whitelist):
+    """True si la IP coincide pero el dueño está apagado."""
+    import ipaddress
+
+    try:
+        ip = ipaddress.ip_address(str(client_ip).strip())
+    except ValueError:
+        return False
+    cache = {}
+    for entry in whitelist or []:
+        token = _entry_ip(entry)
+        if not token:
+            continue
+        try:
+            matched = False
+            if '/' in token:
+                matched = ip in ipaddress.ip_network(token, strict=False)
+            else:
+                matched = ip == ipaddress.ip_address(token)
+        except ValueError:
+            continue
+        if matched and not _whitelist_owner_is_enabled(entry, cache):
+            return True
+    return False
+
+
+def partner_external_ip_forbidden(user=None):
+    """403 JSON para APIs de códigos/licencias si la IP no está en Documentación API."""
+    settings = get_partner_settings()
+    wl = settings.get('ip_whitelist') or []
+    ip = _client_ip()
+    if user is not None and getattr(user, 'enabled', True) is False:
+        return (
+            jsonify(
+                {
+                    'error': (
+                        'El usuario dueño de esta IP está apagado. '
+                        'La IP no funciona en la API hasta que un administrador lo encienda.'
+                    ),
+                    'code': 'owner_disabled',
+                }
+            ),
+            403,
+        )
+    ok = _ip_allowed_for_user(ip, wl, user) if user is not None else _ip_allowed(ip, wl)
+    if ok:
+        return None
+    if _ip_bound_to_disabled_owner(ip, wl):
+        return (
+            jsonify(
+                {
+                    'error': (
+                        'El usuario dueño de esta IP está apagado. '
+                        'La IP no funciona en la API hasta que un administrador lo encienda.'
+                    ),
+                    'code': 'owner_disabled',
+                }
+            ),
+            403,
+        )
+    return (
+        jsonify(
+            {
+                'error': (
+                    'Esta IP no está autorizada para usar la API. '
+                    'El administrador debe vincularla a un usuario en Documentación API.'
+                ),
+                'code': 'ip_not_allowed',
+            }
+        ),
+        403,
+    )
 
 
 def _client_ip():
@@ -141,12 +366,15 @@ def _client_ip():
 # Envelope y errores
 # ---------------------------------------------------------------------------
 
-def _ok(data, status=200):
-    return jsonify({'data': data}), status
+def _ok(data, status=200, message=None):
+    body = {'success': True, 'data': data}
+    if message:
+        body['message'] = message
+    return jsonify(body), status
 
 
 def _err(code, message, status, extra=None):
-    body = {'error': {'code': code, 'message': message}}
+    body = {'success': False, 'error': {'code': code, 'message': message}}
     if extra:
         body['error'].update(extra)
     return jsonify(body), status
@@ -226,9 +454,16 @@ def _gate_error():
     settings = get_partner_settings()
     if not settings['enabled']:
         return _err('api_disabled', 'La API está desactivada por el administrador.', 503)
-    if not _ip_allowed(_client_ip(), settings['ip_whitelist']):
-        return _err('ip_not_allowed', 'Esta IP no está autorizada para usar la API.', 403)
-    return None
+    client_ip = _client_ip()
+    if _ip_allowed(client_ip, settings['ip_whitelist']):
+        return None
+    if _ip_bound_to_disabled_owner(client_ip, settings['ip_whitelist']):
+        return _err(
+            'owner_disabled',
+            'El usuario dueño de esta IP está apagado. La IP no funciona en la API hasta que lo enciendan.',
+            403,
+        )
+    return _err('ip_not_allowed', 'Esta IP no está autorizada para usar la API.', 403)
 
 
 def partner_auth_required(f):
@@ -249,8 +484,19 @@ def partner_auth_required(f):
                 else 'Token inválido.'
             )
             return _err(terr, msg, 401)
+        if _is_store_subuser(user):
+            return _subuser_api_forbidden()
+        settings = get_partner_settings()
+        if not _ip_allowed_for_user(_client_ip(), settings['ip_whitelist'], user):
+            return _err(
+                'ip_not_allowed',
+                'Esta IP no está vinculada a tu usuario. El administrador debe añadirla en Documentación API.',
+                403,
+            )
         if not getattr(user, 'can_access_store', False):
             return _err('forbidden', 'Tu usuario no tiene acceso a la tienda.', 403)
+        if not _partner_currency_or_none(user):
+            return _partner_no_currency_error()
         if not _rate_limit(f'gen:{user.id}', LIMIT_GENERAL_PER_MIN):
             return _err('rate_limited', 'Demasiadas peticiones; espera un momento.', 429)
         request.partner_user = user
@@ -264,6 +510,69 @@ def _is_admin_session():
         return False
     admin_name = (current_app.config.get('ADMIN_USER') or 'admin').strip()
     return (session.get('username') or '').strip() == admin_name
+
+
+def _is_store_subuser(user):
+    """Sub-usuario de tienda (tiene padre). No usa la API ni ve /docs/."""
+    if not user:
+        return False
+    parent_id = getattr(user, 'parent_id', None)
+    if parent_id is None:
+        return False
+    try:
+        return int(parent_id) != int(user.id)
+    except (TypeError, ValueError):
+        return True
+
+
+def _subuser_api_forbidden():
+    return _err(
+        'forbidden',
+        'Los sub-usuarios no pueden usar la API Partner. Usa el usuario principal.',
+        403,
+    )
+
+
+def _partner_currency_or_none(user):
+    """COP/USD efectivo del usuario (o del padre). Sin ese cuadrado la API no aplica."""
+    from app.store.routes import catalog_products_for_store_user
+
+    _, tipo = catalog_products_for_store_user(user)
+    if tipo in ('USD', 'COP'):
+        return tipo
+    return None
+
+
+def _partner_no_currency_error():
+    return _err(
+        'forbidden',
+        'Tu usuario no tiene tipo de precio COP o USD; la API Partner no está disponible.',
+        403,
+    )
+
+
+def _partner_saldo_payload(user, tipo=None, saldo_cop=None, saldo_usd=None):
+    """Saldo solo en la moneda del cuadrado (nunca las dos a la vez)."""
+    tipo = tipo or _partner_currency_or_none(user)
+    if tipo == 'USD':
+        val = float(user.saldo_usd or 0) if saldo_usd is None else float(saldo_usd or 0)
+    elif tipo == 'COP':
+        val = float(user.saldo_cop or 0) if saldo_cop is None else float(saldo_cop or 0)
+    else:
+        return None
+    return {'currency': tipo, 'saldo': val}
+
+
+def _session_docs_user():
+    uid = session.get('user_id')
+    if uid:
+        user = User.query.get(uid)
+        if user:
+            return user
+    uname = (session.get('username') or '').strip()
+    if uname:
+        return User.query.filter_by(username=uname).first()
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -328,15 +637,27 @@ def partner_auth_token():
     user = User.query.filter_by(username=username).first()
     if not user or not user.enabled or not check_password_hash(user.password, password):
         return _err('invalid_credentials', 'Usuario o contraseña incorrectos.', 401)
+    if _is_store_subuser(user):
+        return _subuser_api_forbidden()
+    settings = get_partner_settings()
+    if not _ip_allowed_for_user(_client_ip(), settings['ip_whitelist'], user):
+        return _err(
+            'ip_not_allowed',
+            'Esta IP no está vinculada a tu usuario. El administrador debe añadirla en Documentación API.',
+            403,
+        )
     if not getattr(user, 'can_access_store', False):
         return _err('forbidden', 'Tu usuario no tiene acceso a la tienda.', 403)
+    tipo = _partner_currency_or_none(user)
+    if not tipo:
+        return _partner_no_currency_error()
     access, refresh = _issue_tokens(user)
     return _ok(
         {
             'tokens': {'access': access, 'refresh': refresh},
             'expires_in': ACCESS_TOKEN_MAX_AGE,
             'refresh_expires_in': REFRESH_TOKEN_MAX_AGE,
-            'user': {'id': user.id, 'username': user.username},
+            'user': {'id': user.id, 'username': user.username, 'currency': tipo},
         }
     )
 
@@ -359,25 +680,56 @@ def partner_auth_token_refresh():
             else 'Refresh inválido.'
         )
         return _err(terr, msg, 401)
+    if _is_store_subuser(user):
+        return _subuser_api_forbidden()
+    settings = get_partner_settings()
+    if not _ip_allowed_for_user(_client_ip(), settings['ip_whitelist'], user):
+        return _err(
+            'ip_not_allowed',
+            'Esta IP no está vinculada a tu usuario. El administrador debe añadirla en Documentación API.',
+            403,
+        )
     access, new_refresh = _issue_tokens(user)
     return _ok({'access': access, 'refresh': new_refresh, 'expires_in': ACCESS_TOKEN_MAX_AGE})
+
+
+@partner_api_bp.route('/auth/token/verify/', methods=['POST'])
+@_csrf_exempt
+def partner_auth_token_verify():
+    """Comprueba si un access o refresh sigue válido."""
+    gate = _gate_error()
+    if gate is not None:
+        return gate
+    data = request.get_json(silent=True) or {}
+    token = str(data.get('token') or data.get('access') or '').strip()
+    if not token:
+        return _err('bad_request', 'Envía token.', 400)
+    user, terr = _user_from_token(token, _SALT_ACCESS, ACCESS_TOKEN_MAX_AGE)
+    if user and not terr:
+        return _ok({'valid': True, 'kind': 'access', 'user': {'id': user.id, 'username': user.username}})
+    user, terr = _user_from_token(token, _SALT_REFRESH, REFRESH_TOKEN_MAX_AGE)
+    if user and not terr:
+        return _ok({'valid': True, 'kind': 'refresh', 'user': {'id': user.id, 'username': user.username}})
+    return _err(terr or 'token_invalid', 'Token inválido o expirado.', 401)
 
 
 @partner_api_bp.route('/me/', methods=['GET'])
 @_csrf_exempt
 @partner_auth_required
 def partner_me(user):
-    from app.store.routes import catalog_products_for_store_user
-
-    _, tipo = catalog_products_for_store_user(user)
+    tipo = _partner_currency_or_none(user)
+    saldo = _partner_saldo_payload(user, tipo=tipo)
+    balance = saldo['saldo'] if saldo else 0.0
     return _ok(
         {
             'user': {
                 'id': user.id,
                 'username': user.username,
-                'currency': tipo or 'COP',
-                'saldo_cop': float(user.saldo_cop or 0),
-                'saldo_usd': float(user.saldo_usd or 0),
+                'email': getattr(user, 'email', None) or None,
+                'currency': tipo,
+                'currency_prefix': tipo,
+                'saldo': balance,
+                'balance': balance,
             }
         }
     )
@@ -409,9 +761,6 @@ def _product_payload(product, tipo, with_stock=True):
         'id': product.id,
         'name': product.name,
         'description': (product.description or '')[:500],
-        'price_cop': round(price_cop, 2),
-        'price_usd': round(price_usd, 2),
-        'currency': tipo or None,
         'term_days': getattr(lic, 'license_term_days', None) if lic else None,
         'month_to_month': bool(getattr(lic, 'month_to_month', False)) if lic else False,
         'renewal': {
@@ -419,6 +768,9 @@ def _product_payload(product, tipo, with_stock=True):
             'inventory_search': True,
         },
     }
+    if tipo in ('USD', 'COP'):
+        item['currency'] = tipo
+        item['price'] = round(price_usd if tipo == 'USD' else price_cop, 2)
     if with_stock:
         try:
             item['stock'] = int(_compute_public_sellable_stock_for_product(product) or 0)
@@ -454,7 +806,7 @@ def _normalize_purchase_items(raw_items):
     for it in raw_items:
         if not isinstance(it, dict):
             return None, 0, 'Cada ítem debe ser un objeto JSON.'
-        pid = it.get('product_id', it.get('id'))
+        pid = it.get('product_id', it.get('plan_id', it.get('id')))
         try:
             pid = int(pid)
         except (TypeError, ValueError):
@@ -497,14 +849,15 @@ def _normalize_purchase_items(raw_items):
     return items, total_accounts, None
 
 
-@partner_api_bp.route('/store/purchases/', methods=['POST'])
-@_csrf_exempt
-@partner_auth_required
-def partner_store_purchases(user):
-    from app.store.routes import _acquire_checkout_lock, _procesar_pago_core
+def _execute_partner_purchase(user, raw_items):
+    from app.store.routes import _acquire_checkout_lock, _procesar_pago_core, _user_can_purchase_in_store
 
-    data = request.get_json(silent=True) or {}
-    raw_items = data.get('items') or data.get('productos') or []
+    if not _user_can_purchase_in_store(user):
+        return _err(
+            'forbidden',
+            'Tu cuenta solo puede visualizar la tienda. No puedes comprar ni reservar.',
+            403,
+        )
     if not isinstance(raw_items, list) or not raw_items:
         return _err('bad_request', 'Envía items: [{product_id, quantity, ...}].', 400)
     if len(raw_items) > LIMIT_CART_LINES:
@@ -516,6 +869,12 @@ def partner_store_purchases(user):
     items, total_accounts, verr = _normalize_purchase_items(raw_items)
     if verr:
         return _err('bad_request', verr, 400)
+    if total_accounts > LIMIT_PURCHASES_PER_MIN:
+        return _err(
+            'cart_limit',
+            f'Máximo {LIMIT_PURCHASES_PER_MIN} cuentas por pedido.',
+            400,
+        )
     if not _rate_limit(f'buy:{user.id}', LIMIT_PURCHASES_PER_MIN, weight=total_accounts):
         return _err(
             'rate_limited',
@@ -527,8 +886,6 @@ def partner_store_purchases(user):
     if lock is None:
         return _err('checkout_busy', 'Ya hay un pago en proceso; espera a que termine.', 429)
     try:
-        # El checkout interno lee request.get_json(): le presentamos el pedido
-        # con la misma forma que usa la tienda web.
         request._cached_json = ({'productos': items}, {'productos': items})
         with _session_as_user(user):
             resp = _procesar_pago_core()
@@ -537,13 +894,21 @@ def partner_store_purchases(user):
 
     payload, status = _flask_response_payload(resp)
     if payload.get('success'):
+        tipo = _partner_currency_or_none(user)
+        saldo = _partner_saldo_payload(
+            user,
+            tipo=tipo,
+            saldo_cop=payload.get('new_saldo_cop'),
+            saldo_usd=payload.get('new_saldo_usd'),
+        )
+        assigned = payload.get('cuentas_asignadas') or []
         return _ok(
             {
-                'cuentas_asignadas': payload.get('cuentas_asignadas') or [],
-                'saldo': {
-                    'saldo_cop': payload.get('new_saldo_cop'),
-                    'saldo_usd': payload.get('new_saldo_usd'),
-                },
+                'cuentas_asignadas': assigned,
+                'purchases': assigned,
+                'saldo': saldo or {'currency': tipo, 'saldo': 0.0},
+                'balance': (saldo or {}).get('saldo'),
+                'currency': tipo,
             }
         )
     extra = {}
@@ -556,6 +921,100 @@ def partner_store_purchases(user):
         status if status >= 400 else 400,
         extra=extra or None,
     )
+
+
+def _parse_cart_items_from_mp(data):
+    """Acepta items de carrito MP ({plan_id, quantity}) o de tienda ({product_id})."""
+    raw = data.get('items') or data.get('productos')
+    if isinstance(raw, list) and raw:
+        return raw
+    plan_id = data.get('plan_id') or data.get('product_id')
+    if plan_id is None:
+        return None
+    customers = data.get('customers')
+    if isinstance(customers, list) and customers:
+        return [{'product_id': plan_id, 'quantity': len(customers)}]
+    qty = data.get('quantity') or data.get('cantidad') or 1
+    return [{'product_id': plan_id, 'quantity': qty}]
+
+
+def _partner_cart_preview(user, raw_items):
+    from app.store.routes import catalog_products_for_store_user, _user_can_purchase_in_store
+
+    if not isinstance(raw_items, list) or not raw_items:
+        return _err('bad_request', 'Envía items: [{plan_id, quantity}].', 400)
+    if len(raw_items) > LIMIT_CART_LINES:
+        return _err('cart_limit', f'Máximo {LIMIT_CART_LINES} líneas por pedido.', 400)
+    items, total_accounts, verr = _normalize_purchase_items(raw_items)
+    if verr:
+        return _err('bad_request', verr, 400)
+    if total_accounts > LIMIT_PURCHASES_PER_MIN:
+        return _err('cart_limit', f'Máximo {LIMIT_PURCHASES_PER_MIN} cuentas por pedido.', 400)
+
+    products, tipo = catalog_products_for_store_user(user)
+    by_id = {int(p.id): p for p in products}
+    saldo = _partner_saldo_payload(user, tipo=tipo) or {'saldo': 0.0, 'currency': tipo}
+    balance = float(saldo.get('saldo') or 0)
+    lines = []
+    total_price = 0.0
+    stock_ok = True
+    for row in items:
+        pid = int(row['id'])
+        qty = int(row.get('cantidad') or 1)
+        product = by_id.get(pid)
+        if product is None:
+            return _err('not_found', f'El producto {pid} no está en tu catálogo.', 404)
+        payload = _product_payload(product, tipo)
+        unit = float(payload.get('price') or 0)
+        stock = int(payload.get('stock') or 0)
+        line_ok = stock >= qty
+        if not line_ok:
+            stock_ok = False
+        line_total = round(unit * qty, 2)
+        total_price += line_total
+        lines.append(
+            {
+                'plan_id': pid,
+                'product_id': pid,
+                'plan_name': product.name,
+                'platform_name': product.name,
+                'quantity': qty,
+                'unit_price': unit,
+                'line_total': line_total,
+                'stock': stock,
+                'stock_sufficient': line_ok,
+                'currency': tipo,
+            }
+        )
+    total_price = round(total_price, 2)
+    balance_ok = balance + 1e-9 >= total_price
+    can_buy = bool(_user_can_purchase_in_store(user) and stock_ok and balance_ok)
+    return _ok(
+        {
+            'lines': lines,
+            'summary': {
+                'line_count': len(lines),
+                'total_accounts': total_accounts,
+                'total_price': total_price,
+                'balance': balance,
+                'balance_after': round(balance - total_price, 2) if balance_ok else balance,
+                'stock_sufficient': stock_ok,
+                'balance_sufficient': balance_ok,
+                'can_checkout': can_buy,
+                'can_confirm': can_buy,
+                'currency': tipo,
+            },
+        }
+    )
+
+
+@partner_api_bp.route('/store/purchases/', methods=['POST'])
+@_csrf_exempt
+@partner_auth_required
+def partner_store_purchases(user):
+    data = request.get_json(silent=True) or {}
+    raw_items = data.get('items') or data.get('productos') or []
+    return _execute_partner_purchase(user, raw_items)
 
 
 # ---------------------------------------------------------------------------
@@ -621,7 +1080,12 @@ def partner_store_issues_list(user):
         .limit(100)
         .all()
     )
-    return _ok({'issues': [photo_to_dict(p) for p in rows]})
+    issues = []
+    for p in rows:
+        item = photo_to_dict(p)
+        item['platform'] = 'store'
+        issues.append(item)
+    return _ok({'issues': issues})
 
 
 @partner_api_bp.route('/store/issues/', methods=['POST'])
@@ -641,7 +1105,7 @@ def partner_store_issues_create(user):
         image = None
 
     issue_text = str(form.get('issue') or form.get('detalle') or '').strip()
-    account_id = form.get('account_id')
+    account_id = form.get('account_id') or form.get('count_id')
     email = form.get('email') or form.get('credential')
     status_label = str(form.get('status_label') or 'reportada').strip()[:120]
     if not issue_text:
@@ -828,8 +1292,440 @@ def partner_codes_search(user):
 
 
 # ---------------------------------------------------------------------------
+# Alias de rutas (mismas operaciones, otras URLs)
+# ---------------------------------------------------------------------------
+
+def _page_args():
+    try:
+        page = max(1, int(request.args.get('page') or 1))
+    except (TypeError, ValueError):
+        page = 1
+    try:
+        page_size = int(request.args.get('page_size') or 20)
+    except (TypeError, ValueError):
+        page_size = 20
+    return page, max(1, min(100, page_size))
+
+
+@partner_api_bp.route('/me/password/', methods=['POST'])
+@_csrf_exempt
+@partner_auth_required
+def partner_me_password(user):
+    data = request.get_json(silent=True) or {}
+    old_pw = str(data.get('old_password') or '')
+    new_pw = str(data.get('new_password') or '')
+    confirm = str(data.get('new_password_confirm') or new_pw)
+    if not old_pw or not new_pw:
+        return _err('bad_request', 'Envía old_password y new_password.', 400)
+    if new_pw != confirm:
+        return _err('bad_request', 'La confirmación no coincide.', 400)
+    if len(new_pw) < 6:
+        return _err('bad_request', 'La nueva contraseña debe tener al menos 6 caracteres.', 400)
+    if not check_password_hash(user.password, old_pw):
+        return _err('invalid_credentials', 'La contraseña actual no es correcta.', 401)
+    user.password = generate_password_hash(new_pw)
+    db.session.commit()
+    return _ok({'changed': True}, message='Contraseña actualizada. Vuelve a iniciar sesión.')
+
+
+@partner_api_bp.route('/multiplatform/platforms/', methods=['GET'])
+@_csrf_exempt
+@partner_auth_required
+def partner_mp_platforms(user):
+    from app.store.routes import catalog_products_for_store_user
+
+    products, tipo = catalog_products_for_store_user(user)
+    q = (request.args.get('q') or '').strip().lower()
+    platforms = []
+    for p in products:
+        if q and q not in (p.name or '').lower():
+            continue
+        platforms.append({'id': p.id, 'name': p.name, 'platform_id': p.id})
+    return _ok({'platforms': platforms, 'currency': tipo})
+
+
+@partner_api_bp.route('/multiplatform/platforms/<int:platform_id>/market/', methods=['GET'])
+@_csrf_exempt
+@partner_auth_required
+def partner_mp_market(user, platform_id):
+    from app.store.routes import catalog_products_for_store_user
+
+    products, tipo = catalog_products_for_store_user(user)
+    product = next((p for p in products if int(p.id) == int(platform_id)), None)
+    if product is None:
+        return _err('not_found', 'Esa plataforma no está en tu catálogo.', 404)
+    payload = _product_payload(product, tipo)
+    plan = {
+        'plan_id': product.id,
+        'product_id': product.id,
+        'name': product.name,
+        'price': payload.get('price'),
+        'currency': tipo,
+        'stock': payload.get('stock'),
+        'term_days': payload.get('term_days'),
+        'month_to_month': payload.get('month_to_month'),
+        'renewal': payload.get('renewal'),
+    }
+    return _ok(
+        {
+            'platform_id': product.id,
+            'platform_name': product.name,
+            'currency': tipo,
+            'plans': [plan],
+        }
+    )
+
+
+@partner_api_bp.route('/multiplatform/sales/', methods=['POST'])
+@_csrf_exempt
+@partner_auth_required
+def partner_mp_sales(user):
+    data = request.get_json(silent=True) or {}
+    items = _parse_cart_items_from_mp(data)
+    if not items:
+        return _err('bad_request', 'Envía plan_id (o items).', 400)
+    return _execute_partner_purchase(user, items)
+
+
+@partner_api_bp.route('/multiplatform/sales/bulk/preview/', methods=['POST'])
+@_csrf_exempt
+@partner_auth_required
+def partner_mp_bulk_preview(user):
+    data = request.get_json(silent=True) or {}
+    customers = data.get('customers')
+    if not isinstance(customers, list) or not (2 <= len(customers) <= 10):
+        return _err('bad_request', 'Envía customers: lista de 2 a 10 nombres.', 400)
+    items = _parse_cart_items_from_mp(data)
+    return _partner_cart_preview(user, items)
+
+
+@partner_api_bp.route('/multiplatform/sales/bulk/', methods=['POST'])
+@_csrf_exempt
+@partner_auth_required
+def partner_mp_bulk(user):
+    data = request.get_json(silent=True) or {}
+    customers = data.get('customers')
+    if not isinstance(customers, list) or not (2 <= len(customers) <= 10):
+        return _err('bad_request', 'Envía customers: lista de 2 a 10 nombres.', 400)
+    items = _parse_cart_items_from_mp(data)
+    return _execute_partner_purchase(user, items)
+
+
+@partner_api_bp.route('/multiplatform/cart/preview/', methods=['POST'])
+@_csrf_exempt
+@partner_auth_required
+def partner_mp_cart_preview(user):
+    data = request.get_json(silent=True) or {}
+    items = _parse_cart_items_from_mp(data)
+    return _partner_cart_preview(user, items)
+
+
+@partner_api_bp.route('/multiplatform/cart/checkout/', methods=['POST'])
+@_csrf_exempt
+@partner_auth_required
+def partner_mp_cart_checkout(user):
+    data = request.get_json(silent=True) or {}
+    items = _parse_cart_items_from_mp(data)
+    return _execute_partner_purchase(user, items)
+
+
+@partner_api_bp.route('/multiplatform/renewals/search/', methods=['GET', 'POST'])
+@_csrf_exempt
+@partner_auth_required
+def partner_mp_renewals_search(user):
+    from app.store.routes import _lookup_store_renewal_accounts, _parse_renewal_email_tokens
+
+    if request.method == 'GET':
+        raw = str(request.args.get('q') or request.args.get('email') or '').strip()
+    else:
+        data = request.get_json(silent=True) or {}
+        raw = str(data.get('q') or data.get('emails') or data.get('email') or '').strip()
+    if not raw:
+        return _err('bad_request', 'Envía q con el correo a renovar.', 400)
+    emails = _parse_renewal_email_tokens(raw)
+    if not emails:
+        return _err('bad_request', 'No se encontraron correos en el texto.', 400)
+    with _session_as_user(user):
+        renewable, rejected = _lookup_store_renewal_accounts(emails)
+    return _ok({'renewable': renewable, 'rejected': rejected})
+
+
+@partner_api_bp.route('/multiplatform/renewals/', methods=['POST'])
+@_csrf_exempt
+@partner_auth_required
+def partner_mp_renewals_create(user):
+    data = request.get_json(silent=True) or {}
+    ids = data.get('renovacion_account_ids') or data.get('account_ids') or []
+    if data.get('account_id') is not None:
+        ids = list(ids) + [data.get('account_id')]
+    clean = []
+    for x in ids:
+        try:
+            clean.append(int(x))
+        except (TypeError, ValueError):
+            continue
+    product_id = data.get('product_id') or data.get('plan_id')
+    if not clean:
+        return _err('bad_request', 'Envía account_id o renovacion_account_ids.', 400)
+    if not product_id:
+        acc = _find_partner_account(user, account_id=clean[0])
+        if acc:
+            from app.store.models import License
+
+            lic = License.query.get(acc.license_id)
+            product_id = getattr(lic, 'product_id', None) if lic else None
+    if not product_id:
+        return _err('bad_request', 'No se pudo determinar el product_id / plan_id.', 400)
+    return _execute_partner_purchase(
+        user,
+        [{'product_id': product_id, 'renovacion_account_ids': clean}],
+    )
+
+
+@partner_api_bp.route('/multiplatform/accounts/', methods=['GET'])
+@_csrf_exempt
+@partner_auth_required
+def partner_mp_accounts(user):
+    from app.store.models import License, LicenseAccount, Product
+
+    page, page_size = _page_args()
+    q = (request.args.get('q') or request.args.get('search') or '').strip().lower()
+    qry = LicenseAccount.query.filter(
+        LicenseAccount.assigned_to_user_id == int(user.id),
+        LicenseAccount.status.in_(('assigned', 'sold')),
+    )
+    if q:
+        qry = qry.filter(
+            db.or_(
+                LicenseAccount.email.ilike('%' + q + '%'),
+                LicenseAccount.account_identifier.ilike('%' + q + '%'),
+            )
+        )
+    total = qry.count()
+    rows = (
+        qry.order_by(LicenseAccount.assigned_at.desc().nullslast())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+        .all()
+    )
+    out = []
+    for acc in rows:
+        lic = License.query.get(acc.license_id) if acc.license_id else None
+        prod = Product.query.get(lic.product_id) if lic and lic.product_id else None
+        out.append(
+            {
+                'count_id': acc.id,
+                'account_id': acc.id,
+                'sale_id': acc.sale_id,
+                'email': acc.email or acc.account_identifier,
+                'password': acc.password,
+                'plan': prod.name if prod else None,
+                'product_id': lic.product_id if lic else None,
+                'date_start': acc.assigned_at.isoformat() + 'Z' if acc.assigned_at else None,
+                'date_end': acc.expires_at.isoformat() + 'Z' if acc.expires_at else None,
+            }
+        )
+    return _ok({'accounts': out, 'page': page, 'page_size': page_size, 'total': total})
+
+
+@partner_api_bp.route('/seller/account-issues/', methods=['GET'])
+@_csrf_exempt
+@partner_auth_required
+def partner_mp_issues_list(user):
+    return partner_store_issues_list.__wrapped__(user)
+
+
+@partner_api_bp.route('/seller/account-issues/', methods=['POST'])
+@_csrf_exempt
+@partner_auth_required
+def partner_mp_issues_create(user):
+    return partner_store_issues_create.__wrapped__(user)
+
+
+@partner_api_bp.route('/seller/account-issues/search/', methods=['GET'])
+@_csrf_exempt
+@partner_auth_required
+def partner_mp_issues_search(user):
+    from app.store.models import License, LicenseAccount, Product
+
+    q = str(request.args.get('q') or request.args.get('email') or '').strip().lower()
+    if not q:
+        return _err('bad_request', 'Envía q con el correo o parte de la cuenta.', 400)
+    rows = (
+        LicenseAccount.query.filter(
+            LicenseAccount.assigned_to_user_id == int(user.id),
+            LicenseAccount.status.in_(('assigned', 'sold')),
+        )
+        .filter(
+            db.or_(
+                LicenseAccount.email.ilike('%' + q + '%'),
+                LicenseAccount.account_identifier.ilike('%' + q + '%'),
+            )
+        )
+        .order_by(LicenseAccount.assigned_at.desc().nullslast())
+        .limit(30)
+        .all()
+    )
+    accounts = []
+    for acc in rows:
+        lic = License.query.get(acc.license_id) if acc.license_id else None
+        prod = Product.query.get(lic.product_id) if lic and lic.product_id else None
+        accounts.append(
+            {
+                'count_id': acc.id,
+                'account_id': acc.id,
+                'email': acc.email or acc.account_identifier,
+                'plan': prod.name if prod else None,
+            }
+        )
+    return _ok({'accounts': accounts})
+
+
+@partner_api_bp.route('/seller/account-issues/<platform>/<int:issue_id>/', methods=['DELETE'])
+@_csrf_exempt
+@partner_auth_required
+def partner_mp_issues_delete(user, platform, issue_id):
+    from app.store.license_report_photos import LicenseReportPhoto, ensure_report_photos_schema
+
+    ensure_report_photos_schema()
+    row = LicenseReportPhoto.query.filter_by(id=int(issue_id), reporter_user_id=int(user.id)).first()
+    if not row:
+        return _err('not_found', 'No se encontró ese reporte.', 404)
+    db.session.delete(row)
+    db.session.commit()
+    return _ok({'deleted': True, 'id': issue_id, 'platform': platform})
+
+
+@partner_api_bp.route('/streaming-codes/services/', methods=['GET'])
+@_csrf_exempt
+@partner_auth_required
+def partner_mp_codes_services(user):
+    return partner_codes_services.__wrapped__(user)
+
+
+@partner_api_bp.route('/streaming-codes/query/', methods=['POST'])
+@_csrf_exempt
+@partner_auth_required
+def partner_mp_codes_query(user):
+    resp = partner_codes_search.__wrapped__(user)
+    body, status = _flask_response_payload(resp)
+    if not body.get('success') and body.get('error'):
+        return jsonify(body), status
+    payload = body.get('data') or {}
+    result = payload.get('result') or {}
+    results = []
+    if payload.get('found') and result:
+        link = None
+        for m in result.get('matches') or []:
+            if str(m).lower().startswith('http'):
+                link = m
+                break
+        results.append(
+            {
+                'subject': result.get('subject'),
+                'date': result.get('date'),
+                'code': result.get('code'),
+                'link': link,
+                'extra': result.get('matches') or [],
+            }
+        )
+    return _ok(
+        {
+            'service': payload.get('service'),
+            'email': payload.get('email'),
+            'found': payload.get('found'),
+            'results': results,
+            'result': result,
+        }
+    )
+
+
+@partner_api_bp.route('/seller/sales/', methods=['GET'])
+@partner_api_bp.route('/seller/sales/<platform>/', methods=['GET'])
+@_csrf_exempt
+@partner_auth_required
+def partner_mp_sales_history(user, platform=None):
+    from app.store.models import Product, Sale
+
+    page, page_size = _page_args()
+    qry = Sale.query.filter_by(user_id=int(user.id))
+    total = qry.count()
+    rows = qry.order_by(Sale.created_at.desc()).offset((page - 1) * page_size).limit(page_size).all()
+    sales = []
+    for sale in rows:
+        prod = Product.query.get(sale.product_id)
+        sales.append(
+            {
+                'sale_id': sale.id,
+                'product_id': sale.product_id,
+                'plan': prod.name if prod else None,
+                'quantity': sale.quantity,
+                'total_price': float(sale.total_price or 0),
+                'currency': sale.currency,
+                'is_renewal': bool(sale.is_renewal),
+                'created_at': sale.created_at.isoformat() + 'Z' if sale.created_at else None,
+            }
+        )
+    return _ok({'sales': sales, 'page': page, 'page_size': page_size, 'total': total, 'platform': platform or 'store'})
+
+
+@partner_api_bp.route('/seller/dashboard/', methods=['GET'])
+@_csrf_exempt
+@partner_auth_required
+def partner_mp_dashboard(user):
+    from datetime import timedelta
+
+    from app.store.license_report_photos import LicenseReportPhoto, ensure_report_photos_schema
+    from app.store.models import Sale
+
+    tipo = _partner_currency_or_none(user)
+    saldo = _partner_saldo_payload(user, tipo=tipo) or {'saldo': 0.0}
+    since = datetime.utcnow() - timedelta(days=30)
+    sales_30 = Sale.query.filter(Sale.user_id == int(user.id), Sale.created_at >= since).count()
+    open_issues = 0
+    try:
+        ensure_report_photos_schema()
+        open_issues = LicenseReportPhoto.query.filter(
+            LicenseReportPhoto.reporter_user_id == int(user.id),
+            LicenseReportPhoto.status.in_(('open', 'awaiting')),
+        ).count()
+    except Exception:
+        open_issues = 0
+    return _ok(
+        {
+            'balance': saldo.get('saldo'),
+            'currency': tipo,
+            'sales_last_30_days': sales_30,
+            'open_issues': open_issues,
+        }
+    )
+
+
+@partner_api_bp.route('/store/purchases/preview/', methods=['POST'])
+@_csrf_exempt
+@partner_auth_required
+def partner_store_purchases_preview(user):
+    data = request.get_json(silent=True) or {}
+    items = _parse_cart_items_from_mp(data)
+    return _partner_cart_preview(user, items)
+
+
+# ---------------------------------------------------------------------------
 # Administración (sesión admin, con CSRF): interruptor + IPs
 # ---------------------------------------------------------------------------
+
+def _annotate_whitelist_owner_status(wl):
+    cache = {}
+    out = []
+    for entry in wl or []:
+        if not isinstance(entry, dict):
+            out.append(entry)
+            continue
+        item = dict(entry)
+        item['owner_enabled'] = _whitelist_owner_is_enabled(item, cache)
+        out.append(item)
+    return out
+
 
 @partner_api_bp.route('/admin/settings/', methods=['GET'])
 def partner_admin_settings_get():
@@ -837,6 +1733,8 @@ def partner_admin_settings_get():
         return _err('forbidden', 'Solo el administrador puede ver esta configuración.', 403)
     settings = get_partner_settings()
     settings['client_ip'] = _client_ip()
+    settings['users'] = _partner_ip_bind_users()
+    settings['ip_whitelist'] = _annotate_whitelist_owner_status(settings.get('ip_whitelist') or [])
     return _ok(settings)
 
 
@@ -852,22 +1750,41 @@ def partner_admin_settings_post():
     if not isinstance(raw_list, list):
         return _err('bad_request', 'ip_whitelist debe ser una lista.', 400)
     cleaned = []
+    seen = set()
     invalid = []
     for entry in raw_list:
-        norm = _normalize_ip_entry(entry)
-        if norm is None:
-            invalid.append(str(entry))
-        elif norm not in cleaned:
-            cleaned.append(norm)
+        bound = _bind_ip_entry(entry)
+        if bound is None:
+            label = entry.get('ip') if isinstance(entry, dict) else entry
+            invalid.append(str(label))
+            continue
+        if bound['ip'] in seen:
+            cleaned = [c for c in cleaned if c['ip'] != bound['ip']]
+        seen.add(bound['ip'])
+        cleaned.append(bound)
     if invalid:
         return _err(
             'bad_request',
             'IPs no válidas: ' + ', '.join(invalid[:5]) + '. Usa IPs exactas o rangos CIDR.',
             400,
         )
+    unbound = [c['ip'] for c in cleaned if not c.get('user_id')]
+    if unbound:
+        return _err(
+            'bad_request',
+            'Cada IP debe estar vinculada a un usuario. Falta dueño en: ' + ', '.join(unbound[:5]) + '.',
+            400,
+        )
+    if not cleaned:
+        return _err(
+            'bad_request',
+            'La lista no puede quedar vacía. Añade al menos una IP vinculada a un usuario.',
+            400,
+        )
     save_partner_settings(enabled, cleaned)
     settings = get_partner_settings()
     settings['client_ip'] = _client_ip()
+    settings['users'] = _partner_ip_bind_users()
     return _ok(settings)
 
 
@@ -877,22 +1794,36 @@ def partner_admin_settings_post():
 
 @partner_api_bp.route('/docs/', methods=['GET'])
 def partner_api_docs():
-    """Documentación generada desde la BD: siempre al día sin editar nada."""
+    """Documentación generada desde la BD: solo con sesión de la web (admin o usuario)."""
     from app.models.service import ServiceModel  # noqa: F401 (aseguramos import temprano)
+    from app.store.routes import catalog_products_for_store_user
 
-    is_admin = _is_admin_session()
+    if not session.get('logged_in'):
+        flash('Debes iniciar sesión para ver la documentación de la API.', 'warning')
+        return redirect(url_for('user_auth_bp.login'))
+
+    docs_user = _session_docs_user()
+    if not _is_admin_session() and _is_store_subuser(docs_user):
+        flash('La documentación de la API es solo para el usuario principal y el administrador.', 'warning')
+        return redirect(url_for('store_bp.store_front'))
+    viewer_currency = _partner_currency_or_none(docs_user) if docs_user else None
+    can_see_prices = viewer_currency in ('USD', 'COP')
+    admin_docs = _is_admin_session()
 
     products_docs = []
     try:
-        from app.store.models import Product
-        from app.store.routes import public_store_products_query
+        if can_see_prices:
+            products, tipo = catalog_products_for_store_user(docs_user)
+            products_docs = [_product_payload(p, tipo) for p in products]
+        elif admin_docs:
+            from app.store.models import Product
+            from app.store.routes import public_store_products_query
 
-        try:
-            products = public_store_products_query().all()
-        except Exception:
-            products = Product.query.filter_by(enabled=True).order_by(Product.name.asc()).all()
-        for p in products:
-            products_docs.append(_product_payload(p, None))
+            try:
+                products = public_store_products_query().order_by(Product.name.asc()).all()
+            except Exception:
+                products = Product.query.filter_by(enabled=True).order_by(Product.name.asc()).all()
+            products_docs = [_product_payload(p, None) for p in products]
     except Exception:
         current_app.logger.exception('partner docs: productos')
 
@@ -904,12 +1835,26 @@ def partner_api_docs():
 
     settings = get_partner_settings()
     base_url = request.url_root.rstrip('/') + '/api/partner/v1'
-    example_product = products_docs[0] if products_docs else {'id': 1, 'name': 'Producto ejemplo'}
+    example_currency = viewer_currency or 'COP'
+    example_product = products_docs[0] if products_docs else {
+        'id': 1,
+        'name': 'Producto ejemplo',
+        'renewal': {'customer_account': True, 'inventory_search': True},
+    }
+    if can_see_prices:
+        example_price = example_product.get('price', 12000.0 if example_currency == 'COP' else 3.5)
+    else:
+        example_price = 12000.0 if example_currency == 'COP' else 3.5
     example_service = services_docs[0] if services_docs else {'id': 1, 'name': 'Boton ejemplo'}
 
     return render_template(
         'partner_api_docs.html',
-        is_admin=is_admin,
+        current_user=docs_user,
+        viewer_currency=viewer_currency,
+        can_see_prices=can_see_prices,
+        can_see_product_list=can_see_prices or admin_docs,
+        example_currency=example_currency,
+        example_price=example_price,
         base_url=base_url,
         products=products_docs,
         services=services_docs,

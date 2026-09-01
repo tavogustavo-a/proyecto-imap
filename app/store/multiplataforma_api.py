@@ -545,3 +545,126 @@ def purchase_days(purchase, default_days=30):
     except Exception:
         pass
     return default_days
+
+
+# ---------------------------------------------------------------------------
+# Recargas de saldo del vendedor (QR Bancolombia / Binance de Multiplataforma)
+# ---------------------------------------------------------------------------
+
+def get_recharge_config():
+    """GET /payments/recharge/config/"""
+    return api_request('GET', '/payments/recharge/config/') or {}
+
+
+def create_recharge_attempt(name, value):
+    """POST /payments/recharge/attempts/ — titular + monto → payment_id y payload QR."""
+    return api_request(
+        'POST',
+        '/payments/recharge/attempts/',
+        json_body={'name': str(name or '').strip(), 'value': value},
+    ) or {}
+
+
+def check_recharge_attempt(payment_id):
+    """POST /payments/recharge/attempts/{id}/check/"""
+    return api_request(
+        'POST',
+        '/payments/recharge/attempts/%s/check/' % int(payment_id),
+    ) or {}
+
+
+def list_recharge_attempts():
+    """GET /payments/recharge/attempts/"""
+    return api_request('GET', '/payments/recharge/attempts/') or {}
+
+
+def get_recharge_attempt(payment_id):
+    """GET /payments/recharge/attempts/{id}/"""
+    return api_request(
+        'GET',
+        '/payments/recharge/attempts/%s/' % int(payment_id),
+    ) or {}
+
+
+def list_payment_history(page=1, page_size=20, q=None):
+    """GET /payments/history/"""
+    params = {'page': int(page), 'page_size': int(page_size)}
+    if q:
+        params['q'] = str(q)[:120]
+    return api_request('GET', '/payments/history/', params=params) or {}
+
+
+def list_payment_issues():
+    """GET /payments/issues/"""
+    return api_request('GET', '/payments/issues/') or {}
+
+
+def create_payment_issue(payment_id, issue_text, image_name, image_bytes, image_mime):
+    """POST /payments/issues/ — recarga no acreditada (imagen obligatoria)."""
+    return api_request(
+        'POST',
+        '/payments/issues/',
+        form_data={
+            'payment_id': str(int(payment_id)),
+            'issue': str(issue_text or '')[:1000],
+        },
+        files={
+            'image': (
+                image_name or 'comprobante.jpg',
+                image_bytes,
+                image_mime or 'image/jpeg',
+            )
+        },
+    ) or {}
+
+
+def qr_png_data_url(payload):
+    """PNG data-URL de un texto (TLV EMV, URL, etc.)."""
+    import base64
+    import io
+
+    import qrcode
+
+    text = str(payload or '').strip()
+    if not text:
+        return None
+    img = qrcode.make(text)
+    buf = io.BytesIO()
+    img.save(buf, format='PNG')
+    return 'data:image/png;base64,' + base64.b64encode(buf.getvalue()).decode('ascii')
+
+
+def enrich_recharge_attempt_qr(data):
+    """Añade qr_data_url para mostrar el QR en la web sin ir a multiplataforma.co."""
+    if not isinstance(data, dict):
+        return data
+    if data.get('qr_data_url'):
+        return data
+    qr_url = (data.get('qr_url') or data.get('qrcode_link') or data.get('qrcodeLink') or '').strip()
+    if qr_url.startswith('http://') or qr_url.startswith('https://'):
+        try:
+            resp = requests.get(qr_url, timeout=15)
+            if resp.ok and resp.content:
+                import base64
+
+                mime = (resp.headers.get('Content-Type') or 'image/png').split(';')[0].strip()
+                if mime.startswith('image/'):
+                    data['qr_data_url'] = (
+                        'data:%s;base64,' % mime
+                        + base64.b64encode(resp.content).decode('ascii')
+                    )
+                    return data
+        except requests.RequestException:
+            pass
+        data['qr_data_url'] = qr_png_data_url(qr_url)
+        return data
+    tlv = (
+        data.get('tlv_payload_base')
+        or data.get('tlv')
+        or data.get('emv')
+        or data.get('qr_payload')
+        or ''
+    )
+    if tlv:
+        data['qr_data_url'] = qr_png_data_url(tlv)
+    return data

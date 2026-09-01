@@ -5,6 +5,7 @@
 {% block head %}
 {{ super() }}
 <meta name="csrf_token" content="{{ csrf_token() }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/store.css') }}">
 {% endblock head %}
 
 {% block content %}
@@ -20,26 +21,39 @@
      data-email="{{ user.email }}"
      data-full-name="{{ user.full_name or '' }}"
      data-phone="{{ user.phone or '' }}"
+     data-clear-trigger-log-url="{{ url_for('admin_bp.clear_trigger_log') }}"
+     data-logout-all-cookies-url="{{ url_for('admin_bp.logout_all_and_clear_cookies') }}"
      >
 
+  <div id="mobileMenu" class="mobile-menu-store hidden">
+    <div class="menu-user-info-row menu-user-info-row--name-only menu-sidebar-heading-name">
+      <span class="menu-user-name">{{ session.get('username', 'Admin') }}</span>
+    </div>
+    {% include 'includes/admin_menu_primary_links.html' %}
+    <button id="btnClearTriggerLogMenu" type="button" class="btn-panel btn-red mobile-menu-btn mb-04"><i class="fas fa-trash"></i> Limpiar Logs</button>
+    <a href="{{ url_for('auth_bp.logout') }}" class="btn-panel btn-red mobile-menu-btn mb-04"><i class="fas fa-sign-out-alt"></i> Cerrar Sesión</a>
+    <button id="btnLogoutAllAndClearCookies" type="button" class="btn-panel btn-red mobile-menu-btn mb-04" data-url="{{ url_for('admin_bp.logout_all_and_clear_cookies') }}"><i class="fas fa-cookie-bite"></i> Cerrar sesión y limpiar cookies</button>
+  </div>
+
+  <div id="mobileMenu2" class="mobile-menu-store hidden">
+    <div class="menu-user-info-row menu-user-info-row--name-only menu-sidebar-heading-name">
+      <span class="menu-user-name">Menú</span>
+    </div>
+    {% include 'includes/admin_menu_secondary_links.html' %}
+    {% include 'includes/admin_menu_licencias_extra_links.html' %}
+  </div>
+
+  <div id="menuOverlay" class="menu-overlay"></div>
+
   <div class="admin-card">
-    <div class="d-flex align-items-center flex-wrap gap-1 mb-1 justify-content-between">
-      {# Aplicada clase no-shrink #}
-      <h2 class="m-0 no-shrink">Gestionar Correos de {{ user.username }}</h2>
-      <div>
-        <button 
-          id="btnVolverUsuarios" 
-          class="btn-blue" 
-          data-url="{{ url_for('admin_bp.usuarios_page') }}"
-        >
-          Volver
-        </button>
+    <div class="d-flex justify-content-between align-items-center mb-1">
+      <div class="d-flex gap-05">
+        <button id="menuToggleBtn" type="button" class="btn-panel btn-blue ml-2 menu-toggle-btn" title="Menú de navegación" aria-label="Abrir menú de navegación">&#9776; Menú</button>
+        <button id="menu2ToggleBtn" type="button" class="btn-panel btn-blue menu-toggle-btn" title="Menú secundario" aria-label="Abrir segundo menú">&#9776; Menú2</button>
       </div>
     </div>
 
-    {# Aplicada clase HR #}
-    <hr class="hr-margin-15">
-    <h3 class="mb-05 text-center">Búsqueda y Eliminacion de Correos</h3>
+    <h3 class="mb-05 text-center">Búsqueda y Eliminacion de Correos ({{ user.username }})</h3>
     {# Clase searchEmailsForm aplicada desde CSS #}
     <form id="searchEmailsForm" name="searchEmailsForm">
       <label for="searchEmailsInput" class="sr-only">Buscar y eliminar correos</label>
@@ -142,9 +156,9 @@
           <p class="text-muted text-center">Cargando APIs vinculadas...</p>
         </div>
 
-        <div class="d-flex gap-05 align-items-center">
-          <input type="text" id="newApiNameInput" class="flex-grow-1 api-input" placeholder="Nombre del proyecto (ej: Proyecto B)" autocomplete="off">
-          <input type="text" id="newApiUrlInput" class="flex-grow-1 api-input" placeholder="URL de la API (ej: https://proyecto-b.com/api)" autocomplete="off">
+        <div class="d-flex gap-05 align-items-center api-add-row">
+          <input type="text" id="newApiNameInput" class="flex-grow-1 api-input" placeholder="Nombre del proyecto" autocomplete="off">
+          <input type="text" id="newApiIpInput" class="flex-grow-1 api-input" placeholder="IP o rango CIDR" autocomplete="off">
           <input type="text" id="newApiTokenInput" class="flex-grow-1 api-input" placeholder="Token de acceso" autocomplete="off">
           <button type="button" id="addLinkedApiBtn" class="btn-blue" title="Agregar otra API">
             <i class="fas fa-plus"></i>
@@ -181,9 +195,8 @@
       <br>
       <strong>Atención:</strong> si desactivas este permiso, se borrarán todos sus sub-usuarios existentes.
     </p>
-    <div class="mb-1">
-       {# Mantenido gap inline #}
-      <label class="d-flex align-items-center gap-03">
+    <div class="mb-1 d-flex align-items-center subusers-perm-row">
+      <label class="d-flex align-items-center gap-03 mb-0">
         <input
           type="checkbox"
           id="toggleCanCreateSubusers"
@@ -193,7 +206,7 @@
         >
         Puede crear sub-usuarios
       </label>
-      <button id="saveCanCreateSubusersBtn" class="btn-green ml-1">
+      <button id="saveCanCreateSubusersBtn" class="btn-green">
         Guardar
       </button>
     </div>
@@ -293,9 +306,9 @@
     </button>
   </div>
   <div class="mb-1 text-left text-small" style="line-height:1.45; padding: 0 0.35rem;">
-    <p class="mb-05"><strong>Qué hace:</strong> conecta a este usuario con otros proyectos para consultar correos desde Códigos en esos servidores.</p>
-    <p class="mb-05"><strong>Cómo usarlo:</strong> agrega nombre, URL de la API y el token del otro proyecto. Con <strong>Mi API</strong> obtienes la URL y el token de este usuario para pegarlos en el otro lado.</p>
-    <p class="mb-0"><strong>Nota:</strong> el correo debe estar permitido aquí o en el proyecto remoto; filtros y regex se aplican igual al consultar.</p>
+    <p class="mb-05"><strong>Qué hace:</strong> vincula este usuario con un nombre de proyecto, su IP y el token que usará en esta API de Códigos.</p>
+    <p class="mb-05"><strong>Cómo usarlo:</strong> agrega nombre, IP o rango CIDR y token. La URL es siempre la de este proyecto. Con <strong>Mi API</strong> copias el token de este usuario.</p>
+    <p class="mb-0"><strong>IP:</strong> la IP que pegues queda vinculada a este usuario en Documentación API. Sin IP no se aceptan consultas.</p>
   </div>
   <div class="d-flex justify-content-center">
     <button type="button" class="popup-button-confirm" id="okLinkedApisInfoBtn">Entendido</button>
@@ -309,16 +322,8 @@
       <i class="fas fa-times" aria-hidden="true"></i>
     </button>
   </div>
-  <p class="text-small mb-1 text-center">Usa estos datos para vincular este usuario en otros proyectos.</p>
+  <p class="text-small mb-1 text-center">Usa el token para vincular este usuario. El servidor que consulte debe usar una IP vinculada a este usuario (se agrega en APIs Vinculadas o en Documentación API).</p>
   <div class="mb-1 text-center">
-    <label for="myApiUrlDisplay" class="d-block mb-03"><strong>URL de la API:</strong></label>
-    <div class="d-flex gap-05 mb-05">
-      <input type="text" id="myApiUrlDisplay" class="flex-grow-1 text-center api-input" readonly>
-      <button type="button" class="btn-panel btn-blue btn-sm copy-api-btn" data-target="myApiUrlDisplay" title="Copiar URL">
-        <i class="fas fa-copy"></i>
-      </button>
-    </div>
-    
     <label for="myApiTokenDisplay" class="d-block mb-03"><strong>Tu Token Maestro:</strong></label>
     <div class="d-flex gap-05">
       <input type="text" id="myApiTokenDisplay" class="flex-grow-1 text-center api-input" readonly>
@@ -346,8 +351,8 @@
   <div class="mb-1 text-center">
     <label for="editApiName" class="d-block mb-03">Nombre del Proyecto:</label>
     <input type="text" id="editApiName" class="w-100 mb-05 text-center api-input">
-    <label for="editApiUrl" class="d-block mb-03">URL de la API:</label>
-    <input type="text" id="editApiUrl" class="w-100 mb-05 text-center api-input">
+    <label for="editApiIp" class="d-block mb-03">IP o rango CIDR (opcional):</label>
+    <input type="text" id="editApiIp" class="w-100 mb-05 text-center api-input" placeholder="Si la rellenas, se vincula a este usuario" autocomplete="off">
     <label for="editApiToken" class="d-block mb-03">Token de Acceso:</label>
     <input type="text" id="editApiToken" class="w-100 text-center api-input">
   </div>
@@ -361,6 +366,8 @@
 
 {# --- AÑADIR CARGA DEL NUEVO SCRIPT EXTERNO --- #}
 {% block scripts %}
-{# {{ super() }} #}
-<script src="{{ url_for('static', filename='js/admin_user_emails.js') }}?v=20260806-unique-emails"></script>
+<script src="{{ url_for('store_bp.static', filename='js/menu_tienda.js') }}" defer></script>
+<script src="{{ url_for('static', filename='js/clear_trigger_logs.js') }}" defer></script>
+<script src="{{ url_for('static', filename='js/logout_all_cookies_btn.js') }}" defer></script>
+<script src="{{ url_for('static', filename='js/admin_user_emails.js') }}?v=20260831-no-volver"></script>
 {% endblock scripts %}

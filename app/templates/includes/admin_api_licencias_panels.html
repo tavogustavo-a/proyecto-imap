@@ -1,0 +1,195 @@
+{# API para proyectos vinculados + API licencias. Solo admin. IDs fijos para admin_dashboard.js #}
+<div id="apiLicenciasAdmin" class="partner-docs-api-licencias">
+  <div class="admin-box">
+    <h3 class="admin-api-section-title">
+      <span>API Para Proyectos Vinculados</span>
+      <button type="button" id="globalLinkedApisInfoBtn" class="btn-panel btn-blue admin-global-api-info-btn" title="Qué hace esta sección" aria-label="Información sobre API Para Proyectos Vinculados" aria-controls="globalLinkedApisInfoModal" aria-haspopup="dialog">
+        <i class="fas fa-info-circle" aria-hidden="true"></i>
+      </button>
+      <button type="button" id="showCodesMyApiBtn" title="Ver mi API para proyectos vinculados">Mi API</button>
+    </h3>
+    <p class="mut">Da acceso a otros proyectos a esta API de Códigos. Con Mi API copias el token de este proyecto. La IP se configura arriba y la URL es la de esta API.</p>
+    <div id="globalLinkedApisList" class="mb-1">
+      <p class="mut">Cargando APIs globales...</p>
+    </div>
+    <div class="row api-add-row">
+      <div class="pd-owner-picker" data-owner-picker>
+        <input type="hidden" id="newGlobalApiOwner" value="">
+        <button type="button" id="newGlobalApiOwnerSearch" class="pd-owner-picker-btn" data-placeholder="Buscar usuario dueño…" aria-haspopup="dialog" aria-label="Usuario dueño del proyecto">
+          <i class="fas fa-user" aria-hidden="true"></i>
+          <span class="pd-owner-picker-btn-label">Buscar usuario dueño…</span>
+          <i class="fas fa-chevron-down" aria-hidden="true"></i>
+        </button>
+      </div>
+      <input type="text" id="newGlobalApiToken" class="api-input" placeholder="Token de Acceso" autocomplete="off">
+      <button type="button" id="addGlobalApiBtn" title="Agregar API Global"><i class="fas fa-plus"></i></button>
+    </div>
+    <p class="text-center mt-05 mb-0"><span id="globalApiMsg" class="status-msg"></span></p>
+  </div>
+
+  <div class="admin-box">
+    <h3 class="admin-api-section-title">
+      <span>API para las licencias</span>
+      <button type="button" id="licenciasApiInfoBtn" class="btn-panel btn-blue admin-global-api-info-btn" title="Qué hace esta sección" aria-label="Información sobre API para licencias" aria-controls="licenciasApiInfoModal" aria-haspopup="dialog">
+        <i class="fas fa-info-circle" aria-hidden="true"></i>
+      </button>
+      <button type="button" id="showLicenciasMyApiBtn" title="Ver mi API para licencias">Mi API</button>
+    </h3>
+    <p class="mut">El mismo usuario, con el token que usará en licencias. La IP se configura arriba y la URL es la de esta API.</p>
+    <div id="licenciasApiList" class="mb-1"></div>
+    <div class="row api-add-row">
+      <div class="pd-owner-picker" data-owner-picker>
+        <input type="hidden" id="newLicenciasApiOwner" value="">
+        <button type="button" id="newLicenciasApiOwnerSearch" class="pd-owner-picker-btn" data-placeholder="Buscar usuario dueño…" aria-haspopup="dialog" aria-label="Usuario dueño del proyecto">
+          <i class="fas fa-user" aria-hidden="true"></i>
+          <span class="pd-owner-picker-btn-label">Buscar usuario dueño…</span>
+          <i class="fas fa-chevron-down" aria-hidden="true"></i>
+        </button>
+      </div>
+      <input type="text" id="newLicenciasApiToken" class="api-input" placeholder="Token de Acceso" autocomplete="off">
+      <button type="button" id="addLicenciasApiBtn" title="Agregar API de licencias"><i class="fas fa-plus"></i></button>
+    </div>
+    <p class="text-center mt-05 mb-0"><span id="licenciasApiMsg" class="status-msg"></span></p>
+  </div>
+</div>
+
+<div id="globalLinkedApisInfoModal" class="popup-base popup-small popup-hide" role="dialog" aria-modal="true" aria-labelledby="globalLinkedApisInfoTitle" hidden>
+  <div class="popup-modal-header">
+    <h4 id="globalLinkedApisInfoTitle" class="mt-0 mb-0 flex-grow-1 text-center">
+      <i class="fas fa-info-circle" aria-hidden="true"></i> API Para Proyectos Vinculados
+    </h4>
+    <button type="button" class="btn-close" id="closeGlobalLinkedApisInfoBtn" aria-label="Cerrar información">
+      <i class="fas fa-times"></i>
+    </button>
+  </div>
+  <div class="mb-1 text-left text-small" style="line-height:1.45; padding: 0 0.35rem;">
+    <p class="mb-05"><strong>Qué hace:</strong> da a otros proyectos acceso a esta API de Códigos con el token de este proyecto.</p>
+    <p class="mb-05"><strong>Cómo usarlo:</strong> con <strong>Mi API</strong> copias el token. Aquí eliges usuario dueño y token. <strong>Probar</strong> comprueba IP + token.</p>
+    <p class="mb-05"><strong>Qué necesitas:</strong> usuario dueño y token de acceso. La URL es siempre la de este proyecto.</p>
+    <p class="mb-0"><strong>IP:</strong> ese mismo usuario debe tener al menos una IP en la lista de arriba.</p>
+  </div>
+  <div class="d-flex justify-content-center">
+    <button type="button" class="popup-button-confirm" id="okGlobalLinkedApisInfoBtn">Entendido</button>
+  </div>
+</div>
+
+<div id="editGlobalApiModal" class="popup-base popup-small popup-hide">
+  <div class="popup-modal-header">
+    <h4 class="mt-0 mb-0 flex-grow-1 text-center">Editar API Global</h4>
+    <button type="button" class="btn-close" id="closeEditGlobalApiModalBtn" aria-label="Cerrar modal">
+      <i class="fas fa-times"></i>
+    </button>
+  </div>
+  <input type="hidden" id="editGlobalApiId">
+  <div class="mb-1 text-center">
+    <label for="editGlobalApiOwnerSearch" class="d-block mb-03">Usuario dueño:</label>
+    <div class="pd-owner-picker pd-owner-picker--modal" data-owner-picker>
+      <input type="hidden" id="editGlobalApiOwner" value="">
+      <button type="button" id="editGlobalApiOwnerSearch" class="pd-owner-picker-btn" data-placeholder="Buscar usuario dueño…" aria-haspopup="dialog" aria-label="Buscar usuario dueño">
+        <i class="fas fa-user" aria-hidden="true"></i>
+        <span class="pd-owner-picker-btn-label">Buscar usuario dueño…</span>
+        <i class="fas fa-chevron-down" aria-hidden="true"></i>
+      </button>
+    </div>
+    <label for="editGlobalApiToken" class="d-block mb-03">Token de Acceso:</label>
+    <input type="text" id="editGlobalApiToken" class="w-100 text-center api-input">
+  </div>
+  <div class="d-flex justify-content-center">
+    <button type="button" class="popup-button-confirm" id="saveEditGlobalApiBtn">Guardar</button>
+  </div>
+</div>
+
+<div id="licenciasApiInfoModal" class="popup-base popup-small popup-hide" role="dialog" aria-modal="true" aria-labelledby="licenciasApiInfoTitle" hidden>
+  <div class="popup-modal-header">
+    <h4 id="licenciasApiInfoTitle" class="mt-0 mb-0 flex-grow-1 text-center">
+      <i class="fas fa-info-circle" aria-hidden="true"></i> API para las licencias
+    </h4>
+    <button type="button" class="btn-close" id="closeLicenciasApiInfoBtn" aria-label="Cerrar información">
+      <i class="fas fa-times"></i>
+    </button>
+  </div>
+  <div class="mb-1 text-left text-small" style="line-height:1.45; padding: 0 0.35rem;">
+    <p class="mb-05"><strong>Qué hace:</strong> vincula el mismo usuario dueño con el token que usará en la API de licencias.</p>
+    <p class="mb-05"><strong>Cómo usarlo:</strong> con <strong>Mi API</strong> copias el token. Aquí eliges usuario y token. <strong>Probar</strong> comprueba IP + token.</p>
+    <p class="mb-0"><strong>IP obligatoria:</strong> ese usuario debe tener IP vinculada arriba en esta página.</p>
+  </div>
+  <div class="d-flex justify-content-center">
+    <button type="button" class="popup-button-confirm" id="okLicenciasApiInfoBtn">Entendido</button>
+  </div>
+</div>
+
+<div id="codesMyApiModal" class="popup-base popup-small popup-hide">
+  <div class="popup-modal-header">
+    <h4 class="mt-0 mb-0 flex-grow-1 text-center">Mi API de Acceso para proyectos vinculados</h4>
+    <button type="button" class="btn-close" id="closeCodesMyApiModalBtn" aria-label="Cerrar modal">
+      <i class="fas fa-times"></i>
+    </button>
+  </div>
+  <p class="text-small mb-1 text-center">Usa este token en otros proyectos para consultar esta API de Códigos. El servidor que consulte debe usar una IP dada de alta arriba, en esta página.</p>
+  <div class="mb-1 text-center">
+    <label for="codesMyApiTokenDisplay" class="d-block mb-03"><strong>Tu Token Maestro:</strong></label>
+    <div class="d-flex gap-05">
+      <input type="text" id="codesMyApiTokenDisplay" class="flex-grow-1 text-center api-input" readonly>
+      <button type="button" class="btn-panel btn-blue btn-sm copy-licencias-api-btn" data-target="codesMyApiTokenDisplay" title="Copiar Token">
+        <i class="fas fa-copy"></i>
+      </button>
+      <button type="button" id="regenCodesMasterTokenBtn" class="btn-panel btn-orange btn-sm" title="Regenerar Token">
+        <i class="fas fa-sync-alt"></i>
+      </button>
+    </div>
+  </div>
+  <div class="alert-info p-05 text-smaller text-center mt-1">
+    <strong>Nota:</strong> Cada proyecto tiene un token único. No compartas este token con nadie.
+  </div>
+</div>
+
+<div id="licenciasMyApiModal" class="popup-base popup-small popup-hide">
+  <div class="popup-modal-header">
+    <h4 class="mt-0 mb-0 flex-grow-1 text-center">Mi API de Acceso para licencias</h4>
+    <button type="button" class="btn-close" id="closeLicenciasMyApiModalBtn" aria-label="Cerrar modal">
+      <i class="fas fa-times"></i>
+    </button>
+  </div>
+  <p class="text-small mb-1 text-center">Usa el token para vincular este proyecto. El servidor que consulte debe usar una IP dada de alta arriba, en esta página.</p>
+  <div class="mb-1 text-center">
+    <label for="licenciasMyApiTokenDisplay" class="d-block mb-03"><strong>Tu Token Maestro:</strong></label>
+    <div class="d-flex gap-05">
+      <input type="text" id="licenciasMyApiTokenDisplay" class="flex-grow-1 text-center api-input" readonly>
+      <button type="button" class="btn-panel btn-blue btn-sm copy-licencias-api-btn" data-target="licenciasMyApiTokenDisplay" title="Copiar Token">
+        <i class="fas fa-copy"></i>
+      </button>
+      <button type="button" id="regenLicenciasMasterTokenBtn" class="btn-panel btn-orange btn-sm" title="Regenerar Token">
+        <i class="fas fa-sync-alt"></i>
+      </button>
+    </div>
+  </div>
+  <div class="alert-info p-05 text-smaller text-center mt-1">
+    <strong>Nota:</strong> Cada proyecto tiene un token único. No compartas este token con nadie.
+  </div>
+</div>
+
+<div id="editLicenciasApiModal" class="popup-base popup-small popup-hide">
+  <div class="popup-modal-header">
+    <h4 class="mt-0 mb-0 flex-grow-1 text-center">Editar API de licencias</h4>
+    <button type="button" class="btn-close" id="closeEditLicenciasApiModalBtn" aria-label="Cerrar modal">
+      <i class="fas fa-times"></i>
+    </button>
+  </div>
+  <input type="hidden" id="editLicenciasApiId">
+  <div class="mb-1 text-center">
+    <label for="editLicenciasApiOwnerSearch" class="d-block mb-03">Usuario dueño:</label>
+    <div class="pd-owner-picker pd-owner-picker--modal" data-owner-picker>
+      <input type="hidden" id="editLicenciasApiOwner" value="">
+      <button type="button" id="editLicenciasApiOwnerSearch" class="pd-owner-picker-btn" data-placeholder="Buscar usuario dueño…" aria-haspopup="dialog" aria-label="Buscar usuario dueño">
+        <i class="fas fa-user" aria-hidden="true"></i>
+        <span class="pd-owner-picker-btn-label">Buscar usuario dueño…</span>
+        <i class="fas fa-chevron-down" aria-hidden="true"></i>
+      </button>
+    </div>
+    <label for="editLicenciasApiToken" class="d-block mb-03">Token de Acceso:</label>
+    <input type="text" id="editLicenciasApiToken" class="w-100 text-center api-input">
+  </div>
+  <div class="d-flex justify-content-center">
+    <button type="button" class="popup-button-confirm" id="saveEditLicenciasApiBtn">Guardar</button>
+  </div>
+</div>

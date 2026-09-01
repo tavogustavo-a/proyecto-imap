@@ -211,6 +211,65 @@ textarea {
   outline: none;
 }
 
+#linkedApisSection .api-add-row {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem;
+  min-width: 0;
+  max-width: 100%;
+}
+#linkedApisSection .api-add-row .api-input,
+#linkedApisSection .api-add-row #addLinkedApiBtn {
+  box-sizing: border-box;
+  height: 2.15rem;
+  min-height: 2.15rem;
+  max-height: 2.15rem;
+  margin: 0;
+  font-size: 0.9rem;
+  line-height: 1.25;
+  border-radius: 5px !important;
+}
+#linkedApisSection .api-add-row .api-input {
+  flex: 1 1 8rem;
+  min-width: 0;
+  width: auto;
+  max-width: 100%;
+  padding: 0 0.55rem;
+}
+#linkedApisSection .api-add-row #addLinkedApiBtn {
+  flex: 0 0 2.15rem;
+  width: 2.15rem !important;
+  min-width: 2.15rem !important;
+  max-width: 2.15rem !important;
+  padding: 0 !important;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+@media (max-width: 600px) {
+  #linkedApisSection .api-add-row .api-input:nth-child(1),
+  #linkedApisSection .api-add-row .api-input:nth-child(2) {
+    flex: 1 1 calc(50% - 0.25rem);
+  }
+  #linkedApisSection .api-add-row #newApiTokenInput {
+    flex: 1 1 0;
+    min-width: 0;
+  }
+  #linkedApisSection .api-add-row #addLinkedApiBtn {
+    flex: 0 0 2.15rem;
+    width: 2.15rem !important;
+    min-width: 2.15rem !important;
+    max-width: 2.15rem !important;
+    margin: 0;
+  }
+  #linkedApisSection .linked-api-item {
+    flex-wrap: wrap;
+    gap: 0.4rem;
+  }
+}
+
 /* Max-width para inputs API (sin estilos inline, CSP) */
 .api-input-max-200 { max-width: 200px; }
 
@@ -3399,16 +3458,34 @@ body #popupFilter.popup-base.popup-small {
   padding-left: 0 !important;
   gap: 0.18rem !important;
 }
+#user-management-container .admin-card .subusers-perm-row {
+  flex-wrap: nowrap !important;
+  gap: 0.75rem;
+}
+#user-management-container .admin-card .subusers-perm-row label.d-flex.align-items-center.gap-03 {
+  width: auto !important;
+  flex: 0 1 auto;
+}
+#user-management-container .admin-card .subusers-perm-row #saveCanCreateSubusersBtn {
+  flex: 0 0 auto;
+}
 #user-management-container .admin-card label.d-flex input[type="checkbox"] {
   margin-left: 0 !important;
   margin-right: 0.3rem !important;
 }
-#user-management-container .admin-card .d-flex.gap-05.mb-1 > button {
+#user-management-container .admin-card .d-flex.gap-05.mb-1 > button:not(.menu-toggle-btn) {
   font-size: 0.68rem !important;
   padding: 0.32rem 0.7rem !important;
   min-width: 54px;
   max-width: 180px;
   border-radius: 7px;
+}
+#user-management-container #menuToggleBtn,
+#user-management-container #menu2ToggleBtn {
+  float: none !important;
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: center;
 }
 
 /* POPUPS de email.html: contorno blanco y borde negro */
@@ -3466,6 +3543,7 @@ body #popupFilter.popup-base.popup-small {
   white-space: normal;
   max-width: 100%;
   overflow-wrap: anywhere;
+  text-align: center;
 }
 @media (max-width: 600px) {
   #user-management-container h2 {

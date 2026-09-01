@@ -44812,6 +44812,60 @@ body:has(.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell))
   text-transform: none !important;
   vertical-align: middle !important;
 }
+.admin-proveedores-anadir-fuera-page .mp-api-recharge {
+  text-align: left;
+}
+.admin-proveedores-anadir-fuera-page .mp-api-recharge-meta {
+  font-size: 0.82rem;
+  color: #475569;
+  margin: 0 0 0.65rem;
+  line-height: 1.35;
+}
+.admin-proveedores-anadir-fuera-page .mp-api-recharge-amount-row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+.admin-proveedores-anadir-fuera-page .mp-api-recharge-prefix {
+  font-weight: 700;
+  color: #0f172a;
+}
+.admin-proveedores-anadir-fuera-page .mp-api-recharge-active {
+  margin-top: 0.85rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid #cbd5e1;
+}
+.admin-proveedores-anadir-fuera-page .mp-api-recharge-active-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.35rem;
+  flex-wrap: wrap;
+}
+.admin-proveedores-anadir-fuera-page .mp-api-recharge-report textarea {
+  width: 100%;
+  box-sizing: border-box;
+  margin: 0.35rem 0;
+}
+.admin-proveedores-anadir-fuera-page .mp-api-recharge-list {
+  margin-top: 0.85rem;
+  overflow-x: auto;
+}
+.admin-proveedores-anadir-fuera-page .mp-api-recharge-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.82rem;
+}
+.admin-proveedores-anadir-fuera-page .mp-api-recharge-table th,
+.admin-proveedores-anadir-fuera-page .mp-api-recharge-table td {
+  border-bottom: 1px solid #e2e8f0;
+  padding: 0.35rem 0.4rem;
+  text-align: left;
+}
+.admin-proveedores-anadir-fuera-page .mp-api-recharge .balance-recharge-method-qr-open {
+  margin: 0.45rem 0 0.7rem;
+}
 @media (max-width: 768px) {
   .admin-proveedores-anadir-fuera-page #menuToggleBtn.menu-toggle-btn,
   .admin-proveedores-anadir-fuera-page #menu2ToggleBtn.menu-toggle-btn,

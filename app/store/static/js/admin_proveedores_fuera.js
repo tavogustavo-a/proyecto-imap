@@ -89,8 +89,7 @@
     return num.toLocaleString('es-CO') + (prefix ? ' ' + prefix : '');
   }
 
-  // Un título (Conexión API) contrae todo el proveedor, incluida
-  // Plataformas y stock. Un proveedor nuevo: data-mp-collapse-key en el wrapper.
+  // Un título (Conexión API) contrae todo el proveedor: plataformas, stock y recargas.
   var COLLAPSE_STORAGE = 'proveedores_fuera_cards_collapsed_v1';
 
   function readCollapsedMap() {
@@ -130,7 +129,7 @@
     }
 
     root.addEventListener('click', function (ev) {
-      if (ev.target.closest('.mp-api-title-btn, .mp-api-actions, .mp-api-form-row, .mp-api-profile-block, a, input, select, textarea, label')) return;
+      if (ev.target.closest('.mp-api-title-btn, .mp-api-actions, .mp-api-form-row, .mp-api-profile-block, .mp-api-recharge-active, .mp-api-recharge-list, a, button, input, select, textarea, label')) return;
       var toggle = ev.target.closest('.mp-api-card-toggle');
       if (!toggle || !root.contains(toggle)) return;
       var provider = toggle.closest('.mp-api-provider[data-mp-collapse-key]');
@@ -182,6 +181,7 @@
     lastProfileBalance = profile.balance;
     updateLowBalanceWarn(profile.balance);
     setChip('ok', 'Conectado');
+    document.dispatchEvent(new CustomEvent('mp-api-credentials', { detail: { configured: true } }));
   }
 
   // ------------------------- estado inicial -------------------------
@@ -190,6 +190,7 @@
     if (data.configured) {
       setChip('saved', 'Credenciales guardadas');
       if (data.username) els.username.value = data.username;
+      document.dispatchEvent(new CustomEvent('mp-api-credentials', { detail: { configured: true } }));
     }
     if (data.low_balance_threshold !== undefined && els.thresholdInput) {
       lowBalanceThreshold = Number(data.low_balance_threshold) || 0;

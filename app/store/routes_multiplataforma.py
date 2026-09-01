@@ -13,13 +13,22 @@ from app.admin.decorators import admin_required
 from . import store_bp
 from .multiplataforma_api import (
     MultiplataformaApiError,
+    check_recharge_attempt,
     clear_credentials,
+    create_payment_issue,
+    create_recharge_attempt,
+    enrich_recharge_attempt_qr,
     get_market,
     get_plan_links,
     get_platforms,
     get_profile,
+    get_recharge_attempt,
+    get_recharge_config,
     get_saved_username,
     has_credentials,
+    list_payment_history,
+    list_payment_issues,
+    list_recharge_attempts,
     save_credentials,
     set_plan_link,
 )
@@ -196,3 +205,147 @@ def admin_mp_api_save_link():
     if not ok:
         return jsonify({'success': False, 'error': error}), 409
     return jsonify({'success': True, 'links': get_plan_links()})
+
+
+def _mp_recharge_payload(data):
+    if not isinstance(data, dict):
+        return data
+    return enrich_recharge_attempt_qr(dict(data))
+
+
+@store_bp.route('/admin/proveedores-fuera/mp/recharge/config')
+@admin_required
+def admin_mp_recharge_config():
+    try:
+        data = get_recharge_config()
+    except MultiplataformaApiError as exc:
+        return _error_response(exc)
+    return jsonify({'success': True, 'data': data})
+
+
+@store_bp.route('/admin/proveedores-fuera/mp/recharge/attempts', methods=['GET'])
+@admin_required
+def admin_mp_recharge_attempts_list():
+    try:
+        data = list_recharge_attempts()
+    except MultiplataformaApiError as exc:
+        return _error_response(exc)
+    if isinstance(data, list):
+        payload = {'attempts': [x for x in data if isinstance(x, dict)]}
+    elif isinstance(data, dict):
+        payload = dict(data)
+        items = (
+            payload.get('attempts')
+            or payload.get('results')
+            or payload.get('items')
+            or []
+        )
+        payload['attempts'] = items if isinstance(items, list) else []
+    else:
+        payload = {'attempts': []}
+    return jsonify({'success': True, 'data': payload})
+
+
+@store_bp.route('/admin/proveedores-fuera/mp/recharge/attempts', methods=['POST'])
+@admin_required
+def admin_mp_recharge_attempts_create():
+    body = request.get_json(silent=True) or {}
+    name = (body.get('name') or '').strip()
+    value = body.get('value')
+    if not name:
+        return jsonify({'success': False, 'error': 'Indica el nombre del titular (como en el comprobante).'}), 400
+    try:
+        value_num = int(float(str(value).replace(',', '.')))
+    except (TypeError, ValueError):
+        return jsonify({'success': False, 'error': 'Monto inválido.'}), 400
+    if value_num <= 0:
+        return jsonify({'success': False, 'error': 'El monto debe ser mayor que cero.'}), 400
+    try:
+        data = create_recharge_attempt(name, value_num)
+    except MultiplataformaApiError as exc:
+        return _error_response(exc)
+    return jsonify({'success': True, 'data': _mp_recharge_payload(data)}), 201
+
+
+@store_bp.route('/admin/proveedores-fuera/mp/recharge/attempts/<int:payment_id>/check', methods=['POST'])
+@admin_required
+def admin_mp_recharge_attempt_check(payment_id):
+    try:
+        data = check_recharge_attempt(payment_id)
+    except MultiplataformaApiError as exc:
+        return _error_response(exc)
+    profile = None
+    try:
+        if isinstance(data, dict) and (
+            data.get('validated') or data.get('check_status') == 'verified'
+        ):
+            profile = get_profile()
+    except MultiplataformaApiError:
+        profile = None
+    return jsonify({'success': True, 'data': _mp_recharge_payload(data), 'profile': profile})
+
+
+@store_bp.route('/admin/proveedores-fuera/mp/recharge/attempts/<int:payment_id>')
+@admin_required
+def admin_mp_recharge_attempt_detail(payment_id):
+    try:
+        data = get_recharge_attempt(payment_id)
+    except MultiplataformaApiError as exc:
+        return _error_response(exc)
+    return jsonify({'success': True, 'data': _mp_recharge_payload(data)})
+
+
+@store_bp.route('/admin/proveedores-fuera/mp/recharge/history')
+@admin_required
+def admin_mp_recharge_history():
+    try:
+        page = int(request.args.get('page') or 1)
+        page_size = int(request.args.get('page_size') or 20)
+    except (TypeError, ValueError):
+        page, page_size = 1, 20
+    q = (request.args.get('q') or '').strip() or None
+    try:
+        data = list_payment_history(page=page, page_size=page_size, q=q)
+    except MultiplataformaApiError as exc:
+        return _error_response(exc)
+    return jsonify({'success': True, 'data': data})
+
+
+@store_bp.route('/admin/proveedores-fuera/mp/recharge/issues', methods=['GET'])
+@admin_required
+def admin_mp_recharge_issues_list():
+    try:
+        data = list_payment_issues()
+    except MultiplataformaApiError as exc:
+        return _error_response(exc)
+    return jsonify({'success': True, 'data': data})
+
+
+@store_bp.route('/admin/proveedores-fuera/mp/recharge/issues', methods=['POST'])
+@admin_required
+def admin_mp_recharge_issues_create():
+    payment_id = request.form.get('payment_id') or (request.get_json(silent=True) or {}).get('payment_id')
+    issue = request.form.get('issue') or (request.get_json(silent=True) or {}).get('issue') or ''
+    image = request.files.get('image')
+    try:
+        payment_id = int(payment_id)
+    except (TypeError, ValueError):
+        return jsonify({'success': False, 'error': 'payment_id inválido.'}), 400
+    if not str(issue).strip():
+        return jsonify({'success': False, 'error': 'Describe el problema en issue.'}), 400
+    if image is None or not getattr(image, 'filename', ''):
+        return jsonify({'success': False, 'error': 'La imagen del comprobante es obligatoria.'}), 400
+    raw = image.read()
+    if not raw:
+        return jsonify({'success': False, 'error': 'El archivo de imagen está vacío.'}), 400
+    try:
+        data = create_payment_issue(
+            payment_id,
+            issue,
+            image.filename,
+            raw,
+            image.mimetype or 'image/jpeg',
+        )
+    except MultiplataformaApiError as exc:
+        return _error_response(exc)
+    return jsonify({'success': True, 'data': data}), 201

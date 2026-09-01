@@ -34,16 +34,14 @@ document.addEventListener('DOMContentLoaded', function() {
     // ======= LÓGICA PARA APIs GLOBALES (ADMIN) =======
     const globalLinkedApisList = document.getElementById("globalLinkedApisList");
     const addGlobalApiBtn = document.getElementById("addGlobalApiBtn");
-    const newGlobalApiName = document.getElementById("newGlobalApiName");
-    const newGlobalApiUrl = document.getElementById("newGlobalApiUrl");
+    const newGlobalApiOwner = document.getElementById("newGlobalApiOwner");
     const newGlobalApiToken = document.getElementById("newGlobalApiToken");
     const globalApiMsg = document.getElementById("globalApiMsg");
 
     const editGlobalApiModal = document.getElementById("editGlobalApiModal");
     const closeEditGlobalApiModalBtn = document.getElementById("closeEditGlobalApiModalBtn");
     const editGlobalApiId = document.getElementById("editGlobalApiId");
-    const editGlobalApiName = document.getElementById("editGlobalApiName");
-    const editGlobalApiUrl = document.getElementById("editGlobalApiUrl");
+    const editGlobalApiOwner = document.getElementById("editGlobalApiOwner");
     const editGlobalApiToken = document.getElementById("editGlobalApiToken");
     const saveEditGlobalApiBtn = document.getElementById("saveEditGlobalApiBtn");
 
@@ -94,6 +92,59 @@ document.addEventListener('DOMContentLoaded', function() {
             .replace(/'/g, "&#039;");
     }
 
+    let partnerBindUsers = [];
+
+    function fillOwnerSelect(selectEl, users, selectedId, usernameHint) {
+        if (!selectEl) return;
+        const owner = (users || []).find(function (u) {
+            return String(u.id) === String(selectedId || "");
+        });
+        const name = (owner && owner.username) || usernameHint || "";
+        if (window.PartnerOwnerPicker) {
+            window.PartnerOwnerPicker.setValue(selectEl, selectedId || "", name);
+            return;
+        }
+        selectEl.value = selectedId ? String(selectedId) : "";
+    }
+
+    function fillAllOwnerSelects(users) {
+        partnerBindUsers = Array.isArray(users) ? users : [];
+        if (window.PartnerOwnerPicker) {
+            window.PartnerOwnerPicker.mergeUsers(partnerBindUsers);
+            window.PartnerOwnerPicker.bindAll();
+        }
+    }
+
+    function fetchPartnerBindUsers() {
+        return fetch("/api/partner/v1/admin/settings/", {
+            method: "GET",
+            headers: { "X-CSRFToken": getCsrfToken() },
+            credentials: "same-origin",
+        })
+            .then(function (res) {
+                return res.json();
+            })
+            .then(function (data) {
+                const users = (data && data.data && data.data.users) || [];
+                fillAllOwnerSelects(users);
+                return users;
+            })
+            .catch(function () {
+                return [];
+            });
+    }
+
+    function ownerLabelFromProject(p) {
+        return (p && (p.owner_username || p.name)) || "";
+    }
+
+    function maskToken(t) {
+        const s = String(t || "");
+        if (!s) return "";
+        if (s.length <= 10) return "••••••••";
+        return s.slice(0, 6) + "…" + s.slice(-4);
+    }
+
     function fetchGlobalApis() {
         if (!globalLinkedApisList) return;
         fetch("/admin/global_linked_projects", {
@@ -126,16 +177,17 @@ document.addEventListener('DOMContentLoaded', function() {
             div.className = "linked-api-item d-flex justify-content-between align-items-center mb-05 p-05 text-left";
             div.innerHTML = `
                 <div class="flex-grow-1 ml-05">
-                    <strong>${escapeHtml(p.name)}</strong><br>
-                    <small class="text-muted">${escapeHtml(p.url)}</small>
+                    <strong>${escapeHtml(ownerLabelFromProject(p))}</strong><br>
+                    <small class="text-muted">Token ${escapeHtml(maskToken(p.token))}</small>
                 </div>
                 <div class="d-flex gap-05 mr-05 align-items-center flex-wrap">
                     <button type="button" class="btn-blue btn-imap-action btn-imap-small test-global-project-btn" data-id="${p.id}">
                         Probar
                     </button>
                     <button type="button" class="btn-panel btn-orange btn-sm edit-global-project-btn" 
-                            data-id="${p.id}" data-name="${escapeHtml(p.name)}" 
-                            data-api-url="${escapeHtml(p.url)}" data-token="${escapeHtml(p.token)}">
+                            data-id="${p.id}" data-owner-id="${p.owner_user_id || ""}" 
+                            data-owner-username="${escapeHtml(ownerLabelFromProject(p))}"
+                            data-token="${escapeHtml(p.token)}">
                         <i class="fas fa-edit"></i>
                     </button>
                     <button type="button" class="btn-panel btn-red btn-sm delete-global-project-btn" data-id="${p.id}">
@@ -150,8 +202,7 @@ document.addEventListener('DOMContentLoaded', function() {
         globalLinkedApisList.querySelectorAll(".edit-global-project-btn").forEach(btn => {
             btn.addEventListener("click", () => {
                 editGlobalApiId.value = btn.dataset.id;
-                editGlobalApiName.value = btn.dataset.name;
-                editGlobalApiUrl.value = btn.dataset.apiUrl;
+                fillOwnerSelect(editGlobalApiOwner, partnerBindUsers, btn.dataset.ownerId || "", btn.dataset.ownerUsername || "");
                 editGlobalApiToken.value = btn.dataset.token;
                 editGlobalApiModal.classList.remove("popup-hide");
                 editGlobalApiModal.classList.add("popup-show");
@@ -209,11 +260,10 @@ document.addEventListener('DOMContentLoaded', function() {
 
     if (addGlobalApiBtn) {
         addGlobalApiBtn.addEventListener("click", () => {
-            const name = newGlobalApiName.value.trim();
-            const url = newGlobalApiUrl.value.trim();
+            const ownerUserId = newGlobalApiOwner ? newGlobalApiOwner.value : "";
             const token = newGlobalApiToken.value.trim();
 
-            if (!name || !url || !token) {
+            if (!ownerUserId || !token) {
                 globalApiMsg.textContent = "Faltan datos obligatorios.";
                 globalApiMsg.className = "text-italic text-danger";
                 return;
@@ -222,13 +272,16 @@ document.addEventListener('DOMContentLoaded', function() {
             fetch("/admin/global_linked_projects", {
                 method: "POST",
                 headers: { "Content-Type": "application/json", "X-CSRFToken": getCsrfToken() },
-                body: JSON.stringify({ name, url, token })
+                body: JSON.stringify({ owner_user_id: parseInt(ownerUserId, 10), token })
             })
             .then(res => res.json())
             .then(data => {
                 if (data.status === "ok") {
-                    newGlobalApiName.value = "";
-                    newGlobalApiUrl.value = "";
+                    if (window.PartnerOwnerPicker) {
+                        window.PartnerOwnerPicker.clear(newGlobalApiOwner);
+                    } else if (newGlobalApiOwner) {
+                        newGlobalApiOwner.value = "";
+                    }
                     newGlobalApiToken.value = "";
                     fetchGlobalApis();
                 } else {
@@ -247,11 +300,15 @@ document.addEventListener('DOMContentLoaded', function() {
 
     if (saveEditGlobalApiBtn) {
         saveEditGlobalApiBtn.addEventListener("click", () => {
+            const ownerUserId = editGlobalApiOwner ? editGlobalApiOwner.value : "";
             const payload = {
-                name: editGlobalApiName.value.trim(),
-                url: editGlobalApiUrl.value.trim(),
+                owner_user_id: ownerUserId ? parseInt(ownerUserId, 10) : null,
                 token: editGlobalApiToken.value.trim()
             };
+            if (!payload.owner_user_id || !payload.token) {
+                alert("Faltan datos obligatorios.");
+                return;
+            }
             fetch(`/admin/global_linked_projects/${editGlobalApiId.value}`, {
                 method: "PUT",
                 headers: { "Content-Type": "application/json", "X-CSRFToken": getCsrfToken() },
@@ -270,6 +327,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Cerrar modal al hacer clic fuera
     document.addEventListener('mousedown', function(e) {
+        if (e.target.closest('.pd-owner-picker-overlay')) return;
         if (editGlobalApiModal && (editGlobalApiModal.classList.contains('popup-show'))) {
             if (!editGlobalApiModal.contains(e.target) && !e.target.closest('.edit-global-project-btn')) {
                 editGlobalApiModal.classList.remove("popup-show");
@@ -283,23 +341,24 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
 
-    fetchGlobalApis();
+    fetchPartnerBindUsers().then(function () {
+        fetchGlobalApis();
+    });
     // ======= FIN LÓGICA APIs GLOBALES =======
 
     // ======= UI secciones API licencias (diseño; sin backend aún) =======
     function setupUiOnlyLinkedApiSection(cfg) {
         const listEl = document.getElementById(cfg.listId);
+        if (!listEl) return;
         const addBtn = document.getElementById(cfg.addBtnId);
-        const nameInput = document.getElementById(cfg.nameInputId);
-        const urlInput = document.getElementById(cfg.urlInputId);
+        const ownerSelect = document.getElementById(cfg.ownerSelectId);
         const tokenInput = document.getElementById(cfg.tokenInputId);
         const msgEl = document.getElementById(cfg.msgId);
 
         const editModal = document.getElementById(cfg.editModalId);
         const closeEditBtn = document.getElementById(cfg.closeEditBtnId);
         const editId = document.getElementById(cfg.editIdFieldId);
-        const editName = document.getElementById(cfg.editNameId);
-        const editUrl = document.getElementById(cfg.editUrlId);
+        const editOwnerSelect = document.getElementById(cfg.editOwnerSelectId);
         const editToken = document.getElementById(cfg.editTokenId);
         const saveEditBtn = document.getElementById(cfg.saveEditBtnId);
 
@@ -360,10 +419,10 @@ document.addEventListener('DOMContentLoaded', function() {
                 div.innerHTML =
                     '<div class="flex-grow-1 ml-05">' +
                     "<strong>" +
-                    escapeHtml(p.name) +
+                    escapeHtml(ownerLabelFromProject(p)) +
                     "</strong><br>" +
-                    '<small class="text-muted">' +
-                    escapeHtml(p.url) +
+                    '<small class="text-muted">Token ' +
+                    escapeHtml(maskToken(p.token)) +
                     "</small>" +
                     "</div>" +
                     '<div class="d-flex gap-05 mr-05 align-items-center flex-wrap">' +
@@ -390,8 +449,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     });
                     if (!item || !editModal) return;
                     editId.value = String(item.id);
-                    editName.value = item.name;
-                    editUrl.value = item.url;
+                    fillOwnerSelect(editOwnerSelect, partnerBindUsers, item.owner_user_id || "", item.owner_username || item.name || "");
                     editToken.value = item.token;
                     editModal.classList.remove("popup-hide");
                     editModal.classList.add("popup-show");
@@ -416,8 +474,8 @@ document.addEventListener('DOMContentLoaded', function() {
                                 "X-CSRFToken": getCsrfToken(),
                             },
                             body: JSON.stringify({
-                                name: item.name,
-                                url: item.url,
+                                name: ownerLabelFromProject(item),
+                                owner_user_id: item.owner_user_id,
                                 token: item.token,
                             }),
                         })
@@ -466,21 +524,63 @@ document.addEventListener('DOMContentLoaded', function() {
         if (closeInfoBtn) closeInfoBtn.addEventListener("click", closeInfo);
         if (okInfoBtn) okInfoBtn.addEventListener("click", closeInfo);
 
+        function bindOwnerToken(ownerUserId, token) {
+            const bindUrl = cfg.bindUrl || "";
+            if (!bindUrl) {
+                return Promise.resolve({ status: "ok" });
+            }
+            return fetch(bindUrl, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "X-CSRFToken": getCsrfToken(),
+                },
+                body: JSON.stringify({
+                    owner_user_id: parseInt(ownerUserId, 10),
+                    token: token,
+                }),
+            }).then(function (res) {
+                return res.json();
+            });
+        }
+
         if (addBtn) {
             addBtn.addEventListener("click", function () {
-                const name = (nameInput && nameInput.value.trim()) || "";
-                const url = (urlInput && urlInput.value.trim()) || "";
+                const ownerUserId = (ownerSelect && ownerSelect.value) || "";
                 const token = (tokenInput && tokenInput.value.trim()) || "";
-                if (!name || !url || !token) {
+                if (!ownerUserId || !token) {
                     setMsg("Faltan datos obligatorios.", true);
                     return;
                 }
-                items.push({ id: nextId++, name: name, url: url, token: token });
-                if (nameInput) nameInput.value = "";
-                if (urlInput) urlInput.value = "";
-                if (tokenInput) tokenInput.value = "";
-                setMsg("");
-                render();
+                const owner = partnerBindUsers.find(function (u) {
+                    return String(u.id) === String(ownerUserId);
+                });
+                const wrap = ownerSelect && ownerSelect.closest("[data-owner-picker]");
+                const pickerLabel = wrap && wrap.querySelector(".pd-owner-picker-btn-label");
+                const ownerName = (owner && owner.username) || (wrap && wrap.classList.contains("has-value") && pickerLabel && pickerLabel.textContent.trim()) || "";
+                bindOwnerToken(ownerUserId, token).then(function (data) {
+                    if (data && data.status && data.status !== "ok") {
+                        setMsg("Error: " + (data.message || "No se pudo vincular el token."), true);
+                        return;
+                    }
+                    items.push({
+                        id: nextId++,
+                        owner_user_id: parseInt(ownerUserId, 10),
+                        owner_username: ownerName,
+                        name: ownerName,
+                        token: token,
+                    });
+                    if (window.PartnerOwnerPicker) {
+                        window.PartnerOwnerPicker.clear(ownerSelect);
+                    } else if (ownerSelect) {
+                        ownerSelect.value = "";
+                    }
+                    if (tokenInput) tokenInput.value = "";
+                    setMsg("");
+                    render();
+                }).catch(function () {
+                    setMsg("Error de red al vincular el token.", true);
+                });
             });
         }
 
@@ -493,22 +593,37 @@ document.addEventListener('DOMContentLoaded', function() {
                     return x.id === id;
                 });
                 if (!item) return;
-                const name = (editName && editName.value.trim()) || "";
-                const url = (editUrl && editUrl.value.trim()) || "";
+                const ownerUserId = (editOwnerSelect && editOwnerSelect.value) || "";
                 const token = (editToken && editToken.value.trim()) || "";
-                if (!name || !url || !token) {
+                if (!ownerUserId || !token) {
                     alert("Faltan datos obligatorios.");
                     return;
                 }
-                item.name = name;
-                item.url = url;
-                item.token = token;
-                closeEdit();
-                render();
+                const owner = partnerBindUsers.find(function (u) {
+                    return String(u.id) === String(ownerUserId);
+                });
+                const wrap = editOwnerSelect && editOwnerSelect.closest("[data-owner-picker]");
+                const pickerLabel = wrap && wrap.querySelector(".pd-owner-picker-btn-label");
+                const ownerName = (owner && owner.username) || (wrap && wrap.classList.contains("has-value") && pickerLabel && pickerLabel.textContent.trim()) || "";
+                bindOwnerToken(ownerUserId, token).then(function (data) {
+                    if (data && data.status && data.status !== "ok") {
+                        alert("Error: " + (data.message || "No se pudo vincular el token."));
+                        return;
+                    }
+                    item.owner_user_id = parseInt(ownerUserId, 10);
+                    item.owner_username = ownerName;
+                    item.name = ownerName;
+                    item.token = token;
+                    closeEdit();
+                    render();
+                }).catch(function () {
+                    alert("Error de red al vincular el token.");
+                });
             });
         }
 
         document.addEventListener("mousedown", function (e) {
+            if (e.target.closest(".pd-owner-picker-overlay")) return;
             if (editModal && editModal.classList.contains("popup-show")) {
                 if (!editModal.contains(e.target) && !e.target.closest("." + editBtnClass)) {
                     closeEdit();
@@ -527,15 +642,13 @@ document.addEventListener('DOMContentLoaded', function() {
     setupUiOnlyLinkedApiSection({
         listId: "licenciasApiList",
         addBtnId: "addLicenciasApiBtn",
-        nameInputId: "newLicenciasApiName",
-        urlInputId: "newLicenciasApiUrl",
+        ownerSelectId: "newLicenciasApiOwner",
         tokenInputId: "newLicenciasApiToken",
         msgId: "licenciasApiMsg",
         editModalId: "editLicenciasApiModal",
         closeEditBtnId: "closeEditLicenciasApiModalBtn",
         editIdFieldId: "editLicenciasApiId",
-        editNameId: "editLicenciasApiName",
-        editUrlId: "editLicenciasApiUrl",
+        editOwnerSelectId: "editLicenciasApiOwner",
         editTokenId: "editLicenciasApiToken",
         saveEditBtnId: "saveEditLicenciasApiBtn",
         infoBtnId: "licenciasApiInfoBtn",
@@ -547,56 +660,88 @@ document.addEventListener('DOMContentLoaded', function() {
         testBtnClass: "test-licencias-api-btn",
         enableTest: true,
         testUrl: "/admin/global_licencias_linked/test",
+        bindUrl: "/admin/global_licencias_linked",
         deleteConfirm: "¿Seguro que quieres eliminar esta API de licencias?",
     });
 
-    // Mi API (mismo estilo que plantilla email / códigos)
-    const showLicenciasMyApiBtn = document.getElementById("showLicenciasMyApiBtn");
-    const licenciasMyApiModal = document.getElementById("licenciasMyApiModal");
-    const closeLicenciasMyApiModalBtn = document.getElementById("closeLicenciasMyApiModalBtn");
-    const licenciasMyApiUrlDisplay = document.getElementById("licenciasMyApiUrlDisplay");
-    const licenciasMyApiTokenDisplay = document.getElementById("licenciasMyApiTokenDisplay");
-    const regenLicenciasMasterTokenBtn = document.getElementById("regenLicenciasMasterTokenBtn");
+    function wireMyApiModal(cfg) {
+        const btn = document.getElementById(cfg.btnId);
+        const modal = document.getElementById(cfg.modalId);
+        const closeBtn = document.getElementById(cfg.closeBtnId);
+        const tokenDisplay = document.getElementById(cfg.tokenDisplayId);
+        const regenBtn = document.getElementById(cfg.regenBtnId);
 
-    function openLicenciasMyApiModal() {
-        if (!licenciasMyApiModal) return;
-        licenciasMyApiModal.classList.remove("popup-hide");
-        licenciasMyApiModal.classList.add("popup-show");
-    }
+        function openModal() {
+            if (!modal) return;
+            modal.classList.remove("popup-hide");
+            modal.classList.add("popup-show");
+        }
 
-    function closeLicenciasMyApiModal() {
-        if (!licenciasMyApiModal) return;
-        licenciasMyApiModal.classList.remove("popup-show");
-        licenciasMyApiModal.classList.add("popup-hide");
-    }
+        function closeModal() {
+            if (!modal) return;
+            modal.classList.remove("popup-show");
+            modal.classList.add("popup-hide");
+        }
 
-    if (showLicenciasMyApiBtn) {
-        showLicenciasMyApiBtn.addEventListener("click", function () {
-            fetch("/admin/global_licencias_api", {
-                method: "GET",
-                headers: { "X-CSRFToken": getCsrfToken() },
-                credentials: "same-origin",
-            })
-                .then(function (res) {
-                    return res.json();
+        if (btn) {
+            btn.addEventListener("click", function () {
+                fetch(cfg.getUrl, {
+                    method: "GET",
+                    headers: { "X-CSRFToken": getCsrfToken() },
+                    credentials: "same-origin",
                 })
-                .then(function (data) {
-                    if (data.status === "ok") {
-                        if (licenciasMyApiUrlDisplay) licenciasMyApiUrlDisplay.value = data.api_url || "";
-                        if (licenciasMyApiTokenDisplay) licenciasMyApiTokenDisplay.value = data.token || "";
-                        openLicenciasMyApiModal();
-                    } else {
-                        alert("Error al obtener token: " + (data.message || "desconocido"));
-                    }
+                    .then(function (res) {
+                        return res.json();
+                    })
+                    .then(function (data) {
+                        if (data.status === "ok") {
+                            if (tokenDisplay) tokenDisplay.value = data.token || "";
+                            openModal();
+                        } else {
+                            alert("Error al obtener token: " + (data.message || "desconocido"));
+                        }
+                    })
+                    .catch(function (err) {
+                        alert("Error de red: " + (err && err.message ? err.message : "desconocido"));
+                    });
+            });
+        }
+
+        if (closeBtn) closeBtn.addEventListener("click", closeModal);
+
+        if (regenBtn) {
+            regenBtn.addEventListener("click", function () {
+                if (!confirm(cfg.regenConfirm)) return;
+                fetch(cfg.regenUrl, {
+                    method: "POST",
+                    headers: { "X-CSRFToken": getCsrfToken() },
+                    credentials: "same-origin",
                 })
-                .catch(function (err) {
-                    alert("Error de red: " + (err && err.message ? err.message : "desconocido"));
-                });
+                    .then(function (res) {
+                        return res.json();
+                    })
+                    .then(function (data) {
+                        if (data.status === "ok") {
+                            if (tokenDisplay) tokenDisplay.value = data.token || "";
+                            alert("Nuevo token generado.");
+                        } else {
+                            alert("Error: " + (data.message || "desconocido"));
+                        }
+                    })
+                    .catch(function (err) {
+                        alert("Error de red: " + (err && err.message ? err.message : "desconocido"));
+                    });
+            });
+        }
+
+        document.addEventListener("mousedown", function (e) {
+            if (e.target.closest(".pd-owner-picker-overlay")) return;
+            if (modal && modal.classList.contains("popup-show")) {
+                if (!modal.contains(e.target) && !(btn && btn.contains(e.target))) {
+                    closeModal();
+                }
+            }
         });
-    }
-
-    if (closeLicenciasMyApiModalBtn) {
-        closeLicenciasMyApiModalBtn.addEventListener("click", closeLicenciasMyApiModal);
     }
 
     document.querySelectorAll(".copy-licencias-api-btn").forEach(function (btn) {
@@ -620,46 +765,28 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     });
 
-    if (regenLicenciasMasterTokenBtn) {
-        regenLicenciasMasterTokenBtn.addEventListener("click", function () {
-            if (
-                !confirm(
-                    "¿Seguro que quieres regenerar el token de licencias? Las vinculaciones de licencias en otros proyectos dejarán de funcionar hasta que las actualices con el nuevo token."
-                )
-            ) {
-                return;
-            }
-            fetch("/admin/global_licencias_api/regen_token", {
-                method: "POST",
-                headers: { "X-CSRFToken": getCsrfToken() },
-                credentials: "same-origin",
-            })
-                .then(function (res) {
-                    return res.json();
-                })
-                .then(function (data) {
-                    if (data.status === "ok") {
-                        if (licenciasMyApiTokenDisplay) licenciasMyApiTokenDisplay.value = data.token || "";
-                        alert("Nuevo token generado.");
-                    } else {
-                        alert("Error: " + (data.message || "desconocido"));
-                    }
-                })
-                .catch(function (err) {
-                    alert("Error de red: " + (err && err.message ? err.message : "desconocido"));
-                });
-        });
-    }
+    wireMyApiModal({
+        btnId: "showCodesMyApiBtn",
+        modalId: "codesMyApiModal",
+        closeBtnId: "closeCodesMyApiModalBtn",
+        tokenDisplayId: "codesMyApiTokenDisplay",
+        regenBtnId: "regenCodesMasterTokenBtn",
+        getUrl: "/admin/global_codes_api",
+        regenUrl: "/admin/global_codes_api/regen_token",
+        regenConfirm:
+            "¿Seguro que quieres regenerar el token de este proyecto? Los demás proyectos dejarán de poder consultar esta API hasta que actualices el token.",
+    });
 
-    document.addEventListener("mousedown", function (e) {
-        if (licenciasMyApiModal && licenciasMyApiModal.classList.contains("popup-show")) {
-            if (
-                !licenciasMyApiModal.contains(e.target) &&
-                !e.target.closest("#showLicenciasMyApiBtn")
-            ) {
-                closeLicenciasMyApiModal();
-            }
-        }
+    wireMyApiModal({
+        btnId: "showLicenciasMyApiBtn",
+        modalId: "licenciasMyApiModal",
+        closeBtnId: "closeLicenciasMyApiModalBtn",
+        tokenDisplayId: "licenciasMyApiTokenDisplay",
+        regenBtnId: "regenLicenciasMasterTokenBtn",
+        getUrl: "/admin/global_licencias_api",
+        regenUrl: "/admin/global_licencias_api/regen_token",
+        regenConfirm:
+            "¿Seguro que quieres regenerar el token de licencias? Las vinculaciones de licencias en otros proyectos dejarán de funcionar hasta que las actualices con el nuevo token.",
     });
     // ======= FIN UI secciones API licencias =======
 

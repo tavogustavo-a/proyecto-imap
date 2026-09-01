@@ -4,7 +4,7 @@
 
 {% block head %}
   {{ super() }}
-  <link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}?v=20260828-mp-collapse3">
+  <link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}?v=20260831-mp-recargas2">
   <meta name="csrf_token" content="{{ csrf_token() }}">
 {% endblock %}
 
@@ -40,7 +40,12 @@
        data-url-test="{{ url_for('store_bp.admin_mp_api_test') }}"
        data-url-platforms="{{ url_for('store_bp.admin_mp_api_platforms') }}"
        data-url-links="{{ url_for('store_bp.admin_mp_api_links') }}"
-       data-url-threshold="{{ url_for('store_bp.admin_mp_api_save_threshold') }}">
+       data-url-threshold="{{ url_for('store_bp.admin_mp_api_save_threshold') }}"
+       data-url-recharge-config="{{ url_for('store_bp.admin_mp_recharge_config') }}"
+       data-url-recharge-attempts="{{ url_for('store_bp.admin_mp_recharge_attempts_list') }}"
+       data-url-recharge-detail-tpl="{{ url_for('store_bp.admin_mp_recharge_attempt_detail', payment_id=0) }}"
+       data-url-recharge-check-tpl="{{ url_for('store_bp.admin_mp_recharge_attempt_check', payment_id=0) }}"
+       data-url-recharge-issues="{{ url_for('store_bp.admin_mp_recharge_issues_create') }}">
     <div class="d-flex justify-content-between align-items-center mb-1">
       <div class="d-flex gap-05">
         <button id="menuToggleBtn" class="btn-panel btn-blue menu-toggle-btn" title="Menú de navegación" aria-label="Abrir menú de navegación">&#9776; Menú</button>
@@ -103,8 +108,63 @@
             </div>
           </div>
         </div>
+
+        <div class="mp-api-card">
+          <div class="mp-api-card-title">
+            <i class="fas fa-qrcode" aria-hidden="true"></i> Recargas
+            <span id="mpRechargeChip" class="mp-api-chip mp-api-chip--off">Sin conexión</span>
+          </div>
+          <div class="mp-api-card-body mp-api-recharge">
+            <p id="mpRechargeHint" class="text-muted mb-0">Guarda y prueba la conexión API de Multiplataforma para recargar saldo del vendedor desde esta página (QR Bancolombia o Binance Pay, según el proveedor).</p>
+            <div id="mpRechargeForm" class="hidden">
+              <p id="mpRechargeMeta" class="mp-api-recharge-meta"></p>
+              <div class="mp-api-form-row">
+                <input type="text" id="mpRechargeName" autocomplete="name" placeholder="Titular (nombre y apellidos, como en el comprobante)" aria-label="Titular de la recarga">
+              </div>
+              <div class="mp-api-form-row mp-api-recharge-amount-row">
+                <span id="mpRechargePrefix" class="mp-api-recharge-prefix">$</span>
+                <input type="number" id="mpRechargeAmount" min="1" step="1" placeholder="Monto" aria-label="Monto a recargar">
+              </div>
+              <div class="mp-api-actions">
+                <button id="mpRechargeCreateBtn" type="button" class="btn-panel btn-blue"><i class="fas fa-plus"></i> Crear recarga</button>
+                <button id="mpRechargeListBtn" type="button" class="btn-panel btn-blue"><i class="fas fa-list"></i> Historial</button>
+              </div>
+              <p id="mpRechargeMsg" class="mp-api-message hidden"></p>
+              <div id="mpRechargeActive" class="mp-api-recharge-active hidden">
+                <div class="mp-api-recharge-active-head">
+                  <strong id="mpRechargeActiveTitle">Pago pendiente</strong>
+                  <span id="mpRechargeActiveStatus" class="mp-api-chip mp-api-chip--saved">Pendiente</span>
+                </div>
+                <p id="mpRechargeActiveMeta" class="mp-api-recharge-meta"></p>
+                <button id="mpRechargeQrOpen" type="button" class="balance-recharge-method-qr-open hidden" aria-label="Mostrar QR de pago">
+                  <i class="fas fa-qrcode" aria-hidden="true"></i><span>Mostrar QR de pago</span>
+                </button>
+                <div class="mp-api-actions">
+                  <button id="mpRechargeCheckBtn" type="button" class="btn-panel btn-blue"><i class="fas fa-sync"></i> Verificar pago</button>
+                </div>
+                <div id="mpRechargeReportWrap" class="mp-api-recharge-report hidden">
+                  <p class="mp-api-label">¿Pagaste y no se acreditó?</p>
+                  <textarea id="mpRechargeIssueText" rows="2" maxlength="1000" placeholder="Describe el problema"></textarea>
+                  <div class="mp-api-form-row">
+                    <input type="file" id="mpRechargeIssueFile" accept="image/*" aria-label="Foto del comprobante">
+                  </div>
+                  <button id="mpRechargeIssueBtn" type="button" class="btn-panel btn-blue"><i class="fas fa-flag"></i> Reportar</button>
+                </div>
+              </div>
+              <div id="mpRechargeListWrap" class="mp-api-recharge-list hidden"></div>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
+  </div>
+</div>
+
+<div id="mpRechargeQrLightbox" class="balance-recharge-qr-lightbox" hidden>
+  <div class="balance-recharge-qr-lightbox__backdrop" data-mp-qr-close="1"></div>
+  <div class="balance-recharge-qr-lightbox__panel" role="dialog" aria-modal="true" aria-label="QR de recarga">
+    <button type="button" class="balance-recharge-qr-lightbox__close" data-mp-qr-close="1" aria-label="Cerrar">&times;</button>
+    <img id="mpRechargeQrImg" class="balance-recharge-qr-lightbox__img" alt="Código QR para recargar saldo">
   </div>
 </div>
 {% endblock %}
@@ -114,5 +174,6 @@
   <script src="{{ url_for('store_bp.static', filename='js/menu_tienda.js') }}" defer></script>
   <script src="{{ url_for('static', filename='js/clear_trigger_logs.js') }}" defer></script>
   <script src="{{ url_for('static', filename='js/logout_all_cookies_btn.js') }}" defer></script>
-  <script src="{{ url_for('store_bp.static', filename='js/admin_proveedores_fuera.js') }}?v=20260828-mp-collapse3" defer></script>
+  <script src="{{ url_for('store_bp.static', filename='js/admin_proveedores_fuera.js') }}?v=20260831-mp-recargas2" defer></script>
+  <script src="{{ url_for('store_bp.static', filename='js/admin_mp_recargas.js') }}?v=20260831-mp-recargas2" defer></script>
 {% endblock %}

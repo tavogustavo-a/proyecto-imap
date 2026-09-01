@@ -2647,25 +2647,36 @@ def get_linked_projects(user_id):
 @admin_bp.route("/user/<int:user_id>/linked_projects", methods=["POST"])
 @admin_required
 def add_linked_project(user_id):
-    """Agrega una nueva API vinculada para un usuario."""
+    """Agrega una API vinculada: nombre + token + IP. La URL es la de esta API."""
+    from app.store.partner_api import upsert_partner_ip_for_user
+
     user = User.query.get_or_404(user_id)
-    data = request.get_json()
-    
-    name = data.get("name", "").strip()
-    url = data.get("url", "").strip()
-    token = data.get("token", "").strip()
-    
-    if not name or not url or not token:
-        return jsonify({"status": "error", "message": "Faltan datos obligatorios (nombre, url o token)."}), 400
-        
+    data = request.get_json() or {}
+
+    name = (data.get("name") or "").strip()
+    token = (data.get("token") or "").strip()
+    ip_raw = (data.get("ip") or "").strip()
+
+    if not name or not token or not ip_raw:
+        return jsonify({
+            "status": "error",
+            "message": "Faltan datos obligatorios (nombre, IP o token).",
+        }), 400
+
+    bound, err = upsert_partner_ip_for_user(user, ip_raw)
+    if err:
+        return jsonify({"status": "error", "message": err}), 400
+
+    user.master_token = token
+
     new_project = LinkedProject(
         user_id=user.id,
         name=name,
-        url=url,
-        token=token
+        url=_this_project_api_url("/api/external/search"),
+        token=token,
     )
     db.session.add(new_project)
-    
+
     try:
         db.session.commit()
         return jsonify({"status": "ok", "project": {
@@ -2673,7 +2684,8 @@ def add_linked_project(user_id):
             "name": new_project.name,
             "url": new_project.url,
             "token": new_project.token,
-            "enabled": new_project.enabled
+            "enabled": new_project.enabled,
+            "ip": bound["ip"] if bound else ip_raw,
         }})
     except Exception as e:
         db.session.rollback()
@@ -2682,17 +2694,33 @@ def add_linked_project(user_id):
 @admin_bp.route("/user/linked_projects/<int:project_id>", methods=["PUT"])
 @admin_required
 def update_linked_project(project_id):
-    """Actualiza una API vinculada."""
+    """Actualiza una API vinculada (nombre + token; IP opcional; URL = esta API)."""
+    from app.store.partner_api import upsert_partner_ip_for_user
+
     project = LinkedProject.query.get_or_404(project_id)
-    data = request.get_json()
-    
-    project.name = data.get("name", project.name).strip()
-    project.url = data.get("url", project.url).strip()
-    project.token = data.get("token", project.token).strip()
-    
+    data = request.get_json() or {}
+    owner = User.query.get(project.user_id)
+
+    project.name = (data.get("name") or project.name or "").strip()
+    token = (data.get("token") or project.token or "").strip()
+    if not project.name or not token:
+        return jsonify({"status": "error", "message": "Faltan datos obligatorios (nombre o token)."}), 400
+    project.token = token
+    project.url = _this_project_api_url("/api/external/search")
+    if owner:
+        owner.master_token = token
+
+    ip_raw = (data.get("ip") or "").strip()
+    if ip_raw:
+        if not owner:
+            return jsonify({"status": "error", "message": "Usuario dueño no encontrado."}), 404
+        _bound, err = upsert_partner_ip_for_user(owner, ip_raw)
+        if err:
+            return jsonify({"status": "error", "message": err}), 400
+
     if "enabled" in data:
         project.enabled = bool(data.get("enabled"))
-        
+
     try:
         db.session.commit()
         return jsonify({"status": "ok"})
@@ -2737,9 +2765,11 @@ def _test_linked_project_response(project):
 @admin_bp.route("/user/linked_projects/<int:project_id>/test", methods=["POST"])
 @admin_required
 def test_linked_project(project_id):
-    """Prueba URL + token de una API vinculada de un usuario (plantilla IMAP)."""
+    """Prueba usuario + IP + token (esta API, sin URL)."""
     project = LinkedProject.query.get_or_404(project_id)
-    return _test_linked_project_response(project)
+    owner = User.query.get(project.user_id) if project.user_id else None
+    ok, message = _test_owner_api_binding(owner, project.token, kind="codes")
+    return jsonify({"status": "ok" if ok else "error", "message": message}), 200
 
 
 @admin_bp.route("/user/<int:user_id>/master_token", methods=["GET"])
@@ -2775,51 +2805,134 @@ def regen_master_token(user_id):
         return jsonify({"status": "error", "message": str(e)}), 500
 
 
+def _validate_principal_owner_user(owner_user_id):
+    """Usuario principal habilitado para vincular APIs/proyectos."""
+    try:
+        uid = int(owner_user_id)
+    except (TypeError, ValueError):
+        return None, ("Usuario dueño inválido.", 400)
+    owner = User.query.get(uid)
+    if not owner:
+        return None, ("Usuario dueño no encontrado.", 404)
+    if owner.parent_id is not None:
+        return None, ("El dueño debe ser un usuario principal, no un sub-usuario.", 400)
+    if getattr(owner, "enabled", True) is False:
+        return None, ("El usuario dueño está inhabilitado.", 400)
+    return owner, None
+
+
+def _this_project_api_url(path):
+    return request.url_root.rstrip("/") + path
+
+
+def _owner_has_bound_ip(owner):
+    from app.store.partner_api import get_partner_settings
+
+    if not owner:
+        return False
+    try:
+        uid = int(owner.id)
+    except (TypeError, ValueError):
+        return False
+    wl = (get_partner_settings() or {}).get("ip_whitelist") or []
+    for entry in wl:
+        if not isinstance(entry, dict):
+            continue
+        try:
+            if int(entry.get("user_id") or 0) == uid:
+                return True
+        except (TypeError, ValueError):
+            continue
+    return False
+
+
+def _apply_owner_api_token(owner, token):
+    """El token pegado es el que usará ese usuario para vincular la API."""
+    token = (token or "").strip()
+    if owner and token:
+        owner.master_token = token
+    return token
+
+
+def _test_owner_api_binding(owner, token, kind="codes"):
+    """Comprueba usuario + IP (arriba) + token, sin llamar a la URL (ya es esta API)."""
+    if not owner:
+        return False, "Falta usuario dueño."
+    token = (token or "").strip()
+    if not token:
+        return False, "Falta el token."
+    from app.store.partner_api import get_partner_settings
+
+    settings = get_partner_settings() or {}
+    if not settings.get("enabled", True):
+        return False, "La API está apagada. Actívala arriba."
+    if getattr(owner, "enabled", True) is False:
+        return False, (
+            f"«{owner.username}» está apagado. "
+            "Su IP no funciona en la API hasta que lo enciendas."
+        )
+    if not _owner_has_bound_ip(owner):
+        return False, (
+            f"Vincula una IP a «{owner.username}» arriba para que pueda usar la API."
+        )
+    stored = (owner.master_token or "").strip()
+    if stored and secrets.compare_digest(stored, token):
+        label = "Códigos" if kind == "codes" else "licencias"
+        return True, f"«{owner.username}»: IP y token listos para {label}."
+    if kind == "licenses":
+        expected = (_get_or_create_licencias_api_token() or "").strip()
+        if expected and secrets.compare_digest(expected, token):
+            return True, f"«{owner.username}»: IP y token de Mi API de licencias listos."
+    return False, (
+        "El token no coincide con el de ese usuario. "
+        "Guárdalo primero (Añadir o Guardar) para vincularlo."
+    )
+
+
+def _linked_project_payload(project):
+    owner = project.user
+    owner_username = owner.username if owner else (project.name or "")
+    return {
+        "id": project.id,
+        "owner_user_id": project.user_id,
+        "owner_username": owner_username,
+        "name": owner_username,
+        "url": project.url,
+        "token": project.token,
+        "enabled": project.enabled,
+    }
+
+
 # --- RUTAS PARA APIs GLOBALES DEL ADMINISTRADOR ---
 
 @admin_bp.route("/global_linked_projects", methods=["GET"])
 @admin_required
 def get_global_linked_projects():
     """Obtiene la lista de APIs globales del administrador."""
-    admin_username = current_app.config.get("ADMIN_USER", "admin")
-    admin = User.query.filter_by(username=admin_username).first()
-    if not admin:
-        return jsonify({"status": "error", "message": "Admin no encontrado"}), 404
-        
-    projects = admin.linked_projects.order_by(LinkedProject.created_at.desc()).all()
+    projects = LinkedProject.query.order_by(LinkedProject.created_at.desc()).all()
     return jsonify({
         "status": "ok",
-        "projects": [{
-            "id": p.id,
-            "name": p.name,
-            "url": p.url,
-            "token": p.token,
-            "enabled": p.enabled
-        } for p in projects]
+        "projects": [_linked_project_payload(p) for p in projects]
     })
 
 @admin_bp.route("/global_linked_projects", methods=["POST"])
 @admin_required
 def add_global_linked_project():
-    """Agrega una nueva API global para el administrador."""
-    admin_username = current_app.config.get("ADMIN_USER", "admin")
-    admin = User.query.filter_by(username=admin_username).first()
-    if not admin:
-        return jsonify({"status": "error", "message": "Admin no encontrado"}), 404
-        
-    data = request.get_json()
-    name = data.get("name", "").strip()
-    url = data.get("url", "").strip()
-    token = data.get("token", "").strip()
-    
-    if not name or not url or not token:
-        return jsonify({"status": "error", "message": "Faltan datos"}), 400
-        
+    """Agrega una API vinculada a un usuario dueño (URL = esta API)."""
+    data = request.get_json() or {}
+    owner, err = _validate_principal_owner_user(data.get("owner_user_id"))
+    if err:
+        return jsonify({"status": "error", "message": err[0]}), err[1]
+    token = _apply_owner_api_token(owner, data.get("token"))
+
+    if not token:
+        return jsonify({"status": "error", "message": "Falta el token"}), 400
+
     new_project = LinkedProject(
-        user_id=admin.id,
-        name=name,
-        url=url,
-        token=token
+        user_id=owner.id,
+        name=owner.username,
+        url=_this_project_api_url("/api/external/search"),
+        token=token,
     )
     db.session.add(new_project)
     try:
@@ -2833,23 +2946,26 @@ def add_global_linked_project():
 @admin_required
 def manage_global_linked_project(project_id):
     """Actualiza o elimina una API global."""
-    admin_username = current_app.config.get("ADMIN_USER", "admin")
-    admin = User.query.filter_by(username=admin_username).first()
-    if not admin:
-        return jsonify({"status": "error", "message": "Admin no encontrado"}), 404
-
     project = LinkedProject.query.get_or_404(project_id)
-    if project.user_id != admin.id:
-        return jsonify({"status": "error", "message": "No autorizado"}), 403
 
     if request.method == "DELETE":
         db.session.delete(project)
     else:
-        data = request.get_json()
-        project.name = data.get("name", project.name).strip()
-        project.url = data.get("url", project.url).strip()
-        project.token = data.get("token", project.token).strip()
-        
+        data = request.get_json() or {}
+        if "owner_user_id" in data:
+            owner, err = _validate_principal_owner_user(data.get("owner_user_id"))
+            if err:
+                return jsonify({"status": "error", "message": err[0]}), err[1]
+            project.user_id = owner.id
+            project.name = owner.username
+        else:
+            owner = User.query.get(project.user_id)
+        token = (data.get("token") or project.token or "").strip()
+        if not token:
+            return jsonify({"status": "error", "message": "Falta el token"}), 400
+        project.token = _apply_owner_api_token(owner, token)
+        project.url = _this_project_api_url("/api/external/search")
+
     try:
         db.session.commit()
         return jsonify({"status": "ok"})
@@ -2861,21 +2977,60 @@ def manage_global_linked_project(project_id):
 @admin_bp.route("/global_linked_projects/<int:project_id>/test", methods=["POST"])
 @admin_required
 def test_global_linked_project(project_id):
-    """Prueba URL + token de una API global del administrador."""
-    admin_username = current_app.config.get("ADMIN_USER", "admin")
-    admin = User.query.filter_by(username=admin_username).first()
-    if not admin:
-        return jsonify({"status": "error", "message": "Admin no encontrado"}), 404
-
+    """Prueba usuario + IP + token de una API de Códigos (esta API, sin URL)."""
     project = LinkedProject.query.get_or_404(project_id)
-    if project.user_id != admin.id:
-        return jsonify({"status": "error", "message": "No autorizado"}), 403
-    return _test_linked_project_response(project)
+    owner = User.query.get(project.user_id) if project.user_id else None
+    ok, message = _test_owner_api_binding(owner, project.token, kind="codes")
+    return jsonify({"status": "ok" if ok else "error", "message": message}), 200
 
 
 def _admin_user_for_global_api():
     admin_username = current_app.config.get("ADMIN_USER", "admin")
     return User.query.filter_by(username=admin_username).first()
+
+
+def _get_or_create_admin_codes_api_token():
+    """Token de «Mi API» de Códigos: el master_token del admin de este proyecto."""
+    admin = _admin_user_for_global_api()
+    if not admin:
+        return None, None
+    if not (admin.master_token or "").strip():
+        admin.master_token = secrets.token_hex(32)
+        db.session.commit()
+    return admin, admin.master_token
+
+
+@admin_bp.route("/global_codes_api", methods=["GET"])
+@admin_required
+def get_global_codes_api():
+    """URL + token de «Mi API» para proyectos vinculados (Códigos)."""
+    admin, token = _get_or_create_admin_codes_api_token()
+    if not admin:
+        return jsonify({"status": "error", "message": "Admin no encontrado"}), 404
+    base_url = request.url_root.rstrip("/")
+    return jsonify(
+        {
+            "status": "ok",
+            "token": token,
+            "api_url": f"{base_url}/api/external/search",
+        }
+    )
+
+
+@admin_bp.route("/global_codes_api/regen_token", methods=["POST"])
+@admin_required
+def regen_global_codes_api_token():
+    """Regenera el token de Códigos de este proyecto (otros proyectos deberán actualizarlo)."""
+    admin = _admin_user_for_global_api()
+    if not admin:
+        return jsonify({"status": "error", "message": "Admin no encontrado"}), 404
+    admin.master_token = secrets.token_hex(32)
+    try:
+        db.session.commit()
+        return jsonify({"status": "ok", "token": admin.master_token})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"status": "error", "message": str(e)}), 500
 
 
 _LICENCIAS_API_TOKEN_KEY = "licencias_api_master_token"
@@ -2927,38 +3082,43 @@ def regen_global_licencias_api_token():
         return jsonify({"status": "error", "message": str(e)}), 500
 
 
+@admin_bp.route("/global_licencias_linked", methods=["POST"])
+@admin_required
+def bind_global_licencias_owner_token():
+    """Vincula el token de licencias al usuario dueño (misma credencial de API)."""
+    data = request.get_json(silent=True) or {}
+    owner, err = _validate_principal_owner_user(data.get("owner_user_id"))
+    if err:
+        return jsonify({"status": "error", "message": err[0]}), err[1]
+    token = _apply_owner_api_token(owner, data.get("token"))
+    if not token:
+        return jsonify({"status": "error", "message": "Falta el token"}), 400
+    try:
+        db.session.commit()
+        return jsonify({"status": "ok"})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
 @admin_bp.route("/global_licencias_linked/test", methods=["POST"])
 @admin_required
 def test_global_licencias_linked():
     """
-    Prueba URL + token de una API de licencias vinculada (items en UI / futuros persistidos).
-    Body JSON: { name, url, token }
+    Prueba usuario + IP + token de licencias (esta API, sin URL).
+    Body JSON: { owner_user_id, token }
     """
-    from app.services.search_service import test_linked_licenses_api
-
-    admin = _admin_user_for_global_api()
-    if not admin:
-        return jsonify({"status": "error", "message": "Admin no encontrado"}), 404
-
     data = request.get_json(silent=True) or {}
-    name = (data.get("name") or "").strip()
-    url = (data.get("url") or "").strip()
     token = (data.get("token") or "").strip()
-    if not url or not token:
+    owner = None
+    if data.get("owner_user_id"):
+        owner, err = _validate_principal_owner_user(data.get("owner_user_id"))
+        if err:
+            return jsonify({"status": "error", "message": err[0]}), err[1]
+    if not owner or not token:
         return jsonify(
-            {"status": "error", "message": "Faltan URL o token de la API de licencias."}
+            {"status": "error", "message": "Faltan usuario dueño o token."}
         ), 400
 
-    try:
-        origin_domain = request.url_root.rstrip("/")
-    except RuntimeError:
-        origin_domain = "unknown"
-
-    ok, message = test_linked_licenses_api(
-        url,
-        token,
-        origin_user=admin.username or "admin",
-        origin_domain=origin_domain,
-        project_name=name or "API de licencias",
-    )
+    ok, message = _test_owner_api_binding(owner, token, kind="licenses")
     return jsonify({"status": "ok" if ok else "error", "message": message}), 200

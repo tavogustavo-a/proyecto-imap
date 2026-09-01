@@ -115,6 +115,7 @@
       {% if user_object and user_object.has_public_tools_access() %}
         <a href="{{ url_for('store_bp.tools_public') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-tools"></i> Herramientas</a>
       {% endif %}
+      {% include 'includes/store_user_menu_api_docs_link.html' %}
       <a href="{{ url_for('main_bp.home') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-code"></i> Códigos</a>
       {% if is_user and user_object and user_object.can_create_subusers %}
         <a href="{{ url_for('subuser_bp.manage_subusers') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-users"></i> Sub-usuarios</a>
