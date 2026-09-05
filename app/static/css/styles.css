@@ -699,7 +699,7 @@ input[type="submit"],
 }
 
 /* Asegurar que los admin-card en la p�gina de usuarios tengan el mismo estilo */
-.usuarios-page .container-max-width-900 .admin-card {
+.usuarios-page.container-max-width-900 > .admin-card {
   background-color: var(--card-bg) !important;
   color: var(--text-color) !important;
   border: none !important;
@@ -743,19 +743,19 @@ input[type="submit"],
 
 /* Margen superior espec�fico para el segundo admin-card (eliminaci�n masiva) - Pantallas grandes */
 @media (min-width: 769px) {
-  .usuarios-page .container-max-width-900.mt-2 {
+  .usuarios-page.container-max-width-900.mt-2 {
     margin-top: 1.5rem !important;
     margin-bottom: 0 !important;
   }
   
-  .usuarios-page .container-max-width-900.mt-2 .admin-card {
+  .usuarios-page.container-max-width-900.mt-2 .admin-card {
     margin-top: 0 !important;
     margin-bottom: 0 !important;
   }
 }
 
 /* Regla base (se sobrescribe en media queries) */
-.usuarios-page .container-max-width-900.mt-2 {
+.usuarios-page.container-max-width-900.mt-2 {
   margin-top: 1.5rem !important;
 }
 
@@ -773,7 +773,7 @@ input[type="submit"],
   }
   
   /* En m�viles, reducir el margen superior del contenedor */
-  .usuarios-page .container-max-width-900.mt-2 {
+  .usuarios-page.container-max-width-900.mt-2 {
     margin-top: 1.5rem;
   }
   .search-container {
@@ -1849,6 +1849,25 @@ noscript p {
   padding: 3px;
 }
 
+#allowedEmailsPagination {
+  gap: 0.5rem;
+}
+
+#allowedEmailsPagination .allowed-emails-page-nav {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-left: auto;
+}
+
+#paginationInfo {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  white-space: nowrap;
+  font-size: 0.92rem;
+}
+
 /* Ajustar paginaci�n en email.html para pantallas peque�as */
 @media (max-width: 768px) {
   .pagination-info-wrapper {
@@ -1863,19 +1882,17 @@ noscript p {
     gap: 0.5rem;
     justify-content: space-between;
   }
-  
-  #allowedEmailsPagination > #deleteAllEmailsBtn {
-    margin-left: auto;
-    margin-right: 0;
-  }
-  
-  #allowedEmailsPagination > .ml-auto {
+
+  #allowedEmailsPagination .allowed-emails-page-nav {
     width: 100%;
-    display: flex;
     justify-content: center;
-    margin-left: 0 !important;
-    margin-right: 0;
-    order: 3;
+    margin-left: 0;
+    order: 2;
+  }
+
+  #allowedEmailsPagination > #deleteAllEmailsBtn {
+    width: 100%;
+    order: 1;
   }
 }
 
@@ -3451,6 +3468,14 @@ body #popupFilter.popup-base.popup-small {
   padding: 0;
 }
 
+#user-management-container .admin-card h3.admin-api-section-title,
+#user-management-container .admin-card h4.admin-api-section-title {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  margin-top: 0;
+}
 #user-management-container .admin-card label.d-flex.align-items-center.gap-03 {
   justify-content: flex-start !important;
   width: 100% !important;
@@ -3458,9 +3483,28 @@ body #popupFilter.popup-base.popup-small {
   padding-left: 0 !important;
   gap: 0.18rem !important;
 }
-#user-management-container .admin-card .subusers-perm-row {
-  flex-wrap: nowrap !important;
-  gap: 0.75rem;
+#user-management-container .admin-card .regex-filters-actions-row {
+  gap: 0.5rem;
+  justify-content: center;
+}
+#user-management-container .admin-card .user-config-options-stack {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.15rem;
+}
+#user-management-container .admin-card .user-config-options-stack .subusers-perm-row,
+#user-management-container .admin-card .user-config-options-stack .unique-emails-toggle-row {
+  justify-content: flex-start;
+  gap: 0.5rem;
+  margin: 0;
+  width: 100%;
+}
+#user-management-container .admin-card .user-config-options-stack .unique-emails-toggle-row {
+  margin-top: 0 !important;
+}
+#user-management-container .admin-card .subusers-perm-row .subusers-perm-label-group {
+  flex: 0 1 auto;
 }
 #user-management-container .admin-card .subusers-perm-row label.d-flex.align-items-center.gap-03 {
   width: auto !important;
@@ -3473,7 +3517,7 @@ body #popupFilter.popup-base.popup-small {
   margin-left: 0 !important;
   margin-right: 0.3rem !important;
 }
-#user-management-container .admin-card .d-flex.gap-05.mb-1 > button:not(.menu-toggle-btn) {
+#user-management-container .admin-card .d-flex.gap-05.mb-1 > button:not(.menu-toggle-btn):not(.admin-global-api-info-btn) {
   font-size: 0.68rem !important;
   padding: 0.32rem 0.7rem !important;
   min-width: 54px;
@@ -4070,7 +4114,8 @@ a.btn-search.btn-rounded:hover {
     flex-direction: column !important;
   }
   /* T�tulo + ? en la misma l�nea (no apilar) */
-  .admin-card h3.admin-api-section-title {
+  .admin-card h3.admin-api-section-title,
+  .admin-card h4.admin-api-section-title {
     flex-direction: row !important;
     flex-wrap: nowrap !important;
     gap: 0.35rem !important;

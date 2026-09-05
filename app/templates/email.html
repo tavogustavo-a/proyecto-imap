@@ -51,9 +51,10 @@
         <button id="menuToggleBtn" type="button" class="btn-panel btn-blue ml-2 menu-toggle-btn" title="Menú de navegación" aria-label="Abrir menú de navegación">&#9776; Menú</button>
         <button id="menu2ToggleBtn" type="button" class="btn-panel btn-blue menu-toggle-btn" title="Menú secundario" aria-label="Abrir segundo menú">&#9776; Menú2</button>
       </div>
+      <button id="btnVolverPanel" type="button" class="btn-panel btn-blue menu-toggle-btn" data-url="{{ url_for('admin_bp.usuarios_page') }}" title="Volver a usuarios" aria-label="Volver a usuarios">Volver</button>
     </div>
 
-    <h3 class="mb-05 text-center">Búsqueda y Eliminacion de Correos ({{ user.username }})</h3>
+    <h3 class="mb-05 text-center">Eliminacion de Correos ({{ user.username }})</h3>
     {# Clase searchEmailsForm aplicada desde CSS #}
     <form id="searchEmailsForm" name="searchEmailsForm">
       <label for="searchEmailsInput" class="sr-only">Buscar y eliminar correos</label>
@@ -79,7 +80,7 @@
   <div class="admin-card">
     <div id="allowedEmailsContainer" class="mb-0">
       <div class="d-flex justify-content-between align-items-center flex-wrap gap-1 mb-05">
-        <label for="perPageSelect"><strong>Lista Correos permitidos:</strong></label>
+        <label for="perPageSelect"><strong>Correos permitidos:</strong></label>
         <div class="d-flex align-items-center gap-05">
           <span><strong>Mostrar:</strong></span>
           <select id="perPageSelect" class="select-padding-3px" autocomplete="off">
@@ -91,14 +92,14 @@
       <div id="allowedEmailsTextContainer" class="allowed-emails-display">
         <p>Cargando correos...</p>
       </div>
-      <div id="allowedEmailsPagination" class="d-flex justify-content-between align-items-center">
-        <span id="paginationInfo"></span>
+      <div id="allowedEmailsPagination" class="d-flex justify-content-between align-items-center flex-wrap gap-05">
         <button id="deleteAllEmailsBtn" class="btn-panel btn-red btn-sm" title="Eliminar TODOS los correos permitidos para este usuario">
-          <i class="fas fa-trash"></i> Eliminar Todos
+          Eliminar Todo
         </button>
-        <div class="ml-auto">
-          <button id="prevPageBtn" class="btn-panel btn-blue" disabled>&lt; Anterior</button>
-          <button id="nextPageBtn" class="btn-panel btn-blue ml-05" disabled>Siguiente &gt;</button>
+        <div class="allowed-emails-page-nav d-flex align-items-center gap-05">
+          <button id="prevPageBtn" class="btn-panel btn-blue" disabled>&larr; Anterior</button>
+          <span id="paginationInfo"></span>
+          <button id="nextPageBtn" class="btn-panel btn-blue" disabled>Siguiente &rarr;</button>
         </div>
       </div>
       
@@ -111,23 +112,6 @@
         <textarea id="addEmailsInput" name="add_emails_input" rows="2" class="d-block mx-auto mt-05 mb-05 textarea-wide" placeholder="Ingresa uno o varios correos (separados por comas, espacios o saltos de línea). Ejemplo: nuevo1@ejemplo.com, nuevo2@ejemplo.com..." autocomplete="off"></textarea>
         <div class="text-center">
           <button type="button" id="addEmailsBtn" class="btn-blue">Añadir Correos</button>
-        </div>
-        <div class="text-center mt-05 d-flex justify-content-center align-items-center gap-05 flex-wrap unique-emails-toggle-row">
-          <label class="d-inline-flex align-items-center gap-05 mb-0 unique-emails-toggle-label" for="uniqueAllowedEmailsCheckbox">
-            <input
-              type="checkbox"
-              id="uniqueAllowedEmailsCheckbox"
-              {% if user.unique_allowed_emails %}checked{% endif %}
-              autocomplete="off"
-            >
-            <span>Correos únicos para este usuario</span>
-          </label>
-          <button type="button" id="uniqueAllowedEmailsInfoBtn" class="btn-panel btn-blue admin-global-api-info-btn" title="Qué hace correos únicos" aria-label="Información sobre correos únicos" aria-controls="uniqueAllowedEmailsInfoModal" aria-haspopup="dialog">
-            <i class="fas fa-info-circle" aria-hidden="true"></i>
-          </button>
-        </div>
-        <div class="text-center mt-03">
-          <span id="uniqueAllowedEmailsMsg" class="text-italic text-small" hidden></span>
         </div>
         {# Aplicadas clases margen y texto #}
         <div class="text-center mt-05">
@@ -173,58 +157,74 @@
   </div>
 
   <div class="admin-card">
-    <h3>Acceso a Regex y Filtros (Usuario Principal)</h3>
-    {# Aplicada clase de texto #}
-    <p class="text-medium-small">
-      Marca o desmarca cuáles <strong>Regex</strong> o <strong>Filtros</strong>
-      tiene permitido consultar este usuario.
-    </p>
-    <div class="mb-1">
-      <button type="button" class="btn-blue" id="openRegexModalBtn">Configurar Regex</button>
-      <button type="button" class="btn-blue ml-05" id="openFiltersModalBtn">
-        Configurar Filtros
+    <h3 class="admin-api-section-title justify-content-center">
+      <span>Configurar regex y filtros (Usuario)</span>
+      <button type="button" id="regexFiltersAccessInfoBtn" class="btn-panel btn-blue admin-global-api-info-btn" title="Información sobre configurar regex y filtros" aria-label="Información sobre configurar regex y filtros" aria-controls="regexFiltersAccessInfoModal" aria-haspopup="dialog">
+        <i class="fas fa-info-circle" aria-hidden="true"></i>
+      </button>
+    </h3>
+    <div class="mb-1 d-flex justify-content-center align-items-center flex-wrap gap-05 regex-filters-actions-row">
+      <button type="button" class="btn-blue" id="openRegexModalBtn">Regex</button>
+      <button type="button" class="btn-blue" id="openFiltersModalBtn">
+        Filtros
       </button>
     </div>
-  </div>
-
-  <div class="admin-card">
-    <h3>Permiso para Crear Sub-usuarios</h3>
-    {# Aplicada clase de texto #}
-    <p class="text-small">
-      Si activas esta opción, el usuario podrá crear "sub-usuarios" y gestionarlos.
-      <br>
-      <strong>Atención:</strong> si desactivas este permiso, se borrarán todos sus sub-usuarios existentes.
-    </p>
-    <div class="mb-1 d-flex align-items-center subusers-perm-row">
-      <label class="d-flex align-items-center gap-03 mb-0">
-        <input
-          type="checkbox"
-          id="toggleCanCreateSubusers"
-          name="toggleCanCreateSubusers"
-          {% if user.can_create_subusers %}checked{% endif %}
-          autocomplete="off"
-        >
-        Puede crear sub-usuarios
-      </label>
-      <button id="saveCanCreateSubusersBtn" class="btn-green">
-        Guardar
-      </button>
+    <div class="user-config-options-stack mb-1">
+      <div class="d-flex align-items-center flex-wrap gap-05 subusers-perm-row">
+        <div class="d-flex align-items-center gap-03 subusers-perm-label-group">
+          <label class="d-flex align-items-center gap-03 mb-0">
+            <input
+              type="checkbox"
+              id="toggleCanCreateSubusers"
+              name="toggleCanCreateSubusers"
+              {% if user.can_create_subusers %}checked{% endif %}
+              autocomplete="off"
+            >
+            ¿Crear sub-usuarios?
+          </label>
+          <button type="button" id="subusersPermInfoBtn" class="btn-panel btn-blue admin-global-api-info-btn" title="Información sobre permiso de sub-usuarios" aria-label="Información sobre permiso de sub-usuarios" aria-controls="subusersPermInfoModal" aria-haspopup="dialog">
+            <i class="fas fa-info-circle" aria-hidden="true"></i>
+          </button>
+        </div>
+        <button id="saveCanCreateSubusersBtn" class="btn-green">
+          Guardar
+        </button>
+      </div>
+      <div class="d-flex align-items-center flex-wrap gap-05 unique-emails-toggle-row">
+        <div class="d-flex align-items-center gap-03 subusers-perm-label-group">
+          <label class="d-flex align-items-center gap-03 mb-0 unique-emails-toggle-label" for="uniqueAllowedEmailsCheckbox">
+            <input
+              type="checkbox"
+              id="uniqueAllowedEmailsCheckbox"
+              {% if user.unique_allowed_emails %}checked{% endif %}
+              autocomplete="off"
+            >
+            <span>Correos únicos para este usuario</span>
+          </label>
+          <button type="button" id="uniqueAllowedEmailsInfoBtn" class="btn-panel btn-blue admin-global-api-info-btn" title="Qué hace correos únicos" aria-label="Información sobre correos únicos" aria-controls="uniqueAllowedEmailsInfoModal" aria-haspopup="dialog">
+            <i class="fas fa-info-circle" aria-hidden="true"></i>
+          </button>
+        </div>
+      </div>
+      <div>
+        <span id="uniqueAllowedEmailsMsg" class="text-italic text-small" hidden></span>
+      </div>
     </div>
 
     {% if user.can_create_subusers %}
       {# Aplicada clase HR #}
       <hr class="hr-margin-1">
-      <h4>Sub-usuarios</h4>
-      <div class="d-flex gap-05 mb-1">
+      <h4 class="admin-api-section-title justify-content-center">
+        <span>Configurar regex y filtro sub-usuarios</span>
+        <button type="button" id="subusersSectionInfoBtn" class="btn-panel btn-blue admin-global-api-info-btn" title="Información sobre configurar regex y filtro sub-usuarios" aria-label="Información sobre configurar regex y filtro sub-usuarios" aria-controls="subusersSectionInfoModal" aria-haspopup="dialog">
+          <i class="fas fa-info-circle" aria-hidden="true"></i>
+        </button>
+      </h4>
+      <div class="d-flex justify-content-center flex-wrap gap-05 mb-1">
         <button id="btnShowSubusers" class="btn-blue text-subuser-buttons">Ver Sub-usuarios</button>
-        <button id="btnSubusersRegexGlobal" class="btn-blue text-subuser-buttons">Configurar Regex Sub-usuario</button>
-        <button id="btnSubusersFilterGlobal" class="btn-blue text-subuser-buttons">Configurar Filtros Sub-usuario</button>
+        <button id="btnSubusersRegexGlobal" class="btn-blue text-subuser-buttons">Regex Sub-usuario</button>
+        <button id="btnSubusersFilterGlobal" class="btn-blue text-subuser-buttons">Filtros Sub-usuario</button>
       </div>
-      {# Aplicada clase de texto #}
-      <p class="text-smaller">
-        Desde aquí puedes Encender/Apagar (On/Off) y <strong>Eliminar</strong> cada sub-usuario.
-        Además, puedes definir Regex y Filtros que se aplicarán a los sub-usuarios en general.
-      </p>
     {% endif %}
   </div>
 
@@ -275,6 +275,58 @@
 </div>
 
 {# --- MODAL CORREOS ÚNICOS --- #}
+<div id="regexFiltersAccessInfoModal" class="popup-base popup-small popup-hide" role="dialog" aria-modal="true" aria-labelledby="regexFiltersAccessInfoTitle" hidden>
+  <div class="popup-modal-header">
+    <h4 id="regexFiltersAccessInfoTitle" class="mt-0 mb-0 flex-grow-1 text-center">
+      <i class="fas fa-info-circle" aria-hidden="true"></i> Configurar regex y filtros (Usuario)
+    </h4>
+    <button type="button" class="btn-close" id="closeRegexFiltersAccessInfoBtn" aria-label="Cerrar información">
+      <i class="fas fa-times" aria-hidden="true"></i>
+    </button>
+  </div>
+  <div class="mb-1 text-left text-small" style="line-height:1.45; padding: 0 0.35rem;">
+    <p class="mb-0">Marca o desmarca cuáles <strong>Regex</strong> o <strong>Filtros</strong> tiene permitido consultar este usuario.</p>
+  </div>
+  <div class="d-flex justify-content-center">
+    <button type="button" class="popup-button-confirm" id="okRegexFiltersAccessInfoBtn">Entendido</button>
+  </div>
+</div>
+
+<div id="subusersSectionInfoModal" class="popup-base popup-small popup-hide" role="dialog" aria-modal="true" aria-labelledby="subusersSectionInfoTitle" hidden>
+  <div class="popup-modal-header">
+    <h4 id="subusersSectionInfoTitle" class="mt-0 mb-0 flex-grow-1 text-center">
+      <i class="fas fa-info-circle" aria-hidden="true"></i> Configurar regex y filtro sub-usuarios
+    </h4>
+    <button type="button" class="btn-close" id="closeSubusersSectionInfoBtn" aria-label="Cerrar información">
+      <i class="fas fa-times" aria-hidden="true"></i>
+    </button>
+  </div>
+  <div class="mb-1 text-left text-small" style="line-height:1.45; padding: 0 0.35rem;">
+    <p class="mb-0">Desde aquí puedes Encender/Apagar (On/Off) y <strong>Eliminar</strong> cada sub-usuario. Además, puedes definir Regex y Filtros que se aplicarán a los sub-usuarios en general.</p>
+  </div>
+  <div class="d-flex justify-content-center">
+    <button type="button" class="popup-button-confirm" id="okSubusersSectionInfoBtn">Entendido</button>
+  </div>
+</div>
+
+<div id="subusersPermInfoModal" class="popup-base popup-small popup-hide" role="dialog" aria-modal="true" aria-labelledby="subusersPermInfoTitle" hidden>
+  <div class="popup-modal-header">
+    <h4 id="subusersPermInfoTitle" class="mt-0 mb-0 flex-grow-1 text-center">
+      <i class="fas fa-info-circle" aria-hidden="true"></i> Permiso para Crear Sub-usuarios
+    </h4>
+    <button type="button" class="btn-close" id="closeSubusersPermInfoBtn" aria-label="Cerrar información">
+      <i class="fas fa-times" aria-hidden="true"></i>
+    </button>
+  </div>
+  <div class="mb-1 text-left text-small" style="line-height:1.45; padding: 0 0.35rem;">
+    <p class="mb-05">Si activas esta opción, el usuario podrá crear "sub-usuarios" y gestionarlos.</p>
+    <p class="mb-0"><strong>Atención:</strong> si desactivas este permiso, se borrarán todos sus sub-usuarios existentes.</p>
+  </div>
+  <div class="d-flex justify-content-center">
+    <button type="button" class="popup-button-confirm" id="okSubusersPermInfoBtn">Entendido</button>
+  </div>
+</div>
+
 <div id="uniqueAllowedEmailsInfoModal" class="popup-base popup-small popup-hide" role="dialog" aria-modal="true" aria-labelledby="uniqueAllowedEmailsInfoTitle" hidden>
   <div class="popup-modal-header">
     <h4 id="uniqueAllowedEmailsInfoTitle" class="mt-0 mb-0 flex-grow-1 text-center">
@@ -351,8 +403,8 @@
   <div class="mb-1 text-center">
     <label for="editApiName" class="d-block mb-03">Nombre del Proyecto:</label>
     <input type="text" id="editApiName" class="w-100 mb-05 text-center api-input">
-    <label for="editApiIp" class="d-block mb-03">IP o rango CIDR (opcional):</label>
-    <input type="text" id="editApiIp" class="w-100 mb-05 text-center api-input" placeholder="Si la rellenas, se vincula a este usuario" autocomplete="off">
+    <label for="editApiIp" class="d-block mb-03">IP o rango CIDR:</label>
+    <input type="text" id="editApiIp" class="w-100 mb-05 text-center api-input" placeholder="Ej: 192.168.1.10" autocomplete="off">
     <label for="editApiToken" class="d-block mb-03">Token de Acceso:</label>
     <input type="text" id="editApiToken" class="w-100 text-center api-input">
   </div>
@@ -369,5 +421,5 @@
 <script src="{{ url_for('store_bp.static', filename='js/menu_tienda.js') }}" defer></script>
 <script src="{{ url_for('static', filename='js/clear_trigger_logs.js') }}" defer></script>
 <script src="{{ url_for('static', filename='js/logout_all_cookies_btn.js') }}" defer></script>
-<script src="{{ url_for('static', filename='js/admin_user_emails.js') }}?v=20260831-no-volver"></script>
+<script src="{{ url_for('static', filename='js/admin_user_emails.js') }}?v=20260901-edit-api-ip"></script>
 {% endblock scripts %}

@@ -2631,8 +2631,12 @@ def edit_user_products(user_id):
 @admin_required
 def get_linked_projects(user_id):
     """Obtiene la lista de APIs vinculadas de un usuario."""
+    from app.store.partner_api import partner_ips_for_user
+
     user = User.query.get_or_404(user_id)
     projects = user.linked_projects.order_by(LinkedProject.created_at.desc()).all()
+    user_ips = partner_ips_for_user(user)
+    ip_display = user_ips[-1] if user_ips else ""
     return jsonify({
         "status": "ok",
         "projects": [{
@@ -2640,7 +2644,8 @@ def get_linked_projects(user_id):
             "name": p.name,
             "url": p.url,
             "token": p.token,
-            "enabled": p.enabled
+            "enabled": p.enabled,
+            "ip": ip_display,
         } for p in projects]
     })
 

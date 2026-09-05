@@ -123,6 +123,28 @@ def upsert_partner_ip_for_user(user, ip_raw):
     return bound, None
 
 
+def partner_ips_for_user(user):
+    """IPs de Documentación API vinculadas a este usuario (en orden de lista)."""
+    if not user:
+        return []
+    try:
+        uid = int(user.id)
+    except (TypeError, ValueError):
+        return []
+    ips = []
+    seen = set()
+    for entry in get_partner_settings().get('ip_whitelist') or []:
+        bound = _bind_ip_entry(entry)
+        if not bound or bound.get('user_id') != uid:
+            continue
+        ip = bound.get('ip')
+        if not ip or ip in seen:
+            continue
+        seen.add(ip)
+        ips.append(ip)
+    return ips
+
+
 def _entry_ip(entry):
     if isinstance(entry, dict):
         return str(entry.get('ip') or '').strip()

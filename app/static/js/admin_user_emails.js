@@ -32,11 +32,14 @@ document.addEventListener("DOMContentLoaded", function() {
   function handleFetchResponse(response) {
     if (!response.ok) {
       return response.json()
-        .then(errData => { 
-          throw new Error(errData.message || `Error del servidor: ${response.status}`); 
+        .then(errData => {
+          throw new Error(errData.message || `Error del servidor: ${response.status}`);
         })
-        .catch(() => {
-           throw new Error(`Error del servidor: ${response.status}`);
+        .catch(err => {
+          if (err && err.message && !String(err.message).startsWith('Error del servidor:')) {
+            throw err;
+          }
+          throw new Error(`Error del servidor: ${response.status}`);
         });
     }
     return response.json();
@@ -123,7 +126,9 @@ document.addEventListener("DOMContentLoaded", function() {
   function updatePaginationControls(pagination) {
     if (!pagination) return;
 
-    if(paginationInfo) paginationInfo.textContent = `Página ${pagination.page} de ${pagination.total_pages}.`;
+    if(paginationInfo) {
+      paginationInfo.innerHTML = `<i class="fas fa-file-alt" aria-hidden="true"></i> ${pagination.page} / ${pagination.total_pages}`;
+    }
 
     if (prevPageBtn) prevPageBtn.disabled = !pagination.has_prev;
     if (nextPageBtn) nextPageBtn.disabled = !pagination.has_next;
@@ -131,11 +136,11 @@ document.addEventListener("DOMContentLoaded", function() {
     if (deleteAllEmailsBtn) {
         const totalItems = pagination.total_items || 0;
         if (totalItems > 0) {
-            deleteAllEmailsBtn.textContent = `Eliminar Todos (${totalItems})`;
+            deleteAllEmailsBtn.textContent = `Eliminar Todo (${totalItems})`;
             deleteAllEmailsBtn.disabled = false;
             deleteAllEmailsBtn.classList.add('btn-inline-block');
         } else {
-            deleteAllEmailsBtn.textContent = 'Eliminar Todos';
+            deleteAllEmailsBtn.textContent = 'Eliminar Todo';
             deleteAllEmailsBtn.disabled = true;
         }
     }
@@ -521,6 +526,102 @@ document.addEventListener("DOMContentLoaded", function() {
   }
   if (okUniqueAllowedEmailsInfoBtn) {
     okUniqueAllowedEmailsInfoBtn.addEventListener("click", closeUniqueEmailsInfoModal);
+  }
+
+  const regexFiltersAccessInfoBtn = document.getElementById("regexFiltersAccessInfoBtn");
+  const regexFiltersAccessInfoModal = document.getElementById("regexFiltersAccessInfoModal");
+  const closeRegexFiltersAccessInfoBtn = document.getElementById("closeRegexFiltersAccessInfoBtn");
+  const okRegexFiltersAccessInfoBtn = document.getElementById("okRegexFiltersAccessInfoBtn");
+
+  function openRegexFiltersAccessInfo() {
+    if (!regexFiltersAccessInfoModal) return;
+    regexFiltersAccessInfoModal.removeAttribute("hidden");
+    regexFiltersAccessInfoModal.classList.remove("popup-hide");
+    regexFiltersAccessInfoModal.classList.add("popup-show");
+  }
+
+  function closeRegexFiltersAccessInfo() {
+    if (!regexFiltersAccessInfoModal) return;
+    regexFiltersAccessInfoModal.classList.remove("popup-show");
+    regexFiltersAccessInfoModal.classList.add("popup-hide");
+    regexFiltersAccessInfoModal.setAttribute("hidden", "");
+  }
+
+  if (regexFiltersAccessInfoBtn) {
+    regexFiltersAccessInfoBtn.addEventListener("click", function (e) {
+      e.preventDefault();
+      openRegexFiltersAccessInfo();
+    });
+  }
+  if (closeRegexFiltersAccessInfoBtn) {
+    closeRegexFiltersAccessInfoBtn.addEventListener("click", closeRegexFiltersAccessInfo);
+  }
+  if (okRegexFiltersAccessInfoBtn) {
+    okRegexFiltersAccessInfoBtn.addEventListener("click", closeRegexFiltersAccessInfo);
+  }
+
+  const subusersPermInfoBtn = document.getElementById("subusersPermInfoBtn");
+  const subusersPermInfoModal = document.getElementById("subusersPermInfoModal");
+  const closeSubusersPermInfoBtn = document.getElementById("closeSubusersPermInfoBtn");
+  const okSubusersPermInfoBtn = document.getElementById("okSubusersPermInfoBtn");
+
+  function openSubusersPermInfo() {
+    if (!subusersPermInfoModal) return;
+    subusersPermInfoModal.removeAttribute("hidden");
+    subusersPermInfoModal.classList.remove("popup-hide");
+    subusersPermInfoModal.classList.add("popup-show");
+  }
+
+  function closeSubusersPermInfo() {
+    if (!subusersPermInfoModal) return;
+    subusersPermInfoModal.classList.remove("popup-show");
+    subusersPermInfoModal.classList.add("popup-hide");
+    subusersPermInfoModal.setAttribute("hidden", "");
+  }
+
+  if (subusersPermInfoBtn) {
+    subusersPermInfoBtn.addEventListener("click", function (e) {
+      e.preventDefault();
+      openSubusersPermInfo();
+    });
+  }
+  if (closeSubusersPermInfoBtn) {
+    closeSubusersPermInfoBtn.addEventListener("click", closeSubusersPermInfo);
+  }
+  if (okSubusersPermInfoBtn) {
+    okSubusersPermInfoBtn.addEventListener("click", closeSubusersPermInfo);
+  }
+
+  const subusersSectionInfoBtn = document.getElementById("subusersSectionInfoBtn");
+  const subusersSectionInfoModal = document.getElementById("subusersSectionInfoModal");
+  const closeSubusersSectionInfoBtn = document.getElementById("closeSubusersSectionInfoBtn");
+  const okSubusersSectionInfoBtn = document.getElementById("okSubusersSectionInfoBtn");
+
+  function openSubusersSectionInfo() {
+    if (!subusersSectionInfoModal) return;
+    subusersSectionInfoModal.removeAttribute("hidden");
+    subusersSectionInfoModal.classList.remove("popup-hide");
+    subusersSectionInfoModal.classList.add("popup-show");
+  }
+
+  function closeSubusersSectionInfo() {
+    if (!subusersSectionInfoModal) return;
+    subusersSectionInfoModal.classList.remove("popup-show");
+    subusersSectionInfoModal.classList.add("popup-hide");
+    subusersSectionInfoModal.setAttribute("hidden", "");
+  }
+
+  if (subusersSectionInfoBtn) {
+    subusersSectionInfoBtn.addEventListener("click", function (e) {
+      e.preventDefault();
+      openSubusersSectionInfo();
+    });
+  }
+  if (closeSubusersSectionInfoBtn) {
+    closeSubusersSectionInfoBtn.addEventListener("click", closeSubusersSectionInfo);
+  }
+  if (okSubusersSectionInfoBtn) {
+    okSubusersSectionInfoBtn.addEventListener("click", closeSubusersSectionInfo);
   }
 
   if (uniqueAllowedEmailsCheckbox) {
@@ -1316,17 +1417,17 @@ document.addEventListener("DOMContentLoaded", function() {
     'regexModal', 'filtersModal', 'subusersModal', 
     'subusersRegexModal', 'subusersFiltersModal',
     'myApiModal', 'editLinkedApiModal', 'linkedApisInfoModal',
-    'uniqueAllowedEmailsInfoModal'
+    'uniqueAllowedEmailsInfoModal', 'regexFiltersAccessInfoModal', 'subusersPermInfoModal', 'subusersSectionInfoModal'
   ];
   popups.forEach(function(popupId) {
     const popup = document.getElementById(popupId);
     if (popup) {
       document.addEventListener('mousedown', function(e) {
         if (popup.classList.contains('popup-show') || popup.classList.contains('popup-visible')) {
-          if (!popup.contains(e.target) && !e.target.closest('.open-alias-popup') && !e.target.closest('#showMyApiBtn') && !e.target.closest('#linkedApisInfoBtn') && !e.target.closest('#uniqueAllowedEmailsInfoBtn') && !e.target.closest('.edit-project-btn')) {
+          if (!popup.contains(e.target) && !e.target.closest('.open-alias-popup') && !e.target.closest('#showMyApiBtn') && !e.target.closest('#linkedApisInfoBtn') && !e.target.closest('#uniqueAllowedEmailsInfoBtn') && !e.target.closest('#regexFiltersAccessInfoBtn') && !e.target.closest('#subusersPermInfoBtn') && !e.target.closest('#subusersSectionInfoBtn') && !e.target.closest('.edit-project-btn')) {
             popup.classList.remove('popup-show', 'popup-visible');
             popup.classList.add('popup-hide');
-            if (popupId === 'linkedApisInfoModal' || popupId === 'uniqueAllowedEmailsInfoModal') {
+            if (popupId === 'linkedApisInfoModal' || popupId === 'uniqueAllowedEmailsInfoModal' || popupId === 'regexFiltersAccessInfoModal' || popupId === 'subusersPermInfoModal' || popupId === 'subusersSectionInfoModal') {
               popup.setAttribute('hidden', '');
             }
           }
@@ -1389,13 +1490,6 @@ document.addEventListener("DOMContentLoaded", function() {
   const editApiToken = document.getElementById("editApiToken");
   const saveEditApiBtn = document.getElementById("saveEditApiBtn");
 
-  function maskToken(t) {
-    const s = String(t || "");
-    if (!s) return "";
-    if (s.length <= 10) return "••••••••";
-    return s.slice(0, 6) + "…" + s.slice(-4);
-  }
-
   function fetchLinkedProjects() {
     if (!linkedApisList) return;
     fetch(`/admin/user/${userId}/linked_projects`, {
@@ -1429,14 +1523,13 @@ document.addEventListener("DOMContentLoaded", function() {
       div.className = "linked-api-item d-flex justify-content-between align-items-center mb-05 p-05";
       div.innerHTML = `
         <div class="flex-grow-1 ml-05 text-left">
-          <strong>${escapeHtml(p.name)}</strong><br>
-          <small class="text-muted">Token ${escapeHtml(maskToken(p.token))}</small>
+          <strong>${escapeHtml(p.name)}</strong>
         </div>
         <div class="d-flex gap-05 mr-05 align-items-center flex-wrap">
           <button type="button" class="btn-blue btn-imap-action btn-imap-small test-project-btn" data-id="${p.id}">
             Probar
           </button>
-          <button type="button" class="btn-panel btn-orange btn-sm edit-project-btn" data-id="${p.id}" data-name="${escapeHtml(p.name)}" data-token="${escapeHtml(p.token)}">
+          <button type="button" class="btn-panel btn-orange btn-sm edit-project-btn" data-id="${p.id}" data-name="${escapeHtml(p.name)}" data-token="${escapeHtml(p.token)}" data-ip="${escapeHtml(p.ip || "")}">
             <i class="fas fa-edit"></i>
           </button>
           <button type="button" class="btn-panel btn-red btn-sm delete-project-btn" data-id="${p.id}">
@@ -1451,7 +1544,7 @@ document.addEventListener("DOMContentLoaded", function() {
       btn.addEventListener("click", () => {
         editApiId.value = btn.dataset.id;
         editApiName.value = btn.dataset.name;
-        if (editApiIp) editApiIp.value = "";
+        if (editApiIp) editApiIp.value = btn.dataset.ip || "";
         editApiToken.value = btn.dataset.token;
         editLinkedApiModal.classList.remove("popup-hide");
         editLinkedApiModal.classList.add("popup-show");
